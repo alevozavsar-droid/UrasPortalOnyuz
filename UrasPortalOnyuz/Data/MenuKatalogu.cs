@@ -26,7 +26,7 @@ namespace WebApplication3.Data
             ("Rapor33", "Index", "fas fa-shopping-bag", "Çalan İşlem Raporu", null),
             ("Rapor5", "Index", "fas fa-shopping-bag", "Grup İçi Analiz Raporu", null),
             ("Rapor21", "Index", "fas fa-shopping-bag", "Adat Hesaplama", null),
-            ("Rapor35", "Index", "fas fa-shopping-bag", "Analiz Raporu", null),
+            ("Rapor35", "Index", "fas fa-chart-pie", "Tahsilat Analiz Raporu", null),
             ("Rapor22", "Index", "fas fa-user-tag", "Çek Konsolide Raporu", null),
             ("Rapor37", "Index", "fas fa-user-tag", "Çek Akıbeti Kontrol Raporu", null),
             ("Rapor38", "Index", "fas fa-user-tag", "Çek Konsolide Kontrol Raporu", null),
@@ -253,6 +253,7 @@ namespace WebApplication3.Data
             ("IkTalep", "Seyahat", "fas fa-plane-departure", "Seyahat Talebi", "İK ve İdari İşler"),
             ("IkTalep", "Arac", "fas fa-car-side", "Araç Talebi", "İK ve İdari İşler"),
             ("AlimOnay", "Index", "fas fa-cart-shopping", "Aylık Alım Onay Ekranı", "Tedarik Zinciri"),
+            ("GenelAnaliz", "Index", "fas fa-chart-line", "Genel Analiz Raporu", "Yönetim"),
         };
 
         public static List<AppMenu> Olustur()

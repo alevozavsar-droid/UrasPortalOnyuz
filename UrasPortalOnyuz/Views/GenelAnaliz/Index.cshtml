@@ -1,0 +1,90 @@
+@{
+    ViewData["Title"] = "Genel Analiz Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var sirketler = (string[])ViewBag.Sirketler;
+    int yil = (int)ViewBag.Yil;
+}
+@*
+    GENEL ANALİZ RAPORU — Yönetim › Yönetim Özeti › Özel Analizler › Özel Raporlar (Tahsilat Analiz Raporu ile aynı grupta, ayrı ekran).
+    Şirket ve yıl seçilir; aylık satış / alım / brüt kâr / tahsilat / ödeme / net nakit tablosu ve dönem özeti gelir.
+    Veri: /GenelAnaliz/Veri?sirket=&yil=  (örnek; kaynak bağlanınca gerçek değerlerle değişecek).
+*@
+<style>
+    .ga-wrap { padding: 0 14px 30px; }
+    .ga-ust { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 14px 0 12px; }
+    .ga-ust h1 { font-size: 1.2rem; font-weight: 700; margin: 0; }
+    .ga-ust .sub { width: 100%; color: #64748b; font-size: .82rem; }
+    .ga-filtre { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-left: auto; }
+    .ga-filtre select { border: 1px solid #d7dce5; border-radius: 8px; padding: 6px 10px; font-size: .84rem; background: #fff; }
+    .ga-kpi { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+    @@media (max-width: 1200px) { .ga-kpi { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .ga-kpi > div { background: #fff; border: 1px solid #e5e7eb; border-left: 4px solid var(--k, #2563eb); border-radius: 10px; padding: 9px 12px; }
+    .ga-kpi .l { font-size: .64rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #64748b; } .ga-kpi .v { font-size: 1.05rem; font-weight: 800; color: #0f172a; } .ga-kpi .s { font-size: .7rem; color: #64748b; }
+    .ga-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; margin-bottom: 12px; }
+    .ga-card-head { padding: 9px 14px; border-bottom: 1px solid #eef2f7; background: #f8fafc; font-weight: 700; font-size: .84rem; color: #334155; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    table.ga { width: 100%; border-collapse: collapse; font-size: .8rem; }
+    table.ga th { text-align: left; padding: 7px 10px; }
+    table.ga td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; }
+    table.ga tfoot td { font-weight: 700; background: #f8fafc; border-top: 2px solid #e2e8f0; }
+    table.ga tr.bos td { color: #94a3b8; }
+    .ga-bar { display: grid; grid-template-columns: 70px 1fr 110px; gap: 8px; align-items: center; padding: 4px 14px; font-size: .78rem; }
+    .ga-bar .t { height: 10px; background: #f1f5f9; border-radius: 999px; overflow: hidden; display: flex; }
+    .ga-bar .t i { display: block; height: 100%; } .ga-bar .t .s { background: #2563eb; } .ga-bar .t .a { background: #f59e0b; }
+    .ga-lejant { display: flex; gap: 14px; font-size: .74rem; color: #475569; padding: 6px 14px 10px; }
+    .ga-lejant span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; background: var(--c); }
+    .ga-not { font-size: .74rem; color: #64748b; }
+</style>
+
+<div class="ga-wrap">
+    <div class="ga-ust">
+        <h1><i class="fa-solid fa-chart-line"></i> Genel Analiz Raporu</h1>
+        <div class="ga-filtre">
+            <select id="gaSirket"><option value="">Tüm şirketler</option>@foreach (var s in sirketler) { <option>@s</option> }</select>
+            <select id="gaYil">@for (int y = yil; y >= yil - 3; y--) { <option value="@y">@y</option> }</select>
+        </div>
+        <span class="sub">Şirket bazında aylık satış, alım, brüt kâr, tahsilat ve ödeme seyri ile dönem özeti. Tahsilat ayrıntısı için aynı gruptaki Tahsilat Analiz Raporu kullanılır. <span class="ga-not">Veriler örnektir; kaynak bağlanınca gerçek değerlerle değişecek.</span></span>
+    </div>
+
+    <div class="ga-kpi" id="gaKpi"></div>
+
+    <div class="ga-card">
+        <div class="ga-card-head"><span><i class="fa-solid fa-table-list"></i> Aylık seyir · <span id="gaBaslik"></span></span><span class="ga-not">tutarlar TL</span></div>
+        <div class="table-responsive"><table class="ga" id="gaTablo"><thead><tr><th>Ay</th><th>Satış</th><th>Alım</th><th>Brüt Kâr</th><th>Kâr Marjı</th><th>Tahsilat</th><th>Ödeme</th><th>Net Nakit</th></tr></thead><tbody></tbody><tfoot><tr id="gaToplam"></tr></tfoot></table></div>
+    </div>
+
+    <div class="ga-card">
+        <div class="ga-card-head"><span><i class="fa-solid fa-chart-bar"></i> Satış / alım karşılaştırması</span></div>
+        <div id="gaBarlar" style="padding-top:6px"></div>
+        <div class="ga-lejant"><span style="--c:#2563eb">Satış</span><span style="--c:#f59e0b">Alım</span></div>
+    </div>
+</div>
+
+<script>
+(() => {
+    const $ = s => document.querySelector(s);
+    const AYLAR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+    const fmt = n => (Number(n) || 0).toLocaleString('tr-TR', { maximumFractionDigits: 0 });
+    const yuzde = (a, b) => b ? '%' + (a / b * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) : '—';
+    function yukle() {
+        fetch(`/GenelAnaliz/Veri?sirket=${encodeURIComponent($('#gaSirket').value)}&yil=${$('#gaYil').value}`).then(r => r.json()).then(d => {
+            if (!d.success) return;
+            const o = d.ozet;
+            $('#gaBaslik').textContent = `${d.sirket} · ${d.yil}${d.sonAy < 12 ? ` (${d.sonAy} ay)` : ''}`;
+            $('#gaKpi').innerHTML = [
+                ['#2563eb', 'Satış', fmt(o.satis) + ' TL', `${o.aktifMusteri} aktif müşteri`],
+                ['#f59e0b', 'Alım', fmt(o.alim) + ' TL', `${o.aktifTedarikci} aktif tedarikçi`],
+                ['#16a34a', 'Brüt Kâr', fmt(o.brutKar) + ' TL', 'marj ' + yuzde(o.brutKar, o.satis)],
+                ['#0ea5e9', 'Tahsilat', fmt(o.tahsilat) + ' TL', 'tahsilat oranı ' + yuzde(o.tahsilat, o.satis)],
+                ['#dc2626', 'Açık Alacak', fmt(o.acikAlacak) + ' TL', 'satış − tahsilat'],
+                ['#64748b', 'Açık Borç', fmt(o.acikBorc) + ' TL', `${o.acikSiparis} açık sipariş`]
+            ].map(k => `<div style="--k:${k[0]}"><div class="l">${k[1]}</div><div class="v">${k[2]}</div><div class="s">${k[3]}</div></div>`).join('');
+            $('#gaTablo tbody').innerHTML = d.aylar.map(a => a.satis ? `<tr><td>${AYLAR[a.ay - 1]}</td><td>${fmt(a.satis)}</td><td>${fmt(a.alim)}</td><td>${fmt(a.brutKar)}</td><td>${yuzde(a.brutKar, a.satis)}</td><td>${fmt(a.tahsilat)}</td><td>${fmt(a.odeme)}</td><td>${fmt(a.netNakit)}</td></tr>` : `<tr class="bos"><td>${AYLAR[a.ay - 1]}</td><td colspan="7">Dönem henüz kapanmadı</td></tr>`).join('');
+            $('#gaToplam').innerHTML = `<td>Toplam</td><td>${fmt(o.satis)}</td><td>${fmt(o.alim)}</td><td>${fmt(o.brutKar)}</td><td>${yuzde(o.brutKar, o.satis)}</td><td>${fmt(o.tahsilat)}</td><td>${fmt(o.odeme)}</td><td>${fmt(o.tahsilat - o.odeme)}</td>`;
+            const mx = Math.max(1, ...d.aylar.map(a => Math.max(a.satis, a.alim)));
+            $('#gaBarlar').innerHTML = d.aylar.filter(a => a.satis).map(a => `<div class="ga-bar"><span>${AYLAR[a.ay - 1].slice(0, 3)}</span><span class="t" title="Satış ${fmt(a.satis)} · Alım ${fmt(a.alim)}"><i class="s" style="width:${a.satis / mx * 50}%"></i><i class="a" style="width:${a.alim / mx * 50}%"></i></span><span style="text-align:right;font-variant-numeric:tabular-nums">${fmt(a.brutKar)}</span></div>`).join('') || '<div class="ga-not" style="padding:14px">Seçilen yıl için veri yok.</div>';
+        });
+    }
+    $('#gaSirket').addEventListener('change', yukle); $('#gaYil').addEventListener('change', yukle);
+    yukle();
+})();
+</script>

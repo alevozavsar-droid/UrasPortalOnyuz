@@ -354,7 +354,7 @@ namespace WebApplication3.Data
                   U("yonetim-ozeti", "Yönetim Özeti",
                     G("sirket-grup-performansi", "Şirket ve Grup Performansı", R("Şirket Ciro Raporu"), R("Al Sat Şirketleri Satış Analizi"), R("Üretim Şirketleri Kar Analizi"), R("Konsolide Gider Raporu"), K("Hukuk Yönetici Takip Raporu", "#hukuk/genel/02"))),
                   U("ozel-analizler", "Özel Analizler",
-                    G("ozel-raporlar", "Özel Raporlar", R("Analiz Raporu"), R("Çalan İşlem Raporu")))),
+                    G("ozel-raporlar", "Özel Raporlar", R("Tahsilat Analiz Raporu", "Rapor35"), R("Genel Analiz Raporu", "GenelAnaliz", "Index"), R("Çalan İşlem Raporu")))),
 
                 M("takvim", "Takvim", "takvim",
                   "Şirket ve departman takvimleri, toplantılar, görevler ve hatırlatmalar. Ekranlar yeni geliştirilecek.",
