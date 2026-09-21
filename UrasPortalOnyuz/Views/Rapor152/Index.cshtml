@@ -1,0 +1,2985 @@
+﻿@{
+    ViewData["Title"] = "Grup İçi Satış (Uras → Selvi → Müşteri)";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var databases = (List<WebApplication3.Controllers.Rapor152Controller.DatabaseConfig>)ViewBag.Databases;
+    var currentDbDisplay = (string)ViewBag.CurrentDbDisplay;
+    var customers = (List<WebApplication3.Controllers.Rapor152Controller.CustomerModel>)ViewBag.Customers;
+    var items = (List<WebApplication3.Controllers.Rapor152Controller.ItemModel>)ViewBag.Items;
+    var slps = (List<WebApplication3.Controllers.Rapor152Controller.SalesEmployeeModel>)ViewBag.SalesEmployees;
+    var vatGroups = (List<WebApplication3.Controllers.Rapor152Controller.VatGroupModel>)ViewBag.VatGroups;
+    var currencies = (List<string>)ViewBag.Currencies;
+    var muafCodes = (List<WebApplication3.Controllers.Rapor152Controller.MuafCodeModel>)ViewBag.MuafCodes;
+    var nakliyeFirmalari = ViewBag.NakliyeFirmalari as List<WebApplication3.Controllers.Rapor152Controller.NakliyeFirmaModel>
+                           ?? new List<WebApplication3.Controllers.Rapor152Controller.NakliyeFirmaModel>();
+    var countries = (List<WebApplication3.Controllers.Rapor152Controller.CountryModel>)ViewBag.Countries;
+    var states = (List<WebApplication3.Controllers.Rapor152Controller.StateModel>)ViewBag.States;
+    var warehouses = (List<WebApplication3.Controllers.Rapor152Controller.WarehouseModel>)ViewBag.Warehouses;
+    var drivers = (List<WebApplication3.Controllers.Rapor152Controller.DriverModel>)ViewBag.Drivers;
+    var selviCustomers = ViewBag.SelviCustomers as List<WebApplication3.Controllers.Rapor152Controller.CustomerModel> ?? new List<WebApplication3.Controllers.Rapor152Controller.CustomerModel>();
+    var selviDrivers = ViewBag.SelviDrivers as List<WebApplication3.Controllers.Rapor152Controller.DriverModel> ?? new List<WebApplication3.Controllers.Rapor152Controller.DriverModel>();
+    string selviCari = (string)ViewBag.SelviCari ?? "M1408";
+    string selviSirketAdi = (string)ViewBag.SelviSirketAdi ?? "SELVI";
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <style>
+        /* Layout'un tema degiskenlerine baglanir; sayfa acik/koyu temaya uyar. */
+        :root {
+            --form-bg: var(--bg-card, #ffffff);
+            --border-soft: var(--border-color, #e2e8f0);
+            --primary-soft: rgba(59,130,246,.08);
+            --baslik-bg: var(--bg-subtle, #f8fafc);
+            --metin-2: var(--text-secondary, #64748b);
+        }
+        .sap-card { background: var(--form-bg); border: 1px solid var(--border-soft); border-radius: var(--r-lg, 14px); box-shadow: var(--shadow-sm, 0 2px 4px rgba(0,0,0,.02)); margin-bottom: 1rem; overflow: hidden; }
+        /* Kolon genislikleri icerige gore dagitilir (sabit yerlesim degil).
+           Kalem kolonu kisa adlarda daralir, uzun adlarda 300px'e kadar buyur,
+           sonrasinda kesilir; tam metin secicinin uzerine gelince gorunur. */
+        #linesTable { table-layout: auto; }
+
+        #linesTable td:nth-child(2), #linesTable th:nth-child(2) {
+            max-width: 150px;
+        }
+        #linesTable td:nth-child(2) .select2-selection__rendered {
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+
+        /* Serbest metin kolonu dar; icerik tasmaz, tamami tooltip'te gorunur. */
+        #linesTable td:nth-child(3), #linesTable th:nth-child(3) {
+            width: 120px; max-width: 120px; overflow: hidden;
+        }
+        #linesTable td:nth-child(3) input { text-overflow: ellipsis; }
+
+        /* Tutar kolonlari kirilmasin. */
+        #linesTable td:nth-child(6), #linesTable td:nth-child(8),
+        #linesTable th:nth-child(6), #linesTable th:nth-child(8) { white-space: nowrap; }
+
+        .sap-card-header { background-color: var(--baslik-bg); border-bottom: 1px solid var(--border-soft); padding: 0.8rem 1.2rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .sap-card-body { padding: 1.5rem 1.2rem; }
+
+        .form-label { font-weight: 600; color: var(--metin-2); font-size: 0.85rem; margin-bottom: 0.3rem; }
+        .form-select-sm, .form-control-sm { min-height: 34px; font-size: 0.85rem;}
+
+        .table-modern { border-collapse: separate; border-spacing: 0; width: 100%; }
+        .table-modern th { background-color: var(--baslik-bg); color: var(--metin-2); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; padding: 10px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); position: sticky; top: 0; z-index: 3; }
+        .table-modern td { padding: 6px 8px; vertical-align: middle; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); }
+        .table-modern tbody tr:hover td { background-color: var(--primary-soft); cursor:pointer;}
+
+        /* Alan ustu etiket: ayri kolon kaplamaz, dikey yer kazandirir. */
+        .ust-etiket {
+            font-size: 0.68rem; font-weight: 700; color: var(--metin-2, #6c757d);
+            text-transform: uppercase; letter-spacing: .3px; margin-bottom: 2px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+        .table-input { border: 1px solid transparent; background: transparent; width: 100%; padding: 4px 8px; border-radius: 4px; transition: 0.2s; font-size: 0.85rem; }
+        .table-input:focus, .table-input:hover { border-color: #cbd5e1; background: #fff; outline: none; }
+
+        .select2-container--bootstrap-5 .select2-selection { font-size: 0.85rem; min-height: 34px; border-color: var(--border-soft); }
+
+        .footer-totals-box { background: var(--baslik-bg); border: 1px solid var(--border-soft); border-radius: var(--r-md, 10px); padding: 1rem; width: 100%; }
+        .footer-row { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--metin-2); }
+        .footer-row.grand-total { font-weight: 700; font-size: 1rem; border-top: 1px solid var(--border-soft); padding-top: 0.5rem; margin-bottom: 0; }
+
+        .action-bar { background: var(--form-bg); border-top: 1px solid var(--border-soft); padding: 1rem 1.5rem; position: sticky; bottom: 0; z-index: 100; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 12px -2px rgba(0,0,0,.06); }
+
+        .view-mode .searchable-field, .view-mode textarea, .view-mode input { background-color: #f8fafc !important; cursor: not-allowed; pointer-events: none;}
+        .view-mode .select2-selection { background-color: #f8fafc !important; cursor: not-allowed; pointer-events: none; }
+
+        .find-mode .searchable-field { background-color: #fef9c3 !important; border-color: #fde047 !important; }
+        .find-mode .select2-selection { background-color: #fef9c3 !important; border-color: #fde047 !important; }
+
+        .nav-tabs .nav-link { color: var(--metin-2); font-weight: 600; border: none; padding: 0.75rem 1.25rem; font-size: 0.9rem; cursor: pointer; background: transparent; border-bottom: 2px solid transparent; }
+        .nav-tabs .nav-link.active { color: var(--metro-primary, #0d6efd); border-bottom-color: var(--metro-primary, #0d6efd) !important; }
+        .nav-tabs .nav-link:hover { color: var(--metro-primary, #3b82f6); }
+
+        /* Firma bilgileri: opsiyonel, doldurulursa belgelere yazilir */
+        .firma-kutu { background: var(--baslik-bg); border: 1px dashed var(--border-soft);
+                      border-radius: var(--r-md, 10px); padding: 10px 12px; margin-top: 10px; }
+
+        /* Akis secimi */
+        .akis-secenek { border: 2px solid var(--border-soft); border-radius: var(--r-md, 10px);
+                        padding: 14px; cursor: pointer; transition: .15s; height: 100%; }
+        .akis-secenek:hover { border-color: var(--metro-primary, #0d6efd); background: var(--primary-soft); }
+        .akis-secenek .zincir { font-family: Consolas, monospace; font-size: .8rem; color: var(--metin-2); }
+
+        .address-box input, .address-box select { font-size: 0.8rem; height: 28px; padding: 0.25rem 0.5rem; margin-bottom: 4px; }
+        .address-box label { font-size: 0.75rem; color: var(--metin-2); margin-bottom: 2px; }
+        .address-box .select2-selection { min-height: 28px !important; height: 28px !important; }
+        .address-box .select2-selection__rendered { line-height: 26px !important; font-size: 0.8rem; }
+    </style>
+}
+
+<div class="container-fluid py-4 pb-5 mb-5" id="mainContainer">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="d-flex align-items-center">
+            <h4 class="mb-0 fw-bold text-dark" id="pageTitle"><i class="fas fa-cart-plus text-warning me-2"></i>Satış Siparişi Oluştur</h4>
+            <span class="badge bg-secondary fs-6 px-3 py-2 ms-3">@currentDbDisplay</span>
+        </div>
+
+        <div class="btn-group shadow-sm border bg-white rounded" role="group">
+            <button type="button" class="btn btn-light nav-btn" data-dir="first" title="İlk Kayıt"><i class="fas fa-fast-backward"></i></button>
+            <button type="button" class="btn btn-light nav-btn" data-dir="prev" title="Önceki Kayıt"><i class="fas fa-step-backward"></i></button>
+            <button type="button" class="btn btn-light nav-btn" data-dir="next" title="Sonraki Kayıt"><i class="fas fa-step-forward"></i></button>
+            <button type="button" class="btn btn-light nav-btn" data-dir="last" title="Son Kayıt"><i class="fas fa-fast-forward"></i></button>
+            <button type="button" class="btn btn-light" id="btnFindMode" title="Kayıt Bul"><i class="fas fa-search text-info"></i></button>
+            <button type="button" class="btn btn-light text-primary fw-bold" id="btnNewDoc" title="Yeni Kayıt Ekle"><i class="fas fa-plus"></i></button>
+            <button type="button" class="btn btn-light text-warning fw-bold" id="btnCogalt"
+                    title="Bu belgeyi çoğalt: aynısını yeni kayıt olarak forma getirir, SAP'ye kaydetmez"
+                    style="display:none;"><i class="fas fa-copy"></i></button>
+        </div>
+    </div>
+
+    <div id="loadingOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8); z-index:9999; flex-direction:column; justify-content:center; align-items:center;">
+        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+        <h5 class="mt-3 text-primary fw-bold">İşlem Yapılıyor...</h5>
+    </div>
+
+    <form id="orderForm" novalidate>
+        <div class="sap-card">
+            <div class="sap-card-body">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="row mb-3 align-items-center">
+                            <label class="col-sm-3 form-label mb-0 text-muted">Müşteri <span class="text-danger">*</span></label>
+                            <div class="col-sm-9">
+                                <select id="CardCode" class="form-select select2-init searchable-field req-add">
+                                    <option value="">Müşteri Seçiniz...</option>
+                                    @foreach (var customer in customers)
+                                    {
+                                        <option value="@customer.CardCode" data-name="@customer.CardName" selected="@(customer.CardCode == selviCari)">@customer.CardCode - @customer.CardName</option>
+                                    }
+                                </select>
+                                <div class="form-text" style="font-size:.72rem;">Uras'ta müşteri sabittir (Selvi Kimya). Asıl müşteri aşağıdan seçilir.</div>
+                            </div>
+                        </div>
+                        <div class="row mb-3 align-items-center" style="background:#fff7ed; border:1px dashed #fdba74; border-radius:8px; padding:6px 0;">
+                            <label class="col-sm-3 form-label mb-0 text-danger fw-bold">@selviSirketAdi Müşterisi <span class="text-danger">*</span></label>
+                            <div class="col-sm-9">
+                                <select id="SelviCardCode" class="form-select select2-init searchable-field req-add">
+                                    <option value="">Selvi'deki asıl müşteriyi seçiniz...</option>
+                                    @foreach (var c in selviCustomers)
+                                    {
+                                        <option value="@c.CardCode" data-name="@c.CardName">@c.CardCode - @c.CardName</option>
+                                    }
+                                </select>
+                                <div class="form-text" style="font-size:.72rem;">Selvi'deki sipariş, irsaliye ve fatura bu müşteriye kesilir. Adresi Lojistik, şoförü Nakliye sekmesinde seçilir.</div>
+                            </div>
+                        </div>
+                        <div class="row mb-3 align-items-center">
+                            <label class="col-sm-3 form-label mb-0 text-muted">Satış Çalışanı <span class="text-danger">*</span></label>
+                            <div class="col-sm-9">
+                                <select id="SalesPersonCode" class="form-select select2-init searchable-field req-add">
+                                    <option value="">Seçiniz...</option>
+                                    @foreach (var slp in slps)
+                                    {
+                                        <option value="@slp.SlpCode">@slp.SlpName</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mb-3 align-items-center">
+                            <label class="col-sm-3 form-label mb-0 text-muted">Para Birimi</label>
+                            <div class="col-sm-5 pe-1">
+                                <select id="CurrencyType" class="form-select form-select-sm searchable-field">
+                                    <option value="BP">Muhatabın para birimi</option>
+                                    <option value="LC">Ulusal para birimi</option>
+                                    <option value="SC">Sistem para birimi</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-4 ps-1">
+                                <select id="DocCurrency" class="form-select form-select-sm w-100 searchable-field">
+                                    <option value="">Seçiniz</option>
+                                    @if(currencies != null)
+                                    {
+                                        foreach(var c in currencies)
+                                        {
+                                            <option value="@c">@c</option>
+                                        }
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="row mb-2 align-items-center" id="divDocNumSearch" style="display: none;">
+                            <label class="col-sm-4 form-label mb-0 text-md-end text-info fw-bold">Belge Numarası</label>
+                            <div class="col-sm-8">
+                                <input type="number" id="SearchDocNum" class="form-control form-control-sm border-info" placeholder="Otomatik (Bulmak için buraya yazın)" />
+                            </div>
+                        </div>
+
+                        @* Etiketler ayri kolon yerine alanlarin USTUNDE duruyor.
+                           Boylece yedi alan dort satir yerine iki satira siğiyor ve
+                           sagda bos yer kalmiyor. *@
+                        <div class="row g-2 mb-2">
+                            <div class="col-3">
+                                <div class="ust-etiket">Kayıt T. <span class="text-danger">*</span></div>
+                                <input type="date" id="DocDate" class="form-control form-control-sm searchable-field req-add" />
+                            </div>
+                            <div class="col-3">
+                                <div class="ust-etiket">Belge T. <span class="text-danger">*</span></div>
+                                <input type="date" id="TaxDate" class="form-control form-control-sm searchable-field req-add" />
+                            </div>
+                            <div class="col-3">
+                                <div class="ust-etiket">Teslimat T. <span class="text-danger">*</span></div>
+                                <input type="date" id="DocDueDate" class="form-control form-control-sm searchable-field req-add" />
+                            </div>
+                            <div class="col-3">
+                                @* Vade tarihi (talep 26): faturaya yazilir, cari kartin odeme
+                                   kosuluna gore otomatik dolar. Teslimat tarihi ise siparis
+                                   tarihini takip eder (talep 44). *@
+                                <div class="ust-etiket">Vade T.</div>
+                                <input type="date" id="VadeTarihi" class="form-control form-control-sm searchable-field" />
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-2">
+                            <div class="col-4">
+                                <div class="ust-etiket">İşlem Tipi <span class="text-danger">*</span></div>
+                                <select id="U_BE1_AKTAR" class="form-select form-select-sm searchable-field req-add">
+                                    <option value="">- Seçiniz -</option>
+                                    <option value="X">X (Sipariş Formu Yazdır)</option>
+                                    <option value="R">R</option>
+                                    <option value="Y">Y</option>
+                                </select>
+                            </div>
+                            <div class="col-4">
+                                <div class="ust-etiket">Fatura Tipi <span class="text-danger">*</span></div>
+                                <select id="U_BE1_SEND" class="form-select form-select-sm searchable-field req-add">
+                                    <option value="">- Seçiniz -</option>
+                                    <option value="1">1 - SATIS</option>
+                                    <option value="2">2 - IADE</option>
+                                    <option value="3">3 - ISTISNA</option>
+                                    <option value="4">4 - OZELMATRAH</option>
+                                    <option value="5">5 - TEVKIFAT</option>
+                                    <option value="8">8 - IHRACKAYITLI</option>
+                                </select>
+                            </div>
+                            <div class="col-4">
+                                <div class="ust-etiket">Muafiyet Kodu</div>
+                                <select id="U_BE1_MUAFCODE" class="form-select form-select-sm searchable-field" disabled>
+                                    <option value="">- Muafiyet Kodu -</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 border-top pt-3 mt-1">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <div class="d-flex align-items-center">
+                                    <label class="form-label mb-0 text-muted me-2" style="width: 70px; text-align: right;">Belge Kuru</label>
+                                    <input type="text" id="ExchangeRate" class="form-control form-control-sm bg-light fw-bold text-end flex-grow-1" readonly value="1.0000" />
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="d-flex align-items-center">
+                                    <label class="form-label mb-0 text-muted me-2" style="width: 70px; text-align: right;">USD Kuru</label>
+                                    <input type="number" id="USDRate" class="form-control form-control-sm text-end fw-bold searchable-field flex-grow-1" step="0.0001" value="0.0000" />
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="d-flex align-items-center">
+                                    <label class="form-label mb-0 text-muted me-2" style="width: 70px; text-align: right;">EUR Kuru</label>
+                                    <input type="number" id="EURRate" class="form-control form-control-sm text-end fw-bold searchable-field flex-grow-1" step="0.0001" value="0.0000" />
+                                </div>
+                            </div>
+                            <div class="col-md-3 d-flex align-items-center justify-content-end">
+                                <div class="form-check m-0">
+                                    <input class="form-check-input searchable-field" type="checkbox" id="UpdateGlobalRates" value="true">
+                                    <label class="form-check-label small fw-bold text-primary" for="UpdateGlobalRates" style="cursor:pointer;" title="İşaretlerseniz girilen kurlar SAP'nin genel kur tablosuna (ORTT) kaydedilir.">
+                                        <i class="fas fa-save me-1"></i> Sisteme Kuru Kaydet
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <div class="sap-card" id="tabsCard">
+            <div class="sap-card-header p-0 border-bottom-0 bg-light">
+                <ul class="nav nav-tabs border-bottom-0" id="orderTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link active" id="lines-tab" data-toggle="tab" data-bs-toggle="tab" href="#lines-pane" role="tab">İçerikler</a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link" id="logistics-tab" data-toggle="tab" data-bs-toggle="tab" href="#logistics-pane" role="tab">Lojistik</a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link" id="transport-tab" data-toggle="tab" data-bs-toggle="tab" href="#transport-pane" role="tab">Nakliye</a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link text-danger fw-bold" id="selvi-tab" data-toggle="tab" data-bs-toggle="tab" href="#selvi-pane" role="tab"><i class="fas fa-building me-1"></i>@selviSirketAdi Adres & Şoför</a>
+                    </li>
+                </ul>
+                <div class="pe-3 py-2" id="btnAddRowContainer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary bg-white fw-bold shadow-sm" id="btnAddRow">
+                        <i class="fas fa-plus text-success me-1"></i> Kalem Ekle
+                    </button>
+                </div>
+            </div>
+
+            <div class="tab-content border-top" id="orderTabsContent">
+                <div class="tab-pane fade show active" id="lines-pane" role="tabpanel">
+                    <div class="table-responsive" style="min-height: 250px; overflow-y:visible;">
+                        <table class="table-modern border-0" id="linesTable">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;" class="text-center">#</th>
+                                    @* Bosluk kalem kolonuna birakilir; serbest metin dar tutulur ki
+                                       sagdaki tutar kolonlari tam gorunsun (uzun metin icin tooltip var). *@
+                                    @* Genislik icerige gore: kisa kalem adinda daralir, uzun adda
+                                       belli bir sinira kadar genisler, sonrasinda "..." ile kesilir. *@
+                                    <th style="min-width: 130px; max-width: 150px;">Kalem No - Tanım <span class="text-danger">*</span></th>
+                                    <th style="width: 120px; max-width: 120px;">Serbest Metin / Lot</th>
+                                    <th style="width: 150px; min-width: 150px;">Parti (Uras stoğu) <span class="text-danger">*</span></th>
+                                    <th style="width: 120px;">Depo / Stok <span class="text-danger">*</span></th>
+                                    <th style="width: 110px;" class="text-end">Miktar / 2.Birim <span class="text-danger">*</span></th>
+                                    <th style="width: 190px; min-width: 190px;" class="text-end">Birim Fiyat &amp; PB <span class="text-danger">*</span></th>
+                                    <th style="width: 110px;">Vergi Kodu <span class="text-danger">*</span></th>
+                                    <th style="width: 185px; min-width: 185px;" class="text-end">Toplam <span id="toplamKolonPB" class="text-muted fw-normal"></span></th>
+                                    <th style="width: 40px;" class="text-center" id="colDelIcon"><i class="fas fa-trash text-muted"></i></th>
+                                </tr>
+                            </thead>
+                            <tbody id="linesBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade p-4 bg-white" id="logistics-pane" role="tabpanel">
+                    <div class="row g-5">
+                        <div class="col-md-6 address-box">
+                            <h6 class="fw-bold text-dark border-bottom pb-2 mb-3">
+                                <i class="fas fa-truck text-secondary me-2"></i>Sevkiyat Adresi
+                                <a href="#" id="copyToPayTo" class="small float-end text-decoration-none text-primary"><i class="fas fa-arrow-right me-1"></i>Fatura Adresine Kopyala</a>
+                            </h6>
+                            <div class="d-flex gap-2 mb-3">
+                                <select id="ShipToCode" class="form-select form-select-sm searchable-field flex-grow-1">
+                                    <option value="">- Seçiniz -</option>
+                                </select>
+                                <button type="button" class="btn btn-sm btn-outline-success searchable-field" onclick="saveAddressToBP('S')" title="Formdaki bu adresi Cariye Kaydet">
+                                    <i class="fas fa-save"></i> Cariye Ekle
+                                </button>
+                            </div>
+
+                            <div class="row g-2">
+                                <div class="col-12"><label>Adres Satır 1 <span class="text-danger">*</span></label><input type="text" id="ShipToStreet" class="form-control searchable-field" /></div>
+                                <div class="col-12"><label>Adres Satır 2 (Ek Bilgi)</label><input type="text" id="ShipToStreetNo" class="form-control searchable-field" /></div>
+                                <div class="col-12"><label>Adres Satır 3</label><input type="text" id="ShipToBlock" class="form-control searchable-field" /></div>
+                                <div class="col-6"><label>Posta Kodu <span class="text-danger">*</span></label><input type="text" id="ShipToZipCode" class="form-control searchable-field" /></div>
+                                <div class="col-6"><label>İlçe / Semt <span class="text-danger">*</span></label><input type="text" id="ShipToCounty" class="form-control searchable-field" /></div>
+                                <div class="col-6">
+                                    <label>Ülke/Bölge <span class="text-danger">*</span></label>
+                                    <select id="ShipToCountry" class="form-select select2-init searchable-field">
+                                        <option value="">- Seçiniz -</option>
+                                        @foreach (var c in countries) { <option value="@c.Code">@c.Name</option> }
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label>İl / Eyalet (Devlet) <span class="text-danger">*</span></label>
+                                    <select id="ShipToState" class="form-select select2-init searchable-field">
+                                        <option value="">- Seçiniz -</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 address-box">
+                            <h6 class="fw-bold text-dark border-bottom pb-2 mb-3">
+                                <i class="fas fa-file-invoice-dollar text-secondary me-2"></i>Fatura Adresi
+                                <a href="#" id="copyToShipTo" class="small float-end text-decoration-none text-primary"><i class="fas fa-arrow-left me-1"></i>Sevk Adresine Kopyala</a>
+                            </h6>
+                            <div class="d-flex gap-2 mb-3">
+                                <select id="PayToCode" class="form-select form-select-sm searchable-field flex-grow-1">
+                                    <option value="">- Seçiniz -</option>
+                                </select>
+                                <button type="button" class="btn btn-sm btn-outline-success searchable-field" onclick="saveAddressToBP('B')" title="Formdaki bu adresi Cariye Kaydet">
+                                    <i class="fas fa-save"></i> Cariye Ekle
+                                </button>
+                            </div>
+
+                            <div class="row g-2">
+                                <div class="col-12"><label>Adres Satır 1 <span class="text-danger">*</span></label><input type="text" id="PayToStreet" class="form-control searchable-field" /></div>
+                                <div class="col-12"><label>Adres Satır 2 (Ek Bilgi)</label><input type="text" id="PayToStreetNo" class="form-control searchable-field" /></div>
+                                <div class="col-12"><label>Adres Satır 3</label><input type="text" id="PayToBlock" class="form-control searchable-field" /></div>
+                                <div class="col-6"><label>Posta Kodu <span class="text-danger">*</span></label><input type="text" id="PayToZipCode" class="form-control searchable-field" /></div>
+                                <div class="col-6"><label>İlçe / Semt <span class="text-danger">*</span></label><input type="text" id="PayToCounty" class="form-control searchable-field" /></div>
+                                <div class="col-6">
+                                    <label>Ülke/Bölge <span class="text-danger">*</span></label>
+                                    <select id="PayToCountry" class="form-select select2-init searchable-field">
+                                        <option value="">- Seçiniz -</option>
+                                        @foreach (var c in countries) { <option value="@c.Code">@c.Name</option> }
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label>İl / Eyalet (Devlet) <span class="text-danger">*</span></label>
+                                    <select id="PayToState" class="form-select select2-init searchable-field">
+                                        <option value="">- Seçiniz -</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade p-4 bg-white" id="selvi-pane" role="tabpanel">
+                    <div class="alert alert-warning py-2 small mb-3"><i class="fas fa-info-circle me-1"></i>Bu bölümdeki adres ve şoför, <b>Selvi'de</b> kesilecek sipariş / irsaliye / faturaya yazılır. Adres eksikse alanları doldurup "Selvi Cariye Ekle" ile Selvi'deki cari karta kaydedin.</div>
+                    <div class="row g-5">
+                        <div class="col-md-6 address-box">
+                            <h6 class="fw-bold text-dark border-bottom pb-2 mb-3">
+                                <i class="fas fa-truck text-secondary me-2"></i>Sevkiyat Adresi
+                                <a href="#" id="selviCopyToPayTo" class="small float-end text-decoration-none text-primary"><i class="fas fa-arrow-right me-1"></i>Fatura Adresine Kopyala</a>
+                            </h6>
+                            <div class="d-flex gap-2 mb-3">
+                                <select id="SelviShipToCode" class="form-select form-select-sm searchable-field flex-grow-1">
+                                    <option value="">- Seçiniz -</option>
+                                </select>
+                                <button type="button" class="btn btn-sm btn-outline-success searchable-field" onclick="saveSelviAddressToBP('S')" title="Formdaki bu adresi Cariye Kaydet">
+                                    <i class="fas fa-save"></i> Selvi Cariye Ekle
+                                </button>
+                            </div>
+
+                            <div class="row g-2">
+                                <div class="col-12"><label>Adres Satır 1 <span class="text-danger">*</span></label><input type="text" id="SelviShipToStreet" class="form-control searchable-field" /></div>
+                                <div class="col-12"><label>Adres Satır 2 (Ek Bilgi)</label><input type="text" id="SelviShipToStreetNo" class="form-control searchable-field" /></div>
+                                <div class="col-12"><label>Adres Satır 3</label><input type="text" id="SelviShipToBlock" class="form-control searchable-field" /></div>
+                                <div class="col-6"><label>Posta Kodu <span class="text-danger">*</span></label><input type="text" id="SelviShipToZipCode" class="form-control searchable-field" /></div>
+                                <div class="col-6"><label>İlçe / Semt <span class="text-danger">*</span></label><input type="text" id="SelviShipToCounty" class="form-control searchable-field" /></div>
+                                <div class="col-6">
+                                    <label>Ülke/Bölge <span class="text-danger">*</span></label>
+                                    <select id="SelviShipToCountry" class="form-select select2-init searchable-field">
+                                        <option value="">- Seçiniz -</option>
+                                        @foreach (var c in countries) { <option value="@c.Code">@c.Name</option> }
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label>İl / Eyalet (Devlet) <span class="text-danger">*</span></label>
+                                    <select id="SelviShipToState" class="form-select select2-init searchable-field">
+                                        <option value="">- Seçiniz -</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 address-box">
+                            <h6 class="fw-bold text-dark border-bottom pb-2 mb-3">
+                                <i class="fas fa-file-invoice-dollar text-secondary me-2"></i>Fatura Adresi
+                                <a href="#" id="selviCopyToShipTo" class="small float-end text-decoration-none text-primary"><i class="fas fa-arrow-left me-1"></i>Sevk Adresine Kopyala</a>
+                            </h6>
+                            <div class="d-flex gap-2 mb-3">
+                                <select id="SelviPayToCode" class="form-select form-select-sm searchable-field flex-grow-1">
+                                    <option value="">- Seçiniz -</option>
+                                </select>
+                                <button type="button" class="btn btn-sm btn-outline-success searchable-field" onclick="saveSelviAddressToBP('B')" title="Formdaki bu adresi Cariye Kaydet">
+                                    <i class="fas fa-save"></i> Selvi Cariye Ekle
+                                </button>
+                            </div>
+
+                            <div class="row g-2">
+                                <div class="col-12"><label>Adres Satır 1 <span class="text-danger">*</span></label><input type="text" id="SelviPayToStreet" class="form-control searchable-field" /></div>
+                                <div class="col-12"><label>Adres Satır 2 (Ek Bilgi)</label><input type="text" id="SelviPayToStreetNo" class="form-control searchable-field" /></div>
+                                <div class="col-12"><label>Adres Satır 3</label><input type="text" id="SelviPayToBlock" class="form-control searchable-field" /></div>
+                                <div class="col-6"><label>Posta Kodu <span class="text-danger">*</span></label><input type="text" id="SelviPayToZipCode" class="form-control searchable-field" /></div>
+                                <div class="col-6"><label>İlçe / Semt <span class="text-danger">*</span></label><input type="text" id="SelviPayToCounty" class="form-control searchable-field" /></div>
+                                <div class="col-6">
+                                    <label>Ülke/Bölge <span class="text-danger">*</span></label>
+                                    <select id="SelviPayToCountry" class="form-select select2-init searchable-field">
+                                        <option value="">- Seçiniz -</option>
+                                        @foreach (var c in countries) { <option value="@c.Code">@c.Name</option> }
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label>İl / Eyalet (Devlet) <span class="text-danger">*</span></label>
+                                    <select id="SelviPayToState" class="form-select select2-init searchable-field">
+                                        <option value="">- Seçiniz -</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="row g-5 mt-1">
+                        <div class="col-md-6 address-box">
+                            <h6 class="fw-bold text-dark border-bottom pb-2 mb-3"><i class="fas fa-id-card text-secondary me-2"></i>Selvi Şoför Bilgileri (Selvi listesinden)</h6>
+
+                            <div class="d-flex align-items-end gap-2 mb-3">
+                                <div class="flex-grow-1">
+                                    <label class="fw-bold text-primary">Kayıtlı Şoför Seçin <span class="text-danger">*</span></label>
+                                    <select id="SelviDriverListSelect" class="form-select select2-init searchable-field req-add">
+                                        <option value="">- Seçiniz -</option>
+                                        @if(selviDrivers != null)
+                                        {
+                                            foreach(var d in selviDrivers)
+                                            {
+                                                <option value="@d.DocEntry">@d.Name (@d.Plate)</option>
+                                            }
+                                        }
+                                    </select>
+                                </div>
+                                <button type="button" class="btn btn-primary mb-1 shadow-sm" id="btnOpenNewSelviDriverModal"><i class="fas fa-plus me-1"></i>Yeni Şoför Ekle</button>
+                            </div>
+
+                            <div class="row g-2 mt-2 pt-2 border-top">
+                                <div class="col-12">
+                                    <label>Şoför Ad/Soyad <span class="text-danger">*</span></label>
+                                    <input type="text" id="SelviSRCNAME" class="form-control bg-light" readonly />
+                                </div>
+                                <div class="col-12">
+                                    <label>Şoför Plaka <span class="text-danger">*</span></label>
+                                    <input type="text" id="SelviSRCPLAKA" class="form-control bg-light" readonly />
+                                </div>
+                                <div class="col-12">
+                                    <label>Şoför Ünvanı</label>
+                                    <input type="text" id="SelviSRCTITLE" class="form-control bg-light" readonly />
+                                </div>
+                                <div class="col-6"><label>TC Kimlik No (VKN) <span class="text-danger">*</span></label><input type="text" id="SelviSRCVKN" class="form-control bg-light" readonly /></div>
+                                <div class="col-3"><label>KVKK</label><input type="text" id="SelviSRCKVKK" class="form-control bg-light" readonly /></div>
+                                <div class="col-3"><label>Telefon</label><input type="text" id="SelviSRCTEL" class="form-control bg-light" readonly /></div>
+                                <input type="hidden" id="SelviFIRMANO" />
+                            </div>
+                        </div>
+
+                        
+                    </div>
+                </div>
+
+                <div class="tab-pane fade p-4 bg-white" id="transport-pane" role="tabpanel">
+                    <div class="row g-5">
+                        <div class="col-md-6 address-box">
+                            <h6 class="fw-bold text-dark border-bottom pb-2 mb-3"><i class="fas fa-id-card text-secondary me-2"></i>Şoför Bilgileri</h6>
+
+                            <div class="d-flex align-items-end gap-2 mb-3">
+                                <div class="flex-grow-1">
+                                    <label class="fw-bold text-primary">Kayıtlı Şoför Seçin <span class="text-danger">*</span></label>
+                                    <select id="DriverListSelect" class="form-select select2-init searchable-field req-add">
+                                        <option value="">- Seçiniz -</option>
+                                        @if(drivers != null)
+                                        {
+                                            foreach(var d in drivers)
+                                            {
+                                                <option value="@d.DocEntry">@d.Name (@d.Plate)</option>
+                                            }
+                                        }
+                                    </select>
+                                </div>
+                                <button type="button" class="btn btn-primary mb-1 shadow-sm" id="btnOpenNewDriverModal"><i class="fas fa-plus me-1"></i>Yeni Şoför Ekle</button>
+                            </div>
+
+                            <div class="row g-2 mt-2 pt-2 border-top">
+                                <div class="col-12">
+                                    <label>Şoför Ad/Soyad <span class="text-danger">*</span></label>
+                                    <input type="text" id="U_BE1_SRCNAME" class="form-control bg-light" readonly />
+                                </div>
+                                <div class="col-12">
+                                    <label>Şoför Plaka <span class="text-danger">*</span></label>
+                                    <input type="text" id="U_BE1_SRCPLAKA" class="form-control bg-light" readonly />
+                                </div>
+                                <div class="col-12">
+                                    <label>Şoför Ünvanı</label>
+                                    <input type="text" id="U_BE1_SRCTITLE" class="form-control bg-light" readonly />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 address-box">
+                            <h6 class="fw-bold text-dark border-bottom pb-2 mb-3"><i class="fas fa-truck-loading text-secondary me-2"></i>Nakliye ve Ek Bilgiler</h6>
+
+                            <div class="row g-2">
+                                <div class="col-6 mb-2">
+                                    <label class="form-label mb-1 text-primary fw-bold">Nakliye Tarihi <span class="text-danger">*</span></label>
+                                    <input type="date" id="U_BE1_NAKLIYETARIHI" class="form-control form-control-sm searchable-field req-add" />
+                                </div>
+                                <div class="col-6 mb-2">
+                                    <label class="form-label mb-1 text-primary fw-bold">Nakliye Saati <span class="text-danger">*</span></label>
+                                    <input type="time" id="U_BE1_NAKLIYESAATI" class="form-control form-control-sm searchable-field req-add" />
+                                </div>
+
+                                <div class="col-12 mt-2 pt-2 border-top">
+                                    <label>TC Kimlik No (VKN) <span class="text-danger">*</span></label>
+                                    <input type="text" id="U_BE1_SRCVKN" class="form-control bg-light" readonly />
+                                </div>
+                                <div class="col-4">
+                                    <label>KVKK Onay (E/H)</label>
+                                    <input type="text" id="U_BE1_SRCKVKK" class="form-control bg-light" readonly />
+                                </div>
+                                <div class="col-4">
+                                    <label>Telefon</label>
+                                    <input type="text" id="U_BE1_SRCTEL" class="form-control bg-light" readonly />
+                                </div>
+                            </div>
+
+                            <!-- Nakliyeci firma bilgileri: opsiyonel. Doldurulursa
+                                 sipariş, irsaliye ve faturaya birlikte yazılır. -->
+                            <div class="firma-kutu">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <span class="fw-bold small"><i class="fas fa-building me-1 text-secondary"></i>Nakliyeci Firma Bilgileri</span>
+                                    <span class="badge bg-secondary-subtle text-secondary border">opsiyonel</span>
+                                </div>
+                                @* Nakliyeci firma artik SAP'deki [@@BE1_NAKLIYEFIRMA]
+                                   listesinden secilir; listede yoksa "Yeni" ile eklenir.
+                                   Secim, asagidaki uc alani doldurur ve kayit mantigi
+                                   eskisi gibi bu alanlar uzerinden calisir. *@
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-8">
+                                        <label>Nakliyeci Firma</label>
+                                        <select id="NakliyeFirmaSecim" class="form-select searchable-field">
+                                            <option value="">- Seçiniz -</option>
+                                            @foreach (var f in nakliyeFirmalari)
+                                            {
+                                                <option value="@f.FirmaAdi" data-no="@f.FirmaNo" data-vkn="@f.FirmaVkn">
+                                                    @f.FirmaAdi @(string.IsNullOrWhiteSpace(f.FirmaVkn) ? "" : "(" + f.FirmaVkn + ")")
+                                                </option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <div class="col-4">
+                                        <button type="button" class="btn btn-outline-primary w-100" id="btnYeniNakliyeFirma">
+                                            <i class="fas fa-plus me-1"></i> Yeni Firma
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="row g-2 mt-1">
+                                    <div class="col-4">
+                                        <label>Firma No</label>
+                                        <input type="text" id="U_BE1_FIRMANO" class="form-control bg-light searchable-field" placeholder="-" readonly />
+                                    </div>
+                                    <div class="col-4">
+                                        <label>Firma Ünvanı</label>
+                                        <input type="text" id="U_BE1_FIRMAADI" class="form-control bg-light searchable-field" placeholder="-" readonly />
+                                    </div>
+                                    <div class="col-4">
+                                        <label>Firma Vergi No</label>
+                                        <input type="text" id="U_BE1_FIRMAVKN" class="form-control bg-light searchable-field" placeholder="-" readonly />
+                                    </div>
+                                </div>
+                                <div class="small mt-2" style="color:var(--metin-2);">
+                                    Boş bırakılabilir. Doldurulursa sipariş, irsaliye ve faturaya birlikte kaydedilir.
+                                </div>
+                            </div>
+
+                            <div class="alert alert-info mt-4 py-2 small">
+                                <i class="fas fa-info-circle me-1"></i> Not: Seçilen şoför ve nakliye bilgileri SAP üzerinde doğrudan Teslimat (e-İrsaliye) ve Fatura (e-Fatura) kayıtlarına işlenecektir.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="row mt-3" id="footerSection">
+            <div class="col-lg-8 mb-3">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label text-muted fw-bold mb-1"><i class="fas fa-file-alt text-primary me-1"></i>Sipariş Açıklaması</label>
+                        <textarea id="OrderComments" class="form-control bg-white border shadow-sm searchable-field" rows="4" style="resize:none; font-size:0.85rem;"></textarea>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input searchable-field" type="checkbox" id="OrderDescFlag" value="Y">
+                            <label class="form-check-label small fw-bold text-secondary" for="OrderDescFlag">Sipariş Formunda Göster</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label text-muted fw-bold mb-1"><i class="fas fa-truck text-warning me-1"></i>İrsaliye Açıklaması</label>
+                        <textarea id="DeliveryComments" class="form-control bg-white border shadow-sm searchable-field" rows="4" style="resize:none; font-size:0.85rem;"></textarea>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input searchable-field" type="checkbox" id="DeliveryDescFlag" value="Y">
+                            <label class="form-check-label small fw-bold text-secondary" for="DeliveryDescFlag">İrsaliyede Göster</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label text-muted fw-bold mb-1"><i class="fas fa-file-invoice-dollar text-success me-1"></i>Fatura Açıklaması</label>
+                        <textarea id="InvoiceComments" class="form-control bg-white border shadow-sm searchable-field" rows="4" style="resize:none; font-size:0.85rem;"></textarea>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input searchable-field" type="checkbox" id="InvoiceDescFlag" value="Y">
+                            <label class="form-check-label small fw-bold text-secondary" for="InvoiceDescFlag">Faturada Göster</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                @* Butun tutarlar BELGE PARA BIRIMINDE gosterilir.
+                   TL karsiligi gosterilmez; belge USD ise ekranda USD gorunur. *@
+                <div class="footer-totals-box shadow-sm w-100">
+                    <div class="footer-row">
+                        <span>İndirim öncesi toplam</span>
+                        <span id="lblNetTotalFC">0,00</span>
+                    </div>
+                    <div class="footer-row">
+                        <span>Vergi</span>
+                        <span id="lblTaxTotalFC">0,00</span>
+                    </div>
+                    <div class="footer-row grand-total">
+                        <span>Genel Toplam</span>
+                        <span id="lblGrandTotalFC" class="text-success">0,00</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="action-bar fixed-bottom">
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-light border px-4" id="btnCancel">İptal</button>
+                <button type="button" class="btn btn-danger px-4 shadow-sm" id="btnCancelDocument" style="display:none;">
+                    <i class="fas fa-ban me-1"></i>Belgeyi İptal Et
+                </button>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-secondary px-4 shadow-sm" id="btnPrintDocument" style="display:none;">
+                    <i class="fas fa-print me-1"></i>Sipariş Formu Yazdır
+                </button>
+
+                <div class="btn-group dropup" id="btnCopyToContainer" style="display:none;">
+                    <button type="button" class="btn btn-outline-primary dropdown-toggle fw-bold bg-white" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-copy me-1"></i> Kopyala Hedef
+                    </button>
+                    <ul class="dropdown-menu shadow-sm mb-2">
+                        <li><a class="dropdown-item copy-to-target" href="#" data-target="Rapor108"><i class="fas fa-truck text-muted me-2"></i>Teslimat</a></li>
+                        <li><a class="dropdown-item copy-to-target" href="#" data-target="Rapor109"><i class="fas fa-file-invoice-dollar text-muted me-2"></i>Satış Faturası</a></li>
+                    </ul>
+                </div>
+
+                <button type="submit" class="btn btn-warning px-5 shadow-sm fw-bold" id="btnSave">SAP'ye Ekle</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- YENİ NAKLİYECİ FİRMA MODAL -->
+<div class="modal fade" id="yeniNakliyeFirmaModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white">
+                <h6 class="modal-title fw-bold"><i class="fas fa-truck me-2"></i>Yeni Nakliyeci Firma</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Kapat"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-2">
+                    <label class="form-label mb-1">Firma Ünvanı <span class="text-danger">*</span></label>
+                    <input type="text" id="yeniFirmaAdi" class="form-control" maxlength="200" />
+                </div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label mb-1">Firma No</label>
+                        <input type="text" id="yeniFirmaNo" class="form-control" maxlength="50" />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label mb-1">Vergi No</label>
+                        <input type="text" id="yeniFirmaVkn" class="form-control" maxlength="11" />
+                    </div>
+                </div>
+                <div class="small text-muted mt-2">
+                    Firma SAP'ye Service Layer üzerinden eklenir ve listeye hemen düşer.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Vazgeç</button>
+                <button type="button" class="btn btn-primary" id="btnYeniFirmaKaydet">Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ARAMA SONUÇLARI MODAL -->
+<div class="modal fade" id="searchResultsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-list me-2"></i>Arama Sonuçları</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-hover table-modern mb-0">
+                        <thead class="sticky-top">
+                            <tr>
+                                <th>Belge No</th>
+                                <th>Müşteri Kodu</th>
+                                <th>Müşteri Adı</th>
+                                <th>Kayıt Tarihi</th>
+                                <th>Döviz</th>
+                            </tr>
+                        </thead>
+                        <tbody id="searchResultsBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <span class="text-muted small me-auto"><i class="fas fa-info-circle me-1"></i>Görüntülemek istediğiniz kaydın üzerine tıklayın.</span>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- EKSİK STOK BİLDİRİMİ MODAL -->
+<div class="modal fade" id="missingStockModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title fw-bold"><i class="fas fa-exclamation-triangle me-2"></i>Eksik Stok Uyarısı</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="alert alert-warning m-3 border border-warning" style="background-color: #fffbeb;">
+                    Aşağıdaki kalemlerde yeterli stok bulunmuyor. Siparişi kaydetmeden önce bu kalemler için <strong>otomatik mal girişi</strong> yapılacaktır. Onaylıyor musunuz?
+                </div>
+                <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                    <table class="table table-hover table-modern mb-0">
+                        <thead class="sticky-top">
+                            <tr>
+                                <th>Kalem Kodu</th>
+                                <th>Kalem Adı</th>
+                                <th>Depo</th>
+                                <th class="text-end">İstenen</th>
+                                <th class="text-end">Mevcut</th>
+                                <th class="text-end text-danger fw-bold">Eksik</th>
+                            </tr>
+                        </thead>
+                        <tbody id="missingStockBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal Et</button>
+                <button type="button" class="btn btn-success fw-bold px-4" id="btnConfirmMissingStock"><i class="fas fa-check me-2"></i>Onayla ve İşleme Devam Et</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- YENİ ŞOFÖR MODAL -->
+<div class="modal fade" id="newDriverModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-user-plus me-2"></i>Yeni Şoför Kaydı</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="frmNewDriver">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label mb-1">Ad/Soyad <span class="text-danger">*</span></label>
+                            <input type="text" id="nd_Name" class="form-control form-control-sm" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1">Plaka <span class="text-danger">*</span></label>
+                            <input type="text" id="nd_Plate" class="form-control form-control-sm" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1">Ünvan</label>
+                            <input type="text" id="nd_Title" class="form-control form-control-sm" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1">TC / VKN <span class="text-danger">*</span></label>
+                            <input type="text" id="nd_VKN" class="form-control form-control-sm" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1">Telefon</label>
+                            <input type="text" id="nd_Tel" class="form-control form-control-sm" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1">Firma No</label>
+                            <input type="text" id="nd_FirmaNo" class="form-control form-control-sm" />
+                        </div>
+                        <div class="col-md-12">
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" value="E" id="nd_KVKK">
+                                <label class="form-check-label" for="nd_KVKK">
+                                    KVKK Onayı Verildi
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-light border" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-success fw-bold" id="btnSaveNewDriver">Kaydet & Seç</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<template id="rowTemplate">
+    <tr>
+        <td class="text-center align-middle row-index text-muted small fw-bold">1</td>
+        <td>
+            <select class="form-select item-select req-add">
+                <option value="">- Kalem Seçin / Yazarak Arayın -</option>
+            </select>
+        </td>
+        <td class="align-middle">
+            <input type="text" class="table-input input-freetxt" placeholder="Serbest Metin / Lot"
+                   title="Serbest Metin / Lot" />
+        </td>
+        <td class="align-middle">
+            <select class="form-select form-select-sm table-input input-batch" style="font-size: 0.8rem; padding: 2px 4px; min-height:26px;" title="Uras deposundaki mevcut partiler">
+                <option value="">Önce kalem seçin</option>
+            </select>
+            <div class="small text-muted mt-1" style="font-size:0.72rem;"><span class="batch-info"></span></div>
+        </td>
+        <td class="align-middle">
+            <select class="form-select form-select-sm table-input input-whs req-add" style="font-size: 0.8rem; padding: 2px 4px; min-height:26px;">
+                <option value="">Depo Seç</option>
+                @foreach (var whs in warehouses)
+                {
+                    if(whs.WhsCode == "01")
+                    {
+                        <option value="@whs.WhsCode" selected="selected">@whs.WhsCode</option>
+                    }
+                    else
+                    {
+                        <option value="@whs.WhsCode">@whs.WhsCode</option>
+                    }
+                }
+            </select>
+            <div class="small text-muted mt-1" style="font-size:0.75rem;">Stok: <span class="input-stock fw-bold text-dark">0</span></div>
+        </td>
+        <td class="align-middle text-end">
+            <input type="number" class="table-input text-end input-qty fw-medium req-add" value="1" min="0.01" step="0.01" />
+            <div class="small text-muted mt-1" style="font-size:0.75rem;">
+                <span class="input-sec-total fw-bold text-dark">0</span> <span class="input-sec-name"></span>
+            </div>
+            <input type="hidden" class="input-sec-multiplier" value="0" />
+        </td>
+        <td>
+            <div class="input-group input-group-sm">
+                <input type="number" class="form-control text-end input-price fw-medium req-add" value="0.00" min="0" step="0.0001" />
+                <select class="form-select input-currency text-center fw-bold text-muted px-1 req-add" style="max-width: 65px;">
+                    @if(currencies != null)
+                    {
+                        foreach(var c in currencies)
+                        {
+                            <option value="@c">@c</option>
+                        }
+                    }
+                </select>
+            </div>
+            @* Talep 43: birim fiyatin diger para birimindeki karsiligi goz ucuyla
+               gorulebilsin diye satirin altinda kucuk ve salt okunur durur. *@
+            <div class="small text-muted mt-1 fiyat-karsilik" style="font-size:0.72rem; min-height:1em;"></div>
+        </td>
+        <td>
+            <select class="form-select form-select-sm table-input input-vat req-add">
+                <option value="">İşlem Tipi Seç</option>
+                @foreach(var vat in vatGroups)
+                {
+                    <option value="@vat.Code" data-rate="@vat.Rate">@vat.Code (@vat.Rate.ToString("0")%)</option>
+                }
+            </select>
+        </td>
+        @* Satir toplami yazilabilir: birim fiyat bilinmiyorsa toplam girilir,
+           birim fiyat miktara bolunerek hesaplanir (talep 34). *@
+        <td class="text-end align-middle">
+            <input type="number" class="table-input text-end fw-bold text-secondary input-line-total small"
+                   step="0.01" min="0" placeholder="0,00" title="Toplam yazarsanız birim fiyat miktara göre hesaplanır" />
+        </td>
+        <td class="text-center align-middle del-cell">
+            <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row p-1 border-0" title="Sil"><i class="fas fa-times fs-6"></i></button>
+        </td>
+    </tr>
+</template>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <script>
+        toastr.options = { positionClass: "toast-bottom-right", timeOut: "3000" };
+
+        let currentBpCurrency = 'TRY';
+        window.exchangeRates = { 'TRY': 1.0 };
+        window.bpAddresses = [];
+
+        let currentMode = 'ADD';
+        let isBindingData = false;
+        let currentDocEntry = 0;
+
+        const allMuafCodes = @Html.Raw(Json.Serialize(ViewBag.MuafCodes ?? new List<WebApplication3.Controllers.Rapor152Controller.MuafCodeModel>()));
+        const allStates = @Html.Raw(Json.Serialize(states));
+        let allDrivers = @Html.Raw(Json.Serialize(drivers));
+
+        const itemDict = {};
+        @foreach(var item in items) {
+            <text>itemDict['@item.ItemCode'] = '@item.ItemName.Replace("'", "\\'")';</text>
+        }
+
+        // -----------------------------------------------------------------
+        // TESLİMAT ve VADE TARİHİ (talep 26)
+        //
+        // Cari kartın ödeme koşulundan (OCTG.ExtraDays / ExtraMonth) hesaplanır.
+        // Teslimat tarihi siparişe/irsaliyeye, vade tarihi faturaya yazılır.
+        // Kullanıcı ikisini de elle değiştirebilir. Bu fonksiyon yalnızca yeni
+        // kayıt modunda çalışır ve cari ya da belge tarihi değiştiğinde her iki
+        // alanı da yeniden hesaplar (elle girilen değerin üzerine yazar).
+        // -----------------------------------------------------------------
+        function vadeTarihleriniHesapla() {
+            if (typeof currentMode !== 'undefined' && currentMode !== 'ADD') return;
+
+            var belgeTarihi = $('#DocDate').val();
+            if (!belgeTarihi) return;
+
+            var d = new Date(belgeTarihi);
+            d.setMonth(d.getMonth() + (window.cariVadeAy || 0));
+            d.setDate(d.getDate() + (window.cariVadeGun || 0));
+            var hesap = d.toISOString().split('T')[0];
+
+            // TESLIMAT TARIHI ODEME KOSULUNDAN GELMEZ (talep 44).
+            //
+            // Onceden musterinin vade gun/ay bilgisi hem vadeye hem teslimat
+            // tarihine yaziliyordu; sonucta teslimat tarihi kendiliginden
+            // ileri bir tarihe kayiyordu. Artik odeme kosulu YALNIZCA vadeyi
+            // belirler; teslimat tarihi siparis tarihini takip eder ve elle
+            // degistirilebilir.
+            $('#VadeTarihi').val(hesap);
+
+            if (!window.teslimatElleDegisti) $('#DocDueDate').val(belgeTarihi);
+        }
+
+        function formatNumber(num) {
+            return num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function formatItemDropdown(item) {
+            if (item.loading) { return item.text; }
+            if (!item.id) { return item.text; }
+
+            var stockInfo = item.stock || $(item.element).data('stock') || "Stok Yok";
+
+            var $result = $(
+                '<div>' +
+                '<div style="font-weight:600; color:#1e293b;">' + item.text + '</div>' +
+                '<div style="font-size:0.8rem; color:#10b981; margin-top:2px;">' +
+                '<i class="fas fa-boxes me-1"></i>' + stockInfo +
+                '</div>' +
+                '</div>'
+            );
+            return $result;
+        }
+
+        $('#orderTabs a').on('click', function (e) {
+            e.preventDefault();
+            $(this).tab('show');
+            if($(this).attr('id') === 'lines-tab' && currentMode === 'ADD') {
+                $('#btnAddRowContainer').show();
+            } else {
+                $('#btnAddRowContainer').hide();
+            }
+        });
+
+        window.saveAddressToBP = function(type) {
+            if (currentMode !== 'ADD') return;
+            const cardCode = $('#CardCode').val();
+            if(!cardCode) { toastr.warning("Önce müşteri seçmelisiniz."); return; }
+
+            const prefix = type === 'S' ? 'ShipTo' : 'PayTo';
+            const street = $(`#${prefix}Street`).val();
+            const country = $(`#${prefix}Country`).val();
+
+            if(!street || !country) {
+                toastr.warning("Adres satırı 1 ve Ülke/Bölge boş bırakılamaz.");
+                return;
+            }
+
+            const promptMsg = type === 'S' ? "Sevkiyat adresi için bir Adres Tanıtıcı (İsim) belirleyin (Örn: Şube 1):" : "Fatura adresi için bir Adres Tanıtıcı (İsim) belirleyin (Örn: Merkez):";
+            const addrName = prompt(promptMsg);
+            if(!addrName) return;
+
+            const payload = {
+                AddressName: addrName,
+                AddressType: type,
+                Street: street,
+                StreetNo: $(`#${prefix}StreetNo`).val(),
+                Block: $(`#${prefix}Block`).val(),
+                ZipCode: $(`#${prefix}ZipCode`).val(),
+                City: $(`#${prefix}State option:selected`).text() !== '- Seçiniz -' ? $(`#${prefix}State option:selected`).text() : '',
+                County: $(`#${prefix}County`).val(),
+                State: $(`#${prefix}State`).val(),
+                Country: country
+            };
+
+            $('#loadingOverlay').css('display', 'flex');
+            $.ajax({
+                url: `/Rapor152/SaveBPAddress?cardCode=${cardCode}`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(payload),
+                success: function(res) {
+                    if(res.success) {
+                        toastr.success(res.message);
+                        $.get('/Rapor152/GetCustomerAddresses', { cardCode: cardCode }, function(addressesRes) {
+                            window.bpAddresses = addressesRes;
+                            let html = '<option value="">- Seçiniz -</option>';
+                            addressesRes.forEach(a => {
+                                if(a.addressType === type) html += `<option value="${a.addressName}">${a.addressName}</option>`;
+                            });
+                            $(`#${prefix}Code`).html(html).val(addrName).trigger('change');
+                        });
+                    } else {
+                        toastr.error(res.message);
+                    }
+                },
+                error: function (xhr) {
+                    // Sunucu hatanin sebebini { success:false, message:"..." }
+                    // olarak donuyor; eskiden bu yutulup yalnizca "Sunucu hatasi"
+                    // yaziliyordu ve sorunun ne oldugu hic gorunmuyordu.
+                    var mesaj = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : null;
+                    if (!mesaj && xhr.responseText) {
+                        try { mesaj = (JSON.parse(xhr.responseText) || {}).message; } catch (e) { }
+                    }
+                    toastr.error(mesaj || ('Adres kaydedilemedi. (HTTP ' + xhr.status + ')'), '', { timeOut: 9000 });
+                },
+                complete: function() { $('#loadingOverlay').hide(); }
+            });
+        };
+
+        // ---- NAKLİYECİ FİRMA (SAP: [@@BE1_NAKLIYEFIRMA]) --------------------
+        // Secim, kayitta kullanilan uc alani doldurur; alanlar salt okunur.
+        function nakliyeFirmaUygula() {
+            var sec = $('#NakliyeFirmaSecim').find('option:selected');
+            $('#U_BE1_FIRMAADI').val(sec.val() || '');
+            $('#U_BE1_FIRMANO').val(sec.data('no') || '');
+            $('#U_BE1_FIRMAVKN').val(sec.data('vkn') || '');
+        }
+
+        $(document).on('change', '#NakliyeFirmaSecim', nakliyeFirmaUygula);
+
+        $(document).on('click', '#btnYeniNakliyeFirma', function () {
+            if (currentMode !== 'ADD') { toastr.warning('Yeni firma yalnızca ekleme modunda tanımlanabilir.'); return; }
+            $('#yeniFirmaAdi, #yeniFirmaNo, #yeniFirmaVkn').val('');
+            new bootstrap.Modal(document.getElementById('yeniNakliyeFirmaModal')).show();
+        });
+
+        $(document).on('click', '#btnYeniFirmaKaydet', function () {
+            var ad = ($('#yeniFirmaAdi').val() || '').trim();
+            if (!ad) { toastr.warning('Firma ünvanı zorunludur.'); return; }
+
+            var dugme = $(this).prop('disabled', true);
+
+            $.ajax({
+                url: '/Rapor152/NakliyeFirmaEkle',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    FirmaAdi: ad,
+                    FirmaNo: ($('#yeniFirmaNo').val() || '').trim(),
+                    FirmaVkn: ($('#yeniFirmaVkn').val() || '').trim()
+                }),
+                success: function (res) {
+                    if (!res.success) { toastr.error(res.message); return; }
+                    toastr.success(res.message);
+
+                    // Listeyi tazele ve yeni firmayi sec.
+                    $.getJSON('/Rapor152/NakliyeFirmalari', function (liste) {
+                        var html = '<option value="">- Seçiniz -</option>';
+                        (liste || []).forEach(function (f) {
+                            html += '<option value="' + f.firmaAdi + '" data-no="' + (f.firmaNo || '')
+                                  + '" data-vkn="' + (f.firmaVkn || '') + '">' + f.firmaAdi
+                                  + (f.firmaVkn ? ' (' + f.firmaVkn + ')' : '') + '</option>';
+                        });
+                        $('#NakliyeFirmaSecim').html(html).val(ad);
+                        nakliyeFirmaUygula();
+                    });
+
+                    bootstrap.Modal.getInstance(document.getElementById('yeniNakliyeFirmaModal')).hide();
+                },
+                error: function (xhr) {
+                    var m = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : null;
+                    toastr.error(m || ('Firma eklenemedi. (HTTP ' + xhr.status + ')'), '', { timeOut: 9000 });
+                },
+                complete: function () { dugme.prop('disabled', false); }
+            });
+        });
+
+        $('#DriverListSelect').on('change', function() {
+            if(isBindingData || currentMode !== 'ADD') return;
+            const docEntry = $(this).val();
+            if(docEntry) {
+                const driver = allDrivers.find(d => d.docEntry === docEntry);
+                if(driver) {
+                    $('#U_BE1_SRCNAME').val(driver.name);
+                    $('#U_BE1_SRCPLAKA').val(driver.plate);
+                    $('#U_BE1_SRCTITLE').val(driver.title);
+                    $('#U_BE1_SRCVKN').val(driver.vkn);
+                    $('#U_BE1_SRCKVKK').val(driver.kvkk);
+                    $('#U_BE1_FIRMANO').val(driver.firmaNo);
+                    $('#U_BE1_SRCTEL').val(driver.tel);
+                }
+            } else {
+                $('#U_BE1_SRCNAME, #U_BE1_SRCPLAKA, #U_BE1_SRCTITLE, #U_BE1_SRCVKN, #U_BE1_SRCKVKK, #U_BE1_FIRMANO, #U_BE1_SRCTEL').val('');
+                $('#NakliyeFirmaSecim').val(''); $('#U_BE1_FIRMAADI, #U_BE1_FIRMAVKN').val('');
+            }
+        });
+
+        $('#btnOpenNewDriverModal').click(function() {
+            if(currentMode !== 'ADD') return;
+            $('#frmNewDriver')[0].reset();
+            $('#newDriverModal').modal('show');
+        });
+
+        $('#btnSaveNewDriver').click(function() {
+            const name = $('#nd_Name').val();
+            const plate = $('#nd_Plate').val();
+            const vkn = $('#nd_VKN').val();
+
+            if(!name || !plate || !vkn) {
+                toastr.warning("Ad/Soyad, Plaka ve TC/VKN alanları zorunludur.");
+                return;
+            }
+
+            const payload = {
+                Name: name,
+                Plate: plate,
+                Title: $('#nd_Title').val(),
+                VKN: vkn,
+                KVKK: $('#nd_KVKK').is(':checked') ? 'E' : 'H',
+                FirmaNo: $('#nd_FirmaNo').val(),
+                Tel: $('#nd_Tel').val()
+            };
+
+            const btn = $(this);
+            btn.prop('disabled', true).text('Kaydediliyor...');
+
+            const selviHedef = window.driverTarget === 'SELVI';
+            $.ajax({
+                url: selviHedef ? '/Rapor152/AddSelviDriver' : '/Rapor152/AddDriver',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(payload),
+                success: function(res) {
+                    if(res.success) {
+                        toastr.success(selviHedef ? "Şoför Selvi listesine eklendi ve seçildi." : "Şoför sisteme eklendi ve seçildi.");
+                        const newOption = new Option(`${res.data.name} (${res.data.plate})`, res.data.docEntry, true, true);
+                        if (selviHedef) { selviDrivers.unshift(res.data); $('#SelviDriverListSelect').append(newOption).trigger('change'); }
+                        else { allDrivers.unshift(res.data); $('#DriverListSelect').append(newOption).trigger('change'); }
+                        $('#newDriverModal').modal('hide');
+                    } else {
+                        toastr.error(res.message);
+                    }
+                },
+                error: function() {
+                    toastr.error("Sunucu bağlantı hatası.");
+                },
+                complete: function() {
+                    btn.prop('disabled', false).text('Kaydet & Seç');
+                }
+            });
+        });
+
+
+        // =====================================================================
+        // GRUP İÇİ: SELVİ TARAFI (müşteri, adres, şoför) ve PARTİ SEÇİMİ
+        // =====================================================================
+        let selviDrivers = @Html.Raw(Json.Serialize(selviDrivers));
+        window.selviAddresses = [];
+        window.driverTarget = 'URAS';
+
+        $('#SelviCardCode').on('change', function () {
+            const kod = $(this).val();
+            $('#SelviShipToCode, #SelviPayToCode').html('<option value="">- Seçiniz -</option>');
+            fillAddressComponent('SelviShipTo', null); fillAddressComponent('SelviPayTo', null);
+            if (!kod) return;
+            $.get('/Rapor152/GetSelviCustomerAddresses', { cardCode: kod }, function (res) {
+                window.selviAddresses = res || [];
+                let sh = '<option value="">- Seçiniz -</option>', ph = '<option value="">- Seçiniz -</option>';
+                res.forEach(a => {
+                    if (a.addressType === 'S') sh += `<option value="${a.addressName}">${a.addressName}</option>`;
+                    if (a.addressType === 'B') ph += `<option value="${a.addressName}">${a.addressName}</option>`;
+                });
+                $('#SelviShipToCode').html(sh); $('#SelviPayToCode').html(ph);
+                const s = res.find(a => a.addressType === 'S'), b = res.find(a => a.addressType === 'B');
+                if (s) $('#SelviShipToCode').val(s.addressName).trigger('change');
+                if (b) $('#SelviPayToCode').val(b.addressName).trigger('change');
+                const eksik = !s || !s.street || !s.county || !s.zipCode || !s.country;
+                if (eksik) toastr.warning("Selvi müşterisinin sevk adresi eksik. Adres & Şoför sekmesinden tamamlayın.", "Selvi adresi", { timeOut: 8000 });
+                // Kalemlerin Selvi fiyatlarını bilgi olarak yenile
+                $('#linesBody tr').each(function () { selviKalemBilgisi($(this)); });
+            });
+        });
+        $('#SelviShipToCode').on('change', function () {
+            const v = $(this).val(); fillAddressComponent('SelviShipTo', window.selviAddresses.find(a => a.addressName === v && a.addressType === 'S'));
+        });
+        $('#SelviPayToCode').on('change', function () {
+            const v = $(this).val(); fillAddressComponent('SelviPayTo', window.selviAddresses.find(a => a.addressName === v && a.addressType === 'B'));
+        });
+        $('#SelviShipToCountry').on('change', function () { if (!isBindingData) populateStates('SelviShipToCountry', 'SelviShipToState'); });
+        $('#SelviPayToCountry').on('change', function () { if (!isBindingData) populateStates('SelviPayToCountry', 'SelviPayToState'); });
+        $('#selviCopyToPayTo').click(function (e) {
+            e.preventDefault();
+            ['Street', 'StreetNo', 'Block', 'ZipCode', 'County'].forEach(f => $('#SelviPayTo' + f).val($('#SelviShipTo' + f).val()));
+            $('#SelviPayToCountry').val($('#SelviShipToCountry').val()).trigger('change.select2');
+            populateStates('SelviPayToCountry', 'SelviPayToState', $('#SelviShipToState').val());
+        });
+        $('#selviCopyToShipTo').click(function (e) {
+            e.preventDefault();
+            ['Street', 'StreetNo', 'Block', 'ZipCode', 'County'].forEach(f => $('#SelviShipTo' + f).val($('#SelviPayTo' + f).val()));
+            $('#SelviShipToCountry').val($('#SelviPayToCountry').val()).trigger('change.select2');
+            populateStates('SelviShipToCountry', 'SelviShipToState', $('#SelviPayToState').val());
+        });
+
+        window.saveSelviAddressToBP = function (type) {
+            const cardCode = $('#SelviCardCode').val();
+            if (!cardCode) { toastr.warning("Önce Selvi müşterisini seçin."); return; }
+            const prefix = type === 'S' ? 'SelviShipTo' : 'SelviPayTo';
+            const street = $(`#${prefix}Street`).val(), country = $(`#${prefix}Country`).val();
+            if (!street || !country) { toastr.warning("Adres satırı 1 ve Ülke/Bölge boş bırakılamaz."); return; }
+            const addrName = prompt(type === 'S' ? "Selvi sevk adresi için Adres Tanıtıcı (Örn: Fabrika):" : "Selvi fatura adresi için Adres Tanıtıcı (Örn: Merkez):");
+            if (!addrName) return;
+            const payload = {
+                AddressName: addrName, AddressType: type, Street: street,
+                StreetNo: $(`#${prefix}StreetNo`).val(), Block: $(`#${prefix}Block`).val(), ZipCode: $(`#${prefix}ZipCode`).val(),
+                City: $(`#${prefix}State option:selected`).text() !== '- Seçiniz -' ? $(`#${prefix}State option:selected`).text() : '',
+                County: $(`#${prefix}County`).val(), State: $(`#${prefix}State`).val(), Country: country
+            };
+            $('#loadingOverlay').css('display', 'flex');
+            $.ajax({
+                url: `/Rapor152/SaveSelviBPAddress?cardCode=${cardCode}`, type: 'POST', contentType: 'application/json', data: JSON.stringify(payload),
+                success: function (res) {
+                    if (res.success) { toastr.success(res.message); $('#SelviCardCode').trigger('change'); }
+                    else toastr.error(res.message);
+                },
+                error: function () { toastr.error("Sunucu hatası."); },
+                complete: function () { $('#loadingOverlay').hide(); }
+            });
+        };
+
+        $('#SelviDriverListSelect').on('change', function () {
+            const id = $(this).val();
+            const d = selviDrivers.find(x => x.docEntry === id);
+            $('#SelviSRCNAME').val(d ? d.name : ''); $('#SelviSRCPLAKA').val(d ? d.plate : ''); $('#SelviSRCTITLE').val(d ? d.title : '');
+            $('#SelviSRCVKN').val(d ? d.vkn : ''); $('#SelviSRCKVKK').val(d ? d.kvkk : ''); $('#SelviSRCTEL').val(d ? d.tel : ''); $('#SelviFIRMANO').val(d ? d.firmaNo : '');
+        });
+        $('#btnOpenNewSelviDriverModal').click(function () {
+            window.driverTarget = 'SELVI';
+            $('#frmNewDriver')[0].reset();
+            $('#newDriverModal').modal('show');
+        });
+        $('#btnOpenNewDriverModal').on('click', function () { window.driverTarget = 'URAS'; });
+
+        // Parti listesi (Uras deposu). Kalem/depo değişince yenilenir.
+        function partileriYukle(row) {
+            const itemCode = row.find('.item-select').val();
+            const whs = row.find('.input-whs').val() || '01';
+            const sel = row.find('.input-batch');
+            const info = row.find('.batch-info');
+            sel.html('<option value="">Yükleniyor...</option>').data('partili', false);
+            if (!itemCode) { sel.html('<option value="">Önce kalem seçin</option>'); info.text(''); return; }
+            $.get('/Rapor152/GetItemBatches', { itemCode: itemCode, whsCode: whs }, function (res) {
+                sel.data('partili', !!res.partili);
+                if (!res.partili) { sel.html('<option value="">Partisiz kalem</option>'); info.text(''); return; }
+                let h = '<option value="">- Parti seçin -</option>';
+                (res.batches || []).forEach(b => { h += `<option value="${b.batchNum}" data-qty="${b.quantity}">${b.batchNum} (${formatNumber(b.quantity)})</option>`; });
+                sel.html(h);
+                if (!res.batches || res.batches.length === 0) { sel.html('<option value="">Depoda parti yok</option>'); info.text('Stokta parti bulunmuyor'); }
+                else if (res.batches.length === 1) { sel.val(res.batches[0].batchNum).trigger('change'); }
+                else info.text(res.batches.length + ' parti mevcut');
+            });
+        }
+        $(document).on('change', '.input-batch', function () {
+            const row = $(this).closest('tr');
+            const opt = $(this).find('option:selected');
+            const qty = parseFloat(opt.data('qty')) || 0;
+            row.find('.input-freetxt').val($(this).val() || '');
+            row.find('.batch-info').text($(this).val() ? 'Parti stoğu: ' + formatNumber(qty) : '');
+        });
+        function selviKalemBilgisi(row) {
+            const itemCode = row.find('.item-select').val(), cari = $('#SelviCardCode').val();
+            if (!itemCode) return;
+            $.get('/Rapor152/GetSelviItemInfo', { urasItemCode: itemCode, selviCardCode: cari }, function (res) {
+                const sel = row.find('.item-select');
+                if (!res.success) { toastr.error(res.message, 'Selvi kalem eşlemesi', { timeOut: 10000 }); sel.closest('td').css('background', '#fee2e2'); return; }
+                sel.closest('td').css('background', '');
+                const info = row.find('.batch-info');
+                const mevcut = info.text();
+                info.attr('title', 'Selvi kodu: ' + res.selviItemCode + ' | Selvi fiyatı: ' + formatNumber(res.price) + ' ' + res.currency);
+                row.find('.item-select').attr('title', 'Selvi: ' + res.selviItemCode + ' — ' + (res.selviItemName || '') + ' | ' + formatNumber(res.price) + ' ' + res.currency);
+            });
+        }
+        $(document).on('change', '.item-select', function () { const row = $(this).closest('tr'); setTimeout(function () { partileriYukle(row); selviKalemBilgisi(row); }, 150); });
+        $(document).on('change', '.input-whs', function () { partileriYukle($(this).closest('tr')); });
+
+        function populateStates(countrySelectId, stateSelectId, selectedState = '') {
+            const countryCode = $('#' + countrySelectId).val();
+            const stateSelect = $('#' + stateSelectId);
+
+            stateSelect.empty().append('<option value="">- Seçiniz -</option>');
+
+            if(countryCode) {
+                const filteredStates = allStates.filter(s => s.country === countryCode);
+                filteredStates.forEach(s => {
+                    stateSelect.append(`<option value="${s.code}">${s.name}</option>`);
+                });
+            }
+            if(selectedState) {
+                stateSelect.val(selectedState).trigger('change.select2');
+            }
+        }
+
+        function fillAddressComponent(prefix, addr) {
+            $(`#${prefix}Street`).val(addr ? addr.street : '');
+            $(`#${prefix}StreetNo`).val(addr ? addr.streetNo : '');
+            $(`#${prefix}Block`).val(addr ? addr.block : '');
+            $(`#${prefix}ZipCode`).val(addr ? addr.zipCode : '');
+            $(`#${prefix}County`).val(addr ? addr.county : '');
+
+            if(addr && addr.country) {
+                $(`#${prefix}Country`).val(addr.country).trigger('change.select2');
+                populateStates(`${prefix}Country`, `${prefix}State`, addr.state);
+            } else {
+                $(`#${prefix}Country`).val('').trigger('change.select2');
+                $(`#${prefix}State`).empty().append('<option value="">- Seçiniz -</option>');
+            }
+        }
+
+        $('#ShipToCountry').on('change', function() {
+            if(!isBindingData) populateStates('ShipToCountry', 'ShipToState');
+        });
+        $('#PayToCountry').on('change', function() {
+            if(!isBindingData) populateStates('PayToCountry', 'PayToState');
+        });
+
+        $('#copyToPayTo').click(function(e) {
+            e.preventDefault();
+            $('#PayToStreet').val($('#ShipToStreet').val());
+            $('#PayToStreetNo').val($('#ShipToStreetNo').val());
+            $('#PayToBlock').val($('#ShipToBlock').val());
+            $('#PayToZipCode').val($('#ShipToZipCode').val());
+            $('#PayToCounty').val($('#ShipToCounty').val());
+
+            let country = $('#ShipToCountry').val();
+            $('#PayToCountry').val(country).trigger('change.select2');
+            populateStates('PayToCountry', 'PayToState', $('#ShipToState').val());
+        });
+
+        $('#copyToShipTo').click(function(e) {
+            e.preventDefault();
+            $('#ShipToStreet').val($('#PayToStreet').val());
+            $('#ShipToStreetNo').val($('#PayToStreetNo').val());
+            $('#ShipToBlock').val($('#PayToBlock').val());
+            $('#ShipToZipCode').val($('#PayToZipCode').val());
+            $('#ShipToCounty').val($('#PayToCounty').val());
+
+            let country = $('#PayToCountry').val();
+            $('#ShipToCountry').val(country).trigger('change.select2');
+            populateStates('ShipToCountry', 'ShipToState', $('#PayToState').val());
+        });
+
+        // temizle = false verilirse ADD moduna gecerken form SIFIRLANMAZ.
+        // Belge cogaltmada bu gerekli: once kayit forma yuklenir, sonra ekran
+        // "yeni kayit" durumuna cevrilir ama degerler yerinde kalir.
+        function setFormMode(mode, isClosed = false, isCanceled = false, temizle = true) {
+            currentMode = mode;
+
+            $('#pageTitle .badge.bg-danger').remove();
+            $('#pageTitle .badge.bg-secondary.status-badge').remove();
+            $('#pageTitle .badge.bg-success.status-badge').remove();
+
+            if (mode === 'VIEW') {
+                $('#mainContainer').removeClass('find-mode').addClass('view-mode');
+                $('.searchable-field').prop('disabled', true);
+
+                $('#OrderComments, #DeliveryComments, #InvoiceComments').prop('disabled', true);
+                $('#UpdateGlobalRates').prop('disabled', true);
+                $('#USDRate, #EURRate').prop('disabled', true);
+
+                $('#U_BE1_NAKLIYETARIHI, #U_BE1_NAKLIYESAATI').prop('disabled', true);
+
+                $('.req-add').prop('required', false);
+
+                $('#DocNum').val(currentDocEntry).prop('disabled', true);
+                $('#btnCogalt').show();   // acik belge cogaltilabilir
+
+                $('#btnAddRowContainer, .del-cell, #colDelIcon').hide();
+                $('#btnSave').hide();
+                $('#btnOpenNewDriverModal').hide();
+                $('#divDocNumSearch').hide();
+                $('#tabsCard, #footerSection').show();
+
+                $('#btnCancel').text("Yeni Ekle").removeClass('btn-light').addClass('btn-primary text-white').prop('disabled', false);
+                $('#btnPrintDocument').show();
+
+                if (isCanceled) {
+                    $('#btnCancelDocument').hide();
+                    $('#btnCopyToContainer').hide();
+                    $('#pageTitle').append(' <span class="badge bg-danger ms-2 fs-6 status-badge">İPTAL EDİLMİŞ</span>');
+                } else if (isClosed) {
+                    $('#btnCancelDocument').show();
+                    $('#btnCopyToContainer').hide();
+                    $('#pageTitle').append(' <span class="badge bg-secondary ms-2 fs-6 status-badge">KAPALI (Faturalı)</span>');
+                } else {
+                    $('#btnCancelDocument').show();
+                    $('#btnCopyToContainer').show();
+                    $('#pageTitle').append(' <span class="badge bg-success ms-2 fs-6 status-badge">AÇIK</span>');
+                }
+            }
+            else if (mode === 'FIND') {
+                $('#mainContainer').removeClass('view-mode').addClass('find-mode');
+
+                $('.searchable-field').prop('disabled', false).val('');
+                $('#CardCode').val('').trigger('change.select2');
+                $('#SalesPersonCode').val('').trigger('change.select2');
+                $('#U_BE1_SEND').val('');
+                $('#U_BE1_MUAFCODE').empty().append('<option value="">- Muafiyet Kodu -</option>').prop('disabled', false);
+                $('#DriverListSelect').val('').trigger('change.select2');
+                $('#U_BE1_SRCNAME, #U_BE1_SRCPLAKA, #U_BE1_SRCTITLE, #U_BE1_SRCVKN, #U_BE1_SRCKVKK, #U_BE1_FIRMANO, #U_BE1_SRCTEL').val('');
+                $('#NakliyeFirmaSecim').val(''); $('#U_BE1_FIRMAADI, #U_BE1_FIRMAVKN').val('');
+
+                $('#OrderDescFlag, #DeliveryDescFlag, #InvoiceDescFlag').prop('checked', false);
+                $('#UpdateGlobalRates').prop('checked', false);
+
+                $('#ShipToCode, #PayToCode').empty().append('<option value="">- Seçiniz -</option>');
+                fillAddressComponent('ShipTo', null);
+                fillAddressComponent('PayTo', null);
+
+                $('#divDocNumSearch').show();
+                $('#SearchDocNum').prop('disabled', false).val('').focus();
+                $('#ExchangeRate').val('');
+                $('#USDRate, #EURRate').val('0.0000').prop('disabled', true);
+
+                $('#OrderComments, #DeliveryComments, #InvoiceComments').prop('disabled', true).val('');
+
+                $('#U_BE1_NAKLIYETARIHI, #U_BE1_NAKLIYESAATI').val('');
+
+                $('.req-add').prop('required', false);
+
+                $('#btnAddRowContainer, .del-cell, #colDelIcon').hide();
+                $('#tabsCard, #footerSection').hide();
+
+                $('#btnSave').show().text("Ara").removeClass('btn-warning').addClass('btn-info text-white').html('<i class="fas fa-search me-2"></i>Ara');
+
+                $('#btnCancelDocument').hide();
+                $('#btnCopyToContainer').hide();
+                $('#btnPrintDocument').hide();
+
+                $('#btnOpenNewDriverModal').hide();
+                $('#btnCancel').text("İptal").removeClass('btn-primary text-white').addClass('btn-light').prop('disabled', false);
+                $('#pageTitle').html('<i class="fas fa-search text-info me-2"></i>Kayıt Bul');
+
+                $('#linesBody').empty();
+                resetTotals();
+            }
+            else {
+                $('#mainContainer').removeClass('view-mode find-mode');
+
+                $('.searchable-field').prop('disabled', false);
+                $('#USDRate, #EURRate').prop('disabled', false);
+                $('#UpdateGlobalRates').prop('disabled', false);
+
+                $('#OrderComments, #DeliveryComments, #InvoiceComments').prop('disabled', false).val('');
+
+                $('.req-add').prop('required', true);
+
+                $('#DocNum').val('').prop('disabled', true);
+                $('#ExchangeRate').prop('readonly', true);
+
+                if($('#lines-tab').hasClass('active')) $('#btnAddRowContainer').show();
+
+                $('.del-cell, #colDelIcon').show();
+                $('#tabsCard, #footerSection').show();
+                $('#btnOpenNewDriverModal').show();
+
+                $('#btnSave').show().removeClass('btn-info text-white').addClass('btn-warning').html('SAP\'ye Ekle');
+
+                $('#btnCancelDocument').hide();
+                $('#btnCopyToContainer').hide();
+                $('#btnPrintDocument').hide();
+                $('#btnCogalt').hide();   // yeni kayitta cogaltilacak belge yok
+
+                $('#btnCancel').text("İptal").removeClass('btn-primary text-white').addClass('btn-light');
+                $('#divDocNumSearch').hide();
+
+                $('#pageTitle').html('<i class="fas fa-cart-plus text-warning me-2"></i>Satış Siparişi Oluştur');
+                currentDocEntry = 0;
+
+                if (!temizle) return;   // cogaltma: degerler korunur
+
+                isBindingData = true;
+                $('#orderForm')[0].reset();
+                $('#CardCode').val('').trigger('change.select2');
+                $('#SalesPersonCode').val('').trigger('change.select2');
+                $('#DriverListSelect').val('').trigger('change.select2');
+                $('#SelviCardCode, #SelviDriverListSelect, #SelviShipToCountry, #SelviPayToCountry').val('').trigger('change.select2');
+                $('#SelviShipToCode, #SelviPayToCode').html('<option value="">- Seçiniz -</option>');
+                $('#SelviShipToState, #SelviPayToState').empty().append('<option value="">- Seçiniz -</option>');
+                $('#U_BE1_SRCNAME, #U_BE1_SRCPLAKA, #U_BE1_SRCTITLE, #U_BE1_SRCVKN, #U_BE1_SRCKVKK, #U_BE1_FIRMANO, #U_BE1_SRCTEL').val('');
+                $('#NakliyeFirmaSecim').val(''); $('#U_BE1_FIRMAADI, #U_BE1_FIRMAVKN').val('');
+
+                $('#OrderDescFlag, #DeliveryDescFlag, #InvoiceDescFlag').prop('checked', false);
+                $('#UpdateGlobalRates').prop('checked', false);
+
+                $('#U_BE1_SEND').val('1').trigger('change');
+
+                $('#DocCurrency').val('');
+                $('#U_BE1_AKTAR').val('');
+                $('#linesBody').empty();
+
+                $('#ShipToCode, #PayToCode').empty().append('<option value="">- Seçiniz -</option>');
+                fillAddressComponent('ShipTo', null);
+                fillAddressComponent('PayTo', null);
+                window.bpAddresses = [];
+
+                const today = new Date();
+                const yyyy_mm_dd = today.toISOString().split('T')[0];
+                const hh_mm = today.toTimeString().substring(0,5);
+
+                $('#DocDate').val(yyyy_mm_dd);
+                $('#TaxDate').val(yyyy_mm_dd);
+
+                $('#U_BE1_NAKLIYETARIHI').val(yyyy_mm_dd);
+                $('#U_BE1_NAKLIYESAATI').val(hh_mm);
+
+                // Teslimat tarihi varsayilan olarak SIPARIS TARIHI (bugun).
+                window.teslimatElleDegisti = false;
+                $('#DocDueDate').val(yyyy_mm_dd);
+                // Cari secilene kadar vade = belge tarihi (talep 26)
+                window.cariVadeGun = 0; window.cariVadeAy = 0;
+                $('#VadeTarihi').val(yyyy_mm_dd);
+
+                addRow();
+                calculateTotals();
+                isBindingData = false;
+            }
+        }
+
+        function loadOrderDetailsFromId(docEntry) {
+            $('#loadingOverlay').css('display', 'flex');
+            $.get('/Rapor152/GetOrderDetails', { docEntry: docEntry }, function(res) {
+                if(res && res.success && res.data) {
+                    bindOrderToForm(res.data);
+                } else {
+                    toastr.error(res.message || "Sipariş detayları alınamadı.");
+                }
+            }).fail(function() {
+                toastr.error("Kayıt çekilirken hata oluştu.");
+            }).always(function() {
+                $('#loadingOverlay').hide();
+            });
+        }
+
+        // bittiginde: yukleme TAMAMEN bittikten sonra calisir. Fonksiyonun sonu
+        // kur sorgusunun icinde (asenkron) oldugu icin, cagiran taraf hemen
+        // ardindan ekran modunu degistirirse VIEW modu uzerine yaziyordu.
+        function bindOrderToForm(res, bittiginde) {
+            isBindingData = true;
+            currentDocEntry = res.docEntry;
+
+            $('#pageTitle').html(`<i class="fas fa-file-invoice text-primary me-2"></i>Sipariş Görüntüle (No: ${res.docNum})`);
+
+            $('#CardCode').val(res.cardCode).trigger('change.select2');
+            $('#SalesPersonCode').val(res.slpCode).trigger('change.select2');
+            $('#DocDate').val(res.docDate);
+            $('#DocDueDate').val(res.docDueDate);
+            // Kayitli sipariste ayri bir vade alani tutulmuyor; teslimat tarihi gosterilir.
+            $('#VadeTarihi').val(res.docDueDate);
+            $('#TaxDate').val(res.taxDate);
+            $('#U_BE1_AKTAR').val(res.u_BE1_AKTAR || res.U_BE1_AKTAR);
+
+            $('#OrderDescFlag').prop('checked', (res.u_BE1_DESPATCHDESC || res.U_BE1_DESPATCHDESC) === 'Y');
+
+            $('#OrderComments').val(res.comments);
+            $('#DeliveryComments').val(res.deliveryComments);
+            $('#InvoiceComments').val(res.invoiceComments);
+
+            $('#U_BE1_NAKLIYETARIHI').val(res.u_BE1_NAKLIYETARIHI || res.U_BE1_NAKLIYETARIHI || '');
+            $('#U_BE1_NAKLIYESAATI').val(res.u_BE1_NAKLIYESAATI || res.U_BE1_NAKLIYESAATI || '');
+
+            let sendType = res.u_BE1_SEND || res.U_BE1_SEND;
+            $('#U_BE1_SEND').val(sendType).trigger('change');
+
+            let muaf = res.u_BE1_MUAFCODE || res.U_BE1_MUAFCODE;
+            if(muaf) {
+                $('#U_BE1_MUAFCODE').html(`<option value="${muaf}">${muaf}</option>`).val(muaf);
+            }
+
+            $('#ShipToCode').html(`<option value="${res.shipToCode}">${res.shipToCode}</option>`).val(res.shipToCode);
+            $('#PayToCode').html(`<option value="${res.payToCode}">${res.payToCode}</option>`).val(res.payToCode);
+
+            if(res.addressExtension) {
+                fillAddressComponent('ShipTo', {
+                    street: res.addressExtension.shipToStreet, streetNo: res.addressExtension.shipToStreetNo,
+                    block: res.addressExtension.shipToBlock, zipCode: res.addressExtension.shipToZipCode,
+                    county: res.addressExtension.shipToCounty,
+                    state: res.addressExtension.shipToState, country: res.addressExtension.shipToCountry
+                });
+                fillAddressComponent('PayTo', {
+                    street: res.addressExtension.billToStreet, streetNo: res.addressExtension.billToStreetNo,
+                    block: res.addressExtension.billToBlock, zipCode: res.addressExtension.billToZipCode,
+                    county: res.addressExtension.billToCounty,
+                    state: res.addressExtension.billToState, country: res.addressExtension.billToCountry
+                });
+            } else {
+                fillAddressComponent('ShipTo', null);
+                fillAddressComponent('PayTo', null);
+            }
+
+            $('#DriverListSelect').val(res.u_BE1_SOFORSECIMI || res.U_BE1_SOFORSECIMI || '').trigger('change.select2');
+            $('#U_BE1_SRCNAME').val(res.u_BE1_SRCNAME || res.U_BE1_SRCNAME || '');
+            $('#U_BE1_SRCPLAKA').val(res.u_BE1_SRCPLAKA || res.U_BE1_SRCPLAKA || '');
+            $('#U_BE1_SRCTITLE').val(res.u_BE1_SRCTITLE || res.U_BE1_SRCTITLE || '');
+            $('#U_BE1_SRCVKN').val(res.u_BE1_SRCVKN || res.U_BE1_SRCVKN || '');
+            $('#U_BE1_SRCKVKK').val(res.u_BE1_SRCKVKK || res.U_BE1_SRCKVKK || '');
+            $('#U_BE1_FIRMANO').val(res.u_BE1_FIRMANO || res.U_BE1_FIRMANO || '');
+            $('#U_BE1_FIRMAADI').val(res.u_BE1_FIRMAADI || res.U_BE1_FIRMAADI || '');
+            // Kayitli belgedeki firma listede varsa secili gelsin.
+            $('#NakliyeFirmaSecim').val(res.u_BE1_FIRMAADI || res.U_BE1_FIRMAADI || '');
+            $('#U_BE1_FIRMAVKN').val(res.u_BE1_FIRMAVKN || res.U_BE1_FIRMAVKN || '');
+            $('#U_BE1_SRCTEL').val(res.u_BE1_SRCTEL || res.U_BE1_SRCTEL || '');
+
+            $('#DocCurrency').val(res.docCurrency);
+            $('#ExchangeRate').val(res.docRate.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }));
+
+            window.exchangeRates[res.docCurrency] = res.docRate;
+
+            $.get('/Rapor152/GetAllExchangeRates', { date: res.docDate }, function(rates) {
+                window.exchangeRates = rates;
+                $('#USDRate').val((rates['USD'] || 0).toFixed(4));
+                $('#EURRate').val((rates['EUR'] || 0).toFixed(4));
+
+                let rowsHtml = '';
+                let netLC = 0, taxLC = 0;
+
+                res.lines.forEach((line, index) => {
+                    let itemName = line.itemName || itemDict[line.itemCode] || '';
+                    let displayTitle = itemName ? `${line.itemCode} - ${itemName}` : line.itemCode;
+                    // KAYITLI SIPARISTE SAP'NIN KENDI KURU KULLANILIR.
+                    //
+                    // Onceden kur, guncel kur tablosundan aranip bulunamazsa 1.0
+                    // aliniyordu; boyle olunca EUR satirin tutari TL yerine doviz
+                    // rakami olarak toplaniyor ve TRY belgede toplam yanlis
+                    // (dovizli) cikiyordu. Artik belgeye kaydedilmis kur esastir.
+                    let lineRate = (parseFloat(line.lineRate) > 0)
+                        ? parseFloat(line.lineRate)
+                        : (window.exchangeRates[line.currency] || (line.currency === res.docCurrency ? res.docRate : 1.0));
+
+                    let secQty = line.quantity * line.secUnitMultiplier;
+                    let lineNetFC = line.quantity * line.unitPrice;
+                    // SAP'nin sakladigi yerel tutar varsa dogrudan o kullanilir.
+                    let lineNetLC = (parseFloat(line.lineTotalLC) > 0)
+                        ? parseFloat(line.lineTotalLC)
+                        : (lineNetFC * lineRate);
+
+                    // Toplam kolonu BELGE para birimindedir: yerel tutar belgenin
+                    // kuruna bolunur (TRY belgede kur 1, yani TL karsiligi yazar).
+                    let belgeKuru = parseFloat(res.docRate) > 0 ? parseFloat(res.docRate) : 1.0;
+                    let lineNetDoc = lineNetLC / belgeKuru;
+
+                    let vatObj = @Html.Raw(Json.Serialize(ViewBag.VatGroups));
+                    let foundVat = vatObj.find(v => v.code === line.vatGroup);
+                    let vRate = foundVat ? foundVat.rate : 0;
+                    let lineTaxLC = lineNetLC * (vRate / 100);
+
+                    netLC += lineNetLC;
+                    taxLC += lineTaxLC;
+
+                    rowsHtml += `
+                    <tr>
+                        <td class="text-center align-middle text-muted small fw-bold">${index + 1}</td>
+                        <td class="align-middle fw-medium">${displayTitle}</td>
+                        <td class="align-middle">
+                            <input type="text" class="table-input text-start fw-medium input-freetxt" value="${line.freeTxt || ''}" title="${line.freeTxt || ''}" readonly />
+                        </td>
+                        <td class="align-middle">
+                            <select class="form-select form-select-sm table-input input-whs" disabled style="font-size: 0.8rem; padding: 2px 4px; min-height:26px;">
+                                <option value="${line.warehouseCode}">${line.warehouseCode}</option>
+                            </select>
+                            <div class="small text-muted mt-1" style="font-size:0.75rem;">Stok: -</div>
+                        </td>
+                        <td class="align-middle text-end">
+                            <input type="text" class="table-input text-end fw-medium" value="${line.quantity}" readonly />
+                            <div class="small text-muted mt-1" style="font-size:0.75rem;">
+                                <span class="fw-bold text-dark">${formatNumber(secQty)}</span> ${line.secUnitName || ''}
+                            </div>
+                        </td>
+                        <td class="text-end align-middle">
+                            ${formatNumber(line.unitPrice)} ${line.currency}
+                            ${line.currency !== (res.docCurrency || 'TRY')
+                                ? `<div class="small text-muted" style="font-size:0.72rem;">≈ ${formatNumber((line.unitPrice * lineRate) / belgeKuru)} ${res.docCurrency || 'TRY'}</div>`
+                                : ''}
+                        </td>
+                        <td class="align-middle">${line.vatGroup}</td>
+                        <td class="text-end align-middle fw-bold text-secondary small">
+                            ${formatNumber(lineNetDoc)} ${res.docCurrency || 'TRY'}
+                            ${line.currency !== (res.docCurrency || 'TRY')
+                                ? `<div class="text-muted fw-normal" style="font-size:0.72rem;">${formatNumber(lineNetFC)} ${line.currency}</div>`
+                                : ''}
+                        </td>
+                    </tr>`;
+                });
+
+                $('#linesBody').html(rowsHtml);
+
+                toplamlariYaz(netLC, taxLC, res.docCurrency, res.docRate);
+
+                const isCanceled = (res.canceled === 'Y' || res.canceled === 'y');
+                const isClosed = (res.docStatus === 'C' || res.docStatus === 'c');
+                setFormMode('VIEW', isClosed, isCanceled);
+                isBindingData = false;
+
+                if (typeof bittiginde === 'function') bittiginde(res);
+            });
+        }
+
+        function populateSearchResults(list) {
+            let html = '';
+            list.forEach(row => {
+                html += `
+                <tr onclick="loadOrderAndCloseModal(${row.docEntry})">
+                    <td class="fw-bold">${row.docNum}</td>
+                    <td>${row.cardCode}</td>
+                    <td class="text-truncate" style="max-width: 200px;">${row.cardName || ''}</td>
+                    <td>${row.docDate}</td>
+                    <td><span class="badge bg-secondary">${row.docCurrency}</span></td>
+                </tr>`;
+            });
+            $('#searchResultsBody').html(html);
+            $('#searchResultsModal').modal('show');
+        }
+
+        window.loadOrderAndCloseModal = function(docEntry) {
+            $('#searchResultsModal').modal('hide');
+            loadOrderDetailsFromId(docEntry);
+        }
+
+        $('.nav-btn').click(function() {
+            if (isBindingData) return;
+            const dir = $(this).data('dir');
+
+            $('#loadingOverlay').css('display', 'flex');
+
+            $.get('/Rapor152/GetOrderNavigation', { currentDocEntry: currentDocEntry, direction: dir }, function(res) {
+                if(res && res.success && res.data) {
+                    bindOrderToForm(res.data);
+                } else {
+                    toastr.info("Bu yönde başka kayıt bulunmuyor.");
+                }
+            }).fail(function() {
+                toastr.error("Kayıt çekilirken hata oluştu.");
+            }).always(function() {
+                $('#loadingOverlay').hide();
+            });
+        });
+
+        $('#btnNewDoc').click(function() {
+            setFormMode('ADD');
+            fetchAllExchangeRates();
+            setTimeout(urasMusteriSabitle, 80);
+        });
+
+        // Grup içi: Uras'taki müşteri her zaman Selvi Kimya. Seçim kilitli; adres/para birimi otomatik yüklenir.
+        const SELVI_CARI = '@selviCari';
+        function urasMusteriSabitle() {
+            if (currentMode !== 'ADD') return;
+            if ($('#CardCode').val() !== SELVI_CARI) $('#CardCode').val(SELVI_CARI).trigger('change');
+        }
+        $('#CardCode').on('select2:opening', function (e) { if (currentMode === 'ADD') { e.preventDefault(); toastr.info("Uras'ta müşteri sabittir: Selvi Kimya. Asıl müşteriyi alttaki kutudan seçin."); } });
+
+        // ---- BELGEYİ ÇOĞALT ---------------------------------------------
+        //
+        // Açık siparişin birebir aynısını YENİ KAYIT olarak forma getirir.
+        // SAP'ye hiçbir şey gönderilmez; kontrol edip "SAP'ye Ekle" düğmesine
+        // basmak kullanıcıya bırakılır. Belgeye özel alanlar (belge no, kayıt
+        // numarası, durum) taşınmaz; tarihler bugüne çekilir.
+        $('#btnCogalt').click(function () {
+            if (!currentDocEntry) { toastr.warning('Önce çoğaltılacak siparişi açın.'); return; }
+
+            const kaynakEntry = currentDocEntry;
+
+            $('#loadingOverlay').css('display', 'flex');
+            $.get('/Rapor152/GetOrderDetails', { docEntry: kaynakEntry }, function (res) {
+                if (!res || !res.success || !res.data) {
+                    toastr.error((res && res.message) || 'Sipariş detayları alınamadı.');
+                    return;
+                }
+
+                // Yükleme kur sorgusu yüzünden ASENKRON bitiyor; çoğaltma adımları
+                // bu yüzden geri çağrıda yapılır. Aksi hâlde VIEW modu sonradan
+                // gelip üzerine yazıyor, form salt okunur kalıyor ve
+                // "SAP'ye Ekle" düğmesi görünmüyordu.
+                bindOrderToForm(res.data, cogaltmayiTamamla);
+            }).fail(function () {
+                toastr.error('Kayıt çekilirken hata oluştu.');
+            }).always(function () {
+                $('#loadingOverlay').hide();
+            });
+        });
+
+        function cogaltmayiTamamla(veri) {
+            const kaynakNo = veri.docNum;
+
+            // Ekran, değerler korunarak "yeni kayıt" durumuna çevrilir.
+            isBindingData = true;
+            setFormMode('ADD', false, false, false);
+
+            // Belgeye özel alanlar temizlenir.
+            currentDocEntry = 0;
+            $('#DocNum').val('').prop('disabled', true);
+
+            const bugun = new Date().toISOString().split('T')[0];
+            $('#DocDate').val(bugun);
+            $('#TaxDate').val(bugun);
+
+            // Teslim ve vade tarihi geçmişte kaldıysa bugüne çekilir.
+            ['#DocDueDate', '#VadeTarihi'].forEach(function (alan) {
+                const mevcut = $(alan).val();
+                if (!mevcut || mevcut < bugun) $(alan).val(bugun);
+            });
+
+            $('#pageTitle').html('<i class="fas fa-copy text-warning me-2"></i>Satış Siparişi Oluştur '
+                               + '<span class="badge bg-warning text-dark align-middle">' + kaynakNo + ' kopyası</span>');
+
+            isBindingData = false;
+
+            // Satırlar DÜZENLENEBİLİR şablonla yeniden kurulur: görüntüleme
+            // satırları kaydetme rutininin aradığı alanları taşımıyor.
+            cogaltSatirlariKur(veri.lines || []);
+
+            toastr.success(kaynakNo + " numaralı sipariş çoğaltıldı. Kontrol edip "
+                         + "<b>SAP'ye Ekle</b> düğmesiyle kaydedin.", "", { timeOut: 9000, enableHtml: true });
+        }
+
+        $('#btnFindMode').click(function() {
+            setFormMode('FIND');
+        });
+
+        $('#btnPrintDocument').click(function() {
+            if(currentDocEntry > 0) {
+                window.open('/Rapor152/PrintOrder?docEntry=' + currentDocEntry, '_blank');
+            }
+        });
+
+        function fetchAllExchangeRates() {
+            if(currentMode !== 'ADD') return;
+            const date = $('#DocDate').val();
+            $.get('/Rapor152/GetAllExchangeRates', { date: date }, function(res) {
+                window.exchangeRates = res;
+                const docCur = $('#DocCurrency').val() || 'TRY';
+                const docRate = window.exchangeRates[docCur] || 1.0;
+                $('#ExchangeRate').val(docRate.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }));
+
+                const usdRate = window.exchangeRates['USD'] || 0;
+                const eurRate = window.exchangeRates['EUR'] || 0;
+                $('#USDRate').val(usdRate.toFixed(4));
+                $('#EURRate').val(eurRate.toFixed(4));
+
+                calculateTotals();
+            });
+        }
+
+        $(document).ready(function () {
+            $('.select2-init').select2({ theme: 'bootstrap-5', width: '100%' });
+
+            setFormMode('ADD');
+            fetchAllExchangeRates();
+            setTimeout(urasMusteriSabitle, 120);
+
+            $('#USDRate').on('input change', function() {
+                window.exchangeRates['USD'] = parseFloat($(this).val()) || 0;
+                if ($('#DocCurrency').val() === 'USD') {
+                    $('#ExchangeRate').val(window.exchangeRates['USD'].toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }));
+                }
+                calculateTotals();
+            });
+
+            $('#EURRate').on('input change', function() {
+                window.exchangeRates['EUR'] = parseFloat($(this).val()) || 0;
+                if ($('#DocCurrency').val() === 'EUR') {
+                    $('#ExchangeRate').val(window.exchangeRates['EUR'].toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }));
+                }
+                calculateTotals();
+            });
+
+            $('#btnCancelDocument').click(function() {
+                if (!currentDocEntry || currentDocEntry <= 0) return;
+
+                if (confirm("Bu belgeyi iptal etmek istediğinize emin misiniz? Fatura -> İrsaliye -> Sipariş sırasıyla otomatik iptal edilecektir.")) {
+                    $('#loadingOverlay').css('display', 'flex');
+
+                    $.post('/Rapor152/CancelOrder?docEntry=' + currentDocEntry, function(res) {
+                        if (res.success) {
+                            toastr.success(res.message);
+                            setTimeout(() => { window.location.reload(); }, 2000);
+                        } else {
+                            toastr.error(res.message);
+                        }
+                    }).fail(function(xhr) {
+                        const errMsg = xhr.responseJSON ? xhr.responseJSON.message : "İptal işlemi sırasında hata oluştu.";
+                        toastr.error(errMsg);
+                    }).always(function() {
+                        $('#loadingOverlay').hide();
+                    });
+                }
+            });
+
+            $('.copy-to-target').click(function(e) {
+                e.preventDefault();
+                if (!currentDocEntry || currentDocEntry <= 0) return;
+
+                const targetController = $(this).data('target');
+                const url = `/${targetController}?baseType=17&baseEntry=${currentDocEntry}`;
+                window.location.href = url;
+            });
+
+            $('#U_BE1_SEND').on('change', function() {
+                if(isBindingData) return;
+
+                const sendType = $(this).find("option:selected").text();
+                const muafSelect = $('#U_BE1_MUAFCODE');
+
+                muafSelect.empty();
+                muafSelect.append('<option value="">- Muafiyet Kodu -</option>');
+
+                if(currentMode === 'ADD' && (sendType.includes("SATIS") || sendType.includes("IADE") || sendType === "")) {
+                    muafSelect.prop('disabled', true).prop('required', false);
+                    return;
+                }
+
+                if (currentMode === 'ADD') {
+                    muafSelect.prop('disabled', false).prop('required', true);
+                }
+
+                let targetType = "";
+                if(sendType.includes("ISTISNA")) targetType = "ISTISNA";
+                else if(sendType.includes("OZELMATRAH")) targetType = "OZELMATRAH";
+                else if(sendType.includes("TEVKIFAT")) targetType = "TEVKIFAT";
+                else if(sendType.includes("IHRACKAYITLI")) targetType = "IHRACKAYITLI";
+
+                if(targetType !== "") {
+                    const filteredCodes = allMuafCodes.filter(c => c.type === targetType);
+                    filteredCodes.forEach(c => {
+                        muafSelect.append(`<option value="${c.code}">${c.code} - ${c.name}</option>`);
+                    });
+                }
+            });
+
+            $('#U_BE1_AKTAR').on('change', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+
+                if ($(this).val() === 'X') {
+                    $('#linesBody tr').each(function() {
+                        $(this).find('.input-vat').val('S05');
+                    });
+                    calculateTotals();
+                    toastr.info("İşlem Tipi 'X' seçildiği için vergi kodları S05 olarak güncellendi.");
+                }
+            });
+
+         $('#CardCode').on('change', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+                const cardCode = $(this).val();
+                if(!cardCode) return;
+
+                $.get('/Rapor152/GetCustomerInfo', { cardCode: cardCode }, function(res) {
+                    currentBpCurrency = res.currency;
+                    $('#CurrencyType').val('BP');
+                    $('#DocCurrency').val(currentBpCurrency);
+
+                    const docRate = window.exchangeRates[currentBpCurrency] || 1.0;
+                    $('#ExchangeRate').val(docRate.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }));
+
+                    if(res.slpCode && res.slpCode !== -1) {
+                        $('#SalesPersonCode').val(res.slpCode).trigger('change.select2');
+                    }
+
+                    // Müşteri seçildiğinde teslimat ve vade tarihi ödeme koşuluna göre dolar.
+                    window.cariVadeGun = res.extraDays || 0;
+                    window.cariVadeAy = res.extraMonth || 0;
+                    vadeTarihleriniHesapla();
+                });
+
+
+                $.get('/Rapor152/GetCustomerAddresses', { cardCode: cardCode }, function(res) {
+                    let shipHtml = '<option value="">- Seçiniz -</option>';
+                    let payHtml = '<option value="">- Seçiniz -</option>';
+                    window.bpAddresses = res;
+
+                    res.forEach(addr => {
+                        if(addr.addressType === 'S') shipHtml += `<option value="${addr.addressName}">${addr.addressName}</option>`;
+                        if(addr.addressType === 'B') payHtml += `<option value="${addr.addressName}">${addr.addressName}</option>`;
+                    });
+
+                    $('#ShipToCode').html(shipHtml);
+                    $('#PayToCode').html(payHtml);
+
+                    if(res.find(a => a.addressType === 'S')) $('#ShipToCode').val(res.find(a => a.addressType === 'S').addressName).trigger('change');
+                    if(res.find(a => a.addressType === 'B')) $('#PayToCode').val(res.find(a => a.addressType === 'B').addressName).trigger('change');
+                });
+            });
+
+            $('#ShipToCode').on('change', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+                const val = $(this).val();
+                const addr = window.bpAddresses?.find(a => a.addressName === val && a.addressType === 'S');
+                fillAddressComponent('ShipTo', addr);
+            });
+
+            $('#PayToCode').on('change', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+                const val = $(this).val();
+                const addr = window.bpAddresses?.find(a => a.addressName === val && a.addressType === 'B');
+                fillAddressComponent('PayTo', addr);
+            });
+
+            $('#CurrencyType').on('change', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+                const type = $(this).val();
+                if(type === 'BP') {
+                    $('#DocCurrency').val(currentBpCurrency).prop('disabled', false);
+                } else if(type === 'LC') {
+                    $('#DocCurrency').val('TRY').prop('disabled', true);
+                } else if(type === 'SC') {
+                    $('#DocCurrency').val('TRY').prop('disabled', false);
+                }
+
+                const docCur = $('#DocCurrency').val();
+                const docRate = window.exchangeRates[docCur] || 1.0;
+                $('#ExchangeRate').val(docRate.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }));
+
+                // Belge para birimi burada 'change' tetiklemeden degistigi icin
+                // satirlar acikca esitlenir.
+                window.satirParaBirimleriniEsitle();
+
+                calculateTotals();
+            });
+
+            $('#DocCurrency').on('change', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+                const docCur = $(this).val() || 'TRY';
+                const docRate = window.exchangeRates[docCur] || 1.0;
+                $('#ExchangeRate').val(docRate.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }));
+                calculateTotals();
+            });
+
+            $('#DocDate').on('change', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+                fetchAllExchangeRates();
+                vadeTarihleriniHesapla();
+            });
+
+            // Teslimat tarihine elle dokunulduysa bir daha uzerine yazilmaz.
+            $('#DocDueDate').on('change', function () {
+                if (isBindingData || currentMode !== 'ADD') return;
+                window.teslimatElleDegisti = true;
+            });
+
+            $('#btnAddRow').click(function () {
+                if(currentMode !== 'ADD') return;
+                addRow();
+            });
+
+            $(document).on('click', '.btn-remove-row', function () {
+                if(currentMode !== 'ADD') return;
+                $(this).closest('tr').find('.item-select').select2('destroy');
+                $(this).closest('tr').remove();
+                updateRowIndexes();
+                calculateTotals();
+            });
+
+            $(document).on('input', '.input-qty, .input-price', function () { if(currentMode === 'ADD') calculateTotals(); });
+
+            // Kolon dar oldugu icin uzun metin kesilir; tamami tooltip'te durur.
+            $(document).on('input', '.input-freetxt', function () {
+                $(this).attr('title', $(this).val() || 'Serbest Metin / Lot');
+            });
+            // BEDELSİZ SATIR: fiyat 0 girildiğinde KDV kodu S05'e (%0 KDV'den muaf)
+            // çekilir ve istisna alanları hatırlatılır. 'input' yerine 'change'
+            // kullanılıyor; aksi hâlde "0" yazıp "10" yapmaya çalışırken tetiklenirdi.
+            $(document).on('change', '.input-price', function () {
+                if (currentMode !== 'ADD') return;
+
+                var fiyat = parseFloat($(this).val()) || 0;
+                if (fiyat !== 0) return;
+
+                var kdv = $(this).closest('tr').find('.input-vat');
+                if (kdv.find('option[value="S05"]').length && kdv.val() !== 'S05') {
+                    kdv.val('S05');
+                    calculateTotals();
+                    toastr.info("Bedelsiz satır: KDV kodu S05 (%0 KDV'den muaf) olarak ayarlandı.");
+                }
+
+                if (!$('#U_BE1_SEND').val() || !$('#U_BE1_MUAFCODE').val()) {
+                    toastr.warning("Bedelsiz satış için <strong>Fatura Tipi</strong> ve <strong>Muafiyet Kodu</strong> alanlarını doldurmayı unutmayın.",
+                                   "İstisna bilgisi gerekli", { timeOut: 8000, enableHtml: true });
+                }
+            });
+
+            $(document).on('change', '.input-vat, .input-currency', function () { if(currentMode === 'ADD') calculateTotals(); });
+
+            // ---- Toplamdan birim fiyat (talep 34) --------------------------
+            // Birim fiyat her zaman bilinmiyor; kullanici satir toplamini yazar,
+            // birim fiyat miktara bolunerek bulunur.
+            $(document).on('change', '.input-line-total', function () {
+                if (currentMode !== 'ADD') return;
+
+                var satir = $(this).closest('tr');
+                var toplam = parseFloat($(this).val());
+                if (isNaN(toplam)) { calculateTotals(); return; }
+
+                var miktar = parseFloat(satir.find('.input-qty').val()) || 0;
+                if (miktar <= 0) {
+                    toastr.warning('Önce miktar giriniz; birim fiyat toplama göre hesaplanamadı.');
+                    calculateTotals();
+                    return;
+                }
+
+                // Girilen toplam BELGE para biriminde; birim fiyat ise SATIR para
+                // biriminde tutuluyor. Ters cevrim yapilir:
+                //   toplamTL   = toplamBelge * belgeKuru
+                //   fiyatSatir = toplamTL / satirKuru / miktar
+                var belgePB = $('#DocCurrency').val() || 'TRY';
+                var satirPB = satir.find('.input-currency').val() || 'TRY';
+
+                var belgeKuruStr = $('#ExchangeRate').val();
+                var belgeKuru = 1.0;
+                if (belgeKuruStr) belgeKuru = parseFloat(belgeKuruStr.replace(/\./g, '').replace(',', '.')) || 1.0;
+
+                var satirKuru = parseFloat(window.exchangeRates[satirPB]) || (satirPB === belgePB ? belgeKuru : 1.0);
+
+                if (satirKuru <= 0) {
+                    toastr.warning(satirPB + ' kuru bulunamadı; birim fiyatı elle giriniz.');
+                    calculateTotals();
+                    return;
+                }
+
+                var fiyat = (toplam * belgeKuru) / satirKuru / miktar;
+                satir.find('.input-price').val(fiyat.toFixed(4));
+                calculateTotals();
+            });
+
+            // ---- Belge para birimi -> satir para birimi (talep 34) ---------
+            // Ustteki belge para birimi degisince acik satirlarin hepsi ona doner.
+            // Ayri bir islev: belge para birimi bazi yollarda (Kur Tipi secimi)
+            // 'change' tetiklenmeden degistiriliyor, oradan da cagrilabilsin.
+            window.satirParaBirimleriniEsitle = function () {
+                if (isBindingData || currentMode !== 'ADD') return;
+
+                var pb = $('#DocCurrency').val();
+                if (!pb) return;
+
+                var degisen = 0;
+                $('#linesBody tr').each(function () {
+                    var sec = $(this).find('.input-currency');
+                    if (sec.length && sec.val() !== pb && sec.find('option[value="' + pb + '"]').length) {
+                        sec.val(pb);
+                        degisen++;
+                    }
+                });
+
+                if (degisen > 0) {
+                    calculateTotals();
+                    toastr.info(degisen + ' satırın para birimi ' + pb + ' olarak güncellendi.');
+                }
+            };
+
+            $('#DocCurrency').on('change', function () { window.satirParaBirimleriniEsitle(); });
+
+            $(document).on('change', '.item-select', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+
+                const row = $(this).closest('tr');
+                const itemCode = $(this).val();
+                const cardCode = $('#CardCode').val();
+
+                const priceInput = row.find('.input-price');
+                const curInput = row.find('.input-currency');
+                const whsInput = row.find('.input-whs');
+                const stockInput = row.find('.input-stock');
+                const secNameInput = row.find('.input-sec-name');
+                const multiplierInput = row.find('.input-sec-multiplier');
+                const freeTxtInput = row.find('.input-freetxt');
+
+                if (!itemCode) {
+                    priceInput.val(0);
+                    stockInput.text('0');
+                    multiplierInput.val(0);
+                    freeTxtInput.val('');
+                    calculateTotals();
+                    return;
+                }
+
+                if (!whsInput.val()) {
+                    whsInput.val('01');
+                }
+                whsInput.trigger('change');
+
+                if(cardCode) {
+                    $.get('/Rapor152/GetItemPrice', { cardCode: cardCode, itemCode: itemCode }, function(res) {
+                        // FİYAT KENDİ PARA BİRİMİNDE GELİR.
+                        //
+                        // Cariye özel fiyat (OSPP) ya da fiyat listesi kaydı
+                        // hangi para birimindeyse satır o para birimine çekilir
+                        // ve tutar OLDUĞU GİBİ yazılır. Önceden fiyat belge para
+                        // birimine çevriliyordu; çevrim için o günün kuru gerekli
+                        // olduğundan kur yoksa fiyat 0 kalıyordu ve özel fiyat
+                        // hiç gelmiyor gibi görünüyordu.
+                        //
+                        // Fiyat bulunamazsa satır belge para birimiyle açılır.
+                        var belgePB = $('#DocCurrency').val() || 'TRY';
+
+                        function satirParaBirimiSabitle() {
+                            if (curInput.find('option[value="' + belgePB + '"]').length) curInput.val(belgePB);
+                        }
+
+                        if (res && res.hata) {
+                            // Sunucu fiyatı okuyamadı; sessiz 0 yerine sebebi görünsün.
+                            toastr.error(res.hata, 'Fiyat alınamadı', { timeOut: 12000 });
+                        }
+
+                        if(res) {
+                            var kalemPB = res.currency || belgePB;
+                            var fiyat = parseFloat(res.price) > 0 ? parseFloat(res.price) : 0;
+
+                            if (fiyat > 0) {
+                                // Fiyatın kendi para birimi satıra uygulanır.
+                                if (curInput.find('option[value="' + kalemPB + '"]').length) {
+                                    curInput.val(kalemPB);
+                                } else {
+                                    satirParaBirimiSabitle();
+                                    if (kalemPB !== belgePB) {
+                                        toastr.warning(kalemPB + ' para birimi satır listesinde yok; '
+                                                     + 'fiyat ' + belgePB + ' olarak bırakıldı, kontrol edin.');
+                                    }
+                                }
+                            } else {
+                                satirParaBirimiSabitle();
+                            }
+
+                            priceInput.val(fiyat > 0 ? fiyat.toFixed(4) : 0);
+                            // NOT: burada satirParaBirimiSabitle() CAGRILMAZ; para birimi
+                            // yukarida fiyatin kendi birimine ayarlandi, tekrar cagirmak
+                            // onu belge para birimine geri cevirip fiyati yanlis birimde
+                            // birakiyordu.
+                            secNameInput.text(res.secUnitName || '');
+                            multiplierInput.val(res.secUnitMultiplier || 0);
+                            freeTxtInput.val(res.freeTxt || '');
+
+                            if(res.dfltWH && res.dfltWH !== whsInput.val()) {
+                                whsInput.val(res.dfltWH).trigger('change');
+                            }
+                        } else {
+                            priceInput.val(0);
+                            satirParaBirimiSabitle();
+                            multiplierInput.val(0);
+                            freeTxtInput.val('');
+                        }
+                        calculateTotals();
+                    });
+                }
+            });
+
+            $(document).on('change', '.input-whs', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+
+                const row = $(this).closest('tr');
+                const itemCode = row.find('.item-select').val();
+                const whsCode = $(this).val();
+                const stockInput = row.find('.input-stock');
+
+                if (itemCode && whsCode) {
+                    $.get('/Rapor152/GetItemStock', { itemCode: itemCode, whsCode: whsCode }, function(res) {
+                        stockInput.text(formatNumber(res.onHand || 0));
+                    });
+                } else {
+                    stockInput.text('0');
+                }
+            });
+
+            $('#orderForm').submit(function (e) {
+                e.preventDefault();
+
+                if(currentMode === 'FIND') {
+                    const searchPayload = {
+                        DocNum: $('#SearchDocNum').val() ? parseInt($('#SearchDocNum').val()) : null,
+                        CardCode: $('#CardCode').val(),
+                        SlpCode: $('#SalesPersonCode').val() ? parseInt($('#SalesPersonCode').val()) : null,
+                        DocDate: $('#DocDate').val() || null,
+                        DocDueDate: $('#DocDueDate').val() || null,
+                        TaxDate: $('#TaxDate').val() || null,
+                        U_BE1_AKTAR: $('#U_BE1_AKTAR').val(),
+                        U_BE1_SEND: $('#U_BE1_SEND').val(),
+                        U_BE1_MUAFCODE: $('#U_BE1_MUAFCODE').val(),
+                        DocCurrency: $('#DocCurrency').val()
+                    };
+
+                    $('#loadingOverlay').css('display', 'flex');
+
+                    $.ajax({
+                        url: '/Rapor152/FindOrder',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify(searchPayload),
+                        success: function (res) {
+                            if (res.success && res.data && res.data.length > 0) {
+                                if (res.data.length === 1) {
+                                    loadOrderDetailsFromId(res.data[0].docEntry);
+                                } else {
+                                    populateSearchResults(res.data);
+                                }
+                            } else {
+                                toastr.warning(res.message || "Kayıt bulunamadı.");
+                            }
+                        },
+                        error: function () { toastr.error("Arama sırasında hata oluştu."); },
+                        complete: function () { $('#loadingOverlay').hide(); }
+                    });
+
+                    return;
+                }
+
+                if(currentMode === 'VIEW') return;
+
+                const cardCode = $('#CardCode').val();
+                const cardName = $('#CardCode option:selected').data('name') || "";
+
+                if (!cardCode) { toastr.warning("Lütfen müşteri seçiniz."); return; }
+                if (!$('#SalesPersonCode').val()) { toastr.warning("Lütfen satış temsilcisi seçiniz."); return; }
+                if (!$('#DocDate').val() || !$('#DocDueDate').val() || !$('#TaxDate').val()) { toastr.warning("Lütfen tüm tarihleri eksiksiz giriniz."); return; }
+
+                // Şoför VEYA nakliyeci firma: ikisinden biri yeterli. Nakliyeci seçildiyse şoför boş kalabilir.
+                var soforSecili = !!$('#DriverListSelect').val();
+                var soforTam = !!($('#U_BE1_SRCNAME').val() && $('#U_BE1_SRCPLAKA').val() && $('#U_BE1_SRCVKN').val());
+                var nakliyeVar = !!($('#U_BE1_FIRMAADI').val() || $('#U_BE1_FIRMAVKN').val());
+
+                if (!soforTam && !nakliyeVar) {
+                    toastr.warning(soforSecili
+                        ? "Seçilen şoförün Ad/Soyad, Plaka ve TC/VKN bilgileri eksik. Bilgileri tamamlayın ya da nakliyeci firma seçin."
+                        : "Lütfen şoför veya nakliyeci firma seçiniz. İkisinden biri yeterlidir.");
+                    $('#transport-tab').tab('show');
+                    return;
+                }
+
+                if (!$('#ShipToStreet').val() || !$('#ShipToCounty').val() || !$('#ShipToZipCode').val() || !$('#ShipToCountry').val() || !$('#ShipToState').val()) {
+                    toastr.warning("Sevkiyat adresi için Adres Satır 1, İlçe, İl/Eyalet, Posta Kodu ve Ülke alanları zorunludur.");
+                    $('#logistics-tab').tab('show');
+                    return;
+                }
+
+                if (!$('#PayToStreet').val() || !$('#PayToCounty').val() || !$('#PayToZipCode').val() || !$('#PayToCountry').val() || !$('#PayToState').val()) {
+                    toastr.warning("Fatura adresi için Adres Satır 1, İlçe, İl/Eyalet, Posta Kodu ve Ülke alanları zorunludur.");
+                    $('#logistics-tab').tab('show');
+                    return;
+                }
+
+                const documentLines = [];
+                let hasError = false;
+
+                $('#linesBody tr').each(function (index) {
+                    const itemCode = $(this).find('.item-select').val();
+                    const freeTxt = $(this).find('.input-freetxt').val() || '';
+                    const qty = parseFloat($(this).find('.input-qty').val()) || 0;
+                    const price = parseFloat($(this).find('.input-price').val()) || 0;
+                    const lineCur = $(this).find('.input-currency').val();
+                    const vatGroup = $(this).find('.input-vat').val();
+                    const whsCode = $(this).find('.input-whs').val();
+
+                    if (!itemCode) { hasError = true; toastr.error(`${index + 1}. satırda kalem seçiniz.`); return false; }
+                    if (!whsCode) { hasError = true; toastr.error(`${index + 1}. satır için depo seçiniz.`); return false; }
+                    if (qty <= 0) { hasError = true; toastr.error(`${index + 1}. satır için miktar 0'dan büyük olmalıdır.`); return false; }
+                    // BEDELSİZ SATIŞ (talep 26): fiyat 0 olabilir.
+                    // Yalnızca negatif fiyat engellenir; 0 bilinçli bir bedelsiz satırdır.
+                    if (price < 0) { hasError = true; toastr.error(`${index + 1}. satır için fiyat negatif olamaz.`); return false; }
+                    if (!vatGroup) { hasError = true; toastr.error(`${index + 1}. satır için işlem tipi (KDV) seçiniz.`); return false; }
+
+                    const batchSel = $(this).find('.input-batch');
+                    const batchNo = batchSel.val() || '';
+                    if (batchSel.data('partili') === true && !batchNo) { hasError = true; toastr.error(`${index + 1}. satır (${itemCode}) partili: listeden parti seçiniz.`); return false; }
+                    documentLines.push({
+                        ItemCode: itemCode,
+                        Quantity: qty,
+                        UnitPrice: price,
+                        Currency: lineCur,
+                        VatGroup: vatGroup,
+                        WarehouseCode: whsCode,
+                        FreeTxt: batchNo || freeTxt,
+                        BatchNumber: batchNo
+                    });
+                });
+
+                if (hasError) {
+                    $('#lines-tab').tab('show');
+                    return;
+                }
+
+                if (documentLines.length === 0) {
+                    toastr.warning("Siparişe en az bir kalem ekleyiniz.");
+                    $('#lines-tab').tab('show');
+                    return;
+                }
+
+                // BEDELSİZ SATIŞ KONTROLÜ
+                //
+                // GİB, KDV tutarı 0 olan satırlar için istisna/muafiyet sebebini
+                // zorunlu tutar. Fatura Tipi ve Muafiyet Kodu seçilmezse fatura
+                // QNB şematronundan döner ("cbc:TaxExemptionReason ... bulunmalıdır").
+                // Bu yüzden sipariş aşamasında engelleniyor.
+                if (documentLines.some(function (l) { return (parseFloat(l.UnitPrice) || 0) === 0; })) {
+                    if (!$('#U_BE1_SEND').val() || !$('#U_BE1_MUAFCODE').val()) {
+                        toastr.error("Bedelsiz (fiyatı 0) satır var. Üstteki <strong>Fatura Tipi</strong> ve <strong>Muafiyet Kodu</strong> alanlarını doldurmadan fatura GİB'e gönderilemez.",
+                                     "Eksik istisna bilgisi", { timeOut: 9000, enableHtml: true });
+                        $('#U_BE1_SEND').focus();
+                        return;
+                    }
+                }
+
+                const docCur = $('#DocCurrency').val() || 'TRY';
+                let docRateStr = $('#ExchangeRate').val().replace(/\./g, '').replace(',', '.');
+                let docRate = parseFloat(docRateStr) || 1.0;
+
+                const payload = {
+                    CardCode: cardCode,
+                    CardName: cardName,
+                    DocDate: $('#DocDate').val(),
+                    DocDueDate: $('#DocDueDate').val(),
+                    VadeTarihi: $('#VadeTarihi').val() || null,
+                    TaxDate: $('#TaxDate').val(),
+                    SalesPersonCode: parseInt($('#SalesPersonCode').val()),
+                    DocCurrency: docCur,
+                    DocRate: docRate,
+                    USDRate: parseFloat($('#USDRate').val()) || 0,
+                    EURRate: parseFloat($('#EURRate').val()) || 0,
+
+                    UpdateGlobalRates: $('#UpdateGlobalRates').is(':checked'),
+
+                    U_BE1_AKTAR: $('#U_BE1_AKTAR').val(),
+                    U_BE1_SEND: $('#U_BE1_SEND').val(),
+                    U_BE1_MUAFCODE: $('#U_BE1_MUAFCODE').val(),
+
+                    OrderComments: $('#OrderComments').val(),
+                    OrderDescFlag: $('#OrderDescFlag').is(':checked') ? 'Y' : 'N',
+                    DeliveryComments: $('#DeliveryComments').val(),
+                    DeliveryDescFlag: $('#DeliveryDescFlag').is(':checked') ? 'Y' : 'N',
+                    InvoiceComments: $('#InvoiceComments').val(),
+                    InvoiceDescFlag: $('#InvoiceDescFlag').is(':checked') ? 'Y' : 'N',
+
+                    U_BE1_NAKLIYETARIHI: $('#U_BE1_NAKLIYETARIHI').val(),
+                    U_BE1_NAKLIYESAATI: $('#U_BE1_NAKLIYESAATI').val(),
+
+                    U_BE1_SOFORSECIMI: $('#DriverListSelect').val(),
+                    U_BE1_SOFORADSOYAD: $('#U_BE1_SRCNAME').val(),
+                    U_BE1_ARACPLAKASI: $('#U_BE1_SRCPLAKA').val(),
+                    U_BE1_SOFORUNVANI: $('#U_BE1_SRCTITLE').val(),
+                    U_BE1_SOFORKIMLIK: $('#U_BE1_SRCVKN').val(),
+                    U_BE1_SOFORTEL: $('#U_BE1_SRCTEL').val(),
+                    U_BE1_FRMNO: $('#U_BE1_FIRMANO').val(),
+                    U_BE1_FRMADI: $('#U_BE1_FIRMAADI').val(),
+                    U_BE1_FRMVKN: $('#U_BE1_FIRMAVKN').val(),
+
+                    PayToCode: $('#PayToCode').val(),
+                    ShipToCode: $('#ShipToCode').val(),
+                    AddressExtension: {
+                        ShipToStreet: $('#ShipToStreet').val(),
+                        ShipToStreetNo: $('#ShipToStreetNo').val(),
+                        ShipToBlock: $('#ShipToBlock').val(),
+                        ShipToZipCode: $('#ShipToZipCode').val(),
+                        ShipToCity: $('#ShipToState option:selected').text() !== '- Seçiniz -' ? $('#ShipToState option:selected').text() : '',
+                        ShipToCounty: $('#ShipToCounty').val(),
+                        ShipToState: $('#ShipToState').val(),
+                        ShipToCountry: $('#ShipToCountry').val(),
+
+                        BillToStreet: $('#PayToStreet').val(),
+                        BillToStreetNo: $('#PayToStreetNo').val(),
+                        BillToBlock: $('#PayToBlock').val(),
+                        BillToZipCode: $('#PayToZipCode').val(),
+                        BillToCity: $('#PayToState option:selected').text() !== '- Seçiniz -' ? $('#PayToState option:selected').text() : '',
+                        BillToCounty: $('#PayToCounty').val(),
+                        BillToState: $('#PayToState').val(),
+                        BillToCountry: $('#PayToCountry').val()
+                    },
+                    DocumentLines: documentLines,
+
+                    // ---- Selvi tarafı ----
+                    SelviCardCode: $('#SelviCardCode').val(),
+                    SelviCardName: $('#SelviCardCode option:selected').data('name') || '',
+                    SelviSalesPersonCode: parseInt($('#SalesPersonCode').val()) || 0,
+                    SelviShipToCode: $('#SelviShipToCode').val(),
+                    SelviPayToCode: $('#SelviPayToCode').val(),
+                    SelviSoforSecimi: $('#SelviDriverListSelect').val(),
+                    SelviSoforAdSoyad: $('#SelviSRCNAME').val(),
+                    SelviAracPlakasi: $('#SelviSRCPLAKA').val(),
+                    SelviSoforUnvani: $('#SelviSRCTITLE').val(),
+                    SelviSoforKimlik: $('#SelviSRCVKN').val(),
+                    SelviSoforTel: $('#SelviSRCTEL').val(),
+                    SelviAddressExtension: {
+                        ShipToStreet: $('#SelviShipToStreet').val(),
+                        ShipToStreetNo: $('#SelviShipToStreetNo').val(),
+                        ShipToBlock: $('#SelviShipToBlock').val(),
+                        ShipToZipCode: $('#SelviShipToZipCode').val(),
+                        ShipToCity: $('#SelviShipToState option:selected').text() !== '- Seçiniz -' ? $('#SelviShipToState option:selected').text() : '',
+                        ShipToCounty: $('#SelviShipToCounty').val(),
+                        ShipToState: $('#SelviShipToState').val(),
+                        ShipToCountry: $('#SelviShipToCountry').val(),
+                        BillToStreet: $('#SelviPayToStreet').val(),
+                        BillToStreetNo: $('#SelviPayToStreetNo').val(),
+                        BillToBlock: $('#SelviPayToBlock').val(),
+                        BillToZipCode: $('#SelviPayToZipCode').val(),
+                        BillToCity: $('#SelviPayToState option:selected').text() !== '- Seçiniz -' ? $('#SelviPayToState option:selected').text() : '',
+                        BillToCounty: $('#SelviPayToCounty').val(),
+                        BillToState: $('#SelviPayToState').val(),
+                        BillToCountry: $('#SelviPayToCountry').val()
+                    }
+                };
+
+                // ---- Selvi tarafı doğrulamaları ----
+                if (!$('#SelviCardCode').val()) { toastr.warning("Selvi'deki asıl müşteriyi seçiniz."); $('#SelviCardCode').select2('open'); return; }
+                if (!$('#SelviSRCNAME').val() || !$('#SelviSRCPLAKA').val() || !$('#SelviSRCVKN').val()) { toastr.warning("Selvi tarafı için şoför seçiniz (Nakliye sekmesi)."); $('#transport-tab').tab('show'); return; }
+                if (!$('#SelviShipToStreet').val() || !$('#SelviShipToCounty').val() || !$('#SelviShipToZipCode').val() || !$('#SelviShipToCountry').val() || !$('#SelviShipToState').val()) {
+                    toastr.warning("Selvi müşterisinin sevk adresi eksik: Adres Satır 1, İlçe, İl, Posta Kodu ve Ülke zorunludur. Eksikse 'Cariye Ekle' ile Selvi'ye kaydedin."); $('#selvi-tab').tab('show'); return;
+                }
+                if (!$('#SelviPayToStreet').val() || !$('#SelviPayToCounty').val() || !$('#SelviPayToZipCode').val() || !$('#SelviPayToCountry').val() || !$('#SelviPayToState').val()) {
+                    toastr.warning("Selvi müşterisinin fatura adresi eksik."); $('#selvi-tab').tab('show'); return;
+                }
+
+                $('#loadingOverlay').css('display', 'flex');
+
+                $.ajax({
+                    url: '/Rapor152/CheckStockForOrder',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(payload),
+                    success: function (res) {
+                        $('#loadingOverlay').hide();
+
+                        if (res.success && res.hasMissingStock) {
+                            let html = '';
+                            res.missingItems.forEach(m => {
+                                html += `<tr>
+                                            <td class="fw-bold text-dark">${m.itemCode}</td>
+                                            <td class="text-muted small">${m.itemName}</td>
+                                            <td><span class="badge bg-secondary">${m.warehouseCode}</span></td>
+                                            <td class="text-end fw-bold">${formatNumber(m.required)}</td>
+                                            <td class="text-end">${formatNumber(m.currentStock)}</td>
+                                            <td class="text-end text-danger fw-bold">${formatNumber(m.missing)}</td>
+                                         </tr>`;
+                            });
+
+                            $('#missingStockBody').html(html);
+                            $('#missingStockModal').modal('show');
+
+                            $('#btnConfirmMissingStock').off('click').on('click', function() {
+                                $('#missingStockModal').modal('hide');
+                                akisSor(payload);
+                            });
+
+                        } else if (res.success && !res.hasMissingStock) {
+                            akisSor(payload);
+                        } else {
+                            toastr.error(res.message || "Stok kontrolünde hata oluştu.");
+                        }
+                    },
+                    error: function () {
+                        $('#loadingOverlay').hide();
+                        toastr.error("Stok kontrolü yapılırken sunucu hatası oluştu.");
+                    }
+                });
+            });
+
+            $('#btnCancel').click(function() {
+                if(currentMode === 'VIEW' || currentMode === 'FIND') {
+                    setFormMode('ADD');
+                    fetchAllExchangeRates();
+                } else {
+                    window.history.back();
+                }
+            });
+        });
+
+        /**
+         * Islem Tipi "X" iken hangi belgelerin olusacagini sorar.
+         * Diger islem tiplerinde soru cikmaz, akis eskisi gibi
+         * Siparis -> Irsaliye -> Fatura olarak isler.
+         */
+        function akisSor(payload) {
+            if (($('#U_BE1_AKTAR').val() || '').toUpperCase() !== 'X') {
+                payload.Akis = 'IRSALIYE_FATURA';
+                executeCreateOrder(payload);
+                return;
+            }
+
+            $('#akisModal').remove();
+
+            var html =
+              '<div class="modal fade" id="akisModal" tabindex="-1" data-bs-backdrop="static">'
+            + '  <div class="modal-dialog modal-lg modal-dialog-centered">'
+            + '    <div class="modal-content">'
+            + '      <div class="modal-header">'
+            + '        <h5 class="modal-title fw-bold"><i class="fas fa-code-branch text-primary me-2"></i>Bu sipariş nasıl kapatılsın?</h5>'
+            + '        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>'
+            + '      </div>'
+            + '      <div class="modal-body">'
+            + '        <p class="small mb-3" style="color:var(--metin-2);">'
+            + '          İşlem Tipi <strong>X</strong> seçili. Oluşturulacak belgeleri seçin.</p>'
+            + '        <div class="row g-3">'
+            + '          <div class="col-md-4">'
+            + '            <div class="akis-secenek" data-akis="FATURA">'
+            + '              <div class="fw-bold mb-2"><i class="fas fa-file-invoice-dollar text-success me-1"></i>Direkt Fatura</div>'
+            + '              <div class="zincir">Sipariş ──────────► Fatura</div>'
+            + '              <div class="small mt-2" style="color:var(--metin-2);">İrsaliye oluşturulmaz. Fatura doğrudan siparişten türer.</div>'
+            + '            </div>'
+            + '          </div>'
+            + '          <div class="col-md-4">'
+            + '            <div class="akis-secenek" data-akis="IRSALIYE_FATURA">'
+            + '              <div class="fw-bold mb-2"><i class="fas fa-layer-group text-primary me-1"></i>İrsaliye + Fatura</div>'
+            + '              <div class="zincir">Sipariş ─► İrsaliye ─► Fatura</div>'
+            + '              <div class="small mt-2" style="color:var(--metin-2);">Bugüne kadarki davranış. Üç belge de oluşur.</div>'
+            + '            </div>'
+            + '          </div>'
+            + '          <div class="col-md-4">'
+            + '            <div class="akis-secenek" data-akis="IRSALIYE">'
+            + '              <div class="fw-bold mb-2"><i class="fas fa-truck text-warning me-1"></i>Sadece İrsaliye</div>'
+            + '              <div class="zincir">Sipariş ─► İrsaliye</div>'
+            + '              <div class="small mt-2" style="color:var(--metin-2);">Fatura kesilmez; sonradan kesilebilir.</div>'
+            + '            </div>'
+            + '          </div>'
+            + '        </div>'
+            + '      </div>'
+            + '      <div class="modal-footer">'
+            + '        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Vazgeç</button>'
+            + '      </div>'
+            + '    </div>'
+            + '  </div>'
+            + '</div>';
+
+            $('body').append(html);
+            var modal = new bootstrap.Modal(document.getElementById('akisModal'));
+            modal.show();
+
+            $('#akisModal').on('click', '.akis-secenek', function () {
+                payload.Akis = $(this).data('akis');
+                modal.hide();
+                executeCreateOrder(payload);
+            });
+        }
+
+        function executeCreateOrder(payload) {
+            $('#loadingOverlay').css('display', 'flex');
+            $.ajax({
+                url: '/Rapor152/CreateOrder',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(payload),
+                success: function (res) {
+                    if (res.success) {
+                        toastr.success(res.message);
+
+                        if(res.autoPrint && res.docEntry > 0) {
+                            window.open('/Rapor152/PrintOrder?docEntry=' + res.docEntry, '_blank');
+                        }
+
+                        setTimeout(() => { window.location.reload(); }, 2000);
+                    } else {
+                        toastr.error(res.message);
+                    }
+                },
+                error: function (xhr) {
+                    const errMsg = xhr.responseJSON ? xhr.responseJSON.message : "Bağlantı hatası.";
+                    toastr.error(errMsg);
+                },
+                complete: function () { $('#loadingOverlay').hide(); }
+            });
+        }
+
+        // Cogaltmada satirlari duzenlenebilir sablondan kurar ve kaynak
+        // belgedeki degerlerle doldurur. Kalem secicisi ajax select2 oldugu icin
+        // secili kalem elle option olarak eklenir.
+        function cogaltSatirlariKur(satirlar) {
+            $('#linesBody').empty();
+
+            if (!satirlar.length) { addRow(); calculateTotals(); return; }
+
+            satirlar.forEach(function (line) {
+                addRow();
+                var $tr = $('#linesBody tr').last();
+
+                var ad = line.itemName || '';
+                var etiket = ad ? (line.itemCode + ' - ' + ad) : line.itemCode;
+
+                var $kalem = $tr.find('.item-select');
+                $kalem.append(new Option(etiket, line.itemCode, true, true)).trigger('change.select2');
+
+                $tr.find('.input-freetxt').val(line.freeTxt || '');
+                $tr.find('.input-qty').val(line.quantity);
+                $tr.find('.input-price').val(line.unitPrice);
+
+                var $pb = $tr.find('.input-currency');
+                if ($pb.find('option[value="' + line.currency + '"]').length) $pb.val(line.currency);
+
+                var $kdv = $tr.find('.input-vat');
+                if ($kdv.find('option[value="' + line.vatGroup + '"]').length) $kdv.val(line.vatGroup);
+
+                var $depo = $tr.find('.input-whs');
+                if ($depo.find('option[value="' + line.warehouseCode + '"]').length) $depo.val(line.warehouseCode);
+                else if (line.warehouseCode) $depo.append(new Option(line.warehouseCode, line.warehouseCode, true, true));
+            });
+
+            updateRowIndexes();
+            calculateTotals();
+        }
+
+        function addRow() {
+            const template = document.getElementById('rowTemplate').innerHTML;
+            const $newRow = $(template);
+            $('#linesBody').append($newRow);
+
+            // Yeni satir belge para birimiyle acilsin (talep 34).
+            var belgePB = $('#DocCurrency').val();
+            if (belgePB) {
+                var sec = $newRow.find('.input-currency');
+                if (sec.find('option[value="' + belgePB + '"]').length) sec.val(belgePB);
+            }
+
+            $newRow.find('.item-select').select2({
+                theme: 'bootstrap-5',
+                width: '100%',
+                placeholder: '- Kalem Seçin / Yazarak Arayın -',
+                minimumInputLength: 2,
+                language: {
+                    inputTooShort: function() { return "Aramak için en az 2 karakter girin..."; },
+                    searching: function() { return "Aranıyor..."; },
+                    noResults: function() { return "Sonuç bulunamadı"; }
+                },
+                ajax: {
+                    url: '/Rapor152/SearchItems',
+                    dataType: 'json',
+                    delay: 250,
+                    data: function (params) {
+                        return { q: params.term };
+                    },
+                    processResults: function (data) {
+                        return { results: data.results };
+                    },
+                    cache: true
+                },
+                templateResult: formatItemDropdown,
+                templateSelection: function(item) {
+                    return item.text || item.id;
+                }
+            });
+
+            $newRow.find('.input-whs').val('01');
+
+            if ($('#U_BE1_AKTAR').val() === 'X') {
+                $newRow.find('.input-vat').val('S05');
+            } else {
+                $newRow.find('.input-vat').val('S01');
+            }
+
+            updateRowIndexes();
+        }
+
+        function updateRowIndexes() {
+            $('#linesBody tr').each(function (index) { $(this).find('.row-index').text(index + 1); });
+        }
+
+        function resetTotals() {
+            toplamlariYaz(0, 0, $('#DocCurrency').val() || 'TRY', 1);
+        }
+
+        // Alt toplam kutusunu doldurur. Rakamlar HER ZAMAN belge para biriminde.
+        //
+        // Satirlar TL uzerinden toplanip (netLC/taxLC) burada belge para birimine
+        // cevrilir. Kur okunamazsa cevirme yapilamaz; yanlis rakam gostermemek
+        // icin tutar yerine uyari isareti konur.
+        function toplamlariYaz(netLC, taxLC, docCurrency, docRate) {
+            var pb = docCurrency || 'TRY';
+            var kur = (pb === 'TRY') ? 1.0 : (parseFloat(docRate) || 0);
+            var grandLC = netLC + taxLC;
+
+            if (!(kur > 0)) {
+                $('#lblNetTotalFC').text('kur yok');
+                $('#lblTaxTotalFC').text('kur yok');
+                $('#lblGrandTotalFC').text('kur yok');
+                return;
+            }
+
+            $('#lblNetTotalFC').text(formatNumber(netLC / kur) + ' ' + pb);
+            $('#lblTaxTotalFC').text(formatNumber(taxLC / kur) + ' ' + pb);
+            $('#lblGrandTotalFC').text(formatNumber(grandLC / kur) + ' ' + pb);
+        }
+
+        function calculateTotals() {
+            if(currentMode !== 'ADD') return;
+
+            let netTotalLC = 0, taxTotalLC = 0;
+            const docCurrency = $('#DocCurrency').val() || 'TRY';
+
+            let docRateStr = $('#ExchangeRate').val();
+            let docRate = 1.0;
+            if(docRateStr) docRate = parseFloat(docRateStr.replace(/\./g, '').replace(',', '.')) || 1.0;
+
+            $('#linesBody tr').each(function () {
+                const qty = parseFloat($(this).find('.input-qty').val()) || 0;
+                const price = parseFloat($(this).find('.input-price').val()) || 0;
+                const lineCur = $(this).find('.input-currency').val() || 'TRY';
+                const vatRate = parseFloat($(this).find('.input-vat option:selected').data('rate')) || 0;
+
+                const secMultiplier = parseFloat($(this).find('.input-sec-multiplier').val()) || 0;
+                const secTotal = qty * secMultiplier;
+                $(this).find('.input-sec-total').text(formatNumber(secTotal));
+
+                // Satır kuru (Döviz cinsi)
+                const lineRate = window.exchangeRates[lineCur] || (lineCur === docCurrency ? docRate : 1.0);
+
+                // Kur bulunamadiysa cevrim 1.0 ile yapiliyor demektir; tutar
+                // yanlis olur. Sessiz kalmasin diye alan isaretlenir.
+                const kurYok = (lineCur !== docCurrency) && !window.exchangeRates[lineCur];
+
+                // Satır tutarları orijinal birimiyle ve TL ile (FC = Kendi birimi, LC = TRY)
+                const lineNetFC = qty * price;
+                const lineNetLC = lineNetFC * lineRate;
+                const lineTaxLC = lineNetLC * (vatRate / 100);
+
+                // TOPLAM KOLONU BELGE PARA BIRIMINDEDIR.
+                //
+                // Birim fiyat kendi para biriminde kalir (orn. USD), ama satir
+                // toplami belgenin para birimine cevrilerek gosterilir; belge TRY
+                // ise TL karsiligi yazar. Kurlar TRY bazlidir:
+                //   tutarTL   = tutarFC * satirKuru
+                //   tutarBelge = tutarTL / belgeKuru
+                const lineNetDoc = docRate > 0 ? (lineNetLC / docRate) : lineNetFC;
+
+                // Kullanici o an toplam alanina yaziyorsa uzerine yazilmaz.
+                var $toplam = $(this).find('.input-line-total');
+                if (!$toplam.is(':focus')) $toplam.val(lineNetDoc ? lineNetDoc.toFixed(2) : '');
+
+                // TALEP 43: Birim fiyatin karsiligi.
+                // Satir kendi para biriminde fiyatlaniyor; kullanicinin ayni
+                // anda TL (ya da belge para birimi) karsiligini gormesi icin
+                // fiyatin altina kucuk bir bilgi satiri yazilir.
+                var $karsilik = $(this).find('.fiyat-karsilik');
+                if ($karsilik.length) {
+                    if (!price || lineCur === docCurrency) {
+                        $karsilik.text('');
+                    } else if (kurYok) {
+                        $karsilik.html('<span class="text-danger">' + lineCur + ' kuru yok</span>');
+                    } else {
+                        var birimDoc = (price * lineRate) / (docRate > 0 ? docRate : 1);
+                        $karsilik.text('≈ ' + formatNumber(birimDoc) + ' ' + docCurrency);
+                    }
+                }
+
+                $toplam.toggleClass('border-danger', kurYok)
+                       .attr('title', kurYok
+                            ? lineCur + ' kuru bu tarihte tanımlı değil; tutar çevrilemedi, kontrol edin.'
+                            : 'Toplam yazarsanız birim fiyat miktara göre hesaplanır (' + docCurrency + ')');
+
+                netTotalLC += lineNetLC;
+                taxTotalLC += lineTaxLC;
+            });
+
+            $('#toplamKolonPB').text('(' + docCurrency + ')');
+
+            toplamlariYaz(netTotalLC, taxTotalLC, docCurrency, docRate);
+        }
+    </script>
+}

@@ -1,0 +1,105 @@
+﻿@model List<WebApplication3.Models.CariEkstreViewModel>
+@using WebApplication3.Models
+@using System.Globalization
+
+@{
+    var modelData = Model ?? new List<CariEkstreViewModel>();
+    var groupedData = modelData.GroupBy(d => d.IslemPB).ToList();
+}
+
+@if (groupedData.Any())
+{
+    @foreach (var group in groupedData)
+    {
+        <h5 class="mt-4">Para Birimi: @group.Key</h5>
+        <table class="table table-bordered table-hover rapor-tablo" id="cariEkstreTable-@group.Key">
+            <thead>
+                <tr>
+                    <th>İşlem Anahtarı</th>
+                    <th>Kayıt Tarihi</th>
+                    <th>Vade Tarihi</th>
+                    <th>Muhatap/Hesap Kodu</th>
+                    <th>Muhatap Adı</th>
+                    <th>Satır Ayrıntıları</th>
+                    <th>İşlem Tipi</th>
+                    <th>Aktarım Tipi</th>
+                    <th class="text-right">Borç (TRY)</th>
+                    <th class="text-right">Alacak (TRY)</th>
+                    <th class="text-right">Kml. Bakiye (TRY)</th>
+                    <th class="text-right">Borç (İşlem PB)</th>
+                    <th class="text-right">Alacak (İşlem PB)</th>
+                    <th class="text-right">Kml. Bakiye (İşlem PB)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in group.ToList())
+                {
+                    string rowClass = "";
+                    if (item.IslemTipi == "AT" || item.IslemTipi == "DB")
+                    {
+                        rowClass = "monthly-total-row";
+                    }
+
+                    <tr class="@(rowClass)">
+                        <td>@(item.IslemNo == -1 ? "Devir" : item.IslemNo.ToString())</td>
+                        <td>@item.KayitTarihi?.ToString("dd.MM.yyyy")</td>
+                        <td>@item.VadeTarihi?.ToString("dd.MM.yyyy") ?? "-"</td>
+                        <td>@item.MuhatapKodu</td>
+                        <td>@item.MuhatapAdi</td>
+                        <td>@item.Aciklama</td>
+                        <td>@item.IslemTipi</td>
+                        <td>@item.AktarimTipi</td>
+                        <td class="text-right @(item.TRYB.HasValue && item.TRYB.Value > 0 ? "borc" : "")">@item.TRYB?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                        <td class="text-right @(item.TRYA.HasValue && item.TRYA.Value > 0 ? "alacak" : "")">@item.TRYA?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                        <td class="text-right">
+                            @if (item.IslemTipi == "AT")
+                            {
+                                @((item.TRYB - item.TRYA).Value.ToString("N2", new CultureInfo("tr-TR")))
+                            }
+                            else
+                            {
+                                @item.TRY_KmlBky?.ToString("N2", new CultureInfo("tr-TR"))
+                            }
+                        </td>
+                        <td class="text-right @(item.IslemB.HasValue && item.IslemB.Value > 0 ? "borc" : "")">@item.IslemB?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                        <td class="text-right @(item.IslemA.HasValue && item.IslemA.Value > 0 ? "alacak" : "")">@item.IslemA?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                        <td class="text-right">
+                            @if (item.IslemTipi == "AT")
+                            {
+                                @((item.IslemB - item.IslemA).Value.ToString("N2", new CultureInfo("tr-TR")))
+                            }
+                            else
+                            {
+                                @item.Islem_KmlBky?.ToString("N2", new CultureInfo("tr-TR"))
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                @{
+                    var finalGroup = group.Where(d => d.IslemTipi != "AT" && d.IslemTipi != "DB");
+                    var groupTotalBorcTRY = finalGroup.Sum(d => d.TRYB ?? 0);
+                    var groupTotalAlacakTRY = finalGroup.Sum(d => d.TRYA ?? 0);
+                    var groupTotalBorcIslem = finalGroup.Sum(d => d.IslemB ?? 0);
+                    var groupTotalAlacakIslem = finalGroup.Sum(d => d.IslemA ?? 0);
+                    var finalTRYKmlBky = group.LastOrDefault()?.TRY_KmlBky;
+                    var finalIslemKmlBky = group.LastOrDefault()?.Islem_KmlBky;
+                }
+                <tr class="table-info">
+                    <td colspan="8" class="text-right"><strong>Toplam (@group.Key)</strong></td>
+                    <td class="text-right borc"><strong>@groupTotalBorcTRY.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                    <td class="text-right alacak"><strong>@groupTotalAlacakTRY.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                    <td class="text-right"><strong>@finalTRYKmlBky?.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                    <td class="text-right borc"><strong>@groupTotalBorcIslem.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                    <td class="text-right alacak"><strong>@groupTotalAlacakIslem.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                    <td class="text-right"><strong>@finalIslemKmlBky?.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                </tr>
+            </tfoot>
+        </table>
+    }
+}
+else
+{
+    <div class="alert alert-secondary mt-3">Bu cari için bu filtrelerle gösterilecek işlem bulunmamaktadır.</div>
+}

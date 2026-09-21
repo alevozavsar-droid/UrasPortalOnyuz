@@ -1,0 +1,178 @@
+@using WebApplication3.Controllers
+@{
+    ViewData["Title"] = "Toplu Kalem Ana Verisi Güncelleme";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var alanlar = ViewBag.Alanlar as List<Rapor173Controller.KalemAlani> ?? new List<Rapor173Controller.KalemAlani>();
+    var gruplar = alanlar.GroupBy(a => a.Grup).ToList();
+    string db = (string)ViewBag.CurrentDbDisplay ?? "";
+    string turIkon(string t) => t == "yesno" ? "fa-toggle-on" : t == "int" || t == "dec" ? "fa-hashtag" : t == "date" ? "fa-calendar" : "fa-font";
+}
+@section Styles {
+    <link rel="stylesheet" href="~/css/kalem-toplu.css" asp-append-version="true" />
+}
+
+<div class="kt-sayfa">
+    @Html.AntiForgeryToken()
+
+    <div class="kt-baslik">
+        <div class="kt-baslik-ic"><i class="fas fa-boxes-stacked"></i></div>
+        <div>
+            <h4>Toplu Kalem Ana Verisi Güncelleme</h4>
+            <p>Kalemleri ve alanları seç → mevcut değerlerle dolu Excel'i indir → doldur → yükle → değişiklikleri gör → SAP'ye uygula.</p>
+        </div>
+        <div class="kt-adimlar">
+            <div class="kt-adim aktif" data-adim="1"><span>1</span> Kalemler & Alanlar</div>
+            <div class="kt-adim" data-adim="2"><span>2</span> Excel'i Doldur</div>
+            <div class="kt-adim" data-adim="3"><span>3</span> Önizle & Uygula</div>
+        </div>
+        <span class="kt-db"><i class="fas fa-database me-1"></i>@db</span>
+    </div>
+
+    <div class="kt-izgara">
+        <!-- SOL: kalemler -->
+        <aside class="kt-kart kt-sol">
+            <div class="kt-kart-bas"><i class="fas fa-list-ol"></i> Kalemler</div>
+            <label class="kt-etiket">Kalem kodları <small>(her satıra bir kod; virgül / noktalı virgül de olur — Excel'den yapıştırabilirsin)</small></label>
+            <div class="kt-kod-araclar">
+                <button type="button" class="btn btn-sm btn-outline-primary" id="btnKodSec"><i class="fas fa-list-check me-1"></i>Listeden toplu seç</button>
+                <label class="btn btn-sm btn-outline-primary mb-0" for="ktKodDosya"><i class="fas fa-file-excel me-1"></i>Excel/CSV'den kod yükle</label>
+                <input type="file" id="ktKodDosya" accept=".xlsx,.csv,.txt" hidden />
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnKodTemizle" title="Kod listesini boşalt"><i class="fas fa-eraser"></i></button>
+                <span class="kt-kod-sayac" id="ktKodSayac">0 kod</span>
+            </div>
+            <textarea id="ktKodlar" class="form-control" rows="12" placeholder="HM00012&#10;HM00013&#10;MM00456&#10;&#10;— ya da yukarıdan listeden seç / Excel'den yükle —"></textarea>
+            <div class="kt-veya"><span>ve/veya</span></div>
+            <label class="kt-etiket">Kod öneki / deseni <small>(<code>HM</code> → HM ile başlayanlar, <code>*KIMYA*</code> → içinde geçenler)</small></label>
+            <div class="input-group">
+                <input id="ktOnek" class="form-control" placeholder="HM" />
+                <button type="button" class="btn btn-outline-primary" id="btnSay"><i class="fas fa-magnifying-glass me-1"></i>Kaç kalem?</button>
+            </div>
+            <div id="ktSayim" class="kt-sayim"></div>
+
+            <div class="kt-secim-ozeti">
+                <div class="kt-etiket mb-1">Seçilen alanlar <small>(<b id="ktSeciliSayi">0</b>)</small></div>
+                <div id="ktSeciliListe" class="kt-secili-chipler"><span class="text-muted small">Henüz alan seçilmedi — sağdaki listeden tıkla.</span></div>
+            </div>
+        </aside>
+
+        <!-- SAĞ: alanlar -->
+        <section class="kt-kart kt-sag">
+            <div class="kt-kart-bas kt-alan-bas">
+                <span><i class="fas fa-sliders"></i> Güncellenecek alanlar</span>
+                <div class="kt-alan-arac">
+                    <div class="kt-ara"><i class="fas fa-magnifying-glass"></i><input id="ktAlanAra" class="form-control form-control-sm" placeholder="alan adı veya kolon ara…" /></div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btnTemizleAlan"><i class="fas fa-eraser me-1"></i>Seçimi temizle</button>
+                </div>
+            </div>
+            <div class="kt-alanlar">
+                @foreach (var g in gruplar)
+                {
+                    <div class="kt-grup" data-grup="@g.Key">
+                        <div class="kt-grup-bas">
+                            <span class="kt-grup-ad">@g.Key <em class="kt-grup-sayac" data-toplam="@g.Count()">0/@g.Count()</em></span>
+                            <a href="javascript:void(0)" class="kt-grup-hepsi">hepsini seç</a>
+                            <a href="javascript:void(0)" class="kt-grup-hicbiri">kaldır</a>
+                        </div>
+                        <div class="kt-chipler">
+                            @foreach (var a in g)
+                            {
+                                <label class="kt-chip" data-kolon="@a.Kolon" data-etiket="@a.Etiket" title="@a.Kolon → SAP: @a.SlOzellik (@a.Tur)">
+                                    <input type="checkbox" class="kt-alan" value="@a.Kolon" data-etiket="@a.Etiket" />
+                                    <i class="fas fa-check kt-tik"></i>
+                                    <i class="fas @turIkon(a.Tur) kt-tur"></i>
+                                    <span class="kt-chip-ad">@a.Etiket</span>
+                                    @if (!string.Equals(a.Etiket, a.Kolon, StringComparison.OrdinalIgnoreCase)) { <small>@a.Kolon</small> }
+                                </label>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </section>
+    </div>
+
+    <div class="kt-eylem">
+        <div class="kt-eylem-bilgi"><i class="fas fa-circle-info me-1"></i> Şablon, seçtiğin alanları seçtiğin kalemlerin <b>mevcut değerleriyle dolu</b> getirir; yalnızca değiştirdiğin hücreler SAP'ye yazılır.</div>
+        <button type="button" class="btn btn-primary kt-btn" id="btnSablon"><i class="fas fa-file-excel me-2"></i>Excel Şablonunu İndir</button>
+        <div class="kt-yukle">
+            <label class="btn btn-outline-primary kt-btn mb-0" for="ktDosya"><i class="fas fa-upload me-2"></i>Doldurulmuş Excel'i Yükle</label>
+            <input type="file" id="ktDosya" accept=".xlsx" hidden />
+            <span id="ktDosyaAd" class="text-muted small"></span>
+        </div>
+    </div>
+
+    <div class="kt-kart d-none" id="ktOnizleme">
+        <div class="kt-kart-bas d-flex align-items-center flex-wrap gap-2">
+            <span><i class="fas fa-code-compare"></i> Değişiklik önizlemesi</span>
+            <span class="kt-ozet" id="ktOzet"></span>
+            <div class="ms-auto d-flex gap-2 align-items-center">
+                <label class="kt-onay"><input type="checkbox" id="ktSadeceDegisen" checked /> yalnızca değişenleri göster</label>
+                <button type="button" class="btn btn-success kt-btn" id="btnUygula"><i class="fas fa-paper-plane me-2"></i>SAP'ye Uygula</button>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm kt-tablo mb-0" id="ktTablo">
+                <thead><tr><th style="width:130px">Kalem</th><th>Ad</th><th>Alan</th><th>Mevcut</th><th style="width:30px"></th><th>Yeni</th><th style="width:110px">Durum</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="kt-kart d-none" id="ktSonuc">
+        <div class="kt-kart-bas"><i class="fas fa-flag-checkered"></i> Sonuç <span class="kt-ozet" id="ktSonucOzet"></span></div>
+        <div id="ktSonucListe" class="small"></div>
+    </div>
+</div>
+
+<!-- Listeden toplu kalem seçme penceresi: tüm kalemler solda, seçilenler sağda -->
+<div class="modal fade" id="ktSecModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen-xl-down modal-xl kt-sec-dialog">
+        <div class="modal-content kt-modal">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-list-check me-2"></i>Kalem Seç <small class="text-muted fw-normal ms-2" id="ktSecToplam"></small></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="kt-sec-izgara">
+                    <div class="kt-sec-sol">
+                        <div class="kt-sec-filtre">
+                            <div class="kt-ara flex-grow-1"><i class="fas fa-magnifying-glass"></i><input id="ktSecAra" class="form-control form-control-sm" placeholder="kod veya ad ile süz… (anında)" autocomplete="off" /></div>
+                            <select id="ktSecGrup" class="form-select form-select-sm"><option value="">Tüm kalem grupları</option></select>
+                            <select id="ktSecDurum" class="form-select form-select-sm"><option value="aktif">Aktif</option><option value="pasif">Pasif</option><option value="hepsi">Hepsi</option></select>
+                        </div>
+                        <div class="kt-sec-bar">
+                            <label class="kt-onay"><input type="checkbox" id="ktSecHepsi" /> süzülenlerin tümünü seç</label>
+                            <span class="kt-ozet" id="ktSecOzet"></span>
+                            <span class="ms-auto text-muted small"><i class="fas fa-circle-info me-1"></i>Satıra tıkla: ekle/kaldır · Shift ile aralık</span>
+                        </div>
+                        <div class="kt-sec-liste" id="ktSecListe">
+                            <table class="table table-sm table-hover mb-0 kt-tablo" id="ktSecTablo">
+                                <thead><tr><th style="width:34px"></th><th style="width:150px">Kod</th><th>Ad</th><th style="width:150px">Grup</th><th style="width:70px">Birim</th><th style="width:64px">Durum</th></tr></thead>
+                                <tbody><tr><td colspan="6" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-1"></i> kalemler yükleniyor…</td></tr></tbody>
+                            </table>
+                            <div class="kt-sec-daha d-none" id="ktSecDaha"><button type="button" class="btn btn-sm btn-light" id="btnSecDaha">Daha fazla göster</button></div>
+                        </div>
+                    </div>
+                    <div class="kt-sec-sag">
+                        <div class="kt-sec-sag-bas">
+                            <span><i class="fas fa-basket-shopping me-1"></i>Seçilenler <b id="ktSecSayi">0</b></span>
+                            <a href="javascript:void(0)" id="ktSecTemizle" class="small">tümünü kaldır</a>
+                        </div>
+                        <div class="kt-sec-secili" id="ktSecSecili"><div class="text-muted small p-3 text-center">Henüz kalem seçilmedi. Soldaki listeden tıkla.</div></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <span class="me-auto text-muted small">Seçilenler kod listesine eklenir; mevcut kodlar korunur.</span>
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                <button type="button" class="btn btn-primary kt-btn" id="btnSecEkle"><i class="fas fa-plus me-1"></i>Seçilenleri Listeye Ekle</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="ktPerde"><div class="halka"></div><b id="ktPerdeYazi">İşleniyor…</b></div>
+
+@section Scripts {
+    <script src="~/js/kalem-toplu.js" asp-append-version="true"></script>
+}

@@ -1,0 +1,410 @@
+@{
+    ViewData["Title"] = "Saha Üretim";
+}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-person-digging me-2 text-primary"></i> Saha Üretim</h2>
+    <button class="btn btn-outline-secondary btn-sm" onclick="yukle()"><i class="fas fa-rotate me-1"></i>Yenile</button>
+</div>
+
+<div class="card dash-card mb-3">
+    <div class="card-body">
+        <div class="btn-group btn-group-sm" id="sekmeGrup">
+            <button class="btn btn-primary" onclick="sekmeSec('bas')" id="btnSekmeBas"><i class="fas fa-play me-1"></i>Başlanacak / Devam Eden</button>
+            <button class="btn btn-outline-primary" onclick="sekmeSec('bit')" id="btnSekmeBit"><i class="fas fa-flag-checkered me-1"></i>Bitirilecek (Üretim Tamamlandı)</button>
+        </div>
+    </div>
+</div>
+
+<div class="card dash-card">
+    <div class="table-responsive">
+        <table class="table table-hover table-custom mb-0">
+            <thead><tr>
+                <th>#</th><th>Kalem</th><th class="text-end">Planlanan</th><th>Depo</th><th>Lot</th><th>Durum</th><th>Operatör</th><th>Başlangıç / Bitiş</th><th></th>
+            </tr></thead>
+            <tbody id="tbodyListe"></tbody>
+        </table>
+        <div id="bosMesaj" class="text-center text-muted py-4" style="display:none;"><i class="fas fa-inbox me-1"></i>Kayıt yok.</div>
+    </div>
+</div>
+
+<!-- ================= İŞ EMRİ DETAY MODAL ================= -->
+<div class="modal fade" id="detayModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="detayBaslik">İş Emri Detayı</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="dDocEntry">
+                <div class="row g-3 mb-3" id="ozetKartlari"></div>
+
+                <ul class="nav nav-tabs" id="detayTab">
+                    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabBaslat">Başlat / Bitir</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabBilesen">Bileşen Çıkışı</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabUrunGiris">Ürün Girişi</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabIz">Parti İzi</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabBelge">Bağlı Belgeler</button></li>
+                </ul>
+
+                <div class="tab-content pt-3">
+                    <!-- Başlat / Bitir -->
+                    <div class="tab-pane fade show active" id="tabBaslat">
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <div class="card p-3">
+                                    <div class="fw-bold small text-uppercase text-muted mb-2">Üretimi Başlat</div>
+                                    <p class="small text-muted">Başlangıç zamanı ve operatör olarak sizin adınız kaydedilir.</p>
+                                    <button class="btn btn-primary btn-sm" onclick="uretimiBaslat()"><i class="fas fa-play me-1"></i>Başlat</button>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <div class="card p-3">
+                                    <div class="fw-bold small text-uppercase text-muted mb-2">Üretimi Bitir</div>
+                                    <label class="form-label small">Kazanılan Lot (boşsa otomatik üretilir / seçtirilir)</label>
+                                    <input type="text" class="form-control form-control-sm mb-2" id="bSecilenLot" placeholder="örn. UR25091501">
+                                    <label class="form-label small">Üretilen Miktar</label>
+                                    <input type="number" step="0.001" class="form-control form-control-sm mb-2" id="bUretMiktar">
+                                    <label class="form-label small">Durum</label>
+                                    <select class="form-select form-select-sm mb-2" id="bDurum">
+                                        <option value="T">Tamamlandı</option>
+                                        <option value="B">Kalite Bekliyor</option>
+                                    </select>
+                                    <button class="btn btn-success btn-sm w-100 mb-2" onclick="uretimiTamamla()"><i class="fas fa-check-double me-1"></i>Üretimi Tamamla (Lot + Bileşen Çıkışı + Ürün Girişi)</button>
+                                    <div class="small text-muted mb-2">Tek adımda: (varsa) yarı mamul parti seçimi → lot üretimi → bileşen çıkışı → ürün girişi yapar.</div>
+                                    <button class="btn btn-outline-secondary btn-sm w-100" onclick="uretimiBitir()"><i class="fas fa-flag-checkered me-1"></i>Sadece Durumu/Lotu Güncelle (stok hareketi yapmaz)</button>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="card p-3">
+                                    <div class="fw-bold small text-uppercase text-muted mb-2">Lot Numarasını Düzelt</div>
+                                    <div class="row g-2 align-items-end">
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label small">Yeni Lot</label>
+                                            <input type="text" class="form-control form-control-sm" id="lYeniLot">
+                                        </div>
+                                        <div class="col-12 col-md-5">
+                                            <label class="form-label small">Açıklama (zorunlu)</label>
+                                            <input type="text" class="form-control form-control-sm" id="lAciklama">
+                                        </div>
+                                        <div class="col-12 col-md-3">
+                                            <button class="btn btn-outline-danger btn-sm w-100" onclick="lotDuzelt()"><i class="fas fa-pen me-1"></i>Lotu Düzelt</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bileşen Çıkışı -->
+                    <div class="tab-pane fade" id="tabBilesen">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="small text-muted">Manuel yöntemli bileşenler; parti yönetimli olanlar için istenirse parti seçilebilir, boş bırakılırsa FIFO (en eski parti) kullanılır.</span>
+                            <button class="btn btn-primary btn-sm" onclick="bilesenCikisiYap()"><i class="fas fa-arrow-right-from-bracket me-1"></i>Bileşen Çıkışı Yap</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover table-custom mb-0">
+                                <thead><tr><th>Kalem</th><th>Depo</th><th class="text-end">Miktar</th><th>Depo Stok</th><th>FIFO Parti Önerisi</th><th>Parti Seç (opsiyonel)</th></tr></thead>
+                                <tbody id="tbodyBilesen"></tbody>
+                            </table>
+                            <div id="bilesenBos" class="text-center text-muted py-3" style="display:none;">Çıkış yapılacak manuel yöntemli bileşen yok.</div>
+                        </div>
+                    </div>
+
+                    <!-- Ürün Girişi -->
+                    <div class="tab-pane fade" id="tabUrunGiris">
+                        <div class="row g-2 align-items-end mb-2">
+                            <div class="col-6 col-md-3">
+                                <label class="form-label small">Miktar</label>
+                                <input type="number" step="0.001" class="form-control form-control-sm" id="gMiktar">
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="form-label small">Depo</label>
+                                <select class="form-select form-select-sm" id="gDepo"></select>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="form-label small">Parti No</label>
+                                <input type="text" class="form-control form-control-sm" id="gParti" placeholder="Boşsa kazanılan lot kullanılır">
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="form-label small">Fire Miktarı</label>
+                                <input type="number" step="0.001" class="form-control form-control-sm" id="gFire" value="0">
+                            </div>
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="urunGirisiYap()"><i class="fas fa-arrow-right-to-bracket me-1"></i>Ürün Girişi Yap</button>
+                    </div>
+
+                    <!-- Parti İzi -->
+                    <div class="tab-pane fade" id="tabIz">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover table-custom mb-0">
+                                <thead><tr><th>Tip</th><th>Kalem</th><th>Parti</th><th class="text-end">Miktar</th><th>Silo</th><th>Zaman</th><th>Kullanıcı</th></tr></thead>
+                                <tbody id="tbodyIz"></tbody>
+                            </table>
+                            <div id="izBos" class="text-center text-muted py-3" style="display:none;">Bu iş emri için parti izi kaydı yok.</div>
+                        </div>
+                    </div>
+
+                    <!-- Bağlı Belgeler -->
+                    <div class="tab-pane fade" id="tabBelge">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover table-custom mb-0">
+                                <thead><tr><th>Belge No</th><th>Tarih</th><th>Kalem</th><th class="text-end">Miktar</th><th>Depo</th><th>Yön</th></tr></thead>
+                                <tbody id="tbodyBelgeler"></tbody>
+                            </table>
+                        </div>
+                        <div class="mt-3">
+                            <a href="#" id="kkFormuLink" class="btn btn-outline-secondary btn-sm" target="_blank"><i class="fas fa-clipboard-check me-1"></i>Yeni Ürün KK Formu Oluştur</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; color: #5a5c69; }
+    .kpi-card { border-radius: 10px; border: 1px solid #e3e6f0; padding: 10px 14px; background: #fff; }
+    .kpi-card .l { font-size: .66rem; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: #858796; }
+    .kpi-card .v { font-size: 1.05rem; font-weight: 700; color: #1e293b; }
+    .rozet { font-size: .68rem; font-weight: 700; padding: .2em .5em; border-radius: 6px; }
+    .rozet-yesil { background:#e6f7ee; color:#0f9d58; } .rozet-sari { background:#fff8e6; color:#b7791f; } .rozet-mavi { background:#eaf2ff; color:#2a5fb0; } .rozet-gri { background:#f1f3f5; color:#495057; }
+</style>
+
+<script>
+    let sekme = 'bas', liste = [], secili = null;
+
+    function fmt(n, d) { d = d ?? 2; return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+    function durumRozet(d) {
+        const m = { S: ['rozet-mavi', 'Başladı'], T: ['rozet-yesil', 'Tamamlandı'], B: ['rozet-sari', 'Kalite Bekliyor'] };
+        const v = m[d] || ['rozet-gri', d || 'Bekliyor'];
+        return `<span class="rozet ${v[0]}">${v[1]}</span>`;
+    }
+
+    function sekmeSec(s) {
+        sekme = s;
+        document.getElementById('btnSekmeBas').className = 'btn ' + (s === 'bas' ? 'btn-primary' : 'btn-outline-primary');
+        document.getElementById('btnSekmeBit').className = 'btn ' + (s === 'bit' ? 'btn-primary' : 'btn-outline-primary');
+        yukle();
+    }
+
+    async function yukle() {
+        document.getElementById('tbodyListe').innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-2"></span>Yükleniyor...</td></tr>';
+        const url = sekme === 'bas' ? '/UrasUretimUretim/GetUraskimyaSaha' : '/UrasUretimUretim/GetUraskimyaSahaBit';
+        const res = await fetch(url).then(r => r.json());
+        if (!res.success) { document.getElementById('tbodyListe').innerHTML = `<tr><td colspan="9" class="text-danger text-center py-4">${res.message}</td></tr>`; return; }
+        liste = res.data || [];
+        cizListe();
+    }
+
+    function cizListe() {
+        document.getElementById('bosMesaj').style.display = liste.length ? 'none' : '';
+        document.getElementById('tbodyListe').innerHTML = liste.map(o => `
+            <tr>
+                <td class="fw-bold">#${o.DocNum}</td>
+                <td>${o.ItemName || o.ItemCode}<div class="text-muted small">${o.ItemCode}</div></td>
+                <td class="text-end">${fmt(o.PlannedQty)} ${o.Uom || ''}</td>
+                <td>${o.Warehouse || ''}</td>
+                <td>${o.KazanLotNo || '<span class="text-muted">—</span>'}</td>
+                <td>${durumRozet(o.UvtDurum)}</td>
+                <td>${o.Operator || ''}</td>
+                <td class="small">${o.BasZam || ''}${o.BitZam ? ' / ' + o.BitZam : ''}</td>
+                <td><button class="btn btn-sm btn-outline-primary" onclick="detayAc(${o.DocEntry})"><i class="fas fa-eye"></i></button></td>
+            </tr>`).join('');
+    }
+
+    async function detayAc(docEntry) {
+        secili = liste.find(x => x.DocEntry === docEntry);
+        if (!secili) return;
+        document.getElementById('dDocEntry').value = docEntry;
+        document.getElementById('detayBaslik').textContent = `#${secili.DocNum} — ${secili.ItemName || secili.ItemCode}`;
+        document.getElementById('ozetKartlari').innerHTML = `
+            <div class="col-6 col-md-3"><div class="kpi-card"><div class="l">Planlanan</div><div class="v">${fmt(secili.PlannedQty)} ${secili.Uom || ''}</div></div></div>
+            <div class="col-6 col-md-3"><div class="kpi-card"><div class="l">Depo</div><div class="v">${secili.Warehouse || '—'}</div></div></div>
+            <div class="col-6 col-md-3"><div class="kpi-card"><div class="l">Lot</div><div class="v">${secili.KazanLotNo || '—'}</div></div></div>
+            <div class="col-6 col-md-3"><div class="kpi-card"><div class="l">Durum</div><div class="v">${durumRozet(secili.UvtDurum)}</div></div></div>`;
+        document.getElementById('bSecilenLot').value = '';
+        document.getElementById('bUretMiktar').value = secili.PlannedQty || '';
+        document.getElementById('lYeniLot').value = ''; document.getElementById('lAciklama').value = '';
+        document.getElementById('kkFormuLink').href = `/UrasUretimKalite/UrunKaliteKontrol?docEntry=${docEntry}`;
+
+        new bootstrap.Modal(document.getElementById('detayModal')).show();
+        yukleBilesenler(docEntry);
+        yukleIz(docEntry);
+        yukleBelgeler(docEntry);
+        yukleDepolar();
+    }
+
+    async function yukleDepolar() {
+        const sel = document.getElementById('gDepo');
+        if (sel.dataset.dolu) return;
+        sel.dataset.dolu = '1';
+        const res = await fetch('/UrasUretimUretim/GetWarehousesUretim').then(r => r.json());
+        if (res.success) sel.innerHTML = (res.data || []).map(w => `<option value="${w.WhsCode}">${w.WhsCode} — ${w.WhsName}</option>`).join('');
+        if (secili && secili.Warehouse) sel.value = secili.Warehouse;
+    }
+
+    async function yukleBilesenler(docEntry) {
+        const res = await fetch(`/UrasUretimUretim/GetBilesenPartiOnizleme?docEntry=${docEntry}`).then(r => r.json());
+        const tbody = document.getElementById('tbodyBilesen');
+        if (!res.success || !res.data || !res.data.liste || !res.data.liste.length) {
+            tbody.innerHTML = '';
+            document.getElementById('bilesenBos').style.display = '';
+            return;
+        }
+        document.getElementById('bilesenBos').style.display = 'none';
+        tbody.innerHTML = res.data.liste.map((b, i) => `
+            <tr data-linenum="${b.LineNum}" data-itemcode="${b.ItemCode}">
+                <td>${b.ItemName || b.ItemCode}<div class="text-muted small">${b.ItemCode}</div></td>
+                <td>${b.WhsCode}</td>
+                <td class="text-end">${fmt(b.PlanMiktar, 3)} ${b.Birim || ''}</td>
+                <td>${fmt(b.DepoStok, 2)}</td>
+                <td>${b.Partili ? (b.FifoParti ? `${b.FifoParti} (${fmt(b.FifoPartiStok, 2)})` : '<span class="text-muted">yok</span>') : '<span class="text-muted">partisiz</span>'}</td>
+                <td>${b.Partili ? `<input type="text" class="form-control form-control-sm parti-input" placeholder="FIFO için boş bırakın">` : ''}</td>
+            </tr>`).join('');
+    }
+
+    async function bilesenCikisiYap() {
+        const docEntry = Number(document.getElementById('dDocEntry').value);
+        const secimler = [];
+        document.querySelectorAll('#tbodyBilesen tr').forEach(tr => {
+            const input = tr.querySelector('.parti-input');
+            if (input && input.value.trim()) {
+                secimler.push({ lineNum: Number(tr.dataset.linenum), itemCode: tr.dataset.itemcode, parti: input.value.trim(), kaynak: 'M' });
+            }
+        });
+        const res = await fetch('/UrasUretimUretim/AddInventoryGenExitOtomatik', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ docEntry, secimler })
+        }).then(r => r.json());
+        alert(res.message);
+        if (res.success) yukleBilesenler(docEntry);
+    }
+
+    async function uretimiBaslat() {
+        const docEntry = Number(document.getElementById('dDocEntry').value);
+        const res = await fetch('/UrasUretimUretim/UpdateUrasKimyaSahaBas', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ docEntry })
+        }).then(r => r.json());
+        alert(res.message);
+        if (res.success) yukle();
+    }
+
+    async function uretimiBitir() {
+        const docEntry = Number(document.getElementById('dDocEntry').value);
+        const secilenLot = document.getElementById('bSecilenLot').value.trim();
+        const uretMiktar = Number(document.getElementById('bUretMiktar').value) || null;
+        const durum = document.getElementById('bDurum').value;
+        const res = await fetch('/UrasUretimUretim/UpdateUrasKimyaSahaBit', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ docEntry, secilenLot: secilenLot || null, u_BE1_UVTDURUM: durum, u_BE1_URETMIKTAR: uretMiktar })
+        }).then(r => r.json());
+        alert(res.message);
+        if (res.success) { bootstrap.Modal.getInstance(document.getElementById('detayModal'))?.hide(); yukle(); }
+    }
+
+    // Kaynaktaki $scope.uretimTamamla/uretimTamamlaCalistir ile birebir: tek tıkla Başlat (güvence) →
+    // (varsa reçetedeki partili yarı mamul için lot seçtir) → Bitir (lot üret/devral) → bileşen çıkışı →
+    // ürün girişi. Kaynakta da bu TEK akış SAP'a 4 ayrı çağrı olarak sırayla gider (DI-API/SL kısıtı aynı).
+    async function uretimiTamamla() {
+        if (!secili) return;
+        const docEntry = Number(document.getElementById('dDocEntry').value);
+        const uretMiktar = Number(document.getElementById('bUretMiktar').value) || secili.PlannedQty;
+        if (!uretMiktar || uretMiktar <= 0) { alert('Üretilen miktar giriniz.'); return; }
+        const durum = document.getElementById('bDurum').value;
+
+        let secilenLot = document.getElementById('bSecilenLot').value.trim() || null;
+        if (!secilenLot) {
+            const partilerRes = await fetch(`/UrasUretimUretim/GetYariMamulPartiler?docEntry=${docEntry}`).then(r => r.json());
+            const partiler = (partilerRes.success ? partilerRes.data : []) || [];
+            if (partiler.length > 0) {
+                const secenekler = partiler.map((p, i) => `${i + 1}) ${p.BatchNum} — ${p.ItemName || p.ItemCode} (stok: ${fmt(p.Quantity, 2)})`).join('\n');
+                const secim = prompt(`Reçetedeki yarı mamul için partili stok bulundu. Mamul, seçtiğiniz partiyi AYNI numarayla devralacaktır (izlenebilirlik).\n\n${secenekler}\n\nNumara girin, otomatik lot için boş bırakıp Tamam'a basın:`);
+                if (secim !== null) {
+                    const idx = parseInt(secim, 10);
+                    if (!isNaN(idx) && idx >= 1 && idx <= partiler.length) secilenLot = partiler[idx - 1].BatchNum;
+                } else {
+                    return; // Vazgeç
+                }
+            }
+        }
+
+        if (!confirm(`#${secili.DocNum} nolu sipariş için ${fmt(uretMiktar, 2)} ${secili.Uom || 'KG'} üretimden çıkış ve giriş yapılacaktır.${secilenLot ? ` Seçilen parti (${secilenLot}) mamule aynı numarayla devredilecektir.` : ''}\n\nOnaylıyor musunuz?`)) return;
+
+        let res = await fetch('/UrasUretimUretim/UpdateUrasKimyaSahaBas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ docEntry }) }).then(r => r.json());
+        if (!res.success) { alert('Başlatma hatası: ' + res.message); return; }
+
+        res = await fetch('/UrasUretimUretim/UpdateUrasKimyaSahaBit', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ docEntry, secilenLot, u_BE1_UVTDURUM: durum, u_BE1_URETMIKTAR: uretMiktar })
+        }).then(r => r.json());
+        if (!res.success) { alert('Bitirme hatası: ' + res.message); return; }
+        const uretilenLot = res.data || res.message;
+
+        res = await fetch('/UrasUretimUretim/AddInventoryGenExitOtomatik', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ docEntry, qty: uretMiktar, secilenLot })
+        }).then(r => r.json());
+        if (!res.success) { alert(`Sipariş bitirildi ve lot (${uretilenLot}) üretildi, ancak bileşen çıkışı başarısız: ` + res.message); yukle(); return; }
+
+        res = await fetch('/UrasUretimUretim/AddInventoryGenEntryUretim', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ postDate: new Date().toISOString(), items: [{ itemCode: secili.ItemCode, quantity: uretMiktar, warehouse: secili.Warehouse, docEntry, batchNumber: uretilenLot }] })
+        }).then(r => r.json());
+        if (!res.success) { alert(`Bileşen çıkışı yapıldı ve lot (${uretilenLot}) üretildi, ancak ürün girişi başarısız: ` + res.message); yukle(); return; }
+
+        alert('Üretim tamamlandı. Parti No: ' + uretilenLot);
+        bootstrap.Modal.getInstance(document.getElementById('detayModal'))?.hide();
+        yukle();
+    }
+
+    async function lotDuzelt() {
+        const docEntry = Number(document.getElementById('dDocEntry').value);
+        const yeniLot = document.getElementById('lYeniLot').value.trim();
+        const aciklama = document.getElementById('lAciklama').value.trim();
+        if (!yeniLot || !aciklama) { alert('Yeni lot ve açıklama zorunludur.'); return; }
+        const res = await fetch('/UrasUretimUretim/SetOworLotNo', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ docEntry, yeniLot, aciklama })
+        }).then(r => r.json());
+        alert(res.message);
+        if (res.success) { yukle(); detayAc(docEntry); }
+    }
+
+    async function urunGirisiYap() {
+        const docEntry = Number(document.getElementById('dDocEntry').value);
+        const quantity = Number(document.getElementById('gMiktar').value);
+        const warehouse = document.getElementById('gDepo').value;
+        const batchNumber = document.getElementById('gParti').value.trim() || (secili ? secili.KazanLotNo : '');
+        const fireMiktar = Number(document.getElementById('gFire').value) || 0;
+        if (!quantity || quantity <= 0) { alert('Miktar giriniz.'); return; }
+        const res = await fetch('/UrasUretimUretim/AddInventoryGenEntryUretim', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ postDate: new Date().toISOString(), items: [{ itemCode: secili.ItemCode, quantity, warehouse, docEntry, batchNumber, fireMiktar }] })
+        }).then(r => r.json());
+        alert(res.message);
+        if (res.success) yukleBelgeler(docEntry);
+    }
+
+    async function yukleIz(docEntry) {
+        const res = await fetch(`/UrasUretimUretim/GetBilesenPartiIzi?docEntry=${docEntry}`).then(r => r.json());
+        const liste = (res.success && res.data) ? res.data : [];
+        document.getElementById('izBos').style.display = liste.length ? 'none' : '';
+        document.getElementById('tbodyIz').innerHTML = liste.map(x => `
+            <tr><td>${x.TipAd}</td><td>${x.ItemName || x.ItemCode}</td><td>${x.Parti}</td><td class="text-end">${fmt(x.Miktar, 2)}</td><td>${x.SiloAd || ''}</td><td class="small">${x.Tarih}</td><td>${x.Kullanici}</td></tr>`).join('');
+    }
+
+    async function yukleBelgeler(docEntry) {
+        const res = await fetch(`/UrasUretimUretim/GetBelgeLinesUretim?docEntry=${docEntry}`).then(r => r.json());
+        const liste = (res.success && res.data) ? res.data : [];
+        document.getElementById('tbodyBelgeler').innerHTML = liste.map(x => `
+            <tr><td class="fw-bold">#${x.DocNum}</td><td>${x.DocDate}</td><td>${x.ItemName || x.ItemCode}</td><td class="text-end">${fmt(x.Quantity, 2)}</td><td>${x.WhsCode}</td><td>${x.Yon}</td></tr>`).join('')
+            || '<tr><td colspan="6" class="text-center text-muted py-3">Bağlı belge yok.</td></tr>';
+    }
+
+    sekmeSec('bas');
+</script>

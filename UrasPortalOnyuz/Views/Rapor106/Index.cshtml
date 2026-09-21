@@ -1,0 +1,863 @@
+﻿@{
+    ViewData["Title"] = "Toplu Üretim & Simülasyon Yönetimi";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var currentDbDisplay = (string)ViewBag.CurrentDbDisplay;
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <style>
+        :root { 
+            --form-bg: #ffffff; 
+            --border-soft: #e2e8f0; 
+            --primary-soft: #eff6ff; 
+            --main-bg: #f4f6f9;
+        }
+        
+        .full-height-container {
+            min-height: calc(100vh - 100px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sap-card { 
+            background: var(--form-bg); 
+            border: 1px solid var(--border-soft); 
+            border-radius: 12px; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.03); 
+            overflow: hidden;
+        }
+        .sap-card-header { 
+            background-color: #ffffff; 
+            border-bottom: 1px solid var(--border-soft); 
+            padding: 1rem 1.5rem; 
+            font-weight: 700; 
+            color: #1e293b; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+        .sap-card-body { 
+            padding: 1.5rem; 
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .table-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            border: 1px solid var(--border-soft);
+            border-radius: 8px;
+        }
+        .table-modern { 
+            border-collapse: separate; 
+            border-spacing: 0; 
+            width: 100%; 
+            margin-bottom: 0;
+        }
+        .table-modern th { 
+            background-color: #f8fafc; 
+            color: #64748b; 
+            font-size: 0.75rem; 
+            font-weight: 700; 
+            text-transform: uppercase; 
+            padding: 12px 15px; 
+            border-bottom: 2px solid var(--border-soft); 
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .table-modern td { 
+            padding: 10px 15px; 
+            vertical-align: middle; 
+            border-bottom: 1px solid var(--border-soft); 
+            font-size: 0.85rem; 
+            color: #334155;
+        }
+        
+        .target-row { cursor: pointer; transition: all 0.2s; }
+        .target-row:hover { background-color: var(--primary-soft); }
+        .target-row.active { background-color: #0d6efd !important; }
+        .target-row.active td { color: #ffffff !important; border-color: #0b5ed7; }
+        
+        .status-badge { padding: 5px 10px; border-radius: 6px; font-weight: 600; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 4px; }
+        .status-ok { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0;}
+        .status-missing { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca;}
+        
+        #loadingOverlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.85); z-index:9999; flex-direction:column; justify-content:center; align-items:center; backdrop-filter: blur(4px); }
+        
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .select2-container--default .select2-selection--single { height: 45px; border: 1px solid #0d6efd; border-radius: 8px; display: flex; align-items: center; }
+        .select2-container--default .select2-selection--single .select2-selection__arrow { height: 43px; }
+    </style>
+}
+
+<div class="container-fluid py-4 full-height-container" id="mainContainer">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4 bg-white p-3 rounded-3 shadow-sm border border-light">
+        <div class="d-flex align-items-center">
+            <div class="bg-primary text-white rounded p-2 me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                <i class="fas fa-industry fs-5"></i>
+            </div>
+            <div>
+                <h5 class="mb-0 fw-bold text-dark">Toplu Üretim & Simülasyon Yönetimi</h5>
+                <small class="text-muted">Gelişmiş Muadil Kontrollü (Maksimum Stok Öncelikli) Üretim Sistemi</small>
+            </div>
+        </div>
+        
+        <div class="d-flex align-items-center">
+            <span class="badge bg-dark fs-6 px-4 py-2 rounded-pill shadow-sm">
+                <i class="fas fa-database text-warning me-2"></i>@currentDbDisplay
+            </span>
+            <!-- YENİ EKLENEN: Hatalı Kayıtları Düzeltme Aracı Butonu -->
+            <button class="btn btn-outline-danger btn-sm rounded-pill ms-3 fw-bold px-3 shadow-sm" id="btnOpenErrorModal">
+                <i class="fas fa-tools me-1"></i> Maliyet Düzeltme Aracı
+            </button>
+        </div>
+    </div>
+
+    <div id="loadingOverlay">
+        <div class="spinner-border text-primary" role="status" style="width: 3.5rem; height: 3.5rem; border-width: 0.3rem;"></div>
+        <h5 class="mt-4 text-dark fw-bold" id="loadingText">İşlem Yapılıyor...</h5>
+    </div>
+
+    <div class="row mb-4 d-none" id="summaryStatsRow">
+        <div class="col-md-6">
+            <div class="bg-white p-3 rounded-3 shadow-sm border-start border-4 border-primary d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="text-muted mb-1 text-uppercase fw-bold" style="font-size:0.8rem;">Toplam Üretilecek Ürün</h6>
+                    <h3 class="mb-0 fw-bold text-primary" id="statTotalTarget">0</h3>
+                </div>
+                <div class="bg-primary bg-opacity-10 p-3 rounded-circle">
+                    <i class="fas fa-box-open fs-3 text-primary"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="bg-white p-3 rounded-3 shadow-sm border-start border-4 border-warning d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="text-muted mb-1 text-uppercase fw-bold" style="font-size:0.8rem;">Toplam Tüketilecek Malzeme</h6>
+                    <h3 class="mb-0 fw-bold text-warning" id="statTotalComponent">0</h3>
+                </div>
+                <div class="bg-warning bg-opacity-10 p-3 rounded-circle">
+                    <i class="fas fa-cubes fs-3 text-warning"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 flex-grow-1">
+        
+        <div class="col-xl-4 col-lg-5 d-flex flex-column gap-4">
+            <div class="sap-card d-flex flex-column" style="flex: 0 0 auto;">
+                <div class="sap-card-header">
+                    <span><i class="fas fa-file-excel text-success me-2"></i>Tarih Seçimi ve Excel Yükleme</span>
+                </div>
+                <div class="sap-card-body">
+                    
+                    <div class="mb-3 p-3 bg-light rounded border border-warning shadow-sm">
+                        <label class="form-label fw-bold text-dark small text-uppercase mb-1"><i class="far fa-calendar-alt text-warning me-1"></i> Üretim Tarihi Seçin</label>
+                        <p class="small text-muted mb-2" style="font-size: 0.75rem;">Stoklar seçtiğiniz tarihe göre sıralı olarak hesaplanır ve belgeler bu tarihe atılır.</p>
+                        <input type="date" id="productionDate" class="form-control fw-bold border-warning" value="@DateTime.Now.ToString("yyyy-MM-dd")" />
+                    </div>
+
+                    <div class="alert alert-light border text-muted small mb-3">
+                        <i class="fas fa-info-circle me-1"></i> Şablonu indirip <b>Kalem Kodu</b> ve <b>Miktar</b> doldurup yükleyin.
+                    </div>
+                    
+                    <button type="button" class="btn btn-light border text-success w-100 mb-3 fw-bold shadow-sm" onclick="window.location.href='/Rapor106/DownloadTemplate'">
+                        <i class="fas fa-download me-2"></i> Şablonu İndir
+                    </button>
+                    
+                    <div class="input-group mb-3 shadow-sm">
+                        <input type="file" id="excelFile" class="form-control" accept=".xlsx, .xls" />
+                    </div>
+                    
+                    <button type="button" class="btn btn-primary w-100 fw-bold shadow-sm py-2" id="btnUpload">
+                        <i class="fas fa-upload me-2"></i> Yükle ve Hedefleri Oku
+                    </button>
+                </div>
+            </div>
+
+            <div class="sap-card flex-column flex-grow-1 d-none" id="targetsCard">
+                <div class="sap-card-header">
+                    <span><i class="fas fa-bullseye text-danger me-2"></i>Üretim Hedefleri</span>
+                    <span class="badge bg-light text-dark border" id="targetCountBadge">0 Kayıt</span>
+                </div>
+                <div class="sap-card-body p-0">
+                    <div class="alert alert-info border-0 rounded-0 m-0 py-2 small text-center">
+                        <i class="fas fa-hand-pointer me-1"></i> Reçetesini görmek için listeden bir kaleme tıklayın.
+                    </div>
+                    <div class="table-container border-0 rounded-0" style="max-height: 350px;">
+                        <table class="table-modern">
+                            <thead><tr><th>Kalem Kodu</th><th class="text-end">Miktar</th></tr></thead>
+                            <tbody id="targetsBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="p-3 bg-light border-top mt-auto">
+                        <button class="btn btn-warning fw-bold shadow-sm w-100 py-2 text-dark" id="btnSimulate">
+                            <i class="fas fa-cogs me-2"></i> Simülasyonu Çalıştır
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-8 col-lg-7 d-flex flex-column">
+            
+            <div class="sap-card flex-column flex-grow-1 d-none" id="simulationCard">
+                <div class="sap-card-header bg-white">
+                    <span class="text-dark" id="simulationTitle"><i class="fas fa-microscope text-info me-2"></i>Reçete Bileşenleri</span>
+                    
+                    <div class="d-flex gap-2">
+                        <span id="mismatchWarningBadge" class="badge bg-warning text-dark d-none d-flex align-items-center" title="Bileşen toplamları ana hedefle uyuşmuyor" style="cursor:help;">
+                            <i class="fas fa-exclamation-triangle me-1"></i> Reçete Uyuşmazlığı
+                        </span>
+                        
+                        <button class="btn btn-primary fw-bold shadow-sm px-3 d-none" id="btnExecuteSingleProduction">
+                            <i class="fas fa-play-circle me-1"></i> Seçili Olanı Üret
+                        </button>
+                        <button class="btn btn-success fw-bold shadow-sm px-3 d-none" id="btnExecuteAllProduction">
+                            <i class="fas fa-layer-group me-1"></i> Tümünü Toplu Üret
+                        </button>
+                    </div>
+                </div>
+                <div class="sap-card-body p-0 d-flex flex-column">
+                    <div id="globalWarningBox" class="alert alert-warning border-warning m-3 p-2 small d-none shadow-sm">
+                        <strong class="d-block mb-1"><i class="fas fa-info-circle me-1"></i> Dikkat: Reçete Miktarlarında Uyuşmazlıklar Var!</strong>
+                        <ul id="warningList" class="mb-0 ps-3" style="max-height: 80px; overflow-y: auto;"></ul>
+                    </div>
+
+                    <div class="table-container border-0 rounded-0 flex-grow-1">
+                        <table class="table-modern" id="simTable">
+                            <thead>
+                                <tr>
+                                    <th>Ana Bileşen</th>
+                                    <th>Tüketilecek Ürün</th>
+                                    <th class="text-center">İhtiyaç</th>
+                                    <th class="text-center">Ayrılan</th>
+                                    <th class="text-center">Kalan Stok</th>
+                                    <th class="text-center">Durum</th>
+                                    <th>Aday Stok Durumları</th>
+                                    <th class="text-center">Aksiyon</th>
+                                </tr>
+                            </thead>
+                            <tbody id="simBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sap-card d-flex flex-column justify-content-center align-items-center text-center bg-light border-dashed flex-grow-1" id="placeholderCard" style="border-style: dashed !important;">
+                <div class="p-5">
+                    <i class="fas fa-clipboard-list text-muted mb-3" style="font-size: 3rem; opacity: 0.5;"></i>
+                    <h5 class="text-muted fw-bold">Simülasyon Verisi Yok</h5>
+                    <p class="text-muted small">Sol taraftan bir Excel yükleyip simülasyonu çalıştırın.</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- ÇOKLU MUADİL YÖNETİMİ MODALI -->
+<div class="modal fade" id="muadilModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg border-radius-lg">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold"><i class="fas fa-exchange-alt me-2"></i>Alternatif (Muadil) Ürünleri Belirle</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-info small border-info shadow-sm mb-4">
+                    <i class="fas fa-info-circle me-1"></i> Seçtiğiniz muadiller ürünün SAP kartına <b>(U_MUAD, U_MUAD2, U_MUAD3)</b> işlenir. Simülasyon stok miktarı en yüksek olana öncelik verir.
+                </div>
+                <input type="hidden" id="modalTargetItemCode" />
+                <div class="mb-3">
+                    <label class="form-label fw-bold text-muted small text-uppercase">Ana Bileşen</label>
+                    <input type="text" class="form-control bg-light fw-bold" id="modalMissingItem" readonly />
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold text-primary small text-uppercase">1. Muadil (U_MUAD)</label>
+                    <select class="form-control" id="modalMuadil1" style="width: 100%;">
+                        <option value="">Seçiniz veya arayınız...</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold text-primary small text-uppercase">2. Muadil (U_MUAD2)</label>
+                    <select class="form-control" id="modalMuadil2" style="width: 100%;">
+                        <option value="">Seçiniz veya arayınız...</option>
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label fw-bold text-primary small text-uppercase">3. Muadil (U_MUAD3)</label>
+                    <select class="form-control" id="modalMuadil3" style="width: 100%;">
+                        <option value="">Seçiniz veya arayınız...</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-top-0">
+                <button type="button" class="btn btn-light border px-4" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-primary fw-bold px-4 shadow-sm" id="btnSaveMuadil">Kaydet & Yeniden Simüle Et</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- YENİ EKLENEN: HATALI SİPARİŞLERİ DÜZELTME MODALI -->
+<div class="modal fade" id="errorModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg border-radius-lg">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title fw-bold"><i class="fas fa-exclamation-triangle me-2"></i>Hatalı (Şişkin Maliyetli) Siparişleri Temizle</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-warning small border-warning shadow-sm mb-3">
+                    <i class="fas fa-info-circle me-1"></i> Bu listede görünen siparişler, eski sistemde Excel'deki mükerrer satırlardan dolayı içlerine <b>fazladan malzeme atılmış</b> kayıtlardır. Aşağıdan seçtiğiniz siparişlerin Üretimden Giriş (Receipt) ve Üretime Çıkış (Issue) belgeleri otomatik iptal edilecek ve sipariş kapatılacaktır.
+                </div>
+                <div class="table-responsive border rounded" style="max-height: 450px; overflow-y: auto;">
+                    <table class="table table-hover table-modern align-middle" id="errorTable" style="margin-bottom: 0;">
+                        <thead class="bg-light">
+                            <tr>
+                                <th class="text-center" style="width: 60px;">
+                                    <input class="form-check-input" type="checkbox" id="checkAllErrors" style="transform: scale(1.2); cursor: pointer;">
+                                </th>
+                                <th>Sipariş No</th>
+                                <th>Sipariş Tarihi</th>
+                                <th>Üretilen Kalem</th>
+                                <th class="text-end">Planlanan Miktar</th>
+                            </tr>
+                        </thead>
+                        <tbody id="errorTableBody">
+                            <!-- JS ile dolacak -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-top-0 d-flex justify-content-between">
+                <span class="text-danger fw-bold ms-2" id="selectedErrorCount">0 kayıt seçildi</span>
+                <div>
+                    <button type="button" class="btn btn-light border px-4 me-2" data-bs-dismiss="modal">Vazgeç</button>
+                    <button type="button" class="btn btn-danger fw-bold px-4 shadow-sm" id="btnCancelSelectedOrders"><i class="fas fa-trash-alt me-2"></i>Seçilenleri İptal Et & Kapat</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <script>
+        toastr.options = { positionClass: "toast-bottom-right", progressBar: true, enableHtml: true };
+        let uploadedTargets = [];
+        let simulationData = [];
+        let simulationWarnings = []; 
+        let selectedParentCode = null;
+
+        function showLoading(text) { $('#loadingText').text(text); $('#loadingOverlay').css('display', 'flex'); }
+        function hideLoading() { $('#loadingOverlay').hide(); }
+
+        $(document).ready(function() {
+            // Malzeme listesini çekip tüm select2'lere yükle
+            $.get('/Rapor106/GetItemsList', function(data) {
+                const select2Options = {
+                    data: data,
+                    dropdownParent: $('#muadilModal'),
+                    placeholder: 'Ürün Kodu veya Adı yazarak arayın...',
+                    allowClear: true
+                };
+                
+                $('#modalMuadil1').select2(select2Options);
+                $('#modalMuadil2').select2(select2Options);
+                $('#modalMuadil3').select2(select2Options);
+            });
+        });
+
+        $('#btnUpload').click(function () {
+            const fileInput = document.getElementById('excelFile');
+            if (fileInput.files.length === 0) { toastr.warning("Lütfen bir Excel dosyası seçin."); return; }
+
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+
+            showLoading("Excel Verileri Okunuyor...");
+            $.ajax({
+                url: '/Rapor106/UploadExcel',
+                type: 'POST',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (res) {
+                    if (res.success && res.data.length > 0) {
+                        uploadedTargets = res.data.map(item => ({...item, isProduced: false}));
+                        simulationData = []; 
+                        simulationWarnings = [];
+                        selectedParentCode = null;
+                        
+                        renderLeftTargets();
+                        
+                        $('#targetCountBadge').text(`${res.data.length} Kayıt`);
+                        $('#targetsCard').removeClass('d-none').addClass('d-flex');
+                        
+                        let totalTarget = uploadedTargets.reduce((sum, item) => sum + parseFloat(item.targetQty || 0), 0);
+                        $('#statTotalTarget').text(totalTarget.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + ' Adet');
+                        $('#statTotalComponent').text('Simülasyon Bekleniyor...');
+                        $('#summaryStatsRow').removeClass('d-none'); 
+
+                        toastr.success(`${res.data.length} adet üretim hedefi okundu.`);
+                    } else {
+                        toastr.error(res.message || "Geçerli veri bulunamadı.");
+                    }
+                },
+                error: function () { toastr.error("Yükleme sırasında hata oluştu."); },
+                complete: hideLoading
+            });
+        });
+
+        function renderLeftTargets() {
+            let html = '';
+            uploadedTargets.forEach(t => {
+                let activeClass = (selectedParentCode === t.itemCode) ? "active" : "";
+                let textClass = (selectedParentCode === t.itemCode) ? "" : "text-primary";
+                
+                let statusHtml = '';
+                
+                if (t.isProduced) {
+                    statusHtml = `<span class="badge bg-success shadow-sm" style="font-size:0.8rem;"><i class="fas fa-check-double me-1"></i>Üretildi ✅</span>`;
+                    activeClass = "bg-success bg-opacity-10";
+                    textClass = "text-success";
+                } 
+                else if (simulationData.length > 0) {
+                    let parentSims = simulationData.filter(x => x.parentCode === t.itemCode);
+                    let isMissing = parentSims.some(x => x.isMissing);
+                    let hasWarning = simulationWarnings.some(w => w.includes(t.itemCode));
+
+                    if (isMissing) {
+                        statusHtml = `<i class="fas fa-exclamation-circle ${activeClass ? 'text-white' : 'text-danger'} ms-2" title="Eksik stok veya eksik muadil var! (Sıraya göre)" style="font-size:1.1rem;"></i>`;
+                    } else if (hasWarning) {
+                        statusHtml = `<i class="fas fa-exclamation-triangle ${activeClass ? 'text-white' : 'text-warning'} ms-2" title="Reçete Miktarı Uyuşmuyor!" style="font-size:1.1rem;"></i>`;
+                    } else {
+                        statusHtml = `<i class="fas fa-check-circle ${activeClass ? 'text-white' : 'text-success'} ms-2" title="Sıralı üretime hazır" style="font-size:1.1rem;"></i>`;
+                    }
+                }
+
+                html += `<tr class="target-row ${activeClass} ${t.isProduced ? 'pe-none' : ''}" data-code="${t.itemCode}">
+                            <td class="fw-bold ${textClass} d-flex justify-content-between align-items-center">
+                                <span>${t.itemCode}</span>
+                                ${statusHtml}
+                            </td>
+                            <td class="text-end fw-bold align-middle ${t.isProduced ? 'text-success' : ''}">${t.targetQty}</td>
+                         </tr>`;
+            });
+            $('#targetsBody').html(html);
+        }
+
+        $('#btnSimulate').click(function () { runSimulation(); });
+
+        $(document).on('click', '.target-row', function() {
+            let clickedCode = $(this).data('code');
+            let target = uploadedTargets.find(t => t.itemCode === clickedCode);
+            if(target && target.isProduced) return;
+
+            selectedParentCode = clickedCode;
+            renderLeftTargets(); 
+            
+            if(simulationData.length > 0) {
+                renderSimulationTable();
+            } else {
+                runSimulation();
+            }
+        });
+
+        function runSimulation() {
+            let targetsToSimulate = uploadedTargets.filter(t => !t.isProduced);
+            if(targetsToSimulate.length === 0) return;
+            
+            let selectedDate = $('#productionDate').val();
+            if(!selectedDate) { toastr.warning("Lütfen bir üretim tarihi seçiniz!"); return; }
+
+            let payload = {
+                SelectedDate: selectedDate,
+                Items: targetsToSimulate
+            };
+
+            showLoading("Kümülatif Stoklar Hesaplanıyor...");
+            $.ajax({
+                url: '/Rapor106/SimulateProduction',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(payload),
+                success: function (res) {
+                    if (res.success) {
+                        simulationData = res.data;
+                        simulationWarnings = res.warnings || []; 
+                        
+                        if(!selectedParentCode && targetsToSimulate.length > 0) {
+                            selectedParentCode = targetsToSimulate[0].itemCode;
+                        }
+
+                        renderLeftTargets(); 
+                        renderSimulationTable(); 
+                        
+                        $('#placeholderCard').removeClass('d-flex').addClass('d-none');
+                        $('#simulationCard').removeClass('d-none').addClass('d-flex');
+
+                        let totalComp = res.data.reduce((sum, row) => {
+                            return sum + (row.childName !== "SİSTEMDE REÇETE (BOM) BULUNAMADI!" ? parseFloat(row.allocatedQty || 0) : 0);
+                        }, 0);
+                        $('#statTotalComponent').text(totalComp.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + ' Birim');
+
+                        if (simulationWarnings.length > 0) {
+                            let wHtml = '';
+                            simulationWarnings.forEach(w => wHtml += `<li>${w}</li>`);
+                            $('#warningList').html(wHtml);
+                            $('#globalWarningBox').removeClass('d-none');
+                        } else {
+                            $('#globalWarningBox').addClass('d-none');
+                        }
+
+                    } else {
+                        toastr.error(res.message.replace(/\n/g, '<br>'), "SİMÜLASYON HATASI", { 
+                            timeOut: 0, 
+                            extendedTimeOut: 0, 
+                            closeButton: true 
+                        });
+                        
+                        simulationData = [];
+                        simulationWarnings = [];
+                        $('#simulationCard').removeClass('d-flex').addClass('d-none');
+                        $('#placeholderCard').removeClass('d-none').addClass('d-flex');
+                        $('#statTotalComponent').text('Hesaplanamadı');
+                    }
+                },
+                error: function () { toastr.error("Bağlantı hatası."); },
+                complete: hideLoading
+            });
+        }
+
+        function renderSimulationTable() {
+            if(!selectedParentCode) return;
+            
+            let filteredData = simulationData.filter(x => x.parentCode === selectedParentCode);
+            let hasWarningForCurrent = simulationWarnings.some(w => w.includes(selectedParentCode));
+            let html = '';
+
+            let missingCount = filteredData.filter(x => x.isMissing).length;
+            let titleHtml = `<i class="fas fa-microscope text-info me-2"></i> ${selectedParentCode} Reçetesi`;
+            
+            if (missingCount > 0) {
+                titleHtml += ` <span class="badge bg-danger ms-3"><i class="fas fa-exclamation-triangle me-1"></i> Eksik Bileşen / Stok Var!</span>`;
+            } else {
+                titleHtml += ` <span class="badge bg-success ms-3"><i class="fas fa-check me-1"></i> Tüm Bileşenler Hazır</span>`;
+            }
+            $('#simulationTitle').html(titleHtml);
+
+            if (hasWarningForCurrent) {
+                $('#mismatchWarningBadge').removeClass('d-none');
+            } else {
+                $('#mismatchWarningBadge').addClass('d-none');
+            }
+
+            filteredData.forEach(row => {
+                let isSystemMissing = (row.childName === "SİSTEMDE REÇETE (BOM) BULUNAMADI!");
+                
+                let statusBadge = row.isMissing ? `<span class="status-badge status-missing"><i class="fas fa-times-circle"></i> Eksik</span>` : `<span class="status-badge status-ok"><i class="fas fa-check-circle"></i> Yeterli</span>`;
+                
+                let onHandDisplay = row.onHand <= 0 ? `<span class="text-danger fw-bold">Tükendi (0)</span>` : `<span class="text-info fw-bold">${row.onHand}</span>`;
+                
+                let muadilInfoText = row.muadilInfo ? `<small class="text-muted d-block" style="font-size:0.75rem;">${row.muadilInfo}</small>` : '';
+                
+                let actionBtn = `<button class="btn btn-sm btn-outline-primary btn-set-muadil fw-bold shadow-sm" data-code="${row.childCode}"><i class="fas fa-exchange-alt me-1"></i> Muadil Yönet</button>`;
+
+                if(isSystemMissing) {
+                    html += `
+                    <tr class="bg-danger bg-opacity-10">
+                        <td colspan="8" class="text-danger fw-bold text-center py-4">
+                            <i class="fas fa-exclamation-triangle fs-4 d-block mb-2"></i> BU ÜRÜNÜN REÇETESİ SAP SİSTEMİNDE BULUNAMADI!
+                        </td>
+                    </tr>`;
+                } else {
+                    let rowClass = row.isMissing ? "bg-warning bg-opacity-10" : "";
+                    html += `
+                    <tr class="${rowClass}">
+                        <td class="fw-bold">${row.childCode}<br><small class="text-muted fw-normal">${row.childName}</small></td>
+                        <td class="fw-bold text-primary">${row.finalItemToUse}</td>
+                        <td class="text-center fw-bold text-dark">${row.totalRequiredQty}</td>
+                        <td class="text-center fw-bold text-success">${row.allocatedQty}</td>
+                        <td class="text-center">${onHandDisplay}</td>
+                        <td class="text-center">${statusBadge}</td>
+                        <td>${muadilInfoText}</td>
+                        <td class="text-center">${actionBtn}</td>
+                    </tr>`;
+                }
+            });
+
+            $('#simBody').html(html);
+
+            let overallMissing = simulationData.some(s => s.isMissing);
+            let selectedMissing = filteredData.some(s => s.isMissing);
+
+            if (overallMissing) {
+                $('#btnExecuteAllProduction').removeClass('btn-success').addClass('btn-secondary').prop('disabled', true).html('<i class="fas fa-ban me-1"></i> Toplu Üretim Kapalı');
+            } else {
+                $('#btnExecuteAllProduction').removeClass('btn-secondary').addClass('btn-success').prop('disabled', false).html('<i class="fas fa-layer-group me-1"></i> Tümünü Toplu Üret');
+            }
+
+            if (selectedMissing || filteredData.length === 0 || filteredData[0].childName === "SİSTEMDE REÇETE (BOM) BULUNAMADI!") {
+                $('#btnExecuteSingleProduction').removeClass('btn-primary').addClass('btn-secondary').prop('disabled', true).html('<i class="fas fa-ban me-1"></i> Tek Üretim Kapalı');
+            } else {
+                $('#btnExecuteSingleProduction').removeClass('btn-secondary').addClass('btn-primary').prop('disabled', false).html('<i class="fas fa-play-circle me-1"></i> Seçili Olanı Üret');
+            }
+
+            $('#btnExecuteAllProduction').removeClass('d-none');
+            $('#btnExecuteSingleProduction').removeClass('d-none');
+        }
+
+        $(document).on('click', '.btn-set-muadil', function () {
+            const itemCode = $(this).data('code');
+            $('#modalTargetItemCode').val(itemCode);
+            $('#modalMissingItem').val(itemCode);
+            
+            $('#modalMuadil1').val(null).trigger('change');
+            $('#modalMuadil2').val(null).trigger('change');
+            $('#modalMuadil3').val(null).trigger('change');
+            
+            $('#muadilModal').modal('show');
+        });
+
+        $('#btnSaveMuadil').click(function () {
+            const itemCode = $('#modalTargetItemCode').val();
+            const muadil1 = $('#modalMuadil1').val();
+            const muadil2 = $('#modalMuadil2').val();
+            const muadil3 = $('#modalMuadil3').val();
+
+            showLoading("Muadiller SAP Kartına İşleniyor...");
+            $.post('/Rapor106/UpdateMuadil', { 
+                itemCode: itemCode, 
+                muadilCode1: muadil1,
+                muadilCode2: muadil2,
+                muadilCode3: muadil3
+            }, function (res) {
+                if (res.success) {
+                    $('#muadilModal').modal('hide');
+                    toastr.success(res.message);
+                    runSimulation(); 
+                } else {
+                    toastr.error(res.message);
+                }
+            }).fail(function() { toastr.error("Sunucu hatası."); }).always(hideLoading);
+        });
+
+        function executeProduction(isBulk) {
+            let baseTargets = isBulk ? uploadedTargets : uploadedTargets.filter(t => t.itemCode === selectedParentCode);
+            let targetsToProcess = baseTargets.filter(t => !t.isProduced);
+
+            if (targetsToProcess.length === 0) {
+                toastr.info("Seçili kalemler zaten üretilmiş.");
+                return;
+            }
+            
+            let hasMissing = false;
+            targetsToProcess.forEach(t => {
+                if (simulationData.filter(s => s.parentCode === t.itemCode && s.isMissing).length > 0) {
+                    hasMissing = true;
+                }
+            });
+
+            if (hasMissing) {
+                toastr.error("Seçili işlem için eksik stoku bulunan kalemler var. İşlem iptal edildi.");
+                return;
+            }
+
+            let executeWarningText = "";
+            let confirmMessage = `Sıralı (kümülatif) stoklar uygundur.\n\nSistem ${isBulk ? "TÜM ürünler" : `SADECE ${selectedParentCode} ürünü`} için otomatik olarak:\n1. Üretim Siparişi açacak\n2. Çıkış fişi kesecek\n3. Giriş belgesi yaratacaktır.\n\n`;
+            
+            if (isBulk && simulationWarnings.length > 0) {
+                executeWarningText = "\n\nDİKKAT: Bazı reçetelerde hedef/ihtiyaç uyuşmazlıkları var! Yinede onaysız üretim yapacak mısınız?";
+            } else if (!isBulk && simulationWarnings.some(w => w.includes(selectedParentCode))) {
+                executeWarningText = "\n\nDİKKAT: Bu reçetenin hedef miktar ile bileşen miktar toplamı uyuşmuyor! Yinede onaysız üretim yapacak mısınız?";
+            }
+            
+            if (!confirm(confirmMessage + "Onaylıyor musunuz?" + executeWarningText)) return;
+
+            let selectedDate = $('#productionDate').val();
+            let productionRequests = [];
+            
+            targetsToProcess.forEach(target => {
+                let parentSims = simulationData.filter(s => s.parentCode === target.itemCode);
+                if(parentSims.length > 0 && parentSims[0].childName !== "SİSTEMDE REÇETE (BOM) BULUNAMADI!") {
+                    let req = {
+                        ParentCode: target.itemCode,
+                        TargetQty: target.targetQty,
+                        Components: parentSims.map(s => ({
+                            FinalItemToUse: s.finalItemToUse,
+                            BaseQty: s.baseQty,
+                            TargetQty: target.targetQty,
+                            AllocatedQty: s.allocatedQty,
+                            WhsCode: s.whsCode
+                        }))
+                    };
+                    productionRequests.push(req);
+                }
+            });
+
+            if(productionRequests.length === 0) return;
+
+            let executionPayload = {
+                SelectedDate: selectedDate,
+                Requests: productionRequests
+            };
+
+            showLoading(`Robot Çalışıyor... Belgeler aktarılıyor...`);
+            $.ajax({
+                url: '/Rapor106/ExecuteProduction',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(executionPayload),
+                success: function (res) {
+                    if (res.success) {
+                        if (res.hasErrors) {
+                            toastr.warning(res.message.replace(/\n/g, '<br>'), "Kısmen Başarılı", { timeOut: 15000, extendedTimeOut: 5000, closeButton: true });
+                        } else {
+                            toastr.success(res.message, "İşlem Başarılı!", { timeOut: 5000 });
+                        }
+                        
+                        if (res.successfulItems && res.successfulItems.length > 0) {
+                            res.successfulItems.forEach(itemCode => {
+                                let target = uploadedTargets.find(t => t.itemCode === itemCode);
+                                if (target) {
+                                    target.isProduced = true; 
+                                }
+                            });
+                            
+                            selectedParentCode = null; 
+                            renderLeftTargets();
+                            
+                            $('#simulationCard').removeClass('d-flex').addClass('d-none');
+                            $('#placeholderCard').removeClass('d-none').addClass('d-flex').html(`
+                                <div class="p-5">
+                                    <i class="fas fa-check-circle text-success mb-3" style="font-size: 4rem;"></i>
+                                    <h4 class="text-success fw-bold">Üretim Tamamlandı</h4>
+                                    <p class="text-muted">Seçili kalemler başarıyla SAP'ye işlendi.</p>
+                                </div>
+                            `);
+                        }
+                    } else {
+                        toastr.error(res.message.replace(/\n/g, '<br>'), "Hata Açıklaması", { timeOut: 0, extendedTimeOut: 0, closeButton: true });
+                    }
+                },
+                error: function () { toastr.error("Zaman aşımı veya bağlantı hatası oluştu."); },
+                complete: hideLoading
+            });
+        }
+
+        $('#btnExecuteSingleProduction').click(function() { executeProduction(false); });
+        $('#btnExecuteAllProduction').click(function() { executeProduction(true); });
+
+        // --- YENİ EKLENEN JAVASCRIPT: Hatalı Sipariş İptal İşlemleri ---
+        
+        $('#btnOpenErrorModal').click(function() {
+            showLoading("Hatalı siparişler taranıyor...");
+            $.get('/Rapor106/GetErroneousOrders', function(res) {
+                if (res.success) {
+                    let html = '';
+                    if (res.data.length === 0) {
+                        html = `<tr><td colspan="5" class="text-center text-success fw-bold py-5"><i class="fas fa-check-circle fs-2 d-block mb-2"></i>Sistemde hatalı/mükerrer kayıt bulunamadı!</td></tr>`;
+                        $('#btnCancelSelectedOrders').prop('disabled', true);
+                        $('#checkAllErrors').prop('disabled', true);
+                    } else {
+                        res.data.forEach(item => {
+                            html += `
+                            <tr>
+                                <td class="text-center">
+                                    <input class="form-check-input error-checkbox" type="checkbox" value="${item.docEntry}" style="transform: scale(1.2); cursor: pointer;">
+                                </td>
+                                <td class="fw-bold text-danger">${item.docNum}</td>
+                                <td>${item.postDate}</td>
+                                <td class="fw-bold">${item.itemCode}</td>
+                                <td class="text-end fw-bold text-dark">${item.plannedQty}</td>
+                            </tr>`;
+                        });
+                        $('#btnCancelSelectedOrders').prop('disabled', false);
+                        $('#checkAllErrors').prop('disabled', false).prop('checked', false);
+                    }
+                    $('#errorTableBody').html(html);
+                    updateSelectedCount();
+                    $('#errorModal').modal('show');
+                } else {
+                    toastr.error(res.message);
+                }
+            }).fail(function() {
+                toastr.error("Sunucuya bağlanılamadı.");
+            }).always(hideLoading);
+        });
+
+        $('#checkAllErrors').change(function() {
+            $('.error-checkbox').prop('checked', $(this).is(':checked'));
+            updateSelectedCount();
+        });
+
+        $(document).on('change', '.error-checkbox', function() {
+            updateSelectedCount();
+            if (!$(this).is(':checked')) {
+                $('#checkAllErrors').prop('checked', false);
+            } else if ($('.error-checkbox:checked').length === $('.error-checkbox').length) {
+                $('#checkAllErrors').prop('checked', true);
+            }
+        });
+
+        function updateSelectedCount() {
+            let count = $('.error-checkbox:checked').length;
+            $('#selectedErrorCount').text(`${count} sipariş seçildi`);
+            if(count === 0) {
+                $('#btnCancelSelectedOrders').addClass('disabled');
+            } else {
+                $('#btnCancelSelectedOrders').removeClass('disabled');
+            }
+        }
+
+        $('#btnCancelSelectedOrders').click(function() {
+            let selectedIds = [];
+            $('.error-checkbox:checked').each(function() {
+                selectedIds.push(parseInt($(this).val()));
+            });
+
+            if (selectedIds.length === 0) {
+                toastr.warning("Lütfen iptal edilecek en az bir sipariş seçin.");
+                return;
+            }
+
+            if (!confirm(`Seçtiğiniz ${selectedIds.length} adet üretim siparişinin Üretimden Girişleri ve Üretime Çıkışları tamamen iptal edilecek ve sipariş kapatılacaktır.\n\nBu işlem maliyetlerinizi sıfırlayacaktır. Emin misiniz?`)) return;
+
+            showLoading("Seçili belgeler SAP üzerinden iptal ediliyor, lütfen beklemeye devam edin...");
+            
+            $.ajax({
+                url: '/Rapor106/CancelOrders',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(selectedIds),
+                success: function(res) {
+                    if (res.success) {
+                        toastr.success(res.message.replace(/\n/g, '<br>'), "İşlem Sonucu", { timeOut: 10000 });
+                        $('#errorModal').modal('hide');
+                    } else {
+                        toastr.error(res.message.replace(/\n/g, '<br>'), "İşlem Tamamlanamadı", { timeOut: 0, closeButton: true });
+                    }
+                },
+                error: function() {
+                    toastr.error("Zaman aşımı veya bağlantı hatası oluştu. Lütfen bağlantınızı kontrol edip tekrar deneyin.");
+                },
+                complete: hideLoading
+            });
+        });
+
+    </script>
+}

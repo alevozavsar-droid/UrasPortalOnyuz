@@ -1,0 +1,246 @@
+﻿@model List<WebApplication3.Models.ReconciliationSimulationViewModel>
+@using WebApplication3.Models
+@using System.Globalization
+
+@{
+    ViewData["Title"] = "Cari Mutabakat Kapalı İşlem Detayı (FIFO)";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? "Veritabanı Belirtilmedi";
+    var selectedBpCode = (string)ViewBag.SelectedBpCode;
+    var bpName = Model.FirstOrDefault()?.CariBilgisi ?? (string)ViewBag.SelectedBpName ?? "Muhatap Adı Bulunamadı";
+
+    var culture = new CultureInfo("tr-TR");
+    var simulationData = Model ?? new List<ReconciliationSimulationViewModel>();
+
+    // Grup sayısını hesapla
+    var closedGroupCount = simulationData
+                            .Where(d => d.KapatmaGrubuNo.HasValue)
+                            .Select(d => d.KapatmaGrubuNo)
+                            .Distinct()
+                            .Count();
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/bs5/dt-1.11.5/datatables.min.css" />
+    <style>
+        .container {
+            max-width: 100%;
+            padding: 0 15px;
+        }
+
+        .table-simulation thead th {
+            background-color: #0d6efd;
+            color: white;
+            white-space: nowrap;
+            border-color: #0d6efd !important;
+            font-size: 0.85rem;
+            vertical-align: middle;
+            text-align: center;
+        }
+
+        .matched-row {
+            background-color: #e8f5e9 !important;
+        }
+        /* Yeşilimsi */
+        .unmatched-row {
+            background-color: #fff3cd !important;
+        }
+        /* Sarımsı */
+        .type-borc {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .type-alacak {
+            color: #198754;
+            font-weight: bold;
+        }
+
+        .text-huge-sim {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+
+        .summary-card-custom {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        .dataTables_length, .dataTables_paginate, .dataTables_info {
+            display: none !important;
+        }
+
+        .badge-currency {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: #e9ecef;
+            color: #495057;
+            font-weight: bold;
+        }
+    </style>
+}
+
+<div class="container mt-4">
+    <div class="header text-center mb-4">
+        <h2>CARİ MUTABAKAT KAPALI İŞLEM DETAYI</h2>
+        <p class="text-muted">Döviz öncelikli FIFO ve katı eşleşme kurallarına göre simülasyon sonuçları.</p>
+    </div>
+
+    @if (ViewBag.ErrorMessage != null)
+    {
+        <div class="alert alert-danger">@ViewBag.ErrorMessage</div>
+    }
+
+    <div class="card mb-4 summary-card-custom">
+        <div class="card-body bg-light">
+            <div class="row align-items-center">
+                <div class="col-lg-4">
+                    <p class="mb-1"><strong>Cari Muhatap:</strong> <span class="badge bg-dark">@selectedBpCode</span> @bpName</p>
+                    <p class="mb-1 text-muted small"><strong>Veritabanı:</strong> @currentSelectedDbDisplay</p>
+                </div>
+                <div class="col-lg-8">
+                    <div class="row text-center">
+                        <div class="col-md-4">
+                            <h6 class="small text-muted mb-0">Toplam Eşleşen Tutar</h6>
+                            <span class="text-huge-sim text-primary">
+                                @(simulationData
+                                                                .Where(x => x.KapatmaGrubuNo.HasValue && x.BakiyeTipi == "Borç")
+                                                                .Sum(x => x.KapananTutar)
+                                                                .ToString("N2", culture)) TL
+                            </span>
+                        </div>
+                        <div class="col-md-4">
+                            <h6 class="small text-muted mb-0">Eşleşen Kayıt Sayısı</h6>
+                            <span class="text-huge-sim text-info">
+                                @simulationData.Count(x => x.KapatmaGrubuNo.HasValue)
+                            </span>
+                        </div>
+                        <div class="col-md-4">
+                            <h6 class="small text-muted mb-0">Eşleşme Grubu Sayısı</h6>
+                            <span class="text-huge-sim text-secondary">@closedGroupCount</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <hr />
+            <a href="@Url.Action("Index", "Rapor15", new { bpCode = selectedBpCode, db = ViewBag.SelectedDatabaseKey })" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-2"></i> Ana Rapor'a Geri Dön
+            </a>
+        </div>
+    </div>
+
+    @if (simulationData.Any())
+    {
+        <div class="table-responsive">
+            <table id="simulation-table" class="table table-bordered table-hover table-simulation align-middle">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">Grup No</th>
+                        <th>İşlem No</th>
+                        <th>Satır No</th>
+                        <th>Yön</th>
+                        <th>Belge Tarihi</th>
+                        <th>Vade Tarihi</th>
+                        <th>PB</th>
+                        <th>Kur Farkı PB</th>
+                        <th>Aktarım</th>
+                        <th class="text-end">Eşleşen Tutar</th>
+                        <th class="text-end">Kalan TL Bakiye</th>
+                        <th>Durum</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in simulationData)
+                    {
+                        string rowClass = item.KapatmaGrubuNo.HasValue ? "matched-row" : "unmatched-row";
+                        string yonClass = item.BakiyeTipi == "Borç" ? "type-borc" : "type-alacak";
+                        string yonIcon = item.BakiyeTipi == "Borç" ? "fa-arrow-up" : "fa-arrow-down";
+
+                        <tr class="@rowClass">
+                            <td class="text-center fw-bold">
+                                @if (item.KapatmaGrubuNo.HasValue)
+                                {
+                                    <span class="badge bg-primary">@item.KapatmaGrubuNo</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            </td>
+                            <td>@item.TransId</td>
+                            <td>@item.IslemTipi</td>
+                            <td class="@yonClass">
+                                <i class="fas @yonIcon small me-1"></i> @item.BakiyeTipi
+                            </td>
+                            <td class="text-center">@(item.RefDate != DateTime.MinValue ? item.RefDate.ToString("dd.MM.yyyy") : "-")</td>
+                            <td class="text-center">@(item.DueDate.HasValue? item.DueDate.Value.ToString("dd.MM.yyyy") : "-")</td>
+                            <td class="text-center"><span class="badge-currency">@item.ParaBirimi</span></td>
+                            <td class="text-center">
+                                @if (!string.IsNullOrEmpty(item.KurFarkiParaBirimi))
+                                {
+                                    <span class="badge bg-warning text-dark">@item.KurFarkiParaBirimi</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @if (!string.IsNullOrEmpty(item.AktarimTipi))
+                                {
+                                    <span class="badge border text-dark">@item.AktarimTipi</span>
+                                }
+                            </td>
+                            <td class="text-end fw-bold text-success">
+                                @(item.KapananTutar > 0 ? item.KapananTutar.ToString("N2", culture) : "-")
+                            </td>
+                            <td class="text-end fw-bold text-danger">
+                                @(item.KAPANMAYAN_KALAN_BAKİYE != 0 ? item.KAPANMAYAN_KALAN_BAKİYE.ToString("N2", culture) : "-")
+                            </td>
+                            <td class="text-center">
+                                @if (item.MutabakatDurumu == "KAPANDI")
+                                {
+                                    <span class="badge bg-success"><i class="fas fa-check"></i> Kapandı</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger"><i class="fas fa-exclamation"></i> Açık</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info text-center mt-4">
+            <i class="fas fa-info-circle fa-2x mb-3"></i><br />
+            Kriterlere uygun simülasyon verisi bulunamadı.
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script type="text/javascript" src="https://cdn.datatables.net/v/bs5/dt-1.11.5/datatables.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            if ($('#simulation-table').length) {
+                $('#simulation-table').DataTable({
+                    responsive: true,
+                    ordering: false,
+                    searching: true,
+                    paging: false,
+                    info: false,
+                    language: { url: "//cdn.datatables.net/plug-ins/1.11.5/i18n/tr.json" },
+                    columnDefs: [
+                        { className: "text-center", targets: [0, 4, 5, 6, 7, 8, 11] },
+                        { className: "text-end", targets: [9, 10] }
+                    ]
+                });
+            }
+        });
+    </script>
+}

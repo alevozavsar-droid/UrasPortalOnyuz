@@ -1,0 +1,913 @@
+﻿@{
+    ViewData["Title"] = "Mobil Sipariş Portali";
+    Layout = null; 
+}
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+    <title>Saha Sipariş Portali</title>
+    
+    <link href="@Url.Content("~/lib/bootstrap/dist/css/bootstrap.min.css")" rel="stylesheet" />
+    <link href="@Url.Content("~/lib/toastr/build/toastr.min.css")" rel="stylesheet" />
+    <script src="@Url.Content("~/lib/html2pdf.js/dist/html2pdf.bundle.min.js")"></script>
+    
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --primary: #2563eb;
+            --primary-gradient: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            --success-gradient: linear-gradient(135deg, #10b981, #059669);
+            --dark-gradient: linear-gradient(135deg, #0f172a, #1e293b);
+            --card-shadow: 0 12px 24px rgba(0,0,0,0.04);
+            --radius-lg: 24px;
+            --radius-md: 16px;
+        }
+
+        body { background-color: var(--bg-color); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding-bottom: 110px; margin: 0; color: #334155; }
+        
+        .screen { display: none; animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        .screen.active { display: block; }
+        @@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* HEADER & LOGIN */
+        .app-header { background: var(--dark-gradient); color: white; padding: 25px 20px 20px; border-bottom-left-radius: 30px; border-bottom-right-radius: 30px; box-shadow: 0 4px 20px rgba(15, 23, 42, 0.15); position: sticky; top: 0; z-index: 1000; display: flex; justify-content: space-between; align-items: center; }
+        .app-header h5 { font-size: 1.2rem; letter-spacing: 0.5px; }
+        .login-box { background: white; border-radius: var(--radius-lg); padding: 40px 30px; margin: 60px 20px; box-shadow: var(--card-shadow); text-align: center; }
+        .login-input { height: 60px; border-radius: var(--radius-md); background: #f8fafc; border: 2px solid transparent; font-size: 1.1rem; padding: 0 20px; transition: all 0.3s; }
+        .login-input:focus { border-color: #3b82f6; background: white; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1); outline: none; }
+
+        /* DASHBOARD GRID MENU */
+        .dashboard-header { padding: 30px 20px 10px; }
+        .dashboard-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; padding: 0 20px; margin-top: 10px; }
+        .menu-card { background: white; border-radius: var(--radius-lg); padding: 30px 15px; text-align: center; box-shadow: var(--card-shadow); border: 1px solid rgba(255,255,255,0.5); cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .menu-card:active { transform: scale(0.94); background: #f8fafc; border-color: #cbd5e1; }
+        .menu-icon { font-size: 2.8rem; margin-bottom: 12px; display: block; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1)); }
+        .menu-text { font-weight: 800; color: #1e293b; font-size: 1rem; line-height: 1.2; }
+
+        /* CARDS & INPUTS */
+        .app-card { background: white; border-radius: var(--radius-lg); padding: 25px 20px; margin: 20px 15px; box-shadow: var(--card-shadow); }
+        .card-title { font-size: 1.15rem; font-weight: 800; color: #0f172a; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 2px dashed #e2e8f0; display: flex; align-items: center; gap: 8px; }
+        .form-label { font-weight: 700; color: #64748b; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+        .mobile-search-input { width: 100%; height: 56px; border-radius: var(--radius-md); border: 2px solid #e2e8f0; padding: 0 20px; font-size: 1.05rem; font-weight: 600; background-color: #f8fafc; box-sizing: border-box; transition: all 0.3s; }
+        .search-results-panel { position: absolute; top: 65px; left: 0; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: var(--radius-md); box-shadow: 0 15px 35px rgba(0,0,0,0.15); max-height: 250px; overflow-y: auto; z-index: 2000; display: none; border: 1px solid #e2e8f0; }
+        .search-row { padding: 16px 20px; font-size: 15px; font-weight: 700; color: #334155; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background 0.2s; }
+
+        /* BUTTONS */
+        .btn-modern { border-radius: var(--radius-md); padding: 16px; font-weight: 800; font-size: 1.05rem; transition: all 0.2s; border: none; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-modern:active { transform: scale(0.96); }
+        .btn-primary-gradient { background: var(--primary-gradient); color: white; box-shadow: 0 8px 16px rgba(37, 99, 235, 0.2); }
+        .btn-success-gradient { background: var(--success-gradient); color: white; box-shadow: 0 8px 16px rgba(16, 185, 129, 0.2); }
+        .btn-dark-gradient { background: var(--dark-gradient); color: white; box-shadow: 0 8px 16px rgba(15, 23, 42, 0.2); }
+        .btn-back { background: white; color: #334155; border: 1px solid #e2e8f0; border-radius: 50px; padding: 8px 20px; font-weight: 700; font-size: 0.95rem; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); margin: 20px 0 0 20px; }
+
+        /* QTY & PRICE */
+        .qty-box { background: #f8fafc; border: 2px solid #e2e8f0; border-radius: var(--radius-md); padding: 6px; display: flex; justify-content: space-between; align-items: center;}
+        .qty-btn { width: 48px; height: 48px; background: white; border: none; border-radius: 12px; font-size: 1.4rem; font-weight: bold; color: #475569;}
+        .qty-input { border: none; background: transparent; text-align: center; font-size: 1.6rem; font-weight: 900; width: 100%; color: #0f172a;}
+        .price-area { background: #f0f9ff; border: 2px dashed #bae6fd; border-radius: var(--radius-md); padding: 20px; text-align: center;}
+        .price-text { font-size: 2rem; font-weight: 900; color: #0369a1; margin: 0;}
+
+        /* LISTS & HISTORY */
+        .history-row { display: flex; justify-content: space-between; align-items: center; padding: 16px; background: #fff; border: 1px solid #e2e8f0; border-radius: var(--radius-md); margin-bottom: 12px; transition: all 0.3s ease; gap: 10px;}
+        .history-row.added-success { background-color: #f0fdf4; border-color: #22c55e; }
+        .history-item-info { font-weight: 700; font-size: 0.9rem; color: #334155; flex: 1; padding-right: 10px; line-height: 1.3; word-wrap: break-word;}
+        .history-add-control { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .history-qty-input { width: 50px; height: 44px; text-align: center; font-weight: bold; border: 2px solid #cbd5e1; border-radius: 12px; font-size: 1.1rem; }
+        .btn-history-add { background: #22c55e; color: white; border: none; width: 44px; height: 44px; border-radius: 12px; font-weight: bold; font-size: 1.2rem; transition: transform 0.1s; display: flex; align-items: center; justify-content: center; padding: 0;}
+        
+        .cart-item { background: #fff; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 18px; margin-bottom: 12px; position: relative; box-shadow: 0 4px 6px rgba(0,0,0,0.02);}
+        .btn-delete { position: absolute; right: 12px; top: 12px; color: #ef4444; background: #fef2f2; border: 1px solid #fee2e2; border-radius: 10px; width: 32px; height: 32px; font-weight: bold; display: flex; align-items: center; justify-content: center; }
+
+        /* TABLES & MODALS (TAŞMALAR DÜZELTİLDİ) */
+        .table-responsive { border-radius: 12px; overflow-x: hidden; border: 1px solid #e2e8f0; } 
+        .table { margin-bottom: 0; font-size: 0.85rem; }
+        .table thead th { background-color: #f8fafc; color: #475569; font-weight: 800; border-bottom: 2px solid #e2e8f0; padding: 10px; white-space: nowrap;}
+        .table tbody td { padding: 10px; vertical-align: middle; border-bottom: 1px solid #f1f5f9; color: #334155; font-weight: 600; }
+        
+        .report-card { background: #fff; border-radius: var(--radius-md); border: 1px solid #e2e8f0; padding: 18px; margin-bottom: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); transition: all 0.2s; cursor: pointer; }
+
+        /* EKSTRE TABLOSU (TEK SATIR RAKAMLAR VE TAM SIĞDIRMA) */
+        .ekstre-table { width: 100%; table-layout: fixed; margin: 0; }
+        .ekstre-table th, .ekstre-table td { padding: 6px 2px !important; vertical-align: middle; border-bottom: 1px solid #e2e8f0; word-wrap: break-word; }
+        .ekstre-table th { font-size: 0.55rem !important; text-transform: uppercase; color: #475569; background-color: #f8fafc;}
+        
+        .col-tarih { width: 16%; font-size: 0.55rem; white-space: nowrap; font-weight: 700; color: #0f172a;}
+        .col-tip { width: 8%; text-align: center; }
+        .col-akt { width: 8%; text-align: center; font-size: 0.6rem; font-weight: bold; color: #334155;}
+        .col-desc { width: 26%; font-size: 0.55rem; color: #334155; white-space: normal; line-height: 1.15; }
+        /* RAKAMLAR TEK SATIRDA KALSIN DİYE NOWRAP EKLENDİ */
+        .col-amount { width: 14%; font-size: 0.55rem; font-weight: 700; text-align: right; white-space: nowrap !important;}
+        .col-bakiye { width: 14%; font-size: 0.55rem; font-weight: 800; text-align: right; white-space: nowrap !important;}
+        
+        .badge-tip { font-size: 0.55rem; padding: 3px 1px; width: 100%; display: block; text-align: center; border-radius: 4px; font-weight: bold; }
+
+        .row-aylik-toplam { background-color: #fef08a !important; color: #854d0e !important; } 
+        .row-devir { background-color: #f1f5f9 !important; color: #1e293b !important; }
+        .row-genel-toplam { background-color: #1e293b !important; color: #ffffff !important; }
+
+        /* BOTTOM BAR */
+        .bottom-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 15px 20px 25px; box-shadow: 0 -10px 30px rgba(0,0,0,0.06); border-top-left-radius: 30px; border-top-right-radius: 30px; z-index: 1000; border-top: 1px solid #f1f5f9;}
+        #global-loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 9999; display: none; align-items: center; justify-content: center; flex-direction: column; backdrop-filter: blur(5px); }
+        .loader-spinner { width: 60px; height: 60px; border: 5px solid #e2e8f0; border-top: 5px solid var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <div class="app-header">
+        <h5 class="mb-0 fw-bold">📱 Saha Sipariş</h5>
+        <button id="btnLogout" class="btn btn-sm btn-outline-light rounded-pill fw-bold px-3" style="display:none;" onclick="logout()">Çıkış Yap</button>
+    </div>
+
+    <div id="screen-login" class="screen active">
+        <div class="login-box">
+            <div style="font-size: 4rem; margin-bottom: 10px;">👋</div>
+            <h2 class="fw-bold mb-1 text-dark">SELVI KİMYA</h2>
+            <p class="text-muted mb-4 fw-semibold">Portala giriş yapın</p>
+            
+            <input type="text" id="loginUsername" class="form-control login-input mb-3" placeholder="Kullanıcı Adı" autocomplete="off">
+            <input type="password" id="loginPassword" class="form-control login-input mb-4" placeholder="Şifre" autocomplete="off">
+            
+            <button class="btn-modern btn-primary-gradient" onclick="login()">GİRİŞ YAP 🚀</button>
+        </div>
+    </div>
+
+    <div id="screen-dashboard" class="screen">
+        <div class="dashboard-header">
+            <h4 class="fw-bold text-dark mb-1">Hoş Geldin,</h4>
+            <h3 id="lblActiveUser" class="fw-black" style="color: var(--primary);"></h3>
+        </div>
+        
+        <div class="dashboard-grid">
+            <div class="menu-card" onclick="showScreen('screen-order')">
+                <span class="menu-icon">📦</span>
+                <div class="menu-text">Yeni Sipariş</div>
+            </div>
+            <div class="menu-card" onclick="openOrderStatus()">
+                <span class="menu-icon">📊</span>
+                <div class="menu-text">Sipariş Durumu</div>
+            </div>
+            <div class="menu-card" onclick="showScreen('screen-price-list')">
+                <span class="menu-icon">💰</span>
+                <div class="menu-text">Fiyat Listesi</div>
+            </div>
+            <div class="menu-card" onclick="showScreen('screen-cari-ekstre')">
+                <span class="menu-icon">🧾</span>
+                <div class="menu-text text-danger">Cari Ekstre</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="screen-order" class="screen">
+        <button class="btn-back" onclick="showScreen('screen-dashboard')">⬅ Ana Menü</button>
+        
+        <div class="app-card">
+            <div class="card-title">👤 Müşteri Bilgileri</div>
+            <div class="search-box-wrapper mb-4">
+                <input type="text" id="CustomerSearchInput" class="mobile-search-input" placeholder="Müşteri ara (En az 2 harf)..." autocomplete="off">
+                <input type="hidden" id="SelectedCardCode">
+                <input type="hidden" id="SelectedCardName">
+                <div id="customerResultsPanel" class="search-results-panel"></div>
+            </div>
+            
+            <div class="row g-3">
+                <div class="col-6">
+                    <label class="form-label">İşlem Tipi</label>
+                    <select id="U_BE1_AKTAR" class="form-select mobile-search-input">
+                        <option value="">Seçiniz...</option>
+                        <option value="X">X</option>
+                        <option value="R">R</option>
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label class="form-label">KDV Grubu</label>
+                    <select id="VatGroup" class="form-select mobile-search-input">
+                        @if (ViewBag.VatGroups != null)
+                        {
+                            foreach (var v in ViewBag.VatGroups) { if(v.Code == "S01") { <option value="@v.Code" selected>@v.Code</option> } else { <option value="@v.Code">@v.Code</option> } }
+                        }
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="app-card" id="cardHistoryPanel" style="display: none;">
+            <div class="card-title">🕒 Sık Sipariş Edilenler</div>
+            <div id="historyItemsContainer" style="max-height: 400px; overflow-y: auto; padding-right: 5px;"></div>
+        </div>
+
+        <div class="app-card">
+            <div class="card-title">📦 Ürün Ekle</div>
+            <div class="search-box-wrapper mb-4">
+                <input type="text" id="ItemSearchInput" class="mobile-search-input" placeholder="Ürün ara..." autocomplete="off">
+                <input type="hidden" id="SelectedItemCode">
+                <input type="hidden" id="SelectedItemName"> 
+                <div id="itemResultsPanel" class="search-results-panel"></div>
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label text-center w-100">Sipariş Miktarı</label>
+                <div class="qty-box">
+                    <button type="button" class="qty-btn" onclick="changeQty(-1)">➖</button>
+                    <input type="number" id="Quantity" class="qty-input" value="1" min="1" step="1" />
+                    <button type="button" class="qty-btn" onclick="changeQty(1)">➕</button>
+                </div>
+            </div>
+
+            <div class="price-area mb-4">
+                <label class="form-label text-primary" style="font-size: 0.95rem;">Birim Fiyatı</label>
+                <div class="d-flex justify-content-center align-items-center gap-2">
+                    <p id="lblPrice" class="price-text">0.00</p>
+                    <span id="lblCurrency" class="badge bg-white text-dark border fs-5 px-3 py-2 shadow-sm">TRY</span>
+                </div>
+                <input type="hidden" id="HiddenPrice" value="0">
+            </div>
+
+            <button type="button" id="btnAddToCart" class="btn-modern btn-dark-gradient">SEPETE EKLE ➕</button>
+        </div>
+
+        <div class="app-card mb-5" id="CartSection" style="margin-bottom: 120px !important;">
+            <div class="card-title text-success">🛒 Sepetiniz (<span id="cartCount">0</span>)</div>
+            <div id="cartItemsContainer"><div class="text-center text-muted py-4 fw-bold">Sepetiniz henüz boş.</div></div>
+            <div class="mt-4 pt-4 border-top">
+                <label class="form-label">Sipariş Notu</label>
+                <textarea id="Comments" class="form-control bg-light border-0 p-3 fw-bold" rows="2" style="border-radius: 16px;" placeholder="Eklemek istediğiniz not..."></textarea>
+            </div>
+        </div>
+
+        <div class="bottom-bar">
+            <button id="btnSubmit" class="btn-modern btn-primary-gradient">🚀 SİPARİŞİ GÖNDER</button>
+        </div>
+    </div>
+
+    <div id="screen-order-status" class="screen">
+        <button class="btn-back" onclick="showScreen('screen-dashboard')">⬅ Ana Menü</button>
+        
+        <div class="app-card">
+            <div class="card-title text-primary">📊 Sipariş Durumu</div>
+            
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="form-label">Başlangıç</label>
+                    <input type="date" id="FilterStartDate" class="form-control mobile-search-input px-2">
+                </div>
+                <div class="col-6">
+                    <label class="form-label">Bitiş</label>
+                    <input type="date" id="FilterEndDate" class="form-control mobile-search-input px-2">
+                </div>
+            </div>
+            
+            <div class="search-box-wrapper mb-4">
+                <label class="form-label">Müşteri Filtresi (İsteğe Bağlı)</label>
+                <input type="text" id="FilterCustomerSearch" class="mobile-search-input" placeholder="Tüm müşteriler..." autocomplete="off">
+                <input type="hidden" id="FilterSelectedCardCode">
+                <div id="filterCustomerResultsPanel" class="search-results-panel"></div>
+            </div>
+
+            <button class="btn-modern btn-primary-gradient" onclick="fetchOrderStatuses()">🔍 SONUÇLARI GETİR</button>
+        </div>
+
+        <div class="app-card" style="margin-bottom: 50px;">
+            <div id="orderStatusContainer" class="text-center text-muted py-4 fw-bold">Kriterleri seçip butona basınız.</div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="orderDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content" style="border-radius: var(--radius-lg); border: none;">
+                <div class="modal-header bg-light border-0" style="border-top-left-radius: var(--radius-lg); border-top-right-radius: var(--radius-lg); padding: 15px 20px;">
+                    <h5 class="modal-title fw-bold text-dark fs-6">Sipariş No: <span id="modalDocNum" class="text-primary"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="table-responsive border-0 rounded-0" style="overflow-x: auto;">
+                        <table class="table table-striped mb-0" style="width: 100%; font-size: 0.75rem;">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th style="padding: 10px 8px;">Ürün</th>
+                                    <th class="text-center" style="padding: 10px 4px;">Mik.</th>
+                                    <th class="text-end" style="padding: 10px 4px;">Fiyat</th>
+                                    <th class="text-end" style="padding: 10px 8px;">Toplam</th>
+                                </tr>
+                            </thead>
+                            <tbody id="orderDetailsBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 p-3">
+                    <button type="button" class="btn-modern btn-dark-gradient m-0 py-2" data-bs-dismiss="modal">Kapat</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="screen-price-list" class="screen">
+        <button class="btn-back" onclick="showScreen('screen-dashboard')">⬅ Ana Menü</button>
+        
+        <div class="app-card">
+            <div class="card-title text-success">💰 Fiyat Listesi</div>
+            
+            <div class="search-box-wrapper mb-3">
+                <label class="form-label">1. Bir Müşteri Seçin</label>
+                <input type="text" id="PriceCustomerSearch" class="mobile-search-input" placeholder="Müşterinin tüm fiyatları..." autocomplete="off">
+                <input type="hidden" id="PriceSelectedCardCode">
+                <div id="priceCustomerResultsPanel" class="search-results-panel"></div>
+            </div>
+
+            <div class="search-box-wrapper mb-4">
+                <label class="form-label">2. Veya Bir Ürün Seçin</label>
+                <input type="text" id="PriceItemSearch" class="mobile-search-input" placeholder="Ürünün tüm carilerdeki fiyatı..." autocomplete="off">
+                <input type="hidden" id="PriceSelectedItemCode">
+                <div id="priceItemResultsPanel" class="search-results-panel"></div>
+            </div>
+
+            <button class="btn-modern btn-success-gradient" onclick="fetchItemPrices()">🔍 FİYATLARI GÖR</button>
+        </div>
+
+        <div class="app-card" style="margin-bottom: 50px;">
+            <div id="itemPricesContainer" class="text-center text-muted py-4 fw-bold">Seçim yapıp butona basınız.</div>
+        </div>
+    </div>
+
+    <div id="screen-cari-ekstre" class="screen">
+        <button class="btn-back" onclick="showScreen('screen-dashboard')">⬅ Ana Menü</button>
+        
+        <div class="app-card border-danger border-2">
+            <div class="card-title text-danger">🧾 Cari Ekstre Raporu</div>
+            
+            <div class="search-box-wrapper mb-3">
+                <label class="form-label text-danger">Cari Seçimi (Zorunlu)</label>
+                <input type="text" id="EkstreCustomerSearch" class="mobile-search-input border-danger" placeholder="Cari Ara..." autocomplete="off">
+                <input type="hidden" id="EkstreSelectedCardCode">
+                <div id="ekstreCustomerResultsPanel" class="search-results-panel"></div>
+            </div>
+
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="form-label">Başlangıç</label>
+                    <input type="date" id="EkstreStartDate" class="form-control mobile-search-input px-2">
+                </div>
+                <div class="col-6">
+                    <label class="form-label">Bitiş</label>
+                    <input type="date" id="EkstreEndDate" class="form-control mobile-search-input px-2">
+                </div>
+            </div>
+
+            <div class="bg-light p-3 rounded-4 mb-3 border border-light">
+                <label class="form-label text-dark fw-bold mb-2">İşlem (Aktarım) Tipi Filtresi</label>
+                <div class="d-flex gap-4 mb-1">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="chkAktarX" value="X">
+                        <label class="form-check-label fw-bold" for="chkAktarX">X</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="chkAktarR" value="R">
+                        <label class="form-check-label fw-bold" for="chkAktarR">R</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="chkAktarY" value="Y">
+                        <label class="form-check-label fw-bold" for="chkAktarY">Y</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-light p-3 rounded-4 mb-4 border border-light">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="chkInitialBalance" checked style="width: 1.2em; height: 1.2em;">
+                    <label class="form-check-label fw-bold ms-2 mt-1" for="chkInitialBalance">Devir Bakiyesini Dahil Et</label>
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="chkConnectedBp" style="width: 1.2em; height: 1.2em;">
+                    <label class="form-check-label fw-bold ms-2 mt-1" for="chkConnectedBp">Bağlı Cariyi Dahil Et</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="chkTlEkstre" style="width: 1.2em; height: 1.2em;">
+                    <label class="form-check-label fw-bold ms-2 mt-1 text-primary" for="chkTlEkstre">Sadece TL Ekstre (YPB Gizle)</label>
+                </div>
+            </div>
+
+            <div class="d-flex flex-column gap-3">
+                <button class="btn-modern btn-danger-custom" style="background: linear-gradient(135deg, #ef4444, #b91c1c); color:white;" onclick="fetchEkstreOnScreen()">👁️ EKRANDA GÖRÜNTÜLE</button>
+                <button class="btn-modern btn-primary-gradient" onclick="downloadAndSharePdf()">📄 PDF OLUŞTUR & PAYLAŞ</button>
+            </div>
+        </div>
+
+        <div class="app-card" style="margin-bottom: 50px; padding: 5px;">
+            <div id="ekstreOnScreenContainer" class="text-center text-muted py-4 fw-bold">Ekranda Görüntüle Butonuna Basınız.</div>
+        </div>
+    </div>
+
+    <div id="global-loader">
+        <div class="loader-spinner"></div>
+        <h5 class="fw-bold text-dark bg-white px-4 py-3 rounded-pill shadow-lg">Lütfen Bekleyin...</h5>
+    </div>
+
+    <script src="@Url.Content("~/lib/jquery/dist/jquery.min.js")"></script>
+    <script src="@Url.Content("~/lib/bootstrap/dist/js/bootstrap.bundle.min.js")"></script>
+    <script src="@Url.Content("~/lib/toastr/build/toastr.min.js")"></script>
+
+    <script>
+        let currentUser = { slpCode: 0, slpName: "" };
+        let cart = []; 
+        let searchTimers = {};
+        
+        const BASE_URL = '@Url.Content("~/MobilSiparis/")';
+
+        toastr.options = { "positionClass": "toast-bottom-center", "timeOut": "2500", "progressBar": true, "preventDuplicates": true };
+
+        function showLoader() { $('#global-loader').css('display', 'flex'); }
+        function hideLoader() { $('#global-loader').hide(); }
+
+        function showScreen(screenId) {
+            $('.screen').removeClass('active');
+            $('#' + screenId).addClass('active');
+            window.scrollTo(0,0);
+        }
+
+        function login() {
+            const user = $('#loginUsername').val();
+            const pass = $('#loginPassword').val();
+            if(!user || !pass) { toastr.warning("Lütfen bilgileri doldurun!"); return; }
+
+            showLoader();
+            $.ajax({
+                url: BASE_URL + 'UserLogin', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ Username: user, Password: pass }),
+                success: function(res) {
+                    hideLoader();
+                    if(res.success) {
+                        currentUser.slpCode = res.slpCode; currentUser.slpName = res.slpName;
+                        $('#lblActiveUser').text(res.slpName.split(' ')[0]);
+                        $('#btnLogout').show();
+                        showScreen('screen-dashboard');
+                    } else { toastr.error(res.message); }
+                },
+                error: function(xhr) { hideLoader(); toastr.error("Sistem bağlantı hatası! Kod: " + xhr.status); }
+            });
+        }
+
+        function logout() {
+            currentUser = { slpCode: 0, slpName: "" };
+            $('#loginUsername, #loginPassword').val('');
+            $('#btnLogout').hide();
+            cart = []; renderCart();
+            $('input[type="hidden"], input[type="text"]').val('');
+            $('#cardHistoryPanel').hide();
+            showScreen('screen-login');
+        }
+
+        function setupAutocomplete(inputId, panelId, hiddenId, url, extraParamsCallback, nameHiddenId = null) {
+            $(`#${inputId}`).on('input', function() {
+                if($(this).val().trim() === '') { $(`#${hiddenId}`).val(''); if(nameHiddenId) $(`#${nameHiddenId}`).val(''); }
+                
+                clearTimeout(searchTimers[inputId]);
+                const txt = $(this).val().trim();
+                const panel = $(`#${panelId}`);
+                if (txt.length < 2) { panel.hide(); return; }
+
+                searchTimers[inputId] = setTimeout(function() {
+                    let data = { q: txt };
+                    if(extraParamsCallback) Object.assign(data, extraParamsCallback());
+
+                    $.get(url, data, function(res) {
+                        if (res && res.results && res.results.length > 0) {
+                            let html = '';
+                            res.results.forEach(item => {
+                                let safeName = item.itemName ? item.itemName.replace(/"/g, '&quot;') : '';
+                                html += `<div class="search-row" data-id="${item.id}" data-text="${item.text}" data-name="${safeName}">${item.text}</div>`;
+                            });
+                            panel.html(html).show();
+                        } else { 
+                            panel.html('<div class="p-4 text-center text-muted fw-bold">Sonuç bulunamadı.</div>').show(); 
+                        }
+                    }).fail(function(xhr) { 
+                        panel.hide();
+                        let errorMsg = xhr.responseText ? xhr.responseText : xhr.statusText;
+                        toastr.error("Hata Detayı: " + errorMsg, "ARAMA BAŞARISIZ", { timeOut: 8000 }); 
+                    });
+                }, 300);
+            });
+
+            $(document).on('click', `#${panelId} .search-row`, function() {
+                $(`#${hiddenId}`).val($(this).data('id'));
+                if(nameHiddenId) $(`#${nameHiddenId}`).val($(this).data('name') || $(this).data('text'));
+                $(`#${inputId}`).val($(this).data('text'));
+                $(`#${panelId}`).hide();
+                
+                if(inputId === 'CustomerSearchInput') { loadCustomerHistoryItems($(this).data('id')); triggerPriceCheck(); }
+                if(inputId === 'ItemSearchInput') triggerPriceCheck();
+            });
+        }
+
+        $(document).ready(function() {
+            setupAutocomplete('CustomerSearchInput', 'customerResultsPanel', 'SelectedCardCode', BASE_URL + 'SearchCustomers', () => ({ slpCode: -1 }), 'SelectedCardName');
+            setupAutocomplete('FilterCustomerSearch', 'filterCustomerResultsPanel', 'FilterSelectedCardCode', BASE_URL + 'SearchCustomers', () => ({ slpCode: -1 }));
+            setupAutocomplete('PriceCustomerSearch', 'priceCustomerResultsPanel', 'PriceSelectedCardCode', BASE_URL + 'SearchCustomers', () => ({ slpCode: -1 }));
+            setupAutocomplete('EkstreCustomerSearch', 'ekstreCustomerResultsPanel', 'EkstreSelectedCardCode', BASE_URL + 'SearchCustomers', () => ({ slpCode: -1 })); 
+            
+            setupAutocomplete('ItemSearchInput', 'itemResultsPanel', 'SelectedItemCode', BASE_URL + 'SearchItems', null, 'SelectedItemName');
+            setupAutocomplete('PriceItemSearch', 'priceItemResultsPanel', 'PriceSelectedItemCode', BASE_URL + 'SearchItems');
+
+            $(document).click(function(e) { if (!$(e.target).closest('.search-box-wrapper').length) { $('.search-results-panel').hide(); }});
+            
+            const today = new Date().toISOString().split('T')[0];
+            const startOfYear = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
+            
+            $('#FilterStartDate, #FilterEndDate').val(today);
+            $('#EkstreStartDate').val(startOfYear);
+            $('#EkstreEndDate').val(today);
+            
+            $('#U_BE1_AKTAR').change(function() {
+                let secim = $(this).val();
+                if (secim === 'X') { $('#VatGroup').val('S05'); } 
+                else if (secim === 'R') { $('#VatGroup').val('S01'); }
+            });
+            
+            $('#btnAddToCart').click(function(e) {
+                e.preventDefault();
+                const itemCode = $('#SelectedItemCode').val();
+                const itemName = $('#SelectedItemName').val(); 
+                const qty = parseFloat($('#Quantity').val() || 0);
+                const price = parseFloat($('#HiddenPrice').val() || 0);
+                const cur = $('#lblCurrency').text();
+
+                if (!itemCode) { toastr.warning("Lütfen aratarak ürün seçiniz."); $('#itemResultsPanel').show(); return; }
+                if (qty <= 0) { toastr.warning("Miktarı kontrol ediniz."); return; }
+
+                cart.push({ ItemCode: itemCode, ItemName: itemName || itemCode, Quantity: qty, UnitPrice: price, Currency: cur });
+                toastr.success("Ürün Sepete Eklendi 🛒");
+                
+                $('#SelectedItemCode, #SelectedItemName, #ItemSearchInput').val('');
+                $('#Quantity').val(1); $('#lblPrice').text('0.00'); $('#HiddenPrice').val('0');
+                renderCart(); scrollToCart();
+            });
+
+            $('#btnSubmit').click(function() {
+                if (cart.length === 0) { toastr.warning("Sepetiniz boş!"); return; }
+                if (!$('#SelectedCardCode').val()) { toastr.warning("Müşteri seçimi zorunludur!"); return; }
+
+                const req = {
+                    CardCode: $('#SelectedCardCode').val(), SalesPersonCode: currentUser.slpCode,
+                    VatGroup: $('#VatGroup').val(), U_BE1_AKTAR: $('#U_BE1_AKTAR').val(),
+                    Comments: $('#Comments').val(), DocumentLines: cart 
+                };
+
+                showLoader();
+                $.ajax({
+                    url: BASE_URL + 'SubmitOrder', type: 'POST', contentType: 'application/json', data: JSON.stringify(req),
+                    success: function(res) {
+                        hideLoader();
+                        if (res.success) {
+                            toastr.success("Sipariş SAP'ye eklendi! 🎉");
+                            cart = []; renderCart();
+                            
+                            // GÖNDERİM SONRASI BUTONLARI SIFIRLAMA
+                            $('.history-row').removeClass('added-success');
+                            $('.history-add-control').each(function() {
+                                let codeRaw = $(this).attr('id').replace('control_hist_', '');
+                                let itemName = $(`#row_hist_${$.escapeSelector(codeRaw)} .d-block`).text();
+                                $(this).html(`<input type="number" class="history-qty-input" id="hist_qty_${codeRaw}" value="1" min="1">
+                                              <button type="button" class="btn-history-add shadow-sm" onclick="addHistoryToCart('${codeRaw}', '${itemName.replace(/'/g, "\\'")}')">➕</button>`);
+                            });
+
+                            $('#SelectedCardCode, #SelectedCardName, #CustomerSearchInput, #Comments, #U_BE1_AKTAR').val('');
+                            $('#cardHistoryPanel').hide(); window.scrollTo(0,0);
+                        } else { toastr.error(res.message); }
+                    },
+                    error: function(xhr) { hideLoader(); toastr.error("Bağlantı hatası! Kod: " + xhr.status); }
+                });
+            });
+        });
+
+        function loadCustomerHistoryItems(cardCode) {
+            $.get(BASE_URL + 'GetCustomerHistoryItems', { cardCode: cardCode }, function(res) {
+                const container = $('#historyItemsContainer');
+                if (res && res.length > 0) {
+                    let html = '';
+                    res.forEach(item => {
+                        let safeName = item.itemName ? item.itemName.replace(/"/g, '&quot;') : '';
+                        let escapedName = item.itemName ? item.itemName.replace(/'/g, "\\'") : '';
+                        html += `<div class="history-row" id="row_hist_${item.itemCode}">
+                            <div class="history-item-info">
+                                <span class="text-primary">${item.itemCode}</span><br>
+                                <span class="d-block" style="white-space: normal;">${safeName}</span>
+                            </div>
+                            <div class="history-add-control" id="control_hist_${item.itemCode}">
+                                <input type="number" class="history-qty-input" id="hist_qty_${item.itemCode}" value="1" min="1">
+                                <button type="button" class="btn-history-add shadow-sm" onclick="addHistoryToCart('${item.itemCode}', '${escapedName}')">➕</button>
+                            </div></div>`;
+                    });
+                    container.html(html); $('#cardHistoryPanel').slideDown();
+                } else { $('#cardHistoryPanel').hide(); }
+            });
+        }
+
+        window.addHistoryToCart = function(itemCode, itemName) {
+            // RAW ID İLE İŞLEM YAP (KAÇIŞ KARAKTERİ HATASI DÜZELTİLDİ)
+            const rawId = itemCode;
+            const safeId = $.escapeSelector(rawId);
+            
+            // Raw id kullanarak input değerini al
+            const qtyElement = document.getElementById(`hist_qty_${rawId}`);
+            const qty = qtyElement ? parseFloat(qtyElement.value || 0) : 0;
+
+            if (qty <= 0 || isNaN(qty)) { toastr.warning("Miktar girin."); return; }
+            if (!$('#SelectedCardCode').val()) { toastr.warning("Müşteri seçin."); return; }
+
+            $.get(BASE_URL + 'GetItemPrice', { cardCode: $('#SelectedCardCode').val(), itemCode: itemCode }, function(res) {
+                cart.push({ ItemCode: itemCode, ItemName: itemName, Quantity: qty, UnitPrice: res.price, Currency: res.currency });
+                $(`#row_hist_${safeId}`).addClass('added-success');
+                $(`#control_hist_${safeId}`).html(`<span class="badge bg-success px-3 py-2 fw-bold fs-6">✓ Eklendi</span>`);
+                toastr.success(`Sepete eklendi.`); renderCart(); scrollToCart();
+            });
+        }
+
+        function triggerPriceCheck() {
+            const item = $('#SelectedItemCode').val();
+            if ($('#SelectedCardCode').val() && item) {
+                $.get(BASE_URL + 'GetItemPrice', { cardCode: $('#SelectedCardCode').val(), itemCode: item }, function(res) {
+                    $('#lblPrice').text(res.price.toLocaleString('tr-TR', { minimumFractionDigits: 2 }));
+                    $('#HiddenPrice').val(res.price); $('#lblCurrency').text(res.currency);
+                });
+            }
+        }
+
+        function openOrderStatus() { showScreen('screen-order-status'); }
+
+        function fetchOrderStatuses() {
+            const sDate = $('#FilterStartDate').val();
+            const eDate = $('#FilterEndDate').val();
+            const cCode = $('#FilterSelectedCardCode').val();
+
+            showLoader();
+            $.get(BASE_URL + 'GetOrderStatuses', { slpCode: currentUser.slpCode, cardCode: cCode, startDate: sDate, endDate: eDate }, function(res) {
+                hideLoader();
+                const container = $('#orderStatusContainer');
+                if(res && res.length > 0) {
+                    let html = '';
+                    res.forEach(o => {
+                        let colorClass = "text-secondary";
+                        let badgeBg = "bg-light text-dark border";
+                        if(o.statusName === 'Siparişte (Açık)') { colorClass = "text-primary"; badgeBg = "bg-primary text-white"; }
+                        else if(o.statusName === 'İrsaliyesi Kesildi') { colorClass = "text-info"; badgeBg = "bg-info text-white"; }
+                        else if(o.statusName === 'Faturası Kesildi') { colorClass = "text-success"; badgeBg = "bg-success text-white"; }
+                        else if(o.statusName === 'İptal Edildi') { colorClass = "text-danger"; badgeBg = "bg-danger text-white"; }
+
+                        html += `<div class="report-card" onclick="viewOrderDetails(${o.docEntry}, ${o.docNum})">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-2">
+                                <span class="fw-black text-dark fs-5">#${o.docNum}</span>
+                                <span class="badge ${badgeBg} px-2 py-1">${o.statusName}</span>
+                            </div>
+                            <div style="font-size: 0.95rem; color: #475569;">
+                                <div class="mb-1">📅 ${o.docDate}</div>
+                                <div class="text-truncate mb-2 fw-bold text-dark">👤 ${o.cardName}</div>
+                                <div class="text-end fw-black ${colorClass} mt-2 fs-5">${o.docTotal.toLocaleString('tr-TR', {minimumFractionDigits:2})} <small>${o.docCur}</small></div>
+                            </div>
+                        </div>`;
+                    });
+                    container.html(html);
+                } else { container.html('<div class="text-center text-muted py-4 fw-bold">Bu kriterlere uygun sipariş bulunamadı.</div>'); }
+            }).fail(function(xhr) { hideLoader(); toastr.error("Hata: " + xhr.status); });
+        }
+
+        window.viewOrderDetails = function(docEntry, docNum) {
+            $('#modalDocNum').text(docNum);
+            
+            showLoader();
+            $.get(BASE_URL + 'GetOrderDetails', { docEntry: docEntry }, function(res) {
+                hideLoader();
+                let html = '';
+                if(res && res.length > 0) {
+                    res.forEach(item => {
+                        let priceFmt = item.price.toLocaleString('tr-TR', {minimumFractionDigits:2});
+                        let totalFmt = item.lineTotal.toLocaleString('tr-TR', {minimumFractionDigits:2});
+                        
+                        html += `<tr>
+                            <td style="padding: 10px 8px;"><strong class="text-dark">${item.itemCode}</strong><br><small class="text-muted" style="white-space:normal;">${item.itemName}</small></td>
+                            <td class="text-center align-middle" style="padding: 10px 4px;"><span class="badge bg-light text-dark border px-2 py-1 fs-6">${item.quantity}</span></td>
+                            <td class="text-end align-middle fw-semibold" style="padding: 10px 4px;">${priceFmt} <br><small class="text-muted">${item.currency}</small></td>
+                            <td class="text-end align-middle text-primary fw-black" style="padding: 10px 8px;">${totalFmt} <br><small>${item.lineTotalCurrency}</small></td>
+                        </tr>`;
+                    });
+                } else { html = '<tr><td colspan="4" class="text-center text-muted fw-bold py-4">Detay bulunamadı.</td></tr>'; }
+                
+                $('#orderDetailsBody').html(html);
+                var myModal = new bootstrap.Modal(document.getElementById('orderDetailsModal'), { keyboard: true });
+                myModal.show();
+            }).fail(function(xhr) { hideLoader(); toastr.error("Detaylar yüklenirken hata oluştu. Kod: " + xhr.status); });
+        }
+
+        function fetchItemPrices() {
+            const itemCode = $('#PriceSelectedItemCode').val();
+            const cardCode = $('#PriceSelectedCardCode').val(); 
+
+            if(!itemCode && !cardCode) { toastr.warning("Lütfen Müşteri veya Ürün seçiniz!"); return; }
+
+            showLoader();
+            $.get(BASE_URL + 'GetPriceList', { itemCode: itemCode, cardCode: cardCode, slpCode: currentUser.slpCode }, function(res) {
+                hideLoader();
+                const container = $('#itemPricesContainer');
+                if(res && res.length > 0) {
+                    let headerText = res[0].type === 'Urun' ? 'Ürün Detayı' : 'Müşteri Detayı';
+                    let html = '<div class="table-responsive"><table class="table table-striped table-hover m-0">';
+                    html += `<thead class="table-dark"><tr><th>${headerText}</th><th class="text-end">Fiyat</th></tr></thead><tbody>`;
+                    
+                    res.forEach(p => {
+                        let priceFormatted = p.price.toLocaleString('tr-TR', {minimumFractionDigits:2});
+                        html += `<tr>
+                            <td><strong class="text-dark">${p.code}</strong><br><small class="text-muted" style="white-space:normal;">${p.name}</small></td>
+                            <td class="text-end align-middle fw-black text-primary fs-6">${priceFormatted} <small class="text-muted">${p.currency}</small></td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table></div>';
+                    container.html(html);
+                } else { container.html('<div class="text-center text-muted py-4 fw-bold">Fiyat kaydı bulunamadı.</div>'); }
+            }).fail(function(xhr) { hideLoader(); toastr.error("Hata: " + xhr.status); });
+        }
+
+        function getEkstreParams() {
+            let params = {
+                bpCode: $('#EkstreSelectedCardCode').val(),
+                startDate: $('#EkstreStartDate').val(),
+                endDate: $('#EkstreEndDate').val(),
+                includeInitialBalance: $('#chkInitialBalance').is(':checked'),
+                includeConnectedBp: $('#chkConnectedBp').is(':checked'),
+                tlEkstre: $('#chkTlEkstre').is(':checked')
+            };
+            return params;
+        }
+
+        function getAktarimTipi() {
+            let secilenler = [];
+            if ($('#chkAktarX').is(':checked')) secilenler.push('X');
+            if ($('#chkAktarR').is(':checked')) secilenler.push('R');
+            if ($('#chkAktarY').is(':checked')) secilenler.push('Y');
+            return secilenler;
+        }
+
+        // PDF OLUŞTUR VE PAYLAŞ
+        async function downloadAndSharePdf() {
+            const bpCode = $('#EkstreSelectedCardCode').val();
+            if (!bpCode) { toastr.warning("Raporlamak için Cari Seçiniz!"); return; }
+
+            const p = getEkstreParams();
+            const aktarimList = getAktarimTipi();
+
+            let url = BASE_URL + `DownloadEkstrePdf?bpCode=${p.bpCode}&includeInitialBalance=${p.includeInitialBalance}&includeConnectedBp=${p.includeConnectedBp}&tlEkstre=${p.tlEkstre}&orientation=Portrait`;
+            if (p.startDate) url += `&startDate=${p.startDate}`;
+            if (p.endDate) url += `&endDate=${p.endDate}`;
+            aktarimList.forEach(t => url += `&aktarimTipi=${t}`);
+
+            showLoader();
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Sunucu PDF oluşturamadı.");
+                
+                const blob = await response.blob();
+                const fileName = `Cari_Ekstre_${p.bpCode}.pdf`;
+                const file = new File([blob], fileName, { type: 'application/pdf' });
+
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        files: [file],
+                        title: 'Cari Ekstre Raporu',
+                        text: `${p.bpCode} kodlu cari hesabın ekstre raporu ektedir.`
+                    });
+                } else {
+                    const urlBlob = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = urlBlob;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(urlBlob);
+                    toastr.success("PDF başarıyla indirildi.");
+                }
+            } catch (error) {
+                toastr.error("PDF işlemi başarısız.");
+                console.error(error);
+            } finally {
+                hideLoader();
+            }
+        }
+
+        function fetchEkstreOnScreen() {
+            const bpCode = $('#EkstreSelectedCardCode').val();
+            if (!bpCode) { toastr.warning("Raporlamak için Cari Seçiniz!"); return; }
+
+            const tlOnly = $('#chkTlEkstre').is(':checked');
+
+            let urlParams = $.param(getEkstreParams());
+            const aktarimList = getAktarimTipi();
+            aktarimList.forEach(t => urlParams += `&aktarimTipi=${t}`);
+
+            showLoader();
+            $.get(BASE_URL + 'GetCariEkstreDataJSON?' + urlParams, function(res) {
+                hideLoader();
+                if (res.success && res.data && res.data.length > 0) {
+                    
+                    let html = '<div class="table-responsive rounded-3 shadow-sm border-0 m-0 p-0"><table class="table table-hover m-0 ekstre-table">';
+                    html += '<thead class="table-dark"><tr><th class="col-tarih">Tarih</th><th class="col-tip">Tip</th><th class="col-akt">Akt.</th><th class="col-desc">Açıklama</th><th class="text-end col-amount">Borç</th><th class="text-end col-amount">Alacak</th><th class="text-end col-bakiye">Bakiye</th></tr></thead><tbody>';
+                    
+                    let sonBakiye = "0,00";
+                    let sonParaBirimi = "TRY";
+
+                    res.data.forEach(d => {
+                        let colorRow = '';
+                        if (d.islemTipi === 'AT') { colorRow = 'row-aylik-toplam fw-bold'; } 
+                        else if (d.islemTipi === 'DB') { colorRow = 'row-devir fw-bold'; }
+                        
+                        let dDate = d.kayitTarihi ? new Date(d.kayitTarihi).toLocaleDateString('tr-TR') : '-';
+                        let borc = d.tryb ? d.tryb.toLocaleString('tr-TR', {minimumFractionDigits:2}) : '0,00';
+                        let alacak = d.trya ? d.trya.toLocaleString('tr-TR', {minimumFractionDigits:2}) : '0,00';
+                        let bakiye = d.trY_KmlBky ? d.trY_KmlBky.toLocaleString('tr-TR', {minimumFractionDigits:2}) : '0,00';
+                        
+                        if (d.trY_KmlBky !== null && d.trY_KmlBky !== undefined) {
+                            sonBakiye = bakiye;
+                            sonParaBirimi = d.islemPB || 'TRY';
+                        }
+
+                        // YPB (Döviz) Rakamlarını Alt Satıra (Aynı Hücreye) Ekleme Mantığı
+                        let borcHTML = `<span>${borc}</span>`;
+                        let alacakHTML = `<span>${alacak}</span>`;
+                        let bakiyeHTML = `<span>${bakiye}</span>`;
+
+                        if (!tlOnly && d.islemPB && d.islemPB !== 'TRY' && d.islemPB !== '') {
+                            let islemB = d.islemB ? d.islemB.toLocaleString('tr-TR', {minimumFractionDigits:2}) : '0,00';
+                            let islemA = d.islemA ? d.islemA.toLocaleString('tr-TR', {minimumFractionDigits:2}) : '0,00';
+                            let islemBky = d.islem_KmlBky ? d.islem_KmlBky.toLocaleString('tr-TR', {minimumFractionDigits:2}) : '0,00';
+                            
+                            borcHTML += `<br><small style="color:#64748b; font-size:0.5rem; font-weight:700;">${islemB} ${d.islemPB}</small>`;
+                            alacakHTML += `<br><small style="color:#64748b; font-size:0.5rem; font-weight:700;">${islemA} ${d.islemPB}</small>`;
+                            bakiyeHTML += `<br><small style="color:#64748b; font-size:0.5rem; font-weight:700;">${islemBky} ${d.islemPB}</small>`;
+                        }
+
+                        html += `<tr class="${colorRow}">
+                            <td class="col-tarih">${dDate}</td>
+                            <td class="col-tip"><span class="badge bg-secondary badge-tip">${d.islemTipi}</span></td>
+                            <td class="col-akt">${d.aktarimTipi || '-'}</td>
+                            <td class="col-desc">${d.aciklama || '-'}</td>
+                            <td class="text-end text-danger col-amount">${borcHTML}</td>
+                            <td class="text-end text-success col-amount">${alacakHTML}</td>
+                            <td class="text-end text-primary col-bakiye">${bakiyeHTML}</td>
+                        </tr>`;
+                    });
+                    
+                    html += `<tr class="row-genel-toplam text-white">
+                        <td colspan="4" class="text-end fw-bold py-3 align-middle" style="font-size:0.9rem;">GENEL TOPLAM BAKİYE:</td>
+                        <td colspan="3" class="text-end fw-black py-3 align-middle" style="color: #fde047 !important; font-size:1.1rem; letter-spacing:0.5px;">${sonBakiye} <small style="font-size:0.75rem; color:#fff;">${sonParaBirimi}</small></td>
+                    </tr>`;
+
+                    html += '</tbody></table></div>';
+                    $('#ekstreOnScreenContainer').html(html);
+                } else {
+                    $('#ekstreOnScreenContainer').html('<div class="text-center text-muted py-5 fw-bold bg-light rounded-4 border">Bu kriterlere uygun kayıt bulunamadı.</div>');
+                }
+            }).fail(function(xhr) { hideLoader(); toastr.error("Hata: " + xhr.status); });
+        }
+
+        // ================= SEPET İŞLEMLERİ =================
+        function renderCart() {
+            $('#cartCount').text(cart.length);
+            if (cart.length === 0) { $('#cartItemsContainer').html(`<div class="text-center text-muted py-5 fw-bold bg-light rounded-4 border">Sepetiniz henüz boş.</div>`); return; }
+            let html = '';
+            cart.forEach((line, index) => {
+                let total = (line.Quantity * line.UnitPrice).toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+                let uPrice = line.UnitPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+                html += `<div class="cart-item">
+                    <button type="button" class="btn-delete" onclick="removeFromCart(${index})">🗑️</button>
+                    <div class="fw-bold text-dark mb-3 pe-5" style="font-size:1rem; line-height: 1.3;">${line.ItemCode} <br><small class="text-muted fw-semibold">${line.ItemName}</small></div>
+                    <div class="d-flex justify-content-between align-items-end">
+                        <span class="badge bg-light text-dark border px-3 py-2 fs-6 shadow-sm">${line.Quantity} x ${uPrice}</span>
+                        <strong class="text-primary fs-4 fw-black">${total} <small class="text-muted fs-6">${line.Currency}</small></strong>
+                    </div></div>`;
+            });
+            $('#cartItemsContainer').html(html);
+        }
+
+        function removeFromCart(index) {
+            let removedItem = cart.splice(index, 1)[0];
+            renderCart();
+            toastr.info("Ürün sepetten silindi.");
+
+            // SİLİNEN ÜRÜNÜN BUTONUNU DÜZELTME (ID BUG FIX)
+            if (removedItem && removedItem.ItemCode) {
+                const rawId = removedItem.ItemCode;
+                const safeId = $.escapeSelector(rawId);
+                const row = $(`#row_hist_${safeId}`);
+                if (row.length > 0) {
+                    row.removeClass('added-success');
+                    const escapedName = removedItem.ItemName ? removedItem.ItemName.replace(/'/g, "\\'") : '';
+                    $(`#control_hist_${safeId}`).html(`
+                        <input type="number" class="history-qty-input" id="hist_qty_${rawId}" value="1" min="1">
+                        <button type="button" class="btn-history-add shadow-sm" onclick="addHistoryToCart('${rawId}', '${escapedName}')">➕</button>
+                    `);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

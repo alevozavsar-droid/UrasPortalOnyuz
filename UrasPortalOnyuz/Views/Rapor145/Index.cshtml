@@ -1,0 +1,1417 @@
+﻿@{
+    ViewData["Title"] = "İrsaliye / Fatura Aktarım Denetimi";
+    var kaynakDb = ViewBag.KaynakDb as string;
+    var hedefDb = ViewBag.HedefDb as string;
+    var milat = ViewBag.Milat as string;
+    var kaynakCari = ViewBag.KaynakCari as string;
+}
+
+<style>
+    .ifa-kart { background: var(--bg-card, #fff); border: 1px solid var(--border-color, #e8ecf4);
+                border-radius: 14px; padding: 14px 16px; height: 100%; }
+    .ifa-kart .sayi { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
+    .ifa-kart .etiket { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; font-weight: 700; }
+
+    .filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+                  padding: 10px 12px; background: var(--bg-card, #fff);
+                  border: 1px solid var(--border-color, #e8ecf4); border-radius: 12px; }
+
+    .loading-overlay { display: none; text-align: center; padding: 40px; color: var(--text-secondary, #94a3b8); }
+    .bos-mesaj { text-align: center; padding: 40px 0; color: var(--text-secondary, #94a3b8); }
+
+    .tablo-sarmal { max-height: calc(100vh - 330px); overflow: auto; border: 1px solid var(--border-color, #e8ecf4); border-radius: 12px; }
+    .tablo-sarmal table { margin-bottom: 0; }
+    .tablo-sarmal thead th { position: sticky; top: 0; z-index: 2; background: #eef2f7; font-size: .76rem;
+                             text-transform: uppercase; letter-spacing: .03em; }
+
+    .ham-hata { font-family: Consolas, monospace; font-size: .72rem; white-space: pre-wrap;
+                word-break: break-word; color: var(--text-secondary, #6b7280);
+                background: rgba(148,163,184,.10); border-radius: 6px; padding: 6px 8px; margin-top: 6px; }
+
+    .zincir { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .84rem; }
+    .zincir .ok { color: #94a3b8; }
+</style>
+
+<div class="container-fluid px-4 py-2">
+
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h2 class="h4 mb-0 fw-bold">
+            <i class="fas fa-truck-ramp-box me-2 text-primary"></i>
+            İrsaliye / Fatura Aktarım Denetimi
+            <span class="text-muted fs-6">(@kaynakDb ➔ @hedefDb)</span>
+        </h2>
+        <button class="btn btn-sm btn-primary rounded-pill px-3 fw-bold" onclick="hepsiniYenile()">
+            <i class="fas fa-rotate me-1"></i> Yenile
+        </button>
+    </div>
+
+    <div class="alert alert-secondary border-0 small d-flex align-items-start gap-2 py-2">
+        <i class="fas fa-circle-info mt-1"></i>
+        <div>
+            <b>@kaynakDb</b> şirketindeki <b>@kaynakCari</b> carili belgeler, <b>@hedefDb</b> şirketinde
+            karşı yönde (satış ➔ alış) oluşturulur. Aktarım başlangıcı <b>@milat</b>.
+            Eşleştirme, hedef belgedeki <code>U_KaynakDocEntry</code> alanı üzerinden yapılır.
+            <br>
+            Bu ekran SAP'ye hiçbir şey yazmaz; <b>Kuyruğa Al</b> butonu yalnızca aktarım kuyruğuna kayıt düşer,
+            belgeyi hedefte asıl oluşturan aktarım servisidir.
+        </div>
+    </div>
+
+    <!-- ÖZET KARTLAR -->
+    <div class="row g-2 mb-3">
+        <div class="col-md-3 col-6">
+            <div class="ifa-kart border-start border-4 border-success">
+                <div class="etiket text-success">Akan Belge</div>
+                <div class="sayi" id="kart-akan"><i class="fas fa-spinner fa-spin fs-6"></i></div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="ifa-kart border-start border-4 border-warning">
+                <div class="etiket text-warning">Akmayan</div>
+                <div class="sayi" id="kart-akmayan"><i class="fas fa-spinner fa-spin fs-6"></i></div>
+                <div class="small text-muted" id="kart-akmayan-not"></div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="ifa-kart border-start border-4 border-danger">
+                <div class="etiket text-danger">Hatalı</div>
+                <div class="sayi" id="kart-hatali"><i class="fas fa-spinner fa-spin fs-6"></i></div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="ifa-kart border-start border-4 border-info">
+                <div class="etiket text-info">Kuyrukta Bekleyen</div>
+                <div class="sayi" id="kart-bekleyen"><i class="fas fa-spinner fa-spin fs-6"></i></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SEKMELER -->
+    <ul class="nav nav-pills mb-3" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link active" id="tab-hata" data-bs-toggle="pill" data-bs-target="#panel-hata" type="button">
+                <i class="fas fa-triangle-exclamation text-danger me-1"></i> Hatalar
+                <span id="rozet-hata" class="badge bg-danger ms-1" style="display:none;">0</span>
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="tab-akmayan" data-bs-toggle="pill" data-bs-target="#panel-akmayan" type="button">
+                <i class="fas fa-plane-slash text-warning me-1"></i> Akmayanlar
+                <span id="rozet-akmayan" class="badge bg-warning text-dark ms-1" style="display:none;">0</span>
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="tab-akan" data-bs-toggle="pill" data-bs-target="#panel-akan" type="button">
+                <i class="fas fa-circle-check text-success me-1"></i> Akan Belgeler
+                <span id="rozet-akan" class="badge bg-success ms-1" style="display:none;">0</span>
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="tab-eslesme" data-bs-toggle="pill" data-bs-target="#panel-eslesme" type="button">
+                <i class="fas fa-link-slash text-danger me-1"></i> Eşleştirme Sorunları
+                <span id="rozet-eslesme" class="badge bg-danger ms-1" style="display:none;">0</span>
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="tab-eslesenler" data-bs-toggle="pill" data-bs-target="#panel-eslesenler" type="button">
+                <i class="fas fa-link text-success me-1"></i> Eşleşenler
+                <span id="rozet-eslesenler" class="badge bg-success ms-1" style="display:none;">0</span>
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="tab-atlanan" data-bs-toggle="pill" data-bs-target="#panel-atlanan" type="button">
+                <i class="fas fa-forward text-secondary me-1"></i> Bilerek Atlananlar
+                <span id="rozet-atlanan" class="badge bg-secondary ms-1" style="display:none;">0</span>
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="tab-aylik" data-bs-toggle="pill" data-bs-target="#panel-aylik" type="button">
+                <i class="fas fa-calendar-days text-primary me-1"></i> Aylık Karşılaştırma
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+
+        <!-- AYLIK KARSILASTIRMA -->
+        <div class="tab-pane fade" id="panel-aylik" role="tabpanel">
+            <div class="filter-bar mb-2">
+                <select id="ayTip" class="form-select form-select-sm" style="width:220px;">
+                    <option value="15">İrsaliye ↔ İrsaliye</option>
+                    <option value="13">Fatura ↔ Fatura</option>
+                    <option value="16">İade İrsaliyesi</option>
+                    <option value="14">İade Faturası</option>
+                </select>
+                <select id="ayAy" class="form-select form-select-sm" style="width:200px;"><option value="">Tüm aylar (özet)</option></select>
+                <input type="text" id="ayAra" class="form-control form-control-sm" style="width:200px;" placeholder="Belge no ara...">
+                <div class="form-check ms-2">
+                    <input class="form-check-input" type="checkbox" id="aySadeceSorun">
+                    <label class="form-check-label small" for="aySadeceSorun">Yalnızca sorunlular</label>
+                </div>
+                <span class="small text-muted ms-2" id="aySecimSayi"></span>
+                <button type="button" class="btn btn-sm btn-warning fw-bold" id="ayTopluKuyruk" disabled title="Seçili 'Hedefte yok' belgeleri aktarım kuyruğuna al"><i class="fas fa-rotate me-1"></i>Seçilenleri kuyruğa al<span></span></button>
+                <button type="button" class="btn btn-sm btn-danger fw-bold" id="ayTopluIptal" disabled title="Seçili hedef belgeleri SAP'de iptal et; kaynağı olanları yeniden kuyruğa al"><i class="fas fa-arrows-rotate me-1"></i>Seçilenleri iptal et &amp; yeniden aktar<span></span></button>
+                <button type="button" class="btn btn-sm btn-outline-primary ms-auto" id="ayYenile"><i class="fas fa-rotate me-1"></i>Yenile</button>
+                <span class="small text-muted w-100">Eşleşme önce hedef belgedeki <code>U_KaynakDocEntry</code>, olmazsa hedefteki <b>belge no</b> (NumAtCard = kaynak belge no / e-fatura no) ile yapılır. Kalemler kaynak kodu üzerinden (SELVI.OITM.U_BE1_URASKODU) eşlenir. Faturada miktar + fiyat + satır tutarı, irsaliyede yalnızca miktar kıyaslanır. <span class="ay-tutar-not text-warning-emphasis" style="display:none;">İrsaliyede hedef tarafta fiyat girilmediği için tutar farkı gösterilmez.</span></span>
+            </div>
+
+            <div id="loader-aylik" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br>Aylık karşılaştırma hazırlanıyor...</div>
+
+            <div class="fw-bold small text-uppercase text-muted mb-1" id="aylikOzetBaslik">Aylık özet</div>
+            <div class="tablo-sarmal mb-3" style="max-height:340px;">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Ay</th>
+                            <th class="text-end" style="width:90px;">Kaynak adet</th>
+                            <th class="text-end" style="width:140px;">Kaynak tutar</th>
+                            <th class="text-end" style="width:90px;">Hedef adet</th>
+                            <th class="text-end" style="width:140px;">Hedef tutar</th>
+                            <th class="text-end" style="width:130px;">Fark</th>
+                            <th class="text-center" style="width:100px;" title="Kaynakta var, hedefte yok">Hedefte yok</th>
+                            <th class="text-center" style="width:100px;" title="Hedefte var, kaynakta yok">Kaynakta yok</th>
+                            <th class="text-center" style="width:110px;" title="Eşleşti ama tutar ya da kalem tutmuyor">Tutmayan</th>
+                            <th class="text-center" style="width:110px;">Durum</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-aylik-ozet"><tr><td colspan="10" class="bos-mesaj">Sekmeye girince yüklenir</td></tr></tbody>
+                </table>
+            </div>
+
+            <div class="fw-bold small text-uppercase text-muted mb-1" id="aylikDetayBaslik">Belgeler</div>
+            <div class="tablo-sarmal" style="max-height:calc(100vh - 560px); min-height:260px;">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:34px;" class="text-center"><input type="checkbox" class="form-check-input" id="ayHepsi" title="Görünenleri seç"></th>
+                            <th style="width:100px;">Tarih</th>
+                            <th>Kaynak belge</th>
+                            <th class="text-end" style="width:140px;">Kaynak tutar</th>
+                            <th>Hedef belge</th>
+                            <th class="text-end" style="width:140px;">Hedef tutar</th>
+                            <th class="text-end" style="width:120px;">Fark</th>
+                            <th class="text-center" style="width:80px;" title="Farklı kalem sayısı">Kalem</th>
+                            <th style="width:150px;">Durum</th>
+                            <th style="width:250px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-aylik-detay"><tr><td colspan="10" class="bos-mesaj">Ay seçin</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- HATALAR -->
+        <div class="tab-pane fade show active" id="panel-hata" role="tabpanel">
+            <div class="filter-bar mb-2">
+                <button class="btn btn-sm btn-outline-secondary" onclick="hataTumunuSec(true)">
+                    <i class="fas fa-check-double me-1"></i>Tümünü seç
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="hataTumunuSec(false)">
+                    <i class="fas fa-eraser me-1"></i>Temizle
+                </button>
+                <button id="btn-hata-kuyruk" class="btn btn-sm btn-warning fw-bold" onclick="hataKuyrugaAl()" disabled>
+                    <i class="fas fa-rotate-right me-1"></i>Seçilenleri Kuyruğa Al (<span id="hata-secim">0</span>)
+                </button>
+                <select id="hataTip" class="form-select form-select-sm" style="width:200px;" onchange="hataCiz()">
+                    <option value="">Tüm belge tipleri</option>
+                </select>
+                <span class="ms-auto small text-muted">
+                    Kuyruğa alınan belgeyi servis sıradaki turunda yeniden dener.
+                </span>
+            </div>
+
+            <div id="sebep-dagilimi" class="mb-3"></div>
+
+            <div id="loader-hata" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-danger"></i><br>Hatalar getiriliyor...</div>
+
+            <div class="tablo-sarmal">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:36px;"></th>
+                            <th style="width:150px;">Belge</th>
+                            <th style="width:140px;">Son Deneme</th>
+                            <th>Sebep ve Detay</th>
+                            <th style="width:150px;">Çözüm</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-hata">
+                        <tr><td colspan="5" class="bos-mesaj">Yükleniyor...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- AKMAYANLAR -->
+        <div class="tab-pane fade" id="panel-akmayan" role="tabpanel">
+            <div class="filter-bar mb-2">
+                <input type="text" class="form-control form-control-sm" style="width:240px;"
+                       id="akmayanAra" placeholder="Belge no / sebep ara..." onkeyup="akmayanCiz()">
+                <button class="btn btn-sm btn-outline-secondary" onclick="akmayanTumunuSec(true)">
+                    <i class="fas fa-check-double me-1"></i>Görünenleri seç
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="akmayanTumunuSec(false)">
+                    <i class="fas fa-eraser me-1"></i>Temizle
+                </button>
+                <div class="form-check ms-2">
+                    <input class="form-check-input" type="checkbox" id="akmayanKapsamDisi" onchange="akmayanCiz()">
+                    <label class="form-check-label small" for="akmayanKapsamDisi">Bilerek atlananları ve servis öncesini de göster</label>
+                </div>
+                <button id="btn-akmayan-kuyruk" class="btn btn-sm btn-warning fw-bold" onclick="akmayanKuyrugaAl()" disabled>
+                    <i class="fas fa-rotate-right me-1"></i>Seçilenleri Kuyruğa Al (<span id="akmayan-secim">0</span>)
+                </button>
+            </div>
+
+            <div id="loader-akmayan" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-warning"></i><br>Akmayan belgeler taranıyor...</div>
+
+            <div class="tablo-sarmal">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:36px;"></th>
+                            <th style="width:190px;">Kaynak Belge</th>
+                            <th style="width:110px;">Tarih</th>
+                            <th style="width:130px;" class="text-end">Tutar</th>
+                            <th style="width:130px;">Kuyruk</th>
+                            <th>Sebep</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-akmayan">
+                        <tr><td colspan="6" class="bos-mesaj">Sekmeye girince yüklenir</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- AKAN BELGELER -->
+        <div class="tab-pane fade" id="panel-akan" role="tabpanel">
+            <div class="filter-bar mb-2">
+                <input type="text" class="form-control form-control-sm" style="width:240px;"
+                       id="akanAra" placeholder="Belge no ara..." onkeyup="akanCiz()">
+                <div class="form-check ms-2">
+                    <input class="form-check-input" type="checkbox" id="akanSadeceFark" onchange="akanCiz()">
+                    <label class="form-check-label small" for="akanSadeceFark">Yalnızca tutarı tutmayanlar</label>
+                </div>
+            </div>
+
+            <div id="loader-akan" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-success"></i><br>Akan belgeler getiriliyor...</div>
+
+            <div class="tablo-sarmal">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Akış</th>
+                            <th style="width:110px;">Tarih</th>
+                            <th style="width:130px;" class="text-end">Kaynak Tutar</th>
+                            <th style="width:130px;" class="text-end">Hedef Tutar</th>
+                            <th style="width:120px;">Durum</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-akan">
+                        <tr><td colspan="5" class="bos-mesaj">Sekmeye girince yüklenir</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ESLESTIRME SORUNLARI -->
+        <div class="tab-pane fade" id="panel-eslesme" role="tabpanel">
+
+            <div class="alert alert-danger border-0 small d-flex align-items-start gap-2 py-2">
+                <i class="fas fa-triangle-exclamation mt-1"></i>
+                <div>
+                    Aktarım servisi her açılışta kalem eşleştirmelerini tarar ve bulduğu sorunları
+                    <code>Z_AKTARIM_ESLESME_SORUNLARI</code> tablosuna yazar.
+                    <b>Buradakiler belge hatalarının kök sebebidir</b> - düzeltilmezse belgeler takılmaya devam eder.
+                    Liste servis her yeniden başladığında tazelenir.
+                </div>
+            </div>
+
+            <div class="filter-bar mb-2">
+                <input type="text" class="form-control form-control-sm" style="width:240px;"
+                       id="esAra" placeholder="Kod veya ad ara..." onkeyup="eslesmeCiz()">
+                <select id="esTur" class="form-select form-select-sm" style="width:230px;" onchange="eslesmeCiz()">
+                    <option value="">Tüm sorun türleri</option>
+                </select>
+                <div class="form-check ms-2">
+                    <input class="form-check-input" type="checkbox" id="esCozulenGizle" checked onchange="eslesmeCiz()">
+                    <label class="form-check-label small" for="esCozulenGizle">Düzeltilenleri gizle</label>
+                </div>
+                <span class="ms-auto small text-muted" id="es-ozet"></span>
+            </div>
+
+            <div id="loader-eslesme" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-danger"></i><br>Eşleştirme sorunları getiriliyor...</div>
+
+            <div class="tablo-sarmal">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:190px;">Sorun</th>
+                            <th style="width:230px;">Kaynak Kalem</th>
+                            <th>Hedefteki Durum</th>
+                            <th style="width:150px;">Çözüm</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-eslesme">
+                        <tr><td colspan="4" class="bos-mesaj">Sekmeye girince yüklenir</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ESLESENLER -->
+        <div class="tab-pane fade" id="panel-eslesenler" role="tabpanel">
+
+            <div class="alert alert-secondary border-0 small d-flex align-items-start gap-2 py-2">
+                <i class="fas fa-circle-info mt-1"></i>
+                <div>
+                    Hedef şirkette <code>U_BE1_URASKODU</code> alanı dolu olan kalemler.
+                    Servis bir kalemi önce buradan bulur.
+                    <b>Arama yapmadığınızda</b> en riskli kayıtlar başa alınır: aynı kaynak koda
+                    birden fazla bağ, kaynağı bulunamayan bağ, pasif kalem.
+                </div>
+            </div>
+
+            <div class="filter-bar mb-2">
+                <div class="input-group input-group-sm" style="width:320px;">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input type="text" class="form-control" id="eslAra"
+                           placeholder="Kaynak/hedef kod veya ad ara (Enter)">
+                    <button class="btn btn-outline-secondary" onclick="eslesenlerGetir()">Ara</button>
+                </div>
+                <div class="form-check ms-2">
+                    <input class="form-check-input" type="checkbox" id="eslSadeceSorunlu" onchange="eslesenlerCiz()">
+                    <label class="form-check-label small" for="eslSadeceSorunlu">Yalnızca sorunlular</label>
+                </div>
+                <span class="ms-auto small text-muted" id="esl-ozet"></span>
+            </div>
+
+            <div id="loader-eslesenler" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-success"></i><br>Eşleşmeler getiriliyor...</div>
+
+            <div class="tablo-sarmal">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:250px;">Kaynak Kalem (@kaynakDb)</th>
+                            <th style="width:40px;"></th>
+                            <th style="width:250px;">Hedef Kalem (@hedefDb)</th>
+                            <th style="width:120px;">Durum</th>
+                            <th style="width:210px;">İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-eslesenler">
+                        <tr><td colspan="5" class="bos-mesaj">Sekmeye girince yüklenir</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ATLANANLAR -->
+        <div class="tab-pane fade" id="panel-atlanan" role="tabpanel">
+            <div id="loader-atlanan" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-secondary"></i><br>Atlanan belgeler getiriliyor...</div>
+
+            <div class="tablo-sarmal">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:170px;">Belge</th>
+                            <th style="width:140px;">Tarih</th>
+                            <th>Sebep</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-atlanan">
+                        <tr><td colspan="3" class="bos-mesaj">Sekmeye girince yüklenir</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- KALEM ESLESTIRME PENCERESI -->
+<!-- Aylık karşılaştırma: onar / eşle -->
+<div class="modal fade" id="ayOnarModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-success-subtle">
+                <h5 class="modal-title"><i class="fas fa-link me-2 text-success"></i>Onar / eşle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-2" id="ayOnarSabit"></div>
+                <div class="alert alert-info small mb-2">Belge karşı tarafta <b>var ama numarası yanlış girilmiş</b> olduğunda kullanılır. Seçtiğin hedef belgeye Service Layer ile <code>U_KaynakDocEntry</code> (kaynak entry) ve <code>NumAtCard</code> (kaynağın e-fatura / belge no'su) yazılır; belge yeniden oluşturulmaz, iptal edilmez. Yeşil satırlar tutarı (irsaliyede tarihi) birebir tutan adaylardır.</div>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <b class="small" id="ayOnarAdayBaslik"></b>
+                    <input type="text" id="ayOnarAra" class="form-control form-control-sm ms-auto" style="width:220px;" placeholder="belge no / ref ara...">
+                </div>
+                <div class="tablo-sarmal" style="max-height:50vh;">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead><tr><th style="width:36px;"></th><th style="width:100px;">Tarih</th><th>Belge</th><th class="text-end" style="width:140px;">Tutar</th><th class="text-end" style="width:120px;">Tutar farkı</th><th class="text-end" style="width:90px;">Tarih farkı</th></tr></thead>
+                        <tbody id="ayOnarListe"></tbody>
+                    </table>
+                </div>
+                <div id="ayOnarSonuc" class="mt-3 d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-light" data-bs-dismiss="modal">Kapat</button>
+                <button class="btn btn-success fw-bold" id="ayOnarBtn" disabled><i class="fas fa-link me-1"></i>Eşle ve düzelt</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Aylık karşılaştırma: iptal & yeniden aktar onayı -->
+<div class="modal fade" id="ayIptalModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-danger-subtle">
+                <h5 class="modal-title"><i class="fas fa-triangle-exclamation me-2 text-danger"></i>SAP'de iptal et &amp; yeniden aktar <span class="badge bg-danger ms-2" id="ayIptalSayi">0</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning small mb-3">
+                    <b>Bu işlem SAP'ye yazar.</b> Seçili hedef belgeler <b>SELVI</b> şirketinde Service Layer ile <b>iptal edilir</b> (SAP belgeyi silmez, iptal belgesi oluşturur).
+                    Kaynağı olan belgeler iptalden sonra aktarım kuyruğuna alınır; servis sıradaki turunda hedefte yeniden oluşturur.
+                    Faturaya bağlanmış irsaliye ya da ödemesi olan fatura SAP tarafından iptal edilemez; bu durumlar önceden yakalanır ve atlanır.
+                    İşlem <b>SAP Bilgilerim</b>'deki SELVI kullanıcınızla yapılır ve loglanır.
+                </div>
+                <ul class="small mb-3" id="ayIptalListe"></ul>
+                <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="ayIptalStok" checked><label class="form-check-label" for="ayIptalStok"><b>Stok eksikse tamamla:</b> SAP iptali "negatif stok" nedeniyle reddederse eksik miktar için belge tarihinde <b>Mal Girişi</b> oluşturulur ve iptal yeniden denenir (girişin tutarı kalem maliyetinden hesaplanır).</label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" id="ayIptalOnay"><label class="form-check-label fw-bold" for="ayIptalOnay">Sonuçlarını anladım, devam et</label></div>
+                <div id="ayIptalSonuc" class="mt-3 d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-light" data-bs-dismiss="modal">Kapat</button>
+                <button class="btn btn-danger fw-bold" id="ayIptalBtn" disabled><i class="fas fa-ban me-1"></i>İptal et</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Aylık karşılaştırma: kalem penceresi -->
+<div class="modal fade" id="ayKalemModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-list me-2 text-primary"></i>Kalem karşılaştırması <small class="text-muted ms-2" id="ayKalemBaslik"></small></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Kalem</th><th>Açıklama</th>
+                            <th class="text-end">Miktar (K)</th><th class="text-end">Miktar (H)</th>
+                            <th class="text-end">Fiyat (K)</th><th class="text-end">Fiyat (H)</th>
+                            <th class="text-end">Tutar (K)</th><th class="text-end">Tutar (H)</th>
+                            <th>Durum</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ayKalemGovde"></tbody>
+                </table>
+            </div>
+            <div class="modal-footer"><span class="me-auto small text-muted">K = kaynak (URASKIMYA), H = hedef (SELVI). Kırmızı: fark.</span><button class="btn btn-light" data-bs-dismiss="modal">Kapat</button></div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="kalemModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="border-radius:16px;">
+            <div class="modal-header text-white" style="background:linear-gradient(135deg,#f59e0b,#ef4444);">
+                <h5 class="modal-title fw-bold"><i class="fas fa-link me-2"></i>Kalem Eşleştirme</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="alert alert-secondary border-0 small py-2">
+                    Aktarım servisi hedef kalemi önce <code>U_BE1_URASKODU</code> alanından bulur.
+                    Aşağıdan doğru kalemi seçtiğinizde bu alan yazılır ve belge bir daha takılmaz.
+                    <br>
+                    Yazma işlemi <b>Service Layer</b> üzerinden yapılır; SAP tablosuna doğrudan yazılmaz.
+                </div>
+
+                <div class="mb-3">
+                    <div class="small text-muted">Kaynak kalem (@kaynakDb)</div>
+                    <div class="fw-bold" id="km-kaynak">-</div>
+                </div>
+
+                <div class="input-group input-group-sm mb-2">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input type="text" class="form-control" id="km-ara"
+                           placeholder="Hedefte kod veya ad ara (Enter)">
+                    <button class="btn btn-outline-secondary" onclick="kalemAdaylariGetir()">Ara</button>
+                </div>
+
+                <div style="max-height:340px; overflow:auto;">
+                    <table class="table table-sm table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:36px;"></th>
+                                <th style="width:170px;">Kod</th>
+                                <th>Ad</th>
+                                <th style="width:170px;">Mevcut Bağ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="km-liste">
+                            <tr><td colspan="4" class="text-center text-muted py-3">Yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-warning fw-bold" id="km-kaydet" onclick="kalemEslestir(false)" disabled>
+                    <i class="fas fa-save me-1"></i>Eşleştir ve Kaydet
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="~/js/rapor145-aylik.js" asp-append-version="true"></script>
+<script>
+    // =====================================================================
+    // ORTAK YARDIMCILAR
+    // =====================================================================
+    function kacir(m) { return $('<div>').text(m == null ? '' : m).html(); }
+
+    // =====================================================================
+    // KALEM ESLESTIRME
+    // =====================================================================
+    var kmKaynakKod = '', kmSecili = null, kmAdaylar = [], kmBelge = null;
+
+    $(document).on('click', '.km-btn', function () {
+        kmKaynakKod = $(this).data('kalem');
+        // Hangi belgeden gelindiyse eşleştirme sonrası o belge kuyruğa geri alınır
+        kmBelge = ($(this).data('objtype') && $(this).data('docentry')) ? { ObjType: String($(this).data('objtype')), DocEntry: String($(this).data('docentry')) } : null;
+        kmSecili = null;
+        $('#km-ara').val('');
+        $('#km-kaydet').prop('disabled', true);
+        $('#km-kaynak').text(kmKaynakKod);
+        new bootstrap.Modal(document.getElementById('kalemModal')).show();
+        kalemAdaylariGetir();
+    });
+
+    $(document).on('keypress', '#km-ara', function (e) {
+        if (e.which === 13) { e.preventDefault(); kalemAdaylariGetir(); }
+    });
+
+    function kalemAdaylariGetir() {
+        $('#km-liste').html('<tr><td colspan="4" class="text-center py-3">'
+            + '<i class="fas fa-spinner fa-spin me-1"></i>Aranıyor...</td></tr>');
+
+        $.getJSON('@Url.Action("GetKalemAdaylari", "Rapor145")',
+                  { kaynakKod: kmKaynakKod, ara: $('#km-ara').val() })
+        .done(function (res) {
+            if (!res || !res.success) {
+                $('#km-liste').html('<tr><td colspan="4" class="text-danger text-center py-3">'
+                    + kacir((res && res.message) ? res.message : 'Aday listesi alınamadı.') + '</td></tr>');
+                return;
+            }
+
+            $('#km-kaynak').text(kmKaynakKod + (res.kaynakAd ? '  —  ' + res.kaynakAd : ''));
+
+            kmAdaylar = res.data || [];
+
+            if (!kmAdaylar.length) {
+                $('#km-liste').html('<tr><td colspan="4" class="text-center text-muted py-3">'
+                    + 'Aday bulunamadı. Yukarıdan kod ya da ad ile arayın.</td></tr>');
+                return;
+            }
+
+            var html = '';
+
+            kmAdaylar.forEach(function (a, i) {
+                var pasif = a.Aktif !== 1;
+
+                var bag = a.MevcutEslesme
+                    ? (a.MevcutEslesme === kmKaynakKod
+                        ? '<span class="badge bg-success">bu kaleme bağlı</span>'
+                        : '<span class="badge bg-danger" title="Üzerine yazarsanız bu bağ bozulur">'
+                          + kacir(a.MevcutEslesme) + '</span>')
+                    : '<span class="text-muted small">-</span>';
+
+                html += '<tr class="' + (pasif ? 'table-secondary' : '') + '">'
+                      + '<td><input type="radio" name="kmSec" class="form-check-input" data-idx="' + i + '"'
+                        + (pasif ? ' disabled' : '') + '></td>'
+                      + '<td><code>' + kacir(a.ItemCode) + '</code>'
+                        + (a.IsimBirebir === 1 ? ' <span class="badge bg-info text-dark">isim birebir</span>' : '')
+                        + (pasif ? ' <span class="badge bg-secondary">pasif</span>' : '') + '</td>'
+                      + '<td class="small">' + kacir(a.ItemName) + '</td>'
+                      + '<td>' + bag + '</td>'
+                      + '</tr>';
+            });
+
+            $('#km-liste').html(html);
+        })
+        .fail(function () {
+            $('#km-liste').html('<tr><td colspan="4" class="text-danger text-center py-3">'
+                + 'Sunucuya ulaşılamadı.</td></tr>');
+        });
+    }
+
+    $(document).on('change', 'input[name="kmSec"]', function () {
+        kmSecili = kmAdaylar[$(this).data('idx')];
+        $('#km-kaydet').prop('disabled', !kmSecili);
+    });
+
+    function kalemEslestir(uzerineYaz) {
+        if (!kmSecili) return;
+
+        $('#km-kaydet').prop('disabled', true)
+                       .html('<i class="fas fa-spinner fa-spin me-1"></i>Kaydediliyor...');
+
+        $.ajax({
+            url: '@Url.Action("KalemEslestir", "Rapor145")',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                KaynakKod: kmKaynakKod,
+                HedefKod: kmSecili.ItemCode,
+                UzerineYaz: uzerineYaz
+            }),
+            timeout: 120000
+        }).done(function (res) {
+            $('#km-kaydet').prop('disabled', false)
+                           .html('<i class="fas fa-save me-1"></i>Eşleştir ve Kaydet');
+
+            if (res && res.success) {
+                bootstrap.Modal.getInstance(document.getElementById('kalemModal')).hide();
+                if (kmBelge) {
+                    // Eşleştirme kaydedildi: bloke/hatalı belgeyi kuyruğa geri koy, servis yeniden dener
+                    var belge = kmBelge; kmBelge = null;
+                    $.ajax({ url: '@Url.Action("KuyrugaEkle", "Rapor145")', type: 'POST', contentType: 'application/json', data: JSON.stringify([belge]), timeout: 120000 })
+                        .done(function (k) { alert(res.message + String.fromCharCode(10) + String.fromCharCode(10) + ((k && k.success) ? 'Belge ' + belge.ObjType + '/' + belge.DocEntry + ' aktarım kuyruğuna geri alındı; servis birkaç saniye içinde yeniden dener.' : 'Belge kuyruğa alınamadı: ' + ((k && k.message) || ''))); hepsiniYenile(); })
+                        .fail(function () { alert(res.message + String.fromCharCode(10) + 'Belge kuyruğa alınamadı (sunucuya ulaşılamadı).'); hepsiniYenile(); });
+                    return;
+                }
+                alert(res.message);
+                hepsiniYenile();
+                return;
+            }
+
+            // Hedef kalem baska bir kaynak koda bagli: acik onay iste
+            if (res && res.onayGerekli) {
+                var soru = res.message + String.fromCharCode(10) + String.fromCharCode(10)
+                         + 'Yine de üzerine yazılsın mı?';
+                if (confirm(soru)) kalemEslestir(true);
+                return;
+            }
+
+            alert((res && res.message) ? res.message : 'Eşleştirme kaydedilemedi.');
+        }).fail(function () {
+            $('#km-kaydet').prop('disabled', false)
+                           .html('<i class="fas fa-save me-1"></i>Eşleştir ve Kaydet');
+            alert('Sunucuya ulaşılamadı.');
+        });
+    }
+
+    /** Sebep + etiketler + ipucu + ham kayit dortlusunu cizer. */
+    function sebepBlogu(r) {
+        var html = '<div class="fw-semibold">' + kacir(r.Sebep) + '</div>';
+
+        if (r.Etiketler && r.Etiketler.length) {
+            html += '<div class="mt-1">';
+            r.Etiketler.forEach(function (e) {
+                html += '<span class="badge bg-light text-dark border me-1">' + kacir(e) + '</span>';
+            });
+            html += '</div>';
+        }
+
+        if (r.Ipucu) {
+            html += '<div class="text-muted mt-1"><i class="fas fa-lightbulb text-warning me-1"></i>'
+                  + kacir(r.Ipucu) + '</div>';
+        }
+
+        if (r.HamMesaj && r.HamMesaj !== r.Sebep) {
+            html += '<div class="ham-hata">' + kacir(r.HamMesaj) + '</div>';
+        }
+
+        return html;
+    }
+
+    function para(d) {
+        if (d === null || d === undefined) return '-';
+        return Number(d).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function sayi(d) {
+        return (d === null || d === undefined) ? '-' : Number(d).toLocaleString('tr-TR');
+    }
+
+    /** Loader'i her kosulda kapatan, zaman asimi olan istek. */
+    function veriGetir(url, loaderId, tbodyId, kolonSayisi, basarili) {
+        $(loaderId).show();
+
+        var istek = $.ajax({ url: url, timeout: 300000 });
+
+        istek.always(function () { $(loaderId).hide(); });
+
+        istek.done(function (res) {
+            if (res && res.success && typeof res.toplam !== 'undefined') eslToplam = res.toplam;
+
+            if (!res || !res.success) {
+                $(tbodyId).html('<tr><td colspan="' + kolonSayisi + '" class="bos-mesaj text-danger fw-bold">'
+                    + kacir((res && res.message) ? res.message : 'Veri alınamadı.') + '</td></tr>');
+                return;
+            }
+            try { basarili(res.data || []); }
+            catch (e) {
+                $(tbodyId).html('<tr><td colspan="' + kolonSayisi + '" class="bos-mesaj text-danger fw-bold">'
+                    + 'Çizim hatası: ' + kacir(e.message) + '</td></tr>');
+            }
+        });
+
+        istek.fail(function (jq, durum) {
+            if (durum === 'abort') return;
+            $(tbodyId).html('<tr><td colspan="' + kolonSayisi + '" class="bos-mesaj text-danger fw-bold">'
+                + (durum === 'timeout' ? 'Zaman aşımı.' : 'Sunucuya ulaşılamadı.') + '</td></tr>');
+        });
+    }
+
+    /** Secilen belgeleri kuyruga koyar; sonucu ozetler. */
+    function kuyrugaGonder(paket, bitince) {
+        if (!paket.length) return;
+
+        var soru = paket.length + ' belge aktarım kuyruğuna alınacak.' + String.fromCharCode(10)
+                 + 'SAP üzerinde değişiklik yapılmaz; belgeyi hedefe aktarım servisi atar.' + String.fromCharCode(10)
+                 + 'Onaylıyor musunuz?';
+
+        if (!confirm(soru)) return;
+
+        $.ajax({
+            url: '@Url.Action("KuyrugaEkle", "Rapor145")',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(paket),
+            timeout: 300000
+        }).done(function (res) {
+            if (!res || !res.success) {
+                alert((res && res.message) ? res.message : 'Kuyruğa eklenemedi.');
+                return;
+            }
+
+            var liste = res.data || [];
+            var ok = liste.filter(function (x) { return x.basarili; }).length;
+
+            var hatalar = liste.filter(function (x) { return !x.basarili; })
+                               .slice(0, 10)
+                               .map(function (x) { return x.etiket + ': ' + x.mesaj; })
+                               .join(String.fromCharCode(10));
+
+            alert(liste.length + ' belge işlendi.' + String.fromCharCode(10)
+                + ok + ' başarılı, ' + (liste.length - ok) + ' hatalı.' + String.fromCharCode(10)
+                + String.fromCharCode(10)
+                + 'Servis sıradaki turunda deneyecek; birkaç dakika sonra Yenile deyin.'
+                + (hatalar ? String.fromCharCode(10) + String.fromCharCode(10) + hatalar : ''));
+
+            if (bitince) bitince();
+        }).fail(function () {
+            alert('Sunucuya ulaşılamadı.');
+        });
+    }
+
+    // =====================================================================
+    // ÖZET
+    // =====================================================================
+    function ozetGetir() {
+        $.ajax({ url: '@Url.Action("GetOzetData", "Rapor145")', timeout: 300000 })
+            .done(function (res) {
+                if (!res || !res.success || !res.data) {
+                    $('#kart-akan, #kart-akmayan, #kart-hatali, #kart-bekleyen').text('-');
+                    return;
+                }
+                $('#kart-akan').text(sayi(res.data.Akan));
+                $('#kart-akmayan').text(sayi(res.data.Akmayan));
+
+                // Servis devreye girmeden onceki belgeler ayri sayilir; bunlarin
+                // akmamasi ariza degil, servis o tarihte calismiyordu.
+                var kd = res.data.KapsamDisi || 0;
+                var ba = res.data.BilerekAtlanan || 0;
+
+                var notlar = [];
+                if (ba > 0) notlar.push(sayi(ba) + ' bilerek atlanan');
+                if (kd > 0) notlar.push(sayi(kd) + ' servis öncesi');
+
+                $('#kart-akmayan-not').text(notlar.length ? '+ ' + notlar.join(' · ') : '');
+                $('#kart-hatali').text(sayi(res.data.Hatali));
+                $('#kart-bekleyen').text(sayi(res.data.Bekleyen));
+            })
+            .fail(function () {
+                $('#kart-akan, #kart-akmayan, #kart-hatali, #kart-bekleyen').text('-');
+            });
+    }
+
+    // =====================================================================
+    // HATALAR
+    // =====================================================================
+    var hataVerisi = [];
+
+    /** Hangi sebepten kac belge takildi. */
+    function sebepDagilimiGetir() {
+        $.ajax({ url: '@Url.Action("GetSebepDagilimi", "Rapor145")', timeout: 120000 })
+            .done(function (res) {
+                if (!res || !res.success || !res.data || !res.data.length) {
+                    $('#sebep-dagilimi').empty();
+                    return;
+                }
+
+                var html = '<div class="ifa-kart">'
+                         + '<div class="fw-bold mb-2"><i class="fas fa-chart-simple me-1 text-danger"></i>'
+                         + 'Hata sebepleri <span class="text-muted fw-normal">(toplam '
+                         + sayi(res.toplam) + ' belge)</span></div>'
+                         + '<div class="table-responsive"><table class="table table-sm mb-0">'
+                         + '<tbody>';
+
+                res.data.forEach(function (d) {
+                    var oran = res.toplam ? Math.round(d.adet * 100 / res.toplam) : 0;
+
+                    html += '<tr>'
+                          + '<td style="width:52px;"><span class="badge bg-danger">' + sayi(d.adet) + '</span></td>'
+                          + '<td class="fw-semibold" style="width:280px;">' + kacir(d.grup) + '</td>'
+                          + '<td style="width:130px;">'
+                            + '<div class="progress" style="height:6px;">'
+                            + '<div class="progress-bar bg-danger" style="width:' + oran + '%"></div></div></td>'
+                          + '<td class="small text-muted">' + kacir(d.ornekIpucu) + '</td>'
+                          + '</tr>';
+                });
+
+                html += '</tbody></table></div></div>';
+                $('#sebep-dagilimi').html(html);
+            })
+            .fail(function () { $('#sebep-dagilimi').empty(); });
+    }
+
+    function hataGetir() {
+        sebepDagilimiGetir();
+        veriGetir('@Url.Action("GetHataData", "Rapor145")', '#loader-hata', '#tbody-hata', 5, function (d) {
+            hataVerisi = d;
+            hataCiz();
+        });
+    }
+
+    function hataCiz() {
+        $('#rozet-hata').text(hataVerisi.length).toggle(hataVerisi.length > 0);
+
+        // Belge tipi secenekleri (ilk cizimde doldurulur)
+        if ($('#hataTip option').length <= 1) {
+            var tipler = {};
+            hataVerisi.forEach(function (r) { if (r.TipAdi) tipler[r.TipAdi] = (tipler[r.TipAdi] || 0) + 1; });
+
+            Object.keys(tipler).sort().forEach(function (t) {
+                $('#hataTip').append('<option value="' + kacir(t) + '">' + kacir(t) + ' (' + tipler[t] + ')</option>');
+            });
+        }
+
+        var secilenTip = $('#hataTip').val() || '';
+        var gosterilen = hataVerisi.filter(function (r) { return !secilenTip || r.TipAdi === secilenTip; });
+
+        if (!gosterilen.length) {
+            $('#tbody-hata').html('<tr><td colspan="5" class="bos-mesaj text-success fw-bold">'
+                + '<i class="fas fa-circle-check me-1"></i>'
+                + (hataVerisi.length ? 'Bu belge tipinde hatalı kayıt yok.' : 'Hatalı belge yok.')
+                + '</td></tr>');
+            hataSecimGuncelle();
+            return;
+        }
+
+        var html = '';
+
+        gosterilen.forEach(function (r) {
+            var i = hataVerisi.indexOf(r);
+            var altBelge = (r.AltBelgeObjType && r.AltBelgeDocEntry)
+                ? '<div class="mt-1"><span class="badge bg-info text-dark">Önce şu belge gerekli: '
+                  + kacir(r.AltBelgeObjType) + ' / ' + kacir(r.AltBelgeDocEntry) + '</span></div>'
+                : '';
+
+            var cozum = '<button class="btn btn-sm btn-outline-warning w-100 mb-1" onclick="tekKuyruk(\''
+                      + kacir(r.ObjType) + '\',\'' + kacir(r.DocEntry) + '\')">'
+                      + '<i class="fas fa-rotate-right me-1"></i>Kuyruğa Al</button>';
+
+            // Kalem bulunamadi hatasinda dogrudan eslestirme penceresi; eslestirme kaydedilince belge kendiliginden kuyruga alinir
+            if (r.KalemKodu) {
+                cozum += '<button class="btn btn-sm btn-danger w-100 mb-1 km-btn" data-kalem="'
+                       + kacir(r.KalemKodu) + '" data-objtype="' + kacir(r.ObjType) + '" data-docentry="' + kacir(r.DocEntry) + '">'
+                       + '<i class="fas fa-link me-1"></i>Karşılığını Seç ve Eşleştir</button>';
+            }
+            if (r.Durum === 'B') {
+                cozum += '<div class="small text-danger mt-1"><i class="fas fa-ban me-1"></i>Bloke: servis bu belgeyi kendiliğinden bir daha denemez; sorunu giderip "Kuyruğa Al" deyin.</div>';
+            }
+
+            if (r.AltBelgeObjType && r.AltBelgeDocEntry) {
+                cozum += '<button class="btn btn-sm btn-outline-info w-100" onclick="tekKuyruk(\''
+                       + kacir(r.AltBelgeObjType) + '\',\'' + kacir(r.AltBelgeDocEntry) + '\')">'
+                       + '<i class="fas fa-link me-1"></i>Alt Belgeyi Al</button>';
+            }
+
+            html += '<tr>'
+                  + '<td><input type="checkbox" class="form-check-input hata-sec" data-idx="' + i + '" onclick="hataSecimGuncelle()"></td>'
+                  + '<td><span class="badge bg-dark">' + kacir(r.TipAdi) + '</span>'
+                    + '<div class="small text-muted mt-1">Entry ' + kacir(r.DocEntry) + '</div></td>'
+                  + '<td class="small text-muted">' + kacir(r.IslemTarihi) + '</td>'
+                  + '<td class="text-danger">' + sebepBlogu(r) + '</td>'
+                  + '<td>' + cozum + '</td>'
+                  + '</tr>';
+        });
+
+        $('#tbody-hata').html(html);
+        hataSecimGuncelle();
+    }
+
+    function hataSecimGuncelle() {
+        var n = $('#tbody-hata .hata-sec:checked').length;
+        $('#hata-secim').text(n);
+        $('#btn-hata-kuyruk').prop('disabled', n === 0);
+    }
+
+    function hataTumunuSec(sec) {
+        $('#tbody-hata .hata-sec').prop('checked', sec);
+        hataSecimGuncelle();
+    }
+
+    function hataKuyrugaAl() {
+        var paket = [];
+
+        $('#tbody-hata .hata-sec:checked').each(function () {
+            var r = hataVerisi[$(this).data('idx')];
+            if (r) paket.push({ objType: r.ObjType, docEntry: r.DocEntry, etiket: r.TipAdi + ' #' + r.DocEntry });
+        });
+
+        kuyrugaGonder(paket, hepsiniYenile);
+    }
+
+    function tekKuyruk(objType, docEntry) {
+        kuyrugaGonder([{ objType: objType, docEntry: docEntry, etiket: objType + ' / ' + docEntry }], hepsiniYenile);
+    }
+
+    // =====================================================================
+    // AKMAYANLAR
+    // =====================================================================
+    var akmayanVerisi = [], akmayanGosterilen = [];
+
+    function akmayanGetir() {
+        veriGetir('@Url.Action("GetAkmayanData", "Rapor145")', '#loader-akmayan', '#tbody-akmayan', 6, function (d) {
+            akmayanVerisi = d;
+            akmayanCiz();
+        });
+    }
+
+    function akmayanCiz() {
+        var q = ($('#akmayanAra').val() || '').toLocaleLowerCase('tr-TR');
+
+        var kapsamDisiGoster = $('#akmayanKapsamDisi').is(':checked');
+
+        akmayanGosterilen = akmayanVerisi.filter(function (r) {
+            // Servis devreye girmeden onceki belgeler varsayilan olarak gizli
+            if (!kapsamDisiGoster && r.KapsamDisi === 1) return false;
+
+            // Bilerek atlananlar burada sorun degil; kendi sekmesinde duruyorlar
+            if (!kapsamDisiGoster && r.BilerekAtlandi === 1) return false;
+            if (!q) return true;
+            return ((r.KaynakBelgeNo || '') + ' ' + (r.Sebep || '') + ' ' + (r.KaynakTipAdi || ''))
+                   .toLocaleLowerCase('tr-TR').indexOf(q) > -1;
+        });
+
+        var gercek = akmayanVerisi.filter(function (r) {
+            return r.KapsamDisi !== 1 && r.BilerekAtlandi !== 1;
+        }).length;
+        $('#rozet-akmayan').text(gercek).toggle(gercek > 0);
+
+        if (!akmayanGosterilen.length) {
+            $('#tbody-akmayan').html('<tr><td colspan="6" class="bos-mesaj text-success fw-bold">'
+                + '<i class="fas fa-circle-check me-1"></i>Bu kriterde akmayan belge yok.</td></tr>');
+            akmayanSecimGuncelle();
+            return;
+        }
+
+        var rozetler = {
+            'P': ['bg-warning text-dark', 'BEKLİYOR'],
+            'S': ['bg-success', 'BAŞARILI DENDİ'],
+            'E': ['bg-danger', 'HATA']
+        };
+
+        var html = '';
+
+        akmayanGosterilen.forEach(function (r, i) {
+            var kod = (r.KuyrukDurum || '').trim();
+            var rz = rozetler[kod] || ['bg-dark', 'KUYRUKTA YOK'];
+
+            html += '<tr>'
+                  + '<td><input type="checkbox" class="form-check-input akmayan-sec" data-idx="' + i + '" onclick="akmayanSecimGuncelle()"></td>'
+                  + '<td><span class="badge bg-secondary">' + kacir(r.KaynakTipAdi) + '</span>'
+                    + '<div class="fw-bold mt-1">#' + kacir(r.KaynakBelgeNo) + '</div></td>'
+                  + '<td class="small">' + kacir(r.KaynakTarih) + '</td>'
+                  + '<td class="text-end">' + para(r.KaynakTutar) + '</td>'
+                  + '<td><span class="badge ' + rz[0] + '">' + rz[1] + '</span></td>'
+                  + '<td class="small">' + sebepBlogu(r) + '</td>'
+                  + '</tr>';
+        });
+
+        $('#tbody-akmayan').html(html);
+        akmayanSecimGuncelle();
+    }
+
+    function akmayanSecimGuncelle() {
+        var n = $('#tbody-akmayan .akmayan-sec:checked').length;
+        $('#akmayan-secim').text(n);
+        $('#btn-akmayan-kuyruk').prop('disabled', n === 0);
+    }
+
+    function akmayanTumunuSec(sec) {
+        $('#tbody-akmayan .akmayan-sec').prop('checked', sec);
+        akmayanSecimGuncelle();
+    }
+
+    function akmayanKuyrugaAl() {
+        var paket = [];
+
+        $('#tbody-akmayan .akmayan-sec:checked').each(function () {
+            var r = akmayanGosterilen[$(this).data('idx')];
+            if (r) paket.push({
+                objType: r.ObjType,
+                docEntry: String(r.KaynakDocEntry),
+                etiket: r.KaynakTipAdi + ' #' + r.KaynakBelgeNo
+            });
+        });
+
+        kuyrugaGonder(paket, hepsiniYenile);
+    }
+
+    // =====================================================================
+    // AKAN BELGELER
+    // =====================================================================
+    var akanVerisi = [];
+
+    function akanGetir() {
+        veriGetir('@Url.Action("GetAkanData", "Rapor145")', '#loader-akan', '#tbody-akan', 5, function (d) {
+            akanVerisi = d;
+            akanCiz();
+        });
+    }
+
+    function akanCiz() {
+        var q = ($('#akanAra').val() || '').toLocaleLowerCase('tr-TR');
+        var sadeceFark = $('#akanSadeceFark').is(':checked');
+
+        var liste = akanVerisi.filter(function (r) {
+            if (sadeceFark && r.TutarUyusuyor === 1) return false;
+            if (!q) return true;
+            return ((r.KaynakBelgeNo || '') + ' ' + (r.HedefBelgeNo || '')).toLocaleLowerCase('tr-TR').indexOf(q) > -1;
+        });
+
+        $('#rozet-akan').text(akanVerisi.length).toggle(akanVerisi.length > 0);
+
+        if (!liste.length) {
+            $('#tbody-akan').html('<tr><td colspan="5" class="bos-mesaj">Bu kriterde kayıt yok.</td></tr>');
+            return;
+        }
+
+        var html = '';
+
+        liste.forEach(function (r) {
+            var durum = (r.TutarUyusuyor === 1)
+                ? '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Tutuyor</span>'
+                : '<span class="badge bg-danger"><i class="fas fa-not-equal me-1"></i>Tutar farklı</span>';
+
+            if (r.Iptal === 'Y' || r.HedefIptal === 'Y') {
+                durum += ' <span class="badge bg-secondary">İPTAL</span>';
+            }
+
+            html += '<tr>'
+                  + '<td><div class="zincir">'
+                    + '<span><span class="badge bg-secondary">' + kacir(r.KaynakTipAdi) + '</span> <b>#' + kacir(r.KaynakBelgeNo) + '</b></span>'
+                    + '<span class="ok">──▶</span>'
+                    + '<span><span class="badge bg-primary">' + kacir(r.HedefTipAdi) + '</span> <b>#' + kacir(r.HedefBelgeNo) + '</b></span>'
+                    + '</div></td>'
+                  + '<td class="small">' + kacir(r.KaynakTarih) + '</td>'
+                  + '<td class="text-end">' + para(r.KaynakTutar) + '</td>'
+                  + '<td class="text-end">' + para(r.HedefTutar) + '</td>'
+                  + '<td>' + durum + '</td>'
+                  + '</tr>';
+        });
+
+        $('#tbody-akan').html(html);
+    }
+
+    // =====================================================================
+    // ESLESTIRME SORUNLARI
+    // =====================================================================
+    var esVerisi = [];
+
+    function eslesmeGetir() {
+        veriGetir('@Url.Action("GetEslesmeSorunlari", "Rapor145")',
+                  '#loader-eslesme', '#tbody-eslesme', 4, function (d) {
+            esVerisi = d;
+
+            // Tur secenekleri
+            if ($('#esTur option').length <= 1) {
+                var turler = {};
+                esVerisi.forEach(function (r) { if (r.TurBaslik) turler[r.TurBaslik] = (turler[r.TurBaslik] || 0) + 1; });
+
+                Object.keys(turler).forEach(function (t) {
+                    $('#esTur').append('<option value="' + kacir(t) + '">' + kacir(t) + ' (' + turler[t] + ')</option>');
+                });
+            }
+
+            eslesmeCiz();
+        });
+    }
+
+    function eslesmeCiz() {
+        var q = ($('#esAra').val() || '').toLocaleLowerCase('tr-TR');
+        var tur = $('#esTur').val() || '';
+
+        var cozulenGizle = $('#esCozulenGizle').is(':checked');
+
+        var liste = esVerisi.filter(function (r) {
+            if (cozulenGizle && r.Cozuldu) return false;
+            if (tur && r.TurBaslik !== tur) return false;
+            if (!q) return true;
+            return ((r.KaynakKod || '') + ' ' + (r.KaynakAd || '') + ' ' + (r.HedefKod || ''))
+                   .toLocaleLowerCase('tr-TR').indexOf(q) > -1;
+        });
+
+        // Rozet yalnizca gercekten duran sorunlari sayar
+        var acik = esVerisi.filter(function (r) { return !r.Cozuldu; }).length;
+        var cozulen = esVerisi.length - acik;
+
+        $('#rozet-eslesme').text(acik).toggle(acik > 0);
+        $('#es-ozet').text(liste.length + ' gösteriliyor · ' + acik + ' açık'
+                           + (cozulen ? ' · ' + cozulen + ' düzeltilmiş' : ''));
+
+        if (!liste.length) {
+            $('#tbody-eslesme').html('<tr><td colspan="4" class="bos-mesaj text-success fw-bold">'
+                + '<i class="fas fa-circle-check me-1"></i>'
+                + (esVerisi.length ? 'Bu kriterde kayıt yok.' : 'Eşleştirme sorunu yok.')
+                + '</td></tr>');
+            return;
+        }
+
+        var renkler = {
+            'Hedefte karşılığı yok':     'bg-danger',
+            'Birden fazla hedefe bağlı': 'bg-warning text-dark',
+            'Alt belge satırı uyuşmuyor':'bg-info text-dark'
+        };
+
+        var html = '';
+
+        liste.forEach(function (r) {
+            var renk = r.Cozuldu ? 'bg-success' : (renkler[r.TurBaslik] || 'bg-secondary');
+
+            // Hedef adaylari rozet olarak
+            // Tablo bir anlik goruntu; SU ANKI bagli kalemleri gosteririz
+            var suAn = (r.SuAnKalemler || '').split(',').map(function (x) { return x.trim(); })
+                                             .filter(function (x) { return x.length; });
+
+            var hedef;
+
+            if (suAn.length) {
+                hedef = suAn.map(function (h) {
+                    return '<span class="badge ' + (suAn.length > 1 ? 'bg-warning text-dark' : 'bg-success')
+                         + ' me-1">' + kacir(h) + '</span>';
+                }).join('');
+
+                if (suAn.length > 1) hedef += '<span class="small text-danger ms-1">' + suAn.length + ' bağ</span>';
+            } else {
+                hedef = '<span class="text-danger fw-semibold">hedefte bağlı kalem yok</span>';
+            }
+
+            // Snapshot ile su an farkliysa bunu da belirt
+            if (r.HedefKod && r.HedefKod !== (r.SuAnKalemler || '')) {
+                hedef += '<div class="small text-muted mt-1">Tespit anında: ' + kacir(r.HedefKod) + '</div>';
+            }
+
+            var cozum = r.KaynakKod
+                ? '<button class="btn btn-sm btn-outline-danger w-100 km-btn" data-kalem="'
+                  + kacir(r.KaynakKod) + '"><i class="fas fa-link me-1"></i>Kalem Eşleştir</button>'
+                : '';
+
+            html += '<tr>'
+                  + '<td><span class="badge ' + renk + '">' + kacir(r.TurBaslik) + '</span>'
+                    + '<div class="small text-muted mt-1">' + kacir(r.TespitTarihi) + '</div></td>'
+                  + '<td><code>' + kacir(r.KaynakKod) + '</code>'
+                    + (r.KaynakAd ? '<div class="small text-muted">' + kacir(r.KaynakAd) + '</div>' : '') + '</td>'
+                  + '<td class="small">' + hedef
+                    + (r.Ipucu ? '<div class="text-muted mt-1"><i class="fas fa-lightbulb text-warning me-1"></i>'
+                                 + kacir(r.Ipucu) + '</div>' : '')
+                    + '</td>'
+                  + '<td>' + cozum + '</td>'
+                  + '</tr>';
+        });
+
+        $('#tbody-eslesme').html(html);
+    }
+
+    // =====================================================================
+    // ESLESENLER
+    // =====================================================================
+    var eslVerisi = [], eslToplam = 0;
+
+    function eslesenlerGetir() {
+        veriGetir('@Url.Action("GetEslesmeler", "Rapor145")' + '?ara=' + encodeURIComponent($('#eslAra').val() || ''),
+                  '#loader-eslesenler', '#tbody-eslesenler', 5, function (d) {
+            eslVerisi = d;
+            eslesenlerCiz();
+        });
+    }
+
+    $(document).on('keypress', '#eslAra', function (e) {
+        if (e.which === 13) { e.preventDefault(); eslesenlerGetir(); }
+    });
+
+    function eslSorunluMu(r) {
+        return r.BagAdet > 1 || r.KaynakYok === 1 || r.Aktif !== 1;
+    }
+
+    function eslesenlerCiz() {
+        var sadeceSorunlu = $('#eslSadeceSorunlu').is(':checked');
+        var liste = eslVerisi.filter(function (r) { return !sadeceSorunlu || eslSorunluMu(r); });
+
+        var sorunlu = eslVerisi.filter(eslSorunluMu).length;
+
+        $('#rozet-eslesenler').text(eslVerisi.length).toggle(eslVerisi.length > 0);
+        $('#esl-ozet').text(liste.length + ' gösteriliyor'
+            + (sorunlu ? ' · ' + sorunlu + ' sorunlu' : '')
+            + ' · toplam ' + sayi(eslToplam || 0) + ' eşleşme');
+
+        if (!liste.length) {
+            $('#tbody-eslesenler').html('<tr><td colspan="5" class="bos-mesaj">Kayıt bulunamadı.</td></tr>');
+            return;
+        }
+
+        var html = '';
+
+        liste.forEach(function (r) {
+            var durum = '';
+
+            if (r.BagAdet > 1)
+                durum += '<span class="badge bg-warning text-dark d-block mb-1">' + r.BagAdet + ' bağ</span>';
+            if (r.KaynakYok === 1)
+                durum += '<span class="badge bg-danger d-block mb-1">kaynak yok</span>';
+            if (r.Aktif !== 1)
+                durum += '<span class="badge bg-secondary d-block mb-1">pasif</span>';
+            if (!durum)
+                durum = '<span class="badge bg-success">tekil</span>';
+
+            html += '<tr class="' + (eslSorunluMu(r) ? 'table-warning' : '') + '">'
+                  + '<td><code>' + kacir(r.KaynakKod) + '</code>'
+                    + '<div class="small text-muted">' + kacir(r.KaynakAd || '-') + '</div></td>'
+                  + '<td class="text-center text-muted">➔</td>'
+                  + '<td><code>' + kacir(r.HedefKod) + '</code>'
+                    + '<div class="small text-muted">' + kacir(r.HedefAd || '-') + '</div></td>'
+                  + '<td>' + durum + '</td>'
+                  + '<td>'
+                    + '<button class="btn btn-sm btn-outline-primary w-100 mb-1 km-btn" data-kalem="'
+                      + kacir(r.KaynakKod) + '"><i class="fas fa-pen me-1"></i>Değiştir</button>'
+                    + '<button class="btn btn-sm btn-outline-danger w-100 esl-kaldir" data-hedef="'
+                      + kacir(r.HedefKod) + '" data-kaynak="' + kacir(r.KaynakKod) + '">'
+                      + '<i class="fas fa-link-slash me-1"></i>Bağı Kaldır</button>'
+                  + '</td>'
+                  + '</tr>';
+        });
+
+        $('#tbody-eslesenler').html(html);
+    }
+
+    $(document).on('click', '.esl-kaldir', function () {
+        var buton = $(this);
+        var hedef = buton.data('hedef');
+        var kaynak = buton.data('kaynak');
+
+        var soru = hedef + ' kaleminin ' + kaynak + ' bağı kaldırılacak.' + String.fromCharCode(10)
+                 + 'Bu kalem artık o kaynak kod için seçilmeyecek.' + String.fromCharCode(10)
+                 + 'Onaylıyor musunuz?';
+
+        if (!confirm(soru)) return;
+
+        buton.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i>Kaldırılıyor...');
+
+        $.ajax({
+            url: '@Url.Action("BagiKaldir", "Rapor145")',
+            type: 'POST',
+            data: { hedefKod: hedef },
+            timeout: 120000
+        }).done(function (res) {
+            alert((res && res.message) ? res.message : 'Sonuç alınamadı.');
+            eslesenlerGetir();
+        }).fail(function () {
+            buton.prop('disabled', false).html('<i class="fas fa-link-slash me-1"></i>Bağı Kaldır');
+            alert('Sunucuya ulaşılamadı.');
+        });
+    });
+
+    // =====================================================================
+    // ATLANANLAR
+    // =====================================================================
+    function atlananGetir() {
+        veriGetir('@Url.Action("GetAtlananData", "Rapor145")', '#loader-atlanan', '#tbody-atlanan', 3, function (d) {
+            $('#rozet-atlanan').text(d.length).toggle(d.length > 0);
+
+            if (!d.length) {
+                $('#tbody-atlanan').html('<tr><td colspan="3" class="bos-mesaj">Atlanan belge yok.</td></tr>');
+                return;
+            }
+
+            var html = '';
+
+            d.forEach(function (r) {
+                html += '<tr>'
+                      + '<td><span class="badge bg-dark">' + kacir(r.TipAdi) + '</span>'
+                        + '<div class="small text-muted mt-1">Entry ' + kacir(r.DocEntry) + '</div></td>'
+                      + '<td class="small text-muted">' + kacir(r.IslemTarihi) + '</td>'
+                      + '<td class="small">' + sebepBlogu(r) + '</td>'
+                      + '</tr>';
+            });
+
+            $('#tbody-atlanan').html(html);
+        });
+    }
+
+    // =====================================================================
+    // AÇILIŞ
+    // =====================================================================
+    var yuklendi = {};
+
+    function hepsiniYenile() {
+        if (typeof aylikYenile === 'function') aylikYenile();
+        yuklendi = {};
+        ozetGetir();
+        hataGetir();   // icinde sebep dagilimini da cagirir
+
+        if ($('#tab-akmayan').hasClass('active')) akmayanGetir();
+        if ($('#tab-akan').hasClass('active')) akanGetir();
+        if ($('#tab-eslesme').hasClass('active')) eslesmeGetir();
+        if ($('#tab-eslesenler').hasClass('active')) eslesenlerGetir();
+        if ($('#tab-atlanan').hasClass('active')) atlananGetir();
+    }
+
+    $(document).ready(function () {
+        ozetGetir();
+        hataGetir();
+
+        $('#tab-akmayan').on('shown.bs.tab', function () {
+            if (!yuklendi.akmayan) { yuklendi.akmayan = true; akmayanGetir(); }
+        });
+
+        $('#tab-akan').on('shown.bs.tab', function () {
+            if (!yuklendi.akan) { yuklendi.akan = true; akanGetir(); }
+        });
+
+        $('#tab-eslesme').on('shown.bs.tab', function () {
+            if (!yuklendi.eslesme) { yuklendi.eslesme = true; eslesmeGetir(); }
+        });
+
+        $('#tab-eslesenler').on('shown.bs.tab', function () {
+            if (!yuklendi.eslesenler) { yuklendi.eslesenler = true; eslesenlerGetir(); }
+        });
+
+        $('#tab-atlanan').on('shown.bs.tab', function () {
+            if (!yuklendi.atlanan) { yuklendi.atlanan = true; atlananGetir(); }
+        });
+    });
+</script>
+}

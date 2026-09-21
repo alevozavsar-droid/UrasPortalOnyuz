@@ -1,0 +1,888 @@
+﻿@{
+    ViewData["Title"] = "Konsolide Satış Primi Raporu (Rapor136)";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"] ?? "DefaultConnection";
+    }
+    
+    bool isEnglish = false; 
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        html, body { overflow-x: hidden; height: auto !important; margin: 0; padding: 0; }
+        
+        .container, .container-fluid, main, .content-wrapper, .page-content, .app-content, .content, .body-content { 
+            max-width: 100% !important; width: 100% !important; height: auto !important; max-height: none !important;
+            overflow: visible !important; padding-left: 0.5rem !important; padding-right: 0.5rem !important; margin-left: 0 !important; margin-right: 0 !important; padding-bottom: 50px !important;
+        }
+
+        body { background-color: #f4f7fc; font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #2b3445; font-size: 0.75rem; }
+
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 20px; transition: all 0.3s ease; position: relative; overflow: hidden; cursor: default; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        .kpi-title { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; z-index: 2; position: relative; }
+        .kpi-value { font-size: 24px; font-weight: 900; color: #0f172a; margin-bottom: 2px; z-index: 2; position: relative; white-space: nowrap; letter-spacing: -0.5px; }
+        .kpi-desc { font-size: 11px; color: #94a3b8; z-index: 2; position: relative; }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 5rem; color: #e2e8f0; opacity: 0.4; z-index: 1; transform: rotate(-10deg); }
+        
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        .border-top-warning { border-top: 4px solid #f59e0b !important; }
+        .border-top-info { border-top: 4px solid #0ea5e9 !important; }
+        .border-top-success { border-top: 4px solid #10b981 !important; }
+        .border-top-danger { border-top: 4px solid #ef4444 !important; }
+
+        .action-toolbar { background-color: #ffffff; padding: 12px 15px; border-radius: 10px; border: 1px solid #eef2f7; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; justify-content: space-between; align-items: center; }
+
+        .report-table-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 20px; height: auto !important; overflow: visible !important; display: flex; flex-direction: column; }
+        .table-container { width: 100%; height: auto !important; overflow-y: visible !important; overflow-x: auto; background-color: white; border-radius: 8px; border: 1px solid #eef2f7; position: relative; }
+        
+        table { width: 100%; table-layout: auto; border-collapse: separate; border-spacing: 0; }
+        th, td { padding: 10px 12px !important; font-size: 12px !important; border-right: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; vertical-align: middle; line-height: 1.3; }
+
+        .rapor-tablo thead tr.main-header-row th { background-color: #f8fafc; color: #475569; font-weight: 700; text-transform: uppercase; white-space: nowrap; position: sticky; top: 0; z-index: 102; text-align: center; border-bottom: 2px solid #e2e8f0 !important; }
+        .table-hover tbody tr.master-row:hover td, .table-hover tbody tr.customer-row:hover td { background-color: #f1f5f9; cursor: pointer; }
+        
+        .col-truncate-md { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+        .badge-soft-primary { background-color: #dbeafe; color: #1e40af; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-success { background-color: #d1fae5; color: #065f46; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-danger { background-color: #fee2e2; color: #991b1b; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+
+        /* Hiyerarşi satırları */
+        .customer-row { display: none; background-color: #fafafa; }
+        .customer-row.open { display: table-row; }
+        .detail-row { display: none; background-color: #ffffff; }
+        .detail-row.open { display: table-row; }
+
+        .sub-table { margin: 5px 20px 15px 40px; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .sub-table th { background-color: #e2e8f0 !important; color: #334155; font-size: 11px !important; padding: 8px !important; }
+        .sub-table td { background-color: #ffffff; padding: 8px !important; font-size: 11px !important; border-bottom: 1px solid #f1f5f9; }
+
+        .expand-icon { transition: transform 0.3s ease; display:inline-block; width:20px; text-align:center; }
+        .open > td > .expand-icon { transform: rotate(90deg); }
+
+        /* Mutabakat Modal Stilleri */
+        .modal-xl { max-width: 98% !important; }
+        .recon-table-wrapper { height: 450px; overflow-y: auto; background: #fff; border: 1px solid #dee2e6; border-radius: 5px; }
+        .recon-table { font-size: 11px; margin-bottom: 0; }
+        .recon-table thead th { position: sticky; top: 0; background: #f8f9fa; z-index: 10; padding: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .recon-table td { padding: 4px 6px; vertical-align: middle; }
+        .recon-input { font-size: 11px; height: 24px; padding: 2px 5px; width: 100px; text-align: right; }
+        .recon-selected-row { background-color: #fff3cd !important; font-weight: 600; }
+        .card-header-debit { background-color: #dc3545; color: white; padding: 10px 15px; border-radius: 5px 5px 0 0; }
+        .card-header-credit { background-color: #198754; color: white; padding: 10px 15px; border-radius: 5px 5px 0 0; }
+        
+        .nav-tabs .nav-link { border: none; color: #64748b; padding: 12px 20px; border-bottom: 2px solid transparent; }
+        .nav-tabs .nav-link.active { color: #3b82f6; border-bottom: 2px solid #3b82f6; background-color: transparent; }
+        .nav-tabs .nav-link.foreign-tab-link.active { color: #10b981; border-bottom: 2px solid #10b981; }
+    </style>
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;">
+                <i class="fas fa-sitemap text-primary me-2"></i>Konsolide Satış Primi Raporu (Rapor136)
+            </h4>
+            <span class="text-muted" style="font-size: 13px;">Satış personeli bazlı konsolide prim hak ediş ve açık işlem mutabakat raporu.</span>
+        </div>
+        <div><a asp-controller="Home" asp-action="Index" class="btn btn-sm btn-outline-secondary shadow-sm rounded-pill px-3"><i class="fas fa-arrow-left"></i> Ana Sayfaya Dön</a></div>
+    </div>
+
+    <!-- KPI'lar -->
+    <div class="row mb-3 g-3">
+        <div class="col-md-3"><div class="dashboard-card border-0 border-top-info"><i class="fas fa-users kpi-icon-bg"></i><div class="kpi-title">Personel Sayısı</div><div class="kpi-value text-info" id="kpiPersonnel">0</div></div></div>
+        <div class="col-md-3"><div class="dashboard-card border-0 border-top-primary"><i class="fas fa-chart-line kpi-icon-bg"></i><div class="kpi-title">Konsolide Net Satış</div><div class="kpi-value text-primary" id="kpiTotalSales">0,00 ₺</div></div></div>
+        <div class="col-md-3"><div class="dashboard-card border-0 border-top-danger"><i class="fas fa-balance-scale kpi-icon-bg"></i><div class="kpi-title">Bakiye Değişimi</div><div class="kpi-value text-danger" id="kpiOverdueChange">0,00 ₺</div></div></div>
+        <div class="col-md-3"><div class="dashboard-card border-0 border-top-success"><i class="fas fa-wallet kpi-icon-bg"></i><div class="kpi-title">Toplam Ödenecek Prim</div><div class="kpi-value text-success" id="kpiTotalPremium">0,00 ₺</div></div></div>
+    </div>
+
+    <!-- Filtreler -->
+    <div class="action-toolbar mb-3">
+        <div class="w-100 d-flex flex-wrap align-items-center gap-3">
+            <label class="fw-bold text-muted mb-0" style="font-size: 11px;">YIL / AY:</label>
+            <select id="filterYear" class="form-select form-select-sm shadow-sm w-auto">
+                @for (int y = DateTime.Now.Year; y >= 2020; y--) { <option value="@y" selected="@(y == ViewBag.DefaultYear)">@y</option> }
+            </select>
+            <select id="filterMonth" class="form-select form-select-sm shadow-sm w-auto">
+                @for (int m = 1; m <= 12; m++) { <option value="@m" selected="@(m == ViewBag.DefaultMonth)">@System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(m)</option> }
+            </select>
+            <button type="button" class="btn btn-primary btn-sm shadow-sm px-4" id="btnCalculate"><i class="fas fa-calculator"></i> Primi Hesapla</button>
+        </div>
+    </div>
+
+    <!-- Sekmeler -->
+    <ul class="nav nav-tabs mb-3 border-bottom-0" id="salesTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active fw-bold" id="domestic-tab" data-bs-toggle="tab" data-bs-target="#domestic" type="button" role="tab" aria-controls="domestic" aria-selected="true">
+                <i class="fas fa-building me-1"></i> Yurtiçi Satış Ekibi
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link foreign-tab-link fw-bold" id="foreign-tab" data-bs-toggle="tab" data-bs-target="#foreign" type="button" role="tab" aria-controls="foreign" aria-selected="false">
+                <i class="fas fa-plane-departure me-1"></i> Yurtdışı Satış Ekibi (Aksel, Berkan, Sevgi)
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="salesTabsContent">
+        <!-- YURTİÇİ SATIŞ TABLOSU -->
+        <div class="tab-pane fade show active" id="domestic" role="tabpanel" aria-labelledby="domestic-tab">
+            <div class="report-table-card mb-4 position-relative">
+                <div class="loadingOverlay" style="position:absolute;top:0;left:0;width:100%;height:100%;display:none;flex-direction:column;justify-content:center;align-items:center;background-color:rgba(255,255,255,0.85);backdrop-filter:blur(2px);z-index:1003;border-radius:12px;">
+                    <div class="spinner-border text-primary" role="status" style="width:3rem;height:3rem;"></div>
+                    <p class="mt-3 text-primary fw-bold">Veriler Getiriliyor...</p>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="card-title mb-0 fw-bold text-dark" style="font-size: 14px;"><i class="fas fa-table text-primary me-2"></i>Yurtiçi Satış Primi Tablosu</div>
+                    <div><small class="text-muted"><i class="fas fa-info-circle"></i> Detayları görmek ve Mutabakat yapmak için satırlara tıklayınız.</small></div>
+                </div>
+                <div class="table-container shadow-sm">
+                    <table class="table table-hover rapor-tablo" id="premiumTableDomestic">
+                        <thead>
+                            <tr class="main-header-row">
+                                <th style="width:40px;"></th>
+                                <th class="text-start">Satış Temsilcisi / Müşteri / Şirket</th>
+                                <th class="text-center">Açık İşlem Durumu</th>
+                                <th class="text-end">Konsolide Net Satış</th>
+                                <th class="text-end text-primary">Satış Primi (%1.3)</th>
+                                <th class="text-end">Vadesi Geçmiş Değişimi</th>
+                                <th class="text-end text-danger">Bakiye Değişim Etkisi (%1.3)</th>
+                                <th class="text-end text-success">Ödenecek Net Prim</th>
+                                <th class="text-center">Aksiyon</th>
+                            </tr>
+                        </thead>
+                        <tbody id="premiumTableBodyDomestic">
+                            <tr><td colspan="9" class="text-center text-muted py-5">Raporu getirmek için "Primi Hesapla" butonuna basınız.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- YURTDIŞI SATIŞ TABLOSU (Miktar Dahil) -->
+        <div class="tab-pane fade" id="foreign" role="tabpanel" aria-labelledby="foreign-tab">
+            <div class="report-table-card mb-4 position-relative border-top-success">
+                <div class="loadingOverlay" style="position:absolute;top:0;left:0;width:100%;height:100%;display:none;flex-direction:column;justify-content:center;align-items:center;background-color:rgba(255,255,255,0.85);backdrop-filter:blur(2px);z-index:1003;border-radius:12px;">
+                    <div class="spinner-border text-success" role="status" style="width:3rem;height:3rem;"></div>
+                    <p class="mt-3 text-success fw-bold">Veriler Getiriliyor...</p>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="card-title mb-0 fw-bold text-dark" style="font-size: 14px;"><i class="fas fa-table text-success me-2"></i>Yurtdışı Satış Primi Tablosu</div>
+                    <div><small class="text-muted"><i class="fas fa-info-circle"></i> Detayları görmek ve Mutabakat yapmak için satırlara tıklayınız.</small></div>
+                </div>
+                <div class="table-container shadow-sm">
+                    <table class="table table-hover rapor-tablo" id="premiumTableForeign">
+                        <thead>
+                            <tr class="main-header-row">
+                                <th style="width:40px;"></th>
+                                <th class="text-start">Satış Temsilcisi / Müşteri / Şirket</th>
+                                <th class="text-center">Açık İşlem Durumu</th>
+                                <th class="text-end text-info">Toplam Miktar</th>
+                                <th class="text-end">Konsolide Net Satış</th>
+                                <th class="text-end text-primary">Satış Primi (%1.3)</th>
+                                <th class="text-end">Vadesi Geçmiş Değişimi</th>
+                                <th class="text-end text-danger">Bakiye Değişim Etkisi (%1.3)</th>
+                                <th class="text-end text-success">Ödenecek Net Prim</th>
+                                <th class="text-center">Aksiyon</th>
+                            </tr>
+                        </thead>
+                        <tbody id="premiumTableBodyForeign">
+                            <tr><td colspan="10" class="text-center text-muted py-5">Raporu getirmek için "Primi Hesapla" butonuna basınız.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MUTABAKAT MODAL -->
+<div class="modal fade" id="reconciliationModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-dark text-white border-0 py-3">
+                <h5 class="modal-title fw-bold"><i class="fas fa-handshake me-2 text-warning"></i> Açık İşlemler Eşleştirme ve Kapama Ekranı</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4" style="background-color: #f8f9fa;">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h6 class="fw-bold mb-0 text-dark" id="reconModalTitle">Cari: </h6>
+                        <small class="text-muted">Tüm Şirketlerdeki Açık İşlemler</small>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-danger shadow-sm fw-bold" id="btnCancelReconSingle" title="Seçili Şirketteki SAP Mutabakatlarını İptal Eder">
+                            <i class="fas fa-ban me-1"></i> <span id="lblSingleCancelBtn">Seçili Şirkette İptal Et</span>
+                        </button>
+                        <button type="button" class="btn btn-outline-success shadow-sm fw-bold" id="btnSaveManualMutabakat" title="Açık işlemler bulunsa dahi manuel onay logu bırakır">
+                            <i class="fas fa-save me-1"></i> Manuel Mutabakat Kaydet
+                        </button>
+                        <button type="button" class="btn btn-outline-warning text-dark fw-bold shadow-sm" id="btnAutoReconcileSingle">
+                            <i class="fas fa-magic me-1"></i> <span id="lblSingleReconBtn">Seçili Şirkette Kapat</span>
+                        </button>
+                        <button type="button" class="btn btn-warning fw-bold shadow-sm" id="btnAutoReconcileToplu">
+                            <i class="fas fa-magic me-1"></i> Tüm Şirketlerde Kapat
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Şirket Sekmeleri Buraya Gelecek -->
+                <div id="divTransactions" style="display: none;"></div>
+
+                <!-- SEÇİLEN ŞİRKET İÇİN BORÇ ALACAK TABLOLARI -->
+                <div id="reconTablesArea" style="display: none;">
+                    <div class="row g-3 mt-2">
+                        <div class="col-md-6">
+                            <div class="card shadow-sm border-0 h-100">
+                                <div class="card-header-debit d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold"><i class="fas fa-arrow-down me-1"></i> Borç İşlemleri</span>
+                                    <span class="badge bg-white text-danger fs-6" id="totalSelectedDebit">0,00 TL</span>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="recon-table-wrapper">
+                                        <table class="table table-hover table-bordered recon-table" id="tableDebit">
+                                            <thead>
+                                                <tr>
+                                                    <th width="30" class="text-center"><input type="checkbox" id="chkAllDebit" class="form-check-input"></th>
+                                                    <th>İşlem No</th>
+                                                    <th>Tarih</th>
+                                                    <th>Vade T.</th>
+                                                    <th>Tip</th>
+                                                    <th>İşlem Tipi</th>
+                                                    <th>Para Br.</th>
+                                                    <th>KF Br.</th>
+                                                    <th>Açıklama</th>
+                                                    <th class="text-end">Açık Tutar</th>
+                                                    <th class="text-end" width="110">Kapatılacak</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card shadow-sm border-0 h-100">
+                                <div class="card-header-credit d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold"><i class="fas fa-arrow-up me-1"></i> Alacak İşlemleri</span>
+                                    <span class="badge bg-white text-success fs-6" id="totalSelectedCredit">0,00 TL</span>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="recon-table-wrapper">
+                                        <table class="table table-hover table-bordered recon-table" id="tableCredit">
+                                            <thead>
+                                                <tr>
+                                                    <th width="30" class="text-center"><input type="checkbox" id="chkAllCredit" class="form-check-input"></th>
+                                                    <th>İşlem No</th>
+                                                    <th>Tarih</th>
+                                                    <th>Vade T.</th>
+                                                    <th>Tip</th>
+                                                    <th>İşlem Tipi</th>
+                                                    <th>Para Br.</th>
+                                                    <th>KF Br.</th>
+                                                    <th>Açıklama</th>
+                                                    <th class="text-end">Açık Tutar</th>
+                                                    <th class="text-end" width="110">Kapatılacak</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-white border rounded shadow-sm d-flex justify-content-between align-items-center">
+                        <div><h6 class="mb-1 text-muted">Kapanış Özeti</h6><div class="fs-5 fw-bold" id="reconDifferenceText">Fark: <span class="text-dark">0,00 TL</span></div></div>
+                        <button type="button" class="btn btn-success btn-lg fw-bold shadow-sm px-5" id="btnSubmitRecon" disabled><i class="fas fa-check-circle me-2"></i> Seçilenleri Kapat</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AUTO RECONCILE LOADING MODAL -->
+<div class="modal fade" id="autoReconProgressModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-dark text-white border-0"><h5 class="modal-title fw-bold"><i class="fas fa-robot me-2 text-warning"></i> Otomatik Kapama Süreci</h5></div>
+            <div class="modal-body text-center p-4">
+                <div id="autoReconProgressContent"><div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;"></div><h5 class="text-dark fw-bold">İşlemler analiz ediliyor...</h5><p class="text-muted small">Lütfen bekleyiniz...</p></div>
+            </div>
+            <div class="modal-footer border-0 d-none" id="autoReconFooter"><button type="button" class="btn btn-secondary w-100" onclick="refreshTableAndClose()">Kapat ve Ekranı Yenile</button></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        const antiForgeryToken = $('input[name="__RequestVerificationToken"]').val() || '';
+        const isEnglishJS = @(isEnglish.ToString().ToLower());
+        
+        function formatNumber(value) {
+            if (value === null || value === undefined || isNaN(value)) return '0,00';
+            return parseFloat(value).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        function parseFormattedNumber(val) { if (!val) return 0; return parseFloat(val.replace(/\./g, '').replace(',', '.')) || 0; }
+
+        $(document).ready(function () {
+            
+            $(document).on('click', '.master-row', function (e) {
+                const rep = $(this).data('rep');
+                const childRows = $(`.customer-row.rep-${rep}`);
+                const icon = $(this).find('.expand-icon');
+                
+                if ($(this).hasClass('open')) {
+                    $(this).removeClass('open');
+                    childRows.removeClass('open'); 
+                    $(`.detail-row.rep-${rep}`).removeClass('open'); 
+                    icon.removeClass('fa-chevron-down').addClass('fa-chevron-right');
+                    childRows.find('.expand-icon').removeClass('fa-chevron-down').addClass('fa-chevron-right');
+                } else {
+                    $(this).addClass('open');
+                    childRows.addClass('open'); 
+                    icon.removeClass('fa-chevron-right').addClass('fa-chevron-down');
+                }
+            });
+
+            $(document).on('click', '.customer-row', function (e) {
+                if($(e.target).closest('.btn-mutabakat').length > 0) return;
+                
+                const card = $(this).data('card');
+                const rep = $(this).data('rep');
+                const detailRow = $(`.detail-row.rep-${rep}.cust-${card}`);
+                const icon = $(this).find('.expand-icon');
+
+                if ($(this).hasClass('open')) {
+                    $(this).removeClass('open');
+                    detailRow.removeClass('open');
+                    icon.removeClass('fa-chevron-down').addClass('fa-chevron-right');
+                } else {
+                    $(this).addClass('open');
+                    detailRow.addClass('open');
+                    icon.removeClass('fa-chevron-right').addClass('fa-chevron-down');
+                }
+            });
+
+            $('#btnCalculate').click(function () {
+                const year = $('#filterYear').val();
+                const month = $('#filterMonth').val();
+                $('.loadingOverlay').css('display', 'flex');
+                
+                $.ajax({
+                    url: '/Rapor136/GetConsolidatedData',
+                    type: 'GET',
+                    data: { year: year, month: month },
+                    success: function (res) {
+                        if (res.success) {
+                            renderTable(res.data);
+                            $('#kpiPersonnel').text(res.kpis.personnelCount);
+                            $('#kpiTotalSales').text(formatNumber(res.kpis.totalSales) + ' ₺');
+                            let changeClass = res.kpis.totalOverdueChange > 0 ? 'text-danger' : 'text-success';
+                            let changeIcon = res.kpis.totalOverdueChange > 0 ? '▲' : '▼';
+                            $('#kpiOverdueChange').html(`<span class="${changeClass}">${changeIcon} ${formatNumber(res.kpis.totalOverdueChange)} ₺</span>`);
+                            $('#kpiTotalPremium').text(formatNumber(res.kpis.totalPremium) + ' ₺');
+                        } else {
+                            toastr.error(res.message);
+                        }
+                    },
+                    error: () => toastr.error('Sunucu hatası.'),
+                    complete: () => $('.loadingOverlay').hide()
+                });
+            });
+            
+            $('#btnCalculate').click();
+            initReconciliationLogic();
+        });
+
+        function buildRows(person, tbody, isForeignTab) {
+            let safeRep = person.salesPersonName.replace(/[^a-zA-Z0-9]/g, '');
+            let colCount = isForeignTab ? 10 : 9;
+            
+            // Satış Temsilcisi Master Satırı
+            let repRow = `<tr class="master-row fw-bold" style="background-color:#fff;" data-rep="${safeRep}">
+                <td class="text-center"><i class="fas fa-chevron-right text-muted expand-icon"></i></td>
+                <td><span class="badge-soft-primary" style="font-size:12px;"><i class="fas fa-user-tie me-1"></i>${person.salesPersonName}</span></td>
+                <td class="text-center">-</td>
+                ${isForeignTab ? `<td class="num text-info">${formatNumber(person.totalQuantity)}</td>` : ''}
+                <td class="num">${formatNumber(person.totalNetSales)}</td>
+                <td class="num text-primary">${formatNumber(person.totalSalesPremium)}</td>
+                <td class="num ${person.totalOverdueChange > 0 ? 'text-danger' : 'text-success'}">${person.totalOverdueChange > 0 ? '+' : ''}${formatNumber(person.totalOverdueChange)}</td>
+                <td class="num ${person.totalOverdueEffect < 0 ? 'text-danger' : 'text-success'}">${formatNumber(person.totalOverdueEffect)}</td>
+                <td class="num text-success" style="font-size:14px !important; font-weight:900;">${formatNumber(person.totalFinalPremium)} ₺</td>
+                <td></td>
+            </tr>`;
+            tbody.append(repRow);
+            
+            // Müşteriler (Child)
+            person.customers.forEach((cust) => {
+                let safeCard = cust.cardCode.replace(/[^a-zA-Z0-9]/g, '');
+                
+                let openBadge = cust.hasOpenTransactions 
+                    ? `<span class="badge bg-danger"><i class="fas fa-exclamation-circle me-1"></i> Eşleşebilir İşlem Var</span>` 
+                    : `<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i> Eşleşecek İşlem Yok</span>`;
+                    
+                let mutabakatBtn = `<button class="btn btn-sm btn-outline-primary btn-mutabakat fw-bold" data-cardcode="${cust.cardCode}" data-cardname="${cust.cardName.replace(/"/g, '&quot;')}">
+                                        <i class="fas fa-handshake"></i> Kapama / Mutabakat Yap
+                                     </button>`;
+
+                let custRow = `<tr class="customer-row rep-${safeRep}" data-rep="${safeRep}" data-card="${safeCard}">
+                    <td></td>
+                    <td class="ps-4 fw-bold text-dark"><i class="fas fa-chevron-right text-muted expand-icon me-2" style="font-size:10px;"></i>${cust.cardCode} - <span class="col-truncate-md d-inline-block align-bottom" title="${cust.cardName}">${cust.cardName}</span></td>
+                    <td class="text-center">${openBadge}</td>
+                    ${isForeignTab ? `<td class="num text-info">${formatNumber(cust.totalQuantity)}</td>` : ''}
+                    <td class="num">${formatNumber(cust.totalNetSales)}</td>
+                    <td class="num text-primary">${formatNumber(cust.totalSalesPremium)}</td>
+                    <td class="num ${cust.totalOverdueChange > 0 ? 'text-danger' : 'text-success'}">${formatNumber(cust.totalOverdueChange)}</td>
+                    <td class="num ${cust.totalOverdueEffect < 0 ? 'text-danger' : 'text-success'}">${formatNumber(cust.totalOverdueEffect)}</td>
+                    <td class="num fw-bold text-success">${formatNumber(cust.totalFinalPremium)}</td>
+                    <td class="text-center">${mutabakatBtn}</td>
+                </tr>`;
+                tbody.append(custRow);
+                
+                // Müşteri İçi Şirket Detayları (Sub-Table)
+                let detailsHtml = `<tr class="detail-row rep-${safeRep} cust-${safeCard}"><td colspan="${colCount}" class="p-0 border-0"><div class="sub-table"><table class="table table-sm m-0">
+                                <thead><tr>
+                                    <th>Şirket (DB)</th>
+                                    ${isForeignTab ? `<th class="text-end text-info">Miktar</th>` : ''}
+                                    <th class="text-end">Aylık Net Satış</th>
+                                    <th class="text-end">Satış Primi</th>
+                                    <th class="text-end">Önc.Ay VadeGeçmiş</th>
+                                    <th class="text-end">Bu Ay VadeGeçmiş</th>
+                                    <th class="text-end">Bakiye Değişimi</th>
+                                    <th class="text-end">Bakiye Etkisi</th>
+                                    <th class="text-end">Net Prim</th>
+                                </tr></thead><tbody>`;
+                                
+                cust.details.forEach(det => {
+                    let changeCls = det.overdueChange > 0 ? 'text-danger' : 'text-success';
+                    let effectCls = det.overdueEffect < 0 ? 'text-danger fw-bold' : 'text-success fw-bold';
+                    detailsHtml += `<tr>
+                        <td><span class="badge-soft-secondary">${det.companyName}</span></td>
+                        ${isForeignTab ? `<td class="num text-info">${formatNumber(det.totalQuantity)}</td>` : ''}
+                        <td class="num">${formatNumber(det.netSales)}</td>
+                        <td class="num text-primary">${formatNumber(det.salesPremium)}</td>
+                        <td class="num text-muted">${formatNumber(det.prevMonthOverdue)}</td>
+                        <td class="num text-muted">${formatNumber(det.currMonthOverdue)}</td>
+                        <td class="num ${changeCls}">${formatNumber(det.overdueChange)}</td>
+                        <td class="num ${effectCls}">${formatNumber(det.overdueEffect)}</td>
+                        <td class="num fw-bold">${formatNumber(det.finalPremium)}</td>
+                    </tr>`;
+                });
+                detailsHtml += `</tbody></table></div></td></tr>`;
+                tbody.append(detailsHtml);
+            });
+        }
+
+        function renderTable(data) {
+            const tbodyDomestic = $('#premiumTableBodyDomestic');
+            const tbodyForeign = $('#premiumTableBodyForeign');
+            tbodyDomestic.empty();
+            tbodyForeign.empty();
+
+            let domesticData = data.filter(x => !x.isForeign);
+            let foreignData = data.filter(x => x.isForeign);
+
+            if (domesticData.length === 0) {
+                tbodyDomestic.append('<tr><td colspan="9" class="text-center text-muted py-5"><i class="fas fa-folder-open fa-3x mb-3 opacity-25"></i><br>Yurtiçi kayıt bulunamadı.</td></tr>');
+            } else {
+                domesticData.forEach((person) => buildRows(person, tbodyDomestic, false));
+            }
+
+            if (foreignData.length === 0) {
+                tbodyForeign.append('<tr><td colspan="10" class="text-center text-muted py-5"><i class="fas fa-folder-open fa-3x mb-3 opacity-25"></i><br>Yurtdışı kayıt bulunamadı.</td></tr>');
+            } else {
+                foreignData.forEach((person) => buildRows(person, tbodyForeign, true));
+            }
+        }
+
+        let currentReconCardCode = '';
+        let currentTargetDb = ''; 
+        let openTransactionsData = []; 
+
+        function initReconciliationLogic() {
+            
+            $(document).on('click', '.btn-mutabakat', function (e) {
+                e.stopPropagation();
+                currentReconCardCode = $(this).data('cardcode');
+                const cardName = $(this).data('cardname');
+
+                $('#reconModalTitle').text(`Cari: ${currentReconCardCode} - ${cardName}`);
+                loadAllCompaniesOpenTransactions(currentReconCardCode);
+            });
+
+            $(document).on('change', '.recon-check', calculateReconTotals);
+            $(document).on('input', '.recon-input', calculateReconTotals);
+
+            $('#chkAllDebit').change(function() { $('#tableDebit .recon-check').prop('checked', this.checked); calculateReconTotals(); });
+            $('#chkAllCredit').change(function() { $('#tableCredit .recon-check').prop('checked', this.checked); calculateReconTotals(); });
+
+            $('#btnSubmitRecon').click(function () {
+                const btn = $(this);
+                const lines = [];
+
+                $('.recon-check:checked').each(function () {
+                    const tr = $(this).closest('tr');
+                    const isDebit = tr.closest('table').attr('id') === 'tableDebit';
+                    let amount = parseFormattedNumber(tr.find('.recon-input').val());
+                    if (!isDebit) amount = -Math.abs(amount);
+
+                    lines.push({ TransId: parseInt(tr.data('transid')), LineId: parseInt(tr.data('lineid')), ReconcileAmount: amount, ReconcileAmountFC: 0 });
+                });
+
+                if (lines.length < 2) { toastr.warning('En az 1 Borç ve 1 Alacak işlemi seçmelisiniz.'); return; }
+                if (!currentTargetDb) { toastr.error('Şirket seçili değil.'); return; }
+
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> İşleniyor...');
+
+                $.ajax({
+                    url: '/Rapor136/PerformReconciliation',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    headers: { 'RequestVerificationToken': antiForgeryToken },
+                    data: JSON.stringify({ CardCode: currentReconCardCode, TargetDbName: currentTargetDb, Lines: lines, UseBpDueDate: false }),
+                    success: function (res) {
+                        if (res.success) {
+                            toastr.success(res.message);
+                            if (!res.isRobotPending) { 
+                                loadAllCompaniesOpenTransactions(currentReconCardCode); 
+                            } 
+                            else { 
+                                startRobotPolling(currentReconCardCode, currentTargetDb);
+                            }
+                        } else { toastr.error(res.message); }
+                    },
+                    error: () => toastr.error('İşlem sırasında sunucu hatası oluştu.'),
+                    complete: () => btn.prop('disabled', false).html('<i class="fas fa-check-circle me-2"></i> Seçilenleri Kapat')
+                });
+            });
+
+            $('#btnCancelReconSingle').click(function () {
+                if (!currentTargetDb) { toastr.error('Lütfen bir şirket sekmesi seçin.'); return; }
+                
+                Swal.fire({
+                    title: 'Emin misiniz?',
+                    text: currentTargetDb + " şirketindeki aktif SAP mutabakatları iptal edilecek!",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Evet, İptal Et!',
+                    cancelButtonText: 'Vazgeç'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        $.post('/Rapor136/CancelReconciliations', { cardCode: currentReconCardCode, targetDbName: currentTargetDb }, function(res) {
+                            if (res.success) {
+                                if (res.hasError) Swal.fire('Bilgi', res.message, 'warning');
+                                else Swal.fire('Başarılı!', res.message, 'success');
+                                loadAllCompaniesOpenTransactions(currentReconCardCode);
+                            } else {
+                                Swal.fire('Hata', res.message, 'error');
+                            }
+                        });
+                    }
+                });
+            });
+
+            $('#btnSaveManualMutabakat').click(function () {
+                $.get('/Rapor136/CheckUnreconciledForMutabakat', { cardCode: currentReconCardCode, isConsolidated: true }, function(checkRes) {
+                    if (checkRes.hasOpen) {
+                        Swal.fire({
+                            title: 'Açık İşlemler Var',
+                            text: checkRes.message,
+                            icon: 'warning',
+                            showCancelButton: true,
+                            confirmButtonText: 'Yine de Kaydet',
+                            cancelButtonText: 'İptal'
+                        }).then((res) => {
+                            if (res.isConfirmed) showManualReconPopup();
+                        });
+                    } else {
+                        showManualReconPopup();
+                    }
+                });
+            });
+
+            $('#btnAutoReconcileSingle').click(function () {
+                if (!currentTargetDb) { toastr.error('Lütfen bir şirket sekmesi seçin.'); return; }
+                $('#autoReconProgressContent').html(`<div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;"></div><h5 class="text-dark fw-bold">${currentTargetDb} Şirketinde Otomatik Kapanış Başlatılıyor...</h5>`);
+                $('#autoReconFooter').addClass('d-none');
+                $('#autoReconProgressModal').modal('show');
+                processAutoReconcileQueue([currentTargetDb], 0);
+            });
+
+            $('#btnAutoReconcileToplu').click(function () {
+                $('#autoReconProgressContent').html('<div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;"></div><h5 class="text-dark fw-bold">Tüm Şirketlerde Otomatik Kapanış Başlatılıyor...</h5>');
+                $('#autoReconFooter').addClass('d-none');
+                $('#autoReconProgressModal').modal('show');
+
+                let targetDbs = [];
+                $('#companyReconTabs button').each(function() { targetDbs.push($(this).data('dbname')); });
+                
+                if(targetDbs.length === 0) {
+                    $('#autoReconProgressContent').html(`<h4 class="text-danger">Kapatılacak açık işlem bulunan şirket yok.</h4>`);
+                    $('#autoReconFooter').removeClass('d-none');
+                    return;
+                }
+                processAutoReconcileQueue(targetDbs, 0);
+            });
+        }
+
+        function showManualReconPopup() {
+            Swal.fire({
+                title: 'Manuel Mutabakat Kaydet',
+                html: `
+                    <div style="text-align: left; font-size: 14px; margin-top: 10px;">
+                        <label class="form-label text-muted">Mutabakat Tarihi:</label>
+                        <input type="date" id="swal-recon-date" class="form-control mb-3" value="${new Date().toISOString().split('T')[0]}">
+                        <label class="form-label text-muted">Mutabakat Bakiyesi (TRY):</label>
+                        <input type="number" id="swal-recon-balance" class="form-control" placeholder="Örn: 1500 Veya -1500">
+                    </div>
+                `,
+                focusConfirm: false,
+                showCancelButton: true,
+                confirmButtonText: 'Kaydet',
+                cancelButtonText: 'İptal',
+                preConfirm: () => {
+                    const date = document.getElementById('swal-recon-date').value;
+                    const balance = document.getElementById('swal-recon-balance').value;
+                    if (!date || !balance) {
+                        Swal.showValidationMessage('Tarih ve Bakiye zorunludur');
+                    }
+                    return { date: date, balance: balance }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.post('/Rapor136/SaveManualMutabakat', { cardCode: currentReconCardCode, mutabakatTarihi: result.value.date, bakiye: result.value.balance, isConsolidated: true }, function(res) {
+                        if (res.success) toastr.success(res.message);
+                        else toastr.error(res.message);
+                    });
+                }
+            });
+        }
+        
+        function processAutoReconcileQueue(dbList, index) {
+            if(index >= dbList.length) {
+                $('#autoReconProgressContent').html(`<i class="fas fa-check-circle text-success fa-4x mb-3"></i><h4 class="text-dark fw-bold">İşlem Tamamlandı!</h4>`);
+                $('#autoReconFooter').removeClass('d-none');
+                return;
+            }
+            
+            let dbName = dbList[index];
+            $('#autoReconProgressContent').html(`<div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;"></div><h5 class="text-dark fw-bold">${dbName} şirketinde otomatik kapanış yapılıyor...</h5><p class="text-muted">(${index+1} / ${dbList.length})</p>`);
+
+            $.ajax({
+                url: '/Rapor136/AutoReconcile',
+                type: 'POST',
+                headers: { 'RequestVerificationToken': antiForgeryToken },
+                data: { cardCode: currentReconCardCode, targetDbName: dbName, useBpDueDate: false },
+                success: function (res) {
+                    processAutoReconcileQueue(dbList, index + 1);
+                },
+                error: function () {
+                    processAutoReconcileQueue(dbList, index + 1); 
+                }
+            });
+        }
+        
+        let robotInterval = null;
+        function startRobotPolling(matchedCardCode, dbName) {
+            Swal.fire({
+                title: isEnglishJS ? 'SAP UI Robot in Progress' : 'SAP UI Robot İşlemde',
+                html: `
+                    <p class="text-muted small">${isEnglishJS ? 'Running reconciliations in background...' : 'Arka planda kapanışlar yapılıyor...'}</p>
+                    <div id="robotStatusText" class="alert alert-warning fw-bold mt-2 border-warning">${isEnglishJS ? 'Waiting in queue...' : 'Robot sırası bekleniyor...'}</div>
+                `,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            if(robotInterval) clearInterval(robotInterval);
+            
+            robotInterval = setInterval(() => {
+                $.ajax({
+                    url: '/Rapor136/GetRobotCheckStatus',
+                    type: 'GET',
+                    data: { matchedCardCode: matchedCardCode, dbName: dbName },
+                    success: function(res) {
+                        if (res.success) {
+                            $('#robotStatusText').html(res.statusMessage);
+                            if (res.isFinished) {
+                                clearInterval(robotInterval);
+                                Swal.fire(isEnglishJS ? 'Completed' : 'İşlem Tamamlandı', res.statusMessage, 'success').then(() => {
+                                    loadAllCompaniesOpenTransactions(currentReconCardCode);
+                                });
+                            }
+                        }
+                    }
+                });
+            }, 3000);
+        }
+
+        function loadAllCompaniesOpenTransactions(cardCode) {
+            $('#divTransactions').empty().hide();
+            $('#reconTablesArea').hide();
+            $('#reconciliationModal').modal('show');
+            $('#reconModalTitle').append(' <i class="fas fa-spinner fa-spin ms-2" id="reconSpinner"></i>');
+
+            $.ajax({
+                url: '/Rapor136/GetOpenTransactions',
+                type: 'GET',
+                data: { cardCode: cardCode, targetDbName: '', isConsolidated: true, useBpDueDate: false },
+                success: function(res) {
+                    $('#reconSpinner').remove();
+                    if(res.success && res.data) {
+                        openTransactionsData = res.data;
+                        renderCompanyTabs(res.data);
+                    } else { toastr.error('Açık işlemler yüklenemedi: ' + res.message); }
+                },
+                error: function() { $('#reconSpinner').remove(); toastr.error('Bağlantı hatası.'); }
+            });
+        }
+
+        function renderCompanyTabs(data) {
+            var container = $('#divTransactions');
+            container.empty();
+            $('#reconTablesArea').hide();
+
+            if (data.length === 0) {
+                container.html('<div class="alert alert-success text-center py-4 fw-bold"><i class="fas fa-check-circle fa-2x d-block mb-2"></i> Bu carinin hiçbir şirketinde açık işlem bulunmuyor.</div>').show();
+                $('#btnCalculate').click();
+                return;
+            }
+
+            var groupedData = {};
+            data.forEach(function(item) {
+                var db = item.dbName;
+                if (!groupedData[db]) { groupedData[db] = { companyName: item.companyName, items: [] }; }
+                groupedData[db].items.push(item);
+            });
+
+            var tabsHtml = '<ul class="nav nav-pills mb-3 mt-2" id="companyReconTabs" role="tablist">';
+            var isFirst = true;
+            for (var db in groupedData) {
+                var comp = groupedData[db];
+                var activeClass = isFirst ? 'active' : '';
+                tabsHtml += `
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link ${activeClass} fw-bold shadow-sm me-2" id="tab-${db}" data-bs-toggle="pill" type="button" role="tab" data-dbname="${db}">
+                            <i class="fas fa-building me-1"></i> ${comp.companyName}
+                            <span class="badge bg-danger ms-2">${comp.items.length}</span>
+                        </button>
+                    </li>`;
+                if (isFirst) { currentTargetDb = db; isFirst = false; }
+            }
+            tabsHtml += '</ul>';
+            container.html(tabsHtml).show();
+
+            $('#lblSingleReconBtn').text(currentTargetDb + ' Şirketinde Kapat');
+            $('#lblSingleCancelBtn').text(currentTargetDb + ' Şirketinde İptal Et');
+            fillDebitCreditTables(currentTargetDb);
+            $('#reconTablesArea').fadeIn();
+
+            $('button[data-bs-toggle="pill"]').on('shown.bs.tab', function (e) {
+                currentTargetDb = $(e.target).data('dbname');
+                $('#lblSingleReconBtn').text(currentTargetDb + ' Şirketinde Kapat');
+                $('#lblSingleCancelBtn').text(currentTargetDb + ' Şirketinde İptal Et');
+                fillDebitCreditTables(currentTargetDb);
+            });
+        }
+
+        function fillDebitCreditTables(dbName) {
+            $('#tableDebit tbody, #tableCredit tbody').empty();
+            $('#btnSubmitRecon').prop('disabled', true);
+            $('#chkAllDebit, #chkAllCredit').prop('checked', false);
+
+            let items = openTransactionsData.filter(x => x.dbName === dbName);
+            let hasData = false;
+
+            items.forEach(item => {
+                hasData = true;
+                let openAmt = item.openDebit > 0 ? item.openDebit : item.openCredit;
+                
+                let kfBadge = (item.kurFarkiParaBirimi && item.kurFarkiParaBirimi !== '') 
+                    ? `<span class="badge bg-success" title="Kur Farkı Para Birimi"><i class="fas fa-coins me-1"></i>KF: ${item.kurFarkiParaBirimi}</span>` 
+                    : '<span class="text-muted">-</span>';
+                    
+                let tr = `<tr data-transid="${item.transId}" data-lineid="${item.lineId}">
+                    <td class="text-center"><input type="checkbox" class="form-check-input recon-check"></td>
+                    <td>${item.transId}</td>
+                    <td>${item.docDate}</td>
+                    <td>${item.dueDate}</td>
+                    <td><span class="badge bg-secondary">${item.transType}</span></td>
+                    <td class="fw-bold text-dark">${item.islemTipi || item.aktarimTarihi || '-'}</td>
+                    <td><span class="badge bg-dark">${item.paraBirimi || 'TRY'}</span></td>
+                    <td class="text-center">${kfBadge}</td>
+                    <td class="text-truncate" style="max-width: 150px;" title="${item.memo}">${item.memo}</td>
+                    <td class="text-end fw-bold">${formatNumber(openAmt)}</td>
+                    <td class="p-1"><input type="text" class="form-control recon-input" value="${formatNumber(openAmt)}" data-max="${openAmt}"></td>
+                </tr>`;
+
+                if(item.openDebit > 0) $('#tableDebit tbody').append(tr);
+                if(item.openCredit > 0) $('#tableCredit tbody').append(tr);
+            });
+            
+            if(!hasData) {
+                $('#tableDebit tbody').append('<tr><td colspan="11" class="text-center text-muted">Açık borç işlemi yok.</td></tr>');
+                $('#tableCredit tbody').append('<tr><td colspan="11" class="text-center text-muted">Açık alacak işlemi yok.</td></tr>');
+            }
+
+            $('.recon-input').on('blur', function() {
+                let val = parseFormattedNumber($(this).val());
+                let max = parseFloat($(this).data('max'));
+                if(val > max) val = max;
+                if(val <= 0) { val = max; $(this).closest('tr').find('.recon-check').prop('checked', false); }
+                else { $(this).closest('tr').find('.recon-check').prop('checked', true); }
+                $(this).val(formatNumber(val));
+                calculateReconTotals();
+            });
+
+            calculateReconTotals();
+        }
+
+        function calculateReconTotals() {
+            let totDeb = 0, totCred = 0;
+            $('#tableDebit tbody tr').each(function() {
+                const chk = $(this).find('.recon-check');
+                if(chk.prop('checked')) { $(this).addClass('recon-selected-row'); totDeb += parseFormattedNumber($(this).find('.recon-input').val()); } 
+                else { $(this).removeClass('recon-selected-row'); }
+            });
+            $('#tableCredit tbody tr').each(function() {
+                const chk = $(this).find('.recon-check');
+                if(chk.prop('checked')) { $(this).addClass('recon-selected-row'); totCred += parseFormattedNumber($(this).find('.recon-input').val()); } 
+                else { $(this).removeClass('recon-selected-row'); }
+            });
+
+            $('#totalSelectedDebit').text(formatNumber(totDeb) + ' TL');
+            $('#totalSelectedCredit').text(formatNumber(totCred) + ' TL');
+
+            let diff = Math.abs(totDeb - totCred);
+            if (totDeb > 0 && totCred > 0 && diff === 0) {
+                $('#reconDifferenceText').html(`Fark: <span class="text-success"><i class="fas fa-check"></i> 0,00 TL (Dengeli)</span>`);
+                $('#btnSubmitRecon').prop('disabled', false);
+            } else {
+                $('#reconDifferenceText').html(`Fark: <span class="text-danger"><i class="fas fa-times"></i> ${formatNumber(diff)} TL</span>`);
+                $('#btnSubmitRecon').prop('disabled', true);
+            }
+        }
+
+        function refreshTableAndClose() {
+            $('#autoReconProgressModal').modal('hide');
+            if (currentReconCardCode) {
+                loadAllCompaniesOpenTransactions(currentReconCardCode);
+            }
+            $('#btnCalculate').click();
+        }
+    </script>
+}

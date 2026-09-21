@@ -1,0 +1,181 @@
+@{
+    ViewData["Title"] = "Mal Çıkışı";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-box me-2 text-primary"></i> Mal Çıkışı</h2>
+    <a class="btn btn-outline-secondary btn-sm" href="/UrasUretimStok/MalCikisiSablon"><i class="fas fa-file-excel me-1"></i>Excel Şablonu İndir</a>
+</div>
+<p class="text-muted mb-3">Depodan stok çıkışı (SAP Mal Çıkışı belgesi).</p>
+
+<div class="card dash-card mb-3">
+    <div class="card-body">
+        <div class="row g-2 mb-3">
+            <div class="col-6 col-md-2"><label class="form-label small fw-bold">Belge Tarihi</label><input type="date" id="fDocDate" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-2"><label class="form-label small fw-bold">Vergi Tarihi</label><input type="date" id="fTaxDate" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small fw-bold">Seri</label>
+                <select id="fSeries" class="form-select form-select-sm"><option value="">Varsayılan</option></select>
+            </div>
+            <div class="col-6 col-md-2"><label class="form-label small fw-bold">Referans</label><input type="text" id="fRef2" class="form-control form-control-sm"></div>
+            <div class="col-12 col-md-3"><label class="form-label small fw-bold">Açıklama</label><input type="text" id="fComments" class="form-control form-control-sm"></div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-bold small text-uppercase text-muted">Satırlar</span>
+            <div class="d-flex gap-2">
+                <input type="text" id="fKalemAra" class="form-control form-control-sm" style="width:260px" placeholder="Kalem kodu/adı ara, seçmek için tıkla…" autocomplete="off">
+                <button class="btn btn-outline-primary btn-sm" onclick="satirEkleBos()"><i class="fas fa-plus me-1"></i>Boş Satır</button>
+            </div>
+        </div>
+        <div id="kalemSonuclar" class="list-group position-relative" style="max-height:220px; overflow-y:auto; display:none; z-index:20;"></div>
+
+        <div class="table-responsive">
+            <table class="table table-sm table-custom mb-0">
+                <thead><tr><th>Kalem</th><th style="width:110px">Miktar</th><th style="width:130px">Depo</th><th style="width:110px">Birim Fiyat</th><th style="width:170px">Parti No</th><th style="width:40px"></th></tr></thead>
+                <tbody id="tbodySatirlar"></tbody>
+            </table>
+        </div>
+        <div id="satirBos" class="text-center text-muted py-3">Henüz satır eklenmedi. Yukarıdan kalem arayın.</div>
+
+        <div class="d-flex justify-content-end mt-3">
+            <button class="btn btn-primary" onclick="kaydet()" id="btnKaydet"><i class="fas fa-check me-1"></i>Mal Çıkışını Kaydet</button>
+        </div>
+    </div>
+</div>
+
+<div class="card dash-card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-bold small text-uppercase text-muted">Son Mal Çıkışları</span>
+        <input type="text" id="fGecmisAra" class="form-control form-control-sm" style="width:220px" placeholder="Ara…" onkeydown="if(event.key==='Enter') gecmisYukle()">
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover table-custom mb-0">
+            <thead><tr><th>Belge No</th><th>Tarih</th><th>Referans</th><th>Açıklama</th><th class="text-end">Tutar</th><th class="text-end">Satır</th></tr></thead>
+            <tbody id="tbodyGecmis"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="detayModal" tabindex="-1">
+    <div class="modal-dialog modal-lg"><div class="modal-content">
+        <div class="modal-header"><h6 class="modal-title fw-bold">Belge Detayı</h6><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body"><table class="table table-sm table-custom mb-0"><thead><tr><th>Kalem</th><th class="text-end">Miktar</th><th>Depo</th><th class="text-end">Fiyat</th><th class="text-end">Tutar</th></tr></thead><tbody id="tbodyDetay"></tbody></table></div>
+    </div></div>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; color: #5a5c69; }
+    .list-group-item-action:hover { background: #eef2ff; cursor: pointer; }
+</style>
+
+<script>
+    let satirlar = [], kalemCache = [];
+    function bugun() { return new Date().toISOString().slice(0, 10); }
+
+    async function seriYukle() {
+        const res = await fetch('/UrasUretimStok/GetMalCikisiSeries').then(r => r.json());
+        if (res.success) {
+            const sel = document.getElementById('fSeries');
+            res.data.forEach(s => { const o = document.createElement('option'); o.value = s.Series; o.textContent = s.SeriesName; sel.appendChild(o); });
+        }
+    }
+
+    let aramaZamanlayici = null;
+    document.getElementById('fKalemAra').addEventListener('input', function () {
+        clearTimeout(aramaZamanlayici);
+        const q = this.value.trim();
+        if (q.length < 2) { document.getElementById('kalemSonuclar').style.display = 'none'; return; }
+        aramaZamanlayici = setTimeout(async () => {
+            const res = await fetch('/UrasUretimStok/GetItemsForMalGirisi?search=' + encodeURIComponent(q)).then(r => r.json());
+            if (!res.success) return;
+            kalemCache = res.data || [];
+            const el = document.getElementById('kalemSonuclar');
+            el.innerHTML = kalemCache.map(k => `<button type="button" class="list-group-item list-group-item-action py-2" onclick="kalemSec('${k.ItemCode}')"><b>${k.ItemCode}</b> — ${k.ItemName} <span class="text-muted small">(${k.InvntryUom || ''})</span></button>`).join('') || '<div class="list-group-item text-muted">Sonuç yok</div>';
+            el.style.display = '';
+        }, 300);
+    });
+
+    async function kalemSec(itemCode) {
+        const k = kalemCache.find(x => x.ItemCode === itemCode);
+        if (!k) return;
+        const satir = { ItemCode: k.ItemCode, ItemName: k.ItemName, Quantity: 1, WarehouseCode: k.WhsCode || '', UnitPrice: 0, ManBtchNum: k.ManBtchNum, BatchNumber: '', Partiler: [] };
+        if (k.ManBtchNum) {
+            const res = await fetch('/UrasUretimStok/GetBatchesForMalCikisi?itemCode=' + encodeURIComponent(k.ItemCode) + '&whsCode=' + encodeURIComponent(k.WhsCode || '')).then(r => r.json());
+            if (res.success) satir.Partiler = res.data || [];
+        }
+        satirlar.push(satir);
+        document.getElementById('kalemSonuclar').style.display = 'none';
+        document.getElementById('fKalemAra').value = '';
+        cizSatirlar();
+    }
+    function satirEkleBos() { satirlar.push({ ItemCode: '', ItemName: '', Quantity: 1, WarehouseCode: '', UnitPrice: 0, ManBtchNum: false, BatchNumber: '', Partiler: [] }); cizSatirlar(); }
+    function satirSil(i) { satirlar.splice(i, 1); cizSatirlar(); }
+
+    function cizSatirlar() {
+        document.getElementById('satirBos').style.display = satirlar.length ? 'none' : '';
+        document.getElementById('tbodySatirlar').innerHTML = satirlar.map((s, i) => `
+            <tr>
+                <td><input type="text" class="form-control form-control-sm" value="${s.ItemCode}" oninput="satirlar[${i}].ItemCode=this.value" placeholder="Kalem kodu"><div class="text-muted small">${s.ItemName || ''}</div></td>
+                <td><input type="number" step="any" class="form-control form-control-sm" value="${s.Quantity}" oninput="satirlar[${i}].Quantity=parseFloat(this.value)||0"></td>
+                <td><input type="text" class="form-control form-control-sm" value="${s.WarehouseCode}" oninput="satirlar[${i}].WarehouseCode=this.value" placeholder="Depo"></td>
+                <td><input type="number" step="any" class="form-control form-control-sm" value="${s.UnitPrice}" oninput="satirlar[${i}].UnitPrice=parseFloat(this.value)||0"></td>
+                <td>${s.ManBtchNum
+                    ? (s.Partiler && s.Partiler.length
+                        ? `<select class="form-select form-select-sm" onchange="satirlar[${i}].BatchNumber=this.value"><option value="">Parti seç…</option>${s.Partiler.map(p => `<option value="${p.DistNumber}" ${s.BatchNumber === p.DistNumber ? 'selected' : ''}>${p.DistNumber} (${p.Quantity})</option>`).join('')}</select>`
+                        : '<span class="text-muted small">Stokta parti yok</span>')
+                    : '<span class="text-muted small">—</span>'}</td>
+                <td><button class="btn btn-sm btn-outline-danger" onclick="satirSil(${i})"><i class="fas fa-trash"></i></button></td>
+            </tr>`).join('');
+    }
+
+    async function kaydet() {
+        if (!satirlar.length) { alert('En az bir satır eklemelisiniz.'); return; }
+        for (const s of satirlar) {
+            if (!s.ItemCode || !s.WarehouseCode || !(s.Quantity > 0)) { alert('Her satırda kalem kodu, depo ve miktar (>0) zorunludur.'); return; }
+            if (s.ManBtchNum && !s.BatchNumber) { alert(s.ItemCode + ' partili bir kalem; parti seçmelisiniz.'); return; }
+        }
+        document.getElementById('btnKaydet').disabled = true;
+        try {
+            const body = {
+                DocDate: document.getElementById('fDocDate').value || bugun(),
+                TaxDate: document.getElementById('fTaxDate').value || bugun(),
+                Ref2: document.getElementById('fRef2').value,
+                Comments: document.getElementById('fComments').value,
+                Series: parseInt(document.getElementById('fSeries').value) || 0,
+                Satirlar: satirlar
+            };
+            const res = await fetch('/UrasUretimStok/AddMalCikisi', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+            alert(res.message);
+            if (res.success) { satirlar = []; cizSatirlar(); gecmisYukle(); }
+        } finally { document.getElementById('btnKaydet').disabled = false; }
+    }
+
+    async function gecmisYukle() {
+        const qs = new URLSearchParams({ search: document.getElementById('fGecmisAra').value, page: 1, pageSize: 30 });
+        const res = await fetch('/UrasUretimStok/GetMalCikisiGecmis?' + qs.toString()).then(r => r.json());
+        if (!res.success) return;
+        document.getElementById('tbodyGecmis').innerHTML = (res.data.liste || []).map(g => `
+            <tr class="satir-tikla" style="cursor:pointer" onclick="detayGoster(${g.DocEntry})">
+                <td class="fw-bold">#${g.DocNum}</td><td>${g.DocDate}</td><td>${g.Ref2 || ''}</td><td>${g.Comments || ''}</td>
+                <td class="text-end">${(g.DocTotal || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td><td class="text-end">${g.SatirSayisi}</td></tr>`).join('')
+            || '<tr><td colspan="6" class="text-center text-muted py-3">Kayıt yok.</td></tr>';
+    }
+
+    async function detayGoster(docEntry) {
+        const res = await fetch('/UrasUretimStok/GetMalCikisiDetay?docEntry=' + docEntry).then(r => r.json());
+        if (!res.success) { alert(res.message); return; }
+        document.getElementById('tbodyDetay').innerHTML = (res.data || []).map(d => `
+            <tr><td>${d.ItemName}<div class="text-muted small">${d.ItemCode}</div></td>
+                <td class="text-end">${d.Quantity}</td><td>${d.WhsCode}</td><td class="text-end">${d.Price}</td><td class="text-end">${d.LineTotal}</td></tr>`).join('');
+        new bootstrap.Modal(document.getElementById('detayModal')).show();
+    }
+
+    document.getElementById('fDocDate').value = bugun();
+    document.getElementById('fTaxDate').value = bugun();
+    document.addEventListener('click', e => { if (!e.target.closest('#fKalemAra') && !e.target.closest('#kalemSonuclar')) document.getElementById('kalemSonuclar').style.display = 'none'; });
+    seriYukle();
+    gecmisYukle();
+</script>

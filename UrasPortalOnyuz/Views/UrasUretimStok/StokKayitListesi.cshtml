@@ -1,0 +1,126 @@
+@{
+    ViewData["Title"] = "Stok Kayıt Listesi";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-list-check me-2 text-primary"></i> Stok Kayıt Listesi</h2>
+    <button class="btn btn-outline-secondary btn-sm" onclick="excelAktar()"><i class="fas fa-file-excel me-1"></i>Excel'e Aktar</button>
+</div>
+<p class="text-muted mb-3">Tüm stok hareketleri (OINM) — belge tipine, depoya ve yöne göre filtrelenebilir.</p>
+
+<div class="row g-3 mb-3" id="ozetKartlari"></div>
+
+<div class="card dash-card p-3 mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-12 col-lg-3">
+            <label class="form-label small fw-bold">Arama</label>
+            <input type="text" id="fSearch" class="form-control form-control-sm" placeholder="Kalem, belge no, cari..." oninput="aramaDegisti()">
+        </div>
+        <div class="col-6 col-md-3 col-lg-2">
+            <label class="form-label small fw-bold">Depo</label>
+            <select id="fWarehouse" class="form-select form-select-sm" onchange="yenidenYukle()"><option value="">Tümü</option></select>
+        </div>
+        <div class="col-6 col-md-3 col-lg-2">
+            <label class="form-label small fw-bold">Belge Tipi</label>
+            <select id="fTransType" class="form-select form-select-sm" onchange="yenidenYukle()"><option value="">Tümü</option></select>
+        </div>
+        <div class="col-6 col-md-3 col-lg-2">
+            <label class="form-label small fw-bold">Yön</label>
+            <select id="fYon" class="form-select form-select-sm" onchange="yenidenYukle()"><option value="">Tümü</option><option value="giris">Giriş</option><option value="cikis">Çıkış</option></select>
+        </div>
+        <div class="col-6 col-md-3 col-lg-1"><label class="form-label small fw-bold">Başlangıç</label><input type="date" id="fBas" class="form-control form-control-sm" onchange="yenidenYukle()"></div>
+        <div class="col-6 col-md-3 col-lg-2"><label class="form-label small fw-bold">Bitiş</label><input type="date" id="fBit" class="form-control form-control-sm" onchange="yenidenYukle()"></div>
+    </div>
+</div>
+
+<div class="table-responsive shadow-sm rounded-3 border">
+    <table class="table table-hover table-custom mb-0">
+        <thead>
+            <tr><th>Tarih</th><th>Belge Tipi</th><th>Belge No</th><th>Cari</th><th>Kalem</th><th>Depo</th><th class="text-end">Giriş</th><th class="text-end">Çıkış</th><th class="text-end">Fiyat</th><th class="text-end">Tutar</th></tr>
+        </thead>
+        <tbody id="tbodyListe"></tbody>
+    </table>
+</div>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
+    <small class="text-muted" id="sayfaBilgi"></small>
+    <nav><ul class="pagination pagination-sm mb-0" id="paginasyon"></ul></nav>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; color: #5a5c69; }
+    .ozet-kart { background: #fff; border: 1px solid #e3e6f0; border-radius: 12px; padding: 14px 18px; height: 100%; }
+    .ozet-baslik { font-size: .7rem; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: #6c757d; }
+    .ozet-deger { font-size: 1.3rem; font-weight: 800; }
+</style>
+
+<script>
+    let currentPage = 1;
+    const pageSize = 50;
+    function fmt(n, d) { return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+
+    let aramaZamanlayici = null;
+    function aramaDegisti() { clearTimeout(aramaZamanlayici); aramaZamanlayici = setTimeout(yenidenYukle, 350); }
+    function yenidenYukle() { currentPage = 1; loadListe(); }
+
+    async function depolariYukle() {
+        const res = await fetch('/UrasUretimStok/GetWarehouses').then(r => r.json());
+        if (res.success) { const sel = document.getElementById('fWarehouse'); res.data.forEach(w => { const o = document.createElement('option'); o.value = w.WhsCode; o.textContent = w.WhsCode + ' — ' + w.WhsName; sel.appendChild(o); }); }
+    }
+    async function belgeTipleriYukle() {
+        const res = await fetch('/UrasUretimStok/GetStokKayitBelgeTipleri').then(r => r.json());
+        if (res.success) { const sel = document.getElementById('fTransType'); res.data.forEach(t => { const o = document.createElement('option'); o.value = t.TransType; o.textContent = t.BelgeTipi; sel.appendChild(o); }); }
+    }
+
+    function excelAktar() {
+        const qs = new URLSearchParams({
+            search: document.getElementById('fSearch').value, warehouse: document.getElementById('fWarehouse').value,
+            transType: document.getElementById('fTransType').value, yon: document.getElementById('fYon').value,
+            dateFrom: document.getElementById('fBas').value, dateTo: document.getElementById('fBit').value
+        });
+        window.location.href = '/UrasUretimStok/StokKayitListesiExcel?' + qs.toString();
+    }
+
+    async function loadListe() {
+        document.getElementById('tbodyListe').innerHTML = '<tr><td colspan="10" class="text-center py-5 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Yükleniyor...</td></tr>';
+        const qs = new URLSearchParams({
+            search: document.getElementById('fSearch').value, warehouse: document.getElementById('fWarehouse').value,
+            transType: document.getElementById('fTransType').value, yon: document.getElementById('fYon').value,
+            dateFrom: document.getElementById('fBas').value, dateTo: document.getElementById('fBit').value,
+            page: currentPage, pageSize
+        });
+        const res = await fetch('/UrasUretimStok/GetStokKayitListesi?' + qs.toString()).then(r => r.json());
+        if (!res.success) { document.getElementById('tbodyListe').innerHTML = `<tr><td colspan="10" class="text-center text-danger py-4">${res.message}</td></tr>`; return; }
+        const ozet = res.data.ozet || {}, liste = res.data.liste || [];
+        document.getElementById('ozetKartlari').innerHTML = `
+            <div class="col-12 col-md-4"><div class="ozet-kart"><div class="ozet-baslik">Toplam Kayıt</div><div class="ozet-deger">${fmt(ozet.ToplamKayit, 0)}</div></div></div>
+            <div class="col-6 col-md-4"><div class="ozet-kart"><div class="ozet-baslik text-success">Toplam Giriş</div><div class="ozet-deger text-success">${fmt(ozet.ToplamGiris, 2)}</div></div></div>
+            <div class="col-6 col-md-4"><div class="ozet-kart"><div class="ozet-baslik text-danger">Toplam Çıkış</div><div class="ozet-deger text-danger">${fmt(ozet.ToplamCikis, 2)}</div></div></div>`;
+        document.getElementById('tbodyListe').innerHTML = liste.map(k => `
+            <tr><td class="text-nowrap">${k.DocDate}</td><td>${k.BelgeTipi}</td><td class="fw-bold">${k.BelgeNo || ''}</td>
+                <td>${k.CardName || ''}<div class="text-muted small">${k.CardCode || ''}</div></td>
+                <td>${k.ItemName}<div class="text-muted small">${k.ItemCode}</div></td><td>${k.Warehouse}</td>
+                <td class="text-end text-success">${k.InQty > 0 ? fmt(k.InQty, 2) : ''}</td>
+                <td class="text-end text-danger">${k.OutQty > 0 ? fmt(k.OutQty, 2) : ''}</td>
+                <td class="text-end">${fmt(k.Price, 2)}</td><td class="text-end">${fmt(k.TransValue, 2)}</td></tr>`).join('')
+            || '<tr><td colspan="10" class="text-center text-muted py-4">Kayıt bulunamadı.</td></tr>';
+
+        const toplamSayfa = Math.max(1, Math.ceil((ozet.ToplamKayit || 0) / pageSize));
+        document.getElementById('sayfaBilgi').textContent = `Sayfa ${currentPage} / ${toplamSayfa} — toplam ${fmt(ozet.ToplamKayit, 0)} kayıt`;
+        let html = '';
+        const ekle = (p, label, disabled, active) => { html += `<li class="page-item ${disabled ? 'disabled' : ''} ${active ? 'active' : ''}"><a class="page-link" href="javascript:void(0)" onclick="${disabled ? '' : `gitSayfa(${p})`}">${label}</a></li>`; };
+        if (toplamSayfa > 1) {
+            ekle(1, '«', currentPage === 1, false); ekle(currentPage - 1, '‹', currentPage === 1, false);
+            for (let p = Math.max(1, currentPage - 2); p <= Math.min(toplamSayfa, currentPage + 2); p++) ekle(p, p, false, p === currentPage);
+            ekle(currentPage + 1, '›', currentPage === toplamSayfa, false); ekle(toplamSayfa, '»', currentPage === toplamSayfa, false);
+        }
+        document.getElementById('paginasyon').innerHTML = html;
+    }
+    function gitSayfa(p) { currentPage = p; loadListe(); }
+
+    depolariYukle();
+    belgeTipleriYukle();
+    loadListe();
+</script>

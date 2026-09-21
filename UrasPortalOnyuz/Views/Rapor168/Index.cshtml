@@ -1,0 +1,521 @@
+@{
+    ViewData["Title"] = "İBKB Beyanname Takibi";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string dbDisplay = (string)ViewBag.CurrentDbDisplay ?? "";
+    string dbKey = (string)ViewBag.CurrentDbKey ?? "DefaultConnection";
+    bool yonetici = (bool)(ViewBag.Yonetici ?? false);
+}
+
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+
+<style>
+    .ib-wrap { padding: 0 14px 30px; }
+    .ib-hero { background: linear-gradient(120deg, #1e1b4b 0%, #4338ca 55%, #6366f1 100%); color: #fff; border-radius: 16px; padding: 16px 22px; margin: 14px 0 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; box-shadow: 0 10px 30px -12px rgba(67,56,202,.55); }
+    .ib-hero h1 { font-size: 1.25rem; font-weight: 700; margin: 0; }
+    .ib-hero p { margin: 3px 0 0; opacity: .92; font-size: .82rem; }
+    .ib-hero .db { background: rgba(255,255,255,.18); padding: 8px 14px; border-radius: 10px; font-weight: 600; font-size: .86rem; }
+    .ib-tabs { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .ib-tab { border: 1px solid #e2e8f0; background: #fff; border-radius: 10px; padding: 9px 16px; font-weight: 600; font-size: .86rem; color: #475569; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+    .ib-tab .cnt { font-size: .72rem; background: #e2e8f0; color: #475569; border-radius: 20px; padding: 1px 9px; }
+    .ib-tab.active { background: linear-gradient(135deg, #4338ca, #6366f1); color: #fff; border-color: transparent; box-shadow: 0 6px 14px rgba(67,56,202,.25); }
+    .ib-tab.active .cnt { background: rgba(255,255,255,.25); color: #fff; }
+    .ib-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 4px 14px -8px rgba(15,23,42,.15); overflow: hidden; margin-bottom: 12px; }
+    .ib-toolbar { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid #eef2f7; flex-wrap: wrap; font-size: .82rem; color: #475569; }
+    .ib-toolbar input[type=text], .ib-toolbar input[type=date], .ib-toolbar select { border: 1px solid #d7dce5; border-radius: 8px; padding: 7px 9px; font-size: .84rem; }
+    .ib-search { flex: 1; min-width: 220px; }
+    .ib-btn { border: none; border-radius: 9px; padding: 8px 14px; font-weight: 700; font-size: .82rem; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+    .ib-btn.p { background: #4338ca; color: #fff; } .ib-btn.p:hover { background: #3730a3; }
+    .ib-btn.s { background: #fff; color: #334155; border: 1px solid #d7dce5; }
+    .ib-btn.g { background: #16a34a; color: #fff; }
+    .ib-btn.d { background: #fee2e2; color: #b91c1c; }
+    .ib-btn:disabled { opacity: .5; cursor: default; }
+    .ib-ozet { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; padding: 12px 14px; border-bottom: 1px solid #eef2f7; }
+    .ib-oz { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; background: #fff; cursor: pointer; }
+    .ib-oz.on { border-color: #4338ca; background: #eef2ff; }
+    .ib-oz .n { font-size: 1.25rem; font-weight: 800; color: #0f172a; } .ib-oz .t { font-size: .7rem; color: #64748b; font-weight: 600; text-transform: uppercase; }
+    .ib-oz.kirmizi .n { color: #b91c1c; } .ib-oz.sari .n { color: #b45309; } .ib-oz.yesil .n { color: #15803d; }
+    .ib-dovizler { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 14px 10px; font-size: .76rem; color: #475569; }
+    .ib-dovizler span { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 20px; padding: 3px 10px; }
+    .ib-tablewrap { overflow: auto; max-height: calc(100vh - 380px); }
+    table.ib { width: 100%; border-collapse: collapse; font-size: .8rem; white-space: nowrap; }
+    table.ib thead th { position: sticky; top: 0; background: #f8fafc; color: #334155; font-weight: 700; font-size: .68rem; text-transform: uppercase; padding: 8px 10px; border-bottom: 2px solid #e2e8f0; text-align: left; z-index: 2; }
+    table.ib tbody td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; color: #1e293b; vertical-align: middle; }
+    table.ib tbody tr:hover td { background: #f8fafc; }
+    table.ib .r { text-align: right; font-variant-numeric: tabular-nums; }
+    .bd { display: inline-block; font-size: .68rem; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+    .bd.ACIK { background: #fef3c7; color: #92400e; } .bd.KAPANDI { background: #dcfce7; color: #166534; } .bd.MUAF { background: #e2e8f0; color: #475569; }
+    .bd.TAM { background: #dbeafe; color: #1d4ed8; } .bd.KISMI { background: #ede9fe; color: #6d28d9; } .bd.BELIRSIZ { background: #fee2e2; color: #b91c1c; }
+    .bd.EVET { background: #dbeafe; color: #1d4ed8; } .bd.HAYIR { background: #e2e8f0; color: #475569; }
+    .gun.gecti { color: #b91c1c; font-weight: 700; } .gun.yakin { color: #b45309; font-weight: 700; } .gun.ok { color: #15803d; }
+    .kod { font-family: Consolas, monospace; font-weight: 700; color: #3730a3; }
+    .ib-empty { text-align: center; color: #94a3b8; padding: 50px 20px; }
+    /* modal */
+    /* Tam ekran örtü: body'ye taşınır (_Layout modalleriBodyeTasi), böylece .table-container içinde kesilmez.
+       Yükseklik zoom'dan bağımsız olsun diye 100% kullanılır (vh CSS zoom ile çarpılır). */
+    .ib-modal-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,.55); display: none; align-items: flex-start; justify-content: center; z-index: 2000; padding: 24px 12px; overflow: auto; box-sizing: border-box; }
+    .ib-modal-bg.on { display: flex; }
+    .ib-modal { background: #fff; border-radius: 14px; width: min(1080px, 96%); box-shadow: 0 30px 80px -20px rgba(15,23,42,.6); margin-bottom: 24px; }
+    .ib-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid #eef2f7; background: #f8fafc; border-radius: 14px 14px 0 0; }
+    .ib-modal-head h3 { margin: 0; font-size: 1rem; font-weight: 700; color: #1e1b4b; }
+    .ib-modal-head .x { border: none; background: transparent; font-size: 1.2rem; cursor: pointer; color: #64748b; }
+    .ib-modal-body { padding: 16px 18px; }
+    .ib-sec { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+    .ib-sec h4 { margin: 0 0 10px; font-size: .78rem; font-weight: 800; color: #4338ca; text-transform: uppercase; letter-spacing: .3px; display: flex; align-items: center; gap: 8px; }
+    .ib-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px; }
+    .ib-grid label { display: block; font-size: .68rem; font-weight: 700; color: #475569; margin-bottom: 3px; text-transform: uppercase; }
+    .ib-grid input, .ib-grid select, .ib-grid textarea { width: 100%; border: 1px solid #d7dce5; border-radius: 8px; padding: 7px 9px; font-size: .84rem; }
+    .ib-grid input[readonly] { background: #f8fafc; color: #64748b; }
+    .c2 { grid-column: span 2; } .c3 { grid-column: span 3; } .c4 { grid-column: span 4; } .c6 { grid-column: span 6; } .c12 { grid-column: span 12; }
+    @@media (max-width: 900px) { .c2, .c3, .c4, .c6 { grid-column: span 6; } }
+    .ib-hesap { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 10px; padding: 10px 14px; font-size: .82rem; color: #312e81; display: flex; gap: 18px; flex-wrap: wrap; }
+    .ib-hesap b { font-size: .95rem; }
+    .ib-dosya { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 10px; border: 1px solid #eef2f7; border-radius: 8px; margin-bottom: 6px; font-size: .8rem; }
+    .ib-dosya a { color: #1d4ed8; font-weight: 600; text-decoration: none; }
+    .ib-dosya .tur { font-size: .66rem; font-weight: 700; background: #ede9fe; color: #6d28d9; border-radius: 20px; padding: 1px 8px; }
+    .ib-note { background: #eef2ff; border: 1px solid #c7d2fe; color: #312e81; border-radius: 10px; padding: 10px 14px; font-size: .82rem; margin: 12px 14px; }
+</style>
+
+<div class="ib-wrap">
+    <div class="ib-hero">
+        <div>
+            <h1><i class="fa-solid fa-file-shield"></i> İBKB Beyanname Takibi</h1>
+            <p>İhracat beyannameleri, ülke / İBKB gerekliliği ve bankadan gelen İhracat Bedeli Kabul Belgeleri. Faturalar SAP'ten "İhracat Dosya No" alanıyla çekilir; vade = fiili ihraç tarihi + 180 gün.</p>
+        </div>
+        <div class="db"><i class="fa-solid fa-database"></i> @dbDisplay</div>
+    </div>
+
+    @if (ViewBag.Hata != null) { <div class="ib-note" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;">@ViewBag.Hata</div> }
+
+    <div class="ib-tabs">
+        <div class="ib-tab active" data-tab="liste"><i class="fa-solid fa-list-check"></i> Beyannameler <span class="cnt" id="cntListe">0</span></div>
+        <div class="ib-tab" data-tab="sap"><i class="fa-solid fa-file-invoice"></i> SAP Faturalarından Ekle <span class="cnt" id="cntSap">0</span></div>
+        <div class="ib-tab" data-tab="ulke"><i class="fa-solid fa-earth-europe"></i> Ülke Kuralları <span class="cnt" id="cntUlke">0</span></div>
+    </div>
+
+    @* ================= BEYANNAMELER ================= *@
+    <div class="ib-card" id="paneListe">
+        <div class="ib-ozet" id="ozet"></div>
+        <div class="ib-dovizler" id="dovizler"></div>
+        <div class="ib-toolbar">
+            <input type="text" id="lAra" class="ib-search" placeholder="Dosya no, fatura, cari, ülke, beyanname, İBKB no ara...">
+            <select id="lSirket"><option value="">Tüm şirketler</option></select>
+            <span id="lOzet" style="color:#64748b;"></span>
+            <button class="ib-btn p" style="margin-left:auto;" onclick="yeniBeyanname()"><i class="fa-solid fa-plus"></i> Elle Beyanname Ekle</button>
+            <a class="ib-btn s" id="btnExcel" href="/Rapor168/Excel"><i class="fa-solid fa-file-excel" style="color:#15803d;"></i> Excel</a>
+            @if (yonetici)
+            {
+                <button class="ib-btn s" id="btnVadeDuzelt" onclick="vadeTarihleriDuzelt()" title="Vade tarihi eskiden fiili ihraç tarihinden hesaplanıyordu; artık beyanname tarihinden. Bu, mevcut kayıtları da yeni kurala göre günceller.">
+                    <i class="fa-solid fa-calendar-check"></i> Vade Tarihlerini Düzelt
+                </button>
+            }
+            <button class="ib-btn s" onclick="listeYukle()"><i class="fa-solid fa-rotate"></i></button>
+        </div>
+        <div class="ib-tablewrap">
+            <table class="ib">
+                <thead><tr><th>Şirket</th><th>Dosya No</th><th>Fatura</th><th>Cari</th><th>Ülke</th><th>Beyanname</th><th>Fiili İhraç</th><th>Vade</th><th class="r">Beyanname Tutarı</th><th>Ülke / Oran</th><th class="r">Gereken</th><th>İBKB</th><th class="r">Getirilen</th><th class="r">Kalan</th><th>Durum</th><th>Belge</th><th></th></tr></thead>
+                <tbody id="lBody"><tr><td colspan="17" class="ib-empty">Yükleniyor...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    @* ================= SAP FATURALARI ================= *@
+    <div class="ib-card" id="paneSap" hidden>
+        <div class="ib-note"><b>@dbDisplay</b> şirketinin yurt dışı carilere kesilmiş faturaları. "Beyanname Oluştur" fatura bilgilerini (dosya no, cari, ülke, döviz, tutar) forma taşır; ihracat departmanı beyanname bilgilerini tamamlar. Dosya kartında (@@BE1_IHRACAT) beyanname no girilmişse otomatik gelir. Şirket değiştirmek için üstteki şirket seçiciyi kullanın.</div>
+        <div class="ib-toolbar">
+            <label>Başlangıç <input type="date" id="sB1"></label>
+            <label>Bitiş <input type="date" id="sB2"></label>
+            <label><input type="checkbox" id="sDosyali"> Sadece dosya numarası olanlar</label>
+            <label><input type="checkbox" id="sKayitsiz" checked> Sadece kayıtsız faturalar</label>
+            <input type="text" id="sAra" class="ib-search" placeholder="Fatura no, cari, ülke, dosya no ara...">
+            <button class="ib-btn p" onclick="sapYukle()"><i class="fa-solid fa-magnifying-glass"></i> Getir</button>
+            <span id="sOzet" style="color:#64748b;"></span>
+        </div>
+        <div class="ib-tablewrap">
+            <table class="ib">
+                <thead><tr><th>Fatura No</th><th>Tarih</th><th>Cari</th><th>Ülke</th><th>Dosya No</th><th>Döviz</th><th class="r">Tutar</th><th>Nakliye</th><th>Dosya Kartı Beyanname</th><th>Fatura</th><th>İBKB Kaydı</th><th></th></tr></thead>
+                <tbody id="sBody"><tr><td colspan="12" class="ib-empty">Tarih aralığını seçip Getir'e basın.</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    @* ================= ÜLKE KURALLARI ================= *@
+    <div class="ib-card" id="paneUlke" hidden>
+        <div class="ib-note"><b>Ülke gerekliliği</b> ihracat departmanı tarafından belirlenir. <b>TAM</b>: bedelin tamamı (%100) getirilir ve İBKB düzenlenir. <b>KISMİ</b>: belirtilen oran getirilir. <b>MUAF</b>: bedel getirme ve İBKB zorunluluğu yok. Kural tanımlı ülkeye ait beyanname kaydedilirken gereklilik ve oran otomatik dolar; kural yoksa "belirsiz" olur ve kayıtta elle seçilir.</div>
+        <div class="ib-toolbar">
+            <input type="text" id="uAra" class="ib-search" placeholder="Ülke ara...">
+            <label><input type="checkbox" id="uSadeceTanimli"> Sadece kural tanımlı</label>
+            <label><input type="checkbox" id="uSadeceKullanilan"> Sadece beyannamesi olan ülkeler</label>
+            <span id="uOzet" style="color:#64748b;"></span>
+        </div>
+        <div class="ib-tablewrap">
+            <table class="ib">
+                <thead><tr><th>Kod</th><th>Ülke</th><th>Beyanname</th><th>Gereklilik</th><th>Oran %</th><th>İBKB</th><th>Not</th><th>Güncelleyen</th><th></th></tr></thead>
+                <tbody id="uBody"><tr><td colspan="9" class="ib-empty">Yükleniyor...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@* ================= BEYANNAME MODALI ================= *@
+<div class="ib-modal-bg" id="bModal">
+    <div class="ib-modal">
+        <div class="ib-modal-head"><h3 id="bBaslik"><i class="fa-solid fa-file-shield"></i> Beyanname</h3><button class="x" onclick="modalKapat()">✕</button></div>
+        <div class="ib-modal-body">
+            <input type="hidden" id="bId" value="0"><input type="hidden" id="bFaturaDocEntry" value=""><input type="hidden" id="bCardCode" value="">
+            <div class="ib-sec">
+                <h4><i class="fa-solid fa-file-invoice"></i> Fatura (SAP)</h4>
+                <div class="ib-grid">
+                    <div class="c2"><label>Şirket</label><input type="text" id="bSirketDb" value="@dbDisplay"></div>
+                    <div class="c2"><label>İhracat Dosya No</label><input type="text" id="bDosyaNo" placeholder="2026-24"></div>
+                    <div class="c2"><label>Fatura No</label><input type="text" id="bFaturaNo"></div>
+                    <div class="c2"><label>Fatura Tarihi</label><input type="date" id="bFaturaTarihi"></div>
+                    <div class="c2"><label>Döviz</label><input type="text" id="bDoviz" placeholder="EUR"></div>
+                    <div class="c2"><label>Fatura Tutarı</label><input type="number" step="0.01" id="bFaturaTutar"></div>
+                    <div class="c6"><label>Cari</label><input type="text" id="bCardName"></div>
+                    <div class="c2"><label>Ülke Kodu</label><input type="text" id="bUlkeKodu" placeholder="PL" maxlength="5" oninput="ulkeKuraliUygula()"></div>
+                    <div class="c4"><label>Ülke</label><input type="text" id="bUlkeAdi"></div>
+                </div>
+            </div>
+            <div class="ib-sec">
+                <h4><i class="fa-solid fa-stamp"></i> Gümrük Beyannamesi <span style="font-weight:500; color:#64748b; text-transform:none;">ihracat departmanı girer</span></h4>
+                <div class="ib-grid">
+                    <div class="c3"><label>Beyanname No</label><input type="text" id="bBeyannameNo" placeholder="26341300EX000123"></div>
+                    <div class="c2"><label>Beyanname Tarihi</label><input type="date" id="bBeyannameTarihi" onchange="vadeHesapla()"></div>
+                    <div class="c2"><label>Fiili İhraç Tarihi</label><input type="date" id="bFiiliIhracTarihi" onchange="vadeHesapla()"></div>
+                    <div class="c2"><label>Vade (180 gün)</label><input type="date" id="bVadeTarihi"></div>
+                    <div class="c3"><label>Gümrük Müdürlüğü</label><input type="text" id="bGumruk"></div>
+                    <div class="c3"><label>Beyanname Tutarı (döviz)</label><input type="number" step="0.01" id="bBeyannameTutar" oninput="hesapGoster()"></div>
+                    <div class="c3"><label>Ülke Gerekliliği</label><select id="bUlkeGerekliligi" onchange="oranVarsayilan(); hesapGoster()"><option value="OTOMATIK">Otomatik (ülke kuralından)</option><option value="TAM">TAM (%100)</option><option value="KISMI">KISMİ</option><option value="MUAF">MUAF</option><option value="BELIRSIZ">Belirsiz</option></select></div>
+                    <div class="c2"><label>Getirme Oranı %</label><input type="number" step="1" min="0" max="100" id="bUlkeOran" oninput="hesapGoster()"></div>
+                    <div class="c2"><label>İBKB Gerekli mi?</label><select id="bIbkbGerekliligi"><option value="OTOMATIK">Otomatik</option><option value="EVET">Evet</option><option value="HAYIR">Hayır</option><option value="BELIRSIZ">Belirsiz</option></select></div>
+                    <div class="c2"><label>Durum</label><select id="bDurum"><option value="OTOMATIK">Otomatik</option><option value="ACIK">Açık</option><option value="KAPANDI">Kapandı</option><option value="MUAF">Muaf</option></select></div>
+                </div>
+            </div>
+            <div class="ib-sec">
+                <h4><i class="fa-solid fa-building-columns"></i> İBKB / DAB (banka)</h4>
+                <div class="ib-grid">
+                    <div class="c3"><label>İBKB No</label><input type="text" id="bIbkbNo"></div>
+                    <div class="c2"><label>İBKB Tarihi</label><input type="date" id="bIbkbTarihi"></div>
+                    <div class="c2"><label>İBKB Tutarı (döviz)</label><input type="number" step="0.01" id="bIbkbTutar" oninput="hesapGoster()"></div>
+                    <div class="c3"><label>Banka</label><input type="text" id="bIbkbBanka"></div>
+                    <div class="c2"><label>DAB No</label><input type="text" id="bDabNo"></div>
+                    <div class="c12"><label>Açıklama</label><textarea id="bAciklama" rows="2"></textarea></div>
+                </div>
+                <div class="ib-hesap" id="bHesap" style="margin-top:10px;"></div>
+            </div>
+            <div class="ib-sec" id="bDosyaSec">
+                <h4><i class="fa-solid fa-paperclip"></i> Belgeler <span id="bDosyaSayi" style="font-weight:500; color:#64748b; text-transform:none;"></span></h4>
+                <div id="bDosyaUyari" class="ib-note" style="margin:0 0 10px;" hidden>Belge yüklemek için önce beyannameyi kaydedin.</div>
+                <div id="bDosyaForm" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+                    <select id="bDosyaTur" style="border:1px solid #d7dce5; border-radius:8px; padding:7px 9px;"><option value="BEYANNAME">Gümrük Beyannamesi</option><option value="IBKB">İBKB</option><option value="DAB">DAB</option><option value="FATURA">Fatura</option><option value="DIGER">Diğer</option></select>
+                    <input type="file" id="bDosya" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.xlsx,.xls,.docx,.doc,.txt,.xml,.zip">
+                    <button class="ib-btn s" onclick="dosyaYukle()"><i class="fa-solid fa-upload"></i> Yükle</button>
+                </div>
+                <div id="bDosyalar"></div>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; justify-content:flex-end;">
+                <span id="bBilgi" style="font-size:.74rem; color:#64748b; margin-right:auto;"></span>
+                <button class="ib-btn d" id="bSil" onclick="beyannameSil()" hidden><i class="fa-solid fa-trash"></i> Sil</button>
+                <button class="ib-btn s" onclick="modalKapat()">Kapat</button>
+                <button class="ib-btn g" onclick="beyannameKaydet()"><i class="fa-solid fa-floppy-disk"></i> Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.js"></script>
+<script>
+    toastr.options = { positionClass: "toast-bottom-right", timeOut: 5000, progressBar: true };
+    const DB_DISPLAY = '@dbDisplay', YONETICI = @(yonetici ? "true" : "false"), KULLANICI = '@ViewBag.Kullanici';
+    function esc(s) { return (s == null ? "" : String(s)).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+    function tarih(s) { if (!s) return ''; const d = new Date(s); return isNaN(d) ? '' : d.toLocaleDateString('tr-TR'); }
+    function tarihInput(s) { if (!s) return ''; const d = new Date(s); return isNaN(d) ? '' : d.toISOString().substring(0, 10); }
+    function para(n) { return n == null ? '' : Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+    // ---- sekmeler
+    let aktif = 'liste';
+    document.querySelectorAll('.ib-tab').forEach(t => t.addEventListener('click', function () {
+        document.querySelectorAll('.ib-tab').forEach(x => x.classList.remove('active')); this.classList.add('active');
+        aktif = this.dataset.tab;
+        document.getElementById('paneListe').hidden = aktif !== 'liste';
+        document.getElementById('paneSap').hidden = aktif !== 'sap';
+        document.getElementById('paneUlke').hidden = aktif !== 'ulke';
+        if (aktif === 'sap' && !SAP) sapYukle();
+        if (aktif === 'ulke' && !ULKELER) ulkeYukle();
+    }));
+
+    // ---- liste
+    let LISTE = [], OZET = null, filtreDurum = null, ULKE_KURAL = {};
+    function listeYukle() {
+        const sirket = document.getElementById('lSirket').value;
+        fetch(`/Rapor168/Liste?sirket=${encodeURIComponent(sirket)}`).then(r => r.json()).then(res => {
+            if (!res.success) { toastr.error(res.message); return; }
+            LISTE = res.data || []; OZET = res.ozet;
+            const sel = document.getElementById('lSirket'); const mevcut = sel.value;
+            sel.innerHTML = '<option value="">Tüm şirketler</option>' + (res.sirketler || []).map(s => `<option value="${esc(s)}" ${s === mevcut ? 'selected' : ''}>${esc(s)}</option>`).join('');
+            document.getElementById('cntListe').textContent = OZET.acik;
+            ozetCiz(); listeCiz();
+        }).catch(e => toastr.error('Liste yüklenemedi: ' + e));
+    }
+    function ozetCiz() {
+        if (!OZET) return;
+        const k = (key, n, t, cls) => `<div class="ib-oz ${cls || ''} ${filtreDurum === key ? 'on' : ''}" onclick="ozetSec('${key}')"><div class="n">${n}</div><div class="t">${t}</div></div>`;
+        document.getElementById('ozet').innerHTML = k('', OZET.toplam, 'Toplam beyanname') + k('ACIK', OZET.acik, 'Açık (bedel bekleniyor)', 'sari') + k('GECEN', OZET.vadesiGecen, 'Vadesi geçen', 'kirmizi') + k('YAKIN', OZET.vadeYaklasan, '30 gün içinde vade', 'sari') + k('KAPANDI', OZET.kapandi, 'Kapandı (İBKB tamam)', 'yesil') + k('MUAF', OZET.muaf, 'Muaf');
+        let dHtml = (OZET.dovizler || []).map(d => `<span><b>${esc(d.doviz)}</b> açık: gereken ${para(d.gereken)} · getirilen ${para(d.getirilen)} · <b style="color:#b91c1c">kalan ${para(d.kalan)}</b></span>`).join('');
+        dHtml += `<span title="15.000$ eşiği aşan kısım, ülke oranıyla, beyanname tarihindeki kurla"><b>$ (15.000$ eşiği sonrası)</b> gereken ${para(OZET.gerekenUsdToplam)} · <b style="color:#b91c1c">kalan ${para(OZET.kalanUsdToplam)}</b>${OZET.kuruBulunamayan ? ` · <span style="color:#b45309;">${OZET.kuruBulunamayan} kayıtta kur bulunamadı</span>` : ''}</span>`;
+        document.getElementById('dovizler').innerHTML = dHtml;
+    }
+    function vadeTarihleriDuzelt() {
+        if (!confirm('Vade tarihi eskiden fiili ihraç tarihinden (yoksa beyanname tarihinden) hesaplanıyordu; artık öncelik beyanname tarihi. Bu, halihazırda kayıtlı beyannamelerin vade tarihini de (elle değiştirilmemişse) yeni kurala göre günceller. Devam edilsin mi?')) return;
+        const btn = document.getElementById('btnVadeDuzelt'); btn.disabled = true;
+        fetch('/Rapor168/VadeTarihleriDuzelt', { method: 'POST' }).then(r => r.json()).then(res => {
+            btn.disabled = false;
+            if (!res.success) { toastr.error(res.message || 'Düzeltilemedi'); return; }
+            toastr.success(res.message, '', { timeOut: 10000 });
+            listeYukle();
+        }).catch(e => { btn.disabled = false; toastr.error('Düzeltilemedi: ' + e); });
+    }
+    function ozetSec(k) { filtreDurum = (filtreDurum === k || k === '') ? null : k; ozetCiz(); listeCiz(); }
+    function gunHtml(b) {
+        if (b.durum !== 'ACIK' || b.kalanGun == null) return '';
+        const g = b.kalanGun; const cls = g < 0 ? 'gecti' : g <= 30 ? 'yakin' : 'ok';
+        return `<div class="gun ${cls}" style="font-size:.7rem;">${g < 0 ? Math.abs(g) + ' gün geçti' : g + ' gün kaldı'}</div>`;
+    }
+    function listeCiz() {
+        const q = document.getElementById('lAra').value.trim().toLocaleLowerCase('tr-TR');
+        let arr = LISTE.slice();
+        if (filtreDurum === 'GECEN') arr = arr.filter(b => b.durum === 'ACIK' && b.kalanGun != null && b.kalanGun < 0);
+        else if (filtreDurum === 'YAKIN') arr = arr.filter(b => b.durum === 'ACIK' && b.kalanGun != null && b.kalanGun >= 0 && b.kalanGun <= 30);
+        else if (filtreDurum) arr = arr.filter(b => b.durum === filtreDurum);
+        if (q) arr = arr.filter(b => [b.sirketDb, b.dosyaNo, b.faturaNo, b.cardName, b.ulkeAdi, b.ulkeKodu, b.beyannameNo, b.ibkbNo, b.dabNo, b.aciklama, b.ibkbBanka].join(' ').toLocaleLowerCase('tr-TR').includes(q));
+        document.getElementById('lOzet').textContent = arr.length + ' kayıt';
+        document.getElementById('btnExcel').href = '/Rapor168/Excel?sirket=' + encodeURIComponent(document.getElementById('lSirket').value) + (filtreDurum && ['ACIK', 'KAPANDI', 'MUAF'].includes(filtreDurum) ? '&durum=' + filtreDurum : '');
+        const tb = document.getElementById('lBody');
+        if (!arr.length) { tb.innerHTML = '<tr><td colspan="17" class="ib-empty">Kayıt yok. "SAP Faturalarından Ekle" sekmesinden ya da "Elle Beyanname Ekle" ile başlayın.</td></tr>'; return; }
+        tb.innerHTML = arr.map(b => `<tr onclick="beyannameAc(${b.id})" style="cursor:pointer;">
+            <td class="kod">${esc(b.sirketDb)}</td>
+            <td class="kod">${esc(b.dosyaNo || '—')}</td>
+            <td><b>${esc(b.faturaNo || '—')}</b><div style="font-size:.7rem; color:#64748b;">${tarih(b.faturaTarihi)}</div></td>
+            <td style="white-space:normal; max-width:220px;">${esc(b.cardName || '')}</td>
+            <td>${esc(b.ulkeAdi || b.ulkeKodu || '—')}</td>
+            <td>${b.beyannameNo ? `<b>${esc(b.beyannameNo)}</b><div style="font-size:.7rem; color:#64748b;">${tarih(b.beyannameTarihi)}</div>` : '<span style="color:#b91c1c; font-size:.74rem;">beyanname girilmedi</span>'}</td>
+            <td>${tarih(b.fiiliIhracTarihi) || '—'}</td>
+            <td>${tarih(b.vadeTarihi) || '—'}${gunHtml(b)}</td>
+            <td class="r">${para(b.beyannameTutar)} <span style="color:#64748b; font-size:.72rem;">${esc(b.doviz || '')}</span></td>
+            <td><span class="bd ${esc(b.ulkeGerekliligi || 'BELIRSIZ')}">${esc(b.ulkeGerekliligi || 'BELİRSİZ')}</span> <span style="font-size:.72rem; color:#64748b;">%${b.ulkeOran ?? 100}</span></td>
+            <td class="r">${para(b.gerekenTutar)}${b.gerekenTutarUsd != null ? `<div style="font-size:.7rem; color:#64748b;" title="15.000$ eşiği sonrası, beyanname tarihindeki kurla">$${para(b.gerekenTutarUsd)}</div>` : ''}</td>
+            <td>${b.ibkbNo ? `<b>${esc(b.ibkbNo)}</b><div style="font-size:.7rem; color:#64748b;">${tarih(b.ibkbTarihi)} ${esc(b.ibkbBanka || '')}</div>` : `<span class="bd ${esc(b.ibkbGerekliligi || 'BELIRSIZ')}">${b.ibkbGerekliligi === 'EVET' ? 'gerekli' : b.ibkbGerekliligi === 'HAYIR' ? 'gerekmez' : 'belirsiz'}</span>`}</td>
+            <td class="r">${para(b.ibkbTutar)}</td>
+            <td class="r ${b.kalanTutar > 0 && b.durum === 'ACIK' ? 'gun gecti' : ''}">${para(b.kalanTutar)}${b.kalanTutarUsd != null ? `<div style="font-size:.7rem; color:#64748b;">$${para(b.kalanTutarUsd)}</div>` : ''}</td>
+            <td><span class="bd ${esc(b.durum)}">${esc(b.durum)}</span></td>
+            <td>${b.dosyaSayisi ? `<i class="fa-solid fa-paperclip"></i> ${b.dosyaSayisi}` : '<span style="color:#cbd5e1;">—</span>'}</td>
+            <td><button class="ib-btn s" style="padding:4px 8px;" onclick="event.stopPropagation(); beyannameAc(${b.id})"><i class="fa-solid fa-pen"></i></button></td>
+        </tr>`).join('');
+    }
+    let lt; document.getElementById('lAra').addEventListener('input', () => { clearTimeout(lt); lt = setTimeout(listeCiz, 200); });
+    document.getElementById('lSirket').addEventListener('change', listeYukle);
+
+    // ---- SAP faturaları
+    let SAP = null;
+    (function () { const y = new Date().getFullYear(); document.getElementById('sB1').value = `${y}-01-01`; document.getElementById('sB2').value = new Date().toISOString().substring(0, 10); })();
+    function sapYukle() {
+        const b1 = document.getElementById('sB1').value, b2 = document.getElementById('sB2').value, sd = document.getElementById('sDosyali').checked;
+        document.getElementById('sBody').innerHTML = '<tr><td colspan="12" class="ib-empty"><i class="fa-solid fa-spinner fa-spin"></i> SAP\'ten çekiliyor...</td></tr>';
+        fetch(`/Rapor168/SapFaturalar?baslangic=${b1}&bitis=${b2}&sadeceDosyali=${sd}`).then(r => r.json()).then(res => {
+            if (!res.success) { toastr.error(res.message); document.getElementById('sBody').innerHTML = `<tr><td colspan="12" class="ib-empty">${esc(res.message)}</td></tr>`; return; }
+            SAP = res.data || []; sapCiz();
+        }).catch(e => toastr.error('SAP faturaları alınamadı: ' + e));
+    }
+    function sapCiz() {
+        if (!SAP) return;
+        const q = document.getElementById('sAra').value.trim().toLocaleLowerCase('tr-TR'), kayitsiz = document.getElementById('sKayitsiz').checked;
+        let arr = SAP.slice();
+        if (kayitsiz) arr = arr.filter(f => !f.kayitliId);
+        if (q) arr = arr.filter(f => [f.docNum, f.numAtCard, f.cardName, f.ulkeAdi, f.ulkeKodu, f.dosyaNo, f.beyannameNo].join(' ').toLocaleLowerCase('tr-TR').includes(q));
+        document.getElementById('cntSap').textContent = SAP.filter(f => !f.kayitliId).length;
+        document.getElementById('sOzet').textContent = `${arr.length} fatura (${SAP.filter(f => f.kayitliId).length} kayıtlı)`;
+        const tb = document.getElementById('sBody');
+        if (!arr.length) { tb.innerHTML = '<tr><td colspan="12" class="ib-empty">Fatura yok.</td></tr>'; return; }
+        tb.innerHTML = arr.map((f, i) => `<tr>
+            <td><b>${f.docNum}</b>${f.numAtCard && f.numAtCard !== 'NONE' && !/^0+$/.test(f.numAtCard) ? `<div style="font-size:.7rem; color:#64748b;">${esc(f.numAtCard)}</div>` : ''}</td>
+            <td>${tarih(f.docDate)}</td>
+            <td style="white-space:normal; max-width:240px;">${esc(f.cardName)}</td>
+            <td>${esc(f.ulkeAdi)} <span style="color:#94a3b8; font-size:.72rem;">${esc(f.ulkeKodu)}</span></td>
+            <td class="kod">${f.dosyaNo ? esc(f.dosyaNo) : '<span style="color:#b91c1c; font-weight:400; font-size:.74rem;">dosya no yok</span>'}</td>
+            <td>${esc(f.doviz)}</td>
+            <td class="r">${para(f.tutar)}</td>
+            <td>${tarih(f.nakliyeTarihi) || '—'}</td>
+            <td>${f.beyannameNo ? '<b>' + esc(f.beyannameNo) + '</b>' : '<span style="color:#94a3b8;">—</span>'}</td>
+            <td><span class="bd ${f.faturaDurum === 'Kapalı' ? 'KAPANDI' : 'ACIK'}">${esc(f.faturaDurum)}</span></td>
+            <td>${f.kayitliId ? `<span class="bd KAPANDI">kayıtlı #${f.kayitliId}</span>` : '<span class="bd BELIRSIZ">yok</span>'}</td>
+            <td>${f.kayitliId ? `<button class="ib-btn s" style="padding:4px 8px;" onclick="beyannameAc(${f.kayitliId})"><i class="fa-solid fa-pen"></i> Aç</button>` : `<button class="ib-btn p" style="padding:4px 10px;" onclick="sapDanOlustur(${SAP.indexOf(f)})"><i class="fa-solid fa-plus"></i> Beyanname Oluştur</button>`}</td>
+        </tr>`).join('');
+    }
+    document.getElementById('sAra').addEventListener('input', sapCiz);
+    document.getElementById('sKayitsiz').addEventListener('change', sapCiz);
+    document.getElementById('sDosyali').addEventListener('change', sapYukle);
+
+    // ---- ülke kuralları
+    let ULKELER = null;
+    function ulkeYukle() {
+        fetch('/Rapor168/UlkeKurallari').then(r => r.json()).then(res => {
+            if (!res.success) { toastr.error(res.message); return; }
+            ULKELER = res.data || []; ULKE_KURAL = {}; ULKELER.filter(u => u.tanimli).forEach(u => ULKE_KURAL[u.ulkeKodu] = u);
+            document.getElementById('cntUlke').textContent = ULKELER.filter(u => u.tanimli).length;
+            ulkeCiz();
+        }).catch(e => toastr.error('Ülke kuralları alınamadı: ' + e));
+    }
+    function ulkeCiz() {
+        if (!ULKELER) return;
+        const q = document.getElementById('uAra').value.trim().toLocaleLowerCase('tr-TR');
+        let arr = ULKELER.slice();
+        if (document.getElementById('uSadeceTanimli').checked) arr = arr.filter(u => u.tanimli);
+        if (document.getElementById('uSadeceKullanilan').checked) arr = arr.filter(u => u.beyannameSayisi > 0);
+        if (q) arr = arr.filter(u => (u.ulkeKodu + ' ' + u.ulkeAdi).toLocaleLowerCase('tr-TR').includes(q));
+        arr.sort((a, b) => (b.beyannameSayisi - a.beyannameSayisi) || (b.tanimli - a.tanimli) || a.ulkeAdi.localeCompare(b.ulkeAdi, 'tr'));
+        document.getElementById('uOzet').textContent = `${arr.length} ülke · ${ULKELER.filter(u => u.tanimli).length} kural tanımlı`;
+        document.getElementById('uBody').innerHTML = arr.map(u => `<tr data-kod="${esc(u.ulkeKodu)}" data-ad="${esc(u.ulkeAdi)}" class="${u.tanimli ? '' : ''}">
+            <td class="kod">${esc(u.ulkeKodu)}</td>
+            <td>${esc(u.ulkeAdi)}${u.tanimli ? '' : ' <span style="color:#94a3b8; font-size:.72rem;">tanımsız</span>'}</td>
+            <td>${u.beyannameSayisi || '—'}</td>
+            <td><select class="uG" onchange="ulkeOranAyar(this)" style="border:1px solid #d7dce5; border-radius:6px; padding:3px 6px;"><option value="TAM" ${u.gereklilik === 'TAM' || !u.tanimli ? 'selected' : ''}>TAM</option><option value="KISMI" ${u.gereklilik === 'KISMI' ? 'selected' : ''}>KISMİ</option><option value="MUAF" ${u.gereklilik === 'MUAF' ? 'selected' : ''}>MUAF</option></select></td>
+            <td><input type="number" class="uO" min="0" max="100" step="1" value="${u.tanimli ? u.oran : 100}" style="width:70px; border:1px solid #d7dce5; border-radius:6px; padding:3px 6px;" ${u.gereklilik === 'KISMI' ? '' : 'readonly'}></td>
+            <td><input type="checkbox" class="uI" ${u.tanimli ? (u.ibkbGerekli ? 'checked' : '') : 'checked'}></td>
+            <td><input type="text" class="uN" value="${esc(u.not)}" placeholder="not" style="width:220px; border:1px solid #d7dce5; border-radius:6px; padding:3px 6px;"></td>
+            <td style="font-size:.72rem; color:#64748b;">${u.guncelleyen ? esc(u.guncelleyen) + ' ' + tarih(u.guncellemeTarihi) : ''}</td>
+            <td style="white-space:nowrap;"><button class="ib-btn g" style="padding:4px 10px;" onclick="ulkeKaydet(this)"><i class="fa-solid fa-floppy-disk"></i></button> ${u.tanimli ? `<button class="ib-btn d" style="padding:4px 10px;" title="Kuralı sil (tanımsız yap)" onclick="ulkeKaydet(this, true)"><i class="fa-solid fa-trash"></i></button>` : ''}</td>
+        </tr>`).join('');
+    }
+    function ulkeOranAyar(sel) { const tr = sel.closest('tr'); const o = tr.querySelector('.uO'); if (sel.value === 'KISMI') { o.readOnly = false; if (Number(o.value) === 100 || Number(o.value) === 0) o.value = 50; } else { o.readOnly = true; o.value = sel.value === 'MUAF' ? 0 : 100; } }
+    function ulkeKaydet(btn, sil) {
+        const tr = btn.closest('tr');
+        const body = { ulkeKodu: tr.dataset.kod, ulkeAdi: tr.dataset.ad, gereklilik: tr.querySelector('.uG').value, oran: Number(tr.querySelector('.uO').value), ibkbGerekli: tr.querySelector('.uI').checked, not: tr.querySelector('.uN').value.trim(), sil: !!sil };
+        fetch('/Rapor168/UlkeKuraliKaydet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+            .then(r => r.json()).then(res => { if (res.success) { toastr.success(res.message); ulkeYukle(); } else toastr.error(res.message); }).catch(e => toastr.error('Hata: ' + e));
+    }
+    document.getElementById('uAra').addEventListener('input', ulkeCiz);
+    document.getElementById('uSadeceTanimli').addEventListener('change', ulkeCiz);
+    document.getElementById('uSadeceKullanilan').addEventListener('change', ulkeCiz);
+
+    // ---- modal
+    const ALANLAR = ['SirketDb', 'DosyaNo', 'FaturaNo', 'FaturaTarihi', 'Doviz', 'FaturaTutar', 'CardName', 'UlkeKodu', 'UlkeAdi', 'BeyannameNo', 'BeyannameTarihi', 'FiiliIhracTarihi', 'VadeTarihi', 'BeyannameTutar', 'UlkeGerekliligi', 'UlkeOran', 'IbkbGerekliligi', 'Durum', 'IbkbNo', 'IbkbTarihi', 'IbkbTutar', 'IbkbBanka', 'DabNo', 'Aciklama'];
+    function alanId(a) { return a === 'GumrukMudurlugu' ? 'bGumruk' : 'b' + a; }
+    function modalAc() { document.getElementById('bModal').classList.add('on'); }
+    function modalKapat() { document.getElementById('bModal').classList.remove('on'); }
+    document.getElementById('bModal').addEventListener('click', e => { if (e.target.id === 'bModal') modalKapat(); });
+    function formTemizle() {
+        ALANLAR.forEach(a => { const el = document.getElementById('b' + a); if (!el) return; el.value = el.tagName === 'SELECT' ? 'OTOMATIK' : ''; });
+        document.getElementById('bGumruk').value = ''; document.getElementById('bId').value = '0'; document.getElementById('bFaturaDocEntry').value = ''; document.getElementById('bCardCode').value = '';
+        document.getElementById('bSirketDb').value = DB_DISPLAY;
+        document.getElementById('bSil').hidden = true; document.getElementById('bBilgi').textContent = '';
+        document.getElementById('bDosyalar').innerHTML = ''; document.getElementById('bDosyaSayi').textContent = '';
+        document.getElementById('bDosyaUyari').hidden = false; document.getElementById('bDosyaForm').hidden = true;
+        hesapGoster();
+    }
+    function yeniBeyanname() { formTemizle(); document.getElementById('bBaslik').innerHTML = '<i class="fa-solid fa-file-shield"></i> Yeni Beyanname (elle)'; modalAc(); }
+    function sapDanOlustur(i) {
+        const f = SAP[i]; if (!f) return;
+        formTemizle();
+        document.getElementById('bBaslik').innerHTML = `<i class="fa-solid fa-file-shield"></i> Beyanname Oluştur — Fatura ${f.docNum}`;
+        document.getElementById('bFaturaDocEntry').value = f.docEntry; document.getElementById('bCardCode').value = f.cardCode;
+        document.getElementById('bDosyaNo').value = f.dosyaNo || ''; document.getElementById('bFaturaNo').value = String(f.docNum);
+        document.getElementById('bFaturaTarihi').value = tarihInput(f.docDate); document.getElementById('bDoviz').value = f.doviz || '';
+        document.getElementById('bFaturaTutar').value = f.tutar; document.getElementById('bBeyannameTutar').value = f.tutar;
+        document.getElementById('bCardName').value = f.cardName || ''; document.getElementById('bUlkeKodu').value = f.ulkeKodu || ''; document.getElementById('bUlkeAdi').value = f.ulkeAdi || '';
+        if (f.beyannameNo) document.getElementById('bBeyannameNo').value = f.beyannameNo;
+        if (f.nakliyeTarihi) { document.getElementById('bFiiliIhracTarihi').value = tarihInput(f.nakliyeTarihi); vadeHesapla(); }
+        ulkeKuraliUygula(); hesapGoster(); modalAc();
+    }
+    function beyannameAc(id) {
+        const b = LISTE.find(x => x.id === id);
+        if (!b) { listeYukle(); toastr.info('Liste yenileniyor, tekrar deneyin.'); return; }
+        formTemizle();
+        document.getElementById('bBaslik').innerHTML = `<i class="fa-solid fa-file-shield"></i> Beyanname #${b.id} — ${esc(b.faturaNo || b.beyannameNo || '')}`;
+        document.getElementById('bId').value = b.id; document.getElementById('bFaturaDocEntry').value = b.faturaDocEntry ?? ''; document.getElementById('bCardCode').value = b.cardCode || '';
+        const set = (a, v) => { const el = document.getElementById(alanId(a)); if (el) el.value = v == null ? '' : v; };
+        ['SirketDb', 'DosyaNo', 'FaturaNo', 'Doviz', 'FaturaTutar', 'CardName', 'UlkeKodu', 'UlkeAdi', 'BeyannameNo', 'GumrukMudurlugu', 'BeyannameTutar', 'UlkeOran', 'IbkbNo', 'IbkbTutar', 'IbkbBanka', 'DabNo', 'Aciklama'].forEach(a => set(a, b[a.charAt(0).toLowerCase() + a.slice(1)]));
+        ['FaturaTarihi', 'BeyannameTarihi', 'FiiliIhracTarihi', 'VadeTarihi', 'IbkbTarihi'].forEach(a => set(a, tarihInput(b[a.charAt(0).toLowerCase() + a.slice(1)])));
+        set('UlkeGerekliligi', b.ulkeGerekliligi || 'BELIRSIZ'); set('IbkbGerekliligi', b.ibkbGerekliligi || 'BELIRSIZ'); set('Durum', b.durum || 'ACIK');
+        document.getElementById('bSil').hidden = !(YONETICI || (b.olusturan || '').toLowerCase() === KULLANICI.toLowerCase());
+        document.getElementById('bBilgi').textContent = `Oluşturan ${b.olusturan || ''} ${tarih(b.olusturmaTarihi)}` + (b.guncelleyen ? ` · Güncelleyen ${b.guncelleyen} ${tarih(b.guncellemeTarihi)}` : '');
+        document.getElementById('bDosyaUyari').hidden = true; document.getElementById('bDosyaForm').hidden = false;
+        dosyalariYukle(b.id); hesapGoster(); modalAc();
+    }
+    function vadeHesapla() {
+        // Öncelik: Beyanname Tarihi (talep 67); yoksa Fiili İhraç Tarihi.
+        const f = document.getElementById('bBeyannameTarihi').value || document.getElementById('bFiiliIhracTarihi').value;
+        if (!f) return;
+        const d = new Date(f); d.setDate(d.getDate() + 180); document.getElementById('bVadeTarihi').value = d.toISOString().substring(0, 10);
+    }
+    function oranVarsayilan() { const g = document.getElementById('bUlkeGerekliligi').value, o = document.getElementById('bUlkeOran'); if (g === 'TAM') o.value = 100; else if (g === 'MUAF') o.value = 0; else if (g === 'KISMI' && (!o.value || Number(o.value) === 100 || Number(o.value) === 0)) o.value = 50; }
+    function ulkeKuraliUygula() {
+        const kod = document.getElementById('bUlkeKodu').value.trim().toUpperCase();
+        const k = ULKE_KURAL[kod]; const g = document.getElementById('bUlkeGerekliligi');
+        if (k && g.value === 'OTOMATIK') { document.getElementById('bUlkeOran').value = k.oran; document.getElementById('bUlkeOran').placeholder = 'kural: ' + k.gereklilik; }
+        hesapGoster();
+    }
+    function hesapGoster() {
+        const tutar = Number(document.getElementById('bBeyannameTutar').value || document.getElementById('bFaturaTutar').value || 0);
+        const g = document.getElementById('bUlkeGerekliligi').value; let oran = Number(document.getElementById('bUlkeOran').value);
+        if (!document.getElementById('bUlkeOran').value) oran = g === 'MUAF' ? 0 : g === 'KISMI' ? 50 : 100;
+        const gereken = Math.round(tutar * oran) / 100, getirilen = Number(document.getElementById('bIbkbTutar').value || 0), kalan = Math.max(0, gereken - getirilen);
+        const dv = document.getElementById('bDoviz').value || '';
+        document.getElementById('bHesap').innerHTML = `<span>Gereken: <b>${para(gereken)} ${esc(dv)}</b> (%${oran})</span><span>Getirilen (İBKB): <b>${para(getirilen)} ${esc(dv)}</b></span><span>Kalan: <b style="color:${kalan > 0 ? '#b91c1c' : '#15803d'}">${para(kalan)} ${esc(dv)}</b></span>${gereken > 0 && getirilen >= gereken ? '<span style="color:#15803d;"><i class="fa-solid fa-circle-check"></i> Bedel tamamlandı, durum otomatik KAPANDI olur.</span>' : ''}`;
+    }
+    function beyannameKaydet() {
+        const v = a => { const el = document.getElementById(alanId(a)); return el ? el.value.trim() : ''; };
+        const num = a => { const x = v(a); return x === '' ? null : Number(x); };
+        const dt = a => v(a) || null;
+        const body = {
+            id: Number(document.getElementById('bId').value) || 0,
+            sirketDb: v('SirketDb'), dosyaNo: v('DosyaNo'), faturaDocEntry: document.getElementById('bFaturaDocEntry').value ? Number(document.getElementById('bFaturaDocEntry').value) : null,
+            faturaNo: v('FaturaNo'), faturaTarihi: dt('FaturaTarihi'), cardCode: document.getElementById('bCardCode').value, cardName: v('CardName'),
+            ulkeKodu: v('UlkeKodu').toUpperCase(), ulkeAdi: v('UlkeAdi'), beyannameNo: v('BeyannameNo'), beyannameTarihi: dt('BeyannameTarihi'), fiiliIhracTarihi: dt('FiiliIhracTarihi'), vadeTarihi: dt('VadeTarihi'),
+            gumrukMudurlugu: v('GumrukMudurlugu'), doviz: v('Doviz').toUpperCase(), beyannameTutar: num('BeyannameTutar'), faturaTutar: num('FaturaTutar'),
+            ulkeGerekliligi: v('UlkeGerekliligi'), ulkeOran: v('UlkeGerekliligi') === 'OTOMATIK' ? null : num('UlkeOran'), ibkbGerekliligi: v('IbkbGerekliligi'),
+            ibkbNo: v('IbkbNo'), ibkbTarihi: dt('IbkbTarihi'), ibkbTutar: num('IbkbTutar'), ibkbBanka: v('IbkbBanka'), dabNo: v('DabNo'), durum: v('Durum'), aciklama: v('Aciklama')
+        };
+        fetch('/Rapor168/Kaydet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+            .then(r => r.json()).then(res => {
+                if (!res.success) { toastr.error(res.message); if (res.id) { listeYukle(); } return; }
+                toastr.success(res.message + ' Durum: ' + res.durum);
+                document.getElementById('bId').value = res.id; document.getElementById('bDurum').value = res.durum;
+                document.getElementById('bDosyaUyari').hidden = true; document.getElementById('bDosyaForm').hidden = false;
+                document.getElementById('bBaslik').innerHTML = `<i class="fa-solid fa-file-shield"></i> Beyanname #${res.id}`;
+                listeYukle(); if (SAP) sapYukle(); dosyalariYukle(res.id);
+            }).catch(e => toastr.error('Kaydedilemedi: ' + e));
+    }
+    function beyannameSil() {
+        const id = Number(document.getElementById('bId').value); if (!id) return;
+        if (!confirm('Bu beyanname kaydı ve yüklü belgeleri silinecek. Emin misiniz?')) return;
+        fetch('/Rapor168/Sil', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+            .then(r => r.json()).then(res => { if (res.success) { toastr.success(res.message); modalKapat(); listeYukle(); if (SAP) sapYukle(); } else toastr.error(res.message); });
+    }
+    // ---- belgeler
+    function dosyalariYukle(id) {
+        fetch(`/Rapor168/Dosyalar?beyannameId=${id}`).then(r => r.json()).then(res => {
+            if (!res.success) { toastr.error(res.message); return; }
+            const l = res.data || []; document.getElementById('bDosyaSayi').textContent = l.length ? `(${l.length})` : '(yok)';
+            document.getElementById('bDosyalar').innerHTML = l.length ? l.map(d => `<div class="ib-dosya"><div><span class="tur">${esc(d.tur)}</span> <a href="${esc(d.dosyaYolu)}" target="_blank"><i class="fa-solid fa-file"></i> ${esc(d.dosyaAdi)}</a> <span style="color:#94a3b8; font-size:.72rem;">${d.boyut ? Math.round(d.boyut / 1024) + ' KB · ' : ''}${esc(d.yukleyen || '')} ${tarih(d.tarih)}</span></div><button class="ib-btn d" style="padding:3px 8px;" onclick="dosyaSil(${d.id})"><i class="fa-solid fa-trash"></i></button></div>`).join('') : '<div style="color:#94a3b8; font-size:.78rem;">Henüz belge yüklenmedi. Gümrük beyannamesi, İBKB ve DAB belgelerini buraya yükleyin.</div>';
+        });
+    }
+    function dosyaYukle() {
+        const id = Number(document.getElementById('bId').value); const f = document.getElementById('bDosya').files[0];
+        if (!id) { toastr.warning('Önce beyannameyi kaydedin.'); return; }
+        if (!f) { toastr.warning('Dosya seçin.'); return; }
+        const fd = new FormData(); fd.append('dosya', f); fd.append('beyannameId', id); fd.append('tur', document.getElementById('bDosyaTur').value);
+        fetch('/Rapor168/DosyaYukle', { method: 'POST', body: fd }).then(r => r.json()).then(res => {
+            if (res.success) { toastr.success(res.message); document.getElementById('bDosya').value = ''; dosyalariYukle(id); listeYukle(); } else toastr.error(res.message);
+        }).catch(e => toastr.error('Yüklenemedi: ' + e));
+    }
+    function dosyaSil(id) {
+        if (!confirm('Belge silinsin mi?')) return;
+        fetch('/Rapor168/DosyaSil', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'id=' + id }).then(r => r.json()).then(res => {
+            if (res.success) { toastr.success(res.message); dosyalariYukle(Number(document.getElementById('bId').value)); listeYukle(); } else toastr.error(res.message);
+        });
+    }
+
+    // ---- başlangıç
+    listeYukle();
+    fetch('/Rapor168/UlkeKurallari').then(r => r.json()).then(res => { if (res.success) { ULKELER = res.data || []; ULKE_KURAL = {}; ULKELER.filter(u => u.tanimli).forEach(u => ULKE_KURAL[u.ulkeKodu] = u); document.getElementById('cntUlke').textContent = ULKELER.filter(u => u.tanimli).length; ulkeCiz(); } }).catch(() => { });
+</script>

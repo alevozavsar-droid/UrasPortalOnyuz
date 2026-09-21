@@ -1,0 +1,1037 @@
+﻿@model List<WebApplication3.Models.CustomerRiskReportViewModel>
+@using System.Globalization
+@using Newtonsoft.Json
+@using System.Linq
+@using System.Text.RegularExpressions 
+
+@{
+    ViewData["Title"] = "Müşteri Risk Raporu (Rapor 36)";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // 1. KURAL: URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+
+    var reportDataJson = Model != null ? JsonConvert.SerializeObject(Model) : "[]";
+    var monthFilter = ViewBag.MonthFilter ?? 3;
+
+    // Temizlik fonksiyonunu tanımlıyoruz. Sadece harf ve rakamları tutar.
+    string NormalizeString(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return string.Empty;
+        // Tüm boşlukları, noktalama işaretlerini, özel karakterleri temizler ve küçük harfe çevirir.
+        // \p{L}: Herhangi bir harf, \p{N}: Herhangi bir rakam.
+        string normalized = Regex.Replace(s, @"[^\p{L}\p{N}_]+", "").ToLowerInvariant();
+        return normalized;
+    }
+
+    var distinctValues = new Dictionary<string, List<string>>();
+    if (Model != null && Model.Any())
+    {
+        distinctValues["MusteriKodu"] = Model.Where(m => !string.IsNullOrEmpty(m.MusteriKodu)).Select(m => m.MusteriKodu).Distinct().OrderBy(s => s).ToList();
+
+        // Müşteri adlarını normalize ederek tekilleştirme.
+        distinctValues["MusteriFirmaAdi"] = Model
+            .Where(m => !string.IsNullOrEmpty(m.MusteriFirmaAdi))
+            .GroupBy(m => NormalizeString(m.MusteriFirmaAdi)) 
+            .Select(g => g.First().MusteriFirmaAdi) 
+            .OrderBy(s => s)
+            .ToList();
+
+        distinctValues["SatisSorumlusu"] = Model.Where(m => !string.IsNullOrEmpty(m.SatisSorumlusu)).Select(m => m.SatisSorumlusu).Distinct().OrderBy(s => s).ToList();
+        distinctValues["MusteriGrubu"] = Model.Where(m => !string.IsNullOrEmpty(m.MusteriGrubu)).Select(m => m.MusteriGrubu).Distinct().OrderBy(s => s).ToList();
+    }
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <style>
+        /* Ana Stil Ayarları */
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --danger-color: #dc3545;
+            --light-bg: #f8f9fa;
+            --white-bg: #ffffff;
+            --border-color: #d1d9e6;
+            --text-color: #333;
+            --header-bg: #495057;
+            --header-text: #ffffff;
+            --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.1);
+            --box-shadow-medium: 0 2px 4px rgba(0, 0, 0, 0.08);
+        }
+
+        body {
+            background-color: var(--light-bg);
+            font-family: 'Poppins', sans-serif;
+            color: var(--text-color);
+            line-height: 1.2;
+            font-size: 0.85rem;
+        }
+
+        .container-fluid.py-4 {
+            padding: 0 10px;
+            margin-top: 10px;
+        }
+
+        /* Yeni Filtre Kutusu Modernleştirildi */
+        .filter-controls {
+            background-color: var(--white-bg);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: var(--box-shadow-medium);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+            .filter-controls label {
+                font-weight: 500;
+                color: var(--text-color);
+                margin-bottom: 0;
+                white-space: nowrap;
+            }
+
+            .filter-controls .form-select-sm {
+                height: 35px;
+                padding: 0.25rem 0.5rem;
+                font-size: 0.85rem;
+                border-radius: 5px;
+            }
+
+            .filter-controls .btn {
+                height: 35px;
+                line-height: 1.2;
+                display: flex;
+                align-items: center;
+            }
+
+        /* Sticky Toolbar */
+        .sticky-toolbar {
+            position: sticky;
+            top: 0;
+            background-color: var(--white-bg);
+            z-index: 1000;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            box-shadow: var(--box-shadow-medium);
+            display: flex;
+            justify-content: flex-end; 
+            align-items: center;
+            gap: 20px;
+        }
+
+        .total-amount-display {
+            font-size: 1em;
+            font-weight: 600;
+            color: var(--danger-color);
+            white-space: nowrap;
+        }
+
+        .btn {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.8rem;
+            border-radius: 5px;
+        }
+
+        /* Tablo Konteyneri ve Stilleri */
+        .table-container {
+            overflow-x: auto;
+            max-height: calc(100vh - 240px); /* Alt taraftaki ortak buton için alan optimize edildi */
+            overflow-y: auto;
+            position: relative;
+            border-radius: 8px;
+            box-shadow: var(--shadow-medium);
+            background-color: var(--white-bg);
+            border: 1px solid var(--border-color);
+        }
+
+        .rapor-tablo {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            table-layout: fixed;
+            min-width: 1400px; 
+        }
+
+            .rapor-tablo thead {
+                position: sticky;
+                top: 0;
+                z-index: 101;
+                background-color: var(--white-bg);
+            }
+
+                .rapor-tablo thead .main-header-row th {
+                    background-color: var(--header-bg);
+                    color: var(--header-text);
+                    padding: 6px 4px;
+                    text-align: center;
+                    white-space: nowrap;
+                    font-weight: 600;
+                    border-bottom: 2px solid var(--border-color);
+                    border-right: 1px solid rgba(255, 255, 255, 0.1);
+                    line-height: 1.2;
+                    font-size: 0.8rem;
+                }
+
+                    .rapor-tablo thead .main-header-row th:last-child {
+                        border-right: none;
+                    }
+
+                .rapor-tablo thead .filter-row th {
+                    padding: 3px 4px;
+                    height: 35px;
+                    vertical-align: top;
+                    background-color: #f1f4f8;
+                    border-bottom: 1px solid var(--border-color);
+                }
+
+            .rapor-tablo th, .rapor-tablo td {
+                vertical-align: middle;
+                border-right: 1px solid var(--border-color);
+            }
+
+            .rapor-tablo td {
+                padding: 4px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                height: 30px;
+                line-height: 1.2;
+                border-bottom: 1px solid #e9ecef;
+            }
+
+            .rapor-tablo tbody tr:nth-child(even) {
+                background-color: #fafafa;
+            }
+
+        .table-hover tbody tr:hover {
+            background-color: #e9eff7;
+            cursor: pointer;
+        }
+
+        /* Sayısal alanları sağa hizala */
+        .rapor-tablo td:nth-child(4), /* R Bakiye */
+        .rapor-tablo td:nth-child(5), /* X Bakiye */
+        .rapor-tablo td:nth-child(6), /* 420 Hesap Bakiyesi */
+        .rapor-tablo td:nth-child(7), /* Genel Bakiye Farkı */
+        .rapor-tablo td:nth-child(8), /* R Gecikme Gün */
+        .rapor-tablo td:nth-child(9), /* R Yaşlanan Bakiye */
+        .rapor-tablo td:nth-child(10), /* X Gecikme Gün */
+        .rapor-tablo td:nth-child(11), /* X Yaşlanan Bakiye */
+        .rapor-tablo td:nth-child(14) { /* Fatura Limiti */
+            text-align: right;
+        }
+
+        /* Input/Select stillerini daha küçük yap */
+        .filter-row th .form-control,
+        .filter-row th .bootstrap-select .btn {
+            height: 25px !important;
+            padding: 2px 5px !important;
+            font-size: 0.8rem !important;
+        }
+
+        .rapor-tablo tbody tr.selected-row {
+            background-color: #cce5ff !important;
+            border: 1px solid #007bff;
+        }
+
+        .note-column {
+            min-width: 60px;
+            max-width: 60px;
+            width: 60px;
+            text-align: center;
+        }
+
+            .note-column button {
+                padding: 3px 6px;
+                font-size: 0.75rem;
+            }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .vadesi-gecmis {
+            color: var(--danger-color);
+            font-weight: 600;
+        }
+    </style>
+}
+
+<div class="container-fluid py-4">
+    @Html.AntiForgeryToken()
+
+    <h3 class="mb-3"><i class="fas fa-file-invoice-dollar"></i> Müşteri Finansal Risk Raporu (@ViewBag.CurrentDbDisplay)</h3>
+
+    @if (ViewBag.ErrorMessage != null)
+    {
+        <div class="alert alert-danger" role="alert">
+            @ViewBag.ErrorMessage
+        </div>
+    }
+
+    @if (Model != null && Model.Any())
+    {
+        <div class="filter-controls">
+            <label for="monthFilter">Fatura Limit Ayı:</label>
+            <select id="monthFilter" class="form-select form-select-sm" style="width: 120px;">
+                @for (int i = 1; i <= 12; i++)
+                {
+                    @* ÇÖZÜM: RZ1031 derleme hatasını gidermek için <!option> kaçış yöntemi kullanıldı *@
+                    <!option value="@i" @(i == monthFilter ? "selected" : "")>Son @i Ay Toplamı</!option>
+                }
+            </select>
+            <button class="btn btn-primary btn-sm" id="applyFilterBtn" title="Filtreyi Uygula"><i class="fas fa-filter"></i> Uygula</button>
+
+            <div class="ms-auto d-flex align-items-center">
+                <span class="me-2 total-amount-display">Toplam Seçili Risk:</span>
+                <strong id="totalSelectedTlAmount" class="text-danger">0,00 TL</strong>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table class="table table-bordered table-striped table-hover rapor-tablo" id="rapor36Table">
+                <thead>
+                    <tr class="main-header-row">
+                        <th class="note-column no-sort" title="Not İşlemleri" data-column="NotIslemleri">Not</th>
+                        <th class="sortable-column" data-column="MusteriKodu" title="Müşteri Kodu" data-sort-type="text">Müşteri Kodu <i class="fas fa-sort float-end"></i></th>
+                        <th class="sortable-column" data-column="MusteriFirmaAdi" title="Müşteri Firma Adı" data-sort-type="text">Müşteri Firma Adı <i class="fas fa-sort float-end"></i></th>
+                        <th class="sortable-column" data-column="RBakiye" title="R Bakiye (Cari Ekstre Toplamı)" data-sort-type="number">R Bakiye <i class="fas fa-sort float-end"></i></th>
+                        <th class="sortable-column" data-column="XBakiye" title="X Bakiye (Cari Ekstre Toplamı)" data-sort-type="number">X Bakiye <i class="fas fa-sort float-end"></i></th>
+                        <th class="sortable-column" data-column="Hesap420Bakiyesi" title="420 Hesap Bakiyesi" data-sort-type="number">420 Hesap Bakiyesi <i class="fas fa-sort float-end"></i></th> 
+                        <th class="sortable-column" data-column="GenelBakiyeFarki" title="R Bakiye + 420 Hesap Bakiyesi Toplamı" data-sort-type="number">Genel Bakiye Farkı <i class="fas fa-sort float-end"></i></th> 
+                        <th class="sortable-column" data-column="RYaslananBakiyeGecikmeGunSayisi" title="R Yaşlanan Bakiye Gecikme Gün Sayısı (Tüm Açık İşlemler)" data-sort-type="number">R Yaşlanan Bakiye Gecikme Gün <i class="fas fa-sort float-end"></i></th>
+                        <th class="sortable-column" data-column="RYaslananBakiye" title="R Yaşlanan Bakiye (Tüm Açık İşlemler)" data-sort-type="number">R Yaşlanan Bakiye <i class="fas fa-sort float-end"></i></th>
+                        <th class="sortable-column" data-column="XYaslananBakiyeGecikmeGunSayisi" title="X Yaşlanan Bakiye Gecikme Gün Sayısı (Tüm Açık İşlemler)" data-sort-type="number">X Yaşlanan Bakiye Gecikme Gün <i class="fas fa-sort float-end"></i></th>
+                        <th class="sortable-column" data-column="XYaslananBakiye" title="X Yaşlanan Bakiye (Tüm Açık İşlemler)" data-sort-type="number">X Yaşlanan Bakiye <i class="fas fa-sort float-end"></i></th>
+                        <th class="sortable-column" data-column="SatisSorumlusu" title="Satış Sorumlusu" data-sort-type="text">Satış Sorumlusu <i class="fas fa-sort float-end"></i></th>
+                        <th class="sortable-column" data-column="MusteriGrubu" title="Müşteri Grubu" data-sort-type="text">Müşteri Grubu <i class="fas fa-sort float-end"></i></th>
+                        <th class="sortable-column" data-column="SonAyFaturaLimiti" title="Son @monthFilter Ay Toplam Fatura Limiti" data-sort-type="number">Son @monthFilter Ay Toplam Fatura Limiti <i class="fas fa-sort float-end"></i></th>
+                    </tr>
+                    <tr class="filter-row">
+                        <th class="note-column"></th>
+                        <th data-column="MusteriKodu"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                        <th data-column="MusteriFirmaAdi">
+                            <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Müşteri Adı">
+                                @if (distinctValues.ContainsKey("MusteriFirmaAdi"))
+                                {
+                                    foreach (var item in distinctValues["MusteriFirmaAdi"])
+                                    {
+                                        <option value="@item">@item</option>
+                                    }
+                                }
+                            </select>
+                        </th>
+                        <th data-column="RBakiye"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                        <th data-column="XBakiye"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                        <th data-column="Hesap420Bakiyesi"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th> 
+                        <th data-column="GenelBakiyeFarki"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th> 
+                        <th data-column="RYaslananBakiyeGecikmeGunSayisi"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                        <th data-column="RYaslananBakiye"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                        <th data-column="XYaslananBakiyeGecikmeGunSayisi"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                        <th data-column="XYaslananBakiye"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                        <th data-column="SatisSorumlusu">
+                            <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Satış Sorumlusu">
+                                @if (distinctValues.ContainsKey("SatisSorumlusu"))
+                                {
+                                    foreach (var item in distinctValues["SatisSorumlusu"])
+                                    {
+                                        <option value="@item">@item</option>
+                                    }
+                                }
+                            </select>
+                        </th>
+                        <th data-column="MusteriGrubu">
+                            <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Müşteri Grubu">
+                                @if (distinctValues.ContainsKey("MusteriGrubu"))
+                                {
+                                    foreach (var item in distinctValues["MusteriGrubu"])
+                                    {
+                                        <option value="@item">@item</option>
+                                    }
+                                }
+                            </select>
+                        </th>
+                        <th data-column="SonAyFaturaLimiti"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @* İçerik JavaScript ile doldurulur *@
+                </tbody>
+            </table>
+        </div>
+        <p class="mt-3">Toplam Kayıt: <strong id="totalRecords">@(Model?.Count ?? 0)</strong></p>
+    }
+    else
+    {
+        <div class="alert alert-info text-center shadow-sm">Gösterilecek veri bulunamadı.</div>
+    }
+    
+    @* 4. KURAL: UI/UX Standartlarına uygun şık, db parametreli Ana Sayfa Dönüş butonu *@
+    <div class="mt-4 mb-5 text-center">
+        <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+            <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+        </a>
+    </div>
+</div>
+
+@* Müşteri Notları Modal *@
+<div class="modal fade" id="noteModal" tabindex="-1" aria-labelledby="noteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title" id="noteModalLabel">Müşteri Notları</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <h6 id="customerInfo"></h6>
+
+                <h6>Mevcut Notlar</h6>
+                <div id="existingNotes" class="border p-2 mb-3" style="max-height: 250px; overflow-y: auto;">
+                    <p class="text-muted">Yükleniyor...</p>
+                </div>
+
+                <h6 id="newNoteHeader">Yeni Not Ekle</h6>
+                <form id="addNoteForm">
+                    <input type="hidden" id="noteCardCode" name="CardCode" />
+                    <div class="mb-3">
+                        <textarea class="form-control" id="newNoteContent" name="Note" rows="3" placeholder="Görüşme notlarınızı buraya yazınız..." required></textarea>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-secondary" id="cancelEditButton" style="display:none;" onclick="cancelEdit()">İptal</button>
+                        <button type="button" class="btn btn-success" id="updateNoteButton" style="display:none;">Güncelle</button>
+                        <button type="submit" class="btn btn-primary" id="saveNoteButton">Kaydet</button>
+                    </div>
+                    <div class="clearfix"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            
+            // Aktif veritabanı parametresini JS değişkenine alıyoruz
+            const currentDbParam = '@currentDb';
+            const dbQueryString = currentDbParam ? `?db=${currentDbParam}` : '';
+            const antiForgeryToken = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+
+            const allReportData = @Html.Raw(reportDataJson);
+            const table = document.getElementById('rapor36Table');
+            
+            if(!table) return;
+
+            const tableBody = table.querySelector('tbody');
+            const totalSelectedTlAmountSpan = document.getElementById('totalSelectedTlAmount');
+            const totalRecordsSpan = document.getElementById('totalRecords');
+            const monthFilterSelect = document.getElementById('monthFilter');
+            const applyFilterBtn = document.getElementById('applyFilterBtn');
+
+            // Modal Elementleri
+            const noteModal = new bootstrap.Modal(document.getElementById('noteModal'));
+            const customerInfoH6 = document.getElementById('customerInfo');
+            const existingNotesDiv = document.getElementById('existingNotes');
+            const noteCardCodeInput = document.getElementById('noteCardCode');
+            const addNoteForm = document.getElementById('addNoteForm');
+            const newNoteContent = document.getElementById('newNoteContent');
+            const saveNoteButton = document.getElementById('saveNoteButton');
+            const updateNoteButton = document.getElementById('updateNoteButton');
+            const cancelEditButton = document.getElementById('cancelEditButton');
+            const newNoteHeader = document.getElementById('newNoteHeader');
+
+            let currentlyFilteredRows = [...allReportData];
+            let currentSortColumn = null;
+            let currentSortDirection = 'none';
+            let selectedRowsData = {};
+            let currentEditingNoteId = null;
+
+            // Global Filtre Temizleyici
+            window.clearReportFilters = function () {
+                $('.filter-row .filter-input').val('');
+                $('.filter-select-bs').selectpicker('val', '');
+                currentSortColumn = null;
+                currentSortDirection = 'none';
+                $('th.sortable-column i').attr('class', 'fas fa-sort float-end');
+                
+                currentlyFilteredRows = [...allReportData];
+                renderTable(currentlyFilteredRows);
+                if (typeof toastr !== 'undefined') toastr.success('Filtreler başarıyla sıfırlandı.');
+            };
+
+            const columnMappings = {
+                'MusteriKodu': 'MusteriKodu',
+                'MusteriFirmaAdi': 'MusteriFirmaAdi',
+                'RBakiye': 'RBakiye',
+                'XBakiye': 'XBakiye',
+                'Hesap420Bakiyesi': 'Hesap420Bakiyesi', 
+                'GenelBakiyeFarki': 'GenelBakiyeFarki', 
+                'RYaslananBakiyeGecikmeGunSayisi': 'RYaslananBakiyeGecikmeGunSayisi',
+                'RYaslananBakiye': 'RYaslananBakiye',
+                'XYaslananBakiyeGecikmeGunSayisi': 'XYaslananBakiyeGecikmeGunSayisi',
+                'XYaslananBakiye': 'XYaslananBakiye',
+                'SatisSorumlusu': 'SatisSorumlusu',
+                'MusteriGrubu': 'MusteriGrubu',
+                'SonAyFaturaLimiti': 'SonAyFaturaLimiti'
+            };
+
+            function updatePaginationInfo(totalCount) {
+                if (totalRecordsSpan) {
+                    totalRecordsSpan.textContent = totalCount;
+                }
+            }
+
+            function formatCurrency(value) {
+                return value?.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '0,00';
+            }
+
+            function formatNumber(value) {
+                return value?.toLocaleString('tr-TR') ?? '0';
+            }
+
+            function formatDate(dateString) {
+                if (!dateString) return '';
+                const date = new Date(dateString);
+                if (isNaN(date.getTime())) return '';
+                return date.toLocaleDateString('tr-TR');
+            }
+
+            function calculateSelectedTotal() {
+                let totalAmount = 0;
+                for (const cardCode in selectedRowsData) {
+                    totalAmount += selectedRowsData[cardCode];
+                }
+                totalSelectedTlAmountSpan.textContent = totalAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL';
+            }
+
+            function toggleRowSelection(rowElement, item) {
+                const cardCode = item.MusteriKodu;
+                const riskBakiye = (item.RBakiye || 0) + (item.XBakiye || 0);
+
+                if (rowElement.classList.contains('selected-row')) {
+                    rowElement.classList.remove('selected-row');
+                    delete selectedRowsData[cardCode];
+                } else {
+                    rowElement.classList.add('selected-row');
+                    selectedRowsData[cardCode] = riskBakiye;
+                }
+                calculateSelectedTotal();
+            }
+
+            function renderTable(data) {
+                tableBody.innerHTML = '';
+                const visibleHeaders = document.querySelectorAll('#rapor36Table thead .main-header-row th');
+                const headerCount = visibleHeaders.length;
+
+                if (data.length === 0) {
+                    tableBody.innerHTML = `<tr><td colspan="${headerCount}" class="text-center">Gösterilecek veri bulunamadı.</td></tr>`;
+                    updatePaginationInfo(0);
+                    return;
+                }
+
+                const frag = document.createDocumentFragment();
+
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+                    const cardCode = item.MusteriKodu;
+                    row.setAttribute('data-cardcode', cardCode);
+
+                    if (selectedRowsData.hasOwnProperty(cardCode)) {
+                        row.classList.add('selected-row');
+                    }
+
+                    row.addEventListener('click', function(event) {
+                        if (!event.target.closest('.filter-input, .filter-select-bs, .bootstrap-select, .btn-note-operations')) {
+                            toggleRowSelection(row, item);
+                        }
+                    });
+
+                    visibleHeaders.forEach(header => {
+                        const cell = document.createElement('td');
+                        const columnKey = header.dataset.column;
+                        const propName = columnMappings[columnKey];
+                        
+                        if (columnKey === 'NotIslemleri') {
+                            cell.className = 'note-column';
+                            const noteButton = document.createElement('button');
+                            noteButton.className = `btn btn-sm ${item.CustomerNotes && item.CustomerNotes.length > 0 ? "btn-danger" : "btn-outline-secondary"} btn-note-operations`;
+                            noteButton.dataset.cardcode = item.MusteriKodu; 
+                            noteButton.title = item.CustomerNotes && item.CustomerNotes.length > 0 ? "Notları Görüntüle / Ekle" : "Not Ekle";
+                            noteButton.innerHTML = `<i class="fas fa-comment"></i> ${item.CustomerNotes && item.CustomerNotes.length > 0 ? `(${item.CustomerNotes.length})` : ''}`;
+
+                            noteButton.onclick = function(e) {
+                                e.stopPropagation(); 
+                                customerInfoH6.textContent = `${item.MusteriKodu} - ${item.MusteriFirmaAdi}`;
+                                noteCardCodeInput.value = item.MusteriKodu;
+                                newNoteContent.value = '';
+                                renderNotes(item.CustomerNotes);
+                                noteModal.show();
+                            };
+                            cell.appendChild(noteButton);
+                        } 
+                        else {
+                            let value = propName ? item[propName] : null;
+
+                            if (header.dataset.sortType === 'number') {
+                                if (propName && typeof item[propName] === 'number') {
+                                    if (columnKey.includes('GunSayisi')) {
+                                        cell.textContent = formatNumber(value);
+                                    } else {
+                                        cell.textContent = formatCurrency(value);
+                                    }
+                                } else {
+                                    cell.textContent = columnKey.includes('GunSayisi') ? '0' : '0,00';
+                                }
+                            } else {
+                                cell.textContent = value || '';
+                            }
+                        }
+
+                        row.appendChild(cell);
+                    });
+
+                    frag.appendChild(row);
+                });
+
+                tableBody.appendChild(frag);
+                updatePaginationInfo(data.length);
+                calculateSelectedTotal();
+            }
+
+            function filterTableAndRender() {
+                const filters = {};
+                const filterInputs = document.querySelectorAll('.filter-input');
+                const filterSelects = $('.filter-select-bs');
+
+                filterSelects.each(function () {
+                    const selectElement = $(this);
+                    const columnKey = selectElement.closest('th').data('column');
+                    const selectedValues = selectElement.val();
+                    if (selectedValues && selectedValues.length > 0) {
+                        filters[columnKey] = selectedValues.map(v => (v || '').toLowerCase().trim());
+                    }
+                });
+
+                filterInputs.forEach(input => {
+                    const columnKey = input.closest('th').dataset.column;
+                    const inputValue = input.value.toLowerCase().trim();
+                    if (inputValue) {
+                        filters[columnKey] = [inputValue];
+                    }
+                });
+
+                let filteredData = allReportData.filter(item => {
+                    let isMatch = true;
+                    for (const column in filters) {
+                        const filterValues = filters[column];
+                        const propName = columnMappings[column];
+                        let itemValue = item[propName];
+
+                        if (itemValue === null || itemValue === undefined) {
+                            itemValue = '';
+                        }
+
+                        const inputElement = document.querySelector(`.filter-row th[data-column="${column}"] .filter-input`);
+                        const isNumericFilter = inputElement && inputElement.classList.contains('number-filter');
+                        const isDateFilter = inputElement && inputElement.classList.contains('date-filter');
+
+                        if (!isNumericFilter && !isDateFilter) {
+                             const isMatchFound = filterValues.some(filterVal =>
+                                 itemValue.toString().toLowerCase().includes(filterVal)
+                             );
+                            if (!isMatchFound) {
+                                isMatch = false;
+                                break;
+                            }
+                        }
+                        else if (isDateFilter) {
+                            const formattedDate = formatDate(itemValue).toLowerCase();
+                            const filterValue = filterValues[0];
+                            if (!formattedDate.includes(filterValue)) {
+                                isMatch = false;
+                                break;
+                            }
+                        }
+                        else if (isNumericFilter) {
+                            const filterValue = filterValues[0];
+                            const numericFilterValue = parseFloat(filterValue.replace(/\./g, '').replace(',', '.'));
+                            const itemNumericValue = parseFloat(itemValue.toString().replace(',', '.'));
+
+                            if (isNaN(numericFilterValue)) {
+                                if (filterValue !== "") {
+                                    if (!itemValue.toString().toLowerCase().includes(filterValue)) {
+                                        isMatch = false;
+                                        break;
+                                    }
+                                }
+                            } else {
+                                if (Math.round(itemNumericValue * 100) !== Math.round(numericFilterValue * 100)) {
+                                    isMatch = false;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    return isMatch;
+                });
+
+                if (currentSortColumn && currentSortDirection !== 'none') {
+                    const sortType = document.querySelector(`th[data-column="${currentSortColumn}"]`)?.dataset.sortType;
+                    const propName = columnMappings[currentSortColumn];
+                    filteredData.sort((itemA, itemB) => {
+                        let valA = itemA[propName];
+                        let valB = itemB[propName];
+
+                        let comparison = 0;
+                        if (sortType === 'number') {
+                            valA = parseFloat(valA?.toString().replace(',', '.')) || 0;
+                            valB = parseFloat(valB?.toString().replace(',', '.')) || 0;
+                            comparison = valA - valB;
+                        } else if (sortType === 'date') {
+                            const dateA = valA ? new Date(valA) : new Date(0);
+                            const dateB = valB ? new Date(valB) : new Date(0);
+                            comparison = dateA.getTime() - dateB.getTime();
+                        }
+                         else {
+                            comparison = (valA || '').localeCompare((valB || ''), 'tr', { sensitivity: 'base' });
+                        }
+                        return currentSortDirection === 'asc' ? comparison : -comparison;
+                    });
+                }
+
+                currentlyFilteredRows = filteredData;
+                renderTable(currentlyFilteredRows);
+            }
+
+            // Notu Düzenleme Moduna Alır
+            window.startEdit = function(noteId, content) {
+                currentEditingNoteId = noteId;
+                newNoteContent.value = content;
+
+                saveNoteButton.style.display = 'none';
+                updateNoteButton.style.display = 'block';
+                cancelEditButton.style.display = 'block';
+                newNoteHeader.textContent = 'Not Düzenle';
+
+                newNoteContent.focus();
+            };
+
+            // Düzenleme Modunu İptal Eder
+            window.cancelEdit = function() {
+                currentEditingNoteId = null;
+                newNoteContent.value = '';
+
+                saveNoteButton.style.display = 'block';
+                updateNoteButton.style.display = 'none';
+                cancelEditButton.style.display = 'none';
+                newNoteHeader.textContent = 'Yeni Not Ekle';
+            };
+
+            // Not Silme İşlemi
+            window.deleteNote = async function(noteId, cardCode) {
+                if (!confirm('Bu notu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch('@Url.Action("DeleteNote", "Rapor36")' + dbQueryString, {
+                        method: 'POST', 
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'RequestVerificationToken': antiForgeryToken
+                        },
+                        body: JSON.stringify({ NoteId: noteId })
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        toastr.success(result.message);
+
+                        const customerData = allReportData.find(d => d.MusteriKodu === cardCode);
+                        if (customerData) {
+                            customerData.CustomerNotes = customerData.CustomerNotes.filter(n => n.NoteId !== noteId);
+                            renderNotes(customerData.CustomerNotes);
+
+                            const row = document.querySelector(`tr[data-cardcode="${cardCode}"]`);
+                            if (row) {
+                                const button = row.querySelector('.btn-note-operations');
+                                if (button) {
+                                    if (customerData.CustomerNotes.length === 0) {
+                                        button.classList.remove('btn-danger');
+                                        button.classList.add('btn-outline-secondary');
+                                    }
+                                    button.innerHTML = `<i class="fas fa-comment"></i> ${customerData.CustomerNotes.length > 0 ? `(${customerData.CustomerNotes.length})` : ''}`;
+                                }
+                            }
+                        }
+
+                    } else {
+                        const errorText = await response.text();
+                        toastr.error('Not silinemedi: ' + errorText);
+                    }
+                } catch (error) {
+                    toastr.error('Bir hata oluştu: ' + error.message);
+                }
+            };
+
+            // Notları modal içinde gösteren fonksiyon
+            function renderNotes(notes) {
+                existingNotesDiv.innerHTML = '';
+                cancelEdit();
+
+                if (notes && notes.length > 0) {
+                    notes.sort((a, b) => new Date(b.EklemeTarihi) - new Date(a.EklemeTarihi));
+                    notes.forEach(note => {
+                        const noteElement = document.createElement('div');
+                        noteElement.className = 'card mb-2 bg-light';
+                        noteElement.dataset.noteid = note.NoteId;
+
+                        const noteContent = note.KisaNot;
+                        const noteContentHtml = noteContent.replace(/\n/g, '<br>');
+                        const safeContentForJS = noteContent.replace(/'/g, "\\'").replace(/\n/g, '\\n').trim();
+
+                        noteElement.innerHTML = `
+                            <div class="card-body p-2">
+                                <small class="text-muted float-end">
+                                    ${note.KullaniciKodu} - ${formatDate(note.EklemeTarihi)}
+                                </small>
+                                <p class="card-text mb-2">${noteContentHtml}</p>
+                                <div class="d-flex justify-content-end gap-1">
+                                    <button type="button" class="btn btn-sm btn-info"
+                                        onclick="startEdit(${note.NoteId}, '${safeContentForJS}')"
+                                        title="Notu Düzenle">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-danger"
+                                        onclick="deleteNote(${note.NoteId}, '${note.CardCode}')"
+                                        title="Notu Sil">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                        existingNotesDiv.appendChild(noteElement);
+                    });
+                } else {
+                    existingNotesDiv.innerHTML = '<p class="text-muted">Bu müşteri için kayıtlı not bulunmamaktadır.</p>';
+                }
+            }
+
+            function initializePage() {
+                $('.filter-select-bs').selectpicker({
+                    liveSearch: true,
+                    actionsBox: true,
+                    selectedTextFormat: 'count > 2',
+                    width: '100%',
+                    container: 'body'
+                }).on('changed.bs.select', function () {
+                    filterTableAndRender();
+                });
+
+                document.querySelectorAll('.filter-input').forEach(input => {
+                    if (input.classList.contains('number-filter') || input.classList.contains('date-filter')) {
+                         input.addEventListener('keyup', (e) => {
+                             if (e.key === 'Enter') {
+                                 filterTableAndRender();
+                             }
+                         });
+                    } else {
+                        input.addEventListener('keyup', () => filterTableAndRender());
+                    }
+                });
+
+                document.querySelectorAll('th.sortable-column').forEach(header => {
+                    header.addEventListener('click', function () {
+                        if (this.style.display === 'none' || this.classList.contains('no-sort')) {
+                            return;
+                        }
+
+                        const columnKey = this.dataset.column;
+                        let newSortDirection;
+
+                        if (currentSortColumn === columnKey) {
+                            if (currentSortDirection === 'asc') {
+                                newSortDirection = 'desc';
+                            } else if (currentSortDirection === 'desc') {
+                                newSortDirection = 'none';
+                                currentSortColumn = null; 
+                            } else {
+                                newSortDirection = 'asc';
+                            }
+                        } else {
+                            if (currentSortColumn !== null) {
+                                const prevHeader = document.querySelector(`th.sortable-column[data-column="${currentSortColumn}"] i`);
+                                if (prevHeader) {
+                                    prevHeader.className = 'fas fa-sort float-end';
+                                }
+                            }
+                            newSortDirection = 'asc';
+                            currentSortColumn = columnKey;
+                        }
+
+                        currentSortDirection = newSortDirection;
+
+                        document.querySelectorAll('th.sortable-column i').forEach(icon => icon.className = 'fas fa-sort float-end');
+                        const sortIcon = this.querySelector('i');
+                        if (sortIcon && currentSortDirection !== 'none') {
+                            sortIcon.className = `fas fa-sort-${currentSortDirection === 'asc' ? 'up' : 'down'} float-end`;
+                        } else if (sortIcon && currentSortDirection === 'none') {
+                            sortIcon.className = 'fas fa-sort float-end';
+                        }
+
+                        filterTableAndRender();
+                    });
+                });
+
+                if (applyFilterBtn) {
+                    applyFilterBtn.addEventListener('click', function() {
+                        const selectedMonth = document.getElementById('monthFilter').value;
+                        const currentUrl = new URL(window.location.href);
+                        currentUrl.searchParams.set('monthFilter', selectedMonth);
+                        
+                        if (currentDbParam && !currentUrl.searchParams.has('db')) {
+                            currentUrl.searchParams.set('db', currentDbParam);
+                        }
+                        window.location.href = currentUrl.toString();
+                    });
+                }
+
+                // Not Güncelleme Butonuna Tıklama Olayı
+                $('#updateNoteButton').on('click', async function(e) {
+                    e.preventDefault();
+                    const noteContent = newNoteContent.value.trim();
+                    const noteId = currentEditingNoteId;
+                    const cardCode = noteCardCodeInput.value;
+
+                    if (!noteContent) { toastr.warning('Not içeriği boş olamaz.'); return; }
+                    if (!noteId) return;
+
+                    const button = $(this);
+                    button.prop('disabled', true).text('Güncelleniyor...');
+
+                    try {
+                        const response = await fetch('@Url.Action("UpdateNote", "Rapor36")' + dbQueryString, {
+                            method: 'POST', 
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'RequestVerificationToken': antiForgeryToken
+                            },
+                            body: JSON.stringify({ NoteId: noteId, Note: noteContent })
+                        });
+
+                        if (response.ok) {
+                            const result = await response.json();
+                            toastr.success(result.message);
+
+                            const customerData = allReportData.find(d => d.MusteriKodu === cardCode);
+                            if (customerData) {
+                                const noteToUpdate = customerData.CustomerNotes.find(n => n.NoteId === noteId);
+
+                                if (noteToUpdate) {
+                                    noteToUpdate.KisaNot = noteContent;
+                                    noteToUpdate.EklemeTarihi = new Date().toISOString();
+                                    renderNotes(customerData.CustomerNotes);
+                                    cancelEdit();
+                                }
+                            }
+                        } else {
+                            const errorText = await response.text();
+                            toastr.error('Not güncellenemedi: ' + errorText);
+                        }
+                    } catch (error) {
+                        toastr.error('Bir hata oluştu: ' + error.message);
+                    } finally {
+                        button.prop('disabled', false).text('Güncelle');
+                    }
+                });
+
+                // Not Kaydetme Event'i
+                addNoteForm.addEventListener('submit', async function (e) {
+                    e.preventDefault();
+
+                    if (currentEditingNoteId) return;
+
+                    const cardCode = noteCardCodeInput.value;
+                    const noteContent = newNoteContent.value.trim();
+
+                    if (!noteContent) { toastr.warning('Not içeriği boş olamaz.'); return; }
+
+                    saveNoteButton.disabled = true;
+                    saveNoteButton.textContent = 'Kaydediliyor...';
+
+                    try {
+                        const response = await fetch('@Url.Action("AddNote", "Rapor36")' + dbQueryString, {
+                            method: 'POST', 
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'RequestVerificationToken': antiForgeryToken
+                            },
+                            body: JSON.stringify({ CardCode: cardCode, Note: noteContent })
+                        });
+
+                        if (response.ok) {
+                            const result = await response.json();
+                            toastr.success(result.message);
+
+                            const customerData = allReportData.find(d => d.MusteriKodu === cardCode);
+                            if (customerData) {
+                                if (!customerData.CustomerNotes) customerData.CustomerNotes = [];
+                                
+                                customerData.CustomerNotes.push({
+                                    NoteId: result.newNoteId,
+                                    CardCode: cardCode,
+                                    KisaNot: noteContent,
+                                    KullaniciKodu: 'WEBUSER',
+                                    EklemeTarihi: new Date().toISOString(),
+                                    NotTarihi: new Date().toISOString()
+                                });
+
+                                renderNotes(customerData.CustomerNotes);
+
+                                const row = document.querySelector(`tr[data-cardcode="${cardCode}"]`);
+                                if (row) {
+                                    const button = row.querySelector('.btn-note-operations');
+                                    if (button) {
+                                        button.classList.remove('btn-outline-secondary');
+                                        button.classList.add('btn-danger');
+                                        button.innerHTML = `<i class="fas fa-comment"></i> (${customerData.CustomerNotes.length})`;
+                                    }
+                                }
+                            }
+                            newNoteContent.value = '';
+
+                        } else {
+                            const errorText = await response.text();
+                            toastr.error('Not kaydedilemedi: ' + errorText);
+                        }
+                    } catch (error) {
+                        toastr.error('Bir hata oluştu: ' + error.message);
+                    } finally {
+                        saveNoteButton.disabled = false;
+                        saveNoteButton.textContent = 'Kaydet';
+                    }
+                });
+
+                renderTable(allReportData);
+            }
+
+            window.addEventListener('columnConfigUpdated', () => {
+                filterTableAndRender();
+                $('.filter-select-bs').selectpicker('refresh');
+            });
+
+            initializePage();
+        });
+    </script>
+}

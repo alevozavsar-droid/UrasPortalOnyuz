@@ -1,0 +1,193 @@
+﻿@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string sekme = (string)ViewBag.Sekme ?? "yeni";
+    string no = (string)ViewBag.No ?? "";
+    string q = Context.Request.Query.ContainsKey("_sekme") ? "?_sekme=1" : "";
+}
+@*
+    İZİN TALEP, ONAY, KULLANIM VE PUANTAJ MODÜLÜ — Nakit Avans modülüyle aynı mimari.
+    Sekmeler: Yeni Talep · Taleplerim · Talep Detayı · Ekip Takvimi · Onay Bekleyenler · Takip Raporu.
+    Üç ayrı statü: Talep Durumu (workflow) · Kullanım Durumu (PDKS) · Puantaj Durumu (bordro). Bakiye, kullanılan gün,
+    fiili dönüş ve puantaj ekrana elle girilmez; kaynak sistem olayları (PDKS / SGK / Bordro) Talep No ile işlenir.
+    Veri: /IkTalep/IzinVeri — davranış: wwwroot/js/izin-talep.js — stiller: Avans ekranıyla ortak (.na-*)
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<style>
+    .na { --na-k: #0ea5e9; }
+    .iz-bakiye { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .iz-bakiye > div { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px; text-align: center; }
+    .iz-bakiye .l { font-size: .58rem; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: .04em; }
+    .iz-bakiye .v { font-size: 1rem; font-weight: 800; line-height: 1.15; }
+    .iz-bakiye .kalan { grid-column: span 3; background: #f0f9ff; border-color: #7dd3fc; }
+    .iz-bakiye .kalan .v { font-size: 1.3rem; color: #0369a1; }
+    .iz-bakiye .kalan.kritik { background: #fef2f2; border-color: #fca5a5; } .iz-bakiye .kalan.kritik .v { color: #b91c1c; }
+    .iz-cubuk { height: 6px; border-radius: 999px; background: #e2e8f0; overflow: hidden; display: flex; margin-top: 4px; }
+    .iz-cubuk span { display: block; height: 100%; }
+    .iz-hesap { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 10px; font-size: .72rem; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 6px 10px; }
+    .iz-hesap b { color: #0f172a; }
+    .iz-hesap .h { grid-column: 1 / -1; font-size: .6rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; letter-spacing: .05em; }
+    .iz-tur-bilgi { font-size: .68rem; color: #64748b; margin-top: 2px; min-height: 14px; }
+    /* takvim */
+    .iz-takvim { width: 100%; border-collapse: collapse; font-size: .66rem; table-layout: fixed; }
+    .iz-takvim th, .iz-takvim td { border: 1px solid #eef2f7; padding: 0; height: 24px; text-align: center; }
+    .iz-takvim th { background: #f8fafc; font-weight: 700; color: #475569; font-size: .6rem; }
+    .iz-takvim th.hs, .iz-takvim td.hs { background: #f1f5f9; color: #94a3b8; }
+    .iz-takvim th.tt, .iz-takvim td.tt { background: #fee2e2; color: #991b1b; }
+    .iz-takvim th.bugun { background: #dbeafe; color: #1d4ed8; }
+    .iz-takvim td.ad { text-align: left; padding: 0 6px; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .7rem; }
+    .iz-takvim td.ad small { color: #94a3b8; font-weight: 500; }
+    .iz-takvim td .iz { display: block; height: 18px; margin: 3px 0; border-radius: 3px; cursor: pointer; }
+    .iz-takvim td .iz.bas { border-radius: 6px 3px 3px 6px; } .iz-takvim td .iz.son { border-radius: 3px 6px 6px 3px; }
+    .iz-takvim td .iz.bekliyor { opacity: .45; background-image: repeating-linear-gradient(45deg, transparent 0 3px, rgba(255,255,255,.6) 3px 6px); }
+    .iz-lejant { display: flex; gap: 10px; flex-wrap: wrap; font-size: .66rem; color: #475569; margin-top: 6px; }
+    .iz-lejant span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--c); margin-right: 4px; vertical-align: -1px; }
+    .iz-ay { display: flex; align-items: center; gap: 8px; }
+    .iz-ay b { min-width: 120px; text-align: center; font-size: .8rem; }
+    .iz-uyari-liste { margin: 0; padding-left: 16px; font-size: .7rem; color: #713f12; }
+    .iz-onay-satir td { vertical-align: middle; }
+</style>
+}
+
+<div class="container-fluid py-3 na" id="iz" data-sekme="@sekme" data-no="@no">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-umbrella-beach"></i></span>İzin Talebi</h4>
+        <span class="ikt-akis" style="font-size:.68rem;font-weight:700;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px"><i class="fas fa-route me-1"></i>Talep → Yönetici → (Direktör) → (İK) → Takvim / PDKS → Dönüş → Puantaj</span>
+        <span class="sub w-100">İzin talebi, onay, bakiye, kullanım ve puantaj tek Talep No üzerinden izlenir. Bakiye ve kullanılan gün <b>elle girilmez</b>; kıdem, PDKS giriş-çıkış, SGK rapor bildirimi ve bordro hareketlerinden otomatik hesaplanır.</span>
+    </div>
+
+    <div class="na-turler" data-dinamik="kapali">
+        <a href="/IkTalep/Izin@(q)" class="aktif"><i class="fas fa-umbrella-beach"></i>İzin Talebi</a>
+        <a href="/IkTalep/Mesai@(q)"><i class="fas fa-business-time"></i>Mesai Talebi</a>
+        <a href="/IkTalep/Avans@(q)"><i class="fas fa-hand-holding-dollar"></i>Avans Talebi</a>
+        <a href="/IkTalep/Belge@(q)"><i class="fas fa-file-signature"></i>Belge Talebi</a>
+        <a href="/IkTalep/Seyahat@(q)"><i class="fas fa-plane-departure"></i>Seyahat Talebi</a>
+        <a href="/IkTalep/Arac@(q)"><i class="fas fa-car-side"></i>Araç Talebi</a>
+    </div>
+
+    <div class="na-kpi" id="izKpi" data-dinamik="kapali"></div>
+
+    <div class="na-sekme" id="izSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="yeni"><i class="fas fa-plus me-1"></i>Yeni Talep</button>
+        <button type="button" data-p="liste">Taleplerim <span class="n" id="izNListe">0</span></button>
+        <button type="button" data-p="detay"><i class="fas fa-file-lines me-1"></i>Talep Detayı <span class="n" id="izDetayNo">—</span></button>
+        <button type="button" data-p="takvim"><i class="fas fa-calendar-days me-1"></i>Ekip Takvimi</button>
+        <button type="button" data-p="onay">Onay Bekleyenler <span class="n" id="izNOnay">0</span></button>
+        <button type="button" data-p="takip">Takip Raporu <span class="n" id="izNTakip">0</span></button>
+    </div>
+
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+
+    @* ---------------- YENİ TALEP ---------------- *@
+    <div class="na-panel" data-p="yeni">
+        <form id="izForm" autocomplete="off" novalidate>
+            <div class="row g-2">
+                <div class="col-lg-8">
+                    <div class="na-kart">
+                        <div class="na-kart-b"><span><i class="fas fa-id-card me-1"></i>Talep Üst Bilgileri ve Kişiler</span><span class="not">Talep No, tarih, şirket, departman sistemden otomatik</span></div>
+                        <div class="na-kart-g">
+                            <div class="row g-2">
+                                <div class="col-md-3"><label class="form-label">Talep No</label><input class="form-control" value="Sistem üretir (IZ-2026-…)" disabled></div>
+                                <div class="col-md-3"><label class="form-label">Talep Tarihi / Saati</label><input class="form-control" id="izTarih" disabled></div>
+                                <div class="col-md-6"><label class="form-label">İzni kullanacak personel <span class="z">*</span></label><select class="form-select" name="kullanan" id="izKullanan"></select></div>
+                            </div>
+                            <div class="row g-2 mt-1">
+                                <div class="col-md-6"><div class="iz-hesap" id="izOlusturan"><div class="h">Talebi oluşturan (İK'dan otomatik)</div></div></div>
+                                <div class="col-md-6"><div class="iz-hesap" id="izKullananBilgi"><div class="h">Seçilen personel (İK'dan otomatik)</div></div></div>
+                            </div>
+                            <div class="na-uyari" id="izKullananUyari"></div>
+                        </div>
+                    </div>
+
+                    <div class="na-kart">
+                        <div class="na-kart-b"><span><i class="fas fa-calendar-plus me-1"></i>İzin Detayları</span><span class="not">* zorunlu alan</span></div>
+                        <div class="na-kart-g">
+                            <div class="row g-2">
+                                <div class="col-md-4"><label class="form-label">İzin Türü <span class="z">*</span></label><select class="form-select" name="izinTuru" id="izTur"></select><div class="iz-tur-bilgi" id="izTurBilgi"></div></div>
+                                <div class="col-md-3"><label class="form-label">Başlangıç Tarihi <span class="z">*</span></label><input class="form-control" type="date" name="baslangic" id="izBas" required></div>
+                                <div class="col-md-3"><label class="form-label">Bitiş Tarihi <span class="z">*</span></label><input class="form-control" type="date" name="bitis" id="izBit" required></div>
+                                <div class="col-md-2"><label class="form-label">Yarım Gün</label><select class="form-select" name="yarimGun" id="izYarim"></select><div class="form-text">tek günlük izinde</div></div>
+                                <div class="col-12"><div class="iz-hesap" id="izHesap"><div class="h">Sistem hesabı (hafta sonu ve resmi tatil sayılmaz)</div><span>Takvim günü <b>—</b></span><span>İş günü <b>—</b></span><span>Hafta sonu <b>—</b></span><span>İşe dönüş <b>—</b></span></div></div>
+                                <div class="col-md-4"><label class="form-label">Yerine Bakacak Kişi (vekil)</label><select class="form-select" name="vekil" id="izVekil"></select></div>
+                                <div class="col-md-4"><label class="form-label">İzindeyken Ulaşılacak Telefon</label><input class="form-control" name="iletisim" placeholder="0 5xx xxx xx xx"></div>
+                                <div class="col-md-4"><label class="form-label">İzin Adresi / Şehir</label><input class="form-control" name="adres" placeholder="Örn. Muğla / Fethiye"></div>
+                                <div class="col-md-8"><label class="form-label">Açıklama <span class="z" id="izAciklamaZ" style="display:none">*</span></label><textarea class="form-control" name="aciklama" rows="2" placeholder="Mazeret ve ücretsiz izinde gerekçe zorunludur."></textarea></div>
+                                <div class="col-md-4"><label class="form-label">Belge / Ek Dosya <span class="form-text d-inline" id="izBelgeNot"></span></label><input class="form-control" type="file" id="izEk" multiple></div>
+                                <div class="col-md-7"><label class="form-label">Onay akışı <span class="form-text d-inline">(izin türü, süre, bakiye ve departman doluluğuna göre)</span></label><div class="na-akis" id="izAkis"></div></div>
+                                <div class="col-md-5"><label class="form-label">Kural kontrolleri</label><div id="izKurallar" class="na-mini">—</div></div>
+                            </div>
+                            <div class="d-flex justify-content-end gap-2 mt-2 pt-2 border-top">
+                                <button type="reset" class="btn btn-light btn-sm"><i class="fas fa-eraser me-1"></i>Temizle</button>
+                                <button type="submit" class="btn btn-primary btn-sm" id="izGonder"><i class="fas fa-paper-plane me-1"></i>Talebi Oluştur</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="na-kart">
+                        <div class="na-kart-b"><span><i class="fas fa-wallet me-1"></i>Yıllık İzin Bakiyesi</span><span class="not" id="izBakiyeKisi">canlı hesap</span></div>
+                        <div class="na-kart-g" id="izBakiye"></div>
+                    </div>
+                    <div class="na-kart">
+                        <div class="na-kart-b"><span><i class="fas fa-people-group me-1"></i>Ekip Durumu</span><span class="not">seçilen tarihlerde aynı departman</span></div>
+                        <div class="na-kart-g" id="izEkip"><div class="na-bos">Tarih seçilince listelenir.</div></div>
+                    </div>
+                    <div class="na-kart">
+                        <div class="na-kart-b"><span><i class="fas fa-sliders me-1"></i>Parametreler</span></div>
+                        <div class="na-kart-g">
+                            <div class="na-param mb-1"><span>Bakiye yetersizse:</span><select class="form-select" id="izPolitika"><option>Sadece uyar</option><option>Avans izin (eksi bakiye, ek yönetici onayı)</option><option>Talebi engelle</option></select></div>
+                            <div class="na-param mb-1"><span>Departman doluluk eşiği:</span><input class="form-control" type="number" id="izDoluluk" step="0.01" min="0.05" max="1"> <span>(oran)</span></div>
+                            <div class="na-param"><span>Uzun izin eşiği:</span><input class="form-control" type="number" id="izUzun" step="1"> <span>iş günü</span><button type="button" class="btn btn-light btn-sm py-0" id="izParamKaydet">Kaydet</button></div>
+                            <table class="na-tablo mt-2" data-dinamik="kapali"><thead><tr><th>Kıdem</th><th>Hak</th><th>Dayanak</th></tr></thead><tbody><tr><td>1–5 yıl</td><td>14 gün</td><td rowspan="3">4857 s. İş K. m.53</td></tr><tr><td>5–15 yıl</td><td>20 gün</td></tr><tr><td>15+ yıl</td><td>26 gün</td></tr></tbody></table>
+                        </div>
+                    </div>
+                    <div class="na-kart">
+                        <div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Kritik Kurallar</span></div>
+                        <div class="na-kart-g" style="font-size:.7rem;color:#475569"><ul class="mb-0 ps-3">
+                            <li>Bakiye kıdeme göre otomatik hak edilir; devir, kullanım ve iptal iadeleri hareket olarak tutulur.</li>
+                            <li>Aynı kişide çakışan izin açılamaz; vekil aynı tarihlerde izinli olamaz.</li>
+                            <li>Uzun izin ve departman doluluğu Direktör onayı ekler; ücretsiz izin İK onayı gerektirir.</li>
+                            <li>Raporlu izinde SGK e-rapor bildirimi gelmeden puantaja aktarılmaz.</li>
+                            <li>Başlamış izin iptal edilemez; erken dönüş PDKS'den işlenir ve kalan gün bakiyeye iade edilir.</li>
+                        </ul></div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    @* ---------------- TALEPLERİM ---------------- *@
+    <div class="na-panel" data-p="liste">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Taleplerim</span><span class="not">oluşturduğum, adıma açılan ya da vekili olduğum izinler · satıra tıklayın</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="izListe" data-dinamik="kapali"><thead><tr><th>Talep No</th><th>Personel</th><th>İzin Türü</th><th>Başlangıç</th><th>Bitiş</th><th class="s">İş Günü</th><th>Vekil</th><th>Talep Durumu</th><th>Kullanım Durumu</th><th>Puantaj Durumu</th></tr></thead><tbody></tbody></table></div></div></div>
+    </div>
+
+    @* ---------------- TALEP DETAYI ---------------- *@
+    <div class="na-panel" data-p="detay"><div id="izDetay"><div class="na-bos">Listeden bir talep seçin.</div></div></div>
+
+    @* ---------------- EKİP TAKVİMİ ---------------- *@
+    <div class="na-panel" data-p="takvim">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-days me-1"></i>Ekip İzin Takvimi</span>
+            <span class="d-flex gap-2 align-items-center"><select class="form-select form-select-sm" id="izTakvimDep" style="width:auto;font-size:.7rem;min-height:26px;padding:1px 24px 1px 6px"></select><span class="iz-ay"><button type="button" class="btn btn-light btn-sm py-0" id="izAyOnce">‹</button><b id="izAyAd"></b><button type="button" class="btn btn-light btn-sm py-0" id="izAySonra">›</button><button type="button" class="btn btn-light btn-sm py-0" id="izAyBugun">Bugün</button></span></span></div>
+            <div class="na-kart-g p-1"><div class="table-responsive"><table class="iz-takvim" id="izTakvim" data-dinamik="kapali"></table></div><div class="iz-lejant" id="izLejant"></div></div></div>
+    </div>
+
+    @* ---------------- ONAY BEKLEYENLER ---------------- *@
+    <div class="na-panel" data-p="onay">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clipboard-check me-1"></i>Onay Bekleyen İzin Talepleri</span><span class="not">yönetici / direktör / İK kuyruğu · hızlı işlem ya da satıra tıklayın</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="izOnayListe" data-dinamik="kapali"><thead><tr><th>Talep No</th><th>Personel</th><th>Departman</th><th>İzin Türü</th><th>Tarihler</th><th class="s">İş Günü</th><th>Bekleyen Adım</th><th>Onaycı</th><th class="s">Bekliyor</th><th>Kural Uyarısı</th><th>Hızlı İşlem</th></tr></thead><tbody></tbody></table></div></div></div>
+    </div>
+
+    @* ---------------- TAKİP RAPORU ---------------- *@
+    <div class="na-panel" data-p="takip">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-check me-1"></i>İzin Takip Raporu</span><span class="not">tüm talepler · sütun başlığından sıralama / filtre</span></div>
+            <div class="na-kart-g">
+                <div class="na-filtre"><input class="form-control" id="izTakipAra" placeholder="Talep no, kişi, tür…"><select class="form-select" id="izTakipTur"><option value="">Tür: tümü</option></select><select class="form-select" id="izTakipDurum"><option value="">Talep durumu: tümü</option></select><select class="form-select" id="izTakipKullanim"><option value="">Kullanım: tümü</option></select><span class="ms-auto na-mini" id="izTakipSayi"></span></div>
+                <div class="table-responsive"><table class="na-tablo" id="izTakip"><thead><tr><th>Talep No</th><th>Şirket</th><th>Departman</th><th>Personel</th><th>Talebi Oluşturan</th><th>İzin Türü</th><th>Talep Tarihi</th><th>Başlangıç</th><th>Bitiş</th><th class="s">Takvim Günü</th><th class="s">İş Günü</th><th class="s">Kullanılan</th><th>Ücretli</th><th>Vekil</th><th>Talep Durumu</th><th>Kullanım Durumu</th><th>Puantaj Durumu</th><th>Fiili Dönüş</th><th>Dönüş Teyidi</th><th>Belge</th><th>Yönetici</th><th>Direktör</th><th>İK</th><th>Puantaj Dönemi</th></tr></thead><tbody></tbody></table></div>
+            </div></div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="/js/izin-talep.js?v=1"></script>
+}

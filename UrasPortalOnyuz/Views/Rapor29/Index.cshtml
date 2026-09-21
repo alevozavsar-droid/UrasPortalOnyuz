@@ -1,0 +1,676 @@
+﻿@model List<WebApplication3.Models.SalesReportViewModel>
+@using WebApplication3.Models
+@using System.Globalization;
+@using Newtonsoft.Json;
+
+@{
+    ViewData["Title"] = "Satış Kar/Zarar Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml"; 
+
+    // Aktif Veritabanını (Şirketi) URL veya Cookie'den merkezi olarak alıyoruz
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"];
+    }
+
+    var reportDataJson = Model != null ? JsonConvert.SerializeObject(Model, new JsonSerializerSettings { DateFormatString = "yyyy-MM-dd" }) : "[]";
+}
+
+@section Styles {
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+    
+    <style>
+        :root {
+            --primary-color: #4361ee;
+            --success-color: #2ecc71;
+            --danger-color: #e74c3c;
+            --bg-body: #f4f7f6;
+            --bg-surface: #ffffff;
+            --text-main: #333333;
+            --text-muted: #64748b;
+            --border-light: #dbe2e8;
+            --radius-md: 8px;
+            --shadow-sm: 0 2px 4px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            font-size: 12.5px; 
+            background-color: var(--bg-body); 
+            color: var(--text-main); 
+        }
+
+        .main-report-box { 
+            background-color: var(--bg-surface); 
+            border-radius: var(--radius-md); 
+            box-shadow: var(--shadow-md); 
+            padding: 15px 20px; 
+            margin-bottom: 20px; 
+        }
+
+        .top-action-bar { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            flex-wrap: wrap; 
+            gap: 15px; 
+            margin-bottom: 15px; 
+            padding-bottom: 15px; 
+            border-bottom: 1px solid var(--border-light); 
+        }
+        
+        .filter-group { 
+            display: flex; 
+            align-items: center; 
+            gap: 12px; 
+        }
+
+        .modern-select {
+            appearance: none; 
+            background-color: #f8fafc; 
+            border: 1px solid #cbd5e1; 
+            border-radius: var(--radius-md);
+            padding: 8px 36px 8px 16px; 
+            font-size: 13.5px; 
+            font-weight: 500; 
+            color: #334155; 
+            cursor: pointer;
+            transition: all 0.2s ease; 
+            box-shadow: var(--shadow-sm);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat; 
+            background-position: right 12px center;
+        }
+        .modern-select:hover { border-color: #94a3b8; background-color: #ffffff; }
+        .modern-select:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.15); }
+
+        .btn-modern-select {
+            background-color: #ffffff !important; 
+            border: 1px solid #cbd5e1 !important; 
+            color: #334155 !important; 
+            font-weight: 500 !important;
+            border-radius: var(--radius-md) !important; 
+            padding: 8px 16px !important; 
+            font-size: 13.5px !important; 
+            box-shadow: var(--shadow-sm) !important;
+        }
+
+        .btn-modern-refresh {
+            background-color: #ffffff; 
+            border: 1px solid #cbd5e1; 
+            border-radius: var(--radius-md); 
+            width: 38px; 
+            height: 38px;
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            color: var(--text-muted); 
+            cursor: pointer; 
+            box-shadow: var(--shadow-sm);
+            transition: all 0.2s ease;
+        }
+        .btn-modern-refresh:hover { color: var(--primary-color); border-color: var(--primary-color); background-color: #f8fafc; }
+
+        .summary-widgets { display: flex; gap: 12px; align-items: center; }
+        .widget-pill { 
+            padding: 8px 15px; 
+            border-radius: 50px; 
+            background-color: #f8fafc; 
+            border: 1px solid var(--border-light); 
+            font-size: 13px; 
+            font-weight: 500; 
+            color: var(--text-muted); 
+            display: flex; 
+            align-items: center; 
+        }
+        .widget-pill strong { margin-left: 6px; font-size: 14px; color: var(--text-main); }
+        .db-badge { 
+            background-color: #0dcaf0; 
+            color: #fff; 
+            padding: 8px 15px; 
+            border-radius: var(--radius-md); 
+            font-weight: 600; 
+            display: flex; 
+            align-items: center; 
+            gap: 6px; 
+            box-shadow: var(--shadow-sm); 
+        }
+
+        .table-container { 
+            overflow-x: auto; 
+            border-radius: var(--radius-md); 
+            border: 1px solid #cbd5e1; 
+            background: var(--bg-surface); 
+        }
+        
+        .rapor-tablo { 
+            width: 100%; 
+            margin-bottom: 0; 
+            min-width: 1750px; 
+            table-layout: fixed; 
+            border-collapse: collapse; 
+        }
+        
+        .rapor-tablo th, .rapor-tablo td { 
+            padding: 8px 10px; 
+            vertical-align: middle; 
+            border-bottom: 1px solid var(--border-light); 
+            border-right: 1px solid var(--border-light); 
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            color: #334155;
+            font-size: 12.5px;
+        }
+        
+        .rapor-tablo th:last-child, .rapor-tablo td:last-child { border-right: none; }
+        .rapor-tablo thead { position: sticky; top: 0; z-index: 10; }
+        .rapor-tablo thead .main-header-row th { 
+            background-color: #f1f5f9; 
+            color: #1e293b; 
+            font-weight: 700; 
+            padding: 12px 10px; 
+            border-bottom: 2px solid #94a3b8; 
+            text-transform: uppercase; 
+            cursor: pointer; 
+        }
+        .rapor-tablo thead .filter-row th { 
+            background-color: #ffffff; 
+            padding: 6px 4px; 
+            border-bottom: 2px solid #cbd5e1; 
+            overflow: visible; 
+        }
+        .rapor-tablo thead .filter-row input { 
+            font-size: 11px; 
+            border-radius: 4px; 
+            border: 1px solid #cbd5e1; 
+            width: 100%; 
+            padding: 4px 8px; 
+        }
+
+        .row-zarar { background-color: #fff5f5 !important; } 
+        .row-kar { background-color: #f0fdf4 !important; } 
+        .row-uyari { background-color: #fffbeb !important; }
+        .rapor-tablo tbody tr:hover { background-color: #e2e8f0 !important; }
+
+        .badge-status { 
+            padding: 4px 8px; 
+            border-radius: 20px; 
+            font-weight: 600; 
+            font-size: 11px; 
+            display: inline-block; 
+            text-align: center; 
+            min-width: 80px; 
+            border: 1px solid transparent; 
+        }
+        .badge-zarar { background-color: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
+        .badge-kar { background-color: #dcfce7; color: #15803d; border-color: #86efac; }
+        .badge-uyari { background-color: #fef3c7; color: #b45309; border-color: #fcd34d; }
+
+        .link-style { color: var(--primary-color); font-weight: 600; cursor: pointer; text-decoration: underline transparent; }
+        .link-style:hover { text-decoration: underline var(--primary-color); }
+        .num-col { text-align: right !important; font-family: 'Inter', monospace; font-weight: 500;}
+        
+        .filter-row .bootstrap-select { width: 100% !important; }
+        .bootstrap-select .dropdown-menu { max-width: 350px; white-space: normal; }
+        .filter-row .bootstrap-select .dropdown-toggle { padding: 4px 8px; font-size: 11px; border-color: #cbd5e1; }
+    </style>
+}
+
+<div class="container-fluid py-4">
+    @Html.AntiForgeryToken()
+
+    <div class="row g-0">
+        <div class="col-md-12">
+            
+            @if (TempData["Warning"] != null)
+            {
+                <div class="alert alert-danger text-center shadow-sm" style="font-size: 1.2em; border-radius: 12px; padding: 20px;">
+                    <i class="fas fa-ban fa-2x mb-2 d-block text-danger"></i>
+                    <strong>Erişim Engellendi:</strong> @TempData["Warning"]
+                </div>
+            }
+            else
+            {
+                <div class="main-report-box">
+
+                    <div class="top-action-bar">
+                        
+                        <div class="filter-group">
+                            <button class="btn-modern-refresh" type="button" title="Filtreleri Sıfırla / Yenile" onclick="window.location.href='@Url.Action("Index", "Rapor29")?db=@currentDb'">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+
+                            <select id="topYearSelect" class="modern-select" style="width: 100px;">
+                                @if (ViewBag.Yillar != null)
+                                {
+                                    foreach (SelectListItem y in ViewBag.Yillar)
+                                    {
+                                        if (y.Value == ViewBag.SeciliYil.ToString()) { <option value="@y.Value" selected="selected">@y.Text</option> }
+                                        else { <option value="@y.Value">@y.Text</option> }
+                                    }
+                                }
+                            </select>
+
+                            <select id="topMonthSelect" class="modern-select" style="width: 140px;">
+                                @if (ViewBag.Aylar != null)
+                                {
+                                    foreach (SelectListItem a in ViewBag.Aylar)
+                                    {
+                                        if (a.Value == ViewBag.SeciliAy.ToString()) { <option value="@a.Value" selected="selected">@a.Text</option> }
+                                        else { <option value="@a.Value">@a.Text</option> }
+                                    }
+                                }
+                            </select>
+
+                            <select id="topProductSelect" class="my-custom-product-select" multiple data-live-search="true" data-selected-text-format="count > 2" title="Ürün Ara / Seç..." data-width="320px">
+                                @if (ViewBag.UrunListesi != null)
+                                {
+                                    foreach (SelectListItem u in ViewBag.UrunListesi)
+                                    {
+                                        if (ViewBag.SeciliUrunler != null && ((List<string>)ViewBag.SeciliUrunler).Contains(u.Value))
+                                        {
+                                            <option value="@u.Value" selected="selected" data-subtext="@u.Value">@u.Text</option>
+                                        }
+                                        else
+                                        {
+                                            <option value="@u.Value" data-subtext="@u.Value">@u.Text</option>
+                                        }
+                                    }
+                                }
+                            </select>
+                            
+                            <span class="text-muted ms-2" style="font-size: 11.5px; line-height: 1.2;">
+                                <i class="fas fa-info-circle text-primary me-1"></i> Ürün seçip menüyü kapattığınızda<br>tablo otomatik güncellenir.
+                            </span>
+                        </div>
+
+                        <div class="summary-widgets">
+                            <div class="widget-pill">Seçilen Satış: <strong id="totalSelectedSales" style="color: var(--primary-color);">0,00 TL</strong></div>
+                            <div class="widget-pill">Seçilen K/Z: <strong id="totalSelectedProfitLoss" style="color: var(--primary-color);">0,00 TL</strong></div>
+                            <div class="db-badge"><i class="fas fa-database"></i> @ViewBag.DatabaseName</div>
+                        </div>
+
+                    </div>
+
+                    <div class="table-container shadow-sm">
+                        <table class="table rapor-tablo" id="salesReportTable">
+                            <colgroup>
+                                <col style="width: 40px;">   <col style="width: 90px;">   <col style="width: 110px;">  <col style="width: 90px;">   <col style="width: 120px;">  <col style="width: 250px;">  <col style="width: 90px;">   <col style="width: 130px;">  <col style="width: 140px;">  <col style="width: 140px;">  <col style="width: 140px;">  <col style="width: 120px;">  <col style="width: 90px;">   
+                            </colgroup>
+
+                            <thead>
+                                <tr class="main-header-row">
+                                    <th style="text-align: center;"><input type="checkbox" id="selectAllCheckbox" class="form-check-input" title="Tümünü Seç"></th>
+                                    <th class="sortable-column" data-column="FaturaTarihi" data-sort-type="date">Tarih <i class="fas fa-sort text-muted ms-1 float-end"></i></th>
+                                    <th class="sortable-column" data-column="FaturaAyi" data-sort-type="text">Ay <i class="fas fa-sort text-muted ms-1 float-end"></i></th>
+                                    <th class="sortable-column" data-column="FaturaNo" data-sort-type="text">Fatura No <i class="fas fa-sort text-muted ms-1 float-end"></i></th>
+                                    <th class="sortable-column" data-column="MusteriKodu" data-sort-type="text">Müşteri Kodu <i class="fas fa-sort text-muted ms-1 float-end"></i></th>
+                                    <th class="sortable-column" data-column="MusteriAdi" data-sort-type="text">Müşteri Adı <i class="fas fa-sort text-muted ms-1 float-end"></i></th>
+                                    <th class="sortable-column" data-column="SatisParaBirimi" data-sort-type="text">P. Birimi <i class="fas fa-sort text-muted ms-1 float-end"></i></th>
+                                    <th style="text-align: right;" class="sortable-column" data-column="SatisTutariPB" data-sort-type="number">Satış Satır Toplam(PB) <i class="fas fa-sort text-muted ms-1"></i></th>
+                                    <th style="text-align: right;" class="sortable-column" data-column="SatisTutariTL" data-sort-type="number">Satış Satır Toplam(TL) <i class="fas fa-sort text-muted ms-1"></i></th>
+                                    <th style="text-align: right;" class="sortable-column" data-column="ToplamMaliyet" data-sort-type="number">Maliyet (TL) <i class="fas fa-sort text-muted ms-1"></i></th>
+                                    <th style="text-align: right;" class="sortable-column" data-column="ToplamKarZarar" data-sort-type="number">Kar/Zarar (TL) <i class="fas fa-sort text-muted ms-1"></i></th>
+                                    <th style="text-align: center;" class="sortable-column" data-column="Durum" data-sort-type="text">Durum <i class="fas fa-sort text-muted ms-1"></i></th>
+                                    <th style="text-align: right;" class="sortable-column" data-column="KarZararYuzdesi" data-sort-type="number">K/Z (%) <i class="fas fa-sort text-muted ms-1"></i></th>
+                                </tr>
+                                <tr class="filter-row">
+                                    <th></th>
+                                    <th data-column="FaturaTarihi"><input type="text" class="form-control form-control-sm text-filter" placeholder="Ara..." /></th>
+                                    <th data-column="FaturaAyi">
+                                        <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-selected-text-format="count > 1" data-width="100%" title="Seç">
+                                            @if (ViewBag.FaturaAyiList != null) { foreach (var item in ViewBag.FaturaAyiList) { <option value="@item">@item</option> } }
+                                        </select>
+                                    </th>
+                                    <th data-column="FaturaNo"><input type="text" class="form-control form-control-sm text-filter" placeholder="Ara..." /></th>
+                                    <th data-column="MusteriKodu"><input type="text" class="form-control form-control-sm text-filter" placeholder="Ara..." /></th>
+                                    <th data-column="MusteriAdi">
+                                        <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-selected-text-format="count > 1" data-width="100%" title="Seç">
+                                            @if (ViewBag.MusteriAdiList != null) { foreach (var item in ViewBag.MusteriAdiList) { <option value="@item">@item</option> } }
+                                        </select>
+                                    </th>
+                                    <th data-column="SatisParaBirimi">
+                                        <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-selected-text-format="count > 1" data-width="100%" title="Seç">
+                                            @if (ViewBag.SatisParaBirimiList != null) { foreach (var item in ViewBag.SatisParaBirimiList) { <option value="@item">@item</option> } }
+                                        </select>
+                                    </th>
+                                    <th data-column="SatisTutariPB"></th>
+                                    <th data-column="SatisTutariTL"></th>
+                                    <th data-column="ToplamMaliyet"></th>
+                                    <th data-column="ToplamKarZarar"></th>
+                                    <th data-column="Durum">
+                                        <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-selected-text-format="count > 1" data-width="100%" title="Seç">
+                                            @if (ViewBag.DurumList != null) { foreach (var item in ViewBag.DurumList) { <option value="@item">@item</option> } }
+                                        </select>
+                                    </th>
+                                    <th data-column="KarZararYuzdesi"></th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+
+                    <div class="row mt-3 text-muted">
+                        <div class="col-md-12 text-end" style="font-size: 13px;">
+                            <i class="fas fa-list-ul"></i> <span id="totalRecords">Toplam Kayıt: @(Model?.Count ?? 0)</span>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (TempData["Warning"] == null)
+    {
+        <div class="mt-4 mb-4">
+            <a asp-action="Index" asp-controller="Home" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+                <i class="fas fa-arrow-left me-2"></i> Ana Sayfaya Dön
+            </a>
+        </div>
+    }
+
+</div>
+
+<div class="modal fade" id="saleDetailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" style="max-width: 95%;">
+        <div class="modal-content" style="border-radius: 12px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+            <div class="modal-header" style="background-color: #f8fafc; border-bottom: 1px solid #e0e6ed; border-radius: 12px 12px 0 0;">
+                <h5 class="modal-title fw-bold" style="color: #334155;">Satış Fatura Detayları: <span id="modal-fatura-no" class="text-primary"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body modal-body-details" style="max-height: 70vh; overflow-y: auto; background-color: #fcfcfc;"></div>
+            <div class="modal-footer" style="border-top: 1px solid #e0e6ed;"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="border-radius: 8px;">Kapat</button></div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="purchaseDetailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 12px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
+            <div class="modal-header" style="background-color: #eef2f3; border-bottom: 1px solid #dcdcdc; border-radius: 12px 12px 0 0;">
+                <h5 class="modal-title fw-bold text-dark"><i class="fas fa-file-invoice-dollar text-success me-2"></i>Alış Faturası Detayları: <span id="modal-alis-fatura-no" class="text-success"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body modal-body-details" style="max-height: 60vh; overflow-y: auto; background-color: #fff;"></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if(!document.getElementById('salesReportTable')) return;
+
+            // Aktif veritabanı parametresini JS değişkenine alıyoruz
+            const currentDbParam = '@currentDb';
+            const dbQueryString = currentDbParam ? `?db=${currentDbParam}` : '';
+            const antiForgeryToken = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+
+            const allReportData = @Html.Raw(reportDataJson);
+            const tableBody = document.querySelector('#salesReportTable tbody');
+
+            const totalSelectedSalesSpan = document.getElementById('totalSelectedSales');
+            const totalSelectedProfitLossSpan = document.getElementById('totalSelectedProfitLoss');
+
+            const topYearSelect = $('#topYearSelect');
+            const topMonthSelect = $('#topMonthSelect');
+            const topProductSelect = $('#topProductSelect');
+
+            const columnMappings = {
+                'FaturaTarihi': 'FaturaTarihi', 'FaturaAyi': 'FaturaAyi', 'FaturaNo': 'FaturaNo',
+                'MusteriKodu': 'MusteriKodu', 'MusteriAdi': 'MusteriAdi', 'SatisParaBirimi': 'SatisParaBirimi',
+                'SatisTutariPB': 'SatisTutariPB', 'SatisTutariTL': 'SatisTutariTL', 'ToplamMaliyet': 'ToplamMaliyet',
+                'ToplamKarZarar': 'ToplamKarZarar', 'Durum': 'Durum', 'KarZararYuzdesi': 'KarZararYuzdesi'
+            };
+
+            let currentlyFilteredData = [...allReportData];
+            let currentSortColumn = null;
+            let currentSortDirection = 'none';
+            let selectedDocNums = new Set();
+
+            window.clearReportFilters = function () {
+                $('.filter-row .text-filter').val('');
+                $('.filter-select-bs').selectpicker('val', '');
+                currentSortColumn = null;
+                currentSortDirection = 'none';
+                $('th.sortable-column i').attr('class', 'fas fa-sort text-muted ms-1 float-end');
+                selectedDocNums.clear();
+                filterAndSortTable();
+            };
+
+            function updateSelectedTotals() {
+                let totalSales = 0, totalProfitLoss = 0;
+                currentlyFilteredData.forEach(item => {
+                    if (selectedDocNums.has(item.FaturaNo)) { totalSales += item.SatisTutariTL || 0; totalProfitLoss += item.ToplamKarZarar || 0; }
+                });
+                totalSelectedSalesSpan.textContent = `${totalSales.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL`;
+                totalSelectedSalesSpan.style.color = totalSales < 0 ? 'var(--danger-color)' : 'var(--primary-color)';
+                totalSelectedProfitLossSpan.textContent = `${totalProfitLoss.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL`;
+                totalSelectedProfitLossSpan.style.color = totalProfitLoss > 0 ? 'var(--success-color)' : (totalProfitLoss < 0 ? 'var(--danger-color)' : 'var(--primary-color)');
+
+                const visibleCB = document.querySelectorAll('#salesReportTable tbody input[type="checkbox"]');
+                const selectedCB = document.querySelectorAll('#salesReportTable tbody input[type="checkbox"]:checked');
+                const selectAllCB = document.getElementById('selectAllCheckbox');
+                
+                if (visibleCB.length === 0) { selectAllCB.checked = false; selectAllCB.indeterminate = false; }
+                else if (selectedCB.length === visibleCB.length) { selectAllCB.checked = true; selectAllCB.indeterminate = false; }
+                else if (selectedCB.length > 0) { selectAllCB.checked = false; selectAllCB.indeterminate = true; }
+                else { selectAllCB.checked = false; selectAllCB.indeterminate = false; }
+            }
+
+            function renderTable(data) {
+                tableBody.innerHTML = '';
+                if (data.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="13" class="text-center py-4 text-muted"><i class="fas fa-folder-open mb-2 fa-2x"></i><br>Gösterilecek veri bulunamadı.</td></tr>';
+                    document.getElementById('totalRecords').textContent = `Toplam Kayıt: 0`;
+                    updateSelectedTotals(); return;
+                }
+                const fragment = document.createDocumentFragment();
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.className = item.Durum ? { 'Kar': 'row-kar', 'Zarar': 'row-zarar', 'Başa Baş': 'row-uyari', 'Maliyet Yok': 'row-uyari' }[item.Durum.trim()] || '' : '';
+                    
+                    const selectCell = document.createElement('td');
+                    selectCell.style.textAlign = 'center';
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox'; cb.className = 'form-check-input'; cb.value = item.FaturaNo;
+                    if (selectedDocNums.has(item.FaturaNo)) cb.checked = true;
+                    cb.addEventListener('change', function() { if(this.checked) selectedDocNums.add(this.value); else selectedDocNums.delete(this.value); updateSelectedTotals(); });
+                    selectCell.appendChild(cb); row.appendChild(selectCell);
+
+                    Object.keys(columnMappings).forEach(key => {
+                        const cell = document.createElement('td');
+                        let val = item[columnMappings[key]];
+                        if (val != null) {
+                            if (key.includes('Tarihi')) { const d = new Date(val); cell.textContent = !isNaN(d.getTime()) ? d.toLocaleDateString('tr-TR') : val; }
+                            else if (typeof val === 'number') { cell.textContent = val.toLocaleString('tr-TR', { minimumFractionDigits: 2 }); cell.className = 'num-col'; }
+                            else if (key === 'KarZararYuzdesi') { cell.textContent = val.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + ' %'; cell.className = 'num-col'; }
+                            else if (key === 'Durum') {
+                                let bClass = val.trim() === 'Kar' ? 'badge-kar' : (val.trim() === 'Zarar' ? 'badge-zarar' : 'badge-uyari');
+                                cell.innerHTML = `<span class="badge-status ${bClass}">${val}</span>`; cell.style.textAlign = 'center';
+                            }
+                            else { cell.textContent = val; cell.title = val; }
+                        }
+                        if (key === 'FaturaNo') { cell.classList.add('link-style'); cell.onclick = () => showSaleDetails(val); }
+                        row.appendChild(cell);
+                    });
+                    fragment.appendChild(row);
+                });
+                tableBody.appendChild(fragment);
+                document.getElementById('totalRecords').textContent = `Toplam Kayıt: ${data.length}`;
+                updateSelectedTotals();
+            }
+
+            $('.filter-select-bs').selectpicker({
+                liveSearch: true, style: 'btn-outline-secondary btn-sm', selectedTextFormat: 'count > 1', container: 'body'
+            }).on('changed.bs.select', filterAndSortTable);
+
+            topProductSelect.selectpicker({
+                style: 'btn-modern-select', noneSelectedText: 'Ürün Ara / Seç...', size: 10
+            }).on('hide.bs.select', function () {
+                const currentVals = $(this).val() || [];
+                const previousVals = $(this).data('prev-vals') || [];
+                if (currentVals.join(',') !== previousVals.join(',')) { applyDateFilter(false); }
+            }).on('show.bs.select', function() {
+                $(this).data('prev-vals', $(this).val() || []);
+            });
+
+            topYearSelect.on('change', function() { applyDateFilter(true); });
+            topMonthSelect.on('change', function() { applyDateFilter(true); });
+
+            function applyDateFilter(clearProducts) {
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('yil', topYearSelect.val());
+                currentUrl.searchParams.set('ay', topMonthSelect.val());
+                
+                if (clearProducts) { currentUrl.searchParams.delete('urunler'); } 
+                else {
+                    const selProds = topProductSelect.val();
+                    if (selProds && selProds.length > 0) currentUrl.searchParams.set('urunler', selProds.join(','));
+                    else currentUrl.searchParams.delete('urunler');
+                }
+                
+                if (currentDbParam && !currentUrl.searchParams.has('db')) {
+                    currentUrl.searchParams.set('db', currentDbParam);
+                }
+                
+                window.location.href = currentUrl.toString();
+            }
+
+            document.querySelectorAll('th.sortable-column').forEach(header => {
+                header.addEventListener('click', function () {
+                    const colKey = this.dataset.column;
+                    const prevIcon = document.querySelector(`th.sortable-column[data-column="${currentSortColumn}"] i`);
+                    if (prevIcon) prevIcon.className = 'fas fa-sort text-muted ms-1 float-end';
+                    if (currentSortColumn === colKey) {
+                        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : (currentSortDirection === 'desc' ? 'none' : 'asc');
+                        if (currentSortDirection === 'none') currentSortColumn = null;
+                    } else { currentSortColumn = colKey; currentSortDirection = 'asc'; }
+
+                    const icon = this.querySelector('i');
+                    if (icon) icon.className = currentSortDirection !== 'none' ? `fas fa-sort-${currentSortDirection === 'asc' ? 'up' : 'down'} text-primary ms-1 float-end` : 'fas fa-sort text-muted ms-1 float-end';
+                    filterAndSortTable();
+                });
+            });
+
+            function filterAndSortTable() {
+                let filtered = allReportData.filter(item => {
+                    let match = true;
+                    $('.filter-row .text-filter, .filter-row .filter-select-bs').each(function () {
+                        const colKey = $(this).closest('th').data('column'); if (!colKey) return true;
+                        const val = item[columnMappings[colKey]] ? item[columnMappings[colKey]].toString().toLowerCase().trim() : '';
+                        let fVals = [];
+                        if ($(this).is('input')) { const iVal = $(this).val().toLowerCase().trim(); if (iVal) fVals = [iVal]; }
+                        else { const sel = $(this).val(); if (sel && Array.isArray(sel)) fVals = sel.map(v => v.toLowerCase().trim()); }
+                        if (fVals.length > 0 && !fVals.some(v => val.includes(v))) { match = false; return false; }
+                    });
+                    return match;
+                });
+
+                if (currentSortColumn && currentSortDirection !== 'none') {
+                    const sType = document.querySelector(`th[data-column="${currentSortColumn}"]`)?.dataset.sortType;
+                    const pName = columnMappings[currentSortColumn];
+                    filtered.sort((a, b) => {
+                        let vA = a[pName] ?? '', vB = b[pName] ?? '';
+                        let comp = 0;
+                        if (sType === 'number') comp = (parseFloat(vA) || 0) - (parseFloat(vB) || 0);
+                        else if (sType === 'date') {
+                            const dA = vA ? new Date(vA) : null, dB = vB ? new Date(vB) : null;
+                            if (!dA && !dB) comp = 0; else if (!dA) comp = 1; else if (!dB) comp = -1; else comp = dA.getTime() - dB.getTime();
+                        } else comp = vA.localeCompare(vB, 'tr', { sensitivity: 'base' });
+                        return currentSortDirection === 'asc' ? comp : -comp;
+                    });
+                }
+                currentlyFilteredData = filtered; renderTable(filtered);
+            }
+
+            $('.text-filter').on('keyup', filterAndSortTable);
+
+            document.getElementById('selectAllCheckbox').addEventListener('change', function() {
+                const isChecked = this.checked;
+                document.querySelectorAll('#salesReportTable tbody input[type="checkbox"]').forEach(cb => {
+                    cb.checked = isChecked;
+                    if (isChecked) selectedDocNums.add(cb.value); else selectedDocNums.delete(cb.value);
+                });
+                updateSelectedTotals();
+            });
+
+            function showSaleDetails(docNum) {
+                const modalBody = $('#saleDetailsModal .modal-body-details');
+                document.getElementById('modal-fatura-no').textContent = docNum;
+                modalBody.html('<div class="d-flex justify-content-center my-5"><div class="spinner-border text-primary"></div></div>');
+                $.ajax({
+                    url: `/Rapor29/GetSaleDetails${dbQueryString}`, type: 'GET', data: { docNum: docNum },
+                    success: function (data) { modalBody.html(data); },
+                    error: function () { modalBody.html('<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> Detaylar yüklenirken bir hata oluştu.</div>'); }
+                });
+                new bootstrap.Modal(document.getElementById('saleDetailsModal')).show();
+            }
+
+            window.showPurchaseDetails = function(docNum) {
+                if (!docNum) {
+                    alert("Bu ürün için alış faturası bulunmuyor (Maliyet Yok).");
+                    return;
+                }
+                
+                const modalBody = $('#purchaseDetailsModal .modal-body-details');
+                document.getElementById('modal-alis-fatura-no').textContent = docNum;
+                modalBody.html('<div class="d-flex justify-content-center my-5"><div class="spinner-border text-success"></div></div>');
+
+                $.ajax({
+                    url: `/Rapor29/GetPurchaseDetails${dbQueryString}`,
+                    type: 'GET',
+                    data: { docNum: docNum },
+                    success: function (data) {
+                        if(data && data.length > 0) {
+                            let tableHtml = `<table class="table table-bordered table-striped table-hover" style="font-size:12px;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Fatura Tarihi</th>
+                                        <th>Tedarikçi Kodu</th>
+                                        <th>Tedarikçi Adı</th>
+                                        <th>Ürün Kodu</th>
+                                        <th>Ürün Açıklaması</th>
+                                        <th class="text-end">Miktar</th>
+                                        <th class="text-end" style="background-color:#eefaf2;">Alış Birim Fiyat (Net)</th>
+                                        <th class="text-end">Satır Toplamı (Net)</th>
+                                        <th class="text-center">Para Birimi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
+                            data.forEach(item => {
+                                tableHtml += `<tr>
+                                    <td>${item.FaturaTarihi || item.faturaTarihi || ''}</td>
+                                    <td>${item.TedarikciKodu || item.tedarikciKodu || ''}</td>
+                                    <td>${item.TedarikciAdi || item.tedarikciAdi || ''}</td>
+                                    <td>${item.UrunKodu || item.urunKodu || ''}</td>
+                                    <td>${item.UrunAciklamasi || item.urunAciklamasi || ''}</td>
+                                    <td class="text-end">${(item.Miktar ?? item.miktar) != null ? (item.Miktar ?? item.miktar).toLocaleString('tr-TR', {minimumFractionDigits:2}) : '0,00'}</td>
+                                    <td class="text-end fw-bold text-success" style="background-color:#eefaf2;">${(item.BirimFiyat ?? item.birimFiyat) != null ? (item.BirimFiyat ?? item.birimFiyat).toLocaleString('tr-TR', {minimumFractionDigits:2}) : '0,00'}</td>
+                                    <td class="text-end">${(item.SatirToplami ?? item.satirToplami) != null ? (item.SatirToplami ?? item.satirToplami).toLocaleString('tr-TR', {minimumFractionDigits:2}) : '0,00'}</td>
+                                    <td class="text-center">${item.ParaBirimi || item.paraBirimi || ''}</td>
+                                </tr>`;
+                            });
+                            tableHtml += `</tbody></table>`;
+                            modalBody.html(tableHtml);
+                        } else {
+                            modalBody.html('<div class="alert alert-warning">Bu faturaya ait detay bulunamadı.</div>');
+                        }
+                    },
+                    error: function () {
+                        modalBody.html('<div class="alert alert-danger">Detaylar yüklenirken bir hata oluştu.</div>');
+                    }
+                });
+
+                new bootstrap.Modal(document.getElementById('purchaseDetailsModal')).show();
+            }
+
+            filterAndSortTable();
+        });
+    </script>
+}

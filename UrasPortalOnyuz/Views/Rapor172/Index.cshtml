@@ -1,0 +1,244 @@
+@using WebApplication3.Controllers
+@{
+    ViewData["Title"] = "Parti Yaşlandırma (Stok Yaşı)";
+    var depolar = ViewBag.Depolar as List<Rapor172Controller.DepoOgesi> ?? new List<Rapor172Controller.DepoOgesi>();
+}
+
+<style>
+    .py-sayfa { padding: 4px 2px 24px; }
+    .py-baslik { font-size: 20px; font-weight: 800; color: #0f172a; letter-spacing: -.3px; }
+    .py-alt { font-size: 12.5px; color: #64748b; }
+    .py-kart { background: #fff; border: 1px solid #e8edf3; border-radius: 14px; box-shadow: 0 1px 3px rgba(15,23,42,.04); }
+    .py-etiket { font-size: 11.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .3px; }
+
+    .py-ozet { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+    .py-ozet-kutu { background: #fff; border: 1px solid #e8edf3; border-radius: 12px; padding: 14px 16px; border-top: 3px solid var(--k, #2a78d6); }
+    .py-ozet-baslik { font-size: 11.5px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+    .py-ozet-deger { font-size: 21px; font-weight: 800; color: #0f172a; margin-top: 2px; }
+    .py-ozet-ek { font-size: 11.5px; color: #94a3b8; }
+
+    .py-tablo { font-size: 12.8px; }
+    .py-tablo thead th {
+        position: sticky; top: 0; z-index: 2; background: #f8fafc; color: #475569;
+        font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: .3px;
+        border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+    }
+    .py-tablo tbody tr:hover { background: #f8fafc; }
+    .py-sayi { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .py-kod { font-weight: 700; color: #0f172a; white-space: nowrap; }
+    .py-sarma { max-height: 62vh; overflow: auto; border-radius: 12px; }
+
+    .py-rozet { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+    .py-rozet-yesil { background: #dcfce7; color: #15803d; }
+    .py-rozet-sari { background: #fef9c3; color: #a16207; }
+    .py-rozet-turuncu { background: #ffedd5; color: #c2410c; }
+    .py-rozet-kirmizi { background: #fee2e2; color: #b91c1c; }
+    .py-rozet-gri { background: #eef2f7; color: #475569; }
+
+    .py-bar-satir { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .py-bar-etiket { width: 70px; font-size: 11.5px; font-weight: 700; color: #475569; }
+    .py-bar-yol { flex: 1; background: #f1f5f9; border-radius: 999px; height: 18px; overflow: hidden; }
+    .py-bar-dolu { height: 100%; border-radius: 999px; }
+    .py-bar-sayi { width: 60px; text-align: right; font-size: 12px; font-weight: 700; color: #0f172a; }
+</style>
+
+<div class="py-sayfa">
+
+    <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-3">
+        <div>
+            <div class="py-baslik"><i class="fas fa-hourglass-half text-primary me-2"></i>Parti Yaşlandırma (Stok Yaşı)</div>
+            <div class="py-alt">Depodaki pozitif stoklu partilerin ilk giriş tarihine göre yaşı &middot; FIFO takibi ve bekleyen stok için &middot; Şirket: <strong>URASKIMYA</strong></div>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-success rounded-pill px-3 fw-bold" onclick="excelIndir()">
+                <i class="fas fa-file-excel me-1"></i>Excel
+            </button>
+        </div>
+    </div>
+
+    <!-- FİLTRELER -->
+    <div class="py-kart p-3 mb-3">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <div class="py-etiket mb-1">Depo</div>
+                <select id="fWhs" class="form-select form-select-sm">
+                    <option value="">Tüm depolar</option>
+                    @foreach (var d in depolar)
+                    {
+                        <option value="@d.WhsCode">@d.WhsCode - @d.WhsName</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <div class="py-etiket mb-1">Kalem Tipi</div>
+                <select id="fTip" class="form-select form-select-sm">
+                    <option value="">Tümü</option>
+                    <option value="H">Hammadde</option>
+                    <option value="YM">Yarı Mamul</option>
+                    <option value="UR">Mamul</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <div class="py-etiket mb-1">Ara</div>
+                <input type="text" id="fArama" class="form-control form-control-sm" placeholder="Kalem kodu, adı veya parti..." autocomplete="off" />
+            </div>
+            <div class="col-md-3">
+                <label class="d-flex align-items-center gap-2 mb-2" style="font-size:12.5px; cursor:pointer;">
+                    <input type="checkbox" id="fSktSadece" /> Yalnızca süresi dolanlar
+                </label>
+                <button type="button" class="btn btn-primary btn-sm rounded-pill px-4 fw-bold w-100" onclick="getir()">
+                    <i class="fas fa-rotate me-1"></i>Getir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ÖZET -->
+    <div class="py-ozet mb-3" id="ozetAlani" style="display:none;">
+        <div class="py-ozet-kutu" style="--k:#2a78d6"><div class="py-ozet-baslik">Parti</div><div class="py-ozet-deger" id="ozParti">0</div><div class="py-ozet-ek">pozitif stoklu</div></div>
+        <div class="py-ozet-kutu" style="--k:#1baf7a"><div class="py-ozet-baslik">Toplam Miktar</div><div class="py-ozet-deger" id="ozMiktar">0</div><div class="py-ozet-ek">tüm birimler</div></div>
+        <div class="py-ozet-kutu" style="--k:#e34948"><div class="py-ozet-baslik">Süresi Dolan</div><div class="py-ozet-deger" id="ozSkt">0</div><div class="py-ozet-ek">SKT geçmiş parti</div></div>
+    </div>
+
+    <div class="row g-3 mb-3" id="kovaAlani" style="display:none;">
+        <div class="col-12">
+            <div class="py-kart p-3">
+                <div class="py-etiket mb-2">Yaş Kovalarına Göre Parti Sayısı</div>
+                <div id="kovaGrafik"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TABLO -->
+    <div class="py-kart p-3">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <div class="py-etiket">Parti Listesi <span class="badge bg-light text-dark ms-1" id="rozSatir">0</span></div>
+            <input type="text" id="tabloAra" class="form-control form-control-sm" style="width:240px;" placeholder="Tabloda ara..." autocomplete="off" />
+        </div>
+        <div class="py-sarma">
+            <table class="table table-hover align-middle mb-0 py-tablo" id="partiTablo">
+                <thead>
+                    <tr>
+                        <th>Kalem</th><th>Tip</th><th>Parti</th><th>Depo</th>
+                        <th class="text-end">Miktar</th><th>Giriş</th><th class="text-end">Yaş (gün)</th>
+                        <th>Kova</th><th>SKT</th>
+                    </tr>
+                </thead>
+                <tbody id="partiGovde">
+                    <tr><td colspan="9" class="text-center text-muted py-5">Filtreleri seçip <strong>Getir</strong>'e basın.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    var TUM_SATIRLAR = [];
+    var KOVA_RENK = { '0-30': '#1baf7a', '31-90': '#2a78d6', '91-180': '#eab308', '181-365': '#f97316', '365+': '#e34948' };
+    var KOVA_ROZET = { '0-30': 'py-rozet-yesil', '31-90': 'py-rozet-gri', '91-180': 'py-rozet-sari', '181-365': 'py-rozet-turuncu', '365+': 'py-rozet-kirmizi' };
+
+    function tipSinif(itemCode) {
+        if (itemCode.indexOf('U') === 0) return 'py-rozet-yesil';
+        if (itemCode.indexOf('Y') === 0) return 'py-rozet-gri';
+        return 'py-rozet-sari';
+    }
+
+    function fmt(n, dec) {
+        dec = dec === undefined ? 2 : dec;
+        return Number(n || 0).toLocaleString('tr-TR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    }
+
+    function parametreler() {
+        return {
+            whs: document.getElementById('fWhs').value,
+            tip: document.getElementById('fTip').value,
+            arama: document.getElementById('fArama').value.trim()
+        };
+    }
+
+    function getir() {
+        var p = parametreler();
+        var qs = new URLSearchParams(p).toString();
+        document.getElementById('partiGovde').innerHTML = '<tr><td colspan="9" class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm me-2"></span>Rapor hazırlanıyor...</td></tr>';
+
+        fetch('/Rapor172/Veri?' + qs)
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.basarili) { alert(d.mesaj || 'Veri alınamadı.'); return; }
+                TUM_SATIRLAR = d.satirlar || [];
+                ozetGuncelle(TUM_SATIRLAR, d.kovalar || []);
+                kovaGrafikCiz(d.kovalar || []);
+                tabloCiz();
+            })
+            .catch(function (e) { alert('Hata: ' + e); });
+    }
+
+    function ozetGuncelle(satirlar, kovalar) {
+        document.getElementById('ozetAlani').style.display = '';
+        document.getElementById('kovaAlani').style.display = '';
+        document.getElementById('ozParti').textContent = fmt(satirlar.length, 0);
+        var toplamMiktar = satirlar.reduce(function (a, s) { return a + Number(s.miktar || 0); }, 0);
+        document.getElementById('ozMiktar').textContent = fmt(toplamMiktar, 0);
+        var sktDolan = satirlar.filter(function (s) { return s.suresiDoldu === 1; }).length;
+        document.getElementById('ozSkt').textContent = fmt(sktDolan, 0);
+        document.getElementById('rozSatir').textContent = satirlar.length;
+    }
+
+    function kovaGrafikCiz(kovalar) {
+        var el = document.getElementById('kovaGrafik');
+        var maxSayi = Math.max.apply(null, kovalar.map(function (k) { return k.partiSayisi; }).concat([1]));
+        el.innerHTML = kovalar.map(function (k) {
+            var yuzde = Math.round((k.partiSayisi / maxSayi) * 100);
+            var renk = KOVA_RENK[k.kova] || '#94a3b8';
+            return '<div class="py-bar-satir">' +
+                '<div class="py-bar-etiket">' + k.kova + ' gün</div>' +
+                '<div class="py-bar-yol"><div class="py-bar-dolu" style="width:' + yuzde + '%;background:' + renk + '"></div></div>' +
+                '<div class="py-bar-sayi">' + k.partiSayisi + '</div>' +
+                '</div>';
+        }).join('');
+    }
+
+    function tabloCiz() {
+        var arama = (document.getElementById('tabloAra').value || '').toUpperCase();
+        var govde = document.getElementById('partiGovde');
+        var filtreli = TUM_SATIRLAR.filter(function (s) {
+            if (document.getElementById('fSktSadece').checked && s.suresiDoldu !== 1) return false;
+            if (!arama) return true;
+            return (s.itemCode + s.itemName + s.parti).toUpperCase().indexOf(arama) >= 0;
+        });
+
+        if (filtreli.length === 0) {
+            govde.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-5"><i class="fas fa-inbox me-2"></i>Kayıt yok.</td></tr>';
+            return;
+        }
+
+        govde.innerHTML = filtreli.map(function (s) {
+            var sktRozet = s.suresiDoldu === 1 ? ' <span class="py-rozet py-rozet-kirmizi">doldu</span>' : '';
+            return '<tr>' +
+                '<td><span class="fw-semibold">' + (s.itemName || s.itemCode) + '</span><div class="py-kod">' + s.itemCode + '</div></td>' +
+                '<td><span class="py-rozet ' + tipSinif(s.itemCode) + '">' + s.tip + '</span></td>' +
+                '<td><a href="#" class="text-decoration-none" style="font-family:monospace">' + s.parti + '</a></td>' +
+                '<td>' + s.whsCode + '</td>' +
+                '<td class="py-sayi fw-bold">' + fmt(s.miktar) + ' <span class="text-muted">' + s.birim + '</span></td>' +
+                '<td class="text-nowrap">' + (s.girisTarihi || '') + '</td>' +
+                '<td class="py-sayi">' + s.yasGun + '</td>' +
+                '<td><span class="py-rozet ' + (KOVA_ROZET[s.kova] || 'py-rozet-gri') + '">' + s.kova + '</span></td>' +
+                '<td class="text-nowrap">' + (s.sonKullanma || '&mdash;') + sktRozet + '</td>' +
+                '</tr>';
+        }).join('');
+    }
+
+    function excelIndir() {
+        var p = parametreler();
+        var qs = new URLSearchParams(p).toString();
+        window.location = '/Rapor172/Excel?' + qs;
+    }
+
+    document.getElementById('tabloAra').addEventListener('input', tabloCiz);
+    document.getElementById('fSktSadece').addEventListener('change', tabloCiz);
+    document.getElementById('fArama').addEventListener('keydown', function (e) { if (e.keyCode === 13) getir(); });
+
+    getir();
+</script>
+}

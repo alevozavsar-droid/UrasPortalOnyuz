@@ -1,0 +1,1420 @@
+﻿@{
+    ViewData["Title"] = "İbraz (Çek Depositi)";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var databases = (List<WebApplication3.Controllers.Rapor119Controller.DatabaseConfig>)ViewBag.Databases;
+    var currentDbDisplay = (string)ViewBag.CurrentDbDisplay;
+    var currencies = (List<string>)ViewBag.Currencies;
+
+    var iadeDurumlari = (List<WebApplication3.Controllers.Rapor119Controller.UdfValidValue>)ViewBag.IadeDurumlari;
+    var aktarTipleri = (List<WebApplication3.Controllers.Rapor119Controller.UdfValidValue>)ViewBag.AktarTipleri;
+    var checkTransactionTypes = (List<WebApplication3.Controllers.Rapor119Controller.UdfValidValue>)ViewBag.CheckTransactionTypes;
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <style>
+        :root { --form-bg: #ffffff; --border-soft: #e2e8f0; --primary-soft: #eff6ff; }
+        body { background-color: #f8fafc; }
+        .sap-card { background: var(--form-bg); border: 1px solid var(--border-soft); border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 1.5rem; overflow: hidden; }
+        .sap-card-body { padding: 1.5rem; }
+        
+        .form-label { font-weight: 600; color: #475569; font-size: 0.85rem; margin-bottom: 0.4rem; }
+        .form-control-sm, .form-select-sm { min-height: 36px; font-size: 0.85rem; border-radius: 6px; }
+        .form-control, .form-select { border-color: #cbd5e1; }
+        .form-control:focus, .form-select:focus { border-color: #3b82f6; box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25); }
+        
+        .table-modern { border-collapse: separate; border-spacing: 0; width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-soft); }
+        .table-modern th { background-color: #f1f5f9; color: #334155; font-size: 0.75rem; font-weight: 700; padding: 12px; border-bottom: 2px solid var(--border-soft); border-right: 1px solid var(--border-soft); white-space:nowrap;}
+        .table-modern td { padding: 8px 10px; vertical-align: middle; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); font-size: 0.85rem; white-space:nowrap; background-color: #ffffff; }
+        .table-modern tbody tr:hover td { background-color: var(--primary-soft); cursor:pointer; } 
+        
+        .select2-container--bootstrap-5 .select2-selection { font-size: 0.85rem; min-height: 36px; border-color: #cbd5e1; border-radius: 6px; }
+        
+        .action-bar { background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-top: 1px solid var(--border-soft); padding: 1rem 1.5rem; position: sticky; bottom: 0; z-index: 100; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -10px 15px -3px rgba(0,0,0,0.05); }
+
+        .nav-tabs-sap { border-bottom: 1px solid var(--border-soft); background: #ffffff; padding: 0 1rem; }
+        .nav-tabs-sap .nav-link { color: #64748b; border: none; padding: 1rem 1.5rem; font-weight: 600; border-bottom: 3px solid transparent; border-radius: 0; }
+        .nav-tabs-sap .nav-link.active { color: #2563eb; border-bottom-color: #2563eb; background: #eff6ff; }
+
+        .udf-panel { border-left: 2px dashed var(--border-soft); padding-left: 1.5rem; }
+        .view-mode .searchable-field, .view-mode textarea, .view-mode input { background-color: #f1f5f9 !important; cursor: not-allowed; pointer-events: none; border-color: transparent;}
+        .view-mode .select2-selection { background-color: #f1f5f9 !important; cursor: not-allowed; pointer-events: none; border-color: transparent; }
+        .view-mode .btn-remove-row { display: none !important; }
+        
+        .find-mode .searchable-field { background-color: #fef9c3 !important; border-color: #facc15 !important; }
+        .find-mode .select2-selection { background-color: #fef9c3 !important; border-color: #facc15 !important; }
+
+        .top-header-bar { background: #ffffff; padding: 1rem 1.5rem; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); margin-bottom: 1.5rem; border: 1px solid var(--border-soft); }
+        .status-badge-container { display: flex; align-items: center; gap: 10px; }
+        .doc-num-display { font-size: 1.5rem; font-weight: 800; color: #1e293b; background: #f1f5f9; padding: 5px 15px; border-radius: 8px; border: 1px dashed #cbd5e1; }
+        
+        /* Toplu İşlemler Özel */
+        .bulk-error-list { max-height: 150px; overflow-y: auto; font-size: 0.85rem; font-family: monospace; }
+        .bulk-success-list { font-size: 0.85rem; font-weight: bold; }
+    </style>
+}
+
+<div class="container-fluid py-4 pb-5 mb-5" id="mainContainer">
+    <div class="top-header-bar d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div class="d-flex align-items-center flex-wrap gap-3">
+            <h4 class="mb-0 fw-bold text-dark" id="pageTitle">
+                <div class="d-flex align-items-center">
+                    <div class="bg-primary bg-opacity-10 p-2 rounded-3 me-3">
+                        <i class="fas fa-money-check-alt text-primary fs-4"></i>
+                    </div>
+                    Çek İbraz İşlemleri
+                </div>
+            </h4>
+            
+            <div class="status-badge-container ms-lg-4" id="documentStatusArea" style="display: none;">
+                <div class="doc-num-display">
+                    <span class="text-muted fs-6 fw-normal me-2">Belge No:</span><span id="headerDocNumVal">-</span>
+                </div>
+                <div id="docStatusBadge"></div>
+            </div>
+            
+            <span class="badge bg-secondary fs-6 px-3 py-2 ms-lg-auto">@currentDbDisplay</span>
+        </div>
+        
+        <div class="btn-group shadow-sm border bg-white rounded" role="group">
+            <button type="button" class="btn btn-light nav-btn hover-bg-light" data-dir="first" title="İlk Kayıt"><i class="fas fa-fast-backward text-secondary"></i></button>
+            <button type="button" class="btn btn-light nav-btn hover-bg-light" data-dir="prev" title="Önceki Kayıt"><i class="fas fa-step-backward text-secondary"></i></button>
+            <button type="button" class="btn btn-light nav-btn hover-bg-light" data-dir="next" title="Sonraki Kayıt"><i class="fas fa-step-forward text-secondary"></i></button>
+            <button type="button" class="btn btn-light nav-btn hover-bg-light" data-dir="last" title="Son Kayıt"><i class="fas fa-fast-forward text-secondary"></i></button>
+            <button type="button" class="btn btn-light" id="btnFindMode" title="Kayıt Bul"><i class="fas fa-search text-info"></i> Bul</button>
+            <button type="button" class="btn btn-primary text-white fw-bold" id="btnNewDoc" title="Yeni Kayıt Ekle"><i class="fas fa-plus me-1"></i> Yeni</button>
+            <!-- TOPLU İŞLEM BUTONU -->
+            <button type="button" class="btn btn-warning fw-bold text-dark border-start" id="btnOpenBulkModal" title="Toplu İptal ve Tarih Düzeltme İşlemleri">
+                <i class="fas fa-layer-group me-1"></i> Toplu İşlemler
+            </button>
+        </div>
+    </div>
+
+    <div id="loadingOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.85); backdrop-filter: blur(4px); z-index:9999; flex-direction:column; justify-content:center; align-items:center;">
+        <div class="spinner-border text-primary" role="status" style="width: 4rem; height: 4rem; border-width: 0.35em;"></div>
+        <h4 class="mt-4 text-primary fw-bold">Lütfen Bekleyin...</h4>
+        <p class="text-muted">İşleminiz gerçekleştiriliyor</p>
+    </div>
+
+    <form id="depositForm">
+        <div class="sap-card">
+            <div class="sap-card-body">
+                <div class="row g-4">
+                    <div class="col-lg-8">
+                        <div class="row g-3">
+                            <div class="col-md-4" id="divDocNumSearch" style="display: none;">
+                                <label class="form-label text-info fw-bold"><i class="fas fa-search me-1"></i> İbraz No (Bul)</label>
+                                <input type="number" id="SearchDocNum" class="form-control form-control-sm border-info bg-info bg-opacity-10" placeholder="Örn: 1064" />
+                            </div>
+                            
+                            <div class="col-md-4" id="divStaticDocNum">
+                                <label class="form-label">İbraz Numarası</label>
+                                <input type="text" id="DocNum" class="form-control form-control-sm bg-light text-center fw-bold" readonly placeholder="Otomatik" />
+                            </div>
+
+                            <div class="col-md-4" id="divCashDate">
+                                <label class="form-label">Vadesi şu tarihe kadar</label>
+                                <input type="date" id="UntilDate" class="form-control form-control-sm searchable-field" />
+                            </div>
+
+                            <div class="col-md-8" id="divPostDatedDates" style="display:none;">
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <label class="form-label">Vade Başlangıç</label>
+                                        <input type="date" id="FromDate" class="form-control form-control-sm searchable-field" />
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label">Vade Bitiş</label>
+                                        <input type="date" id="ToDate" class="form-control form-control-sm searchable-field" />
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-4">
+                                <label class="form-label">İbraz Para Birimi</label>
+                                <select id="DocCurrency" class="form-select form-select-sm searchable-field">
+                                    <option value="">Yerel Para Birimi</option>
+                                    @foreach(var c in currencies) { <option value="@c">@c</option> }
+                                </select>
+                            </div>
+
+                            <div class="col-md-4 mt-4 req-field">
+                                <label class="form-label">İbraz Yeri Tipi <span class="text-danger">*</span></label>
+                                <select id="AccountType" class="form-select form-select-sm searchable-field" required>
+                                    <option value="Account" selected>Defteri Kebir Hesabı (Banka)</option>
+                                    <option value="BP">Muhatap (Tedarikçi/Müşteri)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-8 mt-4 req-field">
+                                <label class="form-label">Hesap / Muhatap Kodu <span class="text-danger">*</span></label>
+                                <select id="DepositAccount" class="form-select searchable-field" required></select>
+                            </div>
+                            <div class="col-md-4 mt-3 req-field">
+                                <label class="form-label">İbraz Tarihi <span class="text-danger">*</span></label>
+                                <input type="date" id="DepositDate" class="form-control form-control-sm searchable-field" required />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-4 udf-panel req-field" style="max-height: 400px; overflow-y:auto;">
+                        <h6 class="fw-bold text-dark border-bottom pb-2 mb-3"><i class="fas fa-sliders-h me-2 text-primary"></i>Genel Bilgiler (UDF)</h6>
+                        
+                        <div class="mb-3">
+                            <label class="form-label mb-1">İade mi?</label>
+                            <select id="U_BE1_IADE" class="form-select form-select-sm searchable-field bg-light">
+                                <option value="">Seçiniz</option>
+                                @if(iadeDurumlari.Any()) {
+                                    foreach(var item in iadeDurumlari) { <option value="@item.Code">@item.Description</option> }
+                                } else {
+                                    <option value="N">Hayır</option><option value="E">Evet</option>
+                                }
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label mb-1">İşlem Tipi (Aktar)</label>
+                            <select id="U_BE1_AKTAR" class="form-select form-select-sm searchable-field bg-light">
+                                <option value="">Seçiniz</option>
+                                @if(aktarTipleri.Any()) {
+                                    foreach(var item in aktarTipleri) { <option value="@item.Code">@item.Description</option> }
+                                } else {
+                                    <option value="X">X</option><option value="R">R</option><option value="Y">Y</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label mb-1">Genel Çek İşlem Türü</label>
+                            <select id="U_BE1_CEKISLEMTUR" class="form-select form-select-sm searchable-field bg-light">
+                                <option value="">Seçiniz</option>
+                                @foreach(var t in checkTransactionTypes) {
+                                    <option value="@t.Code">@t.Description</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="sap-card" id="gridCard">
+            <ul class="nav nav-tabs nav-tabs-sap" role="tablist">
+                <li class="nav-item"><button class="nav-link active" id="cekler-tab" data-bs-toggle="tab" data-bs-target="#cekler" type="button" role="tab"><i class="fas fa-money-check me-2"></i>Çekler / Senetler</button></li>
+            </ul>
+            
+            <div class="tab-content">
+                <div class="tab-pane fade show active p-0" id="cekler" role="tabpanel">
+                    <div class="p-3 bg-light border-bottom d-flex align-items-center justify-content-between flex-wrap gap-3">
+                        <div class="d-flex align-items-center gap-3 bg-white p-2 rounded border">
+                            <span class="fw-bold text-primary" title="SAP B1 Çek ibrazı türü: Nakit çek (ChkType C) / Vadeli çek (ChkType S). Vadeli ibraz edilen çekler Vadeli Çek İbrazı ekranına düşer."><i class="fas fa-money-check me-2"></i>Çek İbrazı Türü:</span>
+                            <div class="form-check form-check-inline mb-0">
+                                <input class="form-check-input" type="radio" name="checkType" id="rbNakit" value="Cash" checked>
+                                <label class="form-check-label" for="rbNakit">Nakit Çek <small class="text-muted">(seçili tarihe kadar)</small></label>
+                            </div>
+                            <div class="form-check form-check-inline mb-0">
+                                <input class="form-check-input" type="radio" name="checkType" id="rbVadeli" value="PostDated">
+                                <label class="form-check-label" for="rbVadeli">Vadeli Çek <small class="text-muted">(tarih aralığı)</small></label>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="input-group input-group-sm" style="width: 280px;">
+                                <span class="input-group-text bg-white border-end-0 text-muted"><i class="fas fa-search"></i></span>
+                                <input type="text" id="checkSearchFilter" class="form-control border-start-0 ps-0" placeholder="Listede Çek Ara (No, Banka, Müşteri)...">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table-modern border-0" id="checksTable">
+                            <thead class="sticky-top">
+                                <tr>
+                                    <th class="text-center" style="width:40px;">#</th>
+                                    <th class="text-center" style="width:50px;">
+                                        <input class="form-check-input searchable-field border-secondary" style="transform: scale(1.2);" type="checkbox" id="selectAllChecks">
+                                    </th>
+                                    <th>Vade Tarihi</th>
+                                    <th>Çek No</th>
+                                    <th>Banka Adı</th>
+                                    <th>Şube</th>
+                                    <th>Hesap No</th>
+                                    <th>Muhatap Kodu</th>
+                                    <th>Muhatap Adı</th>
+                                    <th class="text-end">Çek Tutarı</th>
+                                    <th>Proje</th>
+                                    <th class="text-center" style="width: 50px; background: #f1f5f9; position: sticky; right: 0;"><i class="fas fa-trash text-danger" title="Satır İptali"></i></th>
+                                </tr>
+                            </thead>
+                            <tbody id="checksBody">
+                                <tr><td colspan="12" class="text-center text-muted py-5"><i class="fas fa-search fs-3 mb-2 d-block text-black-50"></i>Tarih aralığına uygun ibraz edilmemiş çekler burada listelenecektir.</td></tr>
+                            </tbody>
+                            <tfoot class="sticky-bottom bg-light border-top">
+                                <tr>
+                                    <td colspan="3" class="fw-bold text-muted px-4 py-3">Seçilen Çek Sayısı: <span id="lblCheckCount" class="badge bg-primary fs-6 ms-2">0</span></td>
+                                    <td colspan="6" class="text-end fw-bold text-dark fs-6 py-3">Genel Toplam:</td>
+                                    <td class="text-end fw-bolder text-primary fs-5 py-3" id="lblCheckTotal">0,00</td>
+                                    <td colspan="2"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-3 req-field">
+            <div class="col-md-6">
+                <div class="sap-card">
+                    <div class="sap-card-body">
+                        <label class="form-label text-dark fw-bold mb-2">Yevmiye Açıklamaları</label>
+                        <input type="text" id="JournalRemarks" class="form-control bg-light border" placeholder="İbraz İşlemi - " />
+                        
+                        <div id="divTransAbs" style="display:none;" class="mt-3">
+                            <label class="form-label text-muted mb-1">İşlem / Yevmiye Numarası</label>
+                            <input type="text" id="TransAbs" class="form-control bg-light border-0" readonly />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 d-flex align-items-end justify-content-end pb-3">
+                <div class="form-check p-3 bg-white border rounded-3 shadow-sm d-flex align-items-center">
+                    <input class="form-check-input border-secondary fs-4 ms-0 mt-0 me-3" type="checkbox" id="chkReconcile" checked>
+                    <label class="form-check-label text-dark fw-bold pt-1" for="chkReconcile" style="cursor: pointer;">
+                        İbrazdan sonra tutarların mutabakatını yap <br>
+                        <small class="text-danger fw-normal">Hesap plânında hesap mutabakata KENDİLİĞİNDEN KAPALIYSA bu işareti mutlaka KALDIRIN!</small>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="action-bar fixed-bottom">
+            <div id="documentActionButtons" style="display:none;" class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-danger px-4 py-2 shadow-sm fw-bold rounded-pill" id="btnCancelDocumentModal">
+                    <i class="fas fa-ban me-2"></i>Belgeyi İptal Et
+                </button>
+                <button type="button" class="btn btn-outline-warning px-4 py-2 shadow-sm fw-bold rounded-pill" id="btnReturnDocument">
+                    <i class="fas fa-undo-alt me-2"></i>İade Et
+                </button>
+            </div>
+            <div class="d-flex gap-2 ms-auto">
+                <button type="button" class="btn btn-light border px-4 py-2 rounded-pill fw-bold" id="btnCancel">İptal / Temizle</button>
+                <button type="submit" class="btn btn-success px-5 py-2 shadow-lg fw-bold rounded-pill fs-6" id="btnSave">
+                    <i class="fas fa-save me-2"></i>İbraz Et (Sisteme Kaydet)
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- STANDART İPTAL MODALI -->
+<div class="modal fade" id="cancelOptionsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title fw-bold"><i class="fas fa-ban me-2"></i>İptal Seçenekleri</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 bg-light">
+                <div class="alert alert-danger border-danger mb-4">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Bu ibraz belgesi SAP üzerinden tamamen iptal edilecektir. Çekler portföye iade edilir. İşlem geri alınamaz.
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold mb-3 fs-6">İşlemin iptal tarihi şu olacak:</label>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="radio" name="cancelDateType" id="cancelSystemDate" value="SystemDate" checked style="cursor: pointer; transform: scale(1.2);">
+                        <label class="form-check-label ms-2" for="cancelSystemDate" style="cursor: pointer;">
+                            <strong>Geçerli sistem tarihi</strong>
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="cancelDateType" id="cancelDocDate" value="DocumentDate" style="cursor: pointer; transform: scale(1.2);">
+                        <label class="form-check-label ms-2" for="cancelDocDate" style="cursor: pointer;">
+                            <strong>Asıl belge tarihi</strong>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-white border-top">
+                <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Vazgeç</button>
+                <button type="button" class="btn btn-danger rounded-pill px-5 fw-bold text-white shadow-sm" id="btnConfirmCancel">İptal İşlemini Başlat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- İADE (TERS KAYIT) MODALI -->
+<div class="modal fade" id="returnDateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title fw-bold"><i class="fas fa-undo-alt me-2"></i>İade İşlemi</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 bg-light">
+                <div class="alert alert-warning border-warning mb-4">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Mevcut ibraz belgesi iptal edilecek, İade UDF alanı "Evet" olarak işaretlenecek ve yerine İade (Ters Kayıt) yevmiyesi atılacaktır.
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold mb-3 fs-6">İşlemin iade tarihi şu olacak:</label>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="radio" name="returnDateType" id="rdSystem" value="SystemDate" checked style="cursor: pointer; transform: scale(1.2);">
+                        <label class="form-check-label ms-2" for="rdSystem" style="cursor: pointer;">
+                            <strong>Geçerli sistem tarihi</strong>
+                        </label>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="radio" name="returnDateType" id="rdDocument" value="DocumentDate" style="cursor: pointer; transform: scale(1.2);">
+                        <label class="form-check-label ms-2" for="rdDocument" style="cursor: pointer;">
+                            <strong>Asıl belge tarihi</strong>
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="returnDateType" id="rdCustom" value="Custom" style="cursor: pointer; transform: scale(1.2);">
+                        <label class="form-check-label ms-2" for="rdCustom" style="cursor: pointer;">
+                            <strong>Özel / Geçmiş Tarih</strong>
+                        </label>
+                    </div>
+                </div>
+                <div id="customDateContainer" style="display: none; padding-left: 2rem;" class="mt-3">
+                    <label class="form-label text-muted fw-bold small">İade Kayıt Tarihi Seçiniz <span class="text-danger">*</span></label>
+                    <input type="date" id="ReturnDateInput" class="form-control shadow-sm border-warning" />
+                </div>
+            </div>
+            <div class="modal-footer bg-white border-top">
+                <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Vazgeç</button>
+                <button type="button" class="btn btn-warning rounded-pill px-4 fw-bold text-dark shadow-sm" id="btnConfirmReturn">İade Kaydını Oluştur</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ARAMA MODALI -->
+<div class="modal fade" id="searchResultsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title fw-bold"><i class="fas fa-list me-2"></i>Arama Sonuçları</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0 bg-light">
+                <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                    <table class="table table-hover table-modern mb-0 border-0">
+                        <thead class="sticky-top shadow-sm">
+                            <tr>
+                                <th class="bg-white">İbraz No</th>
+                                <th class="bg-white">Tarih</th>
+                                <th class="bg-white">Hesap / Kasa / Muhatap</th>
+                                <th class="bg-white text-end">Tutar</th>
+                                <th class="bg-white">Açıklama</th>
+                            </tr>
+                        </thead>
+                        <tbody id="searchResultsBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-white border-top">
+                <span class="text-muted small me-auto"><i class="fas fa-info-circle me-1 text-info"></i>Görüntülemek istediğiniz kaydın üzerine tıklayın.</span>
+                <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- TOPLU İŞLEMLER MODALI -->
+<div class="modal fade" id="bulkOperationsModal" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title fw-bold"><i class="fas fa-layer-group me-2"></i>Açık İbrazlar - Toplu İptal ve Tarih Düzeltme İşlemleri</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 bg-light">
+                <div class="alert alert-info border-info mb-3">
+                    <i class="fas fa-info-circle me-2"></i>Aşağıda yalnızca sistemdeki <b>Açık (İptal Edilmemiş)</b> ibraz belgeleri yer almaktadır. İşlem yapmak istediklerinizi seçip aşağıdaki menüden aksiyon belirleyiniz.
+                </div>
+                
+                <!-- Sadece Hatalı (Çakışan) Kayıtları Gösterme Filtresi -->
+                <div class="d-flex justify-content-end mb-2">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="switchShowErrorsOnly" style="cursor: pointer; transform: scale(1.2);">
+                        <label class="form-check-label fw-bold text-danger ms-2" for="switchShowErrorsOnly" style="cursor: pointer;">
+                            <i class="fas fa-exclamation-triangle me-1"></i> Sadece Tarihi Hatalı (Çakışan) İbrazları Göster
+                        </label>
+                    </div>
+                </div>
+<div class="table-responsive bg-white border rounded shadow-sm mb-4" style="max-height: 350px; overflow-y: auto;">
+    <table class="table table-hover table-modern mb-0" id="bulkDepositsTable">
+        <thead class="sticky-top shadow-sm">
+            <tr>
+                <th class="text-center" style="width:50px;">
+                    <input class="form-check-input border-secondary" style="transform: scale(1.2);" type="checkbox" id="selectAllBulk">
+                </th>
+                <th>İbraz No</th>
+                <th>İbraz Tarihi</th>
+                <th>Tahsilat Tarihi</th>
+                <th>Çek Numaraları</th>
+                <th>Hesap / Muhatap</th>
+                <th class="text-end">Tutar</th>
+            </tr>
+        </thead>
+        <tbody id="bulkDepositsBody">
+            <tr><td colspan="7" class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Kayıtlar yükleniyor...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+                <div class="card border-warning bg-white shadow-sm">
+                    <div class="card-header bg-warning bg-opacity-10 fw-bold text-dark border-warning">
+                        <i class="fas fa-cogs me-2"></i>Yapılacak İşlemi Seçiniz
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input border-secondary" type="radio" name="bulkActionType" id="bulkActionCancel" value="Cancel" checked style="transform: scale(1.2); cursor: pointer;">
+                                    <label class="form-check-label ms-2 fw-bold text-danger" for="bulkActionCancel" style="cursor: pointer;">
+                                        Sadece Seçili İbrazları İptal Et
+                                    </label>
+                                    <div class="text-muted small ms-4 mt-1">Belgeler SAP üzerinden iptal edilir, çekler otomatik portföye geri döner. SAP standartlarına göre yevmiye iptali gerçekleşir.</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6 border-start">
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input border-secondary" type="radio" name="bulkActionType" id="bulkActionFix" value="Fix" style="transform: scale(1.2); cursor: pointer;">
+                                    <label class="form-check-label ms-2 fw-bold text-primary" for="bulkActionFix" style="cursor: pointer;">
+                                        Tarihleri Düzelt (Yeniden İbraz Et)
+                                    </label>
+                                    <div class="text-muted small ms-4 mt-1">Seçili ibraz belgeleri iptal edilir. İptal ile portföye düşen çekler, belirteceğiniz yeni hedef tarihte otomatik olarak yeniden ibraz edilir.</div>
+                                </div>
+                                <div id="bulkTargetDateContainer" class="ms-4 mt-2" style="display: none;">
+                                    <label class="form-label text-dark fw-bold small">İbrazın Çıkılacağı Doğru Tarih <span class="text-danger">*</span></label>
+                                    <input type="date" id="bulkTargetDate" class="form-control form-control-sm border-primary shadow-sm">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="bulkResultArea" class="mt-4" style="display: none;">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-dark text-white fw-bold"><i class="fas fa-poll-h me-2"></i>İşlem Sonuç Raporu</div>
+                        <div class="card-body bg-white">
+                            <div class="mb-3 bulk-success-list text-success"></div>
+                            <div class="bulk-error-list text-danger p-3 bg-light rounded border border-danger border-opacity-25" style="display:none;"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer bg-white border-top">
+                <span class="text-muted small me-auto fw-bold">Seçilen: <span id="bulkSelectedCount" class="text-primary">0</span></span>
+                <button type="button" class="btn btn-outline-primary rounded-pill px-4 fw-bold" id="btnBulkBordro"
+                        title="Seçilen ibrazların tamamı tek bir bordroda toplanır. SAP'de hiçbir değişiklik yapmaz.">
+                    <i class="fas fa-file-pdf me-1"></i>Seçilenler İçin TEK Bordro İndir
+                </button>
+                <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Kapat</button>
+                <button type="button" class="btn btn-dark rounded-pill px-5 fw-bold shadow-sm" id="btnExecuteBulk">İşlemi Başlat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    
+    <script>
+        toastr.options = { 
+            positionClass: "toast-top-right", 
+            timeOut: "4000",
+            progressBar: true,
+            preventDuplicates: true
+        };
+
+        let currentMode = 'ADD'; 
+        let isBindingData = false; 
+        let currentDocEntry = 0; 
+
+        function formatNumber(num) {
+            return parseFloat(num).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // Toplami para birimine gore yazar: { USD: 1452, TRY: 5000 } -> "1.452,00 USD" + "5.000,00 TRY" (dovizler karistirilmaz)
+        function pbToplamYaz(pbToplam, tlKarsiligi, yerelPb) {
+            const pbler = Object.keys(pbToplam).filter(k => pbToplam[k] !== 0 || Object.keys(pbToplam).length === 1);
+            if (!pbler.length) { $('#lblCheckTotal').html('0,00'); return; }
+            let h = pbler.map(pb => `<div>${formatNumber(pbToplam[pb])} <span class="badge ${(pb === (yerelPb || 'TRY') || pb === 'TL') ? 'bg-secondary' : 'bg-warning text-dark'} align-middle">${pb}</span></div>`).join('');
+            if (tlKarsiligi && pbler.some(pb => pb !== (yerelPb || 'TRY') && pb !== 'TL'))
+                h += `<div class="small text-muted fw-semibold mt-1">TL karşılığı: ${formatNumber(tlKarsiligi)} ${yerelPb || 'TRY'}</div>`;
+            if (pbler.length > 1) h += `<div class="small text-danger fw-semibold mt-1">Farklı para birimleri ayrı ibraz belgelerine bölünür</div>`;
+            $('#lblCheckTotal').html(h);
+        }
+
+        function calculateSelectedTotals() {
+            let count = 0; const pbToplam = {};
+            $('.chk-select:checked').each(function() {
+                const pb = String($(this).data('cur') || 'TRY');
+                pbToplam[pb] = (pbToplam[pb] || 0) + (parseFloat($(this).data('sum')) || 0);
+                count++;
+            });
+            pbToplamYaz(pbToplam);
+            $('#lblCheckCount').text(count);
+        }
+
+        function updateCheckIndexes() {
+            $('#checksBody tr:visible').each(function(index) { 
+                $(this).find('.check-index').text(index + 1); 
+            });
+        }
+
+        function fetchAvailableChecks() {
+            if(currentMode !== 'ADD' || isBindingData) return;
+            
+            const checkType = $('input[name="checkType"]:checked').val();
+            let date1 = '', date2 = '';
+
+            if (checkType === 'Cash') {
+                date1 = $('#UntilDate').val();
+                if (!date1) return;
+            } else {
+                date1 = $('#FromDate').val();
+                date2 = $('#ToDate').val();
+                if (!date1 || !date2) return;
+            }
+
+            const currency = $('#DocCurrency').val() || '';
+
+            $('#checksBody').html('<tr><td colspan="12" class="text-center text-primary py-5"><div class="spinner-border spinner-border-md mb-2"></div><br/>Çekler sistemden çekiliyor...</td></tr>');
+
+            $.get('/Rapor119/GetAvailableChecks', { checkType: checkType, date1: date1, date2: date2, currency: currency }, function(res) {
+                let html = '';
+                if(res && res.length > 0) {
+                    res.forEach((c, index) => {
+                        html += `
+                        <tr class="align-middle" data-search="${(c.checkNum + ' ' + (c.bankName || '') + ' ' + (c.cardName || '') + ' ' + (c.cardCode || '')).toLowerCase()}">
+                            <td class="text-center text-muted fw-bold check-index">${index + 1}</td>
+                            <td class="text-center">
+                                <input class="form-check-input chk-select searchable-field border-secondary" style="transform: scale(1.2); cursor:pointer;" type="checkbox" value="${c.checkKey}" data-sum="${c.checkSum}" data-cur="${c.currency || 'TRY'}">
+                            </td>
+                            <td>${c.dueDate}</td>
+                            <td class="fw-bolder">${c.checkNum}</td>
+                            <td class="text-truncate" style="max-width: 150px;" title="${c.bankName || c.bankCode || ''}">${c.bankName || c.bankCode || ''}</td>
+                            <td>${c.branch || ''}</td>
+                            <td>${c.acctNum || ''}</td>
+                            <td><span class="badge bg-light text-dark border">${c.cardCode || '-'}</span></td>
+                            <td class="text-truncate fw-semibold" style="max-width:200px;" title="${c.cardName || ''}">${c.cardName || ''}</td>
+                            <td class="text-end fw-bolder text-primary fs-6 bg-primary bg-opacity-10">${formatNumber(c.checkSum)}${c.currency && !['TRY', 'TL'].includes(c.currency) ? ' <span class="badge bg-warning text-dark ms-1" title="Döviz çek">' + c.currency + '</span>' : ''}</td>
+                            <td>${c.project || ''}</td>
+                            <td class="text-center align-middle" style="position: sticky; right: 0; background: #fff; z-index: 1;">
+                                <button type="button" class="btn btn-sm btn-light text-danger btn-remove-row p-2 shadow-sm rounded-circle" title="Bu Çeki Listeden Çıkar"><i class="fas fa-trash-alt"></i></button>
+                            </td>
+                        </tr>`;
+                    });
+                } else {
+                    html = '<tr><td colspan="12" class="text-center text-muted py-5"><i class="fas fa-check-circle fs-3 mb-2 d-block text-success"></i>Tarih aralığına uygun ibraz edilebilecek açık çek bulunamadı.</td></tr>';
+                }
+                $('#checksBody').html(html);
+                $('#selectAllChecks').prop('checked', false);
+                calculateSelectedTotals();
+            });
+        }
+
+        $('#checkSearchFilter').on('input', function() {
+            const query = $(this).val().toLowerCase().trim();
+            $('#checksBody tr').each(function() {
+                const searchData = $(this).data('search') || '';
+                if (!query || searchData.includes(query)) {
+                    $(this).show();
+                } else {
+                    $(this).hide();
+                }
+            });
+            updateCheckIndexes();
+        });
+
+        $(document).on('click', '.btn-remove-row', function() {
+            if (currentMode !== 'ADD') return;
+            const tr = $(this).closest('tr');
+            tr.find('.chk-select').prop('checked', false).trigger('change');
+            tr.fadeOut(300, function() { 
+                $(this).remove(); 
+                updateCheckIndexes(); 
+                calculateSelectedTotals();
+            });
+        });
+
+        function initAccountSelect2() {
+            $('#DepositAccount').select2({
+                theme: 'bootstrap-5',
+                width: '100%',   // bazı ekranlarda/çözünürlüklerde kutu daralıp seçim yapılamıyordu (IT #70)
+                width: '100%',  // bazÄ± ekranlarda kutu daralÄ±yordu (IT #70)
+                placeholder: "🔍 Kod veya Ad ile arayın...",
+                allowClear: true,
+                minimumInputLength: 2,
+                ajax: {
+                    url: '/Rapor119/SearchAccountsAndBPs',
+                    dataType: 'json',
+                    delay: 350,
+                    data: function (params) { 
+                        return { q: params.term, type: $('#AccountType').val() }; 
+                    },
+                    processResults: function (data) {
+                        return {
+                            results: $.map(data, function (item) {
+                                return { id: item.code, text: item.code + " - " + item.name }
+                            })
+                        };
+                    },
+                    cache: true
+                }
+            });
+        }
+
+        function setFormMode(mode) {
+            currentMode = mode;
+            
+            if (mode === 'VIEW') {
+                $('#mainContainer').removeClass('find-mode').addClass('view-mode');
+                $('.searchable-field').prop('disabled', true);
+                $('#JournalRemarks').prop('disabled', true);
+                $('.req-field select, .req-field input').prop('required', false);
+
+                $('#chkReconcile').prop('disabled', true);
+
+                $('#DocNum').prop('disabled', true);
+                $('#divDocNumSearch').hide();
+                $('#divStaticDocNum').show();
+                $('#gridCard').show();
+                $('#btnSave').hide();
+                
+                $('#documentActionButtons').show();
+                $('#divTransAbs').show();
+                
+                $('#btnCancel').text("Yeni Temiz Kayıt Ekle").removeClass('btn-light').addClass('btn-primary text-white').prop('disabled', false).html('<i class="fas fa-plus-circle me-2"></i>Yeni Kayıt');
+                $('#pageTitle').html('<div class="d-flex align-items-center"><div class="bg-primary bg-opacity-10 p-2 rounded-3 me-3"><i class="fas fa-money-check-alt text-primary fs-4"></i></div>İbraz Görüntüle</div>');
+                
+                $('#documentStatusArea').css('display', 'flex');
+            } 
+            else if (mode === 'FIND') {
+                $('#mainContainer').removeClass('view-mode').addClass('find-mode');
+                $('.searchable-field').prop('disabled', false).val('');
+                
+                $('#DepositAccount').empty().trigger('change.select2');
+                $('#AccountType, #DocCurrency, #U_BE1_IADE, #U_BE1_AKTAR, #U_BE1_CEKISLEMTUR').val('').trigger('change');
+                $('#JournalRemarks').prop('disabled', true).val('');
+                $('.req-field select, .req-field input').prop('required', false);
+
+                $('#chkReconcile').prop('disabled', true);
+
+                $('#divDocNumSearch').show();
+                $('#divStaticDocNum').hide();
+                $('#gridCard').hide();
+                $('#divTransAbs').hide();
+                
+                $('#SearchDocNum').prop('disabled', false).val('').focus();
+
+                $('#btnSave').show().text("Ara").removeClass('btn-success').addClass('btn-info text-white shadow').html('<i class="fas fa-search me-2"></i>Sistemde Ara');
+                $('#documentActionButtons').hide();
+                $('#btnCancel').text("İptal").removeClass('btn-primary text-white').addClass('btn-light').prop('disabled', false).html('İptal');
+                
+                $('#pageTitle').html('<div class="d-flex align-items-center"><div class="bg-info bg-opacity-10 p-2 rounded-3 me-3"><i class="fas fa-search text-info fs-4"></i></div>Kayıt Bul</div>');
+                
+                $('#documentStatusArea').hide();
+            }
+            else { 
+                $('#mainContainer').removeClass('view-mode find-mode');
+                $('.searchable-field').prop('disabled', false);
+                $('#JournalRemarks').prop('disabled', false).val('İbraz - ');
+                
+                $('#chkReconcile').prop('disabled', false).prop('checked', true);
+
+                $('#DocNum, #TransAbs').val('').prop('disabled', true);
+                $('#divDocNumSearch, #divTransAbs').hide();
+                $('#divStaticDocNum').show();
+                $('#gridCard').show();
+
+                $('#btnSave').show().removeClass('btn-info text-white').addClass('btn-success shadow-lg').html('<i class="fas fa-save me-2"></i>İbraz Et (Sisteme Kaydet)');
+                $('#documentActionButtons').hide();
+                $('#btnCancel').text("Temizle").removeClass('btn-primary text-white').addClass('btn-light').html('Formu Temizle');
+                
+                $('#pageTitle').html('<div class="d-flex align-items-center"><div class="bg-success bg-opacity-10 p-2 rounded-3 me-3"><i class="fas fa-money-check-alt text-success fs-4"></i></div>Yeni İbraz Oluştur</div>');
+                
+                $('#documentStatusArea').hide();
+                
+                currentDocEntry = 0;
+                isBindingData = true;
+                $('#docChkTypeBadge').remove(); $('#docPbBadge').remove();
+                
+                $('#depositForm')[0].reset();
+                $('#AccountType').val('Account').trigger('change');
+                $('#DepositAccount').empty().trigger('change.select2');
+                $('#DocCurrency, #U_BE1_IADE, #U_BE1_AKTAR, #U_BE1_CEKISLEMTUR').val('').trigger('change');
+
+                $('#rbNakit').prop('checked', true).trigger('change');
+                
+                const today = new Date();
+                const todayStr = today.toISOString().split('T')[0];
+                const tomorrow = new Date(today);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                const tomorrowStr = tomorrow.toISOString().split('T')[0];
+                
+                $('#DepositDate, #UntilDate').val(todayStr);
+                $('#FromDate').val(tomorrowStr);
+                $('#ToDate').val(todayStr);
+
+                $('#checksBody').html('<tr><td colspan="12" class="text-center text-muted py-5"><i class="fas fa-search fs-3 mb-2 d-block text-black-50"></i>Tarih seçildiğinde ibraz edilmemiş çekler burada listelenecektir.</td></tr>');
+                $('#lblCheckTotal').text('0,00');
+                $('#lblCheckCount').text('0');
+                
+                isBindingData = false;
+                fetchAvailableChecks(); 
+            }
+        }
+
+        function loadDepositDetails(deposId) {
+            $('#loadingOverlay').css('display', 'flex');
+            $.get('/Rapor119/GetDepositDetails', { deposId: deposId }, function(res) {
+                if(res && res.success && res.data) {
+                    bindDataToForm(res.data);
+                } else {
+                    toastr.error(res.message || "İbraz detayları alınamadı.");
+                }
+            }).fail(function(xhr) {
+                toastr.error("Kayıt çekilirken hata oluştu: " + (xhr.responseJSON?.message || ""));
+            }).always(function() {
+                $('#loadingOverlay').hide();
+            });
+        }
+
+        function bindDataToForm(res) {
+            isBindingData = true; 
+            currentDocEntry = res.deposId;
+            
+            $('#headerDocNumVal').text(res.deposNum);
+            
+            if(res.canceled) {
+                $('#docStatusBadge').html('<span class="badge bg-danger bg-opacity-10 text-danger border border-danger fs-6 px-3 py-2 ms-2 rounded-pill shadow-sm"><i class="fas fa-times-circle me-2"></i>İPTAL EDİLDİ</span>');
+                $('#documentActionButtons').hide();
+            } else {
+                $('#docStatusBadge').html('<span class="badge bg-success bg-opacity-10 text-success border border-success fs-6 px-3 py-2 ms-2 rounded-pill shadow-sm"><i class="fas fa-check-circle me-2"></i>GEÇERLİ / AÇIK</span>');
+                $('#documentActionButtons').removeClass('d-none').show();
+            }
+            
+            $('#DocNum').val(res.deposNum);
+            $('#TransAbs').val(res.transAbs);
+            
+            $('#AccountType').val(res.bpActType === 'Y' ? 'BP' : 'Account');
+            
+            let displayObj = res.banckAcct;
+            if(res.banckAcctName) {
+                displayObj = res.banckAcct + " - " + res.banckAcctName;
+            }
+            var newOption = new Option(displayObj, res.banckAcct, true, true);
+            $('#DepositAccount').append(newOption).trigger('change');
+
+            // SAP'deki çek ibrazı türü (ODPS.ChkType): S = Vadeli, diğerleri Nakit
+            const vadeliIbraz = res.chkType === 'S';
+            $(vadeliIbraz ? '#rbVadeli' : '#rbNakit').prop('checked', true);
+            $('#divCashDate').show();
+            $('#divPostDatedDates').hide();
+            $('#docChkTypeBadge').remove(); $('#docPbBadge').remove();
+            $('#headerDocNumVal').after(vadeliIbraz
+                ? '<span id="docChkTypeBadge" class="badge bg-warning text-dark ms-2"><i class="fas fa-calendar-alt me-1"></i>VADELİ ÇEK</span>'
+                : '<span id="docChkTypeBadge" class="badge bg-info text-dark ms-2"><i class="fas fa-money-bill me-1"></i>NAKİT ÇEK</span>');
+
+            $('#UntilDate').val(res.deposDate);
+            $('#DepositDate').val(res.deposDate);
+            // Ibraz para birimi (ODPS.DeposCurr): yerel para birimiyse "Yerel Para Birimi", degilse doviz kodu
+            const ibrazPb = (res.docCurr && res.docCurr !== res.yerelPb) ? res.docCurr : '';
+            if (ibrazPb && !$('#DocCurrency option').filter(function () { return this.value === ibrazPb; }).length) $('#DocCurrency').append(new Option(ibrazPb, ibrazPb));
+            $('#DocCurrency').val(ibrazPb);
+            $('#docPbBadge').remove();
+            $('#docChkTypeBadge').after(`<span id="docPbBadge" class="badge ${ibrazPb ? 'bg-warning text-dark' : 'bg-secondary'} ms-2">${ibrazPb || (res.yerelPb || 'TRY')}${ibrazPb ? ' · ' + formatNumber(res.fcTotal) : ''}</span>`);
+            
+            $('#JournalRemarks').val(res.memo);
+
+            $('#U_BE1_IADE').val(res.u_BE1_IADE || '').trigger('change');
+            $('#U_BE1_AKTAR').val(res.u_BE1_AKTAR || '').trigger('change');
+            $('#U_BE1_CEKISLEMTUR').val(res.u_BE1_CEKISLEMTUR || '').trigger('change');
+
+            let html = '';
+            let cSumTotal = 0;
+            if(res.checks && res.checks.length > 0) {
+                res.checks.forEach((c, index) => {
+                    cSumTotal += c.checkSum;
+                    html += `
+                    <tr class="align-middle">
+                        <td class="text-center text-muted fw-bold check-index">${index + 1}</td>
+                        <td class="text-center"><i class="fas fa-check-square text-success fs-5"></i></td>
+                        <td>${c.dueDate}</td>
+                        <td class="fw-bolder">${c.checkNum}</td>
+                        <td class="text-truncate" style="max-width: 150px;">${c.bankName || c.bankCode || ''}</td>
+                        <td>${c.branch || ''}</td>
+                        <td>${c.acctNum || ''}</td>
+                        <td><span class="badge bg-light text-dark border">${c.cardCode || '-'}</span></td>
+                        <td class="text-truncate fw-semibold" style="max-width:200px;">${c.cardName || ''}</td>
+                        <td class="text-end fw-bolder text-primary fs-6 bg-primary bg-opacity-10">${formatNumber(c.checkSum)}${c.currency && !['TRY', 'TL'].includes(c.currency) ? ' <span class="badge bg-warning text-dark ms-1" title="Döviz çek">' + c.currency + '</span>' : ''}</td>
+                        <td>${c.project || ''}</td>
+                        <td class="text-center"></td>
+                    </tr>`;
+                });
+            } else {
+                html = '<tr><td colspan="12" class="text-center text-muted py-5"><i class="fas fa-info-circle fs-3 mb-2 d-block text-black-50"></i>Bu ibrazda çek bulunmuyor.</td></tr>';
+            }
+            $('#checksBody').html(html);
+            const gPb = {}; (res.checks || []).forEach(c => { const pb = c.currency || res.docCurr || res.yerelPb || 'TRY'; gPb[pb] = (gPb[pb] || 0) + (c.checkSum || 0); });
+            pbToplamYaz(Object.keys(gPb).length ? gPb : { [res.yerelPb || 'TRY']: 0 }, res.locTotal, res.yerelPb);
+            $('#lblCheckCount').text(res.checks.length);
+
+            setFormMode('VIEW'); 
+            isBindingData = false;
+        }
+
+        function populateSearchResults(list) {
+            let html = '';
+            list.forEach(row => {
+                let nameDisplay = row.banckAcctName ? ` - ${row.banckAcctName}` : '';
+                html += `
+                <tr style="cursor:pointer;" class="align-middle" onclick="loadDepositFromModal(${row.deposId})">
+                    <td class="fw-bold text-primary fs-6"><i class="fas fa-money-check-alt me-2 text-secondary"></i>${row.deposNum}</td>
+                    <td>${row.deposDate}</td>
+                    <td><span class="badge bg-light text-dark border p-2">${row.banckAcct || ''}${nameDisplay}</span></td>
+                    <td class="fw-bolder text-success text-end fs-6">${formatNumber(row.locTotal)}</td>
+                    <td class="text-truncate text-muted" style="max-width: 250px;">${row.memo || ''}</td>
+                </tr>`;
+            });
+            $('#searchResultsBody').html(html);
+            $('#searchResultsModal').modal('show');
+        }
+
+        window.loadDepositFromModal = function(deposId) {
+            $('#searchResultsModal').modal('hide');
+            loadDepositDetails(deposId);
+        }
+
+        // --- TOPLU İŞLEMLER (BULK ACTIONS) YÖNETİMİ ---
+      function loadOpenDepositsForBulk() {
+    const onlyErrors = $('#switchShowErrorsOnly').is(':checked'); 
+    
+    $('#bulkDepositsBody').html('<tr><td colspan="7" class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Kayıtlar sistemden yükleniyor...</td></tr>');
+    $('#bulkResultArea').hide();
+    $('#selectAllBulk').prop('checked', false);
+    updateBulkCount();
+
+    $.get('/Rapor119/GetOpenDepositsForBulk', { onlyErrors: onlyErrors }, function (res) {
+        if (res.success && res.data) {
+            let html = '';
+            if (res.data.length > 0) {
+                res.data.forEach(d => {
+                    let tahsilatRenk = onlyErrors ? "text-danger fw-bold" : "text-dark";
+                    
+                    html += `
+                        <tr class="align-middle">
+                            <td class="text-center">
+                                <input class="form-check-input bulk-chk border-secondary" style="transform: scale(1.2); cursor:pointer;" type="checkbox" value="${d.deposId}">
+                            </td><div class="table-responsive bg-white border rounded shadow-sm mb-4" style="max-height: 350px; overflow-y: auto;">
+                            <td class="fw-bold text-primary">${d.deposNum}</td>
+                            <td>${d.deposDate}</td>
+                            <td class="${tahsilatRenk}">${d.tahsilatTarihi}</td>
+                            <td class="text-truncate" style="max-width: 150px; font-size: 0.8rem;" title="${d.cekNumaralari}">${d.cekNumaralari}</td>
+                            <td class="text-truncate" style="max-width: 200px;">${d.banckAcctName || d.banckAcct || ''}</td>
+                            <td class="text-end fw-bold text-success">${formatNumber(d.locTotal)}</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                let emptyMsg = onlyErrors ? "Sistemde tarihi hatalı olan (Tahsilattan önce ibraz edilmiş) kayıt bulunamadı." : "İptal edilecek açık ibraz belgesi bulunamadı.";
+                html = `<tr><td colspan="7" class="text-center text-muted py-4"><i class="fas fa-check-circle fs-3 text-success mb-2 d-block"></i>${emptyMsg}</td></tr>`;
+            }
+            $('#bulkDepositsBody').html(html);
+        } else {
+            $('#bulkDepositsBody').html(`<tr><td colspan="7" class="text-center text-danger py-4"><i class="fas fa-exclamation-circle me-2"></i>Veriler çekilemedi: ${res.message}</td></tr>`);
+        }
+    }).fail(function () {
+        $('#bulkDepositsBody').html(`<tr><td colspan="7" class="text-center text-danger py-4"><i class="fas fa-exclamation-circle me-2"></i>Sunucu bağlantı hatası oluştu.</td></tr>`);
+    });
+}
+        function updateBulkCount() {
+            let cnt = $('.bulk-chk:checked').length;
+            $('#bulkSelectedCount').text(cnt);
+            if(cnt > 0) {
+                $('#bulkSelectedCount').removeClass('text-muted').addClass('text-primary fw-bold fs-5');
+            } else {
+                $('#bulkSelectedCount').removeClass('text-primary fw-bold fs-5').addClass('text-muted');
+            }
+        }
+
+        $(document).ready(function () {
+            initAccountSelect2();
+
+            // TOPLU İŞLEM MODAL ETKİLEŞİMLERİ
+            $('#btnOpenBulkModal').click(function () {
+                $('#bulkActionCancel').prop('checked', true).trigger('change');
+                const today = new Date().toISOString().split('T')[0];
+                $('#bulkTargetDate').val(today);
+                
+                $('#switchShowErrorsOnly').prop('checked', false);
+                
+                $('#bulkOperationsModal').modal('show');
+                loadOpenDepositsForBulk();
+            });
+            
+            $(document).on('change', '#switchShowErrorsOnly', function() {
+                loadOpenDepositsForBulk();
+            });
+
+            $(document).on('change', '.bulk-chk', function () {
+                updateBulkCount();
+                if ($('.bulk-chk:checked').length === $('.bulk-chk').length && $('.bulk-chk').length > 0) {
+                    $('#selectAllBulk').prop('checked', true);
+                } else {
+                    $('#selectAllBulk').prop('checked', false);
+                }
+            });
+
+            $('#selectAllBulk').change(function () {
+                $('.bulk-chk').prop('checked', $(this).is(':checked'));
+                updateBulkCount();
+            });
+
+            // Secilen ibrazlarin tamami TEK bordroda toplanip indirilir.
+            // SAP'de degisiklik yapmaz; yalnizca PDF uretir.
+            $('#btnBulkBordro').click(function () {
+                const secilen = $('.bulk-chk:checked').map(function () {
+                    return parseInt($(this).val());
+                }).get();
+
+                if (secilen.length === 0) {
+                    toastr.warning("Bordro için en az bir ibraz belgesi seçiniz.");
+                    return;
+                }
+
+                const $btn = $(this);
+                const eskiHtml = $btn.html();
+                $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i>Bordro hazırlanıyor...');
+
+                fetch('/Rapor119/CreateIbrazBordro', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(secilen)
+                })
+                .then(r => {
+                    if (r.ok) return r.blob();
+                    return r.text().then(t => { throw new Error(t || "Bordro oluşturulamadı."); });
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Ibraz-Bordrosu-Birlesik-${new Date().getTime()}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                    toastr.success(secilen.length + " ibraz belgesi tek bordroda birleştirildi.");
+                })
+                .catch(e => toastr.error(e.message))
+                .finally(() => $btn.prop('disabled', false).html(eskiHtml));
+            });
+
+            $('input[name="bulkActionType"]').change(function () {
+                if ($(this).val() === 'Fix') {
+                    $('#bulkTargetDateContainer').slideDown();
+                } else {
+                    $('#bulkTargetDateContainer').slideUp();
+                }
+            });
+
+            $('#btnExecuteBulk').click(function () {
+                const selectedIds = [];
+                $('.bulk-chk:checked').each(function () {
+                    selectedIds.push(parseInt($(this).val()));
+                });
+
+                if (selectedIds.length === 0) {
+                    toastr.warning("Lütfen işlem yapılacak en az bir ibraz belgesi seçiniz.");
+                    return;
+                }
+
+                const actionType = $('input[name="bulkActionType"]:checked').val();
+                let confirmMsg = "";
+                let apiUrl = "";
+                let payload = { DeposIds: selectedIds };
+
+                if (actionType === 'Cancel') {
+                    confirmMsg = `Seçilen ${selectedIds.length} adet belge SAP üzerinden tamamen iptal edilecektir.\nOnaylıyor musunuz?`;
+                    apiUrl = '/Rapor119/BulkCancelDeposits';
+                } else {
+                    const tDate = $('#bulkTargetDate').val();
+                    if (!tDate) {
+                        toastr.warning("Lütfen ibraz için doğru (hedef) tarihi belirleyiniz.");
+                        return;
+                    }
+                    payload.TargetDate = tDate;
+                    confirmMsg = `Seçilen ${selectedIds.length} adet hatalı ibraz iptal edilecek ve içlerindeki çekler ${tDate} tarihi ile yeniden ibraz edilecektir.\nOnaylıyor musunuz?`;
+                    apiUrl = '/Rapor119/BulkFixDeposits';
+                }
+
+                if (confirm(confirmMsg)) {
+                    $('#bulkResultArea').slideUp();
+                    $('#loadingOverlay').css('display', 'flex');
+
+                    $.ajax({
+                        url: apiUrl,
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify(payload),
+                        success: function (res) {
+                            $('#bulkResultArea').slideDown();
+                            let msgClass = res.success ? 'text-success' : 'text-danger';
+                            
+                            let summaryHtml = `<span class="${msgClass}"><i class="fas ${res.success ? 'fa-check-circle' : 'fa-exclamation-triangle'} me-2"></i>${res.message.replace(/\n/g, '<br/>')}</span>`;
+                            $('.bulk-success-list').html(summaryHtml);
+
+                            if (res.errorList && res.errorList.length > 0) {
+                                let errHtml = "<b>Alınan Hatalar:</b><br/>" + res.errorList.join('<br/>');
+                                $('.bulk-error-list').html(errHtml).show();
+                            } else {
+                                $('.bulk-error-list').hide();
+                            }
+
+                            if (res.success) {
+                                toastr.success("Seçili işlemler başarıyla tamamlandı.");
+                                loadOpenDepositsForBulk();
+                            } else {
+                                toastr.warning("İşlemlerde hatalar oluştu. Lütfen detayları inceleyiniz.", "Kısmi Hata", { timeOut: 0, extendedTimeOut: 0, closeButton: true });
+                            }
+                        },
+                        error: function (xhr) {
+                            let errMsg = xhr.responseJSON ? xhr.responseJSON.message : "Sunucu hatası oluştu.";
+                            toastr.error(errMsg.replace(/\n/g, "<br>"), "İşlem Başarısız", { timeOut: 0, extendedTimeOut: 0, closeButton: true });
+                        },
+                        complete: function () {
+                            $('#loadingOverlay').hide();
+                        }
+                    });
+                }
+            });
+
+
+            $('#AccountType').change(function() {
+                $('#DepositAccount').empty().trigger('change.select2');
+            });
+
+            $('input[name="checkType"]').change(function() {
+                if($(this).val() === 'Cash') {
+                    $('#divCashDate').show();
+                    $('#divPostDatedDates').hide();
+                } else {
+                    $('#divCashDate').hide();
+                    $('#divPostDatedDates').show();
+                }
+                fetchAvailableChecks();
+            });
+
+            setFormMode('ADD');
+
+            $('.nav-btn').click(function() {
+                if (isBindingData) return;
+                const dir = $(this).data('dir');
+                $('#loadingOverlay').css('display', 'flex');
+                
+                $.get('/Rapor119/GetDepositNavigation', { currentDocEntry: currentDocEntry, direction: dir }, function(res) {
+                    if(res && res.success && res.data) {
+                        bindDataToForm(res.data);
+                    } else {
+                        toastr.warning(res.message || "Bu yönde başka kayıt bulunmuyor.");
+                    }
+                }).fail(function(xhr) {
+                    toastr.error("Kayıt çekilirken hata oluştu: " + (xhr.responseJSON?.message || ""));
+                }).always(function() {
+                    $('#loadingOverlay').hide();
+                });
+            });
+
+            $('#btnNewDoc').click(function() { setFormMode('ADD'); });
+            $('#btnFindMode').click(function() { setFormMode('FIND'); });
+
+            $('#UntilDate, #FromDate, #ToDate, #DocCurrency').change(function() {
+                fetchAvailableChecks();
+            });
+
+            $(document).on('change', '.chk-select', function() {
+                calculateSelectedTotals();
+                const tr = $(this).closest('tr');
+                if (!$(this).is(':checked')) {
+                    $('#selectAllChecks').prop('checked', false);
+                    tr.removeClass('bg-primary bg-opacity-10');
+                } else {
+                    tr.addClass('bg-primary bg-opacity-10');
+                    if ($('.chk-select:checked').length === $('.chk-select:visible').length) {
+                        $('#selectAllChecks').prop('checked', true);
+                    }
+                }
+            });
+
+            $('#selectAllChecks').change(function() {
+                if(currentMode !== 'ADD') return;
+                const isChecked = $(this).is(':checked');
+                $('.chk-select:visible').prop('checked', isChecked);
+                
+                if (isChecked) {
+                    $('.chk-select:visible').closest('tr').addClass('bg-primary bg-opacity-10');
+                } else {
+                    $('.chk-select').closest('tr').removeClass('bg-primary bg-opacity-10');
+                }
+                
+                calculateSelectedTotals();
+            });
+
+            // --- STANDART İPTAL BUTONU İŞLEMLERİ ---
+            $('#btnCancelDocumentModal').click(function() {
+                if (!currentDocEntry) return;
+                $('#cancelSystemDate').prop('checked', true);
+                $('#cancelOptionsModal').modal('show');
+            });
+
+            $('#btnConfirmCancel').click(function() {
+                const cancelDateType = $('input[name="cancelDateType"]:checked').val();
+
+                if (confirm("DİKKAT: Seçilen yöntemle belge iptal işlemi başlatılacaktır. Bu işlem geri alınamaz!\n\nOnaylıyor musunuz?")) {
+                    $('#cancelOptionsModal').modal('hide');
+                    $('#loadingOverlay').css('display', 'flex');
+                    
+                    $.ajax({
+                        url: '/Rapor119/CancelDeposit?deposId=' + currentDocEntry + '&dateType=' + cancelDateType,
+                        type: 'POST',
+                        success: function (res) {
+                            if (res.success) {
+                                toastr.success(res.message);
+                                loadDepositDetails(currentDocEntry);
+                            } else {
+                                toastr.error(res.message);
+                            }
+                        },
+                        error: function (xhr) {
+                            const errMsg = xhr.responseJSON ? xhr.responseJSON.message : "İptal sırasında hata oluştu.";
+                            toastr.error(errMsg);
+                        },
+                        complete: function () { $('#loadingOverlay').hide(); }
+                    });
+                }
+            });
+
+            // --- İADE ET BUTONU İŞLEMLERİ ---
+            $('input[name="returnDateType"]').change(function() {
+                if ($(this).val() === 'Custom') {
+                    $('#customDateContainer').slideDown();
+                } else {
+                    $('#customDateContainer').slideUp();
+                }
+            });
+
+            $('#btnReturnDocument').click(function() {
+                if (!currentDocEntry) return;
+                const today = new Date().toISOString().split('T')[0];
+                $('#ReturnDateInput').val(today);
+                
+                $('#rdSystem').prop('checked', true);
+                $('#customDateContainer').hide();
+                
+                $('#returnDateModal').modal('show');
+            });
+
+            $('#btnConfirmReturn').click(function() {
+                const dateType = $('input[name="returnDateType"]:checked').val();
+                let returnDate = '';
+                
+                if (dateType === 'Custom') {
+                    returnDate = $('#ReturnDateInput').val();
+                    if (!returnDate) {
+                        toastr.warning("Lütfen iade tarihini seçiniz.");
+                        return;
+                    }
+                } else {
+                    returnDate = new Date().toISOString().split('T')[0]; 
+                }
+
+                if (confirm("DİKKAT: Seçilen yöntemle iade işlemi başlatılacaktır. Mevcut belge iptal edilecek, İade UDF alanı 'Evet' olarak güncellenecek ve İade (Ters Kayıt) yevmiyesi atılacaktır.\n\nOnaylıyor musunuz?")) {
+                    $('#returnDateModal').modal('hide');
+                    $('#loadingOverlay').css('display', 'flex');
+
+                    $.ajax({
+                        url: '/Rapor119/ReturnDeposit?deposId=' + currentDocEntry + '&returnDate=' + returnDate + '&dateType=' + dateType,
+                        type: 'POST',
+                        success: function (res) {
+                            if (res.success) {
+                                toastr.success(res.message);
+                                setTimeout(function() { 
+                                    setFormMode('ADD'); 
+                                }, 2500); 
+                            } else {
+                                toastr.error(res.message);
+                            }
+                        },
+                        error: function (xhr) {
+                            const errMsg = xhr.responseJSON ? xhr.responseJSON.message : "İade sırasında hata oluştu.";
+                            toastr.error(errMsg);
+                        },
+                        complete: function () { $('#loadingOverlay').hide(); }
+                    });
+                }
+            });
+
+            $('#depositForm').submit(function (e) {
+                e.preventDefault();
+                
+                if(currentMode === 'FIND') {
+                    const searchPayload = {
+                        DeposNum: $('#SearchDocNum').val() ? parseInt($('#SearchDocNum').val()) : null,
+                        BanckAcct: $('#DepositAccount').val(),
+                        DeposDate: $('#UntilDate').val() || null 
+                    };
+                    
+                    $('#loadingOverlay').css('display', 'flex');
+                    
+                    $.ajax({
+                        url: '/Rapor119/FindDeposit',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify(searchPayload),
+                        success: function (res) {
+                            if (res.success && res.data && res.data.length > 0) {
+                                if (res.data.length === 1) loadDepositDetails(res.data[0].deposId);
+                                else populateSearchResults(res.data);
+                            } else {
+                                toastr.warning(res.message || "Girilen kriterlere uygun kayıt bulunamadı.");
+                            }
+                        },
+                        error: function () { toastr.error("Arama sırasında hata oluştu."); },
+                        complete: function () { $('#loadingOverlay').hide(); }
+                    });
+                    return;
+                }
+                
+                if(currentMode === 'VIEW') return;
+
+                const accCode = $('#DepositAccount').val();
+                if (!accCode) { toastr.warning("Lütfen İbraz Yeri (Hesap/Muhatap) seçiniz."); return; }
+
+                const selectedChecks = [];
+                $('.chk-select:checked').each(function() {
+                    selectedChecks.push(parseInt($(this).val()));
+                });
+
+                if (selectedChecks.length === 0) {
+                    toastr.warning("Lütfen ibraz edilecek en az bir çek seçiniz."); return;
+                }
+
+                let splitChecksChoice = false;
+                if (selectedChecks.length > 1) {
+                    splitChecksChoice = confirm("Birden fazla çek seçtiniz.\n\nSistemde bu çeklerin her biri için AYRI (tek tek) ibraz belgesi oluşturulsun mu?\n(İptal derseniz TEK BİR toplu ibraz belgesinde toplanacaktır)");
+                }
+
+                const vadeliSecili = $('input[name="checkType"]:checked').val() === 'PostDated';
+                if (vadeliSecili && !confirm("VADELİ ÇEK olarak ibraz edilecek.\n\nÇekler SAP'de vadeli (tahsile verilen) duruma geçer ve vadesi gelince Vadeli Çek İbrazı ekranında görünür. Devam edilsin mi?")) return;
+
+                const payload = {
+                    AccountType: $('#AccountType').val(),
+                    DepositAccount: accCode,
+                    DepositCurrency: $('#DocCurrency').val() || null,
+                    DepositDate: $('#DepositDate').val(),
+                    JournalRemarks: $('#JournalRemarks').val(),
+                    SplitChecks: splitChecksChoice,
+                    CheckDepositType: $('input[name="checkType"]:checked').val() === 'PostDated' ? 'PostDated' : 'Cash',
+                    
+                    PerformReconciliation: $('#chkReconcile').is(':checked'), 
+                    
+                    U_BE1_AKTAR: $('#U_BE1_AKTAR').val() || null,
+                    U_BE1_IADE: $('#U_BE1_IADE').val() || null,
+                    U_BE1_CEKISLEMTUR: $('#U_BE1_CEKISLEMTUR').val() || null,
+
+                    CheckKeys: selectedChecks
+                };
+
+                $('#loadingOverlay').css('display', 'flex');
+
+                $.ajax({
+                    url: '/Rapor119/CreateDeposit',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(payload),
+                    success: function (res) {
+                        if (res.success) {
+                            
+                            let hasPartialError = res.message && res.message.includes("DİKKAT");
+                            
+                            if (hasPartialError) {
+                                let formattedMsg = res.message.replace(/\n/g, "<br>");
+                                toastr.warning(formattedMsg, "Kısmi Başarı / Uyarı", { timeOut: 0, extendedTimeOut: 0, closeButton: true });
+                            } else {
+                                toastr.success(res.message);
+                            }
+                            
+                            if (res.docNums && res.docNums.length > 0) {
+                                fetch('/Rapor119/CreateIbrazBordro', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(res.docNums)
+                                })
+                                .then(response => {
+                                    if (response.ok) return response.blob();
+                                    throw new Error("Bordro/Makbuz oluşturulamadı.");
+                                })
+                                .then(blob => {
+                                    var url = window.URL.createObjectURL(blob);
+                                    var a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `Ibraz-Bordrosu-${new Date().getTime()}.pdf`;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    a.remove();
+                                    
+                                    if (hasPartialError) {
+                                        $('#loadingOverlay').hide();
+                                    } else {
+                                        setTimeout(() => { window.location.reload(); }, 1500); 
+                                    }
+                                })
+                                .catch(err => {
+                                    toastr.warning("İbraz oluşturuldu ancak PDF Bordrosu indirilemedi.");
+                                    if (hasPartialError) {
+                                        $('#loadingOverlay').hide();
+                                    } else {
+                                        setTimeout(() => { window.location.reload(); }, 2000); 
+                                    }
+                                });
+                            } else {
+                                if (hasPartialError) {
+                                    $('#loadingOverlay').hide();
+                                } else {
+                                    setTimeout(() => { window.location.reload(); }, 2000); 
+                                }
+                            }
+                        } else {
+                            let formattedError = res.message ? res.message.replace(/\n/g, "<br>") : "Bağlantı hatası.";
+                            toastr.error(formattedError, "İşlem Başarısız", { timeOut: 0, extendedTimeOut: 0, closeButton: true });
+                            $('#loadingOverlay').hide();
+                        }
+                    },
+                    error: function (xhr) {
+                        let errMsg = xhr.responseJSON ? xhr.responseJSON.message : "Bağlantı hatası.";
+                        toastr.error(errMsg.replace(/\n/g, "<br>"), "Hata", { timeOut: 0, extendedTimeOut: 0, closeButton: true });
+                        $('#loadingOverlay').hide();
+                    }
+                });
+            });
+            
+            $('#btnCancel').click(function() {
+                if(currentMode === 'VIEW' || currentMode === 'FIND') {
+                    setFormMode('ADD');
+                } else {
+                    if(confirm("Tüm form temizlenecek, emin misiniz?")) {
+                        setFormMode('ADD');
+                    }
+                }
+            });
+        });
+    </script>
+}

@@ -1,0 +1,191 @@
+@{
+    ViewData["Title"] = "Parti Yaşlandırma";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-hourglass-half me-2 text-primary"></i> Parti Yaşlandırma (Stok Yaşı)</h2>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-success btn-sm" onclick="excelAktar()"><i class="fas fa-file-excel me-1"></i>Excel</button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="window.print()"><i class="fas fa-print me-1"></i>Yazdır</button>
+    </div>
+</div>
+<p class="text-muted mb-3">Depodaki pozitif stoklu partilerin ilk giriş tarihine göre yaşı &ndash; FIFO takibi ve bekleyen stok için.</p>
+
+<div class="card dash-card mb-3">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-3">
+                <label class="form-label small fw-bold">Depo</label>
+                <select id="fWhs" class="form-select form-select-sm"><option value="">Tüm depolar</option></select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small fw-bold">Kalem Tipi</label>
+                <select id="fTip" class="form-select form-select-sm">
+                    <option value="">Tümü</option>
+                    <option value="H">Hammadde</option>
+                    <option value="YM">Yarı Mamul</option>
+                    <option value="UR">Mamul</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label small fw-bold">Ara</label>
+                <input type="text" id="fSearch" class="form-control form-control-sm" placeholder="Kalem, parti…">
+            </div>
+            <div class="col-6 col-md-2 d-flex align-items-end">
+                <button class="btn btn-primary btn-sm w-100" onclick="yukle()"><i class="fas fa-rotate me-1"></i>Getir</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="yukleniyor" class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm me-2"></span>Rapor hazırlanıyor…</div>
+
+<div id="icerik" style="display:none;">
+    <div class="row g-3 mb-3" id="kpiSatiri"></div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-12 col-xl-5">
+            <div class="card dash-card h-100">
+                <div class="card-header bg-white fw-bold small text-uppercase text-muted">Yaş Kovalarına Göre Parti Sayısı</div>
+                <div class="card-body"><div id="chartKova" style="min-height:260px;"></div></div>
+            </div>
+        </div>
+        <div class="col-12 col-xl-7">
+            <div class="card dash-card h-100">
+                <div class="card-header bg-white fw-bold small text-uppercase text-muted">En Eski 10 Parti (FIFO Önceliği)</div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover table-custom mb-0">
+                        <thead><tr><th>Kalem</th><th>Parti</th><th>Depo</th><th class="text-end">Miktar</th><th class="text-end">Yaş</th></tr></thead>
+                        <tbody id="tbodyEski10"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card dash-card">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <span class="fw-bold small text-uppercase text-muted">Parti Listesi <span id="satirSayisi" class="badge bg-primary ms-1">0</span></span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-custom mb-0">
+                <thead>
+                    <tr>
+                        <th>Kalem</th><th>Tip</th><th>Parti</th><th>Depo</th><th class="text-end">Miktar</th>
+                        <th>Giriş</th><th class="text-end">Yaş (gün)</th><th>Kova</th><th>SKT</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodySatirlar"></tbody>
+            </table>
+            <div id="bosMesaji" class="text-center text-muted py-4" style="display:none;"><i class="fas fa-inbox me-1"></i>Kayıt yok.</div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; color: #5a5c69; }
+    .kpi-card { border-radius: 10px; border: 1px solid #e3e6f0; padding: 12px 16px; background: #fff; }
+    .kpi-card .l { font-size: .68rem; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: #858796; }
+    .kpi-card .v { font-size: 1.15rem; font-weight: 700; color: #1e293b; }
+    .kpi-card .s { font-size: .72rem; color: #94a3b8; }
+    .rozet { font-size: .7rem; font-weight: 700; padding: .25em .55em; border-radius: 6px; }
+    .rozet-yesil { background:#e6f7ee; color:#0f9d58; } .rozet-sari { background:#fff8e6; color:#b7791f; }
+    .rozet-turuncu { background:#fff1e6; color:#c2410c; } .rozet-kirmizi { background:#fde8e8; color:#c0392b; } .rozet-gri { background:#f1f3f5; color:#495057; }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script>
+    let veriSon = null;
+
+    function excelAktar() {
+        if (!veriSon) return;
+        raporExcel('Parti_Yaslandirma', [
+            { ad: 'Partiler', kolonlar: [{ k: 'ItemCode', b: 'Kalem Kodu' }, { k: 'ItemName', b: 'Kalem' }, { k: 'Tip', b: 'Tip' }, { k: 'Parti', b: 'Parti' }, { k: 'WhsCode', b: 'Depo' }, { k: 'Miktar', b: 'Miktar' }, { k: 'Birim', b: 'Birim' }, { k: 'GirisTarihi', b: 'Giriş' }, { k: 'YasGun', b: 'Yaş (gün)' }, { k: 'Kova', b: 'Kova' }, { k: 'SonKullanma', b: 'SKT' }, { k: r => r.SuresiDoldu == 1 ? 'Evet' : '', b: 'Süresi Doldu' }], satirlar: veriSon.Satirlar || [] },
+            { ad: 'Kovalar', kolonlar: [{ k: 'Kova', b: 'Kova (gün)' }, { k: 'PartiSayisi', b: 'Parti' }, { k: 'Miktar', b: 'Miktar' }, { k: 'Hammadde', b: 'Hammadde' }, { k: 'YariMamul', b: 'Yarı Mamul' }, { k: 'Mamul', b: 'Mamul' }], satirlar: veriSon.Kovalar || [] }
+        ]);
+    }
+    const kovaRenk = { '0-30': '#1baf7a', '31-90': '#eda100', '91-180': '#e67e22', '181-365': '#e74a3b', '365+': '#7f1d1d' };
+    function kovaSinif(k) { return { '0-30': 'rozet-yesil', '31-90': 'rozet-sari', '91-180': 'rozet-turuncu', '181-365': 'rozet-kirmizi', '365+': 'rozet-kirmizi' }[k] || 'rozet-gri'; }
+    function tipSinif(kod) { if (kod.startsWith('U')) return 'rozet-gri'; if (kod.startsWith('Y')) return 'rozet-sari'; return 'rozet-yesil'; }
+    function fmt(n, d) { return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+
+    let chartKova = null;
+
+    async function yukle() {
+        document.getElementById('yukleniyor').style.display = '';
+        document.getElementById('icerik').style.display = 'none';
+        const qs = new URLSearchParams({ whs: document.getElementById('fWhs').value, tip: document.getElementById('fTip').value, search: document.getElementById('fSearch').value });
+        const res = await fetch('/UrasUretimRapor/GetStokYasi?' + qs.toString()).then(r => r.json());
+        document.getElementById('yukleniyor').style.display = 'none';
+        if (!res.success) { alert('Rapor alınamadı: ' + res.message); return; }
+        veriSon = res.data;
+        document.getElementById('icerik').style.display = '';
+        doldurDepolar(veriSon.Depolar);
+        ciz();
+    }
+
+    function doldurDepolar(depolar) {
+        const sel = document.getElementById('fWhs');
+        if (sel.dataset.dolduruldu) return;
+        sel.dataset.dolduruldu = '1';
+        (depolar || []).forEach(w => {
+            const o = document.createElement('option'); o.value = w.WhsCode; o.textContent = w.WhsCode + ' - ' + w.WhsName; sel.appendChild(o);
+        });
+    }
+
+    function ciz() {
+        const v = veriSon;
+        const toplamMiktar = v.Satirlar.reduce((a, s) => a + (s.Miktar || 0), 0);
+        const sktDolan = v.Satirlar.filter(s => s.SuresiDoldu == 1).length;
+
+        let kpiHtml = `
+            <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #2a78d6"><div class="l">Parti</div><div class="v">${v.Satirlar.length}</div><div class="s">pozitif stoklu</div></div></div>
+            <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #1baf7a"><div class="l">Toplam Miktar</div><div class="v">${fmt(toplamMiktar, 0)}</div><div class="s">tüm birimler</div></div></div>`;
+        (v.Kovalar || []).forEach(kv => {
+            kpiHtml += `<div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid ${kovaRenk[kv.Kova] || '#999'}"><div class="l">${kv.Kova} gün</div><div class="v">${kv.PartiSayisi}</div><div class="s">${fmt(kv.Miktar, 0)} miktar</div></div></div>`;
+        });
+        kpiHtml += `<div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #e34948"><div class="l">Süresi Dolan</div><div class="v">${sktDolan}</div><div class="s">SKT geçmiş parti</div></div></div>`;
+        document.getElementById('kpiSatiri').innerHTML = kpiHtml;
+
+        const eski10 = [...v.Satirlar].slice(0, 10);
+        document.getElementById('tbodyEski10').innerHTML = eski10.map(s => `
+            <tr>
+                <td><span class="rozet ${tipSinif(s.ItemCode)} me-1">${s.Tip}</span><span class="fw-semibold">${s.ItemName || s.ItemCode}</span></td>
+                <td><a href="/UrasUretimRapor/Izlenebilirlik?itemCode=${encodeURIComponent(s.ItemCode)}&parti=${encodeURIComponent(s.Parti)}" class="text-decoration-none">${s.Parti}</a></td>
+                <td>${s.WhsCode}</td>
+                <td class="text-end fw-bold">${fmt(s.Miktar, 2)} <span class="text-muted">${s.Birim}</span></td>
+                <td class="text-end"><span class="rozet ${kovaSinif(s.Kova)}">${s.YasGun} gün</span></td>
+            </tr>`).join('') || '<tr><td colspan="5" class="text-center text-muted py-3">Kayıt yok.</td></tr>';
+
+        document.getElementById('satirSayisi').textContent = v.Satirlar.length;
+        document.getElementById('bosMesaji').style.display = v.Satirlar.length ? 'none' : '';
+        document.getElementById('tbodySatirlar').innerHTML = v.Satirlar.map(s => `
+            <tr>
+                <td><span class="fw-semibold">${s.ItemName || s.ItemCode}</span><div class="text-muted small">${s.ItemCode}</div></td>
+                <td><span class="rozet ${tipSinif(s.ItemCode)}">${s.Tip}</span></td>
+                <td><a href="/UrasUretimRapor/Izlenebilirlik?itemCode=${encodeURIComponent(s.ItemCode)}&parti=${encodeURIComponent(s.Parti)}" class="text-decoration-none">${s.Parti}</a></td>
+                <td>${s.WhsCode}</td>
+                <td class="text-end fw-bold">${fmt(s.Miktar, 2)} <span class="text-muted">${s.Birim}</span></td>
+                <td class="text-nowrap">${s.GirisTarihi}</td>
+                <td class="text-end">${s.YasGun}</td>
+                <td><span class="rozet ${kovaSinif(s.Kova)}">${s.Kova}</span></td>
+                <td class="text-nowrap">${s.SonKullanma || '—'} ${s.SuresiDoldu == 1 ? '<span class="rozet rozet-kirmizi ms-1">doldu</span>' : ''}</td>
+            </tr>`).join('');
+
+        if (chartKova) chartKova.destroy();
+        chartKova = new ApexCharts(document.getElementById('chartKova'), {
+            chart: { type: 'bar', height: 260, toolbar: { show: false } },
+            series: [{ name: 'Parti', data: (v.Kovalar || []).map(k => k.PartiSayisi) }],
+            xaxis: { categories: (v.Kovalar || []).map(k => k.Kova + ' gün') },
+            colors: (v.Kovalar || []).map(k => kovaRenk[k.Kova] || '#999'),
+            plotOptions: { bar: { distributed: true, borderRadius: 4 } },
+            dataLabels: { enabled: true },
+            legend: { show: false }
+        });
+        chartKova.render();
+    }
+
+    yukle();
+</script>

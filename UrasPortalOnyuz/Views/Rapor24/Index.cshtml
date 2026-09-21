@@ -1,0 +1,571 @@
+﻿@model List<WebApplication3.Controllers.R24_BakiyeModel>
+
+@{
+    ViewData["Title"] = "Hesap ve Bakiye Günlük Onay Paneli";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    
+    var currentHesapTipi = ViewBag.HesapTipi?.ToString() ?? "KASA";
+    var currentTab = ViewBag.CurrentTab?.ToString() ?? "TUMU";
+    var currentSelectedDbDisplay = ViewBag.CurrentDbDisplay;
+    var currentDbKey = ViewBag.CurrentDbKey;
+    var isAuthorized = ViewBag.IsAuthorized != null && (bool)ViewBag.IsAuthorized;
+
+    var konsolideSirketler = ViewBag.KonsolideSirketler as List<WebApplication3.Controllers.R24_DatabaseConfig> ?? new List<WebApplication3.Controllers.R24_DatabaseConfig>();
+    var ozet = ViewBag.Ozet as WebApplication3.Controllers.R24_OzetModel ?? new WebApplication3.Controllers.R24_OzetModel();
+    var cekSenetOzetList = ViewBag.CekSenetOzetList as List<WebApplication3.Controllers.CekSenetOzetModel> ?? new List<WebApplication3.Controllers.CekSenetOzetModel>();
+}
+
+@section Styles {
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+    <link href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css" rel="stylesheet" />
+
+    <style>
+        body { background-color: #f4f6f9; font-family: 'Inter', 'Segoe UI', Tahoma, sans-serif; color: #334155; }
+        
+        .dash-card { background-color: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04); border: 1px solid #eef0f3; margin-bottom: 1.5rem; }
+        .dash-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; }
+        .dash-header-title { font-size: 0.95rem; font-weight: 700; color: #1e293b; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .filter-label { font-size: 0.65rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.3rem; display: block; letter-spacing: 0.5px; }
+        .modern-input, .modern-select { border-radius: 6px; border: 1px solid #cbd5e1; padding: 0.4rem 0.75rem; font-size: 0.85rem; color: #334155; }
+        .modern-input:focus, .modern-select:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); outline: none; }
+        .btn-filter { background-color: #2563eb; color: #fff; font-weight: 600; border-radius: 6px; padding: 0.4rem 1.5rem; border: none; font-size: 0.85rem; transition: background 0.2s; }
+        .btn-filter:hover { background-color: #1d4ed8; color: #fff; }
+
+        .stat-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 1.25rem; height: 100%; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
+        .stat-card-blue { border-top: 4px solid #3b82f6; }
+        .stat-card-green { border-top: 4px solid #10b981; }
+        .stat-card-red { border-top: 4px solid #ef4444; }
+
+        .stat-title { font-size: 0.65rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 0.75rem; display: block; letter-spacing: 0.5px; }
+        .stat-val { font-size: 1.3rem; font-weight: 800; color: #0f172a; margin-bottom: 0.2rem; }
+
+        .top-menu-bar { display: flex; align-items: center; background: #fff; padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 1.5rem; flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; }
+        .menu-section { display: flex; align-items: center; }
+        .menu-label { font-size: 0.75rem; font-weight: 800; color: #475569; display: flex; align-items: center; padding-right: 0.5rem; letter-spacing: 0.5px; }
+        .menu-btn { background: transparent; border: none; border-radius: 6px; padding: 0.35rem 0.75rem; font-size: 0.8rem; font-weight: 600; color: #64748b; transition: all 0.2s; margin-right: 0.25rem; }
+        .menu-btn:hover { background: #f1f5f9; color: #1e293b; }
+        .menu-btn.active { background: #eff6ff; color: #2563eb; }
+        .menu-divider { width: 1px; height: 24px; background: #cbd5e1; margin: 0 1rem; flex-shrink: 0; }
+
+        table.dataTable { border-collapse: collapse !important; width: 100%; margin-top: 0 !important; }
+        table.dataTable thead th { background-color: #f8fafc !important; color: #475569 !important; font-size: 0.65rem; font-weight: 800; text-transform: uppercase; padding: 1rem !important; border-bottom: 1px solid #e2e8f0 !important; }
+        table.dataTable tbody td { padding: 0.85rem 1rem; vertical-align: middle; border-bottom: 1px solid #f1f5f9; color: #334155; font-size: 0.8rem; font-weight: 600; }
+        
+        table.dataTable tbody tr.table-danger > td { background-color: #fee2e2 !important; color: #7f1d1d !important; border-bottom: 1px solid #fca5a5 !important; }
+        table.dataTable tbody tr.table-success > td { background-color: #ecfdf5 !important; color: #065f46 !important; border-bottom: 1px solid #6ee7b7 !important; }
+
+        .badge-status { font-size: 0.7rem; font-weight: 700; padding: 0.4em 0.8em; border-radius: 20px; border: 1px solid transparent; }
+        
+        .clickable-adet { color: #2563eb; text-decoration: underline; cursor: pointer; font-weight: 800; }
+        .clickable-adet:hover { color: #1d4ed8; }
+    </style>
+}
+
+<div class="container-fluid px-4 py-4">
+
+    <!-- Header Area -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center gap-3">
+            <div class="bg-white p-2 rounded shadow-sm border" style="width: 45px; height: 45px; display: flex; align-items: center; justify-content: center;">
+                <i class="fas fa-calendar-check text-primary fs-5"></i>
+            </div>
+            <div>
+                <h4 class="mb-0 fw-bold text-dark" style="font-size: 1.15rem;">Bakiye ve İşlem GÜNLÜK Onay Paneli</h4>
+                <div class="text-muted small fw-semibold">Günün son durumu için bakiye doğrulaması yapın. Aktif Şirket: <span class="text-primary">@currentSelectedDbDisplay</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Üst Menü / Navigasyon -->
+    <div class="top-menu-bar">
+        <div class="menu-section">
+            <span class="menu-label"><i class="fas fa-wallet text-secondary"></i> KASA (100):</span>
+            <button class="menu-btn @(currentHesapTipi == "KASA" && currentTab == "TUMU" ? "active" : "")" onclick="switchReport('KASA', 'TUMU')">Tümü</button>
+            <button class="menu-btn @(currentHesapTipi == "KASA" && currentTab == "X" ? "active" : "")" onclick="switchReport('KASA', 'X')">X</button>
+            <button class="menu-btn @(currentHesapTipi == "KASA" && currentTab == "R" ? "active" : "")" onclick="switchReport('KASA', 'R')">R</button>
+        </div>
+        <div class="menu-divider"></div>
+        <div class="menu-section">
+            <span class="menu-label"><i class="fas fa-university text-secondary"></i> BANKA (102):</span>
+            <button class="menu-btn @(currentHesapTipi == "BANKA" && currentTab == "TUMU" ? "active" : "")" onclick="switchReport('BANKA', 'TUMU')">Tümü</button>
+            <button class="menu-btn @(currentHesapTipi == "BANKA" && currentTab == "X" ? "active" : "")" onclick="switchReport('BANKA', 'X')">X</button>
+            <button class="menu-btn @(currentHesapTipi == "BANKA" && currentTab == "R" ? "active" : "")" onclick="switchReport('BANKA', 'R')">R</button>
+        </div>
+        <div class="menu-divider"></div>
+        <div class="menu-section">
+            <span class="menu-label"><i class="fas fa-money-check text-secondary"></i> ÇEK (101):</span>
+            <button class="menu-btn @(currentHesapTipi == "CEK" && currentTab == "TUMU" ? "active" : "")" onclick="switchReport('CEK', 'TUMU')">Tümü</button>
+            <button class="menu-btn @(currentHesapTipi == "CEK" && currentTab == "X" ? "active" : "")" onclick="switchReport('CEK', 'X')">X</button>
+            <button class="menu-btn @(currentHesapTipi == "CEK" && currentTab == "R" ? "active" : "")" onclick="switchReport('CEK', 'R')">R</button>
+        </div>
+        <div class="menu-divider"></div>
+        <div class="menu-section">
+            <span class="menu-label"><i class="fas fa-file-signature text-secondary"></i> SENET (121):</span>
+            <button class="menu-btn @(currentHesapTipi == "SENET" && currentTab == "TUMU" ? "active" : "")" onclick="switchReport('SENET', 'TUMU')">Tümü</button>
+            <button class="menu-btn @(currentHesapTipi == "SENET" && currentTab == "X" ? "active" : "")" onclick="switchReport('SENET', 'X')">X</button>
+            <button class="menu-btn @(currentHesapTipi == "SENET" && currentTab == "R" ? "active" : "")" onclick="switchReport('SENET', 'R')">R</button>
+        </div>
+    </div>
+
+    <!-- Filtre Kartı -->
+    <div class="dash-card mb-4">
+        <div class="dash-header py-2 px-3">
+            <h6 class="dash-header-title"><i class="fas fa-filter me-2 text-muted"></i> Filtreler</h6>
+        </div>
+        <div class="p-3">
+            <form asp-controller="Rapor24" asp-action="Index" method="get" id="filterForm">
+                <input type="hidden" name="hesapTipi" value="@currentHesapTipi" id="hesapInput" />
+                <input type="hidden" name="tab" value="@currentTab" id="tabInput" />
+                
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-9">
+                        <label class="filter-label">ŞİRKET SEÇİMİ</label>
+                        <select class="form-select modern-select" name="db" onchange="this.form.submit()">
+                            @foreach (var sirket in konsolideSirketler)
+                            {
+                                <option value="@sirket.Key" selected="@(currentDbKey == sirket.Key)">@sirket.Display</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3 text-end">
+                        <button type="submit" class="btn btn-filter w-100"><i class="fas fa-sync-alt me-2"></i> Yenile / Getir</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ÖZET KARTLARI (MUHASEBE) -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4"><div class="stat-card stat-card-green"><span class="stat-title">Muhasebe - Genel Borç (Giriş)</span><div class="stat-val">@ozet.GirenTutar.ToString("N2") ₺</div></div></div>
+        <div class="col-md-4"><div class="stat-card stat-card-red"><span class="stat-title">Muhasebe - Genel Alacak (Çıkış)</span><div class="stat-val">@ozet.CikanTutar.ToString("N2") ₺</div></div></div>
+        <div class="col-md-4"><div class="stat-card stat-card-blue"><span class="stat-title">Muhasebe - Toplam İşlem Adedi</span><div class="stat-val">@ozet.IslemAdedi Adet İşlem</div></div></div>
+    </div>
+
+    <!-- ÇEK/SENET FİZİKSEL ENVANTER KIYASLAMA TABLOSU VE ONAYI -->
+    @if ((currentHesapTipi == "CEK" || currentHesapTipi == "SENET") && cekSenetOzetList.Any())
+    {
+        <div class="dash-card mb-4 border-info" style="border: 1px solid #0dcaf0;">
+            <div class="dash-header py-2 px-3" style="background-color: #f8ffff; border-bottom: 1px solid #b6effb;">
+                <h6 class="dash-header-title text-info-emphasis m-0" style="color: #055160 !important;"><i class="fas fa-boxes me-2"></i> @currentHesapTipi - FİZİKSEL ENVANTER ÖZETİ (SADECE PORTFÖYDEKİLER)</h6>
+            </div>
+            <div class="table-responsive p-3">
+                <table class="table table-sm table-bordered align-middle mb-0" style="font-size: 0.85rem;">
+                    <thead class="table-light text-center">
+                        <tr>
+                            <th width="20%">İŞLEM TİPİ</th>
+                            <th width="20%">HAREKET DURUMU</th>
+                            <th width="15%">TOPLAM ADET (Tıkla)</th>
+                            <th width="20%" class="text-end">TOPLAM TUTAR (TL)</th>
+                            <th width="25%" class="text-center">GÜNLÜK DURUM / İŞLEM</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach(var item in cekSenetOzetList)
+                        {
+                            bool isFizikselOnayli = item.OnayDurumu == "ONAYLANDI";
+                            bool isFizikselRet = item.OnayDurumu == "RET";
+                            string jsTutar = item.Tutar.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                            string safeHesapAdi = (item.HesapAdi ?? "").Replace("'", "\\'");
+
+                            <tr class="@(isFizikselOnayli ? "table-success" : (isFizikselRet ? "table-danger" : ""))">
+                                <td class="fw-bold text-dark text-center">@item.IslemTipi</td>
+                                <td class="text-center">
+                                    <span class="badge bg-success">@item.HareketDurumu</span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="clickable-adet" onclick="showCekDetay('@item.IslemTipi')" title="Detayları Görmek İçin Tıklayın">@item.Adet Adet</span>
+                                </td>
+                                <td class="text-end fw-bold text-dark">@item.Tutar.ToString("N2")</td>
+                                <td class="text-center align-middle">
+                                    <div class="d-flex align-items-center justify-content-center gap-1">
+                                        @if (isFizikselOnayli)
+                                        {
+                                            <div>
+                                                <span class="badge bg-success badge-status" title="@item.OnaylayanKullaniciAdi (@item.OnayTarihi?.ToString("dd.MM.yyyy"))"><i class="fas fa-check me-1"></i>Onaylı</span>
+                                                @if (isAuthorized) { <button class="btn btn-sm btn-light border text-danger mt-1 fw-bold w-100" style="font-size:0.7rem;" onclick="openRetModal('@item.HesapKodu', '@item.IslemTipi', 'FIZIKSEL_@currentHesapTipi', @jsTutar, @item.Adet, '@safeHesapAdi', '@item.ParaBirimi')" title="Geri Al"><i class="fas fa-times me-1"></i> Geri Al / Ret</button> }
+                                            </div>
+                                        }
+                                        else if (isFizikselRet)
+                                        {
+                                            <div>
+                                                <span class="badge bg-danger badge-status"><i class="fas fa-times me-1"></i>Ret Edildi</span>
+                                                @if(!string.IsNullOrEmpty(item.NotBasligi)) { <div style="font-size:0.65rem; color:#dc3545; font-weight:bold; margin-top:2px;">@item.NotBasligi</div> }
+                                                @if(isAuthorized) { <button class="btn btn-sm btn-light border text-success mt-1 fw-bold w-100" style="font-size:0.7rem;" onclick="submitOnay('FIZIKSEL_@currentHesapTipi', '@item.HesapKodu', '@item.IslemTipi', 'ONAYLANDI', '', '', @jsTutar, @item.Adet, '@safeHesapAdi', '@item.ParaBirimi')" title="Düzeldi"><i class="fas fa-check me-1"></i> Düzeldi/Onayla</button> }
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            @if(isAuthorized) {
+                                                <button class="btn btn-light border btn-sm text-success" onclick="submitOnay('FIZIKSEL_@currentHesapTipi', '@item.HesapKodu', '@item.IslemTipi', 'ONAYLANDI', '', '', @jsTutar, @item.Adet, '@safeHesapAdi', '@item.ParaBirimi')" title="Doğru / Onayla"><i class="fas fa-check"></i></button>
+                                                <button class="btn btn-light border btn-sm text-danger" onclick="openRetModal('@item.HesapKodu', '@item.IslemTipi', 'FIZIKSEL_@currentHesapTipi', @jsTutar, @item.Adet, '@safeHesapAdi', '@item.ParaBirimi')" title="Hatalı / Reddet"><i class="fas fa-times"></i></button>
+                                            } else {
+                                                <span class="badge bg-secondary badge-status">Bekliyor</span>
+                                            }
+                                        }
+                                        <!-- Geçmiş Butonu -->
+                                        <button class="btn btn-sm btn-outline-secondary" style="margin-left:auto;" onclick="gosterGecmis('@currentDbKey', 'FIZIKSEL_@currentHesapTipi', '@item.HesapKodu', '@item.IslemTipi')" title="Onay Geçmişi"><i class="fas fa-history"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot class="table-light fw-bold text-center">
+                        <tr>
+                            <td colspan="2" class="text-end">GENEL TOPLAM:</td>
+                            <td>@cekSenetOzetList.Sum(x => x.Adet) Adet</td>
+                            <td class="text-end text-primary fs-6">@cekSenetOzetList.Sum(x => x.Tutar).ToString("N2") ₺</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    }
+
+    <!-- TABLO ALANI (MUHASEBE BAKİYELERİ) -->
+    <div class="dash-card mb-4">
+        <div class="dash-header">
+            <h6 class="dash-header-title">@currentHesapTipi Muhasebe Bakiyeleri (TÜM HESAPLAR)</h6>
+        </div>
+        <div class="table-responsive p-3">
+            <table class="table-custom datatable w-100">
+                <thead>
+                    <tr>
+                        <th width="12%">HESAP KODU</th>
+                        <th width="20%">HESAP ADI</th>
+                        <th width="10%" class="text-center">İŞLEM TİPİ</th>
+                        <th width="8%" class="text-center">İŞLEM AD.</th>
+                        <th width="12%" class="text-end">BORÇ</th>
+                        <th width="12%" class="text-end">ALACAK</th>
+                        <th width="12%" class="text-end">BAKİYE</th>
+                        <th width="14%" class="text-center">GÜNLÜK DURUM / İŞLEM</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model != null && Model.Any())
+                    {
+                        foreach (var item in Model)
+                        {
+                            bool isOnayli = item.OnayDurumu == "ONAYLANDI";
+                            bool isRet = item.OnayDurumu == "RET";
+                            string jsTutar = item.Bakiye.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                            string safeHesapAdi = (item.HesapAdi ?? "").Replace("'", "\\'");
+
+                            <tr class="@(isOnayli ? "table-success" : (isRet ? "table-danger" : ""))">
+                                <td class="text-primary fw-bold">@item.HesapKodu</td>
+                                <td>@item.HesapAdi</td>
+                                <td class="text-center"><span class="badge bg-light text-dark border">@item.IslemTipi</span></td>
+                                <td class="text-center">@item.IslemAdedi</td>
+                                <td class="text-end text-success">@item.Borc.ToString("N2") <small class="text-muted fw-bold ms-1">@item.ParaBirimi</small></td>
+                                <td class="text-end text-danger">@item.Alacak.ToString("N2") <small class="text-muted fw-bold ms-1">@item.ParaBirimi</small></td>
+                                <td class="text-end fw-bold text-dark">@item.Bakiye.ToString("N2") <small class="text-muted fw-bold ms-1">@item.ParaBirimi</small></td>
+                                <td class="text-center align-middle">
+                                    <div class="d-flex align-items-center justify-content-center gap-1">
+                                        @if (isOnayli)
+                                        {
+                                            <div>
+                                                <span class="badge bg-success badge-status" title="@item.OnaylayanKullaniciAdi (@item.OnayTarihi?.ToString("dd.MM.yyyy"))"><i class="fas fa-check me-1"></i>Onaylı</span>
+                                                @if (isAuthorized) { <button class="btn btn-sm btn-light border text-danger mt-1 fw-bold w-100" style="font-size:0.7rem;" onclick="openRetModal('@item.HesapKodu', '@item.IslemTipi', '@currentHesapTipi', @jsTutar, @item.IslemAdedi, '@safeHesapAdi', '@item.ParaBirimi')" title="Geri Al"><i class="fas fa-times me-1"></i> Geri Al / Ret</button> }
+                                            </div>
+                                        }
+                                        else if (isRet)
+                                        {
+                                            <div>
+                                                <span class="badge bg-danger badge-status"><i class="fas fa-times me-1"></i>Ret Edildi</span>
+                                                @if(!string.IsNullOrEmpty(item.NotBasligi)) { <div style="font-size:0.65rem; color:#dc3545; font-weight:bold; margin-top:2px;">@item.NotBasligi</div> }
+                                                @if(isAuthorized) { <button class="btn btn-sm btn-light border text-success mt-1 fw-bold w-100" style="font-size:0.7rem;" onclick="submitOnay('@currentHesapTipi', '@item.HesapKodu', '@item.IslemTipi', 'ONAYLANDI', '', '', @jsTutar, @item.IslemAdedi, '@safeHesapAdi', '@item.ParaBirimi')" title="Düzeldi"><i class="fas fa-check me-1"></i> Düzeldi/Onayla</button> }
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            @if(isAuthorized) {
+                                                <button class="btn btn-light border btn-sm text-success" onclick="submitOnay('@currentHesapTipi', '@item.HesapKodu', '@item.IslemTipi', 'ONAYLANDI', '', '', @jsTutar, @item.IslemAdedi, '@safeHesapAdi', '@item.ParaBirimi')" title="Doğru / Onayla"><i class="fas fa-check"></i></button>
+                                                <button class="btn btn-light border btn-sm text-danger" onclick="openRetModal('@item.HesapKodu', '@item.IslemTipi', '@currentHesapTipi', @jsTutar, @item.IslemAdedi, '@safeHesapAdi', '@item.ParaBirimi')" title="Hatalı / Reddet"><i class="fas fa-times"></i></button>
+                                            } else {
+                                                <span class="badge bg-secondary badge-status">Bekliyor</span>
+                                            }
+                                        }
+                                        <!-- Geçmiş Butonu -->
+                                        <button class="btn btn-sm btn-outline-secondary" style="margin-left:auto;" onclick="gosterGecmis('@currentDbKey', '@currentHesapTipi', '@item.HesapKodu', '@item.IslemTipi')" title="Onay Geçmişi"><i class="fas fa-history"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Ret / Eksik Bildirim Modalı -->
+<div class="modal fade" id="retModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0" style="border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);">
+            <div class="modal-header bg-light border-bottom">
+                <h6 class="modal-title text-danger fw-bold"><i class="fas fa-exclamation-triangle me-2"></i>Bakiye Uygunsuzluk / Ret İşlemi</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body bg-white p-4">
+                <input type="hidden" id="retHesapGrubu" />
+                <input type="hidden" id="retHesapKodu" />
+                <input type="hidden" id="retIslemTipi" />
+                <input type="hidden" id="retIslemTutar" />
+                <input type="hidden" id="retIslemAdet" />
+                <input type="hidden" id="retHesapAdi" />
+                <input type="hidden" id="retParaBirimi" />
+                
+                <div class="alert alert-warning small border-0 shadow-sm rounded">
+                    Hesap bakiyesinde veya fiziksel envanterde hata olduğunu düşünüyorsanız, sebebini yazarak reddedebilirsiniz. Günlük izlenecektir.
+                </div>
+
+                <div class="mb-3">
+                    <label class="filter-label">Ret Sebebi / Başlık (Kısa) <span class="text-danger">*</span></label>
+                    <input type="text" id="retNotBasligi" class="form-control modern-input border-danger" placeholder="Örn: Açılış bakiyesi hatalı, eksik virman var vb." maxlength="100" />
+                </div>
+                <div class="mb-3">
+                    <label class="filter-label">Detaylı Açıklama (Opsiyonel)</label>
+                    <textarea id="retNotIcerigi" class="form-control modern-input" rows="3" placeholder="Detaylı bir hata açıklaması girebilirsiniz..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-3 border-top-0">
+                <button type="button" class="btn btn-clear" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-danger px-4" style="border-radius: 6px; font-weight: 600;" onclick="kaydetRet()">İşlemi Reddet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Onay Geçmişi Modalı -->
+<div class="modal fade" id="gecmisModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0" style="border-radius: 8px;">
+            <div class="modal-header bg-secondary border-bottom">
+                <h6 class="modal-title fw-bold text-white"><i class="fas fa-history me-2"></i> İşlem Onay Geçmişi</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped align-middle m-0" id="gecmisTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Tarih</th>
+                                <th>İşlem Yapan</th>
+                                <th>Durum</th>
+                                <th>Hesap Adı</th>
+                                <th class="text-end">Tutar</th>
+                                <th>P. Birimi</th>
+                                <th class="text-center">Adet</th>
+                                <th>Not</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- AJAX ile dolacak -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Çek/Senet Detay Modalı (Portföydeki Evraklar) -->
+<div class="modal fade" id="cekDetayModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0" style="border-radius: 8px;">
+            <div class="modal-header bg-info border-bottom" style="background-color: #e0f8f8 !important;">
+                <h6 class="modal-title fw-bold text-dark"><i class="fas fa-list me-2 text-primary"></i> <span id="detayModalTitle">Portföydeki Evrak Listesi</span></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped table-hover align-middle w-100" id="cekDetayTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Çek/Senet No</th>
+                                <th>Vade Tarihi</th>
+                                <th>Cari Adı</th>
+                                <th>Tutar</th>
+                                <th>Para Birimi</th>
+                                <th class="text-end">TL Karşılığı</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- AJAX ile dolacak -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    
+    <script>
+        $(document).ready(function () {
+            $('.datatable').DataTable({
+                language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/tr.json' },
+                pageLength: 50,
+                order: [], 
+                responsive: true,
+                dom: "<'row mb-3'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
+                     "<'row'<'col-sm-12'tr>>" +
+                     "<'row mt-3'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>"
+            });
+        });
+
+        // Üst Tablar arası geçiş
+        function switchReport(hesapTipi, tabName) {
+            document.getElementById('hesapInput').value = hesapTipi;
+            document.getElementById('tabInput').value = tabName;
+            document.getElementById('filterForm').submit();
+        }
+
+        // Onay / Düzeltme İşlemini Veritabanına Yazar
+        function submitOnay(hesapGrubu, hesapKodu, islemTipi, durum, baslik, icerik = "", tutar = 0, adet = 0, hesapAdi = "", paraBirimi = "TL") {
+            var data = { 
+                DbKey: '@currentDbKey', 
+                HesapGrubu: hesapGrubu, 
+                HesapKodu: hesapKodu, 
+                IslemTipi: islemTipi,
+                Durum: durum, 
+                NotBasligi: baslik, 
+                NotIcerigi: icerik,
+                Tutar: tutar,
+                Adet: adet,
+                HesapAdi: hesapAdi,
+                ParaBirimi: paraBirimi
+            };
+
+            fetch('/Rapor24/SetOnayDurumu', {
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            }).then(response => response.json()).then(result => {
+                if (result.success) { 
+                    toastr.success(result.message); 
+                    setTimeout(() => location.reload(), 800); 
+                } 
+                else alert("İşlem Başarısız!\n\nNeden: " + result.message);
+            }).catch(error => {
+                console.error('Fetch Error:', error);
+                alert("İstek gönderilirken teknik bir sorun oluştu.");
+            });
+        }
+
+        var retModal;
+        function openRetModal(hesapKodu, islemTipi, hesapGrubu, tutar, adet, hesapAdi, paraBirimi) {
+            document.getElementById('retHesapGrubu').value = hesapGrubu;
+            document.getElementById('retHesapKodu').value = hesapKodu;
+            document.getElementById('retIslemTipi').value = islemTipi;
+            document.getElementById('retIslemTutar').value = tutar;
+            document.getElementById('retIslemAdet').value = adet;
+            document.getElementById('retHesapAdi').value = hesapAdi;
+            document.getElementById('retParaBirimi').value = paraBirimi;
+            
+            document.getElementById('retNotBasligi').value = "";
+            document.getElementById('retNotIcerigi').value = "";
+            
+            if (!retModal) retModal = new bootstrap.Modal(document.getElementById('retModal'));
+            retModal.show();
+        }
+
+        function kaydetRet() {
+            var hGrubu = document.getElementById('retHesapGrubu').value;
+            var hKodu = document.getElementById('retHesapKodu').value;
+            var iTipi = document.getElementById('retIslemTipi').value;
+            var tutar = parseFloat(document.getElementById('retIslemTutar').value) || 0;
+            var adet = parseInt(document.getElementById('retIslemAdet').value) || 0;
+            var hesapAdi = document.getElementById('retHesapAdi').value;
+            var paraBirimi = document.getElementById('retParaBirimi').value;
+            
+            var baslik = document.getElementById('retNotBasligi').value;
+            var icerik = document.getElementById('retNotIcerigi').value;
+
+            if(!baslik || baslik.trim() === "") { toastr.warning("Lütfen kısa bir Ret sebebi giriniz."); return; }
+
+            submitOnay(hGrubu, hKodu, iTipi, 'RET', baslik, icerik, tutar, adet, hesapAdi, paraBirimi);
+        }
+
+        // Onay Geçmişini Görüntüleme Modalı
+        var gecmisModal;
+        function gosterGecmis(dbKey, anaGrup, hesapKodu, islemTipi) {
+            if (!gecmisModal) gecmisModal = new bootstrap.Modal(document.getElementById('gecmisModal'));
+            var tbody = document.querySelector("#gecmisTable tbody");
+            tbody.innerHTML = "<tr><td colspan='8' class='text-center py-4'><div class='spinner-border text-secondary' role='status'></div> Yükleniyor...</td></tr>";
+            
+            gecmisModal.show();
+
+            fetch(`/Rapor24/GetOnayGecmisi?dbKey=${dbKey}&anaGrup=${anaGrup}&hesapKodu=${hesapKodu}&islemTipi=${islemTipi}`)
+            .then(response => response.json())
+            .then(result => {
+                if(result.success && result.data.length > 0) {
+                    var html = "";
+                    result.data.forEach(function(item) {
+                        var isRet = item.durum === 'RET';
+                        html += `<tr>
+                            <td class="fw-bold">${item.tarih}</td>
+                            <td>${item.kullanici}</td>
+                            <td><span class="badge ${isRet ? 'bg-danger' : 'bg-success'}">${item.durum}</span></td>
+                            <td class="text-primary fw-bold" style="font-size: 0.8rem;">${item.hesapAdi}</td>
+                            <td class="text-end fw-bold">${item.tutar.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
+                            <td class="fw-bold text-muted">${item.paraBirimi}</td>
+                            <td class="text-center">${item.adet}</td>
+                            <td style="font-size: 0.8rem;" class="${isRet ? 'text-danger' : 'text-muted'}">${item.not}</td>
+                        </tr>`;
+                    });
+                    tbody.innerHTML = html;
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-3">Geçmiş onay kaydı bulunamadı.</td></tr>`;
+                }
+            }).catch(error => {
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-3">Veri çekilirken bağlantı hatası oluştu!</td></tr>`;
+            });
+        }
+
+        // Portföy Çek/Senet Detaylarını Modalda Getir
+        var detayModal;
+        function showCekDetay(islemTipi) {
+            if (!detayModal) detayModal = new bootstrap.Modal(document.getElementById('cekDetayModal'));
+            
+            document.getElementById('detayModalTitle').innerText = islemTipi + " - Portföy Evrak Listesi";
+            var tbody = document.querySelector("#cekDetayTable tbody");
+            tbody.innerHTML = "<tr><td colspan='6' class='text-center py-4'><div class='spinner-border text-primary' role='status'></div> Yükleniyor...</td></tr>";
+            
+            detayModal.show();
+
+            fetch(`/Rapor24/GetCekSenetDetay?db=@currentDbKey&hesapTipi=@currentHesapTipi&islemTipi=${encodeURIComponent(islemTipi)}`)
+            .then(response => response.json())
+            .then(result => {
+                if(result.success && result.data.length > 0) {
+                    var html = "";
+                    result.data.forEach(function(item) {
+                        html += `<tr>
+                            <td class="fw-bold">${item.cekNo}</td>
+                            <td>${item.vade}</td>
+                            <td>${item.cariAdi}</td>
+                            <td>${item.tutar.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
+                            <td>${item.paraBirimi}</td>
+                            <td class="text-end fw-bold text-success">${item.tlKarsiligi.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</td>
+                        </tr>`;
+                    });
+                    tbody.innerHTML = html;
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-3">Bu işlem tipine ait portföyde belge bulunamadı.</td></tr>`;
+                }
+            })
+            .catch(error => {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-3">Veri çekilirken bağlantı hatası oluştu!</td></tr>`;
+            });
+        }
+    </script>
+}

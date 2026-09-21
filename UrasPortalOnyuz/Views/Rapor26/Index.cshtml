@@ -1,0 +1,476 @@
+﻿@model List<WebApplication3.Models.Rapor26ViewModel>
+@using Newtonsoft.Json
+@using System.Globalization
+@using System.Linq
+
+@{
+    ViewData["Title"] = "R-X Müşteri Bakiye Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // Aktif Veritabanını (Şirketi) URL veya Cookie'den merkezi olarak alıyoruz
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"];
+    }
+
+    // Veriyi JS tarafına aktarmak için serialize ediyoruz
+    var reportDataJson = Model != null ? JsonConvert.SerializeObject(Model) : "[]";
+
+    // Filtreleme menüleri için benzersiz listeler (Cari Adı ve Satış Temsilcisi)
+    var distinctMusteri = Model != null ? Model.Select(m => m.MusteriFirmaAdi).Where(x => !string.IsNullOrEmpty(x)).Distinct().OrderBy(x => x).ToList() : new List<string>();
+    var distinctSatisTemsilcisi = Model != null ? Model.Select(m => m.SatisSorumlusu).Where(x => !string.IsNullOrEmpty(x)).Distinct().OrderBy(x => x).ToList() : new List<string>();
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+
+    <style>
+        :root {
+            --light-bg: #f8f9fa;
+            --border-color: #e0e0e0;
+            --header-bg: #2c3e50;
+            --header-text: #ffffff;
+            --hover-color: #fff3cd;
+        }
+
+        body {
+            background-color: var(--light-bg);
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.8rem;
+        }
+
+        .sticky-toolbar {
+            position: sticky;
+            top: 0;
+            background-color: #ffffff;
+            z-index: 1000;
+            padding: 10px 15px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            max-height: calc(100vh - 140px);
+            overflow-y: auto;
+            background-color: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        .rapor-tablo {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            min-width: 1800px; /* Tablo genişliği */
+        }
+
+            .rapor-tablo thead {
+                position: sticky;
+                top: 0;
+                z-index: 101;
+                background-color: #fff;
+            }
+
+                .rapor-tablo thead .main-header-row th {
+                    background-color: var(--header-bg);
+                    color: var(--header-text);
+                    padding: 8px 4px;
+                    text-align: center;
+                    border-bottom: 2px solid #ddd;
+                    font-weight: 600;
+                    cursor: pointer;
+                    vertical-align: middle;
+                }
+
+                    /* R Sütunları Başlık Rengi */
+                    .rapor-tablo thead .main-header-row th.th-r-group {
+                        background-color: #2980b9; /* Mavi ton */
+                    }
+
+                    /* X Sütunları Başlık Rengi */
+                    .rapor-tablo thead .main-header-row th.th-x-group {
+                        background-color: #d35400; /* Turuncu ton */
+                    }
+
+                .rapor-tablo thead .filter-row th {
+                    padding: 4px;
+                    background-color: #f1f1f1;
+                    border-bottom: 1px solid #ccc;
+                }
+
+            .rapor-tablo td {
+                padding: 4px 6px;
+                vertical-align: middle;
+                border-right: 1px solid #eee;
+                border-bottom: 1px solid #eee;
+                white-space: nowrap;
+            }
+
+            .rapor-tablo tbody tr:hover {
+                background-color: var(--hover-color) !important;
+            }
+
+        /* Filtre Inputları */
+        .filter-input {
+            width: 100%;
+            font-size: 0.75rem;
+            padding: 2px 5px;
+            height: 26px;
+        }
+
+        .fw-bold-num {
+            font-weight: 600;
+        }
+
+        .footer-info {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background: #fff;
+            padding: 5px;
+            border-top: 1px solid #ccc;
+            text-align: center;
+            font-size: 0.85rem;
+            z-index: 2000;
+        }
+    </style>
+}
+
+<div class="container-fluid py-0 mb-5">
+    @Html.AntiForgeryToken()
+
+    <div class="row g-0">
+        <div class="col-md-12">
+
+            <div class="sticky-toolbar">
+                <h5 class="m-0"><i class="fas fa-balance-scale me-2"></i>R / X Müşteri Bakiye Analizi</h5>
+                <div>
+                    <span class="badge bg-info text-dark me-3" style="font-size:12px;">
+                        <i class="fas fa-database me-1"></i> @ViewBag.CurrentDbDisplay
+                    </span>
+                    <button id="clearAllFiltersBtn" class="btn btn-warning btn-sm me-3 shadow-sm fw-bold">
+                        <i class="fas fa-filter-circle-xmark me-1"></i> Tüm Filtreleri Temizle
+                    </button>
+                    <span class="badge bg-secondary" id="rowCountBadge" style="font-size:13px;">Kayıt: 0</span>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table class="table table-bordered table-striped rapor-tablo" id="rapor26Table">
+                    <thead>
+                        <tr class="main-header-row">
+                            <th class="sortable-column" data-column="CardCode" data-sort-type="text" style="width: 100px;">Müşteri Kodu <i class="fas fa-sort float-end"></i></th>
+                            <th class="sortable-column" data-column="MusteriFirmaAdi" data-sort-type="text" style="width: 250px;">Müşteri Firma Adı <i class="fas fa-sort float-end"></i></th>
+
+                            <th class="sortable-column th-r-group" data-column="RBakiye" data-sort-type="number" style="width: 120px;">R Bakiye <i class="fas fa-sort float-end"></i></th>
+
+                            <th class="sortable-column th-x-group" data-column="XBakiye" data-sort-type="number" style="width: 120px;">X Bakiye <i class="fas fa-sort float-end"></i></th>
+
+                            <th class="sortable-column" data-column="Hesap420Bakiyesi" data-sort-type="number" style="width: 120px;">420 Hesap Bakiyesi <i class="fas fa-sort float-end"></i></th>
+
+                            <th class="sortable-column bg-danger text-white" data-column="GenelBakiyeFarki" data-sort-type="number" style="width: 120px;">Genel Bakiye Farkı <i class="fas fa-sort float-end"></i></th>
+
+                            <th class="sortable-column th-r-group" data-column="RYaslananBakiyeGecikmeGun" data-sort-type="number" style="width: 80px;">R Gecikme (Gün) <i class="fas fa-sort float-end"></i></th>
+                            <th class="sortable-column th-r-group" data-column="RYaslananBakiye" data-sort-type="number" style="width: 120px;">R Yaşlanan Bakiye <i class="fas fa-sort float-end"></i></th>
+
+                            <th class="sortable-column th-x-group" data-column="XYaslananBakiyeGecikmeGun" data-sort-type="number" style="width: 80px;">X Gecikme (Gün) <i class="fas fa-sort float-end"></i></th>
+                            <th class="sortable-column th-x-group" data-column="XYaslananBakiye" data-sort-type="number" style="width: 120px;">X Yaşlanan Bakiye <i class="fas fa-sort float-end"></i></th>
+
+                            <th class="sortable-column" data-column="SatisSorumlusu" data-sort-type="text" style="width: 150px;">Satış Sorumlusu <i class="fas fa-sort float-end"></i></th>
+                        </tr>
+
+                        <tr class="filter-row">
+                            <th data-column="CardCode">
+                                <input type="text" class="form-control filter-input" placeholder="Ara...">
+                            </th>
+                            <th data-column="MusteriFirmaAdi">
+                                <select class="form-select filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-width="100%" data-size="5" title="Seçiniz...">
+                                    @foreach (var item in distinctMusteri)
+                                    {
+                                        <option value="@item">@item</option>
+                                    }
+                                </select>
+                            </th>
+                            <th data-column="RBakiye"><input type="text" class="form-control filter-input number-filter" placeholder="Filtre..."></th>
+                            <th data-column="XBakiye"><input type="text" class="form-control filter-input number-filter" placeholder="Filtre..."></th>
+                            <th data-column="Hesap420Bakiyesi"><input type="text" class="form-control filter-input number-filter" placeholder="Filtre..."></th>
+                            <th data-column="GenelBakiyeFarki"><input type="text" class="form-control filter-input number-filter" placeholder="Filtre..."></th>
+                            <th data-column="RYaslananBakiyeGecikmeGun"><input type="text" class="form-control filter-input number-filter" placeholder="Gün"></th>
+                            <th data-column="RYaslananBakiye"><input type="text" class="form-control filter-input number-filter" placeholder="Filtre..."></th>
+                            <th data-column="XYaslananBakiyeGecikmeGun"><input type="text" class="form-control filter-input number-filter" placeholder="Gün"></th>
+                            <th data-column="XYaslananBakiye"><input type="text" class="form-control filter-input number-filter" placeholder="Filtre..."></th>
+                            <th data-column="SatisSorumlusu">
+                                <select class="form-select filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-width="100%" data-size="5" title="Seçiniz...">
+                                    @foreach (var item in distinctSatisTemsilcisi)
+                                    {
+                                        <option value="@item">@item</option>
+                                    }
+                                </select>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div class="mt-3 ms-2 mb-4">
+        <a asp-action="Index" asp-controller="Home" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+            <i class="fas fa-arrow-left me-2"></i> Ana Sayfaya Dön
+        </a>
+    </div>
+</div>
+
+<div class="footer-info">
+    <span id="footerTotalRecords">Toplam Kayıt: 0</span>
+</div>
+
+@section Scripts {
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            
+            // Aktif veritabanı parametresini JS değişkenine alıyoruz
+            const currentDbParam = '@currentDb';
+
+            // 1. Veriyi Al
+            const allReportData = @Html.Raw(reportDataJson);
+            const tableBody = document.querySelector('#rapor26Table tbody');
+            const rowCountBadge = document.getElementById('rowCountBadge');
+            const footerTotalRecords = document.getElementById('footerTotalRecords');
+            const clearAllFiltersBtn = document.getElementById('clearAllFiltersBtn');
+
+            let currentlyFilteredRows = [...allReportData];
+            let currentSortColumn = null;
+            let currentSortDirection = 'none';
+
+            // 2. Kolon Eşleşmeleri
+            const columnMappings = {
+                'CardCode': 'CardCode',
+                'MusteriFirmaAdi': 'MusteriFirmaAdi',
+                'RBakiye': 'RBakiye',
+                'XBakiye': 'XBakiye',
+                'Hesap420Bakiyesi': 'Hesap420Bakiyesi',
+                'GenelBakiyeFarki': 'GenelBakiyeFarki',
+                'RYaslananBakiyeGecikmeGun': 'RYaslananBakiyeGecikmeGun',
+                'RYaslananBakiye': 'RYaslananBakiye',
+                'XYaslananBakiyeGecikmeGun': 'XYaslananBakiyeGecikmeGun',
+                'XYaslananBakiye': 'XYaslananBakiye',
+                'SatisSorumlusu': 'SatisSorumlusu'
+            };
+
+            // 3. Helper Fonksiyonlar
+            function formatMoney(amount) {
+                if (amount === null || amount === undefined) return '0,00';
+                return amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+
+            // "Tüm Filtreleri Temizle" Butonuna tıklanınca URL'deki db parametresini kaybetmemek için yönlendirmeyi güncelliyoruz.
+            if (clearAllFiltersBtn) {
+                clearAllFiltersBtn.addEventListener('click', function () {
+                    let currentUrl = window.location.href;
+                    let baseUrl = currentUrl.split('?')[0];
+                    let newUrl = baseUrl;
+                    if (currentDbParam) {
+                        newUrl += `?db=${currentDbParam}`;
+                    }
+                    window.location.href = newUrl;
+                });
+            }
+
+            // Global Filtre Temizleyici (Yedek)
+            window.clearReportFilters = function () {
+                $('.filter-select-bs').selectpicker('val', '');
+                $('.filter-input').val('');
+                
+                currentSortColumn = null;
+                currentSortDirection = 'none';
+                document.querySelectorAll('th.sortable-column i').forEach(icon => icon.className = 'fas fa-sort float-end');
+
+                currentlyFilteredRows = [...allReportData];
+                renderTable(currentlyFilteredRows);
+                toastr.success('Filtreler başarıyla sıfırlandı.');
+            };
+
+            // 4. Tabloyu Çiz (Render)
+            function renderTable(data) {
+                tableBody.innerHTML = '';
+
+                if (data.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="11" class="text-center p-3">Görüntülenecek veri bulunamadı.</td></tr>';
+                    updateCounts(0);
+                    return;
+                }
+
+                const fragment = document.createDocumentFragment();
+
+                data.forEach(item => {
+                    const tr = document.createElement('tr');
+
+                    // Bakiye Farkı Kontrolü (Renk Uyarısı)
+                    const diffStyle = (item.GenelBakiyeFarki && Math.abs(item.GenelBakiyeFarki) > 0.1) ? 'color: red; font-weight:bold;' : '';
+
+                    tr.innerHTML = `
+                        <td style="font-weight:500;">${item.CardCode || ''}</td>
+                        <td style="white-space:normal;">${item.MusteriFirmaAdi || ''}</td>
+
+                        <td class="text-end fw-bold-num" style="background-color: #ebf5fb;">${formatMoney(item.RBakiye)}</td>
+                        <td class="text-end fw-bold-num" style="background-color: #fbe6d3;">${formatMoney(item.XBakiye)}</td>
+
+                        <td class="text-end">${formatMoney(item.Hesap420Bakiyesi)}</td>
+
+                        <td class="text-end" style="${diffStyle}">${formatMoney(item.GenelBakiyeFarki)}</td>
+
+                        <td class="text-center" style="background-color: #ebf5fb;">${item.RYaslananBakiyeGecikmeGun || 0}</td>
+                        <td class="text-end" style="background-color: #ebf5fb;">${formatMoney(item.RYaslananBakiye)}</td>
+
+                        <td class="text-center" style="background-color: #fbe6d3;">${item.XYaslananBakiyeGecikmeGun || 0}</td>
+                        <td class="text-end" style="background-color: #fbe6d3;">${formatMoney(item.XYaslananBakiye)}</td>
+
+                        <td>${item.SatisSorumlusu || ''}</td>
+                    `;
+                    fragment.appendChild(tr);
+                });
+
+                tableBody.appendChild(fragment);
+                updateCounts(data.length);
+            }
+
+            function updateCounts(count) {
+                if(rowCountBadge) rowCountBadge.textContent = 'Kayıt: ' + count;
+                if(footerTotalRecords) footerTotalRecords.textContent = 'Toplam Kayıt: ' + count;
+            }
+
+            // 5. Filtreleme Mantığı
+            function filterTable() {
+                const filters = {};
+
+                // Dropdown Filtreleri (SelectPicker)
+                $('.filter-select-bs').each(function () {
+                    const select = $(this);
+                    const col = select.closest('th').data('column');
+                    const vals = select.val();
+                    if (vals && vals.length > 0) {
+                        filters[col] = { type: 'select', values: vals.map(v => v.toLowerCase()) };
+                    }
+                });
+
+                // Input Filtreleri (Text & Number)
+                document.querySelectorAll('.filter-input').forEach(input => {
+                    const val = input.value.trim().toLowerCase();
+                    if (val) {
+                        const col = input.closest('th').dataset.column;
+                        filters[col] = { type: 'text', value: val };
+                    }
+                });
+
+                const filtered = allReportData.filter(item => {
+                    let match = true;
+
+                    for (const colKey in filters) {
+                        const filter = filters[colKey];
+                        const prop = columnMappings[colKey];
+                        let itemVal = item[prop];
+
+                        if (itemVal === null || itemVal === undefined) itemVal = '';
+                        const itemValStr = itemVal.toString().toLowerCase();
+
+                        if (filter.type === 'select') {
+                            // Dropdown logic: Seçilenlerden biriyle eşleşmeli
+                            if (!filter.values.some(v => itemValStr.includes(v))) {
+                                match = false; break;
+                            }
+                        } else {
+                            // Text input logic
+                            if (!itemValStr.includes(filter.value)) {
+                                match = false; break;
+                            }
+                        }
+                    }
+                    return match;
+                });
+
+                currentlyFilteredRows = filtered;
+
+                // Eğer sıralama aktifse tekrar sırala
+                if (currentSortColumn && currentSortDirection !== 'none') {
+                    sortData();
+                }
+
+                renderTable(currentlyFilteredRows);
+            }
+
+            // 6. Sıralama Mantığı
+            function sortData() {
+                const prop = columnMappings[currentSortColumn];
+                const type = document.querySelector(`th[data-column="${currentSortColumn}"]`).dataset.sortType;
+
+                currentlyFilteredRows.sort((a, b) => {
+                    let valA = a[prop];
+                    let valB = b[prop];
+
+                    if (type === 'number') {
+                        valA = parseFloat(valA) || 0;
+                        valB = parseFloat(valB) || 0;
+                        return currentSortDirection === 'asc' ? valA - valB : valB - valA;
+                    } else {
+                        valA = (valA || '').toString().toLowerCase();
+                        valB = (valB || '').toString().toLowerCase();
+                        return currentSortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                    }
+                });
+            }
+
+            // 7. Event Listeners
+
+            // Sıralama Tıklaması
+            document.querySelectorAll('.sortable-column').forEach(th => {
+                th.addEventListener('click', function () {
+                    const col = this.dataset.column;
+
+                    // İkonları sıfırla
+                    document.querySelectorAll('.sortable-column i').forEach(i => i.className = 'fas fa-sort float-end');
+
+                    if (currentSortColumn === col) {
+                        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        currentSortColumn = col;
+                        currentSortDirection = 'asc';
+                    }
+
+                    // Aktif ikonunu güncelle
+                    const icon = this.querySelector('i');
+                    icon.className = currentSortDirection === 'asc' ? 'fas fa-sort-up float-end' : 'fas fa-sort-down float-end';
+
+                    sortData();
+                    renderTable(currentlyFilteredRows);
+                });
+            });
+
+            // Input Filtreleme (Enter ve Keyup)
+            document.querySelectorAll('.filter-input').forEach(input => {
+                input.addEventListener('keyup', filterTable);
+            });
+
+            // SelectPicker Filtreleme
+            $('.filter-select-bs').selectpicker();
+            $('.filter-select-bs').on('changed.bs.select', function () {
+                filterTable();
+            });
+
+            // Başlangıç render
+            renderTable(allReportData);
+        });
+    </script>
+}

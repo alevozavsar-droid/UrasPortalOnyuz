@@ -1,0 +1,1064 @@
+﻿@using System.Globalization
+@model WebApplication3.Controllers.Rapor102ViewModel
+@{
+    ViewData["Title"] = "Konsolide Finansal Dashboard";
+
+    // Aktif Veritabanını (Şirketi) URL veya Cookie'den alıyoruz
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"];
+    }
+}
+
+@functions {
+    public string FormatTutar(decimal net, decimal kdv, bool includeVat) {
+        decimal total = includeVat ? (net + kdv) : net;
+        return total.ToString("N2", new CultureInfo("tr-TR")) + " ₺";
+    }
+    public string FormatFark(decimal net, decimal kdv) {
+        if (net == 0) return "%0.0";
+        decimal pct = (kdv / Math.Abs(net)) * 100;
+        string isaret = kdv >= 0 ? "+" : "";
+        return $"{isaret}{kdv.ToString("N2", new CultureInfo("tr-TR"))} ₺ (%{pct.ToString("N1", new CultureInfo("tr-TR"))})";
+    }
+}
+
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+
+<style>
+    body { background-color: #f4f6f9; }
+    .dash-card { border-radius: 12px; border: none; box-shadow: 0 4px 20px rgba(0,0,0,0.05); background: white; transition: transform 0.3s ease; }
+    .dash-card:hover { transform: translateY(-5px); }
+    .icon-box { width: 54px; height: 54px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 26px; }
+    
+    .bg-gradient-satis { background: linear-gradient(135deg, #1cc88a, #13855c); color: white; box-shadow: 0 4px 10px rgba(28,200,138,0.3); }
+    .bg-gradient-alis { background: linear-gradient(135deg, #36b9cc, #258391); color: white; box-shadow: 0 4px 10px rgba(54,185,204,0.3); }
+    .bg-gradient-gider { background: linear-gradient(135deg, #e74a3b, #be2617); color: white; box-shadow: 0 4px 10px rgba(231,74,59,0.3); }
+    .bg-gradient-taslak { background: linear-gradient(135deg, #f6c23e, #dda20a); color: white; box-shadow: 0 4px 10px rgba(246,194,62,0.3); }
+    .bg-gradient-total { background: linear-gradient(135deg, #858796, #5a5c69); color: white; box-shadow: 0 4px 10px rgba(133,135,150,0.3); }
+    
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11.5px; color: #6e707e; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 12.5px; color: #5a5c69; }
+    .table-custom tfoot th { background-color: #5a5c69; color: white; font-size: 13px; }
+    .table-matris td { vertical-align: middle; font-size: 12px; }
+    
+    .matris-link { color: #4e73df; font-weight: bold; text-decoration: underline; cursor: pointer; transition: 0.2s; }
+    .matris-link:hover { color: #224abe; }
+    
+    .nav-pills-custom .nav-link { color: #5a5c69; font-weight: 600; border-radius: 8px; padding: 10px 20px; margin-right: 10px; border: 1px solid #e3e6f0; transition: all 0.2s; background: white; cursor: pointer; }
+    .nav-pills-custom .nav-link.active { background-color: #4e73df; color: white; border-color: #4e73df; box-shadow: 0 4px 10px rgba(78,115,223,0.3); }
+
+    .modal-custom-wide { max-width: 98%; }
+    .kdv-info-bar { font-size: 11px; padding: 6px 12px; border-radius: 8px; margin-top: 10px; display: inline-block; font-weight: 600; }
+    
+    .kdv-bg-satis { background-color: rgba(28,200,138,0.1); color: #13855c; }
+    .kdv-bg-alis { background-color: rgba(54,185,204,0.1); color: #258391; }
+    .kdv-bg-gider { background-color: rgba(231,74,59,0.1); color: #be2617; }
+    .kdv-bg-taslak { background-color: rgba(246,194,62,0.1); color: #dda20a; }
+    .kdv-bg-total { background-color: rgba(133,135,150,0.1); color: #5a5c69; }
+
+    .form-check-input { width: 1.5em; height: 1.5em; margin-top: 0.1em; cursor: pointer; }
+</style>
+
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 bg-white p-3 rounded-3 shadow-sm border-start border-5 border-primary">
+        <h2 class="h5 mb-0 text-gray-800 fw-bold"><i class="fas fa-chart-pie me-2 text-primary"></i> Konsolide Yönetim Özeti</h2>
+        
+        <form method="get" action="/Rapor102/Index" class="d-flex align-items-center gap-3">
+            
+            @if (!string.IsNullOrEmpty(currentDb))
+            {
+                <input type="hidden" name="db" value="@currentDb" />
+            }
+
+            <div class="input-group input-group-sm rounded-pill border px-2 py-1 bg-white" style="width: auto;">
+                <input type="date" name="startDate" id="startDate" class="form-control border-0 bg-transparent text-secondary fw-bold" value="@Model.BaslangicTarihi.ToString("yyyy-MM-dd")" required />
+                <span class="input-group-text border-0 bg-transparent text-muted px-1"><i class="fas fa-arrow-right"></i></span>
+                <input type="date" name="endDate" id="endDate" class="form-control border-0 bg-transparent text-secondary fw-bold" value="@Model.BitisTarihi.ToString("yyyy-MM-dd")" required />
+            </div>
+            
+            <div class="form-check d-flex align-items-center gap-2 mb-0">
+                <input class="form-check-input" type="checkbox" id="includeVat" name="includeVat" value="true" @(Model.IncludeVat ? "checked" : "") onchange="this.form.submit()">
+                <label class="form-check-label text-primary mb-0 mt-1" for="includeVat" style="cursor: pointer; font-size: 14.5px; font-weight: 500;">
+                    KDV Dahil (Brüt)
+                </label>
+            </div>
+
+            <div class="form-check d-flex align-items-center gap-2 mb-0 ms-2 border-start ps-3">
+                <input class="form-check-input border-warning" type="checkbox" id="includeDealers" name="includeDealers" value="true" @(Model.IncludeDealers ? "checked" : "") onchange="this.form.submit()">
+                <label class="form-check-label text-warning mb-0 mt-1" for="includeDealers" style="cursor: pointer; font-size: 14.5px; font-weight: 600;">
+                    Bayileri Dahil Et
+                </label>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-sm fw-bold shadow-sm rounded-pill px-4 py-2 ms-2"><i class="fas fa-sync-alt me-1"></i> Raporla</button>
+        </form>
+    </div>
+
+    @if (ViewBag.WarningMessage != null) { <div class="alert alert-warning shadow-sm rounded-3"><i class="fas fa-info-circle me-2"></i> @ViewBag.WarningMessage</div> }
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-5 mb-4">
+        <div class="col mb-3">
+            <div class="card dash-card h-100 p-3 border-bottom-success border-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-xs fw-bold text-success text-uppercase mb-1">Net Satış (Taslak Hariç)</div>
+                        <div class="h5 mb-0 fw-bold text-gray-800">@FormatTutar(Model.GenelSatisNet, Model.GenelSatisKdv, Model.IncludeVat)</div>
+                    </div>
+                    <div class="icon-box bg-gradient-satis"><i class="fas fa-arrow-up"></i></div>
+                </div>
+                <div class="kdv-info-bar kdv-bg-satis w-100 text-center mt-auto">
+                    <i class="fas fa-calculator me-1"></i>KDV: @FormatFark(Model.GenelSatisNet, Model.GenelSatisKdv)
+                </div>
+            </div>
+        </div>
+
+        <div class="col mb-3">
+            <div class="card dash-card h-100 p-3 border-bottom-warning border-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-xs fw-bold text-warning text-uppercase mb-1">Bekleyen Taslak Satış</div>
+                        <div class="h5 mb-0 fw-bold text-gray-800">@FormatTutar(Model.GenelTaslakSatisNet, Model.GenelTaslakSatisKdv, Model.IncludeVat)</div>
+                    </div>
+                    <div class="icon-box bg-gradient-taslak"><i class="fas fa-clock"></i></div>
+                </div>
+                <div class="kdv-info-bar kdv-bg-taslak w-100 text-center mt-auto">
+                    <i class="fas fa-calculator me-1"></i>KDV: @FormatFark(Model.GenelTaslakSatisNet, Model.GenelTaslakSatisKdv)
+                </div>
+            </div>
+        </div>
+
+        <div class="col mb-3">
+            <div class="card dash-card h-100 p-3 border-bottom-info border-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-xs fw-bold text-info text-uppercase mb-1">Grup Dışı Net Alış</div>
+                        <div class="h5 mb-0 fw-bold text-gray-800">@FormatTutar(Model.GenelAlisNet, Model.GenelAlisKdv, Model.IncludeVat)</div>
+                    </div>
+                    <div class="icon-box bg-gradient-alis"><i class="fas fa-shopping-cart"></i></div>
+                </div>
+                <div class="kdv-info-bar kdv-bg-alis w-100 text-center mt-auto">
+                    <i class="fas fa-calculator me-1"></i>KDV: @FormatFark(Model.GenelAlisNet, Model.GenelAlisKdv)
+                </div>
+            </div>
+        </div>
+
+        <div class="col mb-3">
+            <div class="card dash-card h-100 p-3 border-bottom-danger border-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-xs fw-bold text-danger text-uppercase mb-1">Grup Dışı Net Gider</div>
+                        <div class="h5 mb-0 fw-bold text-gray-800">@FormatTutar(Model.GenelGiderNet, Model.GenelGiderKdv, Model.IncludeVat)</div>
+                    </div>
+                    <div class="icon-box bg-gradient-gider"><i class="fas fa-arrow-down"></i></div>
+                </div>
+                <div class="kdv-info-bar kdv-bg-gider w-100 text-center mt-auto">
+                    <i class="fas fa-calculator me-1"></i>KDV: @FormatFark(Model.GenelGiderNet, Model.GenelGiderKdv)
+                </div>
+            </div>
+        </div>
+
+        <div class="col mb-3">
+            <div class="card dash-card h-100 p-3 border-bottom-secondary border-3" style="background-color: #fafbfc;">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-xs fw-bold text-secondary text-uppercase mb-1">Toplam Alım & Gider</div>
+                        <div class="h5 mb-0 fw-bold text-gray-800">@FormatTutar(Model.GenelAlimVeGiderToplami, (Model.GenelAlisKdv + Model.GenelGiderKdv), Model.IncludeVat)</div>
+                    </div>
+                    <div class="icon-box bg-gradient-total"><i class="fas fa-balance-scale"></i></div>
+                </div>
+                <div class="kdv-info-bar kdv-bg-total w-100 text-center mt-auto">
+                    <i class="fas fa-calculator me-1"></i>Toplam KDV Etkisi
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card dash-card mb-4 p-4">
+        <h6 class="fw-bold text-gray-800 border-bottom pb-3 mb-3"><i class="fas fa-chart-bar text-primary me-2"></i>Aylık Trend Analizi (@(Model.IncludeVat ? "KDV Dahil" : "KDV Hariç"))</h6>
+        <canvas id="trendChart" style="max-height: 280px;"></canvas>
+    </div>
+
+    <div class="card dash-card p-4 mb-5">
+        <ul class="nav nav-pills nav-pills-custom mb-4 border-bottom pb-3 flex-wrap gap-2" id="pills-tab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="pills-sirket-tab" data-bs-target="#pills-sirket" type="button" role="tab"><i class="fas fa-building text-primary me-1"></i> Şirket Özeti</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link bg-light border-warning" id="pills-bayi-tab" data-bs-target="#pills-bayi" type="button" role="tab" style="color: #d97706;"><i class="fas fa-store me-1"></i> Bayi Şirketleri</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link bg-light border-secondary text-secondary" id="pills-operasyon-tab" data-bs-target="#pills-operasyon" type="button" role="tab"><i class="fas fa-cogs me-1"></i> Operasyon (MO)</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="pills-satis-tab" data-bs-target="#pills-satis" type="button" role="tab"><i class="fas fa-arrow-up text-success me-1"></i> Satışlar</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="pills-taslaksatis-tab" data-bs-target="#pills-taslaksatis" type="button" role="tab"><i class="fas fa-clock text-warning me-1"></i> Taslak Satışlar</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="pills-alis-tab" data-bs-target="#pills-alis" type="button" role="tab"><i class="fas fa-shopping-bag text-info me-1"></i> Alımlar</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="pills-gider-tab" data-bs-target="#pills-gider" type="button" role="tab"><i class="fas fa-receipt text-danger me-1"></i> Giderler</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="pills-aylik-tab" data-bs-target="#pills-aylik" type="button" role="tab"><i class="fas fa-calendar-alt text-warning me-1"></i> Gider Matrisi</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="pills-grupici-tab" data-bs-target="#pills-grupici" type="button" role="tab"><i class="fas fa-handshake text-primary me-1"></i> Grup İçi</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="pills-mukerrer-tab" data-bs-target="#pills-mukerrer" type="button" role="tab">
+                    <i class="fas fa-exclamation-triangle text-danger me-1"></i> Mükerrer 
+                    <span class="badge bg-danger ms-1 rounded-pill">@Model.MukerrerKayitlar.Count</span>
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="pills-tabContent">
+            
+            <div class="tab-pane fade show active" id="pills-sirket" role="tabpanel">
+                <div class="table-responsive border rounded-3">
+                    <table class="table table-hover table-custom mb-0 dt-table" style="width: 100%;">
+                        <thead class="table-dark">
+                            <tr>
+                                <th class="text-white border-0 py-3">Firma Adı</th>
+                                <th class="text-end text-white border-0 py-3 sort-num">Toplam Satış</th>
+                                <th class="text-end text-white border-0 py-3 sort-num">İçindeki Taslak Payı</th>
+                                <th class="text-end text-white border-0 py-3 sort-num">Toplam Alış</th>
+                                <th class="text-end text-white border-0 py-3 sort-num">Toplam Gider</th>
+                                <th class="text-end text-white border-0 py-3 sort-num">Brüt Fark (Satış-Alış-Gider)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var sirket in Model.FirmaOzetleri)
+                            {
+                                decimal karZarar = sirket.ToplamSatis - sirket.ToplamAlis - sirket.ToplamGider;
+                                <tr>
+                                    <td class="fw-bold text-primary" style="font-size:13.5px;">@sirket.FirmaAdi</td>
+                                    <td class="text-end fw-bold text-success" data-sort="@sirket.ToplamSatis.ToString(CultureInfo.InvariantCulture)">@sirket.ToplamSatis.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-end fw-bold text-warning" data-sort="@sirket.ToplamTaslakSatis.ToString(CultureInfo.InvariantCulture)">@(sirket.ToplamTaslakSatis > 0 ? sirket.ToplamTaslakSatis.ToString("N2", new CultureInfo("tr-TR")) + " ₺" : "-")</td>
+                                    <td class="text-end fw-bold text-info" data-sort="@sirket.ToplamAlis.ToString(CultureInfo.InvariantCulture)">@sirket.ToplamAlis.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-end fw-bold text-danger" data-sort="@sirket.ToplamGider.ToString(CultureInfo.InvariantCulture)">@sirket.ToplamGider.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-end fw-bold" data-sort="@karZarar.ToString(CultureInfo.InvariantCulture)" style="color: @(karZarar >= 0 ? "#1cc88a" : "#e74a3b"); font-size:14px; background-color: @(karZarar >= 0 ? "rgba(28,200,138,0.05)" : "rgba(231,74,59,0.05)");">@karZarar.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th>GENEL TOPLAM</th>
+                                <th class="text-end">@Model.FirmaOzetleri.Sum(x => x.ToplamSatis).ToString("N2", new CultureInfo("tr-TR")) ₺</th>
+                                <th class="text-end">@Model.FirmaOzetleri.Sum(x => x.ToplamTaslakSatis).ToString("N2", new CultureInfo("tr-TR")) ₺</th>
+                                <th class="text-end">@Model.FirmaOzetleri.Sum(x => x.ToplamAlis).ToString("N2", new CultureInfo("tr-TR")) ₺</th>
+                                <th class="text-end">@Model.FirmaOzetleri.Sum(x => x.ToplamGider).ToString("N2", new CultureInfo("tr-TR")) ₺</th>
+                                <th class="text-end">@Model.FirmaOzetleri.Sum(x => x.ToplamSatis - x.ToplamAlis - x.ToplamGider).ToString("N2", new CultureInfo("tr-TR")) ₺</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="pills-bayi" role="tabpanel">
+                <div class="table-responsive border rounded-3 mt-3">
+                    <table class="table table-hover table-custom mb-0 dt-table" style="width: 100%;">
+                        <thead style="background-color: #fef3c7;">
+                            <tr>
+                                <th class="text-dark border-0 py-3">Firma Adı</th>
+                                <th class="text-end text-dark border-0 py-3 sort-num">Toplam Satış</th>
+                                <th class="text-end text-dark border-0 py-3 sort-num">İçindeki Taslak Payı</th>
+                                <th class="text-end text-dark border-0 py-3 sort-num">Toplam Alış</th>
+                                <th class="text-end text-dark border-0 py-3 sort-num">Toplam Gider</th>
+                                <th class="text-end text-dark border-0 py-3 sort-num">Brüt Fark</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var sirket in Model.BayiOzetleri)
+                            {
+                                decimal karZarar = sirket.ToplamSatis - sirket.ToplamAlis - sirket.ToplamGider;
+                                <tr>
+                                    <td class="fw-bold text-dark" style="font-size:13.5px;">@sirket.FirmaAdi</td>
+                                    <td class="text-end fw-bold text-success" data-sort="@sirket.ToplamSatis.ToString(CultureInfo.InvariantCulture)">@sirket.ToplamSatis.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-end fw-bold text-warning" data-sort="@sirket.ToplamTaslakSatis.ToString(CultureInfo.InvariantCulture)">@(sirket.ToplamTaslakSatis > 0 ? sirket.ToplamTaslakSatis.ToString("N2", new CultureInfo("tr-TR")) + " ₺" : "-")</td>
+                                    <td class="text-end fw-bold text-info" data-sort="@sirket.ToplamAlis.ToString(CultureInfo.InvariantCulture)">@sirket.ToplamAlis.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-end fw-bold text-danger" data-sort="@sirket.ToplamGider.ToString(CultureInfo.InvariantCulture)">@sirket.ToplamGider.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-end fw-bold" data-sort="@karZarar.ToString(CultureInfo.InvariantCulture)" style="color: @(karZarar >= 0 ? "#1cc88a" : "#e74a3b"); font-size:14px;">@karZarar.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th>GENEL TOPLAM</th>
+                                <th class="text-end">@Model.BayiOzetleri.Sum(x => x.ToplamSatis).ToString("N2", new CultureInfo("tr-TR")) ₺</th>
+                                <th class="text-end">@Model.BayiOzetleri.Sum(x => x.ToplamTaslakSatis).ToString("N2", new CultureInfo("tr-TR")) ₺</th>
+                                <th class="text-end">@Model.BayiOzetleri.Sum(x => x.ToplamAlis).ToString("N2", new CultureInfo("tr-TR")) ₺</th>
+                                <th class="text-end">@Model.BayiOzetleri.Sum(x => x.ToplamGider).ToString("N2", new CultureInfo("tr-TR")) ₺</th>
+                                <th class="text-end">@Model.BayiOzetleri.Sum(x => x.ToplamSatis - x.ToplamAlis - x.ToplamGider).ToString("N2", new CultureInfo("tr-TR")) ₺</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="pills-operasyon" role="tabpanel">
+                <div class="alert alert-secondary py-2 small fw-bold rounded-3 border-0">
+                    <i class="fas fa-cogs me-2"></i> Bu sekmede Cari Kodu <b>"MO"</b> ile başlayan operasyon işlemleri ana toplamlardan bağımsız olarak listelenmektedir.
+                </div>
+                <div class="table-responsive border rounded-3 mt-3">
+                    <table class="table table-hover table-custom mb-0 dt-table" style="width: 100%;">
+                        <thead class="bg-secondary text-white">
+                            <tr>
+                                <th class="text-white border-0 py-3">Firma Adı</th>
+                                <th class="text-end text-white border-0 py-3 sort-num">Satışlar</th>
+                                <th class="text-end text-white border-0 py-3 sort-num">Taslak Satışlar</th>
+                                <th class="text-end text-white border-0 py-3 sort-num">Alışlar</th>
+                                <th class="text-end text-white border-0 py-3 sort-num">Giderler</th>
+                                <th class="text-center text-white border-0 py-3">İşlem</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var sirket in Model.OperasyonOzetleri)
+                            {
+                                <tr>
+                                    <td class="fw-bold text-dark" style="font-size:13.5px;">@sirket.FirmaAdi</td>
+                                    <td class="text-end fw-bold text-success" data-sort="@sirket.ToplamSatis.ToString(CultureInfo.InvariantCulture)">@sirket.ToplamSatis.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-end fw-bold text-warning" data-sort="@sirket.ToplamTaslakSatis.ToString(CultureInfo.InvariantCulture)">@sirket.ToplamTaslakSatis.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-end fw-bold text-info" data-sort="@sirket.ToplamAlis.ToString(CultureInfo.InvariantCulture)">@sirket.ToplamAlis.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-end fw-bold text-danger" data-sort="@sirket.ToplamGider.ToString(CultureInfo.InvariantCulture)">@sirket.ToplamGider.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-center">
+                                        <div class="dropdown">
+                                            <button class="btn btn-sm btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">Detay Gör</button>
+                                            <ul class="dropdown-menu">
+                                                <li><a class="dropdown-item" href="#" onclick="openDetail('@sirket.FirmaAdi', 'Satis', false, true)">Satış Detayı</a></li>
+                                                <li><a class="dropdown-item" href="#" onclick="openDetail('@sirket.FirmaAdi', 'TaslakSatis', false, true)">Taslak Detayı</a></li>
+                                                <li><a class="dropdown-item" href="#" onclick="openDetail('@sirket.FirmaAdi', 'Alis', false, true)">Alış Detayı</a></li>
+                                                <li><a class="dropdown-item" href="#" onclick="openDetail('@sirket.FirmaAdi', 'Gider', false, true)">Gider Detayı</a></li>
+                                            </ul>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th>GENEL TOPLAM</th>
+                                <th class="text-end text-white">@Model.OperasyonOzetleri.Sum(x => x.ToplamSatis).ToString("N2", new CultureInfo("tr-TR")) ₺</th>
+                                <th class="text-end text-white">@Model.OperasyonOzetleri.Sum(x => x.ToplamTaslakSatis).ToString("N2", new CultureInfo("tr-TR")) ₺</th>
+                                <th class="text-end text-white">@Model.OperasyonOzetleri.Sum(x => x.ToplamAlis).ToString("N2", new CultureInfo("tr-TR")) ₺</th>
+                                <th class="text-end text-white">@Model.OperasyonOzetleri.Sum(x => x.ToplamGider).ToString("N2", new CultureInfo("tr-TR")) ₺</th>
+                                <th></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="pills-satis" role="tabpanel">
+                <div class="table-responsive border rounded-3">
+                    <table class="table table-hover table-custom mb-0 dt-table" style="width: 100%;">
+                        <thead class="table-light"><tr><th class="py-3">Firma Adı</th><th class="text-end py-3 sort-num">Grup Dışı Satış</th><th class="text-center py-3">İşlem</th></tr></thead>
+                        <tbody>
+                            @foreach (var sirket in Model.FirmaOzetleri.OrderByDescending(x=>x.ToplamSatis)) {
+                                <tr>
+                                    <td class="fw-bold text-dark">@sirket.FirmaAdi</td>
+                                    <td class="text-end fw-bold text-success" data-sort="@sirket.ToplamSatis.ToString(CultureInfo.InvariantCulture)">@sirket.ToplamSatis.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-center"><button class="btn btn-sm btn-outline-success rounded-pill px-4 fw-bold" onclick="openDetail('@sirket.FirmaAdi', 'Satis', false, false)"><i class="fas fa-list-ul me-1"></i> Listele</button></td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot><tr><th>TOPLAM SATIŞ</th><th class="text-end">@Model.FirmaOzetleri.Sum(x=>x.ToplamSatis).ToString("N2", new CultureInfo("tr-TR")) ₺</th><th></th></tr></tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="pills-taslaksatis" role="tabpanel">
+                <div class="table-responsive border rounded-3">
+                    <table class="table table-hover table-custom mb-0 dt-table" style="width: 100%;">
+                        <thead class="table-light"><tr><th class="py-3">Firma Adı</th><th class="text-end py-3 sort-num">Grup Dışı Taslak Satış</th><th class="text-center py-3">İşlem</th></tr></thead>
+                        <tbody>
+                            @foreach (var sirket in Model.FirmaOzetleri.OrderByDescending(x=>x.ToplamTaslakSatis)) {
+                                <tr>
+                                    <td class="fw-bold text-dark">@sirket.FirmaAdi</td>
+                                    <td class="text-end fw-bold text-warning" data-sort="@sirket.ToplamTaslakSatis.ToString(CultureInfo.InvariantCulture)">@sirket.ToplamTaslakSatis.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-center">
+                                        @if(sirket.ToplamTaslakSatis != 0) {
+                                            <button class="btn btn-sm btn-outline-warning text-dark rounded-pill px-4 fw-bold" onclick="openDetail('@sirket.FirmaAdi', 'TaslakSatis', false, false)"><i class="fas fa-list-ul me-1"></i> Listele</button>
+                                        } else { <span class="text-muted small">Kayıt Yok</span> }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot><tr><th>TOPLAM TASLAK</th><th class="text-end">@Model.FirmaOzetleri.Sum(x=>x.ToplamTaslakSatis).ToString("N2", new CultureInfo("tr-TR")) ₺</th><th></th></tr></tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="pills-alis" role="tabpanel">
+                <div class="table-responsive border rounded-3">
+                    <table class="table table-hover table-custom mb-0 dt-table" style="width: 100%;">
+                        <thead class="table-light"><tr><th class="py-3">Firma Adı</th><th class="text-end py-3 sort-num">Grup Dışı Alış</th><th class="text-center py-3">İşlem</th></tr></thead>
+                        <tbody>
+                            @foreach (var sirket in Model.FirmaOzetleri.OrderByDescending(x=>x.ToplamAlis)) {
+                                <tr>
+                                    <td class="fw-bold text-dark">@sirket.FirmaAdi</td>
+                                    <td class="text-end fw-bold text-info" data-sort="@sirket.ToplamAlis.ToString(CultureInfo.InvariantCulture)">@sirket.ToplamAlis.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-center"><button class="btn btn-sm btn-outline-info text-dark rounded-pill px-4 fw-bold" onclick="openDetail('@sirket.FirmaAdi', 'Alis', false, false)"><i class="fas fa-list-ul me-1"></i> Listele</button></td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot><tr><th>TOPLAM ALIŞ</th><th class="text-end">@Model.FirmaOzetleri.Sum(x=>x.ToplamAlis).ToString("N2", new CultureInfo("tr-TR")) ₺</th><th></th></tr></tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="pills-gider" role="tabpanel">
+                <div class="table-responsive border rounded-3">
+                    <table class="table table-hover table-custom mb-0 dt-table" style="width: 100%;">
+                        <thead class="table-light"><tr><th class="py-3">Firma Adı</th><th class="text-end py-3 sort-num">Grup Dışı Gider</th><th class="text-center py-3">İşlem</th></tr></thead>
+                        <tbody>
+                            @foreach (var sirket in Model.FirmaOzetleri.OrderByDescending(x=>x.ToplamGider)) {
+                                <tr>
+                                    <td class="fw-bold text-dark">@sirket.FirmaAdi</td>
+                                    <td class="text-end fw-bold text-danger" data-sort="@sirket.ToplamGider.ToString(CultureInfo.InvariantCulture)">@sirket.ToplamGider.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-center"><button class="btn btn-sm btn-outline-danger rounded-pill px-4 fw-bold" onclick="openDetail('@sirket.FirmaAdi', 'Gider', false, false)"><i class="fas fa-list-ul me-1"></i> Listele</button></td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot><tr><th>TOPLAM GİDER</th><th class="text-end">@Model.FirmaOzetleri.Sum(x=>x.ToplamGider).ToString("N2", new CultureInfo("tr-TR")) ₺</th><th></th></tr></tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="pills-grupici" role="tabpanel">
+                <div class="alert alert-secondary py-2 small fw-bold rounded-3 border-0"><i class="fas fa-info-circle me-2 text-primary"></i> Bu sekmede, genel toplama KARIŞTIRILMAYAN Grup Şirketlerinin kendi aralarındaki alım/satım işlemleri listelenir.</div>
+                <div class="table-responsive border rounded-3 mt-3">
+                    <table class="table table-hover table-custom mb-0 dt-table" style="width: 100%;">
+                        <thead class="bg-secondary text-white">
+                            <tr>
+                                <th class="py-3 text-white border-0">Firma Adı</th>
+                                <th class="text-end py-3 text-white border-0 sort-num">İç Satış</th><th class="text-center py-3 text-white border-0">İşlem</th>
+                                <th class="text-end py-3 text-white border-0 sort-num">İç Taslak Satış</th><th class="text-center py-3 text-white border-0">İşlem</th>
+                                <th class="text-end py-3 text-white border-0 sort-num">İç Alış</th><th class="text-center py-3 text-white border-0">İşlem</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var sirket in Model.FirmaOzetleri) {
+                                <tr>
+                                    <td class="fw-bold text-primary">@sirket.FirmaAdi</td>
+                                    <td class="text-end fw-bold text-success" data-sort="@sirket.GrupIciSatis.ToString(CultureInfo.InvariantCulture)">@sirket.GrupIciSatis.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-center"><button class="btn btn-sm btn-outline-success rounded-pill px-3 fw-bold" onclick="openDetail('@sirket.FirmaAdi', 'Satis', true, false)"><i class="fas fa-search"></i></button></td>
+                                    
+                                    <td class="text-end fw-bold text-warning" data-sort="@sirket.GrupIciTaslakSatis.ToString(CultureInfo.InvariantCulture)">@sirket.GrupIciTaslakSatis.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-center">
+                                        @if(sirket.GrupIciTaslakSatis != 0) {
+                                            <button class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3 fw-bold" onclick="openDetail('@sirket.FirmaAdi', 'TaslakSatis', true, false)"><i class="fas fa-search"></i></button>
+                                        } else { <span class="text-muted small">-</span> }
+                                    </td>
+
+                                    <td class="text-end fw-bold text-info" data-sort="@sirket.GrupIciAlis.ToString(CultureInfo.InvariantCulture)">@sirket.GrupIciAlis.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                    <td class="text-center"><button class="btn btn-sm btn-outline-info text-dark rounded-pill px-3 fw-bold" onclick="openDetail('@sirket.FirmaAdi', 'Alis', true, false)"><i class="fas fa-search"></i></button></td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th>GENEL TOPLAM</th>
+                                <th class="text-end text-white">@Model.FirmaOzetleri.Sum(x=>x.GrupIciSatis).ToString("N2", new CultureInfo("tr-TR")) ₺</th><th></th>
+                                <th class="text-end text-white">@Model.FirmaOzetleri.Sum(x=>x.GrupIciTaslakSatis).ToString("N2", new CultureInfo("tr-TR")) ₺</th><th></th>
+                                <th class="text-end text-white">@Model.FirmaOzetleri.Sum(x=>x.GrupIciAlis).ToString("N2", new CultureInfo("tr-TR")) ₺</th><th></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="pills-aylik" role="tabpanel">
+                <div class="table-responsive border rounded-3" style="max-height: 550px; overflow-y:auto;">
+                    <table class="table table-bordered table-hover table-matris table-sm mb-0 dt-table" style="width: 100%;">
+                        <thead class="sticky-top table-secondary">
+                            <tr>
+                                <th class="py-2">Ana Kategori</th><th class="py-2">Alt Tür</th>
+                                <th class="text-end py-2 sort-num">Ocak</th><th class="text-end py-2 sort-num">Şubat</th><th class="text-end py-2 sort-num">Mart</th>
+                                <th class="text-end py-2 sort-num">Nisan</th><th class="text-end py-2 sort-num">Mayıs</th><th class="text-end py-2 sort-num">Haz.</th>
+                                <th class="text-end py-2 sort-num">Tem.</th><th class="text-end py-2 sort-num">Ağu.</th><th class="text-end py-2 sort-num">Eyl.</th>
+                                <th class="text-end py-2 sort-num">Ekim</th><th class="text-end py-2 sort-num">Kasım</th><th class="text-end py-2 sort-num">Aralık</th>
+                                <th class="text-end bg-dark text-white py-2 border-dark sort-num">Yıl Toplamı</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var ay in Model.AylikGiderOzetler)
+                            {
+                                <tr>
+                                    <td class="fw-bold text-primary">@ay.AnaKategori</td><td class="text-muted">@ay.AltKategori</td>
+                                    <td class="text-end" data-sort="@ay.Ocak.ToString(CultureInfo.InvariantCulture)">@(ay.Ocak == 0 ? Html.Raw("<span class='text-muted'>-</span>") : Html.Raw($"<a class='matris-link' onclick=\"openMatrixDetail('{ay.AnaKategori}', '{ay.AltKategori}', 1)\">{ay.Ocak:N0}</a>"))</td>
+                                    <td class="text-end" data-sort="@ay.Subat.ToString(CultureInfo.InvariantCulture)">@(ay.Subat == 0 ? Html.Raw("<span class='text-muted'>-</span>") : Html.Raw($"<a class='matris-link' onclick=\"openMatrixDetail('{ay.AnaKategori}', '{ay.AltKategori}', 2)\">{ay.Subat:N0}</a>"))</td>
+                                    <td class="text-end" data-sort="@ay.Mart.ToString(CultureInfo.InvariantCulture)">@(ay.Mart == 0 ? Html.Raw("<span class='text-muted'>-</span>") : Html.Raw($"<a class='matris-link' onclick=\"openMatrixDetail('{ay.AnaKategori}', '{ay.AltKategori}', 3)\">{ay.Mart:N0}</a>"))</td>
+                                    <td class="text-end" data-sort="@ay.Nisan.ToString(CultureInfo.InvariantCulture)">@(ay.Nisan == 0 ? Html.Raw("<span class='text-muted'>-</span>") : Html.Raw($"<a class='matris-link' onclick=\"openMatrixDetail('{ay.AnaKategori}', '{ay.AltKategori}', 4)\">{ay.Nisan:N0}</a>"))</td>
+                                    <td class="text-end" data-sort="@ay.Mayis.ToString(CultureInfo.InvariantCulture)">@(ay.Mayis == 0 ? Html.Raw("<span class='text-muted'>-</span>") : Html.Raw($"<a class='matris-link' onclick=\"openMatrixDetail('{ay.AnaKategori}', '{ay.AltKategori}', 5)\">{ay.Mayis:N0}</a>"))</td>
+                                    <td class="text-end" data-sort="@ay.Haziran.ToString(CultureInfo.InvariantCulture)">@(ay.Haziran == 0 ? Html.Raw("<span class='text-muted'>-</span>") : Html.Raw($"<a class='matris-link' onclick=\"openMatrixDetail('{ay.AnaKategori}', '{ay.AltKategori}', 6)\">{ay.Haziran:N0}</a>"))</td>
+                                    <td class="text-end" data-sort="@ay.Temmuz.ToString(CultureInfo.InvariantCulture)">@(ay.Temmuz == 0 ? Html.Raw("<span class='text-muted'>-</span>") : Html.Raw($"<a class='matris-link' onclick=\"openMatrixDetail('{ay.AnaKategori}', '{ay.AltKategori}', 7)\">{ay.Temmuz:N0}</a>"))</td>
+                                    <td class="text-end" data-sort="@ay.Agustos.ToString(CultureInfo.InvariantCulture)">@(ay.Agustos == 0 ? Html.Raw("<span class='text-muted'>-</span>") : Html.Raw($"<a class='matris-link' onclick=\"openMatrixDetail('{ay.AnaKategori}', '{ay.AltKategori}', 8)\">{ay.Agustos:N0}</a>"))</td>
+                                    <td class="text-end" data-sort="@ay.Eylul.ToString(CultureInfo.InvariantCulture)">@(ay.Eylul == 0 ? Html.Raw("<span class='text-muted'>-</span>") : Html.Raw($"<a class='matris-link' onclick=\"openMatrixDetail('{ay.AnaKategori}', '{ay.AltKategori}', 9)\">{ay.Eylul:N0}</a>"))</td>
+                                    <td class="text-end" data-sort="@ay.Ekim.ToString(CultureInfo.InvariantCulture)">@(ay.Ekim == 0 ? Html.Raw("<span class='text-muted'>-</span>") : Html.Raw($"<a class='matris-link' onclick=\"openMatrixDetail('{ay.AnaKategori}', '{ay.AltKategori}', 10)\">{ay.Ekim:N0}</a>"))</td>
+                                    <td class="text-end" data-sort="@ay.Kasim.ToString(CultureInfo.InvariantCulture)">@(ay.Kasim == 0 ? Html.Raw("<span class='text-muted'>-</span>") : Html.Raw($"<a class='matris-link' onclick=\"openMatrixDetail('{ay.AnaKategori}', '{ay.AltKategori}', 11)\">{ay.Kasim:N0}</a>"))</td>
+                                    <td class="text-end" data-sort="@ay.Aralik.ToString(CultureInfo.InvariantCulture)">@(ay.Aralik == 0 ? Html.Raw("<span class='text-muted'>-</span>") : Html.Raw($"<a class='matris-link' onclick=\"openMatrixDetail('{ay.AnaKategori}', '{ay.AltKategori}', 12)\">{ay.Aralik:N0}</a>"))</td>
+                                    <td class="text-end fw-bold" data-sort="@ay.YilToplami.ToString(CultureInfo.InvariantCulture)" style="background-color:#fff3cd; color:#d97706;">@ay.YilToplami.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="pills-mukerrer" role="tabpanel">
+                <div class="alert mb-4 shadow-sm" style="background-color: #f8d7da; color: #842029; border: 1px solid #f5c2c7; border-radius: 8px;">
+                    <i class="fas fa-exclamation-circle me-1"></i> Bu sekmede aynı firma, cari, tutar ve belge numarasıyla girilmiş hatalı/mükerrer (Örn: Faturadan gelen yevmiyeler vb.) kayıtlar listelenir ve genel gider toplamından otomatik düşülür.
+                </div>
+                
+                <div class="table-responsive border rounded-3 bg-white">
+                    <table class="table table-hover table-custom mb-0 dt-table" style="width: 100%;">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="py-3">Firma Adı</th>
+                                <th class="py-3 text-center">İşlem Tipi</th>
+                                <th class="py-3">Tarih</th>
+                                <th class="py-3">Cari Kodu</th>
+                                <th class="py-3">Cari / Hesap Adı</th>
+                                <th class="py-3">Belge No</th>
+                                <th class="text-end py-3 sort-num">Mükerrer Tutar</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!Model.MukerrerKayitlar.Any()) {
+                                <tr>
+                                    <td colspan="7" class="text-center py-5">
+                                        <div class="d-inline-flex align-items-center justify-content-center bg-success text-white rounded-circle mb-3" style="width: 50px; height: 50px;">
+                                            <i class="fas fa-check fs-4"></i>
+                                        </div>
+                                        <p class="text-success fw-bold mb-0">Mükerrer veya hatalı kayıt bulunmamaktadır.</p>
+                                    </td>
+                                </tr>
+                            }
+                            @foreach (var m in Model.MukerrerKayitlar) {
+                                <tr>
+                                    <td class="fw-bold text-dark align-middle">@m.FirmaAdi</td>
+                                    <td class="text-center align-middle"><span class="badge bg-danger rounded-pill px-3 py-2">@m.Tip</span></td>
+                                    <td class="align-middle">@m.Tarih</td>
+                                    <td class="align-middle fw-bold text-secondary">@m.CariKodu</td>
+                                    <td class="small fw-bold align-middle">@m.CariHesap</td>
+                                    <td class="fw-bold text-primary align-middle">@m.BelgeNo</td>
+                                    <td class="text-end fw-bold text-danger align-middle" data-sort="@m.Tutar.ToString(CultureInfo.InvariantCulture)" style="font-size:14px;">@m.Tutar.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th colspan="6">GENEL TOPLAM</th>
+                                <th class="text-end">@Model.MukerrerKayitlar.Sum(x=>x.Tutar).ToString("N2", new CultureInfo("tr-TR")) ₺</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-custom-wide">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white border-0 py-3">
+                <h5 class="modal-title fw-bold" id="modalTitle">Liste Detayları</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0 bg-light">
+                <div class="p-3 d-flex justify-content-between align-items-center bg-white border-bottom shadow-sm">
+                    <span class="fw-bold text-muted" style="font-size: 0.9rem;">
+                        <i class="fas fa-info-circle me-1"></i>
+                        @(Model.IncludeVat ? "Tablodaki Tutar Değerleri KDV Dahil Rakamlardır" : "Tablodaki Tutar Değerleri KDV Hariç (Net) Rakamlardır")
+                    </span>
+                     <input type="text" id="modalSearch" class="form-control form-control-sm rounded-pill border-primary px-3" style="width: 300px;" placeholder="Listede Hızlı Ara (Toplamlar Güncellenir)...">
+                </div>
+                <div id="loadingSpinner" class="text-center py-5" style="display:none;">
+                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status"></div>
+                    <div class="mt-3 text-primary fw-bold fs-5">Veriler SAP Sisteminden Çekiliyor...</div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm table-custom mb-0" id="dynamicModalTable" style="width: 100%;">
+                        <thead class="sticky-top bg-light shadow-sm" id="modalTableHead"></thead>
+                        <tbody id="modalTableBody" class="bg-white"></tbody>
+                        <tfoot id="modalTableFoot" style="background-color: #5a5c69; color: white;"></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="documentModal" tabindex="-1" aria-hidden="true" style="z-index: 1060;">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-custom-wide">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header text-white border-0 py-3" style="background-color: #e74a3b;">
+                <h5 class="modal-title fw-bold" id="docModalTitle"><i class="fas fa-file-invoice me-2"></i>Belge İçi Satır Detayları</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0 bg-light">
+                <div class="p-3 d-flex justify-content-between align-items-center bg-white border-bottom shadow-sm">
+                    <span class="fw-bold text-muted" style="font-size: 0.9rem;">
+                        <i class="fas fa-list me-1"></i>
+                        Ayrıntılı Satır Listesi (Toplamlar Güncellenir)
+                    </span>
+                    <input type="text" id="docModalSearch" class="form-control form-control-sm rounded-pill border-danger px-3" style="width: 300px;" placeholder="Satırlarda Hızlı Ara...">
+                </div>
+                <div id="docLoadingSpinner" class="text-center py-5" style="display:none;">
+                    <div class="spinner-border text-secondary" style="width: 3rem; height: 3rem;" role="status"></div>
+                    <div class="mt-3 text-secondary fw-bold fs-5">Satır Detayları Yükleniyor...</div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm table-custom mb-0" id="dynamicDocTable" style="width: 100%;">
+                        <thead class="sticky-top bg-light shadow-sm">
+                            <tr>
+                                <th class="py-3">CARİ KODU</th>
+                                <th class="py-3">STOK/HESAP KODU</th>
+                                <th class="py-3">AÇIKLAMA</th>
+                                <th class="text-end py-3 sort-num">MİKTAR</th>
+                                <th class="text-end py-3 sort-num">FİYAT</th>
+                                <th class="text-center py-3">P.B</th>
+                                <th class="text-end py-3 sort-num">ORJ. TUTAR</th>
+                                <th class="text-center py-3 sort-num">KUR</th>
+                                <th class="text-end text-primary fw-bold py-3 sort-num">NET TUTAR</th>
+                                <th class="text-end py-3 sort-num">KDV</th>
+                                <th class="text-end text-danger fw-bold py-3 border-start sort-num">KALEM TOPLAMI</th>
+                            </tr>
+                        </thead>
+                        <tbody id="docModalBody" class="bg-white"></tbody>
+                        <tfoot id="docModalFoot" style="background-color: #5a5c69; color: white;"></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        var isVatIncluded = @Model.IncludeVat.ToString().ToLower();
+
+        // Aktif veritabanı parametresini değişkene alıyoruz
+        const currentDbParam = '@currentDb';
+
+        $.extend( true, $.fn.dataTable.defaults, {
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/tr.json"
+            },
+            "paging": false,
+            "info": false,
+            "searching": true,
+            "dom": 'rt',
+            "columnDefs": [
+                // "sort-num" classına sahip olan kolonları DataTables'a "Bu kolon kesinlikle sayıdır, string gibi davranma" diyerek tanıtıyoruz.
+                { "type": "num", "targets": ".sort-num" }
+            ]
+        });
+
+        $(document).ready(function() {
+            $('.dt-table').DataTable();
+
+            $('.nav-link[data-bs-target]').on('click', function (e) {
+                e.preventDefault();
+                $('.nav-link[data-bs-target]').removeClass('active');
+                $('.tab-pane').removeClass('show active');
+                
+                $(this).addClass('active');
+                let target = $(this).attr('data-bs-target');
+                $(target).addClass('show active');
+
+                let table = $(target).find('table.dataTable').DataTable();
+                if (table) {
+                    table.columns.adjust().draw();
+                }
+            });
+        });
+
+        var modalDt = null;
+        var docDt = null;
+
+        // Modal Hızlı Arama
+        $('#modalSearch').on('keyup', function() {
+            if (modalDt) {
+                modalDt.search(this.value).draw();
+            }
+        });
+
+        // Belge İçi Hızlı Arama
+        $('#docModalSearch').on('keyup', function() {
+            if (docDt) {
+                docDt.search(this.value).draw();
+            }
+        });
+
+        function openDetail(firma, tip, isGrupIci, isOperasyon) {
+            let titleColor = tip === "Satis" ? "bg-success" : (tip === "Alis" ? "bg-info" : (tip === "TaslakSatis" ? "bg-warning" : "bg-danger"));
+            let typeName = tip === "Satis" ? "Satış" : (tip === "Alis" ? "Alış" : (tip === "TaslakSatis" ? "Taslak Satış" : "Gider"));
+            let suffix = isGrupIci ? " (Grup İçi)" : " (Grup Dışı)";
+            if(isOperasyon) suffix += " [Operasyon İşlemleri]";
+            
+            $("#modalTitle").text(firma + " - " + typeName + suffix + " Listesi");
+            $(".modal-header").removeClass("bg-primary bg-dark bg-success bg-info bg-danger bg-warning text-dark").addClass(titleColor);
+            if(tip === "TaslakSatis" || tip === "Alis") $(".modal-header").addClass("text-dark"); else $(".modal-header").addClass("text-white");
+            
+            if ($.fn.DataTable && $.fn.DataTable.isDataTable('#dynamicModalTable')) {
+                $('#dynamicModalTable').DataTable().destroy();
+            }
+
+            let thead = $("#modalTableHead");
+            thead.empty();
+            
+            // Footer'ı tablo indexlerine bağlamak yerine direkt custom ID atıyoruz (Hataları önler)
+            let colspan = tip === "Gider" ? 7 : 8;
+            let footerHtml = `<tr>
+                <th colspan="${colspan}" class="text-end border-0">FİLTRELENEN TOPLAM : </th>
+                <th class="text-end border-0" id="ft-orj">0,00</th>
+                <th class="border-0"></th>
+                <th class="text-end text-danger fs-6 border-0" id="ft-net">0,00</th>
+                <th class="text-end text-white-50 fs-6 border-0" id="ft-kdv">0,00</th>
+                <th class="text-end text-warning fs-6 border-0" id="ft-comp">0,00 ₺</th>
+                <th class="border-0"></th>
+            </tr>`;
+            $("#modalTableFoot").html(footerHtml);
+
+            // Başlıklar arasına "sort-num" classını gömerek sıralamanın düzgün çalışmasını sağlıyoruz.
+            if(tip === "Gider") {
+                thead.append('<tr><th class="py-3">Tarih</th><th class="py-3">Tür</th><th class="py-3">Yevmiye No</th><th class="py-3">Belge No</th><th class="py-3">Cari Kodu</th><th class="py-3">Cari Adı</th><th class="text-center py-3">P.B</th><th class="text-end py-3 sort-num">Orj.Tutar</th><th class="text-center py-3 sort-num">Kur</th><th class="text-end text-danger fw-bold py-3 fs-6 border-start sort-num">TL Net Tutar</th><th class="text-end text-muted fw-bold py-3 fs-6 sort-num">TL KDV</th><th class="text-end text-dark fw-bold py-3 fs-6 sort-num">Hesaplanan Tutar</th><th class="text-center py-3">İşlem</th></tr>');
+            } else {
+                let tColor = tip === "Satis" || tip === "TaslakSatis" ? "text-success" : "text-info";
+                thead.append(`<tr><th class="py-3">Tarih</th><th class="py-3">İşlem Tipi</th><th class="py-3">Tür</th><th class="py-3">Yevmiye No</th><th class="py-3">Belge No</th><th class="py-3">Cari Kodu</th><th class="py-3">Cari Adı</th><th class="text-center py-3">P.B</th><th class="text-end py-3 sort-num">Orj.Tutar</th><th class="text-center py-3 sort-num">Kur</th><th class="text-end ${tColor} fw-bold py-3 fs-6 border-start sort-num">TL Net Tutar</th><th class="text-end text-muted fw-bold py-3 fs-6 sort-num">TL KDV</th><th class="text-end text-dark fw-bold py-3 fs-6 sort-num">Hesaplanan Tutar</th><th class="text-center py-3">İşlem</th></tr>`);
+            }
+
+            $("#modalTableBody").empty();
+            $('#modalSearch').val('');
+            $("#loadingSpinner").show();
+            
+            var detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
+            detailModal.show();
+
+            let sDate = $("#startDate").val();
+            let eDate = $("#endDate").val();
+
+            $.ajax({
+                url: '@Url.Action("GetDetay", "Rapor102")',
+                type: 'GET',
+                // db parametresini API isteğine ekliyoruz
+                data: { firma: firma, tip: tip, start: sDate, end: eDate, isGrupIci: isGrupIci, isOperasyon: isOperasyon, db: currentDbParam },
+                success: function (res) {
+                    $("#loadingSpinner").hide();
+                    if (res.success) {
+                        if(res.data.length > 0) {
+                            let tbody = $("#modalTableBody");
+                            res.data.forEach(function(item) {
+                                let btnHtml = `<button class="btn btn-sm btn-outline-dark rounded-pill py-1 px-3 fw-bold shadow-sm" onclick="openDocument('${firma}', '${item.turKod}', '${item.docId}', '${item.tur}')"><i class="fas fa-search me-1"></i>Detay</button>`;
+                                
+                                let tlNet = item.tlNetTutar;
+                                let tlKdv = item.tlKdv;
+                                let computed = isVatIncluded ? (tlNet + tlKdv) : tlNet;
+
+                                let orjNetTutarDisplay = item.orjNetTutar === 0 ? "<span class='text-muted'>0,00</span>" : item.orjNetTutar.toLocaleString('tr-TR', {minimumFractionDigits:2});
+                                let tlNetDisplay = tlNet === 0 ? "<span class='badge bg-warning text-dark'>0,00</span>" : tlNet.toLocaleString('tr-TR', {minimumFractionDigits:2});
+                                let tlKdvDisplay = tlKdv === 0 ? "<span class='text-muted'>0,00</span>" : tlKdv.toLocaleString('tr-TR', {minimumFractionDigits:2});
+                                let computedDisplay = computed === 0 ? "<span class='badge bg-secondary'>0,00</span>" : computed.toLocaleString('tr-TR', {minimumFractionDigits:2}) + " ₺";
+
+                                // SADECE HAM VERİYİ ROW DATA'YA GÖM (Dinamik Arama Hesaplaması için En Sağlam Yöntem)
+                                let row = `<tr data-orj="${item.orjNetTutar}" data-net="${tlNet}" data-kdv="${tlKdv}" data-comp="${computed}">`;
+
+                                if(tip === "Gider") {
+                                    row += `<td class="py-2" data-sort="${item.tarih.split('.').reverse().join('')}">${item.tarih}</td><td class="py-2"><span class="badge bg-secondary px-2 py-1">${item.tur}</span></td>`;
+                                    row += `<td class="fw-bold py-2">${item.yevmiyeNo}</td><td class="fw-bold py-2">${item.belgeNo}</td>`;
+                                    row += `<td class="fw-bold py-2 text-secondary">${item.cariKodu || '-'}</td>`;
+                                    row += `<td class="small fw-bold py-2">${item.cariAdi}</td>`;
+                                    row += `<td class="text-center fw-bold text-muted py-2">${item.paraBirimi}</td><td class="text-end py-2" data-sort="${item.orjNetTutar}">${orjNetTutarDisplay}</td>`;
+                                    row += `<td class="text-center small py-2" data-sort="${item.kur}">${item.kur.toLocaleString('tr-TR', {minimumFractionDigits:4})}</td>`;
+                                    row += `<td class="text-end fw-bold text-danger border-start py-2" data-sort="${tlNet}">${tlNetDisplay}</td><td class="text-end text-muted py-2" data-sort="${tlKdv}">${tlKdvDisplay}</td><td class="text-end fw-bold text-dark py-2" data-sort="${computed}" style="font-size:13.5px;">${computedDisplay}</td>`;
+                                    row += `<td class="text-center py-2">${btnHtml}</td>`;
+                                } else {
+                                    let bColor = tip === "Satis" ? "bg-success" : (tip === "TaslakSatis" ? "bg-warning text-dark" : "bg-info text-dark");
+                                    let tColor = tip === "Satis" || tip === "TaslakSatis" ? "text-success" : "text-info";
+                                    let islemTipiBadge = item.islemTipi && item.islemTipi !== '' ? `<span class="badge bg-dark">${item.islemTipi}</span>` : `<span class="text-muted">-</span>`;
+
+                                    row += `<td class="py-2" data-sort="${item.tarih.split('.').reverse().join('')}">${item.tarih}</td><td class="py-2 text-center">${islemTipiBadge}</td><td class="py-2"><span class="badge ${bColor} px-2 py-1">${item.tur}</span></td>`;
+                                    row += `<td class="fw-bold py-2">${item.yevmiyeNo}</td><td class="fw-bold py-2">${item.belgeNo}</td>`;
+                                    row += `<td class="fw-bold py-2 text-secondary">${item.cariKodu || '-'}</td>`;
+                                    row += `<td class="small fw-bold py-2">${item.cariAdi}</td>`;
+                                    row += `<td class="text-center fw-bold text-muted py-2">${item.paraBirimi}</td><td class="text-end py-2" data-sort="${item.orjNetTutar}">${orjNetTutarDisplay}</td>`;
+                                    row += `<td class="text-center small py-2" data-sort="${item.kur}">${item.kur.toLocaleString('tr-TR', {minimumFractionDigits:4})}</td>`;
+                                    row += `<td class="text-end fw-bold ${tColor} border-start py-2" data-sort="${tlNet}">${tlNetDisplay}</td><td class="text-end text-muted py-2" data-sort="${tlKdv}">${tlKdvDisplay}</td><td class="text-end fw-bold text-dark py-2" data-sort="${computed}" style="font-size:13.5px;">${computedDisplay}</td>`;
+                                    row += `<td class="text-center py-2">${btnHtml}</td>`;
+                                }
+                                row += "</tr>";
+                                tbody.append(row);
+                            });
+
+                            // Datatable'i başlat ve footer callbacki dinamik ekle
+                            modalDt = $('#dynamicModalTable').DataTable({
+                                destroy: true,
+                                language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/tr.json" },
+                                paging: false,
+                                info: false,
+                                searching: true,
+                                dom: 'rt',
+                                footerCallback: function () {
+                                    let sumOrj = 0, sumNet = 0, sumKdv = 0, sumComp = 0;
+                                    // Sadece ARAMA İLE GÖRÜNEN satırların verisini TR elementinden alarak topluyoruz
+                                    this.api().rows({search: 'applied'}).nodes().each(function(tr) {
+                                        sumOrj += parseFloat($(tr).attr('data-orj')) || 0;
+                                        sumNet += parseFloat($(tr).attr('data-net')) || 0;
+                                        sumKdv += parseFloat($(tr).attr('data-kdv')) || 0;
+                                        sumComp += parseFloat($(tr).attr('data-comp')) || 0;
+                                    });
+                                    $("#ft-orj").text(sumOrj.toLocaleString('tr-TR', {minimumFractionDigits:2}));
+                                    $("#ft-net").text(sumNet.toLocaleString('tr-TR', {minimumFractionDigits:2}));
+                                    $("#ft-kdv").text(sumKdv.toLocaleString('tr-TR', {minimumFractionDigits:2}));
+                                    $("#ft-comp").text(sumComp.toLocaleString('tr-TR', {minimumFractionDigits:2}) + ' ₺');
+                                }
+                            });
+                        } else { $("#modalTableBody").append('<tr><td colspan="15" class="text-center py-5 text-muted"><i class="fas fa-search fa-2x d-block mb-2"></i>Kayıt bulunamadı.</td></tr>'); }
+                    } else { $("#modalTableBody").append(`<tr><td colspan="15" class="text-center py-4 text-danger"><b>Hata:</b> ${res.message}</td></tr>`); }
+                },
+                error: function (xhr) {
+                    $("#loadingSpinner").hide();
+                    $("#modalTableBody").append(`<tr><td colspan="15" class="text-center py-4 text-danger"><b>Sistem Hatası:</b> ${xhr.responseText || xhr.statusText}</td></tr>`);
+                }
+            });
+        }
+
+        function openMatrixDetail(anaKat, altKat, ay) {
+            let aylar = ["", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+            $("#modalTitle").text(aylar[ay] + " Ayı - " + anaKat + " (" + altKat + ") Konsolide Gider Detayları");
+            $(".modal-header").removeClass("bg-primary bg-dark bg-success bg-info bg-danger").addClass("bg-warning text-dark");
+            
+            if ($.fn.DataTable && $.fn.DataTable.isDataTable('#dynamicModalTable')) {
+                $('#dynamicModalTable').DataTable().destroy();
+            }
+
+            let thead = $("#modalTableHead");
+            thead.empty();
+            thead.append('<tr><th class="py-3">Firma</th><th class="py-3">Tarih</th><th class="py-3">Yevmiye No</th><th class="py-3">Belge No</th><th class="py-3">Cari Kodu</th><th class="py-3">Cari Adı</th><th class="text-center py-3">P.B</th><th class="text-end py-3 sort-num">Orj.Tutar</th><th class="text-center py-3 sort-num">Kur</th><th class="text-end text-danger fw-bold border-start py-3 sort-num">TL Net Tutar</th><th class="text-end text-muted fw-bold py-3 sort-num">TL KDV</th><th class="text-end text-dark fw-bold py-3 sort-num">Hesaplanan Tutar</th><th class="text-center py-3">İşlem</th></tr>');
+
+            let footerHtml = `<tr>
+                <th colspan="7" class="text-end border-0">FİLTRELENEN TOPLAM : </th>
+                <th class="text-end border-0" id="fmt-orj">0,00</th>
+                <th class="border-0"></th>
+                <th class="text-end text-danger fs-6 border-0" id="fmt-net">0,00</th>
+                <th class="text-end text-white-50 fs-6 border-0" id="fmt-kdv">0,00</th>
+                <th class="text-end text-warning fs-6 border-0" id="fmt-comp">0,00 ₺</th>
+                <th class="border-0"></th>
+            </tr>`;
+            $("#modalTableFoot").html(footerHtml);
+
+            $("#modalTableBody").empty();
+            $('#modalSearch').val(''); 
+            $("#loadingSpinner").show();
+            
+            var detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
+            detailModal.show();
+
+            let sDate = $("#startDate").val();
+            $.ajax({
+                url: '@Url.Action("GetMatrisDetay", "Rapor102")',
+                type: 'GET',
+                // db parametresini API isteğine ekliyoruz
+                data: { anaKat: anaKat, altKat: altKat, ay: ay, start: sDate, db: currentDbParam },
+                success: function (res) {
+                    $("#loadingSpinner").hide();
+                    if (res.success) {
+                        if (res.data.length > 0) {
+                            let tbody = $("#modalTableBody");
+                            res.data.forEach(function(item) {
+                                let tlNet = item.tlNetTutar;
+                                let tlKdv = item.tlKdv;
+                                let computed = isVatIncluded ? (tlNet + tlKdv) : tlNet;
+
+                                let tlNetDisplay = tlNet === 0 ? "<span class='badge bg-warning text-dark'>0,00</span>" : tlNet.toLocaleString('tr-TR', {minimumFractionDigits:2});
+                                let tlKdvDisplay = tlKdv === 0 ? "<span class='text-muted'>0,00</span>" : tlKdv.toLocaleString('tr-TR', {minimumFractionDigits:2});
+                                let computedDisplay = computed === 0 ? "<span class='badge bg-secondary'>0,00</span>" : computed.toLocaleString('tr-TR', {minimumFractionDigits:2}) + " ₺";
+                                let orjNetTutarDisplay = item.orjNetTutar === 0 ? "<span class='text-muted'>0,00</span>" : item.orjNetTutar.toLocaleString('tr-TR', {minimumFractionDigits:2});
+                                
+                                let btnHtml = `<button class="btn btn-sm btn-outline-dark rounded-pill py-1 px-3 fw-bold shadow-sm" onclick="openDocument('${item.firma}', '${item.turKod}', '${item.docId}', '${item.tur}')"><i class="fas fa-search me-1"></i>Detay</button>`;
+                                
+                                let row = `<tr data-orj="${item.orjNetTutar}" data-net="${tlNet}" data-kdv="${tlKdv}" data-comp="${computed}">
+                                    <td class="fw-bold text-primary py-2">${item.firma}</td><td class="py-2" data-sort="${item.tarih.split('.').reverse().join('')}">${item.tarih}</td>
+                                    <td class="fw-bold py-2">${item.yevmiyeNo}</td><td class="fw-bold py-2">${item.belgeNo}</td>
+                                    <td class="fw-bold text-secondary py-2">${item.cariKodu || '-'}</td>
+                                    <td class="small fw-bold py-2">${item.cariAdi}</td>
+                                    <td class="text-center fw-bold text-muted py-2">${item.paraBirimi}</td>
+                                    <td class="text-end py-2" data-sort="${item.orjNetTutar}">${orjNetTutarDisplay}</td>
+                                    <td class="text-center small py-2" data-sort="${item.kur}">${item.kur.toLocaleString('tr-TR', {minimumFractionDigits:4})}</td>
+                                    <td class="text-end fw-bold text-danger border-start py-2" data-sort="${tlNet}">${tlNetDisplay}</td>
+                                    <td class="text-end text-muted py-2" data-sort="${tlKdv}">${tlKdvDisplay}</td>
+                                    <td class="text-end fw-bold text-dark py-2" data-sort="${computed}" style="font-size:13.5px;">${computedDisplay}</td>
+                                    <td class="text-center py-2">${btnHtml}</td>
+                                </tr>`;
+                                tbody.append(row);
+                            });
+
+                            modalDt = $('#dynamicModalTable').DataTable({
+                                destroy: true,
+                                language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/tr.json" },
+                                paging: false,
+                                info: false,
+                                searching: true,
+                                dom: 'rt',
+                                footerCallback: function () {
+                                    let sumOrj = 0, sumNet = 0, sumKdv = 0, sumComp = 0;
+                                    this.api().rows({search: 'applied'}).nodes().each(function(tr) {
+                                        sumOrj += parseFloat($(tr).attr('data-orj')) || 0;
+                                        sumNet += parseFloat($(tr).attr('data-net')) || 0;
+                                        sumKdv += parseFloat($(tr).attr('data-kdv')) || 0;
+                                        sumComp += parseFloat($(tr).attr('data-comp')) || 0;
+                                    });
+                                    $("#fmt-orj").html(sumOrj.toLocaleString('tr-TR', {minimumFractionDigits:2}));
+                                    $("#fmt-net").html(sumNet.toLocaleString('tr-TR', {minimumFractionDigits:2}));
+                                    $("#fmt-kdv").html(sumKdv.toLocaleString('tr-TR', {minimumFractionDigits:2}));
+                                    $("#fmt-comp").html(sumComp.toLocaleString('tr-TR', {minimumFractionDigits:2}) + ' ₺');
+                                }
+                            });
+                        } else { $("#modalTableBody").append('<tr><td colspan="15" class="text-center py-5 text-muted"><i class="fas fa-search fa-2x d-block mb-2"></i>Bu kategoriye ait işlem bulunamadı.</td></tr>'); }
+                    } else { $("#modalTableBody").append(`<tr><td colspan="15" class="text-center py-4 text-danger"><b>Hata:</b> ${res.message}</td></tr>`); }
+                },
+                error: function (xhr) {
+                    $("#loadingSpinner").hide();
+                    $("#modalTableBody").append(`<tr><td colspan="15" class="text-center py-4 text-danger"><b>Sistem Hatası:</b> ${xhr.responseText || xhr.statusText}</td></tr>`);
+                }
+            });
+        }
+
+        function openDocument(firma, turKod, docId, turAdi) {
+            $("#docModalTitle").html(`<i class="fas fa-file-invoice me-2"></i>${firma} - ${turAdi} Belge Satırları`);
+            
+            if ($.fn.DataTable && $.fn.DataTable.isDataTable('#dynamicDocTable')) {
+                $('#dynamicDocTable').DataTable().destroy();
+            }
+
+            let footerHtml = `<tr>
+                <th colspan="3" class="text-end border-0">FİLTRELENEN TOPLAM : </th>
+                <th class="text-end border-0" id="fdoc-mik">0</th>
+                <th class="text-end border-0">-</th>
+                <th class="border-0"></th>
+                <th class="text-end border-0" id="fdoc-orj">0,00</th>
+                <th class="border-0"></th>
+                <th class="text-end text-primary fs-6 border-0" id="fdoc-net">0,00</th>
+                <th class="text-end text-white-50 fs-6 border-0" id="fdoc-kdv">0,00</th>
+                <th class="text-end text-warning fs-6 border-0" id="fdoc-comp">0,00 ₺</th>
+            </tr>`;
+            $("#docModalFoot").html(footerHtml);
+
+            $("#docModalBody").empty();
+            $('#docModalSearch').val('');
+            $("#docLoadingSpinner").show();
+            var docModal = new bootstrap.Modal(document.getElementById('documentModal'));
+            docModal.show();
+
+            $.ajax({
+                url: '@Url.Action("GetBelgeDetay", "Rapor102")',
+                type: 'GET',
+                // db parametresini API isteğine ekliyoruz
+                data: { firma: firma, turKod: turKod, docId: docId, db: currentDbParam }, 
+                success: function (res) {
+                    $("#docLoadingSpinner").hide();
+                    if (res.success && res.data.length > 0) {
+                        let tbody = $("#docModalBody");
+                        res.data.forEach(function(item) {
+                            let tlNet = item.tlNetTutar;
+                            let tlKdv = item.tlKdv;
+                            let computed = isVatIncluded ? (tlNet + tlKdv) : tlNet;
+
+                            let tlNetDisplay = tlNet === 0 ? "<span class='badge bg-warning text-dark'>0,00</span>" : tlNet.toLocaleString('tr-TR', {minimumFractionDigits:2});
+                            let tlKdvDisplay = tlKdv === 0 ? "<span class='text-muted'>0,00</span>" : tlKdv.toLocaleString('tr-TR', {minimumFractionDigits:2});
+                            let computedDisplay = computed === 0 ? "<span class='badge bg-secondary'>0,00</span>" : computed.toLocaleString('tr-TR', {minimumFractionDigits:2}) + " ₺";
+
+                            let orjNetTutarDisplay = item.orjNetTutar === 0 ? "<span class='text-muted'>0,00</span>" : item.orjNetTutar.toLocaleString('tr-TR', {minimumFractionDigits:2});
+                            let fiyatDisplay = item.fiyat === 0 ? "<span class='text-muted'>0,00</span>" : item.fiyat.toLocaleString('tr-TR', {minimumFractionDigits:4});
+
+                            let row = `<tr data-mik="${item.miktar}" data-orj="${item.orjNetTutar}" data-net="${tlNet}" data-kdv="${tlKdv}" data-comp="${computed}">
+                                <td class="fw-bold text-secondary py-2">${item.cariKodu || '-'}</td>
+                                <td class="fw-bold text-dark py-2">${item.kod}</td><td class="py-2">${item.aciklama}</td>
+                                <td class="text-end py-2" data-sort="${item.miktar}">${item.miktar.toLocaleString('tr-TR')}</td>
+                                <td class="text-end py-2" data-sort="${item.fiyat}">${fiyatDisplay}</td>
+                                <td class="text-center fw-bold text-muted py-2">${item.paraBirimi}</td>
+                                <td class="text-end py-2" data-sort="${item.orjNetTutar}">${orjNetTutarDisplay}</td>
+                                <td class="text-center small py-2" data-sort="${item.kur}">${item.kur.toLocaleString('tr-TR', {minimumFractionDigits:4})}</td>
+                                <td class="text-end fw-bold text-primary py-2" data-sort="${tlNet}">${tlNetDisplay}</td>
+                                <td class="text-end text-muted py-2" data-sort="${tlKdv}">${tlKdvDisplay}</td>
+                                <td class="text-end fw-bold text-danger border-start py-2 bg-light" data-sort="${computed}" style="font-size:13.5px;">${computedDisplay}</td>
+                            </tr>`;
+                            tbody.append(row);
+                        });
+
+                        docDt = $('#dynamicDocTable').DataTable({
+                            destroy: true,
+                            language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/tr.json" },
+                            paging: false,
+                            info: false,
+                            searching: true,
+                            dom: 'rt',
+                            footerCallback: function () {
+                                let sumMik = 0, sumOrj = 0, sumNet = 0, sumKdv = 0, sumComp = 0;
+                                this.api().rows({search: 'applied'}).nodes().each(function(tr) {
+                                    sumMik += parseFloat($(tr).attr('data-mik')) || 0;
+                                    sumOrj += parseFloat($(tr).attr('data-orj')) || 0;
+                                    sumNet += parseFloat($(tr).attr('data-net')) || 0;
+                                    sumKdv += parseFloat($(tr).attr('data-kdv')) || 0;
+                                    sumComp += parseFloat($(tr).attr('data-comp')) || 0;
+                                });
+                                $("#fdoc-mik").html(sumMik.toLocaleString('tr-TR'));
+                                $("#fdoc-orj").html(sumOrj.toLocaleString('tr-TR', {minimumFractionDigits:2}));
+                                $("#fdoc-net").html(sumNet.toLocaleString('tr-TR', {minimumFractionDigits:2}));
+                                $("#fdoc-kdv").html(sumKdv.toLocaleString('tr-TR', {minimumFractionDigits:2}));
+                                $("#fdoc-comp").html(sumComp.toLocaleString('tr-TR', {minimumFractionDigits:2}) + ' ₺');
+                            }
+                        });
+                    } else {
+                        let errorMsg = res.message ? res.message : "Detay bulunamadı veya satır tutarı yok.";
+                        $("#docModalBody").append(`<tr><td colspan="15" class="text-center py-5 text-danger"><i class="fas fa-exclamation-triangle fa-2x d-block mb-2"></i>${errorMsg}</td></tr>`);
+                    }
+                },
+                error: function (xhr) {
+                    $("#docLoadingSpinner").hide();
+                    $("#docModalBody").append(`<tr><td colspan="15" class="text-center py-4 text-danger"><b>Sistem Hatası:</b> ${xhr.responseText || xhr.statusText}</td></tr>`);
+                }
+            });
+        }
+
+        Chart.defaults.font.family = '"Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+        Chart.defaults.color = '#858796';
+        var ctxTrend = document.getElementById('trendChart').getContext('2d');
+        new Chart(ctxTrend, {
+            type: 'bar',
+            data: {
+                labels: ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'],
+                datasets: [
+                    { label: 'Satışlar', data: [@string.Join(",", Model.TrendOzetler.Select(x => x.Satis.ToString(CultureInfo.InvariantCulture)))], backgroundColor: '#1cc88a', borderRadius: 4, barPercentage: 0.7 },
+                    { label: 'Alımlar', data: [@string.Join(",", Model.TrendOzetler.Select(x => x.Alis.ToString(CultureInfo.InvariantCulture)))], backgroundColor: '#36b9cc', borderRadius: 4, barPercentage: 0.7 },
+                    { label: 'Giderler', data: [@string.Join(",", Model.TrendOzetler.Select(x => x.Gider.ToString(CultureInfo.InvariantCulture)))], backgroundColor: '#e74a3b', borderRadius: 4, barPercentage: 0.7 }
+                ]
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                plugins: { 
+                    legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 10 } },
+                    tooltip: { backgroundColor: "rgba(255,255,255,0.9)", titleColor: "#5a5c69", bodyColor: "#5a5c69", borderColor: '#dddfeb', borderWidth: 1, padding: 10 }
+                },
+                scales: {
+                    y: { grid: { borderDash: [2], color: "#e3e6f0", drawBorder: false }, ticks: { callback: function(val) { return val.toLocaleString('tr-TR') + ' ₺'; } } },
+                    x: { grid: { display: false, drawBorder: false } }
+                }
+            }
+        });
+    </script>
+}

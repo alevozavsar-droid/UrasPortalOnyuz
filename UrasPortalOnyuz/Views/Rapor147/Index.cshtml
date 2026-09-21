@@ -1,0 +1,339 @@
+﻿@{
+    ViewData["Title"] = "Kasa / Banka Bakiye Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var islemTipleri = ViewBag.IslemTipleri as List<string> ?? new List<string>();
+    var bugun = DateTime.Today;
+    // Varsayilan baslangic 01.01.2020: devir bakiyeleri bu tarihten oncesini
+    // kapsasin, rapor da acilir acilmaz tum gecmisi iceren bakiyeyi gostersin.
+    var varsayilanBas = new DateTime(2020, 1, 1);
+    var varsayilanBit = bugun;
+}
+
+<style>
+    .kb-kart { background:#fff; border:1px solid #e6ebf2; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+    /* Coklu secim acilir listesi (islem tipi) */
+    .kb-coklu { position: relative; }
+    .kb-coklu-panel {
+        display:none; position:absolute; z-index:1050; top:calc(100% + 2px); left:0;
+        min-width:100%; max-height:260px; overflow-y:auto; background:#fff;
+        border:1px solid #ced4da; border-radius:.375rem; box-shadow:0 6px 18px rgba(0,0,0,.12); padding:4px;
+    }
+    .kb-coklu.acik .kb-coklu-panel { display:block; }
+    .kb-coklu-satir {
+        display:flex; align-items:center; gap:8px; padding:5px 8px; margin:0;
+        font-size:12.5px; border-radius:4px; cursor:pointer; white-space:nowrap;
+    }
+    .kb-coklu-satir:hover { background:#eef2f7; }
+    .kb-coklu-satir input { margin:0; }
+
+    .kb-etiket { font-size:11.5px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.3px; }
+    .ozet-kutu { border-radius:10px; padding:14px 16px; border:1px solid #e6ebf2; background:#fff; }
+    .ozet-baslik { font-size:11.5px; font-weight:700; color:#64748b; text-transform:uppercase; }
+    .ozet-deger { font-size:20px; font-weight:800; color:#0f172a; }
+
+    #kbTablo { width:100%; border-collapse:collapse; font-size:12.5px; }
+    #kbTablo thead th {
+        position:sticky; top:0; z-index:2; background:#f1f5f9; color:#334155;
+        font-weight:700; font-size:11.5px; text-transform:uppercase;
+        padding:9px 8px; border-bottom:2px solid #cbd5e1; white-space:nowrap; cursor:pointer; user-select:none;
+    }
+    #kbTablo thead th:hover { background:#e2e8f0; }
+    #kbTablo thead th .ok { color:#94a3b8; font-size:.85em; }
+    #kbTablo thead th.artan .ok, #kbTablo thead th.azalan .ok { color:#2563eb; }
+    #kbTablo tbody td { padding:7px 8px; border-bottom:1px solid #eef2f7; white-space:nowrap; }
+    #kbTablo tbody tr:hover { background:#f8fbff; }
+    #kbTablo tfoot td { padding:9px 8px; background:#f8fafc; font-weight:800; border-top:2px solid #cbd5e1; }
+    .sayi { text-align:right; font-variant-numeric:tabular-nums; }
+    .eksi { color:#b02a37; }
+    .doviz-kolon { background:#fbfbfd; }
+    .tablo-kutu { max-height:58vh; overflow:auto; border:1px solid #e6ebf2; border-radius:10px; background:#fff; }
+</style>
+
+<div class="container-fluid py-3">
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h4 class="fw-bold mb-1">Kasa / Banka Bakiye Raporu</h4>
+            <div class="text-muted" style="font-size:12.5px;">
+                Devir, dönem hareketleri ve dönem sonu bakiyesi — @ViewBag.CurrentDbDisplay
+            </div>
+        </div>
+        <button class="btn btn-success fw-bold" id="btnExcel">
+            <i class="fas fa-file-excel me-1"></i> Excel
+        </button>
+    </div>
+
+    <div class="kb-kart p-3 mb-3">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <div class="kb-etiket mb-1">Başlangıç</div>
+                <input type="date" id="bas" class="form-control form-control-sm" value="@varsayilanBas.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-2">
+                <div class="kb-etiket mb-1">Bitiş</div>
+                <input type="date" id="bit" class="form-control form-control-sm" value="@varsayilanBit.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-2">
+                <div class="kb-etiket mb-1">İşlem Tipi (U_BE1_AKTAR)</div>
+                <div class="kb-coklu" id="tipSecici">
+                    <button type="button" class="form-select form-select-sm text-start" id="tipDugme">Tümü</button>
+                    <div class="kb-coklu-panel" id="tipPanel">
+                        <label class="kb-coklu-satir fw-bold border-bottom">
+                            <input type="checkbox" id="tipHepsi" checked /> <span>Tümü</span>
+                        </label>
+                        @foreach (var t in islemTipleri)
+                        {
+                            <label class="kb-coklu-satir">
+                                <input type="checkbox" class="tipKutu" value="@t" /> <span>@t</span>
+                            </label>
+                        }
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="kb-etiket mb-1">Hesapta ara</div>
+                <input type="text" id="ara" class="form-control form-control-sm" placeholder="Hesap kodu veya adı..." autocomplete="off" />
+            </div>
+            <div class="col-md-3 d-flex gap-2 align-items-center">
+                <button class="btn btn-primary btn-sm flex-fill fw-bold" id="btnGetir">
+                    <i class="fas fa-search me-1"></i> Getir
+                </button>
+                <div class="d-flex flex-column" style="white-space:nowrap;">
+                    <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" id="devirDahil" checked>
+                        <label class="form-check-label" for="devirDahil" style="font-size:12px;">Devir bakiyesi</label>
+                    </div>
+                    <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" id="sifirlar">
+                        <label class="form-check-label" for="sifirlar" style="font-size:12px;">Boş hesaplar</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="text-muted mt-2" style="font-size:11.5px;">
+            İşlem tipi seçilirse devir bakiyesi de aynı süzgeçle hesaplanır; böylece
+            <b>devir + dönem hareketi = dönem sonu</b> her zaman tutar.
+            <b>Devir bakiyesi</b> kutusu kapatılırsa yalnızca seçilen aralıktaki hareketler gösterilir.
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="ozet-kutu"><div class="ozet-baslik">Kasa Devir (TL)</div><div class="ozet-deger" id="ozKasaDevir">—</div></div></div>
+        <div class="col-md-3"><div class="ozet-kutu"><div class="ozet-baslik">Kasa Bakiye (TL)</div><div class="ozet-deger text-primary" id="ozKasa">—</div></div></div>
+        <div class="col-md-3"><div class="ozet-kutu"><div class="ozet-baslik">Banka Devir (TL)</div><div class="ozet-deger" id="ozBankaDevir">—</div></div></div>
+        <div class="col-md-3"><div class="ozet-kutu"><div class="ozet-baslik">Banka Bakiye (TL)</div><div class="ozet-deger text-primary" id="ozBanka">—</div></div></div>
+    </div>
+
+    <div class="kb-kart p-0">
+        <ul class="nav nav-pills gap-1 p-3 pb-0" id="sekmeler">
+            <li class="nav-item"><button class="nav-link active" data-grup="Kasa">Kasa <span class="badge bg-light text-dark ms-1">0</span></button></li>
+            <li class="nav-item"><button class="nav-link" data-grup="Banka">Banka <span class="badge bg-light text-dark ms-1">0</span></button></li>
+        </ul>
+
+        <div class="p-3">
+            <div class="tablo-kutu">
+                <table id="kbTablo">
+                    <thead>
+                        <tr>
+                            <th data-alan="hesapKodu">Hesap Kodu <span class="ok">⇅</span></th>
+                            <th data-alan="hesapAdi">Hesap Adı <span class="ok">⇅</span></th>
+                            <th data-alan="paraBirimi">PB <span class="ok">⇅</span></th>
+                            <th class="sayi" data-alan="devirTL" data-sayi="1">Devir (TL) <span class="ok">⇅</span></th>
+                            <th class="sayi" data-alan="borcTL" data-sayi="1">Dönem Borç <span class="ok">⇅</span></th>
+                            <th class="sayi" data-alan="alacakTL" data-sayi="1">Dönem Alacak <span class="ok">⇅</span></th>
+                            <th class="sayi" data-alan="sonTL" data-sayi="1">Bakiye (TL) <span class="ok">⇅</span></th>
+                            <th class="sayi doviz-kolon" data-alan="devirDoviz" data-sayi="1">Devir (Dvz) <span class="ok">⇅</span></th>
+                            <th class="sayi doviz-kolon" data-alan="sonDoviz" data-sayi="1">Bakiye (Dvz) <span class="ok">⇅</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="kbGovde">
+                        <tr><td colspan="9" class="text-center text-muted py-5">Tarih aralığı seçip <b>Getir</b> deyin.</td></tr>
+                    </tbody>
+                    <tfoot id="kbAlt"></tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    (function () {
+        var veri = [];
+        var aktifGrup = 'Kasa';
+        var siralama = { alan: null, artan: true };
+
+        // Sayfa belirli bir sirkete sabitlenmis olabilir (?db=...); kendi
+        // isteklerimiz de bunu tasimali, yoksa cerezdeki sirketten veri gelir.
+        var SAYFA_DB = new URLSearchParams(window.location.search).get('db') || '';
+
+        function bicim(v) {
+            return (Number(v) || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function hucre(v) {
+            var n = Number(v) || 0;
+            return '<td class="sayi' + (n < 0 ? ' eksi' : '') + '">' + bicim(n) + '</td>';
+        }
+
+        function kacir(m) { var d = document.createElement('div'); d.textContent = m == null ? '' : m; return d.innerHTML; }
+
+        function suzulmus() {
+            var q = (document.getElementById('ara').value || '').toLocaleLowerCase('tr');
+            var liste = veri.filter(function (r) { return r.grup === aktifGrup; });
+
+            if (q) {
+                liste = liste.filter(function (r) {
+                    return (r.hesapKodu + ' ' + r.hesapAdi).toLocaleLowerCase('tr').indexOf(q) > -1;
+                });
+            }
+
+            if (siralama.alan) {
+                var a = siralama.alan, yon = siralama.artan ? 1 : -1;
+                var sayisal = ['devirTL', 'borcTL', 'alacakTL', 'sonTL', 'devirDoviz', 'sonDoviz'].indexOf(a) > -1;
+                liste = liste.slice().sort(function (x, y) {
+                    if (sayisal) return ((Number(x[a]) || 0) - (Number(y[a]) || 0)) * yon;
+                    return String(x[a] || '').localeCompare(String(y[a] || ''), 'tr') * yon;
+                });
+            }
+            return liste;
+        }
+
+        function ciz() {
+            var liste = suzulmus();
+            var govde = document.getElementById('kbGovde');
+            var alt = document.getElementById('kbAlt');
+
+            if (!liste.length) {
+                govde.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-5">Bu grupta kayıt yok.</td></tr>';
+                alt.innerHTML = '';
+                return;
+            }
+
+            govde.innerHTML = liste.map(function (r) {
+                return '<tr>'
+                     + '<td class="fw-semibold">' + kacir(r.hesapKodu) + '</td>'
+                     + '<td>' + kacir(r.hesapAdi) + '</td>'
+                     + '<td>' + kacir(r.paraBirimi) + '</td>'
+                     + hucre(r.devirTL) + hucre(r.borcTL) + hucre(r.alacakTL) + hucre(r.sonTL)
+                     + '<td class="sayi doviz-kolon">' + (r.cokParaBirimli ? '' : bicim(r.devirDoviz)) + '</td>'
+                     + '<td class="sayi doviz-kolon">' + (r.cokParaBirimli ? '' : bicim(r.sonDoviz)) + '</td>'
+                     + '</tr>';
+            }).join('');
+
+            var t = function (alan) { return liste.reduce(function (a, r) { return a + (Number(r[alan]) || 0); }, 0); };
+
+            alt.innerHTML = '<tr><td colspan="3">TOPLAM (' + liste.length + ' hesap)</td>'
+                          + '<td class="sayi">' + bicim(t('devirTL')) + '</td>'
+                          + '<td class="sayi">' + bicim(t('borcTL')) + '</td>'
+                          + '<td class="sayi">' + bicim(t('alacakTL')) + '</td>'
+                          + '<td class="sayi">' + bicim(t('sonTL')) + '</td>'
+                          + '<td colspan="2"></td></tr>';
+        }
+
+        function rozetler() {
+            document.querySelectorAll('#sekmeler button').forEach(function (b) {
+                var g = b.dataset.grup;
+                b.querySelector('.badge').textContent = veri.filter(function (r) { return r.grup === g; }).length;
+            });
+        }
+
+        // ---- Islem tipi coklu secimi ------------------------------------
+        // Hicbiri isaretli degilse (= "Tümü") suzgec uygulanmaz.
+        var tipSecici = document.getElementById('tipSecici');
+        var tipDugme  = document.getElementById('tipDugme');
+        var tipHepsi  = document.getElementById('tipHepsi');
+
+        function secilenTipler() {
+            return Array.prototype.slice
+                .call(document.querySelectorAll('.tipKutu:checked'))
+                .map(function (k) { return k.value; });
+        }
+
+        function tipEtiketiniTazele() {
+            var s = secilenTipler();
+            tipHepsi.checked = (s.length === 0);
+            tipDugme.textContent = s.length === 0 ? 'Tümü'
+                                 : (s.length === 1 ? s[0] : s.length + ' tip seçili');
+            tipDugme.title = s.length ? s.join(', ') : 'Tüm işlem tipleri';
+        }
+
+        tipDugme.addEventListener('click', function (e) {
+            e.stopPropagation();
+            tipSecici.classList.toggle('acik');
+        });
+        tipSecici.addEventListener('click', function (e) { e.stopPropagation(); });
+        document.addEventListener('click', function () { tipSecici.classList.remove('acik'); });
+
+        tipHepsi.addEventListener('change', function () {
+            document.querySelectorAll('.tipKutu').forEach(function (k) { k.checked = false; });
+            tipEtiketiniTazele();
+        });
+        document.querySelectorAll('.tipKutu').forEach(function (k) {
+            k.addEventListener('change', tipEtiketiniTazele);
+        });
+        tipEtiketiniTazele();
+
+        function parametreler() {
+            return 'bas=' + encodeURIComponent(document.getElementById('bas').value)
+                 + '&bit=' + encodeURIComponent(document.getElementById('bit').value)
+                 + '&islemTipi=' + encodeURIComponent(secilenTipler().join(','))
+                 + '&sifirlariGoster=' + (document.getElementById('sifirlar').checked ? 'true' : 'false')
+                 + '&devirDahil=' + (document.getElementById('devirDahil').checked ? 'true' : 'false')
+                 + (SAYFA_DB ? '&db=' + encodeURIComponent(SAYFA_DB) : '');
+        }
+
+        async function getir() {
+            document.getElementById('kbGovde').innerHTML =
+                '<tr><td colspan="9" class="text-center text-muted py-5"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</td></tr>';
+            try {
+                var c = await fetch('/Rapor147/Veri?' + parametreler());
+                var v = await c.json();
+                if (!v.success) { toastr.error(v.message || 'Veri alınamadı.'); return; }
+
+                veri = v.satirlar || [];
+                document.getElementById('ozKasaDevir').textContent = bicim(v.ozet.kasaDevir);
+                document.getElementById('ozKasa').textContent = bicim(v.ozet.kasa);
+                document.getElementById('ozBankaDevir').textContent = bicim(v.ozet.bankaDevir);
+                document.getElementById('ozBanka').textContent = bicim(v.ozet.banka);
+
+                rozetler();
+                ciz();
+            } catch (e) {
+                toastr.error('Veri alınamadı.');
+            }
+        }
+
+        document.getElementById('btnGetir').addEventListener('click', getir);
+        document.getElementById('sifirlar').addEventListener('change', getir);
+        document.getElementById('devirDahil').addEventListener('change', getir);
+        document.getElementById('ara').addEventListener('input', ciz);
+
+        document.getElementById('sekmeler').addEventListener('click', function (e) {
+            var b = e.target.closest('button');
+            if (!b) return;
+            this.querySelectorAll('button').forEach(function (x) { x.classList.remove('active'); });
+            b.classList.add('active');
+            aktifGrup = b.dataset.grup;
+            ciz();
+        });
+
+        document.querySelector('#kbTablo thead').addEventListener('click', function (e) {
+            var th = e.target.closest('th');
+            if (!th || !th.dataset.alan) return;
+            siralama.artan = (siralama.alan === th.dataset.alan) ? !siralama.artan : true;
+            siralama.alan = th.dataset.alan;
+            this.querySelectorAll('th').forEach(function (x) { x.classList.remove('artan', 'azalan'); });
+            th.classList.add(siralama.artan ? 'artan' : 'azalan');
+            ciz();
+        });
+
+        document.getElementById('btnExcel').addEventListener('click', function () {
+            window.location.href = '/Rapor147/Excel?' + parametreler();
+        });
+
+        getir();
+    })();
+</script>
+}

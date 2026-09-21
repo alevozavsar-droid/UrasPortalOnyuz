@@ -1,0 +1,216 @@
+﻿@model List<WebApplication3.Controllers.Rapor64ViewModel>
+
+@{
+    ViewData["Title"] = "Uzaktan SAP Mutabakat Paneli";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // 1. KURAL: URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+}
+
+@section Styles {
+    <style>
+        .table-hover tbody tr:hover {
+            background-color: #f1f1f1;
+        }
+        .status-badge {
+            font-size: 0.9em;
+            padding: 5px 10px;
+            border-radius: 15px;
+        }
+        .card-header-custom {
+            background: linear-gradient(45deg, #1e3c72, #2a5298);
+            color: white;
+        }
+    </style>
+}
+
+@* 2. KURAL: Güvenlik (CSRF) - Yetkisiz robot tetiklemelerini engellemek için eklendi *@
+@Html.AntiForgeryToken()
+
+<div class="container-fluid mt-4">
+    <div class="card shadow mb-4">
+        <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">
+                <i class="fas fa-robot me-2"></i> SAP Hibrit Robot Kontrol Paneli
+            </h4>
+            <span class="badge bg-success status-badge">
+                <i class="fas fa-wifi"></i> Sistem Online
+            </span>
+        </div>
+        <div class="card-body">
+
+            @if (ViewBag.Error != null)
+            {
+                <div class="alert alert-danger shadow-sm">
+                    <i class="fas fa-exclamation-triangle"></i> @ViewBag.Error
+                </div>
+            }
+
+            <div class="alert alert-info shadow-sm border-left-info">
+                <div class="d-flex align-items-center">
+                    <div class="me-3">
+                        <i class="fas fa-info-circle fa-2x text-info"></i>
+                    </div>
+                    <div>
+                        <strong>Nasıl Çalışır?</strong>
+                        <br />
+                        Aşağıdaki listeden bir cari seçip <b>"Robotu Başlat"</b> butonuna bastığınızda, talebiniz anında bilgisayarınızda çalışan <b>SAP Robot Ajanına</b> iletilir ve mutabakat işlemi otomatik başlar.
+                        <br />
+                        <small class="text-muted">Lütfen bilgisayarınızdaki siyah ekranlı Robot uygulamasının açık olduğundan emin olun.</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white"><i class="fas fa-search"></i></span>
+                        <input type="text" id="searchInput" class="form-control" placeholder="Cari Adı veya Kodu Ara...">
+                    </div>
+                </div>
+                <div class="col-md-8 text-end">
+                    @* 1. KURAL: Yenileme işleminde şirket parametresini kaybetmemek için güncellendi *@
+                    <button class="btn btn-secondary btn-sm" onclick="window.location.href = window.location.pathname + '?db=' + activeDbCode;">
+                        <i class="fas fa-sync-alt"></i> Listeyi Yenile
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover" id="cariTable">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width: 15%">Cari Kodu</th>
+                            <th style="width: 45%">Cari Adı</th>
+                            <th style="width: 20%" class="text-end">Bakiye</th>
+                            <th style="width: 20%" class="text-center">Aksiyon</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model != null && Model.Count > 0)
+                        {
+                            @foreach (var item in Model)
+                            {
+                                <tr>
+                                    <td class="align-middle fw-bold text-primary">@item.CardCode</td>
+                                    <td class="align-middle">@item.CardName</td>
+                                    <td class="align-middle text-end fw-bold">
+                                        @item.Bakiye.ToString("N2") @item.ParaBirimi
+                                    </td>
+                                    <td class="text-center">
+                                        <button class="btn btn-primary btn-sm btn-robot-baslat shadow-sm"
+                                                data-kod="@item.CardCode"
+                                                data-isim="@item.CardName">
+                                            <i class="fas fa-play-circle"></i> Robotu Başlat
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="4" class="text-center text-muted py-4">
+                                    <i class="fas fa-folder-open fa-2x mb-2"></i><br />
+                                    Gösterilecek kayıt bulunamadı veya veritabanı bağlantısı yok.
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @* 4. KURAL: UI/UX Standartlarına uygun şık, db parametreli Ana Sayfa butonu *@
+            <div class="mt-4 mb-2 text-center">
+                <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+                    <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+                </a>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        // 1. KURAL JS DEĞİŞKENİ: Aktif Şirket kodunu JS tarafında hafızaya alıyoruz
+        const activeDbCode = '@currentDb';
+
+        $(document).ready(function () {
+            // 1. Tablo Arama Fonksiyonu
+            $("#searchInput").on("keyup", function () {
+                var value = $(this).val().toLowerCase();
+                $("#cariTable tbody tr").filter(function () {
+                    $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
+                });
+            });
+
+            // 2. Robotu Başlat Butonu
+            $(".btn-robot-baslat").click(function () {
+                var btn = $(this);
+                var cariKod = btn.data("kod");
+                var cariIsim = btn.data("isim");
+
+                Swal.fire({
+                    title: 'Mutabakat Başlatılsın mı?',
+                    text: cariIsim + " (" + cariKod + ") için robot çalıştırılacak.",
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#3085d6',
+                    cancelButtonColor: '#d33',
+                    confirmButtonText: 'Evet, Başlat!',
+                    cancelButtonText: 'İptal'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        var originalHtml = btn.html();
+                        btn.prop("disabled", true).html('<i class="fas fa-circle-notch fa-spin"></i> İletiliyor...');
+
+                        $.ajax({
+                            // 1. KURAL: Arka plan isteğinin sonuna şirket parametresi eklenerek bağlantı korundu
+                            url: '/Rapor64/MutabakatEmriVer?db=' + activeDbCode,
+                            type: 'POST',
+                            contentType: 'application/json',
+                            // 2. KURAL: Sunucunun isteği doğrulaması için CSRF token başlığa eklendi
+                            headers: {
+                                "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                            },
+                            data: JSON.stringify({ CardCode: cariKod }), 
+                            success: function (response) {
+                                if (response.success) {
+                                    Swal.fire({
+                                        icon: 'success',
+                                        title: 'Talimat İletildi!',
+                                        text: response.message,
+                                        timer: 3000,
+                                        showConfirmButton: false
+                                    });
+                                } else {
+                                    Swal.fire({
+                                        icon: 'error',
+                                        title: 'Başarısız',
+                                        text: response.message
+                                    });
+                                }
+                            },
+                            error: function (xhr, status, error) {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Sunucu Hatası',
+                                    text: 'Web sunucusuyla iletişim kurulamadı. İnternet bağlantınızı kontrol edin.'
+                                });
+                            },
+                            complete: function () {
+                                setTimeout(function() {
+                                    btn.prop("disabled", false).html(originalHtml);
+                                }, 1000);
+                            }
+                        });
+                    }
+                });
+            });
+        });
+    </script>
+}

@@ -1,0 +1,1004 @@
+﻿@{
+    ViewData["Title"] = "Muhatap Ana Verileri Yönetimi";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var customers = ViewBag.Customers as List<WebApplication3.Controllers.Rapor97Controller.CustomerModel> ?? new List<WebApplication3.Controllers.Rapor97Controller.CustomerModel>();
+    var groups = ViewBag.Groups as List<WebApplication3.Controllers.Rapor97Controller.LookupModel> ?? new List<WebApplication3.Controllers.Rapor97Controller.LookupModel>();
+    var salesPersons = ViewBag.SalesPersons as List<WebApplication3.Controllers.Rapor97Controller.LookupModel> ?? new List<WebApplication3.Controllers.Rapor97Controller.LookupModel>();
+    var paymentTerms = ViewBag.PaymentTerms as List<WebApplication3.Controllers.Rapor97Controller.LookupModel> ?? new List<WebApplication3.Controllers.Rapor97Controller.LookupModel>();
+    
+    var controlAccounts = ViewBag.ControlAccounts as List<WebApplication3.Controllers.Rapor97Controller.LookupModel> ?? new List<WebApplication3.Controllers.Rapor97Controller.LookupModel>();
+    var errorMessage = ViewBag.ErrorMessage as string;
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+    
+    <style>
+        body { background-color: var(--bg-main, #f4f7f6); font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 0.85rem; color: #2c3e50; }
+        .bp-card { background: var(--bg-card, #ffffff); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); margin-bottom: 25px; overflow: hidden; border: 1px solid var(--border-color, #e9ecef); }
+        .header-bg { background: linear-gradient(90deg, #f39c12, #e67e22); height: 6px; width: 100%; }
+        .header-section { padding: 25px; background: var(--bg-subtle, #fafbfc); border-bottom: 1px solid var(--border-color, #edf2f7); }
+        .bal-field { text-align: right; font-weight: 700; background: var(--bg-card, #fff) !important; color: #e74c3c; font-size: 1.1rem; }
+        .form-label { font-weight: 600; color: var(--text-secondary, #5c6a77); margin-bottom: 4px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .form-control, .form-select { border-radius: 6px; padding: 6px 12px; font-size: 0.85rem; border: 1px solid var(--border-color, #cfd9e0); transition: all 0.2s ease-in-out; background-color: var(--bg-subtle, #fbfcfd); }
+        .form-control:focus, .form-select:focus { border-color: #f39c12; box-shadow: 0 0 0 3px rgba(243, 156, 18, 0.15); background-color: var(--bg-card, #fff); }
+        .form-control[readonly] { background-color: #eef2f5; color: #6c7a89; cursor: not-allowed; }
+        .nav-tabs { border-bottom: 2px solid var(--border-color, #edf2f7); padding: 0 20px; background: var(--bg-card, #fff); }
+        .nav-tabs .nav-link { color: #7f8c8d; font-weight: 600; padding: 12px 20px; border: none; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.3s; }
+        .nav-tabs .nav-link:hover { color: #f39c12; }
+        .nav-tabs .nav-link.active { color: #2c3e50; border-bottom: 3px solid #f39c12; background: transparent; }
+        .tab-content { padding: 25px; background: var(--bg-card, #fff); }
+        .address-list { border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color, #edf2f7); }
+        .list-group-item.active { background-color: #f39c12; border-color: #f39c12; color: #fff !important; }
+        .list-group-item { border-left: none; border-right: none; transition: background 0.2s; cursor: pointer; }
+        .list-group-item:hover:not(.active) { background-color: #fdf3e5; }
+        .row-compact > [class^="col-"] { padding-right: 15px; padding-left: 15px; margin-bottom: 12px; }
+        hr { border-color: #edf2f7; margin: 20px 0; }
+        .select2-container--bootstrap-5 .select2-dropdown { z-index: 1060; }
+    </style>
+}
+
+<div class="container-fluid px-4 py-4">
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger shadow-sm border-0 mb-3 rounded-3">
+            <i class="fas fa-exclamation-triangle me-2"></i><strong>Hata:</strong> @errorMessage
+        </div>
+    }
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="w-50 shadow-sm rounded-3">
+            <select id="bpSelect" class="form-select select2-init">
+                <option value="">-- Müşteri / Satıcı Ara ve Seç --</option>
+                @foreach (var c in customers)
+                {
+                    <option value="@c.CardCode">@c.CardCode - @c.CardName</option>
+                }
+            </select>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <select id="newBpType" class="form-select border-success text-success fw-bold" style="width: auto;">
+                <option value="C">Yeni Müşteri Aç</option>
+                <option value="S">Yeni Tedarikçi Aç</option>
+            </select>
+            <button class="btn btn-success fw-bold px-4 rounded-pill shadow-sm" id="btnNewBP"
+                    title="Yeni kayıt moduna geçer ve cari kodu atar. Kayıt, sağdaki düğmeyle yapılır.">
+                <i class="fas fa-plus me-2"></i>Yeni Kayda Başla
+            </button>
+            <span id="yeniKayitUyarisi" class="badge bg-warning text-dark d-none" style="font-weight:600;">
+                <i class="fas fa-triangle-exclamation me-1"></i>Kaydedilmedi
+            </span>
+            <button class="btn btn-primary fw-bold px-4 rounded-pill shadow-sm" id="btnUpdateBP">
+                <i class="fas fa-cloud-upload-alt me-2"></i>SAP'ye Gönder / Güncelle
+            </button>
+        </div>
+    </div>
+
+    <div class="bp-card">
+        <div class="header-bg"></div>
+        
+        <div class="header-section row row-compact align-items-end">
+            <div class="col-xl-2 col-lg-3 col-md-4">
+                <label class="form-label text-primary">Muhatap Kodu</label>
+                <input type="text" class="form-control fw-bold" id="form_CardCode" readonly placeholder="Otomatik Üretilecek">
+            </div>
+            <div class="col-xl-4 col-lg-5 col-md-8">
+                <label class="form-label">Muhatap Adı</label>
+                <input type="text" class="form-control fw-bold" id="form_CardName" placeholder="Firma adını giriniz">
+            </div>
+            <div class="col-xl-2 col-lg-4 col-md-6 offset-xl-1">
+                <label class="form-label text-danger">Hesap Bakiyesi</label>
+                <input type="text" class="form-control bal-field" id="form_Balance" readonly value="0,00">
+            </div>
+            
+            <div class="w-100 m-0 p-0"></div> 
+            
+            <div class="col-xl-2 col-lg-3 col-md-4">
+                <label class="form-label">Grup</label>
+                <select class="form-select" id="form_GroupCode">
+                    @foreach(var g in groups) { <option value="@g.Id">@g.Name</option> }
+                </select>
+            </div>
+            <div class="col-xl-4 col-lg-5 col-md-8">
+                <label class="form-label">Yabancı Ad (İngilizce vb.)</label>
+                <input type="text" class="form-control" id="form_CardFName">
+            </div>
+            <div class="col-xl-2 col-lg-4 col-md-6 offset-xl-1">
+                <label class="form-label text-muted">Açık Teslimatlar</label>
+                <input type="text" class="form-control bal-field text-muted fs-6" id="form_DNotesBal" readonly value="0,00">
+            </div>
+
+            <div class="w-100 m-0 p-0"></div> 
+            
+            <div class="col-xl-2 col-lg-3 col-md-4">
+                <label class="form-label">Para Birimi</label>
+                <select class="form-select" id="form_Currency">
+                    <option value="##">Tüm para birimleri</option>
+                    <option value="TRY">TRY</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                </select>
+            </div>
+            <div class="col-xl-4 col-lg-5 col-md-8">
+                <label class="form-label">TCKN / VKN</label>
+                <input type="text" class="form-control fw-bold" id="form_LicTradNum" placeholder="10 veya 11 Haneli Vergi/TC No">
+            </div>
+            <div class="col-xl-2 col-lg-4 col-md-6 offset-xl-1">
+                <label class="form-label text-muted">Açık Siparişler</label>
+                <div class="input-group">
+                    <input type="text" class="form-control bal-field text-muted fs-6" id="form_OrdersBal" readonly value="0,00">
+                    <span class="input-group-text bg-light text-muted" id="form_OprCount" title="Açık Fırsatlar">0</span>
+                </div>
+            </div>
+        </div>
+
+        <ul class="nav nav-tabs" id="bpTab" role="tablist">
+            <li class="nav-item"><a class="nav-link active" data-bs-target="#tabGenel" href="#tabGenel"><i class="fas fa-info-circle me-1"></i> Genel</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-target="#tabAdres" href="#tabAdres"><i class="fas fa-map-marker-alt me-1"></i> Adresler</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-target="#tabOdemeK" href="#tabOdemeK"><i class="fas fa-file-invoice-dollar me-1"></i> Ödeme Koşulları</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-target="#tabMuhasebe" href="#tabMuhasebe"><i class="fas fa-calculator me-1"></i> Muhasebe</a></li>
+        </ul>
+
+        <div class="tab-content" id="bpTabContent">
+            
+            <div class="tab-pane fade show active" id="tabGenel">
+                <div class="row">
+                    <div class="col-xl-5 col-lg-6 border-end pe-lg-5">
+                        <div class="row align-items-center mb-2"><div class="col-4"><label class="form-label mb-0">Telefon 1</label></div><div class="col-8"><input type="text" class="form-control" id="form_Phone1"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-4"><label class="form-label mb-0">Telefon 2</label></div><div class="col-8"><input type="text" class="form-control" id="form_Phone2"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-4"><label class="form-label mb-0">Cep Telefonu</label></div><div class="col-8"><input type="text" class="form-control" id="form_Cellular"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-4"><label class="form-label mb-0">Faks</label></div><div class="col-8"><input type="text" class="form-control" id="form_Fax"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-4"><label class="form-label mb-0">E-Posta</label></div><div class="col-8"><input type="email" class="form-control" id="form_Email"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-4"><label class="form-label mb-0">Web Sitesi</label></div><div class="col-8"><input type="text" class="form-control" id="form_IntrntSite"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-4"><label class="form-label mb-0">Sevkiyat Türü</label></div><div class="col-8"><select class="form-select" id="form_ShipType"><option value="0">-Tanımsız-</option></select></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-4"><label class="form-label mb-0">Parola</label></div><div class="col-8"><input type="password" class="form-control" id="form_Password"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-4"><label class="form-label mb-0">Faktoring Göst.</label></div><div class="col-8"><input type="text" class="form-control" id="form_Indicator"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-4"><label class="form-label mb-0">Proje Kodu</label></div><div class="col-8"><input type="text" class="form-control" id="form_ProjectCod"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-4"><label class="form-label mb-0">İş Türü</label></div><div class="col-8"><select class="form-select" id="form_CmpPrivate"><option value="1">Şirket</option><option value="2">Şahıs</option><option value="3">Çalışan</option></select></div></div>
+                        <div class="row align-items-center mb-4"><div class="col-4"><label class="form-label mb-0">Takma Ad</label></div><div class="col-8"><input type="text" class="form-control" id="form_AliasName"></div></div>
+
+                        <div class="p-3 bg-light rounded-3 border">
+                            <div class="form-check form-check-inline mb-2">
+                                <input class="form-check-input" type="radio" name="rdoStatus" id="rdoEtkin" value="Y" checked>
+                                <label class="form-check-label fw-bold text-success" for="rdoEtkin">Etkin</label>
+                            </div>
+                            <div class="row g-2 align-items-center mt-1">
+                                <div class="col-auto"><label class="form-label mb-0">Başlangıç:</label></div><div class="col"><input type="date" class="form-control form-control-sm" id="form_ValidFrom"></div>
+                                <div class="col-auto"><label class="form-label mb-0">Bitiş:</label></div><div class="col"><input type="date" class="form-control form-control-sm" id="form_ValidTo"></div>
+                            </div>
+                            <hr class="my-3"/>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="rdoStatus" id="rdoEtkinDegil" value="N">
+                                <label class="form-check-label fw-bold text-danger" for="rdoEtkinDegil">Etkin Değil</label>
+                            </div>
+                            <div class="row g-2 align-items-center mt-1">
+                                <div class="col-auto"><label class="form-label mb-0">Başlangıç:</label></div><div class="col"><input type="date" class="form-control form-control-sm" id="form_FrozenFrom"></div>
+                                <div class="col-auto"><label class="form-label mb-0">Bitiş:</label></div><div class="col"><input type="date" class="form-control form-control-sm" id="form_FrozenTo"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-xl-7 col-lg-6 ps-lg-5 mt-4 mt-lg-0">
+                        <div class="row align-items-center mb-2"><div class="col-xl-3 col-4"><label class="form-label mb-0">İlgili Kişi</label></div><div class="col-xl-9 col-8"><input type="text" class="form-control" id="form_CntctPrsn"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-xl-3 col-4"><label class="form-label mb-0 text-primary">Vergi Dairesi</label></div><div class="col-xl-9 col-8"><input type="text" class="form-control" id="form_AddID"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-xl-3 col-4"><label class="form-label mb-0">Vergi No.</label></div><div class="col-xl-9 col-8"><input type="text" class="form-control" id="form_VatIdUnCmp"></div></div>
+                        <div class="row align-items-start mb-3 mt-3"><div class="col-xl-3 col-4"><label class="form-label mt-1">Açıklamalar</label></div><div class="col-xl-9 col-8"><textarea class="form-control" id="form_Notes" rows="4"></textarea></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-xl-3 col-4"><label class="form-label mb-0">Satış Çalışanı</label></div>
+                            <div class="col-xl-9 col-8">
+                                <select class="form-select" id="form_SlpCode">
+                                    <option value="-1">-Satış çalışanı yok-</option>
+                                    @foreach(var s in salesPersons) { <option value="@s.Id">@s.Name</option> }
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row align-items-center mb-2"><div class="col-xl-3 col-4"><label class="form-label mb-0">İşleyen</label></div><div class="col-xl-9 col-8"><input type="text" class="form-control" id="form_AgentCode"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-xl-3 col-4"><label class="form-label mb-0">Kanal Kodu</label></div><div class="col-xl-9 col-8"><input type="text" class="form-control" id="form_ChannlBP"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-xl-3 col-4"><label class="form-label mb-0">Teknisyen</label></div><div class="col-xl-9 col-8"><input type="number" class="form-control" id="form_DfTcnician"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-xl-3 col-4"><label class="form-label mb-0">Bölge</label></div><div class="col-xl-9 col-8"><input type="number" class="form-control" id="form_Territory"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-xl-3 col-4"><label class="form-label mb-0">Dil</label></div><div class="col-xl-9 col-8"><select class="form-select" id="form_LangCode"><option value="0">Türkçe (Turkish)</option><option value="3">İngilizce (English)</option></select></div></div>
+                        <div class="row align-items-center mb-4"><div class="col-xl-3 col-4"><label class="form-label mb-0">GLN</label></div><div class="col-xl-9 col-8"><input type="text" class="form-control" id="form_GlblLocNum"></div></div>
+                        <div class="row mt-3">
+                            <div class="col-12 offset-xl-3 offset-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="form_BlockComm" value="Y">
+                                    <label class="form-check-label text-muted" for="form_BlockComm">Pazarlama içeriğini göndermeyi bloke et</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="tabAdres">
+                <div class="row">
+                    <div class="col-md-4 col-lg-3 border-end pe-4">
+                        <div class="d-flex justify-content-between align-items-center mb-2 border-bottom pb-2">
+                            <div><i class="fas fa-file-invoice text-primary me-2"></i><span class="fw-bold text-uppercase fs-6">Fatura Adresi</span></div>
+                            <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="addNewAddress('B')" title="Yeni Fatura Adresi Ekle"><i class="fas fa-plus"></i></button>
+                        </div>
+                        <ul class="list-group address-list mb-4 shadow-sm" id="listFatura"></ul>
+                        
+                        <div class="d-flex justify-content-between align-items-center mb-2 border-bottom pb-2">
+                            <div><i class="fas fa-truck text-success me-2"></i><span class="fw-bold text-uppercase fs-6">Sevkiyat Adresi</span></div>
+                            <button class="btn btn-sm btn-outline-success py-0 px-2" onclick="addNewAddress('S')" title="Yeni Sevkiyat Adresi Ekle"><i class="fas fa-plus"></i></button>
+                        </div>
+                        <ul class="list-group address-list shadow-sm" id="listSevkiyat"></ul>
+                    </div>
+                    
+                    <div class="col-md-8 col-lg-9 ps-4" id="addressDetailArea">
+                        <div id="addressEmptyMsg" class="alert alert-info border-0 shadow-sm rounded-3 py-3 mb-4">
+                            <i class="fas fa-info-circle me-2 fs-5 align-middle"></i>
+                            Adres düzenlemek için soldan bir adres seçin veya '+' butonuna tıklayarak yeni adres ekleyin.
+                        </div>
+                        
+                        <div class="card border-0 shadow-sm rounded-3" id="addressFormCard" style="display:none;">
+                            <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-edit me-2"></i>Adres Düzenle</span>
+                            </div>
+                            <div class="card-body">
+                                <input type="hidden" id="det_AddrIndex" />
+                                <input type="hidden" id="det_AddrType" />
+                                
+                                <div class="row mb-2">
+                                    <div class="col-md-3"><label class="form-label mt-2">Adres Tanıtıcısı</label></div>
+                                    <div class="col-md-9"><input type="text" class="form-control fw-bold border-primary" id="det_AddrName" placeholder="Örn: Merkez, Depo..."></div>
+                                </div>
+                                <div class="row mb-2">
+                                    <div class="col-md-3"><label class="form-label mt-2">Sokak / Mahalle</label></div>
+                                    <div class="col-md-9"><input type="text" class="form-control" id="det_Street"></div>
+                                </div>
+                                <div class="row mb-2">
+                                    <div class="col-md-3"><label class="form-label mt-2">Bina / Blok / No</label></div>
+                                    <div class="col-md-9"><input type="text" class="form-control" id="det_Block"></div>
+                                </div>
+                                <div class="row mb-2">
+                                    <div class="col-md-3"><label class="form-label mt-2">Posta Kodu</label></div>
+                                    <div class="col-md-3"><input type="text" class="form-control" id="det_Zip"></div>
+                                    
+                                    <div class="col-md-2 text-end"><label class="form-label mt-2">İlçe</label></div>
+                                    <div class="col-md-4"><input type="text" class="form-control" id="det_County"></div>
+                                </div>
+                                <hr />
+                                <div class="row mb-2">
+                                    <div class="col-md-3"><label class="form-label mt-2 text-danger">Ülke</label></div>
+                                    <div class="col-md-9">
+                                        <select class="form-select select2-init" id="det_Country"></select>
+                                    </div>
+                                </div>
+                                <div class="row mb-2">
+                                    <div class="col-md-3"><label class="form-label mt-2 text-danger">İl / Bölge</label></div>
+                                    <div class="col-md-9">
+                                        <select class="form-select select2-init" id="det_State">
+                                            <option value="">Önce Ülke Seçiniz...</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="tabOdemeK">
+                <div class="row">
+                    <div class="col-xl-5 col-lg-6 border-end pe-lg-5">
+                        <div class="row align-items-center mb-3"><div class="col-5"><label class="form-label text-warning fw-bold mb-0">Ödeme Koşulları</label></div><div class="col-7"><select class="form-select fw-bold border-warning" id="form_GroupNum"><option value="-1">Seçiniz</option>@foreach(var p in paymentTerms) { <option value="@p.Id">@p.Name</option> }</select></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-5"><label class="form-label mb-0">Gecikme Faizi %</label></div><div class="col-7"><input type="number" step="0.01" class="form-control" id="form_IntrstRate"></div></div>
+                        <hr/>
+                        <div class="row align-items-center mb-2"><div class="col-5"><label class="form-label mb-0">Fiyat Listesi</label></div><div class="col-7"><input type="number" class="form-control" id="form_ListNum" placeholder="Liste No (Örn: 1)"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-5"><label class="form-label mb-0">Toplam İndirim %</label></div><div class="col-7"><input type="number" step="0.01" class="form-control" id="form_Discount"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-5"><label class="form-label mb-0">Kredi Limiti</label></div><div class="col-7"><input type="number" step="0.01" class="form-control text-end text-danger fw-bold" id="form_CreditLine"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-5"><label class="form-label mb-0">Taahhüt Limiti</label></div><div class="col-7"><input type="number" step="0.01" class="form-control text-end text-danger fw-bold" id="form_DebtLine"></div></div>
+                        <div class="row align-items-center mb-4"><div class="col-5"><label class="form-label mb-0">İhtar Koşulu</label></div><div class="col-7"><input type="text" class="form-control" id="form_DunTerm"></div></div>
+                    </div>
+
+                    <div class="col-xl-7 col-lg-6 ps-lg-5 mt-4 mt-lg-0">
+                        <div class="row align-items-center mb-2"><div class="col-xl-3 col-4"><label class="form-label mb-0">Kredi Kartı Türü</label></div><div class="col-xl-9 col-8"><input type="text" class="form-control" id="form_CreditCard"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-xl-3 col-4"><label class="form-label mb-0">Kredi Kartı No</label></div><div class="col-xl-9 col-8"><input type="text" class="form-control" id="form_CrCardNum"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-xl-3 col-4"><label class="form-label mb-0">Geçerlilik Sonu</label></div><div class="col-xl-4 col-6"><input type="date" class="form-control" id="form_CardValid"></div></div>
+                        <div class="row align-items-center mb-2"><div class="col-xl-3 col-4"><label class="form-label mb-0">Tanıtıcı Numarası</label></div><div class="col-xl-9 col-8"><input type="text" class="form-control" id="form_OwnerIdNum"></div></div>
+                        <div class="row align-items-center mb-4"><div class="col-xl-3 col-4"><label class="form-label mb-0">Ortalama Gecikme (Gün)</label></div><div class="col-xl-3 col-4"><input type="number" class="form-control text-center" id="form_AvrageLate"></div></div>
+                        
+                        <div class="mt-5 p-4 border rounded-3 bg-light shadow-sm">
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="form_PartDelivr" value="Y" style="transform: scale(1.2); margin-right: 10px;">
+                                <label class="form-check-label fw-bold">Satış siparişinin kısmi teslimatına izin ver</label>
+                            </div>
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="form_EdrsFromBP" value="Y" style="transform: scale(1.2); margin-right: 10px;">
+                                <label class="form-check-label fw-bold text-muted">Bu muhatabın çekleri ciro edilebilir (Salt Okunur)</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="form_EdrsToBP" value="Y" style="transform: scale(1.2); margin-right: 10px;">
+                                <label class="form-check-label fw-bold text-muted">Bu muhatap ciro edilen çekleri kabul ediyor (Salt Okunur)</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 mt-4">
+                        <div class="p-3 bg-light rounded-3 border">
+                            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                                <span class="fw-bold text-primary"><i class="fas fa-university me-2"></i>Muhatap Banka Hesapları (Kurulum)</span>
+                                <button type="button" class="btn btn-sm btn-primary" onclick="openBankModal()"><i class="fas fa-plus"></i> Banka Ekle</button>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-hover table-sm bg-white" id="tblBanks">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Banka Kodu</th>
+                                            <th>Ülke</th>
+                                            <th>Hesap No</th>
+                                            <th>Banka Hesap Adı</th>
+                                            <th>Şube</th>
+                                            <th>IBAN</th>
+                                            <th>BIC/SWIFT</th>
+                                            <th class="text-center">İşlem</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="listBanks">
+                                        </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="tabMuhasebe">
+                <div class="row">
+                    <div class="col-xl-7 col-lg-9 border-end pe-lg-5">
+                        <div class="row align-items-center mb-4 p-3 bg-light rounded-3 border">
+                            <div class="col-xl-3 col-4"><label class="form-label fw-bold mb-0 text-primary">Konsolidasyon Muhatabı</label></div>
+                            <div class="col-xl-5 col-4"><input type="text" class="form-control border-primary" id="form_FatherCard" placeholder="Cari Kod"></div>
+                            <div class="col-xl-4 col-4">
+                                <div class="form-check form-check-inline mt-1"><input class="form-check-input" type="radio" name="rdoFather" id="rdoFatherP" value="P" checked><label class="form-check-label" for="rdoFatherP">Ödeme</label></div>
+                                <div class="form-check form-check-inline mt-1"><input class="form-check-input" type="radio" name="rdoFather" id="rdoFatherD" value="D"><label class="form-check-label" for="rdoFatherD">Teslimat</label></div>
+                            </div>
+                        </div>
+
+                        <div class="row align-items-center mb-3">
+                            <div class="col-xl-3 col-4"><label class="form-label fw-bold mb-0 text-success">Mutabakat Hesabı</label></div>
+                            <div class="col-xl-7 col-6">
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light"><i class="fas fa-book"></i></span>
+                                    <select class="form-select fw-bold border-success select2-init" id="form_DebPayAcct">
+                                        <option value="">Seçiniz...</option>
+                                        @foreach(var act in controlAccounts) { 
+                                            <option value="@act.Code">@act.Name</option> 
+                                        }
+                                    </select>
+                                    <button class="btn btn-success" type="button" id="btnYeniMutabakat"
+                                            title="Üst hesabı seç, sıradaki kırılımı otomatik açayım">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row align-items-center mb-2"><div class="col-xl-3 col-4"><label class="form-label mb-0">Peşinat Mahsuplaştırma Hsb.</label></div><div class="col-xl-5 col-6"><input type="text" class="form-control" id="form_DpmClear"></div></div>
+                        <div class="row align-items-center mb-5"><div class="col-xl-3 col-4"><label class="form-label mb-0">Peşinat Ara Hesabı</label></div><div class="col-xl-5 col-6"><input type="text" class="form-control" id="form_DpmIntAct"></div></div>
+
+                        <hr/>
+                        <div class="form-check form-switch mb-3"><input class="form-check-input text-danger" type="checkbox" id="form_BlockDunn" value="Y" style="transform: scale(1.2); margin-right: 10px;"><label class="form-check-label fw-bold text-danger">İhtar Mektuplarını Bloke Et</label></div>
+                        <div class="row align-items-center mb-2"><div class="col-xl-3 col-4"><label class="form-label mb-0">İhtar Düzeyi</label></div><div class="col-xl-3 col-4"><input type="number" class="form-control text-center" id="form_DunnLevel"></div></div>
+                        <div class="row align-items-center mb-4"><div class="col-xl-3 col-4"><label class="form-label mb-0">İhtar Tarihi</label></div><div class="col-xl-3 col-4"><input type="date" class="form-control" id="form_DunnDate"></div></div>
+                        <div class="row align-items-center mb-3 mt-4"><div class="col-xl-3 col-4"><label class="form-label mb-0">Planlama Grubu</label></div><div class="col-xl-5 col-6"><input type="text" class="form-control" id="form_PlngGroup"></div></div>
+                        <div class="form-check"><input class="form-check-input" type="checkbox" id="form_Affiliate" value="Y"><label class="form-check-label fw-bold text-muted">Bağlı Firma (Affiliate)</label></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="mutabakatModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-light">
+        <h5 class="modal-title fw-bold"><i class="fas fa-book text-success me-2"></i>Yeni Mutabakat Hesabı</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted mb-3">
+          Üst hesabı seçin; sıradaki kırılım otomatik hesaplanır, hesap SAP'de
+          <strong>mutabakat hesabı</strong> olarak işaretlenip forma getirilir.
+        </p>
+        <label class="form-label fw-bold mb-1">Üst Hesap</label>
+        <select id="mhUst" class="form-control mb-3" style="width:100%"></select>
+
+        <label class="form-label fw-bold mb-1">Hesap Adı</label>
+        <input type="text" id="mhAd" class="form-control mb-3" maxlength="100" placeholder="Cari adı">
+
+        <div class="alert alert-success py-2 mb-0 d-none" id="mhOnizleme">
+          Açılacak hesap: <strong id="mhKod"></strong>
+        </div>
+      </div>
+      <div class="modal-footer bg-light border-top-0">
+        <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">İptal</button>
+        <button type="button" class="btn btn-success px-4 fw-bold" id="btnMutabakatOlustur">
+          <i class="fas fa-check me-1"></i>Oluştur
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="prefixModal" tabindex="-1" aria-labelledby="prefixModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-light">
+        <h5 class="modal-title fw-bold" id="prefixModalLabel"><i class="fas fa-magic text-primary me-2"></i>Yeni Cari Kodu Öneki</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted mb-2">Lütfen kullanmak istediğiniz öneki seçin veya klavyeden yeni bir önek yazıp <strong>Enter</strong> tuşuna basın (Örn: M, MA, MO).</p>
+        <div class="alert alert-info py-2 mb-3" style="font-size:12.5px;">
+          Bu adım cariyi <strong>oluşturmaz</strong>; yalnızca sıradaki cari kodunu ayırır.
+          Kayıt, formu doldurduktan sonra <strong>Yeni Olarak Kaydet</strong> düğmesiyle yapılır.
+        </div>
+        <select id="modalPrefixSelect" class="form-control" style="width: 100%;"></select>
+      </div>
+      <div class="modal-footer bg-light border-top-0">
+        <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">İptal</button>
+        <button type="button" class="btn btn-primary px-4 fw-bold" id="btnConfirmPrefix">Devam Et</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="bankModal" tabindex="-1" aria-labelledby="bankModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-light">
+        <h5 class="modal-title fw-bold" id="bankModalLabel"><i class="fas fa-university text-primary me-2"></i>Banka Hesabı Bilgileri</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="bankModalIndex" />
+        
+        <div class="row mb-2">
+            <div class="col-md-3"><label class="form-label mt-2">Ülke</label></div>
+            <div class="col-md-9">
+                <select class="form-select select2-init" id="bank_Country" style="width: 100%;"></select>
+            </div>
+        </div>
+        
+        <div class="row mb-2">
+            <div class="col-md-3"><label class="form-label mt-2 text-primary">Banka Kodu</label></div>
+            <div class="col-md-9">
+                <select class="form-select" id="bank_BankCode" style="width: 100%;">
+                    <option value="">Önce Ülke Seçiniz...</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="row mb-2">
+            <div class="col-md-3"><label class="form-label mt-2">Hesap No</label></div>
+            <div class="col-md-9"><input type="text" class="form-control" id="bank_AccountNo"></div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-md-3"><label class="form-label mt-2">Hesap Adı</label></div>
+            <div class="col-md-9"><input type="text" class="form-control" id="bank_AccountName"></div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-md-3"><label class="form-label mt-2">Şube</label></div>
+            <div class="col-md-9"><input type="text" class="form-control" id="bank_Branch"></div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-md-3"><label class="form-label mt-2">IBAN</label></div>
+            <div class="col-md-9"><input type="text" class="form-control fw-bold border-success" id="bank_IBAN"></div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-md-3"><label class="form-label mt-2">BIC/SWIFT</label></div>
+            <div class="col-md-9"><input type="text" class="form-control" id="bank_BICSwiftCode"></div>
+        </div>
+      </div>
+      <div class="modal-footer bg-light border-top-0">
+        <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">İptal</button>
+        <button type="button" class="btn btn-primary px-4 fw-bold" id="btnSaveBank">Listeye Ekle / Güncelle</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    
+    <script>
+        let isNewMode = false;
+        let currentAddresses = [];
+        let addressesModified = false;
+        let currentBanks = [];
+        
+        window.addNewAddress = function(type) {
+            let addrName = prompt("Yeni adres için benzersiz bir ad girin (Örn: Merkez, Depo):");
+            if(addrName) {
+                addressesModified = true;
+                currentAddresses.push({
+                    lineNum: null, 
+                    addressName: addrName, 
+                    addressType: type, 
+                    street: '', 
+                    block: '', 
+                    zipCode: '', 
+                    city: '', 
+                    county: '', 
+                    country: 'TR', 
+                    state: ''
+                });
+                renderAddressLists();
+                $(`.list-group-item-action[data-idx="${currentAddresses.length - 1}"]`).click();
+            }
+        };
+
+        function renderAddressLists() {
+            $('#listFatura, #listSevkiyat').empty();
+            currentAddresses.forEach((a, index) => {
+                let icon = a.addressType === 'B' ? 'fa-file-invoice' : 'fa-truck';
+                let li = `<li class="list-group-item list-group-item-action cursor-pointer" data-idx="${index}">
+                            <i class="fas ${icon} me-2 opacity-50"></i>${a.addressName}
+                          </li>`;
+                if(a.addressType === 'B') $('#listFatura').append(li);
+                else $('#listSevkiyat').append(li);
+            });
+        }
+
+        function syncCurrentAddressForm() {
+            let idx = $('#det_AddrIndex').val();
+            if ($('#addressFormCard').is(':visible') && idx !== "") {
+                addressesModified = true;
+                currentAddresses[idx].addressName = $('#det_AddrName').val();
+                currentAddresses[idx].street = $('#det_Street').val();
+                currentAddresses[idx].block = $('#det_Block').val();
+                currentAddresses[idx].zipCode = $('#det_Zip').val();
+                currentAddresses[idx].county = $('#det_County').val();
+                currentAddresses[idx].country = $('#det_Country').val();
+                currentAddresses[idx].state = $('#det_State').val(); 
+                currentAddresses[idx].city = $('#det_State option:selected').text();
+                return true;
+            }
+            return false;
+        }
+
+        window.openBankModal = function(idx = "") {
+            $('#bankModalIndex').val(idx);
+            
+            if(idx === "") {
+                $('#bank_AccountNo, #bank_AccountName, #bank_Branch, #bank_IBAN, #bank_BICSwiftCode').val('');
+                $('#bank_BankCode').data('target-val', ''); // Hedef bankayı temizle
+                $('#bank_Country').val('TR').trigger('change'); 
+            } else {
+                let b = currentBanks[idx];
+                $('#bank_AccountNo').val(b.accountNo);
+                $('#bank_AccountName').val(b.accountName);
+                $('#bank_Branch').val(b.branch);
+                $('#bank_IBAN').val(b.iban);
+                $('#bank_BICSwiftCode').val(b.bicSwiftCode);
+                
+                // Seçili banka kodunu değişkende tut, AJAX bitince seçecek
+                $('#bank_BankCode').data('target-val', b.bankCode);
+                $('#bank_Country').val(b.country).trigger('change'); 
+            }
+            $('#bankModal').modal('show');
+        }
+
+        $('#btnSaveBank').on('click', function() {
+            let idx = $('#bankModalIndex').val();
+            let b = {
+                bankCode: $('#bank_BankCode').val(),
+                country: $('#bank_Country').val(),
+                accountNo: $('#bank_AccountNo').val(),
+                accountName: $('#bank_AccountName').val(),
+                branch: $('#bank_Branch').val(),
+                iban: $('#bank_IBAN').val(),
+                bicSwiftCode: $('#bank_BICSwiftCode').val()
+            };
+
+            if (!b.bankCode) { toastr.warning("Banka kodu seçmelisiniz!"); return; }
+
+            if(idx === "") { currentBanks.push(b); } 
+            else { currentBanks[idx] = b; }
+
+            renderBankList();
+            $('#bankModal').modal('hide');
+        });
+
+        function renderBankList() {
+            $('#listBanks').empty();
+            currentBanks.forEach((b, i) => {
+                $('#listBanks').append(`
+                    <tr>
+                        <td>${b.bankCode}</td>
+                        <td>${b.country}</td>
+                        <td>${b.accountNo}</td>
+                        <td>${b.accountName}</td>
+                        <td>${b.branch}</td>
+                        <td class="fw-bold">${b.iban}</td>
+                        <td>${b.bicSwiftCode}</td>
+                        <td class="text-center">
+                            <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 me-1" onclick="openBankModal(${i})"><i class="fas fa-edit"></i></button>
+                            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeBank(${i})"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `);
+            });
+        }
+
+        $(document).ready(function() {
+            toastr.options = { "closeButton": true, "progressBar": true, "positionClass": "toast-bottom-right", "timeOut": "4000" };
+            
+            // Tüm select2'ler init ediliyor
+            $('.select2-init').select2({ theme: 'bootstrap-5', width: '100%' });
+            
+            // Banka Kodu Select2 (Modal içinde doğru çalışması için dropdownParent ataması)
+            $('#bank_BankCode').select2({
+                theme: 'bootstrap-5', 
+                width: '100%',
+                dropdownParent: $('#bankModal')
+            });
+
+            $.get('/Rapor97/GetCountries', function(res) {
+                $('#det_Country, #bank_Country').empty().append('<option value="">Seçiniz...</option>');
+                res.forEach(c => { 
+                    let opt = `<option value="${c.code}">${c.name}</option>`;
+                    $('#det_Country').append(opt); 
+                    $('#bank_Country').append(opt);
+                });
+            });
+
+            // Adres Ülke Değişimi
+            $('#det_Country').on('change', function() {
+                const cCode = $(this).val();
+                $('#det_State').empty().append('<option value="">Yükleniyor...</option>');
+                if(cCode) {
+                    $.get('/Rapor97/GetStates?countryCode=' + cCode, function(res) {
+                        $('#det_State').empty().append('<option value="">İl Seçiniz...</option>');
+                        res.forEach(s => { $('#det_State').append(`<option value="${s.code}">${s.name}</option>`); });
+                        let activeIdx = $('#det_AddrIndex').val();
+                        if(activeIdx !== "") {
+                            let savedState = currentAddresses[activeIdx].state;
+                            if(savedState) { $('#det_State').val(savedState).trigger('change.select2'); }
+                        }
+                    });
+                }
+            });
+
+            // YENİ: Banka Modalındaki Ülke Değişimi (İlgili ülkenin bankalarını getirir)
+            $('#bank_Country').on('change', function() {
+                const cCode = $(this).val();
+                $('#bank_BankCode').empty().append('<option value="">Yükleniyor...</option>');
+                
+                if(cCode) {
+                    $.get('/Rapor97/GetBanks?countryCode=' + cCode, function(res) {
+                        $('#bank_BankCode').empty().append('<option value="">Banka Seçiniz...</option>');
+                        
+                        if(Array.isArray(res)) {
+                            res.forEach(b => { 
+                                // SWIFT kodunu option'un data attribute'una koyuyoruz ki seçilince otomatik dolsun
+                                let opt = `<option value="${b.code}" data-swift="${b.swift}">${b.code} - ${b.name}</option>`;
+                                $('#bank_BankCode').append(opt); 
+                            });
+                        } else if(res.error) {
+                            toastr.error("Banka listesi alınamadı: " + res.error);
+                        }
+                        
+                        // Edit modundaysak hedef bankayı seç
+                        let targetVal = $('#bank_BankCode').data('target-val');
+                        if(targetVal) {
+                            $('#bank_BankCode').val(targetVal).trigger('change.select2');
+                            $('#bank_BankCode').data('target-val', ''); // Temizle
+                        }
+                    }).fail(function() {
+                        toastr.error("Banka listesi çekilirken sunucu hatası oluştu.");
+                    });
+                } else {
+                    $('#bank_BankCode').empty().append('<option value="">Önce Ülke Seçiniz...</option>');
+                }
+            });
+
+            // YENİ: Banka Seçildiğinde SWIFT (BIC) kutusunu otomatik doldurma
+            $('#bank_BankCode').on('change', function() {
+                let selectedOption = $(this).find('option:selected');
+                let swift = selectedOption.data('swift');
+                
+                // Eğer bankanın swift kodu varsa ve kutu boşsa otomatik doldur
+                if(swift && $('#bank_BICSwiftCode').val() === '') {
+                    $('#bank_BICSwiftCode').val(swift);
+                }
+            });
+
+            $('#bpTab .nav-link').on('click', function (e) {
+                e.preventDefault(); 
+                $('#bpTab .nav-link').removeClass('active');
+                $(this).addClass('active');
+                var target = $(this).attr('href') || $(this).attr('data-bs-target');
+                $('.tab-content .tab-pane').removeClass('show active');
+                $(target).addClass('show active');
+            });
+
+            function clearForm() {
+                $('input[type="text"]:not(#form_Balance, #form_DNotesBal, #form_OrdersBal, #form_OprCount, #form_CardCode), input[type="number"], input[type="email"], input[type="password"], input[type="date"], textarea').val('');
+                $('#form_Balance, #form_DNotesBal, #form_OrdersBal').val('0,00');
+                $('#form_OprCount').text('0');
+                $('input[type="checkbox"]').prop('checked', false);
+                $('#rdoEtkin').prop('checked', true);
+                $('#rdoFatherP').prop('checked', true);
+                $('#form_DebPayAcct').val('').trigger('change.select2');
+                $('#form_CardCode').prop('readonly', false);
+                currentAddresses = [];
+                currentBanks = []; 
+                addressesModified = false;
+                renderAddressLists();
+                renderBankList();
+                $('#addressFormCard').hide();
+                $('#addressEmptyMsg').show();
+            }
+
+            $('#btnNewBP').on('click', function() {
+                const type = $('#newBpType').val(); 
+                
+                $.get('/Rapor97/GetBPCodePrefixes?cardType=' + type, function(res) {
+                    if (res.success) {
+                        $('#modalPrefixSelect').empty(); 
+                        res.prefixes.forEach(p => { $('#modalPrefixSelect').append(new Option(p, p, false, false)); });
+                        $('#modalPrefixSelect').select2({
+                            theme: 'bootstrap-5', tags: true, dropdownParent: $('#prefixModal'), placeholder: "Seçiniz veya yeni yazınız...", allowClear: true
+                        });
+                        $('#prefixModal').modal('show');
+                    } else { toastr.error("Önek listesi sunucudan alınamadı."); }
+                }).fail(function() { toastr.error("Sunucuya bağlanılamadı."); });
+            });
+
+            // ---- MUTABAKAT HESABI OTOMATIK ACMA (Talep 30) -------------------
+            //
+            // Kullanici ust hesabi seciyor (120.01, 336.01 ...), sistem o ustun
+            // altindaki sıradaki kirilimi Service Layer ile aciyor, mutabakat
+            // hesabi tikini isaretliyor ve kodu bu forma dolduruyor.
+
+            function mhSiradakiKod(ust, sonKod) {
+                if (!sonKod) return ust + '.0001';
+                var i = sonKod.lastIndexOf('.');
+                var kuyruk = i < 0 ? sonKod : sonKod.substring(i + 1);
+                if (!/^\d+$/.test(kuyruk)) return ust + '.0001';
+                var yeni = String(parseInt(kuyruk, 10) + 1);
+                while (yeni.length < kuyruk.length) yeni = '0' + yeni;
+                return ust + '.' + yeni;
+            }
+
+            function mhOnizlemeyiTazele() {
+                var s = $('#mhUst').find('option:selected');
+                var ust = s.val();
+                if (!ust) { $('#mhOnizleme').addClass('d-none'); return; }
+                $('#mhKod').text(mhSiradakiKod(ust, s.data('son') || ''));
+                $('#mhOnizleme').removeClass('d-none');
+            }
+
+            $('#btnYeniMutabakat').on('click', function () {
+                var tip = $('#newBpType').val() || 'C';
+
+                $('#mhAd').val($('#form_CardName').val() || '');
+                $('#mhOnizleme').addClass('d-none');
+                $('#mhUst').empty();
+
+                $.get('/Rapor97/UstHesaplar?cardType=' + tip, function (res) {
+                    if (!res.success) { toastr.error(res.message || 'Üst hesap listesi alınamadı.'); return; }
+                    if (!res.liste || res.liste.length === 0) {
+                        toastr.warning('Bu şirkette uygun üst hesap bulunamadı.'); return;
+                    }
+
+                    res.liste.forEach(function (h) {
+                        var o = new Option(h.kod + ' - ' + h.ad, h.kod, false, false);
+                        $(o).data('son', h.sonKod || '');
+                        $('#mhUst').append(o);
+                    });
+
+                    $('#mhUst').select2({
+                        theme: 'bootstrap-5', dropdownParent: $('#mutabakatModal'),
+                        placeholder: 'Üst hesap seçiniz...'
+                    });
+                    $('#mhUst').off('change.mh').on('change.mh', mhOnizlemeyiTazele);
+
+                    mhOnizlemeyiTazele();
+                    $('#mutabakatModal').modal('show');
+                }).fail(function () { toastr.error('Sunucuya bağlanılamadı.'); });
+            });
+
+            $('#btnMutabakatOlustur').on('click', function () {
+                var ust = $('#mhUst').val();
+                var ad = ($('#mhAd').val() || '').trim();
+
+                if (!ust) { toastr.warning('Lütfen bir üst hesap seçin.'); return; }
+                if (!ad) { toastr.warning('Hesap adı boş olamaz.'); return; }
+
+                var dugme = $(this);
+                dugme.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Açılıyor...');
+
+                $.ajax({
+                    url: '/Rapor97/MutabakatHesabiAc',
+                    type: 'POST', contentType: 'application/json',
+                    data: JSON.stringify({ UstHesap: ust, Ad: ad }),
+                    success: function (res) {
+                        if (!res.success) { toastr.error(res.message || 'Hesap açılamadı.'); return; }
+
+                        // Yeni hesabi listeye ekleyip forma sec
+                        if ($('#form_DebPayAcct').find("option[value='" + res.kod + "']").length === 0) {
+                            $('#form_DebPayAcct').append(new Option(res.etiket, res.kod, false, false));
+                        }
+                        $('#form_DebPayAcct').val(res.kod).trigger('change.select2');
+
+                        $('#mutabakatModal').modal('hide');
+                        toastr.success(res.message, "", { timeOut: 9000 });
+
+                        // Hesap acmak cariyi KAYDETMEZ. Kullanici burada durup
+                        // "kayit tamam" sanmasin diye kaydet dugmesini one cikariyoruz.
+                        var $kaydet = $('#btnUpdateBP');
+                        $kaydet[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        $kaydet.addClass('border border-3 border-warning');
+                        setTimeout(function () { $kaydet.removeClass('border border-3 border-warning'); }, 6000);
+                    },
+                    error: function (x) { toastr.error('Sunucu hatası: ' + (x.responseText || x.statusText)); },
+                    complete: function () {
+                        dugme.prop('disabled', false).html('<i class="fas fa-check me-1"></i>Oluştur');
+                    }
+                });
+            });
+
+            $('#btnConfirmPrefix').on('click', function() {
+                let selectedPrefix = $('#modalPrefixSelect').val();
+                if (selectedPrefix && selectedPrefix.trim() !== "") {
+                    selectedPrefix = selectedPrefix.trim().toUpperCase(); 
+                    const type = $('#newBpType').val();
+                    isNewMode = true;
+                    $('#bpSelect').val(null).trigger('change.select2');
+                    clearForm();
+                    $('#form_CardCode').val("Hesaplanıyor...").prop('readonly', true);
+                    $('#prefixModal').modal('hide'); 
+                    
+                    $.get('/Rapor97/GetNextBPCode?prefix=' + encodeURIComponent(selectedPrefix) + '&cardType=' + type, function(res2) {
+                        if(res2.success) { $('#form_CardCode').val(res2.code); } 
+                        else { toastr.error("Kod hesaplanırken bir hata oluştu!"); $('#form_CardCode').val(""); }
+                    });
+                    
+                    $('#btnUpdateBP').removeClass('btn-primary').addClass('btn-success').html('<i class="fas fa-check-circle me-2"></i>Yeni Olarak Kaydet');
+                    $('#bpTab .nav-link').first().trigger('click');
+                    $('#yeniKayitUyarisi').removeClass('d-none');
+
+                    toastr.info(
+                        "Yeni kayıt moduna geçildi, cari kodu ayrıldı. Cari HENÜZ oluşmadı - " +
+                        "bilgileri doldurup <b>Yeni Olarak Kaydet</b> düğmesine basın.",
+                        "", { timeOut: 10000, enableHtml: true });
+                } else { toastr.warning("Lütfen bir önek seçin veya yazın!"); }
+            });
+
+            $('#bpSelect').on('change', function() {
+                const cardCode = $(this).val();
+                if (!cardCode) return;
+                isNewMode = false;
+                addressesModified = false;
+                $('#form_CardCode').prop('readonly', true);
+                $('#btnUpdateBP').removeClass('btn-success').addClass('btn-primary').html('<i class="fas fa-cloud-upload-alt me-2"></i>SAP\'ye Güncelle');
+                
+                $.get('/Rapor97/GetBPDetails', { cardCode: cardCode }).done(function(res) {
+                    if (res.success) {
+                        const d = res.data;
+                        $('#form_CardCode').val(d.cardCode); $('#form_CardName').val(d.cardName); $('#form_CardFName').val(d.cardFName);
+                        $('#form_GroupCode').val(d.groupCode); $('#form_Currency').val(d.currency); $('#form_LicTradNum').val(d.licTradNum);
+                        $('#form_Balance').val(d.balance.toLocaleString('tr-TR', { minimumFractionDigits: 2 }));
+                        $('#form_DNotesBal').val(d.dNotesBal.toLocaleString('tr-TR', { minimumFractionDigits: 2 }));
+                        $('#form_OrdersBal').val(d.ordersBal.toLocaleString('tr-TR', { minimumFractionDigits: 2 }));
+                        $('#form_OprCount').text(d.oprCount); $('#form_Phone1').val(d.phone1); $('#form_Phone2').val(d.phone2);
+                        $('#form_Cellular').val(d.cellular); $('#form_Fax').val(d.fax); $('#form_Email').val(d.email);
+                        $('#form_IntrntSite').val(d.intrntSite); $('#form_ShipType').val(d.shipType); $('#form_Password').val(d.password);
+                        $('#form_Indicator').val(d.indicator); $('#form_ProjectCod').val(d.projectCod); $('#form_CmpPrivate').val(d.cmpPrivate);
+                        $('#form_AliasName').val(d.aliasName); $('#form_CntctPrsn').val(d.cntctPrsn); $('#form_AddID').val(d.addID);
+                        $('#form_VatIdUnCmp').val(d.vatIdUnCmp); $('#form_Notes').val(d.notes); $('#form_SlpCode').val(d.slpCode);
+                        $('#form_AgentCode').val(d.agentCode); $('#form_ChannlBP').val(d.channlBP); $('#form_DfTcnician').val(d.dfTcnician);
+                        $('#form_Territory').val(d.territory); $('#form_LangCode').val(d.langCode); $('#form_GlblLocNum').val(d.glblLocNum);
+                        
+                        $('#form_BlockComm').prop('checked', d.blockComm === 'Y');
+                        if(d.validFor === 'Y') $('#rdoEtkin').prop('checked', true); else $('#rdoEtkinDegil').prop('checked', true);
+                        $('#form_ValidFrom').val(d.validFrom); $('#form_ValidTo').val(d.validTo);
+                        $('#form_FrozenFrom').val(d.frozenFrom); $('#form_FrozenTo').val(d.frozenTo);
+                        $('#form_GroupNum').val(d.groupNum); $('#form_IntrstRate').val(d.intrstRate); $('#form_ListNum').val(d.listNum);
+                        $('#form_Discount').val(d.discount); $('#form_CreditLine').val(d.creditLine); $('#form_DebtLine').val(d.debtLine);
+                        $('#form_DunTerm').val(d.dunTerm); 
+
+                        currentBanks = d.bpBankAccounts || [];
+                        renderBankList();
+
+                        $('#form_CreditCard').val(d.creditCard); $('#form_CrCardNum').val(d.crCardNum);
+                        $('#form_CardValid').val(d.cardValid); $('#form_OwnerIdNum').val(d.ownerIdNum); $('#form_AvrageLate').val(d.avrageLate);
+                        $('#form_PartDelivr').prop('checked', d.partDelivr === 'Y');
+                        $('#form_FatherCard').val(d.fatherCard); 
+                        if(d.fatherType === 'P') $('#rdoFatherP').prop('checked', true); else $('#rdoFatherD').prop('checked', true);
+                        if(d.debPayAcct) { $('#form_DebPayAcct').val(d.debPayAcct).trigger('change.select2'); } else { $('#form_DebPayAcct').val('').trigger('change.select2'); }
+                        $('#form_DpmClear').val(d.dpmClear); $('#form_DpmIntAct').val(d.dpmIntAct); $('#form_BlockDunn').prop('checked', d.blockDunn === 'Y');
+                        $('#form_DunnLevel').val(d.dunnLevel); $('#form_DunnDate').val(d.dunnDate); $('#form_PlngGroup').val(d.plngGroup);
+                        $('#form_Affiliate').prop('checked', d.affiliate === 'Y');
+                        
+                        currentAddresses = d.addresses || [];
+                        renderAddressLists();
+                        $('#addressFormCard').hide();
+                        $('#addressEmptyMsg').show();
+                    }
+                });
+            });
+
+            $(document).on('click', '.list-group-item-action', function() {
+                syncCurrentAddressForm();
+                $('.list-group-item-action').removeClass('active');
+                $(this).addClass('active');
+                let idx = $(this).data('idx');
+                let a = currentAddresses[idx];
+                $('#addressEmptyMsg').hide();
+                $('#addressFormCard').show();
+                $('#det_AddrIndex').val(idx); $('#det_AddrType').val(a.addressType); $('#det_AddrName').val(a.addressName);
+                $('#det_Street').val(a.street); $('#det_Block').val(a.block); $('#det_Zip').val(a.zipCode); $('#det_County').val(a.county);
+                let c = a.country || 'TR';
+                $('#det_Country').val(c).trigger('change');
+            });
+
+            $('#btnUpdateBP').on('click', function() {
+                if (!$('#form_CardCode').val()) { toastr.warning("Lütfen işlem yapılacak cari kodu giriniz."); return; }
+
+                syncCurrentAddressForm();
+
+                const payload = {
+                    IsNew: isNewMode,
+                    CardType: $('#newBpType').val() || 'C',
+                    AddressesModified: addressesModified,
+                    CardCode: $('#form_CardCode').val(), CardName: $('#form_CardName').val(), CardFName: $('#form_CardFName').val(),
+                    GroupCode: parseInt($('#form_GroupCode').val() || -1), Currency: $('#form_Currency').val(), LicTradNum: $('#form_LicTradNum').val(),
+                    Phone1: $('#form_Phone1').val(), Phone2: $('#form_Phone2').val(), Cellular: $('#form_Cellular').val(),
+                    Fax: $('#form_Fax').val(), Email: $('#form_Email').val(), IntrntSite: $('#form_IntrntSite').val(),
+                    ShipType: parseInt($('#form_ShipType').val() || 0), Password: $('#form_Password').val(), Indicator: $('#form_Indicator').val(),
+                    ProjectCod: $('#form_ProjectCod').val(), CmpPrivate: parseInt($('#form_CmpPrivate').val() || 1), AliasName: $('#form_AliasName').val(),
+                    CntctPrsn: $('#form_CntctPrsn').val(), AddID: $('#form_AddID').val(), VatIdUnCmp: $('#form_VatIdUnCmp').val(), Notes: $('#form_Notes').val(),
+                    SlpCode: parseInt($('#form_SlpCode').val() || -1), AgentCode: $('#form_AgentCode').val(), ChannlBP: $('#form_ChannlBP').val(),
+                    DfTcnician: parseInt($('#form_DfTcnician').val() || 0), Territory: parseInt($('#form_Territory').val() || 0), LangCode: parseInt($('#form_LangCode').val() || 0),
+                    GlblLocNum: $('#form_GlblLocNum').val(), BlockComm: $('#form_BlockComm').is(':checked') ? 'Y' : 'N',
+                    ValidFor: $('#rdoEtkin').is(':checked') ? 'Y' : 'N', ValidFrom: $('#form_ValidFrom').val(), ValidTo: $('#form_ValidTo').val(),
+                    FrozenFor: $('#rdoEtkinDegil').is(':checked') ? 'Y' : 'N', FrozenFrom: $('#form_FrozenFrom').val(), FrozenTo: $('#form_FrozenTo').val(),
+                    GroupNum: parseInt($('#form_GroupNum').val() || -1), IntrstRate: parseFloat($('#form_IntrstRate').val() || 0), ListNum: parseInt($('#form_ListNum').val() || 0),
+                    Discount: parseFloat($('#form_Discount').val() || 0), CreditLine: parseFloat($('#form_CreditLine').val() || 0), DebtLine: parseFloat($('#form_DebtLine').val() || 0),
+                    DunTerm: $('#form_DunTerm').val(), BPBankAccounts: currentBanks, CreditCard: $('#form_CreditCard').val(), CrCardNum: $('#form_CrCardNum').val(),
+                    CardValid: $('#form_CardValid').val(), OwnerIdNum: $('#form_OwnerIdNum').val(), AvrageLate: parseInt($('#form_AvrageLate').val() || 0),
+                    PartDelivr: $('#form_PartDelivr').is(':checked') ? 'Y' : 'N', FatherCard: $('#form_FatherCard').val(), FatherType: $('#rdoFatherP').is(':checked') ? 'P' : 'D',
+                    DebPayAcct: $('#form_DebPayAcct').val(), DpmClear: $('#form_DpmClear').val(), DpmIntAct: $('#form_DpmIntAct').val(),
+                    BlockDunn: $('#form_BlockDunn').is(':checked') ? 'Y' : 'N', DunnLevel: parseInt($('#form_DunnLevel').val() || 0), DunnDate: $('#form_DunnDate').val(),
+                    PlngGroup: $('#form_PlngGroup').val(), Affiliate: $('#form_Affiliate').is(':checked') ? 'Y' : 'N', Addresses: currentAddresses
+                };
+
+                const $btn = $(this);
+                const originalText = $btn.html();
+                $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>İşlem Yapılıyor...');
+
+                $.ajax({
+                    url: '/Rapor97/UpdateBP',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(payload),
+                    success: function(res) {
+                        if(res.success) {
+                            $('#yeniKayitUyarisi').addClass('d-none');
+                            toastr.success(res.message);
+                            if(isNewMode) { setTimeout(() => location.reload(), 1500); }
+                            else { addressesModified = false; renderAddressLists(); }
+                        } else { toastr.error("SAP Kayıt Hatası: " + res.message, "", {timeOut: 6000}); }
+                    },
+                    error: function(xhr) {
+                        // Sunucudan gelen govdeyi de goster: sessiz basarisizlik olmasin.
+                        var ayrinti = (xhr.responseText || '').substring(0, 500) || xhr.statusText;
+                        toastr.error("Sunucu Hatası (" + xhr.status + "): " + ayrinti, "", { timeOut: 12000 });
+                        console.error('UpdateBP hatası', xhr.status, xhr.responseText);
+                    },
+                    complete: function() { $btn.prop('disabled', false).html(originalText); }
+                });
+            });
+        });
+    </script>
+}

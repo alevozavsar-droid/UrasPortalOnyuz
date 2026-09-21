@@ -1,0 +1,513 @@
+﻿@model dynamic
+@{
+    ViewData["Title"] = "Kalem Ana Verileri Yönetimi";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var items = ViewBag.Items as List<WebApplication3.Controllers.Rapor100Controller.LookupModel> ?? new List<WebApplication3.Controllers.Rapor100Controller.LookupModel>();
+    var itemGroups = ViewBag.ItemGroups as List<WebApplication3.Controllers.Rapor100Controller.LookupModel> ?? new List<WebApplication3.Controllers.Rapor100Controller.LookupModel>();
+
+    // Aktif Veritabanını (Şirketi) güvenli bir şekilde URL veya Cookie'den alıyoruz
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"];
+    }
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+    
+    <style>
+        body { background-color: var(--bg-main, #f4f7f6); font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 0.85rem; color: #2c3e50; }
+        .bp-card { background: var(--bg-card, #ffffff); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); margin-bottom: 25px; border: 1px solid var(--border-color, #e9ecef); }
+        .header-bg { background: linear-gradient(90deg, #f39c12, #e67e22); height: 6px; width: 100%; border-radius: 12px 12px 0 0;}
+        .form-label { font-weight: 600; color: var(--text-secondary, #5c6a77); margin-bottom: 4px; font-size: 0.8rem; }
+        .form-control, .form-select { border-radius: 6px; padding: 6px 12px; font-size: 0.85rem; border: 1px solid var(--border-color, #cfd9e0); background-color: var(--bg-subtle, #fbfcfd); }
+        .form-control:focus, .form-select:focus { border-color: #f39c12; box-shadow: 0 0 0 3px rgba(243, 156, 18, 0.15); background-color: var(--bg-card, #fff); }
+        .nav-tabs { border-bottom: 2px solid var(--border-color, #edf2f7); background: var(--bg-card, #fff); }
+        .nav-tabs .nav-link { color: #7f8c8d; font-weight: 600; padding: 10px 15px; border: none; border-bottom: 3px solid transparent; cursor: pointer;}
+        .nav-tabs .nav-link:hover, .nav-tabs .nav-link.active { color: #f39c12; border-bottom: 3px solid #f39c12; background: transparent; }
+        .udf-panel { background: var(--bg-subtle, #fafbfc); border-left: 1px solid var(--border-color, #edf2f7); padding: 15px; height: 100%; overflow-y: auto; max-height: 800px; }
+        .udf-panel label { font-size: 0.75rem; margin-bottom: 2px; }
+        .udf-panel .form-control-sm, .udf-panel .form-select-sm { padding: 4px 8px; font-size: 0.8rem; }
+    </style>
+}
+
+<div class="container-fluid px-4 py-4">
+    @if (!string.IsNullOrEmpty((string)ViewBag.AlanMesaji))
+    {
+        <div class="alert alert-info py-2 px-3 mb-2" style="font-size:13px;"><i class="fas fa-wand-magic-sparkles me-1"></i>@ViewBag.AlanMesaji</div>
+    }
+    @Html.AntiForgeryToken()
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="w-50 shadow-sm rounded-3">
+            <select id="itemSelect" class="form-select select2-init">
+                <option value="">-- Stok Kodu Ara ve Seç --</option>
+                @foreach (var i in items) { <option value="@i.Code">@i.Code - @i.Name</option> }
+            </select>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <button class="btn btn-success fw-bold px-4 rounded-pill shadow-sm" id="btnNew"><i class="fas fa-plus me-2"></i>Yeni Kalem</button>
+            <button class="btn btn-primary fw-bold px-4 rounded-pill shadow-sm" id="btnUpdate"><i class="fas fa-cloud-upload-alt me-2"></i>SAP'ye Gönder / Güncelle</button>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-xl-8 col-lg-7">
+            <div class="bp-card">
+                <div class="header-bg"></div>
+                <div class="p-3 bg-light border-bottom">
+                    <div class="row align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label text-primary">Kalem Numarası</label>
+                            <input type="text" class="form-control fw-bold" id="form_ItemCode" placeholder="Oto. veya Manuel">
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label">Tanım</label>
+                            <input type="text" class="form-control fw-bold" id="form_ItemName">
+                        </div>
+                        <div class="col-md-4">
+                            <div class="d-flex gap-3 mt-3">
+                                <div class="form-check"><input class="form-check-input" type="checkbox" id="form_InvntItem" checked><label class="form-check-label">Stok</label></div>
+                                <div class="form-check"><input class="form-check-input" type="checkbox" id="form_SellItem" checked><label class="form-check-label">Satış</label></div>
+                                <div class="form-check"><input class="form-check-input" type="checkbox" id="form_PrchseItem" checked><label class="form-check-label">Satınalma</label></div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mt-2">
+                            <label class="form-label">Yabancı Ad</label>
+                            <input type="text" class="form-control" id="form_FrgnName">
+                        </div>
+                        <div class="col-md-5 mt-2">
+                            <label class="form-label">Kalem Grubu</label>
+                            <select class="form-select select2-init" id="form_ItmsGrpCod">
+                                @foreach(var g in itemGroups) { <option value="@g.Id">@g.Name</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-4 mt-2">
+                            <label class="form-label">Barkod</label>
+                            <input type="text" class="form-control" id="form_CodeBars">
+                        </div>
+                    </div>
+                </div>
+
+                <ul class="nav nav-tabs" id="itemTab" role="tablist">
+                    <li class="nav-item"><a class="nav-link active" data-bs-target="#tabGenel">Genel</a></li>
+                    <li class="nav-item"><a class="nav-link" data-bs-target="#tabStok">Stok Verileri</a></li>
+                </ul>
+
+                <div class="tab-content p-4">
+                    <div class="tab-pane fade show active" id="tabGenel">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" id="form_ValidFor" checked><label class="form-check-label text-success fw-bold">Etkin</label></div>
+                                <div class="row align-items-center mb-2"><div class="col-4"><label class="form-label">Üretici</label></div><div class="col-8"><select class="form-select"><option>- Üretici Yok -</option></select></div></div>
+                                <div class="row align-items-center mb-2"><div class="col-4"><label class="form-label">Ek tanımlayıcı</label></div><div class="col-8"><input type="text" class="form-control"></div></div>
+                                <div class="row align-items-center mb-2"><div class="col-4"><label class="form-label">Sevkiyat türü</label></div><div class="col-8"><select class="form-select"><option>CIF</option></select></div></div>
+                                <div class="row align-items-center mb-2"><div class="col-4"><label class="form-label">Kalem yönetme ölçütü</label></div><div class="col-8"><select class="form-select"><option value="N">Hiçbiri</option><option value="S">Seri Numaraları</option><option value="B">Partiler</option></select></div></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="tabStok">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <label class="form-label text-success">Stokta (OnHand)</label>
+                                <input type="text" class="form-control fw-bold" id="form_OnHand" readonly value="0.00">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label text-danger">Taahhüt Edilen (IsCommited)</label>
+                                <input type="text" class="form-control fw-bold" id="form_IsCommited" readonly value="0.00">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label text-primary">Sipariş Edilen (OnOrder)</label>
+                                <input type="text" class="form-control fw-bold" id="form_OnOrder" readonly value="0.00">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-4 col-lg-5">
+            <div class="bp-card udf-panel shadow-sm">
+                <h6 class="text-primary fw-bold border-bottom pb-2 mb-3"><i class="fas fa-list-alt me-2"></i>Kullanıcı Tanımlı Alanlar (UDF)</h6>
+                
+                <div class="row g-2">
+                    <div class="col-6"><label class="form-label">İhracat Gtip No</label><input type="text" class="form-control form-control-sm" id="udf_GTIP"></div>
+                    <div class="col-6"><label class="form-label">İhracat Menşei</label><input type="text" class="form-control form-control-sm" id="udf_MENSEI"></div>
+                    <div class="col-12"><label class="form-label">İhracat Gtip Tanımı</label><input type="text" class="form-control form-control-sm" id="udf_GTIPNAME"></div>
+                    <div class="col-6"><label class="form-label">CPA Version</label><input type="text" class="form-control form-control-sm" id="udf_CPALISTVERSION"></div>
+                    <div class="col-6"><label class="form-label">GTIP Version</label><input type="text" class="form-control form-control-sm" id="udf_GTIPLISTVERSION"></div>
+                    <div class="col-6"><label class="form-label">CPA Kodu</label><input type="text" class="form-control form-control-sm" id="udf_CPA"></div>
+                    <div class="col-6"><label class="form-label">UBB Kodu</label><input type="text" class="form-control form-control-sm" id="udf_UBBCODE"></div>
+                    <div class="col-6"><label class="form-label">İkinci Birim Adı</label><input type="text" class="form-control form-control-sm" id="udf_IkOB"></div>
+                    <div class="col-6"><label class="form-label">İkinci Birim Miktar</label><input type="text" class="form-control form-control-sm" id="udf_IkOBm"></div>
+                    <div class="col-6"><label class="form-label">Origin</label><input type="text" class="form-control form-control-sm" id="udf_ORIGIN"></div>
+                    <div class="col-6"><label class="form-label">Hazır Malzeme Grubu</label><input type="text" class="form-control form-control-sm" id="udf_HZRMLZM"></div>
+                    <div class="col-6"><label class="form-label">Alt Grup 1</label><input type="text" class="form-control form-control-sm" id="udf_ALTGRUP1"></div>
+                    <div class="col-6"><label class="form-label">Alt Grup 2</label><input type="text" class="form-control form-control-sm" id="udf_ALTGRUP2"></div>
+                    <div class="col-6"><label class="form-label">Alt Grup 3</label><input type="text" class="form-control form-control-sm" id="udf_ALTGRUP3"></div>
+                    <div class="col-6"><label class="form-label">Alt Grup 4</label><input type="text" class="form-control form-control-sm" id="udf_ALTGRUP4"></div>
+                    <div class="col-6"><label class="form-label">Alt Grup 5</label><input type="text" class="form-control form-control-sm" id="udf_ALTGRUP5"></div>
+                    <div class="col-6"><label class="form-label">Değişken Durumu</label><input type="text" class="form-control form-control-sm" id="udf_DEGISKEN"></div>
+                    <div class="col-6"><label class="form-label">Amortisman Baş. Tar.</label><input type="text" class="form-control form-control-sm" id="udf_AT"></div>
+                    <div class="col-6"><label class="form-label">Faydalı Ömür (Yıl)</label><input type="text" class="form-control form-control-sm" id="udf_FAYDA"></div>
+                    <div class="col-6"><label class="form-label">SB Ky. Mlyt Değeri</label><input type="text" class="form-control form-control-sm" id="udf_SK"></div>
+                    <div class="col-6"><label class="form-label">Dönem Aktif Bedeli</label><input type="text" class="form-control form-control-sm" id="udf_DAB"></div>
+                    <div class="col-6"><label class="form-label">Dn. Başı Defter Değ.</label><input type="text" class="form-control form-control-sm" id="udf_DBD"></div>
+                    <div class="col-6"><label class="form-label">Kapalı SK Birikmiş Am.</label><input type="text" class="form-control form-control-sm" id="udf_KAPALI"></div>
+                    <div class="col-6"><label class="form-label">Dn. Amortisman Tutarı</label><input type="text" class="form-control form-control-sm" id="udf_DAT"></div>
+                    <div class="col-6"><label class="form-label">Yeni Birikmiş Amort.</label><input type="text" class="form-control form-control-sm" id="udf_YENI"></div>
+                    <div class="col-6"><label class="form-label">Dönem Sonu Defter Değ.</label><input type="text" class="form-control form-control-sm" id="udf_DSD"></div>
+                    <div class="col-6"><label class="form-label">31.12.2023 Değerlenmiş</label><input type="text" class="form-control form-control-sm" id="udf_3112"></div>
+                    <div class="col-6"><label class="form-label">257-Değerlenmiş</label><input type="text" class="form-control form-control-sm" id="udf_257"></div>
+                    <div class="col-6"><label class="form-label">06.2024 DEĞERLENMİŞ</label><input type="text" class="form-control form-control-sm" id="udf_062024"></div>
+                    <div class="col-6"><label class="form-label">BİRİKMİŞ AMORTİSMAN 257</label><input type="text" class="form-control form-control-sm" id="udf_BIRIK257"></div>
+                    <div class="col-6"><label class="form-label">İşlem Tipi</label><input type="text" class="form-control form-control-sm" id="udf_AKTAR"></div>
+                    <div class="col-6"><label class="form-label">CAS No</label><input type="text" class="form-control form-control-sm" id="udf_CASNO"></div>
+                    <div class="col-6"><label class="form-label">KKDİK Kayıt</label><input type="text" class="form-control form-control-sm" id="udf_KKDIK"></div>
+                    <div class="col-6"><label class="form-label">Reach Kayıt</label><input type="text" class="form-control form-control-sm" id="udf_REACH"></div>
+                    <div class="col-6"><label class="form-label">OECO-TEX Belgesi</label><input type="text" class="form-control form-control-sm" id="udf_OECO"></div>
+                    <div class="col-6"><label class="form-label">ZDHC Belgesi</label><input type="text" class="form-control form-control-sm" id="udf_ZDHC"></div>
+                    <div class="col-6"><label class="form-label">ADR Durumu</label><input type="text" class="form-control form-control-sm" id="udf_ADR"></div>
+                    <div class="col-6"><label class="form-label">Kritik Stok</label><input type="text" class="form-control form-control-sm" id="udf_KRTSTK"></div>
+                    <div class="col-6"><label class="form-label">Boyut Açıklaması</label><input type="text" class="form-control form-control-sm" id="udf_BOYUTA"></div>
+                    <div class="col-6"><label class="form-label">Birim Cinsi Çeviri</label><input type="text" class="form-control form-control-sm" id="udf_BCORAN"></div>
+                    <div class="col-12"><label class="form-label">Madde Vergi Grubu Açıklama</label><input type="text" class="form-control form-control-sm" id="udf_MVGACIKLAMA"></div>
+                    <div class="col-6"><label class="form-label">Üretimde Kullanılacak</label><input type="text" class="form-control form-control-sm" id="udf_URETIMYN"></div>
+                    <div class="col-6"><label class="form-label">Kullanım Dışı</label><input type="text" class="form-control form-control-sm" id="udf_KULLANIMD"></div>
+                    <div class="col-12"><label class="form-label">Karlılık Raporu Açıklama</label><input type="text" class="form-control form-control-sm" id="udf_KARLILIKRA"></div>
+                    <div class="col-6"><label class="form-label">Lot Kodu Açıklama</label><input type="text" class="form-control form-control-sm" id="udf_LKACIKLAMA"></div>
+                    <div class="col-6"><label class="form-label">Segment. Kodu Açıklama</label><input type="text" class="form-control form-control-sm" id="udf_SKACIKLAMA"></div>
+                    <div class="col-12"><label class="form-label">Dijital Reçete Grb. Açıklama</label><input type="text" class="form-control form-control-sm" id="udf_DRGACIKLAMA"></div>
+                    <div class="col-12"><label class="form-label">Kaps. Sarf Grb. Açıklama</label><input type="text" class="form-control form-control-sm" id="udf_KSKGACIKLAMA"></div>
+                    <div class="col-6"><label class="form-label">Özellik 1 - Açıklama</label><input type="text" class="form-control form-control-sm" id="udf_OZELLIK1A"></div>
+                    <div class="col-6"><label class="form-label">Malzeme Denge Raporu Aç.</label><input type="text" class="form-control form-control-sm" id="udf_MDRACIKLAMA"></div>
+                    <div class="col-6"><label class="form-label">Özellik 2 - Açıklama</label><input type="text" class="form-control form-control-sm" id="udf_OZELLIK2A"></div>
+                    <div class="col-6"><label class="form-label">Segmentasyon Kodu</label><input type="text" class="form-control form-control-sm" id="udf_SEGMENTKOD"></div>
+                    <div class="col-12"><label class="form-label">Fotoğraf URL</label><input type="text" class="form-control form-control-sm" id="udf_FURL"></div>
+                    <div class="col-6"><label class="form-label">Özellik 1</label><input type="text" class="form-control form-control-sm" id="udf_OZELLIK1"></div>
+                    <div class="col-6"><label class="form-label">Malzeme Denge Raporu</label><input type="text" class="form-control form-control-sm" id="udf_MDGRAPORU"></div>
+                    <div class="col-6"><label class="form-label">Özellik 2</label><input type="text" class="form-control form-control-sm" id="udf_OZELLIK2"></div>
+                    <div class="col-6"><label class="form-label">Madde Vergi Grubu</label><input type="text" class="form-control form-control-sm" id="udf_MVERGIGRUBU"></div>
+                    <div class="col-6"><label class="form-label">Karlılık Raporu</label><input type="text" class="form-control form-control-sm" id="udf_KARLILIKR"></div>
+                    <div class="col-6"><label class="form-label">Lot Kodu</label><input type="text" class="form-control form-control-sm" id="udf_LOTK"></div>
+                    <div class="col-6"><label class="form-label">Dijital Reçete Grubu</label><input type="text" class="form-control form-control-sm" id="udf_DRGRUBU"></div>
+                    <div class="col-6"><label class="form-label">Kapasite Sarf Grup Kod.</label><input type="text" class="form-control form-control-sm" id="udf_KSGKODU"></div>
+                    <div class="col-12"><label class="form-label">Ürün Tipi Açıklama</label><input type="text" class="form-control form-control-sm" id="udf_UTACIKLAMA"></div>
+                    <div class="col-6"><label class="form-label">Mağazada Satışa Açık</label><input type="text" class="form-control form-control-sm" id="udf_MAGAZA"></div>
+                    <div class="col-6"><label class="form-label">İnternette Satışa Açık</label><input type="text" class="form-control form-control-sm" id="udf_INTERNET"></div>
+                    <div class="col-6"><label class="form-label">Üretimde Kul.</label><input type="text" class="form-control form-control-sm" id="udf_URETIM"></div>
+                    <div class="col-6"><label class="form-label">Özellik 7 Açıklama</label><input type="text" class="form-control form-control-sm" id="udf_OZELLIK7A"></div>
+                    <div class="col-6"><label class="form-label">Ürün Denge Raporu Açık.</label><input type="text" class="form-control form-control-sm" id="udf_UDRACIKLAMA"></div>
+                    <div class="col-6"><label class="form-label">Üretim Tarihi Açık.</label><input type="text" class="form-control form-control-sm" id="udf_UTARACIKLAMA"></div>
+                    <div class="col-6"><label class="form-label">SKT Açıklama</label><input type="text" class="form-control form-control-sm" id="udf_SKTACIKLAMA"></div>
+                    <div class="col-6"><label class="form-label">Ürün Grubu Açıklama</label><input type="text" class="form-control form-control-sm" id="udf_UGACIKLAMA"></div>
+                    <div class="col-6"><label class="form-label">Kapasite Raporu Açıklama</label><input type="text" class="form-control form-control-sm" id="udf_KRACIKLAMA"></div>
+                    <div class="col-6"><label class="form-label">Özellik 3 Açıklama</label><input type="text" class="form-control form-control-sm" id="udf_OZELLIK3A"></div>
+                    <div class="col-6"><label class="form-label">Ürün Tipi</label><input type="text" class="form-control form-control-sm" id="udf_URUNTIP"></div>
+                    <div class="col-6"><label class="form-label">Özellik 3</label><input type="text" class="form-control form-control-sm" id="udf_OZELLIK3"></div>
+                    <div class="col-6"><label class="form-label">Kapasite Raporu</label><input type="text" class="form-control form-control-sm" id="udf_KAPASITER"></div>
+                    <div class="col-6"><label class="form-label">Özellik 7</label><input type="text" class="form-control form-control-sm" id="udf_OZELLIK7"></div>
+                    <div class="col-6"><label class="form-label">Ürün Denge Raporu</label><input type="text" class="form-control form-control-sm" id="udf_UDRAPOR"></div>
+                    <div class="col-12"><label class="form-label">Madde Muhasebe Hsp. Grubu Aç.</label><input type="text" class="form-control form-control-sm" id="udf_MMHESAPG"></div>
+                    <div class="col-6"><label class="form-label">Madde Vergi Grubu</label><input type="text" class="form-control form-control-sm" id="udf_MVG"></div>
+                    <div class="col-6"><label class="form-label">Ürün Grubu</label><input type="text" class="form-control form-control-sm" id="udf_URUNGRUP"></div>
+                    <div class="col-6"><label class="form-label">Ana Kategori</label><input type="text" class="form-control form-control-sm" id="udf_ANAKTGR"></div>
+                    <div class="col-6"><label class="form-label">Marka</label><input type="text" class="form-control form-control-sm" id="udf_MARKA"></div>
+                    <div class="col-6"><label class="form-label">İhracat Kabın Cinsi</label><input type="text" class="form-control form-control-sm" id="udf_PACKAGINGTYPECODE"></div>
+                    <div class="col-6"><label class="form-label">Yerlilik Oranı</label><input type="text" class="form-control form-control-sm" id="udf_YERLILIK"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    
+    <script>
+        let isNewMode = false;
+
+        $(document).ready(function() {
+            toastr.options = { "closeButton": true, "positionClass": "toast-bottom-right" };
+            $('.select2-init').select2({ theme: 'bootstrap-5', width: '100%' });
+
+            // Razor üzerinden aldığımız aktif db parametresi ve Anti-Forgery token
+            const dbParam = '@currentDb';
+            const antiForgeryToken = $('input[name="__RequestVerificationToken"]').val();
+
+            // TAB GEÇİŞ TETİKLEYİCİ
+            $('#itemTab .nav-link').on('click', function (e) {
+                e.preventDefault(); 
+                $('#itemTab .nav-link').removeClass('active');
+                $(this).addClass('active');
+                var target = $(this).attr('data-bs-target');
+                $('.tab-content .tab-pane').removeClass('show active');
+                $(target).addClass('show active');
+            });
+
+            function clearForm() {
+                $('input[type="text"]').val('');
+                $('input[type="checkbox"]').prop('checked', false);
+                $('#form_InvntItem, #form_SellItem, #form_PrchseItem, #form_ValidFor').prop('checked', true);
+                $('#form_OnHand, #form_IsCommited, #form_OnOrder').val('0.00');
+                $('#form_ItemCode').prop('readonly', false);
+            }
+
+            $('#btnNew').click(function() {
+                isNewMode = true;
+                $('#itemSelect').val(null).trigger('change.select2');
+                clearForm();
+                $('#btnUpdate').removeClass('btn-primary').addClass('btn-success').html('<i class="fas fa-check me-2"></i>Yeni Kaydet');
+                $('#form_ItemCode').focus();
+            });
+
+            $('#itemSelect').on('change', function() {
+                const code = $(this).val();
+                if (!code) return;
+                isNewMode = false;
+                $('#form_ItemCode').prop('readonly', true);
+                $('#btnUpdate').removeClass('btn-success').addClass('btn-primary').html('<i class="fas fa-cloud-upload-alt me-2"></i>Güncelle');
+
+                // db parametresini AJAX GET isteğine ekliyoruz
+                $.get('/Rapor100/GetItemDetails', { itemCode: code, db: dbParam }, function(res) {
+                    if(res.success) {
+                        const d = res.data;
+                        $('#form_ItemCode').val(d.itemCode);
+                        $('#form_ItemName').val(d.itemName);
+                        $('#form_FrgnName').val(d.frgnName);
+                        $('#form_ItmsGrpCod').val(d.itmsGrpCod).trigger('change');
+                        $('#form_CodeBars').val(d.codeBars);
+                        $('#form_InvntItem').prop('checked', d.invntItem);
+                        $('#form_SellItem').prop('checked', d.sellItem);
+                        $('#form_PrchseItem').prop('checked', d.prchseItem);
+                        $('#form_ValidFor').prop('checked', d.validFor);
+                        
+                        $('#form_OnHand').val(d.onHand);
+                        $('#form_IsCommited').val(d.isCommited);
+                        $('#form_OnOrder').val(d.onOrder);
+
+                        // UDFs MAP (Arayüze Doldurma)
+                        $('#udf_GTIP').val(d.u_BE1_GTIP);
+                        $('#udf_MENSEI').val(d.u_BE1_MENSEI);
+                        $('#udf_GTIPNAME').val(d.u_BE1_GTIPNAME);
+                        $('#udf_CPALISTVERSION').val(d.u_BE1_CPALISTVERSION);
+                        $('#udf_GTIPLISTVERSION').val(d.u_BE1_GTIPLISTVERSION);
+                        $('#udf_CPA').val(d.u_BE1_CPA);
+                        $('#udf_UBBCODE').val(d.u_BE1_UBBCODE);
+                        $('#udf_IkOB').val(d.u_BE1_IkOB);
+                        $('#udf_IkOBm').val(d.u_BE1_IkOBm);
+                        $('#udf_ORIGIN').val(d.u_BE1_ORIGIN);
+                        $('#udf_HZRMLZM').val(d.u_BE1_HZRMLZM);
+                        $('#udf_ALTGRUP1').val(d.u_BE1_ALTGRUP1);
+                        $('#udf_ALTGRUP2').val(d.u_BE1_ALTGRUP2);
+                        $('#udf_ALTGRUP3').val(d.u_BE1_ALTGRUP3);
+                        $('#udf_ALTGRUP4').val(d.u_BE1_ALTGRUP4);
+                        $('#udf_ALTGRUP5').val(d.u_BE1_ALTGRUP5);
+                        $('#udf_DEGISKEN').val(d.u_BE1_DEGISKEN);
+                        $('#udf_AT').val(d.u_BE1_AT);
+                        $('#udf_FAYDA').val(d.u_BE1_FAYDA);
+                        $('#udf_SK').val(d.u_BE1_SK);
+                        $('#udf_DAB').val(d.u_BE1_DAB);
+                        $('#udf_DBD').val(d.u_BE1_DBD);
+                        $('#udf_KAPALI').val(d.u_BE1_KAPALI);
+                        $('#udf_DAT').val(d.u_BE1_DAT);
+                        $('#udf_YENI').val(d.u_BE1_YENI);
+                        $('#udf_DSD').val(d.u_BE1_DSD);
+                        $('#udf_3112').val(d.u_BE1_3112);
+                        $('#udf_257').val(d.u_BE1_257);
+                        $('#udf_062024').val(d.u_BE1_062024);
+                        $('#udf_BIRIK257').val(d.u_BE1_BIRIK257);
+                        $('#udf_AKTAR').val(d.u_BE1_AKTAR);
+                        $('#udf_CASNO').val(d.u_BE1_CASNO);
+                        $('#udf_KKDIK').val(d.u_BE1_KKDIK);
+                        $('#udf_REACH').val(d.u_BE1_REACH);
+                        $('#udf_OECO').val(d.u_BE1_OECO);
+                        $('#udf_ZDHC').val(d.u_BE1_ZDHC);
+                        $('#udf_ADR').val(d.u_BE1_ADR);
+                        $('#udf_KRTSTK').val(d.u_BE1_KRTSTK);
+                        $('#udf_BOYUTA').val(d.u_BE1_BOYUTA);
+                        $('#udf_BCORAN').val(d.u_BE1_BCORAN);
+                        $('#udf_MVGACIKLAMA').val(d.u_BE1_MVGACIKLAMA);
+                        $('#udf_URETIMYN').val(d.u_BE1_URETIMYN);
+                        $('#udf_KULLANIMD').val(d.u_BE1_KULLANIMD);
+                        $('#udf_KARLILIKRA').val(d.u_BE1_KARLILIKRA);
+                        $('#udf_LKACIKLAMA').val(d.u_BE1_LKACIKLAMA);
+                        $('#udf_SKACIKLAMA').val(d.u_BE1_SKACIKLAMA);
+                        $('#udf_DRGACIKLAMA').val(d.u_BE1_DRGACIKLAMA);
+                        $('#udf_KSKGACIKLAMA').val(d.u_BE1_KSKGACIKLAMA);
+                        $('#udf_OZELLIK1A').val(d.u_BE1_OZELLIK1A);
+                        $('#udf_MDRACIKLAMA').val(d.u_BE1_MDRACIKLAMA);
+                        $('#udf_OZELLIK2A').val(d.u_BE1_OZELLIK2A);
+                        $('#udf_SEGMENTKOD').val(d.u_BE1_SEGMENTKOD);
+                        $('#udf_FURL').val(d.u_BE1_FURL);
+                        $('#udf_OZELLIK1').val(d.u_BE1_OZELLIK1);
+                        $('#udf_MDGRAPORU').val(d.u_BE1_MDGRAPORU);
+                        $('#udf_OZELLIK2').val(d.u_BE1_OZELLIK2);
+                        $('#udf_MVERGIGRUBU').val(d.u_BE1_MVERGIGRUBU);
+                        $('#udf_KARLILIKR').val(d.u_BE1_KARLILIKR);
+                        $('#udf_LOTK').val(d.u_BE1_LOTK);
+                        $('#udf_DRGRUBU').val(d.u_BE1_DRGRUBU);
+                        $('#udf_KSGKODU').val(d.u_BE1_KSGKODU);
+                        $('#udf_UTACIKLAMA').val(d.u_BE1_UTACIKLAMA);
+                        $('#udf_MAGAZA').val(d.u_BE1_MAGAZA);
+                        $('#udf_INTERNET').val(d.u_BE1_INTERNET);
+                        $('#udf_URETIM').val(d.u_BE1_URETIM);
+                        $('#udf_OZELLIK7A').val(d.u_BE1_OZELLIK7A);
+                        $('#udf_UDRACIKLAMA').val(d.u_BE1_UDRACIKLAMA);
+                        $('#udf_UTARACIKLAMA').val(d.u_BE1_UTARACIKLAMA);
+                        $('#udf_SKTACIKLAMA').val(d.u_BE1_SKTACIKLAMA);
+                        $('#udf_UGACIKLAMA').val(d.u_BE1_UGACIKLAMA);
+                        $('#udf_KRACIKLAMA').val(d.u_BE1_KRACIKLAMA);
+                        $('#udf_OZELLIK3A').val(d.u_BE1_OZELLIK3A);
+                        $('#udf_URUNTIP').val(d.u_BE1_URUNTIP);
+                        $('#udf_OZELLIK3').val(d.u_BE1_OZELLIK3);
+                        $('#udf_KAPASITER').val(d.u_BE1_KAPASITER);
+                        $('#udf_OZELLIK7').val(d.u_BE1_OZELLIK7);
+                        $('#udf_UDRAPOR').val(d.u_BE1_UDRAPOR);
+                        $('#udf_MMHESAPG').val(d.u_BE1_MMHESAPG);
+                        $('#udf_MVG').val(d.u_BE1_MVG);
+                        $('#udf_URUNGRUP').val(d.u_BE1_URUNGRUP);
+                        $('#udf_ANAKTGR').val(d.u_BE1_ANAKTGR);
+                        $('#udf_MARKA').val(d.u_BE1_MARKA);
+                        $('#udf_PACKAGINGTYPECODE').val(d.u_BE1_PACKAGINGTYPECODE);
+                        $('#udf_YERLILIK').val(d.u_BE1_YERLILIK);
+                    } else {
+                        // HATAYI EKRANA BASIYORUZ (Hangi UDF eksikse SQL hatası olarak buraya düşer)
+                        toastr.error(res.message, "Bilgi Getirilemedi");
+                    }
+                }).fail(function() {
+                    toastr.error("Sunucu ile bağlantı kurulamadı.");
+                });
+            });
+
+            $('#btnUpdate').click(function() {
+                if (!$('#form_ItemCode').val()) { toastr.warning("Kalem kodu zorunludur."); return; }
+
+                const payload = {
+                    IsNew: isNewMode,
+                    ItemCode: $('#form_ItemCode').val(),
+                    ItemName: $('#form_ItemName').val(),
+                    FrgnName: $('#form_FrgnName').val(),
+                    ItmsGrpCod: parseInt($('#form_ItmsGrpCod').val() || -1),
+                    CodeBars: $('#form_CodeBars').val(),
+                    InvntItem: $('#form_InvntItem').is(':checked'),
+                    SellItem: $('#form_SellItem').is(':checked'),
+                    PrchseItem: $('#form_PrchseItem').is(':checked'),
+                    ValidFor: $('#form_ValidFor').is(':checked'),
+                    
+                    // UDFs MAP (Payload'a Ekleme)
+                    U_BE1_GTIP: $('#udf_GTIP').val(),
+                    U_BE1_MENSEI: $('#udf_MENSEI').val(),
+                    U_BE1_GTIPNAME: $('#udf_GTIPNAME').val(),
+                    U_BE1_CPALISTVERSION: $('#udf_CPALISTVERSION').val(),
+                    U_BE1_GTIPLISTVERSION: $('#udf_GTIPLISTVERSION').val(),
+                    U_BE1_CPA: $('#udf_CPA').val(),
+                    U_BE1_UBBCODE: $('#udf_UBBCODE').val(),
+                    U_BE1_IkOB: $('#udf_IkOB').val(),
+                    U_BE1_IkOBm: $('#udf_IkOBm').val(),
+                    U_BE1_ORIGIN: $('#udf_ORIGIN').val(),
+                    U_BE1_HZRMLZM: $('#udf_HZRMLZM').val(),
+                    U_BE1_ALTGRUP1: $('#udf_ALTGRUP1').val(),
+                    U_BE1_ALTGRUP2: $('#udf_ALTGRUP2').val(),
+                    U_BE1_ALTGRUP3: $('#udf_ALTGRUP3').val(),
+                    U_BE1_ALTGRUP4: $('#udf_ALTGRUP4').val(),
+                    U_BE1_ALTGRUP5: $('#udf_ALTGRUP5').val(),
+                    U_BE1_DEGISKEN: $('#udf_DEGISKEN').val(),
+                    U_BE1_AT: $('#udf_AT').val(),
+                    U_BE1_FAYDA: $('#udf_FAYDA').val(),
+                    U_BE1_SK: $('#udf_SK').val(),
+                    U_BE1_DAB: $('#udf_DAB').val(),
+                    U_BE1_DBD: $('#udf_DBD').val(),
+                    U_BE1_KAPALI: $('#udf_KAPALI').val(),
+                    U_BE1_DAT: $('#udf_DAT').val(),
+                    U_BE1_YENI: $('#udf_YENI').val(),
+                    U_BE1_DSD: $('#udf_DSD').val(),
+                    U_BE1_3112: $('#udf_3112').val(),
+                    U_BE1_257: $('#udf_257').val(),
+                    U_BE1_062024: $('#udf_062024').val(),
+                    U_BE1_BIRIK257: $('#udf_BIRIK257').val(),
+                    U_BE1_AKTAR: $('#udf_AKTAR').val(),
+                    U_BE1_CASNO: $('#udf_CASNO').val(),
+                    U_BE1_KKDIK: $('#udf_KKDIK').val(),
+                    U_BE1_REACH: $('#udf_REACH').val(),
+                    U_BE1_OECO: $('#udf_OECO').val(),
+                    U_BE1_ZDHC: $('#udf_ZDHC').val(),
+                    U_BE1_ADR: $('#udf_ADR').val(),
+                    U_BE1_KRTSTK: $('#udf_KRTSTK').val(),
+                    U_BE1_BOYUTA: $('#udf_BOYUTA').val(),
+                    U_BE1_BCORAN: $('#udf_BCORAN').val(),
+                    U_BE1_MVGACIKLAMA: $('#udf_MVGACIKLAMA').val(),
+                    U_BE1_URETIMYN: $('#udf_URETIMYN').val(),
+                    U_BE1_KULLANIMD: $('#udf_KULLANIMD').val(),
+                    U_BE1_KARLILIKRA: $('#udf_KARLILIKRA').val(),
+                    U_BE1_LKACIKLAMA: $('#udf_LKACIKLAMA').val(),
+                    U_BE1_SKACIKLAMA: $('#udf_SKACIKLAMA').val(),
+                    U_BE1_DRGACIKLAMA: $('#udf_DRGACIKLAMA').val(),
+                    U_BE1_KSKGACIKLAMA: $('#udf_KSKGACIKLAMA').val(),
+                    U_BE1_OZELLIK1A: $('#udf_OZELLIK1A').val(),
+                    U_BE1_MDRACIKLAMA: $('#udf_MDRACIKLAMA').val(),
+                    U_BE1_OZELLIK2A: $('#udf_OZELLIK2A').val(),
+                    U_BE1_SEGMENTKOD: $('#udf_SEGMENTKOD').val(),
+                    U_BE1_FURL: $('#udf_FURL').val(),
+                    U_BE1_OZELLIK1: $('#udf_OZELLIK1').val(),
+                    U_BE1_MDGRAPORU: $('#udf_MDGRAPORU').val(),
+                    U_BE1_OZELLIK2: $('#udf_OZELLIK2').val(),
+                    U_BE1_MVERGIGRUBU: $('#udf_MVERGIGRUBU').val(),
+                    U_BE1_KARLILIKR: $('#udf_KARLILIKR').val(),
+                    U_BE1_LOTK: $('#udf_LOTK').val(),
+                    U_BE1_DRGRUBU: $('#udf_DRGRUBU').val(),
+                    U_BE1_KSGKODU: $('#udf_KSGKODU').val(),
+                    U_BE1_UTACIKLAMA: $('#udf_UTACIKLAMA').val(),
+                    U_BE1_MAGAZA: $('#udf_MAGAZA').val(),
+                    U_BE1_INTERNET: $('#udf_INTERNET').val(),
+                    U_BE1_URETIM: $('#udf_URETIM').val(),
+                    U_BE1_OZELLIK7A: $('#udf_OZELLIK7A').val(),
+                    U_BE1_UDRACIKLAMA: $('#udf_UDRACIKLAMA').val(),
+                    U_BE1_UTARACIKLAMA: $('#udf_UTARACIKLAMA').val(),
+                    U_BE1_SKTACIKLAMA: $('#udf_SKTACIKLAMA').val(),
+                    U_BE1_UGACIKLAMA: $('#udf_UGACIKLAMA').val(),
+                    U_BE1_KRACIKLAMA: $('#udf_KRACIKLAMA').val(),
+                    U_BE1_OZELLIK3A: $('#udf_OZELLIK3A').val(),
+                    U_BE1_URUNTIP: $('#udf_URUNTIP').val(),
+                    U_BE1_OZELLIK3: $('#udf_OZELLIK3').val(),
+                    U_BE1_KAPASITER: $('#udf_KAPASITER').val(),
+                    U_BE1_OZELLIK7: $('#udf_OZELLIK7').val(),
+                    U_BE1_UDRAPOR: $('#udf_UDRAPOR').val(),
+                    U_BE1_MMHESAPG: $('#udf_MMHESAPG').val(),
+                    U_BE1_MVG: $('#udf_MVG').val(),
+                    U_BE1_URUNGRUP: $('#udf_URUNGRUP').val(),
+                    U_BE1_ANAKTGR: $('#udf_ANAKTGR').val(),
+                    U_BE1_MARKA: $('#udf_MARKA').val(),
+                    U_BE1_PACKAGINGTYPECODE: $('#udf_PACKAGINGTYPECODE').val(),
+                    U_BE1_YERLILIK: $('#udf_YERLILIK').val()
+                };
+
+                const $btn = $(this);
+                const originalText = $btn.html();
+                $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>Kaydediliyor...');
+
+                $.ajax({
+                    url: '/Rapor100/UpdateItem?db=' + dbParam, // db parametresini ekliyoruz
+                    type: 'POST',
+                    contentType: 'application/json',
+                    headers: { 'RequestVerificationToken': antiForgeryToken }, // Güvenlik token'ı eklendi
+                    data: JSON.stringify(payload),
+                    success: function(res) {
+                        if(res.success) {
+                            toastr.success(res.message);
+                            if(isNewMode) setTimeout(() => location.reload(), 1500);
+                        } else {
+                            toastr.error(res.message);
+                        }
+                    },
+                    error: function() { toastr.error("Sunucu Hatası"); },
+                    complete: function() { $btn.prop('disabled', false).html(originalText); }
+                });
+            });
+        });
+    </script>
+}

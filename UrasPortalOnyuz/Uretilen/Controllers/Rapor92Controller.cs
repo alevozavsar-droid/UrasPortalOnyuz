@@ -1,0 +1,139 @@
+﻿// <ornek-uretildi/> Bu dosya ana projeden OTOMATIK uretildi: govdeler sokuldu, baglanti yok.
+#pragma warning disable
+using Microsoft.AspNetCore.Mvc.Rendering;
+using System.Linq;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.AspNetCore.Authorization;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
+using System.IO;
+using Microsoft.Extensions.Primitives;
+using System.Text;
+using ClosedXML.Excel;
+using System.Net.Mime;
+
+namespace WebApplication3.Controllers
+{
+
+    public class AlisItemViewModel
+    {
+        public string ItemCode { get; set; }
+        public string ItemName { get; set; }
+    }
+
+    public class AlisCariViewModel
+    {
+        public string CardCode { get; set; }
+        public string CardName { get; set; }
+    }
+
+    public class AlisEkstreViewModel
+    {
+        public DateTime? KayitTarihi { get; set; }
+        public int BelgeNo { get; set; }
+        public string IslemTipi { get; set; }
+        public string AktarimTipi { get; set; }
+        public string MuhatapKodu { get; set; }
+        public string MuhatapAdi { get; set; }
+        public string KalemKodu { get; set; }
+        public string KalemAdi { get; set; }
+
+        public string Birim { get; set; }
+        public decimal GuncelStok { get; set; }
+        public decimal Miktar { get; set; }
+        public decimal TonMiktari { get; set; }
+
+        public decimal Fiyat { get; set; }
+        public decimal Tutar { get; set; }
+        public string ParaBirimi { get; set; }
+
+        public decimal UsdKarsiligi { get; set; }
+        public decimal EurKarsiligi { get; set; }
+    }
+
+    public class Rapor92DatabaseConfig
+    {
+        public string Key { get; set; }
+        public string Display { get; set; }
+    }
+
+    [Authorize]
+    [Route("[controller]")]
+    public class Rapor92Controller : Controller
+    {
+        private readonly IConfiguration _configuration;
+
+        private readonly List<Rapor92DatabaseConfig> _databases = new List<Rapor92DatabaseConfig>
+        {
+            new Rapor92DatabaseConfig { Key = "DefaultConnection", Display = "URASKIMYA" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection1", Display = "URSMAKINE" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection2", Display = "AVRUPA_PAPER" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection3", Display = "ALV_KIMYA" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection4", Display = "DAF_KIMYA" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection5", Display = "SELVI" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection6", Display = "ALVFILO" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection7", Display = "AVRASYA" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection8", Display = "ASIA" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection9", Display = "DEKORLIM" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection10", Display = "URAS_HOLDING" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection12", Display = "URSMAKINE__A.S" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection11", Display = "TestUrasKimya" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection13", Display = "ALVKIMYA_A.S" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection32", Display = "URASHOLDING_2026" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection33", Display = "DAFKIMYA_2026" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection34", Display = "AVRUPAPAPER_2026" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection35", Display = "ALVFILO_2026" },
+            new Rapor92DatabaseConfig { Key = "DefaultConnection36", Display = "URASBASKI_2026" }
+        };
+
+        private string GetSelectedDatabase()
+ {return default;
+}
+
+        private List<AlisItemViewModel> GetItemList(string connectionString)
+ {return default;
+}
+
+        private List<AlisCariViewModel> GetCariList(string connectionString)
+ {return default;
+}
+
+        private List<string> GetAktarimTipiList(string connectionString)
+ {return default;
+}
+
+        [Authorize]
+        public IActionResult Index([FromQuery] List<string> itemCode, [FromQuery] List<string> bpCode, DateTime? startDate, DateTime? endDate, [FromQuery] List<string> aktarimTipi)
+ {ViewBag.CurrentDbDisplay = "";
+ViewBag.SelectedItemCodes = WebApplication3.OrnekDoldurucu.Liste<string>(12);
+ViewBag.SelectedBpCodes = WebApplication3.OrnekDoldurucu.Liste<string>(12);
+ViewBag.SelectedAktarimTipi = WebApplication3.OrnekDoldurucu.Liste<string>(12);
+ViewBag.ItemList = WebApplication3.OrnekDoldurucu.Liste<AlisItemViewModel>(12);
+ViewBag.CariList = WebApplication3.OrnekDoldurucu.Liste<AlisCariViewModel>(12);
+ViewBag.AktarimTipiList = WebApplication3.OrnekDoldurucu.Liste<string>(12);
+WebApplication3.OrnekDoldurucu.Hazirla(this);
+return View("Index", WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.AlisEkstreViewModel>(12));
+}
+
+        private List<AlisEkstreViewModel> GetAlisEkstreData(string connectionString, List<string> itemCode, List<string> bpCode, DateTime? startDate, DateTime? endDate, List<string> aktarimTipi)
+ {return default;
+}
+
+        [HttpGet("downloadexcel")]
+        [Authorize]
+        public IActionResult DownloadExcel([FromQuery] List<string> itemCode, [FromQuery] List<string> bpCode, DateTime? startDate, DateTime? endDate, [FromQuery] List<string> aktarimTipi)
+ {return Content("Ön yüz örneği: dosya üretilmez.", "text/plain; charset=utf-8");
+}
+
+        [HttpGet("downloadpdf")]
+        [Authorize]
+        public IActionResult DownloadPdf([FromQuery] List<string> itemCode, [FromQuery] List<string> bpCode, DateTime? startDate, DateTime? endDate, [FromQuery] List<string> aktarimTipi)
+ {return Content("Ön yüz örneği: dosya üretilmez.", "text/plain; charset=utf-8");
+}
+    }
+}

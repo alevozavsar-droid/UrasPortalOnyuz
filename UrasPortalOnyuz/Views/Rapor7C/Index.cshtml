@@ -1,0 +1,585 @@
+﻿@model List<WebApplication3.Models.Rapor7cViewModel>
+@{
+    ViewData["Title"] = "Ürün Maliyet Simülasyonu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    
+    // 1. KURAL: URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+
+    var bomList = ViewBag.BomList as List<WebApplication3.Models.BomViewModel> ?? new List<WebApplication3.Models.BomViewModel>();
+    var dbList = ViewBag.Databases as List<WebApplication3.Models.DatabaseConfig> ?? new List<WebApplication3.Models.DatabaseConfig>();
+
+    // Kurları JS tarafına aktarmak için
+    var usdRateStr = (ViewBag.UsdRate != null) ? ((decimal)ViewBag.UsdRate).ToString(System.Globalization.CultureInfo.InvariantCulture) : "1";
+    var eurRateStr = (ViewBag.EurRate != null) ? ((decimal)ViewBag.EurRate).ToString(System.Globalization.CultureInfo.InvariantCulture) : "1";
+}
+
+@section Styles {
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f7f6;
+        }
+
+        .modern-card {
+            border: none;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+            background: #ffffff;
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+        
+        .modern-card-header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 1.5rem;
+            border-bottom: none;
+        }
+
+        .table-simulation {
+            margin-bottom: 0;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        
+        .table-simulation thead th {
+            background-color: #2c3e50;
+            color: #ffffff;
+            font-weight: 500;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 12px;
+            border: 1px solid #34495e;
+            vertical-align: middle;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .table-simulation tbody td {
+            font-size: 0.85rem;
+            vertical-align: middle;
+            padding: 10px 12px;
+            border: 1px solid #e9ecef;
+            color: #495057;
+        }
+
+        .table-simulation tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .input-manual-price { 
+            width: 110px; 
+            text-align: right; 
+            font-weight: 600; 
+            color: #0d6efd; 
+            border: 2px solid #b6d4fe; 
+            border-radius: 8px 0 0 8px !important;
+            background-color: #f8faff;
+            transition: all 0.3s ease;
+        }
+        .input-manual-price:focus { 
+            border-color: #0d6efd; 
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15); 
+            background-color: #ffffff;
+        }
+
+        /* Manuel USD Input Stili */
+        .input-manual-usd {
+            width: 90px;
+            text-align: right;
+            font-weight: 700;
+            color: #6f42c1;
+            border: 2px solid #d63384;
+            border-radius: 8px !important;
+            background-color: #fdf2f8;
+            transition: all 0.3s ease;
+        }
+        .input-manual-usd:focus {
+            border-color: #d63384;
+            box-shadow: 0 0 0 0.25rem rgba(214, 51, 132, 0.25);
+            background-color: #ffffff;
+        }
+
+        /* Yeni Eklenen Manuel Miktar Input Stili */
+        .input-manual-qty {
+            width: 80px;
+            text-align: right;
+            font-weight: 700;
+            color: #055160;
+            border: 2px solid #0dcaf0;
+            border-radius: 8px !important;
+            background-color: #e0f8f9;
+            transition: all 0.3s ease;
+        }
+        .input-manual-qty:focus {
+            border-color: #0dcaf0;
+            box-shadow: 0 0 0 0.25rem rgba(13, 202, 240, 0.25);
+            background-color: #ffffff;
+        }
+        
+        .select-currency { 
+            width: 80px; 
+            border: 2px solid #b6d4fe; 
+            border-left: none;
+            font-weight: 600; 
+            color: #495057;
+            border-radius: 0 8px 8px 0 !important;
+            background-color: #f8faff;
+        }
+
+        .bg-sys { background-color: #f8f9fa !important; }
+        .bg-est-usd { background-color: #e8f5e9 !important; color: #1b5e20 !important; font-weight: 600; }
+        .bg-est-tl { background-color: #c8e6c9 !important; color: #1b5e20 !important; font-weight: 700; }
+        
+        .bg-manual-usd { background-color: #f3e8ff !important; color: #551a8b !important; font-weight: 600; }
+        .bg-manual-tl { background-color: #e9d5ff !important; color: #551a8b !important; font-weight: 700; }
+
+        .sys-total { font-size: 1.15rem; font-weight: 700; color: #ffc107; }
+        .est-total { font-size: 1.25rem; font-weight: 800; color: #2ecc71; }
+        .man-total { font-size: 1.25rem; font-weight: 800; color: #d946ef; }
+
+        .btn-toggle { 
+            width: 26px; 
+            height: 26px; 
+            padding: 0; 
+            display: inline-flex; 
+            align-items: center; 
+            justify-content: center; 
+            border-radius: 8px; 
+            background-color: #e9ecef;
+            color: #495057;
+            border: none;
+            transition: all 0.2s ease;
+        }
+        .btn-toggle:hover {
+            background-color: #dee2e6;
+            transform: scale(1.05);
+        }
+        
+        .is-bom-row td { 
+            background-color: #fff9e6 !important; 
+            font-weight: 600; 
+            border-top: 2px solid #ffeeba !important;
+            border-bottom: 2px solid #ffeeba !important;
+        }
+
+        .modern-alert {
+            border-radius: 12px;
+            border: none;
+            background: rgba(13, 110, 253, 0.05);
+            border-left: 5px solid #0d6efd;
+            color: #084298;
+        }
+        
+        .select2-container--bootstrap-5 .select2-selection {
+            border-radius: 8px;
+            padding: 0.375rem 0.75rem;
+            border-color: #dee2e6;
+        }
+    </style>
+}
+
+@* 2. KURAL: Güvenlik (CSRF) - Yetkisiz veri işlemlerini ve istek manipülasyonlarını engellemek amacıyla eklendi *@
+@Html.AntiForgeryToken()
+
+<div class="container-fluid mt-4">
+    <div class="modern-card">
+        <div class="modern-card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h4 class="mb-0 fw-bold"><i class="fas fa-chart-pie me-2"></i> Ürün Maliyet Simülasyonu</h4>
+            <div class="d-flex gap-2">
+                <span class="badge bg-light text-dark px-3 py-2 rounded-pill shadow-sm">
+                    <i class="fas fa-dollar-sign text-success me-1"></i> USD: @ViewBag.UsdRate
+                </span>
+                <span class="badge bg-light text-dark px-3 py-2 rounded-pill shadow-sm">
+                    <i class="fas fa-euro-sign text-primary me-1"></i> EUR: @ViewBag.EurRate
+                </span>
+                <span class="badge bg-dark px-3 py-2 rounded-pill border border-secondary">
+                    <i class="fas fa-database me-1"></i> @ViewBag.CurrentDbDisplay
+                </span>
+            </div>
+        </div>
+        <div class="card-body p-4">
+            <form asp-controller="Rapor7c" asp-action="Index" method="get">
+                <div class="row align-items-end g-3">
+                    <div class="col-md-3">
+                        <label class="form-label text-muted fw-semibold">Firma Seçimi</label>
+                        <select class="form-select form-control-lg shadow-sm" id="db" name="db">
+                            @foreach (var db in dbList)
+                            {
+                                if(db.Display == ViewBag.CurrentDbDisplay)
+                                {
+                                    <option value="@db.Key" selected>@db.Display</option>
+                                }
+                                else
+                                {
+                                    <option value="@db.Key">@db.Display</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label class="form-label text-muted fw-semibold">Ürün Ağacı (BOM) Seçiniz</label>
+                        <select class="form-control form-control-lg" id="itemCode" name="itemCode">
+                            <option value="">-- Ürün Arayın veya Seçin --</option>
+                            @foreach (var bom in bomList)
+                            {
+                                if(bom.Code == ViewBag.SelectedItemCode)
+                                {
+                                    <option value="@bom.Code" selected>@bom.Code - @bom.Name</option>
+                                }
+                                else
+                                {
+                                    <option value="@bom.Code">@bom.Code - @bom.Name</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary btn-lg w-100 rounded-3 shadow-sm fw-bold">
+                            <i class="fas fa-search me-2"></i> Maliyeti Getir
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (Model != null && Model.Any())
+    {
+        var urunAdi = Model.First().UrunAgacAdi;
+        <div class="alert modern-alert shadow-sm mb-4 p-3 d-flex align-items-center">
+            <i class="fas fa-info-circle fa-2x me-3 opacity-75"></i>
+            <div>
+                <h6 class="alert-heading fw-bold mb-1">Analiz Edilen Ürün: @ViewBag.SelectedItemCode - @urunAdi</h6>
+                <p class="mb-0 small">Alt ürün ağacı (BOM) olan kalemlerin yanındaki <b>[+]</b> butonuna tıklayarak kırılımlarını görebilirsiniz. Fiyatlar otomatik olarak aşağıdan yukarıya doğru toplanır.</p>
+            </div>
+        </div>
+
+        <div class="modern-card">
+            <div class="table-responsive">
+                <table class="table table-simulation w-100">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" class="text-start" style="min-width: 150px;">Kalem Kodu</th>
+                            <th rowspan="2" class="text-start" style="min-width: 220px;">Kalem Adı</th>
+                            <th rowspan="2" class="text-center" style="min-width: 100px;">Kaynak</th>
+                            <th rowspan="2" class="text-end">İhtiyaç Miktarı</th>
+                            <th rowspan="2" class="text-center" style="background-color: #0dcaf0; min-width: 100px;">MANUEL MİKTAR</th>
+                            <th rowspan="2" class="text-center" style="background-color: #8b5cf6; min-width: 110px;">MANUEL BİRİM (USD)</th>
+                            <th colspan="2" class="text-center" style="background-color: #34495e;">SİSTEM BİRİM</th>
+                            <th colspan="2" class="text-center" style="background-color: #34495e;">SİSTEM TOPLAM</th>
+                            <th colspan="2" class="text-center" style="background-color: #7c3aed;">MANUEL TOPLAM</th>
+                            <th rowspan="2" class="text-center" style="background-color: #0d6efd; min-width: 210px;">Tahmini Giriş (Fiyat / PB)</th>
+                            <th colspan="2" class="text-center" style="background-color: #198754;">TAHMİNİ TOPLAM</th>
+                        </tr>
+                        <tr>
+                            <th class="text-end" style="background-color: #34495e;">Mly. (USD)</th>
+                            <th class="text-end" style="background-color: #34495e;">Mly. (TL)</th>
+                            <th class="text-end" style="background-color: #34495e;">Top. (USD)</th>
+                            <th class="text-end" style="background-color: #34495e;">Top. (TL)</th>
+                            
+                            <th class="text-end" style="background-color: #7c3aed;">Top. (USD)</th>
+                            <th class="text-end" style="background-color: #7c3aed;">Top. (TL)</th>
+
+                            <th class="text-end" style="background-color: #198754;">Top. (USD)</th>
+                            <th class="text-end" style="background-color: #198754;">Top. (TL)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model)
+                        {
+                            <tr class="bom-row @(item.AltUrunAgaciMi ? "is-bom-row" : "")" 
+                                data-id="@item.UniqueId" 
+                                data-parent="@item.ParentUniqueId" 
+                                data-level="@item.Level" 
+                                data-is-bom="@item.AltUrunAgaciMi.ToString().ToLower()" 
+                                style="@(item.Level > 0 ? "display:none;" : "")">
+                                
+                                <td style="padding-left: @(item.Level * 30 + 12)px;">
+                                    @if (item.AltUrunAgaciMi)
+                                    {
+                                        <button type="button" class="btn-toggle me-2 shadow-sm" data-target="@item.UniqueId">
+                                            <i class="fas fa-plus text-primary"></i>
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <span style="display:inline-block; width: 36px;"></span>
+                                    }
+                                    <span class="font-monospace">@item.KalemKodu</span>
+                                </td>
+                                <td class="fw-medium">@item.KalemAdi</td>
+                                <td class="text-center">
+                                    <span class="badge @(item.AltUrunAgaciMi ? "bg-warning text-dark" : "bg-light text-secondary border")">
+                                        @(item.AltUrunAgaciMi ? "Alt Ürün Ağacı" : item.MaliyetKaynagi)
+                                    </span>
+                                </td>
+                                <td class="text-end fw-bold text-primary qty-cell" data-qty="@item.Miktar">@item.Miktar.ToString("N4")</td>
+                                
+                                <td class="text-center" style="background-color: #f1fbfc;">
+                                    <input type="number" step="0.0001" class="form-control input-manual-qty form-control-sm text-end m-auto" 
+                                           value="@item.Miktar.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)" />
+                                </td>
+
+                                <td class="text-center" style="background-color: #faf5ff;">
+                                    @if (item.AltUrunAgaciMi)
+                                    {
+                                        <div class="d-flex flex-column align-items-center">
+                                            <span class="fw-bold text-purple manual-calc-unit-usd" style="color: #6f42c1;">0.00</span>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <input type="number" step="0.0001" class="form-control input-manual-usd form-control-sm text-end m-auto" 
+                                               value="@item.SistemBirimMaliyetiUSD.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)" />
+                                    }
+                                </td>
+
+                                <td class="text-end bg-sys text-muted sys-unit-usd" data-val="@item.SistemBirimMaliyetiUSD">@item.SistemBirimMaliyetiUSD.ToString("N4")</td>
+                                <td class="text-end bg-sys text-muted sys-unit-tl" data-val="@item.SistemBirimMaliyetiTL">@item.SistemBirimMaliyetiTL.ToString("N4")</td>
+                                
+                                <td class="text-end bg-sys fw-semibold sys-line-total-usd">0.00</td>
+                                <td class="text-end bg-sys fw-semibold sys-line-total-tl">0.00</td>
+
+                                <td class="text-end bg-manual-usd manual-line-total-usd">0.00</td>
+                                <td class="text-end bg-manual-tl manual-line-total-tl">0.00</td>
+                                
+                                <td class="text-center">
+                                    @if (item.AltUrunAgaciMi)
+                                    {
+                                        <div class="d-flex flex-column align-items-center">
+                                            <span class="badge bg-primary px-3 py-1 mt-1 fs-6 shadow-sm est-calc-unit-tl">0.00 TL</span>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="input-group input-group-sm justify-content-center shadow-sm rounded-3">
+                                            <input type="number" step="0.0001" class="form-control input-manual-price" 
+                                                   value="@item.SistemBirimMaliyetiTL.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)" />
+                                            <select class="form-select select-currency">
+                                                <option value="TRY" selected>TRY</option>
+                                                <option value="USD">USD</option>
+                                                <option value="EUR">EUR</option>
+                                            </select>
+                                        </div>
+                                    }
+                                </td>
+                                
+                                <td class="text-end bg-est-usd row-total-estimated-usd">0.00</td>
+                                <td class="text-end bg-est-tl row-total-estimated-tl">0.00</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <thead style="background-color: #1a252f; border-color: #1a252f;">
+                        <tr>
+                            <td colspan="8" class="text-end text-white pe-3" style="padding: 15px;">
+                                <span class="text-uppercase tracking-wide opacity-75 fs-6">Ağaç Genel Toplamı:</span>
+                            </td>
+                            <td class="text-end sys-total" id="grand-sys-total-usd" style="padding: 15px;">0.00</td>
+                            <td class="text-end sys-total" id="grand-sys-total-tl" style="padding: 15px;">0.00</td>
+
+                            <td class="text-end man-total" id="grand-manual-total-usd" style="padding: 15px;">0.00</td>
+                            <td class="text-end man-total" id="grand-manual-total-tl" style="padding: 15px;">0.00</td>
+
+                            <td class="text-end" style="padding: 15px;"></td>
+                            <td class="text-end est-total" id="grand-est-total-usd" style="padding: 15px; color: #4ade80;">0.00</td>
+                            <td class="text-end est-total" id="grand-est-total-tl" style="padding: 15px; color: #4ade80;">0.00</td>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(ViewBag.SelectedItemCode))
+    {
+        <div class="alert alert-warning border-warning shadow-sm rounded-4 mt-4 p-4 text-center">
+            <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+            <h5 class="fw-bold">Veri Bulunamadı</h5>
+            <p class="mb-0 text-muted">Seçilen ürüne ait bileşen/maliyet bulunamadı veya reçete (BOM) tanımlı değil.</p>
+        </div>
+    }
+
+    @* 4. KURAL: UI/UX Standartlarına uygun şık, db parametreli Ana Sayfa Dönüş butonu *@
+    <div class="mt-4 mb-5 text-center">
+        <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+            <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+        </a>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    
+    <script>
+        const usdRate = parseFloat('@usdRateStr');
+        const eurRate = parseFloat('@eurRateStr');
+
+        $(document).ready(function () {
+            // Select2 Arama Kutusu
+            $('#itemCode').select2({ 
+                theme: "bootstrap-5", 
+                placeholder: "-- Ürün Arayın veya Seçin --", 
+                allowClear: true 
+            });
+
+            // Satırları açıp kapama (Ağaç yapısı Toggle)
+            $('.btn-toggle').click(function() {
+                let targetId = $(this).data('target');
+                let icon = $(this).find('i');
+                let isExpanded = icon.hasClass('fa-minus');
+
+                if (isExpanded) {
+                    icon.removeClass('fa-minus text-danger').addClass('fa-plus text-primary');
+                    hideDescendants(targetId);
+                } else {
+                    icon.removeClass('fa-plus text-primary').addClass('fa-minus text-danger');
+                    $('tr[data-parent="' + targetId + '"]').fadeIn(200);
+                }
+            });
+
+            // Altındaki tüm çocukları silsilesiyle gizler
+            function hideDescendants(parentId) {
+                $('tr[data-parent="' + parentId + '"]').each(function() {
+                    $(this).hide();
+                    let childId = $(this).data('id');
+                    $(this).find('.btn-toggle i').removeClass('fa-minus text-danger').addClass('fa-plus text-primary');
+                    hideDescendants(childId);
+                });
+            }
+
+            // Fiyatları en alt hammadelerden en üste (bottom-up) toplar
+            function calculateEstimates() {
+                let accumulatedTotals = {}; 
+                let grandSysUSD = 0, grandSysTL = 0;
+                let grandEstUSD = 0, grandEstTL = 0;
+                let grandManUSD = 0, grandManTL = 0;
+
+                // Level'ı en yüksek olan (en alt seviye) satırdan yukarıya doğru hesapla
+                let rows = $('tbody tr.bom-row').toArray().sort((a, b) => $(b).data('level') - $(a).data('level'));
+
+                $(rows).each(function () {
+                    let $row = $(this);
+                    let isBom = $row.data('is-bom') === true;
+                    let uniqueId = $row.data('id');
+                    let parentId = $row.data('parent');
+                    
+                    // Veritabanından gelen Orijinal miktar
+                    let sysQty = parseFloat($row.find('.qty-cell').data('qty')) || 0;
+                    
+                    // Kullanıcının Girebileceği Manuel Miktar
+                    let manQty = parseFloat($row.find('.input-manual-qty').val());
+                    if (isNaN(manQty) || manQty < 0) manQty = 0;
+
+                    let sysUnitUSD = 0, sysUnitTL = 0;
+                    let estUnitUSD = 0, estUnitTL = 0;
+                    let manUnitUSD = 0, manUnitTL = 0;
+
+                    if (isBom) {
+                        sysUnitUSD = (accumulatedTotals[uniqueId] && accumulatedTotals[uniqueId].sysUSD) ? accumulatedTotals[uniqueId].sysUSD : 0;
+                        sysUnitTL  = (accumulatedTotals[uniqueId] && accumulatedTotals[uniqueId].sysTL)  ? accumulatedTotals[uniqueId].sysTL  : 0;
+                        
+                        estUnitUSD = (accumulatedTotals[uniqueId] && accumulatedTotals[uniqueId].estUSD) ? accumulatedTotals[uniqueId].estUSD : 0;
+                        estUnitTL  = (accumulatedTotals[uniqueId] && accumulatedTotals[uniqueId].estTL)  ? accumulatedTotals[uniqueId].estTL  : 0;
+                        
+                        manUnitUSD = (accumulatedTotals[uniqueId] && accumulatedTotals[uniqueId].manUSD) ? accumulatedTotals[uniqueId].manUSD : 0;
+                        manUnitTL  = (accumulatedTotals[uniqueId] && accumulatedTotals[uniqueId].manTL)  ? accumulatedTotals[uniqueId].manTL  : 0;
+
+                    if ($row.find('.sys-unit-usd').length) $row.find('.sys-unit-usd').text(sysUnitUSD.toFixed(4));
+                    if ($row.find('.sys-unit-tl').length) $row.find('.sys-unit-tl').text(sysUnitTL.toFixed(4));
+                    if ($row.find('.manual-calc-unit-usd').length) $row.find('.manual-calc-unit-usd').text(manUnitUSD.toFixed(4));
+                    if ($row.find('.est-calc-unit-tl').length) $row.find('.est-calc-unit-tl').text(estUnitTL.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' TL');
+                    } 
+                    else {
+                        sysUnitUSD = parseFloat($row.find('.sys-unit-usd').data('val')) || 0;
+                        sysUnitTL = parseFloat($row.find('.sys-unit-tl').data('val')) || 0;
+
+                        // MANUEL GİRİŞ USD OKUNMASI
+                        manUnitUSD = parseFloat($row.find('.input-manual-usd').val()) || 0;
+                        manUnitTL = manUnitUSD * usdRate;
+
+                        // TAHMİNİ GİRİŞ OKUNMASI
+                        let inputVal = parseFloat($row.find('.input-manual-price').val()) || 0;
+                        let selectedCurr = $row.find('.select-currency').val();
+                        if (selectedCurr === 'TRY') { estUnitTL = inputVal; estUnitUSD = inputVal / usdRate; } 
+                        else if (selectedCurr === 'USD') { estUnitTL = inputVal * usdRate; estUnitUSD = inputVal; } 
+                        else if (selectedCurr === 'EUR') { estUnitTL = inputVal * eurRate; estUnitUSD = (inputVal * eurRate) / usdRate; }
+                    }
+
+                    // Sistem Toplamları orijinal miktar kullanılarak hesaplanır
+                    let sysLineUSD = sysUnitUSD * sysQty;
+                    let sysLineTL  = sysUnitTL * sysQty;
+                    
+                    // Manuel ve Tahmini Satır Toplamları "Manuel Miktar" kolonu üzerinden hesaplanır
+                    let manLineUSD = manUnitUSD * manQty;
+                    let manLineTL  = manUnitTL * manQty;
+                    
+                    let estLineUSD = estUnitUSD * manQty;
+                    let estLineTL  = estUnitTL * manQty;
+
+                    if ($row.find('.sys-line-total-usd').length) $row.find('.sys-line-total-usd').text(sysLineUSD.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                    if ($row.find('.sys-line-total-tl').length) $row.find('.sys-line-total-tl').text(sysLineTL.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                    
+                    if ($row.find('.manual-line-total-usd').length) $row.find('.manual-line-total-usd').text(manLineUSD.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                    if ($row.find('.manual-line-total-tl').length) $row.find('.manual-line-total-tl').text(manLineTL.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+                    if ($row.find('.row-total-estimated-usd').length) $row.find('.row-total-estimated-usd').text(estLineUSD.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                    if ($row.find('.row-total-estimated-tl').length) $row.find('.row-total-estimated-tl').text(estLineTL.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+                    // Eğer atası varsa, maliyetleri atasının kumbarasına ekle
+                    if (parentId && parentId !== '@ViewBag.SelectedItemCode') {
+                        if (!accumulatedTotals[parentId]) accumulatedTotals[parentId] = { sysUSD:0, sysTL:0, estUSD:0, estTL:0, manUSD:0, manTL:0 };
+                        accumulatedTotals[parentId].sysUSD += sysLineUSD;
+                        accumulatedTotals[parentId].sysTL  += sysLineTL;
+                        
+                        accumulatedTotals[parentId].estUSD += estLineUSD;
+                        accumulatedTotals[parentId].estTL  += estLineTL;
+                        
+                        accumulatedTotals[parentId].manUSD += manLineUSD;
+                        accumulatedTotals[parentId].manTL  += manLineTL;
+                    }
+
+                    // Eğer en üst katmansa (Level 0) ANA GENEL TOPLAMA ekle
+                    if ($row.data('level') == 0) {
+                        grandSysUSD += sysLineUSD;
+                        grandSysTL  += sysLineTL;
+                        
+                        grandEstUSD += estLineUSD;
+                        grandEstTL  += estLineTL;
+                        
+                        grandManUSD += manLineUSD;
+                        grandManTL  += manLineTL;
+                    }
+                });
+
+                // Footer Genel Toplam Yazdırılması
+                $('#grand-sys-total-usd').text(grandSysUSD.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                $('#grand-sys-total-tl').text(grandSysTL.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                
+                $('#grand-manual-total-usd').text(grandManUSD.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                $('#grand-manual-total-tl').text(grandManTL.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+                $('#grand-est-total-usd').text(grandEstUSD.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                $('#grand-est-total-tl').text(grandEstTL.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            }
+
+            calculateEstimates();
+
+            // Tüm input değişikliklerini dinleyip saniye saniye canlı günceller
+            $('.input-manual-price, .select-currency, .input-manual-usd, .input-manual-qty').on('input change', function () {
+                calculateEstimates();
+            });
+        });
+    </script>
+}

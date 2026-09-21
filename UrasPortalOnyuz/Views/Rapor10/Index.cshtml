@@ -1,0 +1,836 @@
+﻿@model List<WebApplication3.Models.ProductImportCostViewModel>
+@using System.Globalization;
+@using Newtonsoft.Json;
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Xsrf
+
+@{
+    ViewData["Title"] = "İthalat Maliyet Analizi Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["SelectedDatabase"] ?? "";
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? currentDb;
+
+    var reportDataJson = Model != null ? JsonConvert.SerializeObject(Model) : "[]";
+
+    var distinctValues = new Dictionary<string, List<string>>();
+    if (Model != null)
+    {
+        distinctValues["TedarikciAdi"] = (List<string>)ViewBag.TedarikciAdiList ?? new List<string>();
+        distinctValues["Kalemİsmi"] = (List<string>)ViewBag.KalemIsmiList ?? new List<string>();
+        distinctValues["TemelBelgeParaBirimi"] = (List<string>)ViewBag.TemelBelgeParaBirimiList ?? new List<string>();
+        distinctValues["MaliyetBelgeNo"] = (List<string>)ViewBag.MaliyetBelgeNoList ?? new List<string>();
+    }
+
+    var islemSayisi = Model?.Count ?? 0;
+    var farkliTedarikci = Model?.Select(x => x.TedarikciAdi).Where(x => !string.IsNullOrEmpty(x)).Distinct().Count() ?? 0;
+    var farkliKalem = Model?.Select(x => x.Kalemİsmi).Where(x => !string.IsNullOrEmpty(x)).Distinct().Count() ?? 0;
+    var toplamMiktar = Model?.Sum(x => x.Miktar) ?? 0;
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+
+    <style>
+        html, body { overflow-x: hidden; height: auto !important; margin: 0; padding: 0; }
+        
+        .container, .container-fluid, main, .content-wrapper, .page-content, .app-content, .content, .body-content { 
+            max-width: 100% !important; 
+            width: 100% !important; 
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            padding-left: 0.5rem !important; 
+            padding-right: 0.5rem !important; 
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            padding-bottom: 50px !important;
+        }
+
+        body { 
+            background-color: #f4f7fc; 
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            color: #2b3445; 
+            font-size: 0.75rem;
+        }
+
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 20px; transition: all 0.3s ease; position: relative; overflow: hidden; cursor: default; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        
+        .kpi-title { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; z-index: 2; position: relative; }
+        .kpi-value { font-size: 24px; font-weight: 900; color: #0f172a; margin-bottom: 2px; z-index: 2; position: relative; white-space: nowrap; letter-spacing: -0.5px; }
+        .kpi-desc { font-size: 11px; color: #94a3b8; z-index: 2; position: relative; }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 5rem; color: #e2e8f0; opacity: 0.4; z-index: 1; transform: rotate(-10deg); }
+        
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        .border-top-warning { border-top: 4px solid #f59e0b !important; }
+        .border-top-success { border-top: 4px solid #10b981 !important; }
+        .border-top-info { border-top: 4px solid #0ea5e9 !important; }
+
+        .action-toolbar { background-color: #ffffff; padding: 12px 15px; border-radius: 10px; border: 1px solid #eef2f7; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; justify-content: space-between; align-items: center; }
+
+        .report-table-card {
+            background: #ffffff; 
+            border-radius: 12px; 
+            border: 1px solid #eef2f7; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03); 
+            padding: 20px;
+            height: auto !important;
+            overflow: visible !important;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* --- STICKY HEADER --- */
+        .table-container { 
+            width: 100%;
+            height: 65vh; 
+            min-height: 400px; 
+            overflow-y: auto !important; 
+            overflow-x: auto !important; 
+            background-color: white; 
+            border-radius: 8px; 
+            border: 1px solid #eef2f7; 
+            position: relative;
+        }
+        
+        .rapor-tablo { 
+            width: 100%; 
+            table-layout: auto; 
+            border-collapse: separate !important; 
+            border-spacing: 0 !important; 
+            min-width: 1800px; 
+            margin-bottom: 0;
+        }
+        
+        .rapor-tablo th, .rapor-tablo td {
+            padding: 8px 10px !important;
+            font-size: 11px !important;
+            border-right: 1px solid #f1f5f9;
+            vertical-align: middle;
+            line-height: 1.3;
+        }
+
+        .rapor-tablo tbody td {
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .rapor-tablo thead tr.main-header-row th {
+            position: sticky !important;
+            top: 0 !important; 
+            background-color: #f8fafc !important; 
+            color: #475569;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            z-index: 102 !important;
+            height: 45px !important; 
+            box-sizing: border-box;
+            text-align: center;
+            box-shadow: 0 1px 0 #cbd5e1; 
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .rapor-tablo thead tr.main-header-row th:hover { 
+            background-color: #e2e8f0 !important; 
+            color: #0f172a; 
+        }
+
+        .rapor-tablo thead tr.filter-row th {
+            position: sticky !important;
+            top: 45px !important; 
+            background-color: #ffffff !important;
+            z-index: 101 !important;
+            padding: 6px !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.04), 0 1px 0 #cbd5e1;
+        }
+        /* ----------------------------------- */
+        
+        .rapor-tablo tbody tr:hover td { background-color: #f8fafc; box-shadow: inset 2px 0 0 #3b82f6; }
+        
+        .col-truncate-md { max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .col-truncate-lg { max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .num { text-align: right; font-variant-numeric: tabular-nums; }
+        
+        .badge-soft-secondary { background-color: #f1f5f9; color: #475569; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px; border: 1px solid #cbd5e1; }
+
+        .rapor-tablo thead tr.filter-row th .bootstrap-select > .dropdown-toggle {
+            height: 30px !important;
+            padding: 4px 8px !important;
+            font-size: 11px !important;
+            background-color: #fff !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 4px;
+            line-height: 1.5;
+        }
+        
+        body > .bootstrap-select.dropdown, .bootstrap-select .dropdown-menu {
+            z-index: 999999 !important;
+            font-size: 11px !important;
+        }
+
+        .bs-searchbox input.form-control {
+            user-select: auto !important;
+            pointer-events: auto !important;
+            color: #2b3445 !important;
+            background-color: #ffffff !important;
+        }
+
+        .link-style { color: #3b82f6; cursor: pointer; font-weight: 700; transition: all 0.2s; }
+        .link-style:hover { color: #1d4ed8; text-decoration: underline; }
+
+        /* Modern Modal Tasarımı ve Sticky Alanlar */
+        .modal-xl-custom { max-width: 95% !important; }
+        .modal-content { border-radius: 12px; border: none; box-shadow: 0 15px 35px rgba(0,0,0,0.2); overflow: hidden; }
+        .modal-header-custom { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color: #ffffff; padding: 16px 24px; border-bottom: none; z-index: 1050; }
+        .modal-header-custom .btn-close { filter: invert(1) grayscale(100%) brightness(200%); opacity: 0.8; }
+        .modal-header-custom .btn-close:hover { opacity: 1; }
+
+        .modal-info-bar { background-color: #ffffff; border-bottom: 1px solid #e2e8f0; z-index: 1040; position: relative; }
+        .info-card { display: flex; align-items: center; padding: 8px 16px; border-right: 1px solid #e2e8f0; }
+        .info-card:last-child { border-right: none; }
+        .info-card i { font-size: 18px; color: #94a3b8; margin-right: 12px; }
+        .info-card .info-title { font-size: 10.5px; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; display: block; margin-bottom: 2px;}
+        .info-card .info-val { font-size: 14px; font-weight: 800; color: #0f172a; display: block; }
+        .fw-black { font-weight: 900 !important; }
+
+        .modal-table-scroll-area { max-height: 55vh; overflow-y: auto; background-color: #f8fafc; padding: 20px; }
+
+        .modern-report-table { border-collapse: separate; border-spacing: 0; width: 100%; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; }
+        .modern-report-table thead th { 
+            position: sticky; 
+            top: 0; 
+            z-index: 1020; 
+            background-color: #f1f5f9; 
+            color: #475569; 
+            font-weight: 700; 
+            text-transform: uppercase; 
+            font-size: 11px; 
+            padding: 12px 16px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.04), 0 2px 0 #cbd5e1;
+        }
+        .modern-report-table td { padding: 12px 16px; font-size: 12px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+        .modern-report-table tbody tr:hover { background-color: #f8fafc; }
+        .modern-report-table .bg-unit-cost { background-color: #f0f9ff !important; color: #0284c7 !important; font-weight: 600; }
+        
+        .modern-report-table tfoot th, .modern-report-table tfoot td {
+            position: sticky;
+            bottom: -1px;
+            z-index: 1020;
+            background: linear-gradient(to right, #0f172a, #1e293b); 
+            color: #ffffff; 
+            font-weight: 700; 
+            font-size: 13px; 
+            padding: 15px 16px; 
+            border-top: 3px solid #3b82f6; 
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+        }
+        .modern-report-table tfoot .total-highlight { color: #facc15; font-size: 14px; }
+
+        .btn-sm { font-size: 11.5px !important; padding: 4px 12px !important; height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+    </style>
+}
+
+@Html.AntiForgeryToken()
+
+<div class="container-fluid">
+    <input type="hidden" id="currentDb" value="@currentDb" />
+
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;"><i class="fas fa-ship text-primary me-2"></i>İthalat Maliyet Analizi Raporu</h4>
+            <span class="text-muted" style="font-size: 13px;">Aktif Veritabanı: <strong class="text-primary">@currentSelectedDbDisplay</strong> | İthalat belgelerine ait kalem bazlı maliyet, kur ve fark analizleri</span>
+        </div>
+        <div>
+            <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-sm btn-outline-secondary shadow-sm rounded-pill px-3">
+                <i class="fas fa-arrow-left"></i> Ana Sayfaya Dön
+            </a>
+        </div>
+    </div>
+
+    <div class="row mb-3 g-3">
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-primary hover-elevate">
+                <i class="fas fa-list-ol kpi-icon-bg"></i>
+                <div class="kpi-title">Toplam Kayıt</div>
+                <div class="kpi-value text-primary" id="kpiTotalRecords">@islemSayisi</div>
+                <div class="kpi-desc">Filtrelenen belge sayısı</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-info hover-elevate">
+                <i class="fas fa-building kpi-icon-bg"></i>
+                <div class="kpi-title">Farklı Tedarikçi</div>
+                <div class="kpi-value text-info">@farkliTedarikci</div>
+                <div class="kpi-desc">İşlem gören tedarikçi sayısı</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-warning hover-elevate">
+                <i class="fas fa-boxes kpi-icon-bg"></i>
+                <div class="kpi-title">Farklı Kalem</div>
+                <div class="kpi-value text-warning">@farkliKalem</div>
+                <div class="kpi-desc">İthal edilen eşsiz ürün çeşidi</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-success hover-elevate position-relative">
+                <span class="badge bg-success position-absolute top-0 end-0 mt-3 me-3 rounded-pill shadow-sm">NET</span>
+                <i class="fas fa-weight-hanging kpi-icon-bg"></i>
+                <div class="kpi-title">Toplam İthalat Miktarı</div>
+                <div class="kpi-value text-success">@toplamMiktar.ToString("N2", new CultureInfo("tr-TR"))</div>
+                <div class="kpi-desc">Tüm kalemlerin toplam hacmi</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="action-toolbar mb-3">
+        <div class="w-100 d-flex flex-wrap align-items-center justify-content-between gap-3 m-0">
+            <div class="d-flex align-items-center gap-3 flex-grow-1 flex-wrap">
+                <button type="button" class="btn btn-primary btn-sm shadow-sm px-4" onclick="window.clearReportFilters()">
+                    <i class="fas fa-filter-slash"></i> Filtreleri Temizle
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="report-table-card mb-4 position-relative">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="card-title mb-0 fw-bold text-dark" style="font-size: 14px;"><i class="fas fa-table text-primary me-2"></i>Maliyet Detay Tablosu</div>
+            <div class="text-muted" style="font-size: 11.5px;">Mavi renkli Belge Numaralarına tıklayarak detayları görebilirsiniz.</div>
+        </div>
+        
+        <div class="table-container shadow-sm">
+            <table class="table table-hover rapor-tablo" id="rapor10Table">
+                <thead>
+                    <tr class="main-header-row">
+                        <th class="sortable-column" data-column="MaliyetBelgeNo" data-sort-type="number" style="width: 100px;">Belge No <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="TedarikciAdi" data-sort-type="text" style="min-width: 250px;">Tedarikçi Adı <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="Kalemİsmi" data-sort-type="text" style="min-width: 250px;">Kalem İsmi <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="Miktar" data-sort-type="number" style="width: 100px;">Miktar <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="TemelBelgeFiyati" data-sort-type="number" style="width: 120px;">Birim Fiyat <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="TemelBelgeParaBirimi" data-sort-type="text" style="width: 70px;">PB <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="IthalatMaliyetiKuru" data-sort-type="number" style="width: 90px;">Kur <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="BirimFiyatTL" data-sort-type="number" style="width: 130px;">Birim Fiyat (TL) <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="BirimGiderTL" data-sort-type="number" style="width: 130px;">Birim Gider (TL) <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="BirimMaliyetTL" data-sort-type="number" style="width: 140px;">Birim Maliyet (TL) <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="BirimMaliyetBelgeParaBirimi" data-sort-type="number" style="width: 140px;">Birim Mal. (PB) <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="MaliyetFarkiYuzde" data-sort-type="number" style="width: 90px;">Fark (%) <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="MalGirisiNo" data-sort-type="number" style="width: 100px;">Giriş No <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="MalGirisiTarihi" data-sort-type="date" style="width: 110px;">Giriş Tarihi <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                    </tr>
+                    <tr class="filter-row">
+                        <th data-column="MaliyetBelgeNo">
+                            <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%" title="Tümü">
+                                @foreach (var item in distinctValues["MaliyetBelgeNo"]) { <option value="@item">@item</option> }
+                            </select>
+                        </th>
+                        <th data-column="TedarikciAdi">
+                            <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%" title="Tümü">
+                                @foreach (var item in distinctValues["TedarikciAdi"]) { <option value="@item">@item</option> }
+                            </select>
+                        </th>
+                        <th data-column="Kalemİsmi">
+                            <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%" title="Tümü">
+                                @foreach (var item in distinctValues["Kalemİsmi"]) { <option value="@item">@item</option> }
+                            </select>
+                        </th>
+                        <th data-column="Miktar"></th>
+                        <th data-column="TemelBelgeFiyati"></th>
+                        <th data-column="TemelBelgeParaBirimi">
+                            <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%" title="Tümü">
+                                @foreach (var item in distinctValues["TemelBelgeParaBirimi"]) { <option value="@item">@item</option> }
+                            </select>
+                        </th>
+                        <th data-column="IthalatMaliyetiKuru"></th>
+                        <th data-column="BirimFiyatTL"></th>
+                        <th data-column="BirimGiderTL"></th>
+                        <th data-column="BirimMaliyetTL"></th>
+                        <th data-column="BirimMaliyetBelgeParaBirimi"></th>
+                        <th data-column="MaliyetFarkiYuzde"></th>
+                        <th data-column="MalGirisiNo"></th>
+                        <th data-column="MalGirisiTarihi"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="costDetailsModal" tabindex="-1" aria-labelledby="costDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-xl-custom">
+        <div class="modal-content">
+            <div class="modal-header modal-header-custom">
+                <h5 class="modal-title fw-bold" id="costDetailsModalLabel" style="font-size: 16px; letter-spacing: 0.5px;">
+                    <i class="fas fa-file-invoice-dollar me-2 text-info"></i> Maliyet Ek Gider Raporu
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            
+            <div class="modal-body p-0">
+                <div class="modal-info-bar shadow-sm" id="modalTopInfo" style="display:none;">
+                    <div class="d-flex flex-wrap w-100 align-items-center">
+                        <div class="info-card flex-grow-1">
+                            <i class="fas fa-box-open"></i>
+                            <div>
+                                <span class="info-title">Kalem İsmi</span>
+                                <span class="info-val" id="infoKalem">-</span>
+                            </div>
+                        </div>
+                        <div class="info-card px-4">
+                            <i class="fas fa-balance-scale"></i>
+                            <div>
+                                <span class="info-title">Miktar</span>
+                                <span class="info-val text-dark" id="infoMiktar">-</span>
+                            </div>
+                        </div>
+                        <div class="info-card px-4">
+                            <i class="fas fa-tags"></i>
+                            <div>
+                                <span class="info-title">Birim Fiyat</span>
+                                <span class="info-val text-success" id="infoFiyat">-</span>
+                            </div>
+                        </div>
+                        <!-- BÜYÜK VE DİKKAT ÇEKİCİ ALAN -->
+                        <div class="info-card px-4 bg-primary bg-opacity-10 py-2 border-start border-primary border-3">
+                            <i class="fas fa-calculator text-primary fs-3"></i>
+                            <div class="ms-1">
+                                <span class="info-title text-primary fw-bold">Maliyetli Br. Fiyat</span>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="info-val text-primary fs-4 fw-black" id="infoNihaiFiyat">-</span>
+                                    <span class="badge bg-danger fs-6 px-2 py-1 shadow-sm" id="infoFarkYuzde">-%0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="modalLoading" class="text-center py-5 bg-light">
+                    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Yükleniyor...</span>
+                    </div>
+                    <p class="text-muted fw-bold fs-6">Gider detayları hesaplanıyor...</p>
+                </div>
+
+                <div id="modalContent" class="modal-table-scroll-area" style="display:none;">
+                    <table class="modern-report-table shadow-sm" id="detailsTable">
+                        <thead>
+                            <tr>
+                                <th class="text-start"><i class="fas fa-tag me-1 opacity-50"></i> Gider Kalemi</th>
+                                <th class="text-end"><i class="fas fa-lira-sign me-1 opacity-50"></i> Gider Tutarı (TL)</th>
+                                <th class="text-end bg-unit-cost"><i class="fas fa-divide me-1 opacity-50"></i> Birim Gider (TL)</th>
+                                <th class="text-end"><i class="fas fa-globe me-1 opacity-50"></i> Gider Tutarı (YP)</th>
+                                <th class="text-end bg-unit-cost"><i class="fas fa-divide me-1 opacity-50"></i> Birim Gider (YP)</th>
+                                <th class="text-end"><i class="fas fa-exchange-alt me-1 opacity-50"></i> İthalat Kuru</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="modal-footer border-top bg-white py-3">
+                <button type="button" class="btn btn-outline-secondary btn-sm px-4 rounded-pill fw-bold shadow-sm" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i> Kapat
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+
+    <script>
+        ['keydown', 'keypress', 'keyup', 'click'].forEach(function(eventType) {
+            document.addEventListener(eventType, function(e) {
+                if (e.target && e.target.closest('.bs-searchbox')) {
+                    e.stopPropagation();
+                }
+            }, true); 
+        });
+
+        if (typeof bootstrap !== 'undefined') {
+            window.bootstrap = bootstrap;
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const currentDbParam = '@currentDb';
+            const dbQueryString = currentDbParam ? `&db=${currentDbParam}` : '';
+            const allReportData = @Html.Raw(reportDataJson);
+
+            const tableBody = document.querySelector('#rapor10Table tbody');
+            const kpiTotalRecordsSpan = document.getElementById('kpiTotalRecords');
+
+            let currentlyFilteredRows = [...allReportData];
+            let currentSortColumn = null;
+            let currentSortDirection = 'none';
+
+            const columnMappings = {
+                'MaliyetBelgeNo': 'MaliyetBelgeNo',
+                'TedarikciAdi': 'TedarikciAdi',
+                'Kalemİsmi': 'Kalemİsmi',
+                'Miktar': 'Miktar',
+                'TemelBelgeFiyati': 'TemelBelgeFiyati',
+                'TemelBelgeParaBirimi': 'TemelBelgeParaBirimi',
+                'IthalatMaliyetiKuru': 'IthalatMaliyetiKuru',
+                'BirimFiyatTL': 'BirimFiyatTL',
+                'BirimGiderTL': 'BirimGiderTL',
+                'BirimMaliyetTL': 'BirimMaliyetTL',
+                'BirimMaliyetBelgeParaBirimi': 'BirimMaliyetBelgeParaBirimi',
+                'MaliyetFarkiYuzde': 'MaliyetFarkiYuzde',
+                'MalGirisiNo': 'MalGirisiNo',
+                'MalGirisiTarihi': 'MalGirisiTarihi'
+            };
+
+            function formatNumber(val) {
+                if (val === null || val === undefined) return '-';
+                return val.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+            }
+
+            function formatDate(val) {
+                if (!val) return '-';
+                return new Date(val).toLocaleDateString('tr-TR');
+            }
+
+            function renderTable(data) {
+                tableBody.innerHTML = '';
+                if (data.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="14" class="text-center py-5 text-muted"><i class="fas fa-folder-open fa-3x mb-3 opacity-25 d-block"></i>Gösterilecek veri bulunamadı.</td></tr>';
+                    if (kpiTotalRecordsSpan) kpiTotalRecordsSpan.textContent = "0";
+                    return;
+                }
+                const frag = document.createDocumentFragment();
+
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+
+                    const cellBelgeNo = document.createElement('td');
+                    cellBelgeNo.innerHTML = `<span class="link-style" onclick="showDetails('${(item.Kalemİsmi || '').replace(/'/g, "\\'")}', ${item.MaliyetBelgeNo})">${item.MaliyetBelgeNo || ''}</span>`;
+                    cellBelgeNo.dataset.column = 'MaliyetBelgeNo';
+                    cellBelgeNo.className = "text-center";
+                    row.appendChild(cellBelgeNo);
+
+                    const cellTedarikci = document.createElement('td');
+                    cellTedarikci.textContent = item.TedarikciAdi || '';
+                    cellTedarikci.className = "fw-medium text-dark col-truncate-lg";
+                    row.appendChild(cellTedarikci);
+
+                    const cellKalem = document.createElement('td');
+                    cellKalem.textContent = item.Kalemİsmi || '';
+                    cellKalem.className = "col-truncate-lg text-muted";
+                    row.appendChild(cellKalem);
+
+                    const cellMiktar = document.createElement('td');
+                    cellMiktar.textContent = formatNumber(item.Miktar);
+                    cellMiktar.className = "num fw-bold text-dark";
+                    row.appendChild(cellMiktar);
+
+                    const cellFiyat = document.createElement('td');
+                    cellFiyat.textContent = formatNumber(item.TemelBelgeFiyati);
+                    cellFiyat.className = "num text-muted";
+                    row.appendChild(cellFiyat);
+
+                    const cellPB = document.createElement('td');
+                    cellPB.innerHTML = `<span class="badge-soft-secondary border">${item.TemelBelgeParaBirimi || ''}</span>`;
+                    cellPB.className = "text-center";
+                    row.appendChild(cellPB);
+
+                    const cellKur = document.createElement('td');
+                    cellKur.textContent = formatNumber(item.IthalatMaliyetiKuru);
+                    cellKur.className = "num text-danger fw-medium";
+                    row.appendChild(cellKur);
+
+                    const cellFiyatTL = document.createElement('td');
+                    cellFiyatTL.textContent = formatNumber(item.BirimFiyatTL);
+                    cellFiyatTL.className = "num text-muted";
+                    row.appendChild(cellFiyatTL);
+
+                    const cellGiderTL = document.createElement('td');
+                    cellGiderTL.textContent = formatNumber(item.BirimGiderTL);
+                    cellGiderTL.className = "num text-warning fw-bold";
+                    row.appendChild(cellGiderTL);
+
+                    const cellMalTL = document.createElement('td');
+                    cellMalTL.textContent = formatNumber(item.BirimMaliyetTL);
+                    cellMalTL.className = "num fw-bold text-primary";
+                    row.appendChild(cellMalTL);
+
+                    const cellMalPB = document.createElement('td');
+                    cellMalPB.textContent = formatNumber(item.BirimMaliyetBelgeParaBirimi);
+                    cellMalPB.className = "num fw-bold text-info";
+                    row.appendChild(cellMalPB);
+
+                    const cellFark = document.createElement('td');
+                    const farkVal = item.MaliyetFarkiYuzde || 0;
+                    cellFark.textContent = formatNumber(farkVal);
+                    cellFark.className = "num fw-bold";
+                    if(farkVal > 0) cellFark.classList.add('text-danger');
+                    else if(farkVal < 0) cellFark.classList.add('text-success');
+                    row.appendChild(cellFark);
+
+                    const cellGirisNo = document.createElement('td');
+                    cellGirisNo.textContent = item.MalGirisiNo || '-';
+                    cellGirisNo.className = "text-center";
+                    row.appendChild(cellGirisNo);
+
+                    const cellGirisTar = document.createElement('td');
+                    cellGirisTar.textContent = formatDate(item.MalGirisiTarihi);
+                    cellGirisTar.className = "text-center";
+                    row.appendChild(cellGirisTar);
+
+                    frag.appendChild(row);
+                });
+
+                tableBody.appendChild(frag);
+                if (kpiTotalRecordsSpan) kpiTotalRecordsSpan.textContent = data.length.toLocaleString('tr-TR');
+            }
+
+            function filterTableAndRender() {
+                const filters = {};
+                $('.filter-select-bs').each(function () {
+                    const selectElement = $(this);
+                    const columnKey = selectElement.closest('th').data('column');
+                    const selectedValues = selectElement.val();
+                    if (selectedValues && selectedValues.length > 0) {
+                        filters[columnKey] = selectedValues.map(v => (v || '').toLowerCase().trim());
+                    }
+                });
+
+                let filteredData = allReportData.filter(item => {
+                    let isMatch = true;
+                    for (const column in filters) {
+                        const filterValues = filters[column];
+                        const propName = columnMappings[column];
+                        if (!propName) continue;
+
+                        let itemValue = item[propName];
+
+                        if (itemValue === null || itemValue === undefined) {
+                            itemValue = '';
+                        } else if (typeof itemValue === 'number') {
+                             itemValue = itemValue.toString();
+                        } else {
+                            itemValue = itemValue.toString();
+                        }
+                        itemValue = itemValue.toLowerCase().trim();
+
+                        if (filterValues.length > 0 && !filterValues.includes(itemValue)) {
+                            isMatch = false;
+                            break;
+                        }
+                    }
+                    return isMatch;
+                });
+
+                if (currentSortColumn && currentSortDirection !== 'none') {
+                    const sortType = document.querySelector(`th[data-column="${currentSortColumn}"]`)?.dataset.sortType;
+                    const propName = columnMappings[currentSortColumn];
+                    filteredData.sort((itemA, itemB) => {
+                        let valA = itemA[propName];
+                        let valB = itemB[propName];
+
+                        if (valA === null || valA === undefined) valA = '';
+                        if (valB === null || valB === undefined) valB = '';
+
+                        let comparison = 0;
+                        if (sortType === 'number') {
+                            comparison = (parseFloat(valA) || 0) - (parseFloat(valB) || 0);
+                        } else if (sortType === 'date') {
+                            const dateA = valA ? new Date(valA) : 0;
+                            const dateB = valB ? new Date(valB) : 0;
+                            comparison = dateA - dateB;
+                        } else {
+                            comparison = (valA.toString()).localeCompare(valB.toString(), 'tr', { sensitivity: 'base' });
+                        }
+                        return currentSortDirection === 'asc' ? comparison : -comparison;
+                    });
+                }
+
+                currentlyFilteredRows = filteredData;
+                renderTable(currentlyFilteredRows);
+            }
+
+            document.querySelectorAll('th.sortable-column').forEach(header => {
+                header.addEventListener('click', function () {
+                    const columnKey = this.dataset.column;
+                    if (currentSortColumn === columnKey) {
+                        if (currentSortDirection === 'asc') currentSortDirection = 'desc';
+                        else if (currentSortDirection === 'desc') {
+                            currentSortDirection = 'none';
+                            currentSortColumn = null;
+                        } else currentSortDirection = 'asc';
+                    } else {
+                        if (currentSortColumn !== null) {
+                            const prevHeader = document.querySelector(`th.sortable-column[data-column="${currentSortColumn}"] i`);
+                            if (prevHeader) {
+                                prevHeader.className = 'fas fa-sort float-end mt-1 text-secondary';
+                            }
+                        }
+                        currentSortColumn = columnKey;
+                        currentSortDirection = 'asc';
+                    }
+
+                    document.querySelectorAll('th.sortable-column i').forEach(icon => icon.className = 'fas fa-sort float-end mt-1 text-secondary');
+                    const sortIcon = this.querySelector('i');
+                    if (sortIcon && currentSortDirection !== 'none') {
+                        sortIcon.className = `fas fa-sort-${currentSortDirection === 'asc' ? 'up' : 'down'} float-end mt-1 text-primary`;
+                    }
+                    filterTableAndRender();
+                });
+            });
+
+            window.clearReportFilters = function () {
+                $('.filter-select-bs').selectpicker('val', '');
+                currentSortColumn = null;
+                currentSortDirection = 'none';
+                document.querySelectorAll('th.sortable-column i').forEach(icon => icon.className = 'fas fa-sort float-end mt-1 text-secondary');
+                filterTableAndRender();
+                toastr.success('Filtreler başarıyla temizlendi.');
+            };
+
+            window.showDetails = async function(itemName, docNum) {
+                const modal = new bootstrap.Modal(document.getElementById('costDetailsModal'));
+                const loading = document.getElementById('modalLoading');
+                const content = document.getElementById('modalContent');
+                const topInfo = document.getElementById('modalTopInfo');
+                
+                const table = document.getElementById('detailsTable');
+                const tbody = table.querySelector('tbody');
+                
+                const oldTfoot = table.querySelector('tfoot');
+                if (oldTfoot) oldTfoot.remove();
+
+                modal.show();
+                loading.style.display = 'block';
+                content.style.display = 'none';
+                topInfo.style.display = 'none';
+                tbody.innerHTML = '';
+
+                try {
+                    const response = await fetch(`/IthalatMaliyet/GetCostDetails?itemName=${encodeURIComponent(itemName)}&maliyetBelgeNo=${docNum}${dbQueryString}`);
+                    if (!response.ok) throw new Error("Veri sunucudan alınamadı.");
+
+                    const details = await response.json();
+
+                    if(details.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5 text-muted"><i class="fas fa-box-open fa-2x mb-2 d-block"></i>Bu belge numarasına ait alt gider detayı bulunmamaktadır.</td></tr>';
+                        content.style.display = 'block';
+                    } else {
+                        const firstItem = details[0];
+                        document.getElementById('infoKalem').textContent = firstItem.kalemİsmi || '-';
+                        document.getElementById('infoMiktar').textContent = formatNumber(firstItem.miktar);
+                        
+                        const pb = firstItem.temelBelgeParaBirimi || 'TL';
+                        document.getElementById('infoFiyat').textContent = formatNumber(firstItem.temelBelgeFiyati) + ' ' + pb;
+                        
+                        // BÜYÜK DİKKAT ÇEKİCİ ALAN (AYNI PARA BİRİMİNDE MALİYETLİ FİYAT VE YÜZDELİK FARK)
+                        document.getElementById('infoNihaiFiyat').textContent = formatNumber(firstItem.birimMaliyetBelgeParaBirimi) + ' ' + pb;
+
+                        const farkYuzde = firstItem.maliyetFarkiYuzde || 0;
+                        const farkBadge = document.getElementById('infoFarkYuzde');
+                        if (farkYuzde > 0) {
+                            farkBadge.className = 'badge bg-danger fs-6 px-2 py-1 shadow-sm';
+                            farkBadge.textContent = `+%${formatNumber(farkYuzde)}`;
+                        } else if (farkYuzde < 0) {
+                            farkBadge.className = 'badge bg-success fs-6 px-2 py-1 shadow-sm';
+                            farkBadge.textContent = `-%${formatNumber(Math.abs(farkYuzde))}`;
+                        } else {
+                            farkBadge.className = 'badge bg-secondary fs-6 px-2 py-1 shadow-sm';
+                            farkBadge.textContent = `%0`;
+                        }
+
+                        topInfo.style.display = 'block';
+
+                        let totalTL = 0;
+                        let totalYP = 0;
+                        let totalUnitTL = 0;
+                        let totalUnitYP = 0;
+                        let currencyUnit = "";
+
+                        details.forEach(det => {
+                            const quantity = det.miktar && det.miktar > 0 ? det.miktar : 1;
+                            
+                            let valTL = det.giderTutariTL || 0;
+                            totalTL += valTL;
+                            
+                            let unitCostTL = valTL / quantity;
+                            totalUnitTL += unitCostTL;
+
+                            let valYP = 0;
+                            if (det.giderTutariYabanciPara) {
+                                const parts = det.giderTutariYabanciPara.split(' ');
+                                valYP = parseFloat(parts[0].replace(',', '.')); 
+                                if (!isNaN(valYP)) totalYP += valYP;
+                                if (parts.length > 1) currencyUnit = parts[1];
+                            }
+
+                            let unitCostYP = valYP / quantity;
+                            totalUnitYP += unitCostYP;
+
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td class="fw-semibold text-dark">${det.giderKalemi || '-'}</td>
+                                <td class="text-end text-muted font-monospace">${formatNumber(valTL)}</td>
+                                <td class="text-end bg-unit-cost font-monospace">${formatNumber(unitCostTL)}</td> 
+                                <td class="text-end text-muted font-monospace">${det.giderTutariYabanciPara || '-'}</td>
+                                <td class="text-end bg-unit-cost font-monospace">${formatNumber(unitCostYP)} <span class="ms-1 small">${currencyUnit}</span></td> 
+                                <td class="text-end font-monospace text-secondary">${formatNumber(det.ithalatMaliyetiKuru)}</td>
+                            `;
+                            tbody.appendChild(tr);
+                        });
+
+                        const tfoot = document.createElement('tfoot');
+                        tfoot.innerHTML = `
+                            <tr>
+                                <th>GENEL TOPLAM</th>
+                                <td class="text-end font-monospace">${formatNumber(totalTL)} <span class="small ms-1 opacity-75">TL</span></td>
+                                <td class="text-end font-monospace total-highlight">${formatNumber(totalUnitTL)} <span class="small ms-1 opacity-75">TL</span></td> 
+                                <td class="text-end font-monospace">${formatNumber(totalYP)} <span class="small ms-1 opacity-75">${currencyUnit}</span></td>
+                                <td class="text-end font-monospace total-highlight">${formatNumber(totalUnitYP)} <span class="small ms-1 opacity-75">${currencyUnit}</span></td> 
+                                <td></td>
+                            </tr>
+                        `;
+                        table.appendChild(tfoot);
+                    }
+                } catch (error) {
+                    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4"><i class="fas fa-exclamation-triangle me-2"></i>Sistem Hatası: ${error.message}</td></tr>`;
+                } finally {
+                    loading.style.display = 'none';
+                    content.style.display = 'block';
+                }
+            };
+
+            renderTable(allReportData);
+
+            $('.filter-select-bs').selectpicker({
+                liveSearch: true,
+                actionsBox: true,
+                selectAllText: 'Tümünü Seç',
+                deselectAllText: 'Tümünü Kaldır',
+                selectedTextFormat: 'count > 1',
+                width: '100%',
+                container: 'body',
+                dropupAuto: false,
+                size: 6
+            }).on('changed.bs.select', function () {
+                filterTableAndRender();
+            }).on('shown.bs.select', function (e) {
+                const dropdownMenu = $('body > .bootstrap-select.dropdown.show');
+                if (dropdownMenu.length) {
+                    setTimeout(() => {
+                        dropdownMenu.find('.bs-searchbox input').focus();
+                    }, 50);
+                }
+            });
+        });
+    </script>
+}

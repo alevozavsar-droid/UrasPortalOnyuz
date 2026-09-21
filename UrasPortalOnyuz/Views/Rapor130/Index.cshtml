@@ -1,0 +1,1247 @@
+﻿@model FinansRaporlama.Controllers.KonsolideDashboard130ViewModel
+@{
+    ViewData["Title"] = "Nakit Akış İzleme Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    bool isSuperUser = ViewBag.IsSuperUser == true;
+    string activeRole = ViewBag.CurrentRole ?? "none";
+    string currentUser = (ViewBag.CurrentUserName as string) ?? "sistem";
+
+    // Muhasebe ve Finans yetkili kullanıcıları listesi
+    string[] muhUsers = new[] {
+        "muh45", "muh47", 
+        "kullanici@ornek.local", "seda.isik", 
+        "kullanici@ornek.local", "kullanici@ornek.local", "canan.su", "canansu"
+    };
+
+    bool isMuhUser = muhUsers.Contains(currentUser) || activeRole == "muh45";
+
+    // Yetki Mantıkları
+    bool canEditMutabakat = isMuhUser || isSuperUser;
+    bool canEditNotlar = activeRole == "sat5" || activeRole == "sat8" || isMuhUser || isSuperUser;
+}
+
+@section Styles {
+    <style>
+        .rapor-ozel-header {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .company-section { margin-bottom: 50px; display: none; }
+
+        .excel-layout { display: flex; flex-direction: row; border: 1px solid var(--border-color); border-radius: var(--r-lg, 14px); box-shadow: var(--shadow-sm); background-color: var(--bg-card); overflow: hidden; border-radius: 8px; }
+        .excel-sidebar { width: 40px; min-width: 40px; background-color: var(--metro-warning, #ffc700); border-right: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; }
+        .excel-sidebar span { writing-mode: vertical-rl; transform: rotate(180deg); font-weight: bold; font-size: 14px; white-space: nowrap; color: #000; }
+        .excel-content { flex: 1; display: flex; flex-direction: column; overflow-x: auto; width: calc(100% - 40px); }
+
+        .excel-table { width: 100%; border-collapse: collapse; font-family: var(--font-main); }
+        .excel-table th, .excel-table td { border: 1px solid var(--border-color); padding: 6px; text-align: center; vertical-align: middle; white-space: nowrap; }
+        .excel-table th { background-color: var(--bg-main); font-weight: 600; font-size: 11px; color: var(--text-primary); }
+        .excel-table .title-row { background-color: var(--sidebar-active-bg); color: var(--sidebar-active-border); font-weight: bold; font-style: italic; border-bottom: none; }
+        
+        .excel-table input[type="text"], .excel-table input[type="date"], .excel-table select { 
+            width: 100%; border: none; background: transparent !important; text-align: center; font-size: 11px; outline: none; 
+            appearance: none; -webkit-appearance: none; -moz-appearance: none; pointer-events: none; cursor: default;
+            color: var(--text-primary);
+        }
+
+        .excel-table textarea { 
+            width: 100%; border: none; background: transparent !important; text-align: left; font-size: 11px; outline: none; box-sizing: border-box;
+            appearance: none; -webkit-appearance: none; -moz-appearance: none; pointer-events: none; cursor: default;
+            color: var(--text-primary); resize: vertical; min-height: 40px; padding: 4px; overflow-wrap: break-word; white-space: pre-wrap;
+        }
+        
+        .num-input { text-align: right; font-weight: bold; }
+        .format-money { text-align: right; font-weight: bold; }
+        .format-rate { text-align: right; font-weight: bold; color: #d63384; } 
+
+        .sortable-header { cursor: pointer; transition: background 0.2s; user-select: none; }
+        .sortable-header:hover { background-color: var(--bg-main); }
+        .sortable-header i { font-size: 10px; color: var(--text-secondary); }
+
+        .clickable-bakiye { transition: background-color 0.2s; }
+        .clickable-bakiye td.link-style { color: var(--text-primary); font-weight: bold; }
+        
+        #rowContextMenu { position: absolute; display: none; z-index: 9999; background: var(--bg-card); border: 1px solid var(--border-color); box-shadow: var(--shadow-md); padding: 5px 0; border-radius: 8px; min-width: 170px; }
+        #rowContextMenu .dropdown-item { padding: 8px 15px; cursor: pointer; display: flex; align-items: center; color: var(--text-primary); }
+        #rowContextMenu .dropdown-item:hover { background-color: var(--bg-main); }
+
+        .welcome-screen { text-align: center; margin-top: 5vh; padding: 40px; color: var(--text-secondary); }
+
+        .interactive-cell select, .interactive-cell input, .interactive-cell textarea {
+            pointer-events: auto !important; 
+            cursor: pointer !important;
+            border: 1px solid #ccc !important;
+            background-color: #fff !important;
+            appearance: auto !important;
+            -webkit-appearance: auto !important;
+            -moz-appearance: auto !important;
+        }
+        .interactive-cell textarea, .interactive-cell textarea[readonly] {
+            cursor: text !important;
+        }
+    
+        /* Uzun listede kolon adlari kaybolmasin */
+        .excel-table thead th {
+            position: sticky; top: 0; z-index: 5;
+            background-color: var(--bg-subtle, var(--bg-main));
+            box-shadow: inset 0 -1px 0 var(--border-color);
+        }
+</style>
+}
+
+@if (activeRole == "none")
+{
+    <div class="welcome-screen">
+        <i class="fas fa-lock fa-4x mb-3 text-danger"></i>
+        <h2 class="text-danger">Bu raporu görüntüleme yetkiniz bulunmamaktadır.</h2>
+        <p class="fs-5 mt-2">Sadece ilgili satınalmacılar ve yöneticiler bu raporu görebilir.</p>
+    </div>
+}
+else
+{
+    @Html.AntiForgeryToken()
+    <div class="rapor-ozel-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <form method="get" asp-action="Index" class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="fw-bold text-primary"><i class="fas fa-calendar-alt"></i> Tarih Aralığı:</span>
+            <input type="date" name="startDate" class="form-control form-control-sm w-auto interactive-cell" value="@Model.StartDate.ToString("yyyy-MM-dd")" />
+            <span>-</span>
+            <input type="date" name="endDate" class="form-control form-control-sm w-auto interactive-cell" value="@Model.EndDate.ToString("yyyy-MM-dd")" />
+            
+            @if(isSuperUser)
+            {
+                <span class="fw-bold ms-3 text-danger"><i class="fas fa-user-shield"></i> Süper Filtre:</span>
+                <select name="viewRole" class="form-select form-select-sm w-auto border-danger fw-bold text-danger interactive-cell">
+                    <option value="all" selected="@(activeRole == "all")">Tüm Kayıtları Göster</option>
+                    <option value="sat5" selected="@(activeRole == "sat5")">Tolga Yaman'in Gördükleri (sat5)</option>
+                    <option value="sat8" selected="@(activeRole == "sat8")">Gizem Tan'un Gördükleri (sat8)</option>
+                    <option value="muh45" selected="@(activeRole == "muh45")">Sadece Planlananlar (Muhasebe/Finans)</option>
+                </select>
+            }
+            else
+            {
+                <input type="hidden" name="viewRole" value="@activeRole" />
+            }
+
+            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i> Getir</button>
+            
+            <button type="submit" asp-action="ExportExcel" class="btn btn-success btn-sm text-white ms-2">
+                <i class="fas fa-file-excel"></i> Excel'e Aktar
+            </button>
+            
+            <button type="button" class="btn btn-info btn-sm text-white ms-2" data-bs-toggle="modal" data-bs-target="#odenenlerModal">
+                <i class="fas fa-check-double"></i> Ödenenler Listesi
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm text-white ms-1" data-bs-toggle="modal" data-bs-target="#sistemLoglariModal">
+                <i class="fas fa-list-alt"></i> Sistem Logları
+            </button>
+        </form>
+
+        <div class="d-flex gap-2 flex-wrap">
+            <span class="fw-bold text-muted mt-1 small">Görüntüle:</span>
+            @foreach (var comp in Model.Companies)
+            {
+                <button type="button" data-target="#company-@comp.DbName" class="btn btn-outline-dark btn-sm rounded-pill font-weight-bold hizli-git-btn">@comp.DisplayName</button>
+            }
+        </div>
+    </div>
+
+    <div class="welcome-screen" id="welcomeMessage">
+        <i class="fas fa-chart-line fa-4x mb-3 text-primary"></i>
+        <h2>Nakit Akış İzleme Raporu</h2>
+        <p class="fs-5 mt-2">Görüntülemek istediğiniz firmayı sağ üstteki butonlardan seçiniz.</p>
+        @if(!isSuperUser){ <span class="badge bg-secondary p-2 mt-2 fs-6">Sadece size ait yetkili satırları görüyorsunuz.</span> }
+    </div>
+
+    @foreach (var comp in Model.Companies)
+    {
+        <div id="company-@comp.DbName" class="company-section">
+            <div class="d-flex justify-content-between mb-2 align-items-center">
+                <div class="dropdown">
+                    <button class="btn btn-outline-primary btn-sm dropdown-toggle fw-bold" type="button" id="odemeMenu-@comp.DbName" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-filter"></i> Ödeme Yöntemi: Tümü
+                    </button>
+                    <ul class="dropdown-menu shadow-sm" style="font-size: 0.85rem;">
+                        <li><a class="dropdown-item odeme-filter-btn" href="#" data-dbname="@comp.DbName" data-method="Tümü">Tümü</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item odeme-filter-btn" href="#" data-dbname="@comp.DbName" data-method="Nakit">Nakit</a></li>
+                        <li><a class="dropdown-item odeme-filter-btn" href="#" data-dbname="@comp.DbName" data-method="Çek">Çek/Senet</a></li>
+                        <li><a class="dropdown-item odeme-filter-btn" href="#" data-dbname="@comp.DbName" data-method="Senet">Senet</a></li>
+                        <li><a class="dropdown-item odeme-filter-btn" href="#" data-dbname="@comp.DbName" data-method="Havale / EFT">Havale / EFT</a></li>
+                        <li><a class="dropdown-item odeme-filter-btn" href="#" data-dbname="@comp.DbName" data-method="Kredi Kartı / Banka Kartı">Kredi Kartı / Banka Kartı</a></li>
+                        <li><a class="dropdown-item odeme-filter-btn" href="#" data-dbname="@comp.DbName" data-method="Mahsup">Mahsup</a></li>
+                        <li><a class="dropdown-item odeme-filter-btn" href="#" data-dbname="@comp.DbName" data-method="Temlik">Temlik</a></li>
+                        <li><a class="dropdown-item odeme-filter-btn" href="#" data-dbname="@comp.DbName" data-method="Diğer">Diğer</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="excel-layout shadow-sm">
+                <div class="excel-sidebar">
+                    <span>@comp.DisplayName</span>
+                </div>
+
+                <div class="excel-content">
+                    <table class="excel-table main-payment-table" data-dbname="@comp.DbName">
+                        <thead>
+                            <tr>
+                                <th colspan="18" class="title-row text-center">İZLEME VE MUTABAKAT MODU</th>
+                            </tr>
+                            <tr>
+                                <th style="width: 40px;" title="Satır Numarası">#</th> 
+                                <th class="sortable-header" data-type="string" style="width: 80px;">İŞLEM TİPİ <i class="fas fa-sort ms-1"></i></th>
+                                <th class="sortable-header" data-type="string" style="width: 100px;">KAYNAK FİRMA <i class="fas fa-sort ms-1"></i></th>
+                                <th class="sortable-header" data-type="string" style="width: 100px;">BELGE NO <i class="fas fa-sort ms-1"></i></th>
+                                <th class="sortable-header" data-type="date" style="width: 120px;">PLANLANAN <i class="fas fa-sort ms-1"></i></th>
+                                
+                                <th class="sortable-header" data-type="string" style="min-width: 180px;">KURUM <i class="fas fa-sort ms-1"></i></th>
+                                <th class="sortable-header" data-type="string" style="min-width: 250px;">ÜRÜN / HİZMET <i class="fas fa-sort ms-1"></i></th>
+                                
+                                <th class="sortable-header" data-type="string" style="width: 60px;">PB <i class="fas fa-sort ms-1"></i></th>
+                                <th class="sortable-header" data-type="number" style="width: 80px;">KUR <i class="fas fa-sort ms-1"></i></th>
+                                <th class="sortable-header" data-type="number" style="width: 100px;">TUTAR <i class="fas fa-sort ms-1"></i></th>
+                                <th class="sortable-header" data-type="number" style="width: 100px;">TUTAR (₺) <i class="fas fa-sort ms-1"></i></th>
+                                <th class="sortable-header" data-type="string" style="width: 100px;">ÖDEME YÖNTEMİ <i class="fas fa-sort ms-1"></i></th>
+                                <th class="sortable-header" data-type="number" style="width: 100px;">ÖDENEN <i class="fas fa-sort ms-1"></i></th>
+                                <th class="sortable-header" data-type="string" style="width: 90px;">DURUM <i class="fas fa-sort ms-1"></i></th>
+                                <th style="width: 90px;">BELGELER</th>
+                                
+                                <th class="sortable-header" data-type="string" style="width: 110px;">MUTABAKAT <i class="fas fa-sort ms-1"></i></th>
+                                <th class="sortable-header" data-type="date" style="width: 100px;">SON MUT. T. <i class="fas fa-sort ms-1"></i></th>
+                                <th style="min-width: 350px;">AÇIKLAMA / NOTLAR</th>
+                            </tr>
+                        </thead>
+                        <tbody class="sortable-body" data-dbname="@comp.DbName">
+                            @if (comp.OdemeListesi == null || !comp.OdemeListesi.Any())
+                            {
+                                <tr><td colspan="18" class="text-center text-muted py-3 empty-row nodrag">Kayıt bulunmamaktadır.</td></tr> 
+                            }
+                            else
+                            {
+                                @for (int i = 0; i < comp.OdemeListesi.Count; i++)
+                                {
+                                    var line = comp.OdemeListesi[i];
+                                    <tr style="background-color: @(string.IsNullOrEmpty(line.U_Renk) ? "transparent" : line.U_Renk);" data-docentry="@line.DocEntry" class="data-row">
+                                        <td class="text-center align-middle">
+                                            <span class="row-number fw-bold text-muted" style="font-size: 0.9em;">@(i + 1)</span>
+                                            <input type="hidden" name="U_OdenmeTarihi" value="@(line.U_OdenmeTarihi?.ToString("yyyy-MM-dd"))" />
+                                            <input type="hidden" name="U_PlanlananTarih" value="@(line.U_PlanlananTarih?.ToString("yyyy-MM-dd"))" />
+                                        </td>
+                                        <td class="text-center align-middle">
+                                            <input type="text" value="@(string.IsNullOrEmpty(line.U_IslemTipi) ? "" : line.U_IslemTipi)" readonly disabled />
+                                        </td>
+                                        <td class="text-center align-middle fw-bold" style="color:var(--text-primary)">
+                                            @line.U_KaynakFirma
+                                        </td>
+                                        <td class="text-center align-middle">
+                                            @if(line.U_BagliDocEntry.HasValue && line.U_BagliDocEntry > 0)
+                                            {
+                                                <a href="javascript:void(0);" class="text-decoration-none fw-bold text-primary belge-detay-btn interactive-cell" 
+                                                   data-docentry="@line.U_BagliDocEntry" 
+                                                   data-belgetipi="@line.U_BagliBelgeTipi" 
+                                                   data-kaynakdb="@line.U_KaynakFirma" 
+                                                   title="Detayları Görüntüle">
+                                                   <i class="fas fa-chevron-circle-down"></i> @(line.U_FaturaSiparisNo ?? "Görüntüle")
+                                                </a>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted fw-bold">@(line.U_FaturaSiparisNo ?? "-")</span>
+                                            }
+                                        </td>
+                                        <td><input type="text" value="@(line.U_PlanlananTarih?.ToString("dd.MM.yyyy"))" readonly disabled /></td>
+                                        
+                                        <td class="align-middle"><textarea readonly disabled title="@line.U_Kurum" rows="2">@line.U_Kurum</textarea></td>
+                                        <td class="align-middle"><textarea readonly disabled title="@line.U_UrunHizmet" rows="2">@line.U_UrunHizmet</textarea></td>
+                                        
+                                        <td><input type="text" value="@line.U_ParaBirimi" readonly disabled /></td>
+                                        <td>
+                                            <input type="text" class="format-rate" value="@(line.U_Kur?.ToString("N4", new System.Globalization.CultureInfo("tr-TR")))" readonly disabled />
+                                        </td>
+                                        <td>
+                                            <input type="text" class="format-money" value="@(line.U_Tutar?.ToString("N2", new System.Globalization.CultureInfo("tr-TR")))" readonly disabled />
+                                        </td>
+                                        <td>
+                                            <input type="text" class="format-money text-primary tutartl-val" value="@(line.U_TutarTL?.ToString("N2", new System.Globalization.CultureInfo("tr-TR")))" readonly disabled />
+                                        </td>
+                                        <td>
+                                            <input type="text" value="@line.U_OdemeYontemi" readonly disabled />
+                                            <input type="hidden" class="odeme-yontemi-val" value="@line.U_OdemeYontemi" />
+                                        </td>
+                                        <td>
+                                            <input type="text" class="format-money text-success odenen-val" value="@(line.U_OdenenTutar?.ToString("N2", new System.Globalization.CultureInfo("tr-TR")))" readonly disabled />
+                                        </td>
+                                        <td>
+                                            <input type="text" class="fw-bold" value="@line.U_Durum" readonly disabled />
+                                            <input type="hidden" class="durum-val" value="@line.U_Durum" />
+                                        </td>
+                                        
+                                        <td class="align-middle text-center">
+                                            <div class="d-flex justify-content-center gap-1">
+                                            @if (!string.IsNullOrEmpty(line.U_BE1_DEKONT))
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-primary p-1 pdf-preview-btn interactive-cell" data-url="@line.U_BE1_DEKONT" title="Dekontu Önizle">
+                                                    <i class="fas fa-receipt"></i>
+                                                </button>
+                                            }
+                                            @if (!string.IsNullOrEmpty(line.U_BE1_TALIMAT))
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-danger p-1 pdf-preview-btn interactive-cell" data-url="@line.U_BE1_TALIMAT" title="Talimatı Önizle">
+                                                    <i class="fas fa-file-invoice"></i>
+                                                </button>
+                                            }
+                                            @if(string.IsNullOrEmpty(line.U_BE1_DEKONT) && string.IsNullOrEmpty(line.U_BE1_TALIMAT))
+                                            {
+                                                <span class="text-muted small">- Yok -</span>
+                                            }
+                                            </div>
+                                        </td>
+
+                                        <!-- YENİ MUTABAKAT ALANI MANTIĞI -->
+                                        <td class="interactive-cell align-middle p-1">
+                                            @if(canEditMutabakat)
+                                            {
+                                                @if (line.SonMutabakatTarihi.HasValue)
+                                                {
+                                                    <select class="form-select form-select-sm mutabakat-select fw-bold" data-docentry="@line.DocEntry" data-dbname="@comp.DbName">
+                                                        <option value="" selected="@(string.IsNullOrEmpty(line.U_MutabakatDurumu))">-</option>
+                                                        <option value="Mutabık" selected="@(line.U_MutabakatDurumu == "Mutabık")" style="color: green;">Mutabık</option>
+                                                        <option value="Mutabık Değil" selected="@(line.U_MutabakatDurumu == "Mutabık Değil")" style="color: red;">Mutabık Değil</option>
+                                                    </select>
+                                                }
+                                                else
+                                                {
+                                                    <div style="cursor: pointer;" onclick="ShowMutabakatAlert();" title="Mutabakat yapabilmek için Cari Ekstreden mutabakat kaydetmelisiniz.">
+                                                        <select class="form-select form-select-sm fw-bold" disabled style="pointer-events: none; background-color: #e9ecef; cursor: pointer;">
+                                                            <option>@(string.IsNullOrEmpty(line.U_MutabakatDurumu) ? "-" : line.U_MutabakatDurumu)</option>
+                                                        </select>
+                                                    </div>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <span class="fw-bold @(line.U_MutabakatDurumu == "Mutabık" ? "text-success" : (line.U_MutabakatDurumu == "Mutabık Değil" ? "text-danger" : ""))">
+                                                    @(string.IsNullOrEmpty(line.U_MutabakatDurumu) ? "-" : line.U_MutabakatDurumu)
+                                                </span>
+                                            }
+                                        </td>
+                                        
+                                        <td class="align-middle text-center fw-bold text-secondary" style="font-size: 11px;">
+                                            @(line.SonMutabakatTarihi?.ToString("dd.MM.yyyy") ?? "-")
+                                        </td>
+
+                                        <td class="interactive-cell p-1">
+                                            <div class="d-flex flex-column gap-1">
+                                                @if(canEditNotlar)
+                                                {
+                                                    <textarea class="form-control current-notes border-primary" title="@line.U_Notlar" style="font-size: 11px; min-height: 60px; height: auto; resize: vertical; padding: 5px; background-color:#ffffff!important; text-align: left;">@line.U_Notlar</textarea>
+                                                    
+                                                    <div class="d-flex justify-content-between align-items-center mt-1">
+                                                        <button class="btn btn-success btn-sm btn-save-note flex-shrink-0" type="button" data-docentry="@line.DocEntry" data-dbname="@comp.DbName" title="Düzenlenen Notu Kaydet">
+                                                            <i class="fas fa-save"></i> Kaydet
+                                                        </button>
+                                                        
+                                                        <div class="input-group input-group-sm ms-1 w-100">
+                                                            <input type="text" class="form-control new-note-input" placeholder="Sonuna ekle...">
+                                                            <button class="btn btn-primary btn-sm btn-add-note" type="button" data-docentry="@line.DocEntry" data-dbname="@comp.DbName" title="Sonuna İsminizle Ekle"><i class="fas fa-plus"></i></button>
+                                                        </div>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <textarea class="form-control current-notes" readonly title="@line.U_Notlar" style="font-size: 11px; min-height: 60px; height: auto; resize: vertical; padding: 5px; background-color:#f8f9fa!important; text-align: left;">@line.U_Notlar</textarea>
+                                                }
+                                            </div>
+                                        </td>
+
+                                    </tr>
+                                }
+                            }
+                            
+                            <tr class="total-row nodrag" style="background-color: var(--bg-main);">
+                                <td colspan="9" class="text-end fw-bold" style="color:var(--text-primary)">TOPLAM:</td> 
+                                <td class="fw-bold num-input border-secondary"></td>
+                                <td class="fw-bold num-input toplam-tutar-tl-label text-primary border-secondary">₺0,00</td>
+                                <td colspan="1" class="border-secondary"></td>
+                                <td class="fw-bold num-input toplam-odenen-column-label text-success border-secondary">₺0,00</td>
+                                <td colspan="5" class="border-secondary"></td> 
+                            </tr>
+                        </tbody>
+                    </table>
+                    
+                    @if (activeRole == "all")
+                    {
+                    <div class="d-flex flex-row flex-nowrap gap-3 mt-2 align-items-start" style="padding-bottom: 10px; overflow-x: auto;">
+                        <div class="flex-grow-1" style="min-width: 700px;">
+                            <table class="excel-table summary-table w-100" data-dbname="@comp.DbName" style="border-top: 2px solid var(--border-color);">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 110px;">GÜNCELLENME TARİHİ</th>
+                                        <th>BANKA / KASA</th>
+                                        <th>DETAY</th>
+                                        <th style="width: 50px;">PB</th>
+                                        <th style="width: 100px;">TUTAR</th>
+                                        <th style="width: 100px;">TUTAR (₺)</th>
+                                        <th class="bg-primary text-white" style="width: 120px;">TOPLAM ÖDENECEK</th>
+                                        <th class="bg-success text-white" style="width: 120px;">TOPLAM ÖDENEN</th>
+                                        <th class="bg-danger text-white" style="width: 120px;">KALAN ÖDENECEK</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{ int rowspanSayisi = comp.KasaBakiyeleri.Count > 0 ? comp.KasaBakiyeleri.Count : 1; }
+                                    @if (!comp.KasaBakiyeleri.Any())
+                                    {
+                                        <tr>
+                                            <td colspan="6">Bakiye kaydı bulunamadı.</td>
+                                            <td rowspan="1" class="align-middle fs-6 fw-bold summary-total-to-pay">₺0</td>
+                                            <td rowspan="1" class="align-middle fs-6 fw-bold summary-total-paid">₺0</td>
+                                            <td rowspan="1" class="align-middle fs-6 fw-bold summary-balance">₺0</td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @for (int i = 0; i < comp.KasaBakiyeleri.Count; i++)
+                                        {
+                                            var bakiye = comp.KasaBakiyeleri[i];
+                                            string pbGosterim = bakiye.PB == "TRY" ? "TL" : bakiye.PB == "EUR" ? "EURO" : bakiye.PB;
+
+                                            <tr class="clickable-bakiye">
+                                                <td>@(bakiye.GuncellenmeTarihi?.ToString("dd.MM.yyyy") ?? "")</td>
+                                                <td class="text-start">@bakiye.BankaKasa</td>
+                                                <td class="text-start">@bakiye.Detay</td>
+                                                <td>@pbGosterim</td>
+                                                <td class="num-input">@bakiye.Tutar.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))</td>
+                                                <td class="num-input text-primary">@bakiye.TutarTL.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))</td>
+                                                
+                                                @if (i == 0)
+                                                {
+                                                    <td rowspan="@rowspanSayisi" class="align-middle text-center fs-5 fw-bold summary-total-to-pay text-primary" style="background-color: var(--bg-main);">₺0</td>
+                                                    <td rowspan="@rowspanSayisi" class="align-middle text-center fs-5 fw-bold summary-total-paid text-success" style="background-color: var(--bg-main);">₺0</td>
+                                                    <td rowspan="@rowspanSayisi" class="align-middle text-center fs-5 fw-bold summary-balance text-danger" style="background-color: var(--bg-main);">₺0</td>
+                                                }
+                                            </tr>
+                                        }
+                                    }
+                                    <tr style="background-color: var(--bg-main);">
+                                        <td colspan="5" class="text-end fw-bold" style="color:var(--text-primary)">NAKİT KASA MEVCUT BAKİYE:</td>
+                                        <td class="fw-bold num-input text-warning border-dark border-2">₺@comp.ToplamKasaMevcudu.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))</td>
+                                        <td colspan="3" class="border-0"></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div style="min-width: 400px; width: 400px;">
+                            <table class="excel-table w-100" style="border-top: 2px solid var(--border-color);">
+                                <thead>
+                                    <tr><th colspan="5" class="bg-primary text-white border-primary">PARA BİRİMİNE GÖRE PROJEKSİYON (ORİJİNAL)</th></tr>
+                                    <tr>
+                                        <th style="width: 40px;">PB</th>
+                                        <th>Yöntem</th>
+                                        <th>Mevcut Bakiye</th>
+                                        <th>Bekleyen Ödeme</th>
+                                        <th>Kalan Bakiye</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!comp.ProjeksiyonListesi.Any())
+                                    {
+                                        <tr><td colspan="5" class="text-center text-muted">Kayıt yok.</td></tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var p in comp.ProjeksiyonListesi)
+                                        {
+                                            string pbStr = p.ParaBirimi == "TRY" ? "TL" : p.ParaBirimi;
+                                            <tr>
+                                                <td rowspan="2" class="align-middle fw-bold" style="font-size: 14px; background-color: var(--bg-main);">@pbStr</td>
+                                                <td class="fw-bold text-start">Nakit / Banka</td>
+                                                <td class="num-input text-success">@p.MevcutBanka.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))</td>
+                                                <td class="num-input text-danger">@p.BekleyenNakitOdeme.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))</td>
+                                                <td class="num-input fw-bold @(p.KalanBanka < 0 ? "text-danger" : "text-primary")">
+                                                    @p.KalanBanka.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td class="fw-bold text-start">Müşteri Çekleri</td>
+                                                <td class="num-input text-success">@p.MevcutCek.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))</td>
+                                                <td class="num-input text-danger">@p.BekleyenCekOdeme.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))</td>
+                                                <td class="num-input fw-bold @(p.KalanCek < 0 ? "text-danger" : "text-primary")">
+                                                    @p.KalanCek.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+}
+
+<!-- === MODALLAR BAŞLANGIÇ === -->
+<div id="rowContextMenu">
+    <a class="dropdown-item fw-bold mb-1" href="#" id="btnShowLogs">
+        <i class="fas fa-history text-warning me-2"></i> Geçmişi Görüntüle
+    </a>
+</div>
+<!-- Modal: Ödenenler -->
+<div class="modal fade" id="odenenlerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white py-2 border-0">
+                <h6 class="modal-title"><i class="fas fa-check-double"></i> Tüm Ödenen Belgeler</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="background-color: var(--bg-main);">
+                <div class="row g-2 mb-3">
+                    <div class="col-md-3">
+                        <label class="small fw-bold">Başlangıç Tarihi</label>
+                        <input type="date" id="odenenlerStart" class="form-control form-control-sm border-dark interactive-cell" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="small fw-bold">Bitiş Tarihi</label>
+                        <input type="date" id="odenenlerEnd" class="form-control form-control-sm border-dark interactive-cell" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="small fw-bold">Arama (Kurum / Hizmet vb.)</label>
+                        <input type="text" id="odenenlerSearch" class="form-control form-control-sm border-dark interactive-cell" placeholder="Arama yapın..." />
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="button" id="btnOdenenlerGetir" class="btn btn-primary btn-sm w-100"><i class="fas fa-search"></i> Filtrele</button>
+                    </div>
+                </div>
+                <div class="table-responsive bg-card rounded shadow-sm border border-secondary">
+                    <table class="table table-sm table-hover m-0" style="font-size: 0.8rem;">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Firma</th>
+                                <th>Ödenme Tarihi</th>
+                                <th>Kurum</th>
+                                <th>Ürün / Hizmet</th>
+                                <th>Ödeme Yöntemi</th>
+                                <th>Fatura/SAP No</th>
+                                <th class="text-center">Dekont</th>
+                                <th class="text-center">Talimat</th>
+                                <th class="text-end">Tutar (Orijinal)</th>
+                                <th class="text-end">Tutar (₺)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="odenenlerBody">
+                            <tr><td colspan="10" class="text-center text-muted py-3">Yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Modal: Sistem Logları -->
+<div class="modal fade" id="sistemLoglariModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-secondary text-white py-2 border-0">
+                <h6 class="modal-title"><i class="fas fa-list-alt"></i> Sistem İşlem Logları</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+           <div class="row g-2 mb-3 align-items-end border-bottom pb-2 mt-2 px-3" style="background-color: var(--bg-main);">
+                <div class="col-auto">
+                    <label class="small fw-bold">Firma Seçin:</label>
+                    <select id="logFirmaSelect" class="form-select form-select-sm border-dark interactive-cell">
+                        @foreach (var comp in Model.Companies) { <option value="@comp.DbName">@comp.DisplayName</option> }
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="small fw-bold">Başlangıç:</label>
+                    <input type="date" id="logStartDate" class="form-control form-control-sm border-dark interactive-cell" />
+                </div>
+                <div class="col-auto">
+                    <label class="small fw-bold">Bitiş:</label>
+                    <input type="date" id="logEndDate" class="form-control form-control-sm border-dark interactive-cell" />
+                </div>
+                <div class="col-auto">
+                    <div class="form-check mb-1">
+                        <input class="form-check-input border-dark interactive-cell" type="checkbox" id="chkSadeceSilinenler">
+                        <label class="form-check-label small fw-bold text-danger" for="chkSadeceSilinenler">Sadece Silinenler</label>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <button type="button" id="btnLogGetir" class="btn btn-primary btn-sm"><i class="fas fa-search"></i> Filtrele</button>
+                </div>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive bg-card">
+                    <table class="table table-sm table-hover m-0" style="font-size: 0.8rem;">
+                        <thead class="table-dark">
+                            <tr>
+                                <th style="width: 140px;">Tarih</th>
+                                <th style="width: 150px;">İşlemi Yapan</th>
+                                <th style="width: 130px;">İşlem Tipi</th>
+                                <th style="width: 80px;">Kayıt No</th>
+                                <th>Açıklama / Detay</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sistemLoglariBody">
+                            <tr><td colspan="5" class="text-center text-muted py-3">Firma seçip 'Logları Getir' butonuna basın.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Modal: Satır Geçmişi (Log) -->
+<div class="modal fade" id="logModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white py-2 border-0">
+                <h6 class="modal-title"><i class="fas fa-history text-warning me-2"></i> Belge İşlem Geçmişi</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped table-hover m-0" style="font-size: 0.8rem;">
+                        <thead class="table-secondary">
+                            <tr>
+                                <th style="width: 140px;">Tarih</th>
+                                <th style="width: 150px;">İşlemi Yapan</th>
+                                <th style="width: 130px;">İşlem Tipi</th>
+                                <th>Açıklama / Detay</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logTabloBody">
+                            <tr><td colspan="4" class="text-center text-muted py-3">Loglar yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Modal: Belge Detay -->
+<div class="modal fade" id="detayModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white py-2 border-0">
+                <h6 class="modal-title"><i class="fas fa-list"></i> <span id="detayModalTitle">Detaylar</span></h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped table-hover m-0" style="font-size: 0.75rem;">
+                        <thead class="table-secondary" id="detayModalTableHead"></thead>
+                        <tbody id="detayModalTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-1 border-0" style="background-color: var(--bg-main);">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Modal: PDF Önizleme -->
+<div class="modal fade" id="pdfPreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" style="height: 95vh; max-width: 95vw;">
+        <div class="modal-content border-0" style="height: 100%;">
+            <div class="modal-header bg-dark text-white py-2 border-0">
+                <h6 class="modal-title"><i class="fas fa-file-pdf text-danger me-2"></i> Belge Önizleme</h6>
+                <div>
+                    <a id="modalDownloadBtn" href="#" download class="btn btn-sm btn-success me-3"><i class="fas fa-download"></i> İndir</a>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+            </div>
+            <div class="modal-body p-0" style="height: calc(100% - 40px); background-color: #525659;">
+                <iframe id="pdfPreviewIframe" src="" style="width: 100%; height: 100%; border: none;"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- === MODALLAR BİTİŞ === -->
+
+@section Scripts {
+    <script>
+        // Bulanık/tıklanamaz pencere düzeltmesi.
+        // Layout @@RenderBody()'yi .table-container içinde render ediyor; bu
+        // sayfadaki .table-container kuralı oraya da uyduğu için oluşan
+        // stacking context modali backdrop'un altında bırakıyordu.
+        (function modalleriBodyeTasi() {
+            var idler = ['odenenlerModal', 'sistemLoglariModal', 'logModal', 'detayModal', 'pdfPreviewModal'];
+            idler.forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el && el.parentElement !== document.body) {
+                    document.body.appendChild(el);
+                }
+            });
+        })();
+    </script>
+
+    <!-- SweetAlert2 (Şık Uyarı Mesajları İçin) -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <script>
+        // Uyarı Fonksiyonu
+        function ShowMutabakatAlert() {
+            Swal.fire({
+                icon: 'warning',
+                title: 'İşlem Engellendi',
+                text: 'Cari ekstreden mutabakatı kaydet işlemi yapmalısınız.',
+                confirmButtonText: 'Tamam'
+            });
+        }
+
+        $(document).ready(function () {
+            
+            const csrfToken = $('input[name="__RequestVerificationToken"]').val();
+
+            // Mutabakat ve Notlar için AJAX Güncelleme
+            $(document).on('change', '.mutabakat-select', function() {
+                var btn = $(this);
+                var val = btn.val();
+                var docEntry = btn.data('docentry');
+                var dbName = btn.data('dbname');
+
+                btn.prop('disabled', true);
+
+                $.ajax({
+                    url: '/Rapor130/UpdateMutabakatVeNot',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    headers: { 'RequestVerificationToken': csrfToken },
+                    data: JSON.stringify({
+                        DbName: dbName,
+                        DocEntry: docEntry,
+                        MutabakatDurumu: val,
+                        YeniNot: null
+                    }),
+                    success: function(res) {
+                        btn.prop('disabled', false);
+                        if(res.success) {
+                            toastr.success('Mutabakat durumu güncellendi.');
+                            if(val === 'Mutabık') btn.css('color', 'green');
+                            else if(val === 'Mutabık Değil') btn.css('color', 'red');
+                            else btn.css('color', '');
+                        } else {
+                            toastr.error(res.message || 'Güncellenemedi.');
+                        }
+                    },
+                    error: function() {
+                        btn.prop('disabled', false);
+                        toastr.error('Ağ hatası oluştu.');
+                    }
+                });
+            });
+
+            // YENİ: Serbest Düzenlenen Tam Notu Kaydetme AJAX'ı
+            $(document).on('click', '.btn-save-note', function() {
+                var btn = $(this);
+                var container = btn.closest('td');
+                var textarea = container.find('.current-notes');
+                var val = textarea.val(); 
+                var docEntry = btn.data('docentry');
+                var dbName = btn.data('dbname');
+
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+
+                $.ajax({
+                    url: '/Rapor130/UpdateMutabakatVeNot',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    headers: { 'RequestVerificationToken': csrfToken },
+                    data: JSON.stringify({
+                        DbName: dbName,
+                        DocEntry: docEntry,
+                        TamNot: val 
+                    }),
+                    success: function(res) {
+                        btn.prop('disabled', false).html('<i class="fas fa-save"></i> Kaydet');
+                        if(res.success) {
+                            toastr.success('Notlar başarıyla kaydedildi.');
+                            textarea.attr('title', val); 
+                        } else {
+                            toastr.error(res.message || 'Not kaydedilemedi.');
+                        }
+                    },
+                    error: function() {
+                        btn.prop('disabled', false).html('<i class="fas fa-save"></i> Kaydet');
+                        toastr.error('Ağ hatası oluştu.');
+                    }
+                });
+            });
+
+            $(document).on('click', '.btn-add-note', function() {
+                var btn = $(this);
+                var container = btn.closest('td');
+                var input = container.find('.new-note-input');
+                var textarea = container.find('.current-notes');
+                var val = input.val().trim();
+                var docEntry = btn.data('docentry');
+                var dbName = btn.data('dbname');
+
+                if(!val) return;
+
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+
+                $.ajax({
+                    url: '/Rapor130/UpdateMutabakatVeNot',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    headers: { 'RequestVerificationToken': csrfToken },
+                    data: JSON.stringify({
+                        DbName: dbName,
+                        DocEntry: docEntry,
+                        MutabakatDurumu: null,
+                        YeniNot: val
+                    }),
+                    success: function(res) {
+                        btn.prop('disabled', false).html('<i class="fas fa-plus"></i>');
+                        if(res.success) {
+                            toastr.success('Not başarıyla eklendi.');
+                            input.val('');
+                            var mevcutNot = textarea.val();
+                            var eklenecekMetin = res.eklenenNot;
+                            textarea.val(mevcutNot ? mevcutNot + ' | ' + eklenecekMetin : eklenecekMetin);
+                            
+                            textarea.scrollTop(textarea[0].scrollHeight);
+                        } else {
+                            toastr.error(res.message || 'Not eklenemedi.');
+                        }
+                    },
+                    error: function() {
+                        btn.prop('disabled', false).html('<i class="fas fa-plus"></i>');
+                        toastr.error('Ağ hatası oluştu.');
+                    }
+                });
+            });
+
+            $(document).on('keyup', '.new-note-input', function(e) {
+                if(e.key === 'Enter') {
+                    $(this).siblings('.btn-add-note').click();
+                }
+            });
+
+
+            // Hesaplamalar
+            function calculateAllTotals() {
+                $('.company-section').each(function() {
+                    var $section = $(this);
+                    var sumTutarTL = 0;
+                    var sumOdenen = 0;
+
+                    $section.find('.main-payment-table tbody tr.data-row:visible').each(function() {
+                        var ttl = $(this).find('.tutartl-val').val();
+                        var oden = $(this).find('.odenen-val').val();
+                        
+                        if(ttl) sumTutarTL += parseFloat(ttl.replace(/\./g, '').replace(',', '.')) || 0;
+                        if(oden) sumOdenen += parseFloat(oden.replace(/\./g, '').replace(',', '.')) || 0;
+                    });
+
+                    $section.find('.toplam-tutar-tl-label').text('₺' + formatMoneyStr(sumTutarTL));
+                    $section.find('.toplam-odenen-column-label').text('₺' + formatMoneyStr(sumOdenen));
+
+                    $section.find('.summary-total-to-pay').text('₺' + formatMoneyStr(sumTutarTL));
+                    $section.find('.summary-total-paid').text('₺' + formatMoneyStr(sumOdenen));
+                    
+                    var balance = sumTutarTL - sumOdenen;
+                    $section.find('.summary-balance').text('₺' + formatMoneyStr(balance));
+                });
+            }
+
+            function formatMoneyStr(val) {
+                if (!val && val !== 0) return '0,00';
+                return parseFloat(val).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+
+            calculateAllTotals();
+
+            $('.odeme-filter-btn').click(function (e) {
+                e.preventDefault();
+                var method = $(this).data('method');
+                var text = $(this).text();
+                var dbName = $(this).data('dbname');
+                
+                $(this).closest('.dropdown').find('.dropdown-toggle').html('<i class="fas fa-filter"></i> Ödeme Yöntemi: ' + text);
+                
+                $('.main-payment-table[data-dbname="' + dbName + '"] tbody.sortable-body tr.data-row').each(function () {
+                    var rowMethod = $(this).find('.odeme-yontemi-val').val() || "";
+                    if (method === 'Tümü' || rowMethod === method) {
+                        $(this).show();
+                    } else {
+                        $(this).hide();
+                    }
+                });
+                
+                calculateAllTotals();
+            });
+
+            $(document).on('click', '.hizli-git-btn', function(e) {
+                e.preventDefault();
+                $('#welcomeMessage').hide();
+                $('.company-section').hide();
+                var targetDiv = $($(this).data('target'));
+                if (targetDiv.length) {
+                    targetDiv.fadeIn(300);
+                    $('html, body').animate({ scrollTop: targetDiv.offset().top - 90 }, 300);
+                }
+            });
+
+            $('.sortable-header').click(function() {
+                const table = $(this).closest('table');
+                const tbody = table.find('tbody.sortable-body');
+                const rows = tbody.find('tr.data-row').toArray();
+                const index = $(this).index();
+                const type = $(this).data('type') || 'string';
+                let asc = $(this).data('asc') || false;
+
+                table.find('.sortable-header i').attr('class', 'fas fa-sort ms-1 text-muted');
+                asc = !asc;
+                $(this).data('asc', asc);
+                $(this).find('i').attr('class', asc ? 'fas fa-sort-up ms-1 text-primary' : 'fas fa-sort-down ms-1 text-primary');
+
+                function parseMoneyToFloatLocal(str) {
+                    if (!str && str !== 0) return 0;
+                    var safeStr = str.toString().replace(/\./g, '').replace(',', '.');
+                    return parseFloat(safeStr) || 0;
+                }
+
+                rows.sort((a, b) => {
+                    let valA = $(a).children('td').eq(index).find('input[type="text"], select, textarea, input[type="hidden"]:not(.odeme-yontemi-val, .durum-val)').val() || $(a).children('td').eq(index).text();
+                    let valB = $(b).children('td').eq(index).find('input[type="text"], select, textarea, input[type="hidden"]:not(.odeme-yontemi-val, .durum-val)').val() || $(b).children('td').eq(index).text();
+                    
+                    valA = valA.trim(); valB = valB.trim();
+
+                    if (type === 'number') {
+                        valA = parseMoneyToFloatLocal(valA); valB = parseMoneyToFloatLocal(valB);
+                        return asc ? valA - valB : valB - valA;
+                    } else if (type === 'date') {
+                        valA = new Date(valA).getTime() || 0; valB = new Date(valB).getTime() || 0;
+                        return asc ? valA - valB : valB - valA;
+                    } else {
+                        return asc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                    }
+                });
+
+                tbody.find('tr.sub-detail-row').remove();
+                $('.belge-detay-btn i').removeClass('fa-chevron-circle-up').addClass('fa-chevron-circle-down');
+
+                $.each(rows, function(i, row) { 
+                    var newIndex = i + 1;
+                    $(row).find('.row-number').text(newIndex);
+                    tbody.append(row); 
+                });
+                
+                tbody.append(table.find('.total-row')); 
+            });
+
+            // BELGE DETAYI ÇEKME
+            $(document).on('click', '.belge-detay-btn', function () {
+                var btn = $(this);
+                var tr = btn.closest('tr');
+                var kaynakDbName = btn.data('kaynakdb'); 
+                var docEntry = btn.data('docentry');
+                var belgeTipi = btn.data('belgetipi');
+
+                if (tr.next().hasClass('sub-detail-row')) {
+                    tr.next().fadeOut(200, function() { $(this).remove(); });
+                    btn.find('i').removeClass('fa-chevron-circle-up').addClass('fa-chevron-circle-down');
+                    return;
+                }
+
+                btn.find('i').removeClass('fa-chevron-circle-down').addClass('fa-spinner fa-spin');
+
+                $.get('/Rapor130/GetBelgeAltDetay', { kaynakDbName: kaynakDbName, belgeTipi: belgeTipi, docEntry: docEntry }, function (res) {
+                    btn.find('i').removeClass('fa-spinner fa-spin').addClass('fa-chevron-circle-up');
+
+                    if (res.success && res.data && res.data.length > 0) {
+                        var firstRow = res.data[0];
+                        var faturaNo = firstRow.FaturaNo || firstRow.faturaNo || '';
+                        var pb = firstRow.ParaBirimi || firstRow.paraBirimi || 'TRY';
+
+                        var toplamKdvsiz = 0;
+                        var toplamKdv = 0;
+                        var genelToplam = 0;
+
+                        var kalemlerTable = 
+                            '<table class="table table-bordered table-striped table-hover mt-2 mb-2" style="font-size:11px; background-color: var(--bg-card); color: var(--text-primary);">' +
+                                '<thead style="background-color: var(--bg-main); border-bottom: 2px solid var(--border-color);">' +
+                                    '<tr>' +
+                                        '<th style="font-weight: bold;">Ürün/Hizmet Kodu</th>' +
+                                        '<th style="font-weight: bold;">Açıklama</th>' +
+                                        '<th class="text-center" style="font-weight: bold;">Miktar</th>' +
+                                        '<th class="text-end" style="font-weight: bold;">KDV\'siz Tutar</th>' +
+                                        '<th class="text-end" style="font-weight: bold;">KDV Tutarı</th>' +
+                                        '<th class="text-end" style="font-weight: bold;">KDV\'li Toplam</th>' +
+                                    '</tr>' +
+                                '</thead>' +
+                                '<tbody>';
+
+                        res.data.forEach(function(k) {
+                            var miktar = k.Miktar || k.miktar || 0;
+                            var kdvsiz = k.KdvsizTutar || k.kdvsizTutar || 0;
+                            var kdv = k.KdvTutari || k.kdvTutari || 0;
+                            var kdvli = k.KdvliTutar || k.kdvliTutar || 0;
+
+                            toplamKdvsiz += kdvsiz;
+                            toplamKdv += kdv;
+                            genelToplam += kdvli;
+
+                            kalemlerTable += 
+                                '<tr>' +
+                                    '<td>' + (k.ItemCode || k.itemCode || '') + '</td>' +
+                                    '<td>' + (k.KalemAdi || k.kalemAdi || '') + '</td>' +
+                                    '<td class="text-center">' + miktar.toFixed(2) + '</td>' +
+                                    '<td class="text-end">' + formatMoneyStr(kdvsiz) + ' ' + pb + '</td>' +
+                                    '<td class="text-end text-danger">' + formatMoneyStr(kdv) + ' ' + pb + '</td>' +
+                                    '<td class="text-end fw-bold text-success">' + formatMoneyStr(kdvli) + ' ' + pb + '</td>' +
+                                '</tr>';
+                        });
+
+                        kalemlerTable += 
+                                '</tbody>' +
+                                '<tfoot>' +
+                                    '<tr style="background-color: var(--bg-main); font-weight: bold; border-top: 2px solid var(--border-color);">' +
+                                        '<td colspan="3" class="text-end">BELGE TOPLAMLARI:</td>' +
+                                        '<td class="text-end">' + formatMoneyStr(toplamKdvsiz) + ' ' + pb + '</td>' +
+                                        '<td class="text-end text-danger">' + formatMoneyStr(toplamKdv) + ' ' + pb + '</td>' +
+                                        '<td class="text-end text-success">' + formatMoneyStr(genelToplam) + ' ' + pb + '</td>' +
+                                    '</tr>' +
+                                '</tfoot>' +
+                            '</table>';
+
+                        var faturaText = faturaNo ? '(' + faturaNo + ')' : '';
+                        var subRow = 
+                            '<tr class="sub-detail-row" style="display:none; background-color: var(--bg-main);">' +
+                                '<td colspan="4"></td>' + 
+                                '<td colspan="14">' +
+                                    '<div class="p-3 border border-primary rounded shadow-sm" style="background-color: var(--bg-card);">' +
+                                        '<h6 class="text-primary fw-bold mb-3 border-bottom border-primary pb-2">' +
+                                            '<i class="fas fa-list"></i> ' + belgeTipi + ' Detayları ' + faturaText +
+                                        '</h6>' +
+                                        kalemlerTable +
+                                    '</div>' +
+                                '</td>' +
+                            '</tr>';
+
+                        tr.after(subRow);
+                        tr.next().fadeIn(300);
+                    } else {
+                        btn.find('i').removeClass('fa-spinner fa-spin').addClass('fa-chevron-circle-down');
+                    }
+                }).fail(function() {
+                    btn.find('i').removeClass('fa-spinner fa-spin').addClass('fa-chevron-circle-down');
+                });
+            });
+
+            $(document).on('click', '.pdf-preview-btn', function(e) {
+                e.preventDefault();
+                var rawUrl = $(this).data('url');
+                
+                if (rawUrl) {
+                    var cleanUrl = String(rawUrl).trim().replace(/\\/g, '/');
+                    var fileName = cleanUrl.substring(cleanUrl.lastIndexOf('/') + 1);
+                    var finalUrl = '';
+                    var title = $(this).attr('title') || '';
+                    
+                    if (fileName.toLowerCase().includes('talimat') || title.toLowerCase().includes('talimat')) {
+                        finalUrl = '/Talimatlar/' + fileName;
+                    } else {
+                        finalUrl = '/Dekontlar/' + fileName;
+                    }
+                    
+                    $('#pdfPreviewIframe').attr('src', finalUrl);
+                    $('#modalDownloadBtn').attr('href', finalUrl);
+                    $('#pdfPreviewModal').modal('show');
+                }
+            });
+
+            $('#pdfPreviewModal').on('hidden.bs.modal', function () { $('#pdfPreviewIframe').attr('src', ''); });
+
+            var activeContextRow = null;
+            $(document).on('contextmenu', '.sortable-body tr.data-row', function(e) {
+                e.preventDefault();
+                activeContextRow = $(this);
+                $('#rowContextMenu').css({ display: 'block', left: e.pageX + 'px', top: e.pageY + 'px' });
+            });
+            $(document).click(function() { $('#rowContextMenu').hide(); });
+
+            $('#btnShowLogs').click(function(e) {
+                e.preventDefault();
+                $('#rowContextMenu').hide(); 
+
+                if (activeContextRow) {
+                    var dbName = activeContextRow.closest('tbody').data('dbname');
+                    var docEntry = activeContextRow.data('docentry');
+
+                    if (!docEntry || docEntry == 0) return;
+
+                    $('#logTabloBody').html('<tr><td colspan="4" class="text-center text-muted"><i class="fas fa-spinner fa-spin"></i> Yükleniyor...</td></tr>');
+                    $('#logModal').modal('show');
+
+                    $.ajax({
+                        url: '/Rapor130/GetRowLogs',
+                        type: 'GET',
+                        data: { dbName: dbName, docEntry: docEntry },
+                        success: function (res) {
+                            if (res.success) {
+                                let html = '';
+                                if(res.data.length === 0) {
+                                    html = '<tr><td colspan="4" class="text-center text-danger">Bu belgeye ait geçmiş kaydı bulunamadı.</td></tr>';
+                                } else {
+                                    res.data.forEach(x => {
+                                        let islemTarihi = x.IslemTarihi || x.islemTarihi;
+                                        let kullanici = x.Kullanici || x.kullanici || '-';
+                                        let islemTipi = x.IslemTipi || x.islemTipi || '';
+                                        let aciklama = x.Aciklama || x.aciklama || '';
+
+                                        let dateObj = new Date(islemTarihi);
+                                        let formatliTarih = dateObj.toLocaleDateString('tr-TR') + ' ' + dateObj.toLocaleTimeString('tr-TR');
+                                        
+                                        let islemTipiBadge = 'bg-secondary';
+                                        if(islemTipi.includes('GÜNCEL')) islemTipiBadge = 'bg-info text-dark';
+                                        if(islemTipi.includes('EKLEME')) islemTipiBadge = 'bg-success';
+                                        if(islemTipi.includes('SİL')) islemTipiBadge = 'bg-danger';
+                                        if(islemTipi.includes('DEKONT') || islemTipi.includes('TALİMAT')) islemTipiBadge = 'bg-primary';
+
+                                        html += `<tr>
+                                                    <td>${formatliTarih}</td>
+                                                    <td class="fw-bold text-primary">${kullanici}</td>
+                                                    <td><span class="badge ${islemTipiBadge}">${islemTipi}</span></td>
+                                                    <td>${aciklama}</td>
+                                                 </tr>`;
+                                    });
+                                }
+                                $('#logTabloBody').html(html);
+                            } else {
+                                $('#logTabloBody').html(`<tr><td colspan="4" class="text-center text-danger">${res.message}</td></tr>`);
+                            }
+                        },
+                        error: function() {
+                            $('#logTabloBody').html('<tr><td colspan="4" class="text-center text-danger">Bağlantı hatası oluştu.</td></tr>');
+                        }
+                    });
+                }
+            });
+
+            $('#btnLogGetir').click(function() {
+                var dbName = $('#logFirmaSelect').val();
+                var startDate = $('#logStartDate').val();
+                var endDate = $('#logEndDate').val();
+                var sadeceSilinenler = $('#chkSadeceSilinenler').is(':checked');
+
+                $('#sistemLoglariBody').html('<tr><td colspan="5" class="text-center"><i class="fas fa-spinner fa-spin"></i> Yükleniyor...</td></tr>');
+                
+                $.get('/Rapor130/GetSistemLoglari', { 
+                    dbName: dbName,
+                    startDate: startDate,
+                    endDate: endDate,
+                    sadeceSilinenler: sadeceSilinenler
+                }, function(res) {
+                    if (res.success) {
+                        let html = '';
+                        if(res.data.length === 0) {
+                            html = '<tr><td colspan="5" class="text-center text-warning">Kayıt bulunamadı.</td></tr>';
+                        } else {
+                            res.data.forEach(x => {
+                                let islemTarihi = x.IslemTarihi || x.islemTarihi;
+                                let kullanici = x.Kullanici || x.kullanici || '-';
+                                let islemTipi = x.IslemTipi || x.islemTipi || '';
+                                let aciklama = x.Aciklama || x.aciklama || '';
+                                let docEntry = x.DocEntry || x.docEntry || '-';
+
+                                let dateObj = new Date(islemTarihi);
+                                let formatliTarih = dateObj.toLocaleDateString('tr-TR') + ' ' + dateObj.toLocaleTimeString('tr-TR');
+                                
+                                let islemTipiBadge = 'bg-secondary';
+                                if(islemTipi.includes('GÜNCEL')) islemTipiBadge = 'bg-info text-dark';
+                                if(islemTipi.includes('EKLEME')) islemTipiBadge = 'bg-success';
+                                if(islemTipi.includes('SİL')) islemTipiBadge = 'bg-danger';
+                                if(islemTipi.includes('DEKONT') || islemTipi.includes('TALİMAT')) islemTipiBadge = 'bg-primary';
+
+                                let trClass = islemTipi.includes('SİL') ? 'table-danger' : '';
+
+                                html += `<tr class="${trClass}">
+                                            <td>${formatliTarih}</td>
+                                            <td class="fw-bold text-primary">${kullanici}</td>
+                                            <td><span class="badge ${islemTipiBadge}">${islemTipi}</span></td>
+                                            <td class="fw-bold text-muted">${docEntry}</td>
+                                            <td>${aciklama}</td>
+                                         </tr>`;
+                            });
+                        }
+                        $('#sistemLoglariBody').html(html);
+                    } else {
+                        $('#sistemLoglariBody').html(`<tr><td colspan="5" class="text-center text-danger">${res.message}</td></tr>`);
+                    }
+                }).fail(function() {
+                    $('#sistemLoglariBody').html('<tr><td colspan="5" class="text-center text-danger">Bağlantı hatası oluştu.</td></tr>');
+                });
+            });
+
+            $('#sistemLoglariModal').on('show.bs.modal', function () {
+                if(!$('#logStartDate').val()) {
+                    var date = new Date();
+                    $('#logStartDate').val(new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0]);
+                    $('#logEndDate').val(new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0]);
+                }
+                $('#btnLogGetir').trigger('click');
+            });
+
+            function loadOdenenler() {
+                var s = $('#odenenlerStart').val();
+                var e = $('#odenenlerEnd').val();
+                var q = $('#odenenlerSearch').val();
+                var vr = $('select[name="viewRole"]').val() || $('input[name="viewRole"]').val();
+                $('#odenenlerBody').html('<tr><td colspan="10" class="text-center py-4">Sorgulanıyor...</td></tr>');
+                
+                $.get('/Rapor130/GetOdenenler', { start: s, end: e, search: q, viewRole: vr }, function(res) {
+                    var html = '';
+                    var total = 0;
+                    res.forEach(function(item) {
+                        total += item.tutarTL || 0;
+                        var dt = item.odenmeTarihi ? new Date(item.odenmeTarihi).toLocaleDateString('tr-TR') : '-';
+                        
+                        var dekontBtn = item.dekontLink ? '<button type="button" class="btn btn-sm btn-outline-primary p-1 pdf-preview-btn interactive-cell" data-url="'+item.dekontLink+'"><i class="fas fa-receipt"></i> Görüntüle</button>' : '<span class="text-muted">-</span>';
+                        var talimatBtn = item.talimatLink ? '<button type="button" class="btn btn-sm btn-outline-danger p-1 pdf-preview-btn interactive-cell" data-url="'+item.talimatLink+'"><i class="fas fa-file-invoice"></i> Görüntüle</button>' : '<span class="text-muted">-</span>';
+
+                        html += '<tr>' +
+                                '<td><span class="badge bg-secondary">' + item.firma + '</span></td>' +
+                                '<td>' + dt + '</td>' +
+                                '<td>' + (item.kurum || '-') + '</td>' +
+                                '<td>' + (item.urunHizmet || '-') + '</td>' +
+                                '<td>' + (item.odemeYontemi || '-') + '</td>' +
+                                '<td><span class="fw-bold">' + (item.faturaSiparisNo || '-') + '</span></td>' +
+                                '<td class="text-center">' + dekontBtn + '</td>' +
+                                '<td class="text-center">' + talimatBtn + '</td>' +
+                                '<td class="text-end">' + formatMoneyStr(item.tutar) + ' ' + (item.paraBirimi || 'TL') + '</td>' +
+                                '<td class="text-end fw-bold text-success">' + formatMoneyStr(item.tutarTL) + ' ₺</td>' +
+                            '</tr>';
+                    });
+                    if(res.length === 0) { html = '<tr><td colspan="10" class="text-center text-danger">Kayıt bulunamadı.</td></tr>'; } 
+                    else { html += '<tr class="table-success"><td colspan="9" class="text-end fw-bold text-dark">KONSOLİDE TOPLAM:</td><td class="text-end fw-bold text-danger">' + formatMoneyStr(total) + ' ₺</td></tr>'; }
+                    $('#odenenlerBody').html(html);
+                });
+            }
+            $('#btnOdenenlerGetir').click(loadOdenenler);
+            $('#odenenlerSearch').on('keyup', function(e) { if(e.key === 'Enter') loadOdenenler(); });
+            $('#odenenlerModal').on('show.bs.modal', function() {
+                if(!$('#odenenlerStart').val()) {
+                    var date = new Date();
+                    $('#odenenlerStart').val(new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0]);
+                    $('#odenenlerEnd').val(new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0]);
+                    loadOdenenler();
+                }
+            });
+            
+            $('select[name="viewRole"]').change(function(){ $(this).closest('form').submit(); });
+        }); 
+    </script>
+}

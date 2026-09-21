@@ -1,0 +1,222 @@
+﻿@model List<WebApplication3.Models.VendorReconciliationSimulationViewModel>
+@using WebApplication3.Models
+@using System.Globalization
+
+@{
+    ViewData["Title"] = "Tedarikçi Mutabakat Kapalı İşlem Detayı (FIFO)";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? "Veritabanı Belirtilmedi";
+    var selectedBpCode = (string)ViewBag.SelectedBpCode;
+    var bpName = Model.FirstOrDefault()?.CariBilgisi ?? (string)ViewBag.SelectedBpName ?? "Muhatap Adı Bulunamadı";
+
+    var totalClosedAmount = (decimal?)ViewBag.ToplamKapananTutar ?? 0.0M;
+    var closedTransactionCount = (int?)ViewBag.KapananIslemSayisi ?? 0;
+    var closedGroupCount = (int?)ViewBag.ClosedGroupCount ?? 0;
+
+    var culture = new CultureInfo("tr-TR");
+    var simulationData = Model ?? new List<VendorReconciliationSimulationViewModel>();
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/bs5/dt-1.11.5/datatables.min.css" />
+    <style>
+        .container {
+            max-width: 100%;
+            padding: 0 15px;
+        }
+
+        .table-simulation thead th {
+            background-color: #0d6efd;
+            color: white;
+            white-space: nowrap;
+            border-color: #0d6efd !important;
+        }
+
+        .header-row {
+            background-color: #e9ecef !important;
+            font-weight: bold;
+            font-size: 1.05em;
+        }
+
+        .detail-row {
+            background-color: #f8f9fa !important;
+        }
+
+        .table-simulation tbody tr.header-row td {
+            border-top: 2px solid #0d6efd;
+        }
+
+        .header-borc {
+            background-color: #f8d7da;
+        }
+
+        .header-alacak {
+            background-color: #d1e7dd;
+        }
+
+        .detail-borc {
+            background-color: #ffe0e2;
+        }
+
+        .text-huge-sim {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+
+        .summary-card-custom {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        .dataTables_length, .dataTables_paginate, .dataTables_info {
+            display: none !important;
+        }
+    </style>
+}
+
+<div class="container mt-4">
+    <div class="header text-center mb-4">
+        <h2>TEDARİKÇİ MUTABAKAT KAPALI İŞLEM DETAYI (FIFO)</h2>
+        <p class="mb-0">Açık **Borç** ve **Alacak** kayıtları, **Aktarım Tarihi** ve **Vade/Belge Tarihi** bazlı olarak **FIFO** mantığı ile kapatılmış işlemler listelenmektedir. Sadece **tamamen kapanan işlemler ve detayları** gösterilir.</p>
+    </div>
+
+    @if (ViewBag.ErrorMessage != null)
+    {
+        <div class="alert alert-danger" role="alert">@ViewBag.ErrorMessage</div>
+    }
+
+    <div class="card mb-4 summary-card-custom">
+        <div class="card-body bg-light">
+            <div class="row">
+                <div class="col-lg-4 mb-3">
+                    <p class="mb-1"><strong>Tedarikçi Muhatap:</strong> **@selectedBpCode** - @bpName</p>
+                    <p class="mb-1"><strong>Aktif Veritabanı:</strong> @currentSelectedDbDisplay</p>
+                    <hr class="d-lg-none" />
+                </div>
+
+                <div class="col-lg-8">
+                    <div class="row text-center">
+
+                        <div class="col-md-4 col-6 mb-2">
+                            <i class="fas fa-handshake me-2 text-primary"></i>
+                            <h6 class="small text-muted mb-0">Toplam Kapanan Tutar (Borç/Alacak)</h6>
+                            <span class="text-huge-sim text-primary">@totalClosedAmount.ToString("N2", culture) TL</span>
+                        </div>
+
+                        <div class="col-md-4 col-6 mb-2">
+                            <i class="fas fa-list-ol me-2 text-info"></i>
+                            <h6 class="small text-muted mb-0">Toplam Kapanan İşlem Detay Satırı</h6>
+                            <span class="text-huge-sim text-info">@closedTransactionCount Adet</span>
+                        </div>
+
+                        <div class="col-md-4 col-12 mb-2">
+                            <i class="fas fa-layer-group me-2 text-secondary"></i>
+                            <h6 class="small text-muted mb-0">Mutabakat Grubu Sayısı</h6>
+                            <span class="text-huge-sim text-secondary">@closedGroupCount Grup</span>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+            <hr />
+            <a href="@Url.Action("Index", "Rapor52", new { bpCode = selectedBpCode, db = ViewBag.SelectedDatabaseKey })" class="btn btn-secondary btn-sm">
+                <i class="fas fa-arrow-left me-2"></i> Ana Rapor'a Geri Dön
+            </a>
+        </div>
+    </div>
+
+    @if (simulationData.Any())
+    {
+        <div class="table-responsive">
+            <table id="simulation-table" class="table table-bordered table-striped table-hover table-simulation" style="width:100%">
+                <thead>
+                    <tr>
+                        <th style="width: 80px;">Bakiye Tipi</th>
+                        <th style="width: 80px;">Satır Tipi</th>
+                        <th style="width: 80px;">İşlem No</th>
+                        <th style="width: 80px;">Kpt. Grup No</th>
+                        <th style="width: 120px;">İşlem Tipi</th>
+                        <th style="width: 100px;">Belge Tarihi</th>
+                        <th style="width: 100px;">**Aktarım Tipi**</th>
+                        <th style="width: 100px;">**Sıralama Tarihi (FIFO)**</th>
+                        <th style="width: 150px;" class="text-end">Kapanan Tutar</th>
+                        <th style="width: 150px;" class="text-end">Kalan Bakiye</th>
+                        <th style="width: 150px;">Kapatan/İşlem No</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in simulationData)
+                    {
+                        string rowClass = item.SiraTipi == "HEADER"
+                        ? (item.BakiyeTipi == "BORÇ" ? "header-row header-borc" : "header-row header-alacak")
+                        : "detail-row detail-borc";
+
+                        string balanceTypeIcon = item.BakiyeTipi == "BORÇ" ? "fa-arrow-circle-up text-danger" : "fa-arrow-circle-down text-success";
+
+                        <tr class="@rowClass">
+                            <td data-order="@(item.BakiyeTipi == "BORÇ" ? 2 : 1)">
+                                <i class="fas @balanceTypeIcon me-1"></i>
+                                **@item.BakiyeTipi**
+                            </td>
+                            <td>**@item.SiraTipi**</td>
+                            <td>@item.TransId</td>
+                            <td>@item.KapatmaGrubuNo</td>
+                            <td>@item.IslemTipi</td>
+                            <td data-order="@item.RefDate.Ticks">@item.RefDate.ToString("dd.MM.yyyy")</td>
+
+                            <td>@item.AktarimTipi</td>
+
+                            <td data-order="@item.SiralamaTarihi.GetValueOrDefault(DateTime.MaxValue).Ticks">
+                                @item.SiralamaTarihi?.ToString("dd.MM.yyyy")
+                            </td>
+
+                            <td class="text-end text-success">@item.KapananTutar.ToString("N2", culture)</td>
+
+                            <td class="text-end @(item.KAPANMAYAN_KALAN_BAKİYE > 0.001M ? "text-danger fw-bold" : "text-secondary")">
+                                @item.KAPANMAYAN_KALAN_BAKİYE.ToString("N2", culture)
+                            </td>
+
+                            <td>@item.KapatanIslemNo</td>
+
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info text-center">
+            Simülasyon sonuçlarına uygun veri bulunamadı veya tedarikçi muhatabın kapatılmış borç/alacak kaydı yok.
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script type="text/javascript" src="https://cdn.datatables.net/v/bs5/dt-1.11.5/datatables.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            if ($('#simulation-table').length && $('#simulation-table tbody tr').length > 0) {
+                $('#simulation-table').DataTable({
+                    responsive: true,
+                    ordering: true,
+                    searching: true,
+                    info: false,
+                    lengthChange: false,
+                    paging: false,
+                    order: [[3, 'asc'], [1, 'desc']],
+                    language: {
+                        url: "//cdn.datatables.net/plug-ins/1.11.5/i18n/tr.json"
+                    },
+                    columnDefs: [
+                        { targets: [8, 9], orderable: false }
+                    ]
+                });
+            }
+        });
+    </script>
+}

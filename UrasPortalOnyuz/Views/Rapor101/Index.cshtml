@@ -1,0 +1,615 @@
+﻿@{
+    ViewData["Title"] = "Dönem Sonu Kapanış Merkezi";
+}
+
+<style>
+    body { background-color: #f4f7f6; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    .modern-card { border-radius: 0.75rem; border: 1px solid #edf2f9; box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.04); background: #ffffff; height: 100%; display: flex; flex-direction: column; }
+    .card-header-custom { background-color: #ffffff; border-bottom: 1px solid #edf2f9; padding: 1rem 1.5rem; border-radius: 0.75rem 0.75rem 0 0; font-weight: bold; color: #2b3452; }
+    .form-label { font-weight: 600; color: #495057; font-size: 0.85rem; margin-bottom: 0.4rem; letter-spacing: 0.3px; }
+    .form-control-modern, .form-select-modern { border-radius: 0.5rem; border: 1px solid #ced4da; font-size: 0.9rem; padding: 0.5rem 0.75rem; transition: all 0.2s; }
+    .form-control-modern:focus, .form-select-modern:focus { border-color: #86b7fe; box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15); outline: none; }
+    .filter-box { border: 1px solid #e9ecef; border-radius: 0.5rem; background: #fafbfc; max-height: 140px; overflow-y: auto; padding: 0.5rem; }
+    .filter-item { display: flex; align-items: center; padding: 0.3rem 0.5rem; border-radius: 0.3rem; transition: background 0.2s; margin-bottom: 2px; }
+    .filter-item:hover { background-color: #e9ecef; }
+    .filter-item input[type="checkbox"] { margin-right: 8px; cursor: pointer; width: 16px; height: 16px; accent-color: #0d6efd; }
+    .btn-modern { border-radius: 0.5rem; font-weight: 600; padding: 0.6rem 1.2rem; transition: all 0.2s ease; letter-spacing: 0.3px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration:none; }
+    .btn-primary-custom { background: linear-gradient(135deg, #0d6efd, #0a58ca); border: none; color: white; }
+    .btn-success-custom { background: linear-gradient(135deg, #198754, #146c43); border: none; color: white; }
+    .btn-danger-custom { background: linear-gradient(135deg, #dc3545, #b02a37); border: none; color: white; }
+    .btn-secondary { background: #6c757d; border: none; color: white; }
+    .btn-modern:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); color: white; }
+    .btn-modern:active { transform: translateY(0); }
+    .summary-table th { color: #6c757d; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; border-top: none; }
+    .summary-table td { font-size: 0.95rem; vertical-align: middle; border-color: #f1f3f5; }
+    .net-val { font-family: 'Courier New', Courier, monospace; font-weight: bold; }
+    .net-success { color: #0f5132; background-color: #d1e7dd; border-radius: 0.4rem; padding: 0.5rem 1rem; display: block; width: 100%; text-align: center; font-weight:bold; }
+    .net-error { color: #842029; background-color: #f8d7da; border-radius: 0.4rem; padding: 0.5rem 1rem; display: block; width: 100%; text-align: center; font-weight:bold; }
+    .table-container { border: 1px solid #edf2f9; border-radius: 0.5rem; background-color: #fff; overflow-x: auto; }
+    .data-table thead th { background-color: #f8f9fa; color: #495057; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; position: sticky; top: 0; z-index: 1; border-bottom: 2px solid #dee2e6; }
+    .data-table tbody td { font-size: 0.9rem; vertical-align: middle; border-bottom: 1px solid #f1f3f5; }
+    .loader-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.8); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(3px); display: none; }
+    .spinner-custom { width: 3rem; height: 3rem; color: #0d6efd; }
+    .data-table thead th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+    .data-table thead th.sortable:hover { background-color: #eef2f7; }
+    .sort-ok { color: #adb5bd; font-size: 0.8em; margin-left: 2px; }
+    .data-table thead th.sirali-artan .sort-ok,
+    .data-table thead th.sirali-azalan .sort-ok { color: #0d6efd; }
+</style>
+
+<div id="loadingOverlay" class="loader-overlay">
+    <div class="spinner-border spinner-custom" role="status">
+        <span class="visually-hidden">Yükleniyor...</span>
+    </div>
+    <h5 class="mt-3 fw-bold text-primary" id="loadingText">İşlem yapılıyor, lütfen bekleyin...</h5>
+</div>
+
+<div class="container-fluid py-4">
+    
+    @Html.AntiForgeryToken()
+
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4">
+        <div>
+            <h3 class="fw-bold mb-1" style="color: #2b3452;">
+                Dönem Sonu Kapanış Merkezi
+            </h3>
+            <p class="text-muted mb-0 small">Sistem ve Excel entegrasyonu ile otomatik yevmiye kayıtları oluşturun.</p>
+        </div>
+        
+        <div class="mt-3 mt-md-0 d-flex align-items-center bg-white px-3 py-2 rounded-3 shadow-sm border">
+            <label class="fw-semibold text-secondary me-2 mb-0" style="white-space: nowrap;">Çalışılan Firma:</label>
+            <select id="cbFirma" class="form-select-modern border-0 bg-light text-primary fw-bold" style="min-width: 220px;" onchange="changeCompany()">
+                @foreach (var db in ViewBag.Databases)
+                {
+                    if (db.Key == ViewBag.SelectedDb)
+                    {
+                        <option value="@db.Key" selected>@db.Display</option>
+                    }
+                    else
+                    {
+                        <option value="@db.Key">@db.Display</option>
+                    }
+                }
+            </select>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4 align-items-stretch">
+        
+        <div class="col-xl-8">
+            <div class="modern-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label">Mizan Baş. Tar.</label>
+                            <input type="date" id="txtBas" class="form-control-modern w-100" value="@(new DateTime(DateTime.Now.Year, 1, 1).ToString("yyyy-MM-dd"))" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Mizan Bit. Tar.</label>
+                            <input type="date" id="txtBit" class="form-control-modern w-100" value="@(new DateTime(DateTime.Now.Year, 12, 31).ToString("yyyy-MM-dd"))" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label text-primary">1. Kapanış Fiş Tar.</label>
+                            <input type="date" id="txtKayitD" class="form-control-modern w-100 border-primary" value="@(new DateTime(DateTime.Now.Year, 12, 31).ToString("yyyy-MM-dd"))" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label text-success">2. Açılış Fiş Tar.</label>
+                            <input type="date" id="txtAciD" class="form-control-modern w-100 border-success" value="@(new DateTime(DateTime.Now.Year + 1, 1, 1).ToString("yyyy-MM-dd"))" />
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Fark Hesabı (Örn: 690)</label>
+                            <input type="text" id="txtKapHes" class="form-control-modern w-100" placeholder="Hesap kodu girin..." />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Yeni Fiş İşlem Tipi</label>
+                            <select id="cbHedIsl" class="form-select-modern w-100">
+                                <option value="">İşlem Tipi Belirtme</option>
+                                @foreach (var f in ViewBag.Filtreler)
+                                {
+                                    <option value="@f.Kod">@f.Tanim</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">İşlem Türü</label>
+                            <select id="cbGrup" class="form-select-modern w-100 bg-light">
+                                <option value="B" selected>Bilanço (1-5) Devir/Açılış</option>
+                                <option value="6">6'lı Hesaplar Kapanış</option>
+                                <option value="7">7'li Hesaplar Yansıtma</option>
+                                <option value="T">Tüm Hesaplar (Özel İşlem)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4 align-items-center">
+                        <div class="col-md-8">
+                            <label class="form-label">Yevmiye Açıklaması</label>
+                            <input type="text" id="txtAciklama" class="form-control-modern w-100" value="Dönem Sonu Kapanış/Açılış Kaydı" />
+                        </div>
+                        @* Önceden bu karar iki ayrı yere bölünmüştü: buradaki "Açılış Fişi
+                           Oluştur" anahtarı ile Excel butonlarının yanındaki "Excel Modu"
+                           listesi. İkisi birlikte ayarlanmadığında sessizce eksik fiş
+                           atılabiliyordu. Artık tek ve açık bir seçim var. *@
+                        <div class="col-md-4">
+                            <label class="form-label text-success fw-bold">Oluşturulacak Fişler</label>
+                            <select id="cbFisTipi" class="form-select-modern w-100 border-success fw-semibold">
+                                <option value="IKISI" selected>Kapanış + Açılış (ikisi birden)</option>
+                                <option value="SADECE_KAPANIS">Sadece Kapanış Fişi</option>
+                                <option value="SADECE_ACILIS">Sadece Açılış (Devir) Fişi</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <hr class="text-muted opacity-25 mt-auto">
+
+                    <div class="row g-4 mt-2">
+                        <div class="col-md-4">
+                            <label class="form-label text-secondary">İşlem Tipi Filtresi (Okuma)</label>
+                            <div class="filter-box custom-scrollbar">
+                                @foreach (var f in ViewBag.Filtreler)
+                                {
+                                    <label class="filter-item text-muted" style="font-size: 0.85rem;">
+                                        <input type="checkbox" class="chkFiltre" value="@f.Kod" checked /> @f.Tanim
+                                    </label>
+                                }
+                            </div>
+                        </div>
+                        <div class="col-md-8 d-flex flex-column justify-content-end">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <button class="btn-modern btn-primary-custom flex-fill" onclick="SistemdenHesapla()">
+                                    Sistemden Hesapla
+                                </button>
+                                
+                                <div class="d-flex flex-column flex-fill">
+                                    @* Excel'in nasıl okunacağı artık yukarıdaki "Oluşturulacak Fişler"
+                                       seçiminden türetiliyor; ayrı bir mod listesi yok. *@
+                                    <div class="small text-muted mb-1" id="excelModBilgi" style="font-size: 0.75rem;"></div>
+                                    <div class="d-flex gap-1 w-100">
+                                        <!-- YENİ EKLENEN ŞABLON BUTONU BURADA -->
+                                        <a href="/Rapor101/ExcelSablonIndir" class="btn-modern btn-secondary w-50" style="padding: 0.4rem; font-size: 0.85rem;" target="_blank">
+                                            Şablon İndir
+                                        </a>
+                                        <label class="btn-modern btn-success-custom w-50 mb-0" style="cursor: pointer; padding: 0.4rem; font-size: 0.85rem;">
+                                            Excel Yükle 
+                                            <input type="file" id="fileExcel" accept=".xls,.xlsx" style="display: none;" onchange="ExcelYukle()" />
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <button class="btn-modern btn-danger-custom w-100 py-2 fs-6 shadow" onclick="YevmiyeKaydet()">
+                                Yevmiye Kayıtlarını Oluştur (SAP SL)
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-4">
+            <div class="modern-card bg-light">
+                <div class="card-header-custom text-center border-0 bg-light pt-4">
+                    <h5 class="mb-0 fw-bold">Özet Tablo</h5>
+                </div>
+                <div class="card-body p-4 d-flex flex-column">
+                    <table class="table table-borderless summary-table text-end mb-4">
+                        <thead>
+                            <tr>
+                                <th class="text-start pb-2">Kalem</th>
+                                <th class="pb-2">TRY</th>
+                                <th class="pb-2">EUR</th>
+                                <th class="pb-2">USD</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom: 1px dashed #ced4da;">
+                                <td class="text-start text-secondary fw-semibold py-3">1. Toplam Mizan</td>
+                                <td id="mizTL" class="net-val py-3">0.00</td>
+                                <td id="mizEU" class="net-val py-3">0.00</td>
+                                <td id="mizUS" class="net-val py-3">0.00</td>
+                            </tr>
+                            <tr>
+                                <td class="text-start text-secondary fw-semibold py-3">2. Atılacak Fiş Etkisi</td>
+                                <td id="fisTL" class="net-val py-3">0.00</td>
+                                <td id="fisEU" class="net-val py-3">0.00</td>
+                                <td id="fisUS" class="net-val py-3">0.00</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    
+                    <div class="mt-auto p-3 bg-white border rounded-3 shadow-sm">
+                        <p class="text-muted fw-bold mb-2 small text-uppercase text-center">3. Ana Fiş Yevmiye Dengesi (TL)</p>
+                        <div id="kalTL" class="fs-4 net-success">0.00</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modern-card">
+        <div class="card-header-custom d-flex justify-content-between align-items-center">
+            <span>Önizleme Tablosu</span>
+            <span class="badge bg-primary text-white rounded-pill" id="rowCount">0 Satır</span>
+        </div>
+        <div class="card-body p-3">
+
+            @* Mizan doğrulaması: sonuç Mizan ile birebir mi, değilse hangi hesapta ayrışıyor *@
+            <div id="mizanKontrol" class="alert d-none py-2 px-3 mb-3" role="status"></div>
+
+            <div class="d-flex justify-content-end mb-2">
+                <input type="text" id="gridAra" class="form-control-modern" style="max-width: 280px;"
+                       placeholder="Tabloda ara (hesap, ad, tip)..." autocomplete="off" />
+            </div>
+
+            <div class="table-container custom-scrollbar">
+                <table class="table table-hover data-table mb-0" id="gridTable">
+                    <thead>
+                        <tr>
+                            <th>Durum</th>
+                            <th class="sortable" data-alan="hesapKodu">Hesap / Cari Kodu <span class="sort-ok">⇅</span></th>
+                            <th class="sortable" data-alan="anaHesap">Bağlı Hesap <span class="sort-ok">⇅</span></th>
+                            <th class="sortable" data-alan="hesapAdi">Hesap Adı <span class="sort-ok">⇅</span></th>
+                            <th class="sortable" data-alan="islemTipi">İşlem Tipi <span class="sort-ok">⇅</span></th>
+                            <th class="text-end sortable" data-alan="borcTL" data-sayi="1">Borç (TL) <span class="sort-ok">⇅</span></th>
+                            <th class="text-end sortable" data-alan="alacakTL" data-sayi="1">Alacak (TL) <span class="sort-ok">⇅</span></th>
+                            <th class="text-center sortable" data-alan="dovizCinsi">Döviz <span class="sort-ok">⇅</span></th>
+                            <th class="text-end">Borç (FC)</th>
+                            <th class="text-end">Alacak (FC)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="gridBody">
+                        <tr>
+                            <td colspan="10" class="text-center text-muted py-5">
+                                <span class="fs-3 d-block mb-2">📊</span>
+                                Önizleme verisi yok. Lütfen sistemden hesaplayın veya Excel yükleyin.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <datalist id="accLookup">
+        @if(ViewBag.LookupList != null)
+        {
+            foreach(var item in ViewBag.LookupList)
+            {
+                <option value="@item.Code">@item.Name (@item.Type)</option>
+            }
+        }
+    </datalist>
+</div>
+
+@section Scripts {
+    <script>
+        var currentRowData = [];
+        
+        const dbParam = '@ViewBag.SelectedDb';
+        const dbQueryString = dbParam ? '?db=' + dbParam : '';
+        const antiForgeryToken = $('input[name="__RequestVerificationToken"]').val();
+
+        function changeCompany() {
+            var db = $('#cbFirma').val();
+            document.cookie = "SelectedDatabase=" + db + "; path=/; max-age=" + (60 * 60 * 24 * 30);
+            window.location.href = '?db=' + db;
+        }
+
+        // -----------------------------------------------------------------
+        // OLUŞTURULACAK FİŞLER
+        //
+        // Tek seçim, sunucunun beklediği iki bayrağa çevrilir:
+        //   IKISI          -> kapanış fişi + aynası olan açılış fişi
+        //   SADECE_KAPANIS -> yalnızca kapanış fişi
+        //   SADECE_ACILIS  -> yalnızca açılış (devir) fişi, ters çevrilmeden
+        // -----------------------------------------------------------------
+        function fisTipi() { return $('#cbFisTipi').val() || 'IKISI'; }
+        function sadeceAcilisMi() { return fisTipi() === 'SADECE_ACILIS'; }
+        function acilisAtilacakMi() { return fisTipi() === 'IKISI'; }
+
+        function fisTipiBilgisiniGoster() {
+            var t = fisTipi();
+            var metin = (t === 'SADECE_ACILIS')
+                ? 'Excel, doğrudan açılış bakiyesi olarak okunur.'
+                : 'Excel, kapanış mizanı olarak okunur.';
+            $('#excelModBilgi').text(metin);
+
+            // Açılış tarihi yalnızca açılış fişi atılacaksa gerekli.
+            var acilisGerekli = (t !== 'SADECE_KAPANIS');
+            $('#txtAciD').prop('disabled', !acilisGerekli)
+                         .toggleClass('bg-light', !acilisGerekli);
+            $('#txtKayitD').prop('disabled', t === 'SADECE_ACILIS')
+                           .toggleClass('bg-light', t === 'SADECE_ACILIS');
+        }
+
+        $(document).on('change', '#cbFisTipi', fisTipiBilgisiniGoster);
+        $(fisTipiBilgisiniGoster);
+
+        $('#cbGrup').change(function () {
+            // 6'lı ve 7'li hesaplarda devir/açılış fişi atılmaz; yalnızca kapanış.
+            var val = $(this).val();
+            $('#cbFisTipi').val((val === "6" || val === "7") ? 'SADECE_KAPANIS' : 'IKISI');
+            fisTipiBilgisiniGoster();
+        });
+
+        function showLoading(show, text) {
+            if (show) {
+                if(text) $('#loadingText').text(text);
+                $('#loadingOverlay').css('display', 'flex');
+            } else {
+                $('#loadingOverlay').hide();
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // MİZAN DOĞRULAMASI
+        //
+        // Sunucu, aynı dönem ve filtre için Mizan'ın kendi tanımıyla hesap
+        // bazında net bakiyeyi de hesaplar ve buradaki sonuçla karşılaştırır.
+        // Mizan doğru kabul edilir; fark varsa hangi hesapta olduğu gösterilir.
+        // -----------------------------------------------------------------
+        function updateMizanKontrol(mk) {
+            var kutu = $('#mizanKontrol');
+            if (!mk) { kutu.addClass('d-none').empty(); return; }
+
+            if (mk.uyumlu) {
+                kutu.removeClass('d-none alert-danger').addClass('alert-success')
+                    .html('<strong>✔️ Mizan ile birebir uyumlu.</strong> Hesaplanan bakiyeler Mizan raporundaki rakamlarla aynı.'
+                        + '<div class="small mt-1">Karşılaştırma kapsamı: <strong>' + (mk.kapsam || '-') + '</strong>. '
+                        + 'Mizan\'ı başka bir kapsamla açarsanız toplamlar doğal olarak farklı çıkar.</div>');
+                return;
+            }
+
+            var satirlar = (mk.farklar || []).map(function (f) {
+                return '<tr><td class="fw-semibold">' + f.hesap + '</td>'
+                     + '<td class="text-end">' + Number(f.mizan).toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + '</td>'
+                     + '<td class="text-end">' + Number(f.hesaplanan).toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + '</td>'
+                     + '<td class="text-end text-danger fw-bold">' + Number(f.fark).toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + '</td></tr>';
+            }).join('');
+
+            kutu.removeClass('d-none alert-success').addClass('alert-danger').html(
+                '<strong>⚠️ Mizan ile fark var:</strong> ' + mk.farkSayisi + ' hesapta ayrışma bulundu. Mizan doğru kabul edilir.'
+                + '<div class="table-responsive mt-2"><table class="table table-sm mb-0">'
+                + '<thead><tr><th>Hesap</th><th class="text-end">Mizan</th><th class="text-end">Hesaplanan</th><th class="text-end">Fark</th></tr></thead>'
+                + '<tbody>' + satirlar + '</tbody></table></div>'
+                + (mk.farkSayisi > (mk.farklar || []).length ? '<div class="small mt-1">İlk ' + (mk.farklar || []).length + ' fark gösteriliyor.</div>' : '')
+            );
+        }
+
+        // -----------------------------------------------------------------
+        // TABLO: sıralama ve arama
+        // -----------------------------------------------------------------
+        var gridSiralama = { alan: null, artan: true };
+
+        function gridDeger(satir, alan) {
+            // Sunucu bazen PascalCase bazen camelCase dönüyor; ikisini de karşıla.
+            var buyuk = alan.charAt(0).toUpperCase() + alan.slice(1);
+            var v = (satir[buyuk] !== undefined && satir[buyuk] !== null) ? satir[buyuk] : satir[alan];
+            return (v === undefined || v === null) ? '' : v;
+        }
+
+        function gridSirala(alan, sayisalMi) {
+            if (!currentRowData || !currentRowData.length) return;
+
+            gridSiralama.artan = (gridSiralama.alan === alan) ? !gridSiralama.artan : true;
+            gridSiralama.alan = alan;
+            var yon = gridSiralama.artan ? 1 : -1;
+
+            currentRowData.sort(function (a, b) {
+                var x = gridDeger(a, alan), y = gridDeger(b, alan);
+                if (sayisalMi) return ((Number(x) || 0) - (Number(y) || 0)) * yon;
+                return String(x).localeCompare(String(y), 'tr') * yon;
+            });
+
+            populateGrid(currentRowData);
+
+            $('#gridTable thead th').removeClass('sirali-artan sirali-azalan');
+            $('#gridTable thead th[data-alan="' + alan + '"]')
+                .addClass(gridSiralama.artan ? 'sirali-artan' : 'sirali-azalan');
+
+            gridAramaUygula();
+        }
+
+        function gridAramaUygula() {
+            var q = ($('#gridAra').val() || '').trim().toLocaleLowerCase('tr');
+            if (!q) { $('#gridBody tr').show(); return; }
+            $('#gridBody tr').each(function () {
+                var metin = $(this).text().toLocaleLowerCase('tr');
+                // Satirdaki input degerleri text()'e girmedigi icin ayrica bakilir.
+                $(this).find('input').each(function () { metin += ' ' + ($(this).val() || '').toLocaleLowerCase('tr'); });
+                $(this).toggle(metin.indexOf(q) >= 0);
+            });
+        }
+
+        $(document).on('click', '#gridTable thead th.sortable', function () {
+            gridSirala($(this).data('alan'), $(this).data('sayi') === 1);
+        });
+
+        $(document).on('input', '#gridAra', gridAramaUygula);
+
+        function updateSummary(summary) {
+            $('#mizTL').text(summary.mizTL.toLocaleString('tr-TR', { minimumFractionDigits: 2 }));
+            $('#mizEU').text(summary.mizEU.toLocaleString('tr-TR', { minimumFractionDigits: 2 }));
+            $('#mizUS').text(summary.mizUS.toLocaleString('tr-TR', { minimumFractionDigits: 2 }));
+            
+            $('#fisTL').text(summary.fisTL.toLocaleString('tr-TR', { minimumFractionDigits: 2 }));
+            $('#fisEU').text(summary.fisEU.toLocaleString('tr-TR', { minimumFractionDigits: 2 }));
+            $('#fisUS').text(summary.fisUS.toLocaleString('tr-TR', { minimumFractionDigits: 2 }));
+
+            $('#kalTL').text(summary.kalTL.toLocaleString('tr-TR', { minimumFractionDigits: 2 }));
+
+            if (Math.abs(summary.kalTL) <= 0.01) {
+                $('#kalTL').removeClass('net-error').addClass('net-success');
+            } else {
+                $('#kalTL').removeClass('net-success').addClass('net-error');
+            }
+        }
+
+        function populateGrid(data) {
+            currentRowData = data;
+            var tbody = $('#gridBody');
+            tbody.empty();
+            
+            $('#rowCount').text((data ? data.length : 0) + ' Satır');
+
+            if (!data || data.length === 0) {
+                tbody.append('<tr><td colspan="10" class="text-center text-muted py-5"><span class="fs-3 d-block mb-2">📊</span>Kayıt bulunamadı.</td></tr>');
+                return;
+            }
+
+            data.forEach(function (r, index) { 
+                var ad = r.HesapAdi || r.hesapAdi || "";
+                var durum = r.KiyasDurum || r.kiyasDurum || "";
+                var hKod = r.HesapKodu || r.hesapKodu || "";
+                var aHesap = r.AnaHesap || r.anaHesap || "";
+                var tip = r.IslemTipi || r.islemTipi || "";
+                
+                var bTL = r.BorcTL !== undefined ? r.BorcTL : (r.borcTL || 0);
+                var aTL = r.AlacakTL !== undefined ? r.AlacakTL : (r.alacakTL || 0);
+                var dc = r.DovizCinsi || r.dovizCinsi || "";
+                var bFC = r.BorcDoviz || r.borcDoviz || "";
+                var aFC = r.AlacakDoviz || r.alacakDoviz || "";
+
+                var isFark = ad.includes("FARK");
+                var trClass = isFark ? "table-warning fw-bold" : "";
+                
+                var statusIcon = durum.includes("Sistemden") ? "🔵" : "📗";
+                if(isFark) statusIcon = "⚠️";
+                if(durum === "") statusIcon = "";
+                if(durum.includes("Bulunamadı")) statusIcon = "❌";
+
+                var inputHtml = isFark ? `<span class="fw-semibold text-primary">${hKod}</span>` : 
+                    `<input type="text" class="form-control form-control-sm border-primary" 
+                            list="accLookup" 
+                            value="${hKod}" 
+                            placeholder="Cari/Hesap Seç..." 
+                            onchange="updateAccountCode(${index}, this.value)" 
+                            style="min-width: 130px; font-weight: 600;" />`;
+
+                var tr = `<tr class="${trClass}">
+                    <td><span class="badge bg-light text-dark border"><small>${statusIcon} ${durum}</small></span></td>
+                    <td>${inputHtml}</td>
+                    <td class="text-muted">${aHesap}</td>
+                    <td>${ad}</td>
+                    <td><small class="text-muted">${tip}</small></td>
+                    <td class="text-end fw-bold">${bTL > 0 ? bTL.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : ''}</td>
+                    <td class="text-end fw-bold">${aTL > 0 ? aTL.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : ''}</td>
+                    <td class="text-center">${dc ? '<span class="badge bg-secondary">' + dc + '</span>' : ''}</td>
+                    <td class="text-end text-muted">${bFC}</td>
+                    <td class="text-end text-muted">${aFC}</td>
+                </tr>`;
+                tbody.append(tr);
+            });
+        }
+
+        function updateAccountCode(index, newVal) {
+            if(currentRowData[index]) {
+                currentRowData[index].HesapKodu = newVal.trim();
+                currentRowData[index].KiyasDurum = "Kullanıcı Seçimi ✔️";
+            }
+        }
+
+        function SistemdenHesapla() {
+            var req = {
+                BasTarih: $('#txtBas').val(),
+                BitTarih: $('#txtBit').val(),
+                HesapGrubu: $('#cbGrup').val(),
+                FarkHesabi: $('#txtKapHes').val(),
+                Filtreler: []
+            };
+
+            $('.chkFiltre:checked').each(function () { req.Filtreler.push($(this).val()); });
+
+            showLoading(true, "Sistemden mizan çekiliyor, hesaplamalar yapılıyor...");
+
+            $.ajax({
+                url: '/Rapor101/SistemdenHesapla' + dbQueryString,
+                type: 'POST',
+                contentType: 'application/json',
+                headers: { 'RequestVerificationToken': antiForgeryToken },
+                data: JSON.stringify(req),
+                success: function (res) {
+                    showLoading(false);
+                    if (res.success) { populateGrid(res.data); updateSummary(res.summary); updateMizanKontrol(res.mizanKontrol); }
+                    else { alert("Hata: " + res.message); }
+                },
+                error: function () {
+                    showLoading(false); alert("Sunucu ile iletişim kurulamadı.");
+                }
+            });
+        }
+
+        function ExcelYukle() {
+            var file = document.getElementById("fileExcel").files[0];
+            if (!file) return;
+
+            var formData = new FormData();
+            formData.append("file", file);
+            formData.append("farkHesabi", $('#txtKapHes').val());
+            formData.append("isAcilisOnly", sadeceAcilisMi());
+
+            showLoading(true, "Excel yükleniyor ve analiz ediliyor...");
+
+            $.ajax({
+                url: '/Rapor101/ExcelYukle' + dbQueryString,
+                type: 'POST',
+                data: formData,
+                headers: { 'RequestVerificationToken': antiForgeryToken },
+                processData: false,
+                contentType: false,
+                success: function (res) {
+                    showLoading(false);
+                    $('#fileExcel').val(''); 
+                    if (res.success) { populateGrid(res.data); updateSummary(res.summary); } 
+                    else { alert("Hata: " + res.message); }
+                },
+                error: function () {
+                    showLoading(false); $('#fileExcel').val(''); alert("Sunucu ile iletişim kurulamadı.");
+                }
+            });
+        }
+
+        function YevmiyeKaydet() {
+            if (currentRowData.length === 0) {
+                alert("Önce hesaplama yapın veya Excel yükleyin.");
+                return;
+            }
+
+            var isAcilisOnlyMode = sadeceAcilisMi();
+            var req = {
+                KayitTarihi: $('#txtKayitD').val(), AcilisTarihi: $('#txtAciD').val(),
+                IsAcilisYapiyor: acilisAtilacakMi(), IsAcilisOnlyMode: isAcilisOnlyMode,
+                HesapGrubu: $('#cbGrup').val(), FarkHesabi: $('#txtKapHes').val(),
+                HedefIslemTipi: $('#cbHedIsl').val(), AnaAciklama: $('#txtAciklama').val(),
+                Rows: currentRowData 
+            };
+
+            if ((req.IsAcilisYapiyor || req.IsAcilisOnlyMode) && (!req.AcilisTarihi || req.AcilisTarihi === "")) {
+                alert("Açılış/Devir fişi atmak için Açılış Tarihi girmelisiniz!");
+                return;
+            }
+
+            showLoading(true, "Yevmiye fişleri SAP Service Layer üzerinden oluşturuluyor. Lütfen bekleyin...");
+            
+            $.ajax({
+                url: '/Rapor101/YevmiyeKaydet' + dbQueryString,
+                type: 'POST',
+                contentType: 'application/json',
+                headers: { 'RequestVerificationToken': antiForgeryToken },
+                data: JSON.stringify(req),
+                success: function (res) {
+                    showLoading(false);
+                    if (res.success) { alert(res.message); } 
+                    else { alert(res.message); }
+                },
+                error: function (xhr) {
+                    showLoading(false); alert("Hata oluştu: " + xhr.responseText);
+                }
+            });
+        }
+    </script>
+}

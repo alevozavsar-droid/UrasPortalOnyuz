@@ -1,0 +1,228 @@
+@model List<WebApplication3.Models.ZoomKullaniciSatiri>
+@{
+    ViewData["Title"] = "Yakınlaştırma Yönetimi";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var satirlar = Model ?? new List<WebApplication3.Models.ZoomKullaniciSatiri>();
+    int[] kademeler = ViewBag.Kademeler as int[] ?? new[] { 60, 67, 75, 80, 90, 100, 110, 125, 150 };
+    string hata = ViewBag.Hata as string;
+}
+
+@section Styles {
+    <style>
+        .zy-wrap { width: 100%; padding: 16px; }
+        .zy-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+        .zy-head h3 { margin: 0; font-size: 1.25rem; font-weight: 800; letter-spacing: -.03em; color: var(--text-primary); }
+        .zy-head p { margin: 4px 0 0; font-size: .85rem; color: var(--text-secondary); }
+
+        /* Toplu islem cubugu */
+        .zy-toplu {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px;
+            padding: 10px 14px; margin-bottom: 12px;
+        }
+        .zy-toplu .secili { font-size: .85rem; font-weight: 600; color: var(--text-secondary); min-width: 110px; }
+        .zy-toplu select { width: auto; }
+        .zy-toplu .ara { margin-left: auto; width: 240px; }
+
+        .zy-tablo { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--bg-card); font-size: .86rem; }
+        .zy-tablo th { position: sticky; top: 0; background: var(--bg-card); text-align: left; padding: 10px 12px; font-weight: 700; font-size: .78rem; color: var(--text-secondary); border-bottom: 2px solid var(--border-color); white-space: nowrap; }
+        .zy-tablo td { padding: 8px 12px; border-bottom: 1px solid var(--border-color); vertical-align: middle; color: var(--text-primary); }
+        .zy-tablo tr:hover td { background: var(--metro-primary-light); }
+        .zy-tablo tr.secili td { background: var(--metro-primary-light); }
+        .zy-tablo td.kod { font-weight: 700; white-space: nowrap; }
+        .zy-tablo td.zoom select { width: 96px; }
+        .zy-tablo .rozet { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .72rem; font-weight: 700; background: var(--bg-subtle, #f1f3f5); color: var(--text-secondary); }
+        .zy-tablo .rozet.farkli { background: rgba(13,110,253,.12); color: #0d6efd; }
+        .zy-tablo input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
+        .zy-bos { padding: 30px; text-align: center; color: var(--text-secondary); }
+    </style>
+}
+
+<div class="zy-wrap">
+    <div class="zy-head">
+        <div>
+            <h3><i class="fas fa-magnifying-glass-plus me-2 text-primary"></i>Yakınlaştırma Yönetimi</h3>
+            <p>Tüm kullanıcıların sayfa yakınlaştırma oranı. Satırdaki liste tek kullanıcıyı, üstteki toplu alan seçilen kullanıcıları değiştirir. %100 varsayılandır.</p>
+        </div>
+        <div class="text-muted" style="font-size:.82rem;">Toplam <b>@satirlar.Count</b> kullanıcı</div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(hata))
+    {
+        <div class="alert alert-danger py-2">Liste okunamadı: @hata</div>
+    }
+
+    <div class="zy-toplu">
+        <span class="secili"><span id="zySeciliSayi">0</span> seçili</span>
+        <select id="zyTopluDeger" class="form-select form-select-sm">
+            @foreach (var k in kademeler)
+            {
+                <option value="@k" selected="@(k == 100)">%@k</option>
+            }
+        </select>
+        <button type="button" id="zyTopluUygula" class="btn btn-sm btn-primary" disabled>
+            <i class="fas fa-check me-1"></i>Seçilenlere uygula
+        </button>
+        <button type="button" id="zySecimTemizle" class="btn btn-sm btn-light" disabled>Seçimi temizle</button>
+        <input type="text" id="zyAra" class="form-control form-control-sm ara" placeholder="Kullanıcı kodu / ad ara...">
+    </div>
+
+    @if (satirlar.Count == 0)
+    {
+        <div class="zy-bos">Listelenecek kullanıcı bulunamadı.</div>
+    }
+    else
+    {
+        <div style="overflow-x:auto;">
+            <table class="zy-tablo" id="zyTablo">
+                <thead>
+                    <tr>
+                        <th style="width:36px;"><input type="checkbox" id="zyTumu" title="Görünenlerin tümünü seç"></th>
+                        <th>Kullanıcı</th>
+                        <th>Ad Soyad</th>
+                        <th>Yetki</th>
+                        <th>Zoom</th>
+                        <th>Durum</th>
+                        <th>Son Güncelleme</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in satirlar)
+                    {
+                        <tr data-kod="@s.KullaniciKodu" data-ara="@((s.KullaniciKodu + " " + s.AdSoyad).ToLowerInvariant())">
+                            <td><input type="checkbox" class="zy-sec" value="@s.KullaniciKodu"></td>
+                            <td class="kod">@s.KullaniciKodu</td>
+                            <td>@s.AdSoyad</td>
+                            <td><span class="rozet">@(string.IsNullOrWhiteSpace(s.Yetki) ? "-" : s.Yetki)</span></td>
+                            <td class="zoom">
+                                <select class="form-select form-select-sm zy-tekil" data-eski="@s.Zoom">
+                                    @foreach (var k in kademeler)
+                                    {
+                                        <option value="@k" selected="@(k == s.Zoom)">%@k</option>
+                                    }
+                                </select>
+                            </td>
+                            <td><span class="rozet durum @(s.Zoom != 100 ? "farkli" : "")">@(s.Zoom != 100 ? "Özel" : "Varsayılan")</span></td>
+                            <td class="tarih">@(s.Guncelleme.HasValue && s.Zoom != 100 ? s.Guncelleme.Value.ToString("dd.MM.yyyy HH:mm") : "-")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            var tablo = document.getElementById('zyTablo');
+            if (!tablo) return;
+
+            var tumu = document.getElementById('zyTumu');
+            var seciliSayi = document.getElementById('zySeciliSayi');
+            var topluDeger = document.getElementById('zyTopluDeger');
+            var topluUygula = document.getElementById('zyTopluUygula');
+            var secimTemizle = document.getElementById('zySecimTemizle');
+            var ara = document.getElementById('zyAra');
+
+            function secililer() {
+                return Array.prototype.slice.call(tablo.querySelectorAll('.zy-sec:checked')).map(function (c) { return c.value; });
+            }
+
+            function sayacGuncelle() {
+                var n = secililer().length;
+                seciliSayi.textContent = n;
+                topluUygula.disabled = n === 0;
+                secimTemizle.disabled = n === 0;
+                Array.prototype.forEach.call(tablo.querySelectorAll('.zy-sec'), function (c) {
+                    c.closest('tr').classList.toggle('secili', c.checked);
+                });
+            }
+
+            function satirGuncelle(kod, zoom) {
+                var tr = tablo.querySelector('tr[data-kod="' + kod.replace(/"/g, '\\"') + '"]');
+                if (!tr) return;
+                var sel = tr.querySelector('.zy-tekil');
+                sel.value = String(zoom);
+                sel.dataset.eski = String(zoom);
+                var durum = tr.querySelector('.durum');
+                durum.textContent = zoom !== 100 ? 'Özel' : 'Varsayılan';
+                durum.classList.toggle('farkli', zoom !== 100);
+                var simdi = new Date();
+                var iki = function (x) { return (x < 10 ? '0' : '') + x; };
+                tr.querySelector('.tarih').textContent = zoom !== 100
+                    ? iki(simdi.getDate()) + '.' + iki(simdi.getMonth() + 1) + '.' + simdi.getFullYear() + ' ' + iki(simdi.getHours()) + ':' + iki(simdi.getMinutes())
+                    : '-';
+            }
+
+            function kaydet(kodlar, zoom, bitti) {
+                var veri = new FormData();
+                kodlar.forEach(function (k) { veri.append('kullanicilar', k); });
+                veri.append('zoom', zoom);
+
+                fetch('/Home/ZoomTopluKaydet', { method: 'POST', body: veri })
+                    .then(function (r) { return r.json(); })
+                    .then(function (c) {
+                        if (!c || !c.success) {
+                            toastr.error((c && c.message) || 'Kayıt yapılamadı.');
+                            bitti(false);
+                            return;
+                        }
+                        kodlar.forEach(function (k) { satirGuncelle(k, zoom); });
+                        toastr.success(kodlar.length + ' kullanıcı %' + zoom + ' olarak güncellendi.');
+                        bitti(true);
+                    })
+                    .catch(function () { toastr.error('Sunucuya ulaşılamadı.'); bitti(false); });
+            }
+
+            // Tekil degisiklik: satirdaki liste degisince hemen kaydedilir.
+            tablo.addEventListener('change', function (e) {
+                var sel = e.target.closest('.zy-tekil');
+                if (sel) {
+                    var kod = sel.closest('tr').dataset.kod;
+                    var yeni = parseInt(sel.value, 10);
+                    sel.disabled = true;
+                    kaydet([kod], yeni, function (ok) {
+                        sel.disabled = false;
+                        if (!ok) sel.value = sel.dataset.eski;
+                    });
+                    return;
+                }
+                if (e.target.classList.contains('zy-sec')) sayacGuncelle();
+            });
+
+            // Tumunu sec: yalnizca gorunen (filtreye uyan) satirlar.
+            tumu.addEventListener('change', function () {
+                Array.prototype.forEach.call(tablo.querySelectorAll('tbody tr'), function (tr) {
+                    if (tr.style.display === 'none') return;
+                    tr.querySelector('.zy-sec').checked = tumu.checked;
+                });
+                sayacGuncelle();
+            });
+
+            secimTemizle.addEventListener('click', function () {
+                Array.prototype.forEach.call(tablo.querySelectorAll('.zy-sec'), function (c) { c.checked = false; });
+                tumu.checked = false;
+                sayacGuncelle();
+            });
+
+            topluUygula.addEventListener('click', function () {
+                var kodlar = secililer();
+                if (!kodlar.length) return;
+                var zoom = parseInt(topluDeger.value, 10);
+                topluUygula.disabled = true;
+                kaydet(kodlar, zoom, function () { sayacGuncelle(); });
+            });
+
+            ara.addEventListener('input', function () {
+                var m = ara.value.trim().toLowerCase();
+                Array.prototype.forEach.call(tablo.querySelectorAll('tbody tr'), function (tr) {
+                    tr.style.display = (!m || tr.dataset.ara.indexOf(m) >= 0) ? '' : 'none';
+                });
+            });
+
+            sayacGuncelle();
+        })();
+    </script>
+}

@@ -1,0 +1,647 @@
+﻿@model List<WebApplication3.Models.BelgeViewModel>
+@using WebApplication3.Models
+@using System.Globalization;
+@using Newtonsoft.Json;
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Xsrf
+
+@{
+    ViewData["Title"] = "Nakit Akışı (Ödenenler) Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // Aktif Veritabanını (Şirketi) URL veya Cookie'den merkezi olarak alıyoruz
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"];
+    }
+
+    var reportDataJson = Model != null ? JsonConvert.SerializeObject(Model, new JsonSerializerSettings { DateFormatString = "yyyy-MM-dd" }) : "[]";
+    var totalRecords = Model?.Count ?? 0;
+    var activeDatabaseDisplayName = (string)ViewBag.DatabaseName ?? currentDb;
+
+    var distinctValues = new Dictionary<string, List<string>>();
+    if (Model != null)
+    {
+        distinctValues["Hafta"] = Model.Where(m => m.Hafta.HasValue).Select(m => m.Hafta.Value.ToString()).Distinct().OrderBy(s => s).ToList();
+        distinctValues["TarihAraligi"] = Model.Where(m => !string.IsNullOrEmpty(m.TarihAraligi)).Select(m => m.TarihAraligi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["OrderDate"] = Model.Where(m => m.OrderDate.HasValue).Select(m => m.OrderDate.Value.ToString("dd.MM.yyyy")).Distinct().OrderBy(s => DateTime.Parse(s, new CultureInfo("tr-TR"))).ToList();
+        distinctValues["TedarikciAlacakli"] = Model.Where(m => !string.IsNullOrEmpty(m.TedarikciAlacakli)).Select(m => m.TedarikciAlacakli).Distinct().OrderBy(s => s).ToList();
+        distinctValues["DocNum"] = Model.Where(m => !string.IsNullOrEmpty(m.DocNum)).Select(m => m.DocNum).Distinct().OrderBy(s => s).ToList();
+        distinctValues["FaturaNo"] = Model.Where(m => !string.IsNullOrEmpty(m.FaturaNo)).Select(m => m.FaturaNo).Distinct().OrderBy(s => s).ToList();
+        distinctValues["OdemeNedeni"] = Model.Where(m => !string.IsNullOrEmpty(m.OdemeNedeni)).Select(m => m.OdemeNedeni).Distinct().OrderBy(s => s).ToList();
+        distinctValues["MutabakatDurumu"] = Model.Where(m => !string.IsNullOrEmpty(m.MutabakatDurumu)).Select(m => m.MutabakatDurumu).Distinct().OrderBy(s => s).ToList();
+        distinctValues["VadeTarihi"] = Model.Where(m => m.VadeTarihi.HasValue).Select(m => m.VadeTarihi.Value.ToString("dd.MM.yyyy")).Distinct().OrderBy(s => DateTime.Parse(s, new CultureInfo("tr-TR"))).ToList();
+        distinctValues["GerceklesenOdemeTarihi"] = Model.Where(m => m.GerceklesenOdemeTarihi.HasValue).Select(m => m.GerceklesenOdemeTarihi.Value.ToString("dd.MM.yyyy")).Distinct().OrderBy(s => DateTime.Parse(s, new CultureInfo("tr-TR"))).ToList();
+        distinctValues["ParaBirimi"] = Model.Where(m => !string.IsNullOrEmpty(m.ParaBirimi)).Select(m => m.ParaBirimi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["OdemeSekli"] = Model.Where(m => !string.IsNullOrEmpty(m.OdemeSekli)).Select(m => m.OdemeSekli).Distinct().OrderBy(s => s).ToList();
+        distinctValues["Durum"] = Model.Where(m => !string.IsNullOrEmpty(m.Durum)).Select(m => m.Durum).Distinct().OrderBy(s => s).ToList();
+    }
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { 
+            background-color: #f4f7fc; 
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            color: #2b3445; 
+            font-size: 0.75rem;
+            overflow-y: hidden;
+        }
+
+        .container-fluid { padding: 15px 20px !important; }
+
+        /* Dashboard Card Stilleri */
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 20px; transition: all 0.3s ease; position: relative; overflow: hidden; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        
+        .kpi-title { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; z-index: 2; position: relative; }
+        .kpi-value { font-size: 24px; font-weight: 900; color: #0f172a; margin-bottom: 2px; z-index: 2; position: relative; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .kpi-desc { font-size: 11px; color: #94a3b8; z-index: 2; position: relative; }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 5rem; color: #e2e8f0; opacity: 0.4; z-index: 1; transform: rotate(-10deg); }
+        
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        .border-top-warning { border-top: 4px solid #f59e0b !important; }
+        .border-top-success { border-top: 4px solid #10b981 !important; }
+
+        /* Tablo Konteyneri */
+        .table-container {
+            height: calc(100vh - 275px); 
+            overflow: auto;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background-color: white;
+            width: 100%;
+            position: relative;
+        }
+
+        table { width: 100%; table-layout: auto; border-collapse: separate; border-spacing: 0; min-width: 2000px; }
+
+        th, td {
+            padding: 4px 6px !important;
+            font-size: 11.5px !important;
+            border-right: 1px solid #f1f5f9;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+            line-height: 1.2;
+            white-space: normal !important;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+        }
+
+        thead { position: sticky; top: 0; z-index: 100; background-color: #f8fafc; }
+        .main-header-row th { background-color: #f8fafc; color: #475569; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; text-align: center; height: 35px; vertical-align: middle !important; border-bottom: 2px solid #e2e8f0; }
+        .filter-row th { background-color: #ffffff; padding: 2px !important; vertical-align: top; height: 30px; border-bottom: 1px solid #e2e8f0; }
+
+        .table-hover tbody tr:hover { background-color: #f8fafc; transform: scale(1.0005); transition: all 0.2s; box-shadow: inset 2px 0 0 #3b82f6; }
+
+        .checkbox-column { width: 30px !important; min-width: 30px !important; text-align: center !important; vertical-align: middle !important; padding: 0 !important; }
+        .form-check-input { cursor: pointer; width: 1.1em; height: 1.1em; display: block !important; margin: 0 auto !important; float: none !important; }
+
+        .sortable-column { cursor: pointer; }
+        .sortable-column:hover { background-color: #e2e8f0; color: #0f172a; }
+
+        /* Badges ve Satır Renkleri (Adaptasyon) */
+        .badge-soft-warning { background-color: #fef3c7; color: #92400e; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-primary { background-color: #dbeafe; color: #1e40af; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-success { background-color: #d1fae5; color: #065f46; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-danger { background-color: #fee2e2; color: #991b1b; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+
+        .table-success-row { background-color: #ecfdf5 !important; }
+        .table-danger-row { background-color: #fef2f2 !important; }
+        .table-warning-row { background-color: #fffbeb !important; }
+        
+        .rapor-tablo tbody tr.selected { background-color: #fff3cd !important; box-shadow: inset 2px 0 0 #f59e0b; }
+
+        /* Toolbar ve Utils */
+        .action-toolbar { background-color: #ffffff; padding: 12px 15px; border-radius: 10px; border: 1px solid #eef2f7; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; justify-content: space-between; align-items: center; }
+        
+        .bootstrap-select .dropdown-toggle { padding: 2px 5px; font-size: 11px; height: 26px; line-height: 1; border-color: #cbd5e1; border-radius: 4px; }
+        .bootstrap-select .dropdown-menu { font-size: 11.5px; }
+
+        /* Buton Stilleri */
+        .btn { font-weight: 600; letter-spacing: 0.2px; }
+        .btn-sm { font-size: 11.5px !important; padding: 4px 10px !important; height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+        .btn-primary { background-color: #3b82f6; border-color: #3b82f6; }
+        .btn-outline-secondary { color: #64748b; border-color: #cbd5e1; }
+        .btn-outline-secondary:hover { background-color: #f1f5f9; color: #0f172a; }
+        .btn-info { background-color: #0ea5e9; border-color: #0ea5e9; color: white;}
+    </style>
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;">Nakit Akışı (Ödenenler) Raporu</h4>
+            <span class="text-muted" style="font-size: 13px;">Sistemde gerçekleşen ödemelerin ve mutabakat durumlarının analizi.</span>
+        </div>
+    </div>
+
+    <!-- KPI Dashboard Row -->
+    <div class="row mb-3 g-3">
+        <div class="col-md-4">
+            <div class="dashboard-card border-0 border-top-primary hover-elevate">
+                <i class="fas fa-database kpi-icon-bg"></i>
+                <div class="kpi-title">Aktif Veritabanı</div>
+                <div class="kpi-value text-primary">@activeDatabaseDisplayName</div>
+                <div class="kpi-desc">Şirket Verileri Gösteriliyor</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="dashboard-card border-0 border-top-success hover-elevate">
+                <i class="fas fa-list-ul kpi-icon-bg"></i>
+                <div class="kpi-title">Gösterilen Kayıt</div>
+                <div class="kpi-value text-success" id="kpiTotalRecords">@totalRecords</div>
+                <div class="kpi-desc">Filtrelenmiş Belge Sayısı</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="dashboard-card border-0 border-top-warning hover-elevate">
+                <i class="fas fa-coins kpi-icon-bg"></i>
+                <div class="kpi-title">Seçili TL Tutar</div>
+                <div class="kpi-value text-warning" id="kpiSelectedTotal">0,00 TL</div>
+                <div class="kpi-desc">Aktif Satır Seçim Toplamı</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-0">
+        <div class="col-md-12">
+            <div class="dashboard-card border-0 p-3" style="cursor: default;">
+                
+                <!-- Action Toolbar -->
+                <div class="action-toolbar">
+                    <div class="d-flex align-items-center gap-2">
+                        <a asp-action="Index" asp-controller="Home" asp-route-db="@currentDb" class="btn btn-sm btn-outline-secondary shadow-sm">
+                            <i class="fas fa-arrow-left"></i> Ana Sayfaya Dön
+                        </a>
+                        <button type="button" class="btn btn-sm btn-info text-white shadow-sm" onclick="window.clearReportFilters()">
+                            <i class="fas fa-filter-slash"></i> Filtreleri Sıfırla
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Table Container -->
+                <div class="table-container shadow-sm">
+                    <table class="table table-hover mb-0 rapor-tablo" id="rapor13Table">
+                        <thead>
+                            <tr class="main-header-row">
+                                <th class="checkbox-column no-drag" title="Seçim Kutusu" data-column="Checkbox">
+                                    <input type="checkbox" id="selectAllCheckbox" class="form-check-input" />
+                                </th>
+                                <th class="sortable-column" data-column="Hafta" title="Hafta" data-sort-type="number" style="width: 50px; min-width: 50px;">Hafta <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="TarihAraligi" title="Tarih Aralığı" data-sort-type="text">Tarih Aralığı <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="OrderDate" title="Belge Tarihi" data-sort-type="date">Belge Tarihi <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="TedarikciAlacakli" title="Tedarikçi / Alacaklı" data-sort-type="text" style="min-width: 250px;">Tedarikçi / Alacaklı <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="DocNum" title="Belge No" data-sort-type="text" style="width: 70px; min-width: 70px;">Belge No <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="FaturaNo" title="Fatura No" data-sort-type="text" style="min-width: 120px;">Fatura No <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="OdemeNedeni" title="Ödeme Nedeni" data-sort-type="text">Ödeme Nedeni <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="MutabakatDurumu" title="Mutabakat Durumu" data-sort-type="text">Mutabakat Durumu <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="VadeTarihi" title="Vade Tarihi" data-sort-type="date">Vade Tarihi <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="GerceklesenOdemeTarihi" title="Gerçekleşen Ödeme Tarihi" data-sort-type="date">Gerç. Ödeme Tar. <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="GunFarki" title="Gün Farkı" data-sort-type="number" style="width: 50px; min-width: 50px;">Gün <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="Tutar" title="Tutar" data-sort-type="number">Tutar <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="OdenenTutar" title="Ödenen Tutar" data-sort-type="number">Ödenen <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="ParaBirimi" title="Para Birimi" data-sort-type="text" style="width: 50px; min-width: 50px;">PB <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="OdemeSekli" title="Ödeme Şekli" data-sort-type="text">Ödeme Şekli <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="GuncelTLTutar" title="Güncel TL Tutar" data-sort-type="number">TL Tutar <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="Durum" title="Durum" data-sort-type="text">Durum <i class="fas fa-sort text-muted ms-1"></i></th>
+                            </tr>
+                            <tr class="filter-row">
+                                <th data-column="Checkbox"></th>
+                                <th data-column="Hafta">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("Hafta")) { foreach (var item in distinctValues["Hafta"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                                <th data-column="TarihAraligi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("TarihAraligi")) { foreach (var item in distinctValues["TarihAraligi"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                                <th data-column="OrderDate">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("OrderDate")) { foreach (var item in distinctValues["OrderDate"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                                <th data-column="TedarikciAlacakli">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("TedarikciAlacakli")) { foreach (var item in distinctValues["TedarikciAlacakli"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                                <th data-column="DocNum">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("DocNum")) { foreach (var item in distinctValues["DocNum"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                                <th data-column="FaturaNo">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("FaturaNo")) { foreach (var item in distinctValues["FaturaNo"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                                <th data-column="OdemeNedeni">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("OdemeNedeni")) { foreach (var item in distinctValues["OdemeNedeni"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                                <th data-column="MutabakatDurumu">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("MutabakatDurumu")) { foreach (var item in distinctValues["MutabakatDurumu"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                                <th data-column="VadeTarihi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("VadeTarihi")) { foreach (var item in distinctValues["VadeTarihi"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                                <th data-column="GerceklesenOdemeTarihi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("GerceklesenOdemeTarihi")) { foreach (var item in distinctValues["GerceklesenOdemeTarihi"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                                <th data-column="GunFarki">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("GunFarki")) { foreach (var item in distinctValues["GunFarki"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                                <th data-column="Tutar">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("Tutar")) { foreach (var item in distinctValues["Tutar"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                                <th data-column="OdenenTutar">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("OdenenTutar")) { foreach (var item in distinctValues["OdenenTutar"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                                <th data-column="ParaBirimi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("ParaBirimi")) { foreach (var item in distinctValues["ParaBirimi"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                                <th data-column="OdemeSekli">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("OdemeSekli")) { foreach (var item in distinctValues["OdemeSekli"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                                <th data-column="GuncelTLTutar">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("GuncelTLTutar")) { foreach (var item in distinctValues["GuncelTLTutar"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                                <th data-column="Durum">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 1" data-width="100%">
+                                        @if (distinctValues.ContainsKey("Durum")) { foreach (var item in distinctValues["Durum"]) { <option value="@item">@item</option> } }
+                                    </select>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- JS ile dinamik render edilecek -->
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const allReportData = @Html.Raw(reportDataJson);
+            const table = document.getElementById('rapor13Table');
+            
+            if(!table) return;
+
+            const tableBody = table.querySelector('tbody');
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const kpiSelectedTotalSpan = document.getElementById('kpiSelectedTotal');
+            const kpiTotalRecordsSpan = document.getElementById('kpiTotalRecords');
+
+            let currentlyFilteredRows = [...allReportData];
+            let currentSortColumn = null;
+            let currentSortDirection = 'none';
+
+            // Merkezi Filtre Sıfırlayıcı Köprüsü
+            window.clearReportFilters = function () {
+                $('.filter-select-bs').selectpicker('val', '');
+                currentSortColumn = null;
+                currentSortDirection = 'none';
+                document.querySelectorAll('th.sortable-column i').forEach(icon => icon.className = 'fas fa-sort text-muted ms-1');
+                
+                currentlyFilteredRows = [...allReportData];
+                renderTable(currentlyFilteredRows);
+                if(typeof toastr !== 'undefined') toastr.success('Filtreler başarıyla sıfırlandı.');
+            };
+
+            const columnMappings = {
+                'Checkbox': null, 
+                'Hafta': 'Hafta',
+                'TarihAraligi': 'TarihAraligi',
+                'OrderDate': 'OrderDate',
+                'TedarikciAlacakli': 'TedarikciAlacakli',
+                'DocNum': 'DocNum',
+                'FaturaNo': 'FaturaNo',
+                'OdemeNedeni': 'OdemeNedeni',
+                'MutabakatDurumu': 'MutabakatDurumu',
+                'VadeTarihi': 'VadeTarihi',
+                'GerceklesenOdemeTarihi': 'GerceklesenOdemeTarihi',
+                'GunFarki': 'GunFarki',
+                'Tutar': 'Tutar',
+                'OdenenTutar': 'OdenenTutar',
+                'ParaBirimi': 'ParaBirimi',
+                'OdemeSekli': 'OdemeSekli',
+                'GuncelTLTutar': 'GuncelTLTutar',
+                'Durum': 'Durum'
+            };
+
+            function updatePaginationInfo(totalCount) {
+                if (kpiTotalRecordsSpan) {
+                    kpiTotalRecordsSpan.textContent = totalCount;
+                }
+            }
+
+            function renderTable(data) {
+                tableBody.innerHTML = '';
+                if (data.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="18" class="text-center py-4"><i class="fas fa-info-circle fa-2x text-info mb-2"></i><br>Gösterilecek veri bulunamadı.</td></tr>';
+                    updatePaginationInfo(0);
+                    calculateSelectedTotal();
+                    return;
+                }
+
+                const frag = document.createDocumentFragment();
+                const visibleHeaders = document.querySelectorAll('#rapor13Table thead .main-header-row th:not([style*="display: none"])');
+
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+                    
+                    // Yeni tasarıma uygun satır renkleri
+                    const rowClass = item.Durum ? {
+                        'Ödendi': 'table-success-row',
+                        'Gecikti': 'table-danger-row',
+                        'Kısmi Ödeme Vadesi Geçti': 'table-warning-row'
+                    }[item.Durum.trim()] || '' : '';
+                    row.className = rowClass;
+
+                    visibleHeaders.forEach((header) => {
+                        const cell = document.createElement('td');
+                        const columnKey = header.dataset.column;
+                        let content = '';
+                        let value = item[columnMappings[columnKey]];
+                        cell.dataset.column = columnKey;
+
+                        if (columnKey === 'Checkbox') {
+                            cell.className = 'checkbox-column';
+                            const checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+                            checkbox.className = 'form-check-input row-selector';
+                            checkbox.dataset.tlValue = item.GuncelTLTutar || 0;
+                            cell.appendChild(checkbox);
+                        } 
+                        else if (columnKey === 'Durum') {
+                            const statusBadge = item.Durum ? {
+                                'Ödendi': 'badge-soft-success',
+                                'Gecikti': 'badge-soft-danger',
+                                'Kısmi Ödeme Vadesi Geçti': 'badge-soft-warning'
+                            }[item.Durum.trim()] || 'badge-soft-primary' : 'badge-soft-primary';
+                            cell.innerHTML = `<span class="${statusBadge}">${value || ''}</span>`;
+                            cell.style.textAlign = 'center';
+                        }
+                        else if (columnKey === 'ParaBirimi') {
+                            cell.innerHTML = `<span class="badge-soft-primary">${value || ''}</span>`;
+                            cell.style.textAlign = 'center';
+                        }
+                        else if (columnKey === 'Hafta') {
+                            cell.innerHTML = `<span class="badge bg-light text-dark border">${value || ''}</span>`;
+                            cell.style.textAlign = 'center';
+                        }
+                        else if (columnKey === 'TedarikciAlacakli') {
+                            cell.textContent = value || '';
+                            cell.className = "fw-bold text-dark";
+                        }
+                        else if (columnKey === 'DocNum') {
+                            cell.textContent = value || '';
+                            cell.className = "text-center text-primary fw-bold";
+                        }
+                        else if (columnKey && columnKey.includes('Date') || columnKey === 'GerceklesenOdemeTarihi' || columnKey === 'VadeTarihi') {
+                            content = value ? new Date(value).toLocaleDateString('tr-TR') : '';
+                            cell.textContent = content;
+                            cell.style.textAlign = 'center';
+                        } 
+                        else if (columnKey === 'GunFarki') {
+                            cell.textContent = value || '-';
+                            cell.style.textAlign = 'center';
+                        }
+                        else if (columnKey === 'Tutar' || columnKey === 'OdenenTutar' || columnKey === 'GuncelTLTutar') {
+                            content = value?.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '-';
+                            cell.textContent = content;
+                            cell.className = "fw-bold text-dark text-end";
+                        } else {
+                            content = value || '';
+                            cell.textContent = content;
+                        }
+
+                        row.appendChild(cell);
+                    });
+
+                    frag.appendChild(row);
+                });
+                
+                tableBody.appendChild(frag);
+                updatePaginationInfo(data.length);
+                calculateSelectedTotal();
+                updateSelectAllCheckboxState();
+            }
+
+            function filterTableAndRender() {
+                const filters = {};
+                $('.filter-select-bs').each(function () {
+                    const selectElement = $(this);
+                    const columnKey = selectElement.closest('th').data('column');
+                    const selectedValues = selectElement.val();
+                    if (selectedValues && selectedValues.length > 0) {
+                        filters[columnKey] = selectedValues.map(v => (v || '').toLowerCase().trim());
+                    }
+                });
+
+                let filteredData = allReportData.filter(item => {
+                    let isMatch = true;
+                    for (const column in filters) {
+                        const filterValues = filters[column];
+                        const propName = columnMappings[column];
+                        let itemValue = item[propName];
+
+                        if (itemValue === null || itemValue === undefined) {
+                            itemValue = '';
+                        } else if (propName && propName.includes('Date') || propName === 'GerceklesenOdemeTarihi' || propName === 'VadeTarihi') {
+                            itemValue = new Date(itemValue).toLocaleDateString('tr-TR');
+                        } else if (typeof itemValue === 'number') {
+                            itemValue = itemValue.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        } else {
+                            itemValue = itemValue.toString();
+                        }
+                        itemValue = itemValue.toLowerCase().trim();
+
+                        if (filterValues.length > 0 && !filterValues.includes(itemValue)) {
+                            isMatch = false;
+                            break;
+                        }
+                    }
+                    return isMatch;
+                });
+
+                if (currentSortColumn && currentSortDirection !== 'none') {
+                    const sortType = document.querySelector(`th[data-column="${currentSortColumn}"]`)?.dataset.sortType;
+                    const propName = columnMappings[currentSortColumn];
+                    filteredData.sort((itemA, itemB) => {
+                        let valA = itemA[propName];
+                        let valB = itemB[propName];
+
+                        let comparison = 0;
+                        if (sortType === 'number') {
+                            valA = parseFloat(valA?.toString().replace(',', '.')) || 0;
+                            valB = parseFloat(valB?.toString().replace(',', '.')) || 0;
+                            comparison = valA - valB;
+                        } else if (sortType === 'date') {
+                            const dateA = valA ? new Date(valA) : new Date(0);
+                            const dateB = valB ? new Date(valB) : new Date(0);
+                            comparison = dateA.getTime() - dateB.getTime();
+                        } else {
+                            comparison = (valA || '').localeCompare((valB || ''), 'tr', { sensitivity: 'base' });
+                        }
+                        return currentSortDirection === 'asc' ? comparison : -comparison;
+                    });
+                }
+
+                currentlyFilteredRows = filteredData;
+                renderTable(currentlyFilteredRows);
+            }
+
+            function initializePage() {
+                if ($.fn.selectpicker) {
+                    $('.filter-select-bs').selectpicker({
+                        liveSearch: true,
+                        actionsBox: true,
+                        width: '100%',
+                        container: 'body'
+                    }).on('changed.bs.select', function () {
+                        filterTableAndRender();
+                    });
+                }
+
+                document.querySelectorAll('th.sortable-column').forEach(header => {
+                    header.addEventListener('click', function () {
+                        const columnKey = this.dataset.column;
+                        if (currentSortColumn === columnKey) {
+                            if (currentSortDirection === 'asc') {
+                                currentSortDirection = 'desc';
+                            } else if (currentSortDirection === 'desc') {
+                                currentSortDirection = 'none';
+                                currentSortColumn = null;
+                            } else {
+                                currentSortDirection = 'asc';
+                            }
+                        } else {
+                            if (currentSortColumn !== null) {
+                                const prevHeader = document.querySelector(`th.sortable-column[data-column="${currentSortColumn}"] i`);
+                                if (prevHeader) {
+                                    prevHeader.className = 'fas fa-sort text-muted ms-1';
+                                }
+                            }
+                            currentSortColumn = columnKey;
+                            currentSortDirection = 'asc';
+                        }
+
+                        document.querySelectorAll('th.sortable-column i').forEach(icon => icon.className = 'fas fa-sort text-muted ms-1');
+                        const sortIcon = this.querySelector('i');
+                        if (sortIcon && currentSortDirection !== 'none') {
+                            sortIcon.className = `fas fa-sort-${currentSortDirection === 'asc' ? 'up' : 'down'} ms-1 text-primary`;
+                        }
+
+                        filterTableAndRender();
+                    });
+                });
+
+                renderTable(allReportData);
+            }
+
+            function updateSelectAllCheckboxState() {
+                if (!selectAllCheckbox) return;
+
+                const visibleCheckboxes = document.querySelectorAll('#rapor13Table tbody tr:not([style*="display: none"]) .row-selector');
+
+                if (visibleCheckboxes.length > 0) {
+                    const allChecked = Array.from(visibleCheckboxes).every(checkbox => checkbox.checked);
+                    const anyChecked = Array.from(visibleCheckboxes).some(checkbox => checkbox.checked);
+
+                    selectAllCheckbox.checked = allChecked;
+                    selectAllCheckbox.indeterminate = !allChecked && anyChecked;
+                } else {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = false;
+                }
+            }
+
+            if (selectAllCheckbox) {
+                selectAllCheckbox.addEventListener('change', function () {
+                    const isChecked = this.checked;
+                    document.querySelectorAll('#rapor13Table tbody tr:not([style*="display: none"])').forEach(row => {
+                        const checkbox = row.querySelector('.row-selector');
+                        if (checkbox) {
+                            checkbox.checked = isChecked;
+                            row.classList.toggle('selected', isChecked);
+                        }
+                    });
+                    calculateSelectedTotal();
+                });
+            }
+
+            tableBody.addEventListener('change', function (event) {
+                if (event.target.classList.contains('row-selector')) {
+                    const row = event.target.closest('tr');
+                    row.classList.toggle('selected', event.target.checked);
+                    calculateSelectedTotal();
+                    updateSelectAllCheckboxState();
+                }
+            });
+
+            // Satıra tıklanınca seçimi değiştirme opsiyonu eklendi (rapor.index deki gibi kolay kullanım)
+            tableBody.addEventListener('click', function(event) {
+                const target = event.target;
+                if ($(target).closest('.bootstrap-select').length || target.matches('input, textarea, select, button, a')) return;
+
+                const row = target.closest('tr');
+                if(!row) return;
+
+                const cb = row.querySelector('.row-selector');
+                if (cb) {
+                    cb.checked = !cb.checked;
+                    row.classList.toggle('selected', cb.checked);
+                    calculateSelectedTotal();
+                    updateSelectAllCheckboxState();
+                }
+            });
+
+            function calculateSelectedTotal() {
+                let totalAmount = 0;
+                document.querySelectorAll('#rapor13Table tbody tr input.row-selector:checked').forEach(checkbox => {
+                    const tlValue = parseFloat(checkbox.dataset.tlValue);
+                    if (!isNaN(tlValue)) {
+                        totalAmount += tlValue;
+                    }
+                });
+                
+                if (kpiSelectedTotalSpan) {
+                    const formattedAmount = totalAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    kpiSelectedTotalSpan.innerHTML = `<span class="fw-bold">${formattedAmount}</span> <small class="text-muted ms-1">TL</small>`;
+                }
+            }
+
+            initializePage();
+        });
+    </script>
+}

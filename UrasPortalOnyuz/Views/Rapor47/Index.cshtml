@@ -1,0 +1,296 @@
+﻿@model List<WebApplication3.Models.TaslakFaturaRaporuViewModel>
+@using WebApplication3.Models
+@using System.Globalization
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Xsrf
+
+@{
+    ViewData["Title"] = "Açık Taslak Satın Alma Faturaları Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // URL'den veya varsa Cookie'den aktif şirketi okuma (currentDb)
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["ActiveDb"] ?? "VarsayilanSirket";
+    }
+
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? currentDb;
+    var modelData = Model ?? new List<TaslakFaturaRaporuViewModel>();
+
+    // KPI Hesaplamaları
+    var islemSayisi = modelData.Count;
+    var benzersizTedarikci = modelData.Select(d => d.TedarikciAdi).Where(t => !string.IsNullOrEmpty(t)).Distinct().Count();
+    var totalTutar = modelData.Sum(d => d.Tutar);
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        /* ========================================================================= */
+        /* TAM EKRAN (FULL WIDTH) VE BOŞLUK SIFIRLAMA ZORLAMASI                      */
+        /* Tablonun kısıtlanmadan aşağı akması için ana kapsayıcılar serbest bırakıldı*/
+        /* ========================================================================= */
+        html, body { overflow-x: hidden; height: auto !important; margin: 0; padding: 0; }
+        
+        .container, .container-fluid, main, .content-wrapper, .page-content, .app-content, .content, .body-content { 
+            max-width: 100% !important; 
+            width: 100% !important; 
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            padding-left: 0.5rem !important; 
+            padding-right: 0.5rem !important; 
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            padding-bottom: 50px !important;
+        }
+
+        body { 
+            background-color: #f4f7fc; 
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            color: #2b3445; 
+            font-size: 0.75rem;
+        }
+
+        /* Dashboard Card Stilleri */
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 20px; transition: all 0.3s ease; position: relative; overflow: hidden; cursor: default; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        
+        .kpi-title { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; z-index: 2; position: relative; }
+        .kpi-value { font-size: 24px; font-weight: 900; color: #0f172a; margin-bottom: 2px; z-index: 2; position: relative; white-space: nowrap; letter-spacing: -0.5px; }
+        .kpi-desc { font-size: 11px; color: #94a3b8; z-index: 2; position: relative; }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 5rem; color: #e2e8f0; opacity: 0.4; z-index: 1; transform: rotate(-10deg); }
+        
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        .border-top-warning { border-top: 4px solid #f59e0b !important; }
+        .border-top-danger { border-top: 4px solid #ef4444 !important; }
+        .border-top-success { border-top: 4px solid #10b981 !important; }
+
+        /* Toolbar ve Aksiyon Alanı */
+        .action-toolbar { background-color: #ffffff; padding: 12px 15px; border-radius: 10px; border: 1px solid #eef2f7; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; justify-content: space-between; align-items: center; }
+
+        /* TABLO KARTI - Yükseklik ve Overflow kısıtlaması TAMAMEN kaldırıldı! */
+        .report-table-card {
+            background: #ffffff; 
+            border-radius: 12px; 
+            border: 1px solid #eef2f7; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03); 
+            padding: 20px;
+            height: auto !important;
+            overflow: visible !important;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .table-container { 
+            width: 100%;
+            height: auto !important;
+            max-height: none !important;
+            overflow-y: visible !important; /* Dikey scroll iptal, sayfa uzayacak */
+            overflow-x: auto; /* Sadece yatayda taşma olursa kaydır */
+            background-color: white; 
+            border-radius: 8px; 
+            border: 1px solid #eef2f7; 
+            position: relative;
+        }
+        
+        table { width: 100%; table-layout: auto; border-collapse: separate; border-spacing: 0; min-width: 800px; }
+        
+        th, td {
+            padding: 10px 12px !important;
+            font-size: 11.5px !important;
+            border-right: 1px solid #f1f5f9;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+            line-height: 1.3;
+        }
+
+        thead th { 
+            background-color: #f8fafc; 
+            color: #475569; 
+            font-weight: 700; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px; 
+            white-space: nowrap; 
+            position: sticky; 
+            top: 0; 
+            z-index: 100; 
+            border-bottom: 2px solid #e2e8f0 !important;
+        }
+        
+        .table-hover tbody tr:hover { background-color: #f8fafc; box-shadow: inset 2px 0 0 #10b981; }
+        
+        /* Özelleştirilmiş Kolon ve Metin Kesme */
+        .col-truncate-lg { max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .num { text-align: right; font-variant-numeric: tabular-nums; }
+        
+        /* Toplam Satırı (Ekranın Altında Sabit Kalır) */
+        .total-row td { 
+            position: sticky; 
+            bottom: 0; 
+            background-color: #f8fafc !important; 
+            font-weight: 800; 
+            font-size: 12.5px !important; 
+            color: #0f172a; 
+            border-top: 2px solid #10b981 !important; 
+            z-index: 90;
+        }
+
+        /* Butonlar */
+        .btn { font-weight: 600; letter-spacing: 0.2px; }
+        .btn-sm { font-size: 11.5px !important; padding: 4px 12px !important; height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+        .btn-primary { background-color: #3b82f6; border-color: #3b82f6; }
+        .btn-success { background-color: #10b981; border-color: #10b981; }
+        .btn-outline-secondary { color: #64748b; border-color: #cbd5e1; }
+        .btn-outline-secondary:hover { background-color: #f1f5f9; color: #0f172a; }
+    </style>
+}
+
+@Html.AntiForgeryToken()
+
+<div class="container-fluid">
+    <input type="hidden" id="currentDb" value="@currentDb" />
+
+    <!-- Başlık Alanı -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;"><i class="fas fa-file-signature text-success me-2"></i>Açık Taslak Satın Alma Faturaları</h4>
+            <span class="text-muted" style="font-size: 13px;">Aktif Veritabanı: <strong class="text-success">@currentSelectedDbDisplay</strong> | Kesinleşmemiş Satın Alma Faturaları (ObjType 18)</span>
+        </div>
+        <div>
+            <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-sm btn-outline-secondary shadow-sm rounded-pill px-3">
+                <i class="fas fa-arrow-left"></i> Ana Sayfaya Dön
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI'lar -->
+    <div class="row mb-3 g-3">
+        <div class="col-md-4">
+            <div class="dashboard-card border-0 border-top-primary hover-elevate">
+                <i class="fas fa-file-invoice kpi-icon-bg"></i>
+                <div class="kpi-title">Toplam Açık Taslak</div>
+                <div class="kpi-value text-primary">@islemSayisi</div>
+                <div class="kpi-desc">Bekleyen belge sayısı</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="dashboard-card border-0 border-top-warning hover-elevate">
+                <i class="fas fa-building kpi-icon-bg"></i>
+                <div class="kpi-title">Farklı Tedarikçi</div>
+                <div class="kpi-value text-warning">@benzersizTedarikci</div>
+                <div class="kpi-desc">Taslak fatura beklenen tedarikçiler</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="dashboard-card border-0 border-top-success hover-elevate position-relative">
+                <i class="fas fa-wallet kpi-icon-bg"></i>
+                <div class="kpi-title">Toplam Tutar</div>
+                <div class="kpi-value text-success">@totalTutar.ToString("N2", new CultureInfo("tr-TR")) ₺</div>
+                <div class="kpi-desc">Taslak durumundaki maliyet toplamı</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aksiyon ve Filtre Barı -->
+    <div class="action-toolbar mb-3">
+        <div class="w-100 d-flex flex-wrap align-items-center justify-content-between gap-3 m-0">
+            <div class="d-flex align-items-center gap-3 flex-grow-1 flex-wrap">
+                <form asp-controller="Rapor47" asp-action="Index" method="get" id="raporForm" class="m-0">
+                    <input type="hidden" name="db" value="@currentDb" />
+                    <button type="submit" class="btn btn-primary btn-sm shadow-sm px-4">
+                        <i class="fas fa-sync-alt"></i> Raporu Yenile
+                    </button>
+                </form>
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-success shadow-sm px-3" id="exportToExcelButton">
+                    <i class="fas fa-file-excel"></i> Excel'e Aktar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- İşlem Listesi (Tablo) -->
+    <div class="report-table-card mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="card-title mb-0 fw-bold text-dark" style="font-size: 14px;"><i class="fas fa-table text-success me-2"></i>Taslak Fatura Detayları</div>
+        </div>
+        
+        <!-- Yükseklik kısıtlaması TAMAMEN KALDIRILAN Tablo Konteyneri -->
+        <div class="table-container shadow-sm">
+            @if (modelData.Any())
+            {
+                <table class="table table-hover align-middle mb-0" id="rapor47Table">
+                    <thead>
+                        <tr>
+                            <th style="width: 120px;">Taslak No</th>
+                            <th class="text-center" style="width: 120px;">Fatura Tarihi</th>
+                            <th>Tedarikçi Adı</th>
+                            <th style="width: 250px;">Sahip Adı</th>
+                            <th class="text-end" style="width: 180px;">Tutar</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in modelData)
+                        {
+                            <tr>
+                                <td class="fw-bold text-primary">@item.TaslakNo</td>
+                                <td class="text-center">@item.FaturaTarihi.ToString("dd.MM.yyyy")</td>
+                                <td class="fw-medium text-dark col-truncate-lg" title="@item.TedarikciAdi">@item.TedarikciAdi</td>
+                                <td><i class="fas fa-user-circle text-muted me-1"></i>@item.SahipAdi</td>
+                                <td class="num fw-medium text-success">@item.Tutar.ToString("N2", new CultureInfo("tr-TR"))</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="total-row">
+                            <td colspan="4" class="text-end pe-3">GENEL TOPLAM:</td>
+                            <td class="num text-success fs-6">@totalTutar.ToString("N2", new CultureInfo("tr-TR"))</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            }
+            else
+            {
+                <div class="text-center py-5">
+                    <div class="text-muted mb-3"><i class="fas fa-file-invoice fa-3x opacity-25 text-success"></i></div>
+                    <h6 class="fw-bold text-secondary">Açık taslak satın alma faturası bulunamadı.</h6>
+                    <p class="small text-muted mb-0">Aktif veritabanında (ObjType 18) beklemede olan belge yoktur.</p>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+
+            // --- GÜVENLİK VE AJAX STANDARTLARI ---
+            const currentDb = $('#currentDb').val();
+            const csrfToken = $('input[name="__RequestVerificationToken"]').val();
+
+            // Tüm jQuery AJAX isteklerine otomatik olarak Token ve db parametresi eklenmesi
+            $.ajaxSetup({
+                headers: { 'RequestVerificationToken': csrfToken },
+                data: { db: currentDb }
+            });
+
+            // Excel Export
+            $('#exportToExcelButton').on('click', function () {
+                var exportUrl = '@Url.Action("ExportToExcel", "Rapor47")';
+
+                if (currentDb) {
+                    exportUrl += '?db=' + encodeURIComponent(currentDb);
+                }
+
+                window.location.href = exportUrl;
+            });
+        });
+    </script>
+}

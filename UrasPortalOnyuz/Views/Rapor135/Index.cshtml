@@ -1,0 +1,702 @@
+﻿@{
+    ViewData["Title"] = "QNB - SAP Alış İrsaliyesi Mutabakatı";
+    Layout = "~/Views/Shared/_Layout.cshtml"; 
+}
+
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+
+<style>
+    body { background-color: #f4f6f9; }
+    .dash-card { border-radius: 8px; border: none; box-shadow: 0 2px 10px rgba(0,0,0,0.05); transition: transform 0.2s; background: white; }
+    .icon-box { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    .filter-card:hover { transform: translateY(-3px); box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    .table-custom { border-collapse: separate; border-spacing: 0; }
+    .table-custom thead th { background-color: #ffffff; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; padding: 12px 10px; }
+    .table-custom tbody td { vertical-align: middle; font-size: 12px; color: #5a5c69; border-bottom: 1px solid #f1f1f1; padding: 10px; }
+    .table-custom tbody tr:hover td { background-color: #f8f9fa !important; }
+    .badge-status { font-size: 11px; padding: 0.4em 0.8em; border-radius: 4px; font-weight: 500; letter-spacing: 0.3px; }
+    .sap-form-label { font-size: 11px; color: #555; margin-bottom: 2px; }
+    .sap-form-control { font-size: 12px; padding: 4px 8px; height: 28px; border-radius: 3px; border: 1px solid #ccc; }
+    .sap-form-control:focus { border-color: #f6c23e; box-shadow: 0 0 0 0.2rem rgba(246, 194, 62, 0.25); }
+    .sap-select { font-size: 12px; padding: 2px 5px; height: 28px; border-radius: 3px; border: 1px solid #ccc; background-color: #fff8e1; }
+    .sap-table th { font-size: 11px; background-color: #e9ecef; border: 1px solid #ddd; padding: 6px; font-weight: 600; }
+    .sap-table td { padding: 4px; border: 1px solid #ddd; vertical-align: middle; }
+    .sap-table input, .sap-table select { width: 100%; border: none; background: transparent; font-size: 11px; }
+    .sap-table input:focus, .sap-table select:focus { outline: 1px solid #f6c23e; background: #fff; }
+    .modal-fullscreen-custom { width: 98vw; max-width: none; height: 98vh; margin: 1vh auto; }
+    .select2-container--bootstrap-5 .select2-selection { font-size: 11px; min-height: 26px; border-radius: 3px; border: 1px solid #ccc; padding: 2px 8px; }
+    .select2-container--bootstrap-5 .select2-selection:focus { border-color: #f6c23e; box-shadow: none; }
+    .select2-results__option { font-size: 11px; }
+    .progress-bar-striped { animation: progress-bar-stripes 1s linear infinite; }
+</style>
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h5 mb-0 text-gray-800 fw-bold"><i class="fas fa-truck-loading me-2 text-primary"></i> QNB - SAP Alış İrsaliyesi Mutabakat Raporu</h2>
+        <div>
+            <button class="btn btn-success btn-sm rounded-pill px-3 d-none" id="btnExport" onclick="exportToExcel()">
+                <i class="fas fa-file-excel me-1"></i> Excel'e Aktar
+            </button>
+        </div>
+    </div>
+
+    <div class="card dash-card mb-4 border-top border-primary border-3">
+        <div class="card-body py-3">
+            <form id="filterForm" onsubmit="startFetchingData(event)">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label text-xs text-uppercase text-muted mb-1">Başlangıç Tarihi</label>
+                        <input type="date" id="startDate" class="form-control form-control-sm px-3" value="@ViewBag.StartDate" required />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label text-xs text-uppercase text-muted mb-1">Bitiş Tarihi</label>
+                        <input type="date" id="endDate" class="form-control form-control-sm px-3" value="@ViewBag.EndDate" required />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label text-xs text-uppercase text-muted mb-1">Veritabanı (Bağlantı)</label>
+                        <select id="dbSelection" class="form-select form-select-sm px-3">
+                            @* QNB hesabı tanımlı tüm şirketler (appsettings QnbApi:Usernames) *@
+                            @foreach (var s in (ViewBag.QnbSirketler as List<KeyValuePair<string, string>>) ?? new List<KeyValuePair<string, string>>())
+                            {
+                                <option value="@s.Key" selected="@((string)ViewBag.SelectedDb == s.Key)">@s.Value</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" id="btnFetch" class="btn btn-primary btn-sm w-100 fw-bold shadow-sm">
+                            <i class="fas fa-search me-1"></i> Verileri Çek ve Karşılaştır
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="progressContainer" class="card dash-card mb-4 d-none border-0 shadow-sm">
+        <div class="card-body py-3">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="text-sm fw-bold text-primary" id="progressText">İrsaliyeler Bekleniyor...</span>
+                <span class="text-xs text-muted" id="progressCount">0 / 0</span>
+            </div>
+            <div class="progress" style="height: 10px;">
+                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 0%;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4 d-none" id="kpiContainer">
+        <div class="col mb-2" onclick="filterByStatus('all')" style="cursor: pointer;">
+            <div class="card dash-card filter-card h-100 py-2 border-start border-4 border-primary">
+                <div class="card-body px-2 py-1">
+                    <div class="row align-items-center g-0">
+                        <div class="col me-2">
+                            <div class="text-xs fw-bold text-primary text-uppercase mb-1" style="font-size:10px;">QNB Gelen</div>
+                            <div class="h5 mb-0 fw-bold text-gray-800" id="kpiTotal">0</div>
+                        </div>
+                        <div class="col-auto"><div class="icon-box bg-primary text-white" style="width:30px;height:30px;font-size:14px;"><i class="fas fa-truck"></i></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col mb-2" onclick="filterByStatus('eslesti')" style="cursor: pointer;">
+            <div class="card dash-card filter-card h-100 py-2 border-start border-4 border-success">
+                <div class="card-body px-2 py-1">
+                    <div class="row align-items-center g-0">
+                        <div class="col me-2">
+                            <div class="text-xs fw-bold text-success text-uppercase mb-1" style="font-size:10px;">SAP'de Var</div>
+                            <div class="h5 mb-0 fw-bold text-gray-800" id="kpiMatched">0</div>
+                        </div>
+                        <div class="col-auto"><div class="icon-box bg-success text-white" style="width:30px;height:30px;font-size:14px;"><i class="fas fa-check-double"></i></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col mb-2" onclick="filterByStatus('sapyok')" style="cursor: pointer;">
+            <div class="card dash-card filter-card h-100 py-2 border-start border-4 border-warning">
+                <div class="card-body px-2 py-1">
+                    <div class="row align-items-center g-0">
+                        <div class="col me-2">
+                            <div class="text-xs fw-bold text-warning text-uppercase mb-1" style="font-size:10px;">SAP'de Yok</div>
+                            <div class="h5 mb-0 fw-bold text-gray-800" id="kpiMissing">0</div>
+                        </div>
+                        <div class="col-auto"><div class="icon-box bg-warning text-white" style="width:30px;height:30px;font-size:14px;"><i class="fas fa-search-minus"></i></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col mb-2" onclick="filterByStatus('mukerrer')" style="cursor: pointer;">
+            <div class="card dash-card filter-card h-100 py-2 border-start border-4 border-dark">
+                <div class="card-body px-2 py-1">
+                    <div class="row align-items-center g-0">
+                        <div class="col me-2">
+                            <div class="text-xs fw-bold text-dark text-uppercase mb-1" style="font-size:10px;">Mükerrer (SAP)</div>
+                            <div class="h5 mb-0 fw-bold text-gray-800" id="kpiMukerrer">0</div>
+                        </div>
+                        <div class="col-auto"><div class="icon-box bg-dark text-white" style="width:30px;height:30px;font-size:14px;"><i class="fas fa-copy"></i></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card dash-card p-2 shadow-sm d-none" id="tableContainer">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table id="mutabakatTable" class="table table-custom align-middle w-100 mb-0">
+                    <thead>
+                        <tr>
+                            <th class="text-center" style="width: 70px;">İşlemler</th>
+                            <th>Belge No</th>
+                            <th>Satıcı Unvan</th>
+                            <th>Belge Tarihi</th>
+                            <th class="text-center">Durum</th>
+                            <th>Hata/Not</th>
+                        </tr>
+                    </thead>
+                    <tbody id="mutabakatTbody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="faturaPreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-dark text-white border-0 py-2">
+                <h5 class="modal-title fw-bold fs-6"><i class="fas fa-file-pdf text-danger me-2"></i> İrsaliye Önizleme</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0" style="height: 80vh; position: relative; background-color: #f8f9fa;">
+                <div id="simpleLoadingSpinner" class="d-flex justify-content-center align-items-center" style="position: absolute; top:0; left:0; width:100%; height:100%; background:white; z-index:10;">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+                <iframe id="simpleFaturaIframe" style="width: 100%; height: 100%; border: none; background-color: #ffffff;"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="sapSplitModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-fullscreen-custom">
+        <div class="modal-content shadow-lg h-100">
+            <div class="modal-header bg-light border-bottom py-2">
+                <div class="d-flex align-items-center">
+                    <h5 class="modal-title text-primary fw-bold fs-6 mb-0 me-3">
+                        <i class="fas fa-exchange-alt me-2"></i> Satınalma İrsaliyesi (OPDN) Aktarım Ekranı
+                    </h5>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="addSapLineRow()">
+                        <i class="fas fa-plus me-1"></i> Satır Ekle
+                    </button>
+                    <button type="button" class="btn btn-sm btn-success px-4" id="btnSaveSap" onclick="saveToSap(event)">
+                        <i class="fas fa-save me-1"></i> SAP'ye Kaydet
+                    </button>
+                    <button type="button" class="btn-close ms-3" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+
+            <div class="modal-body p-0" style="height: calc(100% - 45px); overflow: hidden;">
+                <div class="row g-0 h-100">
+                    
+                    <div class="col-6 border-end h-100 position-relative bg-white">
+                        <div id="splitLoadingSpinner" class="d-flex justify-content-center align-items-center position-absolute w-100 h-100 bg-white" style="z-index:10;">
+                            <div class="spinner-border text-secondary" role="status"></div>
+                        </div>
+                        <iframe id="splitFaturaIframe" style="width: 100%; height: 100%; border: none;"></iframe>
+                    </div>
+
+                    <div class="col-6 h-100 bg-light p-3" style="overflow-y: auto;">
+                        <div id="sapFormLoadingOverlay" class="d-none justify-content-center align-items-center position-absolute w-100 h-100" style="background:rgba(255,255,255,0.8); z-index:10; top:0; left:0;">
+                            <div class="spinner-border text-primary" role="status"></div>
+                        </div>
+
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-3">
+                                <label class="sap-form-label">Satıcı (Cari Kodu)</label>
+                                <input type="text" id="sapCardCode" class="form-control sap-form-control fw-bold text-primary" placeholder="Cari Bulunamadı">
+                            </div>
+                            <div class="col-md-5">
+                                <label class="sap-form-label" id="lblCardName">Ad</label>
+                                <input type="text" id="sapCardName" class="form-control sap-form-control bg-white" placeholder="-" readonly>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="sap-form-label">Satıcı Referans No</label>
+                                <input type="text" id="sapRefNo" class="form-control sap-form-control">
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-3 align-items-end border-bottom pb-2">
+                            <div class="col-md-4">
+                                <label class="sap-form-label">Kayıt Tarihi</label>
+                                <input type="date" id="sapPostingDate" class="form-control sap-form-control">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="sap-form-label">Teslim Tarihi</label>
+                                <input type="date" id="sapDueDate" class="form-control sap-form-control">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="sap-form-label">Belge Tarihi</label>
+                                <input type="date" id="sapDocDate" class="form-control sap-form-control">
+                            </div>
+                        </div>
+
+                        <div class="bg-white border rounded shadow-sm mb-3" style="min-height: 250px;">
+                            <ul class="nav nav-tabs px-2 pt-2 border-bottom-0" style="background: #f8f9fa;">
+                                <li class="nav-item"><a class="nav-link active py-1 px-3 fs-7" href="#">Kalemler</a></li>
+                            </ul>
+                            <div class="table-responsive p-1" style="overflow:visible;">
+                                <table class="table sap-table w-100" id="sapLinesTable">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 40px;" class="text-center">#</th>
+                                            <th style="width: 300px;">Kalem Kodu</th>
+                                            <th>Tanım</th>
+                                            <th style="width: 100px;" class="text-end">Miktar</th>
+                                            <th style="width: 30px;"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="sapLinesTbody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+
+    <script>
+        var dataTable;
+        var currentDraftData = null;
+        var faturalarListesi = [];
+        
+        var statTotal = 0;
+        var statMatched = 0;
+        var statMissing = 0;
+        var statMukerrer = 0;
+
+        function initDataTable() {
+            if (dataTable) { dataTable.destroy(); }
+            
+            dataTable = $('#mutabakatTable').DataTable({
+                "language": { "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/tr.json" },
+                "paging": false,
+                "info": true,
+                "order": [[3, "desc"]], 
+                "dom": '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rt<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
+                buttons: [
+                    {
+                        extend: 'excelHtml5',
+                        title: 'QNB-SAP İrsaliye Raporu',
+                        className: 'd-none',
+                        exportOptions: { columns: [1, 2, 3, 4, 5] } 
+                    }
+                ]
+            });
+        }
+
+        function exportToExcel() {
+            if (dataTable) { dataTable.button('.buttons-excel').trigger(); } 
+        }
+
+        async function startFetchingData(e) {
+            e.preventDefault();
+            
+            var sDate = $('#startDate').val();
+            var eDate = $('#endDate').val();
+            var db = $('#dbSelection').val();
+
+            $('#btnFetch').prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i> Bekleyiniz...');
+            $('#mutabakatTbody').empty();
+            
+            $('#tableContainer, #btnExport').addClass('d-none');
+            $('#progressContainer').removeClass('d-none');
+            $('#kpiContainer').addClass('d-none');
+            
+            statTotal = 0; statMatched = 0; statMissing = 0; statMukerrer = 0;
+            updateKpiUI();
+            
+            $('#progressText').text("Liste getiriliyor...");
+            $('#progressBar').css('width', '5%').removeClass('bg-success bg-danger').addClass('bg-primary');
+
+            try {
+                const listResp = await $.ajax({
+                    url: '@Url.Action("GetIrsaliyelerListesi", "Rapor135")',
+                    type: 'GET',
+                    data: { startDate: sDate, endDate: eDate, dbSelection: db }
+                });
+
+                if (!listResp.success) {
+                    alert(listResp.message);
+                    resetUI();
+                    return;
+                }
+
+                faturalarListesi = listResp.data;
+                statTotal = faturalarListesi.length;
+                
+                if (statTotal === 0) {
+                    $('#progressText').text("Belirtilen tarihte irsaliye bulunamadı.");
+                    $('#progressBar').css('width', '100%').addClass('bg-success');
+                    resetUI();
+                    return;
+                }
+
+                $('#tableContainer, #kpiContainer').removeClass('d-none');
+                $('#btnExport').removeClass('d-none');
+                initDataTable();
+                dataTable.clear();
+
+                faturalarListesi.forEach((f, idx) => {
+                    var trId = "row_" + f.ettn;
+                    var bTarih = moment(f.belgeTarihi).format('DD.MM.YYYY');
+                    var btnHtml = `<button type="button" class="btn btn-sm btn-light border text-primary p-1 me-1" onclick="showPreview('${f.ettn}')"><i class="fas fa-search"></i></button>`;
+                    
+                    if (!f.sapteVarMi && !f.iptalMi) {
+                        btnHtml += `<button type="button" class="btn btn-sm btn-light border text-success p-1 sap-aktar-btn" id="aktar_${f.ettn}" onclick="openSapSplitScreen('${f.ettn}', '${f.belgeNo}')"><i class="fas fa-file-import"></i></button>`;
+                    }
+
+                    dataTable.row.add([
+                        `<div class="text-center text-nowrap">${btnHtml}</div>`,
+                        `<span class="fw-bold">${f.belgeNo}</span>`,
+                        f.saticiUnvan,
+                        bTarih,
+                        `<div class="text-center" id="durum_${f.ettn}"><span class="badge bg-secondary">İşleniyor...</span></div>`,
+                        `<div class="text-muted text-truncate" style="max-width:300px;" id="hata_${f.ettn}">Detaylar Çekiliyor...</div>` 
+                    ]).node().id = trId;
+                });
+                
+                dataTable.draw(false);
+
+                for (let i = 0; i < statTotal; i++) {
+                    await fetchInvoiceDetail(faturalarListesi[i], db);
+                    
+                    var p = Math.round(((i + 1) / statTotal) * 100);
+                    $('#progressBar').css('width', p + '%');
+                    $('#progressCount').text(`${i + 1} / ${statTotal}`);
+                    $('#progressText').text(`${i + 1}. irsaliye kontrol ediliyor...`);
+                }
+
+                $('#progressText').text("Tüm İşlemler Tamamlandı!");
+                $('#progressBar').removeClass('bg-primary progress-bar-striped').addClass('bg-success');
+                setTimeout(() => $('#progressContainer').addClass('d-none'), 3000);
+
+                dataTable.draw(); 
+
+            } catch (err) {
+                console.error(err);
+                alert("Veri çekimi sırasında sunucu bağlantı hatası oluştu.");
+            }
+
+            resetUI();
+        }
+
+        async function fetchInvoiceDetail(fatura, db) {
+            try {
+                var res = await $.ajax({
+                    url: '@Url.Action("ExtractQnbDetail", "Rapor135")',
+                    type: 'GET',
+                    data: { ettn: fatura.ettn, dbSelection: db }
+                });
+
+                if (res.success) {
+                    if(res.gercekDurum && res.gercekDurum !== "") {
+                        fatura.irsaliyeDurumu = res.gercekDurum;
+                        fatura.iptalMi = res.isIptal;
+                    }
+                }
+
+                var durum = "";
+                var badgeClass = "";
+                var hata = "";
+                var aktarBtnGizle = false;
+
+                if (fatura.iptalMi) {
+                    durum = "RED / İPTAL";
+                    badgeClass = "bg-danger text-white";
+                    hata = "DİKKAT: İrsaliye iptal edilmiş veya ret yemiş. SAP'ye aktarılamaz.";
+                    aktarBtnGizle = true;
+                }
+                else if (!fatura.sapteVarMi) {
+                    durum = "SAP'de Yok";
+                    badgeClass = "bg-warning text-dark";
+                    hata = "İrsaliye SAP sistemine henüz işlenmemiş (OPDN).";
+                    statMissing++;
+                } 
+                else if (fatura.mukerrerMi) { 
+                    durum = "Mükerrer (SAP)";
+                    badgeClass = "bg-dark text-white";
+                    hata = "DİKKAT: SAP'de aynı numarayla birden fazla kayıt bulundu!";
+                    statMukerrer++;
+                    aktarBtnGizle = true; 
+                }
+                else {
+                    durum = "SAP'de Var";
+                    badgeClass = "bg-success";
+                    hata = "SAP'ye kaydedilmiş (Tamamlandı).";
+                    statMatched++;
+                    aktarBtnGizle = true;
+                }
+
+                if (aktarBtnGizle) {
+                    $(`#aktar_${fatura.ettn}`).addClass('d-none');
+                } else {
+                    $(`#aktar_${fatura.ettn}`).removeClass('d-none');
+                }
+
+                var rowIdx = dataTable.row(`#row_${fatura.ettn}`).index();
+                dataTable.cell(rowIdx, 4).data(`<div class="text-center"><span class="badge badge-status ${badgeClass}">${durum}</span></div>`);
+                dataTable.cell(rowIdx, 5).data(`<div class="text-muted text-truncate" style="max-width:300px;" title="${hata}">${hata}</div>`);
+                
+                updateKpiUI();
+
+            } catch (err) {
+                console.error("Detay Hatası", err);
+                $(`#durum_${fatura.ettn}`).html(`<span class="badge badge-status bg-danger">Hata</span>`);
+                $(`#hata_${fatura.ettn}`).text('İrsaliye detayı okunamadı.');
+            }
+        }
+
+        function resetUI() {
+            $('#btnFetch').prop('disabled', false).html('<i class="fas fa-search me-1"></i> Verileri Çek ve Karşılaştır');
+        }
+
+        function updateKpiUI() {
+            $('#kpiTotal').text(statTotal);
+            $('#kpiMatched').text(statMatched);
+            $('#kpiMissing').text(statMissing);
+            $('#kpiMukerrer').text(statMukerrer); 
+        }
+
+        function filterByStatus(type) {
+            if (!dataTable) return;
+            var searchStr = '';
+            if (type === 'all') { searchStr = ''; } 
+            else if (type === 'eslesti') { searchStr = "^SAP'de Var$"; } 
+            else if (type === 'sapyok') { searchStr = "^SAP'de Yok$"; }
+            else if (type === 'mukerrer') { searchStr = "^Mükerrer \\(SAP\\)$"; } 
+            dataTable.column(4).search(searchStr, true, false).draw();
+        }
+
+        function showPreview(ettn) {
+            if (!ettn || ettn === '-' || ettn === '') return;
+            var spinner = document.getElementById('simpleLoadingSpinner');
+            var iframe = document.getElementById('simpleFaturaIframe');
+
+            $('#faturaPreviewModal').modal('show');
+            spinner.classList.remove('d-none');
+            spinner.classList.add('d-flex');
+            iframe.src = '';
+
+            var db = $('#dbSelection').val() || 'DefaultConnection5';
+            iframe.onload = function() {
+                spinner.classList.remove('d-flex');
+                spinner.classList.add('d-none');
+            };
+            iframe.src = '@Url.Action("GetIrsaliyeHtml", "Rapor135")?ettn=' + ettn + '&dbSelection=' + db;
+        }
+
+        function openSapSplitScreen(ettn, belgeNo) {
+            if (!ettn || ettn === '-' || ettn === '') return;
+
+            $('#sapCardCode').val(''); $('#sapCardName').val(''); $('#sapRefNo').val(belgeNo);
+            $('#sapPostingDate').val(''); $('#sapDueDate').val(''); $('#sapDocDate').val('');
+            $('#sapLinesTbody').empty();
+            $('#lblCardName').html('Ad');
+            currentDraftData = null;
+
+            var db = $('#dbSelection').val() || 'DefaultConnection5';
+
+            var spinnerLeft = document.getElementById('splitLoadingSpinner');
+            var iframeLeft = document.getElementById('splitFaturaIframe');
+            spinnerLeft.classList.remove('d-none'); spinnerLeft.classList.add('d-flex'); iframeLeft.src = '';
+            iframeLeft.onload = function() { spinnerLeft.classList.remove('d-flex'); spinnerLeft.classList.add('d-none'); };
+            iframeLeft.src = '@Url.Action("GetIrsaliyeHtml", "Rapor135")?ettn=' + ettn + '&dbSelection=' + db;
+
+            $('#sapFormLoadingOverlay').removeClass('d-none').addClass('d-flex');
+            
+            $.ajax({
+                url: '@Url.Action("GetIrsaliyeTaslak", "Rapor135")',
+                type: 'GET',
+                data: { ettn: ettn, dbSelection: db },
+                success: function (res) {
+                    $('#sapFormLoadingOverlay').removeClass('d-flex').addClass('d-none');
+                    if (res.success && res.data) {
+                        var d = res.data;
+                        currentDraftData = d; 
+                        
+                        if (d.cardCode) {
+                            $('#sapCardCode').val(d.cardCode);
+                            let yontemBadge = d.cariBulunmaYontemi ? ` <span class="badge bg-success ms-2" style="font-size:9px;">${d.cariBulunmaYontemi}</span>` : '';
+                            $('#lblCardName').html(`Ad ${yontemBadge}`);
+                        }
+                        if (d.cardName) $('#sapCardName').val(d.cardName);
+
+                        $('#sapPostingDate').val(d.kayitTarihi);
+                        $('#sapDueDate').val(d.vadeTarihi);
+                        $('#sapDocDate').val(d.belgeTarihi);
+                        
+                        renderTableLines();
+
+                    } else {
+                        alert("Taslak veri alınamadı."); addSapLineRow(); 
+                    }
+                },
+                error: function () {
+                    $('#sapFormLoadingOverlay').removeClass('d-flex').addClass('d-none');
+                    alert("Taslak veri çekilirken hata oluştu."); addSapLineRow();
+                }
+            });
+
+            $('#sapSplitModal').modal('show');
+        }
+
+        function renderTableLines() {
+            $('.sap-code-select').select2('destroy');
+            $('#sapLinesTbody').empty();
+
+            if (!currentDraftData) { addSapLineRow(); return; }
+            var lineArray = currentDraftData.satirlar || [];
+
+            if (lineArray.length > 0) {
+                $.each(lineArray, function (index, satir) { drawSingleRow(index + 1, satir); });
+            } else {
+                addSapLineRow();
+            }
+        }
+
+        function drawSingleRow(index, satir) {
+            var rowId = "row_" + Math.random().toString(36).substr(2, 9);
+            var optionsHtml = ""; var selectedVal = "";
+
+            if (satir && satir.onerilenItemKodu) {
+                optionsHtml += `<option value="${satir.onerilenItemKodu}" selected="selected">${satir.onerilenItemKodu} - ${satir.onerilenItemAdi}</option>`;
+                selectedVal = satir.onerilenItemKodu;
+            } 
+            if (satir && satir.digerOnerilenItemler && satir.digerOnerilenItemler.length > 0) {
+                if (!selectedVal) optionsHtml += `<option value=""></option>`;
+                $.each(satir.digerOnerilenItemler, function(i, alt) { optionsHtml += `<option value="${alt.code}">${alt.code} - ${alt.name}</option>`; });
+            }
+
+            var tr = `
+                <tr id="${rowId}">
+                    <td class="text-center text-muted align-middle border-end">${index}</td>
+                    <td style="position:relative;">
+                        <select class="form-select sap-code-select w-100">${optionsHtml}</select>
+                    </td>
+                    <td><input type="text" class="sap-form-control p-1" value="${satir ? (satir.urunAdi || '') : ''}" title="${satir ? (satir.urunAdi || '') : ''}"></td>
+                    <td><input type="number" class="sap-form-control p-1 text-end qty-input" value="${satir ? (satir.miktar || 1) : 1}"></td>
+                    <td class="text-center align-middle"><button type="button" class="btn btn-sm text-danger p-0 delete-row-btn"><i class="fas fa-trash"></i></button></td>
+                </tr>
+            `;
+            $('#sapLinesTbody').append(tr);
+
+            var $selectEl = $('#' + rowId).find('.sap-code-select');
+            $selectEl.select2({
+                theme: 'bootstrap-5', dropdownParent: $('#sapSplitModal'), placeholder: 'Kalem Ara (Min 2 harf)...', allowClear: true, minimumInputLength: 2,
+                language: { inputTooShort: function () { return "En az 2 karakter..."; }, searching: function() { return "Aranıyor..."; }, noResults: function() { return "Bulunamadı."; } },
+                ajax: {
+                    url: '@Url.Action("SearchSapData", "Rapor135")', dataType: 'json', delay: 400,
+                    data: function (p) { return { term: p.term, dbSelection: $('#dbSelection').val() }; },
+                    processResults: function (data) { return { results: $.map(data, function (item) { return { text: item.code + ' - ' + item.name, id: item.code } }) }; },
+                    cache: true
+                }
+            });
+
+            if(!selectedVal) { $selectEl.val(null).trigger('change'); }
+        }
+
+        function addSapLineRow() {
+            drawSingleRow($('#sapLinesTbody tr').length + 1, null);
+            reindexRows();
+        }
+
+        $(document).on('click', '.delete-row-btn', function() {
+            $(this).closest('tr').find('.sap-code-select').select2('destroy');
+            $(this).closest('tr').remove(); reindexRows();
+        });
+
+        function reindexRows() { $('#sapLinesTbody tr').each(function(i) { $(this).find('td:first').text(i + 1); }); }
+
+        function saveToSap(event) {
+            if(!$('#sapCardCode').val()) { alert("Cari Kodu (Satıcı) bilgisini doldurunuz."); return; }
+
+            var lines = [];
+            var hasError = false;
+            
+            $('#sapLinesTbody tr').each(function() {
+                var code = $(this).find('.sap-code-select').val();
+                var desc = $(this).find('td:eq(2) input').val();
+                var qty = parseFloat($(this).find('.qty-input').val()) || 0;
+
+                if(!code) {
+                    hasError = true;
+                    $(this).css('background-color', '#ffeeba');
+                } else {
+                    $(this).css('background-color', '');
+                }
+
+                lines.push({ Code: code, Description: desc, Quantity: qty });
+            });
+
+            if(hasError || lines.length === 0) {
+                alert("Lütfen tüm satırlarda Kalem Kodu seçimi yapınız.");
+                return;
+            }
+
+            var requestData = {
+                DbSelection: $('#dbSelection').val(),
+                CardCode: $('#sapCardCode').val(),
+                NumAtCard: $('#sapRefNo').val(),
+                DocDate: $('#sapPostingDate').val(),
+                DocDueDate: $('#sapDueDate').val(),
+                TaxDate: $('#sapDocDate').val(),
+                Lines: lines
+            };
+
+            var $btn = $(event.currentTarget);
+            var originalText = $btn.html();
+            $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i> Kaydediliyor...');
+
+            $.ajax({
+                url: '@Url.Action("SaveToSap", "Rapor135")',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(requestData),
+                success: function (res) {
+                    $btn.prop('disabled', false).html(originalText);
+                    if (res.success) {
+                        alert(res.message);
+                        $('#sapSplitModal').modal('hide');
+                        $('#btnFetch').click(); 
+                    } else {
+                        alert("Hata: " + res.message);
+                    }
+                },
+                error: function () {
+                    $btn.prop('disabled', false).html(originalText);
+                    alert("Sunucu ile iletişim kurulurken bir hata oluştu.");
+                }
+            });
+        }
+    </script>
+}

@@ -1,0 +1,454 @@
+﻿@model List<WebApplication3.Models.GiderRaporuViewModel>
+@using WebApplication3.Models
+@using System.Globalization
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Xsrf
+
+@{
+    ViewData["Title"] = "Genel Gider Raporu Muavin";
+    Layout = "~/Views/Shared/_Layout.cshtml"; 
+    
+    // URL'den veya Cookie'den aktif şirketi okuyan değişken    
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? currentDb;
+    var modelData = Model ?? new List<GiderRaporuViewModel>();
+
+    // KPI Hesaplamaları
+    var totalKayit = modelData.Count;
+    var totalBorc = modelData.Sum(d => d.Borc);
+    var totalAlacak = modelData.Sum(d => d.Alacak);
+    var totalBakiye = modelData.Sum(d => d.Bakiye);
+    var benzersizHesap = modelData.Select(d => d.AcctCode).Distinct().Count();
+
+    // Konsolide filtreleri
+    var sirketler = (List<WebApplication3.Controllers.DatabaseConfig>)ViewBag.Sirketler ?? new List<WebApplication3.Controllers.DatabaseConfig>();
+    var seciliSirketler = (List<string>)ViewBag.SeciliSirketler ?? new List<string>();
+    var islemTipleri = (List<(string Kod, string Ad)>)ViewBag.IslemTipleri ?? new List<(string Kod, string Ad)>();
+    var seciliIslemTipi = (List<string>)ViewBag.SeciliIslemTipi ?? new List<string>();
+    var uyarilar = (List<string>)ViewBag.Uyarilar ?? new List<string>();
+    var sirketOzeti = modelData.GroupBy(d => d.SirketAdi).Select(g => new { Sirket = g.Key, Kayit = g.Count(), Borc = g.Sum(x => x.Borc), Alacak = g.Sum(x => x.Alacak), Bakiye = g.Sum(x => x.Bakiye) }).OrderBy(g => g.Sirket).ToList();
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        body { 
+            background-color: #f4f7fc; 
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            color: #2b3445; 
+            font-size: 0.75rem;
+        }
+
+        .container-fluid { padding: 15px 20px !important; }
+
+        /* Dashboard Card Stilleri */
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 20px; transition: all 0.3s ease; position: relative; overflow: hidden; cursor: default; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        
+        .kpi-title { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; z-index: 2; position: relative; }
+        .kpi-value { font-size: 24px; font-weight: 900; color: #0f172a; margin-bottom: 2px; z-index: 2; position: relative; white-space: nowrap; letter-spacing: -0.5px; }
+        .kpi-desc { font-size: 11px; color: #94a3b8; z-index: 2; position: relative; }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 5rem; color: #e2e8f0; opacity: 0.4; z-index: 1; transform: rotate(-10deg); }
+        
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        .border-top-warning { border-top: 4px solid #f59e0b !important; }
+        .border-top-success { border-top: 4px solid #10b981 !important; }
+        .border-top-info { border-top: 4px solid #0ea5e9 !important; }
+
+        /* Toolbar ve Aksiyon Alanı */
+        .action-toolbar { background-color: #ffffff; padding: 12px 15px; border-radius: 10px; border: 1px solid #eef2f7; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; justify-content: space-between; align-items: center; }
+
+        /* Tablo Konteyneri - Yükseklik Kısıtlaması YOK (Aşağı Doğru Akar) */
+        .table-container {
+            width: 100%;
+            overflow-x: auto; /* Sadece yatayda taşma olursa kaydır */
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background-color: white;
+            position: relative;
+        }
+
+        table { width: 100%; table-layout: auto; border-collapse: separate; border-spacing: 0; min-width: 1200px; }
+
+        th, td {
+            padding: 8px 10px !important;
+            font-size: 11.5px !important;
+            border-right: 1px solid #f1f5f9;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+            line-height: 1.3;
+        }
+
+        thead th { 
+            position: sticky; 
+            top: 0; 
+            z-index: 100; 
+            background-color: #f8fafc; 
+            color: #475569; 
+            font-weight: 700; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px; 
+            border-bottom: 2px solid #e2e8f0 !important; 
+        }
+
+        .table-hover tbody tr:hover { background-color: #f8fafc; box-shadow: inset 2px 0 0 #3b82f6; }
+        
+        /* Satır kesme ve sütun genişlikleri */
+        .col-truncate-md { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .col-line-clamp-2 { max-width: 250px; white-space: normal !important; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-wrap: break-word; }
+
+        /* Badges (Adaptasyon) */
+        .badge-soft-primary { background-color: #dbeafe; color: #1e40af; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-success { background-color: #d1fae5; color: #065f46; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-warning { background-color: #fef3c7; color: #92400e; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-secondary { background-color: #f1f5f9; color: #475569; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px; border: 1px solid #cbd5e1; }
+        
+        /* Toplam Satırı (Ekranın Altında Sabit Kalır) */
+        .total-row td { 
+            position: sticky; 
+            bottom: 0; 
+            background-color: #f8fafc !important; 
+            font-weight: 800; 
+            font-size: 13px !important; 
+            color: #0f172a; 
+            border-top: 2px solid #3b82f6 !important; 
+            z-index: 90;
+        }
+
+        /* Butonlar */
+        .btn { font-weight: 600; letter-spacing: 0.2px; }
+        .btn-sm { font-size: 11.5px !important; padding: 4px 12px !important; height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+        .btn-primary { background-color: #3b82f6; border-color: #3b82f6; }
+        .btn-success { background-color: #10b981; border-color: #10b981; }
+        .btn-outline-secondary { color: #64748b; border-color: #cbd5e1; }
+        .btn-outline-secondary:hover { background-color: #f1f5f9; color: #0f172a; }
+    </style>
+}
+
+@Html.AntiForgeryToken()
+
+<div class="container-fluid">
+    <!-- Başlık Alanı -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;">Genel Gider Raporu</h4>
+            <span class="text-muted" style="font-size: 13px;">Kapsam: <strong class="text-primary">@currentSelectedDbDisplay</strong> | Muhasebe fişlerinden kategorilendirilmiş giderler | A.Ş., 2026, DEKORLIM ve DRN şirketleri konsolideye dahil değildir</span>
+        </div>
+        <div>
+            <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-sm btn-outline-secondary shadow-sm rounded-pill px-3">
+                <i class="fas fa-arrow-left"></i> Ana Sayfaya Dön
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI'lar -->
+    <div class="row mb-3 g-3">
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-primary hover-elevate">
+                <i class="fas fa-list kpi-icon-bg"></i>
+                <div class="kpi-title">İşlem Sayısı / Hesap</div>
+                <div class="kpi-value text-primary">@totalKayit <span class="fs-6 text-muted fw-normal">/ @benzersizHesap</span></div>
+                <div class="kpi-desc">Listelenen hareket ve benzersiz hesap</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-warning hover-elevate">
+                <i class="fas fa-minus-circle kpi-icon-bg"></i>
+                <div class="kpi-title">Toplam Borç</div>
+                <div class="kpi-value text-warning">@totalBorc.ToString("N2", new CultureInfo("tr-TR")) ₺</div>
+                <div class="kpi-desc">Dönem içi gider / borç toplamı</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-success hover-elevate">
+                <i class="fas fa-plus-circle kpi-icon-bg"></i>
+                <div class="kpi-title">Toplam Alacak</div>
+                <div class="kpi-value text-success">@totalAlacak.ToString("N2", new CultureInfo("tr-TR")) ₺</div>
+                <div class="kpi-desc">Dönem içi alacak (iade/iptal) toplamı</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-info hover-elevate position-relative">
+                <span class="badge bg-info position-absolute top-0 end-0 mt-3 me-3 rounded-pill shadow-sm">NET</span>
+                <i class="fas fa-balance-scale kpi-icon-bg"></i>
+                <div class="kpi-title">Net Bakiye</div>
+                <div class="kpi-value text-info">@totalBakiye.ToString("N2", new CultureInfo("tr-TR")) ₺</div>
+                <div class="kpi-desc">Net gerçekleşen gider</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aksiyon ve Filtre Barı -->
+    <div class="action-toolbar mb-3">
+        <form asp-controller="Rapor42" asp-action="Index" method="get" id="raporForm" class="w-100 d-flex flex-wrap align-items-center justify-content-between gap-3 m-0">
+            <input type="hidden" name="db" value="@currentDb" />
+            
+            <div class="d-flex align-items-center gap-3 flex-grow-1 flex-wrap">
+                <div class="d-flex align-items-center gap-2">
+                    <label for="startDate" class="form-label mb-0 fw-bold text-muted" style="font-size: 11px;">BAŞLANGIÇ:</label>
+                    <input type="date" class="form-control form-control-sm" id="startDate" name="startDate" value="@ViewBag.StartDate" style="width: 140px; font-size: 11.5px;">
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <label for="endDate" class="form-label mb-0 fw-bold text-muted" style="font-size: 11px;">BİTİŞ:</label>
+                    <input type="date" class="form-control form-control-sm" id="endDate" name="endDate" value="@ViewBag.EndDate" style="width: 140px; font-size: 11.5px;">
+                </div>
+                <!-- Şirketler: açılır liste, onay kutulu -->
+                <div class="d-flex align-items-center gap-2">
+                    <label class="form-label mb-0 fw-bold text-muted" style="font-size: 11px;">ŞİRKETLER:</label>
+                    <div class="dropdown secim-listesi" id="sirketSecim">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle text-start" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" style="min-width: 220px;">
+                            <i class="fas fa-building me-1"></i><span class="secim-ozet">Şirket seçiniz</span>
+                        </button>
+                        <div class="dropdown-menu shadow p-2" style="min-width: 300px; max-height: 360px; overflow-y: auto;">
+                            <div class="d-flex justify-content-between border-bottom pb-1 mb-1">
+                                <a href="#" class="secim-hepsi text-decoration-none" style="font-size: 11px;">Hepsini seç</a>
+                                <a href="#" class="secim-temizle text-decoration-none text-danger" style="font-size: 11px;">Temizle</a>
+                            </div>
+                            @foreach (var s in sirketler)
+                            {
+                                <label class="dropdown-item d-flex align-items-center gap-2 px-2 py-1 mb-0" style="cursor: pointer; font-size: 12px;">
+                                    <input class="form-check-input m-0" type="checkbox" name="sirketler" value="@s.Key" checked="@(seciliSirketler.Contains(s.Key))" />
+                                    <span>@s.Display</span>
+                                </label>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <!-- İşlem tipi (U_BE1_AKTAR): açılır liste, onay kutulu -->
+                <div class="d-flex align-items-center gap-2">
+                    <label class="form-label mb-0 fw-bold text-muted" style="font-size: 11px;">İŞLEM TİPİ:</label>
+                    <div class="dropdown secim-listesi" id="islemTipiSecim">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle text-start" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" style="min-width: 170px;">
+                            <i class="fas fa-tags me-1"></i><span class="secim-ozet">İşlem tipi</span>
+                        </button>
+                        <div class="dropdown-menu shadow p-2" style="min-width: 200px;">
+                            <div class="d-flex justify-content-between border-bottom pb-1 mb-1">
+                                <a href="#" class="secim-hepsi text-decoration-none" style="font-size: 11px;">Hepsini seç</a>
+                                <a href="#" class="secim-temizle text-decoration-none text-danger" style="font-size: 11px;">Temizle</a>
+                            </div>
+                            @foreach (var t in islemTipleri)
+                            {
+                                <label class="dropdown-item d-flex align-items-center gap-2 px-2 py-1 mb-0" style="cursor: pointer; font-size: 12px;">
+                                    <input class="form-check-input m-0" type="checkbox" name="islemTipi" value="@t.Kod" checked="@(seciliIslemTipi.Contains(t.Kod))" />
+                                    <span>@t.Ad</span>
+                                </label>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm shadow-sm px-4" id="raporlaBtn">
+                    <i class="fas fa-search"></i> Raporla
+                </button>
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-success shadow-sm px-3" id="exportToExcelButton">
+                    <i class="fas fa-file-excel"></i> Excel'e Aktar
+                </button>
+            </div>
+        </form>
+    </div>
+
+    @{ var alanMesajlari = (List<string>)ViewBag.AlanMesajlari ?? new List<string>(); }
+    @if (alanMesajlari.Any())
+    {
+        <div class="alert alert-info py-2 px-3 mb-3" style="font-size: 12px;">
+            <i class="fas fa-magic me-1"></i><strong>SAP alan kontrolü:</strong>
+            <ul class="mb-0 mt-1">
+                @foreach (var m in alanMesajlari) { <li>@m</li> }
+            </ul>
+        </div>
+    }
+
+    @if (uyarilar.Any())
+    {
+        <div class="alert alert-warning py-2 px-3 mb-3" style="font-size: 12px;">
+            <i class="fas fa-exclamation-triangle me-1"></i><strong>Konsolideye alınamayan şirketler:</strong>
+            <ul class="mb-0 mt-1">
+                @foreach (var u in uyarilar) { <li>@u</li> }
+            </ul>
+        </div>
+    }
+
+    @if (sirketOzeti.Count > 1)
+    {
+        <!-- Şirket bazlı özet -->
+        <div class="dashboard-card border-0 p-3 mb-3">
+            <div class="card-title mb-2 fw-bold text-dark" style="font-size: 14px;"><i class="fas fa-building text-primary me-2"></i>Şirket Bazlı Özet</div>
+            <div class="table-container shadow-sm">
+                <table class="table table-sm table-hover align-middle mb-0" style="min-width: 600px;">
+                    <thead>
+                        <tr>
+                            <th>Şirket</th>
+                            <th class="text-end" style="width: 90px;">Kayıt</th>
+                            <th class="text-end" style="width: 140px;">Borç</th>
+                            <th class="text-end" style="width: 140px;">Alacak</th>
+                            <th class="text-end" style="width: 140px;">Bakiye</th>
+                            <th class="text-end" style="width: 90px;">Pay %</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var o in sirketOzeti)
+                        {
+                            var pay = totalBakiye == 0 ? 0 : (o.Bakiye / totalBakiye) * 100;
+                            <tr>
+                                <td class="fw-bold"><i class="far fa-building text-muted me-2"></i>@o.Sirket</td>
+                                <td class="text-end">@o.Kayit</td>
+                                <td class="text-end text-danger">@o.Borc.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="text-end text-success">@o.Alacak.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="text-end text-primary fw-bold">@o.Bakiye.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="text-end text-muted">@pay.ToString("N1", new CultureInfo("tr-TR"))</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="fw-bold" style="background-color: #f8fafc;">
+                            <td>TOPLAM (@sirketOzeti.Count şirket)</td>
+                            <td class="text-end">@totalKayit</td>
+                            <td class="text-end text-danger">@totalBorc.ToString("N2", new CultureInfo("tr-TR"))</td>
+                            <td class="text-end text-success">@totalAlacak.ToString("N2", new CultureInfo("tr-TR"))</td>
+                            <td class="text-end text-primary">@totalBakiye.ToString("N2", new CultureInfo("tr-TR"))</td>
+                            <td class="text-end">100,0</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    }
+
+    <!-- İşlem Listesi (Tablo) -->
+    <div class="dashboard-card border-0 p-3 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="card-title mb-0 fw-bold text-dark" style="font-size: 14px;"><i class="fas fa-table text-primary me-2"></i>Gider Kalemleri Detayı</div>
+            <div class="text-muted" style="font-size: 12px;">@totalKayit işlem listeleniyor.</div>
+        </div>
+        
+        <!-- Yükseklik kısıtlaması olmayan Tablo Konteyneri -->
+        <div class="table-container shadow-sm">
+            <table class="table table-hover align-middle mb-0" id="giderRaporuTable">
+                <thead>
+                    <tr>
+                        <th style="min-width: 120px;">Şirket Adı</th>
+                        <th class="text-center" style="width: 100px;">Belge Tarihi</th>
+                        <th style="width: 110px;">Hesap Kodu</th>
+                        <th>Hesap Açıklaması</th>
+                        <th>Ana Kategori</th>
+                        <th>Gider Türü</th>
+                        <th>Tedarikçi/Müşteri Adı</th>
+                        <th style="min-width: 200px;">Satır Açıklaması</th>
+                        <th class="text-center" style="width: 110px;">Aktarım</th>
+                        <th class="text-end" style="width: 110px;">Borç</th>
+                        <th class="text-end" style="width: 110px;">Alacak</th>
+                        <th class="text-end" style="width: 110px;">Bakiye</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (modelData.Any())
+                    {
+                        foreach (var item in modelData)
+                        {
+                            <tr>
+                                <td class="fw-bold text-dark"><i class="far fa-building text-muted me-2"></i>@item.SirketAdi</td>
+                                <td class="text-center fw-medium text-secondary">@item.RefDate.ToString("dd.MM.yyyy")</td>
+                                <td><span class="badge-soft-secondary">@item.AcctCode</span></td>
+                                <td class="col-truncate-md" title="@item.Descr">@item.Descr</td>
+                                <td><span class="badge-soft-primary">@item.TKategori</span></td>
+                                <td><span class="badge-soft-warning">@item.TTur</span></td>
+                                <td class="col-truncate-md fw-medium" title="@item.CardName">@item.CardName</td>
+                                <td title="@item.LineMemo">
+                                    <div class="col-line-clamp-2 text-muted" style="font-size: 10.5px;">@item.LineMemo</div>
+                                </td>
+                                <td class="text-center">
+                                    @if (item.U_BE1_AKTAR == "Y") {
+                                        <span class="badge-soft-success">Y</span>
+                                    } else if (item.U_BE1_AKTAR == "X") {
+                                        <span class="badge-soft-primary">X</span>
+                                    } else if (item.U_BE1_AKTAR == "R") {
+                                        <span class="badge-soft-warning">R</span>
+                                    } else {
+                                        <span class="badge-soft-secondary">@(string.IsNullOrWhiteSpace(item.U_BE1_AKTAR) ? "-" : item.U_BE1_AKTAR)</span>
+                                    }
+                                </td>
+                                <td class="text-end text-danger fw-medium">@item.Borc.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="text-end text-success fw-medium">@item.Alacak.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="text-end text-primary fw-bold">@item.Bakiye.ToString("N2", new CultureInfo("tr-TR"))</td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr id="emptyRow">
+                            <td colspan="12" class="text-center py-5">
+                                <div class="text-muted mb-3"><i class="fas fa-file-invoice-dollar fa-3x opacity-25 text-primary"></i></div>
+                                <h6 class="fw-bold text-secondary">Belirtilen tarih aralığında Genel Gider verisi bulunamadı.</h6>
+                                <p class="small text-muted mb-0">Lütfen filtreleri kontrol edin veya farklı bir tarih seçin.</p>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                @if (modelData.Any())
+                {
+                    <tfoot>
+                        <tr class="total-row">
+                            <td colspan="9" class="text-end pe-3">GENEL TOPLAM:</td>
+                            <td class="text-end text-danger">@totalBorc.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                            <td class="text-end text-success">@totalAlacak.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                            <td class="text-end text-primary fs-6">@totalBakiye.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                        </tr>
+                    </tfoot>
+                }
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            // Açılır onay kutulu listeler (şirket / işlem tipi): düğme üzerinde seçim özeti, "Hepsini seç / Temizle" kısayolları
+            function secimOzeti($liste, bosMetin) {
+                var $kutular = $liste.find('input[type=checkbox]');
+                var $secili = $kutular.filter(':checked');
+                var metin;
+                if ($secili.length === 0) metin = bosMetin;
+                else if ($secili.length === $kutular.length) metin = 'Tümü (' + $kutular.length + ')';
+                else if ($secili.length <= 2) metin = $secili.map(function () { return $(this).next('span').text(); }).get().join(', ');
+                else metin = $secili.length + ' / ' + $kutular.length + ' seçili';
+                $liste.find('.secim-ozet').text(metin);
+            }
+            $('.secim-listesi').each(function () {
+                var $liste = $(this);
+                var bosMetin = $liste.attr('id') === 'sirketSecim' ? 'Şirket seçiniz' : 'İşlem tipi seçiniz';
+                secimOzeti($liste, bosMetin);
+                $liste.on('change', 'input[type=checkbox]', function () { secimOzeti($liste, bosMetin); sirketSayisi(); });
+                $liste.find('.secim-hepsi').on('click', function (e) { e.preventDefault(); $liste.find('input[type=checkbox]').prop('checked', true); secimOzeti($liste, bosMetin); sirketSayisi(); });
+                $liste.find('.secim-temizle').on('click', function (e) { e.preventDefault(); $liste.find('input[type=checkbox]').prop('checked', false); secimOzeti($liste, bosMetin); sirketSayisi(); });
+            });
+
+            function seciliSirket() { return $('#sirketSecim input[type=checkbox]:checked').length; }
+            function seciliIslemTipi() { return $('#islemTipiSecim input[type=checkbox]:checked').length; }
+
+            // Şirket sayısını Raporla düğmesinde göster
+            function sirketSayisi() {
+                $('#raporlaBtn').html('<i class="fas fa-search"></i> Raporla (' + seciliSirket() + ' şirket)');
+            }
+            sirketSayisi();
+
+            $('#raporForm').on('submit', function () {
+                if (!seciliSirket()) { toastr.warning('En az bir şirket seçiniz.'); return false; }
+                if (!seciliIslemTipi()) { toastr.warning('En az bir işlem tipi seçiniz.'); return false; }
+                $('#raporlaBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Şirketler sorgulanıyor…');
+            });
+
+            // EXCEL'E AKTAR: ekrandaki filtrelerin aynısıyla
+            $('#exportToExcelButton').on('click', function () {
+                if (!seciliSirket()) { toastr.warning('En az bir şirket seçiniz.'); return; }
+                if (!seciliIslemTipi()) { toastr.warning('En az bir işlem tipi seçiniz.'); return; }
+                var params = $('#raporForm').serialize();
+                window.location.href = '@Url.Action("ExportToExcel", "Rapor42")' + '?' + params;
+            });
+        });
+    </script>
+}

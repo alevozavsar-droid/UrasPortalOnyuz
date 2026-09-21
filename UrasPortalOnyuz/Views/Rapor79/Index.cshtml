@@ -1,0 +1,1920 @@
+﻿@model FinansRaporlama.Controllers.KonsolideDashboardViewModel
+@{
+    ViewData["Title"] = "Konsolide Nakit Akış (Rapor 79)";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // --- YETKİ KONTROLLERİ ---
+    string currentUserName = User.Identity?.Name?.ToLowerInvariant() ?? "";
+    
+    // Sadece it02, ykb, gk veya "uras" ile başlayanlar
+    bool canAddPayment = currentUserName == "it02" || currentUserName == "ykb" || currentUserName == "gk" || currentUserName.StartsWith("uras");
+    
+    // Sadece "fns" ile başlayanlar
+    bool canEditOdenen = currentUserName.StartsWith("fns") || currentUserName == "it02" || currentUserName == "ykb" || currentUserName == "gk";
+
+    // HATA ÇÖZÜMÜ: ViewBag yerine değişkenleri burada tanımlıyoruz
+    bool isSuperUser = currentUserName == "it02" || currentUserName == "ykb" || currentUserName == "gk";
+    
+    // YENİ ÖZELLİK: Özel Onay Yetkisi
+    bool canSetOzelOnay = currentUserName == "it02" || currentUserName == "ykb" || currentUserName == "gk";
+
+    string currentRole = Context.Request.Query["viewRole"].ToString()?.ToLower();
+    if (string.IsNullOrEmpty(currentRole))
+    {
+        currentRole = "all";
+    }
+
+    // --- KULLANICIYA OZEL GIZLI SUTUNLAR ---
+    // Controller Z_KullaniciTercih / Rapor79GizliKolon'dan "3,5,9" bicimindeki
+    // sutun numaralarini verir. 1. sutun (secim kutusu) hicbir zaman gizlenmez.
+    // CSS sunucuda uretilir ki sayfa acilirken sutunlar bir an gorunup kaybolmasin.
+    string gizliKolonMetni = (ViewBag.GizliKolonlar as string) ?? "";
+    var gizliKolonlar = gizliKolonMetni
+        .Split(',', StringSplitOptions.RemoveEmptyEntries)
+        .Select(s => int.TryParse(s.Trim(), out var n) ? n : 0)
+        .Where(n => n >= 2 && n <= 23)
+        .Distinct()
+        .OrderBy(n => n)
+        .ToList();
+    string gizliKolonCss = string.Join("\n", gizliKolonlar.Select(k =>
+        $".main-payment-table thead tr:nth-child(2) > th:nth-child({k}), " +
+        $".main-payment-table tbody > tr:not(:has(> td[colspan])) > td:nth-child({k}) {{ display: none !important; }}"));
+}
+@section Styles {
+    @* Kisiye ozel gizli sutunlar; JS ayni elemani gunceller. *@
+    <style id="r79KolonStil">@Html.Raw(gizliKolonCss)</style>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+
+    <style>
+        body { 
+            font-size: 0.8rem; 
+            background-color: var(--bg-main, #f4f6f9); 
+            scroll-behavior: smooth; 
+}
+        
+        .top-toolbar {
+            /* STICKY: cubuk sayfa akisinin ICINDE kalir, kendi yerini kaplar.
+               fixed iken akistan cikiyor ve alttaki icerik arkasinda kaliyordu;
+               her yeni dugme eklendiginde sabit padding/pay hesabi bozuluyordu. */
+            position: sticky; top: 0;
+            z-index: 1050;
+            margin: 0 -12px 12px;
+            background: rgba(255, 255, 255, .92);
+            -webkit-backdrop-filter: saturate(1.2) blur(12px);
+            backdrop-filter: saturate(1.2) blur(12px);
+            padding: 10px 20px;
+            border-bottom: 1px solid var(--border-color, rgba(15,23,42,.07));
+            box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.05);
+        }
+        [data-theme="dark"] .top-toolbar { background: rgba(19, 26, 40, .9); }
+        
+        .modal-backdrop { z-index: 1060 !important; }
+        .modal { z-index: 1070 !important; }
+
+        .company-section { margin-top: 30px; margin-bottom: 50px; display: none;
+            /* Sabit arac cubugu sarabildigi icin pay olculen yukseklige baglidir;
+               sabit 100px oldugunda alttaki satir cubugun arkasinda kaliyordu. */
+            scroll-margin-top: calc(var(--cubuk-yuksekligi, 100px) + 16px); }
+
+        .excel-layout {
+            display: flex; flex-direction: row;
+            border: 1px solid var(--border-color, rgba(15,23,42,.10));
+            border-radius: var(--r-lg, 14px);
+            background-color: var(--bg-card, #fff);
+            margin-bottom: 14px; overflow: hidden;
+            box-shadow: var(--shadow-sm, 0 1px 2px rgba(16,24,40,.04));
+        }
+        .excel-sidebar { width: 40px; min-width: 40px; background-color: var(--metro-warning, #ffc700); border-right: 1px solid var(--border-color, rgba(15,23,42,.12)); display: flex; align-items: center; justify-content: center; }
+        .excel-sidebar span { writing-mode: vertical-rl; transform: rotate(180deg); font-weight: bold; font-size: 14px; white-space: nowrap; color: #000; }
+        .excel-content { flex: 1; display: flex; flex-direction: column; overflow-x: auto; width: calc(100% - 40px); }
+
+        .excel-table { width: 100%; border-collapse: collapse; font-family: 'Segoe UI', sans-serif; }
+        
+        .excel-table th, .excel-table td { 
+            border: 1px solid var(--border-color, rgba(15,23,42,.12)); 
+            padding: 4px; 
+            text-align: center; 
+            vertical-align: middle; 
+            white-space: nowrap;
+        }
+        .excel-table th { background-color: #f2f2f2; font-weight: bold; font-size: 11px; font-style: italic; }
+        .excel-table .title-row { background-color: var(--bg-card, #fff); font-weight: bold; font-style: italic; text-decoration: underline; border-bottom: none; }
+        
+        .excel-table input[type="text"], .excel-table input[type="date"] { 
+            width: 100%; border: none; background: transparent !important; text-align: center; font-size: 11px; outline: none; box-sizing: border-box; 
+            min-width: 80px;
+        }
+        
+        .excel-table select {
+            width: 100%; border: none; background: transparent !important; text-align-last: center; font-size: 11px; outline: none; box-sizing: border-box; 
+            padding-right: 18px !important; cursor: pointer;
+            min-width: 80px;
+        }
+
+        .excel-table textarea {
+            width: 100%; border: none; background: transparent !important; text-align: left; font-size: 11px; outline: none; box-sizing: border-box;
+            resize: vertical; min-height: 36px; padding: 4px; overflow-wrap: break-word;
+            white-space: normal; 
+            min-width: 150px;
+        }
+
+        .excel-table input[type="text"]:focus, .excel-table textarea:focus, .excel-table input[type="date"]:focus, .excel-table select:focus { background-color: rgba(232, 240, 254, 0.7) !important; }
+        
+        .selected-row td {
+            background-color: #ffd966 !important;
+            transition: background-color 0.2s ease;
+        }
+
+        .chk-cell { 
+            width: 35px !important; 
+            min-width: 35px !important; 
+            max-width: 35px !important; 
+            padding: 0 !important; 
+            text-align: center !important; 
+            vertical-align: middle !important; 
+        }
+        .chk-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            min-height: 25px;
+        }
+        .custom-checkbox {
+            width: 18px !important;
+            height: 18px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            cursor: pointer;
+            position: relative !important;
+        }
+
+        .num-input { text-align: right; font-weight: bold; }
+        .format-money { text-align: right; font-weight: bold; }
+        .format-rate { text-align: right; font-weight: bold; color: #d63384; } 
+        .readonly-bg { background-color: rgba(233, 236, 239, 0.6) !important; }
+
+        .sortable-header { cursor: pointer; transition: background 0.2s; user-select: none; }
+        .sortable-header:hover { background-color: var(--bg-subtle, #eef2f7); }
+        .header-content { display: flex; justify-content: space-between; align-items: center; white-space: nowrap; }
+        .header-content i { margin-left: 5px; color: #888; font-size: 10px; }
+
+        .clickable-bakiye { cursor: pointer; transition: background-color 0.2s; }
+        .clickable-bakiye:hover { background-color: var(--metro-primary-light, rgba(0,158,247,.10)) !important; }
+        .clickable-bakiye td.link-style { color: var(--metro-primary, #0d6efd); text-decoration: underline; font-weight: 600; }
+        
+        #rowContextMenu { position: absolute; display: none; z-index: 9999; background: var(--bg-card, #fff); border: 1px solid #ccc; box-shadow: 2px 2px 5px rgba(0,0,0,0.2); padding: 5px 0; border-radius: 4px; min-width: 170px; }
+        #rowContextMenu .dropdown-item { padding: 8px 15px; cursor: pointer; display: flex; align-items: center; }
+        #rowContextMenu .dropdown-item:hover { background-color: var(--bg-subtle, #f1f5f9); }
+
+        .manual-row td { background-color: var(--bg-subtle, #f9fbfd); }
+        .form-check-inline { margin-right: 1.5rem; }
+        #toast-container { z-index: 999999 !important; }
+        .is-invalid { border-color: #dc3545 !important; background-color: #fff8f8 !important; }
+        
+        .saving-row { animation: savingPulse 1.5s infinite; }
+        @@keyframes savingPulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; background-color: #e0f7fa; }
+            100% { opacity: 1; }
+        }
+
+        .file-upload-cell { min-width: 80px; position: relative; }
+        .file-upload-input { display: none; }
+        #pdfPreviewModal { z-index: 1080 !important; }
+
+        .welcome-screen { text-align: center; margin-top: 10vh; padding: 40px; color: var(--text-secondary, #6c757d); }
+    
+        /* Uzun kasa listelerinde kolon adlari kaybolmasin */
+        .excel-layout thead th,
+        .table-responsive thead th {
+            position: sticky; top: 0; z-index: 5;
+            background: var(--bg-subtle, #f1f5f9);
+            box-shadow: inset 0 -1px 0 var(--border-color, rgba(15,23,42,.08));
+        }
+
+        /* Arac cubugu dar ekranda duzgun sarsin */
+        .top-toolbar > .d-flex { flex-wrap: wrap; gap: 8px; }
+        .top-toolbar form { flex-wrap: wrap; gap: 6px; }
+        .top-toolbar form > * { margin-left: 0 !important; }
+
+        /* Sayfa ici baglanti hedefleri de ayni payi kullansin */
+        [id^="company-"], .scroll-hedef {
+            scroll-margin-top: calc(var(--cubuk-yuksekligi, 100px) + 16px);
+        }
+
+        /* Mutabakat muafiyeti (IT talebi #9) */
+        .muafiyet-select {
+            display: block;
+            margin-top: 3px;
+            width: 100%;
+            max-width: 150px;
+            font-size: .68rem;
+            padding: 1px 4px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .muafiyet-select.muafiyet-bos {
+            border: 1px dashed #cbd5e1;
+            background: transparent;
+            color: #94a3b8;
+        }
+        .muafiyet-select.muafiyet-dolu {
+            border: 1px solid #bfdbfe;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-weight: 700;
+        }
+
+        /* Ödeme yöntemi seçici (şirket seçici gibi yan yana) */
+        .odeme-yontem-etiket {
+            font-size: .66rem; font-weight: 800; letter-spacing: .5px;
+            color: #94a3b8; text-transform: uppercase; white-space: nowrap; margin-right: 2px;
+        }
+        .odeme-filter-btn {
+            border: 1px solid #e2e8f0; background: #fff; color: #475569;
+            font-size: .72rem; font-weight: 700; padding: 3px 11px; white-space: nowrap;
+            transition: background-color .12s ease, border-color .12s ease, color .12s ease;
+        }
+        .odeme-filter-btn:hover { border-color: #93c5fd; color: #1d4ed8; background: #f8fbff; }
+        .odeme-filter-btn.aktif { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+        .odeme-filter-btn .sayi { font-size: .64rem; font-weight: 600; opacity: .7; margin-left: 5px; }
+        .odeme-filter-btn.bos { opacity: .45; }
+        .odeme-filter-btn.bos:hover { border-color: #e2e8f0; color: #475569; background: #fff; }
+</style>
+}
+
+<!-- Gizli Yetki Kontrolü Javascript İçin -->
+<input type="hidden" id="canSetOzelOnay" value="@canSetOzelOnay.ToString().ToLower()" />
+
+<div class="top-toolbar">
+    <div class="d-flex justify-content-between align-items-center">
+        <form method="get" asp-action="Index" class="d-flex align-items-center">
+            <span class="fw-bold me-2 text-primary"><i class="fas fa-calendar-alt"></i> Tarih Aralığı:</span>
+            <input type="date" name="startDate" class="form-control form-control-sm w-auto" value="@Model.StartDate.ToString("yyyy-MM-dd")" />
+            <span class="mx-2">-</span>
+            <input type="date" name="endDate" class="form-control form-control-sm w-auto" value="@Model.EndDate.ToString("yyyy-MM-dd")" />
+            
+            @if (isSuperUser)
+            {
+                <select name="viewRole" class="form-select form-select-sm w-auto ms-2 border-dark">
+                    <option value="all" selected="@(currentRole == "all")">Tümü (Süper Kullanıcı)</option>
+                    <option value="sat5" selected="@(currentRole == "sat5")">Satınalma (Serkan G.)</option>
+                    <option value="sat8" selected="@(currentRole == "sat8")">Satınalma (Eda Y.)</option>
+                    <option value="muh45" selected="@(currentRole == "muh45")">Muhasebe (Sadece Planlananlar)</option>
+                </select>
+            }
+            else
+            {
+                <input type="hidden" name="viewRole" value="@currentRole" />
+            }
+
+            <button type="submit" class="btn btn-primary btn-sm ms-2"><i class="fas fa-filter"></i> Getir</button>
+            <a href="@Url.Action("ExportExcel", "Rapor79", new { startDate = Model.StartDate.ToString("yyyy-MM-dd"), endDate = Model.EndDate.ToString("yyyy-MM-dd"), viewRole = currentRole })" class="btn btn-success btn-sm ms-2 text-white">
+                <i class="fas fa-file-excel"></i> Excel
+            </a>
+            <button type="button" class="btn btn-info btn-sm ms-2 text-white" data-bs-toggle="modal" data-bs-target="#odenenlerModal">
+                <i class="fas fa-check-double"></i> Ödenenler Listesi
+            </button>
+            
+            <button type="button" class="btn btn-secondary btn-sm ms-2 text-white" data-bs-toggle="modal" data-bs-target="#sistemLoglariModal">
+                <i class="fas fa-list-alt"></i> Sistem Logları
+            </button>
+            <button type="button" class="btn btn-dark btn-sm ms-2 text-white" id="kolonSecimBtn" title="Görmek istediğiniz sütunları seçin (size özel kaydedilir)">
+                <i class="fas fa-columns"></i> Sütunlar
+                <span id="kolonGizliSayac" class="badge bg-warning text-dark ms-1" style="@(gizliKolonlar.Count == 0 ? "display:none;" : "")">@gizliKolonlar.Count gizli</span>
+            </button>
+
+            @if (isSuperUser || currentUserName.StartsWith("fns"))
+            {
+                <div class="form-check form-switch ms-3 bg-danger text-white px-3 py-1 rounded shadow-sm mb-0 d-flex align-items-center">
+                    <input class="form-check-input ms-0 me-2 mt-0" type="checkbox" id="ozelOnayModu" title="Mutabakat durumuna bakılmaksızın kayıtları ÖDENDİ yapabilmenizi sağlar.">
+                    <label class="form-check-label fw-bold small" style="cursor:pointer;" for="ozelOnayModu">ÖZEL ONAY MODU</label>
+                </div>
+            }
+            
+            <div class="ms-4 bg-warning text-dark px-3 py-1 rounded fw-bold border border-dark d-flex align-items-center shadow-sm">
+                <i class="fas fa-calculator me-2"></i> Seçili Ödeme (TL): <span id="globalSelectedTotal" class="ms-2 fs-6">₺0,00</span>
+            </div>
+
+            <div class="ms-3 bg-info text-dark px-3 py-1 rounded fw-bold border border-dark d-flex align-items-center shadow-sm">
+                <i class="fas fa-piggy-bank me-2"></i> Seçili Kasa/Banka (TL): <span id="globalSelectedBakiyeTotal" class="ms-2 fs-6">₺0,00</span>
+            </div>
+        </form>
+
+        <div>
+            <span class="fw-bold text-muted me-2 small">Görüntüle:</span>
+            @foreach (var comp in Model.Companies)
+            {
+                <button type="button" data-target="#company-@comp.DbName" class="btn btn-outline-dark btn-sm rounded-pill font-weight-bold hizli-git-btn">@comp.DisplayName</button>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid mt-3" id="mainContainerArea">
+    
+    <div class="welcome-screen" id="welcomeMessage">
+        <i class="fas fa-chart-line fa-4x mb-3 text-primary"></i>
+        <h2>Nakit Akış Raporuna Hoş Geldiniz (Rapor 79)</h2>
+        <p class="fs-5 mt-2">Görüntülemek veya işlem yapmak istediğiniz firmayı sağ üstteki butonlardan seçiniz.</p>
+    </div>
+
+    @foreach (var comp in Model.Companies)
+    {
+        <div id="company-@comp.DbName" class="company-section">
+            <div class="d-flex justify-content-between mb-2 align-items-center">
+                
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-primary btn-sm btn-toplu-dekont fw-bold border border-dark" data-dbname="@comp.DbName">
+                        <i class="fas fa-file-upload"></i> Seçililere Toplu Dekont Yükle
+                    </button>
+                    
+                    @* Ödeme yöntemi: şirket seçici gibi yan yana düğmeler.
+                       Önceden açılır menüydü; hangi yöntemin seçili olduğu ve
+                       hangisinde kaç kayıt bulunduğu görünmüyordu. *@
+                    <div class="odeme-yontem-grubu d-flex flex-wrap align-items-center gap-1 ms-1" data-dbname="@comp.DbName">
+                        <span class="odeme-yontem-etiket"><i class="fas fa-filter"></i> ÖDEME YÖNTEMİ</span>
+                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn aktif" data-dbname="@comp.DbName" data-method="Tümü">Tümü<span class="sayi"></span></button>
+                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn" data-dbname="@comp.DbName" data-method="Nakit">Nakit<span class="sayi"></span></button>
+                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn" data-dbname="@comp.DbName" data-method="Çek">Çek<span class="sayi"></span></button>
+                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn" data-dbname="@comp.DbName" data-method="Senet">Senet<span class="sayi"></span></button>
+                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn" data-dbname="@comp.DbName" data-method="Havale / EFT">Havale / EFT<span class="sayi"></span></button>
+                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn" data-dbname="@comp.DbName" data-method="Kredi Kartı / Banka Kartı">Kredi / Banka Kartı<span class="sayi"></span></button>
+                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn" data-dbname="@comp.DbName" data-method="Mahsup">Mahsup<span class="sayi"></span></button>
+                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn" data-dbname="@comp.DbName" data-method="Temlik">Temlik<span class="sayi"></span></button>
+                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn" data-dbname="@comp.DbName" data-method="Diğer">Diğer<span class="sayi"></span></button>
+                    </div>
+                </div>
+
+              <div>
+                    <span class="badge bg-success me-3 auto-save-indicator" style="display:none;"><i class="fas fa-check-circle"></i> Tüm değişiklikler kaydedildi</span>
+                    @if (canAddPayment)
+                    {
+                        <button type="button" class="btn btn-primary btn-sm me-2 btn-portfoy-cek-ekle" data-dbname="@comp.DbName">
+                            <i class="fas fa-money-check-alt"></i> Çek/Senet Ekle
+                        </button>
+                        <button type="button" class="btn btn-success btn-sm btn-odeme-ekle" data-dbname="@comp.DbName" data-bs-toggle="modal" data-bs-target="#ekleModal">
+                            <i class="fas fa-plus"></i> Yeni Ödeme Ekle
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <div class="excel-layout shadow-sm">
+                <div class="excel-sidebar">
+                    <span>@comp.DisplayName</span>
+                </div>
+
+                <div class="excel-content">
+                    <table class="excel-table main-payment-table" data-dbname="@comp.DbName">
+                        <thead>
+                            <tr>
+                                <th colspan="23" class="title-row">ÖDEME LİSTESİ</th>
+                            </tr>
+                            <tr>
+                                <th class="chk-cell border-dark">
+                                    <div class="chk-wrapper">
+                                        <input type="checkbox" class="chk-all-company custom-checkbox" data-dbname="@comp.DbName" title="Tümünü Seç" />
+                                    </div>
+                                </th>
+                                <th style="min-width: 40px;" title="Satır Numarası">#</th> 
+                                <th class="sortable-header" data-type="string" style="min-width: 90px;">
+                                    <div class="header-content"><span>İŞLEM TİPİ</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="string" style="min-width: 120px;">
+                                    <div class="header-content"><span>KAYNAK FİRMA</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="string" style="min-width: 120px;">
+                                    <div class="header-content"><span>BELGE NO</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="date" style="min-width: 110px;">
+                                    <div class="header-content"><span>BELGE TARİHİ</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="date" style="min-width: 130px;">
+                                    <div class="header-content"><span>PLANLANAN ÖDEME</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="string" style="min-width: 200px;">
+                                    <div class="header-content"><span>KURUM</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="string" style="min-width: 130px;">
+                                    <div class="header-content"><span>SATINALMACI</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="string" style="min-width: 250px;">
+                                    <div class="header-content"><span>ÜRÜN / HİZMET</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="string" style="min-width: 70px;">
+                                    <div class="header-content"><span>PB</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="number" style="min-width: 90px;">
+                                    <div class="header-content"><span>ANLAŞILAN KUR</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="number" style="min-width: 110px;">
+                                    <div class="header-content"><span>TUTAR</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="number" style="min-width: 110px;">
+                                    <div class="header-content"><span>TUTAR (₺)</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="string" style="min-width: 140px;">
+                                    <div class="header-content"><span>ÖDEME YÖNTEMİ</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="date" style="min-width: 130px;">
+                                    <div class="header-content"><span>ÖDENME TARİHİ</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="number" style="min-width: 110px;">
+                                    <div class="header-content"><span>TOPLAM ÖDENEN</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="string" style="min-width: 90px;">
+                                    <div class="header-content"><span>ÖDENEN PB</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="string" style="min-width: 110px;">
+                                    <div class="header-content"><span>DURUM</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="string" style="min-width: 120px;">
+                                    <div class="header-content"><span>MUTABAKAT</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                <th class="sortable-header" data-type="date" style="min-width: 120px;">
+                                    <div class="header-content"><span>SON MUT. TARİHİ</span><i class="fas fa-sort text-muted"></i></div>
+                                </th>
+                                
+                                <th style="min-width: 80px;">DEKONT</th>
+                                <th style="min-width: 200px;">NOT</th>
+                            </tr>
+                        </thead>
+                        <tbody class="sortable-body" data-dbname="@comp.DbName">
+                            @if (comp.OdemeListesi == null || !comp.OdemeListesi.Any())
+                            {
+                                <tr><td colspan="23" class="text-center text-muted py-3 empty-row nodrag">Kayıt yok.</td></tr> 
+                            }
+                            else
+                            {
+                                @for (int i = 0; i < comp.OdemeListesi.Count; i++)
+                                {
+                                    var line = comp.OdemeListesi[i];
+                                    
+                                    // SADECE "Planlandı" VE "Mutabık" İSE SARI, Özel Onay Mor
+                                    string rowColor = "transparent";
+                                    if (line.U_Durum == "ÖDENDİ") {
+                                        rowColor = "#d4edda";
+                                    } else if (line.U_Durum == "Gecikti") {
+                                        rowColor = "#f8d7da";
+                                    } else if (line.U_Durum == "Özel Onay") {
+                                        rowColor = "#e2d9f3"; // Mor renk
+                                    } else if (line.U_Durum == "Planlandı") {
+                                        // Muafiyetli işlem de mutabık gibi ödemeye hazırdır.
+                                        if (line.U_MutabakatDurumu == "Mutabık"
+                                            || !string.IsNullOrEmpty(line.MuafiyetSebebi)) {
+                                            rowColor = "#fff3cd"; // Sarı renk (ödemeye hazır)
+                                        } else {
+                                            rowColor = "#cff4fc"; // Normal Mavi Planlandı
+                                        }
+                                    }
+
+                                    <tr style="background-color: @rowColor;" data-docentry="@line.DocEntry" data-dbname="@comp.DbName" class="data-row">
+                                        <td class="chk-cell border-dark">
+                                            <div class="chk-wrapper">
+                                                <input type="checkbox" class="chk-row custom-checkbox" 
+                                                       data-dbname="@comp.DbName"
+                                                       data-docentry="@line.DocEntry"
+                                                       data-baglidocentry="@line.U_BagliDocEntry"
+                                                       data-baglibelgetipi="@line.U_BagliBelgeTipi"
+                                                       data-kurum="@line.U_Kurum"
+                                                       data-urun="@line.U_UrunHizmet"
+                                                       data-tutar="@(line.U_Tutar?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture))"
+                                                       data-tutartl="@(line.U_TutarTL?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture))"
+                                                       data-parabirimi="@line.U_ParaBirimi" />
+                                            </div>
+                                        </td>
+                                        <td class="text-center align-middle">
+                                            <span class="row-number fw-bold text-muted" style="font-size: 0.9em;">@(i + 1)</span>
+                                            <input type="hidden" class="sira-input" name="U_Sira" value="@(line.U_Sira ?? (i + 1))" />
+                                            <input type="hidden" class="row-color-input" name="U_Renk" value="@rowColor" />
+                                            <input type="hidden" name="U_KayitTipi" value="@line.U_KayitTipi" />
+                                        </td>
+                                        <td class="text-center align-middle">
+                                            <select name="U_IslemTipi" class="auto-save-trigger islem-tipi-select" style="min-width: 60px;">
+                                                <option value="" selected="@(string.IsNullOrEmpty(line.U_IslemTipi))"></option>
+                                                <option value="X" selected="@(line.U_IslemTipi == "X")">X</option>
+                                                <option value="R" selected="@(line.U_IslemTipi == "R")">R</option>
+                                                <option value="Y" selected="@(line.U_IslemTipi == "Y")">Y</option>
+                                            </select>
+                                        </td>
+                                        <td class="text-center align-middle fw-bold text-dark">
+                                            @line.U_KaynakFirma
+                                            <input type="hidden" name="U_KaynakFirma" value="@line.U_KaynakFirma" />
+                                        </td>
+                                        <td class="text-center align-middle">
+                                            @if(line.U_BagliDocEntry.HasValue && line.U_BagliDocEntry > 0)
+                                            {
+                                                <a href="javascript:void(0);" class="text-decoration-none fw-bold text-primary belge-detay-btn" 
+                                                   data-docentry="@line.U_BagliDocEntry" 
+                                                   data-belgetipi="@line.U_BagliBelgeTipi" 
+                                                   data-kaynakdb="@line.U_KaynakFirma" 
+                                                   title="Detayları Görüntüle">
+                                                   <i class="fas fa-chevron-circle-down"></i> @(line.U_FaturaSiparisNo ?? "Görüntüle")
+                                                </a>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted fw-bold">@(line.U_FaturaSiparisNo ?? "-")</span>
+                                            }
+                                            <input type="hidden" name="U_FaturaSiparisNo" value="@line.U_FaturaSiparisNo" />
+                                        </td>
+                                        
+                                        <!-- BELGE TARİHİ -->
+                                        <td class="align-middle fw-bold text-secondary">
+                                            @(line.BelgeTarihi?.ToString("dd.MM.yyyy") ?? "-")
+                                        </td>
+
+                                        <td class="align-middle"><input type="date" name="U_PlanlananTarih" class="auto-save-trigger" value="@(line.U_PlanlananTarih?.ToString("yyyy-MM-dd"))" /></td>
+                                        <td class="align-middle"><textarea name="U_Kurum" class="auto-save-trigger" rows="2" title="@line.U_Kurum">@line.U_Kurum</textarea></td>
+                                        
+                                        <td class="align-middle text-center">
+                                            @if (string.IsNullOrWhiteSpace(line.U_Satinalmaci))
+                                            {
+                                                <span class="text-danger fw-bold" title="Satınalmacı Seçilmemiş!"><i class="fas fa-exclamation-circle"></i> Eksik</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-dark fw-bold" style="font-size:10px;">@line.U_Satinalmaci</span>
+                                            }
+                                            <input type="hidden" name="U_Satinalmaci" value="@line.U_Satinalmaci" />
+                                        </td>
+
+                                        <td class="align-middle"><textarea name="U_UrunHizmet" class="auto-save-trigger" rows="2" title="@line.U_UrunHizmet">@line.U_UrunHizmet</textarea></td>
+                                        
+                                        <td class="align-middle">
+                                            <select class="para-birimi-select auto-save-trigger" name="U_ParaBirimi">
+                                                <option value="TRY" selected="@(line.U_ParaBirimi == "TRY")">TL</option>
+                                                <option value="USD" selected="@(line.U_ParaBirimi == "USD")">USD</option>
+                                                <option value="EUR" selected="@(line.U_ParaBirimi == "EUR" || line.U_ParaBirimi == "EURO")">EURO</option>
+                                                <option value="GBP" selected="@(line.U_ParaBirimi == "GBP")">GBP</option>
+                                                <option value="CHF" selected="@(line.U_ParaBirimi == "CHF")">CHF</option>
+                                                <option value="JPY" selected="@(line.U_ParaBirimi == "JPY")">JPY</option>
+                                                <option value="CAD" selected="@(line.U_ParaBirimi == "CAD")">CAD</option>
+                                                <option value="AUD" selected="@(line.U_ParaBirimi == "AUD")">AUD</option>
+                                                <option value="CNY" selected="@(line.U_ParaBirimi == "CNY")">CNY</option>
+                                                <option value="RUB" selected="@(line.U_ParaBirimi == "RUB")">RUB</option>
+                                            </select>
+                                        </td>
+                                        
+                                        <td class="align-middle">
+                                            <input type="text" class="format-rate kur-display auto-save-trigger" value="@(line.U_Kur?.ToString("N4", new System.Globalization.CultureInfo("tr-TR")))" />
+                                            <input type="hidden" class="kur-input" name="U_Kur" value="@(line.U_Kur?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture))" />
+                                        </td>
+
+                                        <td class="align-middle">
+                                            <input type="text" class="format-money tutar-display auto-save-trigger" value="@(line.U_Tutar?.ToString("N2", new System.Globalization.CultureInfo("tr-TR")))" />
+                                            <input type="hidden" class="tutar-input" name="U_Tutar" value="@(line.U_Tutar?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture))" />
+                                        </td>
+                                        <td class="align-middle">
+                                            <input type="text" class="format-money tutartl-display auto-save-trigger" value="@(line.U_TutarTL?.ToString("N2", new System.Globalization.CultureInfo("tr-TR")))" readonly />
+                                            <input type="hidden" class="tutartl-input" name="U_TutarTL" value="@(line.U_TutarTL?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture))" />
+                                        </td>
+                                        <td class="align-middle">
+                                            <select name="U_OdemeYontemi" class="auto-save-trigger odeme-yontemi-select filter-method-select">
+                                                <option value="" selected="@(string.IsNullOrEmpty(line.U_OdemeYontemi))"></option>
+                                                <option value="Nakit" selected="@(line.U_OdemeYontemi == "Nakit")">Nakit</option>
+                                                <option value="Çek" selected="@(line.U_OdemeYontemi == "Çek")">Çek/Senet</option>
+                                                <option value="Senet" selected="@(line.U_OdemeYontemi == "Senet")">Senet</option>
+                                                <option value="Havale / EFT" selected="@(line.U_OdemeYontemi == "Havale / EFT")">Havale / EFT</option>
+                                                <option value="Kredi Kartı / Banka Kartı" selected="@(line.U_OdemeYontemi == "Kredi Kartı / Banka Kartı")">Kredi Kartı / Banka Kartı</option>
+                                                <option value="Mahsup" selected="@(line.U_OdemeYontemi == "Mahsup")">Mahsup</option>
+                                                <option value="Temlik" selected="@(line.U_OdemeYontemi == "Temlik")">Temlik</option>
+                                                <option value="Diğer" selected="@(line.U_OdemeYontemi == "Diğer")">Diğer</option>
+                                            </select>
+                                        </td>
+                                        <td class="align-middle"><input type="date" name="U_OdenmeTarihi" class="auto-save-trigger" value="@(line.U_OdenmeTarihi?.ToString("yyyy-MM-dd"))" /></td>
+                                        <td class="align-middle">
+                                            <input type="text" class="format-money odenen-tutar-display auto-save-trigger @(!canEditOdenen ? "readonly-bg" : "")" value="@(line.U_OdenenTutar?.ToString("N2", new System.Globalization.CultureInfo("tr-TR")))" @(!canEditOdenen ? "readonly" : "") />
+                                            <input type="hidden" class="odenen-tutar-input" name="U_OdenenTutar" value="@(line.U_OdenenTutar?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture))" />
+                                        </td>
+
+                                        <td class="align-middle">
+                                            <select class="auto-save-trigger @(!canEditOdenen ? "readonly-bg" : "")" name="U_OdenenTutarPB" style="cursor: pointer; min-width: 60px;">
+                                                <option value="TRY" selected="@(line.U_OdenenTutarPB == "TRY" || string.IsNullOrEmpty(line.U_OdenenTutarPB))">TL</option>
+                                                <option value="USD" selected="@(line.U_OdenenTutarPB == "USD")">USD</option>
+                                                <option value="EUR" selected="@(line.U_OdenenTutarPB == "EUR" || line.U_OdenenTutarPB == "EURO")">EURO</option>
+                                                <option value="GBP" selected="@(line.U_OdenenTutarPB == "GBP")">GBP</option>
+                                                <option value="CHF" selected="@(line.U_OdenenTutarPB == "CHF")">CHF</option>
+                                                <option value="JPY" selected="@(line.U_OdenenTutarPB == "JPY")">JPY</option>
+                                                <option value="CAD" selected="@(line.U_OdenenTutarPB == "CAD")">CAD</option>
+                                                <option value="AUD" selected="@(line.U_OdenenTutarPB == "AUD")">AUD</option>
+                                                <option value="CNY" selected="@(line.U_OdenenTutarPB == "CNY")">CNY</option>
+                                                <option value="RUB" selected="@(line.U_OdenenTutarPB == "RUB")">RUB</option>
+                                            </select>
+                                        </td>
+
+                                        <td class="align-middle">
+                                            <select name="U_Durum" class="auto-save-trigger durum-select fw-bold">
+                                                <option value="Bekliyor" selected="@(line.U_Durum == "Bekliyor")">Bekliyor</option>
+                                                <option value="Planlandı" selected="@(line.U_Durum == "Planlandı")">Planlandı</option>
+                                                <option value="Özel Onay" selected="@(line.U_Durum == "Özel Onay")">Özel Onay</option>
+                                                <option value="ÖDENDİ" selected="@(line.U_Durum == "ÖDENDİ")">ÖDENDİ</option>
+                                                <option value="Gecikti" selected="@(line.U_Durum == "Gecikti")">Gecikti</option>
+                                            </select>
+                                            <!-- SUNUCU (BACKEND) YETKİ KONTROLÜ İÇİN ESKİ DURUM GİZLİ INPUTU -->
+                                            <input type="hidden" name="U_EskiDurum" value="@line.U_Durum" class="eski-durum-input" />
+                                        </td>
+                                        
+                                        <td class="align-middle">
+                                            <select name="U_MutabakatDurumu" class="mutabakat-select fw-bold text-dark" style="min-width: 90px; appearance:none; background:transparent; border:none; cursor:not-allowed;" disabled>
+                                                <option value="" selected="@(string.IsNullOrEmpty(line.U_MutabakatDurumu))">-</option>
+                                                <option value="Mutabık" selected="@(line.U_MutabakatDurumu == "Mutabık")" style="color: green;">Mutabık</option>
+                                                <option value="Mutabık Değil" selected="@(line.U_MutabakatDurumu == "Mutabık Değil")" style="color: red;">Mutabık Değil</option>
+                                            </select>
+
+                                            @*
+                                                IT talebi #9: vergi, kontör/yakıt yükleme, elektrik/su/doğalgaz
+                                                faturası gibi işlemlerde mutabakat yapılamıyor. Mutabakat kolonu
+                                                mutabakat sürecinin çıktısıdır ve elle değiştirilmez; muafiyet
+                                                bu yüzden ayrı tutulur (portalde Z_NakitAkisMuafiyet).
+                                            *@
+                                            <select class="muafiyet-select @(string.IsNullOrEmpty(line.MuafiyetSebebi) ? "muafiyet-bos" : "muafiyet-dolu")"
+                                                    data-dbname="@comp.DbName" data-docentry="@line.DocEntry"
+                                                    title="Mutabakatı yapılamayan işlemler için muafiyet">
+                                                <option value="">— muafiyet yok —</option>
+                                                <option value="Vergi ödemesi" selected="@(line.MuafiyetSebebi == "Vergi ödemesi")">Vergi ödemesi</option>
+                                                <option value="Kontör / Yakıt / Sertifika" selected="@(line.MuafiyetSebebi == "Kontör / Yakıt / Sertifika")">Kontör / Yakıt / Sertifika</option>
+                                                <option value="Fatura (Elektrik/Su/Doğalgaz)" selected="@(line.MuafiyetSebebi == "Fatura (Elektrik/Su/Doğalgaz)")">Fatura (Elektrik/Su/Doğalgaz)</option>
+                                                <option value="Diğer" selected="@(line.MuafiyetSebebi == "Diğer")">Diğer</option>
+                                            </select>
+                                        </td>
+
+                                        <!-- SON MUTABAKAT TARİHİ -->
+                                        <td class="align-middle fw-bold text-secondary mutabakat-tarih-cell">
+                                            @(line.SonMutabakatTarihi?.ToString("dd.MM.yyyy") ?? "-")
+                                        </td>
+                                        
+                                        <td class="file-upload-cell align-middle text-center">
+                                            @{
+                                                // IT talebi #11: bir planlanan ödemenin içinde iki ayrı ödeme
+                                                // olabiliyor (ör. beyanname KDV + ardiye). Dekontların tamamı
+                                                // portalde tutuluyor; U_BE1_DEKONT en sonuncuyu gösteriyor.
+                                                var dekontlar = line.DekontListesi ?? new List<FinansRaporlama.Controllers.DekontKaydi>();
+                                            }
+                                            @if (!string.IsNullOrEmpty(line.U_BE1_DEKONT) || dekontlar.Count > 0)
+                                            {
+                                                <div class="btn-group w-100" role="group">
+                                                    <button type="button" class="btn btn-sm btn-outline-primary p-1 pdf-preview-btn" data-url="@line.U_BE1_DEKONT" title="Dekontu Önizle">
+                                                        <i class="fas fa-eye"></i>
+                                                    </button>
+                                                    @if (dekontlar.Count > 1)
+                                                    {
+                                                        <button type="button" class="btn btn-sm btn-outline-secondary p-1 fw-bold dekont-liste-btn"
+                                                                title="@dekontlar.Count dekont — listeyi aç"
+                                                                data-dekontlar="@System.Text.Json.JsonSerializer.Serialize(dekontlar)"
+                                                                data-dbname="@comp.DbName" data-docentry="@line.DocEntry">
+                                                            @dekontlar.Count
+                                                        </button>
+                                                    }
+                                                    <button type="button" class="btn btn-sm btn-outline-success p-1 open-dekont-modal-btn"
+                                                            data-dbname="@comp.DbName" data-docentry="@(line.DocEntry)"
+                                                            title="Bu ödemeye ikinci bir dekont ekle">
+                                                        <i class="fas fa-plus"></i>
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger p-1 delete-dekont-btn" data-dbname="@comp.DbName" data-docentry="@line.DocEntry" title="Dekontu Sil">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-secondary p-1 w-100 open-dekont-modal-btn" 
+                                                        data-dbname="@comp.DbName" 
+                                                        data-docentry="@(line.DocEntry)" 
+                                                        title="Dekont Yükle">
+                                                    <i class="fas fa-upload"></i> Yükle
+                                                </button>
+                                            }
+                                        </td>
+
+                                        <td class="align-middle text-start">
+                                            <div class="d-flex align-items-center">
+                                                <textarea name="U_Notlar" class="flex-grow-1 auto-save-trigger" rows="2" title="@line.U_Notlar">@line.U_Notlar</textarea>
+                                                @if (!string.IsNullOrEmpty(line.MukerrerDocEntryler))
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-warning ms-2 mukerrer-btn fw-bold text-nowrap" style="font-size:.68rem; padding:2px 6px;" tabindex="-1"
+                                                            data-dbname="@comp.DbName" data-docentry="@line.DocEntry" data-digerler="@line.MukerrerDocEntryler"
+                                                            title="Aynı belge numarası şu satırlarda da var: #@line.MukerrerDocEntryler. Tıklayıp karşılaştırın.">
+                                                        <i class="fas fa-clone"></i> Mükerrer olabilir
+                                                    </button>
+                                                }
+                                                else if (line.MukerrerKontrolEdildi == 1)
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-light border ms-2 mukerrer-geri-btn text-muted text-nowrap" style="font-size:.66rem; padding:2px 6px;" tabindex="-1"
+                                                            data-dbname="@comp.DbName" data-docentry="@line.DocEntry" title="Mükerrer değil denmiş. Tıklayınca uyarı yeniden açılır.">
+                                                        <i class="fas fa-check"></i> kontrol edildi
+                                                    </button>
+                                                }
+
+                                                <button type="button" class="btn btn-link text-primary p-0 ms-2 edit-btn" data-dbname="@comp.DbName" tabindex="-1" title="Düzenle">
+                                                    <i class="fas fa-edit fs-5"></i>
+                                                </button>
+                                                
+                                                <button type="button" class="btn btn-link text-danger p-0 ms-2 delete-btn" data-dbname="@comp.DbName" data-id="@line.DocEntry" tabindex="-1" title="Sil">
+                                                    <i class="fas fa-times fs-5"></i>
+                                                </button>
+                                                
+                                                <input type="hidden" name="U_BagliBelgeTipi" value="@line.U_BagliBelgeTipi" />
+                                                <input type="hidden" name="U_BagliDocEntry" value="@line.U_BagliDocEntry" />
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            
+                            <tr class="bg-white total-row nodrag">
+                                <td colspan="12" class="text-end fw-bold text-dark">TOPLAM:</td> 
+                                <td class="fw-bold num-input bg-white text-dark border-secondary"></td>
+                                <td class="fw-bold num-input toplam-tutar-tl-label bg-white text-dark border-secondary">₺0,00</td>
+                                <td colspan="2" class="bg-white border-secondary"></td>
+                                <td class="fw-bold num-input toplam-odenen-column-label bg-white text-dark border-secondary">₺0,00</td>
+                                <td colspan="6" class="bg-white border-secondary"></td> 
+                            </tr>
+
+                        </tbody>
+                    </table>
+
+                    <div class="d-flex flex-row flex-nowrap gap-3 mt-2 align-items-start" style="padding-bottom: 10px; overflow-x: auto;">
+                        
+                        <div class="flex-grow-1" style="min-width: 700px;">
+                            <table class="excel-table summary-table w-100" data-dbname="@comp.DbName" style="border-top: 1px solid rgba(15,23,42,.14);">
+                                <thead>
+                                    <tr>
+                                        <th style="min-width: 30px;" title="Seçili Toplam İçin İşaretle">
+                                            <input type="checkbox" class="chk-all-bakiye custom-checkbox" data-dbname="@comp.DbName">
+                                        </th>
+                                        <th style="min-width: 110px;">GÜNCELLENME TARİHİ</th>
+                                        <th>BANKA / KASA</th>
+                                        <th>DETAY</th>
+                                        <th style="min-width: 50px;">PB</th>
+                                        <th style="min-width: 100px;">TUTAR</th>
+                                        <th style="min-width: 100px;">TUTAR (₺)</th>
+                                        <th class="bg-primary text-white" style="min-width: 120px;">TOPLAM ÖDENECEK</th>
+                                        <th class="bg-success text-white" style="min-width: 120px;">TOPLAM ÖDENEN</th>
+                                        <th class="bg-danger text-white" style="min-width: 120px;">KALAN ÖDENECEK</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{ int rowspanSayisi = comp.KasaBakiyeleri.Count > 0 ? comp.KasaBakiyeleri.Count : 1; }
+                                    @if (!comp.KasaBakiyeleri.Any())
+                                    {
+                                        <tr>
+                                            <td colspan="7">Bakiye kaydı bulunamadı.</td>
+                                            <td rowspan="1" class="align-middle fs-6 fw-bold summary-total-to-pay">₺0</td>
+                                            <td rowspan="1" class="align-middle fs-6 fw-bold summary-total-paid">₺0</td>
+                                            <td rowspan="1" class="align-middle fs-6 fw-bold summary-balance">₺0</td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @for (int i = 0; i < comp.KasaBakiyeleri.Count; i++)
+                                        {
+                                            var bakiye = comp.KasaBakiyeleri[i];
+                                            string pbGosterim = bakiye.PB == "TRY" ? "TL" : bakiye.PB == "EUR" ? "EURO" : bakiye.PB;
+
+                                            <tr class="clickable-bakiye" data-dbname="@comp.DbName" data-tip="@bakiye.BankaKasa" data-pb="@bakiye.PB" data-detay="@bakiye.Detay">
+                                                <td class="text-center" style="cursor: default;" onclick="event.stopPropagation();">
+                                                    <input type="checkbox" class="chk-bakiye custom-checkbox" data-tutartl="@(bakiye.TutarTL.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture))">
+                                                </td>
+                                                <td>@(bakiye.GuncellenmeTarihi?.ToString("dd.MM.yyyy") ?? "")</td>
+                                                <td class="link-style text-start"><i class="fas fa-search-plus text-primary me-1"></i>@bakiye.BankaKasa</td>
+                                                <td class="text-start">@bakiye.Detay</td>
+                                                <td>@pbGosterim</td>
+                                                <td class="num-input">@bakiye.Tutar.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))</td>
+                                                <td class="num-input text-primary">@bakiye.TutarTL.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))</td>
+                                                
+                                                @if (i == 0)
+                                                {
+                                                    <td rowspan="@rowspanSayisi" class="align-middle text-center fs-5 bg-light fw-bold summary-total-to-pay text-primary">₺0</td>
+                                                    <td rowspan="@rowspanSayisi" class="align-middle text-center fs-5 bg-light fw-bold summary-total-paid text-success">₺0</td>
+                                                    <td rowspan="@rowspanSayisi" class="align-middle text-center fs-5 bg-light fw-bold summary-balance text-danger">₺0</td>
+                                                }
+                                            </tr>
+                                        }
+                                    }
+                                    <tr class="bg-light">
+                                        <td colspan="6" class="text-end fw-bold text-dark">NAKİT KASA MEVCUT BAKİYE:</td>
+                                        <td class="fw-bold num-input bg-warning text-dark border-dark border-2">₺@comp.ToplamKasaMevcudu.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))</td>
+                                        <td colspan="3" class="bg-light border-0"></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div style="min-width: 400px; width: 400px;">
+                            <table class="excel-table w-100" style="border-top: 1px solid rgba(15,23,42,.14);">
+                                <thead>
+                                    <tr><th colspan="5" class="bg-dark text-white">PARA BİRİMİNE GÖRE PROJEKSİYON (ORİJİNAL)</th></tr>
+                                    <tr>
+                                        <th style="min-width: 40px;">PB</th>
+                                        <th>Yöntem</th>
+                                        <th>Mevcut Bakiye</th>
+                                        <th>Bekleyen Ödeme</th>
+                                        <th>Kalan Bakiye</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!comp.ProjeksiyonListesi.Any())
+                                    {
+                                        <tr><td colspan="5" class="text-center text-muted">Kayıt yok.</td></tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var p in comp.ProjeksiyonListesi)
+                                        {
+                                            string pbStr = p.ParaBirimi == "TRY" ? "TL" : p.ParaBirimi;
+                                            <tr>
+                                                <td rowspan="2" class="align-middle fw-bold bg-light" style="font-size: 14px;">@pbStr</td>
+                                                <td class="fw-bold text-start">Nakit / Banka</td>
+                                                <td class="num-input text-success">@p.MevcutBanka.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))</td>
+                                                <td class="num-input text-danger">@p.BekleyenNakitOdeme.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))</td>
+                                                <td class="num-input fw-bold @(p.KalanBanka < 0 ? "text-danger" : "text-primary")">
+                                                    @p.KalanBanka.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td class="fw-bold text-start">Müşteri Çekleri</td>
+                                                <td class="num-input text-success">@p.MevcutCek.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))</td>
+                                                <td class="num-input text-danger">@p.BekleyenCekOdeme.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))</td>
+                                                <td class="num-input fw-bold @(p.KalanCek < 0 ? "text-danger" : "text-primary")">
+                                                    @p.KalanCek.ToString("N2", new System.Globalization.CultureInfo("tr-TR"))
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- === MODALLAR BAŞLANGIÇ === -->
+
+<!-- MÜKERRER KARŞILAŞTIRMA MODALI (IT #66) -->
+<div class="modal fade" id="mukerrerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-warning py-2">
+                <h6 class="modal-title fw-bold"><i class="fas fa-clone"></i> Mükerrer olabilir — satırları karşılaştırın</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="small text-muted mb-2">Aynı fatura / sipariş numarasını taşıyan satırlar aşağıda. İncelenen satır sarı. Aynı ödemeyse birini <b>mükerrer</b> olarak kapatın; taksit gibi meşru bir durumsa <b>mükerrer değil</b> deyin, uyarı bir daha çıkmaz.</div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle mb-2" style="font-size:.78rem;">
+                        <thead class="table-light"><tr><th>#</th><th>Belge No</th><th>Kurum</th><th>Ürün / Hizmet</th><th>Planlanan</th><th class="text-end">Tutar</th><th class="text-end">Tutar TL</th><th>Durum</th><th>Ödeme</th><th>Kaynak</th><th>Satınalmacı</th><th>Kayıt</th><th>Not</th><th>Karar</th><th></th></tr></thead>
+                        <tbody id="mkBody"></tbody>
+                    </table>
+                </div>
+                <div class="d-flex gap-2 align-items-center flex-wrap">
+                    <input type="text" id="mkNot" class="form-control form-control-sm" style="max-width:360px;" placeholder="Karar notu (isteğe bağlı)">
+                    <button type="button" class="btn btn-sm btn-success fw-bold ms-auto" id="mkDegilBtn"><i class="fas fa-check"></i> Mükerrer değil, uyarıyı kapat</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- TOPLU DEKONT YÜKLEME MODALI -->
+<div class="modal fade" id="topluDekontUploadModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white py-2">
+                <h6 class="modal-title"><i class="fas fa-file-upload"></i> Seçili Satırlara Toplu Dekont Yükle</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body bg-light">
+                <form id="topluDekontUploadForm">
+                    <input type="hidden" name="startDate" value="@Model.StartDate.ToString("yyyy-MM-dd")" />
+                    <input type="hidden" name="endDate" value="@Model.EndDate.ToString("yyyy-MM-dd")" />
+                    
+                    <input type="hidden" id="topluDekontUploadDbName" name="dbName" />
+                    <input type="hidden" id="topluDekontUploadDocEntries" name="docEntries" />
+                    
+                    <div class="alert alert-warning py-2 mb-3 small fw-bold">
+                        <i class="fas fa-exclamation-triangle"></i> Yükleyeceğiniz bu dekont seçmiş olduğunuz <span id="topluSeciliSatirSayisi"></span> adet satırın tamamına eklenecektir.
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Dekont Dosyası (PDF, JPG, PNG)</label>
+                        <input type="file" class="form-control" id="topluDekontDosya" name="dekontDosya" accept=".pdf,.jpg,.jpeg,.png" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Bilgilendirme Maili Gönderilecek Kişi</label>
+                        <select class="form-select" id="topluSecilenMail" name="secilenMail">
+                            <option value="">-- Mail Gönderme (Sadece Sisteme Yükle) --</option>
+                            <option value="kullanici@ornek.local">Buse Kar (kullanici@ornek.local)</option>
+                            <option value="kullanici@ornek.local">Tolga Yaman (kullanici@ornek.local)</option>
+                            <option value="kullanici@ornek.local">Onur Bal (kullanici@ornek.local)</option>
+                            <option value="kullanici@ornek.local">Özge İsen (kullanici@ornek.local)</option>
+                            <option value="kullanici@ornek.local">Sevgi Ay (kullanici@ornek.local)</option>
+                            <option value="kullanici@ornek.local">Personel 17 (kullanici@ornek.local)</option>
+                            @* IT talebi #11: adresler Cari Ekstre > Cari Notları listesinden alındı. *@
+                            <option value="kullanici@ornek.local">Hülya Er (kullanici@ornek.local)</option>
+                            <option value="kullanici@ornek.local">Nazlı Erdem (kullanici@ornek.local)</option>
+                            <option value="kullanici@ornek.local">Ebru Tekin (kullanici@ornek.local)</option>
+                        </select>
+                        <small class="text-muted d-block mt-1">Seçim yaparsanız dosya yüklenirken ek olarak mail de atılır.</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer py-1">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-success btn-sm" id="btnTopluDekontKaydet"><i class="fas fa-save"></i> Yükle</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="rowContextMenu">
+    <a class="dropdown-item fw-bold text-dark mb-1" href="#" id="btnShowLogs">
+        <i class="fas fa-history text-warning me-2"></i> Geçmişi Görüntüle
+    </a>
+</div>
+
+<div class="modal fade" id="odenenlerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white py-2">
+                <h6 class="modal-title"><i class="fas fa-check-double"></i> Tüm Ödenen Belgeler</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body bg-light">
+                <div class="row g-2 mb-3">
+                    <div class="col-md-3">
+                        <label class="small fw-bold">Başlangıç Tarihi</label>
+                        <input type="date" id="odenenlerStart" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="small fw-bold">Bitiş Tarihi</label>
+                        <input type="date" id="odenenlerEnd" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="small fw-bold">Arama (Kurum / Hizmet vb.)</label>
+                        <input type="text" id="odenenlerSearch" class="form-control form-control-sm" placeholder="Arama yapın..." />
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="button" id="btnOdenenlerGetir" class="btn btn-primary btn-sm w-100"><i class="fas fa-search"></i> Filtrele</button>
+                    </div>
+                </div>
+
+                <div class="table-responsive bg-white border">
+                    <table class="table table-sm table-striped table-hover m-0" style="font-size: 0.8rem;">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Firma</th>
+                                <th>Ödenme Tarihi</th>
+                                <th>Kurum</th>
+                                <th>Ürün / Hizmet</th>
+                                <th>Ödeme Yöntemi</th>
+                                <th>Fatura/SAP No</th>
+                                <th class="text-center">Dekont</th>
+                                <th class="text-end">Tutar (Orijinal)</th>
+                                <th class="text-end">Tutar (₺)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="odenenlerBody">
+                            <tr><td colspan="9" class="text-center text-muted">Yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="detayModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white py-2">
+                <h6 class="modal-title"><i class="fas fa-list"></i> <span id="detayModalTitle">Detaylar</span></h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="detayLoading" class="text-center py-5 d-none">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">Veriler Yükleniyor...</p>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped table-hover table-bordered m-0" style="font-size: 0.75rem;">
+                        <thead class="table-light" id="detayModalTableHead"></thead>
+                        <tbody id="detayModalTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-1">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="satirCekSecimModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white py-2">
+                <h6 class="modal-title"><i class="fas fa-money-check-alt"></i> <span id="satirCekFirmaAdi"></span> - Portföyden Çek Seç</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body bg-light p-2">
+                <input type="hidden" id="satirCekRowDocEntry" />
+                <input type="hidden" id="satirCekDbName" />
+                
+                <div class="alert alert-info py-2 small mb-2">
+                    <i class="fas fa-info-circle"></i> Bu satır için portföyden çek veya çekler seçiniz. Seçtiğiniz çeklerin toplam tutarı, kur ve vade tarihi doğrudan bulunduğunuz satıra aktarılacaktır.
+                </div>
+                
+                <!-- EKLENECEK YENİ ARAMA KUTUSU BAŞLANGIÇ -->
+                <div class="mb-2">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-dark text-white border-dark"><i class="fas fa-search"></i></span>
+                        <input type="text" id="satirCekSearchInput" class="form-control border-dark" placeholder="Çek/Senet No, Banka, Asıl Borçlu veya Tutar arayın...">
+                    </div>
+                </div>
+                <!-- EKLENECEK YENİ ARAMA KUTUSU BİTİŞ -->
+                
+                <div class="table-responsive bg-white border">
+                    <table class="table table-sm table-striped table-hover m-0" style="font-size: 0.85rem;">
+                        <thead class="table-dark">
+                            <tr>
+                                <th style="width: 40px;" class="text-center">
+                                    <input type="checkbox" id="chkAllSatirCek" class="custom-checkbox" title="Tümünü Seç">
+                                </th>
+                                <th>Çek/Senet No</th>
+                                <th>Belge / İşlem Tipi</th>
+                                <th>Banka / Şube</th>
+                                <th>Kimden Geldi / Asıl Borçlu</th>
+                                <th>Vade Tarihi</th>
+                                <th class="text-end">Tutar</th>
+                                <th class="text-end">TL Karşılığı</th>
+                            </tr>
+                        </thead>
+                        <tbody id="satirCekBody">
+                            <tr><td colspan="8" class="text-center text-muted">Yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-1 d-flex justify-content-between">
+                <div>
+                    <span class="fw-bold text-primary ms-2">Seçili Çek Sayısı: <span id="satirSeciliCekSayisi">0</span> | Toplam TL: <span id="satirSeciliCekToplam">0,00 ₺</span></span>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btnSatirCekIptal" data-bs-dismiss="modal">İptal (Geri Al)</button>
+                    <button type="button" class="btn btn-success btn-sm" id="btnSatirCekOnayla"><i class="fas fa-check"></i> Seçilenleri Satıra Uygula</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="portfoyCekEkleModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white py-2">
+                <h6 class="modal-title"><i class="fas fa-money-check-alt"></i> <span id="portfoyCekDbName"></span> - Portföydeki Çekler</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body bg-light p-2">
+                <input type="hidden" id="cekModalDbNameValue" />
+                <div class="table-responsive bg-white border">
+                    <table class="table table-sm table-striped table-hover m-0" style="font-size: 0.85rem;">
+                        <thead class="table-dark">
+                            <tr>
+                                <th style="width: 40px;" class="text-center">
+                                    <input type="checkbox" id="chkAllPortfoyCek" class="custom-checkbox" title="Tümünü Seç">
+                                </th>
+                                <th>Çek/Senet No</th>
+                                <th>Belge / İşlem Tipi</th>
+                                <th>Banka / Şube</th>
+                                <th>Kimden Geldi / Asıl Borçlu</th>
+                                <th>Vade Tarihi</th>
+                                <th class="text-end">Tutar</th>
+                                <th class="text-end">TL Karşılığı</th>
+                            </tr>
+                        </thead>
+                        <tbody id="portfoyCekBody">
+                            <tr><td colspan="8" class="text-center text-muted">Yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-1 d-flex justify-content-between">
+                <div>
+                    <span class="fw-bold text-primary ms-2">Seçili Çek Sayısı: <span id="seciliCekSayisi">0</span></span>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                    <button type="button" class="btn btn-success btn-sm" id="btnPortfoyCekKaydet"><i class="fas fa-save"></i> Seçilenleri Tabloya Ekle</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="ekleModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <form method="post" asp-action="Ekle" asp-controller="Rapor79">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="startDate" value="@Model.StartDate.ToString("yyyy-MM-dd")" />
+                <input type="hidden" name="endDate" value="@Model.EndDate.ToString("yyyy-MM-dd")" />
+                
+                <input type="hidden" id="ModalDbName" name="DbName" />
+                <div class="modal-header bg-success text-white py-2">
+                    <h6 class="modal-title"><i class="fas fa-plus"></i> <span id="ModalFirmaAdi"></span> - Yeni Ödeme Ekle</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body bg-light">
+                    
+                    <div class="alert alert-info py-2 mb-3">
+                        <div class="row g-2">
+                            <div class="col-md-3">
+                                <label class="small fw-bold text-dark">1. Şirket Seçin</label>
+                                <select id="yeniSirketSelect" class="form-select form-select-sm border-dark">
+                                    <option value="">Şirket Seçiniz...</option>
+                                    @foreach (var comp in Model.Companies)
+                                    {
+                                        <option value="@comp.DbName">@comp.DisplayName</option>
+                                    }
+                                </select>
+                                <input type="hidden" id="YeniKaynakFirmaInput" name="U_KaynakFirma">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="small fw-bold text-dark">2. Cari Seçin</label>
+                                <select id="yeniCariSelect" class="form-control w-100" disabled></select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="small fw-bold text-dark">3. Kayıt Tipi</label>
+                                <select id="yeniKayitTipiSelect" class="form-select form-select-sm border-dark" disabled>
+                                    <option value="">Cari Seçin...</option>
+                                    <option value="Fatura">Fatura</option>
+                                    <option value="Sipariş">Sipariş</option>
+                                    <option value="Bakiye">Bakiye</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="small fw-bold text-dark">4. Belge / Bakiye</label>
+                                <select id="yeniBelgeSelect" class="form-select form-select-sm border-dark" disabled>
+                                    <option value="">Kayıt Tipi Seçin...</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <input type="hidden" id="BagliBelgeTipi" name="U_BagliBelgeTipi" value="Manuel" />
+                    <input type="hidden" id="BagliDocEntry" name="U_BagliDocEntry" />
+                    <input type="hidden" id="FaturaSiparisNoInput" name="U_FaturaSiparisNo" />
+
+                    <div class="row g-2">
+                        <div class="col-md-3">
+                            <label class="small fw-bold">Planlanan Tarih</label>
+                            <input type="date" class="form-control form-control-sm" name="U_PlanlananTarih" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold">Kurum</label>
+                            <textarea id="KurumInput" class="form-control form-control-sm" name="U_Kurum" rows="2" required></textarea>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="small fw-bold text-danger">Satınalmacı</label>
+                            <select class="form-select form-select-sm border-danger" id="yeniSatinalmaciSelect" name="U_Satinalmaci" required disabled>
+                                <option value="">Önce Şirket Seçin...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="small fw-bold">Ürün/Hizmet</label>
+                            <textarea id="UrunHizmetInput" class="form-control form-control-sm" name="U_UrunHizmet" rows="2"></textarea>
+                        </div>
+                        
+                        <input type="hidden" id="OrijinalTutarHidden">
+
+                        <div class="col-md-2"><label class="small fw-bold">Para Birimi</label>
+                            <select id="ParaBirimiInput" class="form-select form-select-sm" name="U_ParaBirimi">
+                                <option value="TRY">TL</option>
+                                <option value="USD">USD</option>
+                                <option value="EUR">EURO</option>
+                                <option value="GBP">GBP</option>
+                                <option value="CHF">CHF</option>
+                                <option value="JPY">JPY</option>
+                                <option value="CAD">CAD</option>
+                                <option value="AUD">AUD</option>
+                                <option value="CNY">CNY</option>
+                                <option value="RUB">RUB</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-2"><label class="small fw-bold">Anlaşılan Kur</label>
+                            <input type="text" id="KurHesapInput" class="form-control form-control-sm format-money" value="1" disabled>
+                            <input type="hidden" id="KurHiddenInput" name="U_Kur" value="1">
+                        </div>
+
+                        <div class="col-md-2"><label class="small fw-bold">Ödeme %</label>
+                            <input type="number" id="YuzdeInput" class="form-control form-control-sm text-center fw-bold text-primary" value="100" min="0" max="100">
+                        </div>
+
+                        <div class="col-md-3"><label class="small fw-bold">Tutar</label>
+                            <input type="text" id="TutarInput" class="form-control form-control-sm format-money" required>
+                            <input type="hidden" id="TutarHiddenInput" name="U_Tutar">
+                        </div>
+
+                        <div class="col-md-3"><label class="small fw-bold">Tutar (₺)</label>
+                            <input type="text" id="TutarTLInput" class="form-control form-control-sm readonly-bg format-money" readonly>
+                            <input type="hidden" id="TutarTLHiddenInput" name="U_TutarTL">
+                        </div>
+
+                        <div class="col-md-3"><label class="small fw-bold">İşlem Tipi</label>
+                            <select id="IslemTipiInput" class="form-select form-select-sm" name="U_IslemTipi">
+                                <option value=""></option>
+                                <option value="X">X</option>
+                                <option value="R">R</option>
+                                <option value="Y">Y</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-3"><label class="small fw-bold">Ödeme Yöntemi</label>
+                            <select class="form-select form-select-sm" name="U_OdemeYontemi">
+                                <option value="Nakit">Nakit</option>
+                                <option value="Çek">Çek</option>
+                                <option value="Senet">Senet</option>
+                                <option value="Havale / EFT">Havale / EFT</option>
+                                <option value="Kredi Kartı / Banka Kartı">Kredi Kartı / Banka Kartı</option>
+                                <option value="Mahsup">Mahsup</option>
+                                <option value="Temlik">Temlik</option>
+                                <option value="Diğer">Diğer</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-3"><label class="small fw-bold">Ödenen Tutar</label>
+                            <input type="text" id="OdenenTutarInput" class="form-control form-control-sm format-money" >
+                            <input type="hidden" id="OdenenTutarHiddenInput" name="U_OdenenTutar">
+                        </div>
+
+                        <div class="col-md-3"><label class="small fw-bold">Ödenen Tutar PB</label>
+                            <select class="form-select form-select-sm" name="U_OdenenTutarPB">
+                                <option value="TRY" selected>TL</option>
+                                <option value="USD">USD</option>
+                                <option value="EUR">EURO</option>
+                                <option value="GBP">GBP</option>
+                                <option value="CHF">CHF</option>
+                                <option value="JPY">JPY</option>
+                                <option value="CAD">CAD</option>
+                                <option value="AUD">AUD</option>
+                                <option value="CNY">CNY</option>
+                                <option value="RUB">RUB</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-4"><label class="small fw-bold">Ödenme Tarihi</label><input type="date" class="form-control form-control-sm" name="U_OdenmeTarihi"></div>
+
+                        <div class="col-md-4"><label class="small fw-bold">Durum</label>
+                            <select class="form-select form-select-sm" name="U_Durum" id="EkleDurum">
+                                <option value="Bekliyor" selected>Bekliyor</option>
+                                <option value="Planlandı">Planlandı</option>
+                                <option value="Özel Onay">Özel Onay</option>
+                                <option value="ÖDENDİ">ÖDENDİ</option>
+                                <option value="Gecikti">Gecikti</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-4"><label class="small fw-bold">Not</label><textarea class="form-control form-control-sm" name="U_Notlar" rows="2"></textarea></div>
+                    </div>
+                </div>
+                <div class="modal-footer py-1"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="submit" class="btn btn-success btn-sm">Ekle</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="duzenleModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="post" asp-action="Guncelle" asp-controller="Rapor79">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="startDate" value="@Model.StartDate.ToString("yyyy-MM-dd")" />
+                <input type="hidden" name="endDate" value="@Model.EndDate.ToString("yyyy-MM-dd")" />
+                
+                <input type="hidden" id="EditDbName" name="DbName" />
+                <input type="hidden" id="EditDocEntry" name="DocEntry" />
+                <input type="hidden" id="EditKaynakFirma" name="U_KaynakFirma" />
+                <input type="hidden" id="EditBagliBelgeTipi" name="U_BagliBelgeTipi" />
+                <input type="hidden" id="EditBagliDocEntry" name="U_BagliDocEntry" />
+                <input type="hidden" id="EditFaturaSiparisNo" name="U_FaturaSiparisNo" />
+
+                <div class="modal-header bg-primary text-white py-2">
+                    <h6 class="modal-title"><i class="fas fa-edit"></i> Ödeme Düzenle</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body bg-light">
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="small fw-bold">Planlanan Tarih</label>
+                            <input type="date" class="form-control form-control-sm" id="EditPlanlananTarih" name="U_PlanlananTarih" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="small fw-bold text-danger">Satınalmacı</label>
+                            <select class="form-select form-select-sm border-danger" id="EditSatinalmaci" name="U_Satinalmaci" required>
+                                <option value="">Yükleniyor...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="small fw-bold">Kurum</label>
+                            <textarea class="form-control form-control-sm" id="EditKurum" name="U_Kurum" rows="2" required></textarea>
+                        </div>
+                        
+                        <div class="col-md-12"><label class="small fw-bold">Ürün/Hizmet</label>
+                            <textarea class="form-control form-control-sm" id="EditUrunHizmet" name="U_UrunHizmet" rows="2"></textarea>
+                        </div>
+                        
+                        <div class="col-md-2"><label class="small fw-bold">Para Birimi</label>
+                            <select id="EditParaBirimi" class="form-select form-select-sm" name="U_ParaBirimi">
+                                <option value="TRY">TL</option>
+                                <option value="USD">USD</option>
+                                <option value="EUR">EURO</option>
+                                <option value="GBP">GBP</option>
+                                <option value="CHF">CHF</option>
+                                <option value="JPY">JPY</option>
+                                <option value="CAD">CAD</option>
+                                <option value="AUD">AUD</option>
+                                <option value="CNY">CNY</option>
+                                <option value="RUB">RUB</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-2"><label class="small fw-bold">Anlaşılan Kur</label>
+                            <input type="text" id="EditKurHesap" class="form-control form-control-sm format-money" value="1" disabled>
+                            <input type="hidden" id="EditKurHidden" name="U_Kur" value="1">
+                        </div>
+
+                        <div class="col-md-4"><label class="small fw-bold">Tutar</label>
+                            <input type="text" id="EditTutar" class="form-control form-control-sm format-money" required>
+                            <input type="hidden" id="EditTutarHidden" name="U_Tutar">
+                        </div>
+                        
+                        <div class="col-md-4"><label class="small fw-bold">Tutar (₺)</label>
+                            <input type="text" id="EditTutarTL" class="form-control form-control-sm readonly-bg format-money" readonly>
+                            <input type="hidden" id="EditTutarTLHidden" name="U_TutarTL">
+                        </div>
+
+                        <div class="col-md-3"><label class="small fw-bold">İşlem Tipi</label>
+                            <select id="EditIslemTipi" class="form-select form-select-sm" name="U_IslemTipi">
+                                <option value=""></option>
+                                <option value="X">X</option>
+                                <option value="R">R</option>
+                                <option value="Y">Y</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-3"><label class="small fw-bold">Ödeme Yöntemi</label>
+                            <select class="form-select form-select-sm" id="EditOdemeYontemi" name="U_OdemeYontemi">
+                                <option value="Nakit">Nakit</option>
+                                <option value="Çek">Çek</option>
+                                <option value="Senet">Senet</option>
+                                <option value="Havale / EFT">Havale / EFT</option>
+                                <option value="Kredi Kartı / Banka Kartı">Kredi Kartı / Banka Kartı</option>
+                                <option value="Mahsup">Mahsup</option>
+                                <option value="Temlik">Temlik</option>
+                                <option value="Diğer">Diğer</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-3"><label class="small fw-bold">Ödenen Tutar</label>
+                            <input type="text" id="EditOdenenTutar" class="form-control form-control-sm format-money" >
+                            <input type="hidden" id="EditOdenenTutarHidden" name="U_OdenenTutar">
+                        </div>
+
+                        <div class="col-md-3"><label class="small fw-bold">Ödenen Tutar PB</label>
+                            <select class="form-select form-select-sm" id="EditOdenenTutarPB" name="U_OdenenTutarPB">
+                                <option value="TRY">TL</option>
+                                <option value="USD">USD</option>
+                                <option value="EUR">EURO</option>
+                                <option value="GBP">GBP</option>
+                                <option value="CHF">CHF</option>
+                                <option value="JPY">JPY</option>
+                                <option value="CAD">CAD</option>
+                                <option value="AUD">AUD</option>
+                                <option value="CNY">CNY</option>
+                                <option value="RUB">RUB</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-3"><label class="small fw-bold">Ödenme Tarihi</label>
+                            <input type="date" class="form-control form-control-sm" id="EditOdenmeTarihi" name="U_OdenmeTarihi">
+                        </div>
+
+                        <div class="col-md-3"><label class="small fw-bold">Durum</label>
+                            <select class="form-select form-select-sm" id="EditDurum" name="U_Durum">
+                                <option value="Bekliyor">Bekliyor</option>
+                                <option value="Planlandı">Planlandı</option>
+                                <option value="Özel Onay">Özel Onay</option>
+                                <option value="ÖDENDİ">ÖDENDİ</option>
+                                <option value="Gecikti">Gecikti</option>
+                            </select>
+                            <input type="hidden" id="EditEskiDurumHidden" name="U_EskiDurum" />
+                        </div>
+
+                        <div class="col-md-3"><label class="small fw-bold">Mutabakat</label>
+                            <select class="form-select form-select-sm" id="EditMutabakat" disabled>
+                                <option value="" selected>-</option>
+                                <option value="Mutabık">Mutabık</option>
+                                <option value="Mutabık Değil">Mutabık Değil</option>
+                            </select>
+                            <input type="hidden" id="EditMutabakatHidden" name="U_MutabakatDurumu" />
+                            <input type="hidden" id="EditMutabakatTarihHidden" name="SonMutabakatTarihi" />
+                        </div>
+
+                        <div class="col-md-3"><label class="small fw-bold">Not</label>
+                            <textarea class="form-control form-control-sm" id="EditNotlar" name="U_Notlar" rows="2"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer py-1">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Güncelle</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="pdfPreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" style="height: 95vh; max-width: 95vw;">
+        <div class="modal-content" style="height: 100%;">
+            <div class="modal-header bg-dark text-white py-2">
+                <h6 class="modal-title"><i class="fas fa-file-pdf text-danger me-2"></i> Belge Önizleme</h6>
+                
+                <div>
+                    <a id="modalYeniSekmeBtn" href="#" target="_blank" rel="noopener" class="btn btn-sm btn-light me-2" title="Belgeyi tarayıcının yeni sekmesinde aç">
+                        <i class="fas fa-up-right-from-square"></i> Yeni sekmede aç
+                    </a>
+                    <a id="modalDownloadBtn" href="#" download class="btn btn-sm btn-success me-3">
+                        <i class="fas fa-download"></i> İndir
+                    </a>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+
+            </div>
+            <div class="modal-body p-0" style="height: calc(100% - 40px); background-color: #525659;">
+                <iframe id="pdfPreviewIframe" src="" style="width: 100%; height: 100%; border: none;"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="logModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white py-2">
+                <h6 class="modal-title"><i class="fas fa-history text-warning me-2"></i> Belge İşlem Geçmişi</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped table-hover m-0" style="font-size: 0.8rem;">
+                        <thead class="table-secondary">
+                            <tr>
+                                <th style="width: 140px;">Tarih</th>
+                                <th style="width: 150px;">İşlemi Yapan</th>
+                                <th style="width: 130px;">İşlem Tipi</th>
+                                <th>Açıklama / Detay</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logTabloBody">
+                            <tr><td colspan="4" class="text-center text-muted">Loglar yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="sistemLoglariModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-secondary text-white py-2">
+                <h6 class="modal-title"><i class="fas fa-list-alt"></i> Sistem İşlem Logları (Silinenler ve Değişiklikler)</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="row g-2 mb-3 align-items-end border-bottom pb-2 mt-2 px-3">
+                <div class="col-auto">
+                    <label class="small fw-bold">Firma Seçin:</label>
+                    <select id="logFirmaSelect" class="form-select form-select-sm border-dark">
+                        @foreach (var comp in Model.Companies)
+                        {
+                            <option value="@comp.DbName">@comp.DisplayName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="small fw-bold">Başlangıç:</label>
+                    <input type="date" id="logStartDate" class="form-control form-control-sm border-dark" />
+                </div>
+                <div class="col-auto">
+                    <label class="small fw-bold">Bitiş:</label>
+                    <input type="date" id="logEndDate" class="form-control form-control-sm border-dark" />
+                </div>
+                <div class="col-auto">
+                    <div class="form-check mb-1">
+                        <input class="form-check-input border-dark" type="checkbox" id="chkSadeceSilinenler">
+                        <label class="form-check-label small fw-bold text-danger" for="chkSadeceSilinenler">
+                            Sadece Silinenler
+                        </label>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <button type="button" id="btnLogGetir" class="btn btn-primary btn-sm"><i class="fas fa-search"></i> Filtrele</button>
+                </div>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive bg-white border">
+                    <table class="table table-sm table-hover m-0" style="font-size: 0.8rem;">
+                        <thead class="table-dark">
+                            <tr>
+                                <th style="width: 140px;">Tarih</th>
+                                <th style="width: 150px;">İşlemi Yapan</th>
+                                <th style="width: 130px;">İşlem Tipi</th>
+                                <th style="width: 80px;">Kayıt No</th>
+                                <th>Açıklama / Detay</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sistemLoglariBody">
+                            <tr><td colspan="5" class="text-center text-muted">Firma seçip 'Logları Getir' butonuna basın.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bir ödemeye ait tüm dekontlar (IT talebi #11) -->
+<div class="modal fade" id="dekontListeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold"><i class="fas fa-paperclip me-2 text-primary"></i>Bu Ödemeye Ait Dekontlar</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="dekontListeGovde"></div>
+            <div class="modal-footer py-1">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="dekontUploadModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white py-2">
+                <h6 class="modal-title"><i class="fas fa-upload"></i> Dekont Yükle & Mail Gönder</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body bg-light">
+                <form id="dekontUploadForm">
+                    <input type="hidden" id="dekontUploadDbName" name="dbName" />
+                    <input type="hidden" id="dekontUploadDocEntry" name="docEntry" />
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Dekont Dosyası (PDF, JPG, PNG)</label>
+                        <input type="file" class="form-control" id="dekontDosya" name="dekontDosya" accept=".pdf,.jpg,.jpeg,.png" required>
+                    </div>
+
+                    @* IT talebi #11: aynı satıra birden çok dekont yüklenebildiği için
+                       hangisinin ne olduğu yazılabilsin. *@
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Açıklama <span class="text-muted fw-normal">(isteğe bağlı)</span></label>
+                        <input type="text" class="form-control" id="dekontAciklama" name="dekontAciklama" maxlength="200"
+                               placeholder="Örn: Beyanname KDV ödemesi / Ardiye ödemesi">
+                        <small class="text-muted d-block mt-1">Aynı ödemeye birden fazla dekont yükleyebilirsiniz; açıklama hangisinin ne olduğunu ayırt etmenizi sağlar.</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Bilgilendirme Maili Gönderilecek Kişi</label>
+                        <select class="form-select" id="secilenMail" name="secilenMail">
+                            <option value="">-- Mail Gönderme (Sadece Sisteme Yükle) --</option>
+                            <option value="kullanici@ornek.local">Buse Kar (kullanici@ornek.local)</option>
+                            <option value="kullanici@ornek.local">Tolga Yaman (kullanici@ornek.local)</option>
+                            <option value="kullanici@ornek.local">Onur Bal (kullanici@ornek.local)</option>
+                            <option value="kullanici@ornek.local">Özge İsen (kullanici@ornek.local)</option>
+                            <option value="kullanici@ornek.local">Sevgi Ay (kullanici@ornek.local)</option>
+                            <option value="kullanici@ornek.local">Personel 17 (kullanici@ornek.local)</option>
+                            @* IT talebi #11: adresler Cari Ekstre > Cari Notları listesinden alındı. *@
+                            <option value="kullanici@ornek.local">Hülya Er (kullanici@ornek.local)</option>
+                            <option value="kullanici@ornek.local">Nazlı Erdem (kullanici@ornek.local)</option>
+                            <option value="kullanici@ornek.local">Ebru Tekin (kullanici@ornek.local)</option>
+                        </select>
+                        <small class="text-muted d-block mt-1">Seçim yaparsanız dosya yüklenirken ek olarak mail de atılır.</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer py-1">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-success btn-sm" id="btnDekontKaydet"><i class="fas fa-save"></i> Yükle</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Bulanık/tıklanamaz pencere düzeltmesi.
+        // Layout @@RenderBody()'yi .table-container içinde render ediyor; bu
+        // sayfadaki .table-container kuralı oraya da uyduğu için oluşan
+        // stacking context modali backdrop'un altında bırakıyordu.
+        (function modalleriBodyeTasi() {
+            var idler = ['topluDekontUploadModal', 'odenenlerModal', 'detayModal', 'satirCekSecimModal', 'portfoyCekEkleModal', 'ekleModal', 'duzenleModal', 'pdfPreviewModal', 'logModal', 'sistemLoglariModal', 'dekontListeModal', 'dekontUploadModal', 'mukerrerModal'];
+            idler.forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el && el.parentElement !== document.body) {
+                    document.body.appendChild(el);
+                }
+            });
+        })();
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <script>
+        // Kaydirma payi: sabit arac cubugu sarabildigi icin yuksekligi
+        // degisken. Sabit 90px kullanildiginda hedef satir cubugun
+        // arkasinda kaliyordu.
+        // NOT: Bu fonksiyon her acilista gerekir (sekme geri yukleme ve
+        // hizli-git dugmeleri cagirir). Eskiden yalnizca TempData["Success"]
+        // doluyken cizilen blogun icindeydi; normal acilista tanimsiz kalip
+        // "kaydirmaPayi is not defined" hatasi veriyordu.
+        function kaydirmaPayi() {
+            var cubuk = document.querySelector('.top-toolbar');
+            return (cubuk ? cubuk.offsetHeight : 78) + 16;
+        }
+    </script>
+
+    @if (TempData["Success"] != null)
+    {
+        <script>
+            $(document).ready(function () {
+                toastr.success('@Html.Raw(TempData["Success"])');
+            });
+        </script>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <script>
+            $(document).ready(function () {
+                toastr.error('@Html.Raw(TempData["Error"])');
+            });
+        </script>
+    }
+
+    <script src="~/js/rapor79.js" asp-append-version="true"></script>
+
+<script>
+    // Sabit arac cubugu sarabildigi icin yuksekligi degisken. Govde ust
+    // boslugunu her zaman cubugun GERCEK yuksekligine esitliyoruz; aksi
+    // halde alttaki butonlar cubugun arkasinda kaliyordu.
+    (function () {
+        function toolbarBosluguAyarla() {
+            var cubuk = document.querySelector('.top-toolbar');
+            if (!cubuk) return;
+            var y = cubuk.offsetHeight;
+            // Sayfa ici kaydirma payi da ayni yukseklige baglanir
+            document.documentElement.style.setProperty('--cubuk-yuksekligi', y + 'px');
+        }
+
+        window.toolbarBosluguAyarla = toolbarBosluguAyarla;
+
+        document.addEventListener('DOMContentLoaded', toolbarBosluguAyarla);
+        window.addEventListener('resize', toolbarBosluguAyarla);
+        window.addEventListener('load', toolbarBosluguAyarla);
+
+        // Icerik sonradan degisirse (filtre, rol secimi) tekrar olc
+        if (window.ResizeObserver) {
+            document.addEventListener('DOMContentLoaded', function () {
+                var cubuk = document.querySelector('.top-toolbar');
+                if (cubuk) new ResizeObserver(toolbarBosluguAyarla).observe(cubuk);
+            });
+        }
+    })();
+</script>
+
+@* ============================================================
+   SUTUN SECIMI (kisiye ozel)
+   Odeme listesi tablolarindaki 23 sutundan istenenler gizlenir.
+   Tercih Z_KullaniciTercih / Rapor79GizliKolon'a "3,5,9" olarak yazilir.
+   - Normal hucreler CSS ile (nth-child) gizlenir; sayfa acilirken sunucu
+     ayni CSS'i urettigi icin titreme olmaz.
+   - colspan iceren satirlar (TOPLAM, "Kayit yok", detay alt satiri)
+     CSS ile gizlenemez; JS bu satirlarin colspan'ini gorunen sutun
+     sayisina gore yeniden hesaplar. Sonradan eklenen satirlar icin
+     MutationObserver ayni duzeltmeyi tekrarlar.
+   ============================================================ *@
+<div class="modal fade" id="kolonSecimModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold"><i class="fas fa-columns me-2 text-primary"></i>Görünecek Sütunlar</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-2">İşaretli sütunlar görünür. Seçim yalnızca sizin hesabınıza kaydedilir ve tüm firmalar için geçerlidir.</p>
+                <div class="d-flex gap-2 mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="kolonTumunuSec">Tümünü seç</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="kolonTumunuKaldir">Tümünü kaldır</button>
+                </div>
+                <div id="kolonListesi" class="row g-1"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-light" id="kolonVarsayilan"><i class="fas fa-rotate-left me-1"></i>Varsayılana dön</button>
+                <button type="button" class="btn btn-sm btn-primary" id="kolonKaydet"><i class="fas fa-save me-1"></i>Kaydet ve uygula</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        var TERCIH_ANAHTARI = 'Rapor79GizliKolon';
+        var SUTUN_SAYISI = 23;
+        var KILITLI = [1];   // secim kutusu sutunu her zaman gorunur
+        var gizli = new Set(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(gizliKolonlar)));
+
+        var stil = document.getElementById('r79KolonStil');
+        var sayac = document.getElementById('kolonGizliSayac');
+
+        // Sutun basliklari ilk tablonun basligindan okunur.
+        function sutunAdlari() {
+            var adlar = [];
+            var bas = document.querySelector('.main-payment-table thead tr:nth-child(2)');
+            if (!bas) return adlar;
+            Array.prototype.forEach.call(bas.children, function (th, i) {
+                var span = th.querySelector('.header-content span');
+                var ad = span ? span.textContent : th.textContent;
+                ad = (ad || '').replace(/\s+/g, ' ').trim();
+                if (i === 0) ad = 'Seçim kutusu';
+                if (ad === '#') ad = '# (Satır No)';
+                adlar.push(ad || ('Sütun ' + (i + 1)));
+            });
+            return adlar;
+        }
+
+        function stilYaz() {
+            var kurallar = [];
+            gizli.forEach(function (k) {
+                kurallar.push(
+                    '.main-payment-table thead tr:nth-child(2) > th:nth-child(' + k + '), ' +
+                    '.main-payment-table tbody > tr:not(:has(> td[colspan])) > td:nth-child(' + k + ') { display: none !important; }');
+            });
+            if (stil) stil.textContent = kurallar.join('\n');
+            if (sayac) {
+                sayac.textContent = gizli.size + ' gizli';
+                sayac.style.display = gizli.size ? '' : 'none';
+            }
+        }
+
+        // colspan iceren satirlar: her hucrenin kapsadigi sutunlardan gorunenleri say.
+        function colspanDuzelt() {
+            var satirlar = document.querySelectorAll('.main-payment-table tr');
+            Array.prototype.forEach.call(satirlar, function (tr) {
+                var hucreler = tr.children;
+                var colspanVar = false;
+                for (var i = 0; i < hucreler.length; i++) {
+                    if (hucreler[i].dataset.orjColspan || hucreler[i].colSpan > 1) { colspanVar = true; break; }
+                }
+                if (!colspanVar) return;   // duz satirlar CSS ile hallolur
+
+                var c = 1;
+                for (var j = 0; j < hucreler.length; j++) {
+                    var h = hucreler[j];
+                    var orj = parseInt(h.dataset.orjColspan, 10);
+                    if (!orj) { orj = h.colSpan || 1; h.dataset.orjColspan = orj; }
+                    var gorunen = 0;
+                    for (var k = c; k < c + orj; k++) if (!gizli.has(k)) gorunen++;
+                    if (gorunen === 0) {
+                        h.style.display = 'none';
+                    } else {
+                        h.style.display = '';
+                        if (orj > 1) h.colSpan = gorunen;
+                    }
+                    c += orj;
+                }
+            });
+        }
+
+        function uygula() { stilYaz(); colspanDuzelt(); }
+
+        // Sonradan eklenen satirlar (detay alt satiri, yeni kayit) icin.
+        var bekleyen = null;
+        function gozlemBasla() {
+            if (!window.MutationObserver) return;
+            var g = new MutationObserver(function () {
+                clearTimeout(bekleyen);
+                bekleyen = setTimeout(colspanDuzelt, 50);
+            });
+            Array.prototype.forEach.call(document.querySelectorAll('.main-payment-table tbody'), function (tb) {
+                g.observe(tb, { childList: true });
+            });
+        }
+
+        function listeCiz() {
+            var kap = document.getElementById('kolonListesi');
+            if (!kap) return;
+            var adlar = sutunAdlari();
+            var html = '';
+            for (var i = 1; i <= SUTUN_SAYISI; i++) {
+                var kilitli = KILITLI.indexOf(i) >= 0;
+                html += '<div class="col-6">' +
+                    '<div class="form-check">' +
+                    '<input class="form-check-input kolon-kutu" type="checkbox" id="kolonKutu' + i + '" value="' + i + '"' +
+                    (gizli.has(i) ? '' : ' checked') + (kilitli ? ' disabled' : '') + '>' +
+                    '<label class="form-check-label small" for="kolonKutu' + i + '">' + (i) + '. ' +
+                    (adlar[i - 1] || ('Sütun ' + i)) + (kilitli ? ' <span class="text-muted">(sabit)</span>' : '') + '</label>' +
+                    '</div></div>';
+            }
+            kap.innerHTML = html;
+        }
+
+        function secimdenOku() {
+            var yeni = new Set();
+            Array.prototype.forEach.call(document.querySelectorAll('#kolonListesi .kolon-kutu'), function (k) {
+                var i = parseInt(k.value, 10);
+                if (!k.checked && KILITLI.indexOf(i) < 0) yeni.add(i);
+            });
+            return yeni;
+        }
+
+        function kaydet(yeniGizli, bitti) {
+            var deger = Array.from(yeniGizli).sort(function (a, b) { return a - b; }).join(',');
+            var veri = new FormData();
+            veri.append('anahtar', TERCIH_ANAHTARI);
+            veri.append('deger', deger);   // bos = kayit silinir (varsayilan)
+            fetch('/Home/KullaniciTercihKaydet', { method: 'POST', body: veri })
+                .then(function (r) { return r.json(); })
+                .then(function (c) {
+                    if (!c || !c.success) { toastr.error((c && c.message) || 'Sütun tercihi kaydedilemedi.'); bitti(false); return; }
+                    bitti(true);
+                })
+                .catch(function () { toastr.error('Sunucuya ulaşılamadı.'); bitti(false); });
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            uygula();
+            gozlemBasla();
+
+            var modalEl = document.getElementById('kolonSecimModal');
+            var btn = document.getElementById('kolonSecimBtn');
+            if (!modalEl || !btn) return;
+
+            btn.addEventListener('click', function () {
+                listeCiz();
+                bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            });
+
+            document.getElementById('kolonTumunuSec').addEventListener('click', function () {
+                Array.prototype.forEach.call(document.querySelectorAll('#kolonListesi .kolon-kutu'), function (k) { k.checked = true; });
+            });
+            document.getElementById('kolonTumunuKaldir').addEventListener('click', function () {
+                Array.prototype.forEach.call(document.querySelectorAll('#kolonListesi .kolon-kutu'), function (k) { if (!k.disabled) k.checked = false; });
+            });
+
+            document.getElementById('kolonKaydet').addEventListener('click', function () {
+                var yeni = secimdenOku();
+                var dugme = this; dugme.disabled = true;
+                kaydet(yeni, function (ok) {
+                    dugme.disabled = false;
+                    if (!ok) return;
+                    gizli = yeni;
+                    uygula();
+                    bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+                    toastr.success(gizli.size ? gizli.size + ' sütun gizlendi.' : 'Tüm sütunlar görünür.');
+                });
+            });
+
+            document.getElementById('kolonVarsayilan').addEventListener('click', function () {
+                var dugme = this; dugme.disabled = true;
+                kaydet(new Set(), function (ok) {
+                    dugme.disabled = false;
+                    if (!ok) return;
+                    gizli = new Set();
+                    uygula();
+                    bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+                    toastr.success('Sütunlar varsayılana döndü.');
+                });
+            });
+        });
+    })();
+</script>
+
+}

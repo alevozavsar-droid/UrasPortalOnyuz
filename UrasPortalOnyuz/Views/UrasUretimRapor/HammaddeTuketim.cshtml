@@ -1,0 +1,225 @@
+@{
+    ViewData["Title"] = "Hammadde Tüketim";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-droplet me-2 text-primary"></i> Hammadde Tüketim Raporu</h2>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-success btn-sm" onclick="excelAktar()"><i class="fas fa-file-excel me-1"></i>Excel</button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="window.print()"><i class="fas fa-print me-1"></i>Yazdır</button>
+    </div>
+</div>
+<p class="text-muted mb-3">Üretim bileşen çıkışlarından (iş emri bazlı) hesaplanır.</p>
+
+<div class="card dash-card mb-3">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-2"><label class="form-label small fw-bold">Başlangıç</label><input type="date" id="fBas" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-2"><label class="form-label small fw-bold">Bitiş</label><input type="date" id="fBit" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small fw-bold">Bileşen Tipi</label>
+                <select id="fTip" class="form-select form-select-sm" onchange="yukle()">
+                    <option value="H">Hammadde</option><option value="YM">Yarı Mamul</option><option value="">Tümü</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3"><label class="form-label small fw-bold">Kalem ara (tabloda)</label><input type="text" id="fArama" class="form-control form-control-sm" placeholder="Kod veya ad…" oninput="cizTablo()"></div>
+            <div class="col-12 col-md-3 d-flex gap-2 align-items-end">
+                <button class="btn btn-outline-secondary btn-sm" onclick="hizli(7)">7g</button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="hizli(30)">30g</button>
+                <button class="btn btn-primary btn-sm ms-auto" onclick="yukle()"><i class="fas fa-rotate me-1"></i>Getir</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="yukleniyor" class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm me-2"></span>Rapor hazırlanıyor…</div>
+
+<div id="kapsamYok" class="alert alert-warning d-none">
+    <i class="fas fa-eye-slash me-1"></i>
+    <b>Hammadde görüntüleme yetkiniz yok.</b> Yalnızca yetkili olduğunuz kalem grupları raporlanır.
+</div>
+
+<div id="icerik" style="display:none;">
+    <div class="row g-3 mb-3" id="kpiSatiri"></div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-12 col-xl-7">
+            <div class="card dash-card h-100">
+                <div class="card-header bg-white fw-bold small text-uppercase text-muted">En Çok Tüketilen 12 Kalem (kg)</div>
+                <div class="card-body"><div id="chartTop" style="min-height:280px;"></div></div>
+            </div>
+        </div>
+        <div class="col-12 col-xl-5">
+            <div class="card dash-card h-100">
+                <div class="card-header bg-white fw-bold small text-uppercase text-muted">Günlük Tüketim (kg)</div>
+                <div class="card-body"><div id="chartGun" style="min-height:280px;"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card dash-card">
+        <div class="card-header bg-white">
+            <span class="fw-bold small text-uppercase text-muted">Kalem Bazlı Tüketim <span id="kalemSayisi" class="badge bg-primary ms-1">0</span></span>
+            <span class="small text-muted ms-2">Satıra tıklayınca parti ve ürün kırılımı açılır</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-custom mb-0">
+                <thead><tr><th></th><th>Kalem</th><th class="text-end">Tüketim</th><th class="text-end">Pay</th><th class="text-end">İş Emri</th><th class="text-end">Ürün</th><th class="text-end">Mevcut Stok</th></tr></thead>
+                <tbody id="tbodyKalemler"></tbody>
+            </table>
+            <div id="bosMesaji" class="text-center text-muted py-4" style="display:none;"><i class="fas fa-inbox me-1"></i>Seçilen aralıkta tüketim yok.</div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; color: #5a5c69; }
+    .kpi-card { border-radius: 10px; border: 1px solid #e3e6f0; padding: 12px 16px; background: #fff; }
+    .kpi-card .l { font-size: .68rem; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: #858796; }
+    .kpi-card .v { font-size: 1.05rem; font-weight: 700; color: #1e293b; }
+    .kpi-card .s { font-size: .72rem; color: #94a3b8; }
+    .satir-ac { cursor: pointer; }
+    .satir-ac:hover { background: #f8f9fc; }
+    .alt-detay { background: #fbfcfe; }
+    .rozet { font-size: .68rem; font-weight: 700; padding: .2em .5em; border-radius: 6px; }
+    .rozet-mavi { background:#eaf2ff; color:#2a5fb0; } .rozet-yesil { background:#e6f7ee; color:#0f9d58; } .rozet-gri { background:#f1f3f5; color:#495057; }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script>
+    let veriSon = null;
+    let acikSatirlar = {};
+    let chartTop = null, chartGun = null;
+    function fmt(n, d) { return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+    function toplamMiktar() { return (veriSon?.Kalemler || []).reduce((a, k) => a + (k.Miktar || 0), 0); }
+    function toplamIsEmri() { return (veriSon?.Kalemler || []).reduce((a, k) => a + (k.IsEmri || 0), 0); }
+    function kaynakAd(k) { return { S: 'Silo', M: 'Manuel okutma', Y: 'Yarı mamul lotu', O: 'Otomatik (FIFO)' }[k] || k; }
+
+    function excelAktar() {
+        if (!veriSon) return;
+        raporExcel('Hammadde_Tuketim_' + document.getElementById('fBas').value + '_' + document.getElementById('fBit').value, [
+            { ad: 'Kalemler', kolonlar: [{ k: 'ItemCode', b: 'Kalem Kodu' }, { k: 'ItemName', b: 'Kalem' }, { k: 'Miktar', b: 'Tüketim' }, { k: 'Birim', b: 'Birim' }, { k: 'IsEmri', b: 'İş Emri' }, { k: 'UrunSayisi', b: 'Ürün Sayısı' }, { k: 'MevcutStok', b: 'Mevcut Stok' }], satirlar: veriSon.Kalemler || [] },
+            { ad: 'Partiler', kolonlar: [{ k: 'ItemCode', b: 'Kalem Kodu' }, { k: r => (veriSon.Kalemler.find(x => x.ItemCode === r.ItemCode) || {}).ItemName || '', b: 'Kalem' }, { k: 'Parti', b: 'Parti' }, { k: 'Miktar', b: 'Miktar' }, { k: 'IsEmri', b: 'İş Emri' }, { k: 'IlkKullanim', b: 'İlk Kullanım' }, { k: 'SonKullanim', b: 'Son Kullanım' }, { k: r => kaynakAd(r.Kaynak), b: 'Kaynak' }], satirlar: veriSon.Partiler || [] },
+            { ad: 'Ürünler', kolonlar: [{ k: 'ItemCode', b: 'Kalem Kodu' }, { k: 'UrunKodu', b: 'Ürün Kodu' }, { k: 'UrunAdi', b: 'Ürün' }, { k: 'Miktar', b: 'Miktar' }, { k: 'IsEmri', b: 'İş Emri' }], satirlar: veriSon.Urunler || [] },
+            { ad: 'Günlük', kolonlar: [{ k: r => (r.Gun || '').split('-').reverse().join('.'), b: 'Gün' }, { k: 'Miktar', b: 'Tüketim' }, { k: 'IsEmri', b: 'İş Emri' }], satirlar: veriSon.Gunluk || [] }
+        ]);
+    }
+
+    function hizli(gun) {
+        const bit = new Date(); const bas = new Date(); bas.setDate(bas.getDate() - gun);
+        document.getElementById('fBas').value = bas.toISOString().slice(0, 10);
+        document.getElementById('fBit').value = bit.toISOString().slice(0, 10);
+        yukle();
+    }
+
+    async function yukle() {
+        document.getElementById('yukleniyor').style.display = '';
+        document.getElementById('icerik').style.display = 'none';
+        const qs = new URLSearchParams({ bas: document.getElementById('fBas').value, bit: document.getElementById('fBit').value, tip: document.getElementById('fTip').value });
+        const res = await fetch('/UrasUretimRapor/GetHammaddeTuketim?' + qs.toString()).then(r => r.json());
+        document.getElementById('yukleniyor').style.display = 'none';
+        if (!res.success) { alert('Rapor alınamadı: ' + res.message); return; }
+        veriSon = res.data;
+        acikSatirlar = {};
+        document.getElementById('kapsamYok').classList.toggle('d-none', !veriSon.KapsamYok);
+        document.getElementById('icerik').style.display = '';
+        ciz();
+    }
+
+    function ciz() {
+        const v = veriSon;
+        const tm = toplamMiktar();
+        let kpi = `
+            <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #eb6834"><div class="l">Toplam Tüketim</div><div class="v">${fmt(tm, 0)} <small>kg</small></div><div class="s">${v.Kalemler.length} kalem</div></div></div>
+            <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #2a78d6"><div class="l">İş Emri</div><div class="v">${fmt(toplamIsEmri(), 0)}</div><div class="s">bileşen çıkışı yapılan</div></div></div>`;
+        if (v.Kalemler.length) {
+            kpi += `<div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #1baf7a"><div class="l">En Çok Tüketilen</div><div class="v" style="font-size:.9rem">${v.Kalemler[0].ItemName || v.Kalemler[0].ItemCode}</div><div class="s">${fmt(v.Kalemler[0].Miktar, 0)} ${v.Kalemler[0].Birim}</div></div></div>`;
+        }
+        (v.KaynakDagilimi || []).slice(0, 3).forEach(kd => {
+            kpi += `<div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #4a3aa7"><div class="l">${kd.KaynakAd}</div><div class="v">${fmt(kd.Miktar, 0)} <small>kg</small></div><div class="s">${kd.Satir} satır</div></div></div>`;
+        });
+        document.getElementById('kpiSatiri').innerHTML = kpi;
+
+        cizTablo();
+
+        if (chartTop) chartTop.destroy();
+        const top12 = [...v.Kalemler].slice(0, 12);
+        chartTop = new ApexCharts(document.getElementById('chartTop'), {
+            chart: { type: 'bar', height: 280, toolbar: { show: false } },
+            series: [{ name: 'Tüketim', data: top12.map(k => k.Miktar) }],
+            xaxis: { categories: top12.map(k => k.ItemName || k.ItemCode) },
+            colors: ['#eb6834'],
+            plotOptions: { bar: { horizontal: true, borderRadius: 4 } },
+            dataLabels: { enabled: false }
+        });
+        chartTop.render();
+
+        if (chartGun) chartGun.destroy();
+        chartGun = new ApexCharts(document.getElementById('chartGun'), {
+            chart: { type: 'area', height: 280, toolbar: { show: false } },
+            series: [{ name: 'Tüketim', data: (v.Gunluk || []).map(g => g.Miktar) }],
+            xaxis: { categories: (v.Gunluk || []).map(g => g.Gun) },
+            colors: ['#eb6834'],
+            stroke: { curve: 'smooth', width: 2 },
+            dataLabels: { enabled: false }
+        });
+        chartGun.render();
+    }
+
+    function partiler(itemCode) { return (veriSon.Partiler || []).filter(p => p.ItemCode === itemCode); }
+    function urunler(itemCode) { return (veriSon.Urunler || []).filter(u => u.ItemCode === itemCode); }
+
+    function cizTablo() {
+        const arama = (document.getElementById('fArama').value || '').toLowerCase();
+        const list = (veriSon.Kalemler || []).filter(k => !arama || (k.ItemCode || '').toLowerCase().includes(arama) || (k.ItemName || '').toLowerCase().includes(arama));
+        document.getElementById('kalemSayisi').textContent = list.length;
+        document.getElementById('bosMesaji').style.display = list.length ? 'none' : '';
+        const enBuyuk = veriSon.Kalemler[0] ? veriSon.Kalemler[0].Miktar : 1;
+
+        document.getElementById('tbodyKalemler').innerHTML = list.map(k => {
+            const acik = !!acikSatirlar[k.ItemCode];
+            const oran = enBuyuk ? Math.round(k.Miktar * 100 / enBuyuk) : 0;
+            let detay = '';
+            if (acik) {
+                const pRows = partiler(k.ItemCode).map(p => `
+                    <tr><td><a href="/UrasUretimRapor/Izlenebilirlik?itemCode=${encodeURIComponent(k.ItemCode)}&parti=${encodeURIComponent(p.Parti)}">${p.Parti}</a></td>
+                        <td class="text-end">${fmt(p.Miktar, 3)}</td><td class="text-end">${p.IsEmri}</td><td class="small">${p.IlkKullanim} &ndash; ${p.SonKullanim}</td>
+                        <td>${p.Kaynak ? `<span class="rozet rozet-mavi">${kaynakAd(p.Kaynak)}</span>` : ''}</td></tr>`).join('') || '<tr><td colspan="5" class="text-muted">Partisiz kalem</td></tr>';
+                const uRows = urunler(k.ItemCode).map(u => `
+                    <tr><td>${u.UrunAdi || u.UrunKodu}<div class="text-muted small">${u.UrunKodu}</div></td><td class="text-end">${fmt(u.Miktar, 3)}</td><td class="text-end">${u.IsEmri}</td></tr>`).join('') || '<tr><td colspan="3" class="text-muted">Kayıt yok</td></tr>';
+                detay = `
+                    <tr class="alt-detay"><td></td><td colspan="6">
+                        <div class="row g-3 py-2">
+                            <div class="col-12 col-lg-6">
+                                <div class="fw-bold small text-uppercase text-muted mb-1">Parti kırılımı</div>
+                                <table class="table table-sm table-custom mb-0"><thead><tr><th>Parti</th><th class="text-end">Miktar</th><th class="text-end">İş Emri</th><th>İlk&ndash;Son</th><th>Kaynak</th></tr></thead><tbody>${pRows}</tbody></table>
+                            </div>
+                            <div class="col-12 col-lg-6">
+                                <div class="fw-bold small text-uppercase text-muted mb-1">Kullanıldığı ürünler</div>
+                                <table class="table table-sm table-custom mb-0"><thead><tr><th>Ürün</th><th class="text-end">Miktar</th><th class="text-end">İş Emri</th></tr></thead><tbody>${uRows}</tbody></table>
+                            </div>
+                        </div>
+                    </td></tr>`;
+            }
+            return `
+                <tr class="satir-ac" onclick="acikSatirlar['${k.ItemCode}']=!acikSatirlar['${k.ItemCode}']; cizTablo();">
+                    <td class="text-muted"><i class="fas fa-chevron-${acik ? 'down' : 'right'}"></i></td>
+                    <td><span class="fw-bold">${k.ItemName || k.ItemCode}</span><div class="text-muted small">${k.ItemCode}</div></td>
+                    <td class="text-end fw-bold">${fmt(k.Miktar, 2)} <span class="text-muted">${k.Birim}</span></td>
+                    <td class="text-end">${oran}%</td>
+                    <td class="text-end">${k.IsEmri}</td>
+                    <td class="text-end">${k.UrunSayisi}</td>
+                    <td class="text-end">${fmt(k.MevcutStok, 2)}</td>
+                </tr>${detay}`;
+        }).join('');
+    }
+
+    (function () {
+        const bit = new Date(); const bas = new Date(); bas.setDate(bas.getDate() - 30);
+        document.getElementById('fBas').value = bas.toISOString().slice(0, 10);
+        document.getElementById('fBit').value = bit.toISOString().slice(0, 10);
+    })();
+    yukle();
+</script>

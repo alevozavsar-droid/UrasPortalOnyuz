@@ -1,0 +1,146 @@
+@{ ViewData["Title"] = "Yaşlandırma Formu"; }
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-hourglass-half me-2 text-primary"></i> Yaşlandırma Formu</h2>
+</div>
+<p class="text-muted mb-3">Ürün yaşlandırma takibi — başlangıç (M1/M2) ve 4/9/14 gün sonrası ölçümler.</p>
+
+<div class="card dash-card mb-3">
+    <div class="card-body d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm" onclick="formlariYukle()"><i class="fas fa-rotate me-1"></i>Formları Getir</button>
+        <button class="btn btn-primary btn-sm" onclick="yeniForm()"><i class="fas fa-plus me-1"></i>Yeni Form</button>
+    </div>
+</div>
+
+<div class="card dash-card mb-3" id="gecmisKart" style="display:none;">
+    <div class="card-header bg-white fw-bold small text-uppercase text-muted">Formlar <span id="formSayisi" class="badge bg-primary ms-1">0</span></div>
+    <div class="table-responsive">
+        <table class="table table-hover table-custom mb-0">
+            <thead><tr><th>Tarih</th><th>Form No</th><th>Kontrol Eden</th><th>Onaylayan</th><th class="text-end">Satır</th><th></th></tr></thead>
+            <tbody id="tbodyFormlar"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card dash-card" id="formKart" style="display:none;">
+    <div class="card-header bg-white fw-bold small text-uppercase text-muted">Form</div>
+    <div class="card-body">
+        <div class="row g-2 mb-3">
+            <div class="col-6 col-md-2"><label class="form-label small">Form Tarihi</label><input type="date" id="mFormDate" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-2"><label class="form-label small">Form No</label><input id="mFormNo" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-2"><label class="form-label small">Revizyon</label><input id="mRev" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-2"><label class="form-label small">Sayfa</label><input id="mPage" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-2"><label class="form-label small">Kontrol Eden</label><input id="mCtrlBy" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-2"><label class="form-label small">Onaylayan</label><input id="mAppBy" class="form-control form-control-sm"></div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-bold small text-uppercase text-muted">Satırlar</span>
+            <button class="btn btn-outline-primary btn-sm" onclick="satirEkle()"><i class="fas fa-plus me-1"></i>Satır Ekle</button>
+        </div>
+        <div id="satirlarKapsayici"></div>
+        <div class="mt-3 d-flex gap-2">
+            <button class="btn btn-primary" onclick="formKaydet()"><i class="fas fa-save me-1"></i>Kaydet</button>
+            <button class="btn btn-outline-success" onclick="pdfIndir()"><i class="fas fa-file-pdf me-1"></i>PDF</button>
+            <button class="btn btn-outline-secondary" onclick="document.getElementById('formKart').style.display='none';">Kapat</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 12px; }
+    .table-custom input { font-size: 11px; padding: 2px 4px; width: 100%; }
+    .aging-satir { border: 1px solid #e3e6f0; border-radius: 10px; padding: 10px; margin-bottom: 10px; }
+    .aging-satir .baslik-satir { display: flex; gap: 8px; margin-bottom: 6px; align-items: end; }
+    .aging-donem { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; font-size: 11px; margin-bottom: 4px; }
+    .aging-donem-baslik { font-weight: 700; color: #858796; text-transform: uppercase; font-size: 10px; margin-top: 6px; }
+</style>
+
+<script>
+    let satirlar = [], duzenlenenDocEntry = null;
+    function el(id) { return document.getElementById(id); }
+    const donemler = [
+        { pre: 'M1', ad: 'Başlangıç 1' }, { pre: 'M2', ad: 'Başlangıç 2' },
+        { pre: 'D4', ad: '4 Gün' }, { pre: 'D9', ad: '9 Gün' }, { pre: 'D14', ad: '14 Gün' }
+    ];
+
+    async function formlariYukle() {
+        const res = await fetch('/UrasUretimKalite/GetAgingForms').then(r => r.json());
+        if (!res.success) { alert('Formlar alınamadı: ' + res.message); return; }
+        const liste = res.data || [];
+        el('gecmisKart').style.display = '';
+        el('formSayisi').textContent = liste.length;
+        el('tbodyFormlar').innerHTML = liste.map(f => `
+            <tr><td>${(f.FormDate || '').slice(0, 10)}</td><td>${f.FormNo || ''}</td><td>${f.ControlledBy || ''}</td><td>${f.ApprovedBy || ''}</td>
+                <td class="text-end">${(f.Rows || []).length}</td>
+                <td><button class="btn btn-sm btn-outline-primary" onclick='formuAc(${JSON.stringify(f).replace(/'/g, "&apos;")})'>Aç</button></td></tr>`).join('')
+            || '<tr><td colspan="6" class="text-center text-muted py-3">Kayıt yok.</td></tr>';
+    }
+
+    function yeniForm() {
+        duzenlenenDocEntry = null;
+        el('mFormDate').value = new Date().toISOString().slice(0, 10);
+        el('mFormNo').value = ''; el('mRev').value = ''; el('mPage').value = ''; el('mCtrlBy').value = ''; el('mAppBy').value = '';
+        satirlar = [];
+        cizSatirlar();
+        el('formKart').style.display = '';
+    }
+
+    function formuAc(f) {
+        duzenlenenDocEntry = f.DocEntry;
+        el('mFormDate').value = (f.FormDate || '').slice(0, 10);
+        el('mFormNo').value = f.FormNo || ''; el('mRev').value = f.Rev || ''; el('mPage').value = f.Page || '';
+        el('mCtrlBy').value = f.ControlledBy || ''; el('mAppBy').value = f.ApprovedBy || '';
+        satirlar = (f.Rows || []).map(r => ({ ...r }));
+        cizSatirlar();
+        el('formKart').style.display = '';
+        el('formKart').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function satirEkle() { satirlar.push({}); cizSatirlar(); }
+    function satirSil(i) { satirlar.splice(i, 1); cizSatirlar(); }
+    function satirGuncelle(i, alan, deger, sayi) { satirlar[i][alan] = sayi ? (deger === '' ? null : Number(deger)) : deger; }
+
+    function cizSatirlar() {
+        el('satirlarKapsayici').innerHTML = satirlar.map((s, i) => `
+            <div class="aging-satir">
+                <div class="baslik-satir">
+                    <div style="flex:2"><label class="form-label small mb-0">Ürün Adı</label><input class="form-control form-control-sm" value="${s.ProdName || ''}" onchange="satirGuncelle(${i},'ProdName',this.value)"></div>
+                    <div style="flex:1"><label class="form-label small mb-0">Kazan</label><input class="form-control form-control-sm" value="${s.BoilerNo || ''}" onchange="satirGuncelle(${i},'BoilerNo',this.value)"></div>
+                    <div style="flex:1"><label class="form-label small mb-0">Yaşl. Tarihi</label><input type="date" class="form-control form-control-sm" value="${(s.AgingDate || '').slice(0, 10)}" onchange="satirGuncelle(${i},'AgingDate',this.value)"></div>
+                    <div style="flex:1"><label class="form-label small mb-0">Sorumlu</label><input class="form-control form-control-sm" value="${s.Responsible || ''}" onchange="satirGuncelle(${i},'Responsible',this.value)"></div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="satirSil(${i})"><i class="fas fa-trash"></i></button>
+                </div>
+                <div class="mb-1"><label class="form-label small mb-0">Açıklama</label><input class="form-control form-control-sm" value="${s.Description || ''}" onchange="satirGuncelle(${i},'Description',this.value)"></div>
+                ${donemler.map(d => `
+                    <div class="aging-donem-baslik">${d.ad}</div>
+                    <div class="aging-donem">
+                        <div><label>Tarih</label><input type="date" class="form-control form-control-sm" value="${(s[d.pre + 'Date'] || '').slice(0, 10)}" onchange="satirGuncelle(${i},'${d.pre}Date',this.value)"></div>
+                        <div><label>Visk.</label><input type="number" step="0.01" class="form-control form-control-sm" value="${s[d.pre + 'Visc'] ?? ''}" onchange="satirGuncelle(${i},'${d.pre}Visc',this.value,true)"></div>
+                        <div><label>Sıcaklık</label><input type="number" step="0.01" class="form-control form-control-sm" value="${s[d.pre + 'Temp'] ?? ''}" onchange="satirGuncelle(${i},'${d.pre}Temp',this.value,true)"></div>
+                        <div><label>pH</label><input type="number" step="0.01" class="form-control form-control-sm" value="${s[d.pre + 'Ph'] ?? ''}" onchange="satirGuncelle(${i},'${d.pre}Ph',this.value,true)"></div>
+                        <div><label>Renk</label><input class="form-control form-control-sm" value="${s[d.pre + 'Color'] || ''}" onchange="satirGuncelle(${i},'${d.pre}Color',this.value)"></div>
+                        <div><label>Koku</label><input class="form-control form-control-sm" value="${s[d.pre + 'Odor'] || ''}" onchange="satirGuncelle(${i},'${d.pre}Odor',this.value)"></div>
+                    </div>`).join('')}
+            </div>`).join('') || '<div class="text-center text-muted py-3">Satır yok.</div>';
+    }
+
+    function pdfIndir() {
+        htmlToPdfIndir('formKart', 'Yaslandirma_' + (document.getElementById('mFormNo').value || ''));
+    }
+
+    async function formKaydet() {
+        const model = {
+            docEntry: duzenlenenDocEntry, formDate: el('mFormDate').value || null,
+            formNo: el('mFormNo').value, rev: el('mRev').value, page: el('mPage').value,
+            controlledBy: el('mCtrlBy').value, approvedBy: el('mAppBy').value, rows: satirlar
+        };
+        const res = await fetch('/UrasUretimKalite/SaveAgingForm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(model) }).then(r => r.json());
+        if (!res.success) { alert('Kaydedilemedi: ' + res.message); return; }
+        alert('Kaydedildi (DocEntry: ' + res.message + ').');
+        formlariYukle();
+    }
+</script>

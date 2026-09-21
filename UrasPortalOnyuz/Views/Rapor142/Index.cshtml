@@ -1,0 +1,875 @@
+﻿@model WebApplication3.Controllers.Rapor142ViewModel
+@{
+    ViewData["Title"] = "Zimmet Takip";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var kisiler = Model?.Personeller ?? new List<WebApplication3.Controllers.ZimmetPersonel>();
+    var varliklar = Model?.Varliklar ?? new List<WebApplication3.Controllers.ZimmetVarlik>();
+    var ist = Model?.Istatistik ?? new WebApplication3.Controllers.ZimmetIstatistik();
+    bool yetkili = Model?.Yetkili ?? false;
+
+    var bostakiler = varliklar.Where(v => !v.PersonelId.HasValue).ToList();
+}
+
+@section Styles {
+    <style>
+        .zt-wrap { width: 100%; }
+
+        .zt-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 1.3rem; }
+        .zt-head h3 { margin: 0; font-size: 1.35rem; font-weight: 800; letter-spacing: -.03em; color: var(--text-primary); }
+        .zt-head p { margin: 4px 0 0; font-size: .85rem; color: var(--text-secondary); }
+
+        /* KPI */
+        .kpi-grid { display: grid; gap: 12px; margin-bottom: 1.3rem; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+        .kpi {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: var(--r-lg, 18px); padding: 1rem 1.1rem; position: relative; overflow: hidden;
+            box-shadow: var(--shadow-sm); transition: transform .2s ease, box-shadow .2s ease;
+        }
+        .kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+        .kpi .lbl { font-size: .67rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--text-secondary); }
+        .kpi .val { font-size: 1.5rem; font-weight: 800; letter-spacing: -.04em; margin-top: 4px; line-height: 1; }
+        .kpi .ico { position: absolute; right: -6px; bottom: -10px; font-size: 3.2rem; opacity: .07; transform: rotate(-10deg); }
+
+        /* Sekmeler */
+        .zt-tabs { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; }
+        .zt-tab {
+            border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-secondary);
+            border-radius: 999px; padding: .45rem 1.1rem; font-size: .84rem; font-weight: 600; cursor: pointer;
+            transition: all .18s ease;
+        }
+        .zt-tab:hover { background: var(--metro-primary-light); color: var(--metro-primary); }
+        .zt-tab.active { background: linear-gradient(135deg,#009ef7,#6366f1); color:#fff; border-color: transparent; box-shadow: 0 5px 14px rgba(0,158,247,.28); }
+
+        /* Filtre */
+        .zt-filters {
+            background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--r-lg, 18px);
+            padding: 12px 14px; margin-bottom: 1.1rem; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+            box-shadow: var(--shadow-sm);
+        }
+        .zt-filters .form-control, .zt-filters .form-select { height: 38px; border-radius: 10px; font-size: .84rem; }
+
+        /* Kişi kartı */
+        .kisi-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+        .kisi-kart {
+            background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--r-lg, 18px);
+            padding: 1rem 1.1rem; cursor: pointer; box-shadow: var(--shadow-sm);
+            transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+            display: flex; gap: 14px; align-items: flex-start;
+        }
+        .kisi-kart:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: color-mix(in srgb, var(--metro-primary) 36%, transparent); }
+        .kisi-kart.pasif { opacity: .6; }
+        .avatar {
+            width: 46px; height: 46px; border-radius: 14px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: .9rem;
+            background: linear-gradient(135deg,#009ef7,#6366f1); box-shadow: 0 8px 18px rgba(0,158,247,.3);
+        }
+        .kisi-ad { font-size: .95rem; font-weight: 700; color: var(--text-primary); letter-spacing: -.015em; }
+        .kisi-alt { font-size: .76rem; color: var(--text-secondary); margin-top: 2px; }
+        .kisi-ozet { font-size: .72rem; color: var(--text-secondary); margin-top: 8px; line-height: 1.5; }
+
+        .tag { font-size: .67rem; font-weight: 700; padding: .22rem .55rem; border-radius: 6px; white-space: nowrap; display: inline-block; }
+        .tag-gri { background:#f1f5f9; color:#475569; }
+        .tag-mavi { background:#dbeafe; color:#1e40af; }
+        .tag-yesil { background:#d1fae5; color:#065f46; }
+        .tag-sari { background:#fef3c7; color:#92400e; }
+        .tag-kirmizi { background:#fee2e2; color:#991b1b; }
+        .tag-mor { background:#ede9fe; color:#5b21b6; }
+        [data-theme="dark"] .tag-gri { background:#1f2937; color:#cbd5e1; }
+
+        /* Varlık tablosu */
+        .zt-tablo { width: 100%; font-size: .8rem; }
+        .zt-tablo thead th {
+            background:#0f172a; color:#fff; font-size:.65rem; font-weight:700; letter-spacing:.05em;
+            text-transform:uppercase; padding:9px 10px; position: sticky; top: var(--header-height, 72px); z-index: 10;
+            white-space: nowrap;
+        }
+        .zt-tablo tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
+        .zt-tablo tbody tr:nth-child(even) td { background: #fbfcfe; }
+        .zt-tablo tbody tr:hover td { background: #eef7ff; }
+
+        .kutu {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: var(--r-lg, 18px); box-shadow: var(--shadow-sm); overflow: hidden;
+        }
+
+        /* Detay */
+        .det-satir { display:flex; gap:10px; padding:6px 0; font-size:.83rem; border-bottom:1px dashed var(--border-color); }
+        .det-satir:last-child { border-bottom:none; }
+        .det-satir .k { width:135px; flex-shrink:0; color:var(--text-secondary); font-weight:600; }
+        .det-satir .v { color:var(--text-primary); font-weight:600; word-break:break-word; }
+        .det-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap:2px 24px; }
+
+        .varlik-kart {
+            border:1px solid var(--border-color); border-radius:14px; padding:12px 14px; margin-bottom:10px;
+            background: var(--bg-subtle, #f8fafc);
+        }
+        .varlik-baslik { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+        .varlik-baslik .ad { font-weight:800; font-size:.9rem; color:var(--text-primary); }
+        .varlik-ozellik { display:grid; grid-template-columns: repeat(auto-fit, minmax(190px,1fr)); gap:3px 18px; font-size:.76rem; }
+        .varlik-ozellik span { color:var(--text-secondary); }
+        .varlik-ozellik b { color:var(--text-primary); font-weight:600; }
+
+        .bos-durum { text-align:center; padding:48px 20px; color:var(--text-secondary); }
+        .bos-durum i { font-size:2.8rem; opacity:.18; }
+
+        @@media (max-width: 767px) { .det-satir .k { width:110px; } }
+    </style>
+}
+
+<div class="zt-wrap">
+    @Html.AntiForgeryToken()
+
+    @if (!string.IsNullOrEmpty(Model?.Hata))
+    {
+        <div class="alert alert-danger"><i class="fas fa-triangle-exclamation me-2"></i>@Model.Hata</div>
+    }
+    @if (!string.IsNullOrEmpty(Model?.ImportBilgisi))
+    {
+        <div class="alert alert-success"><i class="fas fa-circle-check me-2"></i>@Model.ImportBilgisi</div>
+    }
+
+    <div class="zt-head">
+        <div>
+            <h3><i class="fas fa-boxes-packing me-2" style="color:var(--metro-primary);"></i>Zimmet Takip</h3>
+            <p>
+                Kişi bazlı demirbaş takibi — laptop, telefon, hat, monitör ve tüm ekipman detayları tek yerde.
+                <span class="tag tag-mavi ms-1"><i class="fas fa-layer-group me-1"></i>Konsolide: tüm şirketler tek listede</span>
+            </p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a class="btn btn-success" href="/ZimmetTakip/ExcelExport"><i class="fas fa-file-excel me-2"></i>Excel</a>
+            @if (yetkili)
+            {
+                <button class="btn btn-outline-primary" onclick="kisiAc(0)"><i class="fas fa-user-plus me-2"></i>Kişi Ekle</button>
+                <button class="btn btn-primary" onclick="varlikAc(0)"><i class="fas fa-plus me-2"></i>Varlık Ekle</button>
+            }
+        </div>
+    </div>
+
+    <!-- KPI -->
+    <div class="kpi-grid">
+        <div class="kpi"><i class="fas fa-layer-group ico"></i><div class="lbl">Toplam Varlık</div><div class="val text-primary">@ist.ToplamVarlik</div></div>
+        <div class="kpi"><i class="fas fa-user-check ico"></i><div class="lbl">Zimmetli</div><div class="val" style="color:#10b981;">@ist.Zimmetli</div></div>
+        <div class="kpi"><i class="fas fa-warehouse ico"></i><div class="lbl">Depoda</div><div class="val" style="color:#6366f1;">@ist.Depoda</div></div>
+        <div class="kpi"><i class="fas fa-screwdriver-wrench ico"></i><div class="lbl">Bakımda</div><div class="val" style="color:#f59e0b;">@ist.Bakimda</div></div>
+        <div class="kpi"><i class="fas fa-users ico"></i><div class="lbl">Personel</div><div class="val text-primary">@ist.PersonelSayisi</div></div>
+        <div class="kpi"><i class="fas fa-shield-halved ico"></i><div class="lbl">Garantisi Biten</div><div class="val" style="color:#f43f5e;">@ist.GarantisiBiten</div></div>
+        <div class="kpi"><i class="fas fa-turkish-lira-sign ico"></i><div class="lbl">Toplam Değer</div><div class="val" style="font-size:1.1rem;">@ist.ToplamDeger.ToString("N2")</div></div>
+    </div>
+
+    <!-- Sekmeler -->
+    <div class="zt-tabs">
+        <button class="zt-tab active" data-sekme="kisiler" onclick="sekmeSec('kisiler', this)"><i class="fas fa-users me-1"></i> Kişiler (@kisiler.Count)</button>
+        <button class="zt-tab" data-sekme="varliklar" onclick="sekmeSec('varliklar', this)"><i class="fas fa-list me-1"></i> Tüm Varlıklar (@varliklar.Count)</button>
+        <button class="zt-tab" data-sekme="depo" onclick="sekmeSec('depo', this)"><i class="fas fa-warehouse me-1"></i> Boştakiler (@bostakiler.Count)</button>
+    </div>
+
+    <!-- Filtre -->
+    <div class="zt-filters">
+        <input type="text" class="form-control" id="fArama" style="width:240px;" placeholder="Ara: kişi, marka, seri no, hat..." onkeyup="suz()">
+        <select class="form-select" id="fTip" style="width:180px;" onchange="suz()">
+            <option value="">Tüm varlık tipleri</option>
+            @foreach (var t in Model.VarlikTipleri) { <option value="@t">@t</option> }
+        </select>
+        <select class="form-select" id="fDurum" style="width:150px;" onchange="suz()">
+            <option value="">Tüm durumlar</option>
+            @foreach (var d in Model.Durumlar) { <option value="@d">@d</option> }
+        </select>
+        <select class="form-select" id="fDepartman" style="width:180px;" onchange="suz()">
+            <option value="">Tüm departmanlar</option>
+            @foreach (var d in Model.Departmanlar) { <option value="@d">@d</option> }
+        </select>
+        <select class="form-select" id="fSirket" style="width:180px;" onchange="suz()">
+            <option value="">Tüm şirketler</option>
+            @foreach (var sk in Model.Sirketler) { <option value="@sk">@sk</option> }
+        </select>
+        <span class="ms-auto text-muted" style="font-size:.78rem;" id="sonucBilgi"></span>
+    </div>
+
+    <!-- KİŞİLER -->
+    <div id="sekme-kisiler">
+        @if (kisiler.Any())
+        {
+            <div class="kisi-grid">
+                @foreach (var k in kisiler)
+                {
+                    <div class="kisi-kart @(k.Aktif ? "" : "pasif")"
+                         data-ara="@($"{k.AdSoyad} {k.Departman} {k.Gorev} {k.Sirket} {k.SicilNo} {k.VarlikOzeti}".ToLower())"
+                         data-departman="@k.Departman"
+                         data-sirket="@k.Sirket"
+                         onclick="kisiDetayAc(@k.Id)">
+                        <div class="avatar">@k.BasHarfler</div>
+                        <div style="flex:1; min-width:0;">
+                            <div class="kisi-ad">@k.AdSoyad</div>
+                            <div class="kisi-alt">
+                                @(string.IsNullOrWhiteSpace(k.Departman) ? "-" : k.Departman)
+                                @if (!string.IsNullOrWhiteSpace(k.Gorev)) { <text> · @k.Gorev</text> }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(k.Sirket))
+                            {
+                                <div class="kisi-alt"><i class="fas fa-building me-1"></i>@k.Sirket</div>
+                            }
+                            <div class="mt-2 d-flex gap-2 flex-wrap align-items-center">
+                                <span class="tag @(k.ZimmetliAdet > 0 ? "tag-mavi" : "tag-gri")">@k.ZimmetliAdet zimmet</span>
+                                @if (k.ZimmetliDeger > 0) { <span class="tag tag-gri">@k.ZimmetliDeger.ToString("N0") ₺</span> }
+                                @if (!k.Aktif) { <span class="tag tag-kirmizi">Pasif</span> }
+                                @if (yetkili && k.Aktif)
+                                {
+                                    <button class="btn btn-sm btn-outline-primary ms-auto" style="font-size:.7rem; padding:.15rem .55rem;"
+                                            title="Bu kişiye varlık zimmetle"
+                                            onclick="event.stopPropagation(); kisiyeZimmetAc(@k.Id, '@Html.Raw(Html.Encode(k.AdSoyad))')">
+                                        <i class="fas fa-plus me-1"></i>Zimmet Ver
+                                    </button>
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(k.VarlikOzeti))
+                            {
+                                <div class="kisi-ozet"><i class="fas fa-tags me-1"></i>@k.VarlikOzeti</div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="bos-durum">
+                <i class="fas fa-user-slash d-block mb-3"></i>
+                <h6 class="fw-bold text-secondary">Henüz kişi kaydı yok</h6>
+                @if (yetkili) { <button class="btn btn-primary mt-2" onclick="kisiAc(0)">Kişi Ekle</button> }
+            </div>
+        }
+    </div>
+
+    <!-- TÜM VARLIKLAR -->
+    <div id="sekme-varliklar" class="d-none">
+        <div class="kutu">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 zt-tablo">
+                    <thead>
+                        <tr>
+                            <th>Tip</th><th>Marka / Model</th><th>Seri No</th><th>Demirbaş</th>
+                            <th>IMEI / Hat</th><th>Kişi</th><th>Şirket</th><th>Durum</th><th>Lokasyon</th>
+                            <th class="text-end">Tutar</th><th>Garanti</th><th class="text-center">İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var v in varliklar)
+                        {
+                            <tr data-ara="@($"{v.VarlikTipi} {v.Marka} {v.Model} {v.SeriNo} {v.DemirbasNo} {v.Imei} {v.HatNumarasi} {v.PersonelAdi} {v.Lokasyon} {v.Sirket}".ToLower())"
+                                data-tip="@v.VarlikTipi" data-durum="@v.Durum" data-sirket="@v.Sirket">
+                                <td><span class="tag tag-mor">@v.VarlikTipi</span></td>
+                                <td class="fw-semibold">@v.Baslik</td>
+                                <td>@v.SeriNo</td>
+                                <td>@v.DemirbasNo</td>
+                                <td>@(string.IsNullOrWhiteSpace(v.Imei) ? v.HatNumarasi : v.Imei)</td>
+                                <td>@(string.IsNullOrWhiteSpace(v.PersonelAdi) ? "-" : v.PersonelAdi)</td>
+                                <td>@(string.IsNullOrWhiteSpace(v.Sirket) ? "-" : v.Sirket)</td>
+                                <td>
+                                    <span class="tag @(v.Durum == "Zimmetli" ? "tag-yesil" : v.Durum == "Bakımda" ? "tag-sari" : v.Durum == "Kayıp" || v.Durum == "Hurda" ? "tag-kirmizi" : "tag-gri")">@v.Durum</span>
+                                </td>
+                                <td>@v.Lokasyon</td>
+                                <td class="text-end">@(v.AlisTutari.HasValue ? v.AlisTutari.Value.ToString("N2") : "")</td>
+                                <td>
+                                    @if (v.GarantiBitis.HasValue)
+                                    {
+                                        <span class="tag @(v.GarantiDoldu ? "tag-kirmizi" : "tag-yesil")">@v.GarantiBitis.Value.ToString("dd.MM.yyyy")</span>
+                                    }
+                                </td>
+                                <td class="text-center" style="white-space:nowrap;">
+                                    @if (yetkili)
+                                    {
+                                        <button class="btn btn-sm btn-outline-secondary" title="Düzenle" onclick="varlikAc(@v.Id)"><i class="fas fa-pen"></i></button>
+                                        @if (v.HareketId.HasValue)
+                                        {
+                                            <button class="btn btn-sm btn-outline-warning" title="İade al" onclick="iadeAc(@v.HareketId.Value, '@Html.Raw(Html.Encode(v.Baslik))')"><i class="fas fa-rotate-left"></i></button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-sm btn-outline-primary" title="Zimmetle" onclick="zimmetAc(@v.Id, '@Html.Raw(Html.Encode(v.Baslik))')"><i class="fas fa-user-plus"></i></button>
+                                        }
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOŞTAKİLER -->
+    <div id="sekme-depo" class="d-none">
+        <div class="kutu">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 zt-tablo">
+                    <thead>
+                        <tr><th>Tip</th><th>Marka / Model</th><th>Seri No</th><th>Durum</th><th>Lokasyon</th><th class="text-center">İşlem</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var v in bostakiler)
+                        {
+                            <tr data-ara="@($"{v.VarlikTipi} {v.Marka} {v.Model} {v.SeriNo} {v.Sirket}".ToLower())" data-tip="@v.VarlikTipi" data-durum="@v.Durum" data-sirket="@v.Sirket">
+                                <td><span class="tag tag-mor">@v.VarlikTipi</span></td>
+                                <td class="fw-semibold">@v.Baslik</td>
+                                <td>@v.SeriNo</td>
+                                <td><span class="tag tag-gri">@v.Durum</span></td>
+                                <td>@v.Lokasyon</td>
+                                <td class="text-center">
+                                    @if (yetkili)
+                                    {
+                                        <button class="btn btn-sm btn-primary" onclick="zimmetAc(@v.Id, '@Html.Raw(Html.Encode(v.Baslik))')"><i class="fas fa-user-plus me-1"></i>Zimmetle</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- KİŞİ DETAY -->
+<div class="modal fade" id="kisiDetayModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+            <div class="modal-header text-white" style="background:linear-gradient(135deg,#0f172a,#1e293b);">
+                <h5 class="modal-title fw-bold" id="kisiDetayBaslik">Kişi Detayı</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="kisiDetayGovde"></div>
+        </div>
+    </div>
+</div>
+
+<!-- KİŞİ FORMU -->
+<div class="modal fade" id="kisiFormModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="border-radius:16px;">
+            <div class="modal-header text-white" style="background:linear-gradient(135deg,#009ef7,#6366f1);">
+                <h5 class="modal-title fw-bold" id="kisiFormBaslik">Kişi</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="kisiForm">
+                    <input type="hidden" name="Id" value="0">
+                    <div class="row g-3">
+                        <div class="col-md-4"><label class="form-label small fw-bold">Sicil No</label><input class="form-control" name="SicilNo"></div>
+                        <div class="col-md-8"><label class="form-label small fw-bold">Ad Soyad *</label><input class="form-control" name="AdSoyad" required></div>
+                        <div class="col-md-6"><label class="form-label small fw-bold">Departman</label><input class="form-control" name="Departman"></div>
+                        <div class="col-md-6"><label class="form-label small fw-bold">Görev</label><input class="form-control" name="Gorev"></div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Şirket</label>
+                            <select class="form-select" name="Sirket">
+                                <option value="">- Seçiniz -</option>
+                                @foreach (var sk in Model.Sirketler)
+                                {
+                                    <option value="@sk" selected="@(sk == Model.AktifSirket)">@sk</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6"><label class="form-label small fw-bold">Lokasyon</label><input class="form-control" name="Lokasyon"></div>
+                        <div class="col-md-6"><label class="form-label small fw-bold">E-Posta</label><input class="form-control" name="Email" type="email"></div>
+                        <div class="col-md-6"><label class="form-label small fw-bold">Telefon</label><input class="form-control" name="Telefon"></div>
+                        <div class="col-md-4"><label class="form-label small fw-bold">İşe Giriş</label><input class="form-control" name="IseGiris" type="date"></div>
+                        <div class="col-md-4"><label class="form-label small fw-bold">Çıkış</label><input class="form-control" name="Cikis" type="date"></div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <div class="form-check"><input class="form-check-input" type="checkbox" name="Aktif" value="true" id="kisiAktif" checked><label class="form-check-label fw-bold" for="kisiAktif">Aktif</label></div>
+                        </div>
+                        <div class="col-12"><label class="form-label small fw-bold">Notlar</label><textarea class="form-control" name="Notlar" rows="2"></textarea></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-primary" onclick="kisiKaydet()"><i class="fas fa-floppy-disk me-2"></i>Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- VARLIK FORMU -->
+<div class="modal fade" id="varlikFormModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius:16px;">
+            <div class="modal-header text-white" style="background:linear-gradient(135deg,#009ef7,#6366f1);">
+                <h5 class="modal-title fw-bold" id="varlikFormBaslik">Varlık</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="varlikForm">
+                    <input type="hidden" name="Id" value="0">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Varlık Tipi *</label>
+                            <select class="form-select" name="VarlikTipi" id="varlikTipi" required onchange="tipAlanlariniGoster()">
+                                @foreach (var t in Model.VarlikTipleri) { <option value="@t">@t</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-3"><label class="form-label small fw-bold">Marka</label><input class="form-control" name="Marka"></div>
+                        <div class="col-md-3"><label class="form-label small fw-bold">Model</label><input class="form-control" name="Model"></div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Durum</label>
+                            <select class="form-select" name="Durum">
+                                @foreach (var d in Model.Durumlar) { <option value="@d">@d</option> }
+                            </select>
+                        </div>
+
+                        <div class="col-md-3"><label class="form-label small fw-bold">Seri No</label><input class="form-control" name="SeriNo"></div>
+                        <div class="col-md-3"><label class="form-label small fw-bold">Demirbaş No</label><input class="form-control" name="DemirbasNo"></div>
+                        <div class="col-md-3"><label class="form-label small fw-bold">Lokasyon</label><input class="form-control" name="Lokasyon"></div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Şirket</label>
+                            <select class="form-select" name="Sirket">
+                                <option value="">- Seçiniz -</option>
+                                @foreach (var sk in Model.Sirketler)
+                                {
+                                    <option value="@sk" selected="@(sk == Model.AktifSirket)">@sk</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-12"><div class="fw-bold text-muted" style="font-size:.7rem; letter-spacing:.08em; border-bottom:2px solid var(--border-color); padding-bottom:5px;">TELEFON / HAT</div></div>
+                        <div class="col-md-4 alan-telefon"><label class="form-label small fw-bold">IMEI</label><input class="form-control" name="Imei"></div>
+                        <div class="col-md-4 alan-telefon"><label class="form-label small fw-bold">Hat Numarası</label><input class="form-control" name="HatNumarasi" placeholder="05xx xxx xx xx"></div>
+                        <div class="col-md-4 alan-telefon"><label class="form-label small fw-bold">Operatör</label><input class="form-control" name="Operator" placeholder="Turkcell / Vodafone / TT"></div>
+
+                        <div class="col-12"><div class="fw-bold text-muted" style="font-size:.7rem; letter-spacing:.08em; border-bottom:2px solid var(--border-color); padding-bottom:5px;">BİLGİSAYAR / EKRAN</div></div>
+                        <div class="col-md-3"><label class="form-label small fw-bold">İşletim Sistemi</label><input class="form-control" name="IsletimSistemi"></div>
+                        <div class="col-md-3"><label class="form-label small fw-bold">İşlemci</label><input class="form-control" name="Islemci"></div>
+                        <div class="col-md-2"><label class="form-label small fw-bold">RAM</label><input class="form-control" name="Ram" placeholder="16 GB"></div>
+                        <div class="col-md-2"><label class="form-label small fw-bold">Disk</label><input class="form-control" name="Disk" placeholder="512 GB SSD"></div>
+                        <div class="col-md-2"><label class="form-label small fw-bold">Ekran</label><input class="form-control" name="EkranBoyutu" placeholder="24&quot;"></div>
+                        <div class="col-md-3"><label class="form-label small fw-bold">MAC Adresi</label><input class="form-control" name="MacAdresi"></div>
+
+                        <div class="col-12"><div class="fw-bold text-muted" style="font-size:.7rem; letter-spacing:.08em; border-bottom:2px solid var(--border-color); padding-bottom:5px;">SATIN ALMA</div></div>
+                        <div class="col-md-3"><label class="form-label small fw-bold">Alış Tarihi</label><input class="form-control" name="AlisTarihi" type="date"></div>
+                        <div class="col-md-3"><label class="form-label small fw-bold">Fatura No</label><input class="form-control" name="FaturaNo"></div>
+                        <div class="col-md-2"><label class="form-label small fw-bold">Tutar</label><input class="form-control" name="AlisTutari" type="number" step="0.01"></div>
+                        <div class="col-md-2"><label class="form-label small fw-bold">Para Birimi</label><input class="form-control" name="ParaBirimi" value="TRY"></div>
+                        <div class="col-md-2"><label class="form-label small fw-bold">Garanti Bitiş</label><input class="form-control" name="GarantiBitis" type="date"></div>
+
+                        <div class="col-12"><label class="form-label small fw-bold">Notlar</label><textarea class="form-control" name="Notlar" rows="2"></textarea></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-primary" onclick="varlikKaydet()"><i class="fas fa-floppy-disk me-2"></i>Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- KİŞİYE ZİMMET VER -->
+<div class="modal fade" id="kisiyeZimmetModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius:16px;">
+            <div class="modal-header text-white" style="background:linear-gradient(135deg,#009ef7,#6366f1);">
+                <h5 class="modal-title fw-bold" id="kisiyeZimmetBaslik">Zimmet Ver</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="kzPersonelId">
+
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Varlık Ara</label>
+                        <input class="form-control form-control-sm" id="kzArama" placeholder="Marka, model, seri no..." onkeyup="kzListele()">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">Zimmet Tarihi</label>
+                        <input type="date" class="form-control form-control-sm" id="kzTarih" value="@DateTime.Today.ToString("yyyy-MM-dd")">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">Teslim Eden</label>
+                        <input class="form-control form-control-sm" id="kzTeslimEden">
+                    </div>
+                </div>
+
+                <div class="alert alert-light border py-2 mb-2" style="font-size:.78rem;">
+                    <i class="fas fa-circle-info me-1"></i> Yalnızca boştaki (zimmetli olmayan) varlıklar listelenir.
+                    Listede yoksa önce <b>Varlık Ekle</b> ile kaydını açın.
+                </div>
+
+                <div id="kzListe" style="max-height:340px; overflow-y:auto;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ZİMMETLE -->
+<div class="modal fade" id="zimmetModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:16px;">
+            <div class="modal-header"><h5 class="modal-title fw-bold" id="zimmetBaslik">Zimmetle</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="zimmetVarlikId">
+                <label class="form-label small fw-bold">Kişi *</label>
+                <select class="form-select mb-3" id="zimmetPersonel">
+                    @foreach (var k in kisiler.Where(x => x.Aktif))
+                    {
+                        <option value="@k.Id">@k.AdSoyad @(string.IsNullOrWhiteSpace(k.Departman) ? "" : " - " + k.Departman)</option>
+                    }
+                </select>
+                <label class="form-label small fw-bold">Zimmet Tarihi</label>
+                <input type="date" class="form-control mb-3" id="zimmetTarihi" value="@DateTime.Today.ToString("yyyy-MM-dd")">
+                <label class="form-label small fw-bold">Teslim Eden</label>
+                <input class="form-control mb-3" id="zimmetTeslimEden">
+                <label class="form-label small fw-bold">Açıklama</label>
+                <textarea class="form-control" id="zimmetAciklama" rows="2"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-primary" onclick="zimmetKaydet()"><i class="fas fa-check me-2"></i>Zimmetle</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- İADE -->
+<div class="modal fade" id="iadeModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:16px;">
+            <div class="modal-header"><h5 class="modal-title fw-bold" id="iadeBaslik">İade Al</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="iadeHareketId">
+                <label class="form-label small fw-bold">İade Tarihi</label>
+                <input type="date" class="form-control mb-3" id="iadeTarihi" value="@DateTime.Today.ToString("yyyy-MM-dd")">
+                <label class="form-label small fw-bold">İade Sonrası Durum</label>
+                <select class="form-select mb-3" id="iadeDurum">
+                    <option value="Depoda">Depoda</option>
+                    <option value="Bakımda">Bakımda</option>
+                    <option value="Hurda">Hurda</option>
+                    <option value="Kayıp">Kayıp</option>
+                </select>
+                <label class="form-label small fw-bold">Açıklama</label>
+                <textarea class="form-control" id="iadeAciklama" rows="2" placeholder="Cihazın durumu, eksik parça vb."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-warning" onclick="iadeKaydet()"><i class="fas fa-rotate-left me-2"></i>İade Al</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        var YETKILI = @(yetkili ? "true" : "false");
+        var VARLIKLAR = @Html.Raw(Json.Serialize(varliklar.Select(v => new {
+            v.Id, v.VarlikTipi, v.Marka, v.Model, v.SeriNo, v.DemirbasNo, v.Imei, v.HatNumarasi,
+            v.Operator, v.MacAdresi, v.IsletimSistemi, v.Islemci, v.Ram, v.Disk, v.EkranBoyutu,
+            v.FaturaNo, v.AlisTutari, v.ParaBirimi, v.Durum, v.Lokasyon, v.Sirket, v.Notlar,
+            AlisTarihi = v.AlisTarihi.HasValue ? v.AlisTarihi.Value.ToString("yyyy-MM-dd") : "",
+            GarantiBitis = v.GarantiBitis.HasValue ? v.GarantiBitis.Value.ToString("yyyy-MM-dd") : ""
+        })));
+        var KISILER = @Html.Raw(Json.Serialize(kisiler.Select(k => new {
+            k.Id, k.SicilNo, k.AdSoyad, k.Departman, k.Gorev, k.Sirket, k.Lokasyon, k.Email, k.Telefon, k.Aktif, k.Notlar,
+            IseGiris = k.IseGiris.HasValue ? k.IseGiris.Value.ToString("yyyy-MM-dd") : "",
+            Cikis = k.Cikis.HasValue ? k.Cikis.Value.ToString("yyyy-MM-dd") : ""
+        })));
+
+        var ZIMMETLI_IDLER = @Html.Raw(Json.Serialize(varliklar.Where(v => v.PersonelId.HasValue).Select(v => v.Id)));
+
+        var aktifSekme = 'kisiler';
+
+        function token() { return $('input[name="__RequestVerificationToken"]').first().val(); }
+        function bildir(ok, mesaj) {
+            if (window.toastr) { toastr.options = { positionClass: 'toast-bottom-right', timeOut: 4000 }; ok ? toastr.success(mesaj) : toastr.error(mesaj); }
+            else { alert(mesaj); }
+        }
+        function kacis(s) { return $('<div>').text(s == null ? '' : s).html(); }
+
+        $(document).ready(function () {
+            ['#kisiDetayModal', '#kisiFormModal', '#varlikFormModal', '#zimmetModal', '#iadeModal', '#kisiyeZimmetModal'].forEach(function (sec) {
+                var $e = $(sec);
+                if ($e.length && !$e.parent().is('body')) $e.appendTo('body');
+            });
+            tipAlanlariniGoster();
+        });
+
+        /* ---------- Sekme & filtre ---------- */
+        function sekmeSec(ad, el) {
+            aktifSekme = ad;
+            $('.zt-tab').removeClass('active');
+            $(el).addClass('active');
+            ['kisiler', 'varliklar', 'depo'].forEach(function (s) {
+                document.getElementById('sekme-' + s).classList.toggle('d-none', s !== ad);
+            });
+            suz();
+        }
+
+        function suz() {
+            var q = ($('#fArama').val() || '').toLocaleLowerCase('tr-TR');
+            var tip = $('#fTip').val(), durum = $('#fDurum').val(), dep = $('#fDepartman').val(), sirket = $('#fSirket').val();
+            var gorunen = 0;
+
+            $('#sekme-kisiler .kisi-kart').each(function () {
+                var uygun = (!q || ('' + $(this).data('ara')).indexOf(q) > -1) &&
+                            (!dep || $(this).data('departman') === dep) &&
+                            (!sirket || $(this).data('sirket') === sirket);
+                $(this).toggle(uygun);
+                if (uygun && aktifSekme === 'kisiler') gorunen++;
+            });
+
+            $('#sekme-varliklar tbody tr, #sekme-depo tbody tr').each(function () {
+                var uygun = (!q || ('' + $(this).data('ara')).indexOf(q) > -1) &&
+                            (!tip || $(this).data('tip') === tip) &&
+                            (!durum || $(this).data('durum') === durum) &&
+                            (!sirket || $(this).data('sirket') === sirket);
+                $(this).toggle(uygun);
+                if (uygun && aktifSekme !== 'kisiler' && $(this).closest('#sekme-' + aktifSekme).length) gorunen++;
+            });
+
+            $('#sonucBilgi').text(gorunen + ' kayıt gösteriliyor');
+        }
+
+        /* ---------- Kişi detayı ---------- */
+        function kisiDetayAc(id) {
+            $('#kisiDetayGovde').html('<div class="text-center py-5 text-muted"><i class="fas fa-spinner fa-spin fa-2x"></i></div>');
+            new bootstrap.Modal(document.getElementById('kisiDetayModal')).show();
+
+            $.getJSON('/ZimmetTakip/PersonelDetay', { id: id }, function (res) {
+                if (!res.success) { $('#kisiDetayGovde').html('<div class="alert alert-danger">' + kacis(res.message) + '</div>'); return; }
+
+                var p = res.personel;
+                $('#kisiDetayBaslik').text(p.adSoyad + (p.departman ? ' — ' + p.departman : ''));
+
+                var h = '<div class="d-flex justify-content-end gap-2 mb-3">';
+                h += '<a class="btn btn-sm btn-outline-danger" target="_blank" href="/ZimmetTakip/Tutanak?personelId=' + p.id + '"><i class="fas fa-file-pdf me-1"></i>Zimmet Tutanağı</a>';
+                if (YETKILI) {
+                    h += '<button class="btn btn-sm btn-primary" onclick="kisiyeZimmetAc(' + p.id + ', \'' + kacis(p.adSoyad) + '\')"><i class="fas fa-plus me-1"></i>Zimmet Ver</button>';
+                    h += '<button class="btn btn-sm btn-outline-primary" onclick="kisiAc(' + p.id + ')"><i class="fas fa-pen me-1"></i>Kişiyi Düzenle</button>';
+                }
+                h += '</div>';
+
+                h += '<div class="det-grid">';
+                h += satir('Sicil No', p.sicilNo) + satir('Ad Soyad', p.adSoyad) + satir('Departman', p.departman);
+                h += satir('Görev', p.gorev) + satir('Şirket', p.sirket) + satir('Lokasyon', p.lokasyon);
+                h += satir('E-Posta', p.email) + satir('Telefon', p.telefon);
+                h += satir('İşe Giriş', p.iseGiris) + satir('Çıkış', p.cikis);
+                h += satir('Durum', p.aktif ? 'Aktif' : 'Pasif');
+                h += '</div>';
+                if (p.notlar) h += '<div class="mt-2 p-3" style="background:var(--bg-subtle,#f8fafc); border-radius:10px; font-size:.83rem;">' + kacis(p.notlar) + '</div>';
+
+                h += '<div class="fw-bold mt-4 mb-2" style="font-size:.72rem; letter-spacing:.1em; text-transform:uppercase; color:var(--text-secondary); border-bottom:2px solid var(--border-color); padding-bottom:6px;">Zimmetli Varlıklar (' + res.varliklar.length + ')</div>';
+
+                if (res.varliklar.length === 0) {
+                    h += '<div class="text-muted small">Bu kişide zimmetli varlık yok.</div>';
+                } else {
+                    res.varliklar.forEach(function (v) {
+                        h += '<div class="varlik-kart"><div class="varlik-baslik">';
+                        h += '<div><span class="tag tag-mor me-2">' + kacis(v.varlikTipi) + '</span><span class="ad">' + kacis((v.marka || '') + ' ' + (v.model || '')) + '</span></div>';
+                        h += '<div class="d-flex gap-2 align-items-center">';
+                        if (v.zimmet) h += '<span class="tag tag-gri">Zimmet: ' + kacis(v.zimmet) + '</span>';
+                        if (v.garanti) h += '<span class="tag ' + (v.garantiDoldu ? 'tag-kirmizi' : 'tag-yesil') + '">Garanti: ' + kacis(v.garanti) + '</span>';
+                        if (YETKILI && v.hareketId) h += '<button class="btn btn-sm btn-outline-warning" onclick="iadeAc(' + v.hareketId + ', \'' + kacis((v.marka || '') + ' ' + (v.model || '')) + '\')"><i class="fas fa-rotate-left"></i></button>';
+                        h += '</div></div>';
+
+                        h += '<div class="varlik-ozellik">';
+                        h += ozellik('Seri No', v.seriNo) + ozellik('Demirbaş', v.demirbasNo) + ozellik('IMEI', v.imei);
+                        h += ozellik('Hat', v.hatNumarasi) + ozellik('Operatör', v.operator) + ozellik('MAC', v.macAdresi);
+                        h += ozellik('İşletim Sist.', v.isletimSistemi) + ozellik('İşlemci', v.islemci) + ozellik('RAM', v.ram);
+                        h += ozellik('Disk', v.disk) + ozellik('Ekran', v.ekranBoyutu) + ozellik('Lokasyon', v.lokasyon);
+                        h += ozellik('Fatura No', v.faturaNo) + ozellik('Alış', v.alis) + ozellik('Tutar', v.tutar ? v.tutar + ' ' + (v.paraBirimi || '') : '');
+                        h += ozellik('Şirket', v.sirket);
+                        h += '</div>';
+                        if (v.notlar) h += '<div class="mt-2 text-muted" style="font-size:.75rem;">' + kacis(v.notlar) + '</div>';
+                        h += '</div>';
+                    });
+                }
+
+                if (res.gecmis.length) {
+                    h += '<div class="fw-bold mt-4 mb-2" style="font-size:.72rem; letter-spacing:.1em; text-transform:uppercase; color:var(--text-secondary); border-bottom:2px solid var(--border-color); padding-bottom:6px;">Geçmiş (İade Edilenler)</div>';
+                    h += '<div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Tip</th><th>Cihaz</th><th>Seri No</th><th>Zimmet</th><th>İade</th></tr></thead><tbody>';
+                    res.gecmis.forEach(function (g) {
+                        h += '<tr><td>' + kacis(g.varlikTipi) + '</td><td>' + kacis((g.marka || '') + ' ' + (g.model || '')) + '</td><td>' + kacis(g.seriNo) + '</td><td>' + kacis(g.zimmet) + '</td><td>' + kacis(g.iade) + '</td></tr>';
+                    });
+                    h += '</tbody></table></div>';
+                }
+
+                $('#kisiDetayGovde').html(h);
+            }).fail(function () { $('#kisiDetayGovde').html('<div class="alert alert-danger">Detay alınamadı.</div>'); });
+        }
+
+        function satir(k, v) { return '<div class="det-satir"><div class="k">' + k + '</div><div class="v">' + (v ? kacis(v) : '-') + '</div></div>'; }
+        function ozellik(k, v) { return v ? '<div><span>' + k + ':</span> <b>' + kacis(v) + '</b></div>' : ''; }
+
+        /* ---------- Kişi formu ---------- */
+        function kisiAc(id) {
+            var f = document.getElementById('kisiForm');
+            f.reset();
+            f.Id.value = id || 0;
+            $('#kisiFormBaslik').text(id ? 'Kişiyi Düzenle' : 'Yeni Kişi');
+
+            if (id) {
+                var k = KISILER.filter(function (x) { return x.id === id; })[0];
+                if (k) {
+                    ['sicilNo','adSoyad','departman','gorev','sirket','lokasyon','email','telefon','iseGiris','cikis','notlar'].forEach(function (alan) {
+                        var ad = alan.charAt(0).toUpperCase() + alan.slice(1);
+                        if (f[ad]) f[ad].value = k[alan] || '';
+                    });
+                    f.Aktif.checked = !!k.aktif;
+                }
+            }
+            new bootstrap.Modal(document.getElementById('kisiFormModal')).show();
+        }
+
+        function kisiKaydet() {
+            var f = document.getElementById('kisiForm');
+            if (!f.checkValidity()) { f.reportValidity(); return; }
+
+            var veri = $(f).serializeArray();
+            if (!f.Aktif.checked) veri.push({ name: 'Aktif', value: 'false' });
+            veri.push({ name: '__RequestVerificationToken', value: token() });
+
+            $.post('/ZimmetTakip/PersonelKaydet', veri, function (res) {
+                bildir(res.success, res.message);
+                if (res.success) setTimeout(function () { location.reload(); }, 700);
+            }).fail(function () { bildir(false, 'Sunucuya ulaşılamadı.'); });
+        }
+
+        /* ---------- Varlık formu ---------- */
+        function varlikAc(id) {
+            var f = document.getElementById('varlikForm');
+            f.reset();
+            f.Id.value = id || 0;
+            f.ParaBirimi.value = 'TRY';
+            $('#varlikFormBaslik').text(id ? 'Varlığı Düzenle' : 'Yeni Varlık');
+
+            if (id) {
+                var v = VARLIKLAR.filter(function (x) { return x.id === id; })[0];
+                if (v) {
+                    Object.keys(v).forEach(function (alan) {
+                        var ad = alan.charAt(0).toUpperCase() + alan.slice(1);
+                        if (f[ad] && v[alan] !== null && v[alan] !== undefined) f[ad].value = v[alan];
+                    });
+                }
+            }
+            tipAlanlariniGoster();
+            new bootstrap.Modal(document.getElementById('varlikFormModal')).show();
+        }
+
+        function tipAlanlariniGoster() {
+            var tip = $('#varlikTipi').val() || '';
+            var telefonMu = tip.indexOf('Telefon') > -1 || tip.indexOf('Hat') > -1 || tip.indexOf('Tablet') > -1;
+            $('.alan-telefon').toggle(telefonMu || tip === '');
+        }
+
+        function varlikKaydet() {
+            var f = document.getElementById('varlikForm');
+            if (!f.checkValidity()) { f.reportValidity(); return; }
+
+            var veri = $(f).serializeArray();
+            veri.push({ name: '__RequestVerificationToken', value: token() });
+
+            $.post('/ZimmetTakip/VarlikKaydet', veri, function (res) {
+                bildir(res.success, res.message);
+                if (res.success) setTimeout(function () { location.reload(); }, 700);
+            }).fail(function () { bildir(false, 'Sunucuya ulaşılamadı.'); });
+        }
+
+        /* ---------- Kişiye zimmet ver ---------- */
+        function kisiyeZimmetAc(personelId, ad) {
+            $('#kzPersonelId').val(personelId);
+            $('#kisiyeZimmetBaslik').html('<i class="fas fa-user-plus me-2"></i>Zimmet Ver - ' + kacis(ad));
+            $('#kzArama').val('');
+            kzListele();
+            new bootstrap.Modal(document.getElementById('kisiyeZimmetModal')).show();
+        }
+
+        function kzListele() {
+            var q = ($('#kzArama').val() || '').toLocaleLowerCase('tr-TR');
+
+            // Boştakiler: kişiye atanmamış ve hurda/kayıp olmayan varlıklar
+            var uygunlar = VARLIKLAR.filter(function (v) {
+                if (v.durum === 'Hurda' || v.durum === 'Kayıp') return false;
+                if (ZIMMETLI_IDLER.indexOf(v.id) > -1) return false;
+                if (!q) return true;
+                var metin = ((v.varlikTipi || '') + ' ' + (v.marka || '') + ' ' + (v.model || '') + ' ' +
+                             (v.seriNo || '') + ' ' + (v.demirbasNo || '') + ' ' + (v.hatNumarasi || '')).toLocaleLowerCase('tr-TR');
+                return metin.indexOf(q) > -1;
+            });
+
+            if (uygunlar.length === 0) {
+                $('#kzListe').html('<div class="text-center py-4 text-muted"><i class="fas fa-box-open fa-2x d-block mb-2 opacity-50"></i>Uygun boşta varlık bulunamadı.</div>');
+                return;
+            }
+
+            var h = '<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0">';
+            h += '<thead><tr><th>Tip</th><th>Marka / Model</th><th>Seri No / Hat</th><th>Durum</th><th class="text-end">İşlem</th></tr></thead><tbody>';
+
+            uygunlar.forEach(function (v) {
+                var kimlik = v.seriNo || v.hatNumarasi || v.imei || '';
+                h += '<tr>'
+                   + '<td><span class="tag tag-mor">' + kacis(v.varlikTipi) + '</span></td>'
+                   + '<td class="fw-semibold">' + kacis(((v.marka || '') + ' ' + (v.model || '')).trim()) + '</td>'
+                   + '<td>' + kacis(kimlik) + '</td>'
+                   + '<td><span class="tag tag-gri">' + kacis(v.durum) + '</span></td>'
+                   + '<td class="text-end"><button class="btn btn-sm btn-primary" onclick="kzZimmetle(' + v.id + ')">'
+                   + '<i class="fas fa-check me-1"></i>Zimmetle</button></td>'
+                   + '</tr>';
+            });
+
+            h += '</tbody></table></div>';
+            $('#kzListe').html(h);
+        }
+
+        function kzZimmetle(varlikId) {
+            $.post('/ZimmetTakip/Zimmetle', {
+                varlikId: varlikId,
+                personelId: $('#kzPersonelId').val(),
+                zimmetTarihi: $('#kzTarih').val(),
+                teslimEden: $('#kzTeslimEden').val(),
+                aciklama: '',
+                __RequestVerificationToken: token()
+            }, function (res) {
+                bildir(res.success, res.message);
+                if (res.success) setTimeout(function () { location.reload(); }, 700);
+            }).fail(function () { bildir(false, 'Sunucuya ulaşılamadı.'); });
+        }
+
+        /* ---------- Zimmet / iade ---------- */
+        function zimmetAc(varlikId, ad) {
+            $('#zimmetVarlikId').val(varlikId);
+            $('#zimmetBaslik').text('Zimmetle: ' + ad);
+            new bootstrap.Modal(document.getElementById('zimmetModal')).show();
+        }
+
+        function zimmetKaydet() {
+            $.post('/ZimmetTakip/Zimmetle', {
+                varlikId: $('#zimmetVarlikId').val(),
+                personelId: $('#zimmetPersonel').val(),
+                zimmetTarihi: $('#zimmetTarihi').val(),
+                teslimEden: $('#zimmetTeslimEden').val(),
+                aciklama: $('#zimmetAciklama').val(),
+                __RequestVerificationToken: token()
+            }, function (res) {
+                bildir(res.success, res.message);
+                if (res.success) setTimeout(function () { location.reload(); }, 700);
+            }).fail(function () { bildir(false, 'Sunucuya ulaşılamadı.'); });
+        }
+
+        function iadeAc(hareketId, ad) {
+            $('#iadeHareketId').val(hareketId);
+            $('#iadeBaslik').text('İade Al: ' + ad);
+            new bootstrap.Modal(document.getElementById('iadeModal')).show();
+        }
+
+        function iadeKaydet() {
+            $.post('/ZimmetTakip/IadeAl', {
+                hareketId: $('#iadeHareketId').val(),
+                iadeTarihi: $('#iadeTarihi').val(),
+                yeniDurum: $('#iadeDurum').val(),
+                aciklama: $('#iadeAciklama').val(),
+                __RequestVerificationToken: token()
+            }, function (res) {
+                bildir(res.success, res.message);
+                if (res.success) setTimeout(function () { location.reload(); }, 700);
+            }).fail(function () { bildir(false, 'Sunucuya ulaşılamadı.'); });
+        }
+    </script>
+}

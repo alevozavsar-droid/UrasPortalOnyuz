@@ -1,0 +1,466 @@
+﻿@model WebApplication3.Controllers.TedarikciTalepModel
+
+@{
+    ViewData["Title"] = "Cari Açılış Formu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    
+    var ulkeListesi = ViewBag.UlkeListesi as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+    var bankaListesi = ViewBag.BankaListesi as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+    var grupListesi = ViewBag.GrupListesi as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+    var hesapGruplari = ViewBag.HesapGruplari as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+    var odemeSekliListesi = ViewBag.OdemeSekliListesi as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+    var paraBirimleri = ViewBag.ParaBirimiListesi as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+}
+
+@section Styles {
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        body { 
+            background-color: #f4f7fc; 
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            color: #2b3445; 
+        }
+        
+        .dashboard-card { 
+            background: #ffffff; 
+            border-radius: 12px; 
+            border: 1px solid #eef2f7; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03); 
+            padding: 24px; 
+            transition: all 0.3s ease; 
+        }
+        
+        .hover-elevate:hover { 
+            transform: translateY(-4px); 
+            box-shadow: 0 8px 15px rgba(0,0,0,0.08); 
+        }
+
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        
+        .section-title {
+            font-size: 0.85rem;
+            font-weight: 800;
+            color: #3b82f6;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #eff6ff;
+        }
+
+        .lbl-custom { 
+            font-weight: 700; 
+            color: #475569; 
+            font-size: 0.8rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .modern-input, .modern-select {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.85rem;
+            color: #334155;
+            transition: all 0.2s ease;
+        }
+
+        .modern-input:focus, .modern-select:focus {
+            background-color: #ffffff;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+            outline: none;
+        }
+
+        .modern-input[readonly] {
+            background-color: #f1f5f9;
+            color: #64748b;
+            cursor: not-allowed;
+        }
+
+        .qr-box { 
+            background-color: #f8fafc;
+            border: 1px dashed #cbd5e1; 
+            border-radius: 8px;
+            padding: 1.5rem; 
+            text-align: center; 
+            height: 100%; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+        }
+
+        .row-spacing { margin-bottom: 1.2rem; }
+    </style>
+}
+
+<div class="container-fluid py-4 w-100">
+    
+    <!-- Başlık ve Üst Butonlar -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;">Cari (Müşteri/Satıcı) Açılış Formu</h4>
+            <span class="text-muted" style="font-size: 14px;">120 veya 320 kırılımları altında otomatik olarak aktif mutabakat hesabı ve Cari Kart açılır.</span>
+        </div>
+        <div class="d-flex gap-3 align-items-center">
+            <!-- TEST İÇİN EKLENEN ÖRNEK DOLDUR BUTONU -->
+            <button type="button" class="btn btn-info rounded-pill px-4 shadow hover-elevate fw-bold text-white" id="btnOrnekDoldur">
+                <i class="fas fa-magic me-2"></i> Örnek Doldur
+            </button>
+            <button type="button" class="btn btn-warning rounded-pill px-4 shadow hover-elevate fw-bold text-dark" onclick="$('#excelInput').click()">
+                <i class="fas fa-file-excel me-2"></i> Excel'den Aktar
+            </button>
+            <input type="file" id="excelInput" style="display:none;" accept=".xlsx, .xls" />
+        </div>
+    </div>
+
+    <!-- Ana Form Kartı -->
+    <div class="dashboard-card border-0 border-top-primary">
+        <form id="frmTedarikci" autocomplete="off">
+            
+            <h6 class="section-title"><i class="fas fa-sitemap me-2"></i>Mükellef ve Kırılım Seçimi</h6>
+            <div class="row row-spacing">
+                <div class="col-md-3">
+                    <label class="lbl-custom">Mükellef Bilgisi</label>
+                    <select class="form-select modern-select" name="MukkellefBilgisi">
+                        <option value="GK">GK - Gerçek Kişi</option>
+                        <option value="TK">TK - Tüzel Kişi</option>
+                    </select>
+                </div>
+                <div class="col-md-9">
+                    <label class="lbl-custom">Hesap Grubu (Kırılım) <span class="text-danger">*</span></label>
+                    <select class="form-select modern-select select2" name="HesapKodu" required>
+                        <option value="">Seçiniz (Örn: 120.01 veya 320.01)...</option>
+                        @foreach (var hesap in hesapGruplari)
+                        {
+                            <option value="@hesap.Value">@hesap.Text</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="row row-spacing">
+                <div class="col-md-12">
+                    <label class="lbl-custom">Firma Unvanı <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control modern-input fw-bold" style="font-size: 1rem;" name="FirmaUnvani" placeholder="Tam ticari unvanı giriniz..." required />
+                </div>
+            </div>
+
+            <h6 class="section-title mt-4"><i class="fas fa-map-marker-alt me-2"></i>Adres ve İletişim (Merkez)</h6>
+            <div class="row row-spacing">
+                <div class="col-md-12 mb-3">
+                    <label class="lbl-custom">Adres</label>
+                    <input type="text" class="form-control modern-input" name="Adres" placeholder="Açık Adres..." />
+                </div>
+                
+                <div class="col-md-3 mb-3">
+                    <label class="lbl-custom">Ülke</label>
+                    <select class="form-select modern-select select2" name="Ulke" id="drpUlke">
+                        <option value="">Seçiniz...</option>
+                        @foreach (var ulke in ulkeListesi)
+                        {
+                            <option value="@ulke.Value">@ulke.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="lbl-custom">İl</label>
+                    <select class="form-select modern-select select2" name="Il" id="drpIl">
+                        <option value="">Önce Ülke Seçiniz...</option>
+                    </select>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="lbl-custom">İlçe</label>
+                    <input type="text" class="form-control modern-input" name="Ilce" />
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="lbl-custom">Posta Kodu</label>
+                    <input type="text" class="form-control modern-input" name="PostaKodu" />
+                </div>
+
+                <div class="col-md-4 mb-3">
+                    <label class="lbl-custom">Tel No</label>
+                    <input type="text" class="form-control modern-input" name="TelNo" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="lbl-custom">E-Posta (Genel)</label>
+                    <input type="email" class="form-control modern-input" name="EPosta" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="lbl-custom">Muhatap Grubu</label>
+                    <select class="form-select modern-select" name="MuhatapGrubu">
+                        <option value="">Seçiniz...</option>
+                        @foreach (var grup in grupListesi)
+                        {
+                            <option value="@grup.Value">@grup.Text</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="row mt-4">
+                <div class="col-md-9">
+                    <h6 class="section-title"><i class="fas fa-users me-2"></i>Personel & Vergi Bilgileri</h6>
+                    
+                    <div class="row row-spacing">
+                        <div class="col-md-4"><label class="lbl-custom">Satış/Pazarlamacı Adı</label><input type="text" class="form-control modern-input" name="SatisAdi" /></div>
+                        <div class="col-md-4"><label class="lbl-custom">GSM</label><input type="text" class="form-control modern-input" name="SatisGSM" /></div>
+                        <div class="col-md-4"><label class="lbl-custom">E-Posta</label><input type="email" class="form-control modern-input" name="SatisEPosta" /></div>
+                    </div>
+
+                    <div class="row row-spacing">
+                        <div class="col-md-4"><label class="lbl-custom">Muhasebeci Adı</label><input type="text" class="form-control modern-input" name="MuhasebeAdi" /></div>
+                        <div class="col-md-4"><label class="lbl-custom">GSM</label><input type="text" class="form-control modern-input" name="MuhasebeGSM" /></div>
+                        <div class="col-md-4"><label class="lbl-custom">E-Posta</label><input type="email" class="form-control modern-input" name="MuhasebeEPosta" /></div>
+                    </div>
+
+                    <div class="row row-spacing">
+                        <div class="col-md-4"><label class="lbl-custom">Vergi Dairesi</label><input type="text" class="form-control modern-input" name="VergiDairesi" /></div>
+                        <div class="col-md-4"><label class="lbl-custom">Vergi No</label><input type="text" class="form-control modern-input" name="VergiNo" /></div>
+                        <div class="col-md-4"><label class="lbl-custom">T.C. Kimlik</label><input type="text" class="form-control modern-input" name="TCKimlik" /></div>
+                    </div>
+
+                    <div class="row row-spacing">
+                        <div class="col-md-12">
+                            <label class="lbl-custom">Ödeme Şekli / Vade</label>
+                            <select class="form-select modern-select select2" name="OdemeSekli">
+                                <option value="">Seçiniz...</option>
+                                @foreach (var odeme in odemeSekliListesi)
+                                {
+                                    <option value="@odeme.Value">@odeme.Text</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <h6 class="section-title"><i class="fas fa-qrcode me-2"></i>Hızlı Aktarım</h6>
+                    <div class="qr-box">
+                        <i class="fas fa-qrcode fa-3x text-muted mb-3 opacity-50"></i>
+                        <label class="lbl-custom text-center mb-2">QR / BARKOD OKUTUNUZ</label>
+                        <input type="text" class="form-control modern-input text-center mx-auto" style="width: 100%;" name="QROkutunuz" placeholder="İmleci buraya bırakın" />
+                    </div>
+                </div>
+            </div>
+
+            <h6 class="section-title mt-4"><i class="fas fa-university me-2"></i>Banka Hesap Bilgileri</h6>
+            <div class="row">
+                <!-- Banka 1 -->
+                <div class="col-md-4">
+                    <div class="p-3 bg-light rounded border border-light hover-elevate">
+                        <span class="badge bg-secondary mb-2">Hesap 1</span>
+                        <div class="mb-2">
+                            <label class="lbl-custom">Banka Adı</label>
+                            <select class="form-select modern-select select2" name="Banka1Adi">
+                                <option value="">Seçiniz...</option>
+                                @foreach(var bank in bankaListesi) { <option value="@bank.Value">@bank.Text</option> }
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <label class="lbl-custom">Para Birimi</label>
+                            <select class="form-select modern-select select2" name="Banka1ParaBirimi">
+                                @foreach(var curr in paraBirimleri) { <option value="@curr.Value">@curr.Text</option> }
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <label class="lbl-custom">Hesap No</label>
+                            <input type="text" class="form-control modern-input" name="Banka1HesapNo" />
+                        </div>
+                        <div>
+                            <label class="lbl-custom">IBAN</label>
+                            <input type="text" class="form-control modern-input" name="Banka1IBAN" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Banka 2 -->
+                <div class="col-md-4">
+                    <div class="p-3 bg-light rounded border border-light hover-elevate">
+                        <span class="badge bg-secondary mb-2">Hesap 2</span>
+                        <div class="mb-2">
+                            <label class="lbl-custom">Banka Adı</label>
+                            <select class="form-select modern-select select2" name="Banka2Adi">
+                                <option value="">Seçiniz...</option>
+                                @foreach(var bank in bankaListesi) { <option value="@bank.Value">@bank.Text</option> }
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <label class="lbl-custom">Para Birimi</label>
+                            <select class="form-select modern-select select2" name="Banka2ParaBirimi">
+                                @foreach(var curr in paraBirimleri) { <option value="@curr.Value">@curr.Text</option> }
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <label class="lbl-custom">Hesap No</label>
+                            <input type="text" class="form-control modern-input" name="Banka2HesapNo" />
+                        </div>
+                        <div>
+                            <label class="lbl-custom">IBAN</label>
+                            <input type="text" class="form-control modern-input" name="Banka2IBAN" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Banka 3 -->
+                <div class="col-md-4">
+                    <div class="p-3 bg-light rounded border border-light hover-elevate">
+                        <span class="badge bg-secondary mb-2">Hesap 3</span>
+                        <div class="mb-2">
+                            <label class="lbl-custom">Banka Adı</label>
+                            <select class="form-select modern-select select2" name="Banka3Adi">
+                                <option value="">Seçiniz...</option>
+                                @foreach(var bank in bankaListesi) { <option value="@bank.Value">@bank.Text</option> }
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <label class="lbl-custom">Para Birimi</label>
+                            <select class="form-select modern-select select2" name="Banka3ParaBirimi">
+                                @foreach(var curr in paraBirimleri) { <option value="@curr.Value">@curr.Text</option> }
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <label class="lbl-custom">Hesap No</label>
+                            <input type="text" class="form-control modern-input" name="Banka3HesapNo" />
+                        </div>
+                        <div>
+                            <label class="lbl-custom">IBAN</label>
+                            <input type="text" class="form-control modern-input" name="Banka3IBAN" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Kayıt İşlemleri -->
+            <div class="d-flex justify-content-between align-items-center mt-5 pt-3 border-top">
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-success rounded-pill px-5 shadow hover-elevate fw-bold">
+                        <i class="fas fa-check-circle me-2"></i> Formu SAP'ye Kaydet
+                    </button>
+                    <button type="button" class="btn btn-light rounded-pill px-4 shadow-sm hover-elevate border" onclick="document.getElementById('frmTedarikci').reset()">
+                        <i class="fas fa-eraser me-2"></i> Formu Temizle
+                    </button>
+                </div>
+
+                <div class="d-flex gap-3 text-muted" style="font-size: 0.85rem;">
+                    <div>
+                        <span class="fw-bold me-1">Hazırlayan:</span> 
+                        <input type="text" class="modern-input py-1 text-center" style="width: 120px;" name="Hazirlayan" value="@Model.Hazirlayan" readonly />
+                    </div>
+                    <div>
+                        <span class="fw-bold me-1">Tarih:</span> 
+                        <input type="text" class="modern-input py-1 text-center" style="width: 110px;" name="HazirlanmaTarihi" value="@Model.HazirlanmaTarihi.ToString("dd.MM.yyyy")" readonly />
+                    </div>
+                </div>
+            </div>
+
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            // Select2 Entegrasyonu
+            $('.select2').select2({ theme: 'bootstrap-5', width: '100%' });
+
+            // Ülke - İl Dinamik Cascade
+            $("#drpUlke").change(function () {
+                var ulkeKodu = $(this).val();
+                var ilDropdown = $("#drpIl");
+                ilDropdown.empty().append('<option value="">Yükleniyor...</option>');
+
+                if (ulkeKodu) {
+                    $.get("/Rapor134/GetIller?ulkeKodu=" + ulkeKodu, function (data) {
+                        ilDropdown.empty().append('<option value="">Seçiniz...</option>');
+                        $.each(data, function (index, item) {
+                            ilDropdown.append($('<option>', { value: item.code, text: item.name }));
+                        });
+                    });
+                } else {
+                    ilDropdown.empty().append('<option value="">Önce Ülke Seçiniz...</option>');
+                }
+            });
+
+            // Örnek Doldur Butonu İşlevi
+            $("#btnOrnekDoldur").click(function() {
+                $("select[name='MukkellefBilgisi']").val("TK").trigger('change');
+                $("input[name='FirmaUnvani']").val("TEST YAZILIM A.Ş.");
+                $("input[name='Adres']").val("Örnek Mah. Test Sokak No:1 Kat:2");
+                $("input[name='Ilce']").val("Kadıköy");
+                $("input[name='PostaKodu']").val("34000");
+                $("input[name='TelNo']").val("02161234567");
+                $("input[name='EPosta']").val("kullanici@ornek.local");
+                
+                $("input[name='SatisAdi']").val("Ahmet Yılmaz");
+                $("input[name='SatisGSM']").val("05551234567");
+                $("input[name='SatisEPosta']").val("kullanici@ornek.local");
+                
+                $("input[name='MuhasebeAdi']").val("Ayşe Demir");
+                $("input[name='MuhasebeGSM']").val("05321234567");
+                $("input[name='MuhasebeEPosta']").val("kullanici@ornek.local");
+                
+                $("input[name='VergiDairesi']").val("Kadıköy VD.");
+                $("input[name='VergiNo']").val("1234567890");
+                $("input[name='TCKimlik']").val("12345678901");
+                
+                $("input[name='Banka1HesapNo']").val("12345678");
+                $("input[name='Banka1IBAN']").val("TR120000000000000000000000");
+                
+                toastr.info("Örnek veriler dolduruldu. Lütfen zorunlu açılır listeleri (Kırılım, Ülke) manuel seçiniz.");
+            });
+
+            // Gönderim yapılıyor mu kontrolü (Çift tıklamayı engeller)
+            let isSubmitting = false;
+
+            // Form Gönderimi (AJAX)
+            $("#frmTedarikci").on("submit", function (e) {
+                e.preventDefault();
+
+                // Eğer form zaten gönderiliyorsa, işlemi anında durdur.
+                if (isSubmitting) return; 
+                
+                isSubmitting = true; // Gönderim başladı bayrağını aktif et
+
+                var btn = $(this).find("button[type=submit]");
+                var originalText = btn.html();
+                
+                // Butonu deaktif et ve yazısını değiştir
+                btn.prop("disabled", true).html('<i class="fas fa-spinner fa-spin me-2"></i> SAP\'ye İşleniyor...');
+
+                $.ajax({
+                    type: "POST",
+                    url: "/Rapor134/Kaydet",
+                    data: $(this).serialize(),
+                    success: function (result) {
+                        if (result.success) {
+                            toastr.success(result.message, "İşlem Başarılı", { timeOut: 5000 });
+                            
+                            // Başarılı olursa butonu tekrar AKTİF ETMİYORUZ ki sayfa yenilenene kadar tekrar tıklanmasın
+                            setTimeout(function () { location.reload(); }, 3000);
+                        } else {
+                            toastr.error(result.message, "Hata", { timeOut: 10000 });
+                            
+                            // Hata durumunda kullanıcı düzeltebilsin diye butonu tekrar aktif et
+                            btn.prop("disabled", false).html(originalText);
+                            isSubmitting = false; 
+                        }
+                    },
+                    error: function () {
+                        toastr.error("Sunucu ile bağlantı sağlanamadı!", "Bağlantı Hatası");
+                        
+                        // Hata durumunda tekrar deneyebilmek için aktif et
+                        btn.prop("disabled", false).html(originalText);
+                        isSubmitting = false; 
+                    }
+                });
+            });
+        });
+    </script>
+}

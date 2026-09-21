@@ -1,0 +1,634 @@
+﻿@model dynamic
+@{
+    ViewData["Title"] = "Cari Kapama (Mutabakat) Merkezi";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    
+    // Aktif Veritabanını URL veya Cookie'den alıyoruz
+    var currentDbKey = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDbKey))
+    {
+        currentDbKey = Context.Request.Cookies["SelectedDatabase"] ?? "DefaultConnection5";
+    }
+
+    string currentDbDisplay = ViewBag.CurrentDbDisplay as string ?? "SELVI";
+    var databases = ViewBag.Databases as List<WebApplication3.Controllers.Rapor103Controller.DatabaseConfig>;
+    
+    // Hem Müşteriler Hem de Tedarikçiler ViewBag'den alınıyor
+    var customers = ViewBag.Customers as List<WebApplication3.Controllers.Rapor103Controller.DatabaseConfig>;
+    var suppliers = ViewBag.Suppliers as List<WebApplication3.Controllers.Rapor103Controller.DatabaseConfig>;
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            overflow-x: hidden;
+        }
+
+        .container-fluid {
+            width: 100% !important;
+            max-width: 100% !important;
+            padding-left: 15px !important;
+            padding-right: 15px !important;
+            margin: 0 !important;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 0 0 10px 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .database-info {
+            background-color: #e9ecef;
+            border-left: 4px solid #6a11cb;
+            padding: 10px 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .dash-card {
+            background-color: white;
+            border-radius: 8px;
+            border: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+        
+        .dash-card .card-body {
+            padding: 20px;
+        }
+
+        table.rapor-tablo {
+            width: 100% !important;
+            border-collapse: collapse;
+            margin-bottom: 0;
+            font-size: 0.85rem;
+        }
+
+        table.rapor-tablo th {
+            background-color: #6a11cb;
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            padding: 12px 10px;
+            text-transform: uppercase;
+            font-size: 0.70rem;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+
+        table.rapor-tablo td {
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            vertical-align: middle;
+            color: #495057;
+        }
+
+        table.rapor-tablo tr { background-color: white; transition: background-color 0.2s; }
+        table.rapor-tablo tr:hover { background-color: #f1f3f5; }
+        table.rapor-tablo tr.table-primary { background-color: #e0f3ff !important; }
+
+        .text-debit { color: #dc3545; font-weight: bold; }
+        .text-credit { color: #198754; font-weight: bold; }
+
+        .amount-input {
+            width: 110px;
+            font-weight: bold;
+            text-align: right;
+            border-radius: 6px;
+            border: 1px solid #ced4da;
+            padding: 5px 10px;
+        }
+        .amount-input:disabled { background-color: #e9ecef; color: #6c757d; }
+        .amount-input:focus { border-color: #6a11cb; box-shadow: 0 0 0 0.2rem rgba(106, 17, 203, 0.25); outline: none; }
+
+        .select2-container--bootstrap-5 .select2-selection {
+            min-height: 42px !important;
+            padding: 4px 12px;
+            border-radius: 6px;
+            border: 1px solid #ced4da;
+            display: flex;
+            align-items: center;
+        }
+        .select2-container--bootstrap-5.select2-container--focus .select2-selection {
+            border-color: #6a11cb;
+            box-shadow: 0 0 0 0.25rem rgba(106, 17, 203, 0.25);
+        }
+
+        .summary-bar {
+            position: sticky;
+            bottom: 0;
+            background: white;
+            z-index: 1000;
+            border-top: 4px solid #6a11cb;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.1);
+            border-radius: 0 0 8px 8px;
+            padding: 15px 20px;
+        }
+
+        .summary-box {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px 15px;
+            border-radius: 8px;
+            min-width: 160px;
+        }
+
+        .chk-row {
+            transform: scale(1.4);
+            cursor: pointer;
+            accent-color: #6a11cb;
+        }
+    </style>
+}
+
+<div class="container-fluid">
+
+    @Html.AntiForgeryToken()
+
+    <div class="header text-center">
+        <h2><i class="fas fa-handshake me-2"></i>CARİ KAPAMA (MUTABAKAT) MERKEZİ</h2>
+        <p class="mb-0">Robot ile otomatik veya ekrandan manuel yevmiye eşleştirme ve kapatma işlemleri</p>
+    </div>
+
+    <div class="database-info d-flex justify-content-between align-items-center shadow-sm">
+        <div>
+            <i class="fas fa-database me-2 text-primary fs-5"></i> 
+            <span class="fs-6">Aktif İşlem Yapılan Veritabanı:</span>
+        </div>
+        <select id="dbSelector" class="form-select fw-bold text-primary border-primary" style="width: auto; background-color: white;" onchange="changeDatabase(this.value)">
+            @if (databases != null)
+            {
+                foreach (var db in databases)
+                {
+                    if (db.Key == currentDbKey) { <option value="@db.Key" selected>@db.Display</option> }
+                    else { <option value="@db.Key">@db.Display</option> }
+                }
+            }
+        </select>
+    </div>
+
+    <div class="card dash-card border-start border-4" style="border-left-color: #6a11cb !important;">
+        <div class="card-body">
+            <h5 class="card-title text-dark fw-bold mb-3"><i class="fas fa-search me-2" style="color: #6a11cb;"></i>Cari Hesap İşlemleri</h5>
+            <div class="row align-items-end g-3">
+                <div class="col-md-5">
+                    <label class="form-label fw-bold text-muted">Cari Kodu / Unvanı Yazarak Arayın</label>
+                    <select id="cmbCardCode" class="form-select select2-customer">
+                        <option value=""></option>
+                        
+                        <optgroup label="Müşteriler">
+                            @if(customers != null)
+                            {
+                                foreach(var c in customers)
+                                {
+                                    <option value="@c.Key">@c.Key - @c.Display</option>
+                                }
+                            }
+                        </optgroup>
+
+                        <optgroup label="Tedarikçiler">
+                            @if(suppliers != null)
+                            {
+                                foreach(var s in suppliers)
+                                {
+                                    <option value="@s.Key">@s.Key - @s.Display</option>
+                                }
+                            }
+                        </optgroup>
+
+                    </select>
+                </div>
+                <div class="col-md-7 d-flex gap-2">
+                    <button class="btn btn-primary fw-bold flex-fill shadow-sm" style="height: 42px; background-color: #2575fc; border: none;" onclick="loadOpenTransactions()">
+                        <i class="fas fa-list me-1"></i> Açık İşlemleri Getir
+                    </button>
+                    <button class="btn btn-dark fw-bold flex-fill shadow-sm" style="height: 42px;" onclick="triggerAutoReconciliation()">
+                        <i class="fas fa-robot text-warning me-1"></i> Otomatik Kapat
+                    </button>
+                    <button class="btn btn-danger fw-bold flex-fill shadow-sm" style="height: 42px;" onclick="triggerCancelAllReconciliations()">
+                        <i class="fas fa-undo me-1"></i> Tümünü İptal Et
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card dash-card" id="divTransactions" style="display: none;">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
+            <h5 class="m-0 font-weight-bold" style="color: #6a11cb;"><i class="fas fa-file-invoice-dollar me-2"></i> Kapanmamış (Açık) Yevmiye Kalemleri</h5>
+            <span class="badge bg-warning text-dark px-3 py-2 fs-6 rounded-pill shadow-sm" id="lblTransCount">0 İşlem Bulundu</span>
+        </div>
+        
+        <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+            <table class="table table-hover rapor-tablo" id="tblTransactions">
+                <thead>
+                    <tr>
+                        <th class="text-center">Seç</th>
+                        <th>Kayıt T.</th>
+                        <th>Vade T.</th>
+                        <th>Yevm/Satır</th>
+                        <th>Aktarım Tarihi</th>
+                        <th>İşlem Tipi</th>
+                        <th>Kur. P.B.</th>
+                        <th>Dövizli Borç</th>
+                        <th>Dövizli Alacak</th>
+                        <th>Açık Borç (TL)</th>
+                        <th>Açık Alacak (TL)</th>
+                        <th>Açıklama (Memo)</th>
+                        <th class="text-end pe-3">Kapatılacak Tutar</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyTransactions">
+                    </tbody>
+            </table>
+        </div>
+
+        <div class="summary-bar d-flex flex-wrap justify-content-between align-items-center">
+            <div class="d-flex flex-wrap gap-3 align-items-center">
+                <div class="summary-box border-danger border-opacity-50 border-start border-4">
+                    <span class="text-muted d-block small fw-bold text-uppercase"><i class="fas fa-arrow-down text-danger me-1"></i> Seçilen Borç</span>
+                    <span class="h4 mb-0 fw-bold text-danger" id="lblTotalDebit">0,00 ₺</span>
+                </div>
+                
+                <div class="summary-box border-success border-opacity-50 border-start border-4">
+                    <span class="text-muted d-block small fw-bold text-uppercase"><i class="fas fa-arrow-up text-success me-1"></i> Seçilen Alacak</span>
+                    <span class="h4 mb-0 fw-bold text-success" id="lblTotalCredit">0,00 ₺</span>
+                </div>
+                
+                <div class="summary-box ms-md-3 bg-white border border-secondary shadow-sm">
+                    <span class="text-muted d-block small fw-bold text-uppercase">Kalan Bakiye Farkı</span>
+                    <span class="h3 mb-0 fw-bold text-dark" id="lblDifference">0,00 ₺</span>
+                    <small class="d-block text-muted mt-1" style="font-size: 10px;">(Kapatmak için fark SIFIR olmalı)</small>
+                </div>
+            </div>
+            
+            <button class="btn btn-secondary btn-lg rounded-pill fw-bold shadow mt-3 mt-md-0 px-5" style="height: 55px;" id="btnReconcile" onclick="performManualReconciliation()" disabled>
+                <i class="fas fa-check-double me-2"></i> Seçilenleri Kapat (Mutabakat)
+            </button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        // Aktif veritabanı parametresini JS değişkenine alıyoruz
+        const dbParam = '@currentDbKey';
+        const dbQueryString = dbParam ? '?db=' + dbParam : '';
+        const antiForgeryToken = $('input[name="__RequestVerificationToken"]').val();
+
+        $(document).ready(function() {
+            // SELECT2 KURULUMU - (Yazarak arama özelliği)
+            $('.select2-customer').select2({ 
+                theme: 'bootstrap-5', 
+                placeholder: '🔍 Lütfen listeden cari hesap arayın...',
+                allowClear: true, 
+                width: '100%',
+                language: {
+                    noResults: function () {
+                        return "Aradığınız kriterlere uygun cari hesap bulunamadı.";
+                    }
+                }
+            });
+            
+            $(document).on('select2:open', () => {
+                document.querySelector('.select2-search__field').focus();
+            });
+        });
+
+        function changeDatabase(dbKey) { 
+            // Seçimi Cookie'ye de yazarak güvenceye alalım
+            document.cookie = "SelectedDatabase=" + dbKey + "; path=/; max-age=" + (60 * 60 * 24 * 30);
+            window.location.href = "?db=" + dbKey; 
+        }
+
+        function loadOpenTransactions() {
+            var cardCode = $('#cmbCardCode').val();
+            if (!cardCode) {
+                Swal.fire('Uyarı', 'Lütfen arama kutusundan bir cari hesap seçiniz.', 'warning');
+                return;
+            }
+
+            Swal.fire({ 
+                title: 'Açık İşlemler Çekiliyor...', 
+                text: 'Lütfen bekleyin',
+                allowOutsideClick: false, 
+                didOpen: () => { Swal.showLoading(); } 
+            });
+
+            $.ajax({
+                url: '/Rapor103/GetOpenTransactions' + dbQueryString,
+                type: 'GET',
+                data: { cardCode: cardCode },
+                success: function (res) {
+                    Swal.close();
+                    if (res.success) {
+                        renderTable(res.data);
+                        $('#divTransactions').fadeIn();
+                        $('html, body').animate({ scrollTop: $("#divTransactions").offset().top - 20 }, 500);
+                    } else { Swal.fire('Hata', res.message, 'error'); }
+                },
+                error: function () { Swal.fire('Hata', 'Sunucu bağlantı hatası.', 'error'); }
+            });
+        }
+
+        // --- OTOMATİK ROBOT KAPAMASI ---
+        function triggerAutoReconciliation() {
+            var cardCode = $('#cmbCardCode').val();
+            if (!cardCode) {
+                Swal.fire('Uyarı', 'Lütfen robotun çalışması için önce bir cari hesap seçiniz.', 'warning');
+                return;
+            }
+
+            Swal.fire({
+                title: 'Otomatik Robotu Başlat',
+                html: `Seçili carideki tüm açık işlemler arka planda analiz edilecek ve eşleşen bakiyeler <b>otomatik olarak</b> kapatılacaktır.<br><br>Onaylıyor musunuz?`,
+                icon: 'info',
+                showCancelButton: true,
+                confirmButtonColor: '#2575fc',
+                cancelButtonColor: '#d33',
+                confirmButtonText: '<i class="fas fa-robot text-warning"></i> Evet, Robotu Çalıştır',
+                cancelButtonText: 'İptal'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    
+                    // GERÇEKÇİ İLERLEME ÇUBUĞU SİMÜLASYONU 
+                    let progressInterval;
+                    let currentProgress = 0;
+
+                    Swal.fire({ 
+                        title: 'Robot Devrede İşlemler Kapatılıyor...', 
+                        html: `
+                            <p class="text-muted small">Bu işlem cari bakiyesine ve yevmiye sayısına göre uzun sürebilir. Lütfen sekmeyi kapatmayın.</p>
+                            <div class="progress mt-3" style="height: 25px;">
+                                <div id="robotProgress" class="progress-bar progress-bar-striped progress-bar-animated bg-success fw-bold" role="progressbar" style="width: 0%; font-size:14px;">%0</div>
+                            </div>`, 
+                        allowOutsideClick: false, 
+                        showConfirmButton: false,
+                        didOpen: () => { 
+                            currentProgress = 0;
+                            progressInterval = setInterval(() => {
+                                if (currentProgress < 95) { 
+                                    // Yüzde 95'e kadar rasgele bir hızla dolar ve orada backend cevabını bekler.
+                                    currentProgress += Math.floor(Math.random() * 4) + 1;
+                                    if(currentProgress > 95) currentProgress = 95;
+                                    $('#robotProgress').css('width', currentProgress + '%').text('%' + currentProgress);
+                                }
+                            }, 1500); 
+                        },
+                        willClose: () => { clearInterval(progressInterval); }
+                    });
+
+                    $.ajax({
+                        url: '/Rapor103/AutoReconcile' + dbQueryString,
+                        type: 'POST',
+                        headers: { 'RequestVerificationToken': antiForgeryToken },
+                        data: { cardCode: cardCode },
+                        success: function (res) {
+                            // Başarılı olunca barı %100'e çek
+                            $('#robotProgress').css('width', '100%').text('%100');
+
+                            setTimeout(() => {
+                                if (res.success) {
+                                    Swal.fire('İşlem Kusursuz Tamamlandı', res.message, 'success').then(() => { loadOpenTransactions(); });
+                                } else {
+                                    Swal.fire({
+                                        title: 'İşlem Sonucu Raporu',
+                                        html: res.message,
+                                        icon: res.message.includes("Başarıyla") ? 'warning' : 'error',
+                                        width: 700
+                                    }).then(() => { loadOpenTransactions(); });
+                                }
+                            }, 600); // %100'ü gözle görebilmek için ufak bir gecikme
+                        },
+                        error: function (xhr) {
+                            Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error');
+                        }
+                    });
+                }
+            });
+        }
+
+        // --- TÜM MUTABAKATLARI İPTAL ET ---
+       // --- TÜM MUTABAKATLARI İPTAL ET (DETAYLI RAPOR DESTEKLİ) ---
+        function triggerCancelAllReconciliations() {
+            var cardCode = $('#cmbCardCode').val();
+            if (!cardCode) {
+                Swal.fire('Uyarı', 'Lütfen iptal işlemi için önce bir cari hesap seçiniz.', 'warning');
+                return;
+            }
+
+            Swal.fire({
+                title: 'Toplu İptal Onayı',
+                html: `Seçili cariye <b>(${cardCode})</b> ait tüm açık ve geçerli iç mutabakatlar Service Layer üzerinden iptal edilecektir.<br><br>Bu işlemi geri alamazsınız. Onaylıyor musunuz?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: '<i class="fas fa-undo"></i> Evet, Tümünü İptal Et',
+                cancelButtonText: 'Vazgeç'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    
+                    Swal.fire({
+                        title: 'İptal İşlemi Sürüyor...',
+                        text: 'Service Layer ile iletişim kuruluyor, bu işlem mutabakat sayısına göre biraz sürebilir...',
+                        allowOutsideClick: false,
+                        didOpen: () => { Swal.showLoading(); }
+                    });
+
+                    $.ajax({
+                        url: '/Rapor103/CancelReconciliations' + dbQueryString,
+                        type: 'POST',
+                        headers: { 'RequestVerificationToken': antiForgeryToken },
+                        data: { cardCode: cardCode },
+                        success: function (res) {
+                            if (res.success) {
+                                if(res.hasError) {
+                                    // Eğer hata varsa detaylı ve genişletilmiş rapor penceresi açılır
+                                    Swal.fire({
+                                        title: 'Kısmi Başarı / İptal Edilemeyenler',
+                                        html: res.message,
+                                        icon: 'warning',
+                                        width: 700 // Raporun düzgün okunması için genişliği artırdık
+                                    }).then(() => { loadOpenTransactions(); });
+                                } else {
+                                    Swal.fire('Tamamen İptal Edildi', res.message, 'success').then(() => { loadOpenTransactions(); });
+                                }
+                            } else {
+                                Swal.fire('Hata', res.message, 'error');
+                            }
+                        },
+                        error: function (xhr) {
+                            Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı veya Service Layer yanıt vermedi.', 'error');
+                        }
+                    });
+                }
+            });
+        }
+
+        // Tabloyu Çizdirme
+        function renderTable(data) {
+            var tbody = $('#tbodyTransactions');
+            tbody.empty();
+            $('#lblTransCount').text(data.length + ' Açık Kalem Bulundu');
+
+            if (data.length === 0) {
+                tbody.append('<tr><td colspan="13" class="text-center py-5 text-success fw-bold fs-5"><i class="fas fa-check-circle fa-2x d-block mb-3 text-success"></i> Bu cariye ait kapanmamış (açık) işlem bulunmuyor. Bakiye tamamen temiz!</td></tr>');
+                calculateTotals();
+                return;
+            }
+
+            data.forEach(function (item) {
+                var isDebit = item.openDebit > 0;
+                var maxAmount = isDebit ? item.openDebit : item.openCredit;
+                
+                var formattedDebit = isDebit ? formatMoney(item.openDebit) : '-';
+                var formattedCredit = !isDebit ? formatMoney(item.openCredit) : '-';
+                
+                var fcDebit = isDebit && item.dovizliBorc > 0 ? formatMoney(item.dovizliBorc) : '-';
+                var fcCredit = !isDebit && item.dovizliAlacak > 0 ? formatMoney(item.dovizliAlacak) : '-';
+
+                var rawMaxAmount = parseFloat(maxAmount).toFixed(2);
+                
+                var tr = `<tr data-transid="${item.transId}" data-lineid="${item.lineId}" data-isdebit="${isDebit}">
+                    <td class="text-center"><input type="checkbox" class="chk-row" onchange="handleRowCheck(this, ${rawMaxAmount})"></td>
+                    <td><i class="far fa-calendar-alt text-muted"></i> ${item.docDate}</td>
+                    <td>${item.dueDate}</td>
+                    <td><span class="fw-bold" style="color: #6a11cb;">${item.transId}</span><span class="text-muted small">/${item.lineId}</span></td>
+                    
+                    <td><span class="badge bg-secondary">${item.aktarimTarihi || '-'}</span></td>
+                    <td><span class="badge border border-primary text-primary">${item.islemTipi || '-'}</span></td>
+                    <td><span class="badge bg-dark">${item.paraBirimi}</span></td>
+                    <td class="text-end text-primary">${fcDebit}</td>
+                    <td class="text-end text-primary">${fcCredit}</td>
+
+                    <td class="text-end text-debit">${formattedDebit}</td>
+                    <td class="text-end text-credit">${formattedCredit}</td>
+                    <td title="${item.memo}" style="max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><strong>${item.memo}</strong></td>
+                    <td class="text-end pe-3"><input type="number" class="amount-input ms-auto" value="0.00" max="${rawMaxAmount}" min="0" step="0.01" disabled onkeyup="validateInput(this); calculateTotals()" onchange="validateInput(this); calculateTotals()"></td>
+                </tr>`;
+                tbody.append(tr);
+            });
+            calculateTotals();
+        }
+
+        // Input Koruma (Max tutarı geçemesin)
+        function validateInput(input) {
+            var val = parseFloat($(input).val()) || 0;
+            var max = parseFloat($(input).attr('max')) || 0;
+            if (val > max) { $(input).val(max.toFixed(2)); } 
+            else if (val < 0) { $(input).val("0.00"); }
+        }
+
+        // Seçim Kutusu Tıklanması
+        function handleRowCheck(checkbox, maxAmount) {
+            var row = $(checkbox).closest('tr');
+            var input = row.find('.amount-input');
+            if ($(checkbox).is(':checked')) {
+                row.addClass('table-primary');
+                input.prop('disabled', false).val(parseFloat(maxAmount).toFixed(2));
+            } else {
+                row.removeClass('table-primary');
+                input.prop('disabled', true).val("0.00");
+            }
+            calculateTotals();
+        }
+
+        // Hesaplama Modülü
+        function calculateTotals() {
+            var totalDebit = 0.0, totalCredit = 0.0;
+
+            $('.chk-row:checked').each(function () {
+                var row = $(this).closest('tr');
+                var isDebit = row.data('isdebit');
+                var val = parseFloat(row.find('.amount-input').val()) || 0;
+
+                if (isDebit) totalDebit += val; else totalCredit += val;
+            });
+
+            var diff = Math.round(Math.abs(totalDebit - totalCredit) * 100) / 100; 
+
+            $('#lblTotalDebit').text(formatMoney(totalDebit) + ' ₺');
+            $('#lblTotalCredit').text(formatMoney(totalCredit) + ' ₺');
+            $('#lblDifference').text(formatMoney(diff) + ' ₺');
+
+            if (totalDebit > 0 && totalCredit > 0 && diff === 0) {
+                $('#lblDifference').removeClass('text-danger').addClass('text-success');
+                $('#btnReconcile').prop('disabled', false).css('background-color', '#198754').css('border-color', '#198754').removeClass('btn-secondary');
+            } else {
+                $('#lblDifference').removeClass('text-success').addClass('text-danger');
+                $('#btnReconcile').prop('disabled', true).css('background-color', '').css('border-color', '').addClass('btn-secondary');
+            }
+        }
+
+        // --- MANUEL KAPAMA ---
+        function performManualReconciliation() {
+            var cardCode = $('#cmbCardCode').val();
+            var lines = [];
+
+            $('.chk-row:checked').each(function () {
+                var row = $(this).closest('tr');
+                var amt = parseFloat(row.find('.amount-input').val()) || 0;
+                if (amt > 0) {
+                    lines.push({ TransId: parseInt(row.data('transid')), LineId: parseInt(row.data('lineid')), ReconcileAmount: amt });
+                }
+            });
+
+            Swal.fire({
+                title: 'Mutabakat Onayı',
+                text: "Seçilen işlemler kalıcı olarak birbirine kapatılacaktır. Onaylıyor musunuz?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#198754',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Evet, Kapat',
+                cancelButtonText: 'Vazgeç'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({ title: 'İşleniyor...', text: 'Lütfen bekleyin.', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+                    $.ajax({
+                        url: '/Rapor103/PerformReconciliation' + dbQueryString,
+                        type: 'POST',
+                        contentType: 'application/json',
+                        headers: { 'RequestVerificationToken': antiForgeryToken },
+                        data: JSON.stringify({ CardCode: cardCode, Lines: lines }),
+                        success: function (res) {
+                            if (res.success) {
+                                Swal.fire('Başarılı!', res.message, 'success').then(() => { loadOpenTransactions(); });
+                            } else { Swal.fire({ title: 'SAP Hatası', html: res.message, icon: 'error' }); }
+                        },
+                        error: function (xhr) {
+                            var msg = xhr.responseJSON ? xhr.responseJSON.message : 'Sunucu hatası oluştu.';
+                            Swal.fire({ title: 'Hata', html: msg, icon: 'error' });
+                        }
+                    });
+                }
+            });
+        }
+
+        // Para birimi formatlama (1.234,56)
+        function formatMoney(amount) {
+            return amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+    </script>
+}

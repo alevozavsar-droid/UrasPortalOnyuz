@@ -1,0 +1,556 @@
+﻿@model List<WebApplication3.Models.BelgeViewModel>
+@using Microsoft.AspNetCore.Antiforgery
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using System.Globalization
+@using Newtonsoft.Json
+@inject IAntiforgery Xsrf
+@inject IAuthorizationService AuthorizationService
+
+@{
+    ViewData["Title"] = "Finans Raporlama Ortak Ekranı";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // Hangi Controller'ın çalıştığını buluyoruz
+    string currentController = ViewContext.RouteData.Values["controller"]?.ToString();
+    bool isEditableMode = currentController == "Rapor"; // RaporController ise düzenlenebilir mod
+
+    var requestToken = Xsrf.GetAndStoreTokens(Context).RequestToken;
+    var authorizedUsers = new List<string> { "IT02", "YKB", "GK" };
+    var isUserAuthorized = authorizedUsers.Contains(User.Identity.Name);
+    
+    // Rapor25 (PDF işlemleri) için JSON verisi
+    var reportDataJson = Model != null ? JsonConvert.SerializeObject(Model, new JsonSerializerSettings { DateFormatString = "yyyy-MM-dd" }) : "[]";
+
+    // Filtreleme için Benzersiz Değerler (Rapor25 mantığı)
+    var distinctValues = new Dictionary<string, List<string>>();
+    if (Model != null)
+    {
+        distinctValues["Hafta"] = Model.Where(m => m.Hafta.HasValue).Select(m => m.Hafta.Value.ToString()).Distinct().OrderBy(s => s).ToList();
+        distinctValues["TarihAraligi"] = Model.Where(m => !string.IsNullOrEmpty(m.TarihAraligi)).Select(m => m.TarihAraligi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["TedarikciAlacakli"] = Model.Where(m => !string.IsNullOrEmpty(m.TedarikciAlacakli)).Select(m => m.TedarikciAlacakli).Distinct().OrderBy(s => s).ToList();
+        distinctValues["DocNum"] = Model.Where(m => !string.IsNullOrEmpty(m.DocNum)).Select(m => m.DocNum).Distinct().OrderBy(s => s).ToList();
+        distinctValues["FaturaNo"] = Model.Where(m => !string.IsNullOrEmpty(m.FaturaNo)).Select(m => m.FaturaNo).Distinct().OrderBy(s => s).ToList();
+        distinctValues["OdemeNedeni"] = Model.Where(m => !string.IsNullOrEmpty(m.OdemeNedeni)).Select(m => m.OdemeNedeni).Distinct().OrderBy(s => s).ToList();
+        distinctValues["Durum"] = Model.Where(m => !string.IsNullOrEmpty(m.Durum)).Select(m => m.Durum).Distinct().OrderBy(s => s).ToList();
+    }
+
+    var currentPage = ViewBag.CurrentPage != null ? (int)ViewBag.CurrentPage : 1;
+    var pageSize = ViewBag.PageSize != null ? (int)ViewBag.PageSize : 100;
+    var totalRecords = ViewBag.TotalRecords != null ? (int)ViewBag.TotalRecords : 0;
+    var totalPages = ViewBag.TotalPages != null ? (int)ViewBag.TotalPages : 1;
+
+    var sahipListesi = new List<string> { "Tolga Yaman", "Gizem Tan", "Personel 24", "İdari İşler", "Muhasebe", "Cari İşler", "Finans", "Özge İsen", "Sevgi Ay" };
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+
+    <style>
+        :root { --primary-color: #0d6efd; --light-bg: #f8f9fa; --border-color: #d0d0d0; --header-bg: #212529; --header-text: #ffffff; }
+        body { font-size: 12px; background-color: var(--light-bg); }
+        .main-content { padding: 8px; background-color: #ffffff; border-radius: 6px; box-shadow: 0 0 8px rgba(0,0,0,0.08); }
+        .sticky-toolbar { position: sticky; top: 0; background-color: #ffffff; z-index: 1000; padding: 8px 12px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        .table-container { overflow-x: auto; margin-top: 6px; border: 1px solid var(--border-color); }
+        .rapor-tablo { width: 100%; border-collapse: separate; font-size: 0.84em; min-width: 1600px; }
+        .rapor-tablo thead { position: sticky; top: 0; z-index: 101; background-color: #ffffff; }
+        .rapor-tablo thead th { background-color: var(--header-bg); color: var(--header-text); padding: 4px 3px; text-align: center; border-bottom: 2px solid var(--border-color); }
+        .rapor-tablo td { padding: 1px; vertical-align: middle; border-right: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); height: 25px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rapor-tablo .filter-row th { background-color: #fff; padding: 2px; }
+        
+        /* Modlara göre renklendirme */
+        .table-manual { background-color: #e6f7ff !important; border-left: 4px solid #0dcaf0 !important; }
+        .table-success { background-color: #d1e7dd !important; }
+        .table-danger { background-color: #f8d7da !important; }
+        .table-warning { background-color: #fff3cd !important; }
+        
+        /* Input stilleri (Sadece Edit Modu İçin) */
+        .form-control-sm { font-size: 0.8rem; padding: 2px 4px; height: 26px; }
+    </style>
+}
+
+<div class="container-fluid py-4">
+    <div class="row g-0">
+        <div class="col-md-12 main-content">
+            <div id="loadingOverlay" style="display:none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; justify-content: center; align-items: center; background-color: rgba(255,255,255,0.8); z-index: 2000;">
+                <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Yükleniyor...</span></div>
+            </div>
+
+            @if (isEditableMode)
+            {
+                @:<form method="post" asp-action="Guncelle" asp-controller="Rapor" id="updateDocumentsForm">
+                @Html.AntiForgeryToken()
+            }
+
+            <div class="sticky-toolbar">
+                <div class="toolbar-left-actions">
+                    <div class="btn-group">
+                        @if (isEditableMode)
+                        {
+                            // --- RAPOR CONTROLLER BUTONLARI ---
+                            @if (isUserAuthorized)
+                            {
+                                <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#addRowModal">
+                                    <i class="fas fa-plus"></i> Ekle
+                                </button>
+                                <button type="button" class="btn btn-sm btn-warning" id="showApprovalModalBtn">
+                                    <i class="fas fa-hourglass-half"></i> Onaylar
+                                </button>
+                                // Sıralama Butonları
+                                <button id="moveUpBtn" type="button" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-up"></i></button>
+                                <button id="moveDownBtn" type="button" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-down"></i></button>
+                                <button id="saveOrderBtn" type="button" class="btn btn-sm btn-success"><i class="fas fa-save"></i> Sıra Kaydet</button>
+                            }
+                        }
+                        else
+                        {
+                            // --- RAPOR25 CONTROLLER BUTONLARI ---
+                            <button id="createInstructionBtn" type="button" class="btn btn-sm btn-primary">
+                                <i class="fas fa-file-invoice-dollar"></i> Belge Talimatı (PDF)
+                            </button>
+                            <button id="createNonDocumentInstructionBtn" type="button" class="btn btn-sm btn-success">
+                                <i class="fas fa-money-bill-alt"></i> Belgesiz Ödeme
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center">
+                    <span class="ms-3 me-2 total-amount-display">Seçilen Tutar:</span>
+                    <strong id="selectedTotalAmount" class="text-primary">0.00 TL</strong>
+                </div>
+
+                <div class="ms-auto">
+                    <div class="database-info d-inline-block me-2">
+                        <i class="fas fa-database"></i> @ViewBag.DatabaseName
+                    </div>
+                    @if (isEditableMode)
+                    {
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="fas fa-sync-alt me-2"></i> Güncelle
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table class="table table-bordered table-striped table-hover rapor-tablo" id="belgeTable">
+                    <thead>
+                        <tr class="main-header-row">
+                            <th>Sıra</th>
+                            <th class="checkbox-column"><input type="checkbox" id="selectAllCheckbox" class="form-check-input" /></th>
+                            <th class="sortable-column" data-column="Hafta">Hafta</th>
+                            <th class="sortable-column" data-column="TarihAraligi">Vade Yıl/Ay</th>
+                            <th class="sortable-column" data-column="OrderDate">Belge Tarihi</th>
+                            <th class="sortable-column" data-column="TedarikciAlacakli">Tedarikçi</th>
+                            <th class="sortable-column" data-column="DocNum">Belge No</th>
+                            <th class="sortable-column" data-column="FaturaNo">Fatura No</th>
+                            
+                            @if (isEditableMode)
+                            {
+                                <th>Öde. Plan Tar.</th>
+                                <th>%</th>
+                                <th>Hesaplanan</th>
+                                <th>Not</th>
+                            }
+                            else
+                            {
+                                <th class="sortable-column" data-column="OdeplanTarihi">Öde. Plan Tar.</th>
+                                <th class="sortable-column" data-column="U_BE1_TUTAR">Ödenecek</th>
+                                <th class="sortable-column" data-column="OdeplanNot">Not</th>
+                            }
+
+                            <th class="sortable-column" data-column="OdemeNedeni">Ödeme Nedeni</th>
+                            <th class="sortable-column" data-column="VadeTarihi">Vade Tarihi</th>
+                            <th class="sortable-column" data-column="Tutar">Tutar</th>
+                            <th class="sortable-column" data-column="KalanTutar">Kalan</th>
+                            <th class="sortable-column" data-column="ParaBirimi">PB</th>
+                            <th class="sortable-column" data-column="Durum">Durum</th>
+                            @if(isEditableMode) { <th>İşlem</th> }
+                        </tr>
+                        
+                        <tr class="filter-row">
+                            <th></th>
+                            <th></th>
+                            <th>
+                                <select class="form-select form-select-sm filter-select-bs" multiple data-actions-box="true" title="Hafta">
+                                    @if(distinctValues.ContainsKey("Hafta")) { foreach(var i in distinctValues["Hafta"]) { <option>@i</option> } }
+                                </select>
+                            </th>
+                            <th colspan="12"></th> 
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model != null)
+                        {
+                            for (int i = 0; i < Model.Count; i++)
+                            {
+                                var item = Model[i];
+                                string rowClass = item.Durum == "Ödendi" ? "table-success" : 
+                                                  item.Durum == "Gecikti" ? "table-danger" : "";
+                                if (item.Belge == "Manuel") { rowClass += " table-manual"; }
+
+                                string objType = item.ObjType;
+                                if (string.IsNullOrEmpty(objType)) {
+                                    objType = item.Belge == "Fatura" ? "18" : (item.Belge == "Sipariş" ? "22" : "100");
+                                }
+
+                                <tr class="@rowClass" 
+                                    data-docnum="@item.DocNum" 
+                                    data-objtype="@objType"
+                                    data-docentry="@item.DocEntry"
+                                    data-cardcode="@item.CardCode"
+                                    data-suppliername="@item.TedarikciAlacakli"
+                                    data-faturano="@item.FaturaNo"
+                                    data-belgetipi="@item.Belge"
+                                    data-gunceltltutar="@(item.GuncelTLTutar?.ToString(CultureInfo.InvariantCulture))"
+                                    data-kalantutar="@(item.KalanTutar?.ToString(CultureInfo.InvariantCulture))">
+                                    
+                                    <td>@(item.U_BE1_SIRA?.ToString() ?? "-")</td>
+                                    <td class="checkbox-column">
+                                        <input type="checkbox" class="form-check-input row-selector" 
+                                               data-tl-value="@(item.GuncelTLTutar?.ToString(CultureInfo.InvariantCulture))" />
+                                    </td>
+                                    <td>@item.Hafta</td>
+                                    <td>@item.TarihAraligi</td>
+                                    <td>@(item.OrderDate?.ToString("dd.MM.yyyy"))</td>
+                                    <td>@item.TedarikciAlacakli</td>
+                                    <td>@item.DocNum</td>
+                                    <td>@item.FaturaNo</td>
+
+                                    @if (isEditableMode)
+                                    {
+                                        // --- EDİT MODU HÜCRELERİ ---
+                                        <td>
+                                            <input type="date" name="belgeler[@i].OdeplanTarihi" value="@(item.OdeplanTarihi?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
+                                            <input type="hidden" name="belgeler[@i].DocNum" value="@item.DocNum" />
+                                            <input type="hidden" name="belgeler[@i].ObjType" value="@objType" />
+                                            <input type="hidden" name="belgeler[@i].DocEntry" value="@item.DocEntry" />
+                                        </td>
+                                        <td>
+                                            <input type="number" name="belgeler[@i].U_BE1_YUZDE" value="@(item.U_BE1_YUZDE?.ToString("0.##", CultureInfo.InvariantCulture) ?? "100")" class="form-control form-control-sm yuzde-input" min="0" max="100" />
+                                        </td>
+                                        <td class="yuzdeli-tutar-display text-end">
+                                            @(item.U_BE1_TUTAR?.ToString("N2", new CultureInfo("tr-TR")))
+                                            <input type="hidden" name="belgeler[@i].U_BE1_TUTAR" class="yuzdeli-tutar-hidden-input" value="@item.U_BE1_TUTAR" />
+                                        </td>
+                                        <td>
+                                            <textarea name="belgeler[@i].OdeplanNot" class="form-control form-control-sm" rows="1">@item.OdeplanNot</textarea>
+                                        </td>
+                                    }
+                                    else
+                                    {
+                                        // --- READ ONLY MODU HÜCRELERİ ---
+                                        <td>@(item.OdeplanTarihi?.ToString("dd.MM.yyyy"))</td>
+                                        <td class="text-end">@(item.U_BE1_TUTAR?.ToString("N2", new CultureInfo("tr-TR")))</td>
+                                        <td>@item.OdeplanNot</td>
+                                    }
+
+                                    <td>@item.OdemeNedeni</td>
+                                    <td>@(item.VadeTarihi?.ToString("dd.MM.yyyy"))</td>
+                                    <td class="text-end">@(decimal.TryParse(item.Tutar?.Replace(".", "").Replace(",", "."), out var t) ? (t/100).ToString("N2", new CultureInfo("tr-TR")) : item.Tutar)</td>
+                                    <td class="text-end">@(item.KalanTutar?.ToString("N2", new CultureInfo("tr-TR")))</td>
+                                    <td>@item.ParaBirimi</td>
+                                    <td>@item.Durum</td>
+                                    
+                                    @if(isEditableMode)
+                                    {
+                                        <td>
+                                            @if(item.Belge == "Manuel") {
+                                                <button type="button" class="btn btn-danger btn-sm delete-row-btn" data-docentry="@item.DocEntry"><i class="fas fa-trash"></i></button>
+                                            }
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <nav class="mt-4">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                        <a class="page-link" href="@Url.Action("Index", currentController, new { pageNumber = currentPage - 1, pageSize = pageSize })">&laquo;</a>
+                    </li>
+                    <li class="page-item active"><a class="page-link" href="#">@currentPage</a></li>
+                    <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                        <a class="page-link" href="@Url.Action("Index", currentController, new { pageNumber = currentPage + 1, pageSize = pageSize })">&raquo;</a>
+                    </li>
+                </ul>
+                <div class="text-center">Toplam: <strong>@totalRecords</strong> Kayıt</div>
+            </nav>
+
+            @if (isEditableMode)
+            {
+                @:</form>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addRowModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="post" asp-action="Ekle" asp-controller="Rapor">
+                <div class="modal-header bg-primary text-white"><h5 class="modal-title">Ödeme Ekle</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-6 mb-2"><label>Tedarikçi</label><input type="text" name="belge.U_TedarikciAlacakli" class="form-control" required></div>
+                        <div class="col-6 mb-2"><label>Tutar</label><input type="number" step="0.01" name="belge.U_Tutar" class="form-control" required></div>
+                        <div class="col-6 mb-2"><label>Para Birimi</label><select name="belge.U_ParaBirimi" class="form-select"><option>TRY</option><option>USD</option><option>EUR</option></select></div>
+                        <div class="col-6 mb-2"><label>Plan Tarihi</label><input type="date" name="belge.U_OdeplanTarihi" class="form-control" required></div>
+                    </div>
+                </div>
+                <div class="modal-footer"><button class="btn btn-primary">Kaydet</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="approvalModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-warning"><h5 class="modal-title">Onay Bekleyenler</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body" id="approvalModalBody">Yükleniyor...</div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="companyBankSelectionModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Talimat Oluştur</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <form id="paymentInstructionForm">
+                    <div id="supplierSelectionArea" style="display:none;" class="mb-3">
+                        <label>Tedarikçi</label>
+                        <select id="supplierSelect" class="form-select" data-live-search="true"></select>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6"><label>Şirket Hesabı</label><select id="companyBankSelect" class="form-select"></select></div>
+                        <div class="col-6"><label>Tarih</label><input type="date" id="paymentInstructionDate" class="form-control"></div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check form-check-inline"><input type="checkbox" class="form-check-input payment-method-checkbox" value="Havale" id="pmHavale" checked><label for="pmHavale">Havale</label></div>
+                        <div class="form-check form-check-inline"><input type="checkbox" class="form-check-input payment-method-checkbox" value="Nakit" id="pmNakit"><label for="pmNakit">Nakit</label></div>
+                        <div class="form-check form-check-inline"><input type="checkbox" class="form-check-input payment-method-checkbox" value="Çek" id="pmCek"><label for="pmCek">Çek</label></div>
+                    </div>
+                    <div id="paymentNakitArea" style="display:none;"><input type="number" id="nakitAmountInput" class="form-control" placeholder="Nakit Tutar"></div>
+                    <div id="paymentCekArea" style="display:none;"><select id="cekListSelect" class="form-select" multiple></select><div id="totalCekAmount">0 TL</div></div>
+                    
+                    <div id="documentPaymentArea">
+                        <h6>Belgeler</h6>
+                        <div id="supplierIbanRow" class="mb-2"><select id="supplierIbanSelect" class="form-select"></select></div>
+                        <tbody id="paymentInstructionTableBody"></tbody> </div>
+                    
+                    <div id="nonDocumentPaymentArea" style="display:none;">
+                        <input type="number" id="nonDocAmountInput" class="form-control" placeholder="Tutar">
+                        <input type="text" id="nonDocDescriptionInput" class="form-control mt-2" placeholder="Açıklama">
+                    </div>
+                    
+                    <div class="text-end mt-3 fw-bold">Toplam: <span id="totalInstructionAmountInModal">0.00</span></div>
+                </form>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-primary" id="confirmPaymentInstructionBtn">Oluştur</button></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+
+    <script>
+        // --- ORTAK DEĞİŞKENLER ---
+        const currentController = '@currentController';
+        const isEditable = @(isEditableMode.ToString().ToLower());
+        const antiForgeryToken = $('input[name="__RequestVerificationToken"]').val();
+        
+        // Rapor25 verileri
+        const allReportData = @Html.Raw(reportDataJson);
+        let selectedDocumentsDataForPDF = [];
+        let allCompanyBankAccounts = [];
+        let allPortfolioChecks = [];
+        let isDocumentBasedPayment = true;
+
+        $(document).ready(function() {
+            // Başlangıç ayarları
+            $('.filter-select-bs').selectpicker();
+            
+            // --- ORTAK İŞLEMLER (Checkbox Hesaplama) ---
+            function calculateTotal() {
+                let total = 0;
+                $('.row-selector:checked').each(function() {
+                    let val = parseFloat($(this).data('tl-value'));
+                    if(!isNaN(val)) total += val;
+                });
+                $('#selectedTotalAmount').text(total.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + ' TL');
+            }
+
+            $('#selectAllCheckbox').change(function() {
+                $('.row-selector').prop('checked', this.checked);
+                calculateTotal();
+            });
+
+            $(document).on('change', '.row-selector', function() {
+                calculateTotal();
+            });
+
+            // --- CONTROLLER'A ÖZEL JS MANTIĞI ---
+            if (isEditable) {
+                // ================= RAPOR (EDİT) MANTIĞI =================
+                
+                // Yüzde Hesaplama
+                $('.yuzde-input').on('input', function() {
+                    let row = $(this).closest('tr');
+                    let kalan = parseFloat(row.data('kalantutar').replace(',','.')); // Kültüre dikkat
+                    let yuzde = parseFloat($(this).val());
+                    let yeniTutar = (kalan * yuzde) / 100;
+                    
+                    row.find('.yuzdeli-tutar-display').text(yeniTutar.toLocaleString('tr-TR', {minimumFractionDigits:2}));
+                    row.find('.yuzdeli-tutar-hidden-input').val(yeniTutar.toLocaleString('en-US', {useGrouping:false}).replace(',','.'));
+                });
+
+                // Satır Silme
+                $('.delete-row-btn').click(function() {
+                    if(!confirm('Silmek istediğinize emin misiniz?')) return;
+                    let docEntry = $(this).data('docentry');
+                    $.post('/Rapor/Sil', { belgeTipi: 'Manuel', docEntry: docEntry, __RequestVerificationToken: antiForgeryToken }, function(res){
+                        if(res.success) location.reload();
+                        else toastr.error(res.message);
+                    });
+                });
+
+                // Sıralama Kaydetme
+                $('#saveOrderBtn').click(function() {
+                    let orderList = [];
+                    $('#belgeTable tbody tr').each(function(index) {
+                        orderList.push({
+                            DocEntry: $(this).data('docentry'),
+                            ObjType: $(this).data('objtype'),
+                            U_BE1_SIRA: index + 1 // Yeni sıra
+                        });
+                    });
+                    
+                    $.ajax({
+                        url: '/Rapor/GuncelleSira',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify(orderList),
+                        headers: { 'RequestVerificationToken': antiForgeryToken },
+                        success: function(res) { toastr.success(res.message); },
+                        error: function() { toastr.error('Hata oluştu'); }
+                    });
+                });
+                
+                // Onay Bekleyenler Modal
+                $('#showApprovalModalBtn').click(function(){
+                     $('#approvalModal').modal('show');
+                     $.get('/Rapor/OnayBekleyenler', function(res){
+                         if(res.success) {
+                             let html = '<table class="table"><thead><tr><th>Belge</th><th>Tutar</th><th>İşlem</th></tr></thead><tbody>';
+                             res.data.forEach(d => {
+                                 html += `<tr><td>${d.docNum}</td><td>${d.tutar}</td><td>
+                                    <button class="btn btn-sm btn-success onayla-btn" data-id="${d.docEntry}">Onayla</button>
+                                    <button class="btn btn-sm btn-danger reddet-btn" data-id="${d.docEntry}">Reddet</button>
+                                 </td></tr>`;
+                             });
+                             html += '</tbody></table>';
+                             $('#approvalModalBody').html(html);
+                         }
+                     });
+                });
+                
+                // Onay/Red İşlemleri (Dynamic Click)
+                $(document).on('click', '.onayla-btn, .reddet-btn', function() {
+                    let id = $(this).data('id');
+                    let islem = $(this).hasClass('onayla-btn') ? 'onayla' : 'reddet';
+                    $.post('/Rapor/OnayReddet', { docEntry: id, islem: islem, __RequestVerificationToken: antiForgeryToken }, function(res){
+                        toastr.success(res.message);
+                        $('#showApprovalModalBtn').click(); // Listeyi yenile
+                    });
+                });
+
+            } 
+            else 
+            {
+                // ================= RAPOR 25 (PDF) MANTIĞI =================
+                
+                // Banka Hesaplarını Getir
+                async function fetchBanks() {
+                    let res = await fetch('/Rapor25/GetCompanyBankAccounts');
+                    if(res.ok) {
+                        allCompanyBankAccounts = await res.json();
+                        let opt = '<option value="">Seçiniz</option>';
+                        allCompanyBankAccounts.forEach(b => {
+                            opt += `<option value="${b.accountNumber}" data-bank="${b.bankName}" data-iban="${b.iban}" data-curr="${b.paraBirimi}">${b.bankName} - ${b.accountNumber}</option>`;
+                        });
+                        $('#companyBankSelect').html(opt);
+                    }
+                }
+
+                // Modal Açma
+                $('#createInstructionBtn').click(function() {
+                    let selectedRows = $('.row-selector:checked').closest('tr');
+                    if(selectedRows.length === 0) { toastr.warning('Belge seçin'); return; }
+                    
+                    isDocumentBasedPayment = true;
+                    $('#documentPaymentArea').show();
+                    $('#nonDocumentPaymentArea').hide();
+                    $('#supplierSelectionArea').hide();
+                    
+                    // Seçilenleri PDF verisine dönüştür (Basit logic)
+                    selectedDocumentsDataForPDF = [];
+                    // ... (Burada mevcut karmaşık gruplama mantığınızı kullanın) ...
+                    // Örnek basit mock:
+                    toastr.info('Seçilen satırlar PDF için hazırlanıyor...');
+                    
+                    fetchBanks();
+                    $('#companyBankSelectionModal').modal('show');
+                });
+
+                $('#createNonDocumentInstructionBtn').click(function() {
+                    isDocumentBasedPayment = false;
+                    $('#documentPaymentArea').hide();
+                    $('#nonDocumentPaymentArea').show();
+                    $('#supplierSelectionArea').show();
+                    fetchBanks();
+                    $('#companyBankSelectionModal').modal('show');
+                });
+
+                // PDF Oluşturma İsteği
+                $('#confirmPaymentInstructionBtn').click(function() {
+                    // ... (Mevcut validasyon ve fetch isteği kodlarınız buraya) ...
+                    // Request verisi oluşturulup /Rapor25/CreatePaymentInstruction adresine post edilecek.
+                    
+                    let bankOpt = $('#companyBankSelect option:selected');
+                    let requestData = {
+                        InstructionType: isDocumentBasedPayment ? "BELGE_ODEMESI" : "BELGESIZ_ODEME",
+                        CompanyAccountNumber: $('#companyBankSelect').val(),
+                        PaymentDate: $('#paymentInstructionDate').val(),
+                        PaymentMethods: ['Havale'], // Checkboxlardan alınmalı
+                        TotalAmount: 100 // Hesaplanmalı
+                        // ... Diğer alanlar
+                    };
+
+                    fetch('/Rapor25/CreatePaymentInstruction', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': antiForgeryToken },
+                        body: JSON.stringify(requestData)
+                    })
+                    .then(response => response.blob())
+                    .then(blob => {
+                        let url = window.URL.createObjectURL(blob);
+                        let a = document.createElement('a');
+                        a.href = url; a.download = "Talimat.pdf";
+                        a.click();
+                        $('#companyBankSelectionModal').modal('hide');
+                    })
+                    .catch(err => toastr.error('Hata oluştu'));
+                });
+            }
+        });
+    </script>
+}

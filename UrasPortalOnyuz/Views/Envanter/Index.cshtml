@@ -1,0 +1,680 @@
+﻿@using System.Globalization
+@{
+    ViewData["Title"] = "Envanter Raporu";
+    var sirketler = (List<(string DbName, string Ad)>)ViewBag.Sirketler;
+    var tipler = (List<(string Kod, string Ad, string Betik)>)ViewBag.RaporTipleri;
+    var secilen = (string)ViewBag.SecilenSirket;
+    var yil = (int)ViewBag.Yil;
+    var ay = (int)ViewBag.Ay;
+    var cipa = (DateTime)ViewBag.CipaAy;
+    var kategoriVar = (bool)ViewBag.KategoriVar;
+    var durumlar = ViewBag.Durumlar as List<dynamic> ?? new List<dynamic>();
+    var hesaplananlar = ViewBag.HesaplananAylar as List<dynamic> ?? new List<dynamic>();
+    var tr = new CultureInfo("tr-TR");
+
+    string SirketAdi(string db) => sirketler.FirstOrDefault(s => s.DbName == db).Ad ?? db;
+
+    dynamic DurumBul(string kod) => durumlar.FirstOrDefault(d => (string)d.RaporTipi == kod);
+
+    var aylar = new[] { "Ocak","Şubat","Mart","Nisan","Mayıs","Haziran",
+                        "Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık" };
+}
+
+<style>
+    .env-kart { background:#fff; border:1px solid #e9eef5; border-radius:14px;
+                box-shadow:0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.12); }
+    .env-etiket { font-size:10.5px; font-weight:800; letter-spacing:.5px; color:#94a3b8; text-transform:uppercase; }
+    .env-kpi { font-size:22px; font-weight:900; color:#0f172a; font-variant-numeric:tabular-nums; }
+
+    .env-sekme { display:flex; gap:6px; flex-wrap:wrap; }
+    .env-sekme button {
+        border:1px solid #e2e8f0; background:#fff; color:#475569; border-radius:999px;
+        font-size:12.5px; font-weight:700; padding:6px 16px; white-space:nowrap;
+        transition:background-color .12s ease, border-color .12s ease, color .12s ease;
+    }
+    .env-sekme button:hover:not(:disabled) { border-color:#93c5fd; color:#1d4ed8; background:#f8fbff; }
+    .env-sekme button.aktif { background:#1d4ed8; border-color:#1d4ed8; color:#fff; }
+    .env-sekme button:disabled { opacity:.45; cursor:not-allowed; }
+
+    #envTablo { width:100%; border-collapse:separate; border-spacing:0; }
+    #envTablo th {
+        position:sticky; top:0; z-index:5;
+        background:linear-gradient(180deg,#fbfdff,#f4f7fb);
+        color:#64748b; font-size:10.5px; font-weight:700; letter-spacing:.5px;
+        text-transform:uppercase; padding:10px 12px; white-space:nowrap;
+        border-bottom:1px solid #e6ecf4;
+    }
+    #envTablo td { padding:8px 12px; border-bottom:1px solid #f2f5f9; font-size:12.5px; white-space:nowrap; }
+    #envTablo tbody tr:hover { box-shadow:inset 3px 0 0 #3b82f6; }
+    #envTablo td.sayi { text-align:right; font-variant-numeric:tabular-nums; }
+    #envTablo tfoot td { position:sticky; bottom:0; background:#f8fafc; font-weight:800;
+                         border-top:2px solid #e2e8f0; font-variant-numeric:tabular-nums; }
+    .env-devir { color:#64748b; }
+    .env-son   { color:#1d4ed8; font-weight:700; }
+    .env-govde { max-height:calc(100vh - 430px); overflow:auto; }
+    /* Siralanabilir baslik */
+    #envTablo thead th.sirala { cursor: pointer; user-select: none; white-space: nowrap; }
+    #envTablo thead th.sirala:hover { background: #eef2f7; }
+    #envTablo thead th .ok { color: #adb5bd; font-size: .8em; }
+    #envTablo thead th.artan .ok, #envTablo thead th.azalan .ok { color: #0d6efd; }
+
+    /* SAP devri ile karsilastirma kolonlari */
+    #envTablo .kars { background: #fbfbfd; }
+    #envTablo td.env-fark { color: #b02a37; font-weight: 700; background: #fdeaec; }
+
+    #envTablo tbody tr.env-satir { cursor: pointer; }
+    #envTablo tbody tr.env-satir:hover { background: #f2f7ff; }
+</style>
+
+<div class="container-fluid px-0">
+
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1"><i class="fas fa-boxes-stacked text-primary me-2"></i>Envanter (Denge) Raporu</h5>
+            <div class="text-muted" style="font-size:12px;">
+                Ürün, Malzeme ve Yarı Mamül dengesi. Dönem sonu, ertesi ayın dönem başına devreder.
+            </div>
+        </div>
+        <div class="text-muted" style="font-size:11.5px;">
+            Zincir başlangıcı: <strong>@cipa.ToString("MMMM yyyy", tr)</strong>
+        </div>
+    </div>
+
+    <!-- Filtreler -->
+    <div class="env-kart p-3 mb-3">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="env-etiket" for="sirket">Şirket</label>
+                <select name="sirket" id="sirket" class="form-select form-select-sm" onchange="this.form.submit()">
+                    @foreach (var s in sirketler)
+                    {
+                        <option value="@s.DbName" selected="@(s.DbName == secilen)">@s.Ad</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="env-etiket" for="ay">Ay</label>
+                <select name="ay" id="ay" class="form-select form-select-sm">
+                    @for (int i = 1; i <= 12; i++)
+                    {
+                        <option value="@i" selected="@(i == ay)">@aylar[i - 1]</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="env-etiket" for="yil">Yıl</label>
+                <select name="yil" id="yil" class="form-select form-select-sm">
+                    @for (int y = cipa.Year; y <= DateTime.Today.Year + 1; y++)
+                    {
+                        <option value="@y" selected="@(y == yil)">@y</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
+                    <i class="fas fa-eye me-1"></i> Getir
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnHesapla"
+                        title="Bu ayı (ve gerekiyorsa öncesini) hesaplar">
+                    <i class="fas fa-calculator"></i>
+                </button>
+            </div>
+        </form>
+
+        @if (!kategoriVar)
+        {
+            <div class="alert alert-warning py-2 mt-3 mb-0" style="font-size:12px;">
+                <i class="fas fa-triangle-exclamation me-1"></i>
+                <strong>@SirketAdi(secilen)</strong> şirketinde <code>OITM.U_BE1_UM</code> sınıflandırma alanı yok.
+                Kalemler Ürün / Malzeme / Yarı Mamül olarak ayrılamıyor; kategori süzgeci olmadan
+                üretilebilen raporlar aşağıda sekme olarak açıktır.
+            </div>
+        }
+    </div>
+
+    <!-- Sekmeler -->
+    <div class="env-kart p-3 mb-3">
+        <div class="env-sekme" id="sekmeler">
+            @{ bool ilk = true; }
+            @foreach (var t in tipler)
+            {
+                var d = DurumBul(t.Kod);
+                bool hata = d != null && (string)d.Durum == "HATA";
+                <button type="button" class="@(ilk && !hata ? "aktif" : "")" data-tip="@t.Kod"
+                        disabled="@hata" title="@(hata ? (string)d.Mesaj : "")">
+                    @t.Ad
+                    @if (hata)
+                    {
+                        <i class="fas fa-ban ms-1"></i>
+                    }
+                </button>
+                if (!hata) { ilk = false; }
+            }
+        </div>
+
+        @foreach (var t in tipler)
+        {
+            var d = DurumBul(t.Kod);
+            if (d != null && (string)d.Durum == "HATA")
+            {
+                <div class="alert alert-secondary py-2 mt-3 mb-0" style="font-size:11.5px;">
+                    <strong>@t.Ad</strong> bu şirkette üretilemiyor: @d.Mesaj
+                </div>
+            }
+        }
+    </div>
+
+    <!-- Özet -->
+    <div class="row g-3 mb-3" id="ozetler">
+        <div class="col-md-3"><div class="env-kart p-3"><div class="env-etiket">Kalem</div><div class="env-kpi" id="kpiKalem">—</div></div></div>
+        <div class="col-md-3"><div class="env-kart p-3"><div class="env-etiket">Dönem Başı Tutar</div><div class="env-kpi" id="kpiDevir">—</div></div></div>
+        <div class="col-md-3"><div class="env-kart p-3"><div class="env-etiket">Giriş / Çıkış Tutar</div><div class="env-kpi" id="kpiHareket">—</div></div></div>
+        <div class="col-md-3"><div class="env-kart p-3"><div class="env-etiket">Dönem Sonu Tutar</div><div class="env-kpi" id="kpiSon">—</div></div></div>
+    </div>
+
+    <!-- Tablo -->
+    <div class="env-kart">
+        <div class="d-flex justify-content-between align-items-center p-3 border-bottom flex-wrap gap-2">
+            <span class="fw-bold" style="font-size:13px;" id="tabloBaslik">—</span>
+            <div class="d-flex gap-2 align-items-center">
+                <input type="text" id="ara" class="form-control form-control-sm" placeholder="Kalem ara..." style="width:220px; font-size:12px;">
+                <div class="form-check form-check-inline mb-0 ms-1">
+                    <input class="form-check-input" type="checkbox" id="yalnizFark">
+                    <label class="form-check-label" for="yalnizFark" style="font-size:12px;">
+                        Yalnızca SAP devrinden farklı olanlar
+                    </label>
+                </div>
+                <button class="btn btn-success btn-sm" id="btnExcel"><i class="fas fa-file-excel me-1"></i> Excel</button>
+            </div>
+        </div>
+
+        <div id="karsUyari" class="alert alert-warning py-2 px-3 mx-3 mt-2 mb-0 d-none" style="font-size:12px;">
+            Bu dönem, SAP devri saklanmadan önce hesaplanmış. Karşılaştırma kolonlarının dolması için
+            <b>Hesapla</b> ile bu dönemi yeniden üretin.
+        </div>
+
+        <div class="env-govde">
+            <table id="envTablo">
+                <thead>
+                    <tr>
+                        <th class="sirala" data-alan="kalemKodu">Kalem Kodu <span class="ok">⇅</span></th>
+                        <th class="sirala" data-alan="kalemAdi">Kalem Adı <span class="ok">⇅</span></th>
+                        <th class="text-end sirala" data-alan="devirQ" data-sayi="1">Dönem Başı Mik. <span class="ok">⇅</span></th>
+                        <th class="text-end sirala" data-alan="devirT" data-sayi="1">Dönem Başı Tutar <span class="ok">⇅</span></th>
+                        <th class="text-end sirala kars" data-alan="sapDevirQ" data-sayi="1">SAP Devir Mik. <span class="ok">⇅</span></th>
+                        <th class="text-end sirala kars" data-alan="sapDevirT" data-sayi="1">SAP Devir Tutar <span class="ok">⇅</span></th>
+                        <th class="text-end sirala kars" data-alan="farkQ" data-sayi="1">Fark Mik. <span class="ok">⇅</span></th>
+                        <th class="text-end sirala kars" data-alan="farkT" data-sayi="1">Fark Tutar <span class="ok">⇅</span></th>
+                        <th class="text-end sirala" data-alan="girisQ" data-sayi="1">Giriş Mik. <span class="ok">⇅</span></th>
+                        <th class="text-end sirala" data-alan="girisT" data-sayi="1">Giriş Tutar <span class="ok">⇅</span></th>
+                        <th class="text-end sirala" data-alan="cikisQ" data-sayi="1">Çıkış Mik. <span class="ok">⇅</span></th>
+                        <th class="text-end sirala" data-alan="cikisT" data-sayi="1">Çıkış Tutar <span class="ok">⇅</span></th>
+                        <th class="text-end sirala" data-alan="alimQ" data-sayi="1">Alım Mik. <span class="ok">⇅</span></th>
+                        <th class="text-end sirala" data-alan="alimT" data-sayi="1">Alım Tutar <span class="ok">⇅</span></th>
+                        <th class="text-end sirala" data-alan="satisQ" data-sayi="1">Satış Mik. <span class="ok">⇅</span></th>
+                        <th class="text-end sirala" data-alan="satisT" data-sayi="1">Satış Tutar <span class="ok">⇅</span></th>
+                        <th class="text-end sirala" data-alan="ihracatQ" data-sayi="1">İhracat Mik. <span class="ok">⇅</span></th>
+                        <th class="text-end sirala" data-alan="ihracatT" data-sayi="1">İhracat Tutar <span class="ok">⇅</span></th>
+                        <th class="text-end sirala" data-alan="sonQ" data-sayi="1">Dönem Sonu Mik. <span class="ok">⇅</span></th>
+                        <th class="text-end sirala" data-alan="sonT" data-sayi="1">Dönem Sonu Tutar <span class="ok">⇅</span></th>
+                    </tr>
+                </thead>
+                <tbody id="envGovde">
+                    <tr><td colspan="20" class="text-center text-muted py-5">Şirket ve ay seçip <b>Getir</b> deyin.</td></tr>
+                </tbody>
+                <tfoot id="envAlt"></tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- Hesaplanan aylar -->
+    @if (hesaplananlar.Any())
+    {
+        <div class="env-kart p-3 mt-3">
+            <div class="env-etiket mb-2">Hesaplanmış Dönemler — @SirketAdi(secilen)</div>
+            <div class="d-flex flex-wrap gap-1">
+                @foreach (var h in hesaplananlar)
+                {
+                    <span class="badge bg-light text-dark border" style="font-size:10.5px;">
+                        @aylar[(int)h.Ay - 1] @h.Yil · @h.RaporTipi · @h.Kalem kalem
+                    </span>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<div class="modal fade" id="detayModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title" id="detayBaslik">Kalem Detayı</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+            </div>
+            <div class="modal-body" id="detayGovde"></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    (function () {
+        const sirket = '@secilen';
+        const yil = @yil, ay = @ay;
+        const aylar = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+
+        let aktifTip = document.querySelector('#sekmeler button.aktif')?.dataset.tip || null;
+        let veri = [];
+        let sonListe = [];                       // ekranda gorunen son liste (detay icin)
+        let siralama = { alan: null, artan: true };
+
+        const bicim = v => (v === null || v === undefined)
+            ? '' : Number(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        function kacir(m) { const d = document.createElement('div'); d.textContent = m == null ? '' : m; return d.innerHTML; }
+
+        function ciz(liste) {
+            const govde = document.getElementById('envGovde');
+            const alt = document.getElementById('envAlt');
+
+            if (!liste.length) {
+                govde.innerHTML = '<tr><td colspan="20" class="text-center text-muted py-5">Bu dönem için kayıt yok. <b>Hesapla</b> düğmesini deneyin.</td></tr>';
+                alt.innerHTML = '';
+                ['kpiKalem','kpiDevir','kpiHareket','kpiSon'].forEach(id => document.getElementById(id).textContent = '—');
+                return;
+            }
+
+            govde.innerHTML = liste.map((r, i) => {
+                const varMi = !!r.sapDevirVar;
+                const fq = varMi ? Number(r.farkQ || 0) : null;
+                const ft = varMi ? Number(r.farkT || 0) : null;
+                const fqS = (varMi && Math.abs(fq) > 0.000001) ? ' env-fark' : '';
+                const ftS = (varMi && Math.abs(ft) > 0.01) ? ' env-fark' : '';
+                const yok = '<span class="text-muted">—</span>';
+                return `
+                <tr class="env-satir" data-i="${i}" title="Detay için tıklayın">
+                    <td class="fw-semibold">${kacir(r.kalemKodu)}</td>
+                    <td class="text-muted">${kacir(r.kalemAdi || '')}</td>
+                    <td class="sayi env-devir">${bicim(r.devirQ)}</td>
+                    <td class="sayi env-devir">${bicim(r.devirT)}</td>
+                    <td class="sayi kars">${varMi ? bicim(r.sapDevirQ) : yok}</td>
+                    <td class="sayi kars">${varMi ? bicim(r.sapDevirT) : yok}</td>
+                    <td class="sayi kars${fqS}">${varMi ? bicim(fq) : yok}</td>
+                    <td class="sayi kars${ftS}">${varMi ? bicim(ft) : yok}</td>
+                    <td class="sayi">${bicim(r.girisQ)}</td>
+                    <td class="sayi">${bicim(r.girisT)}</td>
+                    <td class="sayi">${bicim(r.cikisQ)}</td>
+                    <td class="sayi">${bicim(r.cikisT)}</td>
+                    <td class="sayi">${bicim(r.alimQ)}</td>
+                    <td class="sayi">${bicim(r.alimT)}</td>
+                    <td class="sayi">${bicim(r.satisQ)}</td>
+                    <td class="sayi">${bicim(r.satisT)}</td>
+                    <td class="sayi">${bicim(r.ihracatQ)}</td>
+                    <td class="sayi">${bicim(r.ihracatT)}</td>
+                    <td class="sayi env-son">${bicim(r.sonQ)}</td>
+                    <td class="sayi env-son">${bicim(r.sonT)}</td>
+                </tr>`; }).join('');
+
+            const t = (alan) => liste.reduce((a, r) => a + Number(r[alan] || 0), 0);
+
+            alt.innerHTML = `<tr>
+                <td colspan="2">TOPLAM (${liste.length} kalem)</td>
+                <td class="sayi">${bicim(t('devirQ'))}</td><td class="sayi">${bicim(t('devirT'))}</td>
+                <td class="sayi kars">${bicim(t('sapDevirQ'))}</td><td class="sayi kars">${bicim(t('sapDevirT'))}</td>
+                <td class="sayi kars">${bicim(t('farkQ'))}</td><td class="sayi kars">${bicim(t('farkT'))}</td>
+                <td class="sayi">${bicim(t('girisQ'))}</td><td class="sayi">${bicim(t('girisT'))}</td>
+                <td class="sayi">${bicim(t('cikisQ'))}</td><td class="sayi">${bicim(t('cikisT'))}</td>
+                <td class="sayi">${bicim(t('alimQ'))}</td><td class="sayi">${bicim(t('alimT'))}</td>
+                <td class="sayi">${bicim(t('satisQ'))}</td><td class="sayi">${bicim(t('satisT'))}</td>
+                <td class="sayi">${bicim(t('ihracatQ'))}</td><td class="sayi">${bicim(t('ihracatT'))}</td>
+                <td class="sayi">${bicim(t('sonQ'))}</td><td class="sayi">${bicim(t('sonT'))}</td>
+            </tr>`;
+
+            sonListe = liste;
+
+            document.getElementById('kpiKalem').textContent = liste.length;
+            document.getElementById('kpiDevir').textContent = bicim(t('devirT'));
+            document.getElementById('kpiHareket').textContent = bicim(t('girisT')) + ' / ' + bicim(t('cikisT'));
+            document.getElementById('kpiSon').textContent = bicim(t('sonT'));
+        }
+
+        async function yukle() {
+            if (!aktifTip) return;
+            const ad = document.querySelector(`#sekmeler button[data-tip="${aktifTip}"]`)?.textContent.trim() || aktifTip;
+            document.getElementById('tabloBaslik').textContent = `${ad} — ${aylar[ay - 1]} ${yil}`;
+            document.getElementById('envGovde').innerHTML =
+                '<tr><td colspan="20" class="text-center text-muted py-5"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</td></tr>';
+
+            try {
+                const c = await fetch(`/Envanter/Veri?sirket=${encodeURIComponent(sirket)}&yil=${yil}&ay=${ay}&tip=${aktifTip}`);
+                const v = await c.json();
+                if (!v.success) { toastr.error(v.message || 'Veri alınamadı.'); return; }
+                veri = (v.satirlar || []).map(r => {
+                    // Zincirleme devir ile SAP'in kendi devri arasindaki fark.
+                    // SAP devri saklanmamis eski donemlerde karsilastirma yapilmaz.
+                    if (r.sapDevirVar) {
+                        r.farkQ = Number(r.devirQ || 0) - Number(r.sapDevirQ || 0);
+                        r.farkT = Number(r.devirT || 0) - Number(r.sapDevirT || 0);
+                    } else {
+                        r.farkQ = null;
+                        r.farkT = null;
+                    }
+                    return r;
+                });
+
+                const eksik = veri.length > 0 && !veri[0].sapDevirVar;
+                const uyari = document.getElementById('karsUyari');
+                uyari.classList.toggle('d-none', !eksik);
+                document.getElementById('yalnizFark').disabled = eksik;
+
+                uygula();
+            } catch (e) { toastr.error('Veri alınamadı.'); }
+        }
+
+        function uygula() {
+            const q = (document.getElementById('ara').value || '').toLocaleLowerCase('tr');
+            const yalnizFark = document.getElementById('yalnizFark')?.checked;
+
+            let liste = veri;
+
+            if (yalnizFark) {
+                liste = liste.filter(r => Math.abs(Number(r.farkQ || 0)) > 0.000001
+                                       || Math.abs(Number(r.farkT || 0)) > 0.01);
+            }
+
+            if (q) {
+                liste = liste.filter(r =>
+                    (r.kalemKodu || '').toLocaleLowerCase('tr').includes(q) ||
+                    (r.kalemAdi || '').toLocaleLowerCase('tr').includes(q));
+            }
+
+            if (siralama.alan) {
+                const alan = siralama.alan, yon = siralama.artan ? 1 : -1;
+                const sayisal = !['kalemKodu', 'kalemAdi'].includes(alan);
+                liste = liste.slice().sort((a, b) => sayisal
+                    ? ((Number(a[alan]) || 0) - (Number(b[alan]) || 0)) * yon
+                    : String(a[alan] || '').localeCompare(String(b[alan] || ''), 'tr') * yon);
+            }
+
+            ciz(liste);
+        }
+
+        // --- Siralama -------------------------------------------------------
+        document.querySelector('#envTablo thead').addEventListener('click', function (e) {
+            const th = e.target.closest('th.sirala');
+            if (!th) return;
+            const alan = th.dataset.alan;
+            siralama.artan = (siralama.alan === alan) ? !siralama.artan : true;
+            siralama.alan = alan;
+            this.querySelectorAll('th').forEach(x => x.classList.remove('artan', 'azalan'));
+            th.classList.add(siralama.artan ? 'artan' : 'azalan');
+            uygula();
+        });
+
+        // --- Kalem detayi ---------------------------------------------------
+        document.getElementById('envGovde').addEventListener('click', function (e) {
+            const tr = e.target.closest('tr.env-satir');
+            if (!tr) return;
+            const r = sonListe[Number(tr.dataset.i)];
+            if (!r) return;
+
+            const s = (etiket, q, t) => `<tr><td>${etiket}</td>
+                <td class="text-end">${bicim(q)}</td><td class="text-end">${bicim(t)}</td></tr>`;
+
+            const fq = Number(r.farkQ || 0), ft = Number(r.farkT || 0);
+            const uyum = (Math.abs(fq) <= 0.000001 && Math.abs(ft) <= 0.01);
+
+            document.getElementById('detayBaslik').textContent =
+                (r.kalemKodu || '') + ' — ' + (r.kalemAdi || '');
+
+            document.getElementById('detayGovde').innerHTML = `
+                <table class="table table-sm mb-3">
+                    <thead><tr><th></th><th class="text-end">Miktar</th><th class="text-end">Tutar</th></tr></thead>
+                    <tbody>
+                        ${s('Dönem Başı (zincirleme)', r.devirQ, r.devirT)}
+                        ${s('Toplam Giriş', r.girisQ, r.girisT)}
+                        ${s('Toplam Çıkış', r.cikisQ, r.cikisT)}
+                        <tr class="fw-bold border-top"><td>Dönem Sonu</td>
+                            <td class="text-end">${bicim(r.sonQ)}</td>
+                            <td class="text-end">${bicim(r.sonT)}</td></tr>
+                    </tbody>
+                </table>
+
+                <div class="fw-semibold mb-1">Hareket kırılımı</div>
+                <table class="table table-sm mb-3">
+                    <tbody>
+                        ${s('Alım', r.alimQ, r.alimT)}
+                        ${s('Satış', r.satisQ, r.satisT)}
+                        ${s('İhracat', r.ihracatQ, r.ihracatT)}
+                    </tbody>
+                </table>
+
+                <div class="fw-semibold mb-1"><i class="fas fa-list-ul me-1"></i>Bu ayın stok hareketleri — ${aylar[ay - 1]} ${yil}</div>
+                <div id="buAyHareketleri" class="mb-3"></div>
+
+                <div class="fw-semibold mb-1">SAP devri ile karşılaştırma</div>
+                <table class="table table-sm mb-2">
+                    <tbody>
+                        ${s('Zincirleme devir (önceki ay sonu)', r.devirQ, r.devirT)}
+                        ${s('SAP devri (@@BE1_DEVHSP)', r.sapDevirQ, r.sapDevirT)}
+                        <tr class="fw-bold ${uyum ? 'table-success' : 'table-danger'}">
+                            <td>Fark</td>
+                            <td class="text-end">${bicim(fq)}</td>
+                            <td class="text-end">${bicim(ft)}</td></tr>
+                    </tbody>
+                </table>
+
+                <div class="small text-muted">
+                    ${uyum
+                        ? "Bu kalemde iki devir aynı; SAP raporuyla ayrışma yok."
+                        : "Bu kalemde SAP'ın devri, bir önceki ayın dönem sonuyla aynı değil. Ayrışma buradan geliyor."}
+                </div>
+                <hr class="my-3">
+                <div class="fw-semibold mb-2"><i class="fas fa-history me-1"></i>Ay bazlı geçmiş — bu değere nasıl gelindi</div>
+                <div id="kalemGecmisi" class="table-responsive"><div class="text-muted small py-2">Yükleniyor...</div></div>`;
+
+            new bootstrap.Modal(document.getElementById('detayModal')).show();
+            ayHareketYukle(r.kalemKodu, yil, ay, r.devirQ, document.getElementById('buAyHareketleri'), `${aylar[ay - 1]} ${yil}`);
+            kalemGecmisiYukle(r.kalemKodu);
+        });
+
+        // Kalemin CIPA aydan itibaren TUM aylardaki hareketini getir; zincir kopmasini isaretle.
+        async function kalemGecmisiYukle(kalem) {
+            const hedef = document.getElementById('kalemGecmisi');
+            if (!hedef) return;
+            try {
+                const c = await fetch(`/Envanter/KalemGecmisi?sirket=${encodeURIComponent(sirket)}&tip=${encodeURIComponent(aktifTip)}&kalem=${encodeURIComponent(kalem)}`);
+                const v = await c.json();
+                if (!v.success || !(v.aylar || []).length) {
+                    hedef.innerHTML = '<div class="text-muted small py-2">Bu kalem için ay bazlı geçmiş bulunamadı.</div>';
+                    return;
+                }
+                const aylar = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+                let oncekiSonQ = null;
+                const satirlar = v.aylar.map(function (x) {
+                    const kopus = (oncekiSonQ !== null && Math.abs(Number(x.devirQ) - oncekiSonQ) > 0.000001);
+                    oncekiSonQ = Number(x.sonQ);
+                    return `<tr class="gecmis-ay ${kopus ? 'table-danger' : ''}" data-kalem="${kacir(kalem)}" data-yil="${x.yil}" data-ay="${x.ay}" data-devir="${Number(x.devirQ) || 0}" style="cursor:pointer" title="Bu ayın tek tek hareketleri için tıkla${kopus ? ' — DİKKAT: devir kopması bu ayda' : ''}">
+                        <td class="fw-semibold">${aylar[x.ay - 1]} ${x.yil}</td>
+                        <td class="text-end">${bicim(x.devirQ)}</td>
+                        <td class="text-end">${bicim(x.girisQ)}</td>
+                        <td class="text-end">${bicim(x.cikisQ)}</td>
+                        <td class="text-end fw-bold">${bicim(x.sonQ)}</td>
+                        <td class="text-end text-muted">${bicim(x.sapDevirQ)}</td>
+                    </tr>`;
+                }).join('');
+                hedef.innerHTML = `<table class="table table-sm table-hover mb-1">
+                    <thead><tr>
+                        <th>Ay</th><th class="text-end">Devir</th><th class="text-end">Giriş</th>
+                        <th class="text-end">Çıkış</th><th class="text-end">Dönem Sonu</th><th class="text-end">SAP Devri</th>
+                    </tr></thead><tbody>${satirlar}</tbody></table>
+                    <div class="small text-muted">Kırmızı satır: devir kopması o ayda. <b>Bir aya tıkla</b> → o ayın tek tek hareketleri aşağıda açılır.</div>
+                    <div id="ayHareketleri" class="mt-2"></div>`;
+            } catch (e) {
+                hedef.innerHTML = '<div class="text-danger small py-2">Ay bazlı geçmiş yüklenemedi.</div>';
+            }
+        }
+
+        // Bir kalemin belirli bir aydaki stok kayıt listesini (OINM) verilen alana çizer.
+        // devir: ayın dönem başı miktarı; kümülatif buradan başlar.
+        async function ayHareketYukle(kalem, y, a, devir, hedef, ayBaslik) {
+            if (!hedef) return;
+            hedef.innerHTML = '<div class="text-muted small py-2">Hareketler yükleniyor...</div>';
+            try {
+                const c = await fetch(`/Envanter/KalemAyHareket?sirket=${encodeURIComponent(sirket)}&kalem=${encodeURIComponent(kalem)}&yil=${y}&ay=${a}`);
+                const v = await c.json();
+                if (!v.success) {
+                    hedef.innerHTML = '<div class="text-danger small py-2">Hareketler okunamadı: ' + kacir(v.message || '') + '</div>';
+                    return;
+                }
+                if (!(v.hareketler || []).length) {
+                    hedef.innerHTML = '<div class="text-muted small py-2">' + kacir(ayBaslik) + ' — bu kalem için stok hareketi yok.</div>';
+                    return;
+                }
+                // Stok kayıt listesi: kümülatif miktar ayın devrinden başlar, her hareketle ilerler.
+                devir = Number(devir) || 0;
+                let kum = devir, topG = 0, topC = 0, topT = 0, iptalAdet = 0;
+                const satir = v.hareketler.map(function (h) {
+                    const t = (h.tarih || '').substring(0, 10).split('-').reverse().join('.');
+                    const g = Number(h.girisQ) || 0, c = Number(h.cikisQ) || 0, tut = Number(h.tutar) || 0;
+                    const iptal = Number(h.iptal) === 1;
+                    if (iptal) {
+                        // Belgede İPTAL yazıyor: betik saymaz, biz de toplam/kümülatife katmayız.
+                        iptalAdet++;
+                        return `<tr class="table-secondary text-muted" style="text-decoration:line-through" title="${kacir(h.aciklama || '')}">
+                            <td>${t}</td>
+                            <td>${kacir(h.islem)} <span class="badge bg-danger ms-1" style="text-decoration:none">İPTAL — sayılmıyor</span></td>
+                            <td>${kacir(h.belgeNo)}</td>
+                            <td>${kacir(h.depo)}</td>
+                            <td class="text-end">${g ? bicim(g) : ''}</td>
+                            <td class="text-end">${c ? bicim(c) : ''}</td>
+                            <td class="text-end">${bicim(kum)}</td>
+                            <td class="text-end">${bicim(h.fiyat)}</td>
+                            <td class="text-end">${bicim(tut)}</td>
+                        </tr>`;
+                    }
+                    kum += g - c; topG += g; topC += c; topT += tut;
+                    return `<tr title="${kacir(h.aciklama || '')}">
+                        <td>${t}</td>
+                        <td>${kacir(h.islem)}</td>
+                        <td>${kacir(h.belgeNo)}</td>
+                        <td>${kacir(h.depo)}</td>
+                        <td class="text-end text-success">${g ? bicim(g) : ''}</td>
+                        <td class="text-end text-danger">${c ? bicim(c) : ''}</td>
+                        <td class="text-end fw-semibold">${bicim(kum)}</td>
+                        <td class="text-end text-muted">${bicim(h.fiyat)}</td>
+                        <td class="text-end">${bicim(tut)}</td>
+                    </tr>`;
+                }).join('');
+                const iptalNot = iptalAdet ? ` <span class="badge bg-danger">${iptalAdet} İPTAL — sayılmıyor</span>` : '';
+                hedef.innerHTML = `<div class="fw-semibold small mb-1"><i class="fas fa-list-ul me-1"></i>${kacir(ayBaslik)} — stok kayıt listesi (${v.hareketler.length} hareket)${iptalNot}</div>
+                    <div class="table-responsive"><table class="table table-sm table-bordered mb-0">
+                        <thead><tr><th>Tarih</th><th>İşlem</th><th>Belge No</th><th>Depo</th><th class="text-end">Giriş</th><th class="text-end">Çıkış</th><th class="text-end">Kümülatif</th><th class="text-end">Fiyat</th><th class="text-end">Tutar</th></tr></thead>
+                        <tbody>
+                            <tr class="table-light"><td colspan="6" class="fw-semibold">Dönem başı (devir)</td><td class="text-end fw-semibold">${bicim(devir)}</td><td></td><td></td></tr>
+                            ${satir}
+                        </tbody>
+                        <tfoot><tr class="table-light fw-semibold"><td colspan="4">Toplam</td><td class="text-end">${bicim(topG)}</td><td class="text-end">${bicim(topC)}</td><td class="text-end">${bicim(kum)}</td><td></td><td class="text-end">${bicim(topT)}</td></tr></tfoot>
+                    </table></div>`;
+            } catch (err) {
+                hedef.innerHTML = '<div class="text-danger small py-2">Hareketler yüklenemedi.</div>';
+            }
+        }
+
+        // Ay bazlı geçmişte bir ay satırına tıkla -> o ayın stok kayıt listesi altta açılır
+        document.getElementById('detayGovde').addEventListener('click', function (e) {
+            const tr = e.target.closest('.gecmis-ay');
+            if (!tr) return;
+            document.querySelectorAll('.gecmis-ay').forEach(function (r) { r.classList.remove('table-active'); });
+            tr.classList.add('table-active');
+            const ayBaslik = tr.querySelector('td') ? tr.querySelector('td').textContent.trim() : '';
+            ayHareketYukle(tr.dataset.kalem, tr.dataset.yil, tr.dataset.ay, tr.dataset.devir,
+                document.getElementById('ayHareketleri'), ayBaslik);
+        });
+
+        document.getElementById('sekmeler').addEventListener('click', function (e) {
+            const b = e.target.closest('button');
+            if (!b || b.disabled) return;
+            this.querySelectorAll('button').forEach(x => x.classList.remove('aktif'));
+            b.classList.add('aktif');
+            aktifTip = b.dataset.tip;
+            yukle();
+        });
+
+        document.getElementById('ara').addEventListener('input', uygula);
+        document.getElementById('yalnizFark').addEventListener('change', uygula);
+
+        document.getElementById('btnHesapla').addEventListener('click', async function () {
+            const d = this;
+
+            // Hesaplanmış dönemler normalde atlanır. SAP devri karşılaştırması gibi
+            // sonradan eklenen alanların dolması için yeniden üretmek gerekebilir.
+            const secim = await Swal.fire({
+                title: 'Hesaplama',
+                html: 'Eksik dönemler hesaplansın mı, yoksa mevcut dönemler de baştan üretilsin mi?',
+                icon: 'question',
+                showDenyButton: true,
+                showCancelButton: true,
+                confirmButtonText: 'Yalnızca eksikler',
+                denyButtonText: 'Baştan hesapla',
+                cancelButtonText: 'Vazgeç'
+            });
+
+            if (secim.isDismissed) return;
+            const zorla = secim.isDenied;
+
+            d.disabled = true;
+            d.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            Swal.fire({
+                title: 'Hesaplanıyor',
+                html: (zorla
+                        ? 'Bu şirketin tüm dönemleri baştan üretiliyor.<br>'
+                        : 'Zincir başlangıcından bu aya kadar eksik dönemler hesaplanıyor.<br>') +
+                      '<small class="text-muted">İlk çalıştırma birkaç dakika sürebilir.</small>',
+                allowOutsideClick: false, didOpen: () => Swal.showLoading()
+            });
+
+            try {
+                const c = await fetch(`/Envanter/Hesapla?sirket=${encodeURIComponent(sirket)}&yil=${yil}&ay=${ay}&zorla=${zorla}`, { method: 'POST' });
+                const v = await c.json();
+                Swal.close();
+
+                const satirlar = (v.kayitlar || []).map(kacir).join('<br>');
+                Swal.fire({
+                    icon: v.success ? 'success' : 'error',
+                    title: v.success ? 'Hesaplama bitti' : 'Hesaplama hatası',
+                    html: `<div style="text-align:left;font-size:12px;max-height:340px;overflow:auto;">${satirlar || kacir(v.message || '')}</div>`,
+                    width: 680
+                }).then(() => location.reload());
+            } catch (e) {
+                Swal.close();
+                toastr.error('Hesaplama isteği başarısız.');
+            } finally {
+                d.disabled = false;
+                d.innerHTML = '<i class="fas fa-calculator"></i>';
+            }
+        });
+
+        document.getElementById('btnExcel').addEventListener('click', function () {
+            if (!veri.length) { toastr.warning('Dışa aktarılacak veri yok.'); return; }
+            const ad = document.querySelector(`#sekmeler button[data-tip="${aktifTip}"]`)?.textContent.trim() || aktifTip;
+
+            const satirlar = veri.map(r => ({
+                'Kalem Kodu': r.kalemKodu, 'Kalem Adı': r.kalemAdi,
+                'Dönem Başı Miktar': r.devirQ, 'Dönem Başı Tutar': r.devirT,
+                'Giriş Miktar': r.girisQ, 'Giriş Tutar': r.girisT,
+                'Çıkış Miktar': r.cikisQ, 'Çıkış Tutar': r.cikisT,
+                'Dönem Sonu Miktar': r.sonQ, 'Dönem Sonu Tutar': r.sonT
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(satirlar);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Envanter');
+            XLSX.writeFile(wb, `Envanter-${ad}-${aylar[ay - 1]}-${yil}.xlsx`);
+        });
+
+        if (aktifTip) yukle();
+    })();
+</script>
+}

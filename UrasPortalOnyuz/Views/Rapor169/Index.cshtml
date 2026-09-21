@@ -1,0 +1,174 @@
+@{
+    ViewData["Title"] = "Taslak Faturalar";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string dbDisplay = (string)ViewBag.CurrentDbDisplay ?? "";
+    string dbKey = (string)ViewBag.CurrentDbKey ?? "DefaultConnection";
+}
+
+<style>
+    .tf-wrap { padding: 0 14px 30px; }
+    .tf-hero { background: linear-gradient(120deg, #0f172a 0%, #1d4ed8 55%, #3b82f6 100%); color: #fff; border-radius: 16px; padding: 16px 22px; margin: 14px 0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; box-shadow: 0 10px 30px -12px rgba(29,78,216,.55); }
+    .tf-hero h1 { font-size: 1.25rem; font-weight: 700; margin: 0; }
+    .tf-hero p { margin: 3px 0 0; opacity: .92; font-size: .82rem; }
+    .tf-hero .db { background: rgba(255,255,255,.18); padding: 8px 14px; border-radius: 10px; font-weight: 600; font-size: .86rem; }
+    .tf-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 4px 14px -8px rgba(15,23,42,.15); overflow: hidden; margin-bottom: 12px; }
+    .tf-toolbar { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid #eef2f7; flex-wrap: wrap; font-size: .82rem; color: #475569; }
+    .tf-toolbar input, .tf-toolbar select { border: 1px solid #d7dce5; border-radius: 8px; padding: 7px 9px; font-size: .84rem; }
+    .tf-btn { border: none; border-radius: 9px; padding: 8px 14px; font-weight: 700; font-size: .82rem; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+    .tf-btn.p { background: #1d4ed8; color: #fff; } .tf-btn.p:hover { background: #1e40af; }
+    .tf-btn.g { background: #16a34a; color: #fff; }
+    .tf-btn.s { background: #fff; color: #334155; border: 1px solid #d7dce5; }
+    .tf-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 20px; font-size: .78rem; font-weight: 700; }
+    .tf-chip.a { background: #fef3c7; color: #92400e; } .tf-chip.c { background: #dcfce7; color: #166534; } .tf-chip.t { background: #e0e7ff; color: #3730a3; }
+    .tf-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+    .tf-table th { background: #f8fafc; color: #475569; font-weight: 700; text-transform: uppercase; font-size: .7rem; letter-spacing: .4px; padding: 9px 8px; border-bottom: 2px solid #e2e8f0; white-space: nowrap; position: sticky; top: 0; }
+    .tf-table td { padding: 8px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .tf-table tbody tr:hover { background: #f8fafc; cursor: pointer; }
+    .badge-soft { border-radius: 6px; padding: 3px 7px; font-weight: 700; font-size: .7rem; }
+    .b-acik { background: #fef3c7; color: #92400e; } .b-cev { background: #dcfce7; color: #166534; } .b-ihr { background: #dbeafe; color: #1e40af; }
+    .tf-empty { padding: 40px; text-align: center; color: #94a3b8; }
+    .detay-etiket { font-size: .7rem; color: #64748b; text-transform: uppercase; letter-spacing: .3px; }
+    .detay-deger { font-weight: 600; font-size: .85rem; }
+</style>
+
+<div class="tf-wrap">
+    <div class="tf-hero">
+        <div>
+            <h1><i class="fas fa-file-invoice me-2"></i>Taslak Faturalar</h1>
+            <p>SAP'de taslak olarak bekleyen satış faturaları. İhracat siparişlerinin faturası buraya düşer; SAP'de Taslaklar listesinden belgeye çevrilir.</p>
+        </div>
+        <div class="db"><i class="fas fa-database me-1"></i>@dbDisplay</div>
+    </div>
+
+    <div class="tf-card">
+        <div class="tf-toolbar">
+            <label>Başlangıç <input type="date" id="fBas" /></label>
+            <label>Bitiş <input type="date" id="fBit" /></label>
+            <input type="text" id="fAra" placeholder="Müşteri kodu / adı, taslak no, açıklama" style="min-width: 260px;" />
+            <select id="fDurum">
+                <option value="ACIK">Açık taslaklar</option>
+                <option value="CEVRILDI">Belgeye çevrilenler</option>
+                <option value="HEPSI">Hepsi</option>
+            </select>
+            <label style="display:inline-flex;align-items:center;gap:6px;"><input type="checkbox" id="fIhracat" /> Sadece ihracat</label>
+            <button class="tf-btn p" id="btnListele"><i class="fas fa-search"></i> Listele</button>
+            <button class="tf-btn g" id="btnExcel"><i class="fas fa-file-excel"></i> Excel</button>
+            <span style="flex:1"></span>
+            <span class="tf-chip a" id="chipAcik"><i class="fas fa-hourglass-half"></i> Açık: 0</span>
+            <span class="tf-chip c" id="chipCev"><i class="fas fa-check"></i> Çevrildi: 0</span>
+            <span class="tf-chip t" id="chipToplam"><i class="fas fa-list"></i> Toplam: 0</span>
+        </div>
+        <div style="overflow-x:auto; max-height: calc(100vh - 260px); overflow-y: auto;">
+            <table class="tf-table" id="tblTaslak">
+                <thead>
+                    <tr>
+                        <th>Taslak No</th><th>Tarih</th><th>Müşteri</th><th>PB</th><th class="text-end">Tutar</th><th>Tip</th>
+                        <th>İhracat</th><th>Dosya No</th><th>Teslim</th><th>Kap</th><th>Sipariş</th><th>İrsaliye</th><th>Durum</th><th>Oluşturan</th><th>Açıklama</th>
+                    </tr>
+                </thead>
+                <tbody id="tbTaslak"><tr><td colspan="15" class="tf-empty">Listelemek için tarih aralığı seçip Listele'ye basın.</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Taslak detay -->
+<div class="modal fade" id="detayModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-file-invoice me-2 text-primary"></i>Taslak Fatura <span id="dNo"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3 mb-3" id="dBaslik"></div>
+                <div id="dIhracat" class="p-2 rounded mb-3" style="background:#eff6ff;border:1px dashed #93c5fd;display:none;"></div>
+                <div style="overflow-x:auto;">
+                    <table class="tf-table">
+                        <thead><tr><th>#</th><th>Kalem</th><th>Tanım</th><th class="text-end">Miktar</th><th>Birim</th><th class="text-end">Birim Fiyat</th><th>PB</th><th class="text-end">Tutar</th><th>KDV</th><th>Depo</th><th>GTİP</th><th>Baz</th></tr></thead>
+                        <tbody id="dSatirlar"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    const DB = '@dbKey';
+    const TASIMA = { '1': 'Deniz', '2': 'Demiryolu', '3': 'Karayolu', '4': 'Hava', '5': 'Posta', '6': 'Kombine', '7': 'Sabit', '8': 'İç su', '9': 'Diğer' };
+    const fmt = n => (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const tarih = s => s ? new Date(s).toLocaleDateString('tr-TR') : '';
+    const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    function filtreler() {
+        return { baslangic: $('#fBas').val(), bitis: $('#fBit').val(), ara: $('#fAra').val(), durum: $('#fDurum').val(), ihracat: $('#fIhracat').is(':checked'), db: DB };
+    }
+
+    function listele() {
+        $('#tbTaslak').html('<tr><td colspan="15" class="tf-empty"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor…</td></tr>');
+        $.get('/Rapor169/Liste', filtreler(), function (res) {
+            if (!res.success) { $('#tbTaslak').html(`<tr><td colspan="15" class="tf-empty text-danger">${esc(res.message)}</td></tr>`); return; }
+            $('#chipAcik').html(`<i class="fas fa-hourglass-half"></i> Açık: ${res.acik}`);
+            $('#chipCev').html(`<i class="fas fa-check"></i> Çevrildi: ${res.cevrildi}`);
+            $('#chipToplam').html(`<i class="fas fa-list"></i> Toplam: ${res.data.length}`);
+            if (!res.data.length) { $('#tbTaslak').html('<tr><td colspan="15" class="tf-empty">Bu filtrede taslak fatura yok.</td></tr>'); return; }
+            $('#tbTaslak').html(res.data.map(t => {
+                const tutar = (t.docCur && t.docCur !== 'TRY' && t.docTotalFC) ? t.docTotalFC : t.docTotal;
+                const kap = [t.kapAdedi, t.kapCinsi].filter(Boolean).join(' ');
+                return `<tr onclick="detay(${t.docEntry})" title="Satırları görmek için tıklayın">
+                    <td class="fw-bold">${t.docNum}</td><td>${tarih(t.docDate)}</td>
+                    <td><div class="fw-semibold">${esc(t.cardCode)}</div><div class="text-muted small">${esc(t.cardName)}</div></td>
+                    <td>${esc(t.docCur)}</td><td class="text-end fw-semibold">${fmt(tutar)}</td>
+                    <td>${esc(t.faturaTipi)}${t.muafKodu ? ' / ' + esc(t.muafKodu) : ''}</td>
+                    <td>${t.ihracat === 'Y' ? '<span class="badge-soft b-ihr">İHRACAT</span>' : ''}</td>
+                    <td>${esc(t.ihracatDosyaNo)}</td><td>${esc(t.incoterm)}${t.tasimaSekli ? ' · ' + (TASIMA[t.tasimaSekli] || t.tasimaSekli) : ''}</td><td>${esc(kap)}</td>
+                    <td>${t.siparisNo ?? ''}</td><td>${t.irsaliyeNo ?? ''}</td>
+                    <td>${t.faturaNo ? `<span class="badge-soft b-cev">Fatura ${t.faturaNo}</span>` : '<span class="badge-soft b-acik">Açık</span>'}</td>
+                    <td>${esc(t.olusturan)}</td>
+                    <td class="text-muted" style="max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(t.comments)}">${esc(t.comments)}</td>
+                </tr>`;
+            }).join(''));
+        }).fail(() => $('#tbTaslak').html('<tr><td colspan="15" class="tf-empty text-danger">Bağlantı hatası.</td></tr>'));
+    }
+
+    window.detay = function (docEntry) {
+        $.get('/Rapor169/Detay', { docEntry, db: DB }, function (res) {
+            if (!res.success) { toastr.error(res.message); return; }
+            const b = res.baslik;
+            $('#dNo').text('No ' + b.docNum + (b.faturaNo ? ' (Fatura ' + b.faturaNo + ' olarak SAP\'ye eklendi)' : ' (açık taslak)'));
+            const kutu = (e, d) => `<div class="col-md-3"><div class="detay-etiket">${e}</div><div class="detay-deger">${esc(d) || '-'}</div></div>`;
+            const tutar = (b.docCur && b.docCur !== 'TRY' && b.docTotalFC) ? b.docTotalFC : b.docTotal;
+            $('#dBaslik').html(kutu('Müşteri', b.cardCode + ' - ' + b.cardName) + kutu('Belge / Vergi Tarihi', tarih(b.docDate) + ' / ' + tarih(b.taxDate)) + kutu('Vade', tarih(b.docDueDate)) + kutu('Tutar', fmt(tutar) + ' ' + b.docCur)
+                + kutu('Fatura Tipi / Muafiyet', b.faturaTipi + (b.muafKodu ? ' / ' + b.muafKodu : '')) + kutu('Şoför / Plaka', [b.sofor, b.plaka].filter(Boolean).join(' / ')) + kutu('Nakliyeci', b.nakliyeci) + kutu('Açıklama', b.comments));
+            if (b.ihracat === 'Y') {
+                $('#dIhracat').show().html('<div class="fw-bold text-primary mb-1"><i class="fas fa-globe-europe me-1"></i>İhracat bilgileri</div><div class="row g-2">'
+                    + kutu('Dosya No', b.ihracatDosyaNo) + kutu('Teslim Şartı', b.incoterm) + kutu('Gönderilme Şekli', b.tasimaSekli ? (TASIMA[b.tasimaSekli] || b.tasimaSekli) : '')
+                    + kutu('Kap', [b.kapAdedi, b.kapCinsi].filter(Boolean).join(' ')) + kutu('Kap / Konteyner No', b.kapNo) + kutu('Kap Markası', b.kapMarka)
+                    + kutu('Ödeme Şekli / Kanalı', [b.odemeSekli, b.odemeKanali].filter(Boolean).join(' / ')) + kutu('IBAN', b.iban) + '</div>');
+            } else $('#dIhracat').hide();
+            $('#dSatirlar').html((res.satirlar || []).map(s => {
+                const tut = (s.currency && s.currency !== 'TRY' && s.totalFrgn) ? s.totalFrgn : s.lineTotal;
+                const baz = s.baseType == 15 ? 'İrsaliye ' + s.baseEntry : (s.baseType == 17 ? 'Sipariş ' + s.baseEntry : '');
+                return `<tr><td>${s.lineNum + 1}</td><td class="fw-semibold">${esc(s.itemCode)}</td><td>${esc(s.dscription)}</td><td class="text-end">${fmt(s.quantity)}</td><td>${esc(s.birim)}</td><td class="text-end">${fmt(s.price)}</td><td>${esc(s.currency)}</td><td class="text-end fw-semibold">${fmt(tut)}</td><td>${esc(s.vatGroup)}</td><td>${esc(s.whsCode)}</td><td>${esc(s.gtip)}</td><td class="text-muted small">${baz}</td></tr>`;
+            }).join('') || '<tr><td colspan="12" class="tf-empty">Satır yok.</td></tr>');
+            new bootstrap.Modal(document.getElementById('detayModal')).show();
+        });
+    };
+
+    $(function () {
+        const bugun = new Date(), once = new Date(); once.setMonth(once.getMonth() - 3);
+        $('#fBit').val(bugun.toISOString().substring(0, 10));
+        $('#fBas').val(once.toISOString().substring(0, 10));
+        $('#btnListele').on('click', listele);
+        $('#fAra').on('keydown', e => { if (e.key === 'Enter') listele(); });
+        $('#fDurum, #fIhracat').on('change', listele);
+        $('#btnExcel').on('click', () => { window.location.href = '/Rapor169/Excel?' + $.param(filtreler()); });
+        listele();
+    });
+</script>
+}

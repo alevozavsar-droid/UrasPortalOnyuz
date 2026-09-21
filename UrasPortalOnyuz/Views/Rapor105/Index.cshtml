@@ -1,0 +1,1793 @@
+﻿@model List<WebApplication3.Controllers.BankaHareketiViewModel>
+@using System.Globalization
+
+@{
+    ViewData["Title"] = "Günlük Banka Hareketleri (Finekra)";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    
+    var modelData = Model ?? new List<WebApplication3.Controllers.BankaHareketiViewModel>();
+
+    // Talep 45: Finekra hareket servisinin "balance" alani doluysa satir bazinda
+    // bakiye gosterilir. Tum satirlarda 0 geliyorsa servis bu bilgiyi gondermemis
+    // demektir; yaniltici "0,00" yerine "-" basilir ve tablo basliginda not dusulur.
+    bool satirBakiyesiVar = modelData.Any(m => m.Bakiye != 0);
+    var bankAccounts = ViewBag.SapBankAccounts as List<WebApplication3.Controllers.BankAccountModel>;
+    var allAccounts = ViewBag.AllSapAccounts as List<WebApplication3.Controllers.BankAccountModel>;
+
+    // Finekra hesabi -> SAP 102 hesabi eslestirmeleri (IBAN anahtarli). Kartlardaki
+    // secimle kaydedilir; hareket satirlarinda SAP banka hesabi buradan gelir.
+    var eslesmeler = ViewBag.HesapEslesmeleri as Dictionary<string, WebApplication3.Controllers.FinekraHesapEslesme>
+                     ?? new Dictionary<string, WebApplication3.Controllers.FinekraHesapEslesme>(StringComparer.OrdinalIgnoreCase);
+    var sapBankaHesaplari = bankAccounts ?? new List<WebApplication3.Controllers.BankAccountModel>();
+
+    int eslesenSatir = modelData.Count(m => !string.IsNullOrEmpty(m.OnerilenBankaKodu));
+    int eslestirmedenSatir = modelData.Count(m => m.OnerilenBankaKaynagi == "Eşleştirme");
+    int eslesmeyenSatir = modelData.Count - eslesenSatir;
+}
+
+@functions {
+    string IbanAnahtari(string s) =>
+        string.IsNullOrWhiteSpace(s) ? null : new string(s.Where(c => !char.IsWhiteSpace(c)).ToArray()).ToUpperInvariant();
+
+    WebApplication3.Controllers.FinekraHesapEslesme EslesmeBul(
+        WebApplication3.Controllers.FinekraHesapBakiyeModel h,
+        Dictionary<string, WebApplication3.Controllers.FinekraHesapEslesme> eslesmeler)
+    {
+        if (h == null) return null;
+        WebApplication3.Controllers.FinekraHesapEslesme es;
+        // Once IBAN, yoksa Finekra hesap kimligi ("ID:...") ile aranir.
+        var k = IbanAnahtari(h.Iban);
+        if (k != null && eslesmeler.TryGetValue(k, out es)) return es;
+        if (!string.IsNullOrWhiteSpace(h.Id) && eslesmeler.TryGetValue("ID:" + h.Id.Trim(), out es)) return es;
+        return null;
+    }
+
+    // Karttaki "Sistemdeki hesap karsiligi" secim kutusu. HTML burada uretilir ki
+    // dolu ve sifir bakiyeli kartlar ayni bileseni kullansin.
+    Microsoft.AspNetCore.Html.HtmlString EslesmeSecimi(
+        WebApplication3.Controllers.FinekraHesapBakiyeModel h,
+        Dictionary<string, WebApplication3.Controllers.FinekraHesapEslesme> eslesmeler,
+        List<WebApplication3.Controllers.BankAccountModel> hesaplar,
+        bool kompakt)
+    {
+        Func<string, string> E = s => System.Net.WebUtility.HtmlEncode(s ?? "");
+        var es = EslesmeBul(h, eslesmeler);
+        // IBAN yoksa hesap kimligiyle eslesir; yalnizca ikisi de yoksa engellenir.
+        bool ibanYok = IbanAnahtari(h.Iban) == null && string.IsNullOrWhiteSpace(h.Id);
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append("<div class=\"eslesme-alani " + (kompakt ? "" : "mt-2 pt-2 border-top") + "\"")
+          .Append(" data-hesap-id=\"" + E(h.Id) + "\" data-iban=\"" + E(h.Iban) + "\"")
+          .Append(" data-banka=\"" + E(h.BankaAdi) + "\" data-hesap-ad=\"" + E(h.HesapAdi) + "\">");
+
+        if (!kompakt)
+            sb.Append("<div class=\"text-muted fw-bold mb-1\" style=\"font-size:.66rem;letter-spacing:.02em;\">SİSTEMDEKİ HESAP KARŞILIĞI (102)</div>");
+
+        if (ibanYok)
+        {
+            sb.Append("<span class=\"badge bg-secondary\">Hesap kimliği yok, eşleştirilemez</span>");
+        }
+        else
+        {
+            sb.Append("<select class=\"form-select form-select-sm eslesme-select2\" style=\"width:100%\">")
+              .Append("<option value=\"\">Seçilmedi</option>");
+            foreach (var a in hesaplar)
+            {
+                bool secili = es != null && es.SapHesapKodu == a.AcctCode;
+                sb.Append("<option value=\"" + E(a.AcctCode) + "\"" + (secili ? " selected" : "") + ">")
+                  .Append(E(a.AcctCode) + " - " + E(a.AcctName) + " (" + E(a.Currency) + ")")
+                  .Append("</option>");
+            }
+            sb.Append("</select>");
+            sb.Append("<div class=\"eslesme-durum small mt-1\">")
+              .Append(es != null
+                  ? "<span class=\"badge bg-success\"><i class=\"fas fa-link me-1\"></i>Eşleştirildi</span>"
+                  : "<span class=\"badge bg-warning text-dark\"><i class=\"fas fa-unlink me-1\"></i>Eşleştirilmedi</span>")
+              .Append("</div>");
+        }
+        sb.Append("</div>");
+        return new Microsoft.AspNetCore.Html.HtmlString(sb.ToString());
+    }
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <style>
+        :root {
+            --primary-color: #11998e;
+            --secondary-color: #38ef7d;
+            --surface-color: #ffffff;
+            --bg-color: #f8f9fa;
+            --text-color: #2b2d42;
+            --border-radius: 12px;
+            --transition-speed: 0.3s;
+        }
+
+        body { 
+            font-family: 'Inter', 'Segoe UI', Tahoma, sans-serif; 
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        .page-header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: white; 
+            padding: 2.5rem 1.5rem; 
+            border-radius: var(--border-radius); 
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 20px rgba(17, 153, 142, 0.15);
+        }
+
+        .modern-card {
+            background: var(--surface-color);
+            border-radius: var(--border-radius);
+            border: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.04);
+            margin-bottom: 2rem;
+            transition: box-shadow var(--transition-speed);
+        }
+
+        .modern-input {
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            padding: 0.75rem 1rem;
+            transition: all var(--transition-speed);
+        }
+
+        .btn-modern {
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
+            font-weight: 600;
+            border: none;
+            transition: all var(--transition-speed);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        .btn-primary-modern {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .table-container { 
+            padding: 0; 
+            overflow-x: auto; 
+            border-radius: var(--border-radius);
+        }
+        .modern-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-bottom: 0;
+        }
+        .modern-table thead th { 
+            background-color: #f8fafc; 
+            color: #64748b; 
+            font-size: 0.75rem; 
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 1rem 1.25rem; 
+            border-bottom: 2px solid #e2e8f0; 
+            position: sticky; 
+            top: 0; 
+            z-index: 10;
+            white-space: nowrap;
+        }
+        .modern-table tbody tr {
+            transition: background-color var(--transition-speed);
+        }
+        .modern-table tbody tr:hover {
+            background-color: #f1f5f9;
+        }
+        .modern-table td { 
+            padding: 1rem 1.25rem; 
+            border-bottom: 1px solid #e2e8f0; 
+            vertical-align: middle; 
+            font-size: 0.875rem; 
+        }
+
+        .text-borc { color: #ef4444; font-weight: 600; }
+        .text-alacak { color: #10b981; font-weight: 600; }
+        
+        .badge-modern {
+            padding: 0.5em 0.85em;
+            border-radius: 50rem;
+            font-weight: 500;
+            font-size: 0.75rem;
+        }
+
+        .preview-box {
+            background: #f8fafc;
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .preview-label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight:bold; }
+        .preview-val { font-size: 0.9rem; color: #0f172a; margin-bottom: 0.5rem; font-weight: 600;}
+
+        .select2-container--default .select2-selection--single {
+            height: 38px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 36px;
+        }
+
+        .kkeg-table th, .kkeg-table td {
+            padding: 0.5rem;
+            vertical-align: middle;
+            font-size: 0.85rem;
+        }
+    </style>
+}
+
+<div class="container-fluid py-4">
+    
+    <div class="page-header text-center">
+        <h2 class="fw-bold mb-2">FİNEKRA GÜNLÜK BANKA HAREKETLERİ</h2>
+        <p class="mb-0 opacity-75">Açık Bankacılık API Entegrasyonu</p>
+    </div>
+
+    @if (ViewBag.ApiStatus != null && ViewBag.ApiStatus != "Başarılı")
+    {
+        <div class="alert alert-danger shadow-sm border-0 rounded-3 mb-4">
+            <h5 class="alert-heading fw-bold"><i class="fas fa-exclamation-triangle me-2"></i> BAĞLANTI HATASI</h5>
+            <hr>
+            <p class="mb-0">@ViewBag.ApiStatus</p>
+        </div>
+    }
+
+    <!-- BANKA BAKİYELERİ KARTLARI + SAP 102 EŞLEŞTİRME -->
+    @if (ViewBag.HesapBakiyeleri != null)
+    {
+        var bakiyeler = ViewBag.HesapBakiyeleri as List<WebApplication3.Controllers.FinekraHesapBakiyeModel>
+                        ?? new List<WebApplication3.Controllers.FinekraHesapBakiyeModel>();
+        var doluHesaplar = bakiyeler.Where(x => x.Bakiye != 0).OrderByDescending(x => x.Bakiye).ToList();
+        var sifirHesaplar = bakiyeler.Where(x => x.Bakiye == 0).OrderBy(x => x.BankaAdi).ThenBy(x => x.HesapAdi).ToList();
+        int eslesenHesap = bakiyeler.Count(h => EslesmeBul(h, eslesmeler) != null);
+
+        if (bakiyeler.Any())
+        {
+            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                <div class="small text-muted">
+                    <i class="fas fa-university me-1"></i><b>@bakiyeler.Count</b> Finekra hesabının <b>@eslesenHesap</b> tanesi SAP 102 hesabıyla eşleştirildi.
+                    @if (eslesenHesap < bakiyeler.Count)
+                    {
+                        <span class="text-warning fw-semibold ms-1"><i class="fas fa-exclamation-triangle me-1"></i>@(bakiyeler.Count - eslesenHesap) hesap eşleştirilmedi.</span>
+                    }
+                </div>
+                <div class="small text-muted">Eşleştirme bir kez yapılır; hareketlerde SAP banka hesabı otomatik gelir.</div>
+            </div>
+
+            <div class="row g-3 mb-3">
+                @foreach (var hesap in doluHesaplar)
+                {
+                    var eslesti = EslesmeBul(hesap, eslesmeler) != null;
+                    <div class="col-12 col-md-6 col-lg-4 col-xxl-3">
+                        <div class="modern-card p-3 border-start border-4 @(eslesti ? "border-success" : "border-warning") h-100 mb-0 d-flex flex-column">
+                            <div class="text-muted small fw-bold text-uppercase mb-1">@hesap.BankaAdi</div>
+                            <div class="text-dark fw-bold mb-1" style="font-size: 0.9rem;" title="@hesap.HesapAdi">
+                                @(hesap.HesapAdi.Length > 26 ? hesap.HesapAdi.Substring(0, 26) + "..." : hesap.HesapAdi)
+                            </div>
+                            <div class="text-muted small mb-2 font-monospace">@hesap.Iban</div>
+                            <div>
+                                <span class="fs-4 fw-bolder @(hesap.Bakiye < 0 ? "text-danger" : "text-success")">@hesap.Bakiye.ToString("N2", new CultureInfo("tr-TR"))</span>
+                                <span class="fs-6 text-muted fw-bold ms-1">@hesap.ParaBirimi</span>
+                            </div>
+                            <div class="mt-auto">
+                                @EslesmeSecimi(hesap, eslesmeler, sapBankaHesaplari, false)
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @if (sifirHesaplar.Any())
+            {
+                <div class="mb-4">
+                    <a class="small text-decoration-none fw-semibold" data-bs-toggle="collapse" href="#sifirHesaplar" role="button" aria-expanded="false">
+                        <i class="fas fa-chevron-down me-1"></i>Bakiyesi sıfır olan @sifirHesaplar.Count hesap (eşleştirme için göster)
+                    </a>
+                    <div class="collapse mt-2" id="sifirHesaplar">
+                        <div class="row g-2">
+                            @foreach (var hesap in sifirHesaplar)
+                            {
+                                var eslesti = EslesmeBul(hesap, eslesmeler) != null;
+                                <div class="col-12 col-md-6 col-lg-4">
+                                    <div class="modern-card p-2 border-start border-4 @(eslesti ? "border-success" : "border-warning") mb-0">
+                                        <div class="d-flex justify-content-between align-items-center gap-2 mb-1">
+                                            <span class="small fw-bold text-dark" title="@hesap.HesapAdi">@hesap.BankaAdi <span class="text-muted fw-normal">· @hesap.ParaBirimi</span></span>
+                                            <span class="small text-muted font-monospace">@hesap.Iban</span>
+                                        </div>
+                                        @EslesmeSecimi(hesap, eslesmeler, sapBankaHesaplari, true)
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    }
+
+    <div class="modern-card p-4">
+        <form asp-controller="Rapor105" asp-action="Index" method="get">
+            <div class="row g-4 align-items-end">
+                <div class="col-12 col-md-3">
+                    <label for="startDate" class="form-label text-muted fw-semibold small mb-2">BAŞLANGIÇ TARİHİ</label>
+                    <input type="date" class="form-control modern-input" id="startDate" name="startDate" value="@ViewBag.StartDate">
+                </div>
+                <div class="col-12 col-md-3">
+                    <label for="endDate" class="form-label text-muted fw-semibold small mb-2">BİTİŞ TARİHİ</label>
+                    <input type="date" class="form-control modern-input" id="endDate" name="endDate" value="@ViewBag.EndDate">
+                </div>
+                <div class="col-12 col-md-3">
+                    <label for="bankaFiltresi" class="form-label text-muted fw-semibold small mb-2">BANKA</label>
+                    @{
+                        var bankaListesi = modelData.Select(m => m.BankaAdi)
+                            .Where(b => !string.IsNullOrEmpty(b)).Distinct().OrderBy(b => b).ToList();
+                    }
+                    <select id="bankaFiltresi" class="form-select modern-input" title="Bankaya göre filtrele">
+                        <option value="">Tüm bankalar</option>
+                        @foreach (var bnk in bankaListesi)
+                        {
+                            <option value="@bnk">@bnk</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-md-3">
+                    <button type="submit" class="btn-modern btn-primary-modern w-100">
+                        <i class="fas fa-sync-alt"></i> Hareketleri Çek
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- HAREKETLER TABLOSU -->
+    <div class="modern-card table-container">
+        
+        <!-- YENİ EKLENEN ÜST ARAÇ ÇUBUĞU (HATALI VADELİLER İÇİN) -->
+        <div class="p-3 bg-white border-bottom d-flex justify-content-between align-items-center">
+            <h5 class="m-0 fw-bold text-dark"><i class="fas fa-list me-2"></i>İşlem Listesi
+                @if (modelData.Any() && !satirBakiyesiVar)
+                {
+                    <small class="text-muted fw-normal ms-2" style="font-size: .78rem;"><i class="fas fa-info-circle me-1"></i>Finekra bu dönem için satır bakiyesi göndermedi.</small>
+                }
+            </h5>
+            @if (modelData.Any())
+            {
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="badge bg-success" title="SAP banka hesabı bulunan hareket"><i class="fas fa-check me-1"></i>@eslesenSatir eşleşti</span>
+                    <span class="badge bg-primary" title="Kayıtlı eşleştirmeden gelen"><i class="fas fa-link me-1"></i>@eslestirmedenSatir eşleştirmeden</span>
+                    <span class="badge @(eslesmeyenSatir > 0 ? "bg-danger" : "bg-secondary")" title="SAP banka hesabı bulunamayan hareket"><i class="fas fa-unlink me-1"></i>@eslesmeyenSatir eşleşmedi</span>
+                    @if (eslesmeyenSatir > 0)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="btnSadeceEslesmeyen">
+                            <i class="fas fa-filter me-1"></i><span class="metin">Sadece eşleşmeyenler</span>
+                        </button>
+                    }
+                </div>
+            }
+            <button class="btn btn-warning shadow-sm fw-bold text-dark" onclick="openHataliVadeliModal()">
+                <i class="fas fa-exclamation-triangle me-1"></i> Hatalı Vadeli İşlemleri Temizle
+            </button>
+        </div>
+
+        @if (modelData.Any())
+        {
+            <table class="modern-table">
+                <thead>
+                    <tr>
+                        <th>Tarih</th>
+                        <th>Banka Adı</th>
+                        <th>IBAN / Hesap</th>
+                        <th>Açıklama</th>
+                        <th>VKN / TCKN</th>
+                        <th>Finekra Karşı Taraf</th>
+                        <th style="min-width: 250px;">SAP Cari Bilgisi</th>
+                        <th>SAP Banka Hesabı</th>
+                        <th>İşlem Yönü</th>
+                        <th>İşlem Türü</th>
+                        <th class="text-end">Orijinal Tutar</th>
+                        <th class="text-end">Tutar (TRY)</th>
+                        @* Talep 45: satir bazinda banka bakiyesi. Finekra'nin hareket
+                           servisi her harekette o hesabin ISLEM SONRASI bakiyesini gonderir. *@
+                        <th class="text-end" title="İşlem sonrası hesap bakiyesi (Finekra)">Bakiye (Finekra)</th>
+                        <th class="text-center">SAP Durumu</th>
+                        <th class="text-center">İşlemler</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in modelData)
+                    {
+                        <tr data-banka-eslesme="@(string.IsNullOrEmpty(item.OnerilenBankaKodu) ? "yok" : "var")" data-banka="@item.BankaAdi">
+                            <td class="text-muted">@(item.IslemTarihi?.ToString("dd.MM.yyyy HH:mm") ?? "-")</td>
+                            <td><strong class="text-dark">@item.BankaAdi</strong></td>
+                            <td class="text-muted">@item.Iban</td>
+                            <td>
+                                <div style="min-width: 200px; max-width: 300px; white-space: normal; word-break: break-word;">
+                                    @item.Aciklama
+                                </div>
+                            </td>
+                            
+                            <td>
+                                <span class="fw-semibold text-dark">@item.EkrandaGorunenVkn</span>
+                                @if (!string.IsNullOrEmpty(item.EkrandaGorunenVknKaynagi))
+                                {
+                                    <small class="text-muted d-block fw-normal mt-1" style="font-size: 0.70rem;">(@item.EkrandaGorunenVknKaynagi)</small>
+                                }
+                            </td>
+
+                            <td>
+                                @if (item.FinekraCariIsmi == "Açıklamada Belirtilmiş")
+                                {
+                                    <span class="text-muted small fst-italic">Açıklamada Belirtilmiş</span>
+                                }
+                                else
+                                {
+                                    <div style="min-width: 120px; max-width: 200px; white-space: normal; word-break: break-word;" class="fw-medium text-dark">
+                                        @item.FinekraCariIsmi
+                                    </div>
+                                }
+                            </td>
+                            
+                            <!-- SAP CARİ SEÇİM VEYA METİN ALANI -->
+                            <td id="cari-td-@item.Id">
+                                @if (item.SapAktarildiMi)
+                                {
+                                    @if (!string.IsNullOrEmpty(item.SapCariKodu))
+                                    {
+                                        <span class="fw-bold text-primary d-block">@item.SapCariKodu</span>
+                                        <div style="max-width: 200px; white-space: normal; word-break: break-word;" class="text-muted small mt-1">@item.SapCariAdi</div>
+                                    }
+                                    else if(item.SapCariAdi == "Dahili İşlem (Banka Masrafı / Virman vb.)")
+                                    {
+                                        <span class="badge bg-info text-dark badge-modern"><i class="fas fa-building me-1"></i> Dahili İşlem</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small"><em>Bilinmiyor</em></span>
+                                    }
+                                }
+                                else
+                                {
+                                    <select class="form-select grid-cari-select2" id="gridCari-@item.Id" style="width: 100%; min-width: 220px;" 
+                                            data-id="@item.Id" 
+                                            data-date="@item.IslemTarihi?.ToString("yyyy-MM-dd")" 
+                                            data-amount="@item.Tutar.ToString(CultureInfo.InvariantCulture)" 
+                                            data-isgiris="@item.IsGiris.ToString().ToLower()">
+                                        @if (!string.IsNullOrEmpty(item.SapCariKodu))
+                                        {
+                                            <option value="@item.SapCariKodu" selected="selected">@item.SapCariKodu - @item.SapCariAdi</option>
+                                        }
+                                        else if (item.SapCariAdi == "Dahili İşlem (Banka Masrafı / Virman vb.)")
+                                        {
+                                            <option value="DAHILI" selected="selected">DAHILI - Dahili İşlem (Banka Masrafı / Virman vb.)</option>
+                                        }
+                                        else
+                                        {
+                                            <option value="">-- Cari Seçiniz --</option>
+                                        }
+                                    </select>
+                                }
+                            </td>
+
+                            <td>
+                                @if (!string.IsNullOrEmpty(item.OnerilenBankaKodu))
+                                {
+                                    <span class="fw-bold text-success d-block">@item.OnerilenBankaKodu</span>
+                                    <div class="text-muted small mt-1" style="max-width:180px; white-space:normal; word-break:break-word;">
+                                        @item.OnerilenBankaAdi
+                                    </div>
+                                    @if (item.OnerilenBankaKaynagi == "Eşleştirme")
+                                    {
+                                        <span class="badge bg-primary mt-1" style="font-size:.62rem;" title="Kartlardaki kayıtlı eşleştirmeden geldi"><i class="fas fa-link me-1"></i>Eşleştirme</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-light text-muted border mt-1" style="font-size:.62rem;" title="Banka adı / açıklamadan tahmin edildi. Kesinleştirmek için üstteki kartta eşleştirin."><i class="fas fa-magic me-1"></i>Tahmin</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="text-danger small"><i class="fas fa-exclamation-circle"></i> Eşleşmedi</span>
+                                    <small class="d-block text-muted mt-1" style="font-size:.66rem;">Üstteki kartta hesabı eşleştirin</small>
+                                }
+                            </td>
+
+                            <td>
+                                @if (!item.IsGiris)
+                                {
+                                    <span class="badge bg-danger badge-modern bg-opacity-10 text-danger border border-danger border-opacity-25">Çıkış</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success badge-modern bg-opacity-10 text-success border border-success border-opacity-25">Giriş</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="fw-semibold text-secondary">@item.IslemTuru</span>
+                                @if (!string.IsNullOrWhiteSpace(item.IslemKodu))
+                                {
+                                    <small class="text-muted d-block" style="font-size: 0.75rem;">(@item.IslemKodu)</small>
+                                }
+                            </td>
+                            <td class="text-end @(!item.IsGiris ? "text-borc" : "text-alacak")">
+                                @item.Tutar.ToString("N2", new CultureInfo("tr-TR"))
+                                <small class="text-muted d-block fw-normal mt-1" style="font-size: 0.70rem;">@item.ParaBirimi</small>
+                            </td>
+                            <td class="text-end fw-bold text-dark">
+                                @item.TutarTRY.ToString("N2", new CultureInfo("tr-TR"))
+                                <small class="text-muted d-block fw-normal mt-1" style="font-size: 0.70rem;">TRY</small>
+                            </td>
+
+                            @* Talep 45: bu hesabin, bu islemden sonraki bakiyesi (Finekra). *@
+                            <td class="text-end fw-semibold @(item.Bakiye < 0 ? "text-danger" : "text-dark")" style="white-space: nowrap;"
+                                title="@item.BankaAdi - @item.Iban hesabının @(item.IslemTarihi?.ToString("dd.MM.yyyy HH:mm")) itibarıyla bakiyesi (Finekra)">
+                                @if (satirBakiyesiVar)
+                                {
+                                    @item.Bakiye.ToString("N2", new CultureInfo("tr-TR"))
+                                    <small class="text-muted d-block fw-normal mt-1" style="font-size: 0.70rem;">@item.ParaBirimi</small>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            </td>
+
+                            <td class="text-center" id="status-@item.Id">
+                                @if (item.SapAktarildiMi)
+                                {
+                                    <span class="badge bg-success badge-modern mb-1"><i class="fas fa-check-circle me-1"></i> İşlendi</span>
+                                    @if (!string.IsNullOrEmpty(item.SapBelgeNo))
+                                    {
+                                        <small class="text-muted d-block" style="font-size: 0.70rem;">@item.SapBelgeTuru: @item.SapBelgeNo</small>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning text-dark badge-modern"><i class="fas fa-clock me-1"></i> Bekliyor</span>
+                                }
+                            </td>
+                            
+                            <!-- İŞLEMLER BUTONLARI -->
+                            <td class="text-center">
+                                <div class="d-flex flex-column gap-2 align-items-center">
+                                    @if (!string.IsNullOrEmpty(item.Id))
+                                    {
+                                        <a href="@Url.Action("DekontIndir", "Rapor105", new { id = item.Id })" target="_blank" class="btn btn-sm btn-outline-secondary rounded-pill px-3 shadow-sm w-100" title="PDF Dekont">
+                                            <i class="fas fa-file-pdf"></i> PDF
+                                        </a>
+                                    }
+
+                                    @if (!item.SapAktarildiMi)
+                                    {
+                                        <!-- SAP'YE AKTAR BUTONU -->
+                                        <button id="btnAktar-@item.Id" class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm w-100" 
+                                                onclick="openSapModal('@item.Id', '@item.Tutar.ToString("F2", CultureInfo.InvariantCulture)', '@item.TutarTRY.ToString("F2", CultureInfo.InvariantCulture)', '@(item.IsGiris.ToString().ToLower())', '@item.IslemTarihi?.ToString("yyyy-MM-dd")', '@(item.Aciklama?.Replace("'","\\'") ?? "")', '@item.OnerilenBankaKodu', '@(item.IslemTuru?.Replace("'","\\'") ?? "")', '@item.ParaBirimi', '@(item.AciklamadanGelenKur?.ToString("F4", CultureInfo.InvariantCulture) ?? "")', '@item.SapSistemKuru.ToString("F4", CultureInfo.InvariantCulture)', '@(item.EkrandaGorunenVkn ?? "")')">
+                                            <i class="fas fa-cloud-upload-alt"></i> SAP'ye Aktar
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <!-- YENİ EKLENEN İPTAL BUTONU (SADECE İŞLENDİYSE) -->
+                                        @if (item.SapTransId.HasValue && item.SapTransId.Value > 0)
+                                        {
+                                            <button class="btn btn-sm btn-outline-danger rounded-pill px-3 shadow-sm w-100" 
+                                                    onclick="iptalEtSingle(@item.SapTransId.Value, '@(item.SapBelgeNo ?? "")', '@(item.SapBelgeTuru ?? "")', '@item.Id')">
+                                                <i class="fas fa-trash-alt"></i> İptal Et
+                                            </button>
+                                        }
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else if (ViewBag.ApiStatus == "Başarılı")
+        {
+            <div class="text-center py-5">
+                <i class="fas fa-box-open fa-3x text-muted mb-3 opacity-50"></i>
+                <h5 class="text-muted">Kayıt Bulunamadı</h5>
+                <p class="text-muted small">Seçilen tarih aralığında herhangi bir banka hareketi bulunmuyor.</p>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- ========================================== -->
+<!-- YENİ: HATALI VADELİ İŞLEMLER MODALI -->
+<!-- ========================================== -->
+<div class="modal fade" id="hataliVadeliModal" tabindex="-1" aria-hidden="true">
+    <!-- Genişlik %95 olarak ayarlandı -->
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 95%;">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title text-dark fw-bold"><i class="fas fa-exclamation-triangle me-2"></i> Hatalı Vadeli Hesap İşlemleri</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+            </div>
+            <div class="modal-body p-0">
+                <!-- Yükseklik ekranın %70'ine kadar esneyebilecek şekilde ayarlandı (70vh) -->
+                <div class="table-responsive" style="max-height: 70vh; overflow-y: auto;">
+                    <table class="table table-hover table-striped mb-0">
+                        <thead class="table-light" style="position: sticky; top: 0; z-index: 10;">
+                            <tr>
+                                <th class="text-center" style="width: 50px;">
+                                    <input type="checkbox" class="form-check-input" id="chkAllHatali" onchange="toggleAllHatali(this)">
+                                </th>
+                                <th>Kayıt Tarihi</th>
+                                <th>İşlem Türü</th>
+                                <th>Belge No</th>
+                                <th>SAP Hesabı</th>
+                                <th>Açıklama</th>
+                                <th class="text-end">Borç / Alacak (TRY)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbHataliVadeli">
+                            <!-- AJAX İLE DOLDURULACAK -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Kapat</button>
+                <button type="button" class="btn btn-danger px-4" onclick="iptalEtSecilenleri()">
+                    <i class="fas fa-trash-alt me-1"></i> Seçilenleri SAP'den İptal Et
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ========================================== -->
+<!-- MEVCUT SAP AKTARIM MODALI -->
+<!-- ========================================== -->
+<div class="modal fade" id="sapAktarModal" tabindex="-1" aria-labelledby="sapAktarModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-primary text-white border-0">
+        <h5 class="modal-title" id="sapAktarModalLabel"><i class="fas fa-exchange-alt me-2"></i> SAP Aktarım Önizleme</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4">
+          
+          <input type="hidden" id="modalId" />
+          <input type="hidden" id="modalTarih" />
+          <input type="hidden" id="modalTutar" /> 
+          <input type="hidden" id="modalParaBirimi" /> 
+          <input type="hidden" id="modalIsGiris" />
+          <input type="hidden" id="modalAciklama" />
+          <input type="hidden" id="modalIslemTuru" />
+
+          <!-- VKN güncelleme için gizli alan -->
+          <input type="hidden" id="modalFinekraVkn" />
+
+          <div class="preview-box">
+              <div class="row">
+                  <div class="col-6">
+                      <div class="preview-label">İşlem Tarihi</div>
+                      <div class="preview-val" id="lblTarih">-</div>
+                  </div>
+                  <div class="col-6">
+                      <div class="preview-label">İşlem Tutarı</div>
+                      <div class="preview-val text-primary" style="font-size: 1.2rem;" id="lblTutar">-</div>
+                  </div>
+                  <div class="col-12 mt-2">
+                      <div class="preview-label">Açıklama</div>
+                      <div class="preview-val" id="lblAciklama" style="font-size:0.8rem; font-weight:normal;">-</div>
+                  </div>
+              </div>
+          </div>
+
+          <!-- DÖVİZ KURU SEÇİM ALANI -->
+          <div class="row mt-3 mb-4" id="divDovizKuruAlani" style="display:none; background: #f1f5f9; padding: 15px; border-radius: 8px; border: 1px dashed #94a3b8;">
+              <div class="col-md-6 mb-3 mb-md-0">
+                  <label class="form-label fw-bold text-muted small"><i class="fas fa-sync-alt me-1"></i> Döviz Kuru Kaynağı</label>
+                  <select class="form-select modern-input" id="selKurTipi" onchange="kurTipiDegisti()">
+                      <option value="aciklama">Açıklama Kuru (Önerilen)</option>
+                      <option value="sap">SAP Güncel Kuru</option>
+                      <option value="manuel">Manuel Kur Gir</option>
+                  </select>
+              </div>
+              <div class="col-md-6">
+                  <label class="form-label fw-bold text-muted small">Uygulanacak Kur Çarpanı</label>
+                  <input type="number" class="form-control modern-input fw-bold text-primary" id="inpUygulanacakKur" step="0.0001" onchange="manuelKurHesapla()" onkeyup="manuelKurHesapla()">
+              </div>
+              <input type="hidden" id="hdnAciklamaKuru">
+              <input type="hidden" id="hdnSapKuru">
+          </div>
+
+          <div class="row">
+              <div class="col-md-6 mb-3">
+                  <label class="form-label fw-bold text-muted small">Belge Türü (SAP)</label>
+                  <select class="form-select modern-input" id="selBelgeTuru" onchange="toggleBelgeTuru()">
+                      <option value="24">Tahsilat (Gelen Ödeme)</option>
+                      <option value="46">Yapılan Ödeme (Giden Ödeme)</option>
+                      <option value="30">Yevmiye Kaydı</option>
+                  </select>
+              </div>
+              <div class="col-md-6 mb-3">
+                  <label class="form-label fw-bold text-muted small">SAP Banka Hesabı <span class="text-danger">*</span></label>
+                  <select class="form-select modern-select2" id="selBankaHesabi" style="width: 100%;" onchange="calculateKkegPreview(); formValidationCheck();">
+                      <option value="">-- Lütfen Hesap Seçiniz --</option>
+                      @if (bankAccounts != null)
+                      {
+                          foreach (var acc in bankAccounts)
+                          {
+                              <option value="@acc.AcctCode">@acc.AcctCode - @acc.AcctName</option>
+                          }
+                      }
+                  </select>
+              </div>
+          </div>
+
+          <div id="divKkegWrapper" style="display:none;" class="mb-3">
+              <div class="form-check form-switch p-3 bg-danger bg-opacity-10 border border-danger border-opacity-25 rounded d-flex align-items-center gap-2">
+                  <input class="form-check-input fs-4 m-0" type="checkbox" id="chkKkeg" onchange="toggleKkeg()">
+                  <label class="form-check-label fw-bold text-danger m-0 pt-1" for="chkKkeg">Binek Araç Gider Kısıtlaması (%70 - %30 KKEG) Uygula</label>
+              </div>
+          </div>
+
+          <!-- YALNIZCA TAHSİLAT (24) ve ÖDEME (46) İÇİN TEKLİ CARİ SEÇİMİ -->
+          <div id="divStandartKarsiTaraf">
+              <div class="mb-3 p-3 bg-light border rounded" id="divCariKodu">
+                  <label class="form-label fw-bold text-muted small">Cari Kodu <span class="text-danger">*</span></label>
+                  <select class="form-select modal-cari-select2" id="inpCariKodu" style="width: 100%;" onchange="formValidationCheck()"></select>
+                  <div id="lblCariAdi" class="text-muted small mt-1"></div>
+                  
+                  <!-- VKN GÜNCELLEME CHECKBOX ALANI -->
+                  <div id="divVknGuncelleme" class="mt-2 pt-2 border-top" style="display:none;">
+                      <div class="form-check">
+                          <input class="form-check-input" type="checkbox" id="chkUpdateVkn">
+                          <label class="form-check-label small text-primary fw-bold" for="chkUpdateVkn" id="lblVknUpdateText">
+                              Seçilen Carinin VKN/TCKN Bilgisini Güncelle
+                          </label>
+                      </div>
+                      <small class="text-muted d-block" style="font-size:0.75rem;">
+                          (Seçilirse; Cari kartında 10 haneli VKN 'Vergi Dairesi/No' alanına, 11 haneli TCKN ise 'TC Kimlik No' alanına güncellenir.)
+                      </small>
+                  </div>
+
+              </div>
+              <input type="hidden" id="selKarsiTipi" value="Cari" />
+          </div>
+
+          <!-- ÇOKLU YEVMİYE SATIRLARI (SADECE BELGE TÜRÜ 30 OLDUĞUNDA) -->
+          <div id="divCokluYevmiye" style="display:none;" class="mb-3">
+              <div class="p-3 bg-light border border-primary rounded">
+                  <h6 class="fw-bold text-primary mb-3"><i class="fas fa-list-ol me-1"></i> Yevmiye Karşı Hesap/Cari Satırları (Tutar TRY Olarak Girilmelidir)</h6>
+                  
+                  <div class="row g-2 align-items-end mb-3">
+                      <div class="col-md-3">
+                          <label class="form-label small fw-bold text-muted">Tipi</label>
+                          <select class="form-select modern-input py-1" id="selYevmiyeTipi" onchange="toggleYevmiyeTipi()" style="height: 38px;">
+                              <option value="Cari">Cari Hesap</option>
+                              <option value="Hesap">G/L Hesap</option>
+                          </select>
+                      </div>
+                      <div class="col-md-5" id="divYevmiyeCari">
+                          <label class="form-label small fw-bold text-muted">Cari Kodu</label>
+                          <select class="form-select yevmiye-cari-select2" id="inpYevmiyeCari" style="width: 100%;"></select>
+                      </div>
+                      <div class="col-md-5" id="divYevmiyeHesap" style="display:none;">
+                          <label class="form-label small fw-bold text-muted">G/L Hesap</label>
+                          <select class="form-select modern-select2" id="inpYevmiyeHesap" style="width: 100%;">
+                              <option value="">-- Lütfen Hesap Seçiniz --</option>
+                              @if (allAccounts != null) { foreach (var acc in allAccounts) { <option value="@acc.AcctCode">@acc.AcctCode - @acc.AcctName</option> } }
+                          </select>
+                      </div>
+                      <div class="col-md-2">
+                          <label class="form-label small fw-bold text-muted">Tutar (TRY)</label>
+                          <input type="number" class="form-control modern-input py-1" id="inpYevmiyeTutar" step="0.01" style="height: 38px;">
+                      </div>
+                      <div class="col-md-2">
+                          <button type="button" class="btn btn-primary w-100" style="height: 38px;" onclick="addYevmiyeSatir()"><i class="fas fa-plus"></i> Ekle</button>
+                      </div>
+                  </div>
+                  
+                  <div class="table-responsive">
+                      <table class="table table-sm table-bordered bg-white mb-0">
+                          <thead class="table-secondary">
+                              <tr>
+                                  <th>Tip</th>
+                                  <th>Hesap / Cari İsim</th>
+                                  <th class="text-end">Tutar (TRY)</th>
+                                  <th class="text-center" style="width: 50px;">Sil</th>
+                              </tr>
+                          </thead>
+                          <tbody id="tbYevmiyeSatirlari">
+                          </tbody>
+                          <tfoot class="table-light">
+                              <tr>
+                                  <th colspan="2" class="text-end text-danger">Eklenen Toplam (TRY):</th>
+                                  <th class="text-end text-danger fs-6" id="thYevmiyeToplam">0,00</th>
+                                  <th></th>
+                              </tr>
+                          </tfoot>
+                      </table>
+                  </div>
+              </div>
+          </div>
+
+          <div id="divKkegDetails" style="display:none;">
+              <div class="p-3 bg-light border border-secondary rounded">
+                  <div class="row g-2 mb-3">
+                      <div class="col-md-12">
+                          <label class="form-label small fw-bold text-primary">KDV Oranı</label>
+                          <select id="selKdvRate" class="form-select modern-input" style="height: 38px; padding: 0.3rem 0.75rem;" onchange="kdvRateChanged()">
+                              <option value="10">%10 (HGS / OGS / Konaklama vb.)</option>
+                              <option value="20">%20 (Yakıt / Tamir / Bakım vb.)</option>
+                              <option value="0">%0 (KDV'siz İşlemler)</option>
+                          </select>
+                      </div>
+                      <div class="col-md-6 mb-2">
+                          <label class="form-label small fw-bold text-muted">%70 Kabul Edilen Gider Hsp.</label>
+                          <select id="selGider70" class="form-select modern-select2" style="width: 100%;" onchange="calculateKkegPreview()">
+                              <option value="">Kod veya Ad ile arama yapın...</option>
+                              @if (allAccounts != null) {
+                                  foreach (var acc in allAccounts) {
+                                      <option value="@acc.AcctCode">@acc.AcctCode - @acc.AcctName</option>
+                                  }
+                              }
+                          </select>
+                      </div>
+                      <div class="col-md-6 mb-2">
+                          <label class="form-label small fw-bold text-muted">%30 KKEG Gider Hsp.</label>
+                          <select id="selKkeg30" class="form-select modern-select2" style="width: 100%;" onchange="calculateKkegPreview()">
+                              <option value="">Kod veya Ad ile arama yapın...</option>
+                              @if (allAccounts != null) {
+                                  foreach (var acc in allAccounts) {
+                                      <option value="@acc.AcctCode">@acc.AcctCode - @acc.AcctName</option>
+                                  }
+                              }
+                          </select>
+                      </div>
+                      <div class="col-md-6">
+                          <label class="form-label small fw-bold text-muted">%70 İndirilecek KDV Hsp.</label>
+                          <select id="selKdv70" class="form-select modern-select2" style="width: 100%;" onchange="calculateKkegPreview()">
+                              <option value="">Kod veya Ad ile arama yapın...</option>
+                              @if (allAccounts != null) {
+                                  foreach (var acc in allAccounts) {
+                                      <option value="@acc.AcctCode">@acc.AcctCode - @acc.AcctName</option>
+                                  }
+                              }
+                          </select>
+                      </div>
+                      <div class="col-md-6">
+                          <label class="form-label small fw-bold text-muted">%30 KKEG KDV Hsp.</label>
+                          <select id="selKdv30" class="form-select modern-select2" style="width: 100%;" onchange="calculateKkegPreview()">
+                              <option value="">Kod veya Ad ile arama yapın...</option>
+                              @if (allAccounts != null) {
+                                  foreach (var acc in allAccounts) {
+                                      <option value="@acc.AcctCode">@acc.AcctCode - @acc.AcctName</option>
+                                  }
+                              }
+                          </select>
+                      </div>
+                  </div>
+
+                  <hr class="my-3 text-secondary">
+                  <h6 class="fw-bold text-dark mb-2"><i class="fas fa-eye me-1"></i> Yevmiye Fişi Önizlemesi (TRY)</h6>
+                  <div class="table-responsive">
+                      <table class="table table-sm table-bordered bg-white kkeg-table">
+                          <thead class="table-secondary">
+                              <tr class="text-center">
+                                  <th style="width:25%">Hesap Kodu</th>
+                                  <th style="width:45%">Açıklama (Hesap Adı)</th>
+                                  <th style="width:15%">Borç (TRY)</th>
+                                  <th style="width:15%">Alacak (TRY)</th>
+                              </tr>
+                          </thead>
+                          <tbody id="kkegPreviewBody">
+                              </tbody>
+                      </table>
+                  </div>
+              </div>
+          </div>
+
+          <div class="mb-3 mt-3">
+              <label class="form-label fw-bold text-muted small">İşlem Tipi (U_BE1_AKTAR)</label>
+              <select class="form-select modern-input" id="selIslemTipi">
+                  <option value="R" selected>R (Özel İşlem)</option>
+                  <option value="X">X (Standart Aktarım)</option>
+              </select>
+          </div>
+
+      </div>
+      <div class="modal-footer bg-light border-0">
+        <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">İptal</button>
+        <button type="button" class="btn btn-success rounded-pill px-4" id="btnAktarOnayla" onclick="submitSapAktarim()" disabled>
+            <i class="fas fa-check me-2"></i> SAP'ye Gönder
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <script>
+        var aktarModal;
+        let yevmiyeSatirlariArray = []; 
+
+        $(document).ready(function() {
+            $('.modern-select2').select2({
+                dropdownParent: $('#sapAktarModal'),
+                placeholder: "Kod veya Ad ile arama yapın...",
+                allowClear: true
+            });
+
+            // ---- Finekra hesabi -> SAP 102 hesabi eslestirme (kartlar) ----
+            // Secim degisir degismez sunucuya yazilir (Z_FinekraHesapEslesme).
+            // Hareket satirlarinda gecerli olmasi icin sayfa yenilenir.
+            $('.eslesme-select2').select2({
+                placeholder: "SAP 102 hesabı seçin...",
+                allowClear: true,
+                width: '100%'
+            });
+
+            $(document).on('change', '.eslesme-select2', function () {
+                var sel = $(this);
+                var alan = sel.closest('.eslesme-alani');
+                var veri = new FormData();
+                veri.append('finekraHesapId', alan.data('hesapId') || '');
+                veri.append('iban', alan.data('iban') || '');
+                veri.append('bankaAdi', alan.data('banka') || '');
+                veri.append('hesapAdi', alan.data('hesapAd') || '');
+                veri.append('sapHesapKodu', sel.val() || '');
+
+                sel.prop('disabled', true);
+                fetch('/Rapor105/HesapEslesmeKaydet', { method: 'POST', body: veri })
+                    .then(function (r) { return r.json(); })
+                    .then(function (c) {
+                        sel.prop('disabled', false);
+                        if (!c || !c.success) { toastr.error((c && c.message) || 'Eşleştirme kaydedilemedi.'); return; }
+                        var durum = alan.find('.eslesme-durum');
+                        var kart = alan.closest('.modern-card');
+                        if (c.sapHesapKodu) {
+                            durum.html('<span class="badge bg-success"><i class="fas fa-link me-1"></i>Eşleştirildi</span>');
+                            kart.removeClass('border-warning').addClass('border-success');
+                            toastr.success('Eşleştirme kaydedildi: ' + c.sapHesapKodu + '<br><small>Hareket satırlarına yansıması için sayfayı yenileyin.</small>');
+                        } else {
+                            durum.html('<span class="badge bg-warning text-dark"><i class="fas fa-unlink me-1"></i>Eşleştirilmedi</span>');
+                            kart.removeClass('border-success').addClass('border-warning');
+                            toastr.info('Eşleştirme kaldırıldı.');
+                        }
+                    })
+                    .catch(function () { sel.prop('disabled', false); toastr.error('Sunucuya ulaşılamadı.'); });
+            });
+
+            // ---- Kombine filtre: banka + sadece eslesmeyen ----
+            function finekraFiltreUygula() {
+                var sadeceEslesmeyen = $('#btnSadeceEslesmeyen').hasClass('active');
+                var secilenBanka = $('#bankaFiltresi').val() || '';
+                $('table.modern-table tbody tr[data-banka-eslesme]').each(function () {
+                    var $r = $(this);
+                    var bankaUyar = !secilenBanka || String($r.data('banka')) === secilenBanka;
+                    var eslesmeUyar = !sadeceEslesmeyen || $r.data('bankaEslesme') === 'yok';
+                    $r.toggle(bankaUyar && eslesmeUyar);
+                });
+            }
+
+            // ---- Sadece eslesmeyen hareketleri goster ----
+            $('#btnSadeceEslesmeyen').on('click', function () {
+                var aktif = $(this).toggleClass('active').hasClass('active');
+                $(this).find('.metin').text(aktif ? 'Tümünü göster' : 'Sadece eşleşmeyenler');
+                finekraFiltreUygula();
+            });
+
+            // ---- Banka filtresi ----
+            $('#bankaFiltresi').on('change', finekraFiltreUygula);
+
+            // Grid (Ana Tablo) Üzerindeki Cari Seçimi - Mükerrer Kontrolü İçin
+            $('.grid-cari-select2').select2({
+                placeholder: "Cari Seç / Değiştir...",
+                allowClear: true,
+                ajax: {
+                    url: '/Rapor105/AraCari',
+                    dataType: 'json',
+                    delay: 250,
+                    data: function (params) { return { q: params.term }; },
+                    processResults: function (data) { 
+                        data.results.unshift({ id: 'DAHILI', text: 'DAHILI - Dahili İşlem (Banka Masrafı / Virman vb.)' });
+                        return { results: data.results }; 
+                    },
+                    cache: true
+                }
+            }).on('change', function(e) {
+                var selectEl = $(this);
+                var cariKodu = selectEl.val();
+                
+                if(!cariKodu || cariKodu === "DAHILI") return; 
+
+                var id = selectEl.data('id');
+                var date = selectEl.data('date');
+                var amount = selectEl.data('amount');
+                var isGiris = selectEl.data('isgiris');
+                
+                var badgeContainer = $('#status-' + id);
+                var originalHtml = badgeContainer.html();
+                badgeContainer.html('<i class="fas fa-spinner fa-spin text-primary"></i> <small>Kontrol...</small>');
+
+                $.get('/Rapor105/CheckDuplicate', {
+                    finekraId: id,
+                    cariKodu: cariKodu,
+                    dateStr: date,
+                    amount: amount,
+                    isGiris: isGiris
+                }).done(function(res) {
+                    if(res.isProcessed) {
+                        badgeContainer.html('<span class="badge bg-success badge-modern mb-1"><i class="fas fa-check-circle me-1"></i> İşlendi</span><small class="text-muted d-block" style="font-size: 0.70rem;">' + res.belgeTuru + ': ' + res.belgeNo + '</small>');
+                        var btn = $('#btnAktar-' + id);
+                        if(btn.length) btn.remove();
+                        selectEl.prop('disabled', true);
+                    } else {
+                        badgeContainer.html(originalHtml);
+                    }
+                }).fail(function() {
+                    badgeContainer.html(originalHtml);
+                });
+            });
+
+            // Modal İçi Cari Seçimi
+            $('.modal-cari-select2').select2({
+                dropdownParent: $('#sapAktarModal'),
+                placeholder: "Cari Kod veya Unvan ile arama yapın...",
+                allowClear: true,
+                ajax: {
+                    url: '/Rapor105/AraCari',
+                    dataType: 'json',
+                    delay: 250,
+                    data: function (params) { return { q: params.term }; },
+                    processResults: function (data) { return { results: data.results }; },
+                    cache: true
+                }
+            });
+
+            // Yevmiye içi Çoklu Cari Seçimi
+            $('.yevmiye-cari-select2').select2({
+                dropdownParent: $('#sapAktarModal'),
+                placeholder: "Cari Kod / Unvan arayın...",
+                allowClear: true,
+                ajax: {
+                    url: '/Rapor105/AraCari',
+                    dataType: 'json',
+                    delay: 250,
+                    data: function (params) { return { q: params.term }; },
+                    processResults: function (data) { return { results: data.results }; },
+                    cache: true
+                }
+            });
+
+            aktarModal = new bootstrap.Modal(document.getElementById('sapAktarModal'), {
+                keyboard: false
+            });
+        });
+
+        // ==========================================
+        // YENİ: İPTAL İŞLEMLERİ JAVASCRIPT KODLARI
+        // ==========================================
+        
+        function openHataliVadeliModal() {
+            var tbody = document.getElementById('tbHataliVadeli');
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5"><i class="fas fa-circle-notch fa-spin fa-3x text-warning mb-3"></i><h5>Kayıtlar Aranıyor...</h5></td></tr>';
+            
+            var modal = new bootstrap.Modal(document.getElementById('hataliVadeliModal'));
+            modal.show();
+            document.getElementById('chkAllHatali').checked = false;
+
+            fetch('/Rapor105/GetHatalivadeliIslemler')
+                .then(res => res.json())
+                .then(res => {
+                    if (res.success && res.data && res.data.length > 0) {
+                        let html = '';
+                        res.data.forEach(x => {
+                            let tutarBorc = x.borc > 0 ? `<span class="text-primary fw-bold">${x.borc.toLocaleString('tr-TR', {minimumFractionDigits: 2})} (B)</span>` : '';
+                            let tutarAlacak = x.alacak > 0 ? `<span class="text-danger fw-bold">${x.alacak.toLocaleString('tr-TR', {minimumFractionDigits: 2})} (A)</span>` : '';
+                            
+                            html += `<tr>
+                                <td class="text-center">
+                                    <input type="checkbox" class="form-check-input chk-hatali" data-transid="${x.transId}" data-belgeno="${x.belgeNo}" data-belgeturu="${x.belgeTuru}">
+                                </td>
+                                <td>${x.kayitTarihi}</td>
+                                <td><span class="badge bg-secondary">${x.belgeTuru}</span></td>
+                                <td><strong>${x.belgeNo}</strong></td>
+                                <td><small class="d-block fw-bold text-dark">${x.hesapKodu}</small><small class="text-muted">${x.hesapAdi}</small></td>
+                                <td><small>${x.aciklama}</small></td>
+                                <td class="text-end">${tutarBorc}${tutarAlacak}</td>
+                            </tr>`;
+                        });
+                        tbody.innerHTML = html;
+                    } else {
+                        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-muted"><i class="fas fa-check-circle fa-2x text-success mb-2"></i><br>Hatalı VADELİ işlem bulunamadı. Sistem temiz.</td></tr>`;
+                    }
+                })
+                .catch(err => {
+                    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger"><i class="fas fa-times-circle fa-2x mb-2"></i><br>Veriler alınırken hata oluştu.</td></tr>`;
+                    console.error(err);
+                });
+        }
+
+        function toggleAllHatali(cb) {
+            $('.chk-hatali').prop('checked', cb.checked);
+        }
+
+     function iptalEtSecilenleri() {
+            let requests = [];
+            $('.chk-hatali:checked').each(function() {
+                requests.push({
+                    // parseInt eklenerek string yerine int olarak gönderilmesi sağlandı
+                    TransId: parseInt($(this).attr('data-transid'), 10),
+                    BelgeNo: $(this).attr('data-belgeno').toString(),
+                    BelgeTuru: $(this).attr('data-belgeturu').toString()
+                });
+            });
+
+            if(requests.length === 0) {
+                alert("Lütfen iptal edilecek en az bir belge seçiniz.");
+                return;
+            }
+
+            if(confirm(requests.length + " adet belgeyi Service Layer üzerinden iptal etmek istediğinize emin misiniz? (Bu işlem geri alınamaz!)")) {
+                sendCancelRequestToApi(requests, function() {
+                    bootstrap.Modal.getInstance(document.getElementById('hataliVadeliModal')).hide();
+                    location.reload(); 
+                });
+            }
+        }
+
+        function iptalEtSingle(transId, belgeNo, belgeTuru, elementId) {
+            if(confirm("SAP Yevmiye/Belge No: " + belgeNo + " kalıcı olarak iptal edilecek. Emin misiniz?")) {
+                let requests = [{
+                    // parseInt eklenerek string yerine int olarak gönderilmesi sağlandı
+                    TransId: parseInt(transId, 10),
+                    BelgeNo: belgeNo.toString(),
+                    BelgeTuru: belgeTuru.toString()
+                }];
+                
+                sendCancelRequestToApi(requests, function() {
+                    location.reload(); 
+                });
+            }
+        }
+       
+        function sendCancelRequestToApi(requestsArray, successCallback) {
+            fetch('/Rapor105/IptalEtSap', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value
+                },
+                body: JSON.stringify(requestsArray)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    alert("İptal İşlemi Başarılı:\n\n" + data.message);
+                    if(successCallback) successCallback();
+                } else {
+                    alert("İptal İşlemi Sırasında Hata:\n\n" + data.message);
+                }
+            })
+            .catch(err => {
+                alert("Sunucuya ulaşılamadı veya kritik bir hata oluştu.");
+                console.error(err);
+            });
+        }
+
+        // ==========================================
+        // BUTON KONTROLÜ (ZORUNLU ALANLAR DOLDURULMADAN BUTON AKTİF OLMAZ)
+        // ==========================================
+        function formValidationCheck() {
+            var belgeTuru = document.getElementById('selBelgeTuru').value;
+            var isYevmiye = (belgeTuru === "30");
+            var bankaHesabi = $('#selBankaHesabi').val();
+            var btnGonder = document.getElementById('btnAktarOnayla');
+
+            let isValid = false;
+
+            if (!bankaHesabi) {
+                isValid = false;
+            } else {
+                if (isYevmiye) {
+                    let isKkeg = document.getElementById('chkKkeg').checked;
+                    if (isKkeg) {
+                        isValid = true; 
+                    } else {
+                        isValid = (yevmiyeSatirlariArray.length > 0);
+                    }
+                } else {
+                    let cariKodu = $('#inpCariKodu').val();
+                    isValid = (cariKodu && cariKodu.trim() !== "");
+                }
+            }
+
+            btnGonder.disabled = !isValid;
+        }
+
+        // ==========================================
+        // EKRAN VE GÖRÜNÜM KONTROLLERİ
+        // ==========================================
+        function toggleYevmiyeTipi() {
+            if ($('#selYevmiyeTipi').val() === 'Cari') {
+                $('#divYevmiyeCari').show();
+                $('#divYevmiyeHesap').hide();
+            } else {
+                $('#divYevmiyeCari').hide();
+                $('#divYevmiyeHesap').show();
+            }
+        }
+
+        function toggleBelgeTuru() {
+            var belgeTuru = document.getElementById('selBelgeTuru').value;
+            var isYevmiye = (belgeTuru === "30");
+            var isKkeg = document.getElementById('chkKkeg').checked;
+            
+            if(isYevmiye) {
+                document.getElementById('divKkegWrapper').style.display = "block";
+                
+                if(isKkeg) {
+                    document.getElementById('divStandartKarsiTaraf').style.display = "none";
+                    document.getElementById('divCokluYevmiye').style.display = "none";
+                    document.getElementById('divKkegDetails').style.display = "block";
+                } else {
+                    document.getElementById('divStandartKarsiTaraf').style.display = "none";
+                    document.getElementById('divCokluYevmiye').style.display = "block";
+                    document.getElementById('divKkegDetails').style.display = "none";
+                }
+            } else {
+                document.getElementById('divKkegWrapper').style.display = "none";
+                document.getElementById('chkKkeg').checked = false;
+                
+                document.getElementById('divStandartKarsiTaraf').style.display = "block";
+                document.getElementById('divCokluYevmiye').style.display = "none";
+                document.getElementById('divKkegDetails').style.display = "none";
+            }
+            formValidationCheck();
+        }
+
+        function toggleKkeg() {
+            toggleBelgeTuru(); 
+            if(document.getElementById('chkKkeg').checked) {
+                autoSelectKkegAccounts(); 
+                calculateKkegPreview(); 
+            }
+        }
+
+        function kdvRateChanged() {
+            autoSelectKkegAccounts();
+            calculateKkegPreview();
+        }
+
+        // ==========================================
+        // ÇOKLU YEVMİYE SATIRI YÖNETİMİ
+        // ==========================================
+        function addYevmiyeSatir() {
+            let tipi = $('#selYevmiyeTipi').val();
+            let kod = '';
+            let isim = '';
+
+            if (tipi === 'Cari') {
+                let data = $('#inpYevmiyeCari').select2('data');
+                if(data && data.length > 0) {
+                    kod = data[0].id;
+                    isim = data[0].text;
+                }
+            } else {
+                let el = $('#inpYevmiyeHesap');
+                kod = el.val();
+                isim = el.find("option:selected").text();
+            }
+
+            let tutar = parseFloat($('#inpYevmiyeTutar').val());
+
+            if (!kod) { alert("Lütfen Cari/Hesap seçiniz!"); return false; }
+            if (isNaN(tutar) || tutar <= 0) { alert("Lütfen 0'dan büyük geçerli bir tutar giriniz!"); return false; }
+
+            yevmiyeSatirlariArray.push({
+                Tipi: tipi,
+                Kod: kod,
+                Isim: isim,
+                Tutar: tutar
+            });
+
+            renderYevmiyeSatirlari();
+            formValidationCheck();
+            
+            $('#inpYevmiyeCari').val(null).trigger('change');
+            $('#inpYevmiyeHesap').val(null).trigger('change');
+            return true;
+        }
+
+        function removeYevmiyeSatir(index) {
+            yevmiyeSatirlariArray.splice(index, 1);
+            renderYevmiyeSatirlari();
+            formValidationCheck();
+        }
+
+        function renderYevmiyeSatirlari() {
+            let html = '';
+            let total = 0;
+            yevmiyeSatirlariArray.forEach((s, index) => {
+                let badgeClass = s.Tipi === 'Cari' ? 'bg-primary' : 'bg-info text-dark';
+                html += `<tr>
+                    <td><span class="badge ${badgeClass} badge-modern">${s.Tipi}</span></td>
+                    <td class="fw-medium"><small>${s.Isim}</small></td>
+                    <td class="text-end fw-bold">${s.Tutar.toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                    <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" onclick="removeYevmiyeSatir(${index})"><i class="fas fa-times"></i></button></td>
+                </tr>`;
+                total += s.Tutar;
+            });
+            
+            if (yevmiyeSatirlariArray.length === 0) {
+                html = `<tr><td colspan="4" class="text-center text-muted small py-3">Henüz satır eklenmedi. Lütfen yukarıdan satır ekleyiniz.</td></tr>`;
+            }
+            
+            $('#tbYevmiyeSatirlari').html(html);
+            $('#thYevmiyeToplam').text(total.toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2}));
+
+            let targetTutarFC = Math.abs(parseFloat($('#modalTutar').val()) || 0);
+            let uygulananKur = parseFloat($('#inpUygulanacakKur').val()) || 1;
+            let targetTotal = targetTutarFC * uygulananKur; 
+            
+            let remaining = targetTotal - total;
+            if (remaining > 0.01) {
+                $('#inpYevmiyeTutar').val(remaining.toFixed(2));
+            } else {
+                $('#inpYevmiyeTutar').val('');
+            }
+        }
+
+        // ==========================================
+        // DÖVİZ KURU HESAPLAMA (FRONTEND)
+        // ==========================================
+        function kurTipiDegisti() {
+            let tip = document.getElementById('selKurTipi').value;
+            let kurInput = document.getElementById('inpUygulanacakKur');
+            
+            if (tip === "aciklama") {
+                let aciklamaKuru = document.getElementById('hdnAciklamaKuru').value;
+                kurInput.value = (parseFloat(aciklamaKuru) > 0) ? parseFloat(aciklamaKuru).toFixed(4) : "1.0000";
+                kurInput.disabled = true;
+            } else if (tip === "sap") {
+                let sapKuru = document.getElementById('hdnSapKuru').value;
+                kurInput.value = (parseFloat(sapKuru) > 0) ? parseFloat(sapKuru).toFixed(4) : "1.0000";
+                kurInput.disabled = true;
+            } else {
+                kurInput.disabled = false;
+                kurInput.focus();
+            }
+            manuelKurHesapla();
+        }
+
+        function manuelKurHesapla() {
+            let kur = parseFloat(document.getElementById('inpUygulanacakKur').value) || 1;
+            let orijinalTutar = parseFloat(document.getElementById('modalTutar').value) || 0;
+            let pBirim = document.getElementById('modalParaBirimi').value || "TRY";
+            
+            let yeniTlTutar = Math.abs(orijinalTutar) * kur;
+            
+            if (pBirim === "TRY" || pBirim === "TL") {
+                document.getElementById('lblTutar').innerText = Math.abs(orijinalTutar).toLocaleString('tr-TR') + " ₺";
+            } else {
+                document.getElementById('lblTutar').innerText = yeniTlTutar.toLocaleString('tr-TR') + " ₺ (Döviz Tutar: " + Math.abs(orijinalTutar).toLocaleString('tr-TR') + " " + pBirim + ")";
+            }
+
+            calculateKkegPreview();
+            
+            if(yevmiyeSatirlariArray.length === 0) {
+                document.getElementById('inpYevmiyeTutar').value = yeniTlTutar.toFixed(2);
+            } else if (yevmiyeSatirlariArray.length === 1 && document.getElementById('inpCariKodu').value !== "") {
+                yevmiyeSatirlariArray[0].Tutar = yeniTlTutar;
+                renderYevmiyeSatirlari();
+            }
+        }
+
+        // ==========================================
+        // MODAL AÇILIŞ
+        // ==========================================
+        function openSapModal(id, tutarOrijinal, tutarTRY, isGiris, tarih, aciklama, onerilenBankaKodu, islemTuru, paraBirimi, aciklamaKuru, sapKuru, finekraVkn) {
+            
+            document.getElementById('btnAktarOnayla').disabled = true;
+
+            document.getElementById('modalId').value = id;
+            document.getElementById('modalTutar').value = tutarOrijinal; 
+            document.getElementById('modalParaBirimi').value = paraBirimi || "TRY";
+            document.getElementById('modalIsGiris').value = isGiris; 
+            document.getElementById('modalTarih').value = tarih;
+            document.getElementById('modalAciklama').value = aciklama;
+            document.getElementById('modalIslemTuru').value = islemTuru || ""; 
+
+            // VKN Bilgisi
+            document.getElementById('modalFinekraVkn').value = finekraVkn || "";
+            var divVknGuncelle = document.getElementById('divVknGuncelleme');
+            var chkUpdateVkn = document.getElementById('chkUpdateVkn');
+            
+            chkUpdateVkn.checked = false; 
+            if (finekraVkn && finekraVkn.length >= 10) {
+                divVknGuncelle.style.display = "block";
+                document.getElementById('lblVknUpdateText').innerText = "Seçilen Carinin VKN/TCKN Bilgisini Güncelle (Dekont VKN/TCKN: " + finekraVkn + ")";
+            } else {
+                divVknGuncelle.style.display = "none";
+            }
+
+            document.getElementById('hdnAciklamaKuru').value = aciklamaKuru || "";
+            document.getElementById('hdnSapKuru').value = sapKuru || "";
+
+            let pBirim = paraBirimi || "TRY";
+
+            if (pBirim !== "TRY" && pBirim !== "TL") {
+                document.getElementById('divDovizKuruAlani').style.display = "flex";
+                
+                if (aciklamaKuru && parseFloat(aciklamaKuru) > 0) {
+                    document.getElementById('selKurTipi').value = "aciklama";
+                    document.getElementById('inpUygulanacakKur').value = parseFloat(aciklamaKuru).toFixed(4);
+                    document.getElementById('inpUygulanacakKur').disabled = true;
+                } else {
+                    document.getElementById('selKurTipi').value = "sap";
+                    document.getElementById('inpUygulanacakKur').value = parseFloat(sapKuru).toFixed(4);
+                    document.getElementById('inpUygulanacakKur').disabled = true;
+                }
+            } else {
+                document.getElementById('divDovizKuruAlani').style.display = "none";
+                document.getElementById('inpUygulanacakKur').value = "1";
+            }
+
+            document.getElementById('selIslemTipi').value = "R";
+
+            var selBanka = $('#selBankaHesabi');
+            if (onerilenBankaKodu) {
+                selBanka.val(onerilenBankaKodu).trigger('change');
+            } else {
+                selBanka.val('').trigger('change');
+            }
+
+            // ANA TABLODAKİ (GRID) SEÇİLİ CARİYİ OKU (YENİ MANTIK)
+            var gridSelect = $('#gridCari-' + id);
+            var cariKodu = "";
+            var cariAdi = "";
+            if (gridSelect.length && gridSelect.val()) {
+                var val = gridSelect.val();
+                if (val === "DAHILI") {
+                    cariKodu = "";
+                    cariAdi = "Dahili İşlem (Banka Masrafı / Virman vb.)";
+                } else {
+                    var dataObj = gridSelect.select2('data')[0];
+                    cariKodu = val;
+                    if (dataObj && dataObj.text) {
+                        cariAdi = dataObj.text.includes(' - ') ? dataObj.text.split(' - ').slice(1).join(' - ') : dataObj.text;
+                    }
+                }
+            }
+
+            var cariSelect = $('#inpCariKodu');
+            cariSelect.empty();
+            if (cariKodu && cariKodu !== "") {
+                var optionText = cariKodu + (cariAdi ? " - " + cariAdi : "");
+                var newOption = new Option(optionText, cariKodu, true, true);
+                cariSelect.append(newOption).trigger('change');
+            } else {
+                cariSelect.val(null).trigger('change');
+            }
+            
+            var lblCariAdi = document.getElementById('lblCariAdi');
+            if(cariKodu) {
+                lblCariAdi.innerText = cariAdi;
+                lblCariAdi.classList.remove("text-danger");
+            } else {
+                if (cariAdi && cariAdi.includes("Dahili İşlem")) {
+                    lblCariAdi.innerText = cariAdi;
+                    lblCariAdi.classList.remove("text-danger");
+                } else {
+                    lblCariAdi.innerText = "Sistem eşleşme bulamadı, lütfen arama yapınız.";
+                    lblCariAdi.classList.add("text-danger");
+                }
+            }
+            
+            document.getElementById('chkKkeg').checked = false;
+
+            yevmiyeSatirlariArray = [];
+            let aktifKur = parseFloat(document.getElementById('inpUygulanacakKur').value) || 1;
+            let tryKarsiligi = Math.abs(parseFloat(tutarOrijinal)) * aktifKur;
+
+            $('#inpYevmiyeTutar').val(tryKarsiligi.toFixed(2));
+            
+            if (cariKodu && cariKodu !== "") {
+                yevmiyeSatirlariArray.push({
+                    Tipi: 'Cari',
+                    Kod: cariKodu,
+                    Isim: cariKodu + (cariAdi ? " - " + cariAdi : ""),
+                    Tutar: tryKarsiligi
+                });
+            }
+            renderYevmiyeSatirlari();
+            toggleYevmiyeTipi(); 
+
+            document.getElementById('lblTarih').innerText = tarih;
+            document.getElementById('lblAciklama').innerText = aciklama;
+
+            manuelKurHesapla();
+
+            if(isGiris === "false") { 
+                document.getElementById('selBelgeTuru').value = "46"; 
+            } else { 
+                document.getElementById('selBelgeTuru').value = "24"; 
+            }
+            
+            if(cariAdi && cariAdi.includes("Dahili İşlem")) {
+                document.getElementById('selBelgeTuru').value = "30"; 
+            }
+            
+            toggleBelgeTuru();
+            formValidationCheck(); 
+            aktarModal.show();
+        }
+
+        // ==========================================
+        // AKILLI HESAP SEÇİMİ (AUTO-SELECT) KKEG
+        // ==========================================
+        function autoSelectKkegAccounts() {
+            let islemTuru = document.getElementById('modalIslemTuru').value.toUpperCase();
+            let aciklama = document.getElementById('modalAciklama').value.toUpperCase();
+            let kdvRate = document.getElementById('selKdvRate').value; 
+            
+            let combinedText = islemTuru + " " + aciklama;
+            
+            const findBest = (selectId, keywords) => {
+                let options = $(selectId + ' option');
+                for(let i=0; i<options.length; i++) {
+                    if(!options[i].value) continue;
+                    let txt = options[i].text.toUpperCase();
+                    let match = keywords.every(k => txt.includes(k.toUpperCase()));
+                    if(match) return options[i].value;
+                }
+                return null;
+            };
+
+            let val70 = null;
+            if(combinedText.includes("HGS") || combinedText.includes("OGS")) {
+                val70 = findBest('#selGider70', ['770', 'HGS']) || findBest('#selGider70', ['770', 'OGS']);
+            }
+            if(!val70) val70 = findBest('#selGider70', ['770', 'BİNEK']); 
+            if(val70) $('#selGider70').val(val70).trigger('change');
+
+            let val30 = findBest('#selKkeg30', ['689', 'KKEG', 'BİNEK']) || findBest('#selKkeg30', ['689', 'KKEG']);
+            if(val30) $('#selKkeg30').val(val30).trigger('change');
+
+            let valKdv70 = findBest('#selKdv70', ['191', '%' + kdvRate]) || findBest('#selKdv70', ['191', kdvRate + ' ORANLI']);
+            if(valKdv70) $('#selKdv70').val(valKdv70).trigger('change');
+
+            let valKdv30 = findBest('#selKdv30', ['689', 'YAPILMAYAN', 'KDV']) || findBest('#selKdv30', ['689', 'KDV']);
+            if(valKdv30) $('#selKdv30').val(valKdv30).trigger('change');
+        }
+
+        // ==========================================
+        // KKEG CANLI HESAPLAMA VE ÖNİZLEME 
+        // ==========================================
+        function getAccountName(selectId, fallbackText) {
+            var el = $(selectId);
+            if (!el.val()) return fallbackText;
+            var fullText = el.find("option:selected").text();
+            var parts = fullText.split('-');
+            if(parts.length > 1) {
+                return parts.slice(1).join('-').trim(); 
+            }
+            return fullText;
+        }
+
+        function calculateKkegPreview() {
+            if(!document.getElementById('chkKkeg').checked) return;
+
+            var orijinalTutar = parseFloat(document.getElementById('modalTutar').value);
+            var aktifKur = parseFloat(document.getElementById('inpUygulanacakKur').value) || 1;
+            var isGider = (document.getElementById('modalIsGiris').value === "false");
+            
+            var tutar = Math.abs(orijinalTutar) * aktifKur;
+
+            var kdvRate = parseFloat(document.getElementById('selKdvRate').value);
+            
+            var matrah = tutar / (1 + (kdvRate / 100));
+            var kdv = tutar - matrah;
+
+            var matrah70 = parseFloat((matrah * 0.70).toFixed(2));
+            var matrah30 = parseFloat((matrah - matrah70).toFixed(2));
+
+            var kdv70 = parseFloat((kdv * 0.70).toFixed(2));
+            var kdv30 = parseFloat((kdv - kdv70).toFixed(2));
+
+            var bBorc = !isGider ? tutar.toFixed(2) : "-";
+            var bAlacak = isGider ? tutar.toFixed(2) : "-";
+
+            var g70Borc = isGider ? matrah70.toFixed(2) : "-";
+            var g70Alacak = !isGider ? matrah70.toFixed(2) : "-";
+
+            var g30Borc = isGider ? matrah30.toFixed(2) : "-";
+            var g30Alacak = !isGider ? matrah30.toFixed(2) : "-";
+
+            var k70Borc = (isGider && kdv70 > 0) ? kdv70.toFixed(2) : "-";
+            var k70Alacak = (!isGider && kdv70 > 0) ? kdv70.toFixed(2) : "-";
+
+            var k30Borc = (isGider && kdv30 > 0) ? kdv30.toFixed(2) : "-";
+            var k30Alacak = (!isGider && kdv30 > 0) ? kdv30.toFixed(2) : "-";
+
+            var bankaHesabi = $('#selBankaHesabi').val() || "SEÇİLMEDİ";
+            var g70Hsp = $('#selGider70').val() || "SEÇİLMEDİ";
+            var g30Hsp = $('#selKkeg30').val() || "SEÇİLMEDİ";
+            var k70Hsp = $('#selKdv70').val() || "SEÇİLMEDİ";
+            var k30Hsp = $('#selKdv30').val() || "SEÇİLMEDİ";
+
+            var bankaAd = getAccountName('#selBankaHesabi', 'Banka Çıkışı/Girişi');
+            var g70Ad = getAccountName('#selGider70', '%70 Kabul Edilen Gider');
+            var g30Ad = getAccountName('#selKkeg30', '%30 KKEG Gideri');
+            var k70Ad = getAccountName('#selKdv70', '%70 İndirilecek KDV');
+            var k30Ad = getAccountName('#selKdv30', '%30 İndirim Konusu Yapılmayan KDV (KKEG)');
+
+            var tbody = document.getElementById('kkegPreviewBody');
+            var html = "";
+
+            html += `<tr><td class="fw-bold">${bankaHesabi}</td><td class="text-start">${bankaAd}</td><td class="text-primary fw-bold">${bBorc}</td><td class="text-danger fw-bold">${bAlacak}</td></tr>`;
+            html += `<tr><td>${g70Hsp}</td><td class="text-start">${g70Ad}</td><td class="text-primary">${g70Borc}</td><td class="text-danger">${g70Alacak}</td></tr>`;
+            html += `<tr><td>${g30Hsp}</td><td class="text-start">${g30Ad}</td><td class="text-primary">${g30Borc}</td><td class="text-danger">${g30Alacak}</td></tr>`;
+            
+            if(kdv > 0) {
+                html += `<tr><td>${k70Hsp}</td><td class="text-start">${k70Ad}</td><td class="text-primary">${k70Borc}</td><td class="text-danger">${k70Alacak}</td></tr>`;
+                html += `<tr><td>${k30Hsp}</td><td class="text-start">${k30Ad}</td><td class="text-primary">${k30Borc}</td><td class="text-danger">${k30Alacak}</td></tr>`;
+            }
+
+            tbody.innerHTML = html;
+        }
+
+        // ==========================================
+        // SAP AKTARIMI API İSTEĞİ
+        // ==========================================
+        function submitSapAktarim() {
+            
+            formValidationCheck();
+            var btn = document.getElementById('btnAktarOnayla');
+            if (btn.disabled) return; 
+
+            var originalText = btn.innerHTML;
+            
+            var belgeTuru = document.getElementById('selBelgeTuru').value;
+            var isYevmiye = (belgeTuru === "30");
+            var isKkeg = document.getElementById('chkKkeg').checked;
+            
+            var selBelgeDropdown = document.getElementById('selBelgeTuru');
+            var belgeTuruText = selBelgeDropdown.options[selBelgeDropdown.selectedIndex].text.split('(')[0].trim();
+            
+            var bankaHesabi = $('#selBankaHesabi').val();
+            var islemId = document.getElementById('modalId').value;
+            
+            var isGider = (document.getElementById('modalIsGiris').value === "false");
+            var islemYonuMultiplier = isGider ? -1 : 1;
+            
+            var tutarFC = Math.abs(parseFloat(document.getElementById('modalTutar').value));
+            var secilenKur = parseFloat(document.getElementById('inpUygulanacakKur').value) || 1;
+            var tutarTRY = tutarFC * secilenKur;
+
+            var payloadTutar = isYevmiye ? (tutarTRY * islemYonuMultiplier) : (tutarFC * islemYonuMultiplier);
+
+            var payload = {
+                Id: islemId,
+                BelgeTuru: belgeTuru,
+                IslemTipi: document.getElementById('selIslemTipi').value,
+                
+                UygulanacakKur: secilenKur, 
+
+                VknGuncelle: document.getElementById('chkUpdateVkn') ? document.getElementById('chkUpdateVkn').checked : false,
+                FinekraVkn: document.getElementById('modalFinekraVkn').value,
+
+                KarsiTarafTipi: document.getElementById('selKarsiTipi').value,
+                CariKodu: $('#inpCariKodu').val() || "", 
+                
+                Tutar: payloadTutar, 
+                ParaBirimi: document.getElementById('modalParaBirimi').value, 
+                IslemTarihi: document.getElementById('modalTarih').value,
+                Aciklama: document.getElementById('modalAciklama').value,
+                BankaHesapKodu: bankaHesabi,
+                
+                IsKkeg: isKkeg,
+                KdvRate: parseInt(document.getElementById('selKdvRate').value),
+                Gider70Hesap: $('#selGider70').val(),
+                Kkeg30Hesap: $('#selKkeg30').val(),
+                Kdv70Hesap: $('#selKdv70').val(),
+                KkegKdv30Hesap: $('#selKdv30').val(),
+                
+                YevmiyeSatirlari: []
+            };
+
+            if(isYevmiye && isKkeg) {
+                if(!$('#selGider70').val() || !$('#selKkeg30').val()) {
+                    alert("KKEG işlemi için %70 ve %30 Gider Hesapları seçilmelidir!");
+                    return;
+                }
+            } 
+            else if (isYevmiye && !isKkeg) {
+                
+                let pendingTutar = parseFloat($('#inpYevmiyeTutar').val());
+                let pendingTipi = $('#selYevmiyeTipi').val();
+                let pendingKod = '';
+                if (pendingTipi === 'Cari') {
+                    let data = $('#inpYevmiyeCari').select2('data');
+                    if(data && data.length > 0) pendingKod = data[0].id;
+                } else {
+                    pendingKod = $('#inpYevmiyeHesap').val();
+                }
+
+                if (yevmiyeSatirlariArray.length === 0 && pendingKod && !isNaN(pendingTutar) && pendingTutar > 0) {
+                    addYevmiyeSatir();
+                }
+
+                if (yevmiyeSatirlariArray.length === 0) {
+                    alert("Yevmiye kaydı için en az bir karşı hesap/cari satırı eklemelisiniz! Lütfen hesap seçip '+ Ekle' butonuna basınız.");
+                    return;
+                }
+                
+                let totalLines = yevmiyeSatirlariArray.reduce((acc, curr) => acc + curr.Tutar, 0);
+                if (Math.abs(totalLines - Math.abs(tutarTRY)) > 0.01) {
+                    alert(`Eklenen satırların toplamı (${totalLines.toLocaleString('tr-TR', {minimumFractionDigits:2})}) ile banka işleminin TRY tutarı (${Math.abs(tutarTRY).toLocaleString('tr-TR', {minimumFractionDigits:2})}) eşit olmalıdır! Lütfen tutarları eşitleyin.`);
+                    return;
+                }
+                
+                payload.YevmiyeSatirlari = yevmiyeSatirlariArray.map(s => {
+                    return { Tipi: s.Tipi, Kod: s.Kod, Tutar: s.Tutar };
+                });
+            } 
+
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Aktarılıyor...';
+            btn.disabled = true;
+
+            fetch('/Rapor105/AktarSap', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    aktarModal.hide();
+                    
+                    var statusCell = document.getElementById('status-' + islemId);
+                    if(statusCell) {
+                        var docStr = data.docNum ? data.docNum : "Yeni Kayıt";
+                        if (isYevmiye) {
+                            belgeTuruText = isKkeg ? "Yevmiye (KKEG)" : "Yevmiye Fişi";
+                        }
+                        
+                        statusCell.innerHTML = '<span class="badge bg-success badge-modern mb-1"><i class="fas fa-check-circle me-1"></i> İşlendi</span>' + 
+                                               '<small class="text-muted d-block" style="font-size: 0.70rem;">' + belgeTuruText + ': ' + docStr + '</small>';
+                    }
+
+                    // Butonu Kaldırıp İptal Butonu Ekleyelim Veya Direkt Sayfayı Yenileyelim (Daha Temiz Olur)
+                    alert("Kayıt Başarıyla Aktarıldı! Belge No: " + (data.docNum ? data.docNum : ""));
+                    location.reload(); 
+
+                } else {
+                    alert("HATA:\n" + data.message);
+                }
+            })
+            .catch(error => {
+                alert("Kritik Hata: İstek gönderilemedi.");
+                console.error(error);
+            })
+            .finally(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            });
+        }
+    </script>
+}

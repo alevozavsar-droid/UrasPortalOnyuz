@@ -1,0 +1,441 @@
+@{
+    ViewData["Title"] = "Fatura İnceleme";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+
+<style>
+    .fi-wrap { padding: 0 14px 30px; }
+    .fi-hero { background: linear-gradient(120deg, #0c4a6e 0%, #0284c7 55%, #38bdf8 100%); color: #fff; border-radius: 16px; padding: 16px 22px; margin: 14px 0 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; box-shadow: 0 10px 30px -12px rgba(2,132,199,.55); }
+    .fi-hero h1 { font-size: 1.25rem; font-weight: 700; margin: 0; }
+    .fi-hero p { margin: 3px 0 0; opacity: .92; font-size: .82rem; }
+    .fi-hero .fi-db { background: rgba(255,255,255,.18); padding: 8px 14px; border-radius: 10px; font-weight: 600; font-size: .86rem; }
+    .fi-filtre { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px; align-items: end; margin-bottom: 12px; }
+    .fi-filtre label { display: block; font-size: .7rem; font-weight: 700; color: #475569; margin-bottom: 3px; text-transform: uppercase; letter-spacing: .3px; }
+    .fi-filtre input, .fi-filtre select { width: 100%; border: 1px solid #d7dce5; border-radius: 8px; padding: 7px 9px; font-size: .84rem; }
+    .fi-btn { border: none; border-radius: 9px; padding: 9px 16px; font-weight: 700; font-size: .84rem; cursor: pointer; white-space: nowrap; }
+    .fi-btn.p { background: #0284c7; color: #fff; } .fi-btn.p:hover { background: #0369a1; }
+    .fi-btn.s { background: #fff; color: #334155; border: 1px solid #d7dce5; }
+    .fi-hizli { display: flex; gap: 6px; flex-wrap: wrap; grid-column: span 12; }
+    .fi-hizli button { border: 1px solid #bae6fd; background: #f0f9ff; color: #075985; border-radius: 20px; padding: 3px 10px; font-size: .74rem; font-weight: 600; cursor: pointer; }
+    .fi-grid { display: grid; grid-template-columns: minmax(420px, 42fr) 58fr; gap: 12px; align-items: start; }
+    @@media (max-width: 1100px) { .fi-grid { grid-template-columns: 1fr; } }
+    .fi-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 4px 14px -8px rgba(15,23,42,.15); overflow: hidden; }
+    .fi-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #eef2f7; background: #f8fafc; font-weight: 700; font-size: .84rem; color: #334155; flex-wrap: wrap; }
+    .fi-listwrap { max-height: calc(100vh - 330px); overflow: auto; }
+    table.fi { width: 100%; border-collapse: collapse; font-size: .8rem; white-space: nowrap; }
+    table.fi thead th { position: sticky; top: 0; background: #f8fafc; color: #334155; font-weight: 700; font-size: .7rem; text-transform: uppercase; padding: 8px 10px; border-bottom: 2px solid #e2e8f0; text-align: left; z-index: 2; cursor: pointer; }
+    table.fi tbody td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; color: #1e293b; }
+    table.fi tbody tr { cursor: pointer; }
+    table.fi tbody tr:hover td { background: #f0f9ff; }
+    table.fi tbody tr.aktif td { background: #e0f2fe; }
+    table.fi tbody tr.iptal td { color: #94a3b8; text-decoration: line-through; }
+    .txt-r { text-align: right; }
+    .bd { display: inline-block; font-size: .66rem; font-weight: 700; padding: 2px 7px; border-radius: 20px; }
+    .bd.sf { background: #dcfce7; color: #166534; } .bd.si { background: #fef3c7; color: #92400e; } .bd.af { background: #dbeafe; color: #1d4ed8; } .bd.ai { background: #fee2e2; color: #b91c1c; }
+    .bd.acik { background: #fef3c7; color: #92400e; } .bd.kapali { background: #e2e8f0; color: #475569; } .bd.kod { background: #fee2e2; color: #b91c1c; }
+    .fi-empty { text-align: center; color: #94a3b8; padding: 40px 0; }
+    .fi-tabs { display: flex; gap: 4px; padding: 8px 10px 0; border-bottom: 1px solid #eef2f7; background: #fff; flex-wrap: wrap; }
+    .fi-tab { border: 1px solid transparent; border-bottom: none; background: transparent; color: #475569; font-weight: 700; font-size: .8rem; padding: 8px 14px; border-radius: 9px 9px 0 0; cursor: pointer; }
+    .fi-tab.on { background: #f0f9ff; border-color: #bae6fd; color: #0369a1; }
+    .fi-pane { display: none; }
+    .fi-pane.on { display: block; }
+    .fi-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 6px 14px; padding: 12px 14px; font-size: .8rem; }
+    .fi-kv div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed #eef2f7; padding: 3px 0; }
+    .fi-kv .k { color: #64748b; } .fi-kv .v { font-weight: 600; color: #0f172a; text-align: right; }
+    .fi-sub { font-size: .74rem; font-weight: 700; color: #475569; text-transform: uppercase; padding: 10px 14px 4px; }
+    .fi-tbl { width: 100%; border-collapse: collapse; font-size: .78rem; }
+    .fi-tbl th { background: #f8fafc; text-align: left; padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: .68rem; text-transform: uppercase; color: #64748b; white-space: nowrap; }
+    .fi-tbl td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; }
+    .hcode { font-family: Consolas, monospace; font-weight: 700; color: #0f766e; }
+    .kod-uyari { color: #b91c1c; font-size: .7rem; font-weight: 700; }
+    .fi-toplam { display: flex; gap: 16px; justify-content: flex-end; padding: 8px 14px; font-size: .82rem; background: #f8fafc; border-top: 1px solid #eef2f7; flex-wrap: wrap; }
+    .fi-toplam b { color: #0f172a; }
+    .fi-arac { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 12px; border-bottom: 1px solid #eef2f7; }
+    .fi-fbtn { border: 1px solid #d7dce5; background: #fff; color: #334155; border-radius: 8px; padding: 6px 12px; font-size: .78rem; font-weight: 600; cursor: pointer; text-decoration: none; }
+    .fi-fbtn.on, .fi-fbtn:hover { background: #dc2626; border-color: #dc2626; color: #fff; }
+    .fi-uyari { display: none; background: #fffbeb; border-bottom: 1px solid #fde68a; color: #92400e; font-size: .78rem; padding: 7px 12px; }
+    /* Sekme (iframe) içinde açıldığında görünür yükseklik küçük kalıyordu; belge yarım görünmesin diye sabit büyük yükseklik */
+    #qnbCerceve { width: 100%; height: 1100px; border: 0; background: #e5e7eb; }
+    .fi-durum-ok { background: #dcfce7; color: #166534; } .fi-durum-bekle { background: #f1f5f9; color: #475569; }
+    .fi-detay-bos { text-align: center; color: #94a3b8; padding: 70px 20px; font-size: .9rem; }
+</style>
+
+<div class="fi-wrap">
+    <div class="fi-hero">
+        <div>
+            <h1><i class="fa-solid fa-file-invoice"></i> Fatura İnceleme</h1>
+            <p>Tarih, cari, belge no ya da fatura no ile bul; SAP görünümü, QNB gerçek görüntüsü, yevmiye kaydı ve ödemeler tek yerde.</p>
+        </div>
+        <div class="fi-db"><i class="fa-solid fa-database"></i> @ViewBag.SelectedDb</div>
+    </div>
+
+    <div class="fi-filtre">
+        <div style="grid-column: span 3;"><label>Kaynak</label>
+            <select id="fKaynak" title="SAP'deki faturalar ya da QNB gelen kutusundaki e-Faturalar (SAP'ye girilmemiş olanlar dahil)"><option value="sap">SAP faturaları</option><option value="qnbyok">QNB gelen e-Faturalar — SAP'de OLMAYANLAR</option><option value="qnbhepsi">QNB gelen e-Faturalar — hepsi</option></select></div>
+        <div style="grid-column: span 2;"><label>Belge Türü</label>
+            <select id="fTur"><option value="0">Tümü</option><option value="18">Satınalma Faturası</option><option value="19">Satınalma İade</option><option value="13">Satış Faturası</option><option value="14">Satış İade</option></select></div>
+        <div style="grid-column: span 2;"><label>Başlangıç</label><input type="date" id="fBas"></div>
+        <div style="grid-column: span 2;"><label>Bitiş</label><input type="date" id="fBit"></div>
+        <div style="grid-column: span 3;"><label>Cari</label><input type="text" id="fCari" list="cariList" placeholder="Kod ya da ad yazın (boş = tümü)" autocomplete="off"><datalist id="cariList"></datalist></div>
+        <div style="grid-column: span 1;"><label>Belge No</label><input type="text" id="fBelgeNo" placeholder="SAP no"></div>
+        <div style="grid-column: span 2;"><label>Fatura No</label><input type="text" id="fFaturaNo" placeholder="Tedarikçi / e-fatura no"></div>
+        <div style="grid-column: span 2;"><label>Tutar (min – max)</label><div style="display:flex; gap:4px;"><input type="number" id="fMin" placeholder="min"><input type="number" id="fMax" placeholder="max"></div></div>
+        <div style="grid-column: span 2;"><label>Durum</label><select id="fDurum"><option value="">Açık + kapalı</option><option value="O">Yalnızca açık</option><option value="C">Yalnızca kapalı</option></select></div>
+        <div style="grid-column: span 2;"><label>&nbsp;</label><label style="text-transform:none; font-weight:500;"><input type="checkbox" id="fIptal" style="width:auto;"> İptalleri de göster</label></div>
+        <div style="grid-column: span 3; display:flex; gap:6px;"><button class="fi-btn p" id="btnAra" style="flex:1;"><i class="fa-solid fa-magnifying-glass"></i> Bul</button><button class="fi-btn s" id="btnExcel" title="Listeyi Excel'e (CSV) indir"><i class="fa-solid fa-file-csv"></i></button></div>
+        <div class="fi-hizli">
+            <span style="font-size:.72rem; color:#64748b; align-self:center;">Hızlı:</span>
+            <button data-g="0">Bugün</button><button data-g="7">Son 7 gün</button><button data-g="30">Son 30 gün</button><button data-g="ay">Bu ay</button><button data-g="onceki">Önceki ay</button><button data-g="yil">Bu yıl</button>
+        </div>
+    </div>
+
+    <div class="fi-grid">
+        <div class="fi-card">
+            <div class="fi-card-head"><span><i class="fa-solid fa-list"></i> Faturalar <span id="listeOzet" style="font-weight:500; color:#64748b;"></span></span><span id="listeToplam" style="font-weight:500; color:#0f172a;"></span></div>
+            <div class="fi-listwrap">
+                <table class="fi">
+                    <thead><tr><th data-k="docNum">No</th><th data-k="docDate">Tarih</th><th data-k="tur">Tür</th><th data-k="cardName">Cari</th><th data-k="numAtCard">Fatura No</th><th data-k="docTotal" class="txt-r">Tutar</th><th>Durum</th></tr></thead>
+                    <tbody id="liste"><tr><td colspan="7" class="fi-empty">Filtre seçip "Bul"a basın.</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="fi-card" id="detayKart">
+            <div class="fi-card-head"><span id="detayBaslik"><i class="fa-solid fa-file-invoice"></i> Belge seçilmedi</span>
+                <span style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <a id="btnGgSecim" class="fi-fbtn" href="#" target="_blank" style="display:none;" title="Gider/Gelir Seçim ekranında (ay) aç"><i class="fa-solid fa-scale-balanced"></i> Gider/Gelir Seçim</a>
+                </span>
+            </div>
+            <div class="fi-tabs" id="detayTabs" style="display:none;">
+                <button class="fi-tab on" data-p="sap"><i class="fa-solid fa-table-list"></i> SAP Görünümü</button>
+                <button class="fi-tab" data-p="qnb"><i class="fa-solid fa-file-invoice-dollar"></i> QNB Gerçek Görüntü</button>
+                <button class="fi-tab" data-p="yev"><i class="fa-solid fa-book"></i> Yevmiye Kaydı</button>
+                <button class="fi-tab" data-p="ode"><i class="fa-solid fa-money-bill-transfer"></i> Ödeme / Kapanış</button>
+            </div>
+            <div id="detayBos" class="fi-detay-bos"><i class="fa-solid fa-hand-pointer fa-2x" style="margin-bottom:10px; display:block;"></i>Soldaki listeden bir fatura seçin.</div>
+            <div class="fi-pane" id="paneSap"></div>
+            <div class="fi-pane" id="paneQnb">
+                <div class="fi-arac">
+                    <button type="button" class="fi-fbtn on" id="qnbHtml"><i class="fa-solid fa-file-invoice-dollar"></i> Gerçek Görüntü</button>
+                    <button type="button" class="fi-fbtn" id="qnbPdf"><i class="fa-solid fa-file-pdf"></i> PDF</button>
+                    <a id="qnbYeni" class="fi-fbtn" href="#" target="_blank"><i class="fa-solid fa-up-right-from-square"></i> Yeni sekmede aç</a>
+                    <span id="qnbBilgi" style="font-size:.76rem; color:#64748b;"></span>
+                    <span style="margin-left:auto; display:flex; gap:6px; align-items:center; font-size:.74rem; color:#64748b;">
+                        <span id="indeksBilgi" title="QNB gelen kutusu yerel indeksi: eski tarihli tedarikçi faturaları bu indeksten bulunur"></span>
+                        <button type="button" class="fi-fbtn" id="btnIndeks" style="color:#0369a1; border-color:#bae6fd;" title="QNB gelen kutusunu sıra numarasıyla tarar ve yerel indekse yazar; eski tarihli faturaların görüntüsü için gerekir"><i class="fa-solid fa-rotate"></i> Gelen kutusunu tara</button>
+                    </span>
+                </div>
+                <div class="fi-uyari" id="qnbUyari"></div>
+                <iframe id="qnbCerceve" src="about:blank"></iframe>
+            </div>
+            <div class="fi-pane" id="paneYev"></div>
+            <div class="fi-pane" id="paneOde"></div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.js"></script>
+<script>
+    toastr.options = { positionClass: "toast-bottom-right", timeOut: 5000, progressBar: true };
+    const DB_QS = new URLSearchParams(location.search).get('db');
+    const qs = DB_QS ? ('&db=' + encodeURIComponent(DB_QS)) : '';
+    const qs1 = DB_QS ? ('?db=' + encodeURIComponent(DB_QS)) : '';
+    let LISTE = [], secili = null, sortKey = 'docDate', sortDir = -1, DETAY = null;
+    const EKRAN = { 13: 'Rapor109', 14: 'Rapor111', 18: 'Rapor114', 19: 'Rapor116' };
+
+    function esc(s) { return (s == null ? "" : String(s)).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+    function fmt(n, d) { return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: d == null ? 2 : d, maximumFractionDigits: d == null ? 2 : d }); }
+    function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+    function turSinif(ot) { return ot === 13 ? 'sf' : ot === 14 ? 'si' : ot === 18 ? 'af' : 'ai'; }
+
+    // Tarih kısayolları
+    (function () {
+        const now = new Date();
+        document.getElementById('fBas').value = ymd(new Date(now.getFullYear(), now.getMonth(), 1));
+        document.getElementById('fBit').value = ymd(now);
+        document.querySelectorAll('.fi-hizli button').forEach(b => b.addEventListener('click', () => {
+            const g = b.dataset.g, n = new Date(); let b1, b2 = n;
+            if (g === 'ay') b1 = new Date(n.getFullYear(), n.getMonth(), 1);
+            else if (g === 'onceki') { b1 = new Date(n.getFullYear(), n.getMonth() - 1, 1); b2 = new Date(n.getFullYear(), n.getMonth(), 0); }
+            else if (g === 'yil') b1 = new Date(n.getFullYear(), 0, 1);
+            else { b1 = new Date(n); b1.setDate(n.getDate() - parseInt(g)); }
+            document.getElementById('fBas').value = ymd(b1); document.getElementById('fBit').value = ymd(b2);
+            ara();
+        }));
+    })();
+
+    // Cari arama
+    let cariZ;
+    document.getElementById('fCari').addEventListener('input', function () {
+        clearTimeout(cariZ); const q = this.value.trim(); if (q.length < 2) return;
+        cariZ = setTimeout(() => fetch(`/Rapor166/Cariler?q=${encodeURIComponent(q)}${qs}`).then(r => r.json()).then(res => {
+            if (res.success) document.getElementById('cariList').innerHTML = res.data.map(c => `<option value="${esc(c.kod)}">${esc(c.ad)} (${esc(c.tip)})</option>`).join('');
+        }), 250);
+    });
+
+    // ---- Gelen e-Fatura durumu (GİB iptal / ticari red): satır rozetleri ----
+    const DURUMLAR = {};
+    function durumRozet(d) {
+        if (!d) return '';
+        const u = String(d).toUpperCase();
+        if (u.includes('İPTAL') || u.includes('IPTAL')) return `<span class="bd ai" title="${esc(d)}">${esc(d)}</span>`;
+        if (u.includes('RED')) return `<span class="bd ai" title="${esc(d)}">${esc(d)}</span>`;
+        if (u.includes('KABUL')) return `<span class="bd fi-durum-ok" title="QNB / GİB durumu">${esc(d)}</span>`;
+        return `<span class="bd fi-durum-bekle" title="QNB / GİB durumu">${esc(d)}</span>`;
+    }
+    function durumlariGetir(ettnler) {
+        ettnler = [...new Set((ettnler || []).filter(Boolean))].filter(e => !DURUMLAR[e]);
+        if (!ettnler.length) { durumlariUygula(); return; }
+        const parcalar = []; for (let i = 0; i < ettnler.length; i += 40) parcalar.push(ettnler.slice(i, i + 40));
+        (async () => {
+            for (const p of parcalar) {
+                try {
+                    const res = await fetch(`/Rapor166/GelenDurumlar${qs1}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) }).then(r => r.json());
+                    if (res && res.success) (res.data || []).forEach(d => { if (!d.hata) DURUMLAR[d.ettn] = d; });
+                    durumlariUygula();
+                } catch (e) { break; }
+            }
+        })();
+    }
+    function durumlariUygula() {
+        document.querySelectorAll('#liste tr[data-ettn]').forEach(tr => {
+            const d = DURUMLAR[tr.dataset.ettn]; if (!d) return;
+            const el = tr.querySelector('.durum-qnb'); if (el) el.innerHTML = durumRozet(d.durum);
+            if (d.iptal) tr.classList.add('iptal');
+        });
+        QNB_LISTE.forEach(r => { const d = DURUMLAR[r.ettn]; if (d) { r.durum = d.durum; r.iptal = d.iptal; r.durumDetay = d.detay; } });
+    }
+
+    // ---- QNB gelen kutusu listesi (SAP'de olmayan tedarikçi e-Faturaları) ----
+    let QNB_LISTE = [];
+    function qnbAra(hepsi) {
+        const p = new URLSearchParams({ bas: document.getElementById('fBas').value, bit: document.getElementById('fBit').value, ara: document.getElementById('fFaturaNo').value.trim(), cardCode: (document.getElementById('fCari').value || '').split(' ')[0].trim(), durum: hepsi ? 'hepsi' : 'yok' });
+        document.getElementById('liste').innerHTML = '<tr><td colspan="7" class="fi-empty"><i class="fa-solid fa-spinner fa-spin"></i> QNB indeksi okunuyor...</td></tr>';
+        fetch(`/Rapor166/GelenEFaturalar?${p.toString()}${qs}`).then(r => r.json()).then(res => {
+            if (!res.success) { toastr.error(res.message); document.getElementById('liste').innerHTML = `<tr><td colspan="7" class="fi-empty">${esc(res.message)}</td></tr>`; return; }
+            QNB_LISTE = res.data || []; LISTE = [];
+            const tb = document.getElementById('liste');
+            if (!QNB_LISTE.length) { tb.innerHTML = `<tr><td colspan="7" class="fi-empty">${hepsi ? 'Bu aralıkta gelen e-Fatura yok.' : 'SAP\'de olmayan gelen e-Fatura yok.'}<br><span style="font-size:.74rem">İndeks: ${Number(res.indeksAdet).toLocaleString('tr-TR')} belge, son tarih ${esc(res.indeksSonTarih || '')}. Yeni belgeler için QNB sekmesinden "Gelen kutusunu tara".</span></td></tr>`; document.getElementById('listeOzet').textContent = ''; document.getElementById('listeToplam').textContent = ''; return; }
+            tb.innerHTML = QNB_LISTE.map((r, i) => `<tr data-i="${i}" data-ettn="${esc(r.ettn)}" class="${secili && secili.ettn === r.ettn ? 'aktif' : ''} ${r.iptal ? 'iptal' : ''}">
+                <td><b>${esc(r.belgeNo)}</b></td><td>${esc(r.belgeTarihi)}</td><td><span class="bd af">e-Fatura</span>${r.profil ? ' <span class="bd kapali" style="font-size:.6rem">' + esc(r.profil) + '</span>' : ''}</td>
+                <td title="${esc(r.gonderenVkn)}"><div style="max-width:220px; overflow:hidden; text-overflow:ellipsis;">${esc(r.gonderenAd)}</div>${r.cariKod ? '<div style="font-size:.68rem; color:#64748b;">' + esc(r.cariKod) + '</div>' : '<div style="font-size:.68rem; color:#b91c1c;">SAP cari yok (VKN ' + esc(r.gonderenVkn) + ')</div>'}</td>
+                <td>${esc(r.belgeNo)}</td>
+                <td class="txt-r">${r.tutar != null ? fmt(r.tutar) + ' ' + esc(r.paraBirimi || '') : '<span class="text-muted">—</span>'}</td>
+                <td>${r.sapVar ? '<span class="bd kapali" title="' + esc(r.sapTur) + ' ' + r.sapDocNum + '">SAP ' + r.sapDocNum + '</span>' : '<span class="bd ai">SAP\'de YOK</span>'} <span class="durum-qnb">${durumRozet(r.durum)}</span></td>
+            </tr>`).join('');
+            tb.querySelectorAll('tr').forEach(tr => tr.addEventListener('click', () => qnbSec(QNB_LISTE[parseInt(tr.dataset.i)])));
+            durumlariGetir(QNB_LISTE.filter(r => !r.durum).map(r => r.ettn));
+            const toplam = QNB_LISTE.reduce((s, r) => s + (Number(r.tutar) || 0), 0);
+            document.getElementById('listeOzet').textContent = `(${QNB_LISTE.length} e-Fatura${hepsi ? '' : ', SAP\'de olmayan'})`;
+            document.getElementById('listeToplam').innerHTML = `Toplam <b>${fmt(toplam)}</b> · indeks son tarih ${esc(res.indeksSonTarih || '')}`;
+        }).catch(e => toastr.error('Hata: ' + e));
+    }
+    function qnbSec(r) {
+        secili = { ettn: r.ettn };
+        document.querySelectorAll('#liste tr').forEach(tr => tr.classList.toggle('aktif', QNB_LISTE[parseInt(tr.dataset.i)] === r));
+        document.getElementById('detayBos').style.display = 'none';
+        document.getElementById('detayTabs').style.display = 'flex';
+        document.getElementById('btnGgSecim').style.display = 'none';
+        document.querySelectorAll('.fi-tab[data-p="yev"], .fi-tab[data-p="ode"]').forEach(t => t.style.display = 'none');
+        document.getElementById('detayBaslik').innerHTML = `<i class="fa-solid fa-file-invoice-dollar"></i> Gelen e-Fatura <b>${esc(r.belgeNo)}</b> · ${esc(r.gonderenAd)}${r.sapVar ? '' : ' <span class="bd ai">SAP\'de YOK</span>'}`;
+        const kv = (k, v) => `<div><span class="k">${k}</span><span class="v">${v == null || v === '' ? '—' : v}</span></div>`;
+        document.getElementById('paneSap').innerHTML = `<div class="fi-kv">
+            ${kv('Fatura No', esc(r.belgeNo))}${kv('Belge Tarihi', esc(r.belgeTarihi))}${kv('QNB\'ye Geliş', esc(r.gelisTarihi))}${kv('Gönderen', esc(r.gonderenAd))}${kv('Gönderen VKN', esc(r.gonderenVkn))}
+            ${kv('SAP Cari', r.cariKod ? esc(r.cariKod) + ' · ' + esc(r.cariAd) : '<span class="kod-uyari">bu VKN ile tedarikçi kartı yok</span>')}${kv('Tutar', r.tutar != null ? fmt(r.tutar) + ' ' + esc(r.paraBirimi || '') : '')}${kv('Profil', esc(r.profil))}
+            ${kv('ETTN', '<span style="font-size:.7rem">' + esc(r.ettn) + '</span>')}${kv('SAP Durumu', r.sapVar ? esc(r.sapTur) + ' ' + r.sapDocNum : '<b style="color:#b91c1c">SAP\'ye girilmemiş</b>')}
+            ${kv('QNB / GİB Durumu', (durumRozet(r.durum) || '<span class="text-muted">sorgulanıyor…</span>') + (r.durumDetay ? ' <span style="font-size:.7rem; color:#64748b;">' + esc(r.durumDetay) + '</span>' : ''))}
+        </div>${r.sapVar ? '' : `<div class="fi-sub">SAP'ye girmek için</div><div style="padding:0 14px 14px; font-size:.8rem; color:#475569;">Satınalma Faturası ekranında bu tedarikçiyi seçip Fatura No alanına <b>${esc(r.belgeNo)}</b> yazın; QNB görüntüsünü yandaki sekmeden karşılaştırabilirsiniz. <a href="/Rapor114${qs1}" target="_blank" class="fi-fbtn" style="margin-left:8px;"><i class="fa-solid fa-up-right-from-square"></i> Satınalma Faturası ekranı</a></div>`}`;
+        document.getElementById('paneYev').innerHTML = ''; document.getElementById('paneOde').innerHTML = '';
+        // QNB görüntü: doğrudan ETTN ile
+        const htmlUrl = `/Rapor166/GelenGoruntu?ettn=${encodeURIComponent(r.ettn)}${qs}`, pdfUrl = `/Rapor166/GelenGoruntu?ettn=${encodeURIComponent(r.ettn)}&format=PDF${qs}`;
+        const c = document.getElementById('qnbCerceve'), uy = document.getElementById('qnbUyari');
+        uy.style.display = 'none'; document.getElementById('qnbBilgi').textContent = 'Gelen (tedarikçi) e-Faturası · ETTN ile';
+        const goster = (url, btn) => { c.removeAttribute('srcdoc'); c.src = url; document.getElementById('qnbYeni').href = url; document.querySelectorAll('#paneQnb .fi-fbtn').forEach(x => x.classList.remove('on')); if (btn) document.getElementById(btn).classList.add('on'); };
+        document.getElementById('qnbHtml').onclick = () => goster(htmlUrl, 'qnbHtml');
+        document.getElementById('qnbPdf').onclick = () => goster(pdfUrl, 'qnbPdf');
+        window.qnbYukleBekliyor = () => goster(htmlUrl, 'qnbHtml');
+        tabAc('qnb');
+    }
+
+    function ara() {
+        const kaynak = document.getElementById('fKaynak').value;
+        document.querySelectorAll('.fi-tab[data-p="yev"], .fi-tab[data-p="ode"]').forEach(t => t.style.display = '');
+        if (kaynak !== 'sap') { qnbAra(kaynak === 'qnbhepsi'); return; }
+        const p = new URLSearchParams({
+            tur: document.getElementById('fTur').value, bas: document.getElementById('fBas').value, bit: document.getElementById('fBit').value,
+            cardCode: (document.getElementById('fCari').value || '').split(' ')[0].trim(), belgeNo: document.getElementById('fBelgeNo').value.trim(), faturaNo: document.getElementById('fFaturaNo').value.trim(),
+            durum: document.getElementById('fDurum').value, iptalDahil: document.getElementById('fIptal').checked
+        });
+        if (document.getElementById('fMin').value) p.set('minTutar', document.getElementById('fMin').value);
+        if (document.getElementById('fMax').value) p.set('maxTutar', document.getElementById('fMax').value);
+        document.getElementById('liste').innerHTML = '<tr><td colspan="7" class="fi-empty"><i class="fa-solid fa-spinner fa-spin"></i> Aranıyor...</td></tr>';
+        fetch(`/Rapor166/Liste?${p.toString()}${qs}`).then(r => r.json()).then(res => {
+            if (!res.success) { toastr.error(res.message); document.getElementById('liste').innerHTML = `<tr><td colspan="7" class="fi-empty">${esc(res.message)}</td></tr>`; return; }
+            LISTE = res.data || [];
+            if (res.sinir) toastr.warning('2000 kayıt sınırına ulaşıldı; tarih aralığını daraltın.');
+            renderListe();
+        }).catch(e => toastr.error('Hata: ' + e));
+    }
+
+    function renderListe() {
+        const arr = LISTE.slice().sort((a, b) => {
+            let x = a[sortKey], y = b[sortKey];
+            if (sortKey === 'docDate') { x = a.docDate.split('.').reverse().join(''); y = b.docDate.split('.').reverse().join(''); }
+            if (typeof x === 'number' && typeof y === 'number') return (x - y) * sortDir;
+            return String(x).localeCompare(String(y), 'tr') * sortDir;
+        });
+        const tb = document.getElementById('liste');
+        if (!arr.length) { tb.innerHTML = '<tr><td colspan="7" class="fi-empty">Kayıt bulunamadı.</td></tr>'; document.getElementById('listeOzet').textContent = ''; document.getElementById('listeToplam').textContent = ''; return; }
+        tb.innerHTML = arr.map(r => `<tr data-ot="${r.objType}" data-de="${r.docEntry}" data-ettn="${(r.objType === 18 || r.objType === 19) && r.uuid && r.uuid.length >= 30 ? esc(r.uuid) : ''}" class="${r.canceled ? 'iptal' : ''} ${secili && secili.objType === r.objType && secili.docEntry === r.docEntry ? 'aktif' : ''}">
+            <td><b>${r.docNum}</b></td><td>${esc(r.docDate)}</td><td><span class="bd ${turSinif(r.objType)}">${esc(r.tur.replace('Satınalma ', 'Alış ').replace(' Faturası', ''))}</span>${r.docType === 'S' ? ' <span class="bd kapali" title="Hizmet tipi">H</span>' : ''}</td>
+            <td title="${esc(r.cardCode)}"><div style="max-width:220px; overflow:hidden; text-overflow:ellipsis;">${esc(r.cardName)}</div></td>
+            <td>${esc(r.numAtCard || r.efatNo || '')}</td>
+            <td class="txt-r">${fmt(r.docTotal)} ${r.docCur !== 'TRY' ? '<span class="text-muted" style="font-size:.7rem">' + esc(r.docCur) + ' ' + fmt(r.docTotalFC) + '</span>' : ''}</td>
+            <td>${r.canceled ? '<span class="bd ai">İPTAL</span>' : (r.docStatus === 'O' ? '<span class="bd acik">Açık</span>' : '<span class="bd kapali">Kapalı</span>')}${r.kodEksik > 0 ? ' <span class="bd kod" title="Gider/gelir kodu boş satır">kod ' + r.kodEksik + '</span>' : ''} <span class="durum-qnb"></span></td>
+        </tr>`).join('');
+        tb.querySelectorAll('tr').forEach(tr => tr.addEventListener('click', () => sec(parseInt(tr.dataset.ot), parseInt(tr.dataset.de))));
+        // Gelen (tedarikçi) e-Faturalarında GİB iptal / ticari red durumu (Fatura QNB Mutabakat sorgusu)
+        durumlariGetir(arr.filter(r => (r.objType === 18 || r.objType === 19) && r.uuid && r.uuid.length >= 30).map(r => r.uuid));
+        const toplam = arr.reduce((s, r) => s + (r.canceled ? 0 : Number(r.docTotal)), 0);
+        document.getElementById('listeOzet').textContent = `(${arr.length} belge)`;
+        document.getElementById('listeToplam').innerHTML = `Toplam <b>${fmt(toplam)} TRY</b>`;
+    }
+    document.querySelectorAll('table.fi thead th[data-k]').forEach(th => th.addEventListener('click', () => { const k = th.dataset.k; if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = 1; } renderListe(); }));
+    document.getElementById('btnAra').addEventListener('click', ara);
+    document.getElementById('fKaynak').addEventListener('change', function () { const q = this.value !== 'sap'; document.getElementById('fTur').disabled = q; document.getElementById('fBelgeNo').disabled = q; document.getElementById('fDurum').disabled = q; document.getElementById('fMin').disabled = q; document.getElementById('fMax').disabled = q; ara(); });
+    ['fBelgeNo', 'fFaturaNo', 'fCari'].forEach(id => document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') ara(); }));
+    document.getElementById('btnExcel').addEventListener('click', () => {
+        if (!LISTE.length) { toastr.warning('Önce liste oluşturun.'); return; }
+        const sat = [['No', 'Tarih', 'Tür', 'Cari Kodu', 'Cari', 'Fatura No', 'e-Fatura No', 'Tutar', 'PB', 'KDV', 'Ödenen', 'Durum', 'İşlem Tipi', 'Satış Çalışanı', 'Kodsuz Satır']];
+        LISTE.forEach(r => sat.push([r.docNum, r.docDate, r.tur, r.cardCode, r.cardName, r.numAtCard, r.efatNo, String(r.docTotal).replace('.', ','), r.docCur, String(r.vatSum).replace('.', ','), String(r.paidToDate).replace('.', ','), r.canceled ? 'İptal' : (r.docStatus === 'O' ? 'Açık' : 'Kapalı'), r.aktar, r.slpName, r.kodEksik]));
+        const csv = '﻿' + sat.map(x => x.map(v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"').join(';')).join('\r\n');
+        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })); a.download = 'faturalar.csv'; a.click();
+    });
+
+    // ---- Detay ----
+    function sec(ot, de) {
+        secili = { objType: ot, docEntry: de };
+        document.querySelectorAll('#liste tr').forEach(tr => tr.classList.toggle('aktif', parseInt(tr.dataset.ot) === ot && parseInt(tr.dataset.de) === de));
+        document.getElementById('detayBos').style.display = 'none';
+        document.getElementById('detayTabs').style.display = 'flex';
+        document.getElementById('paneSap').innerHTML = '<div class="fi-detay-bos"><i class="fa-solid fa-spinner fa-spin"></i> Yükleniyor...</div>';
+        tabAc('sap');
+        fetch(`/Rapor166/Detay?objType=${ot}&docEntry=${de}${qs}`).then(r => r.json()).then(res => {
+            if (!res.success) { toastr.error(res.message); return; }
+            DETAY = res; renderSap(res); renderYev(res); renderOde(res);
+            const b = res.baslik;
+            document.getElementById('detayBaslik').innerHTML = `<i class="fa-solid fa-file-invoice"></i> ${esc(b.tur)} <b>${b.docNum}</b> · ${esc(b.cardName)}${b.canceled ? ' <span class="bd ai">İPTAL</span>' : ''}`;
+            const gg = document.getElementById('btnGgSecim'); const [dd, mm, yy] = b.docDate.split('.'); gg.style.display = ''; gg.href = `/Rapor163?yil=${yy}&ay=${parseInt(mm)}${qs}`;
+            qnbHazirla(ot, de, b);
+        }).catch(e => toastr.error('Detay alınamadı: ' + e));
+    }
+    function tabAc(p) {
+        document.querySelectorAll('.fi-tab').forEach(t => t.classList.toggle('on', t.dataset.p === p));
+        ['sap', 'qnb', 'yev', 'ode'].forEach(x => document.getElementById('pane' + x.charAt(0).toUpperCase() + x.slice(1)).classList.toggle('on', x === p));
+        if (p === 'qnb' && window.qnbYukleBekliyor) { window.qnbYukleBekliyor(); window.qnbYukleBekliyor = null; }
+    }
+    document.querySelectorAll('.fi-tab').forEach(t => t.addEventListener('click', () => tabAc(t.dataset.p)));
+
+    function renderSap(res) {
+        const b = res.baslik;
+        const kv = (k, v) => `<div><span class="k">${k}</span><span class="v">${v == null || v === '' ? '—' : v}</span></div>`;
+        let h = `<div class="fi-kv">
+            ${kv('Belge No', b.docNum)}${kv('Tür', esc(b.tur) + (b.docType === 'S' ? ' (hizmet)' : ' (kalem)'))}${kv('Belge Tarihi', esc(b.docDate))}${kv('Vade', esc(b.docDueDate))}${kv('Vergi Tarihi', esc(b.taxDate))}
+            ${kv('Cari', esc(b.cardCode) + ' · ' + esc(b.cardName))}${kv('VKN / TCKN', esc(b.vkn))}${kv('Fatura No (ref.)', esc(b.numAtCard))}${kv('e-Fatura No', esc(b.efatNo))}${kv('ETTN', b.uuid ? '<span style="font-size:.7rem">' + esc(b.uuid) + '</span>' : '')}
+            ${kv('Para Birimi / Kur', esc(b.docCur) + ' / ' + fmt(b.docRate, 4))}${kv('Net', fmt(b.docTotal - b.vatSum) + ' TRY')}${kv('KDV', fmt(b.vatSum) + ' TRY')}${b.wtSum ? kv('Stopaj', fmt(b.wtSum) + ' TRY') : ''}${kv('Genel Toplam', '<b>' + fmt(b.docTotal) + ' TRY</b>' + (b.docCur !== 'TRY' ? ' / ' + fmt(b.docTotalFC) + ' ' + esc(b.docCur) : ''))}
+            ${kv('Ödenen', fmt(b.paidToDate) + ' TRY')}${kv('Kalan', '<b>' + fmt(b.docTotal - b.paidToDate) + ' TRY</b>')}${kv('Durum', b.canceled ? 'İPTAL' : (b.docStatus === 'O' ? 'Açık' : 'Kapalı'))}
+            ${kv('İşlem Tipi', esc(b.aktar))}${kv('e-Belge Tipi', esc(b.send))}${kv('Muafiyet', esc(b.muaf))}${kv('Satış/Satınalma Çalışanı', esc(b.slpName))}${kv('Sahip', esc(b.sahip))}${kv('Oluşturan', esc(b.olusturan) + ' ' + esc(b.createDate))}${kv('Ödeme Koşulu', esc(b.odemeKosulu))}
+            ${kv('Yevmiye No', b.transId || '')}${kv('Adres', esc(b.address))}${kv('Sevk Adresi', esc(b.address2))}${kv('Açıklama', esc(b.comments))}
+        </div>`;
+        h += `<div class="fi-sub">Satırlar (${res.satirlar.length})</div><div style="overflow:auto;"><table class="fi-tbl"><thead><tr><th>#</th><th>Kalem / Açıklama</th><th class="txt-r">Miktar</th><th class="txt-r">Birim Fiyat</th><th class="txt-r">İsk.%</th><th class="txt-r">Tutar</th><th>KDV</th><th>Depo</th><th>Hesap</th><th>Gider / Gelir Kodu</th><th>Baz</th></tr></thead><tbody>`;
+        h += res.satirlar.map(s => `<tr><td>${s.lineNum + 1}</td><td>${s.itemCode ? '<b>' + esc(s.itemCode) + '</b> ' : ''}${esc(s.dscription)}</td><td class="txt-r">${fmt(s.quantity, 3)} ${esc(s.birim)}</td><td class="txt-r">${fmt(s.price, 4)} ${esc(s.currency)}</td><td class="txt-r">${s.discPrcnt ? fmt(s.discPrcnt) : ''}</td><td class="txt-r"><b>${fmt(s.lineTotal)}</b>${s.currency && s.currency !== 'TRY' ? '<br><span class="text-muted" style="font-size:.7rem">' + fmt(s.totalFrgn) + ' ' + esc(s.currency) + '</span>' : ''}</td><td>${esc(s.vatGroup)} %${fmt(s.vatPrcnt, 0)}<br><span class="text-muted" style="font-size:.7rem">${fmt(s.vatSum)}</span></td><td>${esc(s.whsCode)}</td><td><span class="hcode">${esc(s.acctCode)}</span><br><span class="text-muted" style="font-size:.7rem">${esc(s.acctName)}</span></td>
+            <td>${s.gider ? '<span class="hcode">' + esc(s.gider) + '</span>' : (s.hesapTipi ? '<span class="kod-uyari"><i class="fa-solid fa-triangle-exclamation"></i> kod yok (' + (s.hesapTipi === 'GELIR' ? 'gelir' : 'gider') + ')</span>' : '<span class="text-muted" style="font-size:.7rem">gerekmez</span>')}</td>
+            <td style="font-size:.7rem; color:#64748b;">${s.baseType > 0 ? esc({ 22: 'Sipariş', 20: 'Mal Girişi', 17: 'Satış Sip.', 15: 'Teslimat', 13: 'Fatura', 18: 'Fatura', 16: 'İade İrs.', 21: 'İade İrs.' }[s.baseType] || s.baseType) + ' ' + s.baseEntry : ''}</td></tr>`).join('');
+        h += `</tbody></table></div><div class="fi-toplam"><span>Net <b>${fmt(b.docTotal - b.vatSum)}</b></span><span>KDV <b>${fmt(b.vatSum)}</b></span><span>Toplam <b>${fmt(b.docTotal)} TRY</b></span></div>`;
+        document.getElementById('paneSap').innerHTML = h;
+    }
+    function renderYev(res) {
+        const y = res.yevmiye || [];
+        if (!y.length) { document.getElementById('paneYev').innerHTML = '<div class="fi-detay-bos">Bu belgenin yevmiye kaydı yok (taslak ya da iptal olabilir).</div>'; return; }
+        let tb = 0, tc = 0;
+        let h = `<div class="fi-sub">Yevmiye No ${res.baslik.transId} · ${y.length} satır</div><div style="overflow:auto;"><table class="fi-tbl"><thead><tr><th>#</th><th>Hesap</th><th>Ad</th><th class="txt-r">Borç</th><th class="txt-r">Alacak</th><th class="txt-r">Döviz</th><th>Vade</th><th>Gider / Gelir Kodu</th><th>Açıklama</th></tr></thead><tbody>`;
+        h += y.map(j => { tb += j.debit; tc += j.credit; return `<tr><td>${j.lineId}</td><td><span class="hcode">${esc(j.muhatap || j.hesap)}</span></td><td>${esc(j.ad)}</td><td class="txt-r">${j.debit ? fmt(j.debit) : ''}</td><td class="txt-r">${j.credit ? fmt(j.credit) : ''}</td><td class="txt-r" style="font-size:.72rem; color:#64748b;">${j.fcCurrency && j.fcCurrency !== 'TRY' ? (j.fcDebit ? fmt(j.fcDebit) : fmt(j.fcCredit)) + ' ' + esc(j.fcCurrency) : ''}</td><td>${esc(j.dueDate)}</td>
+            <td>${j.gider ? '<span class="hcode">' + esc(j.gider) + '</span>' : (j.hesapTipi ? '<span class="kod-uyari">kod yok</span>' : '')}</td><td style="font-size:.72rem;">${esc(j.lineMemo)}</td></tr>`; }).join('');
+        h += `</tbody></table></div><div class="fi-toplam"><span>Borç <b>${fmt(tb)}</b></span><span>Alacak <b>${fmt(tc)}</b></span></div>`;
+        document.getElementById('paneYev').innerHTML = h;
+    }
+    function renderOde(res) {
+        const b = res.baslik, o = res.odemeler || [];
+        let h = `<div class="fi-kv"><div><span class="k">Belge Toplamı</span><span class="v">${fmt(b.docTotal)} TRY</span></div><div><span class="k">Ödenen / Tahsil Edilen</span><span class="v">${fmt(b.paidToDate)} TRY</span></div><div><span class="k">Kalan</span><span class="v"><b>${fmt(b.docTotal - b.paidToDate)} TRY</b></span></div><div><span class="k">Vade</span><span class="v">${esc(b.docDueDate)}</span></div><div><span class="k">Durum</span><span class="v">${b.canceled ? 'İPTAL' : (b.docStatus === 'O' ? 'Açık' : 'Kapalı')}</span></div></div>`;
+        h += `<div class="fi-sub">Bağlı ödeme / tahsilat belgeleri (${o.length})</div>`;
+        h += o.length ? `<div style="overflow:auto;"><table class="fi-tbl"><thead><tr><th>Tür</th><th>Belge No</th><th>Tarih</th><th class="txt-r">Uygulanan</th><th>Açıklama</th></tr></thead><tbody>` + o.map(x => `<tr class="${x.canceled ? 'iptal' : ''}"><td>${esc(x.tur)}</td><td><b>${x.docNum}</b>${x.canceled ? ' <span class="bd ai">İPTAL</span>' : ''}</td><td>${esc(x.docDate)}</td><td class="txt-r">${fmt(x.sumApplied)} TRY${x.cur !== 'TRY' && x.appliedFC ? ' <span class="text-muted" style="font-size:.7rem">' + fmt(x.appliedFC) + ' ' + esc(x.cur) + '</span>' : ''}</td><td style="font-size:.72rem;">${esc(x.comments)}</td></tr>`).join('') + '</tbody></table></div>'
+            : '<div class="fi-detay-bos" style="padding:30px;">Bu belgeye bağlı ödeme / tahsilat yok. (Mahsup ya da iç mutabakatla kapanmış olabilir; yevmiye sekmesine bakın.)</div>';
+        document.getElementById('paneOde').innerHTML = h;
+    }
+
+    // ---- QNB gerçek görüntü ----
+    function qnbHazirla(ot, de, b) {
+        const htmlUrl = `/Rapor166/FaturaGoruntu?objType=${ot}&docEntry=${de}${qs}`, pdfUrl = `/Rapor166/FaturaGoruntu?objType=${ot}&docEntry=${de}&format=PDF${qs}`;
+        const c = document.getElementById('qnbCerceve'), uy = document.getElementById('qnbUyari');
+        c.removeAttribute('srcdoc'); c.src = 'about:blank'; uy.style.display = 'none'; uy.textContent = '';
+        document.getElementById('qnbBilgi').textContent = (ot === 18 || ot === 19) ? 'Gelen (tedarikçi) e-Faturası' : 'Giden (müşteri) e-Faturası / e-Arşiv';
+        const goster = (url, btn) => { c.removeAttribute('srcdoc'); c.src = url; document.getElementById('qnbYeni').href = url; document.querySelectorAll('#paneQnb .fi-fbtn').forEach(x => x.classList.remove('on')); if (btn) document.getElementById(btn).classList.add('on'); };
+        document.getElementById('qnbHtml').onclick = () => goster(htmlUrl, 'qnbHtml');
+        document.getElementById('qnbPdf').onclick = () => goster(pdfUrl, 'qnbPdf');
+        document.getElementById('qnbYeni').href = htmlUrl;
+        // Görüntü sekmesi açılınca yüklenir (her seçimde QNB'ye gitmesin)
+        window.qnbYukleBekliyor = function () {
+            uy.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> QNB kontrol ediliyor...'; uy.style.display = 'block';
+            fetch(`/Rapor166/FaturaGoruntuDurum?objType=${ot}&docEntry=${de}${qs}`).then(r => r.json()).then(d => {
+                if (d && d.bulundu) { uy.style.display = 'none'; if (d.ipucu) { uy.innerHTML = '<i class="fa-solid fa-circle-info"></i> ' + esc(d.ipucu); uy.style.display = 'block'; } goster(htmlUrl, 'qnbHtml'); return; }
+                uy.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> <b>QNB görüntüsü bulunamadı:</b> ' + esc((d && d.mesaj) || 'bilinmeyen neden') + (d && d.ipucu ? ' <span style="color:#64748b">— ' + esc(d.ipucu) + '</span>' : ''); uy.style.display = 'block';
+                c.srcdoc = '<div style="font-family:Segoe UI,Arial;padding:40px;color:#64748b;text-align:center">Belge görüntüsü QNB\'de bulunamadı. Üstteki uyarıya bakın.</div>';
+            }).catch(() => { uy.innerHTML = 'QNB kontrolü yapılamadı.'; uy.style.display = 'block'; });
+        };
+        if (document.getElementById('paneQnb').classList.contains('on')) { window.qnbYukleBekliyor(); window.qnbYukleBekliyor = null; }
+    }
+
+    // ---- QNB gelen kutusu yerel indeksi (eski tarihli belgeler) ----
+    let indeksTariyor = false;
+    function indeksDurum() {
+        fetch(`/Rapor166/GelenIndeksDurum${qs1}`).then(r => r.json()).then(d => {
+            const el = document.getElementById('indeksBilgi');
+            if (!d.success) { el.textContent = ''; document.getElementById('btnIndeks').style.display = 'none'; return; }
+            el.innerHTML = d.adet > 0 ? `İndeks: <b>${Number(d.adet).toLocaleString('tr-TR')}</b> belge (${esc(d.ilkTarih || '')}–${esc(d.sonTarih || '')})` : 'İndeks boş';
+        }).catch(() => { });
+    }
+    function indeksTara(tam) {
+        if (indeksTariyor) return; indeksTariyor = true;
+        const b = document.getElementById('btnIndeks'), el = document.getElementById('indeksBilgi');
+        b.disabled = true; let toplamEklenen = 0, tur = 0;
+        const adim = () => {
+            tur++;
+            fetch(`/Rapor166/GelenIndeksTara?sayfa=40&tam=${tam && tur === 1 ? 'true' : 'false'}${qs}`, { method: 'POST' }).then(r => r.json()).then(s => {
+                if (!s.success) { toastr.error(s.message || 'Tarama hatası', '', { timeOut: 9000 }); bitir(); return; }
+                toplamEklenen += s.eklenen;
+                el.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Taranıyor... ${Number(s.adet).toLocaleString('tr-TR')} belge, son tarih ${esc(s.sonTarih || '')} (+${toplamEklenen})`;
+                if (s.bitti || tur > 400) { toastr.success(`Gelen kutusu indeksi güncel: ${Number(s.adet).toLocaleString('tr-TR')} belge (${toplamEklenen} yeni).`, '', { timeOut: 9000 }); bitir(); return; }
+                adim();
+            }).catch(e => { toastr.error('Tarama kesildi: ' + e); bitir(); });
+        };
+        const bitir = () => { indeksTariyor = false; b.disabled = false; indeksDurum(); };
+        adim();
+    }
+    document.getElementById('btnIndeks').addEventListener('click', () => {
+        if (!confirm('QNB gelen kutusu taranacak. İlk taramada her 100 belge yaklaşık 2 saniye sürer (on binlerce belge için dakikalar). Sayfayı açık bırakın. Başlansın mı?')) return;
+        indeksTara(false);
+    });
+    indeksDurum();
+
+    // Adresle gelen ön seçim (?objType=&docEntry=)
+    (function () {
+        const p = new URLSearchParams(location.search);
+        if (p.get('objType') && p.get('docEntry')) {
+            document.getElementById('fBelgeNo').value = '';
+            sec(parseInt(p.get('objType')), parseInt(p.get('docEntry')));
+        }
+    })();
+    ara();
+</script>

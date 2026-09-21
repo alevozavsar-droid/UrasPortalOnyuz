@@ -1,0 +1,674 @@
+﻿@model List<WebApplication3.Models.CustomerFinancialReportViewModel>
+@using System.Globalization
+@using Microsoft.AspNetCore.Mvc.Rendering
+@using Newtonsoft.Json
+@using System.Linq
+
+@{
+    ViewData["Title"] = "Müşteri Finansal Risk Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // Aktif Veritabanını (Şirketi) URL veya Cookie'den alıyoruz ki linklerde ve yönlendirmelerde kaybolmasın
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"];
+    }
+
+    var reportDataJson = Model != null ? JsonConvert.SerializeObject(Model) : "[]";
+
+    // Filtreleme için distinct değerler toplanır.
+    var distinctValues = new Dictionary<string, List<string>>();
+    if (Model != null && Model.Any())
+    {
+        distinctValues["CardCode"] = Model.Where(m => !string.IsNullOrEmpty(m.CardCode)).Select(m => m.CardCode).Distinct().OrderBy(s => s).ToList();
+        distinctValues["Musteri"] = Model.Where(m => !string.IsNullOrEmpty(m.Musteri)).Select(m => m.Musteri).Distinct().OrderBy(s => s).ToList();
+        distinctValues["SatisSorumlusu"] = Model.Where(m => !string.IsNullOrEmpty(m.SatisSorumlusu)).Select(m => m.SatisSorumlusu).Distinct().OrderBy(s => s).ToList();
+    }
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Ana Stil Ayarları */
+        :root {
+            --primary-color: #dc3545; /* Risk vurgusu için kırmızı ton */
+            --light-bg: #f8f9fa;
+            --white-bg: #ffffff;
+            --border-color: #e0e0e0;
+            --text-color: #333;
+            --header-bg: #2c3e50;
+            --header-text: #ffffff;
+            --shadow-medium: 0 3px 10px rgba(0, 0, 0, 0.08);
+            --hover-color: #fff3cd; /* Yeni belirgin hover rengi (Açık Sarı/Uyarı) */
+        }
+
+        body {
+            background-color: var(--light-bg);
+            font-family: 'Poppins', sans-serif;
+            color: var(--text-color);
+            line-height: 1.2;
+            font-size: 0.8rem;
+        }
+
+        .container-fluid {
+            padding: 0 8px;
+        }
+
+        .sticky-toolbar {
+            position: sticky;
+            top: 0;
+            background-color: #ffffff;
+            z-index: 1000;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 6px;
+            box-shadow: 0 2px 3px rgba(0, 0, 0, 0.06);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .total-amount-display {
+            font-size: 0.96em;
+            font-weight: bold;
+            color: var(--primary-color);
+            white-space: nowrap;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            max-height: calc(100vh - 130px);
+            overflow-y: auto;
+            position: relative;
+            border-radius: 6px;
+            box-shadow: var(--shadow-medium);
+            background-color: var(--white-bg);
+            margin-top: 0.6rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .rapor-tablo {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            table-layout: fixed;
+            min-width: 2000px;
+        }
+
+            .rapor-tablo thead {
+                position: sticky;
+                top: 0;
+                z-index: 101;
+                background-color: #ffffff;
+            }
+
+                .rapor-tablo thead .main-header-row th {
+                    background-color: var(--header-bg);
+                    color: var(--header-text);
+                    padding: 4px 3px;
+                    text-align: center;
+                    white-space: normal;
+                    font-weight: 700;
+                    border-bottom: 2px solid var(--border-color);
+                    height: auto;
+                    line-height: 1.3;
+                    cursor: pointer;
+                }
+
+                .rapor-tablo thead .filter-row th {
+                    padding: 2px 3px;
+                    height: 30px;
+                    line-height: normal;
+                    vertical-align: top;
+                    white-space: nowrap;
+                    background-color: #ffffff;
+                    border-bottom: 1px solid var(--border-color);
+                }
+
+            .rapor-tablo th,
+            .rapor-tablo td {
+                padding: 1px;
+                vertical-align: middle;
+                border-right: 1px solid var(--border-color);
+            }
+
+            .rapor-tablo td {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                height: 25px;
+                line-height: 25px;
+                border-bottom: 1px solid var(--border-color);
+            }
+
+        .table-hover tbody tr:hover {
+            background-color: var(--hover-color) !important;
+        }
+
+        .rapor-tablo th.checkbox-column,
+        .rapor-tablo td.checkbox-column {
+            min-width: 28px !important;
+            max-width: 28px !important;
+            width: 28px !important;
+            padding: 0 5px !important;
+            vertical-align: middle !important;
+            overflow: visible;
+        }
+
+        .rapor-tablo td.checkbox-column {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end; 
+            height: 27px; 
+        }
+
+        .rapor-tablo th.checkbox-column input {
+            display: block;
+            margin-left: auto; 
+            margin-right: 5px; 
+        }
+
+        .filter-row th .form-control,
+        .filter-row th .bootstrap-select .btn {
+            width: 100% !important;
+            box-sizing: border-box !important;
+            height: 28px !important;
+            line-height: normal !important;
+            padding: 2px 5px !important;
+            font-size: 0.85em !important;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border: 1px solid #ced4da;
+            border-radius: 0.25rem;
+        }
+    </style>
+}
+
+<div class="container-fluid py-4">
+    <div class="row g-0">
+        <div class="col-md-12">
+            @if (ViewBag.ErrorMessage != null)
+            {
+                <div class="alert alert-danger" role="alert">
+                    @ViewBag.ErrorMessage
+                </div>
+            }
+
+            <div id="alertContainer" class="mt-3"></div>
+
+            @if (Model != null && Model.Any())
+            {
+                <div class="sticky-toolbar">
+                    <div class="d-flex align-items-center">
+                        <span class="me-2 total-amount-display">Toplam Seçili Risk:</span>
+                        <strong id="totalSelectedTlAmount" class="text-danger">0,00 TL</strong>
+                    </div>
+                    <div>
+                        <button id="clearAllFiltersBtn" class="btn btn-warning btn-sm shadow-sm fw-bold">
+                            <i class="fas fa-filter-circle-xmark me-1"></i> Tüm Filtreleri Temizle
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="table table-bordered table-striped table-hover rapor-tablo" id="rapor17Table">
+                        <thead>
+                            <tr class="main-header-row">
+                                <th class="checkbox-column no-drag" title="Seçim Kutusu" data-column="Checkbox">
+                                    <input type="checkbox" id="selectAllCheckbox" class="form-check-input" />
+                                </th>
+                                <th class="sortable-column" data-column="CardCode" title="Cari Kodu" data-sort-type="text">Cari Kodu <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="Musteri" title="Cari Adı" data-sort-type="text">Cari Adı <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="SatisSorumlusu" title="Satış Sorumlusu" data-sort-type="text">Satış Sorumlusu <i class="fas fa-sort float-end"></i></th>
+
+                                <th class="sortable-column" data-column="MusteriGuncelBakiyesi" title="Güncel Bakiye (OCRD.Balance)" data-sort-type="number">Güncel Bakiye <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="ToplamRisk" title="Toplam Risk = Açık Bakiye + Çekler" data-sort-type="number">Toplam Risk <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="PortfoydekiCek" title="Portföydeki Vadesi Gelmemiş Çek Toplamı" data-sort-type="number">Portföydeki Çek <i class="fas fa-sort float-end"></i></th>
+
+                                <th class="sortable-column" data-column="ToplamAcikFatura" title="Toplam Açık Bakiye (Fatura + Fatura Dışı Borç)" data-sort-type="number">Toplam Açık Bakiye <i class="fas fa-sort float-end"></i></th>
+
+                                <th class="sortable-column" data-column="VadesiGecmisTutar" title="Vadesi Geçmiş Açık Bakiye Tutarı" data-sort-type="number">V. Geçmiş Tutar <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="VadesiGelecekTutar" title="Vadesi Gelecek Açık Bakiye Tutarı" data-sort-type="number">V. Gelecek Tutar <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="MutabakattaAcikTahsilat" title="Mutabakatta Açık Tahsilat (Negatif Bakiye)" data-sort-type="number">Mutabakatta Açık Tahsilat <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="MutabakattaKapanacakTahsilat" title="Mutabakatta Kapanacak Tahsilat (Pozitif Bakiye)" data-sort-type="number">Mutabakatta Kapanacak Tahsilat <i class="fas fa-sort float-end"></i></th>
+
+                                <th class="sortable-column" data-column="VadesiGecmisAdet" title="Vadesi Geçmiş Kayıt Adedi (Fatura + Fatura Dışı)" data-sort-type="number">V.G. Adet <i class="fas fa-sort float-end"></i></th>
+
+                                <th class="sortable-column" data-column="OrtalamaAdat" title="Ortalama Adat (Gün)" data-sort-type="number">Ort. Adat (Gün) <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="OrtalamaTahsilatYaslandirma" title="Ortalama Tahsilat Yaşlandırması (Gün)" data-sort-type="number">Ort. Tah. Yaş. (Gün) <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="EnEskiVadeTarihi" title="En Eski Vadesi Geçmiş Kayıt Tarihi" data-sort-type="date">En Eski Vade Tarihi <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="EnEskiFarkGun" title="En Eski Vade Tarihi ile Bugün Arasındaki Gün Farkı" data-sort-type="number">En Eski Fark (Gün) <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="EnSonTeslimatTarihi" title="En Son Fatura Tarihi (Satış Faturası)" data-sort-type="date">En Son Teslimat <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="SonTahsilatTarihi" title="En Son Kapanan Faturanın Belge Tarihi" data-sort-type="date">Son Tahsilat <i class="fas fa-sort float-end"></i></th>
+                            </tr>
+                            <tr class="filter-row">
+                                <th data-column="Checkbox"></th>
+                                <th data-column="CardCode"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                <th data-column="Musteri">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Cari Adı">
+                                        @if (distinctValues.ContainsKey("Musteri"))
+                                        {
+                                            foreach (var item in distinctValues["Musteri"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="SatisSorumlusu">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Satış Sorumlusu">
+                                        @if (distinctValues.ContainsKey("SatisSorumlusu"))
+                                        {
+                                            foreach (var item in distinctValues["SatisSorumlusu"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="MusteriGuncelBakiyesi"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="ToplamRisk"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="PortfoydekiCek"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="ToplamAcikFatura"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="VadesiGecmisTutar"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="VadesiGelecekTutar"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="MutabakattaAcikTahsilat"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="MutabakattaKapanacakTahsilat"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="VadesiGecmisAdet"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="OrtalamaAdat"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="OrtalamaTahsilatYaslandirma"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="EnEskiVadeTarihi"><input type="text" class="form-control form-control-sm filter-input date-filter" placeholder="GG.AA.YYYY"></th>
+                                <th data-column="EnEskiFarkGun"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="EnSonTeslimatTarihi"><input type="text" class="form-control form-control-sm filter-input date-filter" placeholder="GG.AA.YYYY"></th>
+                                <th data-column="SonTahsilatTarihi"><input type="text" class="form-control form-control-sm filter-input date-filter" placeholder="GG.AA.YYYY"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @* Tablo içeriği dinamik olarak JavaScript tarafından doldurulacaktır. *@
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-info text-center mt-4">
+                    Gösterilecek veri bulunamadı.
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="footer-info-bar mt-2 mb-4 px-2">
+    <div class="d-flex justify-content-between align-items-center">
+        <a asp-action="Index" asp-controller="Home" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+            <i class="fas fa-arrow-left me-2"></i> Ana Sayfaya Dön
+        </a>
+        
+        <div class="text-end text-muted" id="pagination-info">
+            Toplam Kayıt: <strong id="totalRecords">@(Model?.Count ?? 0)</strong>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Aktif veritabanı parametresini JS değişkenine alıyoruz
+            const currentDbParam = '@currentDb';
+
+            const allReportData = @Html.Raw(reportDataJson);
+            const table = document.getElementById('rapor17Table');
+            
+            // Eğer tablo yoksa (veri yoksa) js hatalarını önlemek için çıkış yap
+            if (!table) return;
+
+            const tableBody = table.querySelector('tbody');
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const totalSelectedTlAmountSpan = document.getElementById('totalSelectedTlAmount');
+            const totalRecordsSpan = document.getElementById('totalRecords');
+
+            let currentlyFilteredRows = [...allReportData];
+            let currentSortColumn = null;
+            let currentSortDirection = 'none';
+
+            // Merkezi Filtre Sıfırlayıcı Köprüsü (Layout için)
+            window.clearReportFilters = function () {
+                $('.filter-input').val('');
+                $('.filter-select-bs').selectpicker('val', '');
+                currentSortColumn = null;
+                currentSortDirection = 'none';
+                document.querySelectorAll('th.sortable-column i').forEach(icon => icon.className = 'fas fa-sort float-end');
+                
+                currentlyFilteredRows = [...allReportData];
+                renderTable(currentlyFilteredRows);
+                if (typeof toastr !== 'undefined') toastr.success('Filtreler başarıyla sıfırlandı.');
+            };
+
+            // "Tüm Filtreleri Temizle" Butonuna tıklanınca URL'deki db parametresini kaybetmemek için güncelledik.
+            const clearBtn = document.getElementById('clearAllFiltersBtn');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', function () {
+                    let currentUrl = window.location.href;
+                    let baseUrl = currentUrl.split('?')[0];
+                    let newUrl = baseUrl;
+                    if (currentDbParam) {
+                        newUrl += `?db=${currentDbParam}`;
+                    }
+                    window.location.href = newUrl;
+                });
+            }
+
+            const columnMappings = {
+                'Checkbox': null,
+                'CardCode': 'CardCode',
+                'Musteri': 'Musteri',
+                'SatisSorumlusu': 'SatisSorumlusu',
+                'MusteriGuncelBakiyesi': 'MusteriGuncelBakiyesi',
+                'ToplamRisk': 'ToplamRisk',
+                'PortfoydekiCek': 'PortfoydekiCek',
+                'ToplamAcikFatura': 'ToplamAcikFatura',
+                'VadesiGecmisTutar': 'VadesiGecmisTutar',
+                'VadesiGelecekTutar': 'VadesiGelecekTutar',
+                'MutabakattaAcikTahsilat': 'MutabakattaAcikTahsilat',
+                'MutabakattaKapanacakTahsilat': 'MutabakattaKapanacakTahsilat',
+                'VadesiGecmisAdet': 'VadesiGecmisAdet',
+                'OrtalamaAdat': 'OrtalamaAdat',
+                'OrtalamaTahsilatYaslandirma': 'OrtalamaTahsilatYaslandirma',
+                'EnEskiVadeTarihi': 'EnEskiVadeTarihi',
+                'EnEskiFarkGun': 'EnEskiFarkGun',
+                'EnSonTeslimatTarihi': 'EnSonTeslimatTarihi',
+                'SonTahsilatTarihi': 'SonTahsilatTarihi'
+            };
+
+            function updatePaginationInfo(totalCount) {
+                if (totalRecordsSpan) {
+                    totalRecordsSpan.textContent = totalCount;
+                }
+            }
+
+            function formatDate(dateString) {
+                if (!dateString) return '';
+                const date = new Date(dateString);
+                if (isNaN(date.getTime())) return '';
+                const day = date.getDate().toString().padStart(2, '0');
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                const year = date.getFullYear();
+                return `${day}.${month}.${year}`;
+            }
+
+            function renderTable(data) {
+                tableBody.innerHTML = '';
+                if (data.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="20" class="text-center">Gösterilecek veri bulunamadı.</td></tr>';
+                    updatePaginationInfo(0);
+                    return;
+                }
+
+                const frag = document.createDocumentFragment();
+                const visibleHeaders = document.querySelectorAll('#rapor17Table thead .main-header-row th:not([style*="display: none"])');
+
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+
+                    visibleHeaders.forEach((header) => {
+                        const cell = document.createElement('td');
+                        const columnKey = header.dataset.column;
+                        const propName = columnMappings[columnKey];
+                        let value = propName ? item[propName] : null;
+
+                        if (columnKey === 'Checkbox') {
+                            cell.className = 'checkbox-column';
+                            const checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+                            checkbox.className = 'form-check-input row-selector';
+                            checkbox.dataset.tlValue = item.ToplamRisk || 0;
+                            cell.appendChild(checkbox);
+                        } else if (header.dataset.sortType === 'number') {
+                            if (['MusteriGuncelBakiyesi', 'ToplamRisk', 'PortfoydekiCek', 'ToplamAcikFatura', 'VadesiGecmisTutar', 'VadesiGelecekTutar', 'MutabakattaAcikTahsilat', 'MutabakattaKapanacakTahsilat'].includes(columnKey)) {
+                                cell.textContent = value?.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '0,00';
+                            }
+                            else if (['OrtalamaAdat', 'OrtalamaTahsilatYaslandirma'].includes(columnKey)) {
+                                cell.textContent = value?.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '0,00';
+                            }
+                            else {
+                                cell.textContent = value?.toLocaleString('tr-TR') ?? '0';
+                            }
+                            cell.style.textAlign = 'right';
+                        } else if (header.dataset.sortType === 'date') {
+                            cell.textContent = formatDate(value);
+                            cell.style.textAlign = 'center';
+                        } else {
+                            cell.textContent = value || '';
+                        }
+                        row.appendChild(cell);
+                    });
+                    frag.appendChild(row);
+                });
+                tableBody.appendChild(frag);
+                updatePaginationInfo(data.length);
+                calculateSelectedTotal();
+                updateSelectAllCheckboxState();
+            }
+
+            function filterTableAndRender() {
+                const filters = {};
+                const filterInputs = document.querySelectorAll('.filter-input');
+                const filterSelects = $('.filter-select-bs');
+
+                filterSelects.each(function () {
+                    const selectElement = $(this);
+                    const columnKey = selectElement.closest('th').data('column');
+                    const selectedValues = selectElement.val();
+                    if (selectedValues && selectedValues.length > 0) {
+                        filters[columnKey] = selectedValues.map(v => (v || '').toLowerCase().trim());
+                    }
+                });
+
+                filterInputs.forEach(input => {
+                    const columnKey = input.closest('th').dataset.column;
+                    const inputValue = input.value.toLowerCase().trim();
+                    if (inputValue) {
+                        filters[columnKey] = [inputValue];
+                    }
+                });
+
+                let filteredData = allReportData.filter(item => {
+                    let isMatch = true;
+                    for (const column in filters) {
+                        const filterValues = filters[column];
+                        const propName = columnMappings[column];
+                        let itemValue = item[propName];
+
+                        if (itemValue === null || itemValue === undefined) {
+                            itemValue = '';
+                        }
+
+                        const inputElement = document.querySelector(`.filter-row th[data-column="${column}"] .filter-input`);
+                        const isNumericFilter = inputElement && inputElement.classList.contains('number-filter');
+                        const isDateFilter = inputElement && inputElement.classList.contains('date-filter');
+
+                        if (!isNumericFilter && !isDateFilter) {
+                             const isMatchFound = filterValues.some(filterVal =>
+                                 itemValue.toString().toLowerCase().includes(filterVal)
+                             );
+                            if (!isMatchFound) {
+                                isMatch = false;
+                                break;
+                            }
+                        }
+                        else if (isDateFilter) {
+                            const formattedDate = formatDate(itemValue).toLowerCase();
+                            const filterValue = filterValues[0];
+                            if (!formattedDate.includes(filterValue)) {
+                                isMatch = false;
+                                break;
+                            }
+                        }
+                        else if (isNumericFilter) {
+                            const filterValue = filterValues[0];
+                            const numericFilterValue = parseFloat(filterValue.replace(/\./g, '').replace(',', '.'));
+                            const itemNumericValue = parseFloat(itemValue.toString().replace(',', '.'));
+
+                            if (isNaN(numericFilterValue)) {
+                                if (filterValue !== "") {
+                                    if (!itemValue.toString().toLowerCase().includes(filterValue)) {
+                                        isMatch = false;
+                                        break;
+                                    }
+                                }
+                            } else {
+                                if (Math.round(itemNumericValue * 100) !== Math.round(numericFilterValue * 100)) {
+                                    isMatch = false;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    return isMatch;
+                });
+
+                if (currentSortColumn && currentSortDirection !== 'none') {
+                    const sortType = document.querySelector(`th[data-column="${currentSortColumn}"]`)?.dataset.sortType;
+                    const propName = columnMappings[currentSortColumn];
+                    filteredData.sort((itemA, itemB) => {
+                        let valA = itemA[propName];
+                        let valB = itemB[propName];
+
+                        let comparison = 0;
+                        if (sortType === 'number') {
+                            valA = parseFloat(valA?.toString().replace(',', '.')) || 0;
+                            valB = parseFloat(valB?.toString().replace(',', '.')) || 0;
+                            comparison = valA - valB;
+                        } else if (sortType === 'date') {
+                            const dateA = valA ? new Date(valA) : new Date(0);
+                            const dateB = valB ? new Date(valB) : new Date(0);
+                            comparison = dateA.getTime() - dateB.getTime();
+                        }
+                         else {
+                            comparison = (valA || '').localeCompare((valB || ''), 'tr', { sensitivity: 'base' });
+                        }
+                        return currentSortDirection === 'asc' ? comparison : -comparison;
+                    });
+                }
+
+                currentlyFilteredRows = filteredData;
+                renderTable(currentlyFilteredRows);
+            }
+
+            function updateSelectAllCheckboxState() {
+                if (!selectAllCheckbox) return;
+                const visibleCheckboxes = document.querySelectorAll('#rapor17Table tbody tr input.row-selector');
+                if (visibleCheckboxes.length > 0) {
+                    const allChecked = Array.from(visibleCheckboxes).every(checkbox => checkbox.checked);
+                    const anyChecked = Array.from(visibleCheckboxes).some(checkbox => checkbox.checked);
+
+                    selectAllCheckbox.checked = allChecked;
+                    selectAllCheckbox.indeterminate = !allChecked && anyChecked;
+                } else {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = false;
+                }
+            }
+
+            function calculateSelectedTotal() {
+                let totalAmount = 0;
+                document.querySelectorAll('#rapor17Table tbody tr input.row-selector:checked').forEach(checkbox => {
+                    const tlValue = parseFloat(checkbox.dataset.tlValue);
+                    if (!isNaN(tlValue)) {
+                        totalAmount += tlValue;
+                    }
+                });
+                totalSelectedTlAmountSpan.textContent = totalAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL';
+            }
+
+            selectAllCheckbox.addEventListener('change', function () {
+                const isChecked = this.checked;
+                document.querySelectorAll('#rapor17Table tbody tr input.row-selector').forEach(checkbox => {
+                    checkbox.checked = isChecked;
+                });
+                calculateSelectedTotal();
+            });
+
+            tableBody.addEventListener('change', function (event) {
+                if (event.target.classList.contains('row-selector')) {
+                    calculateSelectedTotal();
+                    updateSelectAllCheckboxState();
+                }
+            });
+
+            function initializePage() {
+                $('.filter-select-bs').selectpicker({
+                    liveSearch: true,
+                    actionsBox: true,
+                    selectedTextFormat: 'count > 2',
+                    width: '100%',
+                    container: 'body'
+                }).on('changed.bs.select', function () {
+                    filterTableAndRender();
+                });
+
+                document.querySelectorAll('.filter-input').forEach(input => {
+                    if (input.classList.contains('number-filter') || input.classList.contains('date-filter')) {
+                         input.addEventListener('keyup', (e) => {
+                             if (e.key === 'Enter') {
+                                 filterTableAndRender();
+                             }
+                         });
+                    } else {
+                        input.addEventListener('keyup', () => filterTableAndRender());
+                    }
+                });
+
+                document.querySelectorAll('th.sortable-column').forEach(header => {
+                    header.addEventListener('click', function () {
+                        if (this.style.display === 'none' || this.classList.contains('no-sort')) { return; }
+
+                        const columnKey = this.dataset.column;
+                        let newSortDirection;
+
+                        if (currentSortColumn === columnKey) {
+                            if (currentSortDirection === 'asc') {
+                                newSortDirection = 'desc';
+                            } else if (currentSortDirection === 'desc') {
+                                newSortDirection = 'none';
+                            } else {
+                                newSortDirection = 'asc';
+                            }
+                        } else {
+                            if (currentSortColumn !== null) {
+                                const prevHeader = document.querySelector(`th.sortable-column[data-column="${currentSortColumn}"] i`);
+                                if (prevHeader) {
+                                    prevHeader.className = 'fas fa-sort float-end';
+                                }
+                            }
+                            newSortDirection = 'asc';
+                            currentSortColumn = columnKey;
+                        }
+
+                        currentSortDirection = newSortDirection;
+
+                        document.querySelectorAll('th.sortable-column i').forEach(icon => icon.className = 'fas fa-sort float-end');
+                        const sortIcon = this.querySelector('i');
+                        if (sortIcon && currentSortDirection !== 'none') {
+                            sortIcon.className = `fas fa-sort-${currentSortDirection === 'asc' ? 'up' : 'down'} float-end`;
+                        } else if (sortIcon && currentSortDirection === 'none') {
+                            sortIcon.className = 'fas fa-sort float-end';
+                        }
+
+                        filterTableAndRender();
+                    });
+                });
+
+                renderTable(allReportData);
+            }
+
+            initializePage();
+        });
+    </script>
+}

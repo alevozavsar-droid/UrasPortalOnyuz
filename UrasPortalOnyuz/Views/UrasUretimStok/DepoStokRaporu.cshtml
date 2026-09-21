@@ -1,0 +1,208 @@
+@{
+    ViewData["Title"] = "Depo Stok Raporu";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-warehouse me-2 text-primary"></i> Depo Stok Raporu</h2>
+    <a class="btn btn-outline-success btn-sm" id="btnExcelIndir" href="#"><i class="fas fa-file-excel me-1"></i>Excel</a>
+</div>
+<p class="text-muted mb-3">Partilere göre stok miktarları.</p>
+
+<div class="row g-3 mb-3" id="ozetKartlari"></div>
+
+<div class="card dash-card p-3 mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-12 col-lg-5">
+            <label class="form-label small fw-bold">Arama</label>
+            <div class="input-group input-group-sm">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text" id="fSearch" class="form-control" placeholder="Kalem kodu, kalem adı veya parti no..." oninput="aramaDegisti()">
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3">
+            <label class="form-label small fw-bold">Depo</label>
+            <select id="fWarehouse" class="form-select form-select-sm" onchange="yenidenYukle()"><option value="">Tümü</option></select>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+            <label class="form-label small fw-bold d-block">Sıfır Stok</label>
+            <div class="form-check form-switch mt-1"><input class="form-check-input" type="checkbox" id="fSifirGoster" onchange="yenidenYukle()"><label class="form-check-label small text-muted" for="fSifirGoster">Göster</label></div>
+        </div>
+        <div class="col-12 col-md-4 col-lg-2 text-lg-end">
+            <button class="btn btn-sm btn-outline-secondary" onclick="filtreTemizle()"><i class="fas fa-xmark me-1"></i>Temizle</button>
+        </div>
+    </div>
+    <div class="d-flex flex-wrap align-items-center mt-3 gap-2">
+        <small class="text-muted fw-bold me-1"><i class="fas fa-filter me-1"></i>Parti Durumu:</small>
+        <div class="btn-group btn-group-sm" role="group">
+            <button type="button" class="btn btn-outline-primary" id="pdTumu" onclick="partiDurumSec('')">Tümü</button>
+            <button type="button" class="btn btn-outline-primary" id="pdPartili" onclick="partiDurumSec('partili')"><i class="fas fa-barcode me-1"></i>Partili</button>
+            <button type="button" class="btn btn-outline-primary" id="pdPartisiz" onclick="partiDurumSec('partisiz')">Partisiz</button>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive shadow-sm rounded-3 border">
+    <table class="table table-hover table-custom mb-0">
+        <thead>
+            <tr><th width="36"></th><th width="150">Kalem Kodu</th><th>Kalem Tanımı</th><th class="text-center" width="95">Parti</th><th class="text-center" width="85">Depo</th><th class="text-end" width="125">Toplam Miktar</th><th class="text-center" width="95">Ölçü Bir.</th><th class="text-center" width="115">En Yakın SKT</th></tr>
+        </thead>
+        <tbody id="tbodyListe"></tbody>
+    </table>
+</div>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
+    <div class="d-flex align-items-center gap-2">
+        <small class="text-muted" id="sayfaBilgi"></small>
+        <select id="fPageSize" class="form-select form-select-sm" style="width:80px;" onchange="currentPage=1; yenidenYukle();">
+            <option value="25">25</option><option value="50" selected>50</option><option value="100">100</option><option value="200">200</option>
+        </select>
+    </div>
+    <nav><ul class="pagination pagination-sm mb-0" id="paginasyon"></ul></nav>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; color: #5a5c69; }
+    .ozet-kart { background: #fff; border: 1px solid #e3e6f0; border-radius: 12px; padding: 14px 18px; display: flex; align-items: center; gap: 12px; height: 100%; }
+    .ozet-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+    .ozet-icon.kayit { background: #eff6ff; color: #0d6efd; } .ozet-icon.kalem { background: #fdf6ec; color: #b45309; } .ozet-icon.miktar { background: #f3fdf4; color: #198754; }
+    .ozet-baslik { font-size: .7rem; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: #6c757d; }
+    .ozet-deger { font-size: 1.3rem; font-weight: 800; }
+    .grup-satir { cursor: pointer; } .grup-satir:hover td { background: #f8fafd; }
+    .qty-pozitif { color: #198754; font-weight: 700; } .qty-negatif { color: #dc3545; font-weight: 700; }
+    .badge-parti { background: #eff6ff; color: #0d6efd; border: 1px solid #bfdbfe; font-weight: 700; }
+    .skt-gecmis { background:#fff5f5; color:#721c24; border:1px solid #fca5a5; } .skt-yaklasan { background:#fff8e6; color:#92400e; border:1px solid #fcd34d; } .skt-normal { background:#f8f9fa; color:#6c757d; border:1px solid #dee2e6; }
+    .detay-panel { margin: 8px 12px 12px 40px; background: #fff; border: 1px solid #e3e6f0; border-left: 3px solid #0d6efd; border-radius: 10px; overflow: hidden; }
+    .detay-baslik { padding: 8px 14px; background: #f8f9fc; font-size: .72rem; font-weight: 800; text-transform: uppercase; color: #6c757d; }
+</style>
+
+<script>
+    let liste = [], ozet = {}, depolar = [], currentPage = 1, filtre = { search: '', warehouse: '', partiDurum: '', sifirGoster: false };
+    let acikSatirlar = {}, detayCache = {};
+    function fmt(n, d) { return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+
+    let aramaZamanlayici = null;
+    function aramaDegisti() { clearTimeout(aramaZamanlayici); aramaZamanlayici = setTimeout(() => { filtre.search = document.getElementById('fSearch').value; currentPage = 1; loadListe(); }, 350); }
+
+    function partiDurumSec(p) {
+        filtre.partiDurum = p;
+        ['Tumu', 'Partili', 'Partisiz'].forEach(x => document.getElementById('pd' + x).className = 'btn btn-outline-primary' + ((x === 'Tumu' && p === '') || (x === 'Partili' && p === 'partili') || (x === 'Partisiz' && p === 'partisiz') ? ' active' : ''));
+        yenidenYukle();
+    }
+
+    function filtreTemizle() {
+        document.getElementById('fSearch').value = ''; document.getElementById('fWarehouse').value = ''; document.getElementById('fSifirGoster').checked = false;
+        filtre = { search: '', warehouse: '', partiDurum: '', sifirGoster: false };
+        partiDurumSec('');
+    }
+
+    function yenidenYukle() {
+        filtre.warehouse = document.getElementById('fWarehouse').value;
+        filtre.sifirGoster = document.getElementById('fSifirGoster').checked;
+        currentPage = 1;
+        loadListe();
+    }
+
+    async function loadListe() {
+        document.getElementById('tbodyListe').innerHTML = '<tr><td colspan="8" class="text-center py-5 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Yükleniyor...</td></tr>';
+        const pageSize = document.getElementById('fPageSize').value;
+        const qs = new URLSearchParams({ search: filtre.search, warehouse: filtre.warehouse, partiDurum: filtre.partiDurum, sifirGoster: filtre.sifirGoster, page: currentPage, pageSize });
+        document.getElementById('btnExcelIndir').href = '/UrasUretimStok/DepoStokRaporuExcel?' + new URLSearchParams({ search: filtre.search, warehouse: filtre.warehouse, partiDurum: filtre.partiDurum, sifirGoster: filtre.sifirGoster }).toString();
+        const res = await fetch('/UrasUretimStok/GetDepoStokRaporu?' + qs.toString()).then(r => r.json());
+        if (!res.success) { document.getElementById('tbodyListe').innerHTML = `<tr><td colspan="8" class="text-center text-danger py-4">${res.message}</td></tr>`; return; }
+        liste = (res.data.liste || []).map(k => ({ ...k, acik: false }));
+        ozet = res.data.ozet || {};
+        acikSatirlar = {};
+        cizOzet();
+        cizListe();
+        cizSayfalama(Number(pageSize));
+    }
+
+    function cizOzet() {
+        document.getElementById('ozetKartlari').innerHTML = `
+            <div class="col-12 col-md-4"><div class="ozet-kart"><div class="ozet-icon kayit"><i class="fas fa-list-ol"></i></div><div><div class="ozet-baslik">Toplam Kayıt</div><div class="ozet-deger">${fmt(ozet.ToplamKayit, 0)}</div></div></div></div>
+            <div class="col-6 col-md-4"><div class="ozet-kart"><div class="ozet-icon kalem"><i class="fas fa-box"></i></div><div><div class="ozet-baslik">Farklı Kalem</div><div class="ozet-deger">${fmt(ozet.ToplamKalem, 0)}</div></div></div></div>
+            <div class="col-6 col-md-4"><div class="ozet-kart"><div class="ozet-icon miktar"><i class="fas fa-layer-group"></i></div><div><div class="ozet-baslik">Toplam Miktar</div><div class="ozet-deger text-success">${fmt(ozet.ToplamMiktar, 2)}</div></div></div></div>`;
+    }
+
+    function sktSinif(gun) { if (gun === null || gun === undefined) return ''; if (gun < 0) return 'skt-gecmis'; if (gun <= 30) return 'skt-yaklasan'; return 'skt-normal'; }
+
+    function cizListe() {
+        if (!liste.length) { document.getElementById('tbodyListe').innerHTML = '<tr><td colspan="8" class="text-center py-5 text-muted"><i class="fas fa-inbox fs-4 d-block mb-2 opacity-50"></i>Seçilen kriterlere uygun stok kaydı bulunamadı.</td></tr>'; return; }
+        document.getElementById('tbodyListe').innerHTML = liste.map((k, i) => {
+            const acik = !!acikSatirlar[i];
+            let detayHtml = '';
+            if (acik) {
+                const rows = detayCache[k.ItemCode];
+                detayHtml = `<tr><td colspan="8" style="padding:0;">
+                    <div class="detay-panel">
+                        <div class="detay-baslik"><i class="fas fa-barcode me-1 text-primary"></i>${k.ItemCode} &mdash; Parti Detayı</div>
+                        <div class="table-responsive"><table class="table table-sm mb-0">
+                            <thead><tr class="text-muted small"><th>Depo</th><th>Parti No</th><th class="text-end">Miktar</th><th class="text-center">Giriş Tarihi</th><th class="text-center">SKT</th></tr></thead>
+                            <tbody>${rows ? rows.map(d => `
+                                <tr><td><span class="badge bg-light text-dark border">${d.WhsCode}</span> <span class="text-muted small">${d.WhsName}</span></td>
+                                    <td>${d.PartiNo ? `<span class="badge-parti badge rounded-pill">${d.PartiNo}</span>` : '<span class="text-muted small">Partisiz</span>'}</td>
+                                    <td class="text-end ${d.Quantity >= 0 ? 'qty-pozitif' : 'qty-negatif'}">${fmt(d.Quantity, 2)}</td>
+                                    <td class="text-center small">${d.GirisTarihi || '—'}</td>
+                                    <td class="text-center">${d.Skt ? `<span class="badge rounded-pill ${sktSinif(d.SktKalanGun)}">${d.Skt}</span>` : '<span class="text-muted small">—</span>'}</td></tr>`).join('') || '<tr><td colspan="5" class="text-center text-muted small py-3">Bu kalem için parti detayı bulunamadı.</td></tr>'
+                                : '<tr><td colspan="5" class="text-center text-muted small py-3"><span class="spinner-border spinner-border-sm me-2"></span>Yükleniyor...</td></tr>'}</tbody>
+                        </table></div>
+                    </div></td></tr>`;
+            }
+            return `
+                <tr class="grup-satir" onclick="detayToggle(${i})">
+                    <td class="text-center"><i class="fas fa-chevron-${acik ? 'down' : 'right'} text-muted"></i></td>
+                    <td class="fw-bold text-primary">${k.ItemCode}</td><td>${k.ItemName}</td>
+                    <td class="text-center">${k.PartiSayisi ? `<span class="badge rounded-pill badge-parti">${k.PartiSayisi} parti</span>` : '<span class="text-muted small">Partisiz</span>'}</td>
+                    <td class="text-center"><span class="badge bg-light text-dark border">${k.DepoSayisi} depo</span></td>
+                    <td class="text-end"><span class="${k.Quantity >= 0 ? 'qty-pozitif' : 'qty-negatif'}">${fmt(k.Quantity, 2)}</span></td>
+                    <td class="text-center"><span class="badge bg-light text-dark border">${k.UomCode || '—'}</span></td>
+                    <td class="text-center">${k.Skt ? `<span class="badge rounded-pill ${sktSinif(k.SktKalanGun)}">${k.Skt}</span>` : '<span class="text-muted small">—</span>'}</td>
+                </tr>${detayHtml}`;
+        }).join('');
+    }
+
+    async function detayToggle(i) {
+        const k = liste[i];
+        acikSatirlar[i] = !acikSatirlar[i];
+        cizListe();
+        if (acikSatirlar[i] && !detayCache[k.ItemCode]) {
+            const qs = new URLSearchParams({ itemCode: k.ItemCode, warehouse: filtre.warehouse, partiDurum: filtre.partiDurum, sifirGoster: filtre.sifirGoster });
+            const res = await fetch('/UrasUretimStok/GetDepoStokPartiDetay?' + qs.toString()).then(r => r.json());
+            detayCache[k.ItemCode] = res.success ? res.data : [];
+            cizListe();
+        }
+    }
+
+    function cizSayfalama(pageSize) {
+        const toplamSayfa = Math.max(1, Math.ceil((ozet.ToplamKalem || 0) / pageSize));
+        const basIdx = (currentPage - 1) * pageSize + (liste.length ? 1 : 0);
+        const sonIdx = Math.min(currentPage * pageSize, ozet.ToplamKalem || 0);
+        document.getElementById('sayfaBilgi').textContent = `${basIdx} – ${sonIdx} arası, toplam ${fmt(ozet.ToplamKalem, 0)} kalem (${fmt(ozet.ToplamKayit, 0)} parti kaydı)`;
+
+        let html = '';
+        const ekle = (p, label, disabled, active) => { html += `<li class="page-item ${disabled ? 'disabled' : ''} ${active ? 'active' : ''}"><a class="page-link" href="javascript:void(0)" onclick="${disabled ? '' : `gitSayfa(${p})`}">${label}</a></li>`; };
+        if (toplamSayfa > 1) {
+            ekle(1, '«', currentPage === 1, false);
+            ekle(currentPage - 1, '‹', currentPage === 1, false);
+            for (let p = Math.max(1, currentPage - 2); p <= Math.min(toplamSayfa, currentPage + 2); p++) ekle(p, p, false, p === currentPage);
+            ekle(currentPage + 1, '›', currentPage === toplamSayfa, false);
+            ekle(toplamSayfa, '»', currentPage === toplamSayfa, false);
+        }
+        document.getElementById('paginasyon').innerHTML = html;
+    }
+
+    function gitSayfa(p) { currentPage = p; loadListe(); }
+
+    async function depolariYukle() {
+        const res = await fetch('/UrasUretimStok/GetWarehouses').then(r => r.json()).catch(() => null);
+        if (res && res.success && res.data) {
+            const sel = document.getElementById('fWarehouse');
+            res.data.forEach(w => { const o = document.createElement('option'); o.value = w.WhsCode; o.textContent = w.WhsCode + ' — ' + w.WhsName; sel.appendChild(o); });
+        }
+    }
+
+    depolariYukle();
+    loadListe();
+</script>

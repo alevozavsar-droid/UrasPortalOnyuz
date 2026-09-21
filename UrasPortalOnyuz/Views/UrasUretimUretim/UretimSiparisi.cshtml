@@ -1,0 +1,647 @@
+﻿@{
+    ViewData["Title"] = "Üretim Siparişi";
+}
+
+<style>
+    /* uras_production 'Üretim Yönetimi' ekranının tasarımıyla görsel eşitleme */
+    .us-kap-wrap { background:#fff; border:1px solid #e3e6f0; border-radius:16px; padding:20px; }
+    .kap-box { background:#f8fafc; padding:10px; border-radius:16px; transition:all .2s; }
+    .kap-box:focus-within { background:#fff; box-shadow:0 4px 12px rgba(0,0,0,.05); }
+    .kap-label-v3 { display:block; text-align:center; font-size:.7rem; font-weight:800; color:#94a3b8; text-transform:uppercase; margin-bottom:5px; }
+    .kap-input-v3 { border:2px solid transparent !important; background:#f1f5f9 !important; height:48px; text-align:center; font-weight:800; font-size:1.1rem; border-radius:12px !important; color:#1e293b; transition:all .2s; width:100%; }
+    .kap-input-v3:focus { background:#fff !important; border-color:#2563eb !important; box-shadow:none !important; outline:none; }
+    .kap-input-v3::-webkit-inner-spin-button { display:none; }
+    .kap-toplam-badge { background:#141a2e; color:#fff; border-radius:16px; padding:8px 18px; display:inline-block; text-align:right; }
+    .kap-toplam-badge .lbl { font-size:.6rem; letter-spacing:1px; opacity:.75; font-weight:800; display:block; }
+    .kap-toplam-badge .val { font-size:1.25rem; font-weight:800; }
+    .fw-black { font-weight:900; }
+    .us-section-title { font-weight:800; color:#2d3748; font-size:1rem; display:flex; align-items:center; gap:8px; }
+    /* Sipariş listesi durum renkleri (referanstaki gibi) */
+    #tbodySiparisler tr.durum-P { background:#e7f5ff; }   /* Planlandı - mavi */
+    #tbodySiparisler tr.durum-R { background:#f3fdf4; }   /* Açık/Onaylı - yeşil */
+    #tbodySiparisler tr.durum-L { background:#f8f9fa; }   /* Kapalı - gri */
+    #tbodySiparisler tr.durum-C { background:#fff5f5; }   /* İptal - kırmızı */
+</style>
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-industry me-2 text-primary"></i> Üretim Siparişi</h2>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm" onclick="yukle()"><i class="fas fa-rotate me-1"></i>Yenile</button>
+        <button class="btn btn-primary btn-sm" onclick="siparisAc(null)"><i class="fas fa-plus me-1"></i>Yeni Sipariş</button>
+    </div>
+</div>
+
+<div class="card dash-card mb-3">
+    <div class="card-body">
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <div class="btn-group btn-group-sm" id="durumGrup">
+                <button class="btn btn-primary" onclick="durumSec('')">Tümü</button>
+                <button class="btn btn-outline-primary" onclick="durumSec('P')">Planlandı</button>
+                <button class="btn btn-outline-primary" onclick="durumSec('R')">Açık</button>
+                <button class="btn btn-outline-primary" onclick="durumSec('L')">Kapalı</button>
+                <button class="btn btn-outline-primary" onclick="durumSec('C')">İptal</button>
+            </div>
+            <input type="text" class="form-control form-control-sm ms-auto" id="arama" style="max-width:260px" placeholder="Kalem kodu / adı ara..." oninput="cizTablo()">
+        </div>
+    </div>
+</div>
+
+<div class="card dash-card">
+    <div class="table-responsive">
+        <table class="table table-hover table-custom mb-0">
+            <thead><tr>
+                <th>#</th><th>Kalem</th><th class="text-end">Planlanan</th><th class="text-end">Üretilen</th><th>Depo</th>
+                <th>Başlangıç</th><th>Termin</th><th>Durum</th><th>Onay</th><th>Lot</th><th></th>
+            </tr></thead>
+            <tbody id="tbodySiparisler"></tbody>
+        </table>
+        <div id="bosMesaj" class="text-center text-muted py-4" style="display:none;"><i class="fas fa-inbox me-1"></i>Kayıt yok.</div>
+    </div>
+</div>
+
+<!-- ================= SİPARİŞ OLUŞTUR / DÜZENLE MODAL ================= -->
+<div class="modal fade" id="siparisModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="siparisModalBaslik">Yeni Üretim Siparişi</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="sDocEntry">
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label small fw-bold">Üretilecek Kalem</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" id="sItemCode" readonly placeholder="Seçmek için tıklayın...">
+                            <button class="btn btn-outline-secondary" type="button" onclick="kalemSecAc()"><i class="fas fa-search"></i></button>
+                        </div>
+                        <div class="small text-muted mt-1" id="sItemName"></div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-bold">Planlanan Miktar</label>
+                        <input type="number" step="0.001" class="form-control form-control-sm" id="sPlannedQty" oninput="planlananDegisti()">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-bold">Depo</label>
+                        <select class="form-select form-select-sm" id="sWhsCode"></select>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-bold">Başlangıç Tarihi</label>
+                        <input type="date" class="form-control form-control-sm" id="sStartDate">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-bold">Termin Tarihi</label>
+                        <input type="date" class="form-control form-control-sm" id="sDueDate">
+                    </div>
+                    <div class="col-6 col-md-3" id="sPostDateWrap">
+                        <label class="form-label small fw-bold">Kayıt Tarihi</label>
+                        <input type="date" class="form-control form-control-sm" id="sPostDate">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-bold">Öncelik</label>
+                        <input type="number" class="form-control form-control-sm" id="sOncelik" value="0">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-bold">Sipariş Türü</label>
+                        <select class="form-select form-select-sm" id="sType">
+                            <option value="S">Standart</option>
+                            <option value="P">Özel</option>
+                            <option value="D">Demontaj</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-bold">İlişkili Belge</label>
+                        <select class="form-select form-select-sm" id="sLinkToObj" onchange="linkDegisti()">
+                            <option value="">(Bağlantı Yok)</option>
+                            <option value="3">Üretim Siparişi</option>
+                            <option value="2">Satış Siparişi</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3" id="sBagliWrap" style="display:none;">
+                        <label class="form-label small fw-bold">Bağlantılı Sipariş No</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" id="sOrderNoText" readonly placeholder="Seç...">
+                            <button class="btn btn-outline-secondary" type="button" onclick="bagliSiparisAc()"><i class="fas fa-link"></i></button>
+                        </div>
+                        <input type="hidden" id="sOrderNo">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-bold">Açıklama</label>
+                        <input type="text" class="form-control form-control-sm" id="sComments">
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="sOnayli"><label class="form-check-label small" for="sOnayli">Üretim onayı verildi (onaysız oluşturulursa yönetici onayı beklenir)</label></div>
+                    </div>
+                </div>
+
+                <div class="us-kap-wrap mt-3">
+                    <div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
+                        <div>
+                            <div class="us-section-title mb-1"><i class="fas fa-box-open text-primary"></i> Kap Planlaması</div>
+                            <div class="text-muted small">Üretim için gerekli kap adetlerini giriniz.</div>
+                        </div>
+                        <div class="kap-toplam-badge">
+                            <span class="lbl">TOPLAM ADET</span>
+                            <span class="val"><span id="kapToplamAdet">0</span> Kap</span>
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col"><div class="kap-box"><label class="kap-label-v3">1KG</label><input type="number" min="0" placeholder="0" class="kap-input-v3 kap-inp" data-kg="1" id="kap1KG" oninput="kapHesapla()"></div></div>
+                        <div class="col"><div class="kap-box"><label class="kap-label-v3">5KG</label><input type="number" min="0" placeholder="0" class="kap-input-v3 kap-inp" data-kg="5" id="kap5KG" oninput="kapHesapla()"></div></div>
+                        <div class="col"><div class="kap-box"><label class="kap-label-v3">10KG</label><input type="number" min="0" placeholder="0" class="kap-input-v3 kap-inp" data-kg="10" id="kap10KG" oninput="kapHesapla()"></div></div>
+                        <div class="col"><div class="kap-box"><label class="kap-label-v3">20KG</label><input type="number" min="0" placeholder="0" class="kap-input-v3 kap-inp" data-kg="20" id="kap20KG" oninput="kapHesapla()"></div></div>
+                        <div class="col"><div class="kap-box"><label class="kap-label-v3">30KG</label><input type="number" min="0" placeholder="0" class="kap-input-v3 kap-inp" data-kg="30" id="kap30KG" oninput="kapHesapla()"></div></div>
+                        <div class="col"><div class="kap-box"><label class="kap-label-v3">40KG</label><input type="number" min="0" placeholder="0" class="kap-input-v3 kap-inp" data-kg="40" id="kap40KG" oninput="kapHesapla()"></div></div>
+                        <div class="col"><div class="kap-box"><label class="kap-label-v3">60KG</label><input type="number" min="0" placeholder="0" class="kap-input-v3 kap-inp" data-kg="60" id="kap60KG" oninput="kapHesapla()"></div></div>
+                    </div>
+                    <div class="mt-3 pt-3 border-top d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <span class="text-muted small fw-bold text-uppercase"><i class="fas fa-info-circle me-1"></i> Toplam Hacim</span>
+                        <span class="fs-5 fw-black" id="kapToplamKgWrap"><span id="kapToplamKg">0</span> / <span id="kapHedefKg">0</span> KG</span>
+                    </div>
+                    <div id="kapUyari" class="bg-danger text-white p-2 text-center small fw-bold rounded mt-2" style="display:none;"><i class="fas fa-triangle-exclamation me-1"></i> Dikkat: Planlanan toplam KG aşıldı!</div>
+                </div>
+
+                <hr>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="fw-bold small text-uppercase text-muted">Bileşenler (Reçete) <span id="sSatirSayisi" class="badge bg-primary ms-1">0</span></div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="bilesenEkleAc()"><i class="fas fa-plus me-1"></i>Bileşen Ekle</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-custom mb-0">
+                        <thead><tr><th>Kalem</th><th class="text-end">Baz Miktar</th><th class="text-end">Planlanan</th><th></th></tr></thead>
+                        <tbody id="sTbodySatirlar"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-primary" id="sKaydetBtn" onclick="siparisKaydet()"><span class="spinner-border spinner-border-sm me-1 d-none" id="sSpin"></span>Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= KALEM ARAMA MODAL ================= -->
+<div class="modal fade" id="kalemModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Kalem Seç</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="text" class="form-control form-control-sm mb-2" id="kalemAra" placeholder="Ara..." oninput="cizKalemler()">
+                <div class="table-responsive" style="max-height:420px;">
+                    <table class="table table-sm table-hover mb-0"><tbody id="tbodyKalemler"></tbody></table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= BAĞLANTILI SİPARİŞ SEÇ MODAL ================= -->
+<div class="modal fade" id="linkOrderModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" id="linkOrderBaslik">Sipariş Seç</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="text" class="form-control form-control-sm mb-2" id="linkOrderAra" placeholder="Ara..." oninput="cizLinkOrders()">
+                <div class="table-responsive" style="max-height:440px;">
+                    <table class="table table-sm table-hover mb-0"><tbody id="tbodyLinkOrders"></tbody></table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= BİLEŞEN (KALEM) EKLE MODAL ================= -->
+<div class="modal fade" id="bilesenModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Bileşen Kalemi Ekle</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="text" class="form-control form-control-sm mb-2" id="bilesenAra" placeholder="Kalem kodu / adı ara..." oninput="cizBilesenAdaylari()">
+                <div class="table-responsive" style="max-height:420px;">
+                    <table class="table table-sm table-hover mb-0"><tbody id="tbodyBilesenAdaylari"></tbody></table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= DETAY / BİLEŞEN İŞLEMLERİ MODAL ================= -->
+<div class="modal fade" id="detayModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" id="detayBaslik">Sipariş Detayı</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <ul class="nav nav-tabs mb-3">
+                    <li class="nav-item"><a class="nav-link active" href="javascript:void(0)" onclick="detaySekmeSec('bilesenler')">Bileşenler</a></li>
+                    <li class="nav-item"><a class="nav-link" href="javascript:void(0)" onclick="detaySekmeSec('belgeler')">Bağlı Belgeler</a></li>
+                    <li class="nav-item"><a class="nav-link" href="javascript:void(0)" onclick="detaySekmeSec('kalite')">Kalite Formları</a></li>
+                </ul>
+
+                <div id="detayPanelBilesenler">
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm table-custom mb-0">
+                            <thead><tr><th></th><th>Kalem</th><th class="text-end">Planlanan</th><th class="text-end">Çıkan</th><th>Depo</th><th class="text-end">Miktar</th></tr></thead>
+                            <tbody id="tbodyDetaySatirlar"></tbody>
+                        </table>
+                    </div>
+                    <div class="alert alert-secondary py-2 small">Seçtiğiniz satırların çıkış miktarını girip "Bileşen Çıkışı Yap" ile üretime tüketim kaydedin; parti yönetimli kalemlerde parti/miktar dağılımını girin.</div>
+                    <button class="btn btn-warning btn-sm" onclick="bilesenCikisiYap()"><i class="fas fa-arrow-up-from-bracket me-1"></i>Bileşen Çıkışı Yap</button>
+                    <hr>
+                    <div class="fw-bold small text-uppercase text-muted mb-2">Ürün / Mamul Girişi</div>
+                    <div class="row g-2 align-items-end mb-2">
+                        <div class="col-6 col-md-3"><label class="form-label small">Miktar</label><input type="number" step="0.001" class="form-control form-control-sm" id="gMiktar"></div>
+                        <div class="col-6 col-md-3"><label class="form-label small">Depo</label><select class="form-select form-select-sm" id="gDepo"></select></div>
+                        <div class="col-6 col-md-3"><label class="form-label small">Parti No (varsa)</label><input type="text" class="form-control form-control-sm" id="gParti"></div>
+                        <div class="col-6 col-md-3 d-grid"><button class="btn btn-success btn-sm" onclick="urunGirisiYap()"><i class="fas fa-arrow-down-to-bracket me-1"></i>Girişi Kaydet</button></div>
+                    </div>
+                </div>
+
+                <div id="detayPanelBelgeler" style="display:none;">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-custom mb-0">
+                            <thead><tr><th>Belge</th><th>Tarih</th><th>Yön</th><th>Kalem</th><th class="text-end">Miktar</th><th>Depo</th></tr></thead>
+                            <tbody id="tbodyDetayBelgeler"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="detayPanelKalite" style="display:none;">
+                    <div class="table-responsive mb-2">
+                        <table class="table table-sm table-custom mb-0">
+                            <thead><tr><th>Form No</th><th>Tarih</th><th></th></tr></thead>
+                            <tbody id="tbodyDetayKalite"></tbody>
+                        </table>
+                    </div>
+                    <a class="btn btn-sm btn-outline-primary" id="kaliteYeniLink" target="_top"><i class="fas fa-plus me-1"></i>Yeni Ürün KK Formu</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; color: #5a5c69; }
+    .rozet { font-size: .68rem; font-weight: 700; padding: .2em .5em; border-radius: 6px; }
+    .rozet-yesil { background:#e6f7ee; color:#0f9d58; } .rozet-mavi { background:#eaf2ff; color:#2a5fb0; }
+    .rozet-kirmizi { background:#fde8e8; color:#c0392b; } .rozet-sari { background:#fff8e6; color:#b7791f; } .rozet-gri { background:#f1f3f5; color:#495057; }
+</style>
+
+<script>
+    let siparisler = [], durumFiltre = '', kalemler = [], secilenSatirlar = [];
+    const durumAd = { P: 'Planlandı', R: 'Açık', L: 'Kapalı', C: 'İptal' };
+    const durumRozet = { P: 'rozet-sari', R: 'rozet-mavi', L: 'rozet-gri', C: 'rozet-kirmizi' };
+
+    // Hatalari YUTMA: her hata kullaniciya gosterilir
+    function hataGoster(mesaj) {
+        try { if (window.toastr) { toastr.error(mesaj); return; } } catch (e) { }
+        alert(mesaj);
+    }
+    window.addEventListener('unhandledrejection', function (e) {
+        const m = e.reason && e.reason.message ? e.reason.message : String(e.reason);
+        hataGoster('İşlem hatası: ' + m);
+    });
+    window.addEventListener('error', function (e) { if (e && e.message) hataGoster('Hata: ' + e.message); });
+    function fmt(n, d) { d = d ?? 2; return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+    function bugun() { return new Date().toISOString().slice(0, 10); }
+
+    function durumSec(d) {
+        durumFiltre = d;
+        document.querySelectorAll('#durumGrup .btn').forEach(b => b.className = 'btn btn-outline-primary');
+        event.target.className = 'btn btn-primary';
+        yukle();
+    }
+
+    async function yukle() {
+        const qs = new URLSearchParams({ durum: durumFiltre });
+        const res = await fetch('/UrasUretimUretim/GetOWOR?' + qs.toString()).then(r => r.json());
+        if (!res.success) { alert('Liste alınamadı: ' + res.message); return; }
+        siparisler = res.data || [];
+        cizTablo();
+    }
+
+    function cizTablo() {
+        const arama = (document.getElementById('arama').value || '').toLowerCase();
+        const list = siparisler.filter(s => !arama || (s.ItemCode || '').toLowerCase().includes(arama) || (s.ItemName || '').toLowerCase().includes(arama));
+        document.getElementById('bosMesaj').style.display = list.length ? 'none' : '';
+        document.getElementById('tbodySiparisler').innerHTML = list.map(s => `
+            <tr class="durum-${s.Status}">
+                <td class="fw-bold">#${s.DocNum}</td>
+                <td><span class="fw-semibold">${s.ItemName || s.ItemCode}</span><div class="text-muted small">${s.ItemCode}</div></td>
+                <td class="text-end">${fmt(s.PlannedQty, 2)} ${s.Uom || ''}</td>
+                <td class="text-end">${fmt(s.CmpltQty, 2)}</td>
+                <td>${s.Warehouse || ''}</td>
+                <td class="text-nowrap">${s.PostDate || ''}</td>
+                <td class="text-nowrap">${s.DueDate || ''}</td>
+                <td><span class="rozet ${durumRozet[s.Status] || 'rozet-gri'}">${durumAd[s.Status] || s.Status}</span></td>
+                <td>${s.UvtOnay === 'Y' ? '<span class="rozet rozet-yesil">Onaylı</span>' : '<span class="rozet rozet-sari">Bekliyor</span>'}</td>
+                <td>${s.KazanLotNo || ''}</td>
+                <td class="text-nowrap">
+                    <button class="btn btn-sm btn-outline-primary" title="Detay / Bileşen" onclick="detayAc(${s.DocEntry}, '${(s.ItemName || s.ItemCode).replace(/'/g, "&#39;")}')"><i class="fas fa-list-check"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary" title="Düzenle" onclick="siparisAc(${s.DocEntry})"><i class="fas fa-pen"></i></button>
+                    ${s.Status !== 'C' && s.Status !== 'L' ? `<button class="btn btn-sm btn-outline-danger" title="İptal" onclick="siparisIptal(${s.DocEntry})"><i class="fas fa-ban"></i></button>` : ''}
+                </td>
+            </tr>`).join('');
+    }
+
+    async function siparisIptal(docEntry) {
+        if (!confirm('Bu üretim siparişini iptal etmek istediğinize emin misiniz?')) return;
+        const res = await fetch('/UrasUretimUretim/CancelProductionOrder?docEntry=' + docEntry, { method: 'POST' }).then(r => r.json());
+        alert(res.message);
+        if (res.success) yukle();
+    }
+
+    // ---------------- Sipariş oluştur/düzenle ----------------
+    let siparisSatirlari = [];
+
+    async function siparisAc(docEntry) {
+        document.getElementById('sDocEntry').value = docEntry || '';
+        document.getElementById('siparisModalBaslik').textContent = docEntry ? 'Üretim Siparişini Düzenle' : 'Yeni Üretim Siparişi';
+        document.getElementById('sPostDateWrap').style.display = docEntry ? 'none' : '';
+        document.getElementById('sItemCode').value = ''; document.getElementById('sItemName').textContent = '';
+        document.getElementById('sPlannedQty').value = ''; document.getElementById('sComments').value = '';
+        document.getElementById('sOncelik').value = 0; document.getElementById('sOnayli').checked = false;
+        document.getElementById('sStartDate').value = bugun(); document.getElementById('sDueDate').value = bugun(); document.getElementById('sPostDate').value = bugun();
+        document.getElementById('sType').value = 'S';
+        document.getElementById('sLinkToObj').value = ''; linkDegisti();
+        document.getElementById('sOrderNo').value = ''; document.getElementById('sOrderNoText').value = '';
+        document.querySelectorAll('.kap-inp').forEach(k => k.value = '');
+        siparisSatirlari = [];
+
+        await depolariYukle('sWhsCode');
+
+        if (docEntry) {
+            const s = siparisler.find(x => x.DocEntry === docEntry);
+            if (s) {
+                document.getElementById('sItemCode').value = s.ItemCode; document.getElementById('sItemName').textContent = s.ItemName || '';
+                document.getElementById('sPlannedQty').value = s.PlannedQty; document.getElementById('sWhsCode').value = s.Warehouse;
+                document.getElementById('sComments').value = s.Comments || ''; document.getElementById('sOncelik').value = s.Oncelik || 0;
+                document.getElementById('sOnayli').checked = s.UvtOnay === 'Y';
+                document.getElementById('sType').value = s.ProdOrderType || 'S';
+                if (s.StartDate) { const p2 = s.StartDate.split('.'); if (p2.length === 3) document.getElementById('sStartDate').value = `${p2[2]}-${p2[1]}-${p2[0]}`; }
+                if (s.DueDate) { const p = s.DueDate.split('.'); if (p.length === 3) document.getElementById('sDueDate').value = `${p[2]}-${p[1]}-${p[0]}`; }
+                document.getElementById('kap1KG').value = s.Kap1Kg || ''; document.getElementById('kap5KG').value = s.Kap5Kg || '';
+                document.getElementById('kap10KG').value = s.Kap10Kg || ''; document.getElementById('kap20KG').value = s.Kap20Kg || '';
+                document.getElementById('kap30KG').value = s.Kap30Kg || ''; document.getElementById('kap40KG').value = s.Kap40Kg || '';
+                document.getElementById('kap60KG').value = s.Kap60Kg || '';
+            }
+            const wor1 = await fetch('/UrasUretimUretim/GetWOR1?docEntry=' + docEntry).then(r => r.json());
+            if (wor1.success) siparisSatirlari = (wor1.data || []).map(l => ({ code: l.ItemCode, name: l.ItemName, baseQty: l.BaseQty, plannedQty: l.PlannedQty, lineNum: l.LineNum, itemType: (l.ItemType == 290 || l.ItemType === 'pit_Resource') ? 290 : 4 }));
+            else hataGoster('Sipariş bileşenleri alınamadı: ' + (wor1.message || 'bilinmeyen hata'));
+        }
+        cizSatirlar();
+        kapHesapla();
+        new bootstrap.Modal(document.getElementById('siparisModal')).show();
+    }
+
+    async function kalemSecAc() {
+        if (kalemler.length === 0) {
+            const res = await fetch('/UrasUretimUretim/GetOITT').then(r => r.json());
+            if (res.success) kalemler = res.data || [];
+        }
+        cizKalemler();
+        new bootstrap.Modal(document.getElementById('kalemModal')).show();
+    }
+
+    function cizKalemler() {
+        const arama = (document.getElementById('kalemAra').value || '').toLowerCase();
+        const list = kalemler.filter(k => !arama || (k.Code || '').toLowerCase().includes(arama) || (k.Name || '').toLowerCase().includes(arama));
+        document.getElementById('tbodyKalemler').innerHTML = list.map(k => `
+            <tr style="cursor:pointer" onclick="kalemSecildi('${k.Code}', '${(k.Name || '').replace(/'/g, "&#39;")}')">
+                <td><b>${k.Code}</b><div class="text-muted small">${k.Name || ''}</div></td></tr>`).join('') || '<tr><td class="text-muted p-3">Kayıt yok.</td></tr>';
+    }
+
+    async function kalemSecildi(code, name) {
+        document.getElementById('sItemCode').value = code; document.getElementById('sItemName').textContent = name;
+        bootstrap.Modal.getInstance(document.getElementById('kalemModal')).hide();
+        const res = await fetch('/UrasUretimUretim/GetITT1Uretim?code=' + encodeURIComponent(code)).then(r => r.json());
+        if (res.success) {
+            const qty = parseFloat(document.getElementById('sPlannedQty').value) || 1;
+            siparisSatirlari = (res.data || []).map(l => ({ code: l.Code, name: l.ItemName, baseQty: l.Quantity, plannedQty: (l.Quantity || 0) * qty, lineNum: -1, itemType: (l.ItemType == 290 || l.ItemType === 'pit_Resource') ? 290 : 4 }));
+            cizSatirlar();
+        } else {
+            hataGoster('Reçete alınamadı: ' + (res.message || 'bilinmeyen hata'));
+        }
+    }
+
+    // Bileşen ekleme: düzgün kalem-seçici (tüm kalemlerden ara-seç)
+    var bilesenAdaylari = [];
+    async function bilesenEkleAc() {
+        if (bilesenAdaylari.length === 0) {
+            const res = await fetch('/UrasUretimUretim/GetNewlineWOR1').then(r => r.json());
+            if (res.success) bilesenAdaylari = res.data || [];
+            else { hataGoster('Kalem listesi alınamadı: ' + (res.message || 'bilinmeyen hata')); return; }
+        }
+        document.getElementById('bilesenAra').value = '';
+        cizBilesenAdaylari();
+        new bootstrap.Modal(document.getElementById('bilesenModal')).show();
+    }
+    function cizBilesenAdaylari() {
+        const q = (document.getElementById('bilesenAra').value || '').toLowerCase();
+        const list = bilesenAdaylari.filter(k => !q || (k.ItemCode || '').toLowerCase().includes(q) || (k.ItemName || '').toLowerCase().includes(q)).slice(0, 300);
+        document.getElementById('tbodyBilesenAdaylari').innerHTML = list.map(k => `
+            <tr style="cursor:pointer" onclick="bilesenSecildi('${(k.ItemCode || '').replace(/'/g, "&#39;")}', '${(k.ItemName || '').replace(/'/g, "&#39;")}')">
+                <td><b>${k.ItemCode}</b><div class="text-muted small">${k.ItemName || ''}</div></td></tr>`).join('') || '<tr><td class="text-muted p-3">Kayıt yok.</td></tr>';
+    }
+    function bilesenSecildi(code, name) {
+        const qty = parseFloat(document.getElementById('sPlannedQty').value) || 1;
+        siparisSatirlari.push({ code: code, name: name, baseQty: 1, plannedQty: 1 * qty, lineNum: -1, itemType: 4 });
+        cizSatirlar();
+        bootstrap.Modal.getInstance(document.getElementById('bilesenModal')).hide();
+    }
+
+    function satirSil(i) { siparisSatirlari.splice(i, 1); cizSatirlar(); }
+
+    function cizSatirlar() {
+        document.getElementById('sSatirSayisi').textContent = siparisSatirlari.length;
+        document.getElementById('sTbodySatirlar').innerHTML = siparisSatirlari.map((s, i) => `
+            <tr><td><b>${s.code}</b><div class="text-muted small">${s.name || ''}</div></td>
+                <td class="text-end"><input type="number" step="0.0001" class="form-control form-control-sm text-end" value="${s.baseQty}" onchange="siparisSatirlari[${i}].baseQty=parseFloat(this.value)||0"></td>
+                <td class="text-end"><input type="number" step="0.0001" class="form-control form-control-sm text-end" value="${s.plannedQty}" onchange="siparisSatirlari[${i}].plannedQty=parseFloat(this.value)||0"></td>
+                <td><button class="btn btn-sm btn-outline-danger" onclick="satirSil(${i})"><i class="fas fa-trash"></i></button></td></tr>`).join('') || '<tr><td colspan="4" class="text-muted text-center py-3">Bileşen yok. Kalem seçtiğinizde reçetesi otomatik dolar.</td></tr>';
+    }
+
+    async function siparisKaydet() {
+        const docEntry = document.getElementById('sDocEntry').value;
+        const itemCode = document.getElementById('sItemCode').value;
+        const plannedQty = parseFloat(document.getElementById('sPlannedQty').value) || 0;
+        if (!itemCode) { alert('Kalem seçin.'); return; }
+        if (plannedQty <= 0) { alert('Planlanan miktar sıfırdan büyük olmalı.'); return; }
+
+        document.getElementById('sSpin').classList.remove('d-none');
+        try {
+            let res;
+            if (docEntry) {
+                const govde = {
+                    DocEntry: parseInt(docEntry), OCode: itemCode, PlannedQty: plannedQty, WhsCode: document.getElementById('sWhsCode').value,
+                    StartDate: document.getElementById('sStartDate').value, DueDate: document.getElementById('sDueDate').value,
+                    Type: document.getElementById('sType').value,
+                    LinkToObj: document.getElementById('sLinkToObj').value || null,
+                    OrderNo: parseInt(document.getElementById('sOrderNo').value) || null,
+                    Comments: document.getElementById('sComments').value, U_BE1_UVTONAY: document.getElementById('sOnayli').checked ? 'Y' : 'N',
+                    ...kapObj(),
+                    U_BE1_ONCELIK: parseInt(document.getElementById('sOncelik').value) || 0,
+                    UpdateWOR1: siparisSatirlari.map(s => ({ LineNum: s.lineNum, ItemCode: s.code, BaseQty: s.baseQty, PlannedQty: s.plannedQty, ItemType: s.itemType }))
+                };
+                res = await fetch('/UrasUretimUretim/UpdateProductionOrder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(govde) }).then(r => r.json());
+            } else {
+                const govde = {
+                    OCode: itemCode, PlannedQty: plannedQty, WhsCode: document.getElementById('sWhsCode').value,
+                    PostDate: document.getElementById('sPostDate').value, StartDate: document.getElementById('sStartDate').value, DueDate: document.getElementById('sDueDate').value,
+                    Type: document.getElementById('sType').value,
+                    LinkToObj: document.getElementById('sLinkToObj').value || null,
+                    OrderNo: parseInt(document.getElementById('sOrderNo').value) || null,
+                    Comments: document.getElementById('sComments').value, U_BE1_UVTONAY: document.getElementById('sOnayli').checked ? 'Y' : 'N',
+                    ...kapObj(),
+                    U_BE1_ONCELIK: parseInt(document.getElementById('sOncelik').value) || 0,
+                    AddWOR1: siparisSatirlari.map(s => ({ Code: s.code, Quantity: s.baseQty, PlannedQty: s.plannedQty, Type: s.itemType }))
+                };
+                res = await fetch('/UrasUretimUretim/AddProductionOrder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(govde) }).then(r => r.json());
+            }
+            alert(res.message);
+            if (res.success) { bootstrap.Modal.getInstance(document.getElementById('siparisModal')).hide(); yukle(); }
+        } finally { document.getElementById('sSpin').classList.add('d-none'); }
+    }
+
+    async function depolariYukle(selectId) {
+        const sel = document.getElementById(selectId);
+        if (sel.dataset.dolduruldu) return;
+        const res = await fetch('/UrasUretimUretim/GetWarehousesUretim').then(r => r.json());
+        if (res.success) { sel.dataset.dolduruldu = '1'; sel.innerHTML = (res.data || []).map(w => `<option value="${w.WhsCode}">${w.WhsCode} — ${w.WhsName}</option>`).join(''); }
+    }
+
+    // ---------------- Detay / bileşen çıkışı / ürün girişi ----------------
+    let detayDocEntry = null;
+
+    function detaySekmeSec(ad) {
+        ['bilesenler', 'belgeler', 'kalite'].forEach(p => document.getElementById('detayPanel' + p.charAt(0).toUpperCase() + p.slice(1)).style.display = p === ad ? '' : 'none');
+        document.querySelectorAll('#detayModal .nav-link').forEach(a => a.classList.remove('active'));
+        event.target.classList.add('active');
+    }
+
+    async function detayAc(docEntry, ad) {
+        detayDocEntry = docEntry;
+        document.getElementById('detayBaslik').textContent = '#' + docEntry + ' — ' + ad;
+        document.getElementById('kaliteYeniLink').href = '/UrasUretimKalite/UrunKaliteKontrol?docEntry=' + docEntry;
+        await depolariYukle('gDepo');
+
+        const wor1 = await fetch('/UrasUretimUretim/GetWOR1?docEntry=' + docEntry).then(r => r.json());
+        if (!wor1.success) hataGoster('Bileşenler alınamadı: ' + (wor1.message || 'bilinmeyen hata'));
+        const satirlar = (wor1.success ? wor1.data : []).filter(l => l.ItemType !== 'pit_Resource' && l.ItemType != 290);
+        document.getElementById('tbodyDetaySatirlar').innerHTML = satirlar.map((l, i) => `
+            <tr><td><input type="checkbox" class="detay-check" data-idx="${i}"></td>
+                <td><b>${l.ItemCode}</b><div class="text-muted small">${l.ItemName || ''}</div></td>
+                <td class="text-end">${fmt(l.PlannedQty, 3)}</td><td class="text-end">${fmt(l.IssuedQty, 3)}</td>
+                <td>${l.WhsCode || ''}</td>
+                <td class="text-end"><input type="number" step="0.0001" class="form-control form-control-sm text-end" style="width:110px" id="dMiktar${i}" value="${(l.PlannedQty - l.IssuedQty).toFixed(3)}"></td></tr>`).join('') || '<tr><td colspan="6" class="text-muted text-center py-3">Bileşen satırı yok.</td></tr>';
+        window._detaySatirlar = satirlar;
+
+        const belgeler = await fetch('/UrasUretimUretim/GetBelgeLinesUretim?docEntry=' + docEntry).then(r => r.json());
+        document.getElementById('tbodyDetayBelgeler').innerHTML = (belgeler.success ? belgeler.data : []).map(b => `
+            <tr><td>#${b.DocNum}</td><td>${b.DocDate}</td><td><span class="rozet ${b.Yon === 'Giriş' ? 'rozet-yesil' : 'rozet-kirmizi'}">${b.Yon}</span></td><td>${b.ItemName || b.ItemCode}</td><td class="text-end">${fmt(b.Quantity, 2)}</td><td>${b.WhsCode}</td></tr>`).join('') || '<tr><td colspan="6" class="text-muted text-center py-3">Bağlı belge yok.</td></tr>';
+
+        const kalite = await fetch('/UrasUretimUretim/GetQCFormsByWorkOrderUretim?docEntry=' + docEntry).then(r => r.json());
+        document.getElementById('tbodyDetayKalite').innerHTML = (kalite.success ? kalite.data : []).map(f => `
+            <tr><td>${f.FormNo || '#' + f.DocEntry}</td><td>${f.FormDate || ''}</td><td><a class="btn btn-sm btn-outline-secondary" href="/UrasUretimKalite/UrunKaliteKontrol?docEntry=${docEntry}&formDocEntry=${f.DocEntry}" target="_top">Aç</a></td></tr>`).join('') || '<tr><td colspan="3" class="text-muted text-center py-3">Kalite formu yok.</td></tr>';
+
+        document.getElementById('detayPanelBilesenler').style.display = '';
+        document.getElementById('detayPanelBelgeler').style.display = 'none';
+        document.getElementById('detayPanelKalite').style.display = 'none';
+        document.querySelectorAll('#detayModal .nav-link').forEach((a, i) => a.classList.toggle('active', i === 0));
+        new bootstrap.Modal(document.getElementById('detayModal')).show();
+    }
+
+    async function bilesenCikisiYap() {
+        const secili = [...document.querySelectorAll('.detay-check:checked')].map(c => parseInt(c.dataset.idx));
+        if (secili.length === 0) { alert('En az bir satır seçin.'); return; }
+        const items = secili.map(i => {
+            const l = window._detaySatirlar[i];
+            return { DocEntry: detayDocEntry, LineNum: l.LineNum, ItemCode: l.ItemCode, PlannedQty: parseFloat(document.getElementById('dMiktar' + i).value) || 0, Warehouse: l.WhsCode, BatchNumbers: [] };
+        });
+        const res = await fetch('/UrasUretimUretim/AddInventoryGenExitUretim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ PostDate: bugun(), Items: items }) }).then(r => r.json());
+        alert(res.message);
+        if (res.success) detayAc(detayDocEntry, document.getElementById('detayBaslik').textContent.split('—')[1]?.trim() || '');
+    }
+
+    async function urunGirisiYap() {
+        const miktar = parseFloat(document.getElementById('gMiktar').value) || 0;
+        if (miktar <= 0) { alert('Miktar sıfırdan büyük olmalı.'); return; }
+        const s = siparisler.find(x => x.DocEntry === detayDocEntry);
+        const items = [{ ItemCode: s ? s.ItemCode : '', Quantity: miktar, Warehouse: document.getElementById('gDepo').value, DocEntry: detayDocEntry, BatchNumber: document.getElementById('gParti').value, FireMiktar: 0 }];
+        const res = await fetch('/UrasUretimUretim/AddInventoryGenEntryUretim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ PostDate: bugun(), Items: items }) }).then(r => r.json());
+        alert(res.message);
+        if (res.success) { document.getElementById('gMiktar').value = ''; document.getElementById('gParti').value = ''; yukle(); }
+    }
+
+    // ---------------- Kap planlaması ----------------
+    function kapObj() {
+        return {
+            U_BE1_KAP1KG: parseFloat(document.getElementById('kap1KG').value) || 0,
+            U_BE1_KAP5KG: parseFloat(document.getElementById('kap5KG').value) || 0,
+            U_BE1_KAP10KG: parseFloat(document.getElementById('kap10KG').value) || 0,
+            U_BE1_KAP20KG: parseFloat(document.getElementById('kap20KG').value) || 0,
+            U_BE1_KAP30KG: parseFloat(document.getElementById('kap30KG').value) || 0,
+            U_BE1_KAP40KG: parseFloat(document.getElementById('kap40KG').value) || 0,
+            U_BE1_KAP60KG: parseFloat(document.getElementById('kap60KG').value) || 0
+        };
+    }
+    function kapHesapla() {
+        let adet = 0, kg = 0;
+        document.querySelectorAll('.kap-inp').forEach(k => {
+            const a = parseFloat(k.value) || 0, b = parseFloat(k.dataset.kg) || 0;
+            adet += a; kg += a * b;
+        });
+        const hedef = parseFloat(document.getElementById('sPlannedQty').value) || 0;
+        document.getElementById('kapToplamAdet').textContent = adet.toLocaleString('tr-TR');
+        document.getElementById('kapToplamKg').textContent = kg.toLocaleString('tr-TR');
+        document.getElementById('kapHedefKg').textContent = hedef.toLocaleString('tr-TR');
+        const asildi = (hedef > 0 && kg > hedef);
+        document.getElementById('kapUyari').style.display = asildi ? '' : 'none';
+        document.getElementById('kapToplamKgWrap').classList.toggle('text-danger', asildi);
+    }
+
+    // Planlanan miktar değişince: reçeteden gelen bileşenleri yeniden çarp + kap hedefini tazele
+    function planlananDegisti() {
+        const qty = parseFloat(document.getElementById('sPlannedQty').value) || 0;
+        siparisSatirlari.forEach(s => { if (s.lineNum === -1 && s.baseQty != null) s.plannedQty = (s.baseQty || 0) * (qty || 1); });
+        cizSatirlar();
+        kapHesapla();
+    }
+
+    // ---------------- Bağlantılı sipariş seçimi ----------------
+    let linkOrders = [];
+    function linkDegisti() {
+        const v = document.getElementById('sLinkToObj').value;
+        document.getElementById('sBagliWrap').style.display = v ? '' : 'none';
+        if (!v) { document.getElementById('sOrderNo').value = ''; document.getElementById('sOrderNoText').value = ''; }
+    }
+    async function bagliSiparisAc() {
+        const v = document.getElementById('sLinkToObj').value;
+        if (!v) { alert('Önce İlişkili Belge türünü seçin.'); return; }
+        const url = v === '3' ? '/UrasUretimUretim/GetOWOR' : '/UrasUretimUretim/GetORDRUretim';
+        const res = await fetch(url).then(r => r.json());
+        linkOrders = res.success ? (res.data || []) : [];
+        document.getElementById('linkOrderBaslik').textContent = v === '3' ? 'Üretim Siparişi Seç' : 'Satış Siparişi Seç';
+        document.getElementById('linkOrderAra').value = '';
+        cizLinkOrders();
+        new bootstrap.Modal(document.getElementById('linkOrderModal')).show();
+    }
+    function cizLinkOrders() {
+        const q = (document.getElementById('linkOrderAra').value || '').toLowerCase();
+        const list = linkOrders.filter(o => !q || JSON.stringify(o).toLowerCase().includes(q));
+        document.getElementById('tbodyLinkOrders').innerHTML = list.map(o => {
+            const no = o.DocNum ?? o.DocEntry, ad = o.ItemName || o.CardName || o.ItemCode || o.CardCode || '';
+            return `<tr style="cursor:pointer" onclick="linkOrderSecildi(${o.DocEntry}, '${String(no).replace(/'/g, '')}')"><td><b>#${no}</b><div class="text-muted small">${String(ad).replace(/</g, '&lt;')}</div></td></tr>`;
+        }).join('') || '<tr><td class="text-muted p-3">Kayıt yok.</td></tr>';
+    }
+    function linkOrderSecildi(docEntry, no) {
+        document.getElementById('sOrderNo').value = docEntry;
+        document.getElementById('sOrderNoText').value = '#' + no;
+        bootstrap.Modal.getInstance(document.getElementById('linkOrderModal')).hide();
+    }
+
+    yukle();
+</script>

@@ -1,0 +1,606 @@
+﻿@model List<WebApplication3.Models.GroupedFinancialData>
+@using System.Globalization;
+@using System.Linq;
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Xsrf
+
+@{
+    ViewData["Title"] = "Grup Bazında Finansal Rapor (Konsolide)";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "Varsayılan Şirket";
+
+    // Toplam değişkenleri
+    decimal totalUrsMakineX = 0; decimal totalUrsMakineR = 0;
+    decimal totalAvrupaPaperX = 0; decimal totalAvrupaPaperR = 0;
+    decimal totalAlvKimyaX = 0; decimal totalAlvKimyaR = 0;
+    decimal totalAlvFiloX = 0; decimal totalAlvFiloR = 0;
+    decimal totalUrasKimyaX = 0; decimal totalUrasKimyaR = 0;
+    decimal totalUrsHoldingX = 0; decimal totalUrsHoldingR = 0;
+    decimal totalSelviX = 0; decimal totalSelviR = 0;
+    decimal totalAsiaDMX = 0; decimal totalAsiaDMR = 0;
+    decimal totalAvrasyaX = 0; decimal totalAvrasyaR = 0;
+    decimal totalDafKimyaX = 0; decimal totalDafKimyaR = 0;
+
+    decimal grandRowTotal = 0;
+
+    decimal[] allXTotals = new decimal[10];
+    decimal[] allRTotals = new decimal[10];
+
+    var columns = new List<(string Header, string DataColumn, string Type)>
+    {
+        ("Borçlu / Alacaklı Firma", "Grup", "string"), 
+        ("URS MAKİNE X", "UrsMakineX", "decimal"),
+        ("URS MAKİNE R", "UrsMakineR", "decimal"),
+        ("AVRUPA PAPER X", "AvrupaPaperX", "decimal"),
+        ("AVRUPA PAPER R", "AvrupaPaperR", "decimal"),
+        ("ALV KİMYA X", "AlvKimyaX", "decimal"),
+        ("ALV KİMYA R", "AlvKimyaR", "decimal"),
+        ("ALV FİLO X", "AlvFiloX", "decimal"),
+        ("ALV FİLO R", "AlvFiloR", "decimal"),
+        ("URAS KİMYA X", "UrasKimyaX", "decimal"),
+        ("URAS KİMYA R", "UrasKimyaR", "decimal"),
+        ("URAS HOLDING X", "UrsHoldingX", "decimal"),
+        ("URAS HOLDING R", "UrsHoldingR", "decimal"), 
+        ("SELVİ X", "SelviX", "decimal"),
+        ("SELVİ R", "SelviR", "decimal"),
+        ("ASIA DM X", "AsiaDMX", "decimal"),
+        ("ASIA DM R", "AsiaDMR", "decimal"),
+        ("AVRASYA X", "AvrasyaX", "decimal"),
+        ("AVRASYA R", "AvrasyaR", "decimal"),
+        ("DAF KİMYA X", "DafKimyaX", "decimal"),
+        ("DAF KİMYA R", "DafKimyaR", "decimal"),
+        ("Genel Satır Toplamı", "SatirToplami", "decimal")
+    };
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { background-color: #f4f7fc; font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #2b3445; }
+        
+        /* Dashboard KPI Kart Stilleri */
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 20px; height: 100%; transition: all 0.3s ease; position: relative; overflow: hidden; cursor: default; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        
+        .kpi-title { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; z-index: 2; position: relative; }
+        .kpi-value { font-size: 26px; font-weight: 900; color: #0f172a; margin-bottom: 2px; z-index: 2; position: relative; }
+        .kpi-desc { font-size: 11px; color: #94a3b8; z-index: 2; position: relative; }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 5rem; color: #e2e8f0; opacity: 0.4; z-index: 1; transform: rotate(-10deg); }
+        
+        /* Renk Sınırları */
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        .border-top-warning { border-top: 4px solid #f59e0b !important; }
+        .border-top-danger { border-top: 4px solid #ef4444 !important; }
+        .border-top-success { border-top: 4px solid #10b981 !important; }
+        .border-top-info { border-top: 4px solid #0ea5e9 !important; }
+        .border-top-purple { border-top: 4px solid #8b5cf6 !important; }
+
+        /* Filtre Alanı */
+        .filter-section { background-color: white; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 15px 20px; border-left: 4px solid #3b82f6; }
+
+        /* Matris Tablo Alanı (Sticky Sütunlu) */
+        .table-container {
+            overflow-x: auto;
+            max-height: 70vh;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            background-color: white;
+            border: 1px solid #eef2f7;
+            margin-bottom: 2rem;
+        }
+
+        .matrix-table {
+            width: 100%;
+            min-width: 2600px;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 0;
+        }
+
+        .matrix-table thead th {
+            background-color: #f8fafc;
+            color: #475569;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 12px 10px;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            border-bottom: 2px solid #e2e8f0;
+            border-right: 1px solid #e2e8f0;
+            white-space: nowrap;
+        }
+
+        .matrix-table tbody td {
+            font-size: 13px;
+            padding: 10px;
+            border-bottom: 1px solid #f1f5f9;
+            border-right: 1px solid #f1f5f9;
+            text-align: right;
+            vertical-align: middle;
+            white-space: nowrap;
+            transition: background-color 0.2s;
+        }
+
+        .matrix-table tbody tr:hover td {
+            background-color: #f8fafc;
+        }
+
+        /* Sabit (Sticky) İlk Sütun */
+        .matrix-table th:nth-child(1), 
+        .matrix-table td:nth-child(1) {
+            position: sticky;
+            left: 0;
+            z-index: 25;
+            background-color: #ffffff;
+            text-align: left;
+            font-weight: 700;
+            color: #1e293b;
+            border-right: 2px solid #cbd5e1;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.02);
+        }
+        .matrix-table thead th:nth-child(1) {
+            background-color: #f8fafc;
+            z-index: 30; /* Hem üst hem sol kesişim noktası en üstte olmalı */
+        }
+
+        /* Sabit (Sticky) Son Sütun */
+        .matrix-table th:last-child, 
+        .matrix-table td:last-child {
+            position: sticky;
+            right: 0;
+            z-index: 25;
+            background-color: #f0f9ff;
+            font-weight: 800;
+            border-left: 2px solid #3b82f6;
+            color: #0f172a;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.02);
+        }
+        .matrix-table thead th:last-child {
+            background-color: #e0f2fe;
+            color: #0369a1;
+            z-index: 30;
+        }
+
+        /* Değer Renklendirme */
+        .positive-value { color: #059669; font-weight: 600; }
+        .negative-value { color: #dc2626; font-weight: 600; }
+        .neutral-value { color: #64748b; font-weight: 500; }
+
+        .inherit-color { color: inherit !important; display: block; width: 100%; text-decoration: none; padding: 2px 4px; border-radius: 4px; }
+        .inherit-color:hover { background-color: rgba(0,0,0,0.04); }
+
+        /* Toplam Satırları */
+        .total-row td { background-color: #f8fafc !important; font-weight: 800 !important; font-size: 14px; border-top: 2px solid #94a3b8; }
+        .grand-net-total-row td { background-color: #f1f5f9 !important; font-weight: 900 !important; font-size: 14px; border-top: 2px solid #3b82f6; }
+        .grand-net-total-row td.empty-cell { background-color: #ffffff !important; border-top: none; border-bottom: none; }
+
+        /* Modal ve Modern Tablo */
+        .modal-content { border-radius: 12px; border: none; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+        .modal-header { background: #1e293b; color: white; border-top-left-radius: 12px; border-top-right-radius: 12px; padding: 1rem 1.5rem; }
+        .modal-body { padding: 0; background-color: #ffffff; }
+        
+        .modern-table { width: 100%; margin: 0; font-size: 13px; }
+        .modern-table thead th { background-color: #f8fafc; color: #475569; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; padding: 12px 16px; text-align: left; }
+        .modern-table tbody td { padding: 12px 16px; vertical-align: middle; border-bottom: 1px solid #f1f5f9; }
+        .modern-table tbody tr:hover { background-color: #f8fafc; }
+        
+        .amount-text { font-family: 'Consolas', 'Courier New', monospace; font-weight: 700; font-size: 14px; letter-spacing: -0.5px; }
+        .badge-account { background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 6px; font-weight: 700; font-size: 11px; border: 1px solid #cbd5e1; }
+    </style>
+}
+
+<div class="container-fluid py-4">
+    @Html.AntiForgeryToken()
+    <input type="hidden" id="currentDb" value="@currentDb" />
+
+    <!-- Başlık ve Aksiyon Barı -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;"><i class="fas fa-coins text-warning me-2"></i>Grup Bazında Finansal Rapor (Konsolide)</h4>
+            <span class="text-muted" style="font-size: 14px;">Aktif Veritabanı: <strong class="text-primary">@currentDb</strong> | Çapraz Şirket Borç/Alacak Analizi Matrisi</span>
+        </div>
+        <div class="d-flex gap-3 align-items-center">
+            <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary rounded-pill fw-bold shadow-sm px-4">
+                <i class="fas fa-arrow-left me-2"></i> Ana Sayfa
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtre Alanı -->
+    <div class="filter-section mb-4">
+        <form asp-action="Index" method="get" class="row align-items-end g-3" id="raporForm">
+            <input type="hidden" name="db" value="@currentDb" />
+            <div class="col-12 col-md-3">
+                <label class="form-label text-muted fw-bold" style="font-size: 12px; text-transform: uppercase;">Başlangıç Tarihi</label>
+                <input type="date" class="form-control form-control-sm" name="startDate" value="@ViewBag.StartDate">
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label text-muted fw-bold" style="font-size: 12px; text-transform: uppercase;">Bitiş Tarihi</label>
+                <input type="date" class="form-control form-control-sm" name="endDate" value="@ViewBag.EndDate">
+            </div>
+            <div class="col-12 col-md-2">
+                <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold shadow-sm">
+                    <i class="fas fa-search me-2"></i> Raporla
+                </button>
+            </div>
+        </form>
+    </div>
+
+    @if (Model != null && Model.Any())
+    {
+        <!-- Matris Tablo -->
+        <div class="table-container hover-elevate" style="transition: none;"> <!-- hover-elevate class added for slight shadow pop, removed transform for sticky compatibility -->
+            <table class="matrix-table" id="finansalTablo">
+                <thead>
+                    <tr>
+                        @foreach (var col in columns)
+                        {
+                            <th>@col.Header</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model)
+                    {
+                        var rowTotal = item.UrsMakineX + item.UrsMakineR + item.AvrupaPaperX + item.AvrupaPaperR + item.AlvKimyaX + item.AlvKimyaR + item.AlvFiloX + item.AlvFiloR + item.UrasKimyaX + item.UrasKimyaR + item.UrsHoldingX + item.UrsHoldingR + item.SelviX + item.SelviR + item.AsiaDMX + item.AsiaDMR + item.AvrasyaX + item.AvrasyaR + item.DafKimyaX + item.DafKimyaR;
+
+                        totalUrsMakineX += item.UrsMakineX; totalUrsMakineR += item.UrsMakineR;
+                        totalAvrupaPaperX += item.AvrupaPaperX; totalAvrupaPaperR += item.AvrupaPaperR;
+                        totalAlvKimyaX += item.AlvKimyaX; totalAlvKimyaR += item.AlvKimyaR;
+                        totalAlvFiloX += item.AlvFiloX; totalAlvFiloR += item.AlvFiloR;
+                        totalUrasKimyaX += item.UrasKimyaX; totalUrasKimyaR += item.UrasKimyaR;
+                        totalUrsHoldingX += item.UrsHoldingX; totalUrsHoldingR += item.UrsHoldingR;
+                        totalSelviX += item.SelviX; totalSelviR += item.SelviR;
+                        totalAsiaDMX += item.AsiaDMX; totalAsiaDMR += item.AsiaDMR;
+                        totalAvrasyaX += item.AvrasyaX; totalAvrasyaR += item.AvrasyaR;
+                        totalDafKimyaX += item.DafKimyaX; totalDafKimyaR += item.DafKimyaR;
+                        grandRowTotal += rowTotal;
+
+                        allXTotals[0] += item.UrsMakineX; allRTotals[0] += item.UrsMakineR;
+                        allXTotals[1] += item.AvrupaPaperX; allRTotals[1] += item.AvrupaPaperR;
+                        allXTotals[2] += item.AlvKimyaX; allRTotals[2] += item.AlvKimyaR;
+                        allXTotals[3] += item.AlvFiloX; allRTotals[3] += item.AlvFiloR;
+                        allXTotals[4] += item.UrasKimyaX; allRTotals[4] += item.UrasKimyaR;
+                        allXTotals[5] += item.UrsHoldingX; allRTotals[5] += item.UrsHoldingR;
+                        allXTotals[6] += item.SelviX; allRTotals[6] += item.SelviR;
+                        allXTotals[7] += item.AsiaDMX; allRTotals[7] += item.AsiaDMR;
+                        allXTotals[8] += item.AvrasyaX; allRTotals[8] += item.AvrasyaR;
+                        allXTotals[9] += item.DafKimyaX; allRTotals[9] += item.DafKimyaR;
+
+                        <tr>
+                            <td><i class="far fa-building me-2 text-muted"></i>@item.Grup</td>
+                            
+                            <td class="@(item.UrsMakineX < 0 ? "negative-value" : (item.UrsMakineX > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="URS MAKINE" data-karsi="@item.Grup" data-tip="X">@item.UrsMakineX.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            <td class="@(item.UrsMakineR < 0 ? "negative-value" : (item.UrsMakineR > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="URS MAKINE" data-karsi="@item.Grup" data-tip="R">@item.UrsMakineR.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            
+                            <td class="@(item.AvrupaPaperX < 0 ? "negative-value" : (item.AvrupaPaperX > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="AVRUPA PAPER" data-karsi="@item.Grup" data-tip="X">@item.AvrupaPaperX.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            <td class="@(item.AvrupaPaperR < 0 ? "negative-value" : (item.AvrupaPaperR > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="AVRUPA PAPER" data-karsi="@item.Grup" data-tip="R">@item.AvrupaPaperR.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            
+                            <td class="@(item.AlvKimyaX < 0 ? "negative-value" : (item.AlvKimyaX > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="ALV KIMYA" data-karsi="@item.Grup" data-tip="X">@item.AlvKimyaX.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            <td class="@(item.AlvKimyaR < 0 ? "negative-value" : (item.AlvKimyaR > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="ALV KIMYA" data-karsi="@item.Grup" data-tip="R">@item.AlvKimyaR.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            
+                            <td class="@(item.AlvFiloX < 0 ? "negative-value" : (item.AlvFiloX > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="ALV FILO" data-karsi="@item.Grup" data-tip="X">@item.AlvFiloX.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            <td class="@(item.AlvFiloR < 0 ? "negative-value" : (item.AlvFiloR > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="ALV FILO" data-karsi="@item.Grup" data-tip="R">@item.AlvFiloR.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            
+                            <td class="@(item.UrasKimyaX < 0 ? "negative-value" : (item.UrasKimyaX > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="URAS KIMYA" data-karsi="@item.Grup" data-tip="X">@item.UrasKimyaX.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            <td class="@(item.UrasKimyaR < 0 ? "negative-value" : (item.UrasKimyaR > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="URAS KIMYA" data-karsi="@item.Grup" data-tip="R">@item.UrasKimyaR.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            
+                            <td class="@(item.UrsHoldingX < 0 ? "negative-value" : (item.UrsHoldingX > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="URAS HOLDING" data-karsi="@item.Grup" data-tip="X">@item.UrsHoldingX.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            <td class="@(item.UrsHoldingR < 0 ? "negative-value" : (item.UrsHoldingR > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="URAS HOLDING" data-karsi="@item.Grup" data-tip="R">@item.UrsHoldingR.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            
+                            <td class="@(item.SelviX < 0 ? "negative-value" : (item.SelviX > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="SELVI" data-karsi="@item.Grup" data-tip="X">@item.SelviX.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            <td class="@(item.SelviR < 0 ? "negative-value" : (item.SelviR > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="SELVI" data-karsi="@item.Grup" data-tip="R">@item.SelviR.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            
+                            <td class="@(item.AsiaDMX < 0 ? "negative-value" : (item.AsiaDMX > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="ASIA DM" data-karsi="@item.Grup" data-tip="X">@item.AsiaDMX.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            <td class="@(item.AsiaDMR < 0 ? "negative-value" : (item.AsiaDMR > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="ASIA DM" data-karsi="@item.Grup" data-tip="R">@item.AsiaDMR.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            
+                            <td class="@(item.AvrasyaX < 0 ? "negative-value" : (item.AvrasyaX > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="AVRASYA" data-karsi="@item.Grup" data-tip="X">@item.AvrasyaX.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            <td class="@(item.AvrasyaR < 0 ? "negative-value" : (item.AvrasyaR > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="AVRASYA" data-karsi="@item.Grup" data-tip="R">@item.AvrasyaR.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            
+                            <td class="@(item.DafKimyaX < 0 ? "negative-value" : (item.DafKimyaX > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="DAF KIMYA" data-karsi="@item.Grup" data-tip="X">@item.DafKimyaX.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            <td class="@(item.DafKimyaR < 0 ? "negative-value" : (item.DafKimyaR > 0 ? "positive-value" : "neutral-value"))">
+                                <a href="javascript:void(0)" class="detay-tetikle inherit-color" data-kaynak="DAF KIMYA" data-karsi="@item.Grup" data-tip="R">@item.DafKimyaR.ToString("N2", CultureInfo.CurrentCulture)</a>
+                            </td>
+                            
+                            <td class="@(rowTotal < 0 ? "negative-value" : (rowTotal > 0 ? "positive-value" : "neutral-value"))">
+                                <strong>@rowTotal.ToString("N2", CultureInfo.CurrentCulture)</strong>
+                            </td>
+                        </tr>
+                    }
+
+                    <tr class="total-row">
+                        <td><i class="fas fa-equals me-2 text-muted"></i>SÜTUN TOPLAMI</td>
+                        <td>@totalUrsMakineX.ToString("N2", CultureInfo.CurrentCulture)</td><td>@totalUrsMakineR.ToString("N2", CultureInfo.CurrentCulture)</td>
+                        <td>@totalAvrupaPaperX.ToString("N2", CultureInfo.CurrentCulture)</td><td>@totalAvrupaPaperR.ToString("N2", CultureInfo.CurrentCulture)</td>
+                        <td>@totalAlvKimyaX.ToString("N2", CultureInfo.CurrentCulture)</td><td>@totalAlvKimyaR.ToString("N2", CultureInfo.CurrentCulture)</td>
+                        <td>@totalAlvFiloX.ToString("N2", CultureInfo.CurrentCulture)</td><td>@totalAlvFiloR.ToString("N2", CultureInfo.CurrentCulture)</td>
+                        <td>@totalUrasKimyaX.ToString("N2", CultureInfo.CurrentCulture)</td><td>@totalUrasKimyaR.ToString("N2", CultureInfo.CurrentCulture)</td>
+                        <td>@totalUrsHoldingX.ToString("N2", CultureInfo.CurrentCulture)</td><td>@totalUrsHoldingR.ToString("N2", CultureInfo.CurrentCulture)</td>
+                        <td>@totalSelviX.ToString("N2", CultureInfo.CurrentCulture)</td><td>@totalSelviR.ToString("N2", CultureInfo.CurrentCulture)</td>
+                        <td>@totalAsiaDMX.ToString("N2", CultureInfo.CurrentCulture)</td><td>@totalAsiaDMR.ToString("N2", CultureInfo.CurrentCulture)</td>
+                        <td>@totalAvrasyaX.ToString("N2", CultureInfo.CurrentCulture)</td><td>@totalAvrasyaR.ToString("N2", CultureInfo.CurrentCulture)</td>
+                        <td>@totalDafKimyaX.ToString("N2", CultureInfo.CurrentCulture)</td><td>@totalDafKimyaR.ToString("N2", CultureInfo.CurrentCulture)</td>
+                        <td class="text-primary">@grandRowTotal.ToString("N2", CultureInfo.CurrentCulture)</td>
+                    </tr>
+
+                    <tr class="grand-net-total-row">
+                        <td class="text-primary"><i class="fas fa-layer-group me-2"></i>KONSOLİDE X NETİ</td>
+                        @for (int i = 0; i < allXTotals.Length; i++) { 
+                            <td class="@(allXTotals[i] < 0 ? "negative-value" : (allXTotals[i] > 0 ? "positive-value" : "neutral-value"))">
+                                @allXTotals[i].ToString("N2", CultureInfo.CurrentCulture)
+                            </td>
+                            <td class="empty-cell"></td> 
+                        }
+                        <td class="text-dark">@allXTotals.Sum().ToString("N2", CultureInfo.CurrentCulture)</td>
+                    </tr>
+                    <tr class="grand-net-total-row">
+                        <td class="text-primary"><i class="fas fa-layer-group me-2"></i>KONSOLİDE R NETİ</td>
+                        @for (int i = 0; i < allRTotals.Length; i++) { 
+                            <td class="empty-cell"></td>
+                            <td class="@(allRTotals[i] < 0 ? "negative-value" : (allRTotals[i] > 0 ? "positive-value" : "neutral-value"))">
+                                @allRTotals[i].ToString("N2", CultureInfo.CurrentCulture)
+                            </td> 
+                        }
+                        <td class="text-dark">@allRTotals.Sum().ToString("N2", CultureInfo.CurrentCulture)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Dashboard / Detaylı Şirket Analizi -->
+        <div class="filter-section mb-4 text-center">
+            <h5 class="fw-bold text-dark mb-3"><i class="fas fa-chart-pie text-info me-2"></i>Şirket Bazlı Detaylı Özet Dashboard</h5>
+            <div class="row justify-content-center">
+                <div class="col-md-5">
+                    <select id="companySelect" class="form-select form-select-lg border-primary shadow-sm text-center fw-bold text-dark" style="cursor: pointer;">
+                        <option value="">-- Analiz Edilecek Şirketi Seçin --</option>
+                        @foreach(var item in Model) { <option value="@item.Grup">@item.Grup</option> }
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div id="detailResult" class="row mb-5 g-3" style="display:none;">
+            <div class="col-md-4">
+                <div class="dashboard-card border-0 border-top-success hover-elevate">
+                    <i class="fas fa-arrow-down kpi-icon-bg"></i>
+                    <div class="kpi-title">Toplam Alacak (Giriş)</div>
+                    <div class="kpi-value text-success" id="summaryAlacak">0.00</div>
+                    <div class="kpi-desc">Diğer şirketlerden tahsil edilecek tutar</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="dashboard-card border-0 border-top-danger hover-elevate">
+                    <i class="fas fa-arrow-up kpi-icon-bg"></i>
+                    <div class="kpi-title">Toplam Borç (Çıkış)</div>
+                    <div class="kpi-value text-danger" id="summaryBorc">0.00</div>
+                    <div class="kpi-desc">Diğer şirketlere ödenecek tutar</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="dashboard-card border-0 border-top-primary hover-elevate position-relative">
+                    <span class="badge bg-primary position-absolute top-0 end-0 mt-3 me-3 rounded-pill shadow-sm">NET</span>
+                    <i class="fas fa-balance-scale kpi-icon-bg"></i>
+                    <div class="kpi-title">Genel Net Bakiye</div>
+                    <div class="kpi-value text-primary" id="summaryNet">0.00</div>
+                    <div class="kpi-desc">Konsolide net durum</div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info text-center mt-4 p-5 rounded-4 shadow-sm" role="alert" style="background-color: white; border: 1px solid #e0f2fe;">
+            <i class="fas fa-search-dollar fa-3x mb-3 text-info opacity-50"></i>
+            <h5 class="fw-bold text-dark">Konsolide Finansal Veri Bulunamadı</h5>
+            <p class="mb-0 text-muted">Belirtilen tarih aralığında görüntülenecek finansal hareket (X/R) bulunmuyor. Lütfen filtreleri kontrol edin.</p>
+        </div>
+    }
+</div>
+
+<!-- Hesap Detay Modal -->
+<div class="modal fade" id="hesapDetayModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header d-flex justify-content-between align-items-center">
+        <h5 class="modal-title fw-bold fs-6 mb-0" id="modalTitle"></h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Kapat"></button>
+      </div>
+      
+      <div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
+        <table class="modern-table">
+            <thead class="sticky-top shadow-sm">
+                <tr>
+                    <th style="width: 20%;">Hesap Kodu</th>
+                    <th style="width: 35%;">Hesap Adı</th>
+                    <th style="width: 10%; text-align: center;">PB</th>
+                    <th style="width: 17%;" class="text-end">PB Bakiye</th>
+                    <th style="width: 18%;" class="text-end">TRY Eşdeğeri</th>
+                </tr>
+            </thead>
+            <tbody id="modalDetayBody">
+                <!-- AJAX ile Doldurulacak -->
+            </tbody>
+        </table>
+      </div>
+      
+      <div class="modal-footer bg-light border-top-0 d-flex justify-content-between align-items-center py-3 px-4">
+          <span class="text-muted" style="font-size: 12px;"><i class="fas fa-info-circle me-1 text-primary"></i> Sadece hareket gören (bakiye veren) hesaplar listelenir.</span>
+          <button type="button" class="btn btn-secondary rounded-pill px-4 fw-bold shadow-sm" data-bs-dismiss="modal">Kapat</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+@section Scripts {
+    <script>
+        var reportData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = null }));
+
+        $(document).ready(function() {
+            // --- Güvenlik / CSRF Token ---
+            const csrfToken = $('input[name="__RequestVerificationToken"]').val();
+
+            // --- DASHBOARD MANTIĞI ---
+            $('#companySelect').change(function() {
+                var selectedGrup = $(this).val();
+                if(!selectedGrup) { 
+                    $('#detailResult').fadeOut(); 
+                    return; 
+                }
+                
+                var propMap = {
+                    'URS MAKINE': 'UrsMakine', 'AVRUPA PAPER': 'AvrupaPaper', 'ALV KIMYA': 'AlvKimya',
+                    'ALV FILO': 'AlvFilo', 'URAS KIMYA': 'UrasKimya', 'URAS HOLDING': 'UrsHolding',
+                    'SELVI': 'Selvi', 'ASIA DM': 'AsiaDM', 'AVRASYA': 'Avrasya', 'DAF KIMYA': 'DafKimya'
+                };
+
+                var prefix = propMap[selectedGrup];
+                if(!prefix) return;
+
+                var tAlacak = 0, tBorc = 0, tNet = 0;
+                var fmt = (v) => new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + ' ₺';
+
+                reportData.forEach(function(row) {
+                    if (row.Grup === selectedGrup) return;
+                    var xVal = row[prefix + 'X'] || 0;
+                    var rVal = row[prefix + 'R'] || 0;
+                    var total = xVal + rVal;
+                    tNet += total;
+                    if(total > 0) tAlacak += total; else if(total < 0) tBorc += total;
+                });
+
+                $('#summaryAlacak').text(fmt(tAlacak));
+                $('#summaryBorc').text(fmt(tBorc));
+                $('#summaryNet').text(fmt(tNet)).removeClass('text-success text-danger text-primary')
+                               .addClass(tNet > 0 ? 'text-success' : (tNet < 0 ? 'text-danger' : 'text-primary'));
+                $('#detailResult').fadeIn();
+            });
+
+            // --- HÜCREYE TIKLAYINCA MODAL AÇMA VE AJAX ---
+            $('.detay-tetikle').click(function(e) {
+                e.preventDefault();
+                
+                var hucreDegeri = $(this).text().trim();
+                if(hucreDegeri === "0,00" || hucreDegeri === "0.00") return;
+
+                var kaynakFirma = $(this).data("kaynak");
+                var karsiFirma = $(this).data("karsi");
+                var tip = $(this).data("tip");
+                var sDate = $('input[name="startDate"]').val();
+                var eDate = $('input[name="endDate"]').val();
+
+                $('#modalTitle').html('<i class="fas fa-list-ul me-2"></i>' + kaynakFirma + ' <i class="fas fa-angle-right mx-1 text-info"></i> ' + karsiFirma + ' <span class="badge bg-secondary ms-2 fw-normal" style="font-size: 11px; padding: 5px 8px;">' + tip + ' İŞLEMLERİ</span>');
+                
+                $('#modalDetayBody').html('<tr><td colspan="5" class="text-center py-5"><i class="fas fa-circle-notch fa-spin fa-2x text-primary mb-3"></i><br/><span class="text-muted fw-bold">Dövizli kayıtlar hesaplanıyor...</span></td></tr>');
+                
+                var modal = new bootstrap.Modal(document.getElementById('hesapDetayModal'));
+                modal.show();
+
+                $.ajax({
+                    url: '/Rapor5/HesapDetayiGetir',
+                    type: 'GET',
+                    data: {
+                        kaynakFirma: kaynakFirma,
+                        karsiFirma: karsiFirma,
+                        tip: tip,
+                        startDate: sDate,
+                        endDate: eDate
+                    },
+                    headers: { 'RequestVerificationToken': csrfToken },
+                    success: function(response) {
+                        var html = "";
+                        if(response && response.length > 0) {
+                            var toplamBakiyeTRY = 0;
+                            
+                            response.forEach(function(item) {
+                                var bDoviz = item.bakiyeDoviz || item.BakiyeDoviz || 0;
+                                var bTRY = item.bakiyeTRY || item.BakiyeTRY || 0;
+                                
+                                // Tablodaki tıklanan satırın ana toplamıyla eşleşmesi için TRY'leri topluyoruz
+                                toplamBakiyeTRY += bTRY;
+                                
+                                var clsDoviz = bDoviz < 0 ? 'text-danger' : (bDoviz > 0 ? 'text-success' : 'text-muted');
+                                var clsTRY = bTRY < 0 ? 'text-danger' : (bTRY > 0 ? 'text-success' : 'text-muted');
+                                
+                                var valDoviz = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2 }).format(bDoviz);
+                                var valTRY = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2 }).format(bTRY);
+                                
+                                var hKodu = item.hesapKodu || item.HesapKodu || '-';
+                                var hAdi = item.hesapAdi || item.HesapAdi || '-';
+                                var pBirim = item.paraBirimi || item.ParaBirimi || '-';
+                                
+                                html += `<tr>
+                                            <td><span class="badge-account">${hKodu}</span></td>
+                                            <td class="text-secondary fw-bold" style="white-space: normal;">${hAdi}</td>
+                                            <td class="text-center"><span class="badge bg-light text-dark border border-secondary border-opacity-25 px-2">${pBirim}</span></td>
+                                            <td class="text-end amount-text ${clsDoviz}">${valDoviz}</td>
+                                            <td class="text-end amount-text ${clsTRY}">${valTRY}</td>
+                                         </tr>`;
+                            });
+                            
+                            // Genel Toplam Satırı
+                            var tCls = toplamBakiyeTRY < 0 ? 'text-danger' : (toplamBakiyeTRY > 0 ? 'text-success' : 'text-dark');
+                            var tVal = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2 }).format(toplamBakiyeTRY);
+                            
+                            html += `<tr style="background-color: #f1f5f9; border-top: 2px solid #3b82f6;">
+                                        <td colspan="4" class="text-end fw-bold text-dark py-3">GENEL TOPLAM (TRY EŞDEĞERİ) :</td>
+                                        <td class="text-end amount-text ${tCls} py-3" style="font-size: 16px;">${tVal} ₺</td>
+                                     </tr>`;
+                        } else {
+                            html = '<tr><td colspan="5" class="text-center text-muted py-5"><i class="fas fa-folder-open fa-3x opacity-25 mb-3 text-secondary"></i><br/>Bu filtrelerde hesap hareketi bulunamadı.</td></tr>';
+                        }
+                        $('#modalDetayBody').html(html);
+                    },
+                    error: function(err) {
+                        $('#modalDetayBody').html('<tr><td colspan="5" class="text-center text-danger py-5"><i class="fas fa-exclamation-triangle fa-3x mb-3"></i><br/><span class="fw-bold">Detaylar yüklenirken bir hata oluştu.</span></td></tr>');
+                        console.error("AJAX Hatası:", err);
+                    }
+                });
+            });
+        });
+    </script>
+}

@@ -1,0 +1,866 @@
+﻿@model List<WebApplication3.Models.Rapor2ViewModel>
+@using WebApplication3.Models
+@using System.Globalization;
+@using Newtonsoft.Json;
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Xsrf
+
+@{
+    ViewData["Title"] = "Çek Akıbeti Raporu (Mükerrer/Farklı Kayıtlar)";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // 1. KURAL: URL'den veya varsa Cookie'den aktif şirketi okuma (currentDb)
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["ActiveDb"] ?? "VarsayilanSirket";
+    }
+
+    var checkTransactionTypes = (List<CheckTransactionType>)ViewBag.CheckTransactionTypes ?? new List<CheckTransactionType>();
+
+    // Modeldeki veriyi JSON formatına çeviriyoruz.
+    var reportDataJson = Model != null ? JsonConvert.SerializeObject(Model, new JsonSerializerSettings { DateFormatString = "yyyy-MM-dd" }) : "[]";
+    var checkTransactionTypesJson = JsonConvert.SerializeObject(checkTransactionTypes);
+
+    // Filtereleme için gerekli distinct değerler
+    var distinctValues = new Dictionary<string, List<string>>();
+    if (Model != null)
+    {
+        // Yeni Alanlar için distinct değerler
+        distinctValues["GelmeNedeni"] = Model.Where(m => !string.IsNullOrEmpty(m.GelmeNedeni)).Select(m => m.GelmeNedeni).Distinct().OrderBy(s => s).ToList();
+        distinctValues["SirketAdi"] = Model.Where(m => !string.IsNullOrEmpty(m.SirketAdi)).Select(m => m.SirketAdi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["CekinBankasi"] = Model.Where(m => !string.IsNullOrEmpty(m.CekinBankasi)).Select(m => m.CekinBankasi).Distinct().OrderBy(s => s).ToList();
+
+        // Mevcut Alanlar
+        distinctValues["CekNumarasi"] = Model.Where(m => !string.IsNullOrEmpty(m.CekNumarasi)).Select(m => m.CekNumarasi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["CekKimdenGeldi"] = Model.Where(m => !string.IsNullOrEmpty(m.CekKimdenGeldi)).Select(m => m.CekKimdenGeldi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["AsilBorclu"] = Model.Where(m => !string.IsNullOrEmpty(m.AsilBorclu)).Select(m => m.AsilBorclu).Distinct().OrderBy(s => s).ToList();
+        distinctValues["Tutar"] = Model.Where(m => m.Tutar.HasValue).Select(m => m.Tutar.Value).Distinct().OrderBy(v => v).Select(v => v.ToString("N2", new CultureInfo("tr-TR"))).ToList();
+        distinctValues["ParaBirimi"] = Model.Where(m => !string.IsNullOrEmpty(m.ParaBirimi)).Select(m => m.ParaBirimi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["VadeTarihi"] = Model.Where(m => m.VadeTarihi.HasValue).Select(m => m.VadeTarihi.Value.ToString("dd.MM.yyyy")).Distinct().OrderBy(s => DateTime.ParseExact(s, "dd.MM.yyyy", new CultureInfo("tr-TR"))).ToList();
+        distinctValues["VadeAyiVeYili"] = Model.Where(m => !string.IsNullOrEmpty(m.VadeAyiVeYili)).Select(m => m.VadeAyiVeYili).Distinct().OrderBy(s => s).ToList();
+        distinctValues["PortfoyeGirisTarihi"] = Model.Where(m => m.PortfoyeGirisTarihi.HasValue).Select(m => m.PortfoyeGirisTarihi.Value.ToString("dd.MM.yyyy")).Distinct().OrderBy(s => DateTime.ParseExact(s, "dd.MM.yyyy", new CultureInfo("tr-TR"))).ToList();
+        distinctValues["IbrazTarihi"] = Model.Where(m => m.IbrazTarihi.HasValue).Select(m => m.IbrazTarihi.Value.ToString("dd.MM.yyyy")).Distinct().OrderBy(s => DateTime.ParseExact(s, "dd.MM.yyyy", new CultureInfo("tr-TR"))).ToList();
+        var distinctTahsilatBelgeNoList = Model.Where(m => !string.IsNullOrEmpty(m.TahsilatBelgeNo)).Select(m => m.TahsilatBelgeNo).Distinct().OrderBy(s => s).ToList(); distinctValues["IbrazBelgeNo"] = Model.Where(m => !string.IsNullOrEmpty(m.IbrazBelgeNo)).Select(m => m.IbrazBelgeNo).Distinct().OrderBy(s => s).ToList();
+        distinctValues["HareketDurumu"] = Model.Where(m => !string.IsNullOrEmpty(m.HareketDurumu)).Select(m => m.HareketDurumu).Distinct().OrderBy(s => s).ToList();
+        distinctValues["BelgeTipi"] = Model.Where(m => !string.IsNullOrEmpty(m.BelgeTipi)).Select(m => m.BelgeTipi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["CekIslemTuru"] = Model.Where(m => !string.IsNullOrEmpty(m.CekIslemTuru)).Select(m => m.CekIslemTuru).Distinct().OrderBy(s => s).ToList();
+        distinctValues["IslemTipiAdi"] = Model.Where(m => !string.IsNullOrEmpty(m.IslemTipiAdi)).Select(m => m.IslemTipiAdi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["PlanlananTedarikci"] = Model.Where(m => !string.IsNullOrEmpty(m.PlanlananTedarikci)).Select(m => m.PlanlananTedarikci).Distinct().OrderBy(s => s).ToList();
+        distinctValues["CekKimeVerildi"] = Model.Where(m => !string.IsNullOrEmpty(m.CekKimeVerildi)).Select(m => m.CekKimeVerildi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["TlKarsiligi"] = Model.Where(m => m.TlKarsiligi.HasValue).Select(m => m.TlKarsiligi.Value).Distinct().OrderBy(v => v).Select(v => v.ToString("N2", new CultureInfo("tr-TR"))).ToList();
+    }
+
+    // Renk paleti tanımlama (10 farklı renk tonu)
+    var colorPalette = new List<string>
+    {
+        "#ffebee", // Red 50
+        "#f3e5f5", // Purple 50
+        "#e8eaf6", // Indigo 50
+        "#e1f5fe", // Light Blue 50
+        "#e8f5e9", // Green 50
+        "#fffde7", // Yellow 50
+        "#fff3e0", // Orange 50
+        "#fbe9e7", // Deep Orange 50
+        "#f5f5f5", // Grey 100
+        "#eceff1"  // Blue Grey 50
+    };
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <style>
+        :root {
+            --primary-color: #0d6efd;
+            --info-color: #0dcaf0;
+            --light-bg: #f8f9fa;
+            --dark-text: black;
+            --border-color: #d0d0d0;
+            --header-bg: #212529;
+            --header-text: #ffffff;
+            --box-shadow-light: 0 0 8px rgba(0, 0, 0, 0.08);
+            --box-shadow-medium: 0 2px 3px rgba(0, 0, 0, 0.06);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 12px;
+            background-color: var(--light-bg);
+            color: var(--dark-text);
+        }
+
+        .main-content {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+            font-size: 1.15em;
+            padding: 8px;
+            background-color: #ffffff;
+            border-radius: 6px;
+            box-shadow: var(--box-shadow-light);
+            position: relative;
+        }
+
+        .container-fluid.py-4 {
+            padding-top: 5px;
+            padding-bottom: 10px;
+            padding-left: 5px;
+            padding-right: 5px;
+        }
+
+        .database-info {
+            background-color: var(--info-color);
+            color: #ffffff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-bottom: 6px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            font-size: 0.96em;
+            line-height: 1.1;
+        }
+
+            .database-info .fas {
+                margin-right: 4px;
+            }
+
+        .sticky-toolbar {
+            position: sticky;
+            top: 0;
+            background-color: #ffffff;
+            z-index: 1000;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+            margin-top: 0px !important;
+            margin-bottom: 6px;
+            box-shadow: var(--box-shadow-medium);
+            display: flex;
+            justify-content: flex-end; /* Sadece veritabanı bilgisini göster */
+            align-items: center;
+            flex-wrap: nowrap;
+            gap: 10px;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            position: relative;
+            border-radius: 6px;
+            box-shadow: var(--box-shadow-medium);
+            background-color: #ffffff;
+            margin-top: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        .rapor-tablo {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 0.84em;
+            color: var(--dark-text);
+            table-layout: fixed;
+            min-width: 2500px; /* Yeni sütunlar için genişletildi */
+        }
+
+            .rapor-tablo thead {
+                position: sticky;
+                top: 0;
+                z-index: 101;
+                background-color: #ffffff;
+            }
+
+                .rapor-tablo thead .main-header-row th {
+                    background-color: var(--header-bg);
+                    color: var(--header-text);
+                    padding: 4px 3px;
+                    text-align: center;
+                    white-space: nowrap;
+                    font-weight: 700;
+                    border-bottom: 2px solid var(--border-color);
+                    height: auto;
+                    line-height: 1.3;
+                }
+
+                .rapor-tablo thead .filter-row th {
+                    padding: 2px 3px;
+                    height: 30px;
+                    line-height: normal;
+                    vertical-align: top;
+                    white-space: nowrap;
+                    background-color: #ffffff;
+                    border-bottom: 1px solid var(--border-color);
+                }
+
+            .rapor-tablo th,
+            .rapor-tablo td {
+                padding: 1px;
+                vertical-align: middle;
+                border-right: 1px solid var(--border-color);
+            }
+
+                .rapor-tablo th:last-child,
+                .rapor-tablo td:last-child {
+                    border-right: none;
+                }
+
+            .rapor-tablo td {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                height: 25px;
+                line-height: 25px;
+                border-bottom: 1px solid var(--border-color);
+            }
+
+        .table-hover tbody tr:hover {
+            background-color: #e9ecef !important;
+        }
+
+        .filter-row th .form-control,
+        .filter-row th .bootstrap-select .btn {
+            width: 100% !important;
+            box-sizing: border-box !important;
+            height: 28px !important;
+            line-height: normal !important;
+            padding: 2px 5px !important;
+            font-size: 0.85em !important;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border: 1px solid #ced4da;
+            border-radius: 0.25rem;
+        }
+
+        /* Renk Sınıfları */
+        @{
+            for (int i = 0; i < colorPalette.Count; i++)
+            {
+                <text>
+                .color-group-@(i) {
+                    background-color: @colorPalette[i] !important;
+                }
+                </text>
+            }
+        }
+        
+        /* Mükerrer olmayan ve diğer durumlar için varsayılan arka plan */
+        .rapor-tablo tbody tr:not([class*="color-group-"]) {
+            background-color: #ffffff;
+        }
+        
+        /* Sadece metin olarak gösterilen hücreler için stil */
+        .read-only-cell {
+            padding: 4px 6px !important;
+            text-align: left;
+        }
+    </style>
+}
+
+<div class="container-fluid py-4">
+    @Html.AntiForgeryToken()
+    
+    <input type="hidden" id="currentDb" name="db" value="@currentDb" />
+
+    <div class="row g-0">
+        <div class="col-md-12">
+            <div class="main-report-box">
+
+                <div class="sticky-toolbar">
+                    <div class="database-info">
+                        <i class="fas fa-database"></i>
+                        Konsolide Rapor - @currentDb </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="table table-bordered table-striped table-hover rapor-tablo" id="rapor2Table">
+                        <thead>
+                            <tr class="main-header-row">
+                                <th class="sortable-column" data-column="SirketAdi" title="Şirket Adı" data-sort-type="text">Şirket Adı <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="CekinBankasi" title="Çekin Bankası" data-sort-type="text">Çekin Bankası <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="GelmeNedeni" title="Getirilme Sebebi" data-sort-type="text">Getirilme Sebebi <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="CekNumarasi" title="Çek No" data-sort-type="text">Çek No <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="CekKimdenGeldi" title="Çek Kimden Geldi" data-sort-type="text">Çek Kimden Geldi <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="AsilBorclu" title="Asıl Borçlu" data-sort-type="text">Asıl Borçlu <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="Tutar" title="Çek Tutarı" data-sort-type="number">Çek Tutarı <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="ParaBirimi" title="Para Birimi" data-sort-type="text">Para Birimi <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="VadeTarihi" title="Vade Tarihi" data-sort-type="date">Vade Tarihi <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="VadeAyiVeYili" title="Vade Ayı ve Yılı" data-sort-type="text">Vade Ayı ve Yılı <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="PortfoyeGirisTarihi" title="Portföye Giriş Tarihi" data-sort-type="date">Portföye Giriş Tarihi <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="IbrazTarihi" title="İbraz Tarihi" data-sort-type="date">İbraz Tarihi <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="TahsilatBelgeNo" title="Tahsilat Belge No" data-sort-type="number">Tahsilat Belge No <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="IbrazBelgeNo" title="İbraz Belge No" data-sort-type="text">İbraz Belge No <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="HareketDurumu" title="Hareket Durumu" data-sort-type="text">Hareket Durumu <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="BelgeTipi" title="Belge Tipi" data-sort-type="text">Belge Tipi <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="CekIslemTuru" title="Çek İşlem Türü Kodu" data-sort-type="text">Çek İşlem Türü Kodu <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="IslemTipiAdi" title="İşlem Tipi" data-sort-type="text">İşlem Tipi <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="PlanlananTedarikci" title="Planlanan Tedarikçi" data-sort-type="text">Planlanan Tedarikçi <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="CekKimeVerildi" title="Çek Kime Verildi" data-sort-type="text">Çek Kime Verildi <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="TlKarsiligi" title="TL Karşılığı" data-sort-type="number">TL Karşılığı <i class="fas fa-sort float-end"></i></th>
+                            </tr>
+                            <tr class="filter-row">
+                                <th data-column="SirketAdi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Şirket Adı">
+                                        @if (distinctValues.ContainsKey("SirketAdi"))
+                                        {
+                                            foreach (var item in distinctValues["SirketAdi"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="CekinBankasi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Çekin Bankası">
+                                        @if (distinctValues.ContainsKey("CekinBankasi"))
+                                        {
+                                            foreach (var item in distinctValues["CekinBankasi"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="GelmeNedeni">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Getirilme Sebebi">
+                                        @if (distinctValues.ContainsKey("GelmeNedeni"))
+                                        {
+                                            foreach (var item in distinctValues["GelmeNedeni"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+
+                                <th data-column="CekNumarasi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Çek No">
+                                        @if (distinctValues.ContainsKey("CekNumarasi"))
+                                        {
+                                            foreach (var item in distinctValues["CekNumarasi"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="CekKimdenGeldi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Çek Kimden Geldi">
+                                        @if (distinctValues.ContainsKey("CekKimdenGeldi"))
+                                        {
+                                            foreach (var item in distinctValues["CekKimdenGeldi"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="AsilBorclu">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Asıl Borçlu">
+                                        @if (distinctValues.ContainsKey("AsilBorclu"))
+                                        {
+                                            foreach (var item in distinctValues["AsilBorclu"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="Tutar">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Çek Tutarı">
+                                        @if (distinctValues.ContainsKey("Tutar"))
+                                        {
+                                            foreach (var item in distinctValues["Tutar"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="ParaBirimi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Para Birimi">
+                                        @if (distinctValues.ContainsKey("ParaBirimi"))
+                                        {
+                                            foreach (var item in distinctValues["ParaBirimi"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="VadeTarihi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Vade Tarihi">
+                                        @if (distinctValues.ContainsKey("VadeTarihi"))
+                                        {
+                                            foreach (var item in distinctValues["VadeTarihi"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="VadeAyiVeYili">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Vade Ayı ve Yılı">
+                                        @if (distinctValues.ContainsKey("VadeAyiVeYili"))
+                                        {
+                                            foreach (var item in distinctValues["VadeAyiVeYili"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="PortfoyeGirisTarihi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Portföye Giriş Tarihi">
+                                        @if (distinctValues.ContainsKey("PortfoyeGirisTarihi"))
+                                        {
+                                            foreach (var item in distinctValues["PortfoyeGirisTarihi"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="IbrazTarihi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="İbraz Tarihi">
+                                        @if (distinctValues.ContainsKey("IbrazTarihi"))
+                                        {
+                                            foreach (var item in distinctValues["IbrazTarihi"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="TahsilatBelgeNo">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Tahsilat Belge No">
+                                        @if (distinctValues.ContainsKey("TahsilatBelgeNo"))
+                                        {
+                                            foreach (var item in distinctValues["TahsilatBelgeNo"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="IbrazBelgeNo">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="İbraz Belge No">
+                                        @if (distinctValues.ContainsKey("IbrazBelgeNo"))
+                                        {
+                                            foreach (var item in distinctValues["IbrazBelgeNo"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="HareketDurumu">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Hareket Durumu">
+                                        @if (distinctValues.ContainsKey("HareketDurumu"))
+                                        {
+                                            foreach (var item in distinctValues["HareketDurumu"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="BelgeTipi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Belge Tipi">
+                                        @if (distinctValues.ContainsKey("BelgeTipi"))
+                                        {
+                                            foreach (var item in distinctValues["BelgeTipi"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="CekIslemTuru">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Çek İşlem Türü Kodu">
+                                        @foreach (var type in checkTransactionTypes.OrderBy(t => t.Description))
+                                        {
+                                            if (type.Code != "0" && type.Code != "12")
+                                            {
+                                                <option value="@type.Code">@type.Description</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="IslemTipiAdi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="İşlem Tipi">
+                                        @if (distinctValues.ContainsKey("IslemTipiAdi"))
+                                        {
+                                            foreach (var item in distinctValues["IslemTipiAdi"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="PlanlananTedarikci">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Planlanan Tedarikçi">
+                                        @if (distinctValues.ContainsKey("PlanlananTedarikci"))
+                                        {
+                                            foreach (var item in distinctValues["PlanlananTedarikci"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="CekKimeVerildi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Çek Kime Verildi">
+                                        @if (distinctValues.ContainsKey("CekKimeVerildi"))
+                                        {
+                                            foreach (var item in distinctValues["CekKimeVerildi"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="TlKarsiligi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="TL Karşılığı">
+                                        @if (distinctValues.ContainsKey("TlKarsiligi"))
+                                        {
+                                            foreach (var item in distinctValues["TlKarsiligi"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="row mt-2 d-flex justify-content-between align-items-center">
+                    <div class="col-md-4">
+                        <div id="pagination-info">
+                            Toplam Kayıt: <strong id="totalRecords">@(Model?.Count ?? 0)</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-4 mb-2">
+                    <div class="col-12 text-end">
+                        <a href="@Url.Action("Index", "Home", new { db = currentDb })" class="btn btn-outline-secondary fw-bold shadow-sm">
+                            <i class="fas fa-arrow-left me-1"></i> Ana Sayfaya Dön
+                        </a>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+
+            // --- GÜVENLİK VE AJAX STANDARTLARI (KURAL 1 ve 2) ---
+            const currentDb = document.getElementById('currentDb').value;
+            const csrfToken = document.querySelector('input[name="__RequestVerificationToken"]').value;
+
+            // Tüm jQuery AJAX isteklerine otomatik olarak Token ve db parametresi eklenmesi
+            $.ajaxSetup({
+                headers: { 'RequestVerificationToken': csrfToken },
+                data: { db: currentDb }
+            });
+
+            // Fetch API kullanıyorsanız URL sonuna "?db=" eklemek için yardımcı bir fonksiyon
+            window.getDbUrl = function(url) {
+                const separator = url.includes('?') ? '&' : '?';
+                return `${url}${separator}db=${encodeURIComponent(currentDb)}`;
+            };
+            // ----------------------------------------------------
+
+            const allReportData = @Html.Raw(reportDataJson);
+            const table = document.getElementById('rapor2Table');
+            const tableBody = table.querySelector('tbody');
+            const totalRecordsSpan = document.getElementById('totalRecords');
+
+            // Renk paletini tanımla (CSS'tekiyle aynı olmalı)
+            const colorPalette = @Html.Raw(JsonConvert.SerializeObject(colorPalette)); 
+
+            let currentlyFilteredRows = [...allReportData];
+            let currentSortColumn = 'GelmeNedeni'; // Varsayılan sıralama GelmeNedeni
+            let currentSortDirection = 'asc';
+
+            const columnMappings = {
+                'SirketAdi': 'SirketAdi',
+                'CekinBankasi': 'CekinBankasi',
+                'GelmeNedeni': 'GelmeNedeni',
+                'CekNumarasi': 'CekNumarasi',
+                'CekKimdenGeldi': 'CekKimdenGeldi',
+                'AsilBorclu': 'AsilBorclu',
+                'Tutar': 'Tutar',
+                'ParaBirimi': 'ParaBirimi',
+                'VadeTarihi': 'VadeTarihi',
+                'VadeAyiVeYili': 'VadeAyiVeYili',
+                'PortfoyeGirisTarihi': 'PortfoyeGirisTarihi',
+                'IbrazTarihi': 'IbrazTarihi',
+                'TahsilatBelgeNo': 'TahsilatBelgeNo',
+                'IbrazBelgeNo': 'IbrazBelgeNo',
+                'HareketDurumu': 'HareketDurumu',
+                'BelgeTipi': 'BelgeTipi',
+                'CekIslemTuru': 'CekIslemTuru',
+                'IslemTipiAdi': 'IslemTipiAdi',
+                'PlanlananTedarikci': 'PlanlananTedarikci',
+                'CekKimeVerildi': 'CekKimeVerildi',
+                'TlKarsiligi': 'TlKarsiligi'
+            };
+
+            const checkTransactionTypesJs = @Html.Raw(checkTransactionTypesJson);
+            const checkTransactionTypeMap = new Map(checkTransactionTypesJs.map(t => [t.Code, t.Description]));
+
+            function updatePaginationInfo(totalCount) {
+                const totalRecordsSpan = document.getElementById('totalRecords');
+                if (totalRecordsSpan) {
+                    totalRecordsSpan.textContent = totalCount;
+                }
+                const pageLinks = document.getElementById('page-links');
+                if (pageLinks) {
+                    pageLinks.innerHTML = ''; // Sayfalama bağlantıları kaldırıldı
+                }
+            }
+            
+            function renderTable(data) {
+                tableBody.innerHTML = '';
+                if (data.length === 0) {
+                    // Checkbox sütunu kaldırıldığı için colspan 21'e ayarlandı
+                    tableBody.innerHTML = '<tr><td colspan="21" class="text-center">Gösterilecek veri bulunamadı.</td></tr>'; 
+                    updatePaginationInfo(0);
+                    return;
+                }
+                
+                const frag = document.createDocumentFragment();
+                
+                let colorMap = new Map();
+                let currentColorIndex = 0;
+                let lastGroupKey = null;
+
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+                    
+                    // Renk atama mantığı: Çek Numarası ve Çekin Bankası bazında gruplama
+                    const currentGroupKey = `${item.CekNumarasi}_${item.CekinBankasi}`;
+                    let rowClass = '';
+
+                    // Eğer yeni bir gruba geçiliyorsa, rengi değiştir ve haritada sakla
+                    if (currentGroupKey !== lastGroupKey) {
+                        if (!colorMap.has(currentGroupKey)) {
+                            colorMap.set(currentGroupKey, `color-group-${currentColorIndex % colorPalette.length}`);
+                            currentColorIndex++;
+                        }
+                    }
+                    
+                    // Sadece 'Getirilme Sebebi' doluysa renklendir (yani bir sorun varsa)
+                    if (item.GelmeNedeni && !item.GelmeNedeni.includes("Hata") && item.GelmeNedeni !== '3 - Çek No/Banka Aynı (Tüm Değerler Aynı)') {
+                        rowClass = colorMap.get(currentGroupKey);
+                    }
+                    
+                    row.className = rowClass;
+                    lastGroupKey = currentGroupKey;
+
+                    row.dataset.docentry = item.DocEntry;
+                    row.dataset.ibrazBelgeNo = item.IbrazBelgeNo;
+
+                    Object.keys(columnMappings).forEach(columnKey => {
+                        const propName = columnMappings[columnKey];
+
+                        const cell = document.createElement('td');
+                        cell.dataset.column = columnKey;
+                        cell.className = 'read-only-cell'; // Sadece metin gösterileceği için genel sınıf eklendi
+
+                        if (columnKey === 'IbrazBelgeNo' && item.IbrazBelgeNo) {
+                            // Link sadece PDF indirme için kalıyor (KURAL 1 URL Güncellemesi yapıldı)
+                            const link = document.createElement('a');
+                            link.href = window.getDbUrl(`/CekAkibetiRapor38/DownloadAttachment/${item.IbrazBelgeNo}`);
+                            link.title = 'Eki Görüntüle';
+                            link.target = '_blank';
+                            link.textContent = item.IbrazBelgeNo;
+                            link.addEventListener('click', (e) => { e.stopPropagation(); });
+                            cell.appendChild(link);
+                        } else if (columnKey.includes('Tarihi')) {
+                            // Tarih formatlama
+                            cell.textContent = item[propName] ? new Date(item[propName]).toLocaleDateString('tr-TR') : '';
+                        } else if (columnKey === 'Tutar' || columnKey === 'TlKarsiligi') {
+                            // Tutar formatlama
+                            cell.textContent = item[propName]?.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '';
+                            cell.style.textAlign = 'right';
+                        } else if (columnKey === 'CekIslemTuru') {
+                            // Sadece kodu gösterir, açıklama değil
+                            cell.textContent = item.CekIslemTuru ?? '';
+                            cell.title = checkTransactionTypeMap.get(item.CekIslemTuru) || ''; // Tooltip olarak tam açıklama
+                        } else {
+                            // Diğer tüm alanlar
+                            cell.textContent = item[propName] ?? '';
+                        }
+
+                        row.appendChild(cell);
+                    });
+
+                    frag.appendChild(row);
+                });
+                tableBody.appendChild(frag);
+                updatePaginationInfo(data.length);
+            }
+
+            function getInitialColumnConfig() {
+                const headers = Array.from(table.querySelectorAll('thead tr:first-child th'));
+                return headers.map((header, index) => ({
+                    originalIndex: index,
+                    newIndex: index,
+                    visible: header.style.display !== 'none',
+                    columnName: header.dataset.column || 'Unknown'
+                }));
+            }
+            
+            function filterTableAndRender() {
+                const filters = {};
+                $('.filter-select-bs').each(function () {
+                    const selectElement = $(this);
+                    const columnKey = selectElement.closest('th').data('column');
+                    const selectedValues = selectElement.val();
+                    if (selectedValues && selectedValues.length > 0) {
+                        filters[columnKey] = selectedValues.map(v => (v || '').toLowerCase().trim());
+                    }
+                });
+
+                let filteredData = allReportData.filter(item => {
+                    let isMatch = true;
+                    for (const column in filters) {
+                        const filterValues = filters[column];
+                        const propName = columnMappings[column];
+                        if (!propName) continue;
+
+                        let itemValue = item[propName];
+
+                        if (itemValue === null || itemValue === undefined) {
+                            itemValue = '';
+                        } else if (propName.includes('Tarihi') && itemValue) {
+                            const date = new Date(itemValue);
+                            itemValue = isNaN(date.getTime()) ? '' : date.toLocaleDateString('tr-TR'); 
+                        } else if (typeof itemValue === 'number' || propName === 'Tutar' || propName === 'TlKarsiligi') {
+                            itemValue = (itemValue || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        } else if (propName === 'CekIslemTuru') {
+                            itemValue = itemValue.toString();
+                        } else {
+                            itemValue = itemValue.toString();
+                        }
+                        itemValue = itemValue.toLowerCase().trim();
+
+                        if (filterValues.length > 0 && !filterValues.includes(itemValue)) {
+                            isMatch = false;
+                            break;
+                        }
+                    }
+                    return isMatch;
+                });
+
+                if (currentSortColumn && currentSortDirection !== 'none') {
+                    const sortType = document.querySelector(`th[data-column="${currentSortColumn}"]`)?.dataset.sortType;
+                    const propName = columnMappings[currentSortColumn];
+                    filteredData.sort((itemA, itemB) => {
+                        let valA = itemA[propName];
+                        let valB = itemB[propName];
+
+                        if (valA === null || valA === undefined) valA = '';
+                        if (valB === null || valB === undefined) valB = '';
+
+                        let comparison = 0;
+                        if (sortType === 'number') {
+                            const numA = parseFloat(valA.toString().replace(/\./g, '').replace(',', '.') || 0);
+                            const numB = parseFloat(valB.toString().replace(/\./g, '').replace(',', '.') || 0);
+                            comparison = numA - numB;
+                        } else if (sortType === 'date') {
+                            const dateA = valA ? new Date(valA) : null;
+                            const dateB = valB ? new Date(valB) : null;
+                            if (dateA === null && dateB === null) comparison = 0;
+                            else if (dateA === null) comparison = 1;
+                            else if (dateB === null) comparison = -1;
+                            else comparison = dateA.getTime() - dateB.getTime();
+                        } else {
+                            comparison = (valA || '').localeCompare((valB || ''), 'tr', { sensitivity: 'base' });
+                        }
+                        return currentSortDirection === 'asc' ? comparison : -comparison;
+                    });
+                }
+
+                currentlyFilteredRows = filteredData;
+                renderTable(currentlyFilteredRows);
+            }
+
+            function initializePage() {
+                window.currentColumnConfig = getInitialColumnConfig();
+
+                $('.filter-select-bs').selectpicker({
+                    liveSearch: true,
+                    actionsBox: true,
+                    selectedTextFormat: 'count > 2',
+                    width: '100%',
+                    container: 'body'
+                }).on('changed.bs.select', function () {
+                    filterTableAndRender();
+                });
+
+                document.querySelectorAll('th.sortable-column').forEach(header => {
+                    header.addEventListener('click', function () {
+                        const columnKey = this.dataset.column;
+                        if (currentSortColumn === columnKey) {
+                            if (currentSortDirection === 'asc') {
+                                currentSortDirection = 'desc';
+                            } else if (currentSortDirection === 'desc') {
+                                currentSortDirection = 'none';
+                                currentSortColumn = null;
+                            } else {
+                                currentSortDirection = 'asc';
+                            }
+                        } else {
+                            if (currentSortColumn !== null) {
+                                const prevHeader = document.querySelector(`th.sortable-column[data-column="${currentSortColumn}"] i`);
+                                if (prevHeader) {
+                                    prevHeader.className = 'fas fa-sort float-end';
+                                }
+                            }
+                            currentSortColumn = columnKey;
+                            currentSortDirection = 'asc';
+                        }
+
+                        document.querySelectorAll('th.sortable-column i').forEach(icon => icon.className = 'fas fa-sort float-end');
+
+                        const sortIcon = this.querySelector('i');
+                        if (sortIcon && currentSortDirection !== 'none') {
+                            sortIcon.className = `fas fa-sort-${currentSortDirection === 'asc' ? 'up' : 'down'} float-end`;
+                        }
+
+                        filterTableAndRender();
+                    });
+                });
+
+                const defaultSortHeader = document.querySelector('th.sortable-column[data-column="GelmeNedeni"]');
+                if (defaultSortHeader) {
+                    const sortIcon = defaultSortHeader.querySelector('i');
+                    if (sortIcon) {
+                        sortIcon.className = `fas fa-sort-up float-end`;
+                    }
+                }
+                
+                if (currentSortColumn) {
+                    filterTableAndRender();
+                } else {
+                    renderTable(allReportData);
+                }
+            }
+
+            initializePage();
+        });
+    </script>
+}

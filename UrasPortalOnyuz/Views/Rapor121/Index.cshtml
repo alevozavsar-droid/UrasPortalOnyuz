@@ -1,0 +1,291 @@
+﻿@{
+    ViewData["Title"] = "Temlik ve Çek Mahsup Zinciri (Rapor 121)";
+}
+
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+
+<style>
+    body { background-color: #f4f6f9; }
+    .card-header-custom { background: linear-gradient(90deg, #1e3c72, #2a5298); color: white; }
+    .step-badge { width: 28px; height: 28px; border-radius: 50%; background-color: #0d6efd; color: white; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; }
+    .company-box { background-color: #e9ecef; border: 1px solid #ced4da; border-radius: 5px; padding: 4px 8px; font-weight: 600; color: #495057; display: inline-block; font-size: 13px; }
+    .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+    .status-badge.Devredildi { background-color: #17a2b8; color: white; }
+    .status-badge.Tahsil { background-color: #28a745; color: white; }
+    .status-badge.Tamamlandi { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .section-title { font-size: 1.1rem; font-weight: 600; color: #343a40; margin-bottom: 15px; border-bottom: 2px solid #e9ecef; padding-bottom: 5px; }
+    .table th { background-color: #f8f9fa; font-size: 13px; color: #495057; }
+    .table td { font-size: 13px; vertical-align: middle; }
+    .account-code { font-family: 'Courier New', Courier, monospace; font-weight: bold; color: #0056b3; }
+</style>
+
+<div class="container-fluid mt-4 px-4 pb-5">
+    
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header card-header-custom py-3">
+            <h5 class="mb-0"><i class="fas fa-project-diagram mr-2"></i> Temlik İşlemi Detayı (Rapor 121)</h5>
+        </div>
+        <div class="card-body bg-white">
+            <div class="row align-items-end">
+                <div class="col-md-4 mb-3">
+                    <label for="ddlSirket" class="font-weight-bold text-dark mb-1">1. Borçlu Grup Şirketi (Son Halka)</label>
+                    <select id="ddlSirket" class="form-control form-select shadow-sm">
+                        <option value="">-- Şirket Seçiniz --</option>
+                        @foreach (var db in ViewBag.Databases)
+                        {
+                            <option value="@db.Key">@db.Display</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="col-md-6 mb-3">
+                    <label for="ddlCari" class="font-weight-bold text-dark mb-1">2. Alacaklı Cari (Nihai Tedarikçi)</label>
+                    <select id="ddlCari" class="form-control shadow-sm" disabled>
+                        <option value="">-- Önce Şirket Seçiniz --</option>
+                    </select>
+                    <small id="cariLoader" class="text-primary mt-1" style="display:none;"><i class="fas fa-spinner fa-spin"></i> SAP'den Cariler Yükleniyor...</small>
+                </div>
+
+                <div class="col-md-2 mb-3">
+                    <button id="btnYoluBul" class="btn btn-success w-100 shadow-sm font-weight-bold" disabled style="padding: 10px;">
+                        <i class="fas fa-bolt"></i> Simülasyonu Başlat
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="sonucAlani" style="display:none;">
+        
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body">
+                <div class="section-title"><i class="fas fa-handshake text-primary mr-2"></i> 1. Cari Borç Mahsup Kayıtları Simülasyonu</div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered mb-0" id="tblMahsup">
+                        <thead>
+                            <tr>
+                                <th class="text-center" style="width: 5%">Sıra</th>
+                                <th style="width: 15%">Borçlu</th>
+                                <th style="width: 15%">Alacaklı</th>
+                                <th style="width: 15%">İlişki Türü</th>
+                                <th style="width: 15%">Tutar (TRY)</th>
+                                <th style="width: 25%">Açıklama</th>
+                                <th class="text-center" style="width: 10%">Durum</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body">
+                <div class="section-title"><i class="fas fa-money-check-alt text-success mr-2"></i> 2. Çek Giriş / Çıkış Kayıtları Simülasyonu (Selvi Merkezli)</div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered mb-0" id="tblCekAkis">
+                        <thead>
+                            <tr>
+                                <th class="text-center" style="width: 5%">Sıra</th>
+                                <th style="width: 15%">İşlem</th>
+                                <th style="width: 15%">Çekin Çıkışı (Veren)</th>
+                                <th style="width: 15%">Çekin Girişi (Alan)</th>
+                                <th style="width: 25%">İşlem Açıklaması</th>
+                                <th style="width: 15%">Tutar (TRY)</th>
+                                <th class="text-center" style="width: 10%">Çek Durumu</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body">
+                <div class="section-title"><i class="fas fa-book text-warning mr-2"></i> 3. Muhasebe Kayıtları Simülasyonu (Adım Adım G/L)</div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered mb-0" id="tblMuhasebe">
+                        <thead>
+                            <tr>
+                                <th class="text-center" style="width: 5%">Adım</th>
+                                <th style="width: 20%">İşlem Yönü</th>
+                                <th style="width: 25%">Açıklama</th>
+                                <th style="width: 20%">Borçlu Hesap</th>
+                                <th class="text-right" style="width: 10%">Borç Tutarı</th>
+                                <th style="width: 20%">Alacaklı Hesap</th>
+                                <th class="text-right" style="width: 10%">Alacak Tutarı</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-right mt-3">
+            <button class="btn btn-outline-secondary font-weight-bold" onclick="window.print()"><i class="fas fa-print"></i> Yazdır</button>
+            <button class="btn btn-primary font-weight-bold ml-2"><i class="fas fa-save"></i> Temlik İşlemini SAP'ye Kaydet</button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            
+            // 1. Select2 Kurulumu
+            $('#ddlCari').select2({
+                theme: 'bootstrap-5',
+                placeholder: "-- Cari Seçiniz --",
+                allowClear: true
+            });
+
+            // 2. Şirket Değişince Carileri Getir
+            $("#ddlSirket").change(function () {
+                var dbKey = $(this).val();
+                
+                if (!dbKey) {
+                    $('#ddlCari').empty().append('<option value="">-- Önce Şirket Seçiniz --</option>').prop("disabled", true);
+                    $("#btnYoluBul").prop("disabled", true);
+                    $("#sonucAlani").fadeOut();
+                    return;
+                }
+
+                $('#ddlCari').empty().prop("disabled", true);
+                $("#cariLoader").fadeIn();
+                $("#btnYoluBul").prop("disabled", true);
+                $("#sonucAlani").slideUp();
+
+                $.ajax({
+                    url: '/Rapor121/GetCariler', // Route kurallarınıza göre düzenleyin
+                    type: 'GET',
+                    data: { dbKey: dbKey },
+                    success: function (res) {
+                        $("#cariLoader").fadeOut();
+                        if (res.success) {
+                            var options = '<option value="">-- Cari Seçiniz --</option>';
+                            $.each(res.data, function (i, item) {
+                                // item.id ve item.text propertyleri Controller'dan geliyor
+                                options += '<option value="' + item.id + '">' + item.text + '</option>';
+                            });
+                            $('#ddlCari').html(options).prop("disabled", false).trigger('change');
+                        } else {
+                            alert(res.message);
+                            $('#ddlCari').empty().append('<option value="">-- Hata Oluştu --</option>');
+                        }
+                    },
+                    error: function() {
+                        $("#cariLoader").fadeOut();
+                        alert("Cariler çekilirken sunucu hatası oluştu.");
+                    }
+                });
+            });
+
+            // 3. Cari Seçilince Butonu Aktif Et
+            $('#ddlCari').on('change', function () {
+                if ($(this).val()) {
+                    $("#btnYoluBul").prop("disabled", false);
+                } else {
+                    $("#btnYoluBul").prop("disabled", true);
+                }
+            });
+
+            // 4. SİMÜLASYONU BAŞLAT (Yolu Bul Butonu)
+            $("#btnYoluBul").click(function () {
+                var dbKey = $("#ddlSirket").val();
+                var cariCode = $("#ddlCari").val();
+                
+                // Dropdown text'inden sadece cari adını ayrıştırıyoruz (Örn: "120.01 - Elze" -> "Elze")
+                var cariFullText = $("#ddlCari option:selected").text();
+                var cariAd = cariFullText.includes(" - ") ? cariFullText.split(' - ').slice(1).join(' - ') : cariFullText;
+
+                // Controller'daki "RotaIstekModel" ile BİREBİR aynı property isimleri
+                var requestData = {
+                    KaynakDbKey: dbKey,
+                    AlacakliCariCode: cariCode,
+                    AlacakliCariAd: cariAd
+                };
+
+                var $btn = $(this);
+                var originalText = $btn.html();
+                $btn.html('<i class="fas fa-spinner fa-spin"></i> Hesaplanıyor...').prop("disabled", true);
+
+                $.ajax({
+                    url: '/Rapor121/YoluBul',
+                    type: 'POST',
+                    contentType: 'application/json; charset=utf-8', // JSON FORMATI ZORUNLULUĞU (415 Hatasını Çözer)
+                    data: JSON.stringify(requestData),              // OBJEYİ STRING'E ÇEVİRİR
+                    success: function (res) {
+                        $btn.html(originalText).prop("disabled", false);
+                        
+                        if (res.success) {
+                            var data = res.data;
+                            
+                            // TABLO 1: Borç Mahsup Doldurma
+                            var mahsupRows = "";
+                            $.each(data.borcMahsupSimulasyonu, function (i, item) {
+                                mahsupRows += "<tr>" +
+                                    "<td class='text-center'><span class='step-badge'>" + item.sira + "</span></td>" +
+                                    "<td><span class='company-box'>" + item.borclu + "</span></td>" +
+                                    "<td><span class='company-box'>" + item.alacakli + "</span></td>" +
+                                    "<td>" + item.iliskiTuru + "</td>" +
+                                    "<td><strong class='text-primary'>" + item.tutar + "</strong></td>" +
+                                    "<td><span class='text-muted'>" + item.aciklama + "</span></td>" +
+                                    "<td class='text-center'><span class='status-badge Tamamlandi'><i class='fas fa-check'></i> " + item.durum + "</span></td>" +
+                                    "</tr>";
+                            });
+                            $("#tblMahsup tbody").html(mahsupRows);
+
+                            // TABLO 2: Çek Akışı Doldurma
+                            var cekRows = "";
+                            $.each(data.cekAkisSimulasyonu, function (i, item) {
+                                var badgeClass = item.cekDurumu === "Tahsil Edildi" ? "Tahsil" : "Devredildi";
+                                cekRows += "<tr>" +
+                                    "<td class='text-center'><span class='step-badge'>" + item.sira + "</span></td>" +
+                                    "<td><strong>" + item.islem + "</strong></td>" +
+                                    "<td><span class='company-box'>" + item.cekinCikisVeren + "</span></td>" +
+                                    "<td><span class='company-box'>" + item.cekinGirisAlan + "</span></td>" +
+                                    "<td><span class='text-muted'>" + item.islemAciklamasi + "</span></td>" +
+                                    "<td><strong class='text-success'>" + item.tutar + "</strong></td>" +
+                                    "<td class='text-center'><span class='status-badge " + badgeClass + "'><i class='fas fa-check'></i> " + item.cekDurumu + "</span></td>" +
+                                    "</tr>";
+                            });
+                            $("#tblCekAkis tbody").html(cekRows);
+
+                            // TABLO 3: Muhasebe Kayıtları Doldurma
+                            var muhRows = "";
+                            $.each(data.muhasebeKayitSimulasyonu, function (i, item) {
+                                muhRows += "<tr>" +
+                                    "<td class='text-center'><span class='step-badge bg-secondary'>" + item.sira + "</span></td>" +
+                                    "<td><strong>" + item.islemUnvani + "</strong></td>" +
+                                    "<td><span class='text-muted'>" + item.aciklama + "</span></td>" +
+                                    "<td><span class='account-code'>" + item.borcHesap + "</span></td>" +
+                                    "<td class='text-right text-danger font-weight-bold'>" + item.borcTutar.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + " ₺</td>" +
+                                    "<td><span class='account-code'>" + item.alacakHesap + "</span></td>" +
+                                    "<td class='text-right text-success font-weight-bold'>" + item.alacakTutar.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + " ₺</td>" +
+                                    "</tr>";
+                            });
+                            $("#tblMuhasebe tbody").html(muRows);
+
+                            // Sonuçları Göster ve Kaydır
+                            $("#sonucAlani").slideDown(600);
+                            $('html, body').animate({ scrollTop: $("#sonucAlani").offset().top - 20 }, 600);
+
+                        } else {
+                            alert("İşlem Başarısız: " + res.message);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        $btn.html(originalText).prop("disabled", false);
+                        alert("Bağlantı hatası: Sunucu ile iletişim kurulamadı. (Hata: " + error + ")");
+                    }
+                });
+            });
+        });
+    </script>
+}

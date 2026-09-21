@@ -1,0 +1,915 @@
+﻿@model WebApplication3.Models.AktarimRaporuViewModel
+@using System.Globalization
+@using Microsoft.AspNetCore.Routing
+@using WebApplication3.Models
+@using System.Text.Json
+@{
+    var islemTipiHaric = (bool?)ViewBag.IslemTipiHaric ?? false;
+    ViewData["Title"] = islemTipiHaric ? "Genel Mizan (İşlem Tipi Hariç)" : "Finansal Mizan Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // Aktif Veritabanını (Şirketi) URL veya Cookie'den merkezi olarak alıyoruz
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"];
+    }
+
+    // --- VERİ HAZIRLIĞI ---
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? "URASKIMYA";
+    var selectedAktarimTipi = ViewBag.SelectedAktarimTipi as List<string> ?? new List<string>();
+    var tryModelData = Model?.HesapHareketleri ?? new List<HesapOzeti>();
+    var dovizliModelData = Model?.DovizliHesapHareketleri ?? new List<HesapOzetiDovizli>();
+    var hesapList = ViewBag.HesapList as List<HesapViewModel> ?? new List<HesapViewModel>();
+    var mainHesapList = ViewBag.MainHesapList as List<HesapViewModel> ?? new List<HesapViewModel>();
+    var selectedHesapKodlari = ViewBag.SelectedHesapKodlari as List<string> ?? new List<string>();
+    var selectedAnaHesap = ViewBag.SelectedAnaHesap as List<string> ?? new List<string>();
+    var kebirMizan = (bool)ViewBag.KebirMizan;
+    var includeZeroBalance = (bool)ViewBag.IncludeZeroBalance;
+    var bakiyeTipi = (string)ViewBag.BakiyeTipi ?? "TRY";
+    var mizanHesaplamaTuru = (string)ViewBag.MizanHesaplamaTuru ?? "SAP";
+    var hesapListWithLevels = (ViewBag.HesapListWithLevels as Dictionary<string, int>) ?? new Dictionary<string, int>();
+    var startDateValue = (string)ViewBag.StartDate;
+    var endDateValue = (string)ViewBag.EndDate;
+
+    // Formatlama
+    var cultureInfo = new CultureInfo("tr-TR");
+
+    // --- FOOTER HESAPLAMALARI ---
+    decimal footerBorc = 0, footerAlacak = 0, footerBorcBakiye = 0, footerAlacakBakiye = 0;
+    decimal footerDovizBorc = 0, footerDovizAlacak = 0, footerDovizBorcBakiye = 0, footerDovizAlacakBakiye = 0;
+    decimal dashBorc = 0, dashAlacak = 0, dashBakiye = 0;
+
+    if (bakiyeTipi == "TRY" && tryModelData.Any())
+    {
+        var enAltSeviyeHesaplar = tryModelData.Where(item =>
+            !tryModelData.Any(other => other.HesapKodu != item.HesapKodu && other.HesapKodu.StartsWith(item.HesapKodu))
+        ).ToList();
+
+        var targetList = enAltSeviyeHesaplar.Any() ? enAltSeviyeHesaplar : tryModelData;
+
+        footerBorc = targetList.Sum(x => x.ToplamBorc);
+        footerAlacak = targetList.Sum(x => x.ToplamAlacak);
+        footerBorcBakiye = targetList.Sum(x => x.ToplamBorc > x.ToplamAlacak ? x.ToplamBorc - x.ToplamAlacak : 0);
+        footerAlacakBakiye = targetList.Sum(x => x.ToplamAlacak > x.ToplamBorc ? x.ToplamAlacak - x.ToplamBorc : 0);
+
+        dashBorc = footerBorc; dashAlacak = footerAlacak; dashBakiye = footerBorcBakiye - footerAlacakBakiye;
+    }
+    else if (bakiyeTipi == "Doviz" && dovizliModelData.Any())
+    {
+        var enAltSeviyeHesaplar = dovizliModelData.Where(item =>
+            !dovizliModelData.Any(other => other.HesapKodu != item.HesapKodu && other.HesapKodu.StartsWith(item.HesapKodu))
+        ).ToList();
+
+        var targetList = enAltSeviyeHesaplar.Any() ? enAltSeviyeHesaplar : dovizliModelData;
+
+        footerBorc = targetList.Sum(x => x.TLBorc);
+        footerAlacak = targetList.Sum(x => x.TLAlacak);
+        footerBorcBakiye = targetList.Sum(x => x.TLBorc > x.TLAlacak ? x.TLBorc - x.TLAlacak : 0);
+        footerAlacakBakiye = targetList.Sum(x => x.TLAlacak > x.TLBorc ? x.TLAlacak - x.TLBorc : 0);
+
+        footerDovizBorc = targetList.Sum(x => x.DovizBorc);
+        footerDovizAlacak = targetList.Sum(x => x.DovizAlacak);
+        footerDovizBorcBakiye = targetList.Sum(x => x.DovizBorc > x.DovizAlacak ? x.DovizBorc - x.DovizAlacak : 0);
+        footerDovizAlacakBakiye = targetList.Sum(x => x.DovizAlacak > x.DovizBorc ? x.DovizAlacak - x.DovizBorc : 0);
+
+        dashBorc = footerBorc; dashAlacak = footerAlacak; dashBakiye = footerBorcBakiye - footerAlacakBakiye;
+    }
+}
+
+@section Styles {
+    <!-- Bootstrap ve FontAwesome Layout'tan geldiği için çıkarıldı -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+
+    <link rel="stylesheet" href="~/css/mizan.css" asp-append-version="true" />
+}
+
+<div id="mzYukleniyor" aria-live="polite">
+    <div class="halka"></div>
+    <b>Mizan hazırlanıyor…</b>
+    <span>Hesap hareketleri toplanıyor, bu işlem birkaç saniye sürebilir.</span>
+</div>
+
+<div class="container-fluid pb-4 pt-2">
+    @Html.AntiForgeryToken()
+
+    <div class="filter-card">
+        <div class="filter-header py-2">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-table me-2"></i>
+                <div>
+                    <h6 class="mb-0 fw-bold">@ViewData["Title"]</h6>
+                </div>
+            </div>
+            <div class="small">
+                Veritabanı: <strong>@currentSelectedDbDisplay</strong>
+            </div>
+        </div>
+
+        <div class="card-body p-2">
+            <form asp-controller="Rapor28" asp-action="@(islemTipiHaric ? "IndexIslemTipiHaric" : "Index")" method="get" id="filterForm">
+                
+                @if (!string.IsNullOrEmpty(currentDb))
+                {
+                    <input type="hidden" name="db" value="@currentDb" />
+                }
+                @* Filtrelerin ait olduğu şirket: şirket değişince önceki seçimler yeni şirkete taşınmaz (bkz. Rapor28Controller filtreDb) *@
+                <input type="hidden" name="filtreDb" value="@currentDb" />
+                <input type="hidden" name="calistir" value="1" />  @* sayfa ilk açılışta boş gelir; rapor yalnızca Raporla ile çalışır *@
+
+                <div class="row g-2">
+                    <div class="col-md-2">
+                        <label class="form-label">Ana Hesap</label>
+                        <select class="form-select form-select-sm" id="anaHesap" name="anaHesap" multiple="multiple">
+                            @foreach (var hesap in mainHesapList)
+                            {
+                                <option value="@hesap.HesapKodu" selected="@(selectedAnaHesap.Contains(hesap.HesapKodu))">@hesap.HesapKodu - @hesap.HesapAdi</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Detay Hesap</label>
+                        <select class="form-select form-select-sm" id="hesapKodlari" name="hesapKodlari" multiple="multiple">
+                            @foreach (var hesap in hesapList)
+                            {
+                                <option value="@hesap.HesapKodu" selected="@(selectedHesapKodlari.Contains(hesap.HesapKodu))">@hesap.HesapKodu - @hesap.HesapAdi</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Başlangıç</label>
+                        <input type="date" class="form-control form-control-sm" id="startDate" name="startDate" value="@startDateValue">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Bitiş</label>
+                        <input type="date" class="form-control form-control-sm" id="endDate" name="endDate" value="@endDateValue">
+                    </div>
+
+                    <div class="col-md-3 d-flex align-items-end gap-1">
+                        <button type="submit" class="btn btn-primary btn-sm flex-fill fw-bold shadow-sm">
+                            <i class="fas fa-sync-alt me-1"></i> Raporla
+                        </button>
+                        
+                        <button type="button" id="btnKiyasla" class="btn btn-warning btn-sm fw-bold shadow-sm" title="SAP ve Web Mizanını Kıyasla">
+                            <i class="fas fa-balance-scale"></i> Kıyasla
+                        </button>
+                        <a href="@Url.Action(islemTipiHaric ? "IndexIslemTipiHaric" : "Index", "Rapor28", new { db = currentDb })" class="btn btn-outline-secondary btn-sm fw-bold shadow-sm" title="Filtreleri temizle (hesap, tarih ve seçimleri sıfırlar)">
+                            <i class="fas fa-eraser"></i> Temizle
+                        </a>
+
+                        @{
+                            var rp = new RouteValueDictionary();
+                            if (!string.IsNullOrEmpty(currentDb))
+                            {
+                                rp.Add("db", currentDb);
+                            }
+                            rp.Add("startDate", ViewBag.StartDate); 
+                            rp.Add("endDate", ViewBag.EndDate);
+                            rp.Add("hesapKodlari", selectedHesapKodlari);
+                            for (int i = 0; i < selectedAnaHesap.Count; i++) { rp.Add($"anaHesap[{i}]", selectedAnaHesap[i]); }
+                            rp.Add("kebirMizan", kebirMizan); 
+                            rp.Add("includeZeroBalance", includeZeroBalance);
+                            rp.Add("bakiyeTipi", bakiyeTipi); 
+                            rp.Add("mizanHesaplamaTuru", mizanHesaplamaTuru);
+                            for (int i = 0; i < selectedAktarimTipi.Count; i++) { rp.Add($"aktarimTipi[{i}]", selectedAktarimTipi[i]); }
+                        }
+                        <div class="btn-group">
+                            <a href="@Url.Action("DownloadExcel", "Rapor28", rp)" class="btn btn-success btn-sm"><i class="fas fa-file-excel"></i></a>
+                            <a href="@Url.Action("DownloadPdf", "Rapor28", rp)" class="btn btn-danger btn-sm"><i class="fas fa-file-pdf"></i></a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-2 mt-2 align-items-center mx-0 px-0">
+                    
+                    @if (!islemTipiHaric)
+                    {
+                        <div class="col-md-2 ps-0">
+                            <select class="form-select form-select-sm shadow-sm" id="aktarimTipi" name="aktarimTipi" multiple="multiple" data-placeholder="İşlem Tipi">
+                                <option value="Y" selected="@(selectedAktarimTipi.Contains("Y"))">Y (Yevmiye)</option>
+                                <option value="X" selected="@(selectedAktarimTipi.Contains("X"))">X (Kapanış)</option>
+                                <option value="R" selected="@(selectedAktarimTipi.Contains("R"))">R (Kur Farkı)</option>
+                                <option value="BOS" selected="@(selectedAktarimTipi.Contains("BOS"))">Boş</option>
+                            </select>
+                        </div>
+                    }
+
+                    <div class="col d-flex align-items-center flex-wrap gap-3">
+                        
+                        @* Seçenekler: radyo kutusu yerine tek tıkla seçilen "chip"ler; seçili olan dolu mavi + onay işareti *@
+                        <div class="mz-seg" role="group" aria-label="Mizan türü">
+                            <span class="mz-seg-etiket"><i class="fas fa-bolt"></i> Tür</span>
+                            <input type="radio" class="btn-check" name="mizanHesaplamaTuru" id="mizanSAP" value="SAP" @(mizanHesaplamaTuru == "SAP" ? "checked" : "")>
+                            <label class="mz-chip" for="mizanSAP"><i class="fas fa-check"></i>Hızlı (SAP)</label>
+                            <input type="radio" class="btn-check" name="mizanHesaplamaTuru" id="mizanWEB" value="WEB" @(mizanHesaplamaTuru == "WEB" ? "checked" : "")>
+                            <label class="mz-chip" for="mizanWEB"><i class="fas fa-check"></i>Detaylı (Web)</label>
+                        </div>
+
+                        <div class="mz-seg" role="group" aria-label="Para birimi">
+                            <span class="mz-seg-etiket"><i class="fas fa-coins"></i> Para</span>
+                            <input type="radio" class="btn-check" name="bakiyeTipi" id="tryMizan" value="TRY" @(bakiyeTipi == "TRY" ? "checked" : "")>
+                            <label class="mz-chip" for="tryMizan"><i class="fas fa-check"></i>TL Mizan</label>
+                            <input type="radio" class="btn-check" name="bakiyeTipi" id="dovizliMizan" value="Doviz" @(bakiyeTipi == "Doviz" ? "checked" : "")>
+                            <label class="mz-chip" for="dovizliMizan"><i class="fas fa-check"></i>Dövizli Mizan</label>
+                        </div>
+
+                        <div class="mz-seg" role="group" aria-label="Ek filtreler">
+                            <span class="mz-seg-etiket"><i class="fas fa-sliders"></i> Filtre</span>
+                            <input type="checkbox" class="btn-check" id="includeZeroBalance" name="includeZeroBalance" value="true" @(includeZeroBalance ? "checked" : "")>
+                            <label class="mz-chip mz-chip-onay" for="includeZeroBalance"><i class="fas fa-check"></i>0 Bakiyeler</label>
+                            <input type="checkbox" class="btn-check" id="kebirMizan" name="kebirMizan" value="true" @(kebirMizan ? "checked" : "")>
+                            <label class="mz-chip mz-chip-onay" for="kebirMizan"><i class="fas fa-check"></i>Sadece Kebir</label>
+                        </div>
+
+                        <div class="ms-auto">
+                            @if (islemTipiHaric)
+                            {
+                                <a href="@Url.Action("Index", "Rapor28", new { db = currentDb })" class="btn btn-outline-primary btn-sm fw-bold"><i class="fas fa-undo"></i> Standart Mizan</a>
+                            }
+                            else
+                            {
+                                <a href="@Url.Action("IndexIslemTipiHaric", "Rapor28", new { db = currentDb })" class="btn btn-outline-secondary btn-sm fw-bold"><i class="fas fa-filter"></i> İşlem Tipi Hariç</a>
+                            }
+                        </div>
+
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if ((bakiyeTipi == "TRY" && tryModelData.Any()) || (bakiyeTipi == "Doviz" && dovizliModelData.Any()))
+    {
+        <div class="row mb-3 g-2">
+            <div class="col-md-4">
+                <div class="summary-card border-left-primary py-2 d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-xs fw-bold text-primary text-uppercase">TOPLAM BORÇ</div>
+                        <div class="h5 text-gray-800">@dashBorc.ToString("N2", cultureInfo)</div>
+                    </div>
+                    <i class="fas fa-lira-sign fa-2x text-gray-300 opacity-25"></i>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="summary-card border-left-success py-2 d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-xs fw-bold text-success text-uppercase">TOPLAM ALACAK</div>
+                        <div class="h5 text-gray-800">@dashAlacak.ToString("N2", cultureInfo)</div>
+                    </div>
+                    <i class="fas fa-lira-sign fa-2x text-gray-300 opacity-25"></i>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="summary-card border-left-info py-2 d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-xs fw-bold text-info text-uppercase">NET BAKİYE</div>
+                        <div class="h5 text-gray-800">@dashBakiye.ToString("N2", cultureInfo)</div>
+                    </div>
+                    <i class="fas fa-balance-scale fa-2x text-gray-300 opacity-25"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="mizan-table table-sm table-hover mb-0" id="mizanTable">
+                        <thead>
+                            <tr>
+                                <th class="sortable" data-type="string" style="width: 12%;">HESAP KODU <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                <th class="sortable" data-type="string">HESAP ADI <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                @if (bakiyeTipi == "Doviz")
+                                {
+                                    <th class="sortable text-center" data-type="string" style="width:50px;">DÖVİZ <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                    <th class="sortable text-end text-muted" data-type="numeric" style="width:9%;">BORÇ (TL) <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                    <th class="sortable text-end text-muted" data-type="numeric" style="width:9%;">ALACAK (TL) <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                    <th class="sortable text-end text-dark" data-type="numeric" style="width:9%;">B. BAKİYE (TL) <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                    <th class="sortable text-end text-dark" data-type="numeric" style="width:9%;">A. BAKİYE (TL) <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                    <th class="sortable text-end" data-type="numeric" style="width:9%;">BORÇ (D) <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                    <th class="sortable text-end" data-type="numeric" style="width:9%;">ALACAK (D) <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                    <th class="sortable text-end" data-type="numeric" style="width:9%;">B. BAKİYE (D) <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                    <th class="sortable text-end" data-type="numeric" style="width:9%;">A. BAKİYE (D) <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                    <th class="sortable text-center" data-type="string" style="width:8%;">DURUM <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                }
+                                else
+                                {
+                                    <th class="sortable text-end" data-type="numeric">BORÇ <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                    <th class="sortable text-end" data-type="numeric">ALACAK <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                    <th class="sortable text-end text-dark" data-type="numeric">BORÇ BAKİYE <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                    <th class="sortable text-end text-dark" data-type="numeric">ALACAK BAKİYE <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                    <th class="sortable text-center" data-type="string" style="width:10%;">DURUM <i class="fas fa-sort sort-icon ms-1"></i></th>
+                                }
+                                <th style="width: 30px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (bakiyeTipi == "TRY")
+                            {
+                                foreach (var item in tryModelData)
+                                {
+                                    string rowClass;
+                                    int indent;
+                                    
+                                    // Parent Hesaplanması (Sadece Gruplama/Sıralama İçin JS Tarafında Kullanılır)
+                                    string parentCode = "";
+                                    int lastDot = item.HesapKodu.LastIndexOf('.');
+                                    if (lastDot > 0) { parentCode = item.HesapKodu.Substring(0, lastDot); } 
+                                    else if (item.HesapKodu.Length > 1) { parentCode = item.HesapKodu.Substring(0, item.HesapKodu.Length - 1); }
+
+                                    if (item.HesapKodu.Length == 1) { rowClass = "level-0-row"; indent = 0; }
+                                    else if (item.HesapKodu.Length == 2) { rowClass = "level-1-row"; indent = 15; }
+                                    else if (item.HesapKodu.Length == 3) { rowClass = "level-2-row"; indent = 30; }
+                                    else if (item.HesapKodu.Length > 3 && item.HesapKodu.Count(c => c == '.') == 1) { rowClass = "level-3-row"; indent = 45; }
+                                    else { rowClass = "level-other-row"; indent = 60; }
+
+                                    decimal borcBakiye = item.ToplamBorc > item.ToplamAlacak ? item.ToplamBorc - item.ToplamAlacak : 0;
+                                    decimal alacakBakiye = item.ToplamAlacak > item.ToplamBorc ? item.ToplamAlacak - item.ToplamBorc : 0;
+
+                                    string durum = item.ToplamBorc > item.ToplamAlacak ? "Alacaklıyız" : (item.ToplamAlacak > item.ToplamBorc ? "Borçluyuz" : "Kapalı");
+                                    string durumColor = item.ToplamBorc > item.ToplamAlacak ? "text-success" : (item.ToplamAlacak > item.ToplamBorc ? "text-danger" : "text-secondary");
+
+                                    <tr class="@rowClass" data-parent="@parentCode">
+                                        <td>
+                                            <div style="padding-left: @(indent)px;" class="text-nowrap">@item.HesapKodu</div>
+                                        </td>
+                                        <td class="text-truncate" style="max-width: 350px;" title="@item.HesapAdi">@item.HesapAdi</td>
+                                        <td class="num-cell @(item.ToplamBorc > 0 ? "text-debt" : "")">@item.ToplamBorc.ToString("N2", cultureInfo)</td>
+                                        <td class="num-cell @(item.ToplamAlacak > 0 ? "text-credit" : "")">@item.ToplamAlacak.ToString("N2", cultureInfo)</td>
+                                        <td class="num-cell fw-bold">@borcBakiye.ToString("N2", cultureInfo)</td>
+                                        <td class="num-cell fw-bold">@alacakBakiye.ToString("N2", cultureInfo)</td>
+                                        <td class="text-center fw-bold @durumColor">@durum</td>
+                                        <td class="text-center p-0">
+                                            <button type="button" class="btn-detail mx-auto shadow-sm"
+                                                    data-hesapkodu="@item.HesapKodu"
+                                                    data-aktarim-tipleri='@Html.Raw(JsonSerializer.Serialize(selectedAktarimTipi))'
+                                                    data-bakiye-tipi="@bakiyeTipi"
+                                                    data-bs-toggle="modal" data-bs-target="#muavinModal">
+                                                <i class="fas fa-search"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                string currentDoviz = null;
+
+                                foreach (var item in dovizliModelData)
+                                {
+                                    if (currentDoviz != item.DovizCinsi)
+                                    {
+                                        <tr class="separator-row">
+                                            <td colspan="13" class="text-center py-1">===== @item.DovizCinsi HESAPLARI =====</td>
+                                        </tr>
+                                        currentDoviz = item.DovizCinsi;
+                                    }
+
+                                    string parentCode = "";
+                                    int lastDot = item.HesapKodu.LastIndexOf('.');
+                                    if (lastDot > 0) { parentCode = item.HesapKodu.Substring(0, lastDot); } 
+                                    else if (item.HesapKodu.Length > 1) { parentCode = item.HesapKodu.Substring(0, item.HesapKodu.Length - 1); }
+
+                                    string rowClass;
+                                    int indent;
+
+                                    if (item.HesapKodu.Length == 1) { rowClass = "level-0-row"; indent = 0; }
+                                    else if (item.HesapKodu.Length == 2) { rowClass = "level-1-row"; indent = 15; }
+                                    else if (item.HesapKodu.Length == 3) { rowClass = "level-2-row"; indent = 30; }
+                                    else if (item.HesapKodu.Length > 3 && item.HesapKodu.Count(c => c == '.') == 1) { rowClass = "level-3-row"; indent = 45; }
+                                    else { rowClass = "level-other-row"; indent = 60; }
+
+                                    decimal tlBorcBakiye = item.TLBorc > item.TLAlacak ? item.TLBorc - item.TLAlacak : 0;
+                                    decimal tlAlacakBakiye = item.TLAlacak > item.TLBorc ? item.TLAlacak - item.TLBorc : 0;
+                                    
+                                    decimal dovBorcBakiye = item.DovizBorc > item.DovizAlacak ? item.DovizBorc - item.DovizAlacak : 0;
+                                    decimal dovAlacakBakiye = item.DovizAlacak > item.DovizBorc ? item.DovizAlacak - item.DovizBorc : 0;
+
+                                    string durum = item.TLBorc > item.TLAlacak ? "Alacaklıyız" : (item.TLAlacak > item.TLBorc ? "Borçluyuz" : "Kapalı");
+                                    string durumColor = item.TLBorc > item.TLAlacak ? "text-success" : (item.TLAlacak > item.TLBorc ? "text-danger" : "text-secondary");
+
+                                    <tr class="@rowClass" data-parent="@parentCode">
+                                        <td>
+                                            <div style="padding-left: @(indent)px;" class="text-nowrap">@item.HesapKodu</div>
+                                        </td>
+                                        <td class="text-truncate" style="max-width: 350px;" title="@item.HesapAdi">@item.HesapAdi</td>
+                                        <td class="text-center"><span class="badge bg-white text-dark border border-secondary" style="font-size: 0.65rem;">@item.DovizCinsi</span></td>
+
+                                        <td class="num-cell text-muted @(item.TLBorc > 0 ? "text-debt" : "")">@item.TLBorc.ToString("N2", cultureInfo)</td>
+                                        <td class="num-cell text-muted @(item.TLAlacak > 0 ? "text-credit" : "")">@item.TLAlacak.ToString("N2", cultureInfo)</td>
+                                        <td class="num-cell fw-bold text-dark">@tlBorcBakiye.ToString("N2", cultureInfo)</td>
+                                        <td class="num-cell fw-bold text-dark">@tlAlacakBakiye.ToString("N2", cultureInfo)</td>
+
+                                        <td class="num-cell @(item.DovizBorc > 0 ? "text-debt" : "")">@item.DovizBorc.ToString("N2", cultureInfo)</td>
+                                        <td class="num-cell @(item.DovizAlacak > 0 ? "text-credit" : "")">@item.DovizAlacak.ToString("N2", cultureInfo)</td>
+                                        <td class="num-cell fw-bold">@dovBorcBakiye.ToString("N2", cultureInfo)</td>
+                                        <td class="num-cell fw-bold">@dovAlacakBakiye.ToString("N2", cultureInfo)</td>
+
+                                        <td class="text-center fw-bold @durumColor">@durum</td>
+                                        
+                                        <td class="text-center p-0">
+                                            <button type="button" class="btn-detail mx-auto shadow-sm"
+                                                    data-hesapkodu="@item.HesapKodu"
+                                                    data-aktarim-tipleri='@Html.Raw(JsonSerializer.Serialize(selectedAktarimTipi))'
+                                                    data-bakiye-tipi="@bakiyeTipi"
+                                                    data-bs-toggle="modal" data-bs-target="#muavinModal">
+                                                <i class="fas fa-search"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="@(bakiyeTipi == "Doviz" ? 3 : 2)" class="text-end fw-bold">
+                                    GENEL TOPLAM:
+                                </td>
+                                @if (bakiyeTipi == "TRY")
+                                {
+                                    <td class="num-cell fw-bold">@footerBorc.ToString("N2", cultureInfo)</td>
+                                    <td class="num-cell fw-bold">@footerAlacak.ToString("N2", cultureInfo)</td>
+                                    <td class="num-cell fw-bold text-debt">@footerBorcBakiye.ToString("N2", cultureInfo)</td>
+                                    <td class="num-cell fw-bold text-credit">@footerAlacakBakiye.ToString("N2", cultureInfo)</td>
+                                    <td></td> <!-- Durum Boşluk -->
+                                }
+                                else
+                                {
+                                    <td class="num-cell fw-bold text-muted">@footerBorc.ToString("N2", cultureInfo)</td>
+                                    <td class="num-cell fw-bold text-muted">@footerAlacak.ToString("N2", cultureInfo)</td>
+                                    <td class="num-cell fw-bold text-dark">@footerBorcBakiye.ToString("N2", cultureInfo)</td>
+                                    <td class="num-cell fw-bold text-dark">@footerAlacakBakiye.ToString("N2", cultureInfo)</td>
+                                    <td class="num-cell fw-bold">@footerDovizBorc.ToString("N2", cultureInfo)</td>
+                                    <td class="num-cell fw-bold">@footerDovizAlacak.ToString("N2", cultureInfo)</td>
+                                    <td class="num-cell fw-bold text-debt">@footerDovizBorcBakiye.ToString("N2", cultureInfo)</td>
+                                    <td class="num-cell fw-bold text-credit">@footerDovizAlacakBakiye.ToString("N2", cultureInfo)</td>
+                                    <td></td> <!-- Durum Boşluk -->
+                                }
+                                <td></td> <!-- Buton Boşluk -->
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        @if ((bool?)ViewBag.RaporCalistirilmadi == true)
+        {
+            <div class="mz-bos">
+                <div class="mz-bos-ic"><i class="fas fa-table-list"></i></div>
+                <h6>Mizan henüz hazırlanmadı</h6>
+                <p>Üstteki filtreleri (hesap, tarih, tür, para birimi) seçip <b>Raporla</b> düğmesine basın. Rapor büyük olduğu için sayfa ilk açılışta boş gelir.</p>
+                <button type="button" class="btn btn-primary btn-sm fw-bold px-4" onclick="document.getElementById('filterForm').requestSubmit ? document.getElementById('filterForm').requestSubmit() : document.getElementById('filterForm').submit();"><i class="fas fa-sync-alt me-1"></i> Raporla</button>
+            </div>
+        }
+        else
+        {
+            <div class="text-center py-5">
+                <div class="mb-2"><i class="fas fa-search fa-2x text-gray-300"></i></div>
+                <h6 class="text-gray-800">Kayıt Bulunamadı</h6>
+                <p class="text-muted small">Lütfen filtre kriterlerini kontrol ediniz.</p>
+            </div>
+        }
+    }
+
+    <div class="mt-3 ms-2 mb-4">
+        <a asp-action="Index" asp-controller="Home" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+            <i class="fas fa-arrow-left me-2"></i> Ana Sayfaya Dön
+        </a>
+    </div>
+
+</div>
+
+<div class="modal fade" id="muavinModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header py-2 text-white bg-primary">
+                <h6 class="modal-title fw-bold"><i class="fas fa-list-alt me-2"></i> Muavin Detayı</h6>
+                <button type="button" class="btn-close btn-close-white small" data-bs-dismiss="modal" aria-label="Kapat"></button>
+            </div>
+            <div class="modal-body bg-light p-2">
+                <div id="muavinDetailHeader" class="bg-white p-2 rounded shadow-sm mb-2 border-left-primary small"></div>
+                <div class="table-responsive bg-white rounded shadow-sm">
+                    <table class="table table-sm table-hover mb-0 muavin-table small">
+                        <thead class="bg-light"></thead>
+                        <tbody id="muavinTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-white py-1">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="kiyaslamaModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header py-2 text-white bg-warning">
+                <h6 class="modal-title fw-bold text-dark"><i class="fas fa-balance-scale me-2"></i> SAP ve Web Mizan Kıyaslaması (Fark Bulunan Kayıtlar)</h6>
+                <button type="button" class="btn-close btn-close-dark small" data-bs-dismiss="modal" aria-label="Kapat"></button>
+            </div>
+            <div class="modal-body bg-light p-2">
+                <div class="table-responsive bg-white rounded shadow-sm">
+                    <table class="table table-sm table-hover mb-0 small">
+                        <thead class="bg-light">
+                            <tr>
+                                <th style="width: 10%;">Hesap Kodu</th>
+                                <th>Hesap Adı</th>
+                                <th class="text-end" style="width: 15%;">SAP Bakiye</th>
+                                <th class="text-end" style="width: 15%;">Web Bakiye</th>
+                                <th class="text-end text-danger" style="width: 15%;">Bakiye Farkı</th>
+                            </tr>
+                        </thead>
+                        <tbody id="kiyaslamaTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-white py-1">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/mizan-secim.js" asp-append-version="true"></script>
+    <!-- jQuery ve Bootstrap Layout'tan geldiği için çıkarıldı -->
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+
+    <script>
+        const currentDbParam = '@currentDb';
+        const startDate = '@startDateValue';
+        const endDate = '@endDateValue';
+        const cultureInfo = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const allHesapList = @Html.Raw(JsonSerializer.Serialize(hesapList.ToDictionary(h => h.HesapKodu, h => h.HesapAdi)));
+
+        // --- SIRALAMA (SORTING) MANTIĞI EKLENDİ ---
+        let currentSortCol = -1;
+        let currentSortDir = 'asc';
+
+        function sortTable(colIndex, isNumeric, thElement) {
+            const tbody = document.querySelector('#mizanTable tbody');
+            if (!tbody) return;
+
+            if (currentSortCol === colIndex) {
+                currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSortCol = colIndex;
+                currentSortDir = 'asc';
+            }
+
+            document.querySelectorAll('#mizanTable th i.sort-icon').forEach(icon => {
+                icon.className = 'fas fa-sort sort-icon ms-1 text-muted';
+            });
+            const activeIcon = thElement.querySelector('i.sort-icon');
+            if (activeIcon) {
+                activeIcon.className = currentSortDir === 'asc' ? 'fas fa-sort-up sort-icon ms-1 text-dark' : 'fas fa-sort-down sort-icon ms-1 text-dark';
+            }
+
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            let chunks = [];
+            let currentChunk = [];
+            let currentParent = null;
+
+            // Kardeş detay satırlarını aynı "parent" etrafında kümele
+            rows.forEach(row => {
+                if (row.classList.contains('separator-row')) {
+                    if (currentChunk.length > 0) {
+                        chunks.push({ parent: currentParent, rows: currentChunk });
+                        currentChunk = [];
+                    }
+                    chunks.push({ isSeparator: true, row: row });
+                    currentParent = null;
+                    return;
+                }
+
+                const parentCode = row.getAttribute('data-parent') || "ROOT";
+
+                if (parentCode !== currentParent) {
+                    if (currentChunk.length > 0) {
+                        chunks.push({ parent: currentParent, rows: currentChunk });
+                    }
+                    currentChunk = [row];
+                    currentParent = parentCode;
+                } else {
+                    currentChunk.push(row);
+                }
+            });
+            if (currentChunk.length > 0) {
+                chunks.push({ parent: currentParent, rows: currentChunk });
+            }
+
+            // Oluşan kardeş bloklarını kendi içlerinde sırala (Gruplar arası hiyerarşi BAZILMAZ)
+            chunks.forEach(chunk => {
+                if (chunk.isSeparator || chunk.rows.length <= 1) return; 
+
+                chunk.rows.sort((a, b) => {
+                    const cellA = a.children[colIndex].innerText.trim();
+                    const cellB = b.children[colIndex].innerText.trim();
+
+                    let valA, valB;
+                    if (isNumeric) {
+                        valA = parseFloat(cellA.replace(/\./g, '').replace(',', '.')) || 0;
+                        valB = parseFloat(cellB.replace(/\./g, '').replace(',', '.')) || 0;
+                    } else {
+                        valA = cellA.toLowerCase();
+                        valB = cellB.toLowerCase();
+                    }
+
+                    if (valA < valB) return currentSortDir === 'asc' ? -1 : 1;
+                    if (valA > valB) return currentSortDir === 'asc' ? 1 : -1;
+                    return 0;
+                });
+            });
+
+            // Sıralı Kardeş Bloklarını Tabloya Geri Yapıştır
+            tbody.innerHTML = '';
+            chunks.forEach(chunk => {
+                if (chunk.isSeparator) {
+                    tbody.appendChild(chunk.row);
+                } else {
+                    chunk.rows.forEach(r => tbody.appendChild(r));
+                }
+            });
+        }
+
+         function loadMuavinRecords(hesapKodu, btnAktarimTipleri, bakiyeTipi) {
+    const detailHeader = $('#muavinDetailHeader');
+    const tableBody = $('#muavinTableBody');
+    const isDovizli = bakiyeTipi === 'Doviz';
+    const tableColspan = isDovizli ? 11 : 8;
+
+    tableBody.html(`<tr><td colspan="${tableColspan}" class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary" role="status"></div><div class="mt-1 text-muted small">Yükleniyor...</div></td></tr>`);
+
+    const headerRow = `<tr>
+        <th style="width:10%">TARİH</th>
+        <th style="width:8%">YEV. NO</th>
+        <th style="width:5%">TÜR</th>
+        <th style="width:10%">REF</th>
+        <th>AÇIKLAMA</th>
+        <th style="width:5%">TİP</th>
+        ${isDovizli ? '<th class="text-center" style="width:5%">DÖVİZ</th>' : ''}
+        <th class="text-end text-muted" style="width:10%">BORÇ (TL)</th>
+        <th class="text-end text-muted" style="width:10%">ALACAK (TL)</th>
+        ${isDovizli ? '<th class="text-end" style="width:10%">BORÇ (D)</th><th class="text-end" style="width:10%">ALACAK (D)</th>' : ''}
+    </tr>`;
+    $('#muavinModal .muavin-table thead').html(headerRow);
+
+    // DİKKAT: Verileri doğrudan ekrandaki filtre alanlarından anlık olarak okuyoruz.
+    var seciliMizanTuru = $('input[name="mizanHesaplamaTuru"]:checked').val() || 'SAP';
+    var seciliStartDate = $('#startDate').val() || startDate;
+    var seciliEndDate = $('#endDate').val() || endDate;
+    
+    // Eğer İşlem Tipi dropdown'ı varsa oradan al, yoksa butondaki datayı kullan
+    var seciliAktarimTipi = $('#aktarimTipi').val();
+    if (!seciliAktarimTipi || seciliAktarimTipi.length === 0) {
+        seciliAktarimTipi = btnAktarimTipleri && btnAktarimTipleri.length > 0 ? btnAktarimTipleri : ['BOS'];
+    }
+
+    $.ajax({
+        url: `@Url.Action("GetMuavinDetay", "Rapor28")`,
+        type: 'GET',
+        traditional: true, // <--- C# TARAFINDA LİSTELERİN DOĞRU OKUNMASI İÇİN EN KRİTİK AYAR BURASI!
+        data: {
+            startDate: seciliStartDate,
+            endDate: seciliEndDate,
+            aktarimTipi: seciliAktarimTipi,
+            hesapKodu: hesapKodu,
+            mizanHesaplamaTuru: seciliMizanTuru,
+            db: currentDbParam
+        },
+        success: function (response) {
+            tableBody.empty();
+            let dataList = [];
+            if (response.data) dataList = response.data;
+            else if (Array.isArray(response)) dataList = response;
+
+            if (dataList.length > 0) {
+                const hesapAdiText = (response.hesapAdi) ? response.hesapAdi : (allHesapList[hesapKodu] || '');
+
+                detailHeader.html(`
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="text-primary fw-bold"><i class="fas fa-file-invoice me-1"></i>${hesapKodu}</span>
+                            <span class="text-dark ms-2 fw-bold">${hesapAdiText}</span>
+                        </div>
+                        <span class="badge bg-primary">${moment(seciliStartDate).format('DD.MM.YYYY')} - ${moment(seciliEndDate).format('DD.MM.YYYY')}</span>
+                    </div>
+                `);
+
+                let totalTLBorc = 0; let totalTLAlacak = 0;
+                let totalDovizBorc = 0; let totalDovizAlacak = 0;
+
+                dataList.forEach(item => {
+                    const tlBorc = item.tlBorc || item.TLBorc || 0;
+                    const tlAlacak = item.tlAlacak || item.TLAlacak || 0;
+                    const dovizBorc = item.dovizBorc || item.DovizBorc || 0;
+                    const dovizAlacak = item.dovizAlacak || item.DovizAlacak || 0;
+
+                    const tarihRaw = item.tarih || item.Tarih || item.RefDate;
+                    const formattedDate = moment(tarihRaw).isValid() ? moment(tarihRaw).format('DD.MM.YYYY') : '-';
+                    const yevmiyeNo = item.yevmiyeNo || item.YevmiyeNo || item.TransId || '';
+                    const islemTuru = item.islemTuru || item.IslemTuru || '';
+                    const muhatap = item.muhatapHesap || item.MuhatapHesap || '-';
+                    const aciklama = item.aciklama || item.Aciklama || item.Memo || '';
+                    const aktTip = item.aktarimTipi || item.AktarimTipi || '-';
+                    const dovizCinsi = item.dovizCinsi || item.DovizCinsi || '';
+
+                    totalTLBorc += tlBorc; totalTLAlacak += tlAlacak;
+                    totalDovizBorc += dovizBorc; totalDovizAlacak += dovizAlacak;
+
+                    let row = `<tr>
+                        <td>${formattedDate}</td>
+                        <td>${yevmiyeNo}</td>
+                        <td><span class="badge bg-light text-dark border border-secondary" style="font-weight:normal;">${islemTuru}</span></td>
+                        <td class="small text-muted">${muhatap}</td>
+                        <td class="text-truncate" style="max-width: 200px;" title="${aciklama}">${aciklama}</td>
+                        <td class="text-center"><small>${aktTip}</small></td>`;
+
+                    if(isDovizli) {
+                        row += `<td class="text-center small">${dovizCinsi}</td>`;
+                    }
+
+                    row += `<td class="num-cell ${tlBorc > 0 ? 'text-debt' : 'text-muted'}">${tlBorc > 0 ? cultureInfo.format(tlBorc) : '-'}</td>
+                            <td class="num-cell ${tlAlacak > 0 ? 'text-credit' : 'text-muted'}">${tlAlacak > 0 ? cultureInfo.format(tlAlacak) : '-'}</td>`;
+
+                    if (isDovizli) {
+                        row += `<td class="num-cell ${dovizBorc > 0 ? 'text-debt' : 'text-muted'}">${dovizBorc > 0 ? cultureInfo.format(dovizBorc) : '-'}</td>
+                                <td class="num-cell ${dovizAlacak > 0 ? 'text-credit' : 'text-muted'}">${dovizAlacak > 0 ? cultureInfo.format(dovizAlacak) : '-'}</td>`;
+                    }
+                    row += `</tr>`;
+                    tableBody.append(row);
+                });
+
+                let totalRow = `<tr class="table-light fw-bold border-top">
+                    <td colspan="${isDovizli ? 7 : 6}" class="text-end">TOPLAM</td>`;
+
+                totalRow += `<td class="num-cell text-debt">${cultureInfo.format(totalTLBorc)}</td>
+                             <td class="num-cell text-credit">${cultureInfo.format(totalTLAlacak)}</td>`;
+
+                if (isDovizli) {
+                    totalRow += `<td class="num-cell text-debt">${cultureInfo.format(totalDovizBorc)}</td>
+                                 <td class="num-cell text-credit">${cultureInfo.format(totalDovizAlacak)}</td>`;
+                }
+                totalRow += `</tr>`;
+                tableBody.append(totalRow);
+
+            } else {
+                tableBody.html(`<tr><td colspan="${tableColspan}" class="text-center py-3 text-muted">Kayıt bulunamadı.</td></tr>`);
+            }
+        },
+        error: function (xhr) {
+            tableBody.html(`<tr><td colspan="${tableColspan}" class="text-center text-danger py-2">Hata oluştu: Sunucu ile iletişim kurulamadı.</td></tr>`);
+        }
+    });
+}
+
+        $(document).ready(function () {
+            // Raporla: sunucu çalışırken perde göster (geri tuşuyla dönüşte perde kalmasın diye pageshow'da gizlenir)
+            $('#filterForm').on('submit', function () { $('#mzYukleniyor').css('display', 'flex'); });
+            window.addEventListener('pageshow', function () { $('#mzYukleniyor').hide(); });
+
+            initializeSelect2WithButtons('#anaHesap', 'Ana Hesap');
+            initializeSelect2WithButtons('#hesapKodlari', 'Detay Hesap');
+
+            if (!@islemTipiHaric.ToString().ToLower()) {
+                initializeSelect2WithButtons('#aktarimTipi', 'İşlem Tipi');
+            }
+
+             $('#anaHesap').on('select2:select', function () {
+                    if ($('#hesapKodlari').val().length > 0) $('#hesapKodlari').val(null).trigger('change');
+                    $('#kebirMizan').prop('checked', false);
+            });
+            $('#hesapKodlari').on('select2:select', function () {
+                    if ($('#anaHesap').val().length > 0) $('#anaHesap').val(null).trigger('change');
+                    $('#kebirMizan').prop('checked', false);
+            });
+             $('#kebirMizan').on('change', function () {
+                if ($(this).is(':checked')) {
+                    if ($('#anaHesap').val().length > 0) $('#anaHesap').val(null).trigger('change');
+                    if ($('#hesapKodlari').val().length > 0) $('#hesapKodlari').val(null).trigger('change');
+                }
+            });
+
+            // Başlık Tıklama Sıralama Event Listener
+            document.querySelectorAll('#mizanTable th.sortable').forEach(th => {
+                th.addEventListener('click', function () {
+                    const colIndex = this.cellIndex;
+                    const isNumeric = this.getAttribute('data-type') === 'numeric';
+                    sortTable(colIndex, isNumeric, this);
+                });
+            });
+
+            // Muavin Detay
+            $(document).on('click', '.btn-detail', function () {
+                const btn = $(this);
+                let aktarimTipleri = [];
+                try {
+                    const rawData = btn.attr('data-aktarim-tipleri');
+                    if(rawData) aktarimTipleri = JSON.parse(rawData);
+                } catch (e) { console.error(e); }
+                loadMuavinRecords(btn.data('hesapkodu'), aktarimTipleri, btn.data('bakiye-tipi'));
+            });
+
+            $('#btnKiyasla').on('click', function () {
+                const modal = new bootstrap.Modal(document.getElementById('kiyaslamaModal'));
+                modal.show();
+                const tbody = $('#kiyaslamaTableBody');
+                
+                tbody.html(`
+                    <tr>
+                        <td colspan="5" class="text-center py-5">
+                            <div class="spinner-border text-warning mb-2" role="status"></div>
+                            <h6 class="text-muted">Mizanlar kıyaslanıyor, lütfen bekleyin...</h6>
+                        </td>
+                    </tr>
+                `);
+
+                let aktarimTipleri = $('#aktarimTipi').val() || [];
+
+                $.ajax({
+                    url: '@Url.Action("GetKiyaslamaRaporu", "Rapor28")',
+                    type: 'GET',
+                    data: {
+                        startDate: $('#startDate').val(),
+                        endDate: $('#endDate').val(),
+                        aktarimTipi: aktarimTipleri,
+                        db: currentDbParam
+                    },
+                    success: function (res) {
+                        tbody.empty();
+                        if (res.success && res.data && res.data.length > 0) {
+                            res.data.forEach(item => {
+                                
+                                let sapBak = item.sapBorc - item.sapAlacak;
+                                let webBak = item.webBorc - item.webAlacak;
+                                let fark = sapBak - webBak;
+
+                                let html = `<tr class="table-warning border-bottom border-warning">
+                                    <td class="fw-bold">${item.hesapKodu}</td>
+                                    <td class="fw-bold">${item.hesapAdi}</td>
+                                    <td class="text-end num-cell">${cultureInfo.format(sapBak)}</td>
+                                    <td class="text-end num-cell">${cultureInfo.format(webBak)}</td>
+                                    <td class="text-end num-cell text-danger fw-bold">${cultureInfo.format(fark)}</td>
+                                </tr>`;
+
+                                if (item.detaylar && item.detaylar.length > 0) {
+                                    html += `<tr><td colspan="5" class="p-0 border-0">
+                                        <table class="table table-sm inner-table m-0">
+                                            <thead>
+                                                <tr>
+                                                    <th style="width:10%">Tarih</th>
+                                                    <th style="width:10%">Yevmiye No</th>
+                                                    <th style="width:10%">Satır No</th>
+                                                    <th>Açıklama</th>
+                                                    <th class="text-end" style="width:12%">SAP Bakiye</th>
+                                                    <th class="text-end" style="width:12%">Web Bakiye</th>
+                                                    <th class="text-danger" style="width:20%">Fark Nedeni</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>`;
+                                    item.detaylar.forEach(det => {
+                                        let dtSapBak = det.sapBorc - det.sapAlacak;
+                                        let dtWebBak = det.webBorc - det.webAlacak;
+                                        html += `<tr>
+                                            <td>${det.tarih}</td>
+                                            <td>${det.yevmiyeNo}</td>
+                                            <td>${det.satirNo}</td>
+                                            <td class="text-truncate" style="max-width:200px;" title="${det.aciklama || '-'}">${det.aciklama || '-'}</td>
+                                            <td class="text-end num-cell">${cultureInfo.format(dtSapBak)}</td>
+                                            <td class="text-end num-cell">${cultureInfo.format(dtWebBak)}</td>
+                                            <td class="text-danger fw-bold">${det.neden}</td>
+                                        </tr>`;
+                                    });
+                                    html += `</tbody></table></td></tr>`;
+                                }
+                                tbody.append(html);
+                            });
+                        } else if (res.success) {
+                            tbody.html(`
+                                <tr>
+                                    <td colspan="5" class="text-center text-success py-5">
+                                        <i class="fas fa-check-circle fa-3x mb-3"></i>
+                                        <h5>Tebrikler!</h5>
+                                        <p class="text-muted">SAP ve Web Mizanları arasında hiçbir fark bulunamadı.</p>
+                                    </td>
+                                </tr>
+                            `);
+                        } else {
+                            tbody.html(`<tr><td colspan="5" class="text-center text-danger py-4 fw-bold"><i class="fas fa-exclamation-triangle me-2"></i>Hata: ${res.message}</td></tr>`);
+                        }
+                    },
+                    error: function () {
+                        tbody.html('<tr><td colspan="5" class="text-center text-danger py-4 fw-bold"><i class="fas fa-wifi me-2"></i>Sunucu ile iletişim kurulamadı.</td></tr>');
+                    }
+                });
+            });
+        });
+    </script>
+}

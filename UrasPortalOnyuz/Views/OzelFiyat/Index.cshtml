@@ -1,0 +1,238 @@
+﻿@{
+    ViewData["Title"] = "Muhatap Özel Fiyatları";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var customers = (List<dynamic>)ViewBag.Customers;
+    var items = (List<dynamic>)ViewBag.Items;
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <style>
+        .table-modern { border-collapse: separate; border-spacing: 0; width: 100%; }
+        .table-modern th { background-color: #f1f5f9; color: #475569; font-size: 0.8rem; font-weight: 700; padding: 10px; }
+        .table-modern td { padding: 8px; vertical-align: middle; border-bottom: 1px solid #e2e8f0; font-size: 0.85rem;}
+        .table-input { border: 1px solid #cbd5e1; background: #fff; width: 100%; padding: 4px 8px; border-radius: 4px; }
+    </style>
+}
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="fw-bold text-dark"><i class="fas fa-tags text-primary me-2"></i>Muhatap Özel Fiyatları</h4>
+        <button class="btn btn-success shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#excelModal">
+            <i class="fas fa-file-excel me-2"></i>Excel'den Toplu Aktar
+        </button>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body bg-light">
+            <div class="row align-items-end">
+                <div class="col-md-6">
+                    <label class="fw-bold text-muted mb-1">Müşteri Seçin (Cari)</label>
+                    <select id="CustomerSelect" class="form-select select2-init">
+                        <option value="">-- Müşteri Seçiniz --</option>
+                        @foreach(var c in customers) {
+                            <option value="@c.CardCode">@c.CardCode - @c.CardName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-6 text-end">
+                    <button class="btn btn-primary px-4" id="btnLoadPrices"><i class="fas fa-search me-2"></i>Fiyatları Getir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0" id="pricesCard" style="display:none;">
+        <div class="card-header bg-white border-bottom py-3">
+            <h6 class="mb-0 fw-bold text-dark">Tanımlı Özel Fiyatlar</h6>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive" style="max-height: 500px;">
+                <table class="table table-hover table-modern mb-0" id="pricesTable">
+                    <thead class="sticky-top">
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>Stok Kodu</th>
+                            <th>Kalem Tanımı</th>
+                            <th style="width: 150px;" class="text-end">Fiyat</th>
+                            <th style="width: 100px;">Döviz</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pricesBody">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="excelModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-file-excel me-2"></i>Excel'den Fiyat Aktarımı</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-info small">
+                    <i class="fas fa-info-circle me-1"></i> Excel dosyanız <b>Cari Kodu/Adı, Stok Kodu/Adı, Fiyat, Döviz</b> sıralamasıyla oluşturulmuş olmalıdır. Sütun başlıkları olabilir, sistem otomatik ilk veriden başlar.
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Excel Dosyası Seçin</label>
+                    <input class="form-control" type="file" id="excelFileInput" accept=".xls,.xlsx">
+                </div>
+
+                <div class="form-check form-switch mt-4">
+                    <input class="form-check-input" type="checkbox" id="chkMatchNames" style="transform: scale(1.2);">
+                    <label class="form-check-label ms-2 fw-bold text-dark" for="chkMatchNames">
+                        Excel'de Cari İsim ve Kalem İsmi var (Sistem Eşleştirme Yapsın)
+                    </label>
+                    <div class="text-muted small mt-1">Eğer sütunlarda kod yerine "isim" yazıyorsa bu seçeneği işaretleyin. Boşluklar temizlenerek otomatik kod eşleştirmesi yapılır.</div>
+                </div>
+
+                <div id="importResults" class="mt-4" style="display:none;">
+                    <hr>
+                    <h6 class="fw-bold">Aktarım Sonuçları:</h6>
+                    <div class="d-flex gap-3 mb-2">
+                        <span class="badge bg-success fs-6">Başarılı: <span id="resSuccess">0</span></span>
+                        <span class="badge bg-danger fs-6">Hatalı: <span id="resError">0</span></span>
+                    </div>
+                    <ul class="list-group" id="resList" style="max-height: 200px; overflow-y:auto; font-size:0.8rem;"></ul>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Kapat</button>
+                <button type="button" class="btn btn-success fw-bold px-4" id="btnProcessExcel">SAP Fiyatlarına İşle</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <script>
+        $(document).ready(function() {
+            $('.select2-init').select2({ theme: 'bootstrap-5', width: '100%' });
+
+            // Müşteri Fiyatlarını Çek
+            $('#btnLoadPrices').click(function() {
+                const cardCode = $('#CustomerSelect').val();
+                if(!cardCode) { toastr.warning("Lütfen müşteri seçiniz."); return; }
+
+                const btn = $(this);
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...');
+
+                $.get('/OzelFiyat/GetCustomerSpecialPrices', { cardCode: cardCode }, function(res) {
+                    if(res.success) {
+                        $('#pricesCard').show();
+                        let html = '';
+                        if(res.data.length === 0) {
+                            html = '<tr><td colspan="5" class="text-center text-muted py-4">Bu müşteriye ait özel fiyat bulunamadı.</td></tr>';
+                        } else {
+                            res.data.forEach((p, idx) => {
+                                html += `
+                                <tr>
+                                    <td class="fw-bold text-muted">${idx+1}</td>
+                                    <td class="fw-bold">${p.itemCode}</td>
+                                    <td>${p.itemName}</td>
+                                    <td class="text-end"><input type="text" class="table-input text-end" value="${p.price}" readonly disabled></td>
+                                    <td><input type="text" class="table-input" value="${p.currency}" readonly disabled></td>
+                                </tr>`;
+                            });
+                        }
+                        $('#pricesBody').html(html);
+                    }
+                }).always(function() {
+                    btn.prop('disabled', false).html('<i class="fas fa-search me-2"></i>Fiyatları Getir');
+                });
+            });
+
+            // Excel'den Oku ve SAP'ye Gönder
+            $('#btnProcessExcel').click(function() {
+                const fileInput = document.getElementById('excelFileInput');
+                if(!fileInput.files.length) { toastr.warning("Lütfen bir Excel dosyası seçiniz."); return; }
+
+                const btn = $(this);
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>İşleniyor...');
+                $('#importResults').hide();
+
+                const file = fileInput.files[0];
+                const reader = new FileReader();
+
+                reader.onload = function(e) {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
+                    // Excel'i JSON array'e çevirir (Header = 1 ile 2D array yaparız ki indeks tabanlı okuyalım)
+                    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    if(rows.length < 1) { toastr.error("Excel dosyası boş."); btn.prop('disabled', false).text('SAP Fiyatlarına İşle'); return; }
+
+                    const parsedData = [];
+                    // İlk satır başlık mı diye kontrol et (Gönderdiğin koddaki startIndex mantığı)
+                    let startIdx = 0;
+                    if(rows[0].join('').toLowerCase().includes("fiyat") || rows[0].join('').toLowerCase().includes("cari")) {
+                        startIdx = 1;
+                    }
+
+                    for(let i = startIdx; i < rows.length; i++) {
+                        const r = rows[i];
+                        if(!r || r.length < 4) continue; // En az 4 sütun olmalı (Cari, Stok, Fiyat, Doviz)
+                        
+                        // Sütun yapıları gönderdiğiniz koddaki gibi farz ediliyor
+                        parsedData.push({
+                            Cari: String(r[0] || ''),
+                            Stok: String(r[1] || ''),
+                            Fiyat: String(r[2] || ''),
+                            Doviz: String(r[3] || 'TRY')
+                        });
+                    }
+
+                    if(parsedData.length === 0) { toastr.error("Aktarılacak geçerli satır bulunamadı."); btn.prop('disabled', false).text('SAP Fiyatlarına İşle'); return; }
+
+                    // Backend'e POST at
+                    const payload = {
+                        MatchNames: $('#chkMatchNames').is(':checked'),
+                        Rows: parsedData
+                    };
+
+                    $.ajax({
+                        url: '/OzelFiyat/BulkImport',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify(payload),
+                        success: function(res) {
+                            if(res.success) {
+                                $('#importResults').show();
+                                $('#resSuccess').text(res.basarili);
+                                $('#resError').text(res.hatali);
+
+                                let liHtml = '';
+                                res.detay.forEach(d => {
+                                    let color = d.durum.includes('Başarılı') ? 'text-success' : 'text-danger';
+                                    liHtml += `<li class="list-group-item py-1"><b class="${color}">${d.durum}</b> | Cari: ${d.cari} | Stok: ${d.stok}</li>`;
+                                });
+                                $('#resList').html(liHtml);
+
+                                if(res.hatali > 0) toastr.warning("İşlem bitti fakat hatalı kayıtlar var.");
+                                else toastr.success("Tüm fiyatlar başarıyla aktarıldı!");
+                            } else {
+                                toastr.error(res.message);
+                            }
+                        },
+                        error: function() { toastr.error("Sunucu ile iletişim kurulamadı."); },
+                        complete: function() { btn.prop('disabled', false).text('SAP Fiyatlarına İşle'); }
+                    });
+                };
+                reader.readAsArrayBuffer(file);
+            });
+        });
+    </script>
+}

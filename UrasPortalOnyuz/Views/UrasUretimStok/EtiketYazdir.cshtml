@@ -1,0 +1,196 @@
+@{
+    ViewData["Title"] = "Etiket Yazdırma";
+}
+
+<script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+
+<div class="d-flex justify-content-between align-items-center mb-3 no-print">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-tag me-2 text-primary"></i> Etiket Yazdırma</h2>
+</div>
+<p class="text-muted mb-3 no-print">Depodaki stoktan (kalem + parti) etiket bilgisi oluşturup yazdırın.</p>
+
+<div class="card dash-card mb-3 no-print">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-6">
+                <label class="form-label small fw-bold">Kalem / Parti Ara</label>
+                <input type="text" id="fAra" class="form-control form-control-sm" placeholder="Kalem kodu, adı veya parti no..." oninput="filtrele()">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small fw-bold">Tip</label>
+                <select id="fTip" class="form-select form-select-sm" onchange="filtrele()">
+                    <option value="">Tümü</option><option value="M">Mamul</option><option value="Y">Yarı Mamul</option><option value="H">Hammadde</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3 text-end">
+                <button class="btn btn-outline-secondary btn-sm" onclick="listeyiYenile()"><i class="fas fa-rotate me-1"></i>Yenile</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 no-print">
+    <div class="col-12 col-lg-5">
+        <div class="card dash-card">
+            <div class="card-header bg-white fw-bold small text-uppercase text-muted">Stok Listesi <span id="listeSayisi" class="badge bg-primary ms-1">0</span></div>
+            <div class="table-responsive" style="max-height:560px;">
+                <table class="table table-sm table-hover table-custom mb-0">
+                    <thead><tr><th>Kalem</th><th>Parti</th><th>Depo</th><th class="text-end">Miktar</th></tr></thead>
+                    <tbody id="tbodyListe"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-lg-7">
+        <div class="card dash-card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span class="fw-bold small text-uppercase text-muted">Etiket Önizleme</span>
+                <button class="btn btn-primary btn-sm" id="btnYazdir" onclick="window.print()" disabled><i class="fas fa-print me-1"></i>Yazdır</button>
+            </div>
+            <div class="card-body" id="etiketAlani">
+                <div class="text-center text-muted py-5"><i class="fas fa-arrow-left fs-3 d-block mb-2"></i>Soldaki listeden bir satır seçin.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; color: #5a5c69; }
+    .satir-tikla { cursor: pointer; } .satir-tikla:hover td { background: #f8fafd; } .satir-tikla.secili td { background: #eef2ff; }
+    .etiket-kart { border: 2px dashed #94a3b8; border-radius: 10px; padding: 18px; }
+    .etiket-kart .baslik { font-size: 1.2rem; font-weight: 800; color: #1e293b; margin-bottom: 4px; }
+    .etiket-kart .kod { font-family: monospace; font-size: .95rem; color: #475569; margin-bottom: 10px; }
+    .etiket-kart .satir { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #e2e8f0; font-size: .88rem; }
+    .etiket-kart .satir .k { color: #64748b; } .etiket-kart .satir .v { font-weight: 700; }
+    .etiket-qr-canvas { width: 120px; height: 120px; }
+    @@media print {
+        .no-print { display: none !important; }
+        .card { border: none !important; box-shadow: none !important; }
+    }
+</style>
+
+<script>
+    let liste = [], seciliSatir = null;
+    function fmt(n, d) { return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+    function tipAd(t) { return { M: 'Mamul', Y: 'Yarı Mamul', H: 'Hammadde' }[t] || t; }
+
+    async function listeyiYenile() {
+        document.getElementById('tbodyListe').innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-2"></span>Yükleniyor...</td></tr>';
+        const res = await fetch('/UrasUretimStok/GetEtiketStokListesi').then(r => r.json());
+        if (!res.success) { document.getElementById('tbodyListe').innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">${res.message}</td></tr>`; return; }
+        liste = res.data || [];
+        filtrele();
+    }
+
+    function filtrele() {
+        const q = (document.getElementById('fAra').value || '').toLowerCase();
+        const tip = document.getElementById('fTip').value;
+        const goster = liste.filter(k => (!tip || k.Tip === tip) && (!q || k.ItemCode.toLowerCase().includes(q) || (k.ItemName || '').toLowerCase().includes(q) || (k.BatchNum || '').toLowerCase().includes(q)));
+        document.getElementById('listeSayisi').textContent = goster.length;
+        document.getElementById('tbodyListe').innerHTML = goster.map((k, i) => `
+            <tr class="satir-tikla" onclick="satirSec('${k.ItemCode}','${k.BatchNum || ''}', this)">
+                <td><span class="badge bg-light text-dark border me-1">${tipAd(k.Tip)}</span><div class="fw-semibold">${k.ItemName || k.ItemCode}</div><div class="text-muted small">${k.ItemCode}</div></td>
+                <td>${k.BatchNum || '<span class="text-muted small">—</span>'}</td><td>${k.WhsCode}</td>
+                <td class="text-end fw-bold">${fmt(k.Quantity, 2)} <span class="text-muted small">${k.Birim}</span></td></tr>`).join('')
+            || '<tr><td colspan="4" class="text-center text-muted py-4">Kayıt yok.</td></tr>';
+    }
+
+    async function satirSec(itemCode, batchNum, el) {
+        document.querySelectorAll('#tbodyListe tr').forEach(r => r.classList.remove('secili'));
+        el.classList.add('secili');
+        document.getElementById('etiketAlani').innerHTML = '<div class="text-center py-5"><span class="spinner-border spinner-border-sm me-2"></span>Yükleniyor...</div>';
+        const res = await fetch('/UrasUretimStok/GetEtiketDetay?itemCode=' + encodeURIComponent(itemCode) + '&batchNum=' + encodeURIComponent(batchNum)).then(r => r.json());
+        if (!res.success) { document.getElementById('etiketAlani').innerHTML = `<div class="alert alert-danger">${res.message}</div>`; return; }
+        seciliSatir = res.data;
+        kapSatirlari = [];
+        cizEtiket();
+        document.getElementById('btnYazdir').disabled = false;
+    }
+
+    // Yarı mamul/mamul etiketinde GetEtiketDetay'dan gelen sabit kap ön ayarlarının (Kap1..Kap60)
+    // üzerine, kaynaktaki gibi kullanıcının serbestçe ekleyip çıkarabileceği ek kap satırları.
+    let kapSatirlari = [];
+    function kapEkle() { kapSatirlari.push({ kg: 0, adet: 0 }); cizEtiket(); }
+    function kapSil(i) { kapSatirlari.splice(i, 1); cizEtiket(); }
+    function kapDegis(i, alan, deger) { kapSatirlari[i][alan] = parseFloat(deger) || 0; cizToplamKap(); }
+    function toplamKapKg() { return kapSatirlari.reduce((t, r) => t + r.kg * r.adet, 0); }
+    function toplamKapAdet() { return kapSatirlari.reduce((t, r) => t + r.adet, 0); }
+    function cizToplamKap() {
+        const el = document.getElementById('kapToplamYazi');
+        if (el) el.textContent = kapSatirlari.length ? `Toplam: ${fmt(toplamKapAdet(), 0)} kap • ${fmt(toplamKapKg(), 2)} kg` : '';
+        const yazdirAlani = document.querySelector('.etiket-kap-yazdir');
+        if (yazdirAlani) {
+            const gecerli = kapSatirlari.filter(r => r.kg > 0 && r.adet > 0);
+            yazdirAlani.innerHTML = gecerli.length
+                ? `<div class="satir"><span class="k">Ek Kap Dağılımı</span><span class="v">${gecerli.map(r => fmt(r.kg, 2) + ' kg kap = ' + fmt(r.adet, 0) + ' Adet').join(', ')}</span></div>`
+                : '';
+        }
+    }
+
+    function cizEtiket() {
+        const d = seciliSatir;
+        let satirlar = `
+            <div class="satir"><span class="k">Miktar</span><span class="v">${fmt(d.Miktar, 2)} ${d.Birim}</span></div>
+            <div class="satir"><span class="k">Parti</span><span class="v">${d.BatchNum || '—'}</span></div>`;
+        let kapBolumu = '';
+        if (d.Tip === 'M' || d.Tip === 'Y') {
+            satirlar += `
+            <div class="satir"><span class="k">Üretim Sipariş No</span><span class="v">${d.UretimSiparisNo || '—'}</span></div>
+            <div class="satir"><span class="k">Üretim Tarihi</span><span class="v">${d.UretimTarihi ? new Date(d.UretimTarihi).toLocaleDateString('tr-TR') : '—'}</span></div>
+            <div class="satir"><span class="k">Operatör</span><span class="v">${d.Operator || '—'}</span></div>
+            <div class="satir"><span class="k">Müşteri</span><span class="v">${d.Musteri || '—'}</span></div>
+            <div class="satir"><span class="k">Ülke</span><span class="v">${d.Ulke || '—'}</span></div>`;
+            const kaplar = [['1 KG', d.Kap1], ['5 KG', d.Kap5], ['10 KG', d.Kap10], ['20 KG', d.Kap20], ['30 KG', d.Kap30], ['40 KG', d.Kap40], ['60 KG', d.Kap60]].filter(k => k[1] > 0);
+            if (kaplar.length) satirlar += `<div class="satir"><span class="k">Kap Dağılımı</span><span class="v">${kaplar.map(k => k[0] + ': ' + k[1]).join(', ')}</span></div>`;
+
+            kapBolumu = `
+            <div class="no-print mt-3 pt-2 border-top">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="small fw-bold text-uppercase text-muted">Ek Kap Dağılımı (isteğe bağlı)</span>
+                    <button class="btn btn-sm btn-outline-primary py-0" onclick="kapEkle()"><i class="fas fa-plus"></i></button>
+                </div>
+                ${kapSatirlari.map((r, i) => `
+                    <div class="input-group input-group-sm mb-1">
+                        <input type="number" min="0" step="0.01" class="form-control" placeholder="Kg" value="${r.kg || ''}" oninput="kapDegis(${i},'kg',this.value)">
+                        <span class="input-group-text">kg ×</span>
+                        <input type="number" min="0" step="1" class="form-control" placeholder="Adet" value="${r.adet || ''}" oninput="kapDegis(${i},'adet',this.value)">
+                        <button class="btn btn-outline-danger" onclick="kapSil(${i})"><i class="fas fa-trash"></i></button>
+                    </div>`).join('')}
+                <div class="small text-muted" id="kapToplamYazi"></div>
+            </div>
+            <div class="etiket-kap-yazdir"></div>`;
+        } else {
+            satirlar += `
+            <div class="satir"><span class="k">Tedarikçi</span><span class="v">${d.Tedarikci || '—'}</span></div>
+            <div class="satir"><span class="k">İrsaliye No</span><span class="v">${d.IrsaliyeNo || '—'}</span></div>
+            <div class="satir"><span class="k">Belge No</span><span class="v">${d.BelgeNo || '—'}</span></div>
+            <div class="satir"><span class="k">Giriş Tarihi</span><span class="v">${d.GirisTarihi ? new Date(d.GirisTarihi).toLocaleDateString('tr-TR') : '—'}</span></div>`;
+        }
+        document.getElementById('etiketAlani').innerHTML = `
+            <div class="etiket-kart">
+                <div class="baslik">${d.ItemName || d.ItemCode}</div>
+                <div class="kod">${d.ItemCode} <span class="badge bg-light text-dark border ms-1">${tipAd(d.Tip)}</span></div>
+                ${satirlar}
+                <div class="text-center mt-2"><canvas class="etiket-qr-canvas"></canvas></div>
+                ${kapBolumu}
+            </div>`;
+        cizToplamKap();
+        renderQr();
+    }
+
+    // QR içeriği kaynaktaki gibi tüm etiket tiplerinde aynı biçim: ItemCode|Lot|Miktar Birim.
+    function renderQr() {
+        try {
+            if (!window.QRious || !seciliSatir) return;
+            const miktarMetin = (seciliSatir.Miktar == null || seciliSatir.Miktar === '') ? '' : `${seciliSatir.Miktar} ${seciliSatir.Birim || ''}`.trim();
+            const deger = `${seciliSatir.ItemCode || ''}|${seciliSatir.BatchNum || ''}|${miktarMetin}`;
+            document.querySelectorAll('.etiket-qr-canvas').forEach(canvas => {
+                new QRious({ element: canvas, value: deger, size: 220, padding: 12, level: 'H' });
+            });
+        } catch (e) { console.error('QR render error:', e); }
+    }
+
+    listeyiYenile();
+</script>

@@ -1,0 +1,251 @@
+﻿@model List<WebApplication3.Controllers.ConsolidatedFaturaViewModel>
+@using System.Globalization
+@using Microsoft.AspNetCore.Routing
+
+@{
+    ViewData["Title"] = "Konsolide Alım Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // 1. KURAL: URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+
+    var allDbs = ViewBag.AllDatabases as List<WebApplication3.Models.DatabaseConfig> ?? new List<WebApplication3.Models.DatabaseConfig>();
+    var selectedDbs = ViewBag.SelectedDbs as List<string> ?? new List<string>();
+    var startDate = ViewBag.StartDate;
+    var endDate = ViewBag.EndDate;
+    var modelData = Model ?? new List<WebApplication3.Controllers.ConsolidatedFaturaViewModel>();
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+        }
+
+        .container-fluid {
+            max-width: 100%;
+            padding: 0 25px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .table-container {
+            overflow-x: auto;
+            margin-top: 2rem;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+        }
+
+        table.rapor-tablo {
+            width: 100% !important;
+            border-collapse: collapse;
+        }
+
+            table.rapor-tablo th, table.rapor-tablo td {
+                padding: 10px 8px;
+                border: 1px solid #dee2e6;
+                font-size: 0.75rem;
+                vertical-align: middle;
+            }
+
+            table.rapor-tablo th {
+                background-color: #007bff;
+                color: white;
+                position: sticky;
+                top: 0;
+                z-index: 10;
+                white-space: nowrap;
+            }
+
+        .db-badge {
+            background-color: #e9ecef;
+            border-left: 4px solid #007bff;
+            padding: 5px 10px;
+            font-weight: bold;
+            border-radius: 3px;
+            white-space: nowrap;
+        }
+
+        .numeric-cell {
+            font-weight: 600;
+            text-align: right !important;
+        }
+
+        .btn-group-export {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 50px 0;
+            color: #6c757d;
+        }
+    </style>
+}
+
+@* 2. KURAL: Güvenlik (CSRF) - Yetkisiz veri işlemlerini engellemek için eklendi *@
+@Html.AntiForgeryToken()
+
+<div class="container-fluid mt-4">
+    <div class="header text-center">
+        <h2>KONSOLİDE FATURA RAPORU</h2>
+        <p class="mb-0">Seçilen şirketlerin fatura detay dökümü</p>
+    </div>
+
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title"><i class="fas fa-filter me-2 text-primary"></i>Filtreleme Seçenekleri</h5>
+            <form asp-controller="Rapor55" asp-action="Index" method="get" id="raporForm">
+                
+                @* 1. KURAL: GET formuna şirket bilgisini ekleyen gizli input *@
+                <input type="hidden" name="db" value="@currentDb" />
+
+                <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label fw-bold">Şirketler (Çoklu Seçim)</label>
+                        <select class="form-control" id="selectedDbs" name="selectedDbs" multiple="multiple" required>
+                            @foreach (var db in allDbs)
+                            {
+                                <option value="@db.Key" selected="@(selectedDbs.Contains(db.Key))">@db.Display</option>
+                            }
+                        </select>
+                        <small class="text-muted">Birden fazla şirket seçebilirsiniz.</small>
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <label class="form-label fw-bold">Başlangıç Tarihi</label>
+                        <input type="date" class="form-control" name="startDate" value="@startDate">
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <label class="form-label fw-bold">Bitiş Tarihi</label>
+                        <input type="date" class="form-control" name="endDate" value="@endDate">
+                    </div>
+                    <div class="col-12 col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-sync-alt me-2"></i>Raporla</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="table-container">
+        @if (selectedDbs.Any())
+        {
+            if (modelData.Any())
+            {
+                <div class="btn-group-export">
+                    @{
+                        // 1. KURAL: Excel ve PDF dışa aktarım linklerine mevcut şirket bilgisini ekliyoruz
+                        var routeValues = new RouteValueDictionary {
+                            {"db", currentDb},
+                            {"startDate", startDate}, 
+                            {"endDate", endDate}
+                        };
+                        for (int i = 0; i < selectedDbs.Count; i++) { routeValues.Add($"selectedDbs[{i}]", selectedDbs[i]); }
+                    }
+                    <a href="@Url.Action("ExportExcel", "Rapor55", routeValues)" class="btn btn-success rounded-pill px-4">
+                        <i class="fas fa-file-excel me-2"></i> Excel İndir
+                    </a>
+                    <a href="@Url.Action("downloadpdf", "Rapor55", routeValues)" class="btn btn-danger rounded-pill px-4">
+                        <i class="fas fa-file-pdf me-2"></i> PDF İndir
+                    </a>
+                </div>
+
+                <table class="table table-bordered table-hover rapor-tablo shadow-sm">
+                    <thead>
+                        <tr>
+                            <th>Şirket Kaynağı</th>
+                            <th>Fatura Tarihi</th>
+                            <th>Ref. Numarası</th>
+                            <th>Tedarikçi Adı</th>
+                            <th>Kod</th>
+                            <th>Açıklama</th>
+                            <th class="text-right">Miktar</th>
+                            <th>Birim</th>
+                            <th class="text-right">Tutar (V.H.)</th>
+                            <th class="text-right">KDV %</th>
+                            <th class="text-right">Toplam</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in modelData)
+                        {
+                            var total = item.VergiHaricTutar + item.KdvTutari;
+                            <tr>
+                                <td><span class="db-badge">@item.VeritabanıKaynağı</span></td>
+                                <td class="text-center">@item.FaturaTarihi.ToString("dd.MM.yyyy")</td>
+                                <td>@item.FaturaRefNo</td>
+                                <td class="fw-bold">@item.TedarikciAdi</td>
+                                <td><code>@item.Kod</code></td>
+                                <td>@item.Aciklama</td>
+                                <td class="text-right">@item.Miktar.ToString("N2")</td>
+                                <td class="text-center">@item.BirimCinsi</td>
+                                <td class="text-right numeric-cell">@item.VergiHaricTutar.ToString("N2")</td>
+                                <td class="text-right">%@item.KdvOrani.ToString("N0")</td>
+                                <td class="text-right numeric-cell text-primary">@total.ToString("N2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot class="table-dark">
+                        <tr>
+                            <td colspan="8" class="text-right fw-bold">GENEL TOPLAM:</td>
+                            <td class="text-right fw-bold">@modelData.Sum(x => x.VergiHaricTutar).ToString("N2")</td>
+                            <td></td>
+                            <td class="text-right fw-bold text-warning">@modelData.Sum(x => x.VergiHaricTutar + x.KdvTutari).ToString("N2")</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            }
+            else
+            {
+                <div class="alert alert-info text-center">Uygun veri bulunamadı.</div>
+            }
+        }
+        else
+        {
+            <div class="empty-state">
+                <i class="fas fa-search fa-4x mb-3 text-muted"></i>
+                <h5>Raporu Görüntülemek İçin Şirket Seçiniz</h5>
+            </div>
+        }
+    </div>
+
+    @* 4. KURAL: UI/UX Standartlarına uygun şık, db parametreli Ana Sayfa butonu *@
+    <div class="mt-4 mb-5 text-center">
+        <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+            <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+        </a>
+    </div>
+
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            $('#selectedDbs').select2({
+                theme: "bootstrap-5",
+                placeholder: "Şirket Seçiniz",
+                allowClear: true,
+                width: '100%',
+                closeOnSelect: false // BU SATIR SEÇİM YAPINCA KUTUNUN KAPANMASINI ENGELLER
+            });
+        });
+    </script>
+}

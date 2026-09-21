@@ -1,0 +1,528 @@
+﻿@{
+    ViewData["Title"] = "Konsolide Fatura ve Satış Raporu";
+}
+
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+<style>
+    .filter-card { background: #f8f9fc; border: 1px solid #e3e6f0; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+    .summary-card { border-radius: 12px; border: none; box-shadow: 0 4px 10px rgba(0,0,0,0.05); transition: transform 0.2s; background: white; }
+    .summary-card:hover { transform: translateY(-3px); }
+    .icon-circle { width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; color: white; }
+    .bg-blue { background-color: #4e73df; }
+    .bg-green { background-color: #1cc88a; }
+    .bg-purple { background-color: #6f42c1; }
+    .bg-orange { background-color: #fd7e14; }
+    .bg-cyan { background-color: #36b9cc; }
+    
+    .quick-date-btn { cursor: pointer; padding: 5px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; transition: 0.2s; border: 1px solid #4e73df; color: #4e73df; background: transparent; margin-bottom: 4px;}
+    .quick-date-btn.active, .quick-date-btn:hover { background: #4e73df; color: white; }
+
+    .fatura-link { cursor: pointer; color: #4e73df; font-weight: bold; text-decoration: underline; }
+    .fatura-link:hover { color: #224abe; }
+    .child-row-bg { background-color: #f8f9fa !important; border-left: 4px solid #4e73df; }
+    .child-table th { background-color: #eaecf4; font-size: 12px; color: #5a5c69; border-bottom: 2px solid #ddd; }
+    .child-table td { border-bottom: 1px solid #e3e6f0; }
+</style>
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
+        <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-file-invoice-dollar me-2 text-primary"></i> Konsolide Fatura Raporu <small class="text-muted fs-6">(Vergi Hariç Net Tutarlar)</small></h2>
+        
+        <div class="d-flex gap-2">
+            <button class="btn btn-success" onclick="$('#addSlpModal').modal('show')">
+                <i class="fas fa-user-plus"></i> Yeni Satışçı Ekle
+            </button>
+            <button class="btn btn-warning" onclick="openBulkUpdateModal()">
+                <i class="fas fa-edit"></i> Seçili Faturaların Satışçısını Değiştir
+            </button>
+        </div>
+    </div>
+
+    <div class="filter-card shadow-sm">
+        <div class="row g-3 align-items-end">
+            <div class="col-xl-2 col-lg-2 col-md-6">
+                <label class="fw-bold text-muted small mb-1">Şirket</label>
+                <select id="companySelector" class="form-select select2" multiple="multiple" data-placeholder="Tüm Şirketler"></select>
+            </div>
+
+            <div class="col-xl-2 col-lg-2 col-md-6">
+                <label class="fw-bold text-muted small mb-1">Satış Temsilcisi</label>
+                <select id="slpSelector" class="form-select select2" multiple="multiple" data-placeholder="Tüm Temsilciler"></select>
+            </div>
+
+            <div class="col-xl-2 col-lg-2 col-md-6">
+                <label class="fw-bold text-muted small mb-1">Ülke</label>
+                <select id="countrySelector" class="form-select select2" multiple="multiple" data-placeholder="Tüm Ülkeler"></select>
+            </div>
+            
+            <div class="col-xl-2 col-lg-2 col-md-6">
+                <label class="fw-bold text-muted small mb-1">Fatura Türü</label>
+                <select id="invoiceTypeSelector" class="form-select select2">
+                    <option value="Tümü">Tümü (Kalem + Hizmet)</option>
+                    <option value="I">Sadece Kalem (Stok)</option>
+                    <option value="S">Sadece Hizmet</option>
+                </select>
+            </div>
+
+            <div class="col-xl-3 col-lg-3 col-md-12">
+                <div class="d-flex justify-content-between mb-1 flex-wrap">
+                    <label class="fw-bold text-muted small">Tarih Aralığı</label>
+                    <div class="d-flex gap-1 flex-wrap">
+                        <button class="quick-date-btn active" onclick="setDateRange('today', this)">Bugün</button>
+                        <button class="quick-date-btn" onclick="setDateRange('month', this)">Bu Ay</button>
+                        <button class="quick-date-btn" onclick="setDateRange('custom', this)">Özel</button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <input type="date" id="startDate" class="form-control" />
+                    <span class="input-group-text bg-light">-</span>
+                    <input type="date" id="endDate" class="form-control" />
+                </div>
+            </div>
+
+            <div class="col-xl-1 col-lg-1 col-md-12 text-end">
+                <button id="btnSearch" class="btn btn-primary w-100 fw-bold" onclick="fetchReportData()">
+                    <i class="fas fa-search"></i> Getir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4" id="summaryCards" style="display: none;">
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card summary-card h-100 p-3 border-start border-4 border-primary">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-xs fw-bold text-primary text-uppercase mb-1">Toplam 1. Miktar</div>
+                        <div class="h4 mb-0 fw-bold text-gray-800" id="lblTotalMiktar1">0</div>
+                    </div>
+                    <div class="icon-circle bg-blue shadow-sm"><i class="fas fa-boxes"></i></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-6 mb-3">
+            <div class="card summary-card h-100 p-3 border-start border-4 border-info">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-xs fw-bold text-info text-uppercase mb-1">Toplam 2. Miktar</div>
+                        <div class="h4 mb-0 fw-bold text-gray-800" id="lblTotalMiktar2">0</div>
+                    </div>
+                    <div class="icon-circle bg-cyan shadow-sm"><i class="fas fa-balance-scale"></i></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card summary-card h-100 p-3 border-start border-4 border-success">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-xs fw-bold text-success text-uppercase mb-1">Toplam Ciro (TRY)</div>
+                        <div class="h4 mb-0 fw-bold text-gray-800" id="lblTotalTRY">0 ₺</div>
+                    </div>
+                    <div class="icon-circle bg-green shadow-sm"><i class="fas fa-lira-sign"></i></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-6 mb-3">
+            <div class="card summary-card h-100 p-3 border-start border-4 border-warning">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-xs fw-bold text-warning text-uppercase mb-1">Toplam Ciro (USD)</div>
+                        <div class="h4 mb-0 fw-bold text-gray-800" id="lblTotalUSD">$0</div>
+                    </div>
+                    <div class="icon-circle bg-orange shadow-sm"><i class="fas fa-dollar-sign"></i></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-6 mb-3">
+            <div class="card summary-card h-100 p-3 border-start border-4 border-secondary">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-xs fw-bold text-secondary text-uppercase mb-1">Toplam Ciro (EUR)</div>
+                        <div class="h4 mb-0 fw-bold text-gray-800" id="lblTotalEUR">€0</div>
+                    </div>
+                    <div class="icon-circle bg-purple shadow-sm"><i class="fas fa-euro-sign"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table id="reportTable" class="table table-hover w-100 align-middle text-nowrap m-0" style="font-size: 13px;">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center">
+                                <input type="checkbox" class="form-check-input" id="checkAll" />
+                            </th>
+                            <th>Tarih</th>
+                            <th>Belge Tipi</th>
+                            <th class="text-center">Tür</th>
+                            <th>Şirket</th>
+                            <th>Satışçı</th>
+                            <th>Fatura No</th>
+                            <th>Müşteri</th>
+                            <th class="text-center">Ülke</th>
+                            <th class="text-center text-primary">T. Miktar 1</th>
+                            <th class="text-center text-info">T. Miktar 2</th>
+                            <th class="text-center">Kur</th>
+                            <th class="text-end text-success">Net Tutar (TRY)</th>
+                            <th class="text-end text-warning">Net Tutar (USD)</th>
+                            <th class="text-end text-secondary">Net Tutar (EUR)</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addSlpModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-user-plus"></i> Yeni Satış Çalışanı Ekle</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info small">Bu işlem girilen adı <b>tüm şirketlerin</b> "OSLP" tablosuna ekler.</div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Çalışan Adı Soyadı</label>
+                    <input type="text" id="newSlpNameInput" class="form-control" placeholder="Örn: Ahmet Yılmaz" autocomplete="off" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-success" id="btnSaveSlp" onclick="saveNewSlp()">Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="updateSlpModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title"><i class="fas fa-edit"></i> Satışçı Güncelle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Seçilen <b id="selectedCountText">0</b> adet faturanın satış çalışanı değiştirilecek.</p>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Yeni Satış Çalışanını Seçin</label>
+                    <select id="modalSlpSelector" class="form-select select2" style="width: 100%;">
+                        </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-warning fw-bold" id="btnUpdateSlp" onclick="applyBulkUpdate()">Güncelle</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+        let dataTable;
+
+        function getCompanyColor(name) {
+            const colors = {
+                'URASKIMYA': '#4e73df', 'URSMAKINE': '#e74a3b', 'ALV_KIMYA': '#1cc88a',
+                'DAF_KIMYA': '#f6c23e', 'SELVI': '#36b9cc', 'AVRUPA_PAPER': '#6f42c1',
+                'ALVFILO': '#fd7e14', 'ASIA_KIMYA': '#20c9a7', 'DEKORLIM': '#6610f2',
+                'URAS_HOLDING': '#e83e8c', 'DRN': '#5a5c69'
+            };
+            return colors[name] || '#858796'; 
+        }
+
+        function formatChildRow(d) {
+            let html = '<div class="p-3"><table class="table table-sm child-table mb-0">';
+            html += '<thead><tr><th>Ürün Kodu</th><th>Ürün Adı</th><th class="text-center">Miktar 1</th><th class="text-center">Miktar 2</th><th class="text-end">Satır Tutarı (TRY)</th><th class="text-end">Satır Tutarı (USD)</th><th class="text-end">Satır Tutarı (EUR)</th></tr></thead><tbody>';
+            
+            d.details.forEach(function(item) {
+                html += '<tr>' +
+                    '<td><span class="fw-bold">' + (item.itemCode || '-') + '</span></td>' +
+                    '<td class="text-muted">' + (item.dscription || 'Hizmet Faturası Kalemi') + '</td>' +
+                    '<td class="text-center fw-bold text-primary">' + item.miktar1.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + ' <small class="text-muted">' + (item.birim1||'') + '</small></td>' +
+                    '<td class="text-center fw-bold text-info">' + item.miktar2.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + ' <small class="text-muted">' + (item.birim2||'') + '</small></td>' +
+                    '<td class="text-end text-dark">' + item.tutarTRY.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + ' ₺</td>' +
+                    '<td class="text-end text-dark">$' + item.tutarUSD.toLocaleString('en-US', {minimumFractionDigits: 2}) + '</td>' +
+                    '<td class="text-end text-dark">€' + item.tutarEUR.toLocaleString('de-DE', {minimumFractionDigits: 2}) + '</td>' +
+                    '</tr>';
+            });
+            html += '</tbody></table></div>';
+            return html;
+        }
+
+        $(document).ready(function () {
+            $('.select2').select2({ theme: "bootstrap-5", width: '100%', allowClear: true });
+            
+            // Modal içindeki select2'nin düzgün çalışması için dropdownParent ayarı
+            $('#modalSlpSelector').select2({
+                theme: "bootstrap-5",
+                dropdownParent: $('#updateSlpModal')
+            });
+
+            dataTable = $('#reportTable').DataTable({
+                language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/tr.json' },
+                order: [[1, "desc"]], // Sütun indexi kaydı (Checkbox geldiği için 1 oldu)
+                paging: false,         
+                lengthChange: false,   
+                info: true,
+                columns: [
+                    { 
+                        data: null, 
+                        orderable: false, 
+                        className: 'text-center',
+                        render: function(d, type, row) {
+                            return `<input type="checkbox" class="form-check-input row-check" 
+                                    data-sirket="${row.sirket}" 
+                                    data-docentry="${row.docEntry}" 
+                                    data-docnum="${row.docNum}" 
+                                    data-belgetipi="${row.belgeTipi}">`;
+                        }
+                    },
+                    { data: 'docDate' },
+                    { data: 'belgeTipi', render: function(d) { return `<span class="badge ${d === 'Taslak Fatura' ? 'bg-warning text-dark' : 'bg-success'}">${d}</span>`; } },
+                    { data: 'faturaTuru', className: 'text-center', render: function(d) { return `<span class="badge ${d === 'Hizmet' ? 'bg-info text-white' : 'bg-secondary text-white'}">${d}</span>`; } },
+                    { data: 'sirket', render: function(d) { return `<span class="badge" style="background-color:${getCompanyColor(d)}; color:white; font-size:11px; padding:6px;">${d}</span>`; } },
+                    { data: 'slpName', className: 'fw-bold' },
+                    { data: 'docNum', className: 'details-control fatura-link', render: function(d) { return `${d} <i class="fas fa-chevron-down ms-1 small"></i>`; } },
+                    { data: 'cardName', render: function(d) { return `<div class="text-truncate fw-bold" style="max-width:200px;" title="${d}">${d}</div>`; } },
+                    { data: 'country', className: 'text-center fw-bold' },
+                    { data: 'toplamMiktar1', className: 'text-center fw-bold text-primary', render: function(d) { return d.toLocaleString('tr-TR', {minimumFractionDigits: 2}); } },
+                    { data: 'toplamMiktar2', className: 'text-center fw-bold text-info', render: function(d) { return d.toLocaleString('tr-TR', {minimumFractionDigits: 2}); } },
+                    { data: 'paraBirimi', className: 'text-center', render: function(d) { return `<span class="badge bg-light text-dark border">${d}</span>`; } },
+                    { data: 'tutarTRY', className: 'text-end fw-bold text-success', render: function(d) { return d.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + ' ₺'; } },
+                    { data: 'tutarUSD', className: 'text-end fw-bold text-warning', render: function(d) { return '$' + d.toLocaleString('en-US', {minimumFractionDigits: 2}); } },
+                    { data: 'tutarEUR', className: 'text-end fw-bold text-secondary', render: function(d) { return '€' + d.toLocaleString('de-DE', {minimumFractionDigits: 2}); } }
+                ]
+            });
+
+            // Tümü Seç / Kaldır
+            $('#checkAll').on('click', function() {
+                var isChecked = $(this).prop('checked');
+                $('.row-check').prop('checked', isChecked);
+            });
+
+            $('#reportTable tbody').on('click', 'td.details-control', function () {
+                var tr = $(this).closest('tr');
+                var row = dataTable.row(tr);
+                var icon = $(this).find('i');
+
+                if (row.child.isShown()) {
+                    row.child.hide();
+                    tr.removeClass('shown child-row-bg');
+                    icon.removeClass('fa-chevron-up').addClass('fa-chevron-down');
+                } else {
+                    row.child(formatChildRow(row.data())).show();
+                    tr.addClass('shown child-row-bg');
+                    icon.removeClass('fa-chevron-down').addClass('fa-chevron-up');
+                }
+            });
+
+            setDateRange('today', document.querySelector('.quick-date-btn.active'));
+            loadFiltersData(true);
+        });
+
+        function loadFiltersData(autoFetch = false) {
+            $.ajax({
+                url: '/Rapor83/GetFiltersData',
+                type: 'GET',
+                success: function (res) {
+                    let cmp = $('#companySelector');
+                    let slp = $('#slpSelector');
+                    let cnt = $('#countrySelector');
+                    let modalSlp = $('#modalSlpSelector');
+                    
+                    cmp.empty(); slp.empty(); cnt.empty(); modalSlp.empty();
+                    
+                    if (res.success) {
+                        res.companies.forEach(c => cmp.append(new Option(c, c, false, false)));
+                        res.countries.forEach(c => cnt.append(new Option(c.text, c.value, false, false)));
+                        
+                        res.reps.forEach(rep => {
+                            slp.append(new Option(rep, rep, false, false));
+                            modalSlp.append(new Option(rep, rep, false, false)); // Güncelleme modalına da doldur
+                        });
+                    }
+                    cmp.trigger('change');
+                    slp.trigger('change');
+                    cnt.trigger('change');
+                    modalSlp.trigger('change');
+
+                    if(autoFetch) fetchReportData();
+                }
+            });
+        }
+
+        function setDateRange(type, btnElement) {
+            $('.quick-date-btn').removeClass('active');
+            $(btnElement).addClass('active');
+
+            let startInput = document.getElementById('startDate');
+            let endInput = document.getElementById('endDate');
+            let today = new Date();
+            startInput.disabled = endInput.disabled = true;
+
+            if (type === 'today') {
+                let dateStr = today.toISOString().split('T')[0];
+                startInput.value = endInput.value = dateStr;
+            } else if (type === 'week') {
+                let firstDay = new Date(today.setDate(today.getDate() - today.getDay() + 1));
+                let lastDay = new Date(today.setDate(today.getDate() - today.getDay() + 7));
+                startInput.value = firstDay.toISOString().split('T')[0];
+                endInput.value = lastDay.toISOString().split('T')[0];
+            } else if (type === 'month') {
+                let firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+                let lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                startInput.value = firstDay.toISOString().split('T')[0];
+                endInput.value = lastDay.toISOString().split('T')[0];
+            } else if (type === 'custom') {
+                startInput.disabled = endInput.disabled = false;
+                startInput.focus();
+            }
+        }
+
+        function fetchReportData() {
+            let selectedCompanies = $('#companySelector').val() || [];
+            if (selectedCompanies.length === 0) selectedCompanies.push("Tümü");
+
+            let selectedReps = $('#slpSelector').val() || [];
+            if (selectedReps.length === 0) selectedReps.push("Tümü");
+
+            let selectedCountries = $('#countrySelector').val() || [];
+            if (selectedCountries.length === 0) selectedCountries.push("Tümü");
+
+            let reqData = {
+                Companies: selectedCompanies,
+                SlpNames: selectedReps,
+                Countries: selectedCountries,
+                InvoiceType: $('#invoiceTypeSelector').val(),
+                StartDate: $('#startDate').val(),
+                EndDate: $('#endDate').val()
+            };
+
+            let btn = document.getElementById('btnSearch');
+            let originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Yükleniyor...';
+            btn.disabled = true;
+
+            $.ajax({
+                url: '/Rapor83/GetReportData',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(reqData),
+                success: function (res) {
+                    if (res.success) {
+                        $('#lblTotalMiktar1').text(res.summary.totalMiktar1.toLocaleString('tr-TR', { minimumFractionDigits: 2 }));
+                        $('#lblTotalMiktar2').text(res.summary.totalMiktar2.toLocaleString('tr-TR', { minimumFractionDigits: 2 }));
+                        $('#lblTotalTRY').text(res.summary.totalTRY.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + ' ₺');
+                        $('#lblTotalUSD').text('$' + res.summary.totalUSD.toLocaleString('en-US', { minimumFractionDigits: 2 }));
+                        $('#lblTotalEUR').text('€' + res.summary.totalEUR.toLocaleString('de-DE', { minimumFractionDigits: 2 }));
+                        $('#summaryCards').fadeIn();
+
+                        $('#checkAll').prop('checked', false); // Tümü seçi sıfırla
+                        dataTable.clear();
+                        dataTable.rows.add(res.data).draw(); 
+                    } else {
+                        alert("Hata: " + res.message);
+                    }
+                },
+                complete: function () {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }
+            });
+        }
+
+        // ================= SERVICE LAYER JS İŞLEMLERİ =================
+
+        function saveNewSlp() {
+            let name = $('#newSlpNameInput').val().trim();
+            if (!name) { alert('Lütfen çalışan adını yazın.'); return; }
+
+            let btn = $('#btnSaveSlp');
+            btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Kaydediliyor...');
+
+            $.ajax({
+                url: '/Rapor83/AddSalesEmployee',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ SlpName: name }),
+                success: function(res) {
+                    if (res.success) {
+                        alert(res.message);
+                        $('#newSlpNameInput').val('');
+                        $('#addSlpModal').modal('hide');
+                        loadFiltersData(); // Yeni kişiyi getirmesi için filtreleri güncelle
+                    } else {
+                        alert("Hatalar:\n" + res.errors.join("\n"));
+                    }
+                },
+                complete: function() {
+                    btn.prop('disabled', false).html('Kaydet');
+                }
+            });
+        }
+
+        function openBulkUpdateModal() {
+            let checked = $('.row-check:checked');
+            if (checked.length === 0) {
+                alert("Lütfen güncellemek istediğiniz faturaları listeden seçin.");
+                return;
+            }
+            $('#selectedCountText').text(checked.length);
+            $('#updateSlpModal').modal('show');
+        }
+
+        function applyBulkUpdate() {
+            let newSlpName = $('#modalSlpSelector').val();
+            if (!newSlpName) { alert("Satışçı seçmediniz!"); return; }
+
+            let selectedInvoices = [];
+            $('.row-check:checked').each(function() {
+                selectedInvoices.push({
+                    Sirket: $(this).data('sirket'),
+                    DocEntry: parseInt($(this).data('docentry')),
+                    DocNum: $(this).data('docnum').toString(),
+                    BelgeTipi: $(this).data('belgetipi')
+                });
+            });
+
+            let btn = $('#btnUpdateSlp');
+            btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Güncelleniyor...');
+
+            $.ajax({
+                url: '/Rapor83/BulkUpdateSalesEmployee',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ NewSlpName: newSlpName, Invoices: selectedInvoices }),
+                success: function(res) {
+                    if (res.success) {
+                        alert(res.message);
+                        $('#updateSlpModal').modal('hide');
+                        fetchReportData(); // Tabloyu Yenile
+                    } else {
+                        console.error(res.errors);
+                        alert("Bazı işlemler başarısız oldu:\n" + (res.errors[0] || res.message));
+                    }
+                },
+                complete: function() {
+                    btn.prop('disabled', false).html('Güncelle');
+                }
+            });
+        }
+    </script>
+}

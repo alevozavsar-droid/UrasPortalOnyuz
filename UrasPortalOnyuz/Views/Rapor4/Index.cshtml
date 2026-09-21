@@ -1,0 +1,796 @@
+﻿@model List<WebApplication3.Controllers.Rapor4Controller.SalesOrderViewModel>
+@using Microsoft.AspNetCore.Antiforgery
+@using System.Globalization
+@using WebApplication3.Models
+@inject IAntiforgery Xsrf
+
+@{
+    ViewData["Title"] = "Satış Sipariş ve İade Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+
+    var databases = (List<WebApplication3.Controllers.DatabaseConfig>)ViewBag.Databases;
+    var currentDbDisplay = (string)ViewBag.CurrentDbDisplay ?? currentDb;
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+
+    <style>
+        /* ========================================================================= */
+        /* TAM EKRAN (FULL WIDTH) VE BOŞLUK SIFIRLAMA ZORLAMASI                       */
+        /* Tablonun kısıtlanmadan aşağı akması için ana kapsayıcılar serbest bırakıldı*/
+        /* ========================================================================= */
+        html, body { overflow-x: hidden; height: auto !important; margin: 0; padding: 0; }
+        
+        .container, .container-fluid, main, .content-wrapper, .page-content, .app-content, .content, .body-content { 
+            max-width: 100% !important; 
+            width: 100% !important; 
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            padding-left: 0.5rem !important; 
+            padding-right: 0.5rem !important; 
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            padding-bottom: 50px !important;
+        }
+
+        body { 
+            background-color: #f4f7fc; 
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            color: #2b3445; 
+            font-size: 0.75rem;
+        }
+
+        /* Dashboard Card Stilleri */
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 20px; transition: all 0.3s ease; position: relative; overflow: hidden; cursor: default; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        
+        .kpi-title { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; z-index: 2; position: relative; }
+        .kpi-value { font-size: 24px; font-weight: 900; color: #0f172a; margin-bottom: 2px; z-index: 2; position: relative; white-space: nowrap; letter-spacing: -0.5px; }
+        .kpi-desc { font-size: 11px; color: #94a3b8; z-index: 2; position: relative; }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 5rem; color: #e2e8f0; opacity: 0.4; z-index: 1; transform: rotate(-10deg); }
+        
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        .border-top-warning { border-top: 4px solid #f59e0b !important; }
+        .border-top-info { border-top: 4px solid #0ea5e9 !important; }
+        .border-top-success { border-top: 4px solid #10b981 !important; }
+
+        /* Toolbar ve Aksiyon Alanı */
+        .action-toolbar { background-color: #ffffff; padding: 12px 15px; border-radius: 10px; border: 1px solid #eef2f7; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; justify-content: space-between; align-items: center; }
+
+        /* TABLO KARTI */
+        .report-table-card {
+            background: #ffffff; 
+            border-radius: 12px; 
+            border: 1px solid #eef2f7; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03); 
+            padding: 20px;
+            height: auto !important;
+            overflow: visible !important;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .table-container { 
+            width: 100%;
+            height: auto !important;
+            max-height: none !important;
+            overflow-y: visible !important;
+            overflow-x: auto;
+            background-color: white; 
+            border-radius: 8px; 
+            border: 1px solid #eef2f7; 
+            position: relative;
+        }
+        
+        table { width: 100%; table-layout: auto; border-collapse: separate; border-spacing: 0; min-width: 2600px; }
+        
+        th, td {
+            padding: 8px 10px !important;
+            font-size: 11.5px !important;
+            border-right: 1px solid #f1f5f9;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+            line-height: 1.3;
+        }
+
+        /* 2 Kademeli Sticky Header */
+        .rapor-tablo thead tr.main-header-row th {
+            background-color: #f8fafc;
+            color: #475569;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            position: sticky;
+            top: 0;
+            z-index: 102;
+            text-align: center;
+            border-bottom: 2px solid #e2e8f0 !important;
+        }
+
+        .rapor-tablo thead tr.filter-row th {
+            padding: 6px !important;
+            background-color: #ffffff;
+            border-bottom: 2px solid #e2e8f0 !important;
+            position: sticky;
+            top: 40px;
+            z-index: 101;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            vertical-align: middle;
+        }
+
+        .table-hover tbody tr:hover td { background-color: #f1f5f9; box-shadow: inset 2px 0 0 #3b82f6; }
+        
+        .rapor-tablo tbody tr.selected td {
+            background-color: #fef08a !important; 
+            border-color: #fde047;
+        }
+        .rapor-tablo tbody tr.selected td:first-child {
+            border-left: 4px solid #eab308;
+        }
+        
+        /* Özelleştirilmiş Kolon ve Metin Kesme */
+        .col-truncate-md { max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .col-truncate-lg { max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+        /* Badges */
+        .badge-soft-primary { background-color: #dbeafe; color: #1e40af; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-success { background-color: #d1fae5; color: #065f46; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-warning { background-color: #fef3c7; color: #92400e; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-danger { background-color: #fee2e2; color: #991b1b; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-secondary { background-color: #f1f5f9; color: #475569; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px; border: 1px solid #cbd5e1; }
+
+        /* Filtre Inputları */
+        .filter-input {
+            height: 30px !important;
+            font-size: 11px !important;
+            padding: 0.25rem 0.5rem !important;
+            border-radius: 4px;
+            border: 1px solid #cbd5e1;
+            width: 100%;
+        }
+        .filter-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); outline: none; }
+        
+        .rapor-tablo thead tr.filter-row th .bootstrap-select > .dropdown-toggle {
+            height: 30px !important;
+            padding: 4px 8px !important;
+            font-size: 11px !important;
+            background-color: #fff !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 4px;
+            line-height: 1.5;
+        }
+
+        .inline-slp-select {
+            border: 1px solid transparent;
+            background-color: transparent;
+            padding: 2px 6px;
+            font-size: 11.5px;
+            height: 28px;
+            width: 100%;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .inline-slp-select:hover { background-color: #e2e8f0; }
+        .inline-slp-select:focus { background-color: #fff; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); outline: none; }
+
+        /* Butonlar */
+        .btn { font-weight: 600; letter-spacing: 0.2px; }
+        .btn-sm { font-size: 11.5px !important; padding: 4px 12px !important; height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+        .btn-primary { background-color: #3b82f6; border-color: #3b82f6; }
+        .btn-outline-secondary { color: #64748b; border-color: #cbd5e1; }
+        .btn-outline-secondary:hover { background-color: #f1f5f9; color: #0f172a; }
+    </style>
+}
+
+@Html.AntiForgeryToken()
+
+<div class="container-fluid">
+    <input type="hidden" id="currentDb" value="@currentDb" />
+
+    <!-- Başlık Alanı -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;"><i class="fas fa-file-invoice text-primary me-2"></i>Satış Sipariş ve İade Raporu</h4>
+            <span class="text-muted" style="font-size: 13px;">Aktif Veritabanı: <strong class="text-primary">@currentDbDisplay</strong> | Siparişler, faturalar ve tahsilat detayları</span>
+        </div>
+        <div>
+            <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-sm btn-outline-secondary shadow-sm rounded-pill px-3">
+                <i class="fas fa-arrow-left"></i> Ana Sayfaya Dön
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI'lar -->
+    <div class="row mb-3 g-3">
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-info hover-elevate">
+                <i class="fas fa-list-ol kpi-icon-bg"></i>
+                <div class="kpi-title">Toplam Kayıt</div>
+                <div class="kpi-value text-info" id="kpiTotalRecords">0</div>
+                <div class="kpi-desc">Filtrelenen belge sayısı</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-primary hover-elevate">
+                <i class="fas fa-check-square kpi-icon-bg"></i>
+                <div class="kpi-title">Seçili Kayıt</div>
+                <div class="kpi-value text-primary" id="kpiSelectedCount">0</div>
+                <div class="kpi-desc">İşaretlenen satır sayısı</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-warning hover-elevate">
+                <i class="fas fa-coins kpi-icon-bg"></i>
+                <div class="kpi-title">Seçili KDV'siz (TL)</div>
+                <div class="kpi-value text-warning" id="kpiSelectedTotalKDVsiz">0,00 ₺</div>
+                <div class="kpi-desc">Vergisiz seçili tutar</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-success hover-elevate position-relative">
+                <span class="badge bg-success position-absolute top-0 end-0 mt-3 me-3 rounded-pill shadow-sm">NET</span>
+                <i class="fas fa-wallet kpi-icon-bg"></i>
+                <div class="kpi-title">Seçili Net Tutar (TL)</div>
+                <div class="kpi-value text-success" id="kpiSelectedTotalAmount">0,00 ₺</div>
+                <div class="kpi-desc">Fatura - İade toplamı</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aksiyon ve Filtre Barı -->
+    <div class="action-toolbar mb-3">
+        <div class="w-100 d-flex flex-wrap align-items-center justify-content-between gap-3 m-0">
+            <div class="d-flex align-items-center gap-3 flex-grow-1 flex-wrap">
+                <!-- ŞİRKET SEÇİMİ KALDIRILDI: YERİNE SABİT ROZET EKLENDİ -->
+                <div class="d-flex align-items-center gap-2 border-end pe-3">
+                    <span class="badge bg-primary fs-6 px-3 py-2 shadow-sm d-flex align-items-center gap-2">
+                        <i class="fas fa-building"></i> @currentDbDisplay
+                    </span>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm shadow-sm px-4" onclick="window.clearReportFilters()">
+                    <i class="fas fa-filter-slash"></i> Filtreleri Temizle
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- İşlem Listesi (Tablo) -->
+    <div class="report-table-card mb-4 position-relative">
+        <div id="loadingOverlay" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;background-color:rgba(255,255,255,0.85);backdrop-filter:blur(2px);z-index:1003;border-radius:12px;">
+            <div class="spinner-border text-primary" role="status" style="width:3rem;height:3rem;">
+                <span class="visually-hidden">Yükleniyor...</span>
+            </div>
+            <p class="mt-3 text-primary fw-bold">Veriler Yükleniyor...</p>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="card-title mb-0 fw-bold text-dark" style="font-size: 14px;"><i class="fas fa-table text-primary me-2"></i>Satış ve Sipariş Detay Tablosu</div>
+            <nav aria-label="Sayfalama">
+                <ul class="pagination pagination-sm mb-0" id="pagination"></ul>
+            </nav>
+        </div>
+        
+        <div class="table-container shadow-sm">
+            <table class="table table-hover rapor-tablo" id="salesOrderTable">
+                <thead>
+                    <tr class="main-header-row">
+                        <th class="text-center" style="width:40px;min-width:40px; z-index: 103;">
+                            <input type="checkbox" id="selectAllCheckbox" class="form-check-input m-0" />
+                        </th>
+                        <th class="sortable-column" data-column="BelgeNumarasi" style="min-width:100px;">Belge No <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column text-center" data-column="BelgeTipi" style="min-width:100px;">Tür <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="BelgeTarihi" style="min-width:120px;">Belge Tarihi <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="BelgeAyYil" style="min-width:130px;">Belge Ay/Yıl <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="HesaplananVadeTarihi" style="min-width:120px;">Vade Tarihi <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="HesaplananVadeAyYil" style="min-width:130px;">Vade Ay/Yıl <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="MusteriAdi" style="min-width:200px;">Müşteri Adı <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="MusteriGrubu" style="min-width:150px;">Müşteri Grubu <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column text-end" data-column="SiparisBelgeTutari" style="min-width:120px;">Tutar (PB) <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column text-end" data-column="KDVsizSiparisBelgeTutari" style="min-width:120px;">KDV'siz (PB) <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column text-center" data-column="BelgeParaBirimi" style="min-width:80px;">PB <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="SatisTemsilcisi" style="min-width:160px;">Satış Temsilcisi <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column" data-column="OdemeKosuluGrubu" style="min-width:140px;">Ödeme Koşulu <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column text-end" data-column="SiparisTLTutariGuncelKur" style="min-width:130px;">TL Tutarı <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column text-end" data-column="ToplamFaturaTutariFaturaPB" style="min-width:130px;">Fat. Tutarı (PB) <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column text-end" data-column="ToplamFaturaTutariTL" style="min-width:130px;">Fat. TL Tutarı <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column text-end" data-column="ToplamOdenenTutarFaturaPB" style="min-width:130px;">Ödenen (PB) <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column text-end" data-column="ToplamOdenenTutarTL" style="min-width:130px;">Ödenen (TL) <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column text-end" data-column="KalanTutarFaturaPB" style="min-width:130px;">Kalan (PB) <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column text-end" data-column="KalanTutarTL" style="min-width:130px;">Kalan (TL) <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column text-end" data-column="MusteriGuncelBakiyesi" style="min-width:140px;">Güncel Bakiye <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                        <th class="sortable-column text-end" data-column="VadesiGecmisFaturaTutariTL" style="min-width:140px;">Vadesi Geçmiş <i class="fas fa-sort float-end mt-1 text-secondary"></i></th>
+                    </tr>
+
+                    <tr class="filter-row">
+                        <th class="text-center z-100">
+                            <input type="checkbox" id="selectAllFilterCheckbox" class="form-check-input m-0" />
+                        </th>
+                        <th><input type="text" class="filter-input" data-column="BelgeNumarasi" placeholder="Ara..." /></th>
+                        <th>
+                            <select class="form-select form-select-sm filter-select-bs" multiple
+                                    data-actions-box="true" data-width="100%" title="Tümü" data-column="BelgeTipi">
+                                <option value="Fatura">Fatura</option>
+                                <option value="İade">İade</option>
+                            </select>
+                        </th>
+                        <th>
+                            <select class="form-select form-select-sm filter-select-bs" multiple
+                                    data-live-search="true" data-actions-box="true"
+                                    data-selected-text-format="count > 2" data-width="100%"
+                                    title="Tümü" data-column="BelgeTarihi">
+                            </select>
+                        </th>
+                        <th>
+                            <select class="form-select form-select-sm filter-select-bs" multiple
+                                    data-live-search="true" data-actions-box="true"
+                                    data-selected-text-format="count > 2" data-width="100%"
+                                    title="Tümü" data-column="BelgeAyYil">
+                            </select>
+                        </th>
+                        <th><input type="text" class="filter-input" data-column="HesaplananVadeTarihi" placeholder="Ara..." /></th>
+                        <th>
+                            <select class="form-select form-select-sm filter-select-bs" multiple
+                                    data-live-search="true" data-actions-box="true"
+                                    data-selected-text-format="count > 2" data-width="100%"
+                                    title="Tümü" data-column="HesaplananVadeAyYil">
+                            </select>
+                        </th>
+                        <th>
+                            <select class="form-select form-select-sm filter-select-bs" multiple
+                                    data-live-search="true" data-actions-box="true"
+                                    data-selected-text-format="count > 2" data-width="100%"
+                                    title="Tümü" data-column="MusteriAdi">
+                            </select>
+                        </th>
+                        <th>
+                            <select class="form-select form-select-sm filter-select-bs" multiple
+                                    data-live-search="true" data-actions-box="true"
+                                    data-selected-text-format="count > 2" data-width="100%"
+                                    title="Tümü" data-column="MusteriGrubu">
+                            </select>
+                        </th>
+                        <th><input type="text" class="filter-input" data-column="SiparisBelgeTutari" placeholder="Ara..." /></th>
+                        <th><input type="text" class="filter-input" data-column="KDVsizSiparisBelgeTutari" placeholder="Ara..." /></th>
+                        <th>
+                            <select class="form-select form-select-sm filter-select-bs" multiple
+                                    data-live-search="true" data-actions-box="true"
+                                    data-selected-text-format="count > 2" data-width="100%"
+                                    title="Tümü" data-column="BelgeParaBirimi">
+                            </select>
+                        </th>
+                        <th>
+                            <select class="form-select form-select-sm filter-select-bs" multiple
+                                    data-live-search="true" data-actions-box="true"
+                                    data-selected-text-format="count > 2" data-width="100%"
+                                    title="Tümü" data-column="SatisTemsilcisi">
+                            </select>
+                        </th>
+                        <th><input type="text" class="filter-input" data-column="OdemeKosuluGrubu" placeholder="Ara..." /></th>
+                        <th><input type="text" class="filter-input" data-column="SiparisTLTutariGuncelKur" placeholder="Ara..." /></th>
+                        <th><input type="text" class="filter-input" data-column="ToplamFaturaTutariFaturaPB" placeholder="Ara..." /></th>
+                        <th><input type="text" class="filter-input" data-column="ToplamFaturaTutariTL" placeholder="Ara..." /></th>
+                        <th><input type="text" class="filter-input" data-column="ToplamOdenenTutarFaturaPB" placeholder="Ara..." /></th>
+                        <th><input type="text" class="filter-input" data-column="ToplamOdenenTutarTL" placeholder="Ara..." /></th>
+                        <th><input type="text" class="filter-input" data-column="KalanTutarFaturaPB" placeholder="Ara..." /></th>
+                        <th><input type="text" class="filter-input" data-column="KalanTutarTL" placeholder="Ara..." /></th>
+                        <th><input type="text" class="filter-input" data-column="MusteriGuncelBakiyesi" placeholder="Ara..." /></th>
+                        <th><input type="text" class="filter-input" data-column="VadesiGecmisFaturaTutariTL" placeholder="Ara..." /></th>
+                    </tr>
+                </thead>
+                <tbody id="salesOrderTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+
+    <script>
+        const activeSalesEmployees = @Html.Raw(Json.Serialize(ViewBag.AllSalesEmployees));
+
+        // Aktif Şirketi JavaScript tarafında hafızaya alıyoruz
+        const activeDbCode = '@currentDb';
+
+        let currentPage = 1;
+        const pageSize = 300;
+        let currentSortColumn = "BelgeTarihi";
+        let currentSortDirection = "desc";
+        let isUpdatingDropdowns = false;
+
+        // Global Filtre Temizleyici
+        window.clearReportFilters = function() {
+            $('.filter-input').val('');
+            $('.filter-select-bs').selectpicker('val', '');
+            applyFilters();
+        };
+
+        function buildFilterObject() {
+            const filters = {};
+            $('.filter-input').each(function () {
+                const col = $(this).data('column');
+                const val = $(this).val().trim();
+                if (val) filters[col] = val;
+            });
+            $('.filter-select-bs').each(function () {
+                const col  = $(this).data('column');
+                const vals = $(this).val();
+                if (vals && vals.length > 0) filters[col] = vals.join('|||');
+            });
+            return filters;
+        }
+
+        function updateDropdowns(currentFilters) {
+            $.ajax({
+                url: '/Rapor4/GetDynamicFilters',
+                type: 'GET',
+                data: { filters: JSON.stringify(currentFilters), db: activeDbCode },
+                success: function (r) {
+                    isUpdatingDropdowns = true;
+                    updateSelect('BelgeTarihi',        r.belgeTarihiList);
+                    updateSelect('BelgeAyYil',         r.belgeAyiList);
+                    updateSelect('HesaplananVadeAyYil', r.vadeAyiList);
+                    updateSelect('MusteriAdi',         r.musteriAdiList);
+                    updateSelect('MusteriGrubu',       r.musteriGrubuList);
+                    updateSelect('SatisTemsilcisi',     r.satisTemsilcisiList);
+                    updateSelect('BelgeParaBirimi',     r.belgeParaBirimiList);
+                    isUpdatingDropdowns = false;
+                }
+            });
+        }
+
+        function updateSelect(columnName, newList) {
+            const sel = $(`select.filter-select-bs[data-column="${columnName}"]`);
+            if (!sel.length) return;
+
+            let selected = sel.val() || [];
+            if (!Array.isArray(selected)) selected = [selected];
+
+            const unique = newList
+                ? [...new Set(newList.map(i => String(i).trim()).filter(Boolean))]
+                : [];
+
+            selected.forEach(s => { if (!unique.includes(s)) unique.push(s); });
+
+            let html = '';
+            unique.forEach(item => {
+                const esc = item.replace(/"/g, '&quot;');
+                html += `<option value="${esc}">${item}</option>`;
+            });
+            sel.html(html);
+
+            sel.val(selected);
+            sel.selectpicker('refresh');
+        }
+
+        function fetchData() {
+            const overlay = $('#loadingOverlay');
+            const body    = $('#salesOrderTableBody');
+
+            $('.sortable-column i.fas')
+                .removeClass('fa-sort-up fa-sort-down text-primary')
+                .addClass('fa-sort text-secondary');
+            $(`.sortable-column[data-column="${currentSortColumn}"]`).find('i.fas')
+                .removeClass('fa-sort text-secondary')
+                .addClass((currentSortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') + ' text-primary');
+
+            overlay.show();
+            $('#selectAllCheckbox, #selectAllFilterCheckbox').prop('checked', false).prop('indeterminate', false);
+            
+            // Seçili değerleri sıfırla
+            $('#kpiSelectedCount').text('0');
+            $('#kpiSelectedTotalAmount').text('0,00 ₺');
+            $('#kpiSelectedTotalKDVsiz').text('0,00 ₺');
+            $('#selectedTotalAmount').text('0,00 TL');
+            $('#selectedTotalKDVsiz').text('0,00 TL');
+
+            const filters = buildFilterObject();
+
+            $.ajax({
+                url: '/Rapor4/GetData',
+                type: 'GET',
+                data: {
+                    page: currentPage,
+                    pageSize: pageSize,
+                    sortColumn: currentSortColumn,
+                    sortDirection: currentSortDirection,
+                    filters: JSON.stringify(filters),
+                    db: activeDbCode
+                },
+                success: function (res) {
+                    if (res.data) {
+                        renderTable(res.data);
+                        renderPagination(res.totalRecords);
+                        $('#kpiTotalRecords').text(res.totalRecords.toLocaleString('tr-TR'));
+                        $('#totalRecordsCount').text(res.totalRecords.toLocaleString('tr-TR'));
+                    } else {
+                        toastr.error(res.message || 'Veri çekilirken hata oluştu.');
+                        body.empty().append('<tr><td colspan="23" class="text-center text-muted py-5"><i class="fas fa-folder-open fa-3x mb-3 opacity-25"></i><br>Gösterilecek belge bulunamadı.</td></tr>');
+                        $('#kpiTotalRecords').text('0');
+                        $('#totalRecordsCount').text('0');
+                        $('#pagination').empty();
+                    }
+                },
+                error: function () {
+                    toastr.error('Veri yüklenemedi. Sunucu hatası.');
+                    body.empty().append('<tr><td colspan="23" class="text-center text-danger py-5"><i class="fas fa-exclamation-triangle fa-3x mb-3 opacity-25"></i><br>Veri yüklenirken hata oluştu.</td></tr>');
+                    $('#kpiTotalRecords').text('0');
+                    $('#totalRecordsCount').text('0');
+                    $('#pagination').empty();
+                },
+                complete: function () { overlay.hide(); }
+            });
+        }
+
+        function applyFilters() {
+            currentPage = 1;
+            const filters = buildFilterObject();
+            fetchData();
+            updateDropdowns(filters);
+        }
+
+        function renderTable(data) {
+            const body = $('#salesOrderTableBody');
+            body.empty();
+            if (!data.length) {
+                body.append('<tr><td colspan="23" class="text-center text-muted py-5"><i class="fas fa-folder-open fa-3x mb-3 opacity-25"></i><br>Gösterilecek belge bulunamadı.</td></tr>');
+                return;
+            }
+
+            data.forEach(item => {
+                const row = $('<tr>')
+                    .attr('data-docentry', item.docEntry)
+                    .attr('data-slpcode', item.slpCode);
+
+                row.append(`<td class="text-center"><input type="checkbox" class="form-check-input m-0 row-selector" /></td>`);
+                row.append(`<td class="fw-bold" title="${item.belgeNumarasi}">${item.belgeNumarasi}</td>`);
+
+                const bClass = item.belgeTipi === 'İade' ? 'badge-soft-danger' : 'badge-soft-primary';
+                row.append(`<td class="text-center" data-belgetipi="${item.belgeTipi}">
+                                <span class="${bClass} w-100">${item.belgeTipi}</span>
+                            </td>`);
+
+                row.append(`<td class="text-center">${item.belgeTarihi}</td>`);
+                row.append(`<td class="text-center">${item.belgeAyYil}</td>`);
+                row.append(`<td class="text-center">${item.hesaplananVadeTarihi}</td>`);
+                row.append(`<td class="text-center">${item.hesaplananVadeAyYil}</td>`);
+                row.append(`<td class="fw-medium text-dark col-truncate-md" title="${item.musteriAdi}">${item.musteriAdi}</td>`);
+                row.append(`<td><span class="badge-soft-secondary">${item.musteriGrubu || ''}</span></td>`);
+                row.append(`<td class="num" data-numeric-value="${item.siparisBelgeTutari}">${formatNumber(item.siparisBelgeTutari)}</td>`);
+                row.append(`<td class="num text-muted" data-numeric-value="${item.kdVsizSiparisBelgeTutari}" data-column="KDVsizSiparisBelgeTutari">${formatNumber(item.kdVsizSiparisBelgeTutari)}</td>`);
+                row.append(`<td class="text-center"><span class="badge-soft-secondary border">${item.belgeParaBirimi}</span></td>`);
+
+                let slpHtml = `<select class="form-select form-select-sm inline-slp-select"
+                                        data-docentry="${item.docEntry}"
+                                        data-belgetipi="${item.belgeTipi}"
+                                        data-original-val="${item.slpCode}"
+                                        title="${item.satisTemsilcisi}">`;
+                let aktif = false;
+                if (activeSalesEmployees) {
+                    activeSalesEmployees.forEach(emp => {
+                        const sel = emp.slpCode === item.slpCode ? 'selected' : '';
+                        if (sel) aktif = true;
+                        slpHtml += `<option value="${emp.slpCode}" ${sel}>${emp.slpName}</option>`;
+                    });
+                }
+                if (!aktif && item.slpCode !== 0 && item.slpCode !== null) {
+                    slpHtml += `<option value="${item.slpCode}" selected>${item.satisTemsilcisi} (Pasif)</option>`;
+                }
+                slpHtml += `</select>`;
+                row.append(`<td style="padding:4px;">${slpHtml}</td>`);
+
+                row.append(`<td class="text-muted">${item.odemeKosuluGrubu || ''}</td>`);
+                row.append(`<td class="num fw-medium text-primary" data-numeric-value="${item.siparisTLTutariGuncelKur}">${formatNumber(item.siparisTLTutariGuncelKur)}</td>`);
+                row.append(`<td class="num" data-numeric-value="${item.toplamFaturaTutariFaturaPB}">${formatNumber(item.toplamFaturaTutariFaturaPB)}</td>`);
+                row.append(`<td class="num fw-bold text-dark" data-numeric-value="${item.toplamFaturaTutariTL}" data-column="ToplamFaturaTutariTL">${formatNumber(item.toplamFaturaTutariTL)}</td>`);
+                row.append(`<td class="num text-muted" data-numeric-value="${item.toplamOdenenTutarFaturaPB}">${formatNumber(item.toplamOdenenTutarFaturaPB)}</td>`);
+                row.append(`<td class="num text-muted" data-numeric-value="${item.toplamOdenenTutarTL}">${formatNumber(item.toplamOdenenTutarTL)}</td>`);
+                row.append(`<td class="num text-muted" data-numeric-value="${item.kalanTutarFaturaPB}">${formatNumber(item.kalanTutarFaturaPB)}</td>`);
+                row.append(`<td class="num fw-bold text-primary" data-numeric-value="${item.kalanTutarTL}" data-column="KalanTutarTL">${formatNumber(item.kalanTutarTL)}</td>`);
+
+                const bakiyeClass = (item.musteriGuncelBakiyesi || 0) > 0 ? 'text-danger' : 'text-success';
+                row.append(`<td class="num" data-numeric-value="${item.musteriGuncelBakiyesi}"><span class="${bakiyeClass} fw-medium">${formatNumber(item.musteriGuncelBakiyesi)}</span></td>`);
+
+                const vadesiClass = (item.vadesiGecmisFaturaTutariTL || 0) > 0 ? 'text-danger' : 'text-success';
+                row.append(`<td class="num" data-numeric-value="${item.vadesiGecmisFaturaTutariTL}"><span class="${vadesiClass} fw-medium">${formatNumber(item.vadesiGecmisFaturaTutariTL)}</span></td>`);
+
+                body.append(row);
+            });
+        }
+
+        function renderPagination(totalRecords) {
+            const cont = $('#pagination');
+            const totalPages = Math.ceil(totalRecords / pageSize);
+            cont.empty();
+            if (totalPages <= 1) return;
+
+            const max = 5;
+            let start = Math.max(1, currentPage - Math.floor(max / 2));
+            let end   = Math.min(totalPages, start + max - 1);
+            if (end - start + 1 < max) start = Math.max(1, end - max + 1);
+
+            const prev = $(`<li class="page-item ${currentPage === 1 ? 'disabled' : ''}"><a class="page-link" href="#">&laquo;</a></li>`);
+            prev.on('click', e => { e.preventDefault(); if (currentPage > 1) { currentPage--; fetchData(); } });
+            cont.append(prev);
+
+            for (let i = start; i <= end; i++) {
+                const li = $(`<li class="page-item ${i === currentPage ? 'active' : ''}"><a class="page-link" href="#">${i}</a></li>`);
+                li.on('click', (pg => e => { e.preventDefault(); if (pg !== currentPage) { currentPage = pg; fetchData(); } })(i));
+                cont.append(li);
+            }
+
+            const next = $(`<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}"><a class="page-link" href="#">&raquo;</a></li>`);
+            next.on('click', e => { e.preventDefault(); if (currentPage < totalPages) { currentPage++; fetchData(); } });
+            cont.append(next);
+        }
+
+        function formatNumber(value) {
+            if (value === null || value === undefined || isNaN(value)) return '0,00';
+            return parseFloat(value).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function calculateSelectedTotal() {
+            let totalAmount = 0, totalKDV = 0;
+            let selectedCount = 0;
+
+            $('#salesOrderTable tbody tr.selected').each(function () {
+                selectedCount++;
+                const tipi    = $(this).find('td[data-belgetipi]').data('belgetipi');
+                const tlCell  = $(this).find('td[data-column="ToplamFaturaTutariTL"]');
+                const kdvCell = $(this).find('td[data-column="KDVsizSiparisBelgeTutari"]');
+                const mult    = tipi === 'İade' ? -1 : 1;
+                
+                if (tlCell.length)  { const v = parseFloat(tlCell.data('numeric-value'));  if (!isNaN(v)) totalAmount += mult * v; }
+                if (kdvCell.length) { const v = parseFloat(kdvCell.data('numeric-value')); if (!isNaN(v)) totalKDV    += mult * v; }
+            });
+
+            // Üstteki mini toolbar ve KPI kartları için güncellemeler
+            $('#selectedTotalAmount').text(formatNumber(totalAmount) + ' TL');
+            $('#selectedTotalKDVsiz').text(formatNumber(totalKDV) + ' TL');
+            
+            $('#kpiSelectedCount').text(selectedCount.toLocaleString('tr-TR'));
+            $('#kpiSelectedTotalAmount').text(formatNumber(totalAmount) + ' ₺');
+            $('#kpiSelectedTotalKDVsiz').text(formatNumber(totalKDV) + ' ₺');
+        }
+
+        function updateSelectAllState() {
+            const boxes   = $('#salesOrderTableBody .row-selector');
+            const allChk  = boxes.length > 0 && boxes.toArray().every(cb => cb.checked);
+            const anyChk  = boxes.toArray().some(cb => cb.checked);
+            $('#selectAllCheckbox, #selectAllFilterCheckbox')
+                .prop('checked', allChk)
+                .prop('indeterminate', !allChk && anyChk);
+        }
+
+        function debounce(fn, wait) {
+            let t;
+            return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); };
+        }
+
+        $(document).ready(function () {
+
+            $('.filter-select-bs').selectpicker({
+                liveSearch: true,
+                actionsBox: true,
+                selectAllText: 'Tümünü Seç',
+                deselectAllText: 'Tümünü Kaldır',
+                selectedTextFormat: 'count > 2',
+                width: '100%',
+                container: 'body'
+            });
+
+            $(document).on('changed.bs.select', '.filter-select-bs', function () {
+                if (isUpdatingDropdowns) return;
+                applyFilters();
+            });
+
+            const debouncedApply = debounce(applyFilters, 600);
+            $('.filter-input').on('input', debouncedApply);
+
+            $('#salesOrderTable').on('click', '.sortable-column', function () {
+                const col = $(this).data('column');
+                currentSortDirection = (currentSortColumn === col && currentSortDirection === 'asc') ? 'desc' : 'asc';
+                currentSortColumn = col;
+                currentPage = 1;
+                fetchData();
+            });
+
+            updateDropdowns({});
+            fetchData();
+
+            $(document).on('click', '#salesOrderTable tbody tr', function (e) {
+                if (!$(e.target).is('input, select, option, button')) {
+                    const cb = $(this).find('.row-selector');
+                    cb.prop('checked', !cb.prop('checked'));
+                    $(this).toggleClass('selected', cb.prop('checked'));
+                    calculateSelectedTotal();
+                    updateSelectAllState();
+                }
+            });
+
+            $(document).on('change', '.row-selector', function () {
+                $(this).closest('tr').toggleClass('selected', this.checked);
+                calculateSelectedTotal();
+                updateSelectAllState();
+            });
+
+            $(document).on('change', '#selectAllCheckbox, #selectAllFilterCheckbox', function () {
+                const checked = $(this).prop('checked');
+                $('#selectAllCheckbox, #selectAllFilterCheckbox').prop('checked', checked).prop('indeterminate', false);
+                $('#salesOrderTableBody .row-selector').prop('checked', checked).closest('tr').toggleClass('selected', checked);
+
+                if (checked) {
+                    $('#loadingOverlay').show();
+                    $.ajax({
+                        url: '/Rapor4/GetTotalAmount',
+                        type: 'GET',
+                        data: { filters: JSON.stringify(buildFilterObject()), db: activeDbCode },
+                        success: function (r) {
+                            if (r.success) {
+                                $('#selectedTotalAmount').text(formatNumber(r.totalAmount) + ' TL');
+                                $('#selectedTotalKDVsiz').text(formatNumber(r.totalKDVsiz) + ' TL');
+
+                                $('#kpiSelectedTotalAmount').text(formatNumber(r.totalAmount) + ' ₺');
+                                $('#kpiSelectedTotalKDVsiz').text(formatNumber(r.totalKDVsiz) + ' ₺');
+                                $('#kpiSelectedCount').text($('#totalRecordsCount').text());
+                            } else {
+                                toastr.error(r.message || 'Toplam tutar alınırken hata oluştu.');
+                            }
+                        },
+                        error: () => toastr.error('Toplam tutar alınırken sunucu hatası.'),
+                        complete: () => $('#loadingOverlay').hide()
+                    });
+                } else {
+                    $('#selectedTotalAmount').text('0,00 TL');
+                    $('#selectedTotalKDVsiz').text('0,00 TL');
+                    
+                    $('#kpiSelectedCount').text('0');
+                    $('#kpiSelectedTotalAmount').text('0,00 ₺');
+                    $('#kpiSelectedTotalKDVsiz').text('0,00 ₺');
+                }
+            });
+
+            $(document).on('change', '.inline-slp-select', function () {
+                const sel      = $(this);
+                const docEntry = sel.data('docentry');
+                const tipi     = sel.data('belgetipi');
+                const newCode  = parseInt(sel.val());
+                const origVal  = sel.data('original-val');
+                if (!newCode) return;
+
+                sel.prop('disabled', true);
+                toastr.info("Güncelleniyor...", "", { timeOut: 1500 });
+
+                $.ajax({
+                    url: '/Rapor4/UpdateSalesEmployee?db=' + activeDbCode,
+                    type: 'POST',
+                    contentType: 'application/json',
+                    headers: {
+                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                    },
+                    data: JSON.stringify({ DocEntry: docEntry, BelgeTipi: tipi, NewSlpCode: newCode }),
+                    success: function (r) {
+                        if (r.success) {
+                            toastr.success("Satış temsilcisi başarıyla değiştirildi.");
+                            sel.data('original-val', newCode);
+                        } else {
+                            toastr.error(r.message || "Hata oluştu.");
+                            sel.val(origVal);
+                        }
+                    },
+                    error: () => { toastr.error("Sunucu ile iletişimde hata oluştu."); sel.val(origVal); },
+                    complete: () => sel.prop('disabled', false)
+                });
+            });
+        });
+    </script>
+}

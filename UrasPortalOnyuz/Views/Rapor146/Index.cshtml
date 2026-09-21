@@ -1,0 +1,343 @@
+﻿@{
+    ViewData["Title"] = "Tahsilat Prim Tablosu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var islemTipleri = ViewBag.IslemTipleri as List<string> ?? new List<string>();
+    var bugun = DateTime.Today;
+    var ayBasi = new DateTime(bugun.Year, bugun.Month, 1);
+    var aySonu = ayBasi.AddMonths(1).AddDays(-1);
+}
+
+<style>
+    .prim-kart { background:#fff; border:1px solid #e6ebf2; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+    /* Coklu secim acilir listesi (islem tipi) */
+    .prim-coklu { position: relative; }
+    .prim-coklu-panel {
+        display:none; position:absolute; z-index:1050; top:calc(100% + 2px); left:0;
+        min-width:100%; max-height:260px; overflow-y:auto; background:#fff;
+        border:1px solid #ced4da; border-radius:.375rem; box-shadow:0 6px 18px rgba(0,0,0,.12); padding:4px;
+    }
+    .prim-coklu.acik .prim-coklu-panel { display:block; }
+    .prim-coklu-satir {
+        display:flex; align-items:center; gap:8px; padding:5px 8px; margin:0;
+        font-size:12.5px; border-radius:4px; cursor:pointer; white-space:nowrap;
+    }
+    .prim-coklu-satir:hover { background:#eef2f7; }
+    .prim-coklu-satir input { margin:0; }
+
+    .prim-etiket { font-size:11.5px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.3px; }
+    .ozet-kutu { border-radius:10px; padding:14px 16px; border:1px solid #e6ebf2; background:#fff; }
+    .ozet-baslik { font-size:11.5px; font-weight:700; color:#64748b; text-transform:uppercase; }
+    .ozet-deger { font-size:20px; font-weight:800; color:#0f172a; }
+
+    #primTablo { width:100%; border-collapse:collapse; font-size:12.5px; }
+    #primTablo thead th {
+        position:sticky; top:0; z-index:2; background:#f1f5f9; color:#334155;
+        font-weight:700; font-size:11.5px; text-transform:uppercase;
+        padding:9px 8px; border-bottom:2px solid #cbd5e1; white-space:nowrap; cursor:pointer; user-select:none;
+    }
+    #primTablo thead th:hover { background:#e2e8f0; }
+    #primTablo thead th .ok { color:#94a3b8; font-size:.85em; }
+    #primTablo thead th.artan .ok, #primTablo thead th.azalan .ok { color:#2563eb; }
+    #primTablo tbody td { padding:7px 8px; border-bottom:1px solid #eef2f7; white-space:nowrap; }
+    #primTablo tbody tr:hover { background:#f8fbff; }
+    #primTablo tfoot td { padding:9px 8px; background:#f8fafc; font-weight:800; border-top:2px solid #cbd5e1; }
+    .sayi { text-align:right; font-variant-numeric:tabular-nums; }
+    .tablo-kutu { max-height:60vh; overflow:auto; border:1px solid #e6ebf2; border-radius:10px; background:#fff; }
+</style>
+
+<div class="container-fluid py-3">
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h4 class="fw-bold mb-1">Tahsilat Prim Tablosu</h4>
+            <div class="text-muted" style="font-size:12.5px;">
+                Seçilen tarih aralığında yapılan tahsilatlar — @ViewBag.CurrentDbDisplay
+            </div>
+        </div>
+        <button class="btn btn-success fw-bold" id="btnExcel">
+            <i class="fas fa-file-excel me-1"></i> Excel (tek sayfa)
+        </button>
+    </div>
+
+    <div class="prim-kart p-3 mb-3">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <div class="prim-etiket mb-1">Başlangıç</div>
+                <input type="date" id="bas" class="form-control form-control-sm" value="@ayBasi.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-2">
+                <div class="prim-etiket mb-1">Bitiş</div>
+                <input type="date" id="bit" class="form-control form-control-sm" value="@aySonu.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-2">
+                <div class="prim-etiket mb-1">İşlem Tipi (U_BE1_AKTAR)</div>
+                <div class="prim-coklu" id="tipSecici">
+                    <button type="button" class="form-select form-select-sm text-start" id="tipDugme">Tümü</button>
+                    <div class="prim-coklu-panel">
+                        <label class="prim-coklu-satir fw-bold border-bottom">
+                            <input type="checkbox" id="tipHepsi" checked /> <span>Tümü</span>
+                        </label>
+                        @foreach (var t in islemTipleri)
+                        {
+                            <label class="prim-coklu-satir">
+                                <input type="checkbox" class="tipKutu" value="@t" /> <span>@t</span>
+                            </label>
+                        }
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="prim-etiket mb-1">Tabloda ara</div>
+                <input type="text" id="ara" class="form-control form-control-sm" placeholder="Cari, belge no, satışçı..." autocomplete="off" />
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button class="btn btn-primary btn-sm flex-fill fw-bold" id="btnGetir">
+                    <i class="fas fa-search me-1"></i> Getir
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" id="btnBuAy" title="Bu ayı seç">Bu ay</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="ozet-kutu"><div class="ozet-baslik">Nakit (TL)</div><div class="ozet-deger" id="ozNakit">—</div></div></div>
+        <div class="col-md-3"><div class="ozet-kutu"><div class="ozet-baslik">Çek</div><div class="ozet-deger" id="ozCek">—</div></div></div>
+        <div class="col-md-3"><div class="ozet-kutu"><div class="ozet-baslik">Havale / Banka (TL)</div><div class="ozet-deger" id="ozHavale">—</div></div></div>
+        <div class="col-md-3"><div class="ozet-kutu"><div class="ozet-baslik">Genel Toplam (TL)</div><div class="ozet-deger text-primary" id="ozToplam">—</div></div></div>
+    </div>
+
+    <div class="prim-kart p-0">
+        <ul class="nav nav-pills gap-1 p-3 pb-0" id="sekmeler">
+            <li class="nav-item"><button class="nav-link active" data-grup="Nakit">Nakit <span class="badge bg-light text-dark ms-1">0</span></button></li>
+            <li class="nav-item"><button class="nav-link" data-grup="Cek">Çek <span class="badge bg-light text-dark ms-1">0</span></button></li>
+            <li class="nav-item"><button class="nav-link" data-grup="Havale">Havale / Banka <span class="badge bg-light text-dark ms-1">0</span></button></li>
+        </ul>
+
+        <div class="p-3">
+            <div class="tablo-kutu">
+                <table id="primTablo">
+                    <thead>
+                        <tr>
+                            <th data-alan="docDate">Tarih <span class="ok">⇅</span></th>
+                            <th data-alan="docNum" data-sayi="1">Belge No <span class="ok">⇅</span></th>
+                            <th data-alan="cardCode">Cari Kodu <span class="ok">⇅</span></th>
+                            <th data-alan="cardName">Cari Adı <span class="ok">⇅</span></th>
+                            <th data-alan="satisci">Satışçı <span class="ok">⇅</span></th>
+                            <th data-alan="islemTipi">İşlem Tipi <span class="ok">⇅</span></th>
+                            <th data-alan="odemeTuru">Ödeme Türü <span class="ok">⇅</span></th>
+                            <th data-alan="paraBirimi">PB <span class="ok">⇅</span></th>
+                            <th class="sayi" data-alan="tutar" data-sayi="1">Tutar <span class="ok">⇅</span></th>
+                            <th class="sayi" data-alan="tutarTL" data-sayi="1">Tutar (TL) <span class="ok">⇅</span></th>
+                            <th data-alan="hesap">Hesap <span class="ok">⇅</span></th>
+                            <th data-alan="cekNo">Çek No <span class="ok">⇅</span></th>
+                            <th data-alan="cekVade">Çek Vadesi <span class="ok">⇅</span></th>
+                            <th data-alan="banka">Banka <span class="ok">⇅</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="primGovde">
+                        <tr><td colspan="14" class="text-center text-muted py-5">Tarih aralığı seçip <b>Getir</b> deyin.</td></tr>
+                    </tbody>
+                    <tfoot id="primAlt"></tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    (function () {
+        var veri = [];
+        var aktifGrup = 'Nakit';
+        var siralama = { alan: null, artan: true };
+
+        var bicim = function (v) {
+            return (Number(v) || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        };
+
+        function kacir(m) { var d = document.createElement('div'); d.textContent = m == null ? '' : m; return d.innerHTML; }
+
+        function tarih(t) {
+            if (!t) return '';
+            var d = new Date(t);
+            return isNaN(d) ? '' : d.toLocaleDateString('tr-TR');
+        }
+
+        function suzulmus() {
+            var q = (document.getElementById('ara').value || '').toLocaleLowerCase('tr');
+            var liste = veri.filter(function (r) { return r.grup === aktifGrup; });
+
+            if (q) {
+                liste = liste.filter(function (r) {
+                    return [r.cardCode, r.cardName, r.satisci, r.docNum, r.cekNo, r.banka, r.hesap]
+                        .join(' ').toLocaleLowerCase('tr').indexOf(q) > -1;
+                });
+            }
+
+            if (siralama.alan) {
+                var a = siralama.alan, yon = siralama.artan ? 1 : -1;
+                var sayisal = ['docNum', 'tutar', 'tutarTL'].indexOf(a) > -1;
+                liste = liste.slice().sort(function (x, y) {
+                    if (sayisal) return ((Number(x[a]) || 0) - (Number(y[a]) || 0)) * yon;
+                    return String(x[a] || '').localeCompare(String(y[a] || ''), 'tr') * yon;
+                });
+            }
+            return liste;
+        }
+
+        function ciz() {
+            var liste = suzulmus();
+            var govde = document.getElementById('primGovde');
+            var alt = document.getElementById('primAlt');
+
+            if (!liste.length) {
+                govde.innerHTML = '<tr><td colspan="14" class="text-center text-muted py-5">Bu grupta kayıt yok.</td></tr>';
+                alt.innerHTML = '';
+                return;
+            }
+
+            govde.innerHTML = liste.map(function (r) {
+                return '<tr>'
+                    + '<td>' + tarih(r.docDate) + '</td>'
+                    + '<td>' + kacir(r.docNum) + '</td>'
+                    + '<td>' + kacir(r.cardCode) + '</td>'
+                    + '<td>' + kacir(r.cardName) + '</td>'
+                    + '<td>' + kacir(r.satisci) + '</td>'
+                    + '<td>' + kacir(r.islemTipi) + '</td>'
+                    + '<td>' + kacir(r.odemeTuru) + '</td>'
+                    + '<td>' + kacir(r.paraBirimi) + '</td>'
+                    + '<td class="sayi">' + bicim(r.tutar) + '</td>'
+                    + '<td class="sayi">' + (r.tutarTL ? bicim(r.tutarTL) : '') + '</td>'
+                    + '<td>' + kacir(r.hesap) + '</td>'
+                    + '<td>' + kacir(r.cekNo) + '</td>'
+                    + '<td>' + tarih(r.cekVade) + '</td>'
+                    + '<td>' + kacir(r.banka) + '</td>'
+                    + '</tr>';
+            }).join('');
+
+            var tTutar = liste.reduce(function (a, r) { return a + (Number(r.tutar) || 0); }, 0);
+            var tTL = liste.reduce(function (a, r) { return a + (Number(r.tutarTL) || 0); }, 0);
+
+            alt.innerHTML = '<tr><td colspan="8">TOPLAM (' + liste.length + ' satır)</td>'
+                          + '<td class="sayi">' + bicim(tTutar) + '</td>'
+                          + '<td class="sayi">' + bicim(tTL) + '</td>'
+                          + '<td colspan="4"></td></tr>';
+        }
+
+        function rozetler() {
+            document.querySelectorAll('#sekmeler button').forEach(function (b) {
+                var g = b.dataset.grup;
+                b.querySelector('.badge').textContent = veri.filter(function (r) { return r.grup === g; }).length;
+            });
+        }
+
+        // Sayfa belirli bir sirkete sabitlenmis olabilir (adres satirinda ?db=...).
+        // Sunucu once query'deki db'ye bakiyor; bu yuzden sayfanin kendi
+        // isteklerinin de db'yi TASIMASI gerekir. Aksi hâlde sabitlenmis sekme
+        // baslikta bir sirketi, veride cerezdeki baska sirketi gosterirdi.
+        var SAYFA_DB = new URLSearchParams(window.location.search).get('db') || '';
+
+        // ---- Islem tipi coklu secimi ------------------------------------
+        // Hicbiri isaretli degilse (= "Tümü") suzgec uygulanmaz.
+        var tipSecici = document.getElementById('tipSecici');
+        var tipDugme  = document.getElementById('tipDugme');
+        var tipHepsi  = document.getElementById('tipHepsi');
+
+        function secilenTipler() {
+            return Array.prototype.slice
+                .call(document.querySelectorAll('.tipKutu:checked'))
+                .map(function (k) { return k.value; });
+        }
+
+        function tipEtiketiniTazele() {
+            var s = secilenTipler();
+            tipHepsi.checked = (s.length === 0);
+            tipDugme.textContent = s.length === 0 ? 'Tümü'
+                                 : (s.length === 1 ? s[0] : s.length + ' tip seçili');
+            tipDugme.title = s.length ? s.join(', ') : 'Tüm işlem tipleri';
+        }
+
+        tipDugme.addEventListener('click', function (e) {
+            e.stopPropagation();
+            tipSecici.classList.toggle('acik');
+        });
+        tipSecici.addEventListener('click', function (e) { e.stopPropagation(); });
+        document.addEventListener('click', function () { tipSecici.classList.remove('acik'); });
+
+        tipHepsi.addEventListener('change', function () {
+            document.querySelectorAll('.tipKutu').forEach(function (k) { k.checked = false; });
+            tipEtiketiniTazele();
+        });
+        document.querySelectorAll('.tipKutu').forEach(function (k) {
+            k.addEventListener('change', tipEtiketiniTazele);
+        });
+        tipEtiketiniTazele();
+
+        function parametreler() {
+            return 'bas=' + encodeURIComponent(document.getElementById('bas').value)
+                 + '&bit=' + encodeURIComponent(document.getElementById('bit').value)
+                 + '&islemTipi=' + encodeURIComponent(secilenTipler().join(','))
+                 + (SAYFA_DB ? '&db=' + encodeURIComponent(SAYFA_DB) : '');
+        }
+
+        async function getir() {
+            document.getElementById('primGovde').innerHTML =
+                '<tr><td colspan="14" class="text-center text-muted py-5"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</td></tr>';
+            try {
+                var c = await fetch('/Rapor146/Veri?' + parametreler());
+                var v = await c.json();
+                if (!v.success) { toastr.error(v.message || 'Veri alınamadı.'); return; }
+
+                veri = v.satirlar || [];
+                document.getElementById('ozNakit').textContent = bicim(v.ozet.nakit);
+                document.getElementById('ozCek').textContent = bicim(v.ozet.cek);
+                document.getElementById('ozHavale').textContent = bicim(v.ozet.havale);
+                document.getElementById('ozToplam').textContent = bicim(v.ozet.toplam);
+
+                rozetler();
+                ciz();
+            } catch (e) {
+                toastr.error('Veri alınamadı.');
+            }
+        }
+
+        document.getElementById('btnGetir').addEventListener('click', getir);
+        document.getElementById('ara').addEventListener('input', ciz);
+
+        document.getElementById('btnBuAy').addEventListener('click', function () {
+            var b = new Date(); b.setDate(1);
+            var s = new Date(b.getFullYear(), b.getMonth() + 1, 0);
+            document.getElementById('bas').value = b.toISOString().split('T')[0];
+            document.getElementById('bit').value = s.toISOString().split('T')[0];
+            getir();
+        });
+
+        document.getElementById('sekmeler').addEventListener('click', function (e) {
+            var b = e.target.closest('button');
+            if (!b) return;
+            this.querySelectorAll('button').forEach(function (x) { x.classList.remove('active'); });
+            b.classList.add('active');
+            aktifGrup = b.dataset.grup;
+            ciz();
+        });
+
+        document.querySelector('#primTablo thead').addEventListener('click', function (e) {
+            var th = e.target.closest('th');
+            if (!th || !th.dataset.alan) return;
+            siralama.artan = (siralama.alan === th.dataset.alan) ? !siralama.artan : true;
+            siralama.alan = th.dataset.alan;
+            this.querySelectorAll('th').forEach(function (x) { x.classList.remove('artan', 'azalan'); });
+            th.classList.add(siralama.artan ? 'artan' : 'azalan');
+            ciz();
+        });
+
+        // Excel: üç grup TEK sayfada iner.
+        document.getElementById('btnExcel').addEventListener('click', function () {
+            window.location.href = '/Rapor146/Excel?' + parametreler();
+        });
+
+        getir();
+    })();
+</script>
+}

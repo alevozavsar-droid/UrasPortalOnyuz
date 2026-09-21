@@ -1,0 +1,1455 @@
+﻿@{
+    ViewData["Title"] = "İthalat İşlemleri ve Satınalma Siparişi";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var databases = (List<WebApplication3.Controllers.Rapor131Controller.DatabaseConfig>)ViewBag.Databases;
+    var currentDbDisplay = (string)ViewBag.CurrentDbDisplay;
+    var vendors = (List<WebApplication3.Controllers.Rapor131Controller.CustomerModel>)ViewBag.Vendors;
+    var items = (List<WebApplication3.Controllers.Rapor131Controller.ItemModel>)ViewBag.Items;
+    var accounts = (List<WebApplication3.Controllers.Rapor131Controller.GLAccountModel>)ViewBag.Accounts;
+    var slps = (List<WebApplication3.Controllers.Rapor131Controller.SalesEmployeeModel>)ViewBag.SalesEmployees;
+    var vatGroups = (List<WebApplication3.Controllers.Rapor131Controller.VatGroupModel>)ViewBag.VatGroups;
+    var currencies = (List<string>)ViewBag.Currencies;
+    var countries = (List<WebApplication3.Controllers.Rapor131Controller.CountryModel>)ViewBag.Countries;
+    var states = (List<WebApplication3.Controllers.Rapor131Controller.StateModel>)ViewBag.States;
+    var warehouses = (List<WebApplication3.Controllers.Rapor131Controller.WarehouseModel>)ViewBag.Warehouses; 
+    var importFiles = (List<WebApplication3.Controllers.Rapor131Controller.ImportFileModel>)ViewBag.ImportFiles;
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <style>
+        :root { --form-bg: #ffffff; --border-soft: #e2e8f0; --primary-soft: #eff6ff; }
+        
+        .dashboard-section { border: 1px solid var(--border-soft); border-radius: 8px; margin-bottom: 1.5rem; background: var(--form-bg); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); transition: all 0.3s ease; }
+        .dashboard-header { background: #f8fafc; padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-soft); display: flex; justify-content: space-between; align-items: center; border-radius: 8px 8px 0 0; transition: background 0.2s; }
+        .dashboard-header h5 { margin: 0; font-weight: 700; color: #1e293b; display: flex; align-items: center;}
+        .dashboard-body { padding: 1.5rem; }
+        
+        /* Tam Ekran Modu İçin - Tablo Kayma ve Yarım Kalma Sorunu Çözümü (Flexbox) */
+        .fullscreen-panel {
+            position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; /* zoom: vw/vh yerine % */
+            z-index: 1050 !important; margin: 0 !important; border-radius: 0 !important; background: var(--form-bg);
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+        .fullscreen-panel .dashboard-body { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
+        .fullscreen-panel form { display: flex; flex-direction: column; height: 100%; }
+        .fullscreen-panel #orderTabsContent { flex-grow: 1; display: flex; flex-direction: column; min-height: 0; }
+        .fullscreen-panel #lines-pane { flex-grow: 1; display: flex; flex-direction: column; min-height: 0; }
+        .fullscreen-panel .table-responsive { flex-grow: 1; max-height: none !important; overflow-y: auto; border-bottom: 1px solid var(--border-soft); }
+        
+        .form-label { font-weight: 600; color: #475569; font-size: 0.85rem; margin-bottom: 0.3rem; }
+        .table-modern { border-collapse: separate; border-spacing: 0; width: 100%; }
+        .table-modern th { background-color: #f1f5f9; color: #475569; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; padding: 10px; border-bottom: 1px solid var(--border-soft); position: sticky; top: 0; z-index: 10;}
+        .table-modern td { padding: 8px 10px; vertical-align: middle; border-bottom: 1px solid var(--border-soft); font-size: 0.85rem; }
+        
+        .table-input { border: 1px solid transparent; background: transparent; width: 100%; padding: 4px 8px; border-radius: 4px; transition: 0.2s; font-size: 0.85rem; }
+        .table-input:focus, .table-input:hover { border-color: #cbd5e1; background: #fff; outline: none; }
+        
+        .select2-container--bootstrap-5 .select2-selection { font-size: 0.85rem; min-height: 34px; border-color: var(--border-soft); }
+        
+        .footer-totals-box { background: #f8fafc; border: 1px solid var(--border-soft); border-radius: 6px; padding: 1rem; width: 350px; float: right; height: 100%; }
+        .footer-row { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.85rem; color: #475569; }
+        .footer-row.grand-total { font-weight: 700; font-size: 1rem; color: #0f172a; border-top: 1px solid var(--border-soft); padding-top: 0.5rem; margin-bottom: 0; }
+        
+        .action-bar { background: white; padding: 1rem 1.5rem; position: sticky; bottom: 0; z-index: 100; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 6px -1px rgba(0,0,0,0.05); margin-top: auto;}
+
+        .view-mode .searchable-field, .view-mode textarea, .view-mode input { background-color: #f8fafc !important; cursor: not-allowed; pointer-events: none;}
+        .find-mode .searchable-field { background-color: #fef9c3 !important; border-color: #fde047 !important; }
+        
+        /* VIEW modunda UDF ve Yorum alanlarının kilitlenmemesi için özel kural */
+        .view-mode .editable-in-view { background-color: #fff !important; cursor: text !important; pointer-events: auto !important; border: 1px solid #94a3b8 !important; }
+
+        .col-item, .col-service { display: none !important; }
+        .table-mode-I .col-item { display: table-cell !important; }
+        .table-mode-S .col-service { display: table-cell !important; }
+        .view-mode .col-action, .find-mode .col-action { display: none !important; }
+        
+        /* Satınalma siparişi navigasyon butonları */
+        .order-nav-group { margin-left: 1rem; }
+    </style>
+}
+
+<div class="container-fluid py-4 pb-5 mb-5" id="mainContainer">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div class="d-flex align-items-center">
+            <h4 class="mb-0 fw-bold text-dark"><i class="fas fa-ship text-primary me-2"></i>İthalat Yönetimi ve Sipariş</h4>
+            <span class="badge bg-secondary fs-6 px-3 py-2 ms-3">@currentDbDisplay</span>
+        </div>
+    </div>
+
+    <div id="loadingOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8); z-index:9999; flex-direction:column; justify-content:center; align-items:center;">
+        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+        <h5 class="mt-3 text-primary fw-bold">İşlem Yapılıyor...</h5>
+    </div>
+
+    <!-- 1. BÖLÜM: İTHALAT DOSYALARI (DASHBOARD) -->
+    <div class="dashboard-section" id="importPanel">
+        <div class="dashboard-header">
+            <h5><i class="fas fa-folder-open text-warning me-2"></i>1. İthalat İşlemleri (Dosya Yönetimi)</h5>
+            <div class="d-flex align-items-center">
+                <button type="button" class="btn btn-sm btn-outline-secondary btn-fullscreen me-3" onclick="toggleFullscreen('importPanel')" title="Tam Ekran Göster/Kapat"><i class="fas fa-expand"></i></button>
+                <i class="fas fa-chevron-down text-muted" data-bs-toggle="collapse" data-bs-target="#importDashboard" style="cursor:pointer;"></i>
+            </div>
+        </div>
+        <div id="importDashboard" class="collapse show dashboard-body">
+            <div class="d-flex justify-content-between mb-3">
+                <h6 class="fw-bold text-muted">Mevcut İthalat Dosyaları</h6>
+                <button type="button" class="btn btn-sm btn-primary fw-bold shadow-sm" id="btnOpenImportModal">
+                    <i class="fas fa-plus me-1"></i> Yeni Dosya Aç
+                </button>
+            </div>
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                <table class="table table-hover table-modern border mb-0" id="importTable">
+                    <thead class="sticky-top">
+                        <tr>
+                            <th>Dosya No</th>
+                            <th>Tedarikçi Kodu</th>
+                            <th>Tedarikçi Adı</th>
+                            <th>Defteri Kebir Kodu</th>
+                            <th>Beyanname No (GTIP)</th>
+                            <th>Durum</th>
+                            <th class="text-end" style="width: 100px;">İşlemler</th>
+                        </tr>
+                    </thead>
+                    <tbody id="importTableBody">
+                        @foreach(var file in importFiles)
+                        {
+                            <tr>
+                                <td class="fw-bold text-primary">@file.DosyaNo</td>
+                                <td>@file.CardCode</td>
+                                <td>@file.CardName</td>
+                                <td>@file.AcctCode</td>
+                                <td>@file.Gtip</td>
+                                <td>
+                                    @if(file.Durum == "Açık") { <span class="badge bg-success">Açık</span> }
+                                    else { <span class="badge bg-secondary">@file.Durum</span> }
+                                </td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-light text-primary border" onclick="editImportFile(@file.DocEntry, '@file.DosyaNo', '@file.CardCode', '@file.AcctCode', '@file.Gtip', '@file.Durum')"><i class="fas fa-edit"></i></button>
+                                    <button class="btn btn-sm btn-light text-danger border" onclick="deleteImportFile(@file.DocEntry)"><i class="fas fa-trash"></i></button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. BÖLÜM: SATINALMA SİPARİŞİ OLUŞTURMA -->
+    <div class="dashboard-section" id="orderPanel">
+        <div class="dashboard-header">
+            <div class="d-flex align-items-center flex-wrap">
+                <h5 class="mb-0">
+                    <i class="fas fa-shopping-cart text-success me-2"></i>2. Satınalma Siparişi 
+                    <span id="lblOrderDocNum" class="text-danger ms-2"></span>
+                    <span id="lblOrderStatus" class="badge bg-info ms-2" style="font-size: 0.75rem; display:none;"></span>
+                </h5>
+                <!-- NAVİGASYON BUTONLARI BURAYA TAŞINDI -->
+                <div class="btn-group shadow-sm border bg-white rounded order-nav-group" role="group">
+                    <button type="button" class="btn btn-light btn-sm nav-btn" data-dir="first" title="İlk Kayıt"><i class="fas fa-fast-backward"></i></button>
+                    <button type="button" class="btn btn-light btn-sm nav-btn" data-dir="prev" title="Önceki Kayıt"><i class="fas fa-step-backward"></i></button>
+                    <button type="button" class="btn btn-light btn-sm nav-btn" data-dir="next" title="Sonraki Kayıt"><i class="fas fa-step-forward"></i></button>
+                    <button type="button" class="btn btn-light btn-sm nav-btn" data-dir="last" title="Son Kayıt"><i class="fas fa-fast-forward"></i></button>
+                    <button type="button" class="btn btn-light btn-sm" id="btnFindMode" title="Kayıt Bul"><i class="fas fa-search text-info"></i></button>
+                    <button type="button" class="btn btn-light btn-sm text-success fw-bold" id="btnNewDoc" title="Yeni Kayıt Ekle"><i class="fas fa-plus"></i></button>
+                </div>
+            </div>
+            
+            <div class="d-flex align-items-center">
+                <button type="button" class="btn btn-sm btn-outline-secondary btn-fullscreen me-3" onclick="toggleFullscreen('orderPanel')" title="Tam Ekran Göster/Kapat"><i class="fas fa-expand"></i></button>
+                <i class="fas fa-chevron-down text-muted" data-bs-toggle="collapse" data-bs-target="#orderDashboard" style="cursor:pointer;"></i>
+            </div>
+        </div>
+        <div id="orderDashboard" class="collapse show dashboard-body bg-light">
+            <form id="orderForm">
+                <div class="row g-4 mb-3 bg-white p-3 border rounded shadow-sm">
+                    <div class="col-md-6">
+                        <div class="row mb-3 align-items-center">
+                            <label class="col-sm-4 form-label mb-0 text-muted">Satıcı <span class="text-danger">*</span></label>
+                            <div class="col-sm-8">
+                                <select id="CardCode" class="form-select select2-init searchable-field req-add">
+                                    <option value="">Satıcı Seçiniz...</option>
+                                    @foreach (var vendor in vendors)
+                                    {
+                                        <option value="@vendor.CardCode">@vendor.CardCode - @vendor.CardName</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mb-3 align-items-center">
+                            <label class="col-sm-4 form-label mb-0 text-muted">Alıcı (Satınalmacı) <span class="text-danger">*</span></label>
+                            <div class="col-sm-8">
+                                <select id="SalesPersonCode" class="form-select select2-init searchable-field req-add">
+                                    <option value="">Seçiniz...</option>
+                                    @foreach (var slp in slps)
+                                    {
+                                        <option value="@slp.SlpCode">@slp.SlpName</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mb-3 align-items-center">
+                            <label class="col-sm-4 form-label mb-0 text-muted">Para Birimi</label>
+                            <div class="col-sm-4 pe-1">
+                                <select id="CurrencyType" class="form-select form-select-sm searchable-field">
+                                    <option value="BP">Muhatabın P.B.</option>
+                                    <option value="LC">Ulusal P.B.</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-4 ps-1">
+                                <select id="DocCurrency" class="form-select form-select-sm w-100 searchable-field">
+                                    <option value="">Seçiniz</option>
+                                    @foreach(var c in currencies) { <option value="@c">@c</option> }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="row mb-2 align-items-center" id="divDocNumSearch" style="display: none;">
+                            <label class="col-sm-4 form-label mb-0 text-md-end text-info fw-bold">Arama Belge No</label>
+                            <div class="col-sm-8">
+                                <input type="number" id="SearchDocNum" class="form-control form-control-sm border-info" placeholder="Bulmak için numara yazın" />
+                            </div>
+                        </div>
+
+                        <div class="row mb-2 align-items-center">
+                            <label class="col-sm-4 form-label mb-0 text-md-end text-muted">Tarihler (Kayıt/Vade/Belge) <span class="text-danger">*</span></label>
+                            <div class="col-sm-8 d-flex gap-1">
+                                <input type="date" id="DocDate" class="form-control form-control-sm searchable-field req-add" title="Kayıt Tarihi" />
+                                <input type="date" id="DocDueDate" class="form-control form-control-sm searchable-field req-add" title="Vade Tarihi" />
+                                <input type="date" id="TaxDate" class="form-control form-control-sm searchable-field req-add" title="Belge Tarihi" />
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-2 align-items-center">
+                            <label class="col-sm-4 form-label mb-0 text-md-end text-primary">Sipariş Türü <span class="text-danger">*</span></label>
+                            <div class="col-sm-8">
+                                <select id="DocType" class="form-select form-select-sm fw-bold border-primary text-primary searchable-field req-add">
+                                    <option value="I" selected>Kalem (Item)</option>
+                                    <option value="S">Hizmet (Service)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row mb-2 align-items-center">
+                            <label class="col-sm-4 form-label mb-0 text-md-end text-primary">İşlem Tipi</label>
+                            <div class="col-sm-8">
+                                <select id="U_BE1_AKTAR" class="form-select form-select-sm searchable-field editable-in-view">
+                                    <option value="">- Seçiniz -</option>
+                                    <option value="X">X</option>
+                                    <option value="R">R</option>
+                                    <option value="Y">Y</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row mb-2 align-items-center">
+                            <label class="col-sm-4 form-label mb-0 text-md-end text-primary">İthalat Dosya No</label>
+                            <div class="col-sm-8">
+                                <select id="U_BE1_AGENTNUM" class="form-select select2-init searchable-field editable-in-view">
+                                    <option value="">- Dosya Seçiniz -</option>
+                                    @foreach(var file in importFiles)
+                                    {
+                                        <option value="@file.DosyaNo">@file.DosyaNo (@file.CardName)</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row mb-2 align-items-center mt-2">
+                            <label class="col-sm-4 form-label mb-0 text-md-end text-muted">Belge Kuru</label>
+                            <div class="col-sm-8">
+                                <input type="text" id="ExchangeRate" class="form-control form-control-sm bg-light fw-bold" readonly value="1.0000" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SEKMELER (Satırlar ve Lojistik) -->
+                <ul class="nav nav-tabs border-bottom-0 ps-3 flex-shrink-0" id="orderTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link active" id="lines-tab" data-toggle="tab" href="#lines-pane" role="tab">İçerikler (Satırlar)</a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link" id="logistics-tab" data-toggle="tab" href="#logistics-pane" role="tab">Lojistik Adresleri</a>
+                    </li>
+                </ul>
+
+                <div class="tab-content border bg-white p-0" id="orderTabsContent">
+                    <div class="tab-pane fade show active d-flex flex-column" id="lines-pane" role="tabpanel" style="height: 100%;">
+                        <div class="p-2 bg-light border-bottom d-flex justify-content-between align-items-center flex-shrink-0" id="btnAddRowContainer">
+                            <button type="button" class="btn btn-sm btn-info text-white fw-bold shadow-sm" id="btnOpenPRQModal">
+                                <i class="fas fa-download me-1"></i> Açık Taleplerden Çek
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary bg-white fw-bold shadow-sm" id="btnAddRow">
+                                <i class="fas fa-plus text-success me-1"></i> Satır Ekle
+                            </button>
+                        </div>
+                        <div class="table-responsive flex-grow-1" style="min-height: 250px;">
+                            <!-- table-mode-I sınıfı tabloya eklendi -->
+                            <table class="table-modern border-0 table-mode-I" id="linesTable">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40px;" class="text-center">#</th>
+                                        <!-- Kalem Sütunları -->
+                                        <th class="col-item" style="min-width: 200px;">Kalem No - Tanım <span class="text-danger">*</span></th>
+                                        <th class="col-item" style="width: 120px;">Depo / Stok <span class="text-danger">*</span></th>
+                                        
+                                        <!-- Hizmet Sütunları -->
+                                        <th class="col-service" style="min-width: 200px;">Hesap Kodu <span class="text-danger">*</span></th>
+                                        <th class="col-service" style="width: 250px;">Tanım (Açıklama) <span class="text-danger">*</span></th>
+
+                                        <!-- Ortak Sütunlar -->
+                                        <th style="width: 110px;" class="text-end">Miktar <span class="text-danger">*</span></th>
+                                        <th style="width: 150px;" class="text-end">Birim Fiyat & PB <span class="text-danger">*</span></th>
+                                        <th style="width: 110px;">Vergi Kodu <span class="text-danger">*</span></th>
+                                        <th style="width: 130px;" class="text-end">Top. (PB)</th>
+                                        <th style="width: 130px;" class="text-end">Top. (TL)</th>
+                                        <th style="width: 40px;" class="text-center col-action"><i class="fas fa-trash text-muted"></i></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="linesBody">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade p-4 flex-grow-1" id="logistics-pane" role="tabpanel" style="overflow-y:auto;">
+                        <div class="row g-5">
+                            <div class="col-md-6 address-box">
+                                <h6 class="fw-bold text-dark border-bottom pb-2 mb-3"><i class="fas fa-map-marker-alt text-secondary me-2"></i>Sevkiyat Adresi</h6>
+                                <select id="ShipToCode" class="form-select form-select-sm mb-3 searchable-field"><option value="">- Seçiniz -</option></select>
+                                <div class="row g-2">
+                                    <div class="col-12"><input type="text" id="ShipToStreet" class="form-control searchable-field" placeholder="Sokak / Adres" /></div>
+                                    <div class="col-4"><input type="text" id="ShipToZipCode" class="form-control searchable-field" placeholder="Posta Kodu" /></div>
+                                    <div class="col-4"><input type="text" id="ShipToCounty" class="form-control searchable-field" placeholder="İlçe" /></div>
+                                    <div class="col-4"><input type="text" id="ShipToCity" class="form-control searchable-field" placeholder="İl" /></div>
+                                    <div class="col-6">
+                                        <select id="ShipToCountry" class="form-select select2-init searchable-field">
+                                            <option value="">- Ülke -</option>
+                                            @foreach (var c in countries) { <option value="@c.Code">@c.Name</option> }
+                                        </select>
+                                    </div>
+                                    <div class="col-6">
+                                        <select id="ShipToState" class="form-select select2-init searchable-field"><option value="">- Eyalet/İl -</option></select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6 address-box">
+                                <h6 class="fw-bold text-dark border-bottom pb-2 mb-3"><i class="fas fa-file-invoice text-secondary me-2"></i>Fatura Adresi</h6>
+                                <select id="PayToCode" class="form-select form-select-sm mb-3 searchable-field"><option value="">- Seçiniz -</option></select>
+                                <div class="row g-2">
+                                    <div class="col-12"><input type="text" id="PayToStreet" class="form-control searchable-field" placeholder="Sokak / Adres" /></div>
+                                    <div class="col-4"><input type="text" id="PayToZipCode" class="form-control searchable-field" placeholder="Posta Kodu" /></div>
+                                    <div class="col-4"><input type="text" id="PayToCounty" class="form-control searchable-field" placeholder="İlçe" /></div>
+                                    <div class="col-4"><input type="text" id="PayToCity" class="form-control searchable-field" placeholder="İl" /></div>
+                                    <div class="col-6">
+                                        <select id="PayToCountry" class="form-select select2-init searchable-field">
+                                            <option value="">- Ülke -</option>
+                                            @foreach (var c in countries) { <option value="@c.Code">@c.Name</option> }
+                                        </select>
+                                    </div>
+                                    <div class="col-6">
+                                        <select id="PayToState" class="form-select select2-init searchable-field"><option value="">- Eyalet/İl -</option></select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-3 flex-shrink-0" id="footerSection">
+                    <div class="col-md-6">
+                        <label class="form-label text-muted">Açıklamalar</label>
+                        <textarea id="Comments" class="form-control bg-light shadow-sm editable-in-view" rows="4" style="resize:none;"></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="footer-totals-box shadow-sm border">
+                            <div class="footer-row"><span>Net Toplam (TL)</span><span id="lblNetTotalLC">0,00 TRY</span></div>
+                            <div class="footer-row"><span>Vergi (TL)</span><span id="lblTaxTotalLC">0,00 TRY</span></div>
+                            <div class="footer-row grand-total mb-2"><span>Genel Toplam (TL)</span><span id="lblGrandTotalLC" class="text-success">0,00 TRY</span></div>
+                            <div class="footer-row grand-total bg-light p-2 rounded"><span>Belge Toplamı</span><span id="lblGrandTotalFC" class="text-primary">0,00</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-bar mt-3 rounded flex-shrink-0">
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-light border px-4" id="btnCancel">İptal</button>
+                        <button type="button" class="btn btn-danger px-4 shadow-sm" id="btnCancelDocument" style="display:none;"><i class="fas fa-ban me-1"></i>Belgeyi İptal Et</button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-warning px-4 shadow-sm fw-bold" id="btnUpdateOrder" style="display:none;"><i class="fas fa-edit me-1"></i> Güncelle</button>
+                        <button type="submit" class="btn btn-success px-5 shadow-sm fw-bold" id="btnSave"><i class="fas fa-save me-1"></i> SAP'ye Ekle</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- SATINALMA TALEPLERİ MODALI (PRQ) -->
+<div class="modal fade" id="prqModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-download me-2"></i>Açık Satınalma Talepleri</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body bg-light">
+                <div class="d-flex gap-2 mb-3">
+                    <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="fetchPRQs('Eda')">Eda'nın Talepleri</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="fetchPRQs('Serkan')">Serkan'ın Talepleri</button>
+                    <div class="input-group input-group-sm" style="width: 250px;">
+                        <input type="text" id="txtPRQSearch" class="form-control" placeholder="Çalışan Ara..." />
+                        <button class="btn btn-primary" onclick="fetchPRQs($('#txtPRQSearch').val())"><i class="fas fa-search"></i></button>
+                    </div>
+                </div>
+                <div class="table-responsive bg-white border" style="height: 400px; overflow-y: auto;">
+                    <table class="table table-hover table-modern mb-0">
+                        <thead class="sticky-top">
+                            <tr>
+                                <th style="width: 40px;"><input type="checkbox" id="chkAllPRQ" /></th>
+                                <th>Talep Eden</th>
+                                <th>Belge No</th>
+                                <th>Tarih</th>
+                                <th>Kalem / Tanım</th>
+                                <th>Açık Miktar</th>
+                                <th>Döviz</th>
+                                <th>Depo</th>
+                            </tr>
+                        </thead>
+                        <tbody id="prqTableBody">
+                            <tr><td colspan="8" class="text-center text-muted py-4">Kayıtları listelemek için yukarıdan seçim yapın.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+                <button type="button" class="btn btn-success fw-bold" onclick="addSelectedPRQsToGrid()"><i class="fas fa-check me-1"></i>Seçili Kalemleri Siparişe Ekle</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- YENİ/DÜZENLE İTHALAT DOSYASI MODAL -->
+<div class="modal fade" id="importFileModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title fw-bold" id="importModalTitle"><i class="fas fa-folder-plus me-2"></i>Yeni İthalat Dosyası Aç</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body bg-light">
+                <form id="frmImportFile">
+                    <input type="hidden" id="imp_DocEntry" value="0" />
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Dosya No <span class="text-danger">*</span></label>
+                            <input type="text" id="imp_DosyaNo" class="form-control" required placeholder="Örn: 2026-001" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Tedarikçi <span class="text-danger">*</span></label>
+                            <select id="imp_CardCode" class="form-select select2-init" style="width:100%;" required>
+                                <option value="">Seçiniz...</option>
+                                @foreach (var v in vendors) { <option value="@v.CardCode" data-name="@v.CardName">@v.CardCode - @v.CardName</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Defteri Kebir Kodu (İthalat Hesabı) <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <select id="imp_AcctCode" class="form-select select2-init" style="width: 70%;" required>
+                                    <option value="">Hesap Seçiniz...</option>
+                                    @foreach (var a in accounts) { <option value="@a.AcctCode">@a.AcctCode - @a.AcctName</option> }
+                                </select>
+                                <button class="btn btn-primary fw-bold" type="button" id="btnNewGLAccount" style="width: 30%;"><i class="fas fa-magic me-1"></i>Yeni Hesap</button>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Beyanname No (GTIP)</label>
+                            <input type="text" id="imp_Gtip" class="form-control" />
+                        </div>
+                        <div class="col-md-4" id="divDurum" style="display: none;">
+                            <label class="form-label">Durum</label>
+                            <select id="imp_Durum" class="form-select">
+                                <option value="Açık">Açık</option>
+                                <option value="Kapalı">Kapalı</option>
+                            </select>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-success fw-bold" id="btnSaveImportFile"><i class="fas fa-save me-1"></i>Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Arama Sonuçları Modalı -->
+<div class="modal fade" id="searchResultsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-list me-2"></i>Arama Sonuçları</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-hover table-modern mb-0">
+                        <thead class="sticky-top">
+                            <tr>
+                                <th>Belge No</th>
+                                <th>Durum</th>
+                                <th>Satıcı Kodu</th>
+                                <th>Satıcı Adı</th>
+                                <th>Kayıt Tarihi</th>
+                                <th>Döviz</th>
+                            </tr>
+                        </thead>
+                        <tbody id="searchResultsBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <span class="text-muted small me-auto"><i class="fas fa-info-circle me-1"></i>Görüntülemek istediğiniz kaydın üzerine tıklayın.</span>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- KALEM SATIR ŞABLONU -->
+<template id="rowTemplateItem">
+    <tr>
+        <td class="text-center align-middle row-index text-muted small fw-bold">1</td>
+        
+        <!-- Kalem Sütunları -->
+        <td class="col-item">
+            <input type="hidden" class="input-basetype" value="" />
+            <input type="hidden" class="input-baseentry" value="" />
+            <input type="hidden" class="input-baseline" value="" />
+            <select class="form-select item-select req-add">
+                <option value="">Kalem Seçin...</option>
+                @foreach (var item in items) { <option value="@item.ItemCode">@item.ItemCode - @item.ItemName</option> }
+            </select>
+        </td>
+        <td class="col-item align-middle">
+            <select class="form-select form-select-sm table-input input-whs req-add" style="padding: 2px 4px;">
+                <option value="">Depo</option>
+                @foreach (var whs in warehouses) {
+                    if (whs.WhsCode == "01") {
+                        <option value="@whs.WhsCode" selected>@whs.WhsCode</option>
+                    } else {
+                        <option value="@whs.WhsCode">@whs.WhsCode</option>
+                    }
+                }
+            </select>
+            <div class="small text-muted mt-1" style="font-size:0.75rem;">Stok: <span class="input-stock fw-bold text-dark">0</span></div>
+        </td>
+        
+        <!-- Hizmet Sütunları (Gizli) -->
+        <td class="col-service"></td>
+        <td class="col-service"></td>
+
+        <!-- Ortak Sütunlar -->
+        <td class="align-middle text-end">
+            <input type="number" class="table-input text-end input-qty fw-medium req-add" value="1" min="0.01" step="0.01" />
+        </td>
+        <td>
+            <div class="input-group input-group-sm">
+                <input type="number" class="form-control text-end input-price fw-medium req-add" value="0.00" min="0" step="0.0001" />
+                <select class="form-select input-currency text-center fw-bold text-muted px-1 req-add" style="max-width: 65px;">
+                    @foreach(var c in currencies) { <option value="@c">@c</option> }
+                </select>
+            </div>
+        </td>
+        <td>
+            <select class="form-select form-select-sm table-input input-vat req-add">
+                <option value="">Seç</option>
+                @foreach(var vat in vatGroups) { 
+                    if(vat.Code == "V1") {
+                        <option value="@vat.Code" data-rate="@vat.Rate" selected>@vat.Code (@vat.Rate.ToString("0")%)</option>
+                    } else {
+                        <option value="@vat.Code" data-rate="@vat.Rate">@vat.Code (@vat.Rate.ToString("0")%)</option> 
+                    }
+                }
+            </select>
+        </td>
+        <td class="text-end align-middle fw-bold text-secondary line-total-fc small">0,00</td>
+        <td class="text-end align-middle fw-bold text-dark line-total-lc small">0,00</td>
+        <td class="text-center align-middle col-action"><button type="button" class="btn btn-sm btn-outline-danger btn-remove-row p-1 border-0"><i class="fas fa-trash fs-6"></i></button></td>
+    </tr>
+</template>
+
+<!-- HİZMET SATIR ŞABLONU -->
+<template id="rowTemplateService">
+    <tr>
+        <td class="text-center align-middle row-index text-muted small fw-bold">1</td>
+        
+        <!-- Kalem Sütunları (Gizli) -->
+        <td class="col-item">
+            <input type="hidden" class="input-basetype" value="" />
+            <input type="hidden" class="input-baseentry" value="" />
+            <input type="hidden" class="input-baseline" value="" />
+        </td>
+        <td class="col-item"></td>
+
+        <!-- Hizmet Sütunları -->
+        <td class="col-service">
+            <select class="form-select account-select req-add">
+                <option value="">Hesap Seçin...</option>
+                @foreach (var acc in accounts) { <option value="@acc.AcctCode">@acc.AcctCode - @acc.AcctName</option> }
+            </select>
+        </td>
+        <td class="col-service align-middle">
+            <input type="text" class="table-input input-desc req-add border" placeholder="Hizmet Açıklaması..." />
+        </td>
+
+        <!-- Ortak Sütunlar -->
+        <td class="align-middle text-end">
+            <input type="number" class="table-input text-end input-qty fw-medium req-add" value="1" min="0.01" step="0.01" />
+        </td>
+        <td>
+            <div class="input-group input-group-sm">
+                <input type="number" class="form-control text-end input-price fw-medium req-add" value="0.00" min="0" step="0.0001" />
+                <select class="form-select input-currency text-center fw-bold text-muted px-1 req-add" style="max-width: 65px;">
+                    @foreach(var c in currencies) { <option value="@c">@c</option> }
+                </select>
+            </div>
+        </td>
+        <td>
+            <select class="form-select form-select-sm table-input input-vat req-add">
+                <option value="">Seç</option>
+                @foreach(var vat in vatGroups) { 
+                    if(vat.Code == "V1") {
+                        <option value="@vat.Code" data-rate="@vat.Rate" selected>@vat.Code (@vat.Rate.ToString("0")%)</option> 
+                    } else {
+                        <option value="@vat.Code" data-rate="@vat.Rate">@vat.Code (@vat.Rate.ToString("0")%)</option> 
+                    }
+                }
+            </select>
+        </td>
+        <td class="text-end align-middle fw-bold text-secondary line-total-fc small">0,00</td>
+        <td class="text-end align-middle fw-bold text-dark line-total-lc small">0,00</td>
+        <td class="text-center align-middle col-action"><button type="button" class="btn btn-sm btn-outline-danger btn-remove-row p-1 border-0"><i class="fas fa-trash fs-6"></i></button></td>
+    </tr>
+</template>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <script>
+        toastr.options = { positionClass: "toast-bottom-right", timeOut: "3000" };
+
+        let currentBpCurrency = 'TRY'; 
+        window.exchangeRates = { 'TRY': 1.0 }; 
+        window.bpAddresses = []; 
+        let currentMode = 'ADD'; 
+        let isBindingData = false; 
+        let isNavigating = false;
+        let currentDocEntry = 0; 
+        let loadedPRQs = []; 
+        const allStates = @Html.Raw(Json.Serialize(states));
+
+        const itemDict = {};
+        @foreach(var item in items) {
+            <text>itemDict['@item.ItemCode'] = '@item.ItemName.Replace("'", "\\'")';</text>
+        }
+        
+        const accountDict = {};
+        @foreach(var acc in accounts) {
+            <text>accountDict['@acc.AcctCode'] = '@acc.AcctName.Replace("'", "\\'")';</text>
+        }
+
+        function formatNumber(num) { return num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+        window.toggleFullscreen = function(panelId) {
+            const panel = document.getElementById(panelId);
+            if (panel.classList.contains('fullscreen-panel')) {
+                panel.classList.remove('fullscreen-panel');
+                document.body.style.overflow = '';
+            } else {
+                panel.classList.add('fullscreen-panel');
+                document.body.style.overflow = 'hidden';
+            }
+        };
+
+        window.editImportFile = function(docEntry, dosyaNo, cardCode, acctCode, gtip, durum) {
+            $('#frmImportFile')[0].reset();
+            $('#importModalTitle').html('<i class="fas fa-edit me-2"></i>İthalat Dosyası Güncelle');
+            $('#imp_DocEntry').val(docEntry);
+            $('#imp_DosyaNo').val(dosyaNo);
+            $('#imp_CardCode').val(cardCode).trigger('change.select2');
+            $('#imp_AcctCode').val(acctCode).trigger('change.select2');
+            $('#imp_Gtip').val(gtip);
+            $('#imp_Durum').val(durum);
+            $('#divDurum').show();
+            $('#importFileModal').modal('show');
+        }
+
+        window.deleteImportFile = function(docEntry) {
+            Swal.fire({
+                title: 'Emin misiniz?',
+                text: "Bu ithalat dosyasını silmek istediğinize emin misiniz?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Evet, Sil!',
+                cancelButtonText: 'İptal'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $('#loadingOverlay').css('display', 'flex');
+                    $.post('/Rapor131/DeleteImportFile?docEntry=' + docEntry, function(res) {
+                        if(res.success) {
+                            toastr.success(res.message);
+                            refreshImportDashboard(res.data);
+                        } else { toastr.error(res.message); }
+                    }).always(function() { $('#loadingOverlay').hide(); });
+                }
+            });
+        }
+
+        window.loadOrderDetailsFromId = function(docEntry) {
+            if (isBindingData) return;
+            $('#loadingOverlay').css('display', 'flex');
+            $.get('/Rapor131/GetOrderDetails', { docEntry: docEntry }, function(res) {
+                if(res.success) bindOrderToForm(res.data);
+                else toastr.error(res.message);
+            }).always(function() { $('#loadingOverlay').hide(); });
+        }
+
+        $(document).ready(function () {
+            $('.select2-init').select2({ theme: 'bootstrap-5', dropdownParent: $('#mainContainer') });
+            $('#imp_CardCode, #imp_AcctCode').select2({ theme: 'bootstrap-5', dropdownParent: $('#importFileModal') });
+            
+            toggleDocTypeColumns('I');
+            setFormMode('ADD');
+            fetchAllExchangeRates();
+            
+            $('#DocType').on('change', function() {
+                if(isBindingData) return;
+                toggleDocTypeColumns($(this).val());
+                $('#linesBody').empty();
+                addRow();
+            });
+
+            $('#orderTabs a').on('click', function (e) {
+                e.preventDefault();
+                $(this).tab('show'); 
+                if($(this).attr('id') === 'lines-tab' && currentMode === 'ADD') {
+                    $('#btnAddRowContainer').css('display', 'flex');
+                } else {
+                    $('#btnAddRowContainer').hide();
+                }
+            });
+
+            $('#btnOpenImportModal').click(function() { 
+                $('#frmImportFile')[0].reset(); 
+                $('#importModalTitle').html('<i class="fas fa-folder-plus me-2"></i>Yeni İthalat Dosyası Aç');
+                $('#imp_DocEntry').val('0'); 
+                $('#divDurum').hide();
+                $('#imp_CardCode, #imp_AcctCode').val('').trigger('change'); 
+                $('#importFileModal').modal('show'); 
+            });
+
+            // HESAP AÇILIŞINDA SWEETALERT DONMA VE PREFIX (159) ÇÖZÜMÜ
+            $('#btnNewGLAccount').click(function() {
+                Swal.fire({
+                    title: 'Ana Hesap Kodu',
+                    text: 'Hangi ana hesap altında açılacak? (Örn: 159.02 veya 159.03 vb.)',
+                    input: 'text',
+                    inputValue: '159.',
+                    showCancelButton: true,
+                    confirmButtonText: 'Devam Et',
+                    cancelButtonText: 'İptal',
+                    preConfirm: (prefix) => {
+                        if(!prefix || !prefix.startsWith('159')) { 
+                            Swal.showValidationMessage('Geçerli bir ana hesap girin (159 ile başlamalı)!'); 
+                            return false; 
+                        }
+                        return prefix;
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        let userPrefix = result.value;
+                        $('#loadingOverlay').css('display', 'flex');
+
+                        $.get('/Rapor131/GetNextImportAccount', { prefix: userPrefix }, function(res) {
+                            $('#loadingOverlay').hide();
+                            
+                            if(res.success) {
+                                Swal.fire({
+                                    title: 'Yeni İthalat Hesabı Aç',
+                                    html: `<b>Hesap Kodu:</b> ${res.nextAccountCode}<br><br>Bu hesap kodu için bir <b>Hesap Adı</b> giriniz:`,
+                                    input: 'text',
+                                    inputAttributes: { autocapitalize: 'off' },
+                                    showCancelButton: true,
+                                    confirmButtonText: 'Hesabı Aç',
+                                    cancelButtonText: 'İptal',
+                                    showLoaderOnConfirm: true,
+                                    preConfirm: (accName) => {
+                                        if(!accName) { Swal.showValidationMessage('Hesap adı boş olamaz!'); return false; }
+                                        return $.ajax({
+                                            url: '/Rapor131/CreateImportGLAccount', type: 'POST', contentType: 'application/json',
+                                            data: JSON.stringify({ AcctCode: res.nextAccountCode, AcctName: accName, FatherNum: res.fatherNum })
+                                        }).then(response => { if(!response.success) { throw new Error(response.message); } return response; })
+                                        .catch(error => { Swal.showValidationMessage(`Hata: ${error.message}`); });
+                                    },
+                                    allowOutsideClick: () => !Swal.isLoading()
+                                }).then((result2) => {
+                                    if (result2.isConfirmed) {
+                                        let newAcc = result2.value;
+                                        let option = new Option(`${newAcc.acctCode} - ${newAcc.acctName}`, newAcc.acctCode, true, true);
+                                        $('#imp_AcctCode').append(option).trigger('change');
+                                        toastr.success("Defteri Kebir hesabı SAP'de başarıyla açıldı.");
+                                    }
+                                });
+                            } else {
+                                toastr.error(res.message || "Sıradaki hesap numarası bulunamadı.");
+                            }
+                        }).fail(function() {
+                            $('#loadingOverlay').hide();
+                            toastr.error("Sunucu ile iletişim kurulamadı.");
+                        });
+                    }
+                });
+            });
+
+            $('#btnSaveImportFile').click(function() {
+                let docEntry = parseInt($('#imp_DocEntry').val()) || 0;
+                let dosyaNo = $('#imp_DosyaNo').val();
+                let cardCode = $('#imp_CardCode').val();
+                let cardName = $('#imp_CardCode option:selected').data('name');
+                let acctCode = $('#imp_AcctCode').val();
+                let gtip = $('#imp_Gtip').val();
+                let durum = $('#imp_Durum').val();
+
+                if(!dosyaNo || !cardCode || !acctCode) { toastr.warning("Lütfen zorunlu alanları doldurun."); return; }
+
+                let payload = { DocEntry: docEntry, DosyaNo: dosyaNo, CardCode: cardCode, CardName: cardName, AcctCode: acctCode, Gtip: gtip, Durum: durum };
+                let btn = $(this); btn.prop('disabled', true);
+                
+                let targetUrl = docEntry > 0 ? '/Rapor131/UpdateImportFile' : '/Rapor131/SaveImportFile';
+
+                $.ajax({
+                    url: targetUrl, type: 'POST', contentType: 'application/json', data: JSON.stringify(payload),
+                    success: function(res) {
+                        if(res.success) {
+                            toastr.success(res.message);
+                            $('#importFileModal').modal('hide');
+                            refreshImportDashboard(res.data); 
+                        } else { toastr.error(res.message); }
+                    },
+                    error: function() { toastr.error("Kayıt sırasında hata oluştu."); },
+                    complete: function() { btn.prop('disabled', false); }
+                });
+            });
+
+            $('#CardCode').on('change', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+                const cardCode = $(this).val();
+                if(!cardCode) return;
+
+                $.get('/Rapor131/GetVendorInfo', { cardCode: cardCode }, function(res) {
+                    currentBpCurrency = res.currency;
+                    $('#CurrencyType').val('BP'); $('#DocCurrency').val(currentBpCurrency);
+                    const docRate = window.exchangeRates[currentBpCurrency] || 1.0;
+                    $('#ExchangeRate').val(docRate.toLocaleString('tr-TR', { minimumFractionDigits: 4 }));
+                    triggerItemPriceUpdate(); 
+                });
+
+                $.get('/Rapor131/GetVendorAddresses', { cardCode: cardCode }, function(res) {
+                    let shipHtml = '<option value="">- Seçiniz -</option>';
+                    let payHtml = '<option value="">- Seçiniz -</option>';
+                    window.bpAddresses = res; 
+                    res.forEach(addr => {
+                        if(addr.addressType === 'S') shipHtml += `<option value="${addr.addressName}">${addr.addressName}</option>`;
+                        if(addr.addressType === 'B') payHtml += `<option value="${addr.addressName}">${addr.addressName}</option>`;
+                    });
+                    $('#ShipToCode').html(shipHtml); $('#PayToCode').html(payHtml);
+                    if(res.find(a => a.addressType === 'S')) $('#ShipToCode').val(res.find(a => a.addressType === 'S').addressName).trigger('change');
+                    if(res.find(a => a.addressType === 'B')) $('#PayToCode').val(res.find(a => a.addressType === 'B').addressName).trigger('change');
+                });
+            });
+
+            $('#ShipToCountry').on('change', function() {
+                if(!isBindingData) populateStates('ShipToCountry', 'ShipToState');
+            });
+            $('#PayToCountry').on('change', function() {
+                if(!isBindingData) populateStates('PayToCountry', 'PayToState');
+            });
+
+            $('#ShipToCode').on('change', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+                const val = $(this).val();
+                const addr = window.bpAddresses?.find(a => a.addressName === val && a.addressType === 'S');
+                fillAddressComponent('ShipTo', addr);
+            });
+
+            $('#PayToCode').on('change', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+                const val = $(this).val();
+                const addr = window.bpAddresses?.find(a => a.addressName === val && a.addressType === 'B');
+                fillAddressComponent('PayTo', addr);
+            });
+
+            $('#CurrencyType').on('change', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+                const type = $(this).val();
+                if(type === 'BP') { $('#DocCurrency').val(currentBpCurrency).prop('disabled', false); } 
+                else if(type === 'LC') { $('#DocCurrency').val('TRY').prop('disabled', true); } 
+                else if(type === 'SC') { $('#DocCurrency').val('TRY').prop('disabled', false); }
+                const docRate = window.exchangeRates[$('#DocCurrency').val()] || 1.0;
+                $('#ExchangeRate').val(docRate.toLocaleString('tr-TR', { minimumFractionDigits: 4 }));
+                calculateTotals();
+            });
+
+            $('#DocCurrency').on('change', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+                const docRate = window.exchangeRates[$(this).val() || 'TRY'] || 1.0;
+                $('#ExchangeRate').val(docRate.toLocaleString('tr-TR', { minimumFractionDigits: 4 }));
+                calculateTotals();
+            });
+
+            $('#DocDate').on('change', function() { if(!isBindingData && currentMode === 'ADD') fetchAllExchangeRates(); });
+            
+            $('#btnAddRow').click(function () { if(currentMode === 'ADD') addRow(); });
+            
+            $(document).on('click', '.btn-remove-row', function () {
+                if(currentMode !== 'ADD') return;
+                $(this).closest('tr').find('select.select2-hidden-accessible').select2('destroy'); 
+                $(this).closest('tr').remove(); updateRowIndexes(); calculateTotals();
+            });
+
+            $(document).on('input', '.input-qty, .input-price', function () { if(currentMode === 'ADD') calculateTotals(); });
+            $(document).on('change', '.input-vat, .input-currency', function () { if(currentMode === 'ADD') calculateTotals(); });
+
+            $(document).on('change', '.item-select', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+                const row = $(this).closest('tr'); const itemCode = $(this).val(); const cardCode = $('#CardCode').val();
+                if(cardCode && itemCode) {
+                    $.get('/Rapor131/GetItemPrice', { cardCode: cardCode, itemCode: itemCode }, function(res) {
+                        row.find('.input-price').val(res.price > 0 ? res.price : 0);
+                        row.find('.input-currency').val(res.currency || 'TRY'); 
+                        row.find('.input-whs').val(res.dfltWH || '01').trigger('change');
+                        calculateTotals();
+                    });
+                }
+            });
+
+            $(document).on('change', '.input-whs', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+                const row = $(this).closest('tr'); const itemCode = row.find('.item-select').val(); const whsCode = $(this).val();
+                if (itemCode && whsCode) {
+                    $.get('/Rapor131/GetItemStock', { itemCode: itemCode, whsCode: whsCode }, function(res) { row.find('.input-stock').text(formatNumber(res.onHand || 0)); });
+                } else { row.find('.input-stock').text('0'); }
+            });
+
+            // SİPARİŞİ KAYDET (CREATE)
+            $('#orderForm').submit(function (e) {
+                e.preventDefault();
+                if(currentMode === 'FIND') { SearchOrder(); return; }
+                if(currentMode === 'VIEW') return;
+
+                if (!$('#CardCode').val()) { toastr.warning("Satıcı seçiniz."); return; }
+                if (!$('#DocDate').val() || !$('#DocDueDate').val() || !$('#TaxDate').val()) { toastr.warning("Tarihleri giriniz."); return; }
+                
+                const isService = $('#DocType').val() === 'S';
+                const documentLines = [];
+                let hasError = false;
+
+                $('#linesBody tr').each(function (index) {
+                    const qty = parseFloat($(this).find('.input-qty').val()) || 0;
+                    const price = parseFloat($(this).find('.input-price').val()) || 0;
+                    const lineCur = $(this).find('.input-currency').val();
+                    const vatGroup = $(this).find('.input-vat').val();
+                    
+                    let baseTypeVal = $(this).find('.input-basetype').val();
+                    let baseEntryVal = $(this).find('.input-baseentry').val();
+                    let baseLineVal = $(this).find('.input-baseline').val();
+                    
+                    let bt = baseTypeVal ? parseInt(baseTypeVal) : null;
+                    let be = baseEntryVal ? parseInt(baseEntryVal) : null;
+                    let bl = baseLineVal ? parseInt(baseLineVal) : null;
+
+                    if(isService) {
+                        const accCode = $(this).find('.account-select').val();
+                        const desc = $(this).find('.input-desc').val();
+                        if(!accCode) { hasError = true; toastr.error(`${index+1}. satırda Hesap Kodu seçiniz.`); return false; }
+                        if(!desc) { hasError = true; toastr.error(`${index+1}. satırda Açıklama giriniz.`); return false; }
+                        documentLines.push({ AccountCode: accCode, ItemDescription: desc, Quantity: qty, UnitPrice: price, Currency: lineCur, VatGroup: vatGroup, BaseType: bt, BaseEntry: be, BaseLine: bl });
+                    } else {
+                        const itemCode = $(this).find('.item-select').val();
+                        const whsCode = $(this).find('.input-whs').val(); 
+                        if(!itemCode) { hasError = true; toastr.error(`${index+1}. satırda Kalem seçiniz.`); return false; }
+                        if(qty <= 0) { hasError = true; toastr.error(`${index+1}. satır miktar 0 olamaz.`); return false; }
+                        documentLines.push({ ItemCode: itemCode, WarehouseCode: whsCode, Quantity: qty, UnitPrice: price, Currency: lineCur, VatGroup: vatGroup, BaseType: bt, BaseEntry: be, BaseLine: bl });
+                    }
+                });
+
+                if (hasError || documentLines.length === 0) return;
+
+                let docRateStr = $('#ExchangeRate').val().replace(/\./g, '').replace(',', '.');
+                
+                const payload = {
+                    DocType: $('#DocType').val(),
+                    CardCode: $('#CardCode').val(),
+                    DocDate: $('#DocDate').val(), DocDueDate: $('#DocDueDate').val(), TaxDate: $('#TaxDate').val(), 
+                    SalesPersonCode: parseInt($('#SalesPersonCode').val()) || 0,
+                    Comments: $('#Comments').val(),
+                    DocCurrency: $('#DocCurrency').val() || 'TRY',
+                    DocRate: parseFloat(docRateStr) || 1.0,
+                    U_BE1_AKTAR: $('#U_BE1_AKTAR').val(), 
+                    U_BE1_AGENTNUM: $('#U_BE1_AGENTNUM').val(),
+                    PayToCode: $('#PayToCode').val(), ShipToCode: $('#ShipToCode').val(),
+                    AddressExtension: {
+                        ShipToStreet: $('#ShipToStreet').val(), ShipToZipCode: $('#ShipToZipCode').val(), ShipToCounty: $('#ShipToCounty').val(), ShipToCity: $('#ShipToCity').val(), ShipToState: $('#ShipToState').val(), ShipToCountry: $('#ShipToCountry').val(),
+                        BillToStreet: $('#PayToStreet').val(), BillToZipCode: $('#PayToZipCode').val(), BillToCounty: $('#PayToCounty').val(), BillToCity: $('#PayToCity').val(), BillToState: $('#PayToState').val(), BillToCountry: $('#PayToCountry').val()
+                    },
+                    DocumentLines: documentLines
+                };
+
+                $('#loadingOverlay').css('display', 'flex');
+                $.ajax({
+                    url: '/Rapor131/CreateOrder', type: 'POST', contentType: 'application/json', data: JSON.stringify(payload),
+                    success: function (res) {
+                        if (res.success) { toastr.success(res.message); setTimeout(() => { window.location.reload(); }, 1500); } 
+                        else { toastr.error(res.message); }
+                    },
+                    error: function (xhr) { toastr.error(xhr.responseJSON ? xhr.responseJSON.message : "Bağlantı hatası."); },
+                    complete: function () { $('#loadingOverlay').hide(); }
+                });
+            });
+
+            // SİPARİŞİ GÜNCELLE (UPDATE - UDF VE AÇIKLAMA)
+            $('#btnUpdateOrder').click(function() {
+                if(!currentDocEntry) return;
+
+                let payload = {
+                    DocEntry: currentDocEntry,
+                    Comments: $('#Comments').val(),
+                    U_BE1_AKTAR: $('#U_BE1_AKTAR').val(),
+                    U_BE1_AGENTNUM: $('#U_BE1_AGENTNUM').val()
+                };
+
+                $('#loadingOverlay').css('display', 'flex');
+                $.ajax({
+                    url: '/Rapor131/UpdateOrder', type: 'POST', contentType: 'application/json', data: JSON.stringify(payload),
+                    success: function (res) {
+                        if (res.success) { toastr.success(res.message); } else { toastr.error(res.message); }
+                    },
+                    error: function (xhr) { toastr.error(xhr.responseJSON ? xhr.responseJSON.message : "Güncelleme hatası."); },
+                    complete: function () { $('#loadingOverlay').hide(); }
+                });
+            });
+            
+            $('#btnCancel').click(function() { if(currentMode === 'VIEW' || currentMode === 'FIND') { setFormMode('ADD'); fetchAllExchangeRates(); } else { window.history.back(); } });
+            
+            // NAVİGASYON
+            $('.nav-btn').click(function() {
+                if (isBindingData || isNavigating) return;
+                
+                isNavigating = true; 
+                $('#loadingOverlay').css('display', 'flex');
+                
+                $.get('/Rapor131/GetOrderNavigation', { currentDocEntry: currentDocEntry, direction: $(this).data('dir') }, function(res) {
+                    if (res.success) {
+                        bindOrderToForm(res.data);
+                    } else { 
+                        toastr.info(res.message || "Kayıt bulunamadı."); 
+                    }
+                }).always(function() { 
+                    $('#loadingOverlay').hide(); 
+                    isNavigating = false; 
+                });
+            });
+
+            $('#btnNewDoc').click(function() { setFormMode('ADD'); fetchAllExchangeRates(); });
+            $('#btnFindMode').click(function() { setFormMode('FIND'); });
+            
+            $('#btnCancelDocument').click(function() {
+                if (!currentDocEntry) return;
+                if (confirm("Bu belgeyi iptal etmek istediğinize emin misiniz?")) {
+                    $('#loadingOverlay').css('display', 'flex');
+                    $.post('/Rapor131/CancelOrder?docEntry=' + currentDocEntry, function(res) {
+                        if (res.success) { toastr.success(res.message); setTimeout(() => { window.location.reload(); }, 1500); } else { toastr.error(res.message); }
+                    }).always(function() { $('#loadingOverlay').hide(); });
+                }
+            });
+
+            // AÇIK PRQ MODALINI AÇ
+            $('#btnOpenPRQModal').click(function() {
+                if(currentMode !== 'ADD') return;
+                $('#txtPRQSearch').val('');
+                $('#prqTableBody').html('<tr><td colspan="8" class="text-center text-muted py-4">Kayıtları listelemek için yukarıdan seçim yapın.</td></tr>');
+                $('#chkAllPRQ').prop('checked', false);
+                $('#prqModal').modal('show');
+            });
+
+            $('#chkAllPRQ').change(function() {
+                $('.chk-prq').prop('checked', $(this).prop('checked'));
+            });
+        });
+
+        function populateStates(countrySelectId, stateSelectId, selectedState = '') {
+            const countryCode = $('#' + countrySelectId).val();
+            const stateSelect = $('#' + stateSelectId);
+            
+            stateSelect.empty().append('<option value="">- Seçiniz -</option>');
+            
+            if(countryCode) {
+                const filteredStates = allStates.filter(s => s.country === countryCode);
+                filteredStates.forEach(s => {
+                    stateSelect.append(`<option value="${s.code}">${s.name}</option>`);
+                });
+            }
+            if(selectedState) {
+                stateSelect.val(selectedState).trigger('change.select2');
+            }
+        }
+
+        function fillAddressComponent(prefix, addr) {
+            $(`#${prefix}Street`).val(addr ? addr.street : '');
+            $(`#${prefix}StreetNo`).val(addr ? addr.streetNo : '');
+            $(`#${prefix}Block`).val(addr ? addr.block : '');
+            $(`#${prefix}ZipCode`).val(addr ? addr.zipCode : '');
+            $(`#${prefix}County`).val(addr ? addr.county : '');
+            $(`#${prefix}City`).val(addr ? addr.city : '');
+            
+            if(addr && addr.country) {
+                $(`#${prefix}Country`).val(addr.country).trigger('change.select2');
+                populateStates(`${prefix}Country`, `${prefix}State`, addr.state);
+            } else {
+                $(`#${prefix}Country`).val('').trigger('change.select2');
+                $(`#${prefix}State`).empty().append('<option value="">- Seçiniz -</option>');
+            }
+        }
+
+        function toggleDocTypeColumns(type) {
+            $('#linesTable').removeClass('table-mode-I table-mode-S').addClass('table-mode-' + type);
+        }
+
+        function addRow() {
+            const isService = $('#DocType').val() === 'S';
+            const templateId = isService ? 'rowTemplateService' : 'rowTemplateItem';
+            const $newRow = $($('#' + templateId).html());
+            
+            $('#linesBody').append($newRow);
+            $newRow.find('select.req-add').select2({ theme: 'bootstrap-5', width: '100%', dropdownParent: $('#mainContainer') });
+            updateRowIndexes();
+        }
+
+        function updateRowIndexes() { $('#linesBody tr').each(function (index) { $(this).find('.row-index').text(index + 1); }); }
+
+        function refreshImportDashboard(dataList) {
+            let html = '', optHtml = '<option value="">- Dosya Seçiniz -</option>';
+            dataList.forEach(f => {
+                let badge = f.durum === 'Açık' ? '<span class="badge bg-success">Açık</span>' : `<span class="badge bg-secondary">${f.durum}</span>`;
+                html += `<tr>
+                            <td class="fw-bold text-primary">${f.dosyaNo}</td>
+                            <td>${f.cardCode}</td>
+                            <td>${f.cardName}</td>
+                            <td>${f.acctCode}</td>
+                            <td>${f.gtip || ''}</td>
+                            <td>${badge}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-light text-primary border" onclick="editImportFile(${f.docEntry}, '${f.dosyaNo}', '${f.cardCode}', '${f.acctCode}', '${f.gtip || ''}', '${f.durum}')"><i class="fas fa-edit"></i></button>
+                                <button class="btn btn-sm btn-light text-danger border" onclick="deleteImportFile(${f.docEntry})"><i class="fas fa-trash"></i></button>
+                            </td>
+                         </tr>`;
+                optHtml += `<option value="${f.dosyaNo}">${f.dosyaNo} (${f.cardName})</option>`;
+            });
+            $('#importTableBody').html(html);
+            $('#U_BE1_AGENTNUM').html(optHtml).trigger('change');
+        }
+
+        function fetchAllExchangeRates() {
+            if(currentMode !== 'ADD') return;
+            $.get('/Rapor131/GetAllExchangeRates', { date: $('#DocDate').val() }, function(res) {
+                window.exchangeRates = res;
+                $('#ExchangeRate').val((window.exchangeRates[$('#DocCurrency').val() || 'TRY'] || 1.0).toLocaleString('tr-TR', { minimumFractionDigits: 4 }));
+                calculateTotals();
+            });
+        }
+
+        function calculateTotals() {
+            if(currentMode !== 'ADD') return;
+            let netTotalLC = 0, taxTotalLC = 0;
+            const docCurrency = $('#DocCurrency').val() || 'TRY';
+            const docRate = parseFloat($('#ExchangeRate').val().replace(/\./g, '').replace(',', '.')) || 1.0;
+
+            $('#linesBody tr').each(function () {
+                const qty = parseFloat($(this).find('.input-qty').val()) || 0;
+                const price = parseFloat($(this).find('.input-price').val()) || 0;
+                const lineCur = $(this).find('.input-currency').val() || 'TRY';
+                const vatRate = parseFloat($(this).find('.input-vat option:selected').data('rate')) || 0;
+                
+                const lineRate = window.exchangeRates[lineCur] || (lineCur === docCurrency ? docRate : 1.0);
+                const lineNetFC = qty * price;
+                const lineNetLC = lineNetFC * lineRate;
+                const lineTaxLC = lineNetLC * (vatRate / 100);
+
+                $(this).find('.line-total-fc').text(formatNumber(lineNetFC) + ' ' + lineCur);
+                $(this).find('.line-total-lc').text(formatNumber(lineNetLC) + ' TRY');
+                
+                netTotalLC += lineNetLC; taxTotalLC += lineTaxLC;
+            });
+
+            $('#lblNetTotalLC').text(formatNumber(netTotalLC) + ' TRY');
+            $('#lblTaxTotalLC').text(formatNumber(taxTotalLC) + ' TRY');
+            $('#lblGrandTotalLC').text(formatNumber(netTotalLC + taxTotalLC) + ' TRY');
+            $('#lblGrandTotalFC').text(formatNumber((docCurrency === 'TRY') ? (netTotalLC + taxTotalLC) : ((netTotalLC + taxTotalLC) / docRate)) + ' ' + docCurrency);
+        }
+
+        function resetTotals() { $('#lblNetTotalLC, #lblTaxTotalLC, #lblGrandTotalLC').text('0,00 TRY'); $('#lblGrandTotalFC').text('0,00'); }
+
+        function triggerItemPriceUpdate() {
+            if(currentMode !== 'ADD' || $('#DocType').val() === 'S') return;
+            $('#linesBody tr').each(function() { const sel = $(this).find('.item-select'); if(sel.val()) sel.trigger('change'); });
+        }
+
+        function setFormMode(mode, docStatus = '', canceled = 'N') {
+            currentMode = mode;
+            $('#lblOrderDocNum').text('');
+            $('#lblOrderStatus').hide();
+            
+            if (mode === 'VIEW') {
+                $('#mainContainer').removeClass('find-mode').addClass('view-mode');
+                $('.searchable-field:not(.editable-in-view), .table-input').prop('disabled', true);
+                $('.editable-in-view').prop('disabled', false); 
+                
+                $('#btnAddRowContainer').hide();
+                $('#btnSave, #divDocNumSearch').hide();
+                $('#btnUpdateOrder').show(); 
+                
+                $('#btnCancel').text("Yeni Ekle").removeClass('btn-light').addClass('btn-primary text-white').prop('disabled', false);
+                
+                if (canceled === 'Y') {
+                    $('#lblOrderStatus').removeClass('bg-success bg-info').addClass('bg-danger').text('İPTAL EDİLDİ').show();
+                    $('#btnCancelDocument, #btnUpdateOrder').hide();
+                    $('.editable-in-view').prop('disabled', true);
+                } else if (docStatus === 'C') {
+                    $('#lblOrderStatus').removeClass('bg-success bg-danger').addClass('bg-secondary').text('KAPALI').show();
+                    $('#btnCancelDocument, #btnUpdateOrder').hide();
+                    $('.editable-in-view').prop('disabled', true); 
+                } else {
+                    $('#lblOrderStatus').removeClass('bg-danger bg-secondary').addClass('bg-success').text('AÇIK').show();
+                    $('#btnCancelDocument').show();
+                }
+            } 
+            else if (mode === 'FIND') {
+                $('#mainContainer').removeClass('view-mode').addClass('find-mode');
+                $('.searchable-field').prop('disabled', false).val('').trigger('change.select2');
+                $('#Comments').prop('disabled', true).val('');
+                
+                $('#divDocNumSearch').show(); $('#SearchDocNum').prop('disabled', false).val('').focus();
+                $('#btnAddRowContainer').hide();
+                $('#linesBody').empty(); resetTotals();
+                
+                $('#btnSave').show().text("Ara").removeClass('btn-success').addClass('btn-info text-white');
+                $('#btnCancelDocument, #btnUpdateOrder').hide();
+                $('#btnCancel').text("İptal").removeClass('btn-primary text-white').addClass('btn-light');
+            }
+            else { 
+                $('#mainContainer').removeClass('view-mode find-mode');
+                $('.searchable-field, #Comments').prop('disabled', false);
+                $('#ExchangeRate').prop('readonly', true); 
+                
+                $('#btnAddRowContainer').css('display', 'flex');
+                $('#btnSave').show().removeClass('btn-info text-white').addClass('btn-success').html('<i class="fas fa-save me-1"></i> SAP\'ye Ekle');
+                $('#btnCancelDocument, #divDocNumSearch, #btnUpdateOrder').hide();
+                $('#btnCancel').text("İptal").removeClass('btn-primary text-white').addClass('btn-light');
+                
+                isBindingData = true; currentDocEntry = 0;
+                $('#orderForm')[0].reset();
+                $('.searchable-field.select2-init').val('').trigger('change.select2');
+                $('#DocType').val('I').trigger('change');
+                
+                const today = new Date().toISOString().split('T')[0];
+                $('#DocDate, #TaxDate').val(today);
+                let nw = new Date(); nw.setDate(nw.getDate() + 7); $('#DocDueDate').val(nw.toISOString().split('T')[0]);
+                
+                $('#linesBody').empty(); addRow(); calculateTotals();
+                isBindingData = false;
+            }
+        }
+
+        function bindOrderToForm(res) {
+            isBindingData = true; 
+            
+            try {
+                currentDocEntry = res.docEntry;
+                $('#lblOrderDocNum').text(`#${res.docNum}`);
+                
+                $('#DocType').val(res.docType).trigger('change');
+                toggleDocTypeColumns(res.docType);
+
+                $('#CardCode').val(res.cardCode).trigger('change.select2');
+                $('#SalesPersonCode').val(res.slpCode).trigger('change.select2');
+                $('#DocDate').val(res.docDate); $('#DocDueDate').val(res.docDueDate); $('#TaxDate').val(res.taxDate);
+                $('#U_BE1_AKTAR').val(res.u_BE1_AKTAR || res.U_BE1_AKTAR).trigger('change.select2');
+                $('#U_BE1_AGENTNUM').val(res.u_BE1_AGENTNUM || res.U_BE1_AGENTNUM).trigger('change.select2');
+                
+                $('#Comments').val(res.comments);
+                $('#DocCurrency').val(res.docCurrency);
+                $('#ExchangeRate').val((res.docRate || 1.0).toLocaleString('tr-TR', { minimumFractionDigits: 4 }));
+                window.exchangeRates[res.docCurrency] = res.docRate || 1.0;
+                
+                let rowsHtml = ''; let netLC = 0, taxLC = 0;
+
+                (res.lines || []).forEach((line, index) => {
+                    let lineRate = window.exchangeRates[line.currency] || (line.currency === res.docCurrency ? res.docRate : 1.0);
+                    let qty = line.quantity || 1;
+                    let price = line.unitPrice || line.lineTotal || 0;
+                    let lineNetFC = qty * price;
+                    let lineNetLC = lineNetFC * lineRate;
+                    
+                    let vatObj = @Html.Raw(Json.Serialize(ViewBag.VatGroups));
+                    let foundVat = vatObj.find(v => v.code === line.vatGroup);
+                    let lineTaxLC = lineNetLC * ((foundVat ? foundVat.rate : 0) / 100);
+                    
+                    netLC += lineNetLC; taxLC += lineTaxLC;
+
+                    let accName = line.accountName || accountDict[line.accountCode] || '';
+                    let accDisplay = line.accountCode ? `${line.accountCode} - ${accName}` : '-';
+                    let itemName = itemDict[line.itemCode] || '';
+
+                    rowsHtml += `<tr>
+                        <td class="text-center align-middle text-muted small fw-bold">${index + 1}</td>
+                        
+                        <td class="col-item align-middle fw-medium">
+                            <input type="hidden" class="input-basetype" value="${line.baseType || ''}" />
+                            <input type="hidden" class="input-baseentry" value="${line.baseEntry || ''}" />
+                            <input type="hidden" class="input-baseline" value="${line.baseLine || ''}" />
+                            ${line.itemCode || '-'} - ${itemName}
+                        </td>
+                        <td class="col-item align-middle">${line.warehouseCode || '-'}</td>
+                        
+                        <td class="col-service align-middle fw-medium">${accDisplay}</td>
+                        <td class="col-service align-middle">${line.itemDescription || '-'}</td>
+                        
+                        <td class="align-middle text-end"><input type="text" class="table-input text-end" value="${qty}" disabled/></td>
+                        <td class="text-end align-middle">${formatNumber(price)} ${line.currency}</td>
+                        <td class="align-middle">${line.vatGroup || ''}</td>
+                        <td class="text-end align-middle fw-bold text-secondary small">${formatNumber(lineNetFC)} ${line.currency}</td>
+                        <td class="text-end align-middle fw-bold text-dark small">${formatNumber(lineNetLC)} TRY</td>
+                        <td class="text-center align-middle col-action"></td>
+                    </tr>`;
+                });
+                $('#linesBody').html(rowsHtml);
+
+                let grandLC = netLC + taxLC;
+                $('#lblNetTotalLC').text(formatNumber(netLC) + ' TRY');
+                $('#lblTaxTotalLC').text(formatNumber(taxLC) + ' TRY');
+                $('#lblGrandTotalLC').text(formatNumber(grandLC) + ' TRY');
+                $('#lblGrandTotalFC').text(formatNumber((res.docCurrency === 'TRY') ? grandLC : (grandLC / (res.docRate || 1))) + ' ' + res.docCurrency);
+                
+                setFormMode('VIEW', res.docStatus, res.canceled); 
+            } catch (err) {
+                console.error("Binding sırasında hata:", err);
+                toastr.error("Kayıt ekrana yazdırılırken bir hata oluştu.");
+            } finally {
+                isBindingData = false;
+            }
+        }
+
+        function SearchOrder() {
+            const payload = { DocNum: $('#SearchDocNum').val() ? parseInt($('#SearchDocNum').val()) : null, CardCode: $('#CardCode').val(), SlpCode: parseInt($('#SalesPersonCode').val()) || null, DocDate: $('#DocDate').val() || null, DocCurrency: $('#DocCurrency').val() };
+            $('#loadingOverlay').css('display', 'flex');
+            $.ajax({ url: '/Rapor131/FindOrder', type: 'POST', contentType: 'application/json', data: JSON.stringify(payload),
+                success: function (res) {
+                    if (res.success && res.data.length > 0) {
+                        if (res.data.length === 1) loadOrderDetailsFromId(res.data[0].docEntry);
+                        else {
+                            let html = ''; 
+                            res.data.forEach(r => {
+                                let stBadge = r.canceled === 'Y' ? '<span class="badge bg-danger">İptal</span>' : (r.docStatus === 'C' ? '<span class="badge bg-secondary">Kapalı</span>' : '<span class="badge bg-success">Açık</span>');
+                                html += `<tr style="cursor:pointer;" onclick="loadOrderAndCloseModal(${r.docEntry})"><td class="fw-bold text-primary">#${r.docNum}</td><td>${stBadge}</td><td>${r.cardCode}</td><td>${r.cardName}</td><td>${r.docDate}</td><td><span class="badge bg-light text-dark border">${r.docCurrency}</span></td></tr>`;
+                            });
+                            $('#searchResultsBody').html(html); $('#searchResultsModal').modal('show');
+                        }
+                    } else toastr.warning(res.message || "Kayıt bulunamadı.");
+                },
+                complete: function () { $('#loadingOverlay').hide(); }
+            });
+        }
+        window.loadOrderAndCloseModal = function(entry) { $('#searchResultsModal').modal('hide'); loadOrderDetailsFromId(entry); }
+
+        // --- PRQ (SATINALMA TALEPLERİ) FONKSİYONLARI ---
+        window.fetchPRQs = function(empName) {
+            if(!empName) { toastr.warning("Lütfen arama için bir isim girin."); return; }
+            $('#prqTableBody').html('<tr><td colspan="8" class="text-center py-4"><i class="fas fa-spinner fa-spin text-primary fs-4"></i><br>Yükleniyor...</td></tr>');
+            
+            $.get('/Rapor131/GetOpenPurchaseRequests', { employeeName: empName }, function(res) {
+                if(res.success && res.data.length > 0) {
+                    loadedPRQs = res.data;
+                    let html = '';
+                    res.data.forEach((r, idx) => {
+                        html += `<tr>
+                                    <td><input type="checkbox" class="form-check-input chk-prq" data-idx="${idx}" /></td>
+                                    <td>${r.employeeName || '-'}</td>
+                                    <td class="fw-bold text-primary">${r.docNum}</td>
+                                    <td>${r.docDate}</td>
+                                    <td>${r.itemCode || '-'} <br> <small class="text-muted">${r.dscription || ''}</small></td>
+                                    <td class="fw-bold text-end">${formatNumber(r.openQty)}</td>
+                                    <td class="text-center">${r.currency || 'TRY'}</td>
+                                    <td>${r.whsCode || '-'}</td>
+                                 </tr>`;
+                    });
+                    $('#prqTableBody').html(html);
+                } else {
+                    $('#prqTableBody').html('<tr><td colspan="8" class="text-center text-danger py-4">Belirtilen çalışana ait açık talep bulunamadı.</td></tr>');
+                }
+            }).fail(function() {
+                $('#prqTableBody').html('<tr><td colspan="8" class="text-center text-danger py-4">Veri çekilirken hata oluştu.</td></tr>');
+            });
+        }
+
+        window.addSelectedPRQsToGrid = function() {
+            let selectedIndexes = [];
+            $('.chk-prq:checked').each(function() { selectedIndexes.push($(this).data('idx')); });
+            
+            if(selectedIndexes.length === 0) { toastr.warning("Siparişe eklemek için en az bir talep seçmelisiniz."); return; }
+            
+            if($('#DocType').val() !== 'I') {
+                toastr.error("Talep aktarımı için Sipariş Türü 'Kalem (Item)' olmalıdır. Lütfen türü değiştirip tekrar deneyin.");
+                return;
+            }
+
+            selectedIndexes.forEach(idx => {
+                let prq = loadedPRQs[idx];
+                
+                const $newRow = $($('#rowTemplateItem').html());
+                $('#linesBody').append($newRow);
+                
+                // Base Type (147 = PRQ) bilgileri
+                $newRow.find('.input-basetype').val(147);
+                $newRow.find('.input-baseentry').val(prq.docEntry);
+                $newRow.find('.input-baseline').val(prq.lineNum);
+                
+                if(prq.itemCode) { $newRow.find('.item-select').val(prq.itemCode); }
+                if(prq.whsCode) { $newRow.find('.input-whs').val(prq.whsCode); }
+                $newRow.find('.input-qty').val(prq.openQty);
+                if(prq.price > 0) $newRow.find('.input-price').val(prq.price);
+                if(prq.currency) $newRow.find('.input-currency').val(prq.currency);
+
+                $newRow.find('select.req-add').select2({ theme: 'bootstrap-5', width: '100%', dropdownParent: $('#mainContainer') });
+                $newRow.find('.item-select').trigger('change');
+            });
+
+            updateRowIndexes();
+            $('#prqModal').modal('hide');
+            toastr.success(`${selectedIndexes.length} adet kalem başarıyla eklendi. Fiyatları kontrol ediniz.`);
+        }
+    </script>
+}

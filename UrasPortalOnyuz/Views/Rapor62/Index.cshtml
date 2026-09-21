@@ -1,0 +1,378 @@
+﻿@model List<WebApplication3.Controllers.Rapor62ViewModel>
+@using WebApplication3.Models
+
+@{
+    ViewData["Title"] = "Satınalma Sipariş Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // 1. KURAL: URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? "Bilinmiyor";
+    var modelData = Model ?? new List<WebApplication3.Controllers.Rapor62ViewModel>();
+
+    // Alt toplamlar
+    var topMiktar = modelData.Sum(x => x.Miktar);
+    var topKalan = modelData.Sum(x => x.KalanSipMiktari);
+    var topTutar = modelData.Sum(x => x.Tutar);
+    var topNet = modelData.Sum(x => x.NetTutar);
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            font-size: 0.85rem;
+            overflow-y: hidden;
+        }
+
+        .container-fluid {
+            padding: 5px 15px !important;
+        }
+
+        .form-control, .btn, .form-select {
+            font-size: 11px;
+            padding: 2px 6px;
+            height: 28px;
+        }
+
+        /* --- SELECT2 EXCEL STİLİ ÖZELLEŞTİRME --- */
+        .select2-container--bootstrap-5 .select2-selection--multiple {
+            min-height: 28px !important;
+            height: 28px !important;
+            font-size: 11px;
+            padding: 0 4px;
+            display: flex;
+            align-items: center;
+            overflow: hidden !important;
+            border-color: #dee2e6;
+        }
+
+        .select2-selection__choice {
+            display: none !important;
+        }
+
+        .select2-selection__rendered {
+            padding-left: 4px !important;
+            color: #212529;
+            width: 100%;
+        }
+
+        .select2-search--inline, .select2-search__field {
+            margin: 0 !important;
+            height: 24px !important;
+            line-height: 24px !important;
+        }
+
+        .table-container {
+            height: calc(100vh - 150px); /* Buton için alan bırakıldı */
+            overflow: auto;
+            border: 1px solid #dee2e6;
+            background-color: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-top: 5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+
+        th, td {
+            padding: 4px 6px !important;
+            font-size: 11px !important;
+            border: 1px solid #ddd;
+            vertical-align: middle;
+            white-space: nowrap;
+            color: #212529;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        thead tr th {
+            position: sticky;
+            top: 0;
+            background-color: #c0392b;
+            color: white;
+            z-index: 20;
+            height: 32px;
+            text-align: center;
+            border: 1px solid #a93226;
+        }
+
+        .num {
+            text-align: right;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-weight: 700;
+        }
+
+        .text-center { text-align: center; }
+        .fw-bold { font-weight: bold; }
+
+        tfoot tr {
+            position: sticky;
+            bottom: 0;
+            z-index: 20;
+            background-color: #dee2e6;
+        }
+
+        tfoot td {
+            background-color: #dee2e6 !important;
+            font-weight: bold;
+            font-size: 12px !important;
+            border-top: 2px solid #555;
+            color: #000;
+        }
+
+        tbody tr:hover {
+            background-color: #fadbd8 !important;
+            cursor: default;
+        }
+        
+        .table-striped tbody tr:nth-of-type(odd) {
+            background-color: rgba(0,0,0,.02);
+        }
+    </style>
+}
+
+@* 2. KURAL: Güvenlik (CSRF) - Yetkisiz veri işlemlerini engellemek için eklendi *@
+@Html.AntiForgeryToken()
+
+<div class="container-fluid">
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-2">
+            <form asp-controller="Rapor62" asp-action="Index" method="get" id="raporForm">
+                
+                @* 1. KURAL: GET formuna şirket bilgisini ekleyen gizli input *@
+                <input type="hidden" name="db" value="@currentDb" />
+
+                <div class="row g-1 align-items-end">
+                    <div class="col-auto">
+                        <h6 class="m-0 fw-bold text-danger"><i class="fas fa-file-invoice-dollar me-2"></i>Siparişler <span class="text-secondary small">(@currentSelectedDbDisplay)</span></h6>
+                    </div>
+
+                    <div class="col-auto ms-auto">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text fw-bold py-0">Başlangıç</span>
+                            <input type="date" class="form-control" name="startDate" value="@ViewBag.StartDate">
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text fw-bold py-0">Bitiş</span>
+                            <input type="date" class="form-control" name="endDate" value="@ViewBag.EndDate">
+                        </div>
+                    </div>
+
+                    <div class="col-auto" style="min-width: 200px; max-width: 250px;">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text py-0"><i class="fas fa-users"></i></span>
+                            <select class="form-select" name="selectedCaris" id="cariSelect" multiple="multiple">
+                                @if (ViewBag.VendorList != null)
+                                {
+                                    foreach (var item in (List<SelectListItem>)ViewBag.VendorList)
+                                    {
+                                        var isSelected = ViewBag.SelectedCaris != null && ((List<string>)ViewBag.SelectedCaris).Contains(item.Value);
+                                        <option value="@item.Value" selected="@(isSelected ? "selected" : null)">@item.Text</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="col-auto" style="min-width: 200px; max-width: 250px;">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text py-0"><i class="fas fa-box"></i></span>
+                            <select class="form-select" name="selectedItems" id="itemSelect" multiple="multiple">
+                                @if (ViewBag.ItemList != null)
+                                {
+                                    foreach (var item in (List<SelectListItem>)ViewBag.ItemList)
+                                    {
+                                        var isSelected = ViewBag.SelectedItems != null && ((List<string>)ViewBag.SelectedItems).Contains(item.Value);
+                                        <option value="@item.Value" selected="@(isSelected ? "selected" : null)">@item.Text</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-danger w-100 fw-bold">Listele</button>
+                    </div>
+                    <div class="col-auto">
+                        <button type="button" class="btn btn-success w-100 fw-bold" id="exportToExcelButton">
+                            <i class="fas fa-file-excel"></i>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="table-container">
+        @if (modelData.Any())
+        {
+            <table class="table table-bordered table-striped mb-0">
+                <thead>
+                    <tr>
+                        <th>Belge No</th>
+                        <th>Cari Kodu</th>
+                        <th>Cari Adı</th>
+                        <th>Kalem Kodu</th>
+                        <th>Kalem Adı</th>
+                        <th>Miktar</th>
+                        <th>Kalan Sip.</th>
+                        <th>Fiyat</th>
+                        <th>P.Birimi</th>
+                        <th>Tutar</th>
+                        <th>İsk %</th>
+                        <th>Dip İsk.</th>
+                        <th>Vergi Top.</th>
+                        <th>Net Tutar</th>
+                        <th>Anlaş. Döviz</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in modelData)
+                    {
+                        <tr>
+                            <td class="text-center fw-bold">@item.BelgeNo</td>
+                            <td>@item.CariKodu</td>
+                            <td title="@item.CariAdi">
+                                @if (item.CariAdi != null && item.CariAdi.Length > 25)
+                                {
+                                    @item.CariAdi.Substring(0, 25) <span class="text-muted">...</span>
+                                }
+                                else
+                                {
+                                    @item.CariAdi
+                                }
+                            </td>
+                            <td>@item.KalemKodu</td>
+                            <td title="@item.KalemAdi">
+                                @if (item.KalemAdi != null && item.KalemAdi.Length > 25)
+                                {
+                                    @item.KalemAdi.Substring(0, 25) <span class="text-muted">...</span>
+                                }
+                                else
+                                {
+                                    @item.KalemAdi
+                                }
+                            </td>
+                            <td class="num">@item.Miktar.ToString("N2")</td>
+                            <td class="num text-danger">@item.KalanSipMiktari.ToString("N2")</td>
+                            <td class="num">@item.Fiyat.ToString("N2")</td>
+                            <td class="text-center">@item.ParaBirimi</td>
+                            <td class="num">@item.Tutar.ToString("N2")</td>
+                            <td class="num">@item.IskOrani.ToString("N2")</td>
+                            <td class="num">@item.ToplamDipIsk.ToString("N2")</td>
+                            <td class="num">@item.VergiToplami.ToString("N2")</td>
+                            <td class="num fw-bold">@item.NetTutar.ToString("N2")</td>
+                            <td class="text-center text-primary fw-bold">@item.AnlasilanDoviz</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="5" class="text-end"><strong>GENEL TOPLAM:</strong></td>
+                        <td class="num">@topMiktar.ToString("N2")</td>
+                        <td class="num">@topKalan.ToString("N2")</td>
+                        <td></td>
+                        <td></td>
+                        <td class="num">@topTutar.ToString("N2")</td>
+                        <td colspan="3"></td>
+                        <td class="num">@topNet.ToString("N2")</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        }
+        else
+        {
+            <div class="alert alert-warning m-3 text-center" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i> Veri bulunamadı veya tarih aralığı seçilmedi.
+            </div>
+        }
+    </div>
+
+    @* 4. KURAL: UI/UX Standartlarına uygun şık, db parametreli Ana Sayfa butonu *@
+    <div class="mt-3 mb-2 text-center">
+        <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+            <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+        </a>
+    </div>
+
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            function initExcelStyleSelect2(selector, placeholder, entityName) {
+                var $element = $(selector);
+
+                $element.select2({
+                    theme: 'bootstrap-5',
+                    placeholder: placeholder,
+                    allowClear: true,
+                    width: '100%',
+                    closeOnSelect: false 
+                });
+
+                function updateText() {
+                    var count = $element.val() ? $element.val().length : 0;
+                    var $renderedContainer = $element.next('.select2-container').find('.select2-selection__rendered');
+
+                    if (count > 0) {
+                        $renderedContainer.html('<span class="fw-bold text-primary">' + count + ' ' + entityName + ' Seçildi</span>');
+                        $renderedContainer.css('opacity', '1');
+                    } else {
+                        $renderedContainer.removeAttr('style');
+                    }
+                }
+
+                $element.on('change select2:select select2:unselect select2:close', function () {
+                    updateText();
+                });
+
+                updateText();
+            }
+
+            initExcelStyleSelect2('#cariSelect', 'Tedarikçi Seçiniz', 'Tedarikçi');
+            initExcelStyleSelect2('#itemSelect', 'Malzeme Seçiniz', 'Malzeme');
+
+            $('#exportToExcelButton').on('click', function () {
+                var startDate = $('input[name="startDate"]').val();
+                var endDate = $('input[name="endDate"]').val();
+                var selectedCaris = $('#cariSelect').val();
+                var selectedItems = $('#itemSelect').val();
+
+                // 1. KURAL: Şirket bilgisini Razor'dan garanti şekilde exportUrl'e bağlıyoruz
+                var exportUrl = '@Url.Action("ExportToExcel", "Rapor62")' +
+                                '?startDate=' + encodeURIComponent(startDate) +
+                                '&endDate=' + encodeURIComponent(endDate) +
+                                '&db=' + encodeURIComponent('@currentDb');
+
+                if (selectedCaris && selectedCaris.length > 0) {
+                    selectedCaris.forEach(function(item) { exportUrl += '&selectedCaris=' + encodeURIComponent(item); });
+                }
+
+                if (selectedItems && selectedItems.length > 0) {
+                    selectedItems.forEach(function(item) { exportUrl += '&selectedItems=' + encodeURIComponent(item); });
+                }
+
+                window.location.href = exportUrl;
+            });
+        });
+    </script>
+}

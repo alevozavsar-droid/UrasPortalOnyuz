@@ -1,0 +1,533 @@
+﻿@model List<WebApplication3.Controllers.BusinessPartnerViewModel>
+
+@{
+    ViewData["Title"] = "Cari İletişim Rehberi";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #3b82f6;
+            --surface-color: #ffffff;
+            --bg-color: #f8fafc;
+            --text-color: #1e293b;
+            --border-radius: 12px;
+        }
+
+        body { 
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        .page-header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: white; 
+            padding: 2rem 1.5rem; 
+            border-radius: var(--border-radius); 
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .modern-card {
+            background: var(--surface-color);
+            border-radius: var(--border-radius);
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+        }
+
+        .table-modern {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .table-modern th {
+            background-color: #f1f5f9;
+            color: #475569;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .table-modern td {
+            padding: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+            vertical-align: top;
+            font-size: 0.9rem;
+            transition: background-color 0.3s;
+        }
+
+        .table-modern tr:hover {
+            background-color: #f8fafc;
+        }
+
+        .editing-row td {
+            background-color: #fffbeb !important;
+        }
+
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 9999;
+        }
+
+        .modern-input {
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+            padding: 0.4rem 0.75rem;
+            width: 100%;
+            font-size: 0.85rem;
+        }
+        .modern-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        /* Select2 Style Override for inline editing */
+        .select2-container .select2-selection--single {
+            height: 34px !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 6px !important;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            line-height: 32px !important;
+            font-size: 0.85rem;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 32px !important;
+        }
+
+        .action-btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .action-btn-group button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+}
+
+<div class="container-fluid py-4">
+    <div class="page-header text-center">
+        <h3 class="fw-bold mb-1"><i class="fas fa-address-book me-2"></i> Müşteri & Tedarikçi Rehberi</h3>
+        <p class="mb-0 opacity-75">SAP Service Layer Üzerinden Anında Satır İçi (Inline) Güncelleme</p>
+    </div>
+
+    @if (ViewBag.Error != null)
+    {
+        <div class="alert alert-danger shadow-sm border-0 rounded-3 mb-4">
+            <i class="fas fa-exclamation-circle me-2"></i> @ViewBag.Error
+        </div>
+    }
+
+    <div class="modern-card">
+        <form asp-controller="Rapor120" asp-action="Index" method="get">
+            <div class="row g-3">
+                <div class="col-md-10">
+                    <input type="text" name="searchKeyword" class="modern-input" style="padding: 0.6rem 1rem;" placeholder="Cari Kodu, Adı veya VKN/TCKN ile arama yapın..." value="@ViewBag.SearchKeyword" />
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100 h-100" style="border-radius: 8px;">
+                        <i class="fas fa-search me-1"></i> Ara
+                    </button>
+                </div>
+            </div>
+            <div class="text-muted small mt-2"><i class="fas fa-info-circle"></i> Arama yapılmadığında performans amaçlı sadece ilk 200 kayıt listelenir.</div>
+        </form>
+    </div>
+
+    <div class="modern-card" style="padding:0; overflow-x:auto;">
+        <table class="table-modern">
+            <thead>
+                <tr>
+                    <th style="width: 20%;">Cari Bilgisi & VKN</th>
+                    <th style="width: 20%;">İletişim (Telefon & E-Posta)</th>
+                    <th style="width: 50%;">Açık Adres (Fatura)</th>
+                    <th style="width: 10%; text-align: center;">İşlem</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model != null && Model.Any())
+                {
+                    int index = 0;
+                    foreach (var item in Model)
+                    {
+                        <tr id="row-@index">
+                            <td>
+                                <strong id="lbl-cardcode-@index" class="text-primary d-block">@item.CardCode</strong>
+                                <span id="lbl-cardname-@index" class="fw-semibold text-dark d-block my-1">@item.CardName</span>
+                                <div>
+                                    <span class="badge bg-secondary opacity-75 me-1" style="font-size: 0.7rem;">@item.CardType</span>
+                                    <small class="text-muted fw-bold">VKN: <span id="lbl-vkn-@index" class="text-dark">@(string.IsNullOrEmpty(item.LicTradNum) ? "-" : item.LicTradNum)</span></small>
+                                </div>
+                            </td>
+
+                            <td>
+                                <div class="view-mode-@index">
+                                    <div class="mb-1 text-muted small"><i class="fas fa-phone me-1"></i> Tel 1: <span id="lbl-phone1-@index" class="text-dark fw-semibold">@(string.IsNullOrEmpty(item.Phone1) ? "-" : item.Phone1)</span></div>
+                                    <div class="mb-1 text-muted small"><i class="fas fa-phone-alt me-1"></i> Tel 2: <span id="lbl-phone2-@index" class="text-dark fw-semibold">@(string.IsNullOrEmpty(item.Phone2) ? "-" : item.Phone2)</span></div>
+                                    <div class="mb-1 text-muted small"><i class="fas fa-mobile-alt me-1"></i> Cep: <span id="lbl-cell-@index" class="text-dark fw-semibold">@(string.IsNullOrEmpty(item.Cellular) ? "-" : item.Cellular)</span></div>
+                                    <div class="text-muted small"><i class="fas fa-envelope me-1"></i> Mail: <span id="lbl-email-@index" class="text-dark fw-semibold">@(string.IsNullOrEmpty(item.Email) ? "-" : item.Email)</span></div>
+                                </div>
+                                <div class="edit-mode-@index d-none">
+                                    <input type="text" id="inp-phone1-@index" class="modern-input mb-1" value="@item.Phone1" placeholder="Tel 1" />
+                                    <input type="text" id="inp-phone2-@index" class="modern-input mb-1" value="@item.Phone2" placeholder="Tel 2" />
+                                    <input type="text" id="inp-cell-@index" class="modern-input mb-1" value="@item.Cellular" placeholder="Cep Telefonu" />
+                                    <input type="email" id="inp-email-@index" class="modern-input" value="@item.Email" placeholder="E-Posta" />
+                                </div>
+                            </td>
+
+                            <td>
+                                <div class="view-mode-@index">
+                                    <div class="mb-1">
+                                        <small class="text-muted d-block" style="font-size:0.75rem;">Adres Adı 2 (Uzun Adres):</small>
+                                        <span id="lbl-address2-@index" class="fw-semibold">@(string.IsNullOrEmpty(item.Address2) ? "-" : item.Address2)</span>
+                                    </div>
+                                    <div class="mb-2">
+                                        <small class="text-muted d-block" style="font-size:0.75rem;">Adres Satır 1 (Sokak):</small>
+                                        <span id="lbl-street-@index">@(string.IsNullOrEmpty(item.Street) ? "-" : item.Street)</span>
+                                    </div>
+                                    <div class="row g-2">
+                                        <div class="col-3">
+                                            <small class="text-muted d-block" style="font-size:0.75rem;">İlçe:</small>
+                                            <strong id="lbl-county-@index" class="text-dark">@(string.IsNullOrEmpty(item.County) ? "-" : item.County)</strong>
+                                        </div>
+                                        <div class="col-3">
+                                            <small class="text-muted d-block" style="font-size:0.75rem;">İl:</small>
+                                            <strong id="lbl-state-@index" class="text-dark" data-code="@item.StateCode">@(string.IsNullOrEmpty(item.StateName) ? "-" : item.StateName)</strong>
+                                        </div>
+                                        <div class="col-3">
+                                            <small class="text-muted d-block" style="font-size:0.75rem;">Ülke:</small>
+                                            <strong id="lbl-country-@index" class="text-dark" data-code="@item.CountryCode">@(string.IsNullOrEmpty(item.CountryName) ? "-" : item.CountryName)</strong>
+                                        </div>
+                                        <div class="col-3">
+                                            <small class="text-muted d-block" style="font-size:0.75rem;">Posta Kodu:</small>
+                                            <strong id="lbl-zipcode-@index" class="text-dark">@(string.IsNullOrEmpty(item.ZipCode) ? "-" : item.ZipCode)</strong>
+                                        </div>
+                                    </div>
+                                    <input type="hidden" id="inp-addressname-@index" value="@item.AddressName" />
+                                </div>
+                                
+                                <div class="edit-mode-@index d-none">
+                                    <input type="text" id="inp-address2-@index" class="modern-input mb-1" value="@item.Address2" placeholder="Adres Adı 2 (Uzun Adres/Bina vb.)" />
+                                    <textarea id="inp-street-@index" class="modern-input mb-2" rows="2" placeholder="Adres Satır 1 (Sokak, Mahalle vb.)">@item.Street</textarea>
+                                    <div class="row g-2">
+                                        <div class="col-3">
+                                            <input type="text" id="inp-county-@index" class="modern-input" value="@item.County" placeholder="İlçe" />
+                                        </div>
+                                        <div class="col-3">
+                                            <select id="inp-country-@index" class="form-select modern-input" onchange="countryChanged(@index)">
+                                                <option value="">-- Ülke Seç --</option>
+                                                @if (ViewBag.Countries != null)
+                                                {
+                                                    foreach (var c in ViewBag.Countries)
+                                                    {
+                                                        <option value="@c.Code">@c.Name</option>
+                                                    }
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="col-3">
+                                            <select id="inp-state-@index" class="form-select modern-input">
+                                                <option value="">-- İl Seç --</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-3">
+                                            <input type="text" id="inp-zipcode-@index" class="modern-input" value="@item.ZipCode" placeholder="Posta Kodu" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <td>
+                                <div class="view-mode-@index action-btn-group">
+                                    <button class="btn btn-sm btn-outline-primary w-100" onclick="enableEdit(@index)" title="Satırda Düzenle">
+                                        <i class="fas fa-edit me-1"></i> Düzenle
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary w-100" onclick="copyRow(@index)" title="Tüm Bilgileri Kopyala">
+                                        <i class="fas fa-copy me-1"></i> Tümünü Kopyala
+                                    </button>
+                                </div>
+                                <div class="edit-mode-@index d-none action-btn-group">
+                                    <button class="btn btn-sm btn-success w-100" id="btn-save-@index" onclick="saveRow(@index)" title="SAP'ye Kaydet">
+                                        <i class="fas fa-check me-1"></i> Kaydet
+                                    </button>
+                                    <button class="btn btn-sm btn-secondary w-100" onclick="cancelEdit(@index)" title="İptal Et">
+                                        <i class="fas fa-times me-1"></i> İptal
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        index++;
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="4" class="text-center py-5 text-muted">
+                            <i class="fas fa-search fa-2x mb-3 opacity-50"></i>
+                            <p>Görüntülenecek kayıt bulunamadı.</p>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="toast-container">
+    <div id="copyToast" class="toast align-items-center text-white bg-dark border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex p-1">
+            <div class="toast-body fw-bold">
+                <i class="fas fa-check-circle text-success me-2 fs-5 align-middle"></i> Tüm satır kopyalandı!
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <script>
+        var toastInstance;
+        // Tüm illeri C#'tan JS Array'ine alıyoruz
+        var allStates = [
+            @if(ViewBag.States != null)
+            {
+                foreach(var s in ViewBag.States)
+                {
+                    @Html.Raw($"{{ code: '{s.Code}', name: '{s.Name.Replace("'", "\\'")}', countryCode: '{s.CountryCode}' }},")
+                }
+            }
+        ];
+
+        document.addEventListener("DOMContentLoaded", function () {
+            toastInstance = new bootstrap.Toast(document.getElementById('copyToast'), { delay: 2000 });
+        });
+
+        // Ülke değiştiğinde o ülkeye ait illeri doldurur
+        function updateStateDropdown(index, countryCode, selectedStateCode) {
+            var stateSel = $('#inp-state-' + index);
+            
+            if (stateSel.hasClass("select2-hidden-accessible")) {
+                stateSel.select2('destroy');
+            }
+
+            stateSel.empty();
+            stateSel.append('<option value="">-- İl Seç --</option>');
+            
+            allStates.forEach(function(s) {
+                if(s.countryCode === countryCode) {
+                    var option = new Option(s.name, s.code);
+                    stateSel.append(option);
+                }
+            });
+
+            if (selectedStateCode) {
+                stateSel.val(selectedStateCode);
+            }
+
+            stateSel.select2({ width: '100%' });
+        }
+
+        function countryChanged(index) {
+            var selectedCountry = $('#inp-country-' + index).val();
+            updateStateDropdown(index, selectedCountry, '');
+        }
+
+        // ==========================================
+        // SATIR İÇİ DÜZENLEME (INLINE EDIT) İŞLEMLERİ
+        // ==========================================
+
+        function enableEdit(index) {
+            document.getElementById('row-' + index).classList.add('editing-row');
+
+            var currCountryCode = document.getElementById('lbl-country-' + index).getAttribute('data-code');
+            var currStateCode = document.getElementById('lbl-state-' + index).getAttribute('data-code');
+            
+            if (!currCountryCode || currCountryCode === "-") currCountryCode = "TR";
+
+            $('#inp-country-' + index).val(currCountryCode);
+            updateStateDropdown(index, currCountryCode, currStateCode);
+
+            $('#inp-country-' + index).select2({ width: '100%' });
+
+            document.querySelectorAll('.view-mode-' + index).forEach(el => el.classList.add('d-none'));
+            document.querySelectorAll('.edit-mode-' + index).forEach(el => el.classList.remove('d-none'));
+        }
+
+        function cancelEdit(index) {
+            document.getElementById('row-' + index).classList.remove('editing-row');
+
+            document.getElementById('inp-phone1-' + index).value = document.getElementById('lbl-phone1-' + index).innerText === "-" ? "" : document.getElementById('lbl-phone1-' + index).innerText;
+            document.getElementById('inp-phone2-' + index).value = document.getElementById('lbl-phone2-' + index).innerText === "-" ? "" : document.getElementById('lbl-phone2-' + index).innerText;
+            document.getElementById('inp-cell-' + index).value = document.getElementById('lbl-cell-' + index).innerText === "-" ? "" : document.getElementById('lbl-cell-' + index).innerText;
+            document.getElementById('inp-email-' + index).value = document.getElementById('lbl-email-' + index).innerText === "-" ? "" : document.getElementById('lbl-email-' + index).innerText;
+            
+            document.getElementById('inp-address2-' + index).value = document.getElementById('lbl-address2-' + index).innerText === "-" ? "" : document.getElementById('lbl-address2-' + index).innerText;
+            document.getElementById('inp-street-' + index).value = document.getElementById('lbl-street-' + index).innerText === "-" ? "" : document.getElementById('lbl-street-' + index).innerText;
+            document.getElementById('inp-county-' + index).value = document.getElementById('lbl-county-' + index).innerText === "-" ? "" : document.getElementById('lbl-county-' + index).innerText;
+            document.getElementById('inp-zipcode-' + index).value = document.getElementById('lbl-zipcode-' + index).innerText === "-" ? "" : document.getElementById('lbl-zipcode-' + index).innerText;
+
+            if ($('#inp-country-' + index).hasClass("select2-hidden-accessible")) {
+                $('#inp-country-' + index).select2('destroy');
+            }
+            if ($('#inp-state-' + index).hasClass("select2-hidden-accessible")) {
+                $('#inp-state-' + index).select2('destroy');
+            }
+
+            document.querySelectorAll('.edit-mode-' + index).forEach(el => el.classList.add('d-none'));
+            document.querySelectorAll('.view-mode-' + index).forEach(el => el.classList.remove('d-none'));
+        }
+
+        function saveRow(index) {
+            var btn = document.getElementById('btn-save-' + index);
+            var originalText = btn.innerHTML;
+            
+            // Kodu Doğrudan InnerText'ten okuyoruz (Güvenli)
+            var cardCode = document.getElementById('lbl-cardcode-' + index).innerText;
+            
+            var selCountry = $('#inp-country-' + index);
+            var selState = $('#inp-state-' + index);
+
+            var countryCode = selCountry.val();
+            var countryName = selCountry.find("option:selected").text();
+            if(!countryCode) countryName = "-";
+
+            var stateCode = selState.val();
+            var stateName = selState.find("option:selected").text();
+            if(!stateCode) stateName = "-";
+
+            var payload = {
+                CardCode: cardCode,
+                Phone1: document.getElementById('inp-phone1-' + index).value.trim(),
+                Phone2: document.getElementById('inp-phone2-' + index).value.trim(),
+                Cellular: document.getElementById('inp-cell-' + index).value.trim(),
+                EmailAddress: document.getElementById('inp-email-' + index).value.trim(),
+                AddressName: document.getElementById('inp-addressname-' + index).value.trim(),
+                Address2: document.getElementById('inp-address2-' + index).value.trim(),
+                Street: document.getElementById('inp-street-' + index).value.trim(),
+                County: document.getElementById('inp-county-' + index).value.trim(),
+                State: stateCode, 
+                Country: countryCode, 
+                ZipCode: document.getElementById('inp-zipcode-' + index).value.trim()
+            };
+
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            btn.disabled = true;
+
+            fetch('/Rapor120/UpdateBp', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    if(data.newAddressName) {
+                        document.getElementById('inp-addressname-' + index).value = data.newAddressName;
+                    }
+
+                    document.getElementById('lbl-phone1-' + index).innerText = payload.Phone1 || "-";
+                    document.getElementById('lbl-phone2-' + index).innerText = payload.Phone2 || "-";
+                    document.getElementById('lbl-cell-' + index).innerText = payload.Cellular || "-";
+                    document.getElementById('lbl-email-' + index).innerText = payload.EmailAddress || "-";
+                    
+                    document.getElementById('lbl-address2-' + index).innerText = payload.Address2 || "-";
+                    document.getElementById('lbl-street-' + index).innerText = payload.Street || "-";
+                    document.getElementById('lbl-county-' + index).innerText = payload.County || "-";
+                    document.getElementById('lbl-zipcode-' + index).innerText = payload.ZipCode || "-";
+                    
+                    var lblState = document.getElementById('lbl-state-' + index);
+                    lblState.innerText = stateName;
+                    lblState.setAttribute('data-code', stateCode || "");
+
+                    var lblCountry = document.getElementById('lbl-country-' + index);
+                    lblCountry.innerText = countryName;
+                    lblCountry.setAttribute('data-code', countryCode || "");
+
+                    if ($('#inp-country-' + index).hasClass("select2-hidden-accessible")) {
+                        $('#inp-country-' + index).select2('destroy');
+                    }
+                    if ($('#inp-state-' + index).hasClass("select2-hidden-accessible")) {
+                        $('#inp-state-' + index).select2('destroy');
+                    }
+
+                    document.getElementById('row-' + index).classList.remove('editing-row');
+                    document.querySelectorAll('.edit-mode-' + index).forEach(el => el.classList.add('d-none'));
+                    document.querySelectorAll('.view-mode-' + index).forEach(el => el.classList.remove('d-none'));
+                } else {
+                    alert("HATA:\n" + data.message);
+                }
+            })
+            .catch(error => {
+                alert("Kritik Hata: İstek gönderilemedi.");
+                console.error(error);
+            })
+            .finally(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            });
+        }
+
+        // ==========================================
+        // KOMPLE SATIRI KOPYALAMA İŞLEMİ (DOM ÜZERİNDEN KUSURSUZ OKUMA)
+        // ==========================================
+
+        function copyRow(index) {
+            // Kodları doğrudan labellardan alarak Tırnak (") hatalarının önüne geçiyoruz
+            var cardCode = document.getElementById('lbl-cardcode-' + index).innerText;
+            var cardName = document.getElementById('lbl-cardname-' + index).innerText;
+            var vkn = document.getElementById('lbl-vkn-' + index).innerText;
+            
+            var phone1 = document.getElementById('lbl-phone1-' + index).innerText;
+            var phone2 = document.getElementById('lbl-phone2-' + index).innerText;
+            var cell = document.getElementById('lbl-cell-' + index).innerText;
+            var email = document.getElementById('lbl-email-' + index).innerText;
+            
+            var address2 = document.getElementById('lbl-address2-' + index).innerText;
+            var street = document.getElementById('lbl-street-' + index).innerText;
+            var county = document.getElementById('lbl-county-' + index).innerText;
+            var stateName = document.getElementById('lbl-state-' + index).innerText;
+            var countryName = document.getElementById('lbl-country-' + index).innerText;
+            var zipcode = document.getElementById('lbl-zipcode-' + index).innerText;
+
+            var fullAddress = (address2 !== "-" ? address2 + "\n" : "") + 
+                              (street !== "-" ? street + "\n" : "") + 
+                              (county !== "-" ? county + " / " : "") + 
+                              (stateName !== "-" ? stateName + " " : "") + 
+                              (countryName !== "-" ? countryName + " " : "") + 
+                              (zipcode !== "-" ? "- " + zipcode : "");
+
+            var textToCopy = "📌 Cari Kodu: " + cardCode + "\n" +
+                             "🏢 Cari Adı: " + cardName + "\n" +
+                             "🆔 VKN/TCKN: " + (vkn === "-" || vkn === "" ? "Yok" : vkn) + "\n\n" +
+                             "☎️ Tel 1: " + (phone1 === "-" ? "Yok" : phone1) + "\n" +
+                             "☎️ Tel 2: " + (phone2 === "-" ? "Yok" : phone2) + "\n" +
+                             "📱 Cep Tel: " + (cell === "-" ? "Yok" : cell) + "\n" +
+                             "✉️ E-Posta: " + (email === "-" ? "Yok" : email) + "\n\n" +
+                             "📍 Fatura Adresi: \n" + (fullAddress.trim() === "" ? "Yok" : fullAddress);
+
+            navigator.clipboard.writeText(textToCopy).then(function () {
+                toastInstance.show();
+            }).catch(function (err) {
+                alert("Kopyalama işlemi cihazınız tarafından engellendi.");
+                console.error('Kopyalama başarısız', err);
+            });
+        }
+    </script>
+}

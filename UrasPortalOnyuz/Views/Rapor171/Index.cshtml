@@ -1,0 +1,429 @@
+@{
+    ViewData["Title"] = "Yansıtma Faturası";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var sirketler = ViewBag.Sirketler as List<WebApplication3.Controllers.Rapor171Controller.DatabaseConfig> ?? new List<WebApplication3.Controllers.Rapor171Controller.DatabaseConfig>();
+    var alanMesajlari = ViewBag.AlanMesajlari as List<string> ?? new List<string>();
+}
+
+<style>
+    .yf-wrap { padding: 0 14px 30px; }
+    .yf-hero { background: linear-gradient(120deg, #4c1d95 0%, #7c3aed 55%, #a78bfa 100%); color: #fff; border-radius: 16px; padding: 16px 22px; margin: 14px 0; box-shadow: 0 10px 30px -12px rgba(124,58,237,.5); }
+    .yf-hero h1 { font-size: 1.25rem; font-weight: 700; margin: 0; } .yf-hero p { margin: 4px 0 0; opacity: .92; font-size: .84rem; }
+    .yf-step { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 14px; box-shadow: 0 4px 14px -8px rgba(15,23,42,.12); overflow: hidden; }
+    .yf-step.kapali { opacity: .5; pointer-events: none; }
+    .yf-step-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #f1f5f9; background: #faf5ff; }
+    .yf-step-head .no { width: 26px; height: 26px; border-radius: 50%; background: #7c3aed; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .82rem; }
+    .yf-step-head h5 { margin: 0; font-size: .92rem; font-weight: 700; color: #4c1d95; }
+    .yf-step-body { padding: 14px 16px; }
+    .yf-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+    .yf-fld { display: flex; flex-direction: column; gap: 4px; }
+    .yf-fld label { font-size: .72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .3px; }
+    .yf-fld input, .yf-fld select { border: 1px solid #d7dce5; border-radius: 8px; padding: 6px 10px; font-size: .84rem; min-width: 140px; }
+    .yf-btn { border: none; border-radius: 9px; padding: 8px 16px; font-weight: 700; font-size: .84rem; cursor: pointer; background: #7c3aed; color: #fff; }
+    .yf-btn:hover { background: #6d28d9; } .yf-btn.s { background: #16a34a; } .yf-btn.s:hover { background: #15803d; }
+    .yf-btn.o { background: #fff; color: #7c3aed; border: 1px solid #ddd6fe; } .yf-btn.o:hover { background: #f5f3ff; }
+    .yf-btn:disabled { background: #cbd5e1; cursor: not-allowed; }
+    table.yf { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    table.yf th { background: #faf5ff; text-align: left; padding: 7px 9px; font-size: .7rem; text-transform: uppercase; color: #6d28d9; border-bottom: 1px solid #ede9fe; }
+    table.yf td { padding: 7px 9px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .yf-search-list { position: absolute; z-index: 50; background: #fff; border: 1px solid #d7dce5; border-radius: 8px; box-shadow: 0 8px 24px -8px rgba(0,0,0,.25); max-height: 260px; overflow-y: auto; min-width: 280px; }
+    .yf-search-list .it { padding: 7px 12px; cursor: pointer; font-size: .82rem; border-bottom: 1px solid #f1f5f9; }
+    .yf-search-list .it:hover { background: #faf5ff; }
+    .yf-eslesme-otomatik { color: #16a34a; font-weight: 700; font-size: .74rem; } .yf-eslesme-manuel { color: #b45309; font-weight: 700; font-size: .74rem; }
+    .yf-uyari { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; font-size: .78rem; padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; }
+    .yf-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; font-size: .78rem; padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; }
+    .yf-fmodal-bg { position: fixed; inset: 0; background: rgba(15,23,42,.5); display: none; align-items: center; justify-content: center; z-index: 1080; }
+    .yf-fmodal-bg.on { display: flex; }
+    .yf-fmodal { background: #fff; border-radius: 14px; width: min(1100px, 95vw); height: 88vh; display: flex; flex-direction: column; overflow: hidden; }
+    .yf-fmodal-head { padding: 10px 16px; background: linear-gradient(135deg, #4c1d95, #7c3aed); color: #fff; display: flex; justify-content: space-between; align-items: center; }
+    .yf-fmodal iframe { flex: 1; border: 0; background: #e5e7eb; }
+</style>
+
+<div class="yf-wrap">
+    <div class="yf-hero">
+        <h1><i class="fas fa-right-left me-2"></i>Grup İçi Yansıtma Faturası</h1>
+        <p>Bir şirketteki alış faturasının tamamını başka bir grup şirketine otomatik satış/alış fatura çifti olarak yansıtır.</p>
+    </div>
+
+    @if (alanMesajlari.Any())
+    {
+        <div class="yf-info"><i class="fas fa-magic me-1"></i><b>SAP alan kontrolü:</b> @string.Join(" | ", alanMesajlari)</div>
+    }
+
+    <!-- ADIM 1: KAYNAK -->
+    <div class="yf-step" id="step1">
+        <div class="yf-step-head"><span class="no">1</span><h5>Kaynak Şirket ve Alış Faturası</h5></div>
+        <div class="yf-step-body">
+            <div class="yf-row">
+                <div class="yf-fld"><label>Kaynak Şirket</label>
+                    <select id="kaynakDb" class="yf-sel">
+                        <option value="">- Seçiniz -</option>
+                        @foreach (var s in sirketler) { <option value="@s.Key">@s.Display</option> }
+                    </select>
+                </div>
+                <div class="yf-fld" style="position:relative; flex:1; min-width:280px;"><label>Alış Faturası Ara</label>
+                    <input type="text" id="faturaAra" placeholder="Cari kodu, cari adı ya da fatura no yazın..." disabled>
+                    <div class="yf-search-list" id="faturaListe" style="display:none; top:56px;"></div>
+                </div>
+            </div>
+            <div id="secilenFatura" style="margin-top:10px;"></div>
+        </div>
+    </div>
+
+    <!-- ADIM 2: FATURA DETAYI -->
+    <div class="yf-step kapali" id="step2">
+        <div class="yf-step-head"><span class="no">2</span><h5>Fatura Satırları</h5></div>
+        <div class="yf-step-body">
+            <div class="table-responsive"><table class="yf" id="tblKaynakSatir"><thead><tr><th>#</th><th>Tür</th><th>Kalem / Hesap</th><th>Açıklama</th><th class="text-end">Miktar</th><th class="text-end">Tutar</th><th>PB</th><th>KDV</th></tr></thead><tbody></tbody></table></div>
+        </div>
+    </div>
+
+    <!-- ADIM 3: HEDEF + KARŞI CARİ -->
+    <div class="yf-step kapali" id="step3">
+        <div class="yf-step-head"><span class="no">3</span><h5>Hedef Şirket ve Karşı Cari</h5></div>
+        <div class="yf-step-body">
+            <div class="yf-row">
+                <div class="yf-fld"><label>Hedef Şirket</label>
+                    <select id="hedefDb" class="yf-sel">
+                        <option value="">- Seçiniz -</option>
+                        @foreach (var s in sirketler) { <option value="@s.Key">@s.Display</option> }
+                    </select>
+                </div>
+            </div>
+            <div id="karsiCariAlan" style="margin-top:10px; display:none;">
+                <div class="yf-row">
+                    <div class="yf-fld" style="position:relative;"><label>Kaynak Şirkette Hedefi Temsil Eden Müşteri</label>
+                        <input type="text" id="kaynakCariAra" placeholder="Cari ara...">
+                        <div class="yf-search-list" id="kaynakCariListe" style="display:none;"></div>
+                        <input type="hidden" id="kaynakCariKod"><div class="small text-muted" id="kaynakCariGosterim"></div>
+                    </div>
+                    <div class="yf-fld" style="position:relative;"><label>Hedef Şirkette Kaynağı Temsil Eden Tedarikçi</label>
+                        <input type="text" id="hedefCariAra" placeholder="Cari ara...">
+                        <div class="yf-search-list" id="hedefCariListe" style="display:none;"></div>
+                        <input type="hidden" id="hedefCariKod"><div class="small text-muted" id="hedefCariGosterim"></div>
+                    </div>
+                </div>
+                <div class="yf-uyari" id="cariYokUyari" style="display:none;">Aradığınız cari yoksa önce ilgili şirkette normal cari ekleme ekranından oluşturup buraya dönün.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADIM 4: SATIR EŞLEŞMESİ -->
+    <div class="yf-step kapali" id="step4">
+        <div class="yf-step-head"><span class="no">4</span><h5>Hedef Şirkette Karşılık Gelen Hesap / Kalem</h5></div>
+        <div class="yf-step-body">
+            <div class="table-responsive"><table class="yf" id="tblEslesme"><thead><tr><th>#</th><th>Kaynak (Tür / Kod / Ad)</th><th>Hedef Karşılığı</th><th></th></tr></thead><tbody></tbody></table></div>
+        </div>
+    </div>
+
+    <!-- ADIM 5: SATIŞ BİLGİLERİ -->
+    <div class="yf-step kapali" id="step5">
+        <div class="yf-step-head"><span class="no">5</span><h5>Yansıtma Satış Faturası Bilgileri</h5></div>
+        <div class="yf-step-body">
+            <div class="yf-row">
+                <div class="yf-fld"><label>Belge Tarihi</label><input type="date" id="DocDate"></div>
+                <div class="yf-fld"><label>Vade Tarihi</label><input type="date" id="DocDueDate"></div>
+                <div class="yf-fld"><label>Vergi Tarihi</label><input type="date" id="TaxDate"></div>
+                <div class="yf-fld"><label>İşlem Tipi</label>
+                    <select id="U_BE1_AKTAR"><option value="">- Seçiniz -</option><option value="X">X (Yazdır)</option><option value="R">R</option><option value="Y">Y</option></select>
+                </div>
+                <div class="yf-fld"><label>Fatura Tipi</label>
+                    <select id="U_BE1_SEND"><option value="1">1 - SATIŞ</option><option value="3">3 - ISTISNA</option></select>
+                </div>
+            </div>
+            <hr>
+            <div class="fw-bold text-muted small mb-2"><i class="fas fa-truck me-1"></i>Lojistik / Nakliye (e-belge için zorunlu)</div>
+            <div class="yf-row">
+                <div class="yf-fld"><label>Şoför Ad Soyad</label><input type="text" id="U_BE1_SOFORADSOYAD"></div>
+                <div class="yf-fld"><label>TC / VKN</label><input type="text" id="U_BE1_SOFORKIMLIK"></div>
+                <div class="yf-fld"><label>Plaka</label><input type="text" id="U_BE1_ARACPLAKASI"></div>
+                <div class="yf-fld"><label>Ünvan</label><input type="text" id="U_BE1_SOFORUNVANI" value="Şoför"></div>
+                <div class="yf-fld"><label>Telefon</label><input type="text" id="U_BE1_SOFORTEL"></div>
+            </div>
+            <div class="yf-row mt-2">
+                <div class="yf-fld"><label>Nakliyeci Firma No</label><input type="text" id="U_BE1_FRMNO"></div>
+                <div class="yf-fld"><label>Nakliyeci Firma Adı</label><input type="text" id="U_BE1_FRMADI"></div>
+                <div class="yf-fld"><label>Nakliyeci VKN</label><input type="text" id="U_BE1_FRMVKN"></div>
+                <div class="yf-fld"><label>Nakliye Tarihi</label><input type="date" id="U_BE1_NAKLIYETARIHI"></div>
+                <div class="yf-fld"><label>Nakliye Saati</label><input type="time" id="U_BE1_NAKLIYESAATI"></div>
+            </div>
+            <div class="row g-3 mt-2">
+                <div class="col-md-6">
+                    <div class="fw-bold text-muted small mb-2">Fatura (Bill-To) Adresi</div>
+                    <div class="yf-row">
+                        <div class="yf-fld" style="flex:1;"><label>Sokak / Adres</label><input type="text" id="BillToStreet" style="width:100%"></div>
+                        <div class="yf-fld"><label>İl</label><input type="text" id="BillToCity"></div>
+                        <div class="yf-fld"><label>İlçe</label><input type="text" id="BillToCounty"></div>
+                        <div class="yf-fld"><label>Posta Kodu</label><input type="text" id="BillToZipCode"></div>
+                        <div class="yf-fld"><label>Ülke (TR)</label><input type="text" id="BillToCountry" value="TR"></div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="fw-bold text-muted small mb-2">Sevk (Ship-To) Adresi</div>
+                    <div class="yf-row">
+                        <div class="yf-fld" style="flex:1;"><label>Sokak / Adres</label><input type="text" id="ShipToStreet" style="width:100%"></div>
+                        <div class="yf-fld"><label>İl</label><input type="text" id="ShipToCity"></div>
+                        <div class="yf-fld"><label>İlçe</label><input type="text" id="ShipToCounty"></div>
+                        <div class="yf-fld"><label>Posta Kodu</label><input type="text" id="ShipToZipCode"></div>
+                        <div class="yf-fld"><label>Ülke (TR)</label><input type="text" id="ShipToCountry" value="TR"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-3 text-end">
+                <button type="button" class="yf-btn s" id="btnSatisOlustur"><i class="fas fa-file-invoice me-1"></i> Yansıtma Satış Faturasını SAP'ye Ekle</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADIM 6: E-BELGE -->
+    <div class="yf-step kapali" id="step6">
+        <div class="yf-step-head"><span class="no">6</span><h5>E-Belge Önizleme ve Gönderim</h5></div>
+        <div class="yf-step-body">
+            <div class="yf-row">
+                <div class="yf-fld"><label>Fatura Serisi</label><select id="seriSecim" style="min-width:220px;"><option value="">- Yükleniyor -</option></select></div>
+                <button type="button" class="yf-btn o" id="btnOnizle"><i class="fas fa-eye me-1"></i> Önizle</button>
+                <button type="button" class="yf-btn s" id="btnGonder" disabled><i class="fas fa-paper-plane me-1"></i> QNB'ye Gönder</button>
+            </div>
+            <div id="onizlemeAlan" style="margin-top:10px; display:none;">
+                <iframe id="onizlemeFrame" style="width:100%; height:60vh; border:1px solid #e5e7eb; border-radius:8px;"></iframe>
+            </div>
+            <div id="sonucAlan" style="margin-top:12px;"></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    const esc = s => (s == null ? "" : String(s)).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const fmt = n => (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const bugun = () => new Date().toISOString().substring(0, 10);
+    ['DocDate', 'DocDueDate', 'TaxDate', 'U_BE1_NAKLIYETARIHI'].forEach(id => document.getElementById(id).value = bugun());
+    document.getElementById('U_BE1_NAKLIYESAATI').value = new Date().toTimeString().substring(0, 5);
+
+    const ST = { kaynakDb: '', kaynakDocEntry: 0, fatura: null, hedefDb: '', kaynakCari: '', hedefCari: '', eslesmeler: [], kaynakInvDocEntry: 0, kaynakInvDocNum: 0, numAtCard: '' };
+
+    function acStep(n) { document.getElementById('step' + n).classList.remove('kapali'); }
+
+    // ================= ADIM 1: kaynak fatura arama =================
+    document.getElementById('kaynakDb').addEventListener('change', function () {
+        ST.kaynakDb = this.value;
+        document.getElementById('faturaAra').disabled = !this.value;
+        document.getElementById('faturaAra').value = '';
+        document.getElementById('faturaListe').style.display = 'none';
+    });
+    let faturaTimer;
+    document.getElementById('faturaAra').addEventListener('input', function () {
+        clearTimeout(faturaTimer);
+        const q = this.value.trim();
+        faturaTimer = setTimeout(() => {
+            fetch(`/Rapor171/AlisFaturalari?db=${ST.kaynakDb}&ara=${encodeURIComponent(q)}`).then(r => r.json()).then(res => {
+                const el = document.getElementById('faturaListe');
+                if (!res.success || !res.data.length) { el.innerHTML = '<div class="it text-muted">Sonuç yok.</div>'; el.style.display = 'block'; return; }
+                el.innerHTML = res.data.map(f => `<div class="it" onclick="faturaSec(${f.docEntry}, '${esc(f.cardCode)}', '${esc(f.cardName)}', ${f.docNum})">
+                    <b>No ${f.docNum}</b> — ${esc(f.cardCode)} ${esc(f.cardName)} · ${fmt(f.docTotal)} ${esc(f.docCur)}</div>`).join('');
+                el.style.display = 'block';
+            });
+        }, 250);
+    });
+
+    window.faturaSec = function (docEntry, cardCode, cardName, docNum) {
+        ST.kaynakDocEntry = docEntry;
+        document.getElementById('faturaListe').style.display = 'none';
+        document.getElementById('faturaAra').value = `No ${docNum} — ${cardCode} ${cardName}`;
+        document.getElementById('secilenFatura').innerHTML = `<div class="yf-info">Seçilen: <b>No ${docNum}</b> — ${esc(cardCode)} ${esc(cardName)}</div>`;
+        fetch(`/Rapor171/FaturaDetay?db=${ST.kaynakDb}&docEntry=${docEntry}`).then(r => r.json()).then(res => {
+            if (!res.success) { toastr.error(res.message); return; }
+            ST.fatura = res;
+            document.querySelector('#tblKaynakSatir tbody').innerHTML = res.satirlar.map((s, i) => `<tr>
+                <td>${i + 1}</td><td>${s.tipiHizmet === 'H' ? 'Hizmet' : 'Kalem'}</td>
+                <td>${s.tipiHizmet === 'H' ? esc(s.acctCode) : esc(s.itemCode)}</td><td>${esc(s.aciklama)}</td>
+                <td class="text-end">${s.tipiHizmet === 'H' ? '—' : fmt(s.quantity)}</td>
+                <td class="text-end">${fmt(s.lineTotal)}</td><td>${esc(s.currency)}</td><td>${esc(s.vatGroup)}</td></tr>`).join('');
+            acStep(2); acStep(3);
+        });
+    };
+
+    // ================= ADIM 3: hedef + karşı cari =================
+    document.getElementById('hedefDb').addEventListener('change', function () {
+        ST.hedefDb = this.value;
+        if (!this.value) { document.getElementById('karsiCariAlan').style.display = 'none'; return; }
+        document.getElementById('karsiCariAlan').style.display = 'block';
+        fetch(`/Rapor171/KarsiCari?kaynakDb=${ST.kaynakDb}&hedefDb=${ST.hedefDb}`).then(r => r.json()).then(res => {
+            if (res.kaynakCari) { ST.kaynakCari = res.kaynakCari; document.getElementById('kaynakCariAra').value = res.kaynakCari; document.getElementById('kaynakCariKod').value = res.kaynakCari; document.getElementById('kaynakCariGosterim').innerHTML = '<span class="yf-eslesme-otomatik"><i class="fas fa-check"></i> Hatırlanan eşleşme</span>'; }
+            if (res.hedefCari) { ST.hedefCari = res.hedefCari; document.getElementById('hedefCariAra').value = res.hedefCari; document.getElementById('hedefCariKod').value = res.hedefCari; document.getElementById('hedefCariGosterim').innerHTML = '<span class="yf-eslesme-otomatik"><i class="fas fa-check"></i> Hatırlanan eşleşme</span>'; }
+            hesapKalemEslesmeYukle();
+        });
+    });
+
+    function cariAramaKur(inputId, listeId, kodInputId, db, tur, gosterimId) {
+        let t;
+        document.getElementById(inputId).addEventListener('input', function () {
+            clearTimeout(t); const q = this.value.trim();
+            t = setTimeout(() => {
+                fetch(`/Rapor171/CariAra?db=${db()}&ara=${encodeURIComponent(q)}&tur=${tur}`).then(r => r.json()).then(res => {
+                    const el = document.getElementById(listeId);
+                    if (!res.success || !res.data.length) { el.innerHTML = '<div class="it text-muted">Sonuç yok.</div>'; el.style.display = 'block'; return; }
+                    el.innerHTML = res.data.map(c => `<div class="it" onclick="cariSecEt('${inputId}','${listeId}','${kodInputId}','${gosterimId}','${esc(c.cardCode)}','${esc(c.cardName)}')">${esc(c.cardCode)} — ${esc(c.cardName)}</div>`).join('');
+                    el.style.display = 'block';
+                });
+            }, 250);
+        });
+    }
+    window.cariSecEt = function (inputId, listeId, kodInputId, gosterimId, kod, ad) {
+        document.getElementById(inputId).value = kod + ' — ' + ad;
+        document.getElementById(kodInputId).value = kod;
+        document.getElementById(listeId).style.display = 'none';
+        document.getElementById(gosterimId).innerHTML = '';
+        if (kodInputId === 'kaynakCariKod') ST.kaynakCari = kod; else ST.hedefCari = kod;
+        if (ST.kaynakCari && ST.hedefCari) {
+            fetch('/Rapor171/KarsiCariKaydet', { method: 'POST', contentType: 'application/json', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ KaynakDb: ST.kaynakDb, HedefDb: ST.hedefDb, KaynakCari: ST.kaynakCari, HedefCari: ST.hedefCari }) });
+        }
+    };
+    cariAramaKur('kaynakCariAra', 'kaynakCariListe', 'kaynakCariKod', () => ST.kaynakDb, 'C', 'kaynakCariGosterim');
+    cariAramaKur('hedefCariAra', 'hedefCariListe', 'hedefCariKod', () => ST.hedefDb, 'S', 'hedefCariGosterim');
+
+    // ================= ADIM 4: hesap/kalem eşleşmesi =================
+    function hesapKalemEslesmeYukle() {
+        if (!ST.fatura) return;
+        ST.eslesmeler = ST.fatura.satirlar.map(s => ({ lineNum: s.lineNum, tipiHizmet: s.tipiHizmet, kaynakKod: s.tipiHizmet === 'H' ? s.acctCode : s.itemCode, hedefKod: '', hedefAd: '', otomatik: false }));
+        const tbody = document.querySelector('#tblEslesme tbody');
+        tbody.innerHTML = ST.eslesmeler.map((e, i) => `<tr data-i="${i}">
+            <td>${i + 1}</td><td>${e.tipiHizmet === 'H' ? 'Hesap' : 'Kalem'}: <b>${esc(e.kaynakKod)}</b></td>
+            <td><span class="hedef-goster" id="hedefGoster${i}">yükleniyor...</span></td>
+            <td><button type="button" class="yf-btn o" style="padding:4px 10px;" onclick="hedefSecDegistir(${i})">Değiştir</button></td></tr>`).join('');
+        acStep(4);
+        ST.eslesmeler.forEach((e, i) => {
+            const uc = e.tipiHizmet === 'H' ? 'HesapKarsiligi' : 'KalemKarsiligi';
+            const p = e.tipiHizmet === 'H' ? 'hesapKodu' : 'itemCode';
+            fetch(`/Rapor171/${uc}?kaynakDb=${ST.kaynakDb}&hedefDb=${ST.hedefDb}&${p}=${encodeURIComponent(e.kaynakKod)}`).then(r => r.json()).then(res => {
+                if (res.bulundu) { e.hedefKod = res.hesap || res.kalem; e.hedefAd = res.ad || ''; e.otomatik = true;
+                    document.getElementById('hedefGoster' + i).innerHTML = `<span class="yf-eslesme-otomatik"><i class="fas fa-check"></i> ${esc(e.hedefKod)}</span> ${esc(e.hedefAd || '')}`;
+                } else {
+                    document.getElementById('hedefGoster' + i).innerHTML = '<span class="yf-eslesme-manuel"><i class="fas fa-triangle-exclamation"></i> seçilmedi — Değiştir\'e basın</span>';
+                }
+                acStep(5);
+            });
+        });
+    }
+    window.hedefSecDegistir = function (i) {
+        const e = ST.eslesmeler[i];
+        const uc = e.tipiHizmet === 'H' ? 'Hesap' : 'Kalem';
+        const q = prompt(`Hedef ${uc.toLowerCase()} kodu ya da adı ara:`);
+        if (!q) return;
+        fetch(`/Rapor171/${uc}Ara?db=${ST.hedefDb}&ara=${encodeURIComponent(q)}`).then(r => r.json()).then(res => {
+            if (!res.success || !res.data.length) { toastr.warning('Sonuç bulunamadı.'); return; }
+            const secenekler = res.data.map((x, idx) => `${idx + 1}) ${uc === 'Hesap' ? x.acctCode + ' - ' + x.acctName : x.itemCode + ' - ' + x.itemName}`).join('\n');
+            const secim = prompt('Birini seçin (numara yazın):\n' + secenekler);
+            const idx = parseInt(secim) - 1;
+            if (isNaN(idx) || !res.data[idx]) return;
+            const x = res.data[idx];
+            const hedefKod = uc === 'Hesap' ? x.acctCode : x.itemCode, hedefAd = uc === 'Hesap' ? x.acctName : x.itemName;
+            e.hedefKod = hedefKod; e.hedefAd = hedefAd; e.otomatik = true;
+            document.getElementById('hedefGoster' + i).innerHTML = `<span class="yf-eslesme-otomatik"><i class="fas fa-check"></i> ${esc(hedefKod)}</span> ${esc(hedefAd)}`;
+            const uc2 = e.tipiHizmet === 'H' ? 'HesapKarsiligiKaydet' : 'KalemKarsiligiKaydet';
+            const gov = e.tipiHizmet === 'H'
+                ? { KaynakDb: ST.kaynakDb, HedefDb: ST.hedefDb, KaynakHesap: e.kaynakKod, HedefHesap: hedefKod, HedefHesapAdi: hedefAd }
+                : { KaynakDb: ST.kaynakDb, HedefDb: ST.hedefDb, KaynakKalem: e.kaynakKod, HedefKalem: hedefKod, HedefKalemAdi: hedefAd };
+            fetch(`/Rapor171/${uc2}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(gov) });
+        });
+    };
+
+    // ================= ADIM 5: adres ön doldurma =================
+    document.getElementById('kaynakCariAra').addEventListener('change', function () {
+        if (!ST.kaynakCari) return;
+        fetch(`/Rapor171/CariAdres?db=${ST.kaynakDb}&cardCode=${encodeURIComponent(ST.kaynakCari)}`).then(r => r.json()).then(res => {
+            if (!res.success) return;
+            const doldur = (pfx, a) => { if (!a) return; document.getElementById(pfx + 'Street').value = a.street || ''; document.getElementById(pfx + 'City').value = a.city || ''; document.getElementById(pfx + 'County').value = a.county || ''; document.getElementById(pfx + 'ZipCode').value = a.zipCode || ''; document.getElementById(pfx + 'Country').value = a.country || 'TR'; };
+            doldur('BillTo', res.bill); doldur('ShipTo', res.ship || res.bill);
+        });
+    });
+
+    // ================= ADIM 5: satış faturası oluştur =================
+    document.getElementById('btnSatisOlustur').addEventListener('click', function () {
+        if (!ST.kaynakCari) { toastr.warning('Karşı cariyi (müşteri) seçiniz.'); return; }
+        if (ST.eslesmeler.some(e => !e.hedefKod)) { toastr.warning('Tüm satırlarda hedef hesap/kalem karşılığı seçilmeli.'); return; }
+        const lines = ST.fatura.satirlar.map((s, i) => ({ LineNum: s.lineNum, TipiHizmet: s.tipiHizmet, ItemCode: s.itemCode, AcctCode: s.acctCode, Aciklama: s.aciklama, Quantity: s.quantity, UnitPrice: s.unitPrice, Currency: s.currency, LineTotal: s.lineTotal, VatGroup: s.vatGroup, WhsCode: s.whsCode }));
+        const payload = {
+            KaynakDb: ST.kaynakDb, HedefDb: ST.hedefDb, KaynakDocEntry: ST.kaynakDocEntry, KaynakCari: ST.kaynakCari,
+            DocDate: document.getElementById('DocDate').value, DocDueDate: document.getElementById('DocDueDate').value, TaxDate: document.getElementById('TaxDate').value,
+            DocCurrency: ST.fatura.baslik.docCur, DocRate: ST.fatura.baslik.docRate,
+            U_BE1_AKTAR: document.getElementById('U_BE1_AKTAR').value, U_BE1_SEND: document.getElementById('U_BE1_SEND').value, U_BE1_MUAFCODE: '',
+            U_BE1_NAKLIYETARIHI: document.getElementById('U_BE1_NAKLIYETARIHI').value, U_BE1_NAKLIYESAATI: document.getElementById('U_BE1_NAKLIYESAATI').value,
+            U_BE1_SOFORADSOYAD: document.getElementById('U_BE1_SOFORADSOYAD').value, U_BE1_ARACPLAKASI: document.getElementById('U_BE1_ARACPLAKASI').value,
+            U_BE1_SOFORUNVANI: document.getElementById('U_BE1_SOFORUNVANI').value, U_BE1_SOFORKIMLIK: document.getElementById('U_BE1_SOFORKIMLIK').value, U_BE1_SOFORTEL: document.getElementById('U_BE1_SOFORTEL').value,
+            U_BE1_FRMNO: document.getElementById('U_BE1_FRMNO').value, U_BE1_FRMADI: document.getElementById('U_BE1_FRMADI').value, U_BE1_FRMVKN: document.getElementById('U_BE1_FRMVKN').value,
+            AddressExtension: {
+                BillToStreet: document.getElementById('BillToStreet').value, BillToCity: document.getElementById('BillToCity').value, BillToCounty: document.getElementById('BillToCounty').value, BillToZipCode: document.getElementById('BillToZipCode').value, BillToCountry: document.getElementById('BillToCountry').value,
+                ShipToStreet: document.getElementById('ShipToStreet').value, ShipToCity: document.getElementById('ShipToCity').value, ShipToCounty: document.getElementById('ShipToCounty').value, ShipToZipCode: document.getElementById('ShipToZipCode').value, ShipToCountry: document.getElementById('ShipToCountry').value
+            },
+            DocumentLines: lines
+        };
+        this.disabled = true; this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Ekleniyor...';
+        fetch('/Rapor171/OlusturSatis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+            .then(r => r.json()).then(res => {
+                this.disabled = false; this.innerHTML = '<i class="fas fa-file-invoice me-1"></i> Yansıtma Satış Faturasını SAP\'ye Ekle';
+                if (!res.success) { toastr.error(res.message); return; }
+                toastr.success(res.message);
+                ST.kaynakInvDocEntry = res.docEntry; ST.kaynakInvDocNum = res.docNum;
+                acStep(6);
+                seriYukle();
+            }).catch(e => { this.disabled = false; toastr.error('Hata: ' + e); });
+    });
+
+    // ================= ADIM 6: e-belge =================
+    function seriYukle() {
+        fetch(`/Rapor88/GetActiveSeriesList?db=${ST.kaynakDb}&docEntry=${ST.kaynakInvDocEntry}&objType=13`).then(r => r.json()).then(res => {
+            const sel = document.getElementById('seriSecim');
+            if (!res.success || !res.data || !res.data.length) { sel.innerHTML = '<option value="">Seri bulunamadı</option>'; return; }
+            sel.innerHTML = res.data.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+        }).catch(() => { document.getElementById('seriSecim').innerHTML = '<option value="">Seri listesi alınamadı</option>'; });
+    }
+    let gibFaturaNo = '';
+    document.getElementById('btnOnizle').addEventListener('click', function () {
+        document.getElementById('onizlemeAlan').style.display = 'block';
+        document.getElementById('onizlemeFrame').src = `/Rapor88/DownloadPreview?db=${ST.kaynakDb}&docEntry=${ST.kaynakInvDocEntry}&objType=13`;
+        document.getElementById('btnGonder').disabled = false;
+    });
+    document.getElementById('btnGonder').addEventListener('click', function () {
+        const prefix = document.getElementById('seriSecim').value;
+        if (!prefix) { toastr.warning('Fatura serisi seçiniz.'); return; }
+        this.disabled = true; this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Numara alınıyor...';
+        fetch(`/Rapor88/GetNextSequence?db=${ST.kaynakDb}&prefix=${encodeURIComponent(prefix)}`).then(r => r.json()).then(res => {
+            if (!res.success) { toastr.error(res.message); this.disabled = false; this.innerHTML = '<i class="fas fa-paper-plane me-1"></i> QNB\'ye Gönder'; return; }
+            gibFaturaNo = res.nextNumber;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> QNB\'ye gönderiliyor...';
+            const form = new URLSearchParams({ db: ST.kaynakDb, docEntry: ST.kaynakInvDocEntry, objType: '13', gibFaturaNo });
+            fetch(`/Rapor88/FaturaGonderOtomatik?${form.toString()}`, { method: 'POST' }).then(r => r.json()).then(sonuc => {
+                if (!sonuc.success) { toastr.error(sonuc.message); document.getElementById('sonucAlan').innerHTML = `<div class="yf-uyari">${esc(sonuc.message)}</div>`; this.disabled = false; this.innerHTML = '<i class="fas fa-paper-plane me-1"></i> QNB\'ye Gönder'; return; }
+                toastr.success('E-belge gönderildi: ' + gibFaturaNo);
+                document.getElementById('sonucAlan').innerHTML = `<div class="yf-info"><i class="fas fa-check-circle me-1"></i> Satış faturası gönderildi (e-belge no: <b>${esc(gibFaturaNo)}</b>). Hedef şirkette alış faturası oluşturuluyor...</div>`;
+                aliseGec();
+            }).catch(e => { toastr.error('Gönderim hatası: ' + e); this.disabled = false; this.innerHTML = '<i class="fas fa-paper-plane me-1"></i> QNB\'ye Gönder'; });
+        });
+    });
+
+    function aliseGec() {
+        fetch(`/Rapor171/SatisBilgi?db=${ST.kaynakDb}&docEntry=${ST.kaynakInvDocEntry}`).then(r => r.json()).then(res => {
+            const numAtCard = (res.success && res.numAtCard) ? res.numAtCard : gibFaturaNo;
+            const lines = ST.fatura.satirlar.map((s, i) => { const e = ST.eslesmeler[i]; return {
+                LineNum: s.lineNum, TipiHizmet: s.tipiHizmet,
+                ItemCode: e.tipiHizmet === 'H' ? null : e.hedefKod, AcctCode: e.tipiHizmet === 'H' ? e.hedefKod : null,
+                Aciklama: s.aciklama, Quantity: s.quantity, UnitPrice: s.unitPrice, Currency: s.currency, LineTotal: s.lineTotal, VatGroup: s.vatGroup, WhsCode: s.whsCode
+            };});
+            const payload = {
+                KaynakDb: ST.kaynakDb, HedefDb: ST.hedefDb, KaynakDocEntry: ST.kaynakDocEntry, KaynakInvDocEntry: ST.kaynakInvDocEntry, GibFaturaNo: numAtCard,
+                HedefCari: ST.hedefCari, DocDate: document.getElementById('DocDate').value, DocDueDate: document.getElementById('DocDueDate').value, TaxDate: document.getElementById('TaxDate').value,
+                DocCurrency: ST.fatura.baslik.docCur, DocRate: ST.fatura.baslik.docRate, DocumentLines: lines
+            };
+            fetch('/Rapor171/OlusturAlis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(r => r.json()).then(sonuc => {
+                if (!sonuc.success) { document.getElementById('sonucAlan').innerHTML += `<div class="yf-uyari">${esc(sonuc.message)}</div>`; return; }
+                document.getElementById('sonucAlan').innerHTML += `<div class="yf-info"><i class="fas fa-check-double me-1"></i> ${esc(sonuc.message)}</div>`;
+                toastr.success(sonuc.message);
+            });
+        });
+    }
+    document.addEventListener('click', function (e) {
+        document.querySelectorAll('.yf-search-list').forEach(el => { if (!el.contains(e.target) && e.target.tagName !== 'INPUT') el.style.display = 'none'; });
+    });
+</script>
+}

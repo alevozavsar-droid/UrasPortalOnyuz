@@ -1,0 +1,1536 @@
+﻿@{
+    ViewData["Title"] = "Yevmiye Kaydı";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var currentDbDisplay = (string)ViewBag.CurrentDbDisplay;
+    var accounts = (List<WebApplication3.Controllers.Rapor107Controller.AccountBPModel>)ViewBag.AccountsAndBPs;
+    var currencies = (List<string>)ViewBag.Currencies;
+    var projects = (List<WebApplication3.Controllers.Rapor107Controller.ProjectModel>)ViewBag.Projects;
+    var indicators = (List<string>)ViewBag.Indicators;
+    var vatGroups = (List<WebApplication3.Controllers.Rapor107Controller.VatGroupModel>)ViewBag.VatGroups;
+    var transCodes = (List<WebApplication3.Controllers.Rapor107Controller.ProjectModel>)ViewBag.TransCodes;
+    var dosyaNolar = (List<string>)ViewBag.DosyaNolar;
+    
+    string localCurrency = ViewBag.LocalCurrency ?? "TRY";
+    string systemCurrency = ViewBag.SystemCurrency ?? "TRY";
+
+    var hUdfs = ViewBag.ActiveHeaderUDFs as HashSet<string> ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var lUdfs = ViewBag.ActiveLineUDFs as HashSet<string> ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <style>
+        :root {
+            --form-bg: var(--bg-card, #f8f9fa);
+            --border-soft: var(--border-color, #ced4da);
+            --primary-soft: rgba(59,130,246,.08);
+            --baslik-bg: var(--bg-subtle, #f8fafc);
+            --metin-2: var(--text-secondary, #64748b);
+        }
+        body { background-color: var(--bg-main, #f0f2f5); }
+        .sap-card { background: var(--bg-card, #ffffff); border: 1px solid var(--border-soft); border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 1rem; }
+        .sap-header { background-color: #e9ecef; border-bottom: 1px solid var(--border-soft); padding: 5px 10px; font-weight: bold; font-size: 0.9rem; color: #495057; }
+        .form-label { font-size: 0.75rem; font-weight: 600; color: #495057; margin-bottom: 2px; }
+        .form-control-sm, .form-select-sm { font-size: 0.8rem; border-radius: 3px; border-color: #adb5bd; min-height: 28px; }
+        
+        .table-je { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+        .table-je th { background-color: #f1f3f5; padding: 6px; border: 1px solid var(--border-soft); color: #495057; font-weight: bold; white-space: nowrap; text-align: center; }
+        .table-je td { padding: 4px; border: 1px solid var(--border-soft); vertical-align: middle; }
+        .table-input { border: 1px solid transparent; background: transparent; width: 100%; font-size: 0.8rem; padding: 2px 4px; border-radius: 2px; }
+        .table-input:focus { border: 1px solid #80bdff; background: var(--bg-card, #fff); outline: none; }
+        
+        .select2-container--bootstrap-5 .select2-selection { font-size: 0.8rem; min-height: 28px; }
+        .select2-container--bootstrap-5 .select2-dropdown { min-width: 450px !important; max-width: 600px !important; width: auto !important; box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
+
+        .action-bar { background: var(--bg-card, #ffffff); border-top: 1px solid var(--border-soft); padding: 10px 20px; position: sticky; bottom: 0; z-index: 100; box-shadow: 0 -2px 5px rgba(0,0,0,0.05); }
+        .right-panel { background: var(--bg-subtle, #f8f9fa); border-left: 1px solid var(--border-soft); height: 100%; padding: 10px 15px; overflow-y: auto; max-height: calc(100vh - 150px); }
+        
+        .udf-row { margin-bottom: 6px; }
+        .udf-label { font-size: 0.75rem; color: var(--text-secondary, #6c757d); }
+
+        /* SADECE DISABLED OLANLARI KİLİTLE (GÜNCELLEME BURADA) */
+        .view-mode .searchable-field:disabled, 
+        .view-mode input:disabled, 
+        .view-mode select:disabled, 
+        .view-mode textarea:disabled { 
+            background-color: #e9ecef !important; 
+            pointer-events: none; 
+        }
+
+        /* DÜZENLENEBİLİR ALANLARA BEYAZ ARKA PLAN VER Kİ BELLİ OLSUN */
+        .view-mode .editable-in-view {
+            background-color: var(--bg-card, #ffffff) !important;
+            border: 1px solid #b8daff !important;
+        }
+
+        .find-mode .searchable-field { background-color: #fef9c3 !important; border-color: #fde047 !important; }
+        
+        #loadingOverlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8); z-index:9999; flex-direction:column; justify-content:center; align-items:center; }
+    </style>
+}
+
+<datalist id="dosyaNoList">
+    @foreach(var d in dosyaNolar) { <option value="@d">@d</option> }
+</datalist>
+
+<div class="container-fluid py-3 pb-5 mb-5" id="mainContainer">
+    <div id="loadingOverlay">
+        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+        <h5 class="mt-3 fw-bold text-primary">Lütfen Bekleyin...</h5>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex align-items-center gap-3">
+            <h4 class="mb-0 fw-bold" id="pageTitle"><i class="fas fa-book text-warning me-2"></i>Yevmiye Kaydı Oluştur</h4>
+            <span class="badge bg-secondary">Şirket: @currentDbDisplay</span>
+        </div>
+        
+        <div class="d-flex align-items-center gap-3">
+            <button type="button" class="btn btn-sm btn-outline-danger shadow-sm fw-bold px-3" id="btnBulkCancelModal" title="Çoklu İptal Yap"><i class="fas fa-layer-group me-2"></i>Toplu İptal</button>
+
+            <div class="badge bg-primary px-3 py-2" title="Yerel Para Birimi">LC: @localCurrency</div>
+            <div class="badge bg-info px-3 py-2 text-dark" title="Sistem Para Birimi">SC: @systemCurrency</div>
+            
+            <div class="btn-group shadow-sm border bg-white rounded">
+                <button type="button" class="btn btn-light nav-btn" data-dir="first" title="İlk Kayıt"><i class="fas fa-fast-backward"></i></button>
+                <button type="button" class="btn btn-light nav-btn" data-dir="prev" title="Önceki Kayıt"><i class="fas fa-step-backward"></i></button>
+                <button type="button" class="btn btn-light nav-btn" data-dir="next" title="Sonraki Kayıt"><i class="fas fa-step-forward"></i></button>
+                <button type="button" class="btn btn-light nav-btn" data-dir="last" title="Son Kayıt"><i class="fas fa-fast-forward"></i></button>
+                <button type="button" class="btn btn-light" id="btnFindMode" title="Kayıt Bul"><i class="fas fa-search text-info"></i></button>
+                <button type="button" class="btn btn-light text-success fw-bold" id="btnNewDoc" title="Yeni Kayıt Ekle"><i class="fas fa-plus"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="sap-card p-2 mb-3" id="exchangeRatesCard">
+        <div class="d-flex flex-wrap align-items-center gap-3">
+            <span class="fw-bold text-primary"><i class="fas fa-coins me-2"></i>Kurlar (ORTT):</span>
+            <div class="input-group input-group-sm" style="width: 160px;">
+                <span class="input-group-text fw-bold">USD</span>
+                <input type="number" class="form-control text-end rate-input" id="rate_USD" step="0.0001" placeholder="0.0000">
+            </div>
+            <div class="input-group input-group-sm" style="width: 160px;">
+                <span class="input-group-text fw-bold">EUR</span>
+                <input type="number" class="form-control text-end rate-input" id="rate_EUR" step="0.0001" placeholder="0.0000">
+            </div>
+            <div class="input-group input-group-sm" style="width: 160px;">
+                <span class="input-group-text fw-bold">GBP</span>
+                <input type="number" class="form-control text-end rate-input" id="rate_GBP" step="0.0001" placeholder="0.0000">
+            </div>
+            <div class="input-group input-group-sm" style="width: 160px;">
+                <span class="input-group-text fw-bold">RUB</span>
+                <input type="number" class="form-control text-end rate-input" id="rate_RUB" step="0.0001" placeholder="0.0000">
+            </div>
+            <button type="button" class="btn btn-sm btn-success fw-bold" id="btnUpdateRates"><i class="fas fa-save me-1"></i>Kurları Kaydet</button>
+        </div>
+    </div>
+
+    <form id="jeForm">
+        <div class="row">
+            <div class="col-lg-9 col-md-12">
+                <div class="sap-card p-3">
+                    <div class="row g-2 mb-2 pb-2 border-bottom">
+                        <div class="col-md-3">
+                            <label class="form-label text-primary fw-bold">Numara (Series)</label>
+                            <input type="number" id="Number" class="form-control form-control-sm searchable-field" placeholder="Otomatik" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label text-primary fw-bold">İşlem Numarası (TransId)</label>
+                            <input type="number" id="TransId" class="form-control form-control-sm searchable-field" placeholder="Otomatik" />
+                        </div>
+                    </div>
+
+                    <div class="row g-2">
+                        <div class="col-md-2">
+                            <label class="form-label">Kayıt Tarihi</label>
+                            <input type="date" id="RefDate" class="form-control form-control-sm searchable-field req-field" required />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Vade Tarihi</label>
+                            <input type="date" id="DueDate" class="form-control form-control-sm searchable-field req-field" required />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Belge Tarihi</label>
+                            <input type="date" id="TaxDate" class="form-control form-control-sm searchable-field req-field" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Açıklamalar</label>
+                            <input type="text" id="Memo" class="form-control form-control-sm searchable-field req-field editable-in-view" maxlength="50" required/>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Sistem Kuru (@systemCurrency)</label>
+                            <input type="number" id="SystemRate" class="form-control form-control-sm text-end bg-light searchable-field" step="0.000001" placeholder="0.000000" readonly />
+                        </div>
+
+                        @* İşlem Tipi (U_BE1_AKTAR) bir UDF'tir ama sik kullanildigi icin
+                           sag taraftaki UDF kartindan buraya alindi (talep 24).
+                           id degismedi; kaydetme/yukleme mantigi aynen calisir. *@
+                        @if (hUdfs.Contains("U_BE1_AKTAR"))
+                        {
+                            <div class="col-md-2 mt-2">
+                                <label class="form-label fw-bold">İşlem Tipi</label>
+                                <select id="U_BE1_AKTAR" class="form-select form-select-sm border-primary searchable-field editable-in-view">
+                                    <option value="">-</option>
+                                    <option value="X">X</option>
+                                    <option value="R">R</option>
+                                    <option value="Y">Y</option>
+                                </select>
+                            </div>
+                        }
+                        <div class="col-md-2 mt-2">
+                            <label class="form-label">İşlem Kodu</label>
+                            <select id="TransCode" class="form-select form-select-sm searchable-field select2-init editable-in-view">
+                                <option value="">- Seçiniz -</option>
+                                @foreach(var i in transCodes) { <option value="@i.Code">@i.Name</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-2 mt-2">
+                            <label class="form-label">Referans 1</label>
+                            <input type="text" id="Ref1" class="form-control form-control-sm searchable-field editable-in-view" maxlength="100" />
+                        </div>
+                        <div class="col-md-2 mt-2">
+                            <label class="form-label">Referans 2</label>
+                            <input type="text" id="Ref2" class="form-control form-control-sm searchable-field editable-in-view" maxlength="100" />
+                        </div>
+                        <div class="col-md-2 mt-2">
+                            <label class="form-label">Referans 3</label>
+                            <input type="text" id="Ref3" class="form-control form-control-sm searchable-field editable-in-view" maxlength="100" />
+                        </div>
+                        <div class="col-md-2 mt-2">
+                            <label class="form-label">Gösterge</label>
+                            <select id="Indicator" class="form-select form-select-sm searchable-field editable-in-view">
+                                <option value="">-</option>
+                                @foreach(var i in indicators) { <option value="@i">@i</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-2 mt-2">
+                            <label class="form-label">Proje</label>
+                            <select id="Project" class="form-select form-select-sm select2-init searchable-field editable-in-view">
+                                <option value="">- Seçiniz -</option>
+                                @foreach(var p in projects) { <option value="@p.Code">@p.Code</option> }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mt-2 border-top pt-2">
+                        <div class="col-md-12 d-flex gap-4">
+                            <div class="form-check">
+                                <input class="form-check-input searchable-field" type="checkbox" id="AutoVAT" checked>
+                                <label class="form-check-label form-label" for="AutoVAT">Otomatik vergi</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sap-card" id="gridCard">
+                    <div class="sap-header d-flex justify-content-between align-items-center">
+                        <span>İçerikler</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary py-0 bg-white" id="btnAddRow"><i class="fas fa-plus text-success"></i> Satır Ekle</button>
+                    </div>
+                    <div class="p-2 table-responsive">
+                        <table class="table-je" id="linesTable" style="min-width: 2500px;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 30px;">#</th>
+                                    <th style="min-width: 350px;">Defteri kebir hesabı/muhatap</th>
+                                    <th style="min-width: 150px;">Borç (@localCurrency)</th>
+                                    <th style="min-width: 150px;">Alacak (@localCurrency)</th>
+                                    <th style="min-width: 150px;">Borç (SPB)</th>
+                                    <th style="min-width: 150px;">Alacak (SPB)</th>
+                                    <th style="min-width: 80px;">PB (YPB)</th>
+                                    <th style="min-width: 150px;">Borç (YPB)</th>
+                                    <th style="min-width: 150px;">Alacak (YPB)</th>
+                                    <th style="min-width: 150px;">Açıklamalar</th>
+                                    <th style="min-width: 100px;">Vergi Grubu</th>
+                                    
+                                    <th style="min-width: 260px;" class="bg-info bg-opacity-10" title="Gider / gelir kodu (Rapor164 kataloğu, satır alanı U_BE1_GIDER): 6'lı hesapta gelir, 7'li hesapta gider kodu zorunlu">Gider / Gelir Kodu</th>
+                                    <th style="min-width: 130px;" class="bg-info bg-opacity-10" title="Araç plakası (satır alanı U_BE1_PLAKA)">Araç Plakası</th>
+                                    <th style="min-width: 150px;" class="bg-info bg-opacity-10" title="Şasi no (satır alanı U_BE1_SASI)">Şasi No</th>
+                                    @if(lUdfs.Contains("U_BE1_DAGIT")) { <th style="min-width: 80px;" class="bg-warning bg-opacity-10">Dağıt</th> }
+                                    @if(lUdfs.Contains("U_BE1_CHECKNO")) { <th style="min-width: 100px;" class="bg-warning bg-opacity-10">Çek No</th> }
+                                    @if(lUdfs.Contains("U_BE1_CHECKID")) { <th style="min-width: 100px;" class="bg-warning bg-opacity-10">Çek Sis. No</th> }
+                                    @if(lUdfs.Contains("U_BE1_CHECKPORTFOY")) { <th style="min-width: 100px;" class="bg-warning bg-opacity-10">Çek Portföy</th> }
+                                    @if(lUdfs.Contains("U_BE1_CHCKTRNSNO")) { <th style="min-width: 100px;" class="bg-warning bg-opacity-10">Çek İşlem No</th> }
+                                    @if(lUdfs.Contains("U_BE1_CHECKDUEDATE")) { <th style="min-width: 120px;" class="bg-warning bg-opacity-10">Çek Vade Trh</th> }
+                                    @if(lUdfs.Contains("U_BE1_MHTANIM")) { <th style="min-width: 120px;" class="bg-warning bg-opacity-10">Mht. Tanımı</th> }
+                                    @if(lUdfs.Contains("U_BE1_CONTRAACT")) { <th style="min-width: 120px;" class="bg-warning bg-opacity-10">Man. Satış K.</th> }
+                                    @if(lUdfs.Contains("U_GIDERKODU")) { <th style="min-width: 100px;" class="bg-warning bg-opacity-10">Gider Kodu</th> }
+                                    
+                                    <th style="width: 30px; position: sticky; right: 0; background: #fff;" class="del-col"><i class="fas fa-trash text-muted"></i></th>
+                                </tr>
+                            </thead>
+                            <tbody id="linesBody"></tbody>
+                            <tfoot>
+                                <tr class="bg-light fw-bold">
+                                    <td colspan="2" class="text-end text-danger">Fark (@localCurrency): <span id="diffAmount">0.00</span></td>
+                                    <td><input type="text" id="totalDebit" class="table-input text-end fw-bold text-dark" readonly value="0,00"></td>
+                                    <td><input type="text" id="totalCredit" class="table-input text-end fw-bold text-dark" readonly value="0,00"></td>
+                                    <td colspan="20"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3 col-md-12" id="udfCard">
+                <div class="sap-card right-panel shadow-sm">
+                    <div class="sap-header bg-transparent border-bottom mb-3 px-0 fw-bold text-primary"><i class="fas fa-sliders-h me-2"></i>Kullanıcı Tanımlı Alanlar (UDF)</div>
+                    
+                    @* İşlem Tipi (U_BE1_AKTAR) buradan ust taraftaki ana forma tasindi (talep 24). *@
+
+                    @if(hUdfs.Contains("U_BE1_TARGETDOC")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Oluşan Belge No</div><div class="col-7"><input type="text" id="U_BE1_TARGETDOC" class="form-control form-control-sm searchable-field editable-in-view" /></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_TARGETTYPE")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Oluşan Belge Type</div><div class="col-7"><input type="text" id="U_BE1_TARGETTYPE" class="form-control form-control-sm searchable-field editable-in-view" /></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_KREDITAKSITNO")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Kredi Taksit No</div><div class="col-7"><input type="text" id="U_BE1_KREDITAKSITNO" class="form-control form-control-sm searchable-field editable-in-view" /></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_ISTAHAKKUK")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Kredi Tahakkuk</div><div class="col-7"><select id="U_BE1_ISTAHAKKUK" class="form-select form-select-sm searchable-field editable-in-view"><option value="N" selected>No</option><option value="Y">Yes</option></select></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_FINDOC")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">BE1 Banka Entry</div><div class="col-7"><input type="text" id="U_BE1_FINDOC" class="form-control form-control-sm searchable-field editable-in-view" /></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_FINTIP")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Api Link</div><div class="col-7"><input type="text" id="U_BE1_FINTIP" class="form-control form-control-sm searchable-field editable-in-view" /></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_AGENTNUM")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">İthalat Dosya No</div><div class="col-7">
+                        <select id="U_BE1_AGENTNUM" class="form-select form-select-sm searchable-field editable-in-view select2-tags">
+                            <option value="">Seçiniz / Yazınız</option>
+                            @foreach(var d in dosyaNolar) { <option value="@d">@d</option> }
+                        </select>
+                    </div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_BABSFLAG")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Kağıt Fatura</div><div class="col-7"><select id="U_BE1_BABSFLAG" class="form-select form-select-sm searchable-field editable-in-view"><option value=""></option><option value="Y">Evet</option><option value="N">Hayır</option></select></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_TERSKYT")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Ters Kayıt</div><div class="col-7"><select id="U_BE1_TERSKYT" class="form-select form-select-sm searchable-field editable-in-view"><option value=""></option><option value="E">Evet</option><option value="H">Hayır</option></select></div></div> }
+
+                    @* Aktarılmasın (U_BE1_AKTARMA): Y=Evet / N=Hayır. Alan bu şirkette yoksa yönetici Service Layer ile açabilir. *@
+                    @if(hUdfs.Contains("U_BE1_AKTARMA")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Aktarılmasın</div><div class="col-7"><select id="U_BE1_AKTARMA" class="form-select form-select-sm searchable-field editable-in-view"><option value="N" selected>Hayır</option><option value="Y">Evet</option></select></div></div> }
+                    else {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label text-muted">Aktarılmasın</div><div class="col-7">
+                        <div class="btn-group w-100">
+                            <button type="button" id="btnAktarmaAlaniAc" class="btn btn-sm btn-outline-warning" title="Bu şirkette U_BE1_AKTARMA alanı yok. Service Layer ile Evet/Hayır alanı olarak açar."><i class="fas fa-plus-circle me-1"></i>Alanı bu şirkette aç</button>
+                            <button type="button" id="btnAktarmaAlaniAcTum" class="btn btn-sm btn-outline-warning" title="Alanı olmayan tüm şirketlerde açar."><i class="fas fa-layer-group"></i></button>
+                        </div>
+                    </div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_BABSKDV")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Kdv Faturası mı</div><div class="col-7"><select id="U_BE1_BABSKDV" class="form-select form-select-sm searchable-field editable-in-view"><option value=""></option><option value="Y">Evet</option><option value="N">Hayır</option></select></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_KURFARKTRANS")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Kur Farkı Faturası</div><div class="col-7"><input type="text" id="U_BE1_KURFARKTRANS" class="form-control form-control-sm searchable-field editable-in-view" /></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_ISCHECKBOND")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Çek - Senet</div><div class="col-7"><input type="text" id="U_BE1_ISCHECKBOND" class="form-control form-control-sm searchable-field editable-in-view" /></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_TRAN_STATUS")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Çek Yapılan İşlemi</div><div class="col-7"><input type="text" id="U_BE1_TRAN_STATUS" class="form-control form-control-sm searchable-field editable-in-view" /></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_MANUELC")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Geçmiş Tarihli Manuel</div><div class="col-7"><select id="U_BE1_MANUELC" class="form-select form-select-sm searchable-field editable-in-view"><option value=""></option><option value="N" selected>Hayır</option><option value="Y">Evet</option></select></div></div> }
+
+                    @if(hUdfs.Contains("U_BE1_DOVIZTIPI")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Döviz Tipi</div><div class="col-7"><select id="U_BE1_DOVIZTIPI" class="form-select form-select-sm searchable-field editable-in-view"><option value="-">Seçiniz</option><option value="A">Alış</option><option value="S">Satış</option><option value="EA">Efektif Alış</option><option value="ES">Efektif Satış</option></select></div></div> }
+
+                    @if(hUdfs.Contains("U_BE1_TAHAKKUKKREDINO")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Tahakkuk Kredi No</div><div class="col-7"><input type="text" id="U_BE1_TAHAKKUKKREDINO" class="form-control form-control-sm searchable-field editable-in-view" /></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_TAHAKKUKKREDISATIRNO")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Tahakkuk Kredi Satır</div><div class="col-7"><input type="text" id="U_BE1_TAHAKKUKKREDISATIRNO" class="form-control form-control-sm searchable-field editable-in-view" /></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_TRANSKIND")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Kur Farkı Para Birimi</div><div class="col-7"><input type="text" id="U_BE1_TransKind" class="form-control form-control-sm searchable-field editable-in-view" /></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_YEVIPTAL")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Yevmiye İptal</div><div class="col-7"><input type="text" id="U_BE1_YEVIPTAL" class="form-control form-control-sm searchable-field editable-in-view" /></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_IHRDOSNO")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">İhracat Dosya No</div><div class="col-7">
+                        <select id="U_BE1_IHRDOSNO" class="form-select form-select-sm searchable-field editable-in-view select2-tags">
+                            <option value="">Seçiniz / Yazınız</option>
+                            @foreach(var d in dosyaNolar) { <option value="@d">@d</option> }
+                        </select>
+                    </div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_TAHSILAT")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Tahsilat İçeriği</div><div class="col-7"><input type="text" id="U_BE1_TAHSILAT" class="form-control form-control-sm searchable-field editable-in-view" /></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_YEVIPTALLOG")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Yevmiye İptal Log</div><div class="col-7"><textarea id="U_BE1_YEVIPTALLOG" class="form-control form-control-sm searchable-field editable-in-view" rows="2" style="resize:none;"></textarea></div></div> }
+                    
+                    @if(hUdfs.Contains("U_BE1_DAGIT")) {
+                    <div class="row udf-row align-items-center"><div class="col-5 udf-label">Dağıt</div><div class="col-7"><select id="U_BE1_DAGIT_HDR" class="form-select form-select-sm searchable-field editable-in-view"><option value="N">N</option><option value="Y">Y</option></select></div></div> }
+                </div>
+            </div>
+        </div>
+
+        <div class="action-bar d-flex justify-content-between">
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-danger shadow-sm fw-bold px-4" id="btnCancelDocument" style="display:none;"><i class="fas fa-ban me-2"></i>Belgeyi İptal Et</button>
+                <button type="button" class="btn btn-outline-primary shadow-sm fw-bold px-4" id="btnDuplicate" style="display:none;"><i class="fas fa-copy me-2"></i>Çoğalt</button>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-info text-white shadow-sm fw-bold px-4" id="btnUpdateDoc" style="display:none;"><i class="fas fa-sync me-2"></i>Güncelle</button>
+                <button type="button" class="btn btn-secondary shadow-sm fw-bold px-4" id="btnDownloadMahsup" style="display:none;"><i class="fas fa-file-pdf me-2"></i>Mahsup İndir</button>
+                <button type="button" class="btn btn-outline-warning px-3 fw-bold bg-white text-dark" id="btnKodTalep" title="Katalogda olmayan gider / gelir kodu için onaya talep gönder (onaylanınca kod eklenir, e-posta gelir)"><i class="fas fa-lightbulb me-1 text-warning"></i>Yeni Gider / Gelir Kodu Talebi</button>
+                <button type="button" class="btn btn-light border px-4" id="btnCancel">İptal</button>
+                <button type="submit" class="btn btn-warning px-5 shadow-sm fw-bold" id="btnSave">Ekle</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- ARAMA MODALI -->
+<div class="modal fade" id="searchModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-info text-dark">
+                <h5 class="modal-title fw-bold"><i class="fas fa-list me-2"></i>Arama Sonuçları</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive" style="max-height: 400px;">
+                    <table class="table table-hover mb-0" style="font-size: 0.85rem;">
+                        <thead class="bg-light sticky-top">
+                            <tr>
+                                <th>İşlem No</th>
+                                <th>Numara</th>
+                                <th>Kayıt Tarihi</th>
+                                <th>Açıklama</th>
+                            </tr>
+                        </thead>
+                        <tbody id="searchResultsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- TOPLU İPTAL MODALI -->
+<div class="modal fade" id="bulkCancelModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title fw-bold"><i class="fas fa-layer-group me-2"></i>Toplu Belge İptali (Sadece Manuel Yevmiyeler)</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive" style="max-height: 500px;">
+                    <table class="table table-hover table-sm mb-0" style="font-size: 0.85rem;">
+                        <thead class="bg-light sticky-top">
+                            <tr>
+                                <th style="width: 40px;" class="text-center"><input type="checkbox" id="chkAllCancel"></th>
+                                <th style="width: 100px;">İşlem No</th>
+                                <th>Numara</th>
+                                <th>Kayıt Tarihi</th>
+                                <th>Açıklama</th>
+                            </tr>
+                        </thead>
+                        <tbody id="openJEsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light d-flex justify-content-between">
+                <span class="text-muted"><i class="fas fa-info-circle me-1"></i>Listede sadece "Açık ve Manüel" kayıtlar listelenir.</span>
+                <div>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+                    <button type="button" class="btn btn-danger fw-bold" id="btnExecuteBulkCancel"><i class="fas fa-check me-2"></i>Seçilenleri İptal Et</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<template id="rowTemplate">
+    <tr>
+        <td class="text-center row-index text-muted fw-bold">1</td>
+        <td>
+            <select class="form-select form-select-sm select-account searchable-field req-field-add" style="width: 100%;">
+                <option value="">Seçiniz...</option>
+                @foreach(var acc in accounts)
+                {
+                    <option value="@acc.Code" data-isbp="@(acc.IsBP ? "true" : "false")">@acc.Code - @acc.Name</option>
+                }
+            </select>
+        </td>
+        <td><input type="text" class="table-input text-end input-debit calc-trigger searchable-field" value="0,00" /></td>
+        <td><input type="text" class="table-input text-end input-credit calc-trigger searchable-field" value="0,00" /></td>
+        <td><input type="text" class="table-input text-end input-sys-debit bg-light searchable-field" value="0,00" readonly /></td>
+        <td><input type="text" class="table-input text-end input-sys-credit bg-light searchable-field" value="0,00" readonly /></td>
+        <td>
+            <select class="form-select form-select-sm table-input input-fc-cur px-1 searchable-field fc-trigger">
+                <option value=""></option>
+                @foreach(var c in currencies) { <option value="@c">@c</option> }
+            </select>
+        </td>
+        <td><input type="text" class="table-input text-end input-fc-debit searchable-field calc-trigger" value="0,00" /></td>
+        <td><input type="text" class="table-input text-end input-fc-credit searchable-field calc-trigger" value="0,00" /></td>
+        <td><input type="text" class="table-input input-memo searchable-field" maxlength="50" /></td>
+        <td>
+            <select class="form-select form-select-sm table-input input-vat searchable-field">
+                <option value="">-</option>
+                @foreach(var v in vatGroups) { <option value="@v.Code">@v.Code</option> }
+            </select>
+        </td>
+        
+        <td class="bg-info bg-opacity-10"><div class="d-flex gap-1 align-items-center"><div style="flex:1; min-width:0;"><select class="form-select form-select-sm table-input input-gider searchable-field" title="Gider / gelir kodu: 6'lı hesapta gelir (GLR), 7'li hesapta gider (GDR) kodu zorunlu"><option value="">- kod seç -</option></select></div><button type="button" class="btn btn-sm btn-outline-primary btn-gg-sec" tabindex="-1" title="Listeden seç: ana grup › alt grup › kalem"><i class="fa-solid fa-list-ul"></i></button></div></td>
+        <td class="bg-info bg-opacity-10"><input type="text" class="table-input input-plaka searchable-field" list="aracPlakaListesi" placeholder="34ABC123" maxlength="20" autocomplete="off" style="text-transform:uppercase" /></td>
+        <td class="bg-info bg-opacity-10"><input type="text" class="table-input input-sasi searchable-field" list="aracSasiListesi" placeholder="Şasi" maxlength="40" autocomplete="off" style="text-transform:uppercase" /></td>
+        @if(lUdfs.Contains("U_BE1_DAGIT")) { <td class="bg-warning bg-opacity-10"><select class="form-select form-select-sm table-input input-dagit px-1 searchable-field"><option value="N">N</option><option value="Y">Y</option></select></td> }
+        @if(lUdfs.Contains("U_BE1_CHECKNO")) { <td class="bg-warning bg-opacity-10"><input type="text" class="table-input input-chkno searchable-field" placeholder="Çek No" /></td> }
+        @if(lUdfs.Contains("U_BE1_CHECKID")) { <td class="bg-warning bg-opacity-10"><input type="text" class="table-input input-chkid searchable-field" placeholder="Sys No" /></td> }
+        @if(lUdfs.Contains("U_BE1_CHECKPORTFOY")) { <td class="bg-warning bg-opacity-10"><input type="text" class="table-input input-chkportfoy searchable-field" placeholder="Portföy" /></td> }
+        @if(lUdfs.Contains("U_BE1_CHCKTRNSNO")) { <td class="bg-warning bg-opacity-10"><input type="text" class="table-input input-chktrnsno searchable-field" placeholder="İşlem No" /></td> }
+        @if(lUdfs.Contains("U_BE1_CHECKDUEDATE")) { <td class="bg-warning bg-opacity-10"><input type="date" class="table-input input-chkduedate searchable-field" /></td> }
+        @if(lUdfs.Contains("U_BE1_MHTANIM")) { <td class="bg-warning bg-opacity-10"><input type="text" class="table-input input-mhtanim searchable-field" placeholder="Tanım" /></td> }
+        @if(lUdfs.Contains("U_BE1_CONTRAACT")) { <td class="bg-warning bg-opacity-10"><input type="text" class="table-input input-contraact searchable-field" placeholder="Kayıt" /></td> }
+        @if(lUdfs.Contains("U_GIDERKODU")) { <td class="bg-warning bg-opacity-10"><input type="text" class="table-input input-giderkodu searchable-field" placeholder="Kod" /></td> }
+
+        <td class="text-center del-col" style="position: sticky; right: 0; background: #fff; z-index: 1;">
+            <button type="button" class="btn btn-sm btn-link text-danger btn-remove-row p-0"><i class="fas fa-times"></i></button>
+        </td>
+    </tr>
+</template>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="~/js/gg-kod-secici.js?v=1"></script>
+    @await Html.PartialAsync("_GiderKodTalep")
+    <script>
+        // -----------------------------------------------------------------
+        // TUTAR BİÇİMLENDİRME (talep 23)
+        //
+        // Tutarlar ekranda Türkçe yazımla gösterilir: 1.234.567,89
+        // (binlik = nokta, ondalık = virgül). Diğer giriş ekranlarındaki
+        // formatNumber ile aynı biçim kullanılır.
+        //
+        // Kullanıcı hem "1.234,56" hem "1234.56" hem de "1234,56" yazabilir;
+        // tutarOku üçünü de doğru okur. Alandan çıkıldığında değer tekrar
+        // Türkçe yazıma çevrilir, böylece kullanıcı yorumu anında görür.
+        // -----------------------------------------------------------------
+        function tutarOku(kaynak) {
+            var m = (typeof kaynak === 'string') ? kaynak : $(kaynak).val();
+            if (m === null || m === undefined) return 0;
+            m = String(m).replace(/\s/g, '').replace(/[^0-9.,+-]/g, '');
+            if (!m) return 0;
+
+            var sonNokta = m.lastIndexOf('.');
+            var sonVirgul = m.lastIndexOf(',');
+
+            if (sonNokta >= 0 && sonVirgul >= 0) {
+                // Iki ayirici da var: SONDAKI ondalik ayiricidir.
+                if (sonVirgul > sonNokta) m = m.replace(/\./g, '').replace(',', '.');
+                else                      m = m.replace(/,/g, '');
+            } else if (sonVirgul >= 0) {
+                var pv = m.split(',');
+                // "1,234" gibi tam 3 haneli tek parca binlik sayilir; digerleri ondalik.
+                if (pv.length === 2 && pv[1].length === 3) m = m.replace(/,/g, '');
+                else m = m.replace(/,/g, '.');
+            } else if (sonNokta >= 0) {
+                var pn = m.split('.');
+                // "1.234" ve "1.234.567" binlik; "1234.5" / "1234.56" ondalik.
+                if (pn.length > 2) m = m.replace(/\./g, '');
+                else if (pn.length === 2 && pn[1].length === 3) m = m.replace(/\./g, '');
+            }
+
+            var n = parseFloat(m);
+            return isNaN(n) ? 0 : n;
+        }
+
+        function tutarYaz(deger) {
+            var n = (typeof deger === 'number') ? deger : tutarOku(deger);
+            if (isNaN(n)) n = 0;
+            return n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        let currentMode = 'ADD';
+        let currentTransId = 0;
+        let isBindingData = false;
+        
+        let systemExchangeRates = {}; 
+        let currentSystemCurrency = '@systemCurrency';
+
+        $(document).ready(function () {
+            toastr.options = { positionClass: "toast-bottom-right", timeOut: "3000" };
+            $('.select2-init').select2({ theme: 'bootstrap-5' });
+
+            // Tutar alanindan cikildiginda deger Turkce yazima cevrilir (talep 23).
+            // change olayi blur'dan once tetiklendigi icin "100 USD" gibi para
+            // birimli girisler once kendi mantiginda islenir; burada yalnizca
+            // sayisal hale gelmis deger bicimlendirilir.
+            $(document).on('blur', '.input-debit, .input-credit, .input-fc-debit, .input-fc-credit', function () {
+                var ham = $(this).val();
+                if (ham === null || String(ham).trim() === '') { $(this).val(tutarYaz(0)); return; }
+                if (/[A-Za-z]/.test(String(ham))) return;   // para birimi yazimi: dokunma
+                $(this).val(tutarYaz(tutarOku(ham)));
+            });
+            
+            // İthalat / İhracat Dosya Numaraları için özel Select2 (Klavyeden giriş serbest - Tags)
+            $('.select2-tags').select2({ theme: 'bootstrap-5', tags: true, placeholder: "Seçiniz / Yazınız", allowClear: true });
+            
+            setFormMode('ADD');
+
+            $('#RefDate').on('change', function() {
+                if(currentMode === 'ADD' && !isBindingData) fetchRatesAndCalculate();
+            });
+
+            $('#btnFindMode').click(() => setFormMode('FIND'));
+            $('#btnNewDoc').click(() => setFormMode('ADD'));
+            $('#btnAddRow').click(() => { if (currentMode === 'ADD') addRow(); });
+
+            // TOPLU İPTAL MODALINI AÇ
+            $('#btnBulkCancelModal').click(function() {
+                $('#loadingOverlay').css('display', 'flex');
+                $.get('/Rapor107/GetOpenManualJEs', function(res) {
+                    if (res.success) {
+                        let html = '';
+                        res.data.forEach(d => {
+                            html += `<tr style="cursor:pointer;" onclick="$(this).find('.chk-cancel').prop('checked', !$(this).find('.chk-cancel').prop('checked'))">
+                                <td class="text-center" onclick="event.stopPropagation()"><input type="checkbox" class="chk-cancel" value="${d.transId}"></td>
+                                <td class="fw-bold text-primary">${d.transId}</td>
+                                <td>${d.number}</td>
+                                <td>${d.refDate}</td>
+                                <td class="text-truncate" style="max-width:300px;">${d.memo || ''}</td>
+                            </tr>`;
+                        });
+                        $('#openJEsBody').html(html);
+                        $('#chkAllCancel').prop('checked', false);
+                        $('#bulkCancelModal').modal('show');
+                    } else toastr.error("Açık kayıtlar getirilemedi.");
+                }).always(() => $('#loadingOverlay').hide());
+            });
+
+            $('#chkAllCancel').change(function() {
+                $('.chk-cancel').prop('checked', $(this).is(':checked'));
+            });
+
+            // TOPLU İPTAL ÇALIŞTIR
+            $('#btnExecuteBulkCancel').click(function() {
+                let ids = [];
+                $('.chk-cancel:checked').each(function() { ids.push(parseInt($(this).val())); });
+                
+                if (ids.length === 0) { toastr.warning("Lütfen iptal edilecek kayıtları seçin."); return; }
+
+                if (confirm(`Toplam ${ids.length} adet belge iptal edilecek (Ters kayıt oluşturulacak). Onaylıyor musunuz?`)) {
+                    $('#bulkCancelModal').modal('hide');
+                    $('#loadingOverlay').css('display', 'flex');
+                    
+                    $.ajax({
+                        url: '/Rapor107/BulkCancelJournalEntries',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ TransIds: ids }),
+                        success: function(res) {
+                            if (res.success) {
+                                if (res.hasErrors) toastr.warning(res.message);
+                                else toastr.success(res.message);
+                                if (currentMode === 'VIEW') loadJEDetails(currentTransId);
+                            } else toastr.error(res.message);
+                        },
+                        error: function() { toastr.error("Toplu iptal işlemi sırasında hata oluştu."); },
+                        complete: function() { $('#loadingOverlay').hide(); }
+                    });
+                }
+            });
+
+            $(document).on('click', '.btn-remove-row', function () {
+                if (currentMode !== 'ADD') return;
+                $(this).closest('tr').find('.select-account, .input-gider').select2('destroy');
+                $(this).closest('tr').remove();
+                updateRowIndexes();
+                calculateTotals();
+            });
+
+            // OTOMATİK SATIR EKLEME KORUMASI: En son satıra dokunulduğunda yenisi eklenir.
+            $(document).on('input change', '#linesBody tr:last-child input, #linesBody tr:last-child select', function() {
+                if (currentMode === 'ADD' && !isBindingData) addRow();
+            });
+
+            // KURLARI SQL'E (ORTT) KAYDETME
+            $('#btnUpdateRates').click(function() {
+                const dateVal = $('#RefDate').val();
+                if (!dateVal) { toastr.warning("Lütfen kayıt tarihi seçin."); return; }
+
+                const rates = {};
+                if ($('#rate_USD').val()) rates['USD'] = parseFloat($('#rate_USD').val());
+                if ($('#rate_EUR').val()) rates['EUR'] = parseFloat($('#rate_EUR').val());
+                if ($('#rate_GBP').val()) rates['GBP'] = parseFloat($('#rate_GBP').val());
+                if ($('#rate_RUB').val()) rates['RUB'] = parseFloat($('#rate_RUB').val());
+
+                if (Object.keys(rates).length === 0) { toastr.warning("Lütfen en az bir kur değeri girin."); return; }
+
+                $('#loadingOverlay').css('display', 'flex');
+                $.ajax({
+                    url: '/Rapor107/UpdateExchangeRates',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ Date: dateVal, Rates: rates }),
+                    success: function(res) {
+                        if (res.success) {
+                            toastr.success(res.message);
+                            fetchRatesAndCalculate(); 
+                        } else toastr.error(res.message);
+                    },
+                    error: function() { toastr.error("Kur güncelleme sırasında hata oluştu."); },
+                    complete: function() { $('#loadingOverlay').hide(); }
+                });
+            });
+
+            // OTOMATİK KDV SATIRI OLUŞTURMA
+            $(document).on('change', '.input-vat', function() {
+                if (currentMode !== 'ADD') return;
+                if (!$('#AutoVAT').is(':checked')) return; 
+                
+                const vatCode = $(this).val();
+                if (!vatCode) return;
+                const tr = $(this).closest('tr');
+                
+                setTimeout(() => {
+                    let lcDebit = tutarOku(tr.find('.input-debit'));
+                    let lcCredit = tutarOku(tr.find('.input-credit'));
+                    let fcDebit = tutarOku(tr.find('.input-fc-debit'));
+                    let fcCredit = tutarOku(tr.find('.input-fc-credit'));
+                    let fcCur = tr.find('.input-fc-cur').val();
+
+                    if (lcDebit === 0 && lcCredit === 0) return; 
+
+                    $('#loadingOverlay').css('display', 'flex');
+                    $.get('/Rapor107/GetVatDetail', { vatCode: vatCode }, function(res) {
+                        if (res.success && res.account) {
+                            let rate = res.rate || 0;
+                            let taxLcDebit = 0, taxLcCredit = 0;
+                            let taxFcDebit = 0, taxFcCredit = 0;
+
+                            if (lcDebit > 0) taxLcDebit = (lcDebit * rate / 100);
+                            if (lcCredit > 0) taxLcCredit = (lcCredit * rate / 100);
+                            if (fcDebit > 0) taxFcDebit = (fcDebit * rate / 100);
+                            if (fcCredit > 0) taxFcCredit = (fcCredit * rate / 100);
+
+                            addRow(); 
+                            const newRow = $('#linesBody tr:nth-last-child(2)'); 
+                            
+                            newRow.find('.select-account').val(res.account).trigger('change.select2');
+                            
+                            if (taxLcDebit > 0) newRow.find('.input-debit').val(tutarYaz(taxLcDebit));
+                            if (taxLcCredit > 0) newRow.find('.input-credit').val(tutarYaz(taxLcCredit));
+                            
+                            if (fcCur) {
+                                newRow.find('.input-fc-cur').val(fcCur);
+                                if (taxFcDebit > 0) newRow.find('.input-fc-debit').val(tutarYaz(taxFcDebit));
+                                if (taxFcCredit > 0) newRow.find('.input-fc-credit').val(tutarYaz(taxFcCredit));
+                            }
+                            
+                            newRow.find('.input-memo').val("Otomatik Vergi (" + vatCode + ")");
+                            
+                            let sysRate = parseFloat($('#SystemRate').val()) || 0;
+                            if (sysRate > 0) {
+                                newRow.find('.input-sys-debit').val(tutarYaz(taxLcDebit / sysRate));
+                                newRow.find('.input-sys-credit').val(tutarYaz(taxLcCredit / sysRate));
+                            }
+                            calculateTotals();
+                            
+                        } else {
+                            toastr.warning(res.message || "Vergi detayı alınamadı.");
+                        }
+                    }).always(function() { $('#loadingOverlay').hide(); });
+                }, 100);
+            });
+
+            // SAP STANDART B1 YEVMİYE HESAPLAMA
+            $(document).on('change', '.calc-trigger, .fc-trigger', function () {
+                if (currentMode !== 'ADD') return;
+                
+                const tr = $(this).closest('tr');
+                let isDebit = $(this).hasClass('input-debit') || $(this).hasClass('input-fc-debit');
+                let isCredit = $(this).hasClass('input-credit') || $(this).hasClass('input-fc-credit');
+                let isLC = $(this).hasClass('input-debit') || $(this).hasClass('input-credit'); 
+
+                if (isLC || $(this).hasClass('input-fc-debit') || $(this).hasClass('input-fc-credit')) {
+                    // Kullanici "100 USD" yazarak para birimi secebiliyor.
+                    // Tutar kismi virgullu de olabilecegi icin ayirici DEGISTIRILMEZ;
+                    // sayiya cevirmeyi tutarOku yapar. (Onceden ilk virgul noktaya
+                    // cevriliyordu ve "1.234,56" -> "1.234.56" olup yanlis okunuyordu.)
+                    let rawVal = $(this).val().trim().toUpperCase();
+                    let match = rawVal.match(/^([0-9.,]+)\s*([A-Z]{3})?$/);
+
+                    if (match && match[2]) {
+                        let parsedAmount = tutarOku(match[1]);
+                        let typedCur = match[2];
+
+                        if (tr.find(`.input-fc-cur option[value="${typedCur}"]`).length > 0) {
+                            tr.find('.input-fc-cur').val(typedCur);
+
+                            if (isDebit) {
+                                tr.find('.input-fc-debit').val(tutarYaz(parsedAmount));
+                                tr.find('.input-fc-credit').val(tutarYaz(0));
+                            } else {
+                                tr.find('.input-fc-credit').val(tutarYaz(parsedAmount));
+                                tr.find('.input-fc-debit').val(tutarYaz(0));
+                            }
+                            
+                            isLC = false; 
+                        } else {
+                            toastr.warning(`Geçersiz para birimi kodu girdiniz: ${typedCur}`);
+                            $(this).val(tutarYaz(parsedAmount));
+                        }
+                    } else if (match) {
+                        // Duz sayisal giris de tutarOku ile okunur. Onceden parseFloat
+                        // kullaniliyordu: "1.500.000" -> 1,50 ve "12345,67" -> 12345,00
+                        // oluyordu (buyuk tutarlar "yuvarlaniyor" gibi gorunuyordu).
+                        $(this).val(tutarYaz(tutarOku(match[1])));
+                    } else {
+                        $(this).val(tutarYaz(0));
+                    }
+                }
+
+                let lcDebit = tutarOku(tr.find('.input-debit'));
+                let lcCredit = tutarOku(tr.find('.input-credit'));
+                let fcDebit = tutarOku(tr.find('.input-fc-debit'));
+                let fcCredit = tutarOku(tr.find('.input-fc-credit'));
+                let sysRate = parseFloat($('#SystemRate').val()) || 0;
+                let fcCur = tr.find('.input-fc-cur').val();
+                let fcRate = (fcCur && systemExchangeRates[fcCur]) ? systemExchangeRates[fcCur] : 1;
+
+                if (isDebit) {
+                    tr.find('.input-credit, .input-fc-credit').val(tutarYaz(0));
+                    lcCredit = 0; fcCredit = 0;
+                } else if (isCredit) {
+                    tr.find('.input-debit, .input-fc-debit').val(tutarYaz(0));
+                    lcDebit = 0; fcDebit = 0;
+                }
+
+                if (isLC) {
+                    tr.find('.input-fc-debit, .input-fc-credit').val(tutarYaz(0));
+                    tr.find('.input-fc-cur').val(''); 
+                    fcDebit = 0; fcCredit = 0;
+                } else {
+                    if (fcCur && fcRate > 0) {
+                        if (isDebit && !isLC) {
+                            lcDebit = fcDebit * fcRate;
+                            tr.find('.input-debit').val(tutarYaz(lcDebit));
+                        } else if (isCredit && !isLC) {
+                            lcCredit = fcCredit * fcRate;
+                            tr.find('.input-credit').val(tutarYaz(lcCredit));
+                        }
+                    }
+                }
+
+                if (sysRate > 0) {
+                    tr.find('.input-sys-debit').val(tutarYaz(lcDebit / sysRate));
+                    tr.find('.input-sys-credit').val(tutarYaz(lcCredit / sysRate));
+                }
+
+                calculateTotals();
+            });
+
+            $('.nav-btn').click(function() {
+                if (isBindingData) return;
+                const dir = $(this).data('dir');
+                $('#loadingOverlay').css('display', 'flex');
+                
+                $.get('/Rapor107/GetJENavigation', { currentTransId: currentTransId, direction: dir }, function(res) {
+                    if(res && res.success && res.data) {
+                        bindDataToForm(res.data);
+                    } else {
+                        toastr.info("Bu yönde başka kayıt bulunmuyor.");
+                    }
+                }).always(function() { $('#loadingOverlay').hide(); });
+            });
+
+            // MAHSUP İNDİRME FONKSİYONU
+            function downloadMahsup(transId, reloadAfter = false) {
+                fetch('/Rapor107/MahsupOlustur', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify([transId])
+                })
+                .then(res => {
+                    if(res.ok) return res.blob();
+                    throw new Error("PDF oluşturulamadı.");
+                })
+                .then(blob => {
+                    var url = window.URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Mahsup_Fisi_${transId}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    if(reloadAfter) setTimeout(() => { window.location.reload(); }, 1500);
+                })
+                .catch(err => {
+                    toastr.error(err.message);
+                    if(reloadAfter) setTimeout(() => { window.location.reload(); }, 1500);
+                });
+            }
+
+            $('#btnDownloadMahsup').click(function() {
+                if (!currentTransId) return;
+                downloadMahsup(currentTransId, false);
+            });
+
+            $('#btnCancelDocument').click(function() {
+                if (!currentTransId) return;
+                if (confirm("DİKKAT: Bu yevmiye kaydını iptal etmek istediğinize emin misiniz? Bu işlem geri alınamaz! (Sistem ters kayıt oluşturacaktır)")) {
+                    $('#loadingOverlay').css('display', 'flex');
+                    $.ajax({
+                        url: '/Rapor107/CancelJournalEntry?transId=' + currentTransId,
+                        type: 'POST',
+                        success: function (res) {
+                            if (res.success) {
+                                toastr.success(res.message);
+                                loadJEDetails(currentTransId); 
+                            } else toastr.error(res.message);
+                        },
+                        error: function (xhr) {
+                            toastr.error(xhr.responseJSON ? xhr.responseJSON.message : "İptal sırasında hata oluştu.");
+                        },
+                        complete: function () { $('#loadingOverlay').hide(); }
+                    });
+                }
+            });
+
+            // GÜNCELLE BUTONU (VIEW MODE)
+            $('#btnUpdateDoc').click(function() {
+                if (currentMode !== 'VIEW' || currentTransId === 0) return;
+
+                const payload = {
+                    TransId: currentTransId,
+                    Memo: $('#Memo').val(),
+                    TransCode: $('#TransCode').val(),
+                    Ref1: $('#Ref1').val(),
+                    Ref2: $('#Ref2').val(),
+                    Ref3: $('#Ref3').val(),
+                    Project: $('#Project').val(),
+                    Indicator: $('#Indicator').val(),
+                    U_BE1_AKTAR: $('#U_BE1_AKTAR').val(), U_BE1_TARGETDOC: $('#U_BE1_TARGETDOC').val(),
+                    U_BE1_TARGETTYPE: $('#U_BE1_TARGETTYPE').val(), U_BE1_KREDITAKSITNO: $('#U_BE1_KREDITAKSITNO').val(),
+                    U_BE1_ISTAHAKKUK: $('#U_BE1_ISTAHAKKUK').val(), U_BE1_FINDOC: $('#U_BE1_FINDOC').val(),
+                    U_BE1_FINTIP: $('#U_BE1_FINTIP').val(), U_BE1_AGENTNUM: $('#U_BE1_AGENTNUM').val(),
+                    U_BE1_BABSFLAG: $('#U_BE1_BABSFLAG').val(), U_BE1_TERSKYT: $('#U_BE1_TERSKYT').val(), U_BE1_AKTARMA: $('#U_BE1_AKTARMA').val(),
+                    U_BE1_BABSKDV: $('#U_BE1_BABSKDV').val(), U_BE1_KURFARKTRANS: $('#U_BE1_KURFARKTRANS').val(),
+                    U_BE1_ISCHECKBOND: $('#U_BE1_ISCHECKBOND').val(), U_BE1_TRAN_STATUS: $('#U_BE1_TRAN_STATUS').val(),
+                    U_BE1_MANUELC: $('#U_BE1_MANUELC').val(), U_BE1_DOVIZTIPI: $('#U_BE1_DOVIZTIPI').val(),
+                    U_BE1_TAHAKKUKKREDINO: $('#U_BE1_TAHAKKUKKREDINO').val(), U_BE1_TAHAKKUKKREDISATIRNO: $('#U_BE1_TAHAKKUKKREDISATIRNO').val(),
+                    U_BE1_TransKind: $('#U_BE1_TransKind').val(), U_BE1_YEVIPTAL: $('#U_BE1_YEVIPTAL').val(),
+                    U_BE1_IHRDOSNO: $('#U_BE1_IHRDOSNO').val(), U_BE1_TAHSILAT: $('#U_BE1_TAHSILAT').val(),
+                    U_BE1_YEVIPTALLOG: $('#U_BE1_YEVIPTALLOG').val(), U_BE1_DAGIT: $('#U_BE1_DAGIT_HDR').val()
+                };
+
+                $('#loadingOverlay').css('display', 'flex');
+                $.ajax({
+                    url: '/Rapor107/UpdateJournalEntry',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(payload),
+                    success: function (res) {
+                        if (res.success) {
+                            toastr.success(res.message);
+                            loadJEDetails(currentTransId); 
+                        } else toastr.error(res.message);
+                    },
+                    error: function (xhr) { toastr.error("Güncelleme hatası."); },
+                    complete: function () { $('#loadingOverlay').hide(); }
+                });
+            });
+
+            // BELGEYİ ÇOĞALT (DUPLICATE)
+            $('#btnDuplicate').click(function() {
+                currentMode = 'ADD';
+                currentTransId = 0;
+                
+                $('#mainContainer').removeClass('view-mode find-mode');
+                
+                // Kilitleri aç
+                $('.searchable-field').prop('disabled', false);
+                $('.select2-hidden-accessible').prop('disabled', false);
+                
+                $('.req-field, .req-field-add').prop('required', true);
+                
+                $('#TransId, #Number').prop('disabled', true).val('').attr('placeholder', 'Otomatik');
+                
+                const today = new Date().toISOString().split('T')[0];
+                $('#RefDate, #DueDate, #TaxDate').val(today);
+                
+                $('#btnAddRow, .del-col').show();
+                $('#gridCard, #udfCard').show();
+                $('#exchangeRatesCard').show();
+                
+                $('#btnSave').show().removeClass('btn-info text-white').addClass('btn-warning').html('Ekle');
+                $('#btnDownloadMahsup').hide();
+                $('#btnCancelDocument').hide();
+                $('#btnUpdateDoc').hide();
+                $(this).hide(); 
+
+                $('#btnCancel').text("İptal").removeClass('btn-primary text-white').addClass('btn-light');
+                $('#pageTitle').html('<i class="fas fa-copy text-warning me-2"></i>Yevmiye Kaydı Oluştur (Çoğaltıldı)');
+                
+                toastr.info("Kayıt çoğaltıldı. Gerekli düzenlemeleri yapıp kaydedebilirsiniz.");
+            });
+
+            $('#jeForm').submit(function (e) {
+                e.preventDefault();
+                if (currentMode === 'VIEW') return;
+
+                if (currentMode === 'FIND') {
+                    const searchPayload = {
+                        TransId: $('#TransId').val() ? parseInt($('#TransId').val()) : null,
+                        Number: $('#Number').val() ? parseInt($('#Number').val()) : null,
+                        RefDate: $('#RefDate').val() || null,
+                        Memo: $('#Memo').val() || null
+                    };
+
+                    $('#loadingOverlay').css('display', 'flex');
+                    $.ajax({
+                        url: '/Rapor107/FindJournalEntry',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify(searchPayload),
+                        success: function (res) {
+                            if (res.success && res.data && res.data.length > 0) {
+                                if (res.data.length === 1) loadJEDetails(res.data[0].transId);
+                                else populateSearchModal(res.data);
+                            } else {
+                                toastr.warning(res.message || "Kayıt bulunamadı.");
+                            }
+                        },
+                        complete: function () { $('#loadingOverlay').hide(); }
+                    });
+                    return;
+                }
+
+                const lines = [];
+                let hasError = false;
+
+                $('#linesBody tr').each(function (index) {
+                    const accSelect = $(this).find('.select-account');
+                    const accCode = accSelect.val();
+                    const isBP = accSelect.find('option:selected').data('isbp') === true;
+                    
+                    const debit = tutarOku($(this).find('.input-debit'));
+                    const credit = tutarOku($(this).find('.input-credit'));
+                    
+                    // BOŞ SON SATIR KORUMASI
+                    if ($(this).is(':last-child') && !accCode && debit === 0 && credit === 0) {
+                        return true; 
+                    }
+
+                    if (!accCode) { hasError = true; toastr.error(`${index + 1}. satırda hesap/muhatap seçiniz.`); return false; }
+                    // 6'lı / 7'li hesap satırında gider-gelir kodu zorunlu (sunucu da denetler)
+                    if (!isBP && /^[67]/.test(accCode) && !($(this).find('.input-gider').val() || '').trim()) { hasError = true; toastr.error(`${index + 1}. satır: ${accCode} hesabı için ${(window.GGSecici && GGSecici.hesapTipi(accCode) === 'GELIR') ? 'gelir' : 'gider'} kodu seçiniz.`); $(this).find('.input-gider').select2('open'); return false; }
+                    if (debit === 0 && credit === 0) { hasError = true; toastr.error(`${index + 1}. satırda Borç veya Alacak (Yerel Para Birimi) girmelisiniz.`); return false; }
+
+                    lines.push({
+                        AccountCode: accCode, IsBP: isBP, Debit: debit, Credit: credit,
+                        SysDebit: tutarOku($(this).find('.input-sys-debit')),
+                        SysCredit: tutarOku($(this).find('.input-sys-credit')),
+                        FCCurrency: $(this).find('.input-fc-cur').val(),
+                        FCDebit: tutarOku($(this).find('.input-fc-debit')),
+                        FCCredit: tutarOku($(this).find('.input-fc-credit')),
+                        LineMemo: $(this).find('.input-memo').val(),
+                        TaxGroup: $(this).find('.input-vat').val(),
+                        ProjectCode: $(this).find('.input-project').val(),
+                        
+                        U_BE1_DAGIT: $(this).find('.input-dagit').val(),
+                        U_BE1_CHECKNO: $(this).find('.input-chkno').val(),
+                        U_BE1_CHECKID: $(this).find('.input-chkid').val(),
+                        U_BE1_CHECKPORTFOY: $(this).find('.input-chkportfoy').val(),
+                        U_BE1_CHCKTRNSNO: $(this).find('.input-chktrnsno').val(),
+                        U_BE1_CHECKDUEDATE: $(this).find('.input-chkduedate').val(),
+                        U_BE1_MHTANIM: $(this).find('.input-mhtanim').val(),
+                        U_BE1_CONTRAACT: $(this).find('.input-contraact').val(),
+                        U_GiderKodu: $(this).find('.input-giderkodu').val(),
+                        Gider: ($(this).find('.input-gider').val() || '').trim(),
+                        Plaka: ($(this).find('.input-plaka').val() || '').replace(/\s+/g, '').toUpperCase(),
+                        Sasi: ($(this).find('.input-sasi').val() || '').trim().toUpperCase()
+                    });
+                });
+
+                if (hasError) return;
+                if (lines.length === 0) { toastr.error("Lütfen en az bir dolu satır ekleyin."); return; }
+
+                const payload = {
+                    RefDate: $('#RefDate').val(), DueDate: $('#DueDate').val(), TaxDate: $('#TaxDate').val(),
+                    Memo: $('#Memo').val(), Ref1: $('#Ref1').val(), Ref2: $('#Ref2').val(), Ref3: $('#Ref3').val(),
+                    TransCode: $('#TransCode').val(), Indicator: $('#Indicator').val(), Project: $('#Project').val(),
+                    AutoVAT: $('#AutoVAT').is(':checked'), SystemRate: parseFloat($('#SystemRate').val()) || 0,
+                    
+                    U_BE1_AKTAR: $('#U_BE1_AKTAR').val(), U_BE1_TARGETDOC: $('#U_BE1_TARGETDOC').val(),
+                    U_BE1_TARGETTYPE: $('#U_BE1_TARGETTYPE').val(), U_BE1_KREDITAKSITNO: $('#U_BE1_KREDITAKSITNO').val(),
+                    U_BE1_ISTAHAKKUK: $('#U_BE1_ISTAHAKKUK').val(), U_BE1_FINDOC: $('#U_BE1_FINDOC').val(),
+                    U_BE1_FINTIP: $('#U_BE1_FINTIP').val(), U_BE1_AGENTNUM: $('#U_BE1_AGENTNUM').val(),
+                    U_BE1_BABSFLAG: $('#U_BE1_BABSFLAG').val(), U_BE1_TERSKYT: $('#U_BE1_TERSKYT').val(), U_BE1_AKTARMA: $('#U_BE1_AKTARMA').val(),
+                    U_BE1_BABSKDV: $('#U_BE1_BABSKDV').val(), U_BE1_KURFARKTRANS: $('#U_BE1_KURFARKTRANS').val(),
+                    U_BE1_ISCHECKBOND: $('#U_BE1_ISCHECKBOND').val(), U_BE1_TRAN_STATUS: $('#U_BE1_TRAN_STATUS').val(),
+                    U_BE1_MANUELC: $('#U_BE1_MANUELC').val(), U_BE1_DOVIZTIPI: $('#U_BE1_DOVIZTIPI').val(),
+                    U_BE1_TAHAKKUKKREDINO: $('#U_BE1_TAHAKKUKKREDINO').val(), U_BE1_TAHAKKUKKREDISATIRNO: $('#U_BE1_TAHAKKUKKREDISATIRNO').val(),
+                    U_BE1_TransKind: $('#U_BE1_TransKind').val(), U_BE1_YEVIPTAL: $('#U_BE1_YEVIPTAL').val(),
+                    U_BE1_IHRDOSNO: $('#U_BE1_IHRDOSNO').val(), U_BE1_TAHSILAT: $('#U_BE1_TAHSILAT').val(),
+                    U_BE1_YEVIPTALLOG: $('#U_BE1_YEVIPTALLOG').val(), U_BE1_DAGIT: $('#U_BE1_DAGIT_HDR').val(),
+                    
+                    JournalEntryLines: lines
+                };
+
+                const btn = $('#btnSave');
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> SAP\'ye Ekleniyor...');
+
+                $.ajax({
+                    url: '/Rapor107/CreateJournalEntry',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(payload),
+                    success: function (res) {
+                        if (res.success && res.newTransId) {
+                            toastr.success(res.message + " Mahsup fişi otomatik indiriliyor...");
+                            downloadMahsup(res.newTransId, true); 
+                        } else toastr.error(res.message);
+                    },
+                    error: function (xhr) { toastr.error(xhr.responseJSON ? xhr.responseJSON.message : "Bağlantı hatası."); },
+                    complete: function () { btn.prop('disabled', false).text('Ekle'); }
+                });
+            });
+
+            $('#btnCancel').click(function() {
+                if (currentMode === 'VIEW' || currentMode === 'FIND') setFormMode('ADD');
+                else window.location.reload();
+            });
+        });
+
+        function fetchRatesAndCalculate() {
+            const dateVal = $('#RefDate').val();
+            if(!dateVal) return;
+
+            $.get('/Rapor107/GetAllExchangeRates', { date: dateVal }, function(res) {
+                systemExchangeRates = res;
+                
+                $('#rate_USD').val(systemExchangeRates['USD'] || '');
+                $('#rate_EUR').val(systemExchangeRates['EUR'] || '');
+                $('#rate_GBP').val(systemExchangeRates['GBP'] || '');
+                $('#rate_RUB').val(systemExchangeRates['RUB'] || '');
+
+                if (currentSystemCurrency && currentSystemCurrency !== '@localCurrency') {
+                    const sysRateVal = systemExchangeRates[currentSystemCurrency] || 1;
+                    $('#SystemRate').val(sysRateVal.toFixed(6));
+                } else {
+                    $('#SystemRate').val(1.000000);
+                }
+                
+                let sysRate = parseFloat($('#SystemRate').val()) || 0;
+                if (sysRate > 0) {
+                    $('#linesBody tr').each(function() {
+                        let lcDebit = tutarOku($(this).find('.input-debit'));
+                        let lcCredit = tutarOku($(this).find('.input-credit'));
+                        $(this).find('.input-sys-debit').val(tutarYaz(lcDebit / sysRate));
+                        $(this).find('.input-sys-credit').val(tutarYaz(lcCredit / sysRate));
+                    });
+                }
+            });
+        }
+
+        function setFormMode(mode) {
+            currentMode = mode;
+            
+            if (!isBindingData) {
+                $('#jeForm')[0].reset();
+                $('.select2-init').val('').trigger('change.select2');
+                $('.select2-tags').val('').trigger('change.select2');
+                $('#linesBody').empty();
+            }
+
+            if (mode === 'VIEW') {
+                $('#mainContainer').removeClass('find-mode').addClass('view-mode');
+                
+                // 1. Önce Her Şeyi Kilitle
+                $('.searchable-field').prop('disabled', true);
+                
+                // 2. Sadece Düzenlenebilir (.editable-in-view) Alanların Kilidini Aç
+                $('.editable-in-view').prop('disabled', false).removeClass('bg-light');
+                $('.editable-in-view.select2-hidden-accessible').prop('disabled', false);
+
+                $('.req-field, .req-field-add').prop('required', false);
+                
+                $('#btnAddRow, .del-col').hide();
+                $('#btnSave').hide();
+                $('#exchangeRatesCard').hide();
+                
+                $('#btnDownloadMahsup').show();
+                $('#btnDuplicate').show();
+                $('#btnUpdateDoc').show(); // Güncelle butonu İptal edilmiş olsa bile açık.
+
+                $('#btnCancel').text("Yeni Ekle").removeClass('btn-light').addClass('btn-primary text-white');
+                
+                $('#gridCard, #udfCard').show();
+            } 
+            else if (mode === 'FIND') {
+                $('#mainContainer').removeClass('view-mode').addClass('find-mode');
+                $('.searchable-field').prop('disabled', false).val('');
+                
+                // Dropdown ve tags temizle
+                $('.select2-hidden-accessible').val('').trigger('change.select2').prop('disabled', false);
+                
+                $('.req-field, .req-field-add').prop('required', false);
+                
+                $('#TransId, #Number').prop('disabled', false).attr('placeholder', 'Aramak için yazın...');
+                $('#btnAddRow, .del-col').hide();
+                $('#exchangeRatesCard').hide();
+                $('#gridCard, #udfCard').hide(); 
+                
+                $('#btnSave').show().text("Ara").removeClass('btn-warning').addClass('btn-info text-white').html('<i class="fas fa-search me-2"></i>Ara');
+                
+                $('#btnDownloadMahsup').hide();
+                $('#btnCancelDocument').hide();
+                $('#btnUpdateDoc').hide();
+                $('#btnDuplicate').hide();
+
+                $('#btnCancel').text("İptal").removeClass('btn-primary text-white').addClass('btn-light');
+                $('#pageTitle').html('<i class="fas fa-search text-info me-2"></i>Kayıt Bul');
+                
+                resetTotals();
+            } 
+            else { 
+                $('#mainContainer').removeClass('view-mode find-mode');
+                $('.searchable-field').prop('disabled', false);
+                $('.select2-hidden-accessible').prop('disabled', false);
+                
+                $('.req-field, .req-field-add').prop('required', true);
+                
+                $('#TransId, #Number').prop('disabled', true).val('').attr('placeholder', 'Otomatik');
+                
+                const today = new Date().toISOString().split('T')[0];
+                $('#RefDate, #DueDate, #TaxDate').val(today);
+                $('#Memo').val('');
+                
+                $('#btnAddRow, .del-col').show();
+                $('#gridCard, #udfCard').show();
+                $('#exchangeRatesCard').show();
+                
+                $('#btnSave').show().removeClass('btn-info text-white').addClass('btn-warning').html('Ekle');
+                
+                $('#btnDownloadMahsup').hide();
+                $('#btnCancelDocument').hide();
+                $('#btnUpdateDoc').hide();
+                $('#btnDuplicate').hide();
+
+                $('#btnCancel').text("İptal").removeClass('btn-primary text-white').addClass('btn-light');
+                $('#pageTitle').html('<i class="fas fa-book text-warning me-2"></i>Yevmiye Kaydı Oluştur');
+                
+                currentTransId = 0;
+                addRow();
+                fetchRatesAndCalculate(); 
+                calculateTotals();
+            }
+        }
+
+        function loadJEDetails(transId) {
+            $('#loadingOverlay').css('display', 'flex');
+            $.get('/Rapor107/GetJournalEntry', { transId: transId }, function(res) {
+                if (res.success && res.data) bindDataToForm(res.data);
+                else toastr.error(res.message);
+            }).always(function() { $('#loadingOverlay').hide(); });
+        }
+
+        window.loadJEDetailsFromModal = function(transId) {
+            $('#searchModal').modal('hide');
+            loadJEDetails(transId);
+        }
+
+        function populateSearchModal(data) {
+            let html = '';
+            data.forEach(d => {
+                html += `
+                <tr style="cursor:pointer;" onclick="loadJEDetailsFromModal(${d.transId})">
+                    <td class="fw-bold text-primary">${d.transId}</td>
+                    <td>${d.number}</td>
+                    <td>${d.refDate}</td>
+                    <td class="text-truncate" style="max-width: 250px;">${d.memo || ''}</td>
+                </tr>`;
+            });
+            $('#searchResultsBody').html(html);
+            $('#searchModal').modal('show');
+        }
+
+        function bindDataToForm(je) {
+            isBindingData = true;
+            
+            setFormMode('VIEW');
+
+            currentTransId = je.transId;
+            
+            if (je.transType !== 30) {
+                $('#btnCancelDocument').hide();
+                $('#pageTitle').html(`<i class="fas fa-book text-primary me-2"></i>Yevmiye Kaydı (İşlem No: ${je.transId}) <span class="badge bg-warning text-dark ms-2" title="Belge başka bir modülden otomatik oluşmuş.">${je.originName} (İptal Edilemez)</span>`);
+            }
+            else if (je.isCanceled) {
+                $('#btnCancelDocument').hide();
+                $('#pageTitle').html(`<i class="fas fa-book text-danger me-2"></i>Yevmiye Kaydı (İşlem No: ${je.transId}) <span class="badge bg-danger ms-2">İPTAL EDİLDİ</span> <span class="badge bg-secondary ms-1">${je.originName}</span>`);
+            } else {
+                $('#btnCancelDocument').show();
+                $('#pageTitle').html(`<i class="fas fa-book text-primary me-2"></i>Yevmiye Kaydı Görüntüle (İşlem No: ${je.transId}) <span class="badge bg-secondary ms-2">${je.originName}</span>`);
+            }
+            
+            // Güncelleme Butonunu her View Mode durumunda göster
+            $('#btnUpdateDoc').show();
+            
+            $('#TransId').val(je.transId); 
+            $('#Number').val(je.number);
+            $('#RefDate').val(je.refDate); 
+            $('#DueDate').val(je.dueDate); 
+            $('#TaxDate').val(je.taxDate);
+            $('#Memo').val(je.memo); 
+            $('#Ref1').val(je.ref1); 
+            $('#Ref2').val(je.ref2); 
+            $('#Ref3').val(je.ref3);
+            
+            if(je.transCode) $('#TransCode').val(je.transCode).trigger('change.select2'); 
+            else $('#TransCode').val('').trigger('change.select2');
+            
+            if(je.project) $('#Project').val(je.project).trigger('change.select2');
+            else $('#Project').val('').trigger('change.select2');
+
+            $('#Indicator').val(je.indicator); 
+            $('#AutoVAT').prop('checked', je.autoVAT);
+            
+            $('#SystemRate').val(je.systemRate || 1.00);
+
+            $('#U_BE1_AKTAR').val(je.u_BE1_AKTAR); 
+            $('#U_BE1_TARGETDOC').val(je.u_BE1_TARGETDOC);
+            $('#U_BE1_TARGETTYPE').val(je.u_BE1_TARGETTYPE); 
+            $('#U_BE1_KREDITAKSITNO').val(je.u_BE1_KREDITAKSITNO);
+            $('#U_BE1_ISTAHAKKUK').val(je.u_BE1_ISTAHAKKUK); 
+            $('#U_BE1_FINDOC').val(je.u_BE1_FINDOC);
+            $('#U_BE1_FINTIP').val(je.u_BE1_FINTIP); 
+            
+            if(je.u_BE1_AGENTNUM) {
+                if($('#U_BE1_AGENTNUM').find("option[value='" + je.u_BE1_AGENTNUM + "']").length) {
+                    $('#U_BE1_AGENTNUM').val(je.u_BE1_AGENTNUM).trigger('change.select2');
+                } else { 
+                    var newOption = new Option(je.u_BE1_AGENTNUM, je.u_BE1_AGENTNUM, true, true);
+                    $('#U_BE1_AGENTNUM').append(newOption).trigger('change');
+                } 
+            } else $('#U_BE1_AGENTNUM').val('').trigger('change.select2');
+
+            $('#U_BE1_BABSFLAG').val(je.u_BE1_BABSFLAG); 
+            $('#U_BE1_TERSKYT').val(je.u_BE1_TERSKYT);
+            $('#U_BE1_AKTARMA').val(je.u_BE1_AKTARMA === 'Y' ? 'Y' : 'N');
+            $('#U_BE1_BABSKDV').val(je.u_BE1_BABSKDV); 
+            $('#U_BE1_KURFARKTRANS').val(je.u_BE1_KURFARKTRANS);
+            $('#U_BE1_ISCHECKBOND').val(je.u_BE1_ISCHECKBOND); 
+            $('#U_BE1_TRAN_STATUS').val(je.u_BE1_TRAN_STATUS);
+            $('#U_BE1_MANUELC').val(je.u_BE1_MANUELC); 
+            $('#U_BE1_DOVIZTIPI').val(je.u_BE1_DOVIZTIPI || '-');
+            $('#U_BE1_TAHAKKUKKREDINO').val(je.u_BE1_TAHAKKUKKREDINO); 
+            $('#U_BE1_TAHAKKUKKREDISATIRNO').val(je.u_BE1_TAHAKKUKKREDISATIRNO);
+            $('#U_BE1_TransKind').val(je.u_BE1_TransKind); 
+            $('#U_BE1_YEVIPTAL').val(je.u_BE1_YEVIPTAL);
+
+            if(je.u_BE1_IHRDOSNO) {
+                if($('#U_BE1_IHRDOSNO').find("option[value='" + je.u_BE1_IHRDOSNO + "']").length) {
+                    $('#U_BE1_IHRDOSNO').val(je.u_BE1_IHRDOSNO).trigger('change.select2');
+                } else { 
+                    var newOption2 = new Option(je.u_BE1_IHRDOSNO, je.u_BE1_IHRDOSNO, true, true);
+                    $('#U_BE1_IHRDOSNO').append(newOption2).trigger('change');
+                } 
+            } else $('#U_BE1_IHRDOSNO').val('').trigger('change.select2');
+
+            $('#U_BE1_TAHSILAT').val(je.u_BE1_TAHSILAT);
+            $('#U_BE1_YEVIPTALLOG').val(je.u_BE1_YEVIPTALLOG); 
+            $('#U_BE1_DAGIT_HDR').val(je.u_BE1_DAGIT);
+
+            $('#linesBody').empty();
+            
+            je.lines.forEach((line, index) => {
+                addRow();
+                
+                const tr = $('#linesBody tr').last();
+                
+                tr.find('.select-account').val(line.accountCode).trigger('change.select2');
+                
+                tr.find('.input-debit').val(tutarYaz(line.debit));
+                tr.find('.input-credit').val(tutarYaz(line.credit));
+                tr.find('.input-sys-debit').val(tutarYaz(line.sysDebit));
+                tr.find('.input-sys-credit').val(tutarYaz(line.sysCredit));
+                tr.find('.input-fc-cur').val(line.fcCurrency || '');
+                tr.find('.input-fc-debit').val(tutarYaz(line.fcDebit));
+                tr.find('.input-fc-credit').val(tutarYaz(line.fcCredit));
+                tr.find('.input-memo').val(line.lineMemo || '');
+                tr.find('.input-vat').val(line.taxGroup || '');
+                
+                tr.find('.input-dagit').val(line.u_BE1_DAGIT || 'N');
+                tr.find('.input-chkno').val(line.u_BE1_CHECKNO || '');
+                tr.find('.input-chkid').val(line.u_BE1_CHECKID || '');
+                tr.find('.input-chkportfoy').val(line.u_BE1_CHECKPORTFOY || '');
+                tr.find('.input-chktrnsno').val(line.u_BE1_CHCKTRNSNO || '');
+                
+                if (line.u_BE1_CHECKDUEDATE) {
+                    let dDate = line.u_BE1_CHECKDUEDATE.split('T')[0];
+                    tr.find('.input-chkduedate').val(dDate);
+                }
+
+                tr.find('.input-mhtanim').val(line.u_BE1_MHTANIM || '');
+                tr.find('.input-contraact').val(line.u_BE1_CONTRAACT || '');
+                tr.find('.input-giderkodu').val(line.u_GiderKodu || '');
+                ggKodSec(tr.find('.input-gider'), line.gider);
+                tr.find('.input-plaka').val(line.plaka || '');
+                tr.find('.input-sasi').val(line.sasi || '');
+            });
+
+            calculateTotals();
+            isBindingData = false;
+        }
+
+        function addRow() {
+            const template = document.getElementById('rowTemplate').innerHTML;
+            const $newRow = $(template);
+            $('#linesBody').append($newRow);
+            
+            const headerMemo = $('#Memo').val();
+            if(headerMemo) $newRow.find('.input-memo').val(headerMemo);
+            
+            if(currentMode !== 'ADD') {
+                $newRow.find('.req-field-add').prop('required', false);
+            }
+
+            $newRow.find('.select-account').select2({ 
+                theme: 'bootstrap-5',
+                width: '100%',
+                dropdownAutoWidth: true
+            });
+            ggKodSeciciKur($newRow.find('.input-gider'));
+            updateRowIndexes();
+        }
+
+        // ===================== GİDER / GELİR KODU (Rapor164 kataloğu, satır UDF U_BE1_GIDER) =====================
+        // Sayfa açılınca alan yoksa Service Layer ile otomatik açılır; kodlar seçili şirketin ekiyle yüklenir.
+        window.GG_KODLAR = []; window.GG_AD = {};
+        function ggEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
+        function ggKodlariYukle() {
+            $.getJSON('/Rapor164/Kodlar', function (res) {
+                if (!res || !res.success) { toastr.warning((res && res.message) || 'Gider/gelir kodları alınamadı.'); return; }
+                window.GG_KODLAR = res.data || []; window.GG_AD = {};
+                window.GG_KODLAR.forEach(function (k) { window.GG_AD[k.kod] = k.ad; window.GG_AD[k.kokKod] = k.ad; });
+                if (res.uyari) toastr.warning(res.uyari, '', { timeOut: 12000 });
+                $('#linesBody tr .input-gider').each(function () { var v = $(this).val(); ggOptgroups($(this)); ggKodSeciciKur($(this)); if (v) ggKodSec($(this), v); });
+            }).fail(function () { toastr.warning('Gider/gelir kod kataloğuna ulaşılamadı.'); });
+        }
+        function ggOptgroups($sel, tip) {
+            if (!$sel.length || $sel.find('optgroup').length || !window.GG_KODLAR.length) return;
+            tip = tip || $sel.attr('data-tip') || '';   // satırın hesabına göre: GELIR → yalnızca gelir kodları, GIDER → yalnızca gider kodları (+ teşvik)
+            var grp = function (t, ad) { if (tip && t !== tip && t !== 'TIS') return ''; var g = window.GG_KODLAR.filter(function (k) { return k.tip === t; }); if (!g.length) return ''; return '<optgroup label="' + ad + '">' + g.map(function (k) { return '<option value="' + ggEsc(k.kod) + '">' + ggEsc(k.kod) + ' — ' + ggEsc(k.ad) + '</option>'; }).join('') + '</optgroup>'; };
+            $sel.append(grp('GIDER', 'GİDER') + grp('GELIR', 'GELİR') + grp('TIS', 'TEŞVİK / İSTİSNA'));
+        }
+        // Satırın hesabına göre kod listesi: tip GELIR/GIDER → liste daraltılır; hesap 6/7 değilse kod kutusu kapatılır ("kod gerekmez").
+        function ggSatirTipiAyarla($tr, tip, hesap) {
+            var $sel = $tr.find('.input-gider'); if (!$sel.length) return;
+            tip = tip || ''; hesap = hesap || '';
+            var mevcut = $sel.val() || '';
+            $sel.attr('data-tip', tip).attr('data-hesap', hesap);
+            if ($sel.hasClass('select2-hidden-accessible')) $sel.select2('destroy');
+            $sel.find('optgroup').remove();
+            ggOptgroups($sel, tip);
+            var gerekmez = !!hesap && !tip;
+            var yerTutucu = gerekmez ? ('kod gerekmez (' + hesap + ')') : (tip === 'GELIR' ? '- gelir kodu seç -' : tip === 'GIDER' ? '- gider kodu seç -' : '- kod seç -');
+            $sel.attr('title', hesap ? ('Satırın hesabı ' + hesap + (gerekmez ? ': gider/gelir kodu gerekmez' : (tip === 'GELIR' ? ': GELİR (GLR) kodu zorunlu' : ': GİDER (GDR) kodu zorunlu'))) : 'Gider / gelir kodu');
+            if (gerekmez || (mevcut && !$sel.find('option[value="' + mevcut + '"]').length)) mevcut = '';
+            $sel.val(mevcut);
+            $sel.prop('disabled', gerekmez);
+            $sel.select2({ theme: 'bootstrap-5', width: '100%', placeholder: yerTutucu, allowClear: true, dropdownAutoWidth: true });
+            if (!mevcut && !gerekmez && window.GG_SABIT && window.GG_SABIT.kod && (!tip || window.GG_SABIT.tip === tip) && (typeof currentMode === 'undefined' || currentMode === 'ADD')) ggKodSec($sel, window.GG_SABIT.kod);
+            $tr.find('.btn-gg-sec').prop('disabled', gerekmez);
+        }
+        function ggKodSeciciKur($sel) {
+            if (!$sel.length) return;
+            ggOptgroups($sel);
+            if (!$sel.hasClass('select2-hidden-accessible')) $sel.select2({ theme: 'bootstrap-5', width: '100%', placeholder: '- kod seç -', allowClear: true, dropdownAutoWidth: true });
+        }
+        function ggKodSec($sel, kod) {
+            kod = (kod || '').trim(); if (!$sel.length) return; ggOptgroups($sel);
+            if (kod && !$sel.find('option[value="' + kod + '"]').length) $sel.append(new Option(kod + (window.GG_AD[kod] ? ' — ' + window.GG_AD[kod] : ''), kod));
+            $sel.val(kod || '').trigger('change.select2');
+        }
+        // Hesap seçilince satırın kod listesi hesabın tipine göre daralır (6'lı gelir → gelir kodları, 7'li / (-) 6'lı → gider kodları, diğer → kod gerekmez)
+        $('#linesBody').on('change', '.select-account', function () {
+            var $tr = $(this).closest('tr'), acct = $(this).val() || '';
+            var isBP = $(this).find('option:selected').data('isbp') === true;
+            ggSatirTipiAyarla($tr, (acct && !isBP) ? GGSecici.hesapTipi(acct) : '', isBP ? '' : acct);
+        });
+        $.ajax({ url: '/Rapor107/GiderAlaniniHazirla', type: 'POST' }).done(function (res) {
+            if (!res || !res.success) { toastr.warning((res && res.message) || 'Gider alanı kontrol edilemedi.', '', { timeOut: 9000 }); return; }
+            if (res.olusturuldu) toastr.info('"Gider / Gelir Kodu" satır alanı (JDT1.U_BE1_GIDER) SAP\'de Service Layer ile otomatik açıldı.', '', { timeOut: 9000 });
+        }).always(ggKodlariYukle);
+        // ===================== ARAC PLAKASI / SASI NO (satir UDF U_BE1_PLAKA / U_BE1_SASI) =====================
+        // Sayfa acilinca alanlar yoksa Service Layer ile acilir; daha once yazilmis plaka/sasi ciftleri listeden secilebilir.
+        var aracListesi = [];
+        $('body').append('<datalist id="aracPlakaListesi"></datalist><datalist id="aracSasiListesi"></datalist>');
+        function aracListesiniYukle() {
+            $.getJSON('/Rapor107/AracListesi').done(function (r) {
+                aracListesi = (r && r.araclar) || [];
+                $('#aracPlakaListesi').html(aracListesi.map(function (a) { return '<option value="' + a.plaka + '">' + (a.sasi ? a.sasi : '') + '</option>'; }).join(''));
+                $('#aracSasiListesi').html(aracListesi.filter(function (a) { return a.sasi; }).map(function (a) { return '<option value="' + a.sasi + '">' + a.plaka + '</option>'; }).join(''));
+            });
+        }
+        $.ajax({ url: '/Rapor107/AracAlanlariniHazirla', type: 'POST' }).done(function (res) {
+            if (!res || !res.success) { toastr.warning((res && res.message) || 'Ara\u00e7 alanlar\u0131 kontrol edilemedi.', '', { timeOut: 9000 }); return; }
+            if (res.olusturulan && res.olusturulan.length) toastr.info('Yevmiye sat\u0131r alanlar\u0131 ' + res.olusturulan.join(', ') + ' SAP\'de Service Layer ile otomatik a\u00e7\u0131ld\u0131.', '', { timeOut: 9000 });
+        }).always(aracListesiniYukle);
+        // Plaka secilince sasi otomatik dolar (ve tersi); bosluklar temizlenir
+        $(document).on('change', '.input-plaka', function () {
+            var p = ($(this).val() || '').replace(/\s+/g, '').toUpperCase(); $(this).val(p);
+            var $s = $(this).closest('tr').find('.input-sasi');
+            if (p && !$s.val()) { var a = aracListesi.find(function (x) { return x.plaka === p; }); if (a && a.sasi) $s.val(a.sasi); }
+        });
+        $(document).on('change', '.input-sasi', function () {
+            var s = ($(this).val() || '').trim().toUpperCase(); $(this).val(s);
+            var $p = $(this).closest('tr').find('.input-plaka');
+            if (s && !$p.val()) { var a = aracListesi.find(function (x) { return x.sasi === s; }); if (a) $p.val(a.plaka); }
+        });
+
+        function updateRowIndexes() {
+            $('#linesBody tr').each(function (index) { $(this).find('.row-index').text(index + 1); });
+        }
+
+        function resetTotals() {
+            $('#totalDebit, #totalCredit').val(tutarYaz(0));
+            $('#diffAmount').text('0.00').removeClass('text-danger').addClass('text-success');
+        }
+
+        function calculateTotals() {
+            let tDebit = 0, tCredit = 0;
+            $('#linesBody tr').each(function () {
+                tDebit += tutarOku($(this).find('.input-debit'));
+                tCredit += tutarOku($(this).find('.input-credit'));
+            });
+
+            $('#totalDebit').val(tutarYaz(tDebit));
+            $('#totalCredit').val(tutarYaz(tCredit));
+            
+            const diff = Math.abs(tDebit - tCredit);
+            $('#diffAmount').text(diff.toFixed(2));
+            if (diff > 0) $('#diffAmount').removeClass('text-success').addClass('text-danger');
+            else $('#diffAmount').removeClass('text-danger').addClass('text-success');
+        }
+
+        // "Aktarılmasın" alanı bu şirkette yoksa Service Layer ile aç (yalnızca yönetici)
+        function aktarmaAlaniniAc(tum) {
+            const msg = tum ? 'Alanı olmayan TÜM şirketlerde OJDT.U_BE1_AKTARMA (Evet/Hayır) alanı açılacak. Devam?'
+                            : 'Bu şirkette OJDT.U_BE1_AKTARMA (Evet/Hayır) alanı Service Layer ile açılacak. Devam?';
+            if (!confirm(msg)) return;
+            $('#loadingOverlay').css('display', 'flex');
+            $.post('/Rapor107/AktarmaAlaniniAc', { tumSirketler: tum }, function (res) {
+                toastr[res.success ? 'success' : 'error'](res.message || (res.success ? 'Alan açıldı.' : 'Alan açılamadı.'), '', { timeOut: 10000 });
+                if (res.success) setTimeout(() => window.location.reload(), 1500);
+            }).fail(() => toastr.error('Sunucu hatası.')).always(() => $('#loadingOverlay').hide());
+        }
+        $('#btnAktarmaAlaniAc').click(() => aktarmaAlaniniAc(false));
+        $('#btnAktarmaAlaniAcTum').click(() => aktarmaAlaniniAc(true));
+    </script>
+}

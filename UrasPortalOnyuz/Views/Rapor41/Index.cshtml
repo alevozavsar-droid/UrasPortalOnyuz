@@ -1,0 +1,492 @@
+﻿@model List<WebApplication3.Models.TevkifatRaporuViewModel>
+@using WebApplication3.Models
+@using System.Globalization
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Xsrf
+
+@{
+    var trCulture = new CultureInfo("tr-TR");
+
+    ViewData["Title"] = "KDV Tevkifat Alış Raporu (Kalem Bazlı)";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // 1. KURAL: URL'den veya varsa Cookie'den aktif şirketi okuma (currentDb)
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["ActiveDb"] ?? "VarsayilanSirket";
+    }
+
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? currentDb;
+    var modelData = Model ?? new List<TevkifatRaporuViewModel>();
+
+    const int TotalColumnCount = 19;
+
+    // KPI Hesaplamaları
+    var totalKayit = modelData.Count;
+    var totalVergiHaric = modelData.Sum(d => d.ToplamVergiHaricTutar);
+    var totalKDV = modelData.Sum(d => d.ToplamKDVTutari);
+    var totalTevkifatli = modelData.Sum(d => d.ToplamTevkifatliTutar);
+    var totalTevkifatsiz = modelData.Sum(d => d.ToplamTevkifatsizTutar);
+    var totalVergiHaricTL = modelData.Sum(d => d.BelgeBazliVergiHaricTutarTL);
+    var totalKDVTL = modelData.Sum(d => d.BelgeBazliKDVTutariTL);
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/bs5/dt-2.0.8/r-3.0.2/datatables.min.css" />
+
+    <style>
+        body { background-color: #f4f7fc; font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #2b3445; }
+        
+        /* Dashboard KPI Kart Stilleri */
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 20px; height: 100%; transition: all 0.3s ease; position: relative; overflow: hidden; cursor: default; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        
+        .kpi-title { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; z-index: 2; position: relative; }
+        .kpi-value { font-size: 24px; font-weight: 900; color: #0f172a; margin-bottom: 2px; z-index: 2; position: relative; letter-spacing: -0.5px; }
+        .kpi-desc { font-size: 11px; color: #94a3b8; z-index: 2; position: relative; }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 5rem; color: #e2e8f0; opacity: 0.4; z-index: 1; transform: rotate(-10deg); }
+        
+        /* Renk Sınırları */
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        .border-top-warning { border-top: 4px solid #f59e0b !important; }
+        .border-top-danger { border-top: 4px solid #ef4444 !important; }
+        .border-top-success { border-top: 4px solid #10b981 !important; }
+        
+        /* Filtre Alanı */
+        .filter-section { background-color: white; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 15px 20px; border-left: 4px solid #3b82f6; }
+
+        /* KESİLME (CLIPPING) SORUNU İÇİN ÇÖZÜM: min-height eklendi */
+        .table-container { 
+            background-color: white; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); 
+            padding: 15px; 
+            margin-bottom: 2rem; 
+            overflow-x: auto; 
+            border: 1px solid #eef2f7; 
+            min-height: 480px; /* Menünün az satır varken kesilmesini engeller */
+        }
+        
+        table.dataTable { border-collapse: collapse !important; width: 100% !important; font-size: 13px; }
+        table.dataTable thead th { background-color: #f8fafc; color: #475569; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0 !important; padding: 12px 10px; white-space: nowrap; }
+        table.dataTable tbody td { padding: 10px; vertical-align: middle; border-bottom: 1px solid #f1f5f9; }
+        table.dataTable.table-hover tbody tr:hover { background-color: #f8fafc; box-shadow: inset 2px 0 0 #3b82f6; }
+        
+        /* DataTables Dropdown Filter Stilleri */
+        .dropdown-menu-filter { 
+            padding: 15px; 
+            width: auto; 
+            min-width: 320px; 
+            max-width: 450px; 
+            border-radius: 10px; 
+            border: 1px solid #e2e8f0; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15); 
+            z-index: 1050 !important;
+            background-color: white;
+        }
+        .select-scroll-container { 
+            max-height: 250px; 
+            overflow-y: auto; 
+            overflow-x: hidden;
+            border: 1px solid #e2e8f0; 
+            border-radius: 6px; 
+            padding: 8px; 
+            margin: 10px 0; 
+            background-color: #f8fafc; 
+        }
+        
+        /* Etiketler alt satıra geçebilsin */
+        .select-scroll-container label { 
+            display: flex; 
+            align-items: flex-start; 
+            white-space: normal; 
+            word-break: break-word; 
+            cursor: pointer; 
+            font-size: 12px; 
+            padding: 6px; 
+            margin-bottom: 2px; 
+            border-radius: 4px; 
+            transition: background 0.2s; 
+            color: #334155; 
+            font-weight: 500; 
+        }
+        .select-scroll-container label:hover { background-color: #e2e8f0; }
+        
+        /* Checkbox boyutu sabit kalsın ezilmesin */
+        .select-scroll-container input[type="checkbox"] { 
+            margin-right: 8px; 
+            margin-top: 3px; 
+            cursor: pointer; 
+            flex-shrink: 0;
+            width: 14px;
+            height: 14px;
+        }
+        
+        .select-actions { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+        
+        /* Badge'ler ve Metin Kesme */
+        .badge-soft-primary { background-color: #dbeafe; color: #1e40af; border-radius: 6px; padding: 5px 10px; font-weight: 700; font-size: 11px; }
+        .badge-soft-success { background-color: #d1fae5; color: #065f46; border-radius: 6px; padding: 5px 10px; font-weight: 700; font-size: 11px; }
+        .badge-soft-warning { background-color: #fef3c7; color: #92400e; border-radius: 6px; padding: 5px 10px; font-weight: 700; font-size: 11px; }
+        .badge-soft-secondary { background-color: #f1f5f9; color: #475569; border-radius: 6px; padding: 5px 10px; font-weight: 700; font-size: 11px; border: 1px solid #cbd5e1; }
+        
+        /* Line-Clamp Metin Kısaltma */
+        .col-line-clamp-2 { max-width: 250px; white-space: normal !important; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-wrap: break-word; }
+        .col-line-clamp-1 { max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: middle; }
+
+        /* Toplam Satırı */
+        .table-footer-row td { background-color: #f1f5f9 !important; font-weight: 800; font-size: 13px !important; color: #0f172a; border-top: 2px solid #3b82f6 !important; }
+    </style>
+}
+
+<div class="container-fluid py-4">
+    @Html.AntiForgeryToken()
+    <input type="hidden" id="currentDb" value="@currentDb" />
+
+    <!-- Başlık ve Aksiyon Barı -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;"><i class="fas fa-file-invoice-dollar text-primary me-2"></i>KDV Tevkifat Alış Raporu</h4>
+            <span class="text-muted" style="font-size: 14px;">Aktif Veritabanı: <strong class="text-primary">@currentSelectedDbDisplay</strong> | Kalem Bazlı Tevkifatlı Alış/İade Faturaları</span>
+        </div>
+        <div class="d-flex gap-3 align-items-center">
+            <button class="btn btn-success rounded-pill px-4 shadow hover-elevate fw-bold" id="exportToExcelButton">
+                <i class="fas fa-file-excel me-2"></i> Excel'e Aktar
+            </button>
+        </div>
+    </div>
+
+    <!-- Filtre Alanı -->
+    <div class="filter-section mb-4">
+        <form asp-controller="Rapor41" asp-action="Index" method="get" id="raporForm">
+            <input type="hidden" name="db" value="@currentDb" />
+            <div class="row align-items-end g-3">
+                <div class="col-12 col-md-3">
+                    <label for="startDate" class="form-label text-muted fw-bold" style="font-size: 12px; text-transform: uppercase;">Başlangıç Tarihi</label>
+                    <input type="date" class="form-control form-control-sm" id="startDate" name="startDate" value="@ViewBag.StartDate">
+                </div>
+                <div class="col-12 col-md-3">
+                    <label for="endDate" class="form-label text-muted fw-bold" style="font-size: 12px; text-transform: uppercase;">Bitiş Tarihi</label>
+                    <input type="date" class="form-control form-control-sm" id="endDate" name="endDate" value="@ViewBag.EndDate">
+                </div>
+                <div class="col-12 col-md-2">
+                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold shadow-sm">
+                        <i class="fas fa-search me-2"></i> Raporla
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- KPI'lar -->
+    <div class="row mb-4 g-3">
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-primary hover-elevate">
+                <i class="fas fa-list-ol kpi-icon-bg"></i>
+                <div class="kpi-title">Kayıt / Kalem Sayısı</div>
+                <div class="kpi-value text-primary">@totalKayit</div>
+                <div class="kpi-desc">Tarih aralığındaki toplam kalem</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-warning hover-elevate">
+                <i class="fas fa-lira-sign kpi-icon-bg"></i>
+                <div class="kpi-title">Vergi Hariç Tutar (TL)</div>
+                <div class="kpi-value text-warning">@totalVergiHaricTL.ToString("N2", trCulture) ₺</div>
+                <div class="kpi-desc">Belge bazlı matrah TL toplamı</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-danger hover-elevate">
+                <i class="fas fa-hand-holding-usd kpi-icon-bg"></i>
+                <div class="kpi-title">Tevkifatlı Tutar (Net)</div>
+                <div class="kpi-value text-danger">@totalTevkifatli.ToString("N2", trCulture) ₺</div>
+                <div class="kpi-desc">Kesinti uygulanan toplam tutar</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-success hover-elevate position-relative">
+                <span class="badge bg-success position-absolute top-0 end-0 mt-3 me-3 rounded-pill shadow-sm">NET</span>
+                <i class="fas fa-wallet kpi-icon-bg"></i>
+                <div class="kpi-title">Tevkifatsız Tutar</div>
+                <div class="kpi-value text-success">@totalTevkifatsiz.ToString("N2", trCulture) ₺</div>
+                <div class="kpi-desc">Kesinti uygulanmayan kalan tutar</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- İşlem Listesi (Tablo) -->
+    <div class="table-container shadow-sm border-0 hover-elevate" style="transition: none;">
+        @if (modelData.Any())
+        {
+            <table class="table table-hover align-middle mb-0 w-100" id="tevkifatRaporuTable">
+                <thead>
+                    <tr>
+                        <th class="text-center">Fatura Tarihi</th>
+                        <th>E-Fatura No</th>
+                        <th class="text-center">Satır No</th> 
+                        <th>Kalem Kodu</th> 
+                        <th>Kalem Açıklaması</th> 
+                        <th>Vergi No</th>
+                        <th>Tedarikçi Adı</th>
+                        <th class="text-center">PB</th>
+                        <th class="text-center">Belge Tipi</th>
+                        <th class="text-center">Tevkifat Oranı</th>
+                        <th class="text-center">WT Kodu</th>
+                        <th>Tevkifat Türü Adı</th>
+                        <th class="text-center">İşlem Tipi</th>
+                        <th class="text-end">Vergi Hariç Tutar</th>
+                        <th class="text-end">KDV Tutarı</th>
+                        <th class="text-end">Tevkifatlı Tutar</th>
+                        <th class="text-end">Tevkifatsız Tutar</th>
+                        <th class="text-end">Vergi Hariç Tutar (TL)</th>
+                        <th class="text-end">KDV Tutarı (TL)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in modelData)
+                    {
+                        <tr>
+                            <td class="text-center fw-medium text-secondary" data-order="@item.FaturaTarihi.ToString("yyyyMMdd")">@item.FaturaTarihi.ToString("dd.MM.yyyy")</td>
+                            <td class="fw-bold text-dark">@item.EFaturaNo</td>
+                            <td class="text-center"><span class="badge-soft-secondary">@item.SatirNo</span></td> 
+                            <td><span class="col-line-clamp-1" title="@item.KalemKodu">@item.KalemKodu</span></td> 
+                            <td title="@item.KalemAciklamasi">
+                                <div class="col-line-clamp-2">@item.KalemAciklamasi</div>
+                            </td> 
+                            <td>@item.VergiNo</td>
+                            <td title="@item.TedarikciAdi">
+                                <div class="col-line-clamp-2 fw-medium text-dark">@item.TedarikciAdi</div>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-light text-dark border border-secondary border-opacity-25 px-2">@item.ParaBirimi</span>
+                            </td>
+                            <td class="text-center">@item.BelgeTipi</td>
+                            <td class="text-center fw-bold text-primary" data-order="@item.TevkifatOrani">@item.TevkifatOrani.ToString("P2", trCulture)</td>
+                            <td class="text-center"><span class="badge-soft-warning">@item.WTKodu</span></td>
+                            <td title="@item.TevkifatTuruAdi">
+                                <div class="col-line-clamp-2">@item.TevkifatTuruAdi</div>
+                            </td>
+                            <td class="text-center"><span class="badge-soft-primary">@item.IslemTipi</span></td>
+                            
+                            <td class="text-end" data-order="@item.ToplamVergiHaricTutar">@item.ToplamVergiHaricTutar.ToString("N2", trCulture)</td>
+                            <td class="text-end text-muted" data-order="@item.ToplamKDVTutari">@item.ToplamKDVTutari.ToString("N2", trCulture)</td>
+                            <td class="text-end text-danger fw-bold" data-order="@item.ToplamTevkifatliTutar">@item.ToplamTevkifatliTutar.ToString("N2", trCulture)</td>
+                            <td class="text-end text-success fw-bold" data-order="@item.ToplamTevkifatsizTutar">@item.ToplamTevkifatsizTutar.ToString("N2", trCulture)</td>
+                            
+                            <td class="text-end text-primary fw-bold" data-order="@item.BelgeBazliVergiHaricTutarTL">@item.BelgeBazliVergiHaricTutarTL.ToString("N2", trCulture)</td>
+                            <td class="text-end text-info fw-bold" data-order="@item.BelgeBazliKDVTutariTL">@item.BelgeBazliKDVTutariTL.ToString("N2", trCulture)</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    @{
+                        const int colspanCount = TotalColumnCount - 6; 
+                    }
+                    <tr class="table-footer-row">
+                        <td colspan="@colspanCount" class="text-end pe-3">GENEL TOPLAM:</td>
+                        <td class="text-end">@totalVergiHaric.ToString("N2", trCulture)</td>
+                        <td class="text-end">@totalKDV.ToString("N2", trCulture)</td>
+                        <td class="text-end text-danger">@totalTevkifatli.ToString("N2", trCulture)</td>
+                        <td class="text-end text-success">@totalTevkifatsiz.ToString("N2", trCulture)</td>
+                        <td class="text-end text-primary">@totalVergiHaricTL.ToString("N2", trCulture)</td>
+                        <td class="text-end text-info">@totalKDVTL.ToString("N2", trCulture)</td>
+                    </tr>
+                </tfoot>
+            </table>
+        }
+        else
+        {
+            <div class="alert alert-info text-center py-5 border-0 rounded-4" style="background-color: #f8fafc;" role="alert">
+                <i class="fas fa-folder-open fa-3x opacity-25 text-primary mb-3"></i>
+                <h6 class="fw-bold text-secondary mb-0">Belirtilen tarih aralığında KDV Tevkifatlı veri bulunamadı. Lütfen filtreleri kontrol edin.</h6>
+            </div>
+        }
+    </div>
+
+    <!-- Geri Dön Butonu -->
+    <div class="row mt-4 mb-5">
+        <div class="col-12 text-center">
+            <a href="@Url.Action("Index", "Home", new { db = currentDb })" class="btn btn-outline-secondary fw-bold shadow-sm rounded-pill px-4">
+                <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+            </a>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script type="text/javascript" src="https://cdn.datatables.net/v/bs5/dt-2.0.8/r-3.0.2/datatables.min.js"></script>
+
+    <script>
+        $(document).ready(function () {
+
+            // --- GÜVENLİK VE AJAX STANDARTLARI (KURAL 1 ve 2) ---
+            const currentDb = $('#currentDb').val();
+            const csrfToken = $('input[name="__RequestVerificationToken"]').val();
+
+            $.ajaxSetup({
+                headers: { 'RequestVerificationToken': csrfToken },
+                data: { db: currentDb }
+            });
+
+            // DataTables Başlatma
+            var table = $('#tevkifatRaporuTable').DataTable({
+                orderCellsTop: true,
+                fixedHeader: true,
+                responsive: false,
+                paging: false,
+                dom: 'Brti',
+                buttons: [],
+                language: {
+                    "sDecimal":        ",",
+                    "sEmptyTable":     "Tabloda herhangi bir veri mevcut değil",
+                    "sInfo":           "_TOTAL_ kayıttan _START_ - _END_ arasındaki kayıtlar gösteriliyor",
+                    "sInfoEmpty":      "Kayıt yok",
+                    "sInfoFiltered":   "(_MAX_ kayıt içerisinden bulunan)",
+                    "sInfoPostFix":    "",
+                    "sInfoThousands":  ".",
+                    "sLengthMenu":     "Sayfada _MENU_ kayıt göster",
+                    "sLoadingRecords": "Yükleniyor...",
+                    "sProcessing":     "İşleniyor...",
+                    "sSearch":         "Ara:",
+                    "sZeroRecords":    "Eşleşen kayıt bulunamadı",
+                    "oPaginate": {
+                        "sFirst":    "İlk",
+                        "sLast":     "Son",
+                        "sNext":     "Sonraki",
+                        "sPrevious": "Önceki"
+                    },
+                    "oAria": {
+                        "sSortAscending":  ": artan sütun sıralamasını aktifleştir",
+                        "sSortDescending": ": azalan sütun sıralamasını aktifleştir"
+                    }
+                },
+                columns: [
+                    { type: 'date', className: 'text-center' }, 
+                    { type: 'string' }, 
+                    { type: 'num', className: 'text-center' }, 
+                    { type: 'string' }, 
+                    { type: 'string' }, 
+                    { type: 'string' }, 
+                    { type: 'string' }, 
+                    { type: 'string', className: 'text-center' }, 
+                    { type: 'string', className: 'text-center' }, 
+                    { type: 'num', className: 'text-center' }, 
+                    { type: 'string', className: 'text-center' }, 
+                    { type: 'string' }, 
+                    { type: 'string', className: 'text-center' }, 
+                    { type: 'num', className: 'text-end' }, 
+                    { type: 'num', className: 'text-end' }, 
+                    { type: 'num', className: 'text-end' }, 
+                    { type: 'num', className: 'text-end' }, 
+                    { type: 'num', className: 'text-end' }, 
+                    { type: 'num', className: 'text-end' }  
+                ],
+                initComplete: function () {
+                    var api = this.api();
+                    var headerRow = $(api.table().header());
+
+                    function setupDropdownFilter(colIdx, header) {
+                        var title = $(header).text();
+                        var filterId = 'filter-' + colIdx;
+
+                        // Bootstrap 5 Data Attribute Dropdown (auto-close="outside" kullanıldı ki içerde arama vs. yaparken menü kapanmasın)
+                        var dropdownButton = $('<button type="button" class="btn btn-sm btn-light dropdown-toggle w-100 shadow-sm fw-bold text-secondary border" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + title + '</button>');
+                        var dropdownMenu = $('<div class="dropdown-menu dropdown-menu-filter" aria-labelledby="' + filterId + '"></div>');
+
+                        var menuContent = '<div class="select-actions">' +
+                            '<button class="btn btn-sm btn-primary select-all-btn w-50 me-1">Tümünü Seç</button>' +
+                            '<button class="btn btn-sm btn-danger clear-all-btn w-50 ms-1">Temizle</button>' +
+                            '</div>' +
+                            '<input type="text" class="form-control form-control-sm mb-2 search-input border-primary" placeholder="Ara..." style="font-size: 12px;">' +
+                            '<div class="select-scroll-container"></div>';
+
+                        dropdownMenu.html(menuContent);
+                        var scrollContainer = dropdownMenu.find('.select-scroll-container');
+                        var searchInput = dropdownMenu.find('.search-input');
+
+                        $(header).empty().addClass('dropdown').attr('id', filterId).append(dropdownButton).append(dropdownMenu);
+
+                        var options = [];
+                        api.column(colIdx, { search: 'applied' }).data().unique().sort().each(function (d) {
+                            if (d) {
+                                var plainText = $('<div>' + d + '</div>').text().trim();
+                                if(plainText && !options.includes(plainText)) {
+                                    options.push(plainText);
+                                    scrollContainer.append('<label><input type="checkbox" value="' + plainText + '"> <span class="ms-1">' + plainText + '</span></label>');
+                                }
+                            }
+                        });
+
+                        var checkboxes = scrollContainer.find('input[type="checkbox"]');
+
+                        function applyFilter() {
+                            var selectedValues = [];
+                            checkboxes.each(function() {
+                                if ($(this).is(':checked')) {
+                                    selectedValues.push($(this).val());
+                                }
+                            });
+
+                            var regex = selectedValues.length ? selectedValues.map(v => $.fn.dataTable.util.escapeRegex(v)).join('|') : '';
+                            api.column(colIdx).search(regex, true, false).draw();
+                        }
+
+                        checkboxes.on('change', applyFilter);
+
+                        searchInput.on('keyup', function() {
+                            var searchTerm = $(this).val().toLowerCase();
+                            scrollContainer.find('label').each(function() {
+                                var labelText = $(this).text().toLowerCase();
+                                if (labelText.indexOf(searchTerm) > -1) {
+                                    $(this).show();
+                                } else {
+                                    $(this).hide();
+                                }
+                            });
+                        });
+
+                        dropdownMenu.find('.select-all-btn').on('click', function(e) {
+                            e.preventDefault();
+                            checkboxes.prop('checked', true);
+                            applyFilter();
+                        });
+
+                        dropdownMenu.find('.clear-all-btn').on('click', function(e) {
+                            e.preventDefault();
+                            checkboxes.prop('checked', false);
+                            applyFilter();
+                        });
+                    }
+
+                    var filterableIndices = [1, 3, 4, 5, 6, 7, 8, 10, 11, 12];
+
+                    api.columns().every(function (colIdx) {
+                        var header = this.header();
+                        if (filterableIndices.includes(colIdx)) {
+                            setupDropdownFilter(colIdx, header);
+                        }
+                    });
+                }
+            });
+
+            $('#exportToExcelButton').on('click', function () {
+                var startDate = $('#startDate').val();
+                var endDate = $('#endDate').val();
+                
+                var exportUrl = '@Url.Action("ExportToExcel", "Rapor41")' +
+                                '?startDate=' + encodeURIComponent(startDate) +
+                                '&endDate=' + encodeURIComponent(endDate);
+
+                if (currentDb) {
+                    exportUrl += '&db=' + encodeURIComponent(currentDb);
+                }
+
+                window.location.href = exportUrl;
+            });
+        });
+    </script>
+}

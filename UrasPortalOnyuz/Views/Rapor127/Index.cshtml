@@ -1,0 +1,572 @@
+﻿@model List<WebApplication3.Controllers.YevmiyeGiderViewModel>
+@using WebApplication3.Controllers
+@using System.Globalization
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Xsrf
+
+@{
+    ViewData["Title"] = "Gider Dağılımı ve Eşleştirme";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"];
+    }
+
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? "URASKIMYA";
+    var giderKodlari = ViewBag.GiderKodlari as List<GiderKoduModel> ?? new List<GiderKoduModel>();
+
+    var aylar = new Dictionary<int, string>
+    {
+        {1, "Ocak"}, {2, "Şubat"}, {3, "Mart"}, {4, "Nisan"}, 
+        {5, "Mayıs"}, {6, "Haziran"}, {7, "Temmuz"}, {8, "Ağustos"}, 
+        {9, "Eylül"}, {10, "Ekim"}, {11, "Kasım"}, {12, "Aralık"}
+    };
+
+    // KPI Hesaplamaları
+    int totalCount = ViewBag.TotalCount ?? 0;
+    int assignedCount = ViewBag.AssignedCount ?? 0;
+    int unassignedCount = ViewBag.UnassignedCount ?? 0;
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    
+    <style>
+        /* ========================================================================= */
+        /* TAM EKRAN (FULL WIDTH) VE BOŞLUK SIFIRLAMA ZORLAMASI                      */
+        /* Tablonun kısıtlanmadan aşağı akması için ana kapsayıcılar serbest bırakıldı*/
+        /* ========================================================================= */
+        html, body { overflow-x: hidden; height: auto !important; margin: 0; padding: 0; }
+        
+        .container, .container-fluid, main, .content-wrapper, .page-content, .app-content, .content, .body-content { 
+            max-width: 100% !important; 
+            width: 100% !important; 
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            padding-left: 0.5rem !important; 
+            padding-right: 0.5rem !important; 
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            padding-bottom: 50px !important;
+        }
+
+        body { 
+            background-color: #f4f7fc; 
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            color: #2b3445; 
+            font-size: 0.75rem;
+        }
+
+        /* Dashboard Card Stilleri */
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 20px; transition: all 0.3s ease; position: relative; overflow: hidden; cursor: default; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        
+        .kpi-title { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; z-index: 2; position: relative; }
+        .kpi-value { font-size: 24px; font-weight: 900; color: #0f172a; margin-bottom: 2px; z-index: 2; position: relative; white-space: nowrap; letter-spacing: -0.5px; }
+        .kpi-desc { font-size: 11px; color: #94a3b8; z-index: 2; position: relative; }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 5rem; color: #e2e8f0; opacity: 0.4; z-index: 1; transform: rotate(-10deg); }
+        
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        .border-top-warning { border-top: 4px solid #f59e0b !important; }
+        .border-top-danger { border-top: 4px solid #ef4444 !important; }
+        .border-top-info { border-top: 4px solid #0ea5e9 !important; }
+        .border-top-success { border-top: 4px solid #10b981 !important; }
+
+        /* Toolbar ve Aksiyon Alanı */
+        .action-toolbar { background-color: #ffffff; padding: 12px 15px; border-radius: 10px; border: 1px solid #eef2f7; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; justify-content: space-between; align-items: center; }
+
+        /* TABLO KARTI - Yükseklik ve Overflow kısıtlaması TAMAMEN kaldırıldı! */
+        .report-table-card {
+            background: #ffffff; 
+            border-radius: 12px; 
+            border: 1px solid #eef2f7; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03); 
+            padding: 20px;
+            height: auto !important;
+            overflow: visible !important;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .table-container { 
+            width: 100%;
+            height: auto !important;
+            max-height: none !important;
+            overflow-y: visible !important; /* Dikey scroll iptal, sayfa uzayacak */
+            overflow-x: auto; /* Sadece yatayda taşma olursa kaydır */
+            background-color: white; 
+            border-radius: 8px; 
+            border: 1px solid #eef2f7; 
+            position: relative;
+        }
+        
+        table { width: 100%; table-layout: auto; border-collapse: separate; border-spacing: 0; min-width: 1400px; }
+        
+        th, td {
+            padding: 8px 10px !important;
+            font-size: 11.5px !important;
+            border-right: 1px solid #f1f5f9;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+            line-height: 1.3;
+        }
+
+        thead th { 
+            background-color: #f8fafc; 
+            color: #475569; 
+            font-weight: 700; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px; 
+            white-space: nowrap; 
+            position: sticky; 
+            top: 0; 
+            z-index: 100; 
+            border-bottom: 2px solid #e2e8f0 !important;
+        }
+        
+        .table-hover tbody tr:hover { background-color: #f8fafc; box-shadow: inset 2px 0 0 #3b82f6; }
+        
+        /* Özelleştirilmiş Kolon ve Metin Kesme */
+        .col-truncate-md { max-width: 180px; white-space: normal; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;}
+        .col-truncate-lg { max-width: 250px; white-space: normal; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;}
+        .num { text-align: right; font-variant-numeric: tabular-nums; }
+        
+        /* Badges */
+        .badge-soft-primary { background-color: #dbeafe; color: #1e40af; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-success { background-color: #d1fae5; color: #065f46; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-warning { background-color: #fef3c7; color: #92400e; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-danger { background-color: #fee2e2; color: #991b1b; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-secondary { background-color: #f1f5f9; color: #475569; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px; border: 1px solid #cbd5e1; }
+        .badge-soft-dark { background-color: #f8fafc; color: #0f172a; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px; border: 1px solid #e2e8f0; cursor: help;}
+
+        /* Butonlar */
+        .btn { font-weight: 600; letter-spacing: 0.2px; }
+        .btn-sm { font-size: 11.5px !important; padding: 4px 12px !important; height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+        .btn-primary { background-color: #3b82f6; border-color: #3b82f6; }
+        .btn-success { background-color: #10b981; border-color: #10b981; }
+        .btn-danger { background-color: #ef4444; border-color: #ef4444; }
+        .btn-outline-danger { color: #ef4444; border-color: #ef4444; }
+        .btn-outline-danger:hover { background-color: #fef2f2; color: #b91c1c; border-color: #b91c1c; }
+        .btn-outline-secondary { color: #64748b; border-color: #cbd5e1; }
+        .btn-outline-secondary:hover { background-color: #f1f5f9; color: #0f172a; }
+
+        /* Aksiyon Linkleri */
+        .pdf-btn { background: none; border: none; padding: 0; color: #ef4444; text-decoration: none; cursor: pointer; transition: all 0.2s; font-size: 11.5px; }
+        .pdf-btn:hover { opacity: 0.7; text-decoration: underline; }
+        .fatura-link { color: #3b82f6; text-decoration: none; background: none; border: none; padding: 0; font-weight: 700; transition: all 0.2s; font-size: 11.5px;}
+        .fatura-link:hover { color: #1d4ed8; text-decoration: underline; }
+
+        /* Select2 Fix */
+        .select2-container { width: 100% !important; min-width: 250px; text-align: left; }
+        .select2-selection__rendered { font-size: 11px !important; line-height: 1.5 !important; }
+        .select2-results__option { font-size: 11px !important; }
+        
+        /* Modal */
+        .modal-content { border-radius: 12px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .modal-header { border-bottom: 1px solid #e2e8f0; background: #f8fafc; border-radius: 12px 12px 0 0; }
+    </style>
+}
+
+@Html.AntiForgeryToken()
+
+<div class="container-fluid">
+    <input type="hidden" id="currentDb" value="@currentDb" />
+
+    <!-- Başlık Alanı -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;"><i class="fas fa-sitemap text-primary me-2"></i>Gider Dağılım ve Eşleştirme Raporu</h4>
+            <span class="text-muted" style="font-size: 13px;">Aktif Veritabanı: <strong class="text-primary">@currentSelectedDbDisplay</strong> | Muhasebe fişleri ile gider kodlarının eşleştirilmesi</span>
+        </div>
+        <div>
+            <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-sm btn-outline-secondary shadow-sm rounded-pill px-3">
+                <i class="fas fa-arrow-left"></i> Ana Sayfaya Dön
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI'lar -->
+    <div class="row mb-3 g-3">
+        <div class="col-md-4">
+            <div class="dashboard-card border-0 border-top-info hover-elevate">
+                <i class="fas fa-file-invoice-dollar kpi-icon-bg"></i>
+                <div class="kpi-title">Toplam Masraf Kalemi</div>
+                <div class="kpi-value text-info">@totalCount</div>
+                <div class="kpi-desc">Dönem içerisindeki tüm gider satırları</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="dashboard-card border-0 border-top-success hover-elevate">
+                <i class="fas fa-check-circle kpi-icon-bg"></i>
+                <div class="kpi-title">Eşleştirilen Kayıtlar</div>
+                <div class="kpi-value text-success">@assignedCount</div>
+                <div class="kpi-desc">Gider kodu atanmış ve tamamlanmış</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="dashboard-card border-0 border-top-danger hover-elevate position-relative">
+                @if (unassignedCount > 0)
+                {
+                    <span class="badge bg-danger position-absolute top-0 end-0 mt-3 me-3 rounded-pill shadow-sm animate__animated animate__pulse animate__infinite">Eksik Var</span>
+                }
+                else
+                {
+                    <span class="badge bg-success position-absolute top-0 end-0 mt-3 me-3 rounded-pill shadow-sm">Tamamlandı</span>
+                }
+                <i class="fas fa-exclamation-circle kpi-icon-bg"></i>
+                <div class="kpi-title">Bekleyen Kayıtlar</div>
+                <div class="kpi-value text-danger">@unassignedCount</div>
+                <div class="kpi-desc">Gider kodu atanmamış eksik kayıtlar</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aksiyon ve Filtre Barı -->
+    <div class="action-toolbar mb-3">
+        <div class="w-100 d-flex flex-wrap align-items-center justify-content-between gap-3 m-0">
+            <div class="d-flex align-items-center gap-3 flex-grow-1 flex-wrap">
+                <form asp-controller="Rapor127" asp-action="Index" method="get" class="d-flex align-items-center gap-3 m-0">
+                    <input type="hidden" name="db" value="@currentDb" />
+                    
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="form-label mb-0 fw-bold text-muted" style="font-size: 11px;">YIL:</label>
+                        <select class="form-select form-select-sm" name="year" style="width: 100px; font-size: 11.5px;">
+                            @for (int i = DateTime.Now.Year + 1; i >= 2020; i--)
+                            {
+                                <option value="@i" selected="@(ViewBag.SelectedYear == i)">@i</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="form-label mb-0 fw-bold text-muted" style="font-size: 11px;">AY:</label>
+                        <select class="form-select form-select-sm" name="month" style="width: 140px; font-size: 11.5px;">
+                            @foreach (var ay in aylar)
+                            {
+                                <option value="@ay.Key" selected="@(ViewBag.SelectedMonth == ay.Key)">@ay.Value</option>
+                            }
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm shadow-sm px-4">
+                        <i class="fas fa-search"></i> Kayıtları Getir
+                    </button>
+                </form>
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+                @if (unassignedCount > 0)
+                {
+                    <button type="button" class="btn btn-sm btn-outline-danger shadow-sm px-3" id="btnSadeceBekleyenler">
+                        <i class="fas fa-filter"></i> Sadece Bekleyenleri Göster
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- İşlem Listesi (Tablo) -->
+    <div class="report-table-card mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="card-title mb-0 fw-bold text-dark" style="font-size: 14px;"><i class="fas fa-table text-primary me-2"></i>Gider Eşleştirme Tablosu</div>
+            <div class="text-muted" style="font-size: 12px;">Seçtiğiniz döneme ait detaylar</div>
+        </div>
+        
+        <!-- Yükseklik kısıtlaması TAMAMEN KALDIRILAN Tablo Konteyneri -->
+        <div class="table-container shadow-sm">
+            @if (Model != null && Model.Any())
+            {
+                <table class="table table-hover align-middle mb-0" id="yevmiyeTable">
+                    <thead>
+                        <tr>
+                            <th class="text-center" style="width: 90px;">Tarih</th>
+                            <th style="min-width: 140px;">Fiş No / Satır</th>
+                            <th class="text-center" style="min-width: 140px;">Fatura Numarası</th>
+                            <th style="width: 120px;">Hesap Kodu</th>
+                            <th style="min-width: 200px;">Hesap Adı</th>
+                            <th style="min-width: 250px;">Açıklama</th>
+                            <th style="min-width: 180px;">İşlem Tipi</th>
+                            <th class="text-end" style="width: 120px;">Borç (Tutar)</th>
+                            <th style="min-width: 320px;">Gider Kodu Seçimi</th>
+                            <th class="text-center" style="width: 150px;">Kaydeden</th>
+                            <th class="text-center" style="width: 100px;">İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model)
+                        {
+                            <tr class="@(item.SeciliGiderId == null ? "eslesmedi" : "eslesti")">
+                                <td class="text-center fw-medium text-secondary">@(item.RefDate?.ToString("dd.MM.yyyy"))</td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button type="button" class="pdf-btn fw-bold" onclick="pdfGoster(@item.TransId)" title="Yevmiye Fişini Görüntüle">
+                                            <i class="fas fa-file-pdf"></i> @item.TransId
+                                        </button>
+                                        <span class="text-muted">/ @item.Line_ID</span>
+                                        
+                                        @if (item.TransType == 13 || item.TransType == 18 || item.TransType == 14 || item.TransType == 19)
+                                        {
+                                            <button class="btn btn-sm btn-info p-1" style="height:24px; font-size:10px;" onclick="detayGoster(@item.TransId, @item.TransType)" title="SAP'deki Fatura Detayını Gör">
+                                                <i class="fas fa-eye text-white m-0"></i>
+                                            </button>
+                                        }
+                                    </div>
+                                </td>
+                                <td class="text-center">
+                                    @if (!string.IsNullOrEmpty(item.FaturaNo))
+                                    {
+                                        <button type="button" class="fatura-link" onclick="faturaIndir('@item.FaturaNo')" title="E-Faturayı Orijinal İndir">
+                                            <i class="fas fa-download text-danger me-1"></i>@item.FaturaNo
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td><span class="badge-soft-secondary">@item.Account</span></td>
+                                <td class="col-truncate-md fw-medium text-dark" title="@item.AcctName">@item.AcctName</td>
+                                <td class="col-truncate-lg text-muted" title="@item.LineMemo">@item.LineMemo</td>
+                                <td>
+                                    <span class="badge-soft-primary mb-1 d-inline-block">@item.TransTypeName</span><br>
+                                    <small class="text-muted">SAP Ref: @item.BaseRef</small>
+                                </td>
+                                <td class="num text-danger fw-bold">@item.Debit.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                
+                                <td class="p-2">
+                                    <select class="form-select gider-select w-100" id="gider_@(item.TransId)_@(item.Line_ID)">
+                                        <option value="">-- Gider Seçiniz --</option>
+                                        @foreach (var g in giderKodlari)
+                                        {
+                                            <option value="@g.Id" selected="@(item.SeciliGiderId == g.Id)">@g.TamAciklama</option>
+                                        }
+                                    </select>
+                                </td>
+
+                                <td class="text-center">
+                                    @if (!string.IsNullOrEmpty(item.KaydedenKullaniciAdi))
+                                    {
+                                        <span class="badge-soft-dark" title="Kullanıcı Kodu: @item.KaydedenKullaniciKodu">
+                                            <i class="fas fa-user text-primary me-1"></i>@item.KaydedenKullaniciAdi
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+
+                                <td class="text-center">
+                                    <button class="btn btn-sm btn-success btn-kaydet text-nowrap w-100 shadow-sm" data-trans="@item.TransId" data-line="@item.Line_ID">
+                                        <i class="fas fa-save"></i> Kaydet
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <div class="text-center py-5">
+                    <div class="text-muted mb-3"><i class="fas fa-clipboard-check fa-3x opacity-25 text-primary"></i></div>
+                    <h6 class="fw-bold text-secondary">Belirtilen ayda herhangi bir masraf kaydı bulunamadı.</h6>
+                    <p class="small text-muted mb-0">Lütfen farklı bir dönem seçerek tekrar arama yapın.</p>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Fatura Detay Modalı -->
+<div class="modal fade" id="faturaDetayModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold text-dark" style="font-size: 15px;"><i class="fas fa-file-invoice me-2 text-primary"></i> SAP Belge / Satır Detayları</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4" id="modalBodyIcerik"></div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-secondary btn-sm px-4 shadow-sm" data-bs-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- PDF Görüntüleyici Modalı -->
+<div class="modal fade" id="pdfModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl" style="height: 90vh;">
+        <div class="modal-content" style="height: 100%;">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold text-dark" style="font-size: 15px;"><i class="fas fa-file-pdf me-2 text-danger"></i> Yevmiye Fişi Görüntüleyici</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0" style="height: calc(100% - 56px);">
+                <iframe id="pdfIframe" style="width: 100%; height: 100%; border: none;"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        $(document).ready(function () {
+            
+            var sadeceBekleyenlerAktif = false;
+            
+            $('#btnSadeceBekleyenler').click(function() {
+                sadeceBekleyenlerAktif = !sadeceBekleyenlerAktif;
+                if(sadeceBekleyenlerAktif) {
+                    $('.eslesti').hide();
+                    $(this).removeClass('btn-outline-danger').addClass('btn-danger').html('<i class="fas fa-filter"></i> Tümünü Göster');
+                } else {
+                    $('.eslesti').show();
+                    $(this).removeClass('btn-danger').addClass('btn-outline-danger').html('<i class="fas fa-filter"></i> Sadece Bekleyenleri Göster');
+                }
+            });
+
+            $('.gider-select').select2({
+                theme: "bootstrap-5",
+                width: 'resolve',
+                placeholder: "-- Gider Kodu Seçiniz --",
+                allowClear: true
+            });
+
+            $('.btn-kaydet').click(function () {
+                var btn = $(this);
+                var transId = btn.data('trans');
+                var lineId = btn.data('line');
+                var giderId = $('#gider_' + transId + '_' + lineId).val();
+
+                if (!giderId) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Eksik Seçim',
+                        text: 'Lütfen kaydetmeden önce bir gider kalemi seçiniz.',
+                        confirmButtonColor: '#3b82f6'
+                    });
+                    return;
+                }
+
+                var originalText = btn.html();
+                btn.html('<i class="fas fa-spinner fa-spin"></i>').prop('disabled', true);
+
+                // Anti-Forgery Token
+                const tokenValue = document.querySelector('input[name="__RequestVerificationToken"]').value;
+
+                $.ajax({
+                    url: '@Url.Action("GiderKaydet", "Rapor127")',
+                    type: 'POST',
+                    headers: { 'RequestVerificationToken': tokenValue },
+                    contentType: 'application/json',
+                    data: JSON.stringify({ TransId: transId, LineId: lineId, GiderId: parseInt(giderId) }),
+                    success: function (res) {
+                        if (res.success) {
+                            Swal.fire({ 
+                                icon: 'success', 
+                                title: 'Başarılı!', 
+                                text: res.message, 
+                                timer: 1500, 
+                                showConfirmButton: false 
+                            });
+                            
+                            btn.removeClass('btn-success').addClass('btn-primary').html('<i class="fas fa-check"></i> Kaydedildi');
+                            btn.closest('tr').removeClass('eslesmedi').addClass('eslesti');
+                            
+                            var currentUserName = '@(User.Identity.Name ?? "System")';
+                            var badgeHtml = '<span class="badge-soft-dark" title="Kullanıcı"><i class="fas fa-user text-primary me-1"></i>' + currentUserName + '</span>';
+                            btn.closest('tr').find('td:nth-last-child(2)').html(badgeHtml);
+
+                            setTimeout(function(){
+                                btn.removeClass('btn-primary').addClass('btn-success').html(originalText).prop('disabled', false);
+                                
+                                if(sadeceBekleyenlerAktif) {
+                                    btn.closest('tr').fadeOut('slow');
+                                }
+                            }, 1500);
+                            
+                        } else {
+                            Swal.fire('Hata', res.message, 'error');
+                            btn.html(originalText).prop('disabled', false);
+                        }
+                    },
+                    error: function () {
+                        Swal.fire('Hata', 'Sunucu ile bağlantı kurulamadı.', 'error');
+                        btn.html(originalText).prop('disabled', false);
+                    }
+                });
+            });
+            
+            $('#pdfModal').on('hidden.bs.modal', function () {
+                $('#pdfIframe').attr('src', '');
+            });
+        });
+
+        function detayGoster(transId, transType) {
+            var myModal = new bootstrap.Modal(document.getElementById('faturaDetayModal'));
+            myModal.show();
+            
+            $('#modalBodyIcerik').html('<div class="text-center my-5"><div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status"></div><h5 class="mt-3 text-muted fw-bold">Belge detayları getiriliyor...</h5></div>');
+
+            $.ajax({
+                url: '@Url.Action("BelgeDetayGetir", "Rapor127")',
+                type: 'GET',
+                data: { transId: transId, transType: transType, db: '@currentDb' },
+                success: function (res) {
+                    if(res.success) {
+                        if(res.data && res.data.length > 0) {
+                            var cariKodu = res.data[0].cardCode || "-";
+                            var cariAdi = res.data[0].cardName || "-";
+                            
+                            var html = '<div class="alert alert-info py-2 mb-3 bg-light border"><i class="fas fa-building text-primary me-2"></i><strong class="text-dark">Cari Hesap:</strong> <span class="text-muted">' + cariKodu + ' - ' + cariAdi + '</span></div>';
+                            
+                            html += '<div class="table-responsive border rounded shadow-sm"><table class="table table-hover table-striped mb-0">';
+                            html += '<thead class="table-light"><tr><th class="text-secondary small fw-bold">Kodu (Ürün / Hesap)</th><th class="text-secondary small fw-bold">Açıklama / Hesap Adı</th><th class="text-secondary small fw-bold text-end">Miktar</th><th class="text-secondary small fw-bold text-end">Birim Fiyat</th><th class="text-secondary small fw-bold text-end">Satır Toplamı</th></tr></thead><tbody>';
+                            
+                            $.each(res.data, function(index, item) {
+                                html += '<tr>' +
+                                        '<td><span class="badge-soft-secondary">' + (item.itemOrAccountCode || '-') + '</span></td>' +
+                                        '<td class="fw-medium text-dark">' + (item.dscription || '-') + '</td>' +
+                                        '<td class="text-end text-muted">' + item.quantity.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + '</td>' +
+                                        '<td class="text-end text-muted">' + item.price.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + '</td>' +
+                                        '<td class="text-end fw-bold text-primary">' + item.lineTotal.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + ' ₺</td>' +
+                                        '</tr>';
+                            });
+                            
+                            html += '</tbody></table></div>';
+                            $('#modalBodyIcerik').html(html);
+                        } else {
+                            $('#modalBodyIcerik').html('<div class="alert alert-warning text-center m-0 border-0"><i class="fas fa-exclamation-triangle fa-2x mb-2 d-block text-warning"></i><strong class="text-dark">Detay Bulunamadı!</strong><br /><span class="text-muted">Bu belgeye ait kalem detayı bulunamadı.</span></div>');
+                        }
+                    } else {
+                        $('#modalBodyIcerik').html('<div class="alert alert-danger text-center border-0"><i class="fas fa-times-circle fa-2x mb-2 d-block text-danger"></i>Hata: ' + res.message + '</div>');
+                    }
+                },
+                error: function () {
+                    $('#modalBodyIcerik').html('<div class="alert alert-danger text-center border-0"><i class="fas fa-wifi fa-2x mb-2 d-block text-danger"></i>Sunucu ile bağlantı hatası oluştu.</div>');
+                }
+            });
+        }
+
+        function pdfGoster(transId) {
+            var myModal = new bootstrap.Modal(document.getElementById('pdfModal'));
+            var url = '@Url.Action("DownloadYevmiyePdf", "Rapor127")' + '?transId=' + transId + '&db=@currentDb#navpanes=0&pagemode=none&scrollbar=0&view=FitH';
+            $('#pdfIframe').attr('src', url);
+            myModal.show();
+        }
+
+        // QNB üzerinden dosyayı (ZIP/PDF/XML) doğrudan İNDİRME işlevi
+        function faturaIndir(faturaNo) {
+            window.location.href = '@Url.Action("DownloadQnbFatura", "Rapor127")' + '?faturaNo=' + faturaNo + '&db=@currentDb';
+        }
+    </script>
+}

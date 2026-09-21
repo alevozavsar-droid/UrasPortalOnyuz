@@ -1,0 +1,250 @@
+@using WebApplication3.Controllers
+@{
+    ViewData["Title"] = "Profilim";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var ben = ViewBag.Ben as ProfilController.KullaniciSatiri;
+    bool yonetici = (bool)(ViewBag.Yonetici ?? false);
+    int sapKayit = (int)(ViewBag.SapBilgiKayit ?? 0), sirketSayisi = (int)(ViewBag.SirketSayisi ?? 0);
+    bool varsayilanHesap = (bool)(ViewBag.VarsayilanHesap ?? false);
+    var eksikler = ben?.Eksikler ?? new System.Collections.Generic.List<string>();
+    bool sapEksik = !varsayilanHesap && sapKayit < sirketSayisi;
+}
+
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+
+<style>
+    .pr-wrap { padding: 0 14px 40px; }
+    .pr-hero { background: linear-gradient(120deg, #0f172a 0%, #1e40af 55%, #3b82f6 100%); color: #fff; border-radius: 16px; padding: 18px 24px; margin: 14px 0 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; box-shadow: 0 10px 30px -12px rgba(30,64,175,.55); }
+    .pr-hero h1 { font-size: 1.3rem; font-weight: 700; margin: 0; }
+    .pr-hero p { margin: 4px 0 0; opacity: .92; font-size: .84rem; }
+    .pr-hero .pr-kod { background: rgba(255,255,255,.18); padding: 8px 14px; border-radius: 10px; font-weight: 700; font-size: .95rem; font-family: Consolas, monospace; }
+    .pr-grid { display: grid; grid-template-columns: minmax(340px, 1fr) minmax(340px, 1fr); gap: 14px; }
+    @@media (max-width: 1000px) { .pr-grid { grid-template-columns: 1fr; } }
+    .pr-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 4px 14px -8px rgba(15,23,42,.15); overflow: hidden; }
+    .pr-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 11px 16px; border-bottom: 1px solid #eef2f7; background: #f8fafc; font-weight: 700; font-size: .88rem; color: #334155; }
+    .pr-body { padding: 14px 16px; }
+    .pr-kv { display: grid; grid-template-columns: 150px 1fr; gap: 7px 12px; font-size: .84rem; align-items: center; }
+    .pr-kv .k { color: #64748b; font-weight: 600; font-size: .74rem; text-transform: uppercase; }
+    .pr-kv .v { color: #0f172a; font-weight: 600; word-break: break-word; }
+    .pr-kv input { width: 100%; border: 1px solid #d7dce5; border-radius: 8px; padding: 7px 10px; font-size: .86rem; }
+    .pr-kv input.eksik { border-color: #fca5a5; background: #fff5f5; }
+    .pr-uyari { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 10px; padding: 10px 14px; font-size: .84rem; margin-bottom: 12px; }
+    .pr-uyari ul { margin: 6px 0 0 18px; padding: 0; }
+    .pr-ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; border-radius: 10px; padding: 10px 14px; font-size: .84rem; margin-bottom: 12px; }
+    .pr-btn { border: none; border-radius: 9px; padding: 9px 16px; font-weight: 700; font-size: .84rem; cursor: pointer; }
+    .pr-btn.p { background: #2563eb; color: #fff; } .pr-btn.p:hover { background: #1d4ed8; }
+    .pr-btn.s { background: #fff; color: #334155; border: 1px solid #d7dce5; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+    .bd { display: inline-block; font-size: .68rem; font-weight: 700; padding: 2px 8px; border-radius: 20px; margin: 1px 2px 1px 0; }
+    .bd.rd { background: #fee2e2; color: #b91c1c; } .bd.gn { background: #dcfce7; color: #166534; } .bd.gr { background: #f1f5f9; color: #475569; } .bd.am { background: #fef3c7; color: #92400e; } .bd.bl { background: #dbeafe; color: #1d4ed8; }
+    .pr-ozet { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid #eef2f7; }
+    .pr-oz { border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 12px; min-width: 120px; background: #fff; cursor: pointer; }
+    .pr-oz.on { border-color: #2563eb; background: #eff6ff; }
+    .pr-oz .n { font-size: 1.15rem; font-weight: 800; color: #0f172a; } .pr-oz .t { font-size: .7rem; color: #64748b; font-weight: 600; text-transform: uppercase; }
+    .pr-oz.kirmizi .n { color: #b91c1c; }
+    .pr-araclar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid #eef2f7; font-size: .82rem; color: #475569; }
+    .pr-araclar input[type=text] { border: 1px solid #d7dce5; border-radius: 8px; padding: 7px 10px; font-size: .84rem; min-width: 220px; }
+    .pr-tablewrap { overflow: auto; max-height: 70vh; }
+    table.pr { width: 100%; border-collapse: collapse; font-size: .8rem; white-space: nowrap; }
+    table.pr thead th { position: sticky; top: 0; background: #f8fafc; color: #334155; font-weight: 700; font-size: .7rem; text-transform: uppercase; padding: 8px 10px; border-bottom: 2px solid #e2e8f0; text-align: left; z-index: 2; }
+    table.pr tbody td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; color: #1e293b; vertical-align: middle; }
+    table.pr tbody tr.eksik td { background: #fffafa; }
+    table.pr tbody tr.sapik td { color: #94a3b8; }
+    table.pr input { border: 1px solid #d7dce5; border-radius: 7px; padding: 5px 8px; font-size: .8rem; width: 100%; min-width: 150px; }
+    table.pr input.eksik { border-color: #fca5a5; background: #fff5f5; }
+    .kod { font-family: Consolas, monospace; font-weight: 700; color: #1d4ed8; }
+    .pr-empty { text-align: center; color: #94a3b8; padding: 40px 0; }
+</style>
+
+<div class="pr-wrap">
+    <div class="pr-hero">
+        <div>
+            <h1><i class="fa-solid fa-id-badge"></i> Profilim</h1>
+            <p>Portal hesabınız SAP kullanıcınıza bağlıdır. Ad soyad ve e-posta adresiniz buradan güncellenir; bildirim e-postaları (kod talebi, onay, mutabakat) bu adrese gider.</p>
+        </div>
+        <div class="pr-kod"><i class="fa-solid fa-user"></i> @ViewBag.Kullanici @(string.IsNullOrEmpty((string)ViewBag.Yetki) ? "" : "· yetki " + ViewBag.Yetki)</div>
+    </div>
+
+    @if (ViewBag.Hata != null)
+    {
+        <div class="pr-uyari"><i class="fa-solid fa-triangle-exclamation"></i> Profil okunamadı: @ViewBag.Hata</div>
+    }
+    else if (ben == null)
+    {
+        <div class="pr-uyari"><i class="fa-solid fa-triangle-exclamation"></i> <b>@ViewBag.Kullanici</b> kodlu SAP kullanıcısı merkez şirkette (URASKIMYA) bulunamadı. Bilgi İşlem'e bildirin.</div>
+    }
+
+    @if (ben != null)
+    {
+        <div class="pr-grid">
+            <div class="pr-card">
+                <div class="pr-head"><span><i class="fa-solid fa-user-gear"></i> SAP Kullanıcı Bilgilerim</span>
+                    @if (eksikler.Count == 0 && !sapEksik) { <span class="bd gn">eksik yok</span> } else { <span class="bd rd">@(eksikler.Count + (sapEksik ? 1 : 0)) eksik</span> }
+                </div>
+                <div class="pr-body">
+                    @if (eksikler.Count > 0 || sapEksik)
+                    {
+                        <div class="pr-uyari"><b><i class="fa-solid fa-triangle-exclamation"></i> Profilinizde eksik bilgi var:</b>
+                            <ul>
+                                @foreach (var e in eksikler)
+                                {
+                                    string tarif = e.StartsWith("E-posta") ? "Aşağıdaki E-posta alanına şirket adresinizi yazın (ör. kullanici@ornek.local) ve Kaydet'e basın. Bildirimler (kod talebi sonucu, onay, mutabakat) bu adrese gider; boşken hiçbir bildirim alamazsınız."
+                                        : e == "Ad soyad boş" ? "Ad soyad alanına adınızı ve soyadınızı yazıp Kaydet'e basın; onay ekranlarında ve e-postalarda kullanıcı kodunuz yerine adınız görünür."
+                                        : e == "Rapor yetkisi tanımlı değil" ? "Size henüz hiçbir rapor yetkisi verilmemiş (yetki kodu da kişi bazlı tanım da yok). Bilgi İşlem'e yazın; Yetki Yönetimi › Kullanıcı Yetkileri ya da Rapor Bazlı Yetki ekranından tanımlanır."
+                                        : e == "Personel kartı bağlı değil" ? "SAP › İnsan Kaynakları › Personel Ana Verisi ekranında personel kartınızın \"Kullanıcı Kodu\" alanına " + ben.Kod + " bağlanmalı. Bilgi İşlem yapar; telefon ve personel e-postası o zaman burada görünür."
+                                        : e == "SAP kullanıcısı kilitli" ? "SAP kullanıcınız kilitli; SAP'ye ve Service Layer'a giriş yapamazsınız. Bilgi İşlem SAP › Yönetim › Kullanıcılar ekranından kilidi kaldırır."
+                                        : "";
+                                    <li><b>@e.</b> @tarif</li>
+                                }
+                                @if (sapEksik) { <li><b>SAP Bilgilerim eksik.</b> Yetkili olduğunuz @sirketSayisi şirketin @(sirketSayisi - sapKayit) tanesinde SAP kullanıcı adı / şifreniz kayıtlı değil; o şirketlere portalden fatura, yevmiye, e-belge atamazsınız. <a href="/SapBilgi">SAP Bilgilerim</a> ekranını açın, her şirket satırında SAP kullanıcı adı ve şifrenizi girip kaydedin.</li> }
+                            </ul>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="pr-ok"><i class="fa-solid fa-circle-check"></i> Profil bilgileriniz tam.</div>
+                    }
+                    <div class="pr-kv">
+                        <div class="k">SAP kullanıcı kodu</div><div class="v"><span class="kod">@ben.Kod</span> <span class="bd gr">USERID @ben.UserId</span>@if (ben.SuperUser) { <span class="bd bl">süper kullanıcı</span> }@if (ben.Kilitli) { <span class="bd rd">kilitli</span> }</div>
+                        <div class="k">Ad soyad</div><div class="v"><input type="text" id="benAd" value="@ben.Ad" maxlength="155" class="@(eksikler.Contains("Ad soyad boş") ? "eksik" : "")" placeholder="Ad Soyad"></div>
+                        <div class="k">E-posta</div><div class="v"><input type="email" id="benMail" value="@ben.Mail" maxlength="100" class="@(eksikler.Any(e => e.StartsWith("E-posta")) ? "eksik" : "")" placeholder="kullanici@ornek.local">
+                            @if (!string.IsNullOrEmpty(ben.MailOtomatikKaynak))
+                            {
+                                <div style="font-size:.74rem; color:#166534; margin-top:4px;"><i class="fa-solid fa-circle-check"></i> E-posta boştu; <b>@ben.MailOtomatikKaynak</b> kaydından alınıp SAP kullanıcınıza yazıldı. Yanlışsa düzeltip Kaydet'e basın.</div>
+                            }
+                            else if (string.IsNullOrEmpty(ben.Mail) && !string.IsNullOrEmpty(ben.DigerSirketMail))
+                            {
+                                <div style="font-size:.74rem; color:#92400e; margin-top:4px;"><i class="fa-solid fa-circle-info"></i> <b>@ben.DigerSirketKaynak</b> şirketinde bu kullanıcının e-postası <b>@ben.DigerSirketMail</b> olarak kayıtlı. <a href="#" onclick="document.getElementById('benMail').value='@ben.DigerSirketMail'; benKaydet(); return false;">Bunu kullan</a></div>
+                            }
+                        </div>
+                        <div class="k">Bölüm</div><div class="v">@(string.IsNullOrEmpty(ben.Bolum) ? "—" : ben.Bolum)</div>
+                        <div class="k">Portal yetkisi</div><div class="v">@(string.IsNullOrEmpty(ben.Yetki) ? "—" : ben.Yetki) @(ben.PortalKullanicisi ? "" : "· portal şifresi tanımlı değil")</div>
+                        <div class="k">SAP Bilgilerim</div><div class="v">@(varsayilanHesap ? "Varsayılan SAP hesabını kullanabilirsiniz." : sapKayit + " / " + sirketSayisi + " şirkette kayıtlı") <a class="pr-btn s" style="padding:4px 10px; font-size:.76rem; margin-left:6px;" href="/SapBilgi"><i class="fa-solid fa-key"></i> Aç</a></div>
+                    </div>
+                    <div style="margin-top:14px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                        <button class="pr-btn p" onclick="benKaydet()"><i class="fa-solid fa-floppy-disk"></i> Kaydet</button>
+                        <span style="font-size:.76rem; color:#64748b;">Kayıt SAP kullanıcı kartına (OUSR) yazılır; SAP istemcisinde de görünür.</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pr-card">
+                <div class="pr-head"><span><i class="fa-solid fa-address-card"></i> Bağlı Personel Kartı (SAP İnsan Kaynakları)</span>
+                    @if (ben.EmpId == null) { <span class="bd am">bağlı değil</span> } else if (!ben.PersonelAktif) { <span class="bd rd">pasif</span> } else { <span class="bd gn">aktif</span> }
+                </div>
+                <div class="pr-body">
+                    @if (ben.EmpId == null)
+                    {
+                        <div class="pr-uyari" style="background:#fffbeb; border-color:#fde68a; color:#92400e;"><i class="fa-solid fa-circle-info"></i> SAP'de bu kullanıcıya bağlı bir personel kartı yok. Personel kartındaki telefon ve e-posta portalda kullanılamaz; Bilgi İşlem SAP › İnsan Kaynakları › Personel Ana Verisi ekranında "Kullanıcı Kodu" alanını bağlayabilir.</div>
+                    }
+                    else
+                    {
+                        <div class="pr-kv">
+                            <div class="k">Personel no</div><div class="v">@ben.EmpId</div>
+                            <div class="k">Ad soyad</div><div class="v">@ben.PersonelAd</div>
+                            <div class="k">Pozisyon</div><div class="v">@(string.IsNullOrEmpty(ben.PersonelPozisyon) ? "—" : ben.PersonelPozisyon)</div>
+                            <div class="k">E-posta (personel)</div><div class="v">@(string.IsNullOrEmpty(ben.PersonelMail) ? "—" : ben.PersonelMail)</div>
+                            <div class="k">Telefon</div><div class="v">@(string.IsNullOrEmpty(ben.PersonelTel) ? "—" : ben.PersonelTel)</div>
+                        </div>
+                        @if (string.IsNullOrEmpty(ben.Mail) && !string.IsNullOrEmpty(ben.PersonelMail))
+                        {
+                            <div style="margin-top:12px;"><button class="pr-btn s" onclick="document.getElementById('benMail').value='@ben.PersonelMail'; benKaydet();"><i class="fa-solid fa-arrow-left"></i> Personel kartındaki e-postayı kullanıcıya yaz</button></div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (yonetici)
+    {
+        <div class="pr-card" style="margin-top:16px;">
+            <div class="pr-head"><span><i class="fa-solid fa-users"></i> Tüm Kullanıcılar (merkez şirket OUSR) — yönetici görünümü</span><span id="listeOzet" style="font-weight:500; color:#64748b;"></span></div>
+            <div class="pr-ozet" id="ozetKutular"></div>
+            <div class="pr-araclar">
+                <input type="text" id="ara" placeholder="Kod, ad, e-posta, bölüm ara...">
+                <label><input type="checkbox" id="sadecePortal" checked> Sadece portal kullanıcıları (şifresi tanımlı)</label>
+                <label><input type="checkbox" id="sadeceEksik"> Sadece eksik bilgisi olanlar</label>
+                <span style="margin-left:auto; font-size:.76rem; color:#94a3b8;">Ad ve e-posta hücreleri düzenlenebilir; satırdaki Kaydet ile yazılır.</span>
+            </div>
+            <div class="pr-tablewrap">
+                <table class="pr">
+                    <thead><tr><th>Kullanıcı</th><th>Ad Soyad</th><th>E-posta</th><th>Bölüm</th><th>Yetki</th><th>Personel Kartı</th><th>Durum / Eksikler</th><th></th></tr></thead>
+                    <tbody id="tb"><tr><td colspan="8" class="pr-empty">Yükleniyor...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.js"></script>
+<script>
+    toastr.options = { positionClass: "toast-bottom-right", timeOut: 5000, progressBar: true };
+    const YONETICI = @(yonetici ? "true" : "false");
+    function esc(s) { return (s == null ? "" : String(s)).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+    function guncelle(kod, ad, mail, sonra) {
+        return fetch('/Profil/Guncelle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kod, ad, mail }) })
+            .then(r => r.json()).then(res => { if (res.success) { toastr.success(res.message, '', { timeOut: 7000 }); if (sonra) sonra(res); } else toastr.error(res.message, '', { timeOut: 9000 }); })
+            .catch(e => toastr.error('Hata: ' + e));
+    }
+    function benKaydet() {
+        const ad = document.getElementById('benAd').value.trim(), mail = document.getElementById('benMail').value.trim();
+        if (!ad && !mail) { toastr.warning('Ad soyad ya da e-posta girin.'); return; }
+        guncelle('', ad, mail, () => setTimeout(() => location.reload(), 900));
+    }
+
+    // ---- yönetici listesi ----
+    let LISTE = [], OZET = null, filtreEksik = null;
+    function yukle() {
+        if (!YONETICI) return;
+        fetch('/Profil/Liste').then(r => r.json()).then(res => {
+            if (!res.success) { toastr.error(res.message); return; }
+            LISTE = res.data || []; OZET = res.ozet; ozetCiz(); render();
+        }).catch(e => toastr.error('Liste yüklenemedi: ' + e));
+    }
+    function ozetCiz() {
+        if (!OZET) return;
+        const kutu = (k, n, t, kirmizi) => `<div class="pr-oz ${kirmizi && n > 0 ? 'kirmizi' : ''} ${filtreEksik === k ? 'on' : ''}" onclick="ozetSec('${k}')"><div class="n">${n}</div><div class="t">${t}</div></div>`;
+        document.getElementById('ozetKutular').innerHTML =
+            kutu('', OZET.portal, 'Portal kullanıcısı', false) + kutu('E-posta', OZET.mailBos, 'E-postası boş', true) + kutu('Ad soyad', OZET.adBos, 'Adı boş', true)
+            + kutu('Rapor yetkisi', OZET.yetkiBos, 'Rapor yetkisi yok', true) + kutu('Personel', OZET.personelYok, 'Personel kartı yok', false) + kutu('kilitli', OZET.kilitli, 'Kilitli', true);
+        document.getElementById('listeOzet').textContent = `(${OZET.toplam} SAP kullanıcısı, ${OZET.portal} portal kullanıcısı)`;
+    }
+    function ozetSec(k) { filtreEksik = (filtreEksik === k || k === '') ? null : k; if (k === '') document.getElementById('sadeceEksik').checked = false; ozetCiz(); render(); }
+    function render() {
+        const q = document.getElementById('ara').value.trim().toLocaleLowerCase('tr-TR');
+        const sadecePortal = document.getElementById('sadecePortal').checked, sadeceEksik = document.getElementById('sadeceEksik').checked;
+        let arr = LISTE.slice();
+        if (sadecePortal) arr = arr.filter(k => k.portalKullanicisi);
+        if (sadeceEksik) arr = arr.filter(k => k.eksikler.length);
+        if (filtreEksik) arr = arr.filter(k => k.eksikler.some(e => e.toLocaleLowerCase('tr-TR').startsWith(filtreEksik.toLocaleLowerCase('tr-TR'))));
+        if (q) arr = arr.filter(k => (k.kod + ' ' + k.ad + ' ' + k.mail + ' ' + k.bolum + ' ' + k.personelAd).toLocaleLowerCase('tr-TR').includes(q));
+        const tb = document.getElementById('tb');
+        if (!arr.length) { tb.innerHTML = '<tr><td colspan="8" class="pr-empty">Kayıt yok.</td></tr>'; return; }
+        tb.innerHTML = arr.map(k => {
+            const mailEksik = k.eksikler.some(e => e.startsWith('E-posta')), adEksik = k.eksikler.includes('Ad soyad boş');
+            return `<tr class="${k.eksikler.length ? 'eksik' : ''} ${k.portalKullanicisi ? '' : 'sapik'}" data-kod="${esc(k.kod)}">
+                <td><span class="kod">${esc(k.kod)}</span>${k.superUser ? ' <span class="bd bl">süper</span>' : ''}${k.portalKullanicisi ? '' : ' <span class="bd gr">portal değil</span>'}</td>
+                <td><input type="text" class="ad ${adEksik ? 'eksik' : ''}" value="${esc(k.ad)}" maxlength="155"></td>
+                <td><input type="email" class="mail ${mailEksik ? 'eksik' : ''}" value="${esc(k.mail)}" maxlength="100" placeholder="e-posta yok">${!k.mail && k.digerSirketMail ? `<div style="font-size:.7rem; color:#92400e; margin-top:2px;" title="Başka şirketteki kayıttan"><i class="fa-solid fa-building"></i> ${esc(k.digerSirketKaynak)}: ${esc(k.digerSirketMail)}</div>` : ''}</td>
+                <td>${esc(k.bolum) || '—'}</td>
+                <td>${k.yetki ? '<span class="bd bl">' + esc(k.yetki) + '</span>' : (k.portalKullanicisi ? '<span class="bd rd">yok</span>' : '—')}</td>
+                <td style="font-size:.74rem;">${k.empId ? esc(k.personelAd) + (k.personelAktif ? '' : ' <span class="bd rd">pasif</span>') + (k.personelMail ? '<br><span style="color:#64748b;">' + esc(k.personelMail) + '</span>' : '') + (k.personelTel ? '<br><span style="color:#64748b;">' + esc(k.personelTel) + '</span>' : '') : '<span style="color:#94a3b8;">bağlı değil</span>'}</td>
+                <td>${k.eksikler.length ? k.eksikler.map(e => `<span class="bd ${e.includes('Personel') ? 'am' : 'rd'}">${esc(e)}</span>`).join('') : '<span class="bd gn">tam</span>'}</td>
+                <td><button class="pr-btn p" style="padding:5px 10px; font-size:.76rem;" onclick="satirKaydet(this)"><i class="fa-solid fa-floppy-disk"></i> Kaydet</button>${k.empId && !k.mail && k.personelMail ? ` <button class="pr-btn s" style="padding:4px 8px; font-size:.72rem;" title="Personel kartındaki e-postayı kullan" onclick="this.closest('tr').querySelector('input.mail').value='${esc(k.personelMail)}'; satirKaydet(this)"><i class="fa-solid fa-arrow-left"></i></button>` : ''}${!k.mail && !k.personelMail && k.digerSirketMail ? ` <button class="pr-btn s" style="padding:4px 8px; font-size:.72rem;" title="${esc(k.digerSirketKaynak)} şirketindeki e-postayı kullan" onclick="this.closest('tr').querySelector('input.mail').value='${esc(k.digerSirketMail)}'; satirKaydet(this)"><i class="fa-solid fa-building"></i></button>` : ''}</td>
+            </tr>`;
+        }).join('');
+    }
+    function satirKaydet(btn) {
+        const tr = btn.closest('tr'); const kod = tr.dataset.kod;
+        const ad = tr.querySelector('input.ad').value.trim(), mail = tr.querySelector('input.mail').value.trim();
+        if (!ad && !mail) { toastr.warning('Ad soyad ya da e-posta girin.'); return; }
+        btn.disabled = true;
+        guncelle(kod, ad, mail, () => yukle()).finally(() => btn.disabled = false);
+    }
+    if (YONETICI) {
+        let st; document.getElementById('ara').addEventListener('input', () => { clearTimeout(st); st = setTimeout(render, 200); });
+        document.getElementById('sadecePortal').addEventListener('change', render);
+        document.getElementById('sadeceEksik').addEventListener('change', render);
+        yukle();
+    }
+</script>

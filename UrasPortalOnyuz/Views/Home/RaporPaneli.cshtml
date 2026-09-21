@@ -1,0 +1,879 @@
+﻿@model WebApplication3.Controllers.HomeIndexViewModel
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Http
+@using Microsoft.Extensions.Configuration
+@inject IHttpContextAccessor HttpContextAccessor
+@inject IConfiguration Configuration
+
+@{
+    ViewData["Title"] = "Rapor Paneli";   // eski ana sayfa; raporlar Grup ERP menü yerleşimine (modüllere) göre gruplanır
+
+    // ---------------------------------------------------------
+    // 0. KULLANICI ADINI SAP B1 (OUSR TABLOSU) ÜZERİNDEN DİNAMİK ÇEKME
+    // ---------------------------------------------------------
+    string currentUserCode = User.Identity?.Name ?? "";
+    string displayName = currentUserCode;
+    var cookieDb = Context.Request.Cookies["SelectedDatabase"] ?? "DefaultConnection";
+
+    displayName = WebApplication3.Data.OrnekVeri.KullaniciAdi(currentUserCode);   // ON YUZ ORNEGI
+
+    var dbList = new Dictionary<string, string> {
+        {"DefaultConnection", "URASKIMYA"}, {"DefaultConnection1", "URSMAKINE"}, {"DefaultConnection2", "AVRUPA_PAPER"},
+        {"DefaultConnection3", "ALV_KIMYA"}, {"DefaultConnection4", "DAF_KIMYA"}, {"DefaultConnection5", "SELVI"},
+        {"DefaultConnection6", "ALVFILO"}, {"DefaultConnection19", "DRN"}, {"DefaultConnection8", "ASIA"},
+        {"DefaultConnection9", "DEKORLIM"}, {"DefaultConnection10", "URAS_HOLDING"}, {"DefaultConnection11", "TestUrasKimya"},
+        {"DefaultConnection7", "Avrasya"}, {"DefaultConnection12", "URSMAKINE_2026"}, {"DefaultConnection13", "ALVKIMYA_2026"},
+        {"DefaultConnection20", "ALVKIMYA_2026"}, {"DefaultConnection21", "URSMAKINE_2026"}, {"DefaultConnection22", "SELVI_2026"}
+    };
+    string currentDbDisplay = WebApplication3.Data.OrnekVeri.SirketAdi(cookieDb);
+
+    // ---------------------------------------------------------
+    // 1. DİNAMİK OLARAK GELEN RAPORLARIN TOPLAM SAYISINI BUL
+    // ---------------------------------------------------------
+    int totalAllowedReports = Model?.RaporGruplari?.Sum(g => g.Value.Count) ?? 0;
+    int kategoriSayisi = Model?.RaporGruplari?.Count ?? 0;
+
+    // ---------------------------------------------------------
+    // 2. SELAMLAMA / AVATAR / TARİH
+    // ---------------------------------------------------------
+    var saat = DateTime.Now.Hour;
+    string selamlama = saat < 6 ? "İyi geceler" : saat < 12 ? "Günaydın" : saat < 18 ? "İyi günler" : "İyi akşamlar";
+
+    var adParcalari = (displayName ?? "").Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+    string basHarfler = adParcalari.Length >= 2
+        ? (adParcalari[0].Substring(0, 1) + adParcalari[1].Substring(0, 1)).ToUpper()
+        : (string.IsNullOrWhiteSpace(displayName) ? "?" : displayName.Trim().Substring(0, Math.Min(2, displayName.Trim().Length)).ToUpper());
+
+    var trKultur = new System.Globalization.CultureInfo("tr-TR");
+    string bugunMetni = DateTime.Now.ToString("dd MMMM yyyy dddd", trKultur);
+}
+
+<style>
+    /* ========================================
+       AFİLLİ GRAFİKLİ DASHBOARD CSS (GLASSMORPHISM)
+       ======================================== */
+    .welcome-banner {
+        background: linear-gradient(135deg, #0b3d91 0%, #1e3a8a 100%);
+        border-radius: 1.25rem; padding: 2.5rem; color: #ffffff;
+        margin-bottom: 2rem; position: relative; overflow: hidden; box-shadow: var(--shadow-md);
+    }
+    .welcome-banner::before {
+        content: ''; position: absolute; top: -20%; left: -10%; width: 250px; height: 250px;
+        background: radial-gradient(circle, rgba(37,99,235, 0.4) 0%, rgba(255,255,255,0) 70%);
+        border-radius: 50%; filter: blur(30px); pointer-events: none;
+    }
+    .welcome-banner::after {
+        content: ''; position: absolute; bottom: -30%; right: -5%; width: 350px; height: 350px;
+        background: radial-gradient(circle, rgba(14,165,233, 0.3) 0%, rgba(255,255,255,0) 70%);
+        border-radius: 50%; filter: blur(40px); pointer-events: none;
+    }
+
+    .stat-badge {
+        background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1); padding: 0.65rem 1.25rem; border-radius: 0.75rem;
+        display: inline-flex; align-items: center; gap: 10px; font-size: 0.95rem; font-weight: 600; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+
+    .search-container { position: relative; max-width: 100%; width: 380px; z-index: 10; }
+    .search-input {
+        padding-left: 50px; border-radius: 0.75rem; border: 1px solid rgba(255, 255, 255, 0.15);
+        background-color: rgba(255, 255, 255, 0.05); backdrop-filter: blur(5px);
+        color: #ffffff; height: 55px; font-size: 1rem; font-weight: 500; transition: all 0.3s ease;
+    }
+    .search-input::placeholder { color: rgba(255, 255, 255, 0.5); }
+    .search-input:focus {
+        background-color: var(--bg-card); color: var(--text-primary); border-color: var(--metro-primary);
+        box-shadow: 0 0 0 4px rgba(37,99,235, 0.2); outline: none;
+    }
+    .search-input:focus + .search-icon { color: var(--metro-primary); }
+    .search-icon { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); color: rgba(255, 255, 255, 0.5); font-size: 1.1rem; transition: color 0.3s ease; }
+
+    /* DASHBOARD GRAFİK KARTLARI */
+    .dashboard-chart-card {
+        background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 1.25rem;
+        padding: 1.5rem; box-shadow: var(--shadow-sm); height: 100%; position: relative; overflow: hidden;
+        transition: transform 0.3s ease;
+    }
+    .dashboard-chart-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-md); }
+    
+    .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .chart-header h3 { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text-primary); display: flex; align-items:center; gap: 8px;}
+    .chart-header h3 i { color: var(--metro-primary); }
+
+    /* WIDGET KARTLARI */
+    .dashboard-widget {
+        background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 1rem;
+        padding: 1.25rem; display: flex; align-items: center; box-shadow: var(--shadow-sm);
+        transition: all 0.3s ease; position: relative; overflow: hidden;
+    }
+    .dashboard-widget:hover { transform: translateY(-5px); box-shadow: var(--shadow-md); border-color: var(--metro-primary); }
+    .widget-icon { width: 55px; height: 55px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; margin-right: 1.25rem; flex-shrink: 0; }
+    
+    .widget-info h4 { margin: 0; font-size: 1.3rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.5px; }
+    .widget-info span { font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; }
+
+    /* Rapor Kategori Filtreleri */
+    .category-filters { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 15px; margin-bottom: 1.5rem; scrollbar-width: none; }
+    .category-filters::-webkit-scrollbar { display: none; }
+    .category-pill {
+        background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-secondary);
+        padding: 0.65rem 1.5rem; border-radius: 2rem; font-size: 0.9rem; font-weight: 600;
+        cursor: pointer; white-space: nowrap; transition: all 0.2s ease; box-shadow: var(--shadow-sm);
+    }
+    .category-pill:hover { background: var(--input-bg); color: var(--metro-primary); transform: translateY(-2px); }
+    .category-pill.active { background: var(--metro-primary-gradient); border-color: transparent; color: #ffffff; box-shadow: var(--metro-glow); }
+
+    /* Rapor Kartları (Hover Preview Destekli) */
+    .report-card {
+        background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 1rem;
+        padding: 1.5rem; height: 100%; display: flex; align-items: flex-start; text-align: left;
+        text-decoration: none !important; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        box-shadow: var(--shadow-sm); position: relative; overflow: visible; /* Önizleme taşabilsin diye visible */
+        border-left: 4px solid transparent; animation: fadeIn 0.5s ease forwards;
+    }
+    @@keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+    .report-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-md); border-left-color: var(--metro-primary); background-color: var(--bg-main); z-index: 10;}
+    
+    .card-icon-wrapper {
+        width: 50px; height: 50px; border-radius: 0.65rem; background: var(--input-bg);
+        display: flex; align-items: center; justify-content: center; font-size: 1.35rem;
+        color: var(--text-secondary); margin-right: 1.25rem; transition: all 0.3s ease; flex-shrink: 0;
+    }
+    .report-card:hover .card-icon-wrapper { background: var(--metro-primary-light); color: var(--metro-primary); transform: scale(1.1) rotate(5deg); }
+    .card-content-wrapper { display: flex; flex-direction: column; justify-content: center; height: 100%; }
+    .card-title { font-weight: 700; color: var(--text-primary); font-size: 0.95rem; margin-bottom: 0.35rem; line-height: 1.3; }
+    .card-action { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; display: flex; align-items: center; transition: color 0.3s; }
+    .report-card:hover .card-action { color: var(--metro-primary); }
+
+    /* MİNİ RAPOR ÖNİZLEME (TOOLTIP SKELETON) */
+    .report-preview-tooltip {
+        position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%) translateY(15px);
+        width: 240px; background: var(--bg-card); border: 1px solid var(--border-color);
+        border-radius: 0.75rem; padding: 15px; box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+        opacity: 0; visibility: hidden; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        z-index: 100; pointer-events: none;
+    }
+    .report-preview-tooltip::after {
+        content: ''; position: absolute; top: 100%; left: 50%; margin-left: -8px;
+        border-width: 8px; border-style: solid;
+        border-color: var(--bg-card) transparent transparent transparent;
+    }
+    .report-card:hover .report-preview-tooltip { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(-10px); }
+    
+    .skeleton-header { width: 100%; height: 15px; background: var(--input-bg); border-radius: 4px; margin-bottom: 10px; display:flex; gap:5px;}
+    .skeleton-col { flex:1; height:100%; background: var(--metro-primary-light); border-radius:3px; }
+    .skeleton-row { width: 100%; height: 10px; background: var(--border-color); border-radius: 3px; margin-bottom: 8px; display:flex; gap:5px;}
+    .skeleton-cell { flex:1; height:100%; background: var(--input-bg); border-radius:2px; }
+
+    /* Asistan Chat */
+    #asistanContainer { position: fixed; bottom: 35px; right: 35px; z-index: 1050; }
+    #asistanButton {
+        width: 65px; height: 65px; border-radius: 50%; background: var(--metro-primary-gradient);
+        color: white; border: none; box-shadow: var(--metro-glow); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 26px; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    #asistanButton:hover { transform: scale(1.1) rotate(15deg); box-shadow: 0 15px 35px rgba(37,99,235, 0.6); }
+    #asistanWindow {
+        position: absolute; bottom: 90px; right: 0; width: 400px; max-height: 650px; height: 75vh;
+        background: var(--bg-card); border-radius: 1rem; box-shadow: var(--shadow-md);
+        display: flex; flex-direction: column; overflow: hidden; transform: scale(0); transform-origin: bottom right;
+        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); opacity: 0; pointer-events: none; border: 1px solid var(--border-color);
+    }
+    #asistanWindow.active { transform: scale(1); opacity: 1; pointer-events: all; }
+    .asistan-header { background: var(--metro-primary-gradient); color: white; padding: 20px 25px; display: flex; align-items: center; justify-content: space-between; }
+    .asistan-header h6 { margin: 0; font-weight: 700; display: flex; align-items: center; gap: 10px; font-size: 1.1rem; }
+    #chatBox { flex: 1; overflow-y: auto; padding: 25px; background: var(--bg-main); scroll-behavior: smooth; }
+    .asistan-input-area { padding: 20px; background: var(--bg-card); border-top: 1px solid var(--border-color); display: flex; gap: 10px; }
+    .asistan-input { border-radius: 0.75rem; border: 1px solid var(--border-color); padding: 12px 20px; flex: 1; font-size: 0.95rem; transition: 0.3s; background: var(--input-bg); color: var(--text-primary); font-weight: 500; }
+    .asistan-input:focus { outline: none; background: var(--bg-card); border-color: var(--metro-primary); box-shadow: 0 0 0 4px rgba(37,99,235,0.15); }
+    .btn-send { background: var(--metro-primary); color: white; border: none; width: 50px; height: 50px; border-radius: 0.75rem; transition: 0.3s; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(37,99,235,0.3); }
+    .btn-send:hover { background: var(--metro-primary-active); transform: translateY(-2px); }
+    .msg { margin-bottom: 20px; max-width: 85%; padding: 15px 20px; border-radius: 1rem; font-size: 0.95rem; line-height: 1.5; position: relative; font-weight: 500; }
+    .msg-user { margin-left: auto; background: var(--metro-primary); color: white; border-bottom-right-radius: 0.25rem; box-shadow: 0 4px 10px rgba(37,99,235,0.2); }
+    .msg-ai { margin-right: auto; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-bottom-left-radius: 0.25rem; box-shadow: var(--shadow-sm); }
+    .ai-badge { font-size: 0.7rem; font-weight: 700; color: var(--metro-primary); margin-bottom: 6px; display: block; letter-spacing: 0.5px; text-transform: uppercase; }
+    .suggested-questions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
+    .suggested-btn { font-size: 0.8rem; background: var(--metro-primary-light); border: 1px solid transparent; color: var(--metro-primary); padding: 8px 15px; border-radius: 2rem; cursor: pointer; transition: 0.2s; font-weight: 600; }
+    .suggested-btn:hover { background: var(--metro-primary); color: white; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(37,99,235,0.2);}
+
+    /* ==========================================================
+       MODERN DASHBOARD KATMANI
+       ========================================================== */
+    .hero {
+        position: relative; overflow: hidden;
+        border-radius: var(--r-xl, 24px);
+        padding: clamp(1.6rem, 3vw, 2.6rem);
+        margin-bottom: clamp(1.2rem, 2.4vw, 2rem);
+        color: var(--text-primary, #3F4254);
+        background:
+            radial-gradient(820px 420px at 8% -20%, rgba(37,99,235,.16), transparent 62%),
+            radial-gradient(680px 420px at 96% 118%, rgba(14,165,233,.14), transparent 60%),
+            linear-gradient(135deg, #ffffff 0%, #f7fbff 55%, #f4f8fd 100%);
+        border: 1px solid rgba(15,23,42,.05);
+        box-shadow: 0 2px 6px rgba(16,24,40,.04), 0 18px 44px rgba(16,24,40,.06);
+        isolation: isolate;
+    }
+    .hero::after {
+        content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+        background-image:
+            linear-gradient(rgba(15,23,42,.035) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(15,23,42,.035) 1px, transparent 1px);
+        background-size: 46px 46px;
+        mask-image: radial-gradient(700px 380px at 22% 0%, #000 10%, transparent 72%);
+        -webkit-mask-image: radial-gradient(700px 380px at 22% 0%, #000 10%, transparent 72%);
+    }
+    .hero-orb {
+        /* Bulanık küreler statik: blur + sonsuz animasyon her karede yeniden rasterize edilip kaydırmayı yavaşlatıyordu */
+        position: absolute; border-radius: 50%; filter: blur(46px); pointer-events: none; z-index: -1;
+        transform: translateZ(0); will-change: transform;
+    }
+    .hero-orb.a { width: 320px; height: 320px; top: -110px; right: 16%; background: rgba(37,99,235,.16); }
+    .hero-orb.b { width: 260px; height: 260px; bottom: -130px; left: 26%; background: rgba(168,85,247,.13); animation-delay: -6s; }
+    @@keyframes orbFloat {
+        from { transform: translate3d(0,0,0) scale(1); }
+        to   { transform: translate3d(28px,-22px,0) scale(1.12); }
+    }
+
+    .hero-avatar {
+        width: 58px; height: 58px; flex-shrink: 0;
+        border-radius: 18px;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 800; font-size: 1.2rem; letter-spacing: .02em;
+        background: linear-gradient(135deg, #2563eb, #0ea5e9);
+        box-shadow: 0 10px 26px rgba(37,99,235,.42);
+        border: 1px solid rgba(255,255,255,.22);
+    }
+    .hero-eyebrow {
+        font-size: .74rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+        color: var(--text-secondary, #7E8299);
+    }
+    .hero-title {
+        font-size: clamp(1.4rem, 2.6vw, 2rem); font-weight: 800;
+        letter-spacing: -.03em; margin: 2px 0 0; line-height: 1.15;
+    }
+    .hero-title span { background: linear-gradient(120deg,#1d4ed8,#0ea5e9); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+    .chip-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 1.35rem; }
+    .chip {
+        display: inline-flex; align-items: center; gap: 9px;
+        padding: .55rem 1rem; border-radius: 999px;
+        font-size: .84rem; font-weight: 600; color: var(--text-primary, #3F4254);
+        background: rgba(255,255,255,.72);
+        border: 1px solid rgba(15,23,42,.07);
+        -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+        transition: background .2s ease, transform .2s ease;
+    }
+    .chip:hover { background: rgba(255,255,255,.95); transform: translateY(-2px); }
+    .chip i { font-size: .95rem; opacity: .95; }
+
+    .hero-search { position: relative; width: 100%; max-width: 420px; }
+    .hero-search input {
+        width: 100%; height: 54px; padding: 0 92px 0 50px;
+        border-radius: 16px; font-size: .95rem; font-weight: 500; color: var(--text-primary, #3F4254);
+        background: rgba(255,255,255,.85);
+        border: 1px solid rgba(15,23,42,.08);
+        -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+        transition: all .22s ease;
+    }
+    .hero-search input::placeholder { color: var(--text-secondary, #9aa1b1); }
+    .hero-search input:focus {
+        outline: none; background: #ffffff;
+        border-color: rgba(2,132,199,.55);
+        box-shadow: 0 0 0 4px rgba(37,99,235,.22);
+    }
+    .hero-search .s-ico { position: absolute; left: 19px; top: 50%; transform: translateY(-50%); color: var(--text-secondary, #9aa1b1); }
+    .hero-search .s-hint {
+        position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+        font-size: .68rem; font-weight: 700; letter-spacing: .06em;
+        padding: .3rem .55rem; border-radius: 7px; color: var(--text-secondary, #9aa1b1);
+        background: rgba(15,23,42,.04); border: 1px solid rgba(15,23,42,.07);
+    }
+
+    /* --- Kart & grafik yüzeyleri --- */
+    .dashboard-chart-card, .dashboard-widget {
+        border-radius: var(--r-lg, 18px);
+        border: 1px solid var(--border-color);
+        box-shadow: var(--shadow-sm);
+        transition: transform .25s var(--ease, ease), box-shadow .25s var(--ease, ease), border-color .25s var(--ease, ease);
+    }
+    .dashboard-chart-card:hover, .dashboard-widget:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow-md);
+        border-color: color-mix(in srgb, var(--metro-primary) 26%, var(--border-color));
+    }
+    .chart-header h3 { font-size: .98rem; letter-spacing: -.02em; }
+    .chart-header h3 i {
+        width: 32px; height: 32px; border-radius: 10px;
+        display: inline-flex; align-items: center; justify-content: center;
+        background: var(--metro-primary-light); font-size: .85rem;
+    }
+    .widget-icon { border-radius: 14px; width: 52px; height: 52px; font-size: 1.4rem; }
+    .widget-info h4 { font-size: 1.25rem; letter-spacing: -.03em; }
+
+    /* --- Bölüm başlığı --- */
+    .section-head { display: flex; align-items: center; gap: 14px; margin: clamp(1.6rem,3vw,2.4rem) 0 1.1rem; }
+    .section-head h4 { margin: 0; font-size: 1.05rem; font-weight: 800; letter-spacing: -.02em; color: var(--text-primary); }
+    .section-head .line { flex: 1; height: 1px; background: linear-gradient(90deg, var(--border-color), transparent); }
+
+    /* --- Kategori pilleri --- */
+    .category-filters { gap: 8px; padding-bottom: 6px; margin-bottom: 1.2rem; }
+    .category-pill {
+        padding: .5rem 1.1rem; border-radius: 999px; font-size: .84rem; font-weight: 600;
+        box-shadow: none; background: var(--bg-card); border: 1px solid var(--border-color);
+        transition: all .2s var(--ease, ease);
+    }
+    .category-pill:hover { background: var(--metro-primary-light); color: var(--metro-primary); border-color: color-mix(in srgb, var(--metro-primary) 32%, transparent); transform: none; }
+    .category-pill.active {
+        background: linear-gradient(135deg,#2563eb,#0ea5e9); color: #fff; border-color: transparent;
+        box-shadow: 0 6px 16px rgba(37,99,235,.28);
+    }
+
+    /* --- Rapor kartları --- */
+    .report-group-section .group-header { margin-bottom: 1rem; }
+    .report-card {
+        border-radius: var(--r-lg, 18px);
+        padding: 1.15rem 1.25rem;
+        border-left-width: 1px;
+        gap: 14px;
+        transition: transform .24s var(--ease, ease), box-shadow .24s var(--ease, ease), border-color .24s var(--ease, ease);
+    }
+    .report-card:hover {
+        transform: translateY(-4px);
+        border-color: color-mix(in srgb, var(--metro-primary) 40%, transparent);
+        border-left-color: color-mix(in srgb, var(--metro-primary) 40%, transparent);
+        box-shadow: var(--shadow-md);
+        background-color: var(--bg-card);
+    }
+    .card-icon-wrapper {
+        width: 46px; height: 46px; border-radius: 13px; font-size: 1.15rem;
+        background: var(--metro-primary-light); color: var(--metro-primary);
+        transition: transform .24s var(--ease, ease);
+    }
+    .report-card:hover .card-icon-wrapper { transform: scale(1.06) rotate(-4deg); }
+    .card-title { font-size: .92rem; font-weight: 700; letter-spacing: -.015em; line-height: 1.35; }
+    .card-action { font-size: .76rem; font-weight: 600; }
+    .report-card:hover .card-action i { transform: translateX(4px); }
+    .card-action i { transition: transform .24s var(--ease, ease); }
+
+    /* --- AI asistan --- */
+    #asistanButton {
+        background: linear-gradient(135deg,#2563eb,#0ea5e9) !important;
+        box-shadow: 0 12px 30px rgba(37,99,235,.4) !important;
+        transition: transform .22s ease, box-shadow .22s ease;
+    }
+    #asistanButton:hover { transform: translateY(-3px) scale(1.05); }
+    #asistanWindow { border-radius: var(--r-xl, 24px) !important; box-shadow: var(--shadow-lg) !important; overflow: hidden; }
+
+    @@media (max-width: 767px) {
+        .hero { padding: 1.4rem; }
+        .hero-search { max-width: 100%; }
+    }
+
+</style>
+<link rel="stylesheet" href="~/css/dashboard-komuta.css" asp-append-version="true" />
+
+<div class="container-fluid py-2 px-xl-4">
+    
+    <!-- 1. KOMUTA MERKEZİ — karşılama -->
+    <div class="hero">
+        <span class="hero-orb a"></span>
+        <span class="hero-orb b"></span>
+        <canvas id="heroCanvas" class="hero-canvas" aria-hidden="true"></canvas>
+
+        <div class="row align-items-center justify-content-between g-4 position-relative">
+            <div class="col-xl-7 col-lg-6">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="hero-avatar-ring"><div class="hero-avatar">@basHarfler</div></div>
+                    <div>
+                        <div class="hero-eyebrow"><span id="heroSaat" class="hero-saat">--:--:--</span> · @bugunMetni</div>
+                        <h2 class="hero-title">@selamlama, <span>@displayName</span></h2>
+                        <div class="hero-tagline" id="heroTagline"><span>Bugün hangi rapora bakıyoruz?</span></div>
+                    </div>
+                </div>
+
+                <div class="chip-row">
+                    <span class="chip"><i class="fas fa-building"></i> @currentDbDisplay</span>
+                    <span class="chip"><i class="fas fa-chart-pie"></i> <b class="sayac" data-hedef="@totalAllowedReports">0</b>&nbsp;rapor</span>
+                    <span class="chip"><i class="fas fa-layer-group"></i> <b class="sayac" data-hedef="@kategoriSayisi">0</b>&nbsp;kategori</span>
+                </div>
+            </div>
+
+            <div class="col-xl-5 col-lg-6 d-flex flex-column align-items-lg-end gap-3">
+                <div class="hero-search">
+                    <i class="fas fa-search s-ico"></i>
+                    <input type="text" id="dashboardSearch" autocomplete="off" placeholder="Rapor veya ekran arayın...">
+                    <span class="s-hint">/</span>
+                </div>
+                <div class="hero-kpis">
+                    <div class="hero-kpi"><i class="fas fa-money-check-alt"></i><div><b id="hk-portfoy">…</b><span>Portföy çek</span></div></div>
+                    <div class="hero-kpi"><i class="fas fa-clipboard-list"></i><div><b id="hk-bekleyen">…</b><span>Bekleyen işlem</span></div></div>
+                    <div class="hero-kpi"><i class="fas fa-percent"></i><div><b id="hk-kdv">…</b><span>KDV durumu</span></div></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 2. ÜST GRAFİKLER (FATURA, AÇIK BELGE, KDV, CARİ, PORTFÖY) -->
+    <div class="row g-4 mb-4" id="dashboardChartsTop">
+        
+        <!-- Fatura Analizi (Çizgi Grafik) -->
+        <div class="col-xl-8 col-lg-12">
+            <div class="dashboard-chart-card">
+                <div class="chart-header">
+                    <h3><i class="fas fa-chart-area"></i> Fatura & İrsaliye Analizi (Net)</h3>
+                    <div class="badge badge-light-primary fw-bolder px-3 py-2" style="background:var(--metro-primary-light); color:var(--metro-primary)">Bu Yıl</div>
+                </div>
+                <div id="faturaChart"></div>
+            </div>
+        </div>
+
+        <!-- Açık Belgeler (Donut Grafik) -->
+        <div class="col-xl-4 col-lg-6">
+            <div class="dashboard-chart-card">
+                <div class="chart-header">
+                    <h3><i class="fas fa-chart-pie"></i> Bekleyen Açık Belgeler</h3>
+                </div>
+                <div id="acikBelgeChart" class="d-flex justify-content-center mt-3"></div>
+            </div>
+        </div>
+
+        <!-- KDV Durumu (Bar Grafik) -->
+        <div class="col-xl-4 col-lg-6">
+            <div class="dashboard-chart-card">
+                <div class="chart-header">
+                    <h3><i class="fas fa-percent"></i> KDV Durumu (Rpr 67)</h3>
+                </div>
+                <div id="kdvChart" class="mt-2"></div>
+                <div class="text-center mt-2">
+                    <span class="fw-bolder fs-5 text-primary" id="kdvNetText">Yükleniyor...</span>
+                    <div class="text-muted small fw-bold">Özet Durum</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Aktif Cari & Portföy Çek (Radial & Widget Karma) -->
+        <div class="col-xl-8 col-lg-12">
+            <div class="row g-4 h-100">
+                <div class="col-md-6">
+                    <div class="dashboard-chart-card d-flex flex-column justify-content-center align-items-center">
+                        <div class="chart-header w-100 mb-0">
+                            <h3><i class="fas fa-users"></i> Aktif Cari (Son 1 Yıl)</h3>
+                        </div>
+                        <div id="cariRadialChart" class="w-100 d-flex justify-content-center mt-2"></div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="d-flex flex-column gap-4 h-100">
+                        <div class="dashboard-widget flex-fill">
+                            <div class="widget-icon widget-warning"><i class="fas fa-money-check-alt"></i></div>
+                            <div class="widget-info">
+                                <h4 id="w-portfoy">Yükleniyor...</h4>
+                                <span id="w-portfoy-title">Portföydeki Çek (Rpr 2)</span>
+                            </div>
+                        </div>
+                        <div class="dashboard-widget flex-fill">
+                            <div class="widget-icon widget-danger"><i class="fas fa-clipboard-list"></i></div>
+                            <div class="widget-info">
+                                <h4 id="w-bekleyen">Yükleniyor...</h4>
+                                <span id="w-bekleyen-title">Bekleyen Cari Not (Rpr 133)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. DİNAMİK OLARAK GELEN TÜM RAPORLAR LİSTESİ -->
+    <div class="section-head">
+        <h4>Raporlar &amp; Hızlı Erişim</h4>
+        <span class="line"></span>
+        <span class="text-muted" style="font-size:.8rem; font-weight:600;">@totalAllowedReports ekran</span>
+    </div>
+
+    @if (Model != null && Model.RaporGruplari != null && Model.RaporGruplari.Any())
+    {
+        <div class="category-filters mt-4">
+            <button class="category-pill active" data-group="all">Tümü</button>
+            @foreach (var grup in Model.RaporGruplari.Keys)
+            {
+                <button class="category-pill" data-group="@grup">@grup</button>
+            }
+        </div>
+    }
+
+    <div id="reportsContainer">
+        @if (Model != null && Model.RaporGruplari != null && Model.RaporGruplari.Any())
+        {
+            @foreach (var grup in Model.RaporGruplari)
+            {
+                string groupIcon = grup.Key switch
+                {
+                    "Finans" => "fa-coins", "Satış" => "fa-shopping-cart", "Muhasebe" => "fa-calculator",
+                    "Cari Yönetimi" => "fa-users", "Satınalma" => "fa-truck-loading", "Üretim" => "fa-industry",
+                    "İthalat/İhracat" => "fa-globe", "Stok & Ürün" => "fa-boxes", "Aktarım İşlemleri" => "fa-robot",
+                    _ => "fa-folder-open"
+                };
+
+                <div class="report-group-section" data-group-name="@grup.Key">
+                    <div class="group-header">
+                        <i class="fas @groupIcon group-icon"></i>
+                        <h5>@grup.Key</h5>
+                    </div>
+                    <div class="row g-4">
+                        @foreach (var rapor in grup.Value)
+                        {
+                            <div class="col-xxl-3 col-xl-4 col-lg-4 col-md-6 col-sm-12 report-item-col" style="animation-delay: @(new Random().Next(0, 4) * 0.1)s;">
+                                <a href="@Url.Action(rapor.ActionName, rapor.ControllerName)" class="report-card" data-controller="@rapor.ControllerName">
+                                    <span class="menu-rozet" data-controller="@rapor.ControllerName" hidden></span>
+                                    <div class="card-icon-wrapper"><i class="@rapor.Icon"></i></div>
+                                    <div class="card-content-wrapper">
+                                        <div class="card-title">@rapor.MenuTitle</div>
+                                        <div class="card-action">Hemen Görüntüle <i class="fas fa-arrow-right ms-2 mt-1 fs-8"></i></div>
+                                    </div>
+                                    <!-- Hover Preview Skeleton -->
+                                    <div class="report-preview-tooltip">
+                                        <div class="text-center text-primary fw-bolder mb-2 border-bottom border-primary pb-1" style="font-size:10px;">@rapor.MenuTitle Önizlemesi</div>
+                                        <div class="skeleton-header">
+                                            <div class="skeleton-col"></div><div class="skeleton-col"></div><div class="skeleton-col"></div>
+                                        </div>
+                                        <div class="skeleton-row"><div class="skeleton-cell"></div><div class="skeleton-cell"></div><div class="skeleton-cell"></div></div>
+                                        <div class="skeleton-row"><div class="skeleton-cell"></div><div class="skeleton-cell"></div><div class="skeleton-cell"></div></div>
+                                        <div class="skeleton-row"><div class="skeleton-cell"></div><div class="skeleton-cell"></div><div class="skeleton-cell"></div></div>
+                                    </div>
+                                </a>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="text-center py-5">
+                <div class="mb-4 mt-5">
+                    <span class="fa-stack fa-4x text-muted">
+                        <i class="fas fa-circle fa-stack-2x opacity-10"></i><i class="fas fa-lock fa-stack-1x opacity-50"></i>
+                    </span>
+                </div>
+                <h3 class="text-muted fw-bold">Rapor Bulunamadı</h3>
+                <p class="text-muted fs-5">Yetkiniz dahilinde görüntülenebilecek ekran bulunmuyor.</p>
+            </div>
+        }
+    </div>
+
+    <div id="noResultsMessage" class="text-center py-5 d-none">
+        <div class="mb-4 mt-5">
+            <span class="fa-stack fa-4x text-muted">
+                <i class="fas fa-circle fa-stack-2x opacity-10"></i><i class="fas fa-search fa-stack-1x opacity-50"></i>
+            </span>
+        </div>
+        <h3 class="text-muted fw-bold">Sonuç Bulunamadı</h3>
+        <p class="text-muted fs-5">"<span id="searchTextDisplay" class="fw-bold" style="color:var(--text-primary)"></span>" aramasına uygun kayıt yok.</p>
+        <button class="btn btn-primary mt-3 rounded-pill px-5 py-2 fw-bold" onclick="clearSearch()">Aramayı Temizle</button>
+    </div>
+</div>
+
+<!-- Yapay Zeka Asistanı -->
+<div id="asistanContainer">
+    <button id="asistanButton" onclick="toggleAsistan()" title="Yapay Zeka Asistanı">
+        <i class="fas fa-sparkles"></i>
+    </button>
+
+    <div id="asistanWindow">
+        <div class="asistan-header">
+            <h6><i class="fas fa-robot fs-5"></i> Finans AI Asistan</h6>
+            <i class="fas fa-times" style="cursor:pointer; font-size:1.3rem;" onclick="toggleAsistan()"></i>
+        </div>
+
+        <div id="chatBox">
+            <div class="msg msg-ai">
+                <span class="ai-badge">ASİSTAN</span>
+                Merhaba <b>@displayName</b>, raporlar ve veriler hakkında sormak istediğin bir şey var mı?
+                <div class="suggested-questions">
+                    <button class="suggested-btn" onclick="askQuick('En borçlu müşteri kim?')">Cari Analizi</button>
+                    <button class="suggested-btn" onclick="askQuick('Bu haftaki ciro durumu nedir?')">Ciro Durumu</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="asistan-input-area">
+            <input type="text" id="txtSoru" class="asistan-input" placeholder="Yapay zekaya sorun..." onkeydown="if(event.key==='Enter') sendQuestion()">
+            <button class="btn-send" onclick="sendQuestion()">
+                <i class="fas fa-paper-plane fs-5"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- ApexCharts Library -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            
+            /* --- GRAFİKLERİ BAŞLAT (BOS DURUM) --- */
+
+            // 1. Fatura Grafiği (Line/Area)
+            var faturaOptions = {
+                series: [], // Veriler ajax ile gelecek
+                chart: { height: 320, type: 'area', fontFamily: 'Inter, sans-serif', toolbar: { show: false }, dropShadow: { enabled: true, top: 10, left: 0, blur: 12, opacity: .16, color: '#2563eb' } },
+                colors: ['#2563eb', '#0ea5e9'],
+                dataLabels: { enabled: false },
+                stroke: { curve: 'smooth', width: 3, lineCap: 'round' },
+                markers: { size: 0, hover: { size: 6 } },
+                tooltip: { theme: 'light' },
+                xaxis: { categories: ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"], labels: { style: { colors: 'var(--text-secondary)' } }, axisBorder: { show: false } },
+                yaxis: { labels: { style: { colors: 'var(--text-secondary)' }, formatter: function (value) { return value.toLocaleString('tr-TR') + " ₺"; } } },
+                grid: { borderColor: 'var(--border-color)', strokeDashArray: 4 },
+                fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 90, 100] } },
+                legend: { position: 'top', horizontalAlign: 'right', labels: { colors: 'var(--text-primary)' } },
+                noData: { text: 'Yükleniyor...', style: { color: 'var(--text-secondary)', fontSize: '15px' } }
+            };
+            var faturaChart = new ApexCharts(document.querySelector("#faturaChart"), faturaOptions);
+            faturaChart.render();
+
+            // 2. Açık Belgeler (Donut)
+            var acikBelgeOptions = {
+                series: [],
+                chart: { type: 'donut', height: 280, fontFamily: 'Inter, sans-serif' },
+                labels: [],
+                colors: ['#0b3d91', '#2563eb', '#7dd3fc'],
+                stroke: { show: true, width: 4, colors: ['#ffffff'] }, dataLabels: { enabled: false },
+                legend: { position: 'bottom', labels: { colors: 'var(--text-primary)' }, markers: { radius: 4 } },
+                plotOptions: { pie: { expandOnClick: false, donut: { size: '76%', labels: { show: true, name: { show: true, color: 'var(--text-secondary)', fontSize: '12px' }, value: { show: true, color: 'var(--text-primary)', fontSize: '22px', fontWeight: 800 }, total: { show: true, label: 'Toplam', color: 'var(--text-secondary)', fontWeight: 700 } } } } },
+                noData: { text: 'Yükleniyor...', style: { color: 'var(--text-secondary)' } }
+            };
+            var acikBelgeChart = new ApexCharts(document.querySelector("#acikBelgeChart"), acikBelgeOptions);
+            acikBelgeChart.render();
+
+            // 3. KDV Durumu (Bar)
+            var kdvOptions = {
+                series: [{ name: 'KDV Tutar', data: [] }],
+                chart: { type: 'bar', height: 230, fontFamily: 'Inter, sans-serif', toolbar: { show: false } },
+                plotOptions: { bar: { borderRadius: 10, borderRadiusApplication: 'end', columnWidth: '38%', distributed: true } },
+                colors: ['#94a3b8', '#2563eb', '#0b3d91'], // Devreden, İndirilecek, Hesaplanan
+                dataLabels: { enabled: true, offsetY: -22, style: { fontSize: '11px', fontWeight: 700, colors: ['#334155'] }, background: { enabled: false }, formatter: function (v) { return (v / 1000).toLocaleString('tr-TR', { maximumFractionDigits: 0 }) + ' K'; } },
+                legend: { show: false },
+                xaxis: { categories: ['İndirilecek(191)', 'Hesaplanan(391)', 'Net KDV'], labels: { style: { colors: 'var(--text-secondary)', fontSize: '11px', fontWeight: 600 } }, axisBorder:{show:false} },
+                yaxis: { labels: { show: false } }, // Rakamları üstte yazacağımız için y eksenini gizledik
+                grid: { show: false },
+                noData: { text: 'Yükleniyor...', style: { color: 'var(--text-secondary)' } }
+            };
+            var kdvChart = new ApexCharts(document.querySelector("#kdvChart"), kdvOptions);
+            kdvChart.render();
+
+            // 4. Aktif Cari (Radial Bar)
+            var cariRadialOptions = {
+                series: [0, 0],
+                chart: { height: 280, type: 'radialBar', fontFamily: 'Inter, sans-serif' },
+                plotOptions: {
+                    radialBar: {
+                        dataLabels: {
+                            name: { fontSize: '14px', color: 'var(--text-secondary)' },
+                            value: { fontSize: '20px', color: 'var(--text-primary)', fontWeight: 700, formatter: function (val) { return val } },
+                            total: { show: true, label: 'Toplam', color: 'var(--text-primary)', formatter: function (w) { return w.globals.seriesTotals.reduce((a, b) => { return a + b }, 0) } }
+                        }
+                    }
+                },
+                labels: ['Müşteri', 'Tedarikçi'],
+                colors: ['#2563eb', '#0ea5e9'],
+                fill: { type: 'gradient', gradient: { shade: 'light', type: 'horizontal', shadeIntensity: .4, gradientToColors: ['#7dd3fc', '#93c5fd'], opacityFrom: 1, opacityTo: 1 } },
+                stroke: { lineCap: 'round' }
+            };
+            var cariRadialChart = new ApexCharts(document.querySelector("#cariRadialChart"), cariRadialOptions);
+            cariRadialChart.render();
+
+            /* --- AJAX İLE VERİ ÇEKME VE GRAFİKLERİ DOLDURMA --- */
+            fetch('/Home/GetDashboardData')
+                .then(response => response.json())
+                .then(data => {
+                    if(data.success) {
+                        // Örnek veri ucu (HomeController.GetDashboardData) düz alanlar döner: satisAylik, alimAylik, acikSiparis/Teslimat/Fatura,
+                        // netKdv, hesaplananKdv, indirilecekKdv, aktifMusteri, aktifTedarikci, portfoyCekTutar/Adet, bekleyenIslem.
+                        const para = v => (Number(v) || 0).toLocaleString('tr-TR', { maximumFractionDigits: 0 }) + ' ₺';
+
+                        // 1. Fatura Grafiği Güncelle (Satış vs Alış)
+                        faturaChart.updateSeries([
+                            { name: 'Net Satış', data: data.satisAylik || [] },
+                            { name: 'Net Alım', data: data.alimAylik || [] }
+                        ]);
+
+                        // 2. Açık Belgeler Güncelle
+                        acikBelgeChart.updateOptions({
+                            series: [data.acikSiparis || 0, data.acikTeslimat || 0, data.acikFatura || 0],
+                            labels: ['Açık Sipariş', 'Açık Teslimat', 'Açık Fatura']
+                        });
+
+                        // 3. KDV Bar Grafiği
+                        kdvChart.updateSeries([{ name: 'Tutar', data: [data.indirilecekKdv || 0, data.hesaplananKdv || 0, data.netKdv || 0] }]);
+                        document.getElementById("kdvNetText").innerText = para(data.netKdv);
+                        document.getElementById("kdvNetText").nextElementSibling.innerText = (data.netKdv || 0) >= 0 ? 'Ödenecek Net KDV' : 'Devreden KDV';
+
+                        // 4. Cari Radial Bar Güncelle
+                        cariRadialChart.updateSeries([Number(data.aktifMusteri) || 0, Number(data.aktifTedarikci) || 0]);
+
+                        // 5. Normal Widget'ları Güncelle
+                        document.getElementById("w-portfoy").innerText = para(data.portfoyCekTutar);
+                        document.getElementById("w-portfoy-title").innerText = "Portföyde " + (data.portfoyCekAdet || 0) + " Çek (Rpr 2)";
+
+                        document.getElementById("w-bekleyen").innerText = (data.bekleyenIslem || 0) + " İşlem";
+                        document.getElementById("w-bekleyen-title").innerText = "Bekleyen Cari Not (Rpr 133)";
+
+                    } else {
+                        toastr.error(data.message || "Dashboard verileri alınamadı.");
+                    }
+                })
+                .catch(error => console.error("Dashboard Fetch Hatası: ", error));
+
+
+            /* --- KATEGORİ PİLL FİLTRELEME & ARAMA MANTIĞI --- */
+            const categoryPills = document.querySelectorAll('.category-pill');
+            const groupSections = document.querySelectorAll('.report-group-section');
+            const searchInput = document.getElementById('dashboardSearch');
+            const reportCols = document.querySelectorAll('.report-item-col');
+            const noResultsMsg = document.getElementById('noResultsMessage');
+            const reportsContainer = document.getElementById('reportsContainer');
+            const dashChartsTop = document.getElementById('dashboardChartsTop');
+
+            /* "/" tuşu ile arama kutusuna odaklan, Esc ile çık */
+            document.addEventListener('keydown', function (e) {
+                var aktif = document.activeElement;
+                var yaziAlaninda = aktif && /^(INPUT|TEXTAREA|SELECT)$/.test(aktif.tagName || '');
+
+                if (e.key === '/' && !yaziAlaninda && searchInput) {
+                    e.preventDefault();
+                    searchInput.focus();
+                    searchInput.select();
+                }
+                if (e.key === 'Escape' && searchInput && aktif === searchInput) {
+                    searchInput.blur();
+                }
+            });
+
+            function toggleDashboardTop(show) {
+                if(show) { dashChartsTop.style.display = ''; } 
+                else { dashChartsTop.style.display = 'none'; }
+            }
+
+            categoryPills.forEach(pill => {
+                pill.addEventListener('click', function() {
+                    categoryPills.forEach(p => p.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    const targetGroup = this.dataset.group;
+                    if(searchInput) searchInput.value = '';
+
+                    toggleDashboardTop(targetGroup === 'all');
+
+                    groupSections.forEach(section => {
+                        const sectionName = section.dataset.groupName;
+                        if(targetGroup === 'all' || sectionName === targetGroup) {
+                            section.style.display = '';
+                            section.querySelectorAll('.report-item-col').forEach(col => col.style.display = '');
+                        } else {
+                            section.style.display = 'none';
+                        }
+                    });
+
+                    reportsContainer.classList.remove('d-none');
+                    noResultsMsg.classList.add('d-none');
+                });
+            });
+
+            if (searchInput) {
+                searchInput.addEventListener('keyup', function(e) {
+                    const searchText = e.target.value.toLocaleLowerCase('tr-TR').trim();
+                    let hasAnyResult = false;
+                    
+                    categoryPills.forEach(p => p.classList.remove('active'));
+                    document.querySelector('.category-pill[data-group="all"]')?.classList.add('active');
+
+                    toggleDashboardTop(searchText === "");
+
+                    reportCols.forEach(col => {
+                        const cardTitle = col.querySelector('.card-title').textContent.toLocaleLowerCase('tr-TR');
+                        if (cardTitle.includes(searchText)) {
+                            col.style.display = '';
+                            hasAnyResult = true;
+                        } else {
+                            col.style.display = 'none';
+                        }
+                    });
+
+                    groupSections.forEach(section => {
+                        const visibleCards = section.querySelectorAll('.report-item-col:not([style*="display: none"])');
+                        section.style.display = visibleCards.length > 0 ? '' : 'none';
+                    });
+
+                    if (!hasAnyResult && searchText !== "") {
+                        reportsContainer.classList.add('d-none');
+                        noResultsMsg.classList.remove('d-none');
+                        document.getElementById('searchTextDisplay').textContent = e.target.value;
+                    } else {
+                        reportsContainer.classList.remove('d-none');
+                        noResultsMsg.classList.add('d-none');
+                    }
+                });
+            }
+        });
+
+        /* --- GLOBAL FONKSİYONLAR --- */
+        function clearSearch() {
+            const searchInput = document.getElementById('dashboardSearch');
+            if (searchInput) { searchInput.value = ''; searchInput.dispatchEvent(new Event('keyup')); searchInput.focus(); }
+        }
+
+        /* --- ASİSTAN MANTIĞI --- */
+        function toggleAsistan() {
+            const win = document.getElementById('asistanWindow');
+            if (win) {
+                win.classList.toggle('active');
+                if(win.classList.contains('active')) { setTimeout(() => { const input = document.getElementById('txtSoru'); if(input) input.focus(); }, 300); }
+            }
+        }
+
+        function askQuick(text) {
+            const input = document.getElementById('txtSoru');
+            if (input) { input.value = text; sendQuestion(); }
+        }
+
+        async function sendQuestion() {
+            const input = document.getElementById("txtSoru");
+            const soru = input.value.trim();
+            if (!soru) return;
+
+            const chatBox = document.getElementById("chatBox");
+            chatBox.innerHTML += `<div class="msg msg-user">${soru}</div>`;
+            input.value = "";
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            const loadingId = "load-" + Date.now();
+            chatBox.innerHTML += `<div id="${loadingId}" class="msg msg-ai"><span class="ai-badge">SİSTEM</span><i class="fas fa-circle-notch fa-spin me-1"></i> Yanıt hazırlanıyor...</div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            const formData = new FormData();
+            formData.append('soru', soru);
+
+            try {
+                const res = await fetch('/YapayZeka/Sor', { method: 'POST', body: formData });
+                const loadingEl = document.getElementById(loadingId);
+                if(loadingEl) loadingEl.remove();
+
+                if (res.ok) {
+                    const data = await res.json();
+                    chatBox.innerHTML += `<div class="msg msg-ai"><span class="ai-badge">ASİSTAN</span>${data.cevap}</div>`;
+                } else {
+                    chatBox.innerHTML += `<div class="msg msg-ai text-danger"><span class="ai-badge" style="color:var(--metro-danger)">HATA</span>Sunucudan yanıt alınamadı.</div>`;
+                }
+            } catch (err) {
+                const loadingEl = document.getElementById(loadingId);
+                if(loadingEl) loadingEl.remove();
+                chatBox.innerHTML += `<div class="msg msg-ai text-danger"><span class="ai-badge" style="color:var(--metro-danger)">HATA</span>Bağlantı hatası oluştu.</div>`;
+            }
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    </script>
+    <script src="~/js/dashboard-komuta.js" asp-append-version="true"></script>
+}

@@ -1,0 +1,315 @@
+﻿@{
+    ViewData["Title"] = "Stok & Tüketim Uyum Dashboard";
+}
+
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+<style>
+    body { background-color: #f8f9fc; }
+    .filter-card { background: #ffffff; border: 1px solid #e3e6f0; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+    .summary-card { border-radius: 12px; border: none; box-shadow: 0 4px 10px rgba(0,0,0,0.05); transition: transform 0.2s; background: white; }
+    .summary-card:hover { transform: translateY(-3px); }
+    .icon-circle { width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; color: white; }
+    
+    .bg-blue { background-color: #4e73df; }
+    .bg-green { background-color: #1cc88a; }
+    .bg-cyan { background-color: #36b9cc; }
+    .bg-red { background-color: #e74a3b; }
+    
+    .status-badge { font-weight: bold; padding: 5px 10px; font-size: 11px; border-radius: 4px; }
+    .status-uyumlu { background-color: #e3fbed; color: #1cc88a; border: 1px solid #1cc88a; }
+    .status-uyumsuz { background-color: #fce4e4; color: #e74a3b; border: 1px solid #e74a3b; }
+    
+    .table-custom th { background-color: #eaecf4; font-size: 12px; color: #5a5c69; border-bottom: 2px solid #ddd; text-transform: uppercase; }
+    .table-custom td { vertical-align: middle; font-size: 13px; }
+</style>
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h4 mb-0 text-gray-800 fw-bold">
+            <i class="fas fa-chart-line me-2 text-primary"></i> URAS Holding | Stok & Tüketim Uyum Dashboard
+        </h2>
+    </div>
+
+    <div class="filter-card shadow-sm">
+        <div class="row g-3 align-items-end">
+            <div class="col-xl-2 col-lg-3 col-md-6">
+                <label class="fw-bold text-muted small mb-1">Şirket</label>
+                <select id="companySelector" class="form-select select2" multiple="multiple" data-placeholder="Tüm Şirketler"></select>
+            </div>
+
+            <div class="col-xl-2 col-lg-3 col-md-6">
+                <label class="fw-bold text-muted small mb-1">Depo Seçimi</label>
+                <select id="depoSelector" class="form-select select2" multiple="multiple" data-placeholder="Tüm Depolar"></select>
+            </div>
+
+            <div class="col-xl-2 col-lg-2 col-md-6">
+                <label class="fw-bold text-muted small mb-1">Ürün Grubu</label>
+                <select id="stokGrubuSelector" class="form-select select2" multiple="multiple" data-placeholder="Tüm Gruplar"></select>
+            </div>
+            
+            <div class="col-xl-2 col-lg-2 col-md-6">
+                <label class="fw-bold text-muted small mb-1">Stok Tipi</label>
+                <select id="stokTipiSelector" class="form-select select2">
+                    <option value="Tümü">Tümü (Hammadde + Ticari)</option>
+                    <option value="Hammadde">Hammadde</option>
+                    <option value="Ticari">Ticari Mal / Ürün</option>
+                </select>
+            </div>
+
+            <div class="col-xl-2 col-lg-2 col-md-6">
+                <label class="fw-bold text-muted small mb-1">Kontrol Ayı</label>
+                <input type="month" id="kontrolAyi" class="form-control" value="@DateTime.Now.ToString("yyyy-MM")" />
+            </div>
+
+            <div class="col-xl-2 col-lg-12 col-md-12 text-end">
+                <button id="btnSearch" class="btn btn-primary w-100 fw-bold shadow-sm" onclick="fetchReportData()">
+                    <i class="fas fa-search me-1"></i> Verileri Getir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4" id="summaryCards" style="display: none;">
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card summary-card h-100 p-3 border-start border-4 border-primary">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-xs fw-bold text-primary text-uppercase mb-1">Toplam Stok Kalemi</div>
+                        <div class="h4 mb-0 fw-bold text-gray-800" id="lblToplamStokKalemi">0</div>
+                    </div>
+                    <div class="icon-circle bg-blue shadow-sm"><i class="fas fa-boxes"></i></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card summary-card h-100 p-3 border-start border-4 border-success">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-xs fw-bold text-success text-uppercase mb-1">Fiili Stok Bedeli</div>
+                        <div class="h4 mb-0 fw-bold text-gray-800" id="lblFiiliStokBedeli">0 ₺</div>
+                    </div>
+                    <div class="icon-circle bg-green shadow-sm"><i class="fas fa-check-double"></i></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card summary-card h-100 p-3 border-start border-4 border-info">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-xs fw-bold text-info text-uppercase mb-1">Muhasebe Stok Bedeli</div>
+                        <div class="h4 mb-0 fw-bold text-gray-800" id="lblMuhasebeStokBedeli">0 ₺</div>
+                    </div>
+                    <div class="icon-circle bg-cyan shadow-sm"><i class="fas fa-calculator"></i></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card summary-card h-100 p-3 border-start border-4 border-danger">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-xs fw-bold text-danger text-uppercase mb-1">Bedel Farkı</div>
+                        <div class="h4 mb-0 fw-bold text-gray-800" id="lblBedelFarki">0 ₺</div>
+                    </div>
+                    <div class="icon-circle bg-red shadow-sm"><i class="fas fa-exclamation-triangle"></i></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card summary-card h-100 p-3">
+                <h6 class="fw-bold text-success mb-2"><i class="fas fa-calendar-check me-1"></i> Aylık Uyumlu</h6>
+                <h3 class="fw-bold mb-0" id="lblAylikUyumlu">0</h3>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card summary-card h-100 p-3">
+                <h6 class="fw-bold text-danger mb-2"><i class="fas fa-calendar-times me-1"></i> Aylık Uyumsuz (Miktar Farklı)</h6>
+                <h3 class="fw-bold mb-0" id="lblAylikUyumsuz">0</h3>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card summary-card h-100 p-3">
+                <h6 class="fw-bold text-success mb-2"><i class="fas fa-layer-group me-1"></i> 3'lü Uyumlu</h6>
+                <h3 class="fw-bold mb-0" id="lblUcluUyumlu">0</h3>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-3">
+            <div class="card summary-card h-100 p-3">
+                <h6 class="fw-bold text-danger mb-2"><i class="fas fa-ban me-1"></i> 3'lü Uyumsuz</h6>
+                <h3 class="fw-bold mb-0" id="lblUcluUyumsuz">0</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Stok ve Fark Analizi Detayları</h6>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table id="reportTable" class="table table-hover table-custom w-100 m-0">
+                    <thead>
+                        <tr>
+                            <th>Firma</th>
+                            <th>Maliyet Tipi</th>
+                            <th>Stok Tipi</th>
+                            <th>Ürün Grubu</th>
+                            <th>Ürün Kodu</th>
+                            <th>Ürün Adı</th>
+                            <th class="text-center">Muh. Miktar</th>
+                            <th class="text-center text-success">Fiili Miktar</th>
+                            <th class="text-end">Birim Maliyet</th>
+                            <th class="text-end">Muh. Bedel</th>
+                            <th class="text-end text-success">Fiili Bedel</th>
+                            <th class="text-end text-danger">Miktar Farkı</th>
+                            <th class="text-end text-danger">Bedel Farkı</th>
+                            <th class="text-center">Aylık Uyum</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+        let dataTable;
+
+        function getCompanyColor(name) {
+            const colors = {
+                'URASKIMYA': '#4e73df', 'URSMAKINE': '#e74a3b', 'ALV_KIMYA': '#1cc88a',
+                'DAF_KIMYA': '#f6c23e', 'SELVI': '#36b9cc', 'AVRUPA_PAPER': '#6f42c1',
+                'ALVFILO': '#fd7e14', 'ASIA_KIMYA': '#20c9a7', 'DEKORLIM': '#6610f2',
+                'URAS_HOLDING': '#e83e8c', 'DRN': '#5a5c69'
+            };
+            return colors[name] || '#858796'; 
+        }
+
+        $(document).ready(function () {
+            // Select2 Başlatma
+            $('.select2').select2({ theme: "bootstrap-5", width: '100%', allowClear: true });
+
+            // DataTables Başlatma
+            dataTable = $('#reportTable').DataTable({
+                language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/tr.json' },
+                order: [[0, "asc"], [4, "asc"]], 
+                paging: true,          
+                lengthMenu: [25, 50, 100, 500],
+                info: true,
+                columns: [
+                    { data: 'sirket', render: function(d) { return `<span class="badge" style="background-color:${getCompanyColor(d)}; color:white;">${d}</span>`; } },
+                    { data: 'maliyetTipi', render: function(d) { return `<span class="badge bg-light text-dark border"><i class="fas fa-tag me-1"></i>${d}</span>`; } },
+                    { data: 'stokTipi', render: function(d) { return `<span class="badge ${d === 'Hammadde' ? 'bg-primary' : 'bg-warning text-dark'}">${d}</span>`; } },
+                    { data: 'urunGrubu' },
+                    { data: 'urunKodu', className: 'fw-bold' },
+                    { data: 'urunAdi', render: function(d) { return `<div class="text-truncate" style="max-width:200px;" title="${d}">${d}</div>`; } },
+                    { data: 'muhasebeStokMiktari', className: 'text-center fw-bold text-secondary', render: function(d, t, r) { return d.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + ' ' + r.birim; } },
+                    { data: 'fiiliStokMiktari', className: 'text-center fw-bold text-success', render: function(d, t, r) { return d.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + ' ' + r.birim; } },
+                    { data: 'birimMaliyet', className: 'text-end', render: function(d) { return d.toLocaleString('tr-TR', {minimumFractionDigits: 4}) + ' ₺'; } },
+                    { data: 'muhasebeStokBedeli', className: 'text-end', render: function(d) { return d.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + ' ₺'; } },
+                    { data: 'fiiliStokBedeli', className: 'text-end text-success fw-bold', render: function(d) { return d.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + ' ₺'; } },
+                    { data: 'miktarFarki', className: 'text-end text-danger fw-bold', render: function(d, t, r) { return d !== 0 ? d.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + ' ' + r.birim : '-'; } },
+                    { data: 'bedelFarki', className: 'text-end text-danger fw-bold', render: function(d) { return d !== 0 ? d.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + ' ₺' : '-'; } },
+                    { data: 'aylikUyumDurumu', className: 'text-center', render: function(d) { return `<span class="status-badge ${d==='UYUMLU'?'status-uyumlu':'status-uyumsuz'}">${d}</span>`; } }
+                ]
+            });
+
+            // Filtreleri Yükle (Controllerdan Şirket, Depo ve Stok Grubunu Çeker)
+            loadFiltersData(false);
+        });
+
+        function loadFiltersData(autoFetch = false) {
+            $.ajax({
+                url: '/Rapor89/GetFiltersData',
+                type: 'GET',
+                success: function (res) {
+                    let cmp = $('#companySelector');
+                    let dpo = $('#depoSelector');
+                    let grp = $('#stokGrubuSelector');
+                    
+                    cmp.empty(); dpo.empty(); grp.empty();
+                    
+                    if (res.success) {
+                        res.companies.forEach(c => cmp.append(new Option(c, c, false, false)));
+                        if(res.depolar) res.depolar.forEach(d => dpo.append(new Option(d.text, d.value, false, false)));
+                        if(res.stokGruplari) res.stokGruplari.forEach(g => grp.append(new Option(g.text, g.value, false, false)));
+                    }
+                    cmp.trigger('change');
+                    dpo.trigger('change');
+                    grp.trigger('change');
+
+                    if(autoFetch) fetchReportData();
+                },
+                error: function () {
+                    alert("Filtre listeleri alınırken bir hata oluştu.");
+                }
+            });
+        }
+
+        function fetchReportData() {
+            let reqData = {
+                Companies: $('#companySelector').val() || ["Tümü"],
+                Depolar: $('#depoSelector').val() || ["Tümü"],
+                StokGruplari: $('#stokGrubuSelector').val() || ["Tümü"],
+                StokTipi: $('#stokTipiSelector').val(),
+                KontrolAyi: $('#kontrolAyi').val()
+            };
+
+            let btn = document.getElementById('btnSearch');
+            let originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Hesaplanıyor...';
+            btn.disabled = true;
+
+            $.ajax({
+                url: '/Rapor89/GetReportData',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(reqData),
+                success: function (res) {
+                    if (res.success) {
+                        // Özet Kartlarını Güncelle
+                        $('#lblToplamStokKalemi').text(res.summary.toplamStokKalemi.toLocaleString('tr-TR'));
+                        $('#lblFiiliStokBedeli').text(res.summary.fiiliStokBedeli.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + ' ₺');
+                        $('#lblMuhasebeStokBedeli').text(res.summary.muhasebeStokBedeli.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + ' ₺');
+                        $('#lblBedelFarki').text(res.summary.bedelFarki.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + ' ₺');
+                        
+                        $('#lblAylikUyumlu').text(res.summary.aylikUyumluSayisi.toLocaleString('tr-TR'));
+                        $('#lblAylikUyumsuz').text(res.summary.aylikUyumsuzSayisi.toLocaleString('tr-TR'));
+                        $('#lblUcluUyumlu').text(res.summary.ucluUyumluSayisi.toLocaleString('tr-TR'));
+                        $('#lblUcluUyumsuz').text(res.summary.ucluUyumsuzSayisi.toLocaleString('tr-TR'));
+                        
+                        $('#summaryCards').fadeIn();
+
+                        // Tabloyu Güncelle
+                        dataTable.clear();
+                        dataTable.rows.add(res.data).draw(); 
+                    } else {
+                        alert("Veri çekilemedi: " + res.message);
+                    }
+                },
+                error: function () {
+                    alert("Sunucuya bağlanılamadı. SQL Sorgusu zaman aşımına uğramış olabilir.");
+                },
+                complete: function () {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }
+            });
+        }
+    </script>
+}

@@ -1,0 +1,467 @@
+﻿@model List<WebApplication3.Controllers.AlisEkstreViewModel>
+@using System.Globalization
+@using Microsoft.AspNetCore.Routing
+@using WebApplication3.Controllers
+
+@{
+    ViewData["Title"] = "Alış Ekstresi";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? "URASKIMYA";
+
+    var selectedItemCodes = ViewBag.SelectedItemCodes as List<string> ?? new List<string>();
+    var selectedBpCodes = ViewBag.SelectedBpCodes as List<string> ?? new List<string>();
+    var selectedAktarimTipi = ViewBag.SelectedAktarimTipi as List<string> ?? new List<string>();
+
+    var itemList = ViewBag.ItemList as List<AlisItemViewModel> ?? new List<AlisItemViewModel>();
+    var cariList = ViewBag.CariList as List<AlisCariViewModel> ?? new List<AlisCariViewModel>();
+    var aktarimTipiList = ViewBag.AktarimTipiList as List<string> ?? new List<string>();
+    var modelData = Model ?? new List<AlisEkstreViewModel>();
+
+    foreach (var item in modelData)
+    {
+        if (string.IsNullOrWhiteSpace(item.ParaBirimi))
+        {
+            item.ParaBirimi = "TRY";
+        }
+    }
+
+    var faturalasanVeriler = new List<AlisEkstreViewModel>();
+    var irsaliyeVerileri = new List<AlisEkstreViewModel>();
+
+    foreach (var item in modelData)
+    {
+        string tip = item.IslemTipi?.Trim() ?? "";
+        if (tip.Contains("Kabul") || tip.Contains("kabul") || tip.Contains("İade"))
+        {
+            if (tip == "Alış İadesi") { faturalasanVeriler.Add(item); } 
+            else { irsaliyeVerileri.Add(item); } 
+        }
+        else
+        {
+            faturalasanVeriler.Add(item);
+        }
+    }
+
+    var groupedFatura = faturalasanVeriler.GroupBy(d => d.ParaBirimi).ToList();
+    var groupedIrsaliye = irsaliyeVerileri.GroupBy(d => d.ParaBirimi).ToList();
+}
+
+@section Styles {
+    <!-- Sadece Select2 CSS kalmalı, Bootstrap ve FontAwesome Layout'tan geliyor -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <style>
+        /* Layout içerisindeki kapsayıcıyı etkilememesi için body stillerini kaldırdık */
+        .header {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .database-info {
+            background-color: #e9ecef;
+            border-left: 4px solid #11998e;
+            padding: 10px 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+
+        /* Layout'un rapor-tablo stili ile çakışmaması için ezilmeleri minimumda tutuyoruz */
+        table.rapor-tablo {
+            font-size: 0.80rem; 
+        }
+
+        th {
+            background-color: #11998e;
+            color: white;
+        }
+
+        th.sortable {
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        th.sortable:hover {
+            background-color: #0e867b;
+        }
+        th.sortable i {
+            color: rgba(255,255,255,0.7);
+            font-size: 0.85em;
+            margin-left: 5px;
+        }
+
+        tr.iade-row { background-color: #fff5f5; color: #dc3545; }
+        tr.iade-row:hover { background-color: #ffe5e5; }
+        tr.irsaliye-row { background-color: #fff9e6; color: #d39e00; }
+        tr.irsaliye-row:hover { background-color: #ffeed3; }
+
+        .fatura-badge { background-color: #198754; color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+        .iade-badge { background-color: #dc3545; color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+        .irsaliye-badge { background-color: #ffc107; color: #212529; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+
+        .text-right { text-align: right !important; }
+        .text-center { text-align: center !important; }
+        .fw-bold { font-weight: bold; }
+        .text-primary-dark { color: #0d6efd; }
+
+        .btn-download-excel, .btn-download-pdf {
+            color: white; border: none; padding: 8px 15px; border-radius: 50px; font-weight: bold; transition: all 0.3s; text-decoration: none;
+        }
+        .btn-download-excel { background: linear-gradient(135deg, #28a745 0%, #218838 100%); }
+        .btn-download-pdf { background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); }
+        .btn-download-excel:hover, .btn-download-pdf:hover { transform: translateY(-2px); color: white; box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+
+        #selectionSummaryPanel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: #212529;
+            color: white;
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: none;
+            padding: 15px 0;
+        }
+        .summary-val { font-size: 1.2rem; font-weight: bold; margin-left: 8px; }
+        .summary-try { color: #20c997; }
+        .summary-usd { color: #5bc0de; }
+        .summary-eur { color: #f0ad4e; }
+    </style>
+}
+
+<div class="container-fluid pb-5">
+    <div class="header text-center shadow-sm mt-2">
+        <h2>ALIŞ EKSTRESİ</h2>
+        <p class="mb-0">Tedarikçiye veya kaleme göre geçmiş satınalma, <strong>iade</strong> ve <strong>açık mal kabul</strong> hareketlerinizi listeleyin</p>
+    </div>
+
+    <div class="database-info shadow-sm text-dark">
+        <i class="fas fa-database me-2"></i> Aktif veritabanı: <strong>@currentSelectedDbDisplay</strong>
+    </div>
+
+    <div class="card mb-4 shadow-sm border-0">
+        <div class="card-body bg-light rounded text-dark">
+            <form asp-controller="Rapor92" asp-action="Index" method="get">
+                <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                        <label for="itemCode" class="form-label fw-bold text-success"><i class="fas fa-box me-1"></i> Kalem Seçimi</label>
+                        <select class="form-control" id="itemCode" name="itemCode" multiple="multiple">
+                            @foreach (var item in itemList)
+                            {
+                                <option value="@item.ItemCode" selected="@(selectedItemCodes.Contains(item.ItemCode))">@item.ItemCode - @item.ItemName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label for="bpCode" class="form-label fw-bold text-primary"><i class="fas fa-truck me-1"></i> Tedarikçi (Cari) Seçimi</label>
+                        <select class="form-control" id="bpCode" name="bpCode" multiple="multiple">
+                            @foreach (var cari in cariList)
+                            {
+                                <option value="@cari.CardCode" selected="@(selectedBpCodes.Contains(cari.CardCode))">@cari.CardCode - @cari.CardName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label for="aktarimTipi" class="form-label fw-bold"><i class="fas fa-tags me-1"></i> Aktarım Tipi</label>
+                        <select class="form-control" id="aktarimTipi" name="aktarimTipi" multiple="multiple">
+                            @foreach (var tip in aktarimTipiList)
+                            {
+                                <option value="@tip" selected="@(selectedAktarimTipi.Contains(tip))">@tip</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label for="startDate" class="form-label fw-bold"><i class="fas fa-calendar-alt me-1"></i> Başlangıç Tarihi</label>
+                        <input type="date" class="form-control shadow-sm" id="startDate" name="startDate" value="@ViewBag.StartDate">
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label for="endDate" class="form-label fw-bold"><i class="fas fa-calendar-check me-1"></i> Bitiş Tarihi</label>
+                        <input type="date" class="form-control shadow-sm" id="endDate" name="endDate" value="@ViewBag.EndDate">
+                    </div>
+                    <div class="col-12 col-md-4 d-flex align-items-end">
+                        <button type="submit" class="btn btn-success w-100 fw-bold shadow-sm" style="height: 38px;">
+                            <i class="fas fa-search me-2"></i>Ara / Raporla
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (selectedItemCodes.Any() || selectedBpCodes.Any())
+    {
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                @if (selectedBpCodes.Any())
+                {
+                    <div class="fs-5 text-primary mb-1">
+                        <i class="fas fa-truck me-2"></i>Tedarikçi: <strong>@(selectedBpCodes.Count > 1 ? $"{selectedBpCodes.Count} Tedarikçi Seçildi" : selectedBpCodes.First())</strong>
+                    </div>
+                }
+                @if (selectedItemCodes.Any())
+                {
+                    <div class="fs-5 text-success">
+                        <i class="fas fa-box-open me-2"></i>Kalem: <strong>@(selectedItemCodes.Count > 1 ? $"{selectedItemCodes.Count} Kalem Seçildi" : selectedItemCodes.First())</strong>
+                    </div>
+                }
+            </div>
+            <div>
+                @{
+                    var routeValues = new RouteValueDictionary {
+                                { "startDate", ViewBag.StartDate }, { "endDate", ViewBag.EndDate }
+                                };
+                    for (int i = 0; i < selectedItemCodes.Count; i++) routeValues.Add($"itemCode[{i}]", selectedItemCodes[i]);
+                    for (int i = 0; i < selectedBpCodes.Count; i++) routeValues.Add($"bpCode[{i}]", selectedBpCodes[i]);
+                    for (int i = 0; i < selectedAktarimTipi.Count; i++) routeValues.Add($"aktarimTipi[{i}]", selectedAktarimTipi[i]);
+                }
+                <a href="@Url.Action("DownloadExcel", "Rapor92", routeValues)" class="btn btn-download-excel me-2">
+                    <i class="fas fa-file-excel me-2"></i>Excel'e Aktar
+                </a>
+                <a href="@Url.Action("DownloadPdf", "Rapor92", routeValues)" class="btn btn-download-pdf">
+                    <i class="fas fa-file-pdf me-2"></i>PDF İndir
+                </a>
+            </div>
+        </div>
+
+        <div class="table-responsive rounded shadow border bg-white mb-4">
+            @if (modelData.Any())
+            {
+                <table class="table table-hover rapor-tablo mb-0" id="mainTable">
+                    <thead>
+                        <tr>
+                            <th class="text-center" style="width: 40px;">
+                                <input type="checkbox" id="selectAllCheckbox" class="form-check-input">
+                            </th>
+                            <th class="sortable" style="width: 75px;" onclick="sortTable(1)">Tarih <i class="fas fa-sort"></i></th>
+                            <th class="sortable" style="width: 100px;" onclick="sortTable(2)">İşlem Tipi <i class="fas fa-sort"></i></th>
+                            <th class="sortable" style="width: 80px;" onclick="sortTable(3, true)">Belge No <i class="fas fa-sort"></i></th>
+                            <th class="sortable" onclick="sortTable(4)">Cari Kodu / Adı <i class="fas fa-sort"></i></th>
+                            <th class="sortable" onclick="sortTable(5)">Kalem Kodu / Adı <i class="fas fa-sort"></i></th>
+                            <th class="text-center sortable" style="width: 60px;" onclick="sortTable(6)">Birim <i class="fas fa-sort"></i></th>
+                            <th class="text-right text-primary-dark sortable" style="width: 80px;" onclick="sortTable(7, true)">G. Stok <i class="fas fa-sort"></i></th>
+                            <th class="text-right sortable" style="width: 80px;" onclick="sortTable(8, true)">Miktar <i class="fas fa-sort"></i></th>
+                            <th class="text-right sortable" style="width: 80px;" onclick="sortTable(9, true)">Ton <i class="fas fa-sort"></i></th>
+                            <th class="text-right sortable" style="width: 80px;" onclick="sortTable(10, true)">Fiyat <i class="fas fa-sort"></i></th>
+                            <th class="text-right sortable" style="width: 90px;" onclick="sortTable(11, true)">Tutar <i class="fas fa-sort"></i></th>
+                            <th class="text-center sortable" style="width: 40px;" onclick="sortTable(12)">PB <i class="fas fa-sort"></i></th>
+                            <th class="text-right sortable" style="width: 80px;" onclick="sortTable(13, true)">USD Karş. <i class="fas fa-sort"></i></th>
+                            <th class="text-right sortable" style="width: 80px;" onclick="sortTable(14, true)">EUR Karş. <i class="fas fa-sort"></i></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in modelData)
+                        {
+                            string tip = item.IslemTipi?.Trim() ?? "";
+                            bool isIade = tip.Contains("İade") || tip.Contains("Iade");
+                            bool isIrsaliye = tip.Contains("Kabul") || tip.Contains("kabul");
+
+                            string rowClass = isIade ? "iade-row" : (isIrsaliye ? "irsaliye-row" : "");
+                            string badgeClass = isIade ? "iade-badge" : (isIrsaliye ? "irsaliye-badge" : "fatura-badge");
+                            bool isMetrekare = item.Birim?.ToLower().Contains("metrekare") == true || item.Birim?.ToLower() == "m2" || item.Birim?.ToLower() == "m²";
+
+                            string tryVal = item.Tutar.ToString(CultureInfo.InvariantCulture);
+                            string usdVal = item.UsdKarsiligi.ToString(CultureInfo.InvariantCulture);
+                            string eurVal = item.EurKarsiligi.ToString(CultureInfo.InvariantCulture);
+
+                            <tr class="@rowClass">
+                                <td class="text-center">
+                                    <input type="checkbox" class="form-check-input row-checkbox" 
+                                           data-try="@tryVal" data-usd="@usdVal" data-eur="@eurVal">
+                                </td>
+                                <td>@(item.KayitTarihi?.ToString("dd.MM.yyyy") ?? "-")</td>
+                                <td><span class="@badgeClass">@item.IslemTipi</span></td>
+                                <td>@item.BelgeNo</td>
+                                <td>
+                                    <div><strong class="text-dark">@item.MuhatapKodu</strong></div>
+                                    <div class="text-muted text-truncate" style="font-size:0.70rem; max-width: 150px;" title="@item.MuhatapAdi">@item.MuhatapAdi</div>
+                                </td>
+                                <td>
+                                    <div><strong class="text-dark">@item.KalemKodu</strong></div>
+                                    <div class="text-muted text-truncate" style="font-size:0.70rem; max-width: 150px;" title="@item.KalemAdi">@item.KalemAdi</div>
+                                </td>
+                                <td class="text-center fw-bold text-dark">@item.Birim</td>
+                                <td class="text-right fw-bold text-primary-dark">@item.GuncelStok.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="text-right fw-bold text-dark">@item.Miktar.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="text-right text-muted fw-bold">
+                                    @(isMetrekare || item.TonMiktari != 0 ? item.TonMiktari.ToString("N4", new CultureInfo("tr-TR")) : "-")
+                                </td>
+                                <td class="text-right text-dark">@item.Fiyat.ToString("N4", new CultureInfo("tr-TR"))</td>
+                                <td class="text-right fw-bold text-dark">@item.Tutar.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="text-center text-dark">@item.ParaBirimi</td>
+                                <td class="text-right fw-bold text-success">@item.UsdKarsiligi.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="text-right fw-bold text-primary">@item.EurKarsiligi.ToString("N2", new CultureInfo("tr-TR"))</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <div class="bg-light p-4 border-top">
+                    <div class="row text-dark">
+                        <div class="col-md-6 border-end">
+                            <h6 class="text-success fw-bold"><i class="fas fa-file-invoice-dollar me-2"></i>Faturalaşan Alışlar (Net)</h6>
+                            <small class="text-muted d-block mb-3">Fatura işlemlerinden <strong>Alış İadesi</strong> düşülmüş net tutarlardır.</small>
+
+                            <div class="d-flex flex-wrap gap-3">
+                                @if (groupedFatura.Any())
+                                {
+                                    foreach (var group in groupedFatura)
+                                    {
+                                        <div class="border rounded p-3 bg-white shadow-sm flex-fill" style="min-width: 180px;">
+                                            <div class="text-muted fw-bold border-bottom pb-1 mb-2">Para Birimi: <span class="text-dark">@group.Key</span></div>
+                                            <div class="d-flex justify-content-between mb-1">
+                                                <span>Net Miktar:</span>
+                                                <strong>@group.Sum(x => x.Miktar).ToString("N2", new CultureInfo("tr-TR"))</strong>
+                                            </div>
+                                            <div class="d-flex justify-content-between text-success">
+                                                <span>Net Tutar:</span>
+                                                <strong>@group.Sum(x => x.Tutar).ToString("N2", new CultureInfo("tr-TR"))</strong>
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 ps-md-4 mt-4 mt-md-0">
+                            <h6 class="fw-bold" style="color: #d39e00;"><i class="fas fa-truck-loading me-2"></i>Açık Mal Kabulleri (Bekleyen)</h6>
+                            <small class="text-muted d-block mb-3">Mal Kabullerinden <strong>Mal İadesi</strong> düşülmüş net tutarlardır.</small>
+
+                            <div class="d-flex flex-wrap gap-3">
+                                @if (groupedIrsaliye.Any())
+                                {
+                                    foreach (var group in groupedIrsaliye)
+                                    {
+                                        <div class="border rounded p-3 bg-white shadow-sm flex-fill" style="min-width: 180px; border-color: #ffc107 !important;">
+                                            <div class="text-muted fw-bold border-bottom pb-1 mb-2">Para Birimi: <span class="text-dark">@group.Key</span></div>
+                                            <div class="d-flex justify-content-between mb-1">
+                                                <span>Net Açık Miktar:</span>
+                                                <strong>@group.Sum(x => x.Miktar).ToString("N2", new CultureInfo("tr-TR"))</strong>
+                                            </div>
+                                            <div class="d-flex justify-content-between" style="color: #d39e00;">
+                                                <span>Olası Tutar:</span>
+                                                <strong>@group.Sum(x => x.Tutar).ToString("N2", new CultureInfo("tr-TR"))</strong>
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<div id="selectionSummaryPanel">
+    <div class="container-fluid d-flex justify-content-between align-items-center px-4">
+        <div>
+            <i class="fas fa-check-square me-2 text-success"></i> 
+            Seçili Satır Sayısı: <span id="lblSelectedCount" class="badge bg-light text-dark fs-6 ms-1">0</span>
+        </div>
+        <div class="d-flex gap-4 align-items-center">
+            <div>Toplam TRY: <span id="lblSelectedTry" class="summary-val summary-try">0,00</span></div>
+            <div class="border-start border-secondary ps-4">Toplam USD: <span id="lblSelectedUsd" class="summary-val summary-usd">0,00</span></div>
+            <div class="border-start border-secondary ps-4">Toplam EUR: <span id="lblSelectedEur" class="summary-val summary-eur">0,00</span></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- Bootstrap ve jQuery Layout içerisinden otomatik olarak geldiği için buradan kaldırıldı -->
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            $('#itemCode').select2({ theme: "bootstrap-5", placeholder: "-- Kalem Seçiniz --", width: '100%', allowClear: true, closeOnSelect: false });
+            $('#bpCode').select2({ theme: "bootstrap-5", placeholder: "-- Tedarikçi Seçiniz --", width: '100%', allowClear: true, closeOnSelect: false });
+            $('#aktarimTipi').select2({ theme: "bootstrap-5", placeholder: "Tümü", width: '100%', allowClear: true, closeOnSelect: false });
+
+            // Checkbox Seçim İşlemleri
+            $('#selectAllCheckbox').on('change', function() {
+                $('.row-checkbox').prop('checked', $(this).prop('checked'));
+                calculateTotals();
+            });
+
+            $('.row-checkbox').on('change', function() {
+                if ($('.row-checkbox:checked').length === $('.row-checkbox').length) {
+                    $('#selectAllCheckbox').prop('checked', true);
+                } else {
+                    $('#selectAllCheckbox').prop('checked', false);
+                }
+                calculateTotals();
+            });
+        });
+
+        // Seçili satırları toplama
+        function calculateTotals() {
+            let count = 0;
+            let sumTry = 0, sumUsd = 0, sumEur = 0;
+
+            $('.row-checkbox:checked').each(function() {
+                count++;
+                sumTry += parseFloat($(this).attr('data-try')) || 0;
+                sumUsd += parseFloat($(this).attr('data-usd')) || 0;
+                sumEur += parseFloat($(this).attr('data-eur')) || 0;
+            });
+
+            if(count > 0) {
+                $('#selectionSummaryPanel').slideDown();
+                $('#lblSelectedCount').text(count);
+                $('#lblSelectedTry').text(sumTry.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                $('#lblSelectedUsd').text(sumUsd.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                $('#lblSelectedEur').text(sumEur.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            } else {
+                $('#selectionSummaryPanel').slideUp();
+            }
+        }
+
+        // Tablo Sıralama Fonksiyonu
+        let sortDirections = {};
+        function sortTable(columnIndex, isNumeric = false) {
+            const table = document.getElementById("mainTable");
+            let rows = Array.from(table.rows).slice(1); 
+            
+            let dir = sortDirections[columnIndex] === 'asc' ? 'desc' : 'asc';
+            sortDirections[columnIndex] = dir;
+
+            rows.sort((a, b) => {
+                let valA = a.cells[columnIndex].innerText.trim();
+                let valB = b.cells[columnIndex].innerText.trim();
+
+                if (isNumeric) {
+                    valA = parseTurkishNumberTable(valA);
+                    valB = parseTurkishNumberTable(valB);
+                    return dir === 'asc' ? valA - valB : valB - valA;
+                } else {
+                    // Tarih kontrolü
+                    if(valA.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
+                        valA = valA.split('.').reverse().join('');
+                        valB = valB.split('.').reverse().join('');
+                    }
+                    return dir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                }
+            });
+
+            const tbody = table.querySelector("tbody");
+            rows.forEach(row => tbody.appendChild(row));
+            
+            // İkonları güncelle
+            $('#mainTable th i.fas').removeClass('fa-sort-up fa-sort-down').addClass('fa-sort');
+            let clickedHeaderIcon = table.rows[0].cells[columnIndex].querySelector('i');
+            if (clickedHeaderIcon) {
+                clickedHeaderIcon.classList.remove('fa-sort');
+                clickedHeaderIcon.classList.add(dir === 'asc' ? 'fa-sort-up' : 'fa-sort-down');
+            }
+        }
+
+        // Layout'daki numara ayrıştırıcıyla çakışmaması için ismini değiştirdik
+        function parseTurkishNumberTable(str) {
+            if(!str || str === '-') return 0;
+            let cleaned = str.replace(/\./g, '').replace(/,/g, '.');
+            return parseFloat(cleaned) || 0;
+        }
+    </script>
+}

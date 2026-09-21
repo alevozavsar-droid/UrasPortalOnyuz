@@ -1,0 +1,335 @@
+﻿@{
+    ViewData["Title"] = "Çek İbraz & Tahsilat Dashboard";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <style>
+        /* Genel Dashboard Stilleri */
+        :root { --form-bg: #ffffff; --border-soft: #e2e8f0; --primary-soft: #eff6ff; }
+        body { background-color: #f4f7fc; font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #2b3445; }
+        
+        /* Kart ve Yükselme (Hover) Efektleri */
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); transition: all 0.3s ease; position: relative; overflow: hidden; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        
+        /* Filtre ve Label Stilleri */
+        .filter-label { font-size: 12px; color: #64748b; font-weight: 700; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px;}
+        .form-control, .form-select { border-radius: 6px; border: 1px solid #cbd5e1; font-size: 13px; padding: 8px 12px; transition: border-color 0.2s;}
+        .form-control:focus, .form-select:focus { border-color: #3b82f6; box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.15); }
+        
+        /* Tablo Stilleri */
+        .table-modern { border-collapse: separate; border-spacing: 0; width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-soft); }
+        .table-modern > thead > tr.header-row > th { background-color: #1e293b; color: #ffffff; font-size: 12px; font-weight: 700; padding: 14px 10px; border-bottom: none; border-right: 1px solid #334155; text-transform: uppercase; letter-spacing: 0.5px; white-space:nowrap; position: sticky; top: 0; z-index: 3;}
+        .table-modern > thead > tr.filter-row > th { background-color: #f8fafc; padding: 6px 8px; border-bottom: 2px solid #cbd5e1; border-right: 1px solid var(--border-soft); position: sticky; top: 46px; z-index: 2;}
+        .table-modern > tbody > tr > td { font-size: 13px; color: #334155; vertical-align: middle; padding: 10px; border-bottom: 1px solid #f1f5f9; border-right: 1px solid var(--border-soft); white-space:nowrap; background-color: #ffffff; }
+        .table-modern tbody tr:hover td { background-color: var(--primary-soft); cursor: pointer; transform: scale(1.001); transition: all 0.2s; box-shadow: inset 2px 0 0 #3b82f6; }
+        
+        /* Kolon İçi Arama İnputu */
+        .column-search { font-size: 11px; padding: 4px 8px; font-weight: 500; text-align: center; }
+        .column-search::placeholder { color: #94a3b8; font-weight: normal; }
+
+        /* Durum Rozetleri (Badges) */
+        .badge-soft-success { background-color: #d1fae5; color: #065f46; border-radius: 6px; padding: 5px 10px; font-weight: 700; font-size: 11px;}
+        .badge-soft-danger { background-color: #fee2e2; color: #991b1b; border-radius: 6px; padding: 5px 10px; font-weight: 700; font-size: 11px;}
+
+        /* Aksiyon Barı */
+        .action-bar { background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-top: 1px solid var(--border-soft); padding: 1rem 1.5rem; position: sticky; bottom: 0; z-index: 100; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -10px 15px -3px rgba(0,0,0,0.05); }
+    </style>
+}
+
+<div class="container-fluid py-4 pb-5 mb-5">
+    <div class="dashboard-card mb-4 bg-white p-4 hover-elevate">
+        <h4 class="fw-bold text-dark mb-4" style="letter-spacing: -0.5px;">
+            <i class="fas fa-list-alt text-primary me-2"></i> Çek İbraz & Tahsilat Dashboard
+        </h4>
+
+        
+        <div class="row g-3 align-items-end">
+
+            <div class="col-md-2">
+                <label class="filter-label">İşlem Tipi</label>
+                <select id="islemTipi" class="form-select fw-bold">
+                    <option value="Ibraz">İbraz (Çıkış)</option>
+                    <option value="Tahsilat">Tahsilat (Giriş)</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="filter-label">Başlangıç Tarihi</label>
+                <input type="date" id="startDate" class="form-control fw-bold" />
+            </div>
+            <div class="col-md-2">
+                <label class="filter-label">Bitiş Tarihi</label>
+                <input type="date" id="endDate" class="form-control fw-bold" />
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button id="btnGetir" class="btn btn-primary w-100 fw-bold shadow-sm">
+                    <i class="fas fa-search me-2"></i>Verileri Getir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-card p-0">
+        <div class="table-responsive" style="max-height: 60vh; overflow-y: auto; overflow-x: auto;">
+            <table class="table-modern border-0" id="checksTable">
+                <thead>
+                    <tr class="header-row">
+                        <th class="text-center" style="width:40px;">
+                            <input class="form-check-input border-secondary" style="transform: scale(1.2);" type="checkbox" id="selectAll">
+                        </th>
+                        <th class="text-center">İşlem Tipi</th>
+                        <th class="text-center">Belge No</th>
+                        <th class="text-center">Belge Tarihi</th>
+                        <th>Hedef/Kaynak Cari/Kasa</th>
+                        <th class="text-center">Çek No</th>
+                        <th class="text-center">Vade Tarihi</th>
+                        <th class="text-end">Tutar</th>
+                        <th>Asıl Borçlu</th>
+                        <th>Çek Kimden Geldi</th>
+                        <th>Banka</th>
+                        <th>Şube</th>
+                    </tr>
+                    <!-- HER KOLON İÇİN ARAMA SATIRI -->
+                    <tr class="filter-row">
+                        <th class="text-center"><i class="fas fa-filter text-muted"></i></th>
+                        <th><input type="text" class="form-control column-search" data-col="1" placeholder="Tip Ara"></th>
+                        <th><input type="text" class="form-control column-search" data-col="2" placeholder="Belge Ara"></th>
+                        <th><input type="text" class="form-control column-search" data-col="3" placeholder="Tarih Ara"></th>
+                        <th><input type="text" class="form-control column-search" data-col="4" placeholder="Cari Ara"></th>
+                        <th><input type="text" class="form-control column-search" data-col="5" placeholder="Çek No Ara"></th>
+                        <th><input type="text" class="form-control column-search" data-col="6" placeholder="Vade Ara"></th>
+                        <th><input type="text" class="form-control column-search" data-col="7" placeholder="Tutar Ara"></th>
+                        <th><input type="text" class="form-control column-search" data-col="8" placeholder="Borçlu Ara"></th>
+                        <th><input type="text" class="form-control column-search" data-col="9" placeholder="Kimden Ara"></th>
+                        <th><input type="text" class="form-control column-search" data-col="10" placeholder="Banka Ara"></th>
+                        <th><input type="text" class="form-control column-search" data-col="11" placeholder="Şube Ara"></th>
+                    </tr>
+                </thead>
+                <tbody id="checksBody">
+                    <tr><td colspan="12" class="text-center text-muted py-5"><i class="fas fa-filter fs-3 mb-2 d-block opacity-25"></i>Kriterleri seçip verileri getirin.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="action-bar fixed-bottom">
+    <div class="d-flex align-items-center">
+        <span class="badge bg-secondary fs-6 px-4 py-2 me-3 rounded-pill shadow-sm">Seçilen: <span id="lblSelectedCount">0</span> Adet</span>
+        <span class="badge bg-primary fs-5 px-4 py-2 rounded-pill shadow-sm">Toplam Tutar: <span id="lblSelectedTotal">0,00</span> ₺</span>
+    </div>
+    <button type="button" class="btn btn-success btn-lg px-5 py-2 shadow hover-elevate fw-bold rounded-pill" id="btnCreateBordro">
+        <i class="fas fa-file-pdf me-2"></i> Seçili Çeklerin Bordrosunu Oluştur
+    </button>
+</div>
+
+@section Scripts {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        toastr.options = { positionClass: "toast-top-right", timeOut: "3000" };
+
+        function formatNumber(num) {
+            return parseFloat(num).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // Tutar ve Adet Hesaplama
+        function calculateTotals() {
+            let total = 0;
+            let count = 0;
+            // Sadece görünür ve seçili olanları hesapla
+            $('.chk-row:checked:visible').each(function() {
+                total += parseFloat($(this).data('sum')) || 0;
+                count++;
+            });
+            $('#lblSelectedCount').text(count);
+            $('#lblSelectedTotal').text(formatNumber(total));
+        }
+
+        $(document).ready(function () {
+            // Varsayılan Tarihleri Ayarla (Son 30 Gün)
+            const today = new Date().toISOString().split('T')[0];
+            const firstDay = new Date();
+            firstDay.setDate(firstDay.getDate() - 30);
+            $('#startDate').val(firstDay.toISOString().split('T')[0]);
+            $('#endDate').val(today);
+
+            // Tümünü Seç İşlemi
+            $('#selectAll').change(function() {
+                // Sadece filtrelenmiş (ekranda görünen) satırları seç/kaldır
+                $('.chk-row:visible').prop('checked', $(this).is(':checked'));
+                calculateTotals();
+            });
+
+            // Tekil Satır Seçimi
+            $(document).on('change', '.chk-row', function() {
+                if ($('.chk-row:checked:visible').length === $('.chk-row:visible').length && $('.chk-row:visible').length > 0) {
+                    $('#selectAll').prop('checked', true);
+                } else {
+                    $('#selectAll').prop('checked', false);
+                }
+                calculateTotals();
+            });
+
+            // ==========================================
+            // KOLON BAZLI CANLI ARAMA (FİLTRELEME) MANTIĞI
+            // ==========================================
+            $('.column-search').on('keyup change', function() {
+                let $rows = $('#checksBody tr.data-row'); // Sadece veri satırlarında ara
+                
+                // Önce tüm satırları göster
+                $rows.show();
+
+                // Her arama kutusu için döngüye gir
+                $('.column-search').each(function() {
+                    let searchValue = $(this).val().toLowerCase().trim();
+                    let colIndex = $(this).data('col'); // Data-col attr'sından indexi al
+
+                    if (searchValue) {
+                        $rows.each(function() {
+                            // Eğer bu satır zaten başka bir filtre yüzünden gizlendiyse atla
+                            if ($(this).is(':visible')) {
+                                let cellText = $(this).find('td').eq(colIndex).text().toLowerCase();
+                                // Eşleşmiyorsa gizle ve checkbox'ı kaldır (güvenlik için)
+                                if (!cellText.includes(searchValue)) {
+                                    $(this).hide();
+                                    $(this).find('.chk-row').prop('checked', false);
+                                }
+                            }
+                        });
+                    }
+                });
+
+                // "Tümünü Seç" durumunu ve toplamları güncelle
+                $('#selectAll').prop('checked', false);
+                calculateTotals();
+            });
+
+            // Verileri Getir
+            $('#btnGetir').click(function () {
+
+                const islemTipi = $('#islemTipi').val();
+                const startDate = $('#startDate').val();
+                const endDate = $('#endDate').val();
+
+                if (!startDate || !endDate) { toastr.warning("Tarih aralığı seçiniz."); return; }
+
+                $('#btnGetir').prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...');
+                $('#checksBody').html('<tr><td colspan="12" class="text-center py-5"><div class="spinner-border text-primary"></div><br><span class="text-primary fw-bold mt-2 d-block">Veriler Sunucudan Çekiliyor...</span></td></tr>');
+                
+                // Yeni arama öncesi arama kutularını temizle
+                $('.column-search').val('');
+
+                $.ajax({
+                    url: '/Rapor132/GetData',
+                    type: 'GET',
+                    data: { islemTipi: islemTipi, baslangicTarihi: startDate, bitisTarihi: endDate },
+                    success: function (res) {
+                        let html = '';
+                        if (res && res.length > 0) {
+                            res.forEach(item => {
+                                let badgeClass = islemTipi === 'Ibraz' ? 'badge-soft-danger' : 'badge-soft-success';
+                                html += `
+                                <tr class="data-row" onclick="$(this).find('.chk-row').click();">
+                                    <td class="text-center" onclick="event.stopPropagation();">
+                                        <input class="form-check-input chk-row border-secondary" style="transform: scale(1.2);" type="checkbox" value="${item.checkKey}" data-sum="${item.tutar}">
+                                    </td>
+                                    <td class="text-center"><span class="${badgeClass}">${item.islemTipi}</span></td>
+                                    <td class="text-center fw-bold text-dark">${item.docNum}</td>
+                                    <td class="text-center">${item.docDate}</td>
+                                    <td class="text-truncate fw-bold" style="max-width:200px;" title="${item.islemYapilanCariHesap}">${item.islemYapilanCariHesap || '-'}</td>
+                                    <td class="text-center fw-bold text-primary">${item.checkNum}</td>
+                                    <td class="text-center">${item.vadeTarihi}</td>
+                                    <td class="text-end fw-bold text-dark bg-light">${formatNumber(item.tutar)}</td>
+                                    <td class="text-truncate" style="max-width:150px;" title="${item.asilBorclu}">${item.asilBorclu || '-'}</td>
+                                    <td class="text-truncate" style="max-width:150px;" title="${item.cekKimdenGeldi}">${item.cekKimdenGeldi || '-'}</td>
+                                    <td class="text-truncate" style="max-width:150px;" title="${item.bankaAdi}">${item.bankaAdi || '-'}</td>
+                                    <td class="text-truncate" style="max-width:150px;">${item.sube || '-'}</td>
+                                </tr>`;
+                            });
+                        } else {
+                            html = '<tr><td colspan="12" class="text-center text-muted py-5 fw-bold">Bu kriterlere uygun çek kaydı bulunamadı.</td></tr>';
+                        }
+                        $('#checksBody').html(html);
+                        $('#selectAll').prop('checked', false);
+                        calculateTotals();
+                    },
+                    error: function () {
+                        toastr.error("Veriler getirilirken hata oluştu.");
+                        $('#checksBody').html('<tr><td colspan="12" class="text-center text-danger py-5 fw-bold"><i class="fas fa-exclamation-triangle fa-2x mb-2"></i><br>Veri çekim hatası.</td></tr>');
+                    },
+                    complete: function () {
+                        $('#btnGetir').prop('disabled', false).html('<i class="fas fa-search me-2"></i>Verileri Getir');
+                    }
+                });
+            });
+
+            // PDF Bordro Oluşturma
+            $('#btnCreateBordro').click(function () {
+                const selectedChecks = [];
+                // Sadece görünür ve işaretli olanları al (filtrede gizlenmiş olanları es geç)
+                $('.chk-row:checked:visible').each(function () {
+                    selectedChecks.push(parseInt($(this).val()));
+                });
+
+                if (selectedChecks.length === 0) {
+                    Swal.fire('Uyarı!', 'Lütfen bordroya eklenecek en az bir çek seçin.', 'warning');
+                    return;
+                }
+
+                const payload = {
+                    IslemTipi: $('#islemTipi').val(),
+                    CheckKeys: selectedChecks
+                };
+
+                const btn = $(this);
+                const originalText = btn.html();
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>PDF Oluşturuluyor...');
+
+                fetch('/Rapor132/CreateBordro', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                .then(response => {
+                    if (response.ok) return response.blob();
+
+                    // Sunucunun gercek sebebini goster; "olusturulamadi" tek basina
+                    // hicbir sey anlatmiyordu.
+                    return response.text().then(metin => {
+                        throw new Error(metin && metin.trim().length
+                            ? metin.trim().substring(0, 300)
+                            : 'Bordro oluşturulamadı (HTTP ' + response.status + ').');
+                    });
+                })
+                .then(blob => {
+                    var url = window.URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = `CekBordrosu_${new Date().getTime()}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    
+                    Swal.fire({
+                        title: 'Başarılı!',
+                        text: 'PDF Bordrosu başarıyla indirildi.',
+                        icon: 'success',
+                        confirmButtonText: 'Tamam'
+                    });
+                })
+                .catch(err => {
+                    Swal.fire('Hata!', err.message, 'error');
+                })
+                .finally(() => {
+                    btn.prop('disabled', false).html(originalText);
+                });
+            });
+        });
+    </script>
+}

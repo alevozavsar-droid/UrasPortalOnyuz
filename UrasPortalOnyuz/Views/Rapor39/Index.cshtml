@@ -1,0 +1,527 @@
+﻿@model List<WebApplication3.Models.CariEkstreViewModel>
+@using WebApplication3.Models
+@using System.Globalization
+@using Microsoft.AspNetCore.Routing
+
+@{
+    ViewData["Title"] = "Muhasebe Hesap Ekstre Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // 1. KURAL: URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? "Bilinmiyor";
+
+    // Controller'dan gelen seçimler
+    var selectedBpCodes = ViewBag.SelectedBpCodes as List<string> ?? new List<string>();
+    var selectedAktarimTipi = ViewBag.SelectedAktarimTipi as List<string> ?? new List<string>();
+    var selectedYevIptal = (string)ViewBag.SelectedYevIptal ?? "All";
+    var includeInitialBalance = (bool)(ViewBag.IncludeInitialBalance ?? false);
+    var detayliAciklama = (bool)(ViewBag.DetayliAciklama ?? false);
+
+    // Dropdown verileri
+    var accountList = ViewBag.CariList as List<CariViewModel> ?? new List<CariViewModel>();
+    var aktarimTipiList = ViewBag.AktarimTipiList as List<string> ?? new List<string>();
+    var modelData = Model ?? new List<CariEkstreViewModel>();
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+        }
+
+        .container {
+            max-width: 100%;
+            padding: 0 25px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .database-info {
+            background-color: #e9ecef;
+            border-left: 4px solid #007bff;
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            margin-top: 2rem;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+        }
+
+        /* --- KOLON GENİŞLİK AYARLARI --- */
+        table.rapor-tablo {
+            width: 100% !important;
+            border-collapse: collapse;
+            table-layout: auto;
+        }
+
+            /* Sütun genişlikleri "MODERN GÖRÜNÜM KATMANI" bölümünde yönetiliyor. */
+
+            table.rapor-tablo th, table.rapor-tablo td {
+                padding: 10px 8px;
+                text-align: left;
+                border: 1px solid #dee2e6;
+                font-size: 0.75rem;
+            }
+
+        th {
+            background-color: #007bff;
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .text-right {
+            text-align: right !important;
+        }
+
+        .borc {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .alacak {
+            color: #198754;
+            font-weight: bold;
+        }
+
+        .rapor-tablo tbody tr.at-row, .rapor-tablo tbody tr.at-row td {
+            background-color: #e3f2fd !important;
+            font-weight: bold !important;
+        }
+
+        .rapor-tablo tbody tr.db-row, .rapor-tablo tbody tr.db-row td {
+            background-color: #f1f3f5 !important;
+            font-weight: bold !important;
+        }
+
+        /* ==================================================================
+           MODERN GÖRÜNÜM KATMANI  (Rapor20 ile aynı tasarım dili)
+           ================================================================== */
+        body { font-family: 'Inter', 'Segoe UI', Tahoma, sans-serif; background-color: var(--bg-main, #f4f6fb); }
+
+        .container { padding: 0 !important; max-width: 100% !important; }
+
+        .header {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #0f172a 100%);
+            border-radius: 18px; padding: 18px 22px; margin-bottom: 16px;
+            box-shadow: var(--shadow-md, 0 10px 30px rgba(15,23,42,.10));
+            position: relative; overflow: hidden;
+        }
+        .header::after {
+            content: ""; position: absolute; inset: 0; pointer-events: none;
+            background: radial-gradient(520px 240px at 6% -30%, rgba(0,158,247,.42), transparent 62%),
+                        radial-gradient(420px 240px at 98% 130%, rgba(99,102,241,.36), transparent 60%);
+        }
+        .header > * { position: relative; z-index: 1; }
+
+        .database-info {
+            background: var(--bg-card, #fff); border: 1px solid var(--border-color, #e8ecf4);
+            border-left: 4px solid var(--metro-primary, #009ef7);
+            border-radius: 12px; padding: 10px 14px; margin-bottom: 14px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .card { border-radius: 18px !important; border: 1px solid var(--border-color, #e8ecf4) !important; }
+        .card-title { font-weight: 800; letter-spacing: -.02em; font-size: 1rem; }
+
+        /* ---------- Filtreler: hepsi aynı hizada ---------- */
+        form .row.g-3 {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+            gap: 12px !important;
+            align-items: end;
+            margin: 0 !important;
+        }
+        form .row.g-3 > [class*="col-"] {
+            width: auto !important; max-width: none !important;
+            flex: none !important; padding: 0 !important;
+            display: flex; flex-direction: column;
+        }
+
+        form .form-label {
+            font-size: .68rem !important; font-weight: 800 !important;
+            letter-spacing: .06em; text-transform: uppercase;
+            color: var(--text-secondary, #64748b) !important; margin-bottom: 5px;
+        }
+
+        form .form-control, form .form-select,
+        form .select2-container--bootstrap-5 .select2-selection {
+            min-height: 40px !important; height: 40px !important;
+            border-radius: 10px !important;
+            border: 1px solid var(--border-color, #e8ecf4) !important;
+            font-size: .85rem;
+        }
+        form .select2-container--bootstrap-5 .select2-selection--multiple {
+            padding: 0 10px !important; display: flex !important; align-items: center !important;
+            overflow: hidden;
+        }
+        form .form-control:focus, form .form-select:focus,
+        form .select2-container--bootstrap-5.select2-container--focus .select2-selection {
+            border-color: var(--metro-primary, #009ef7) !important;
+            box-shadow: 0 0 0 3px rgba(0,158,247,.18) !important;
+        }
+
+        /* Seçilenler tek tek listelenmesin; "N seçildi" özeti göster */
+        .select2-container--bootstrap-5 .select2-selection--multiple .select2-selection__rendered {
+            display: flex !important; align-items: center; flex-wrap: nowrap !important;
+            padding: 0 !important; margin: 0 !important; overflow: hidden;
+        }
+        .select2-container--bootstrap-5 .select2-selection--multiple .select2-selection__choice {
+            display: none !important;
+        }
+        .select2-container--bootstrap-5 .select2-selection--multiple .select2-search--inline { flex: 1; min-width: 40px; }
+        .secim-ozet-li { list-style: none; margin: 0 6px 0 0; display: flex; align-items: center; }
+        .secim-ozet {
+            background: linear-gradient(135deg,#009ef7,#6366f1); color: #fff;
+            font-size: .72rem; font-weight: 700; white-space: nowrap;
+            padding: .22rem .65rem; border-radius: 999px;
+        }
+
+        form .form-check {
+            display: flex; align-items: center; gap: .5rem; min-height: 40px; margin: 0 !important;
+            padding: .35rem .8rem !important;
+            border: 1px solid var(--border-color, #e8ecf4);
+            border-radius: 10px; background: var(--bg-card, #fff);
+        }
+        form .form-check .form-check-input { margin: 0 !important; float: none !important; flex-shrink: 0; }
+        form .form-check .form-check-label { margin: 0 !important; font-size: .8rem; white-space: nowrap; }
+        form button[type="submit"] { border-radius: 10px; height: 40px; font-weight: 700; }
+        form .filtre-hucre { justify-content: flex-end; }
+        form .filtre-hucre .form-check { width: 100%; }
+
+        /* ---------- Tablo: ekrana sığsın, kendi içinde kaymasın ---------- */
+        .table-container {
+            padding: 0; border-radius: 16px; margin-top: 14px;
+            border: 1px solid var(--border-color, #e8ecf4);
+            box-shadow: var(--shadow-sm);
+            background: var(--bg-card, #fff);
+            overflow: visible;          /* sayfa ile birlikte kayar */
+        }
+
+        table.rapor-tablo { font-size: .70rem; }
+
+        table.rapor-tablo th,
+        table.rapor-tablo td { padding: 5px 7px !important; border-color: #eef2f7 !important; }
+
+        table.rapor-tablo th:not(.text-right),
+        table.rapor-tablo td:not(.text-right) {
+            width: auto !important; max-width: none !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere; word-break: break-word; line-height: 1.28;
+        }
+
+        table.rapor-tablo th.text-right,
+        table.rapor-tablo td.text-right { white-space: nowrap !important; text-align: right !important; }
+        table.rapor-tablo td:nth-child(1),
+        table.rapor-tablo td:nth-child(2),
+        table.rapor-tablo td:nth-child(3) { white-space: nowrap !important; }
+
+        /* Başlık satırı sayfa kaydıkça üst barın altına yapışır */
+        table.rapor-tablo th, .rapor-tablo thead th, th {
+            background: #0f172a !important; color: #fff !important;
+            font-size: .63rem; font-weight: 700;
+            letter-spacing: .05em; text-transform: uppercase; white-space: nowrap;
+            position: sticky; top: var(--header-height, 72px); z-index: 12;
+            border-color: #1e293b !important;
+        }
+
+        table.rapor-tablo tbody tr:nth-child(even) td { background-color: #fbfcfe; }
+        table.rapor-tablo tbody tr:hover td { background-color: #eef7ff !important; }
+
+        @@media (max-width: 1200px) {
+            .table-container { overflow-x: auto; }
+            table.rapor-tablo th { top: 0; }
+        }
+    </style>
+    <link rel="stylesheet" href="~/css/ekstre-tema.css" asp-append-version="true" />
+}
+
+@* 2. KURAL: Güvenlik (CSRF) - Yetkisiz istekleri engellemek için eklendi *@
+@Html.AntiForgeryToken()
+
+<div class="container mt-4">
+    <div class="header text-center">
+        <h2>MUHASEBE HESAP EKSTRE RAPORU</h2>
+        <p class="mb-0">Seçilen hesapların ve alt kırılımlarının detaylı finansal dökümü</p>
+    </div>
+
+    <div class="database-info">
+        <i class="fas fa-database me-2"></i> Aktif veritabanı: <strong>@currentSelectedDbDisplay</strong>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Rapor Filtreleri</h5>
+            <form asp-controller="Rapor39" asp-action="Index" method="get" id="raporForm">
+                
+                @* 1. KURAL: GET formuna şirket bilgisini ekleyen gizli input *@
+                <input type="hidden" name="db" value="@currentDb" />
+
+                <div class="row g-3">
+
+                    <div class="col-12 col-md-4">
+                        <label for="bpCode" class="form-label fw-bold">Hesap Kodu / Unvanı (Çoklu Seçim)</label>
+                        <select class="form-control" id="bpCode" name="bpCode" multiple="multiple">
+                            @if (accountList.Any())
+                            {
+                                foreach (var acct in accountList)
+                                {
+                                    bool isSelected = selectedBpCodes.Contains(acct.CardCode);
+                                    @* ÇÖZÜM: Döngü içerisindeki Tag Helper çakışmasını önlemek için standart Razor yöntemi *@
+                                    <option value="@acct.CardCode" selected="@isSelected">@acct.CardCode - @acct.CardName</option>
+                                }
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-12 col-md-2">
+                        <label for="startDate" class="form-label fw-bold">Başlangıç Tarihi</label>
+                        <input type="date" class="form-control" name="startDate" value="@ViewBag.StartDate">
+                    </div>
+                    <div class="col-12 col-md-2">
+                        <label for="endDate" class="form-label fw-bold">Bitiş Tarihi</label>
+                        <input type="date" class="form-control" name="endDate" value="@ViewBag.EndDate">
+                    </div>
+
+                    <div class="col-12 col-md-2">
+                        <label class="form-label fw-bold">Yevmiye İptal Durumu</label>
+                        <select name="yevIptal" class="form-select">
+                            @* ÇÖZÜM: RZ1031 hatasını gidermek için <!option> kaçış sözdizimi uygulandı *@
+                            <!option value="All" @(selectedYevIptal == "All" ? "selected" : "")>Tümü (Dahil)</!option>
+                            <!option value="N" @(selectedYevIptal == "N" ? "selected" : "")>Geçerli (İptalsiz)</!option>
+                            <!option value="Y" @(selectedYevIptal == "Y" ? "selected" : "")>Sadece İptaller</!option>
+                        </select>
+                    </div>
+
+                    <div class="col-12 col-md-2">
+                        <label for="aktarimTipi" class="form-label fw-bold">Aktarım Tipi</label>
+                        <select class="form-control" id="aktarimTipi" name="aktarimTipi" multiple="multiple">
+                            @foreach (var tip in aktarimTipiList)
+                            {
+                                bool isSelected = selectedAktarimTipi.Contains(tip);
+                                <option value="@tip" selected="@isSelected">@tip</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-12 col-md-3 filtre-hucre">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="includeInitialBalance" name="includeInitialBalance" value="true" @(includeInitialBalance ? "checked" : "")>
+                            <label class="form-check-label fw-bold" for="includeInitialBalance">Devir Bakiyesini Dahil Et</label>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-2 filtre-hucre">
+                        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search me-2"></i>Raporla</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (selectedBpCodes.Any())
+    {
+        <div class="row mb-3">
+            <div class="col-12 text-end">
+                @{
+                    var routeValues = new RouteValueDictionary {
+                        {"db", currentDb}, // 1. KURAL: Excel ve PDF linkleri için db parametresi eklendi
+                        {"startDate", ViewBag.StartDate},
+                        {"endDate", ViewBag.EndDate},
+                        {"includeInitialBalance", includeInitialBalance},
+                        {"yevIptal", selectedYevIptal},
+                        {"detayliAciklama", detayliAciklama}
+                        };
+
+                    for (int i = 0; i < selectedBpCodes.Count; i++) { routeValues.Add($"bpCode[{i}]", selectedBpCodes[i]); }
+                    for (int i = 0; i < selectedAktarimTipi.Count; i++) { routeValues.Add($"aktarimTipi[{i}]", selectedAktarimTipi[i]); }
+                }
+
+                <div class="btn-group shadow-sm">
+                    <a href="@Url.Action("DownloadExcel", "Rapor39", routeValues)" class="btn btn-success"><i class="fas fa-file-excel me-1"></i> Excel İndir</a>
+                    <a href="@Url.Action("DownloadPdf", "Rapor39", new RouteValueDictionary(routeValues) { { "orientation", "Portrait" } })" class="btn btn-danger"><i class="fas fa-file-pdf me-1"></i> PDF (Dikey)</a>
+                    <a href="@Url.Action("DownloadPdf", "Rapor39", new RouteValueDictionary(routeValues) { { "orientation", "Landscape" } })" class="btn btn-warning"><i class="fas fa-file-pdf me-1"></i> PDF (Yatay)</a>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="table-container">
+        @if (modelData.Any())
+        {
+            var groupedByAccount = modelData.GroupBy(d => d.MuhatapKodu).OrderBy(g => g.Key).ToList();
+
+            foreach (var accountGroup in groupedByAccount)
+            {
+                <h4 class="mt-4 mb-3 hesap-baslik">
+                    <i class="fas fa-folder-open me-2"></i> @accountGroup.Key - @accountGroup.First().MuhatapAdi
+                </h4>
+
+                foreach (var currencyGroup in accountGroup.GroupBy(d => d.IslemPB))
+                {
+                    <h5 class="mt-3 fs-6"><span class="badge bg-secondary">Para Birimi: @currencyGroup.Key</span></h5>
+                    <table class="table table-bordered table-hover rapor-tablo shadow-sm mb-4">
+                        <thead>
+                            <tr>
+                                <th>İşlem No</th>
+                                <th>Kayıt Tarihi</th>
+                                <th>Vade Tarihi</th>
+                                <th>Kod</th>
+                                <th>Hesap Adı</th>
+                                <th>Satır Ayrıntıları</th>
+                                <th>Tip</th>
+                                <th>Aktarım</th>
+                                <th class="text-right">Borç (TRY)</th>
+                                <th class="text-right">Alacak (TRY)</th>
+                                <th class="text-right">Bakiye (TRY)</th>
+                                <th class="text-right">Borç (@currencyGroup.Key)</th>
+                                <th class="text-right">Alacak (@currencyGroup.Key)</th>
+                                <th class="text-right">Bakiye (@currencyGroup.Key)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in currencyGroup.OrderBy(i => i.KayitTarihi).ThenBy(i => i.IslemNo).ThenBy(i => i.SatirNo))
+                            {
+                                string rowClass = item.IslemTipi == "AT" ? "at-row" : (item.IslemTipi == "DB" ? "db-row" : "");
+                                <tr class="@rowClass">
+                                    <td>@(item.IslemNo == -1 || item.IslemTipi == "AT" ? (item.IslemTipi == "DB" ? "DEVİR" : "TOPLAM") : item.IslemNo.ToString())</td>
+                                    <td>@item.KayitTarihi?.ToString("dd.MM.yyyy")</td>
+                                    <td>@item.VadeTarihi?.ToString("dd.MM.yyyy")</td>
+                                    <td>@item.MuhatapKodu</td>
+                                    <td>@item.MuhatapAdi</td>
+                                    <td>@item.Aciklama</td>
+                                    <td class="text-center">@item.IslemTipi</td>
+                                    <td class="text-center">@item.AktarimTipi</td>
+                                    <td class="text-right @(item.TRYB > 0 ? "borc" : "")">@item.TRYB?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                    <td class="text-right @(item.TRYA > 0 ? "alacak" : "")">@item.TRYA?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                    <td class="text-right fw-bold">@item.TRY_KmlBky?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                    <td class="text-right @(item.IslemB > 0 ? "borc" : "")">@item.IslemB?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                    <td class="text-right @(item.IslemA > 0 ? "alacak" : "")">@item.IslemA?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                    <td class="text-right fw-bold">@item.Islem_KmlBky?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            @{
+                                var movements = currencyGroup.Where(d => d.IslemTipi != "AT" && d.IslemTipi != "DB");
+                                var lastMovement = currencyGroup.LastOrDefault(d => d.IslemTipi != "AT");
+                            }
+                            <tr class="table-info fw-bold">
+                                <td colspan="8" class="text-right">TOPLAM (@currencyGroup.Key)</td>
+                                <td class="text-right borc">@movements.Sum(d => d.TRYB ?? 0).ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="text-right alacak">@movements.Sum(d => d.TRYA ?? 0).ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="text-right">@lastMovement?.TRY_KmlBky?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="text-right borc">@movements.Sum(d => d.IslemB ?? 0).ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="text-right alacak">@movements.Sum(d => d.IslemA ?? 0).ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="text-right">@lastMovement?.Islem_KmlBky?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                }
+            }
+
+            <div class="alert alert-dark mt-4 shadow-sm">
+                <div class="row text-center fw-bold align-items-center">
+                    @{
+                        var genelToplamData = modelData.Where(d => d.IslemTipi != "AT").ToList();
+
+                        decimal genelTopBorc = genelToplamData.Sum(d => d.TRYB ?? 0);
+                        decimal genelTopAlacak = genelToplamData.Sum(d => d.TRYA ?? 0);
+                        decimal genelNet = genelTopBorc - genelTopAlacak;
+                    }
+
+                    <div class="col-md-6 text-end">TÜM HESAPLAR GENEL TOPLAM (TRY):</div>
+                    <div class="col-md-2 borc">@genelTopBorc.ToString("N2", new CultureInfo("tr-TR")) (Borç)</div>
+                    <div class="col-md-2 alacak">@genelTopAlacak.ToString("N2", new CultureInfo("tr-TR")) (Alacak)</div>
+                    <div class="col-md-2">
+                        <span class="badge bg-secondary p-2 w-100">Net: @genelNet.ToString("N2", new CultureInfo("tr-TR"))</span>
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            if (selectedBpCodes.Any())
+            {
+                <div class="alert alert-warning text-center">Seçilen kriterlere uygun kayıt bulunamadı.</div>
+            }
+            else
+            {
+                <div class="alert alert-info text-center">Lütfen raporu görüntülemek için en az bir hesap seçip "Raporla" butonuna basınız.</div>
+            }
+        }
+    </div>
+
+    @* 4. KURAL: UI/UX Standartlarına uygun şık, db parametreli Ana Sayfa Dönüş butonu *@
+    <div class="mt-4 mb-5 text-center">
+        <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+            <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+        </a>
+    </div>
+
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            // Hesap Kodu Multi-Select
+            $('#bpCode').select2({
+                theme: "bootstrap-5",
+                placeholder: "Hesap Ara veya Seç (Çoklu)...",
+                allowClear: true,
+                closeOnSelect: false, // EKLENDİ: Seçim yapıldığında listenin kapanmasını engeller
+                language: { noResults: function() { return "Kayıt bulunamadı"; } }
+            });
+
+            // Aktarım Tipi Multi-Select
+            $('#aktarimTipi').select2({
+                theme: "bootstrap-5",
+                placeholder: "Aktarım Tipi Seçiniz",
+                allowClear: true,
+                closeOnSelect: false // EKLENDİ: Seçim yapıldığında listenin kapanmasını engeller
+            });
+
+            // Seçilenleri tek tek göstermek yerine "N seçildi" özeti bas.
+            function secimOzetiGuncelle(secici, birim) {
+                var $s = $(secici);
+                if (!$s.length) return;
+
+                var adet = ($s.val() || []).length;
+                var $kutu = $s.next('.select2-container').find('.select2-selection__rendered');
+
+                $kutu.find('.secim-ozet-li').remove();
+                if (adet > 0) {
+                    $kutu.prepend('<li class="secim-ozet-li"><span class="secim-ozet">' + adet + ' ' + birim + ' seçildi</span></li>');
+                }
+            }
+
+            [{ sec: '#bpCode', birim: 'hesap' }, { sec: '#aktarimTipi', birim: 'tip' }].forEach(function (a) {
+                secimOzetiGuncelle(a.sec, a.birim);
+                $(a.sec).on('change select2:select select2:unselect select2:clear', function () {
+                    secimOzetiGuncelle(a.sec, a.birim);
+                });
+            });
+        });
+    </script>
+}

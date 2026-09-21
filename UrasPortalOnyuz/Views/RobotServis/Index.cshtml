@@ -1,0 +1,214 @@
+﻿@{
+    ViewData["Title"] = "Aktarım Robotu Servisleri";
+    var yetkili = User.FindFirst("UserAuthority")?.Value == "A";
+}
+
+<style>
+    .rs-satir { background: var(--bg-card, #fff); border: 1px solid var(--border-color, #e8ecf4);
+                border-radius: 14px; padding: 14px 16px; margin-bottom: 10px;
+                display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .rs-satir .ad { font-weight: 700; }
+    .rs-satir .servis { font-family: Consolas, monospace; font-size: .74rem;
+                        color: var(--text-secondary, #94a3b8); }
+    .rs-nokta { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .rs-nokta.acik { background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.18); }
+    .rs-nokta.kapali { background: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.18); }
+    .rs-nokta.bilinmiyor { background: #94a3b8; }
+</style>
+
+<div class="container-fluid px-4 py-2">
+
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h2 class="h4 mb-0 fw-bold">
+            <i class="fas fa-server me-2 text-primary"></i> Aktarım Robotu Servisleri
+        </h2>
+        <button class="btn btn-sm btn-primary rounded-pill px-3 fw-bold" onclick="durumlariGetir()">
+            <i class="fas fa-rotate me-1"></i> Durumları Yenile
+        </button>
+    </div>
+
+    @if (!yetkili)
+    {
+        <div class="alert alert-warning border-0 small d-flex align-items-start gap-2 py-2">
+            <i class="fas fa-lock mt-1"></i>
+            <div>
+                Servisleri yalnızca <b>A</b> yetkisine sahip kullanıcılar yeniden başlatabilir.
+                Siz yalnızca durumları görüntüleyebilirsiniz.
+            </div>
+        </div>
+    }
+
+    <div class="alert alert-secondary border-0 small d-flex align-items-start gap-2 py-2">
+        <i class="fas fa-circle-info mt-1"></i>
+        <div>
+            Robotlar Windows servisi olarak çalışır. Bir panelde veri akmıyorsa ilk bakılacak yer
+            buradaki <b>durum</b> bilgisidir.
+            <br>
+            <b>Yeniden başlatma sırasında dikkat:</b> robot o an bir belgeyi SAP'ye yazıyorsa,
+            işlem yarıda kesilirse kuyruk kaydı güncellenmeden kalabilir ve sonraki turda
+            belge tekrar denenir. Mümkünse kuyruğun boş olduğu bir anda yeniden başlatın.
+        </div>
+    </div>
+
+    <div id="rs-uyari" style="display:none;"></div>
+
+    <div id="loader-rs" class="text-center py-5">
+        <i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br>Servis durumları okunuyor...
+    </div>
+
+    <div id="rs-liste"></div>
+</div>
+
+@section Scripts {
+<script>
+    function kacir(m) { return $('<div>').text(m == null ? '' : m).html(); }
+
+    var yetkili = @(yetkili ? "true" : "false");
+
+    /** Tek bir islem butonu uretir. */
+    function rsButon(s, islem, sinif, ikon, metin) {
+        return '<button class="btn btn-sm ' + sinif + ' fw-bold rs-btn ms-1"'
+             + ' data-servis="' + kacir(s.servisAdi) + '"'
+             + ' data-ad="' + kacir(s.baslik) + '"'
+             + ' data-islem="' + islem + '">'
+             + '<i class="fas ' + ikon + ' me-1"></i>' + metin + '</button>';
+    }
+
+    function durumlariGetir() {
+        $('#loader-rs').show();
+
+        var istek = $.ajax({ url: '@Url.Action("GetDurumlar", "RobotServis")', timeout: 120000 });
+
+        istek.always(function () { $('#loader-rs').hide(); });
+
+        istek.done(function (res) {
+            if (!res || !res.success) {
+                $('#rs-liste').html('<div class="alert alert-danger">'
+                    + kacir((res && res.message) ? res.message : 'Durumlar alınamadı.') + '</div>');
+                return;
+            }
+
+            var html = '';
+
+            (res.data || []).forEach(function (s) {
+                var nokta = s.calisiyor ? 'acik'
+                          : (s.durum === 'BULUNAMADI' || s.durum === 'OKUNAMADI') ? 'bilinmiyor' : 'kapali';
+
+                var panelLinki = s.panel
+                    ? '<a href="/' + kacir(s.panel) + '" class="btn btn-sm btn-outline-secondary">'
+                      + '<i class="fas fa-arrow-up-right-from-square me-1"></i>Paneli aç</a>'
+                    : '';
+
+var butonlar = '';
+
+                if (yetkili && s.yonetilebilir) {
+                    // Butonlar duruma gore: duran servise Durdur gostermenin anlami yok
+                    if (s.calisiyor) {
+                        butonlar = rsButon(s, 'yeniden', 'btn-outline-warning', 'fa-rotate-right', 'Yeniden Başlat')
+                                 + rsButon(s, 'durdur',  'btn-outline-danger',  'fa-stop',         'Durdur');
+                    }
+                    else if (s.durum === 'DURDURULMUŞ' || s.durum === 'DURAKLATILMIŞ') {
+                        butonlar = rsButon(s, 'baslat', 'btn-outline-success', 'fa-play', 'Başlat');
+                    }
+                    else {
+                        // BAŞLATILIYOR / DURDURULUYOR gibi gecis durumlarinda islem verilmez
+                        butonlar = '<span class="small text-muted"><i class="fas fa-hourglass-half me-1"></i>'
+                                 + 'geçiş durumunda</span>';
+                    }
+                }
+                else if (yetkili) {
+                    // Windows yetkisi yok: butonu tiklanabilir gostermek yaniltici olur
+                    butonlar = '<button class="btn btn-sm btn-outline-secondary" disabled '
+                             + 'title="Sunucuda RobotServisYetkisiVer.ps1 betiği çalıştırılmadı">'
+                             + '<i class="fas fa-lock me-1"></i>Yetki yok</button>';
+                }
+
+                html += '<div class="rs-satir">'
+                      + '<span class="rs-nokta ' + nokta + '"></span>'
+                      + '<div class="flex-grow-1">'
+                        + '<div class="ad">' + kacir(s.baslik) + '</div>'
+                        + '<div class="servis">' + kacir(s.servisAdi) + '</div>'
+                        + (s.not ? '<div class="small text-danger mt-1">' + kacir(s.not) + '</div>' : '')
+                      + '</div>'
+                      + '<span class="badge ' + kacir(s.renk) + '">' + kacir(s.durum) + '</span>'
+                      + panelLinki
+                      + butonlar
+                      + '</div>';
+            });
+
+            $('#rs-liste').html(html);
+
+            // Yetki hic verilmemisse tek bir uyari goster
+            var yonetilemeyen = (res.data || []).filter(function (x) {
+                return !x.yonetilebilir && x.durum !== 'KURULU DEĞİL';
+            }).length;
+
+            if (yetkili && yonetilemeyen > 0) {
+                $('#rs-uyari').html(
+                    '<div class="alert alert-warning border-0 small d-flex align-items-start gap-2 py-2">'
+                  + '<i class="fas fa-lock mt-1"></i><div>'
+                  + '<b>Yeniden başlatma kapalı.</b> Portalın Windows servislerini yönetme yetkisi yok '
+                  + '(' + yonetilemeyen + ' servis). Sunucuda <code>Tools/RobotServisYetkisiVer.ps1</code> '
+                  + 'betiğini <b>yönetici olarak</b> bir kez çalıştırın. Durum bilgisi bundan etkilenmez.'
+                  + '</div></div>').show();
+            } else {
+                $('#rs-uyari').empty().hide();
+            }
+        });
+
+        istek.fail(function (jq, durum) {
+            $('#rs-liste').html('<div class="alert alert-danger">'
+                + (durum === 'timeout' ? 'Zaman aşımı.' : 'Sunucuya ulaşılamadı.') + '</div>');
+        });
+    }
+
+    // Delegasyonlu dinleyici: satirlar sonradan cizildigi icin
+    $(document).on('click', '.rs-btn', function () {
+        var buton = $(this);
+        var servis = buton.data('servis');
+        var ad = buton.data('ad');
+        var islem = buton.data('islem');
+
+        var soru;
+
+        if (islem === 'durdur') {
+            soru = ad + ' DURDURULACAK.' + String.fromCharCode(10) + String.fromCharCode(10)
+                 + 'Siz tekrar başlatana kadar bu robot hiçbir belge aktarmayacak;'
+                 + String.fromCharCode(10)
+                 + 'kuyrukta biriken kayıtlar işlenmeden bekler.' + String.fromCharCode(10)
+                 + 'Robot o an bir belge işliyorsa işlem yarıda kesilir.' + String.fromCharCode(10)
+                 + String.fromCharCode(10) + 'Onaylıyor musunuz?';
+        }
+        else if (islem === 'baslat') {
+            soru = ad + ' başlatılacak. Onaylıyor musunuz?';
+        }
+        else {
+            soru = ad + ' yeniden başlatılacak.' + String.fromCharCode(10)
+                 + 'Robot o an bir belge işliyorsa işlem yarıda kesilir.' + String.fromCharCode(10)
+                 + 'Onaylıyor musunuz?';
+        }
+
+        if (!confirm(soru)) return;
+
+        $('.rs-btn').prop('disabled', true);
+        buton.html('<i class="fas fa-spinner fa-spin me-1"></i>İşleniyor...');
+
+        $.ajax({
+            url: '@Url.Action("Islem", "RobotServis")',
+            type: 'POST',
+            data: { servisAdi: servis, islem: islem },
+            timeout: 120000
+        }).done(function (res) {
+            alert((res && res.message) ? res.message : 'Sonuç alınamadı.');
+            durumlariGetir();
+        }).fail(function (jq, durum) {
+            alert(durum === 'timeout'
+                ? 'Zaman aşımı. Durumu listeden kontrol edin.'
+                : 'Sunucuya ulaşılamadı.');
+            durumlariGetir();
+        });
+    });
+
+    $(document).ready(durumlariGetir);
+</script>
+}

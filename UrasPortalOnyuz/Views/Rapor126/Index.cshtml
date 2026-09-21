@@ -1,0 +1,302 @@
+﻿@model List<WebApplication3.Controllers.Rapor126Controller.Rapor126ViewModel>
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Xsrf
+
+@{
+    ViewData["Title"] = "Çek İade / İptal Yevmiye Kontrol Merkezi";
+    Layout = "~/Views/Shared/_Layout.cshtml"; 
+
+    int totalCount = Model?.Count ?? 0;
+    int uyumluCount = Model?.Count(x => x.IsUyumlu) ?? 0;
+    int uyumsuzCount = Model?.Count(x => !x.IsUyumlu) ?? 0;
+    
+    int iptalAmaIadeHataCount = Model?.Count(x => x.HataKodu == "IadeKaldirilmali") ?? 0;
+    int iadeIcinBosOlmaliCount = Model?.Count(x => x.HataKodu == "IadeIcinBosOlmali") ?? 0;
+    int iptalIcinYolOlmaliCount = Model?.Count(x => x.HataKodu == "IptalIcinYOlmali") ?? 0;
+}
+
+@section Styles {
+    <style>
+        :root {
+            --light-bg: #f8f9fa;
+            --dark-text: #334155;
+            --border-color: #e2e8f0;
+            --header-bg: #f8fafc;
+        }
+
+        body { font-family: 'Inter', sans-serif; background-color: var(--light-bg); color: var(--dark-text); }
+        
+        .main-report-box { width: 100%; background: #fff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid var(--border-color); }
+        .sticky-toolbar { background-color: #fff; padding: 12px 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; border-radius: 12px 12px 0 0; }
+        
+        .summary-cards-wrapper { padding: 16px; background-color: #f8fafc; border-bottom: 1px solid var(--border-color); }
+        .quick-filter-card { border: 1px solid var(--border-color); border-radius: 12px; transition: all 0.2s ease; cursor: pointer; background: #fff; }
+        .quick-filter-card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border-color: #0d6efd; }
+        
+        .icon-box { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 1.1rem; flex-shrink: 0; }
+        .stat-title { font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; }
+        .stat-amount { font-size: 1.1rem; font-weight: 700; color: #1e293b; margin-bottom: 0; }
+
+        .table-container { height: calc(100vh - 320px); overflow: auto; background-color: #fff; }
+        .rapor-tablo { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.8rem; }
+        .rapor-tablo th, .rapor-tablo td { padding: 8px; border-right: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); vertical-align: middle; }
+        .rapor-tablo thead th { position: sticky; top: 0; background-color: var(--header-bg); z-index: 10; font-weight: 600; color: #475569; border-bottom: 2px solid var(--border-color); white-space: nowrap; }
+        
+        .badge-uyumlu { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+        .badge-uyumsuz { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+        
+        .btn-duzelt { font-size: 0.75rem; padding: 4px 10px; font-weight: 600; border-radius: 6px; }
+    </style>
+}
+
+<div class="container-fluid py-4">
+    @Html.AntiForgeryToken()
+
+    <div class="main-report-box shadow-sm">
+        <div class="sticky-toolbar">
+            <h5 class="m-0 fw-bold text-dark"><i class="fas fa-sync-alt text-primary me-2"></i> Çek İptal/İade Yevmiye Kontrol Merkezi</h5>
+            <div class="d-flex align-items-center">
+                <span class="text-muted fw-bold me-2 small">Aktif Şirket:</span>
+                <div class="badge bg-info text-dark fs-6 shadow-sm"><i class="fas fa-database me-1"></i> @ViewBag.CurrentDbDisplay</div>
+            </div>
+        </div>
+
+        <div class="summary-cards-wrapper">
+            <div class="row g-2">
+                <div class="col">
+                    <div class="card quick-filter-card h-100" onclick="filterTable('all')">
+                        <div class="card-body p-2 d-flex align-items-center">
+                            <div class="icon-box bg-light text-secondary me-2"><i class="fas fa-list"></i></div>
+                            <div><div class="stat-title">Tümü</div><div class="stat-amount">@totalCount</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card quick-filter-card h-100 border-warning" onclick="filterTable('IadeKaldirilmali')">
+                        <div class="card-body p-2 d-flex align-items-center">
+                            <div class="icon-box bg-warning bg-opacity-10 text-warning me-2"><i class="fas fa-times-circle"></i></div>
+                            <div><div class="stat-title text-warning">Hatalı İade(E) İşareti</div><div class="stat-amount text-warning">@iptalAmaIadeHataCount</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card quick-filter-card h-100 border-primary" onclick="filterTable('IadeIcinBosOlmali')">
+                        <div class="card-body p-2 d-flex align-items-center">
+                            <div class="icon-box bg-primary bg-opacity-10 text-primary me-2"><i class="fas fa-eraser"></i></div>
+                            <div><div class="stat-title text-primary">Boşaltılacak Yevmiyeler</div><div class="stat-amount text-primary">@iadeIcinBosOlmaliCount</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card quick-filter-card h-100 border-info" onclick="filterTable('IptalIcinYOlmali')">
+                        <div class="card-body p-2 d-flex align-items-center">
+                            <div class="icon-box bg-info bg-opacity-10 text-info me-2"><i class="fas fa-font"></i></div>
+                            <div><div class="stat-title text-info">'Y' Yazılacaklar</div><div class="stat-amount text-info">@iptalIcinYolOlmaliCount</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card quick-filter-card h-100 border-danger shadow-sm" onclick="filterTable('uyumsuz')">
+                        <div class="card-body p-2 d-flex align-items-center">
+                            <div class="icon-box bg-danger bg-opacity-10 text-danger me-2"><i class="fas fa-exclamation-triangle"></i></div>
+                            <div><div class="stat-title text-danger">Toplam Hatalı</div><div class="stat-amount text-danger" id="uyumsuzCounter">@uyumsuzCount</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table class="rapor-tablo table-hover" id="rapor126Table">
+                <thead>
+                    <tr>
+                        <th class="text-center">Durum</th>
+                        <th>İşlem Türü</th>
+                        <th>Belge No</th>
+                        <th>Tarih</th>
+                        <th class="text-center">SAP İptal (Canceled)</th>
+                        <th class="text-center">U_BE1_iade Alanı</th>
+                        <th>Orijinal Yev. No</th>
+                        <th class="bg-light text-center">U_BE1_YEVIPTAL (ORJ)</th>
+                        <th>Ters Yevmiye No</th>
+                        <th class="bg-light text-center">U_BE1_YEVIPTAL (TERS)</th>
+                        <th>Hata Nedeni / Açıklama</th>
+                        <th class="text-center">İşlem</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model != null && Model.Any())
+                    {
+                        foreach (var item in Model)
+                        {
+                            <tr class="data-row" 
+                                data-uyumlu="@item.IsUyumlu.ToString().ToLower()" 
+                                data-hatakodu="@item.HataKodu">
+                                
+                                <td class="text-center" style="white-space: nowrap;">
+                                    @if(item.IsUyumlu) { <span class="badge badge-uyumlu px-2 py-1"><i class="fas fa-check"></i> Uyumlu</span> }
+                                    else { <span class="badge badge-uyumsuz px-2 py-1"><i class="fas fa-times"></i> Hatalı</span> }
+                                </td>
+                                <td>@item.IslemTuru</td>
+                                <td class="fw-bold">@item.BelgeNumarasi</td>
+                                <td>@item.BelgeTarihi</td>
+                                
+                                <td class="text-center fw-bold @(item.SapIptal.Contains("Y") ? "text-primary" : "text-muted")">@item.SapIptal</td>
+                                <td class="text-center fw-bold iade-cell @(item.UBe1IadeDegeri.Contains("E") ? "text-warning" : "text-muted")">@item.UBe1IadeDegeri</td>
+
+                                <td class="fw-bold text-primary">@item.OrijinalYevmiyeNo</td>
+                                <td class="text-center bg-light orj-yev-cell @(!string.IsNullOrEmpty(item.OrijinalYev_UBe1Yeviptal) ? "fw-bold text-dark" : "text-muted")">
+                                    @(string.IsNullOrEmpty(item.OrijinalYev_UBe1Yeviptal) ? "- BOŞ -" : item.OrijinalYev_UBe1Yeviptal)
+                                </td>
+                                <td class="fw-bold text-primary @(item.TersYevmiyeNo == "Bulunamadı" ? "text-danger" : "")">@item.TersYevmiyeNo</td>
+                                <td class="text-center bg-light ters-yev-cell @(!string.IsNullOrEmpty(item.TersYev_UBe1Yeviptal) ? "fw-bold text-dark" : "text-muted")">
+                                    @(string.IsNullOrEmpty(item.TersYev_UBe1Yeviptal) ? "- BOŞ -" : item.TersYev_UBe1Yeviptal)
+                                </td>
+                                <td class="small text-muted hata-nedeni-cell" style="max-width:220px; white-space:normal;">@item.HataNedeni</td>
+                                <td class="text-center action-cell">
+                                    @if (!item.IsUyumlu && item.HataKodu != "YevmiyeYok")
+                                    {
+                                        <button class="btn btn-primary btn-duzelt shadow-sm" 
+                                                onclick="fixYevmiye(this, '@item.KaynakTablo', '@item.BelgeNumarasi', '@item.OrijinalYevmiyeNo', '@item.TersYevmiyeNo', '@item.HataKodu')">
+                                            <i class="fas fa-wrench me-1"></i> Düzelt
+                                        </button>
+                                    }
+                                    else if (item.HataKodu == "YevmiyeYok")
+                                    {
+                                        <span class="text-danger small fw-bold"><i class="fas fa-ban"></i> İşlem Yapılamaz</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-success small fw-bold"><i class="fas fa-check-double"></i> Tamam</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr><td colspan="12" class="text-center py-4 text-muted fw-bold">Gösterilecek veri bulunamadı. Lütfen filtrelerinizi kontrol edin.</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="bg-light p-2 border-top rounded-bottom d-flex justify-content-between text-muted small fw-bold">
+            <div>
+                Listelenen Kayıt: <span id="visibleCount" class="text-primary fs-6">@totalCount</span>
+            </div>
+            <div>
+                <em>Düzeltme işlemi, Kural 1, Kural 2 ve Kural 3 mantıklarına göre otomatik uygulanır.</em>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function filterTable(filterType) {
+            let visibleCount = 0;
+            const rows = document.querySelectorAll('.data-row');
+            
+            rows.forEach(row => {
+                const isUyumlu = row.getAttribute('data-uyumlu') === 'true';
+                const hataKodu = row.getAttribute('data-hatakodu');
+                let show = false;
+
+                if (filterType === 'all') show = true;
+                else if (filterType === 'uyumsuz' && !isUyumlu) show = true;
+                else if (filterType === hataKodu) show = true;
+
+                row.style.display = show ? '' : 'none';
+                if (show) visibleCount++;
+            });
+
+            document.getElementById('visibleCount').innerText = visibleCount;
+        }
+
+        async function fixYevmiye(btnElement, kaynakTablo, belgeAnahtar, orjYev, tersYev, hataKodu) {
+            let alertMsg = "";
+
+            if (hataKodu === "IadeKaldirilmali") alertMsg = `Bu belge iptal edilmediği halde İADE seçilmiş. Belgeden İADE İŞARETİ KALDIRILACAK. Onaylıyor musunuz?`;
+            else if (hataKodu === "IadeIcinBosOlmali") alertMsg = `İptal ve İade bir arada olduğu için, ${orjYev} ve ${tersYev} yevmiyelerindeki U_BE1_YEVIPTAL alanları BOŞALTILACAKTIR. Onaylıyor musunuz?`;
+            else if (hataKodu === "IptalIcinYOlmali") alertMsg = `Standart iptal işlemi olduğu için, ${orjYev} ve ${tersYev} yevmiyelerine 'Y' YAZILACAKTIR. Onaylıyor musunuz?`;
+
+            if(!confirm(alertMsg)) return;
+
+            const originalHtml = btnElement.innerHTML;
+            btnElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i> İşleniyor...';
+            btnElement.disabled = true;
+
+            try {
+                const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+                const dbParam = new URLSearchParams(window.location.search).get("db") || '';
+                const url = `/Rapor126/FixYeviptal${dbParam ? '?db=' + dbParam : ''}`;
+
+                const payload = {
+                    KaynakTablo: kaynakTablo,
+                    BelgeAnahtar: belgeAnahtar,
+                    OrijinalYevmiyeNo: orjYev,
+                    TersYevmiyeNo: tersYev,
+                    HataKodu: hataKodu
+                };
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'RequestVerificationToken': token },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    toastr.success(data.message);
+                    
+                    const row = btnElement.closest('tr');
+                    row.style.transition = 'background-color 0.5s ease';
+                    row.style.backgroundColor = '#dcfce7'; 
+                    
+                    // Durumu "Uyumlu" yap
+                    row.querySelector('td:first-child').innerHTML = '<span class="badge badge-uyumlu px-2 py-1"><i class="fas fa-check"></i> Uyumlu</span>';
+                    row.setAttribute('data-uyumlu', 'true');
+                    row.setAttribute('data-hatakodu', 'Yok');
+                    
+                    // DOM Hücrelerini Güncelle
+                    if (hataKodu === "IadeKaldirilmali") {
+                        const iadeCell = row.querySelector('.iade-cell');
+                        iadeCell.innerHTML = "Hayır (H)";
+                        iadeCell.className = "text-center fw-bold text-muted iade-cell";
+                    } 
+                    else if (hataKodu === "IadeIcinBosOlmali") {
+                        row.querySelector('.orj-yev-cell').innerHTML = "- BOŞ -";
+                        row.querySelector('.orj-yev-cell').className = "text-center bg-light text-muted orj-yev-cell";
+                        row.querySelector('.ters-yev-cell').innerHTML = "- BOŞ -";
+                        row.querySelector('.ters-yev-cell').className = "text-center bg-light text-muted ters-yev-cell";
+                    }
+                    else if (hataKodu === "IptalIcinYOlmali") {
+                        row.querySelector('.orj-yev-cell').innerHTML = "Y";
+                        row.querySelector('.orj-yev-cell').className = "text-center bg-light fw-bold text-dark orj-yev-cell";
+                        row.querySelector('.ters-yev-cell').innerHTML = "Y";
+                        row.querySelector('.ters-yev-cell').className = "text-center bg-light fw-bold text-dark ters-yev-cell";
+                    }
+
+                    row.querySelector('.hata-nedeni-cell').innerText = 'Düzeltildi (Kurallara uygun hale getirildi).';
+                    row.querySelector('.action-cell').innerHTML = '<span class="text-success small fw-bold"><i class="fas fa-check-double"></i> Düzeltildi</span>';
+
+                    // Sayacı Güncelle
+                    const uyumsuzCounter = document.getElementById('uyumsuzCounter');
+                    let count = parseInt(uyumsuzCounter.innerText);
+                    if(count > 0) uyumsuzCounter.innerText = count - 1;
+
+                } else {
+                    toastr.error(data.message || 'İşlem başarısız.');
+                    btnElement.innerHTML = originalHtml;
+                    btnElement.disabled = false;
+                }
+            } catch (err) {
+                toastr.error('Sunucuya bağlanırken bir hata oluştu.');
+                btnElement.innerHTML = originalHtml;
+                btnElement.disabled = false;
+            }
+        }
+    </script>
+}

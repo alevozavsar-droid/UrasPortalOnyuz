@@ -1,0 +1,919 @@
+﻿@model WebApplication3.Controllers.Rapor143ViewModel
+@{
+    ViewData["Title"] = "Onay Ekranı";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var taslaklar = Model?.Taslaklar ?? new List<WebApplication3.Controllers.OnayTaslak>();
+    var ist = Model?.Istatistik ?? new WebApplication3.Controllers.OnayIstatistik();
+    var yonetici = Model?.YoneticiMi == true;
+    var sahipler = Model?.Sahipler ?? new List<WebApplication3.Controllers.OnaySahip>();
+    var gecmis = Model?.Gecmis ?? new List<WebApplication3.Controllers.OnayLogKayit>();
+}
+
+@section Styles {
+    <style>.fatura-no-hata { color: #b91c1c !important; font-weight: 700; background: #fef2f2; border-radius: 6px; padding: 0 6px; }        /* Önizleme: sayfanın ortasında, kenarlardan boşluklu büyük pencere */
+        .onizleme-dialog { max-width: 94vw; width: 94vw; height: 92vh; margin: 4vh auto; }
+        .onizleme-dialog .modal-content { height: 92vh; }
+</style>
+    <style>
+        .onay-wrap { width: 100%; }
+
+        .onay-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 1.3rem; }
+        .onay-head h3 { margin: 0; font-size: 1.35rem; font-weight: 800; letter-spacing: -.03em; color: var(--text-primary); }
+        .onay-head p { margin: 4px 0 0; font-size: .85rem; color: var(--text-secondary); }
+
+        .kpi-grid { display: grid; gap: 12px; margin-bottom: 1.3rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+        .kpi {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: var(--r-lg, 18px); padding: 1rem 1.1rem; position: relative; overflow: hidden;
+            box-shadow: var(--shadow-sm); transition: transform .2s ease, box-shadow .2s ease;
+        }
+        .kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+        .kpi .lbl { font-size: .67rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--text-secondary); }
+        .kpi .val { font-size: 1.5rem; font-weight: 800; letter-spacing: -.04em; margin-top: 4px; line-height: 1; }
+        .kpi .ico { position: absolute; right: -6px; bottom: -10px; font-size: 3.2rem; opacity: .07; transform: rotate(-10deg); }
+
+        .filtre {
+            background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--r-lg, 18px);
+            padding: 12px 14px; margin-bottom: 1.1rem; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+            box-shadow: var(--shadow-sm);
+        }
+        .filtre .form-control, .filtre .form-select { height: 38px; border-radius: 10px; font-size: .84rem; }
+
+        /* Taslak kartı */
+        .taslak {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: var(--r-lg, 18px); padding: 1rem 1.15rem 1rem 1.35rem;
+            margin-bottom: 10px; display: flex; gap: 16px; align-items: flex-start;
+            position: relative; overflow: hidden; box-shadow: var(--shadow-sm);
+            transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+        }
+        .taslak:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: color-mix(in srgb, var(--metro-primary) 34%, transparent); }
+        .taslak::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #009ef7; }
+        .taslak[data-bekleme="bekliyor"]::before { background: #f59e0b; }
+        .taslak[data-bekleme="gecikmis"]::before { background: #f43f5e; }
+
+        .t-no {
+            flex-shrink: 0; width: 62px; height: 56px; border-radius: 14px;
+            background: var(--metro-primary-light); color: var(--metro-primary);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            font-weight: 800; line-height: 1.1;
+        }
+        .t-no small { font-size: .52rem; letter-spacing: .1em; opacity: .75; font-weight: 700; }
+        .t-body { flex: 1; min-width: 0; }
+        .t-cari { font-size: .95rem; font-weight: 700; color: var(--text-primary); letter-spacing: -.015em; margin: 0 0 4px; }
+        .t-meta { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: .76rem; color: var(--text-secondary); font-weight: 500; }
+        .t-meta span { display: inline-flex; align-items: center; gap: 5px; }
+        .t-tutar { text-align: right; white-space: nowrap; }
+        .t-tutar .buyuk { font-size: 1.15rem; font-weight: 800; color: var(--text-primary); letter-spacing: -.03em; }
+        .t-tutar .kucuk { font-size: .7rem; color: var(--text-secondary); }
+
+        .tag { font-size: .67rem; font-weight: 700; padding: .22rem .55rem; border-radius: 6px; white-space: nowrap; display: inline-block; }
+        .tag-gri { background:#f1f5f9; color:#475569; }
+        .tag-mavi { background:#dbeafe; color:#1e40af; }
+        .tag-yesil { background:#d1fae5; color:#065f46; }
+        .tag-sari { background:#fef3c7; color:#92400e; }
+        .tag-kirmizi { background:#fee2e2; color:#991b1b; }
+        [data-theme="dark"] .tag-gri { background:#1f2937; color:#cbd5e1; }
+
+        .det-satir { display:flex; gap:10px; padding:6px 0; font-size:.83rem; border-bottom:1px dashed var(--border-color); }
+        .det-satir:last-child { border-bottom:none; }
+        .det-satir .k { width:140px; flex-shrink:0; color:var(--text-secondary); font-weight:600; }
+        .det-satir .v { color:var(--text-primary); font-weight:600; word-break:break-word; }
+        .det-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); gap:2px 24px; }
+
+        .bolum-baslik {
+            font-size: .7rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+            color: var(--text-secondary); margin: 18px 0 8px; padding-bottom: 6px; border-bottom: 2px solid var(--border-color);
+        }
+
+        .bos-durum { text-align:center; padding:56px 20px; color:var(--text-secondary); }
+        .bos-durum i { font-size:3rem; opacity:.18; }
+
+        .sahip-cip {
+            display: inline-flex; align-items: center; gap: 5px;
+            font-size: .7rem; font-weight: 700; padding: .2rem .55rem; border-radius: 999px;
+            background: #eef2ff; color: #4338ca; white-space: nowrap;
+        }
+        .sahip-cip.ben { background: #d1fae5; color: #065f46; }
+        [data-theme="dark"] .sahip-cip { background:#312e81; color:#c7d2fe; }
+
+        .yonetici-serit {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            background: linear-gradient(135deg, rgba(99,102,241,.10), rgba(0,158,247,.10));
+            border: 1px solid color-mix(in srgb, #6366f1 26%, transparent);
+            border-radius: var(--r-lg, 18px); padding: 10px 14px; margin-bottom: 1rem;
+            font-size: .8rem; color: var(--text-secondary); font-weight: 600;
+        }
+
+        .sahip-kutu {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            border: 1px solid var(--border-color); border-radius: 12px;
+            padding: .5rem .75rem; background: var(--bg-card); cursor: pointer;
+            text-decoration: none; color: inherit; transition: all .18s ease;
+        }
+        .sahip-kutu:hover { border-color: var(--metro-primary); transform: translateY(-2px); color: inherit; }
+        .sahip-kutu.secili { border-color: var(--metro-primary); background: var(--metro-primary-light); }
+        .sahip-kutu .ad { font-size: .8rem; font-weight: 700; }
+        .sahip-kutu .alt { font-size: .68rem; color: var(--text-secondary); }
+        .sahip-kutu .adet {
+            font-size: .8rem; font-weight: 800; background: var(--metro-primary-light);
+            color: var(--metro-primary); border-radius: 8px; padding: .15rem .5rem;
+        }
+
+        .sekme-cubugu { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; }
+        .sekme-cubugu .nav-link {
+            border: 1px solid var(--border-color); border-radius: 999px;
+            background: var(--bg-card); padding: .42rem 1.1rem;
+            font-size: .82rem; font-weight: 700; color: var(--text-secondary); cursor: pointer;
+        }
+        .sekme-cubugu .nav-link.active {
+            background: linear-gradient(135deg,#009ef7,#6366f1); color: #fff; border-color: transparent;
+            box-shadow: 0 5px 14px rgba(0,158,247,.28);
+        }
+
+        .sl-rozet {
+            font-size: .65rem; font-weight: 800; letter-spacing: .06em;
+            background: #ede9fe; color: #5b21b6; padding: .2rem .55rem; border-radius: 6px;
+        }
+    </style>
+}
+
+<div class="onay-wrap">
+    @Html.AntiForgeryToken()
+
+    @if (!string.IsNullOrEmpty(Model?.Hata))
+    {
+        <div class="alert alert-danger"><i class="fas fa-triangle-exclamation me-2"></i>@Model.Hata</div>
+    }
+    @if (!string.IsNullOrEmpty(Model?.Uyari))
+    {
+        <div class="alert alert-warning"><i class="fas fa-circle-exclamation me-2"></i>@Model.Uyari</div>
+    }
+
+    <div class="onay-head">
+        <div>
+            <h3><i class="fas fa-clipboard-check me-2" style="color:var(--metro-primary);"></i>Onay Ekranı</h3>
+            <p>
+                Size gelen taslak belgeler. Onayladığınızda taslak
+                <span class="sl-rozet">SERVICE LAYER</span> üzerinden gerçek belgeye dönüşür.
+                <span class="tag tag-mavi ms-1"><i class="fas fa-user me-1"></i>@Model.KullaniciAdi (@Model.KullaniciKodu)</span>
+                <span class="tag tag-gri ms-1"><i class="fas fa-database me-1"></i>@Model.SecilenDbAdi</span>
+                @if (yonetici)
+                {
+                    <span class="tag tag-mor ms-1" style="background:#ede9fe;color:#5b21b6;">
+                        <i class="fas fa-user-shield me-1"></i>YÖNETİCİ GÖRÜNÜMÜ
+                    </span>
+                }
+            </p>
+        </div>
+    </div>
+
+    <!-- KPI -->
+    <div class="kpi-grid">
+        <div class="kpi"><i class="fas fa-inbox ico"></i><div class="lbl">Onay Bekleyen</div><div class="val text-primary">@ist.Bekleyen</div></div>
+        <div class="kpi"><i class="fas fa-turkish-lira-sign ico"></i><div class="lbl">Toplam Tutar</div><div class="val" style="font-size:1.15rem;">@ist.ToplamTutar.ToString("N2")</div></div>
+        <div class="kpi"><i class="fas fa-hourglass-end ico"></i><div class="lbl">7 Günü Geçen</div><div class="val" style="color:#f43f5e;">@ist.Gecikmis</div></div>
+        <div class="kpi"><i class="fas fa-calendar-day ico"></i><div class="lbl">Bugün Gelen</div><div class="val" style="color:#10b981;">@ist.BugunGelen</div></div>
+        @if (yonetici)
+        {
+            <div class="kpi"><i class="fas fa-users ico"></i><div class="lbl">Onay Bekleyen Kişi</div><div class="val" style="color:#6366f1;">@ist.SahipSayisi</div></div>
+        }
+    </div>
+
+    @if (yonetici)
+    {
+        <div class="yonetici-serit">
+            <i class="fas fa-user-shield" style="color:#6366f1;"></i>
+            <span>
+                Yönetici görünümündesiniz: bu şirketteki <b>tüm</b> taslaklar, onayın kime düştüğü
+                ve portal üzerinden yapılmış tüm onay/ret işlemleri görünür.
+            </span>
+        </div>
+
+        <div class="sekme-cubugu">
+            <a class="nav-link active" data-sekme="bekleyen" onclick="sekmeAc('bekleyen')">
+                <i class="fas fa-inbox me-1"></i>Onay Bekleyenler (@ist.Bekleyen)
+            </a>
+            <a class="nav-link" data-sekme="kisiler" onclick="sekmeAc('kisiler')">
+                <i class="fas fa-users me-1"></i>Onay Kime Düştü (@ist.SahipSayisi)
+            </a>
+            <a class="nav-link" data-sekme="gecmis" onclick="sekmeAc('gecmis')">
+                <i class="fas fa-clock-rotate-left me-1"></i>İşlem Geçmişi (@gecmis.Count)
+            </a>
+        </div>
+    }
+
+    <!-- ============ BEKLEYENLER ============ -->
+    <div class="sekme-panel" data-panel="bekleyen">
+
+    <!-- Filtre -->
+    <form method="get" action="/OnayEkrani" class="filtre" id="filtreForm">
+        <div>
+            <select class="form-select" name="belgeTipi" style="width:220px;" onchange="this.form.submit()">
+                <option value="18" selected="@(Model.BelgeTipi == "18")">Satıcı Faturası (Taslak)</option>
+                <option value="13" selected="@(Model.BelgeTipi == "13")">Müşteri Faturası (Taslak)</option>
+                <option value="22" selected="@(Model.BelgeTipi == "22")">Satınalma Siparişi (Taslak)</option>
+                <option value="17" selected="@(Model.BelgeTipi == "17")">Satış Siparişi (Taslak)</option>
+                <option value="19" selected="@(Model.BelgeTipi == "19")">Satıcı İade / Borç Dekontu</option>
+                <option value="14" selected="@(Model.BelgeTipi == "14")">Müşteri İade / Alacak Dekontu</option>
+            </select>
+        </div>
+        <label class="d-flex align-items-center gap-2 mb-0 px-2 border rounded" style="height:38px; cursor:pointer; background:#fff;" title="Yetkili olduğunuz tüm şirketlerdeki bekleyenleri tek listede gösterir">
+            <input type="checkbox" class="form-check-input mt-0" name="konsolide" value="true" @(Model.Konsolide ? "checked" : "") onchange="this.form.submit()">
+            <span class="small fw-bold"><i class="fas fa-layer-group me-1 text-primary"></i>Konsolide (tüm şirketler)</span>
+        </label>
+        <input type="text" class="form-control" id="fArama" style="width:260px;" placeholder="Cari, belge no, açıklama ara..." onkeyup="suz()" onkeydown="if(event.key===&#39;Enter&#39;){event.preventDefault();}">
+        @if (yonetici)
+        {
+            <select class="form-select" name="sahip" style="width:250px;" onchange="this.form.submit()">
+                <option value="">Onay kime düştü: Herkes</option>
+                @foreach (var sh in sahipler)
+                {
+                    <option value="@sh.OwnerCode" selected="@(Model.SahipFiltre == sh.OwnerCode)">
+                        @(string.IsNullOrWhiteSpace(sh.SahipAdi) ? "Personel #" + sh.OwnerCode : sh.SahipAdi.Trim()) (@sh.Adet)
+                    </option>
+                }
+            </select>
+        }
+        <span class="ms-auto text-muted" style="font-size:.78rem;" id="sonucBilgi"></span>
+    </form>
+
+    <!-- Liste -->
+    <div id="liste">
+        @if (taslaklar.Any())
+        {
+            foreach (var t in taslaklar)
+            {
+                <div class="taslak"
+                     data-bekleme="@t.BeklemeDurumu"
+                     data-ara="@($"{t.DocNum} {t.CardCode} {t.CardName} {t.NumAtCard} {t.Comments}".ToLower())">
+
+                    <div class="t-no">
+                        <small>TASLAK</small>
+                        @t.DocNum
+                    </div>
+
+                    <div class="t-body">
+                        <div class="t-cari">@t.CardName <span class="text-muted" style="font-size:.8rem;">(@t.CardCode)</span></div>
+
+                        <div class="t-meta">
+                            @if (Model.Konsolide)
+                            {
+                                <span class="sahip-cip" style="background:#dbeafe;color:#1e40af;" title="Şirket"><i class="fas fa-building me-1"></i>@t.SirketAdi</span>
+                            }
+                            <span><i class="fas fa-file-invoice"></i> @t.BelgeTipiAdi</span>
+                            <span><i class="fas fa-calendar"></i> @(t.DocDate?.ToString("dd.MM.yyyy") ?? "-")</span>
+                            <span><i class="fas fa-clock"></i> Vade: @(t.DocDueDate?.ToString("dd.MM.yyyy") ?? "-")</span>
+                            <span><i class="fas fa-list"></i> @t.SatirSayisi satır</span>
+                            @{
+                                bool faturaNoIlgili = t.ObjType == "18" || t.ObjType == "19";
+                                var fnk = faturaNoIlgili ? WebApplication3.Controllers.Rapor143Controller.FaturaNoKontrol(t.NumAtCard) : (Ok: true, Mesaj: "");
+                            }
+                            @if (!string.IsNullOrWhiteSpace(t.NumAtCard) || faturaNoIlgili)
+                            {
+                                <span class="@(fnk.Ok ? "" : "fatura-no-hata")" title="@fnk.Mesaj">
+                                    <i class="fas fa-hashtag"></i> @(string.IsNullOrWhiteSpace(t.NumAtCard) ? "(fatura no yok)" : t.NumAtCard)
+                                    @if (!fnk.Ok) { <i class="fas fa-triangle-exclamation ms-1"></i> }
+                                </span>
+                            }
+                            <span>
+                                <i class="fas fa-hourglass-half"></i>
+                                @t.BeklemeGunu gündür bekliyor
+                            </span>
+                            @{
+                                var sahipAdi = string.IsNullOrWhiteSpace(t.SahipAdi) ? ("Personel #" + t.OwnerCode) : t.SahipAdi.Trim();
+                                var benimMi = Model.PersonelKodu.HasValue && t.OwnerCode == Model.PersonelKodu.Value;
+                            }
+                            <span class="sahip-cip @(benimMi ? "ben" : "")" title="Onay bu kisiye dustu - OwnerCode @t.OwnerCode">
+                                <i class="fas fa-user-check"></i>@(benimMi ? "Size düştü" : sahipAdi)
+                            </span>
+                        </div>
+
+                        @if (!string.IsNullOrWhiteSpace(t.Comments))
+                        {
+                            <div class="text-muted mt-2" style="font-size:.75rem;">
+                                <i class="fas fa-comment me-1"></i>@t.Comments
+                            </div>
+                        }
+                    </div>
+
+                    <div class="t-tutar">
+                        <div class="buyuk">@t.DocTotal.ToString("N2") <span style="font-size:.75rem;">@t.ParaBirimi</span></div>
+                        <div class="kucuk">KDV: @t.VatSum.ToString("N2")</div>
+                        <div class="mt-2 d-flex gap-2 justify-content-end flex-wrap">
+                            <button class="btn btn-sm btn-outline-secondary" onclick="detayAc(@t.DocEntry, '@t.SirketDb')">
+                                <i class="fas fa-magnifying-glass me-1"></i>Detay
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="onizlemeAc(@t.DocEntry, @(t.DocNum ?? 0), '@t.ObjType', '@t.SirketDb')" title="QNB gerçek görüntü, belge görünümü ve ekli dosyalar">
+                                <i class="fas fa-file-pdf me-1"></i>Önizleme
+                            </button>
+                            @if (faturaNoIlgili)
+                            {
+                                <button class="btn btn-sm @(fnk.Ok ? "btn-outline-secondary" : "btn-warning")" onclick="mailAc(@t.DocEntry, '@t.SirketDb')" title="@(fnk.Ok ? "İlgililere e-posta gönder" : "Fatura numarası hatalı: " + fnk.Mesaj + " — ilgililere bildir")">
+                                    <i class="fas fa-envelope me-1"></i>@(fnk.Ok ? "Mail" : "Hata Bildir")
+                                </button>
+                            }
+                            <button class="btn btn-sm btn-outline-danger" onclick="reddetAc(@t.DocEntry, '@Html.Raw(Html.Encode(t.CardName))', '@t.SirketDb')">
+                                <i class="fas fa-xmark me-1"></i>Reddet
+                            </button>
+                            <button class="btn btn-sm btn-success" onclick="onaylaAc(@t.DocEntry, '@Html.Raw(Html.Encode(t.CardName))', '@t.DocTotal.ToString("N2")', '@t.SirketDb')">
+                                <i class="fas fa-check me-1"></i>Onayla
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+        else if (string.IsNullOrEmpty(Model?.Uyari))
+        {
+            <div class="bos-durum">
+                <i class="fas fa-mug-hot d-block mb-3"></i>
+                <h6 class="fw-bold text-secondary">Onayınızı bekleyen taslak yok</h6>
+                <p class="mb-0">Bu belge tipinde size ait açık taslak bulunmuyor.</p>
+            </div>
+        }
+    </div>
+
+    <div id="sonucYok" class="bos-durum d-none">
+        <i class="fas fa-magnifying-glass d-block mb-3"></i>
+        <h6 class="fw-bold text-secondary">Aramaya uyan taslak bulunamadı</h6>
+    </div>
+
+    </div><!-- /bekleyen -->
+
+    @if (yonetici)
+    {
+        <!-- ============ ONAY KİME DÜŞTÜ ============ -->
+        <div class="sekme-panel d-none" data-panel="kisiler">
+            @if (sahipler.Any())
+            {
+                <div class="row g-2">
+                    @foreach (var sh in sahipler)
+                    {
+                        var ad = string.IsNullOrWhiteSpace(sh.SahipAdi) ? ("Personel #" + sh.OwnerCode) : sh.SahipAdi.Trim();
+                        <div class="col-xl-3 col-lg-4 col-md-6">
+                            <a class="sahip-kutu @(Model.SahipFiltre == sh.OwnerCode ? "secili" : "")"
+                               href="@Url.Action("Index", new { belgeTipi = Model.BelgeTipi, sahip = sh.OwnerCode })">
+                                <div style="min-width:0;">
+                                    <div class="ad text-truncate">@ad</div>
+                                    <div class="alt">Personel kodu: @sh.OwnerCode &middot; @sh.Tutar.ToString("N2")</div>
+                                </div>
+                                <span class="adet">@sh.Adet</span>
+                            </a>
+                        </div>
+                    }
+                </div>
+
+                @if (Model.SahipFiltre.HasValue)
+                {
+                    <div class="mt-3">
+                        <a class="btn btn-sm btn-outline-secondary" href="@Url.Action("Index", new { belgeTipi = Model.BelgeTipi })">
+                            <i class="fas fa-xmark me-1"></i>Kişi filtresini kaldır
+                        </a>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="bos-durum">
+                    <i class="fas fa-users d-block mb-3"></i>
+                    <h6 class="fw-bold text-secondary">Bu belge tipinde onay bekleyen taslak yok</h6>
+                </div>
+            }
+        </div>
+
+        <!-- ============ İŞLEM GEÇMİŞİ ============ -->
+        <div class="sekme-panel d-none" data-panel="gecmis">
+            @if (gecmis.Any())
+            {
+                <div class="filtre">
+                    <input type="text" class="form-control" id="gArama" style="width:300px;"
+                           placeholder="Cari, belge no, kullanıcı ara..." onkeyup="gecmisSuz()">
+                    <span class="ms-auto text-muted" style="font-size:.78rem;" id="gBilgi"></span>
+                </div>
+
+                <div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--r-lg,18px); overflow:hidden;">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0" style="font-size:.8rem;">
+                            <thead style="background:var(--bg-subtle,#f8fafc);">
+                                <tr>
+                                    <th>İşlem</th>
+                                    <th>Tarih</th>
+                                    <th>İşlemi Yapan</th>
+                                    <th>Belge Tipi</th>
+                                    <th>Taslak No</th>
+                                    <th>Cari</th>
+                                    <th class="text-end">Tutar</th>
+                                    <th>Oluşan Belge</th>
+                                    <th>Not</th>
+                                </tr>
+                            </thead>
+                            <tbody id="gecmisGovde">
+                                @foreach (var g in gecmis)
+                                {
+                                    var onayMi = string.Equals(g.Islem, "ONAY", StringComparison.OrdinalIgnoreCase);
+                                    <tr data-ara="@($"{g.TaslakDocNum} {g.CardCode} {g.CardName} {g.KullaniciKodu} {g.Islem} {g.SonucDocNum}".ToLower())">
+                                        <td>
+                                            <span class="tag @(onayMi ? "tag-yesil" : "tag-kirmizi")">
+                                                <i class="fas @(onayMi ? "fa-check" : "fa-xmark") me-1"></i>@g.Islem
+                                            </span>
+                                        </td>
+                                        <td>@(g.IslemTarihi?.ToString("dd.MM.yyyy HH:mm") ?? "-")</td>
+                                        <td class="fw-semibold">@g.KullaniciKodu</td>
+                                        <td>@g.BelgeTipiAdi</td>
+                                        <td>@g.TaslakDocNum</td>
+                                        <td>@g.CardCode <span class="text-muted">@g.CardName</span></td>
+                                        <td class="text-end fw-bold">@(g.DocTotal?.ToString("N2") ?? "-")</td>
+                                        <td>
+                                            @if (g.SonucDocNum.HasValue)
+                                            {
+                                                <span class="tag tag-mavi">#@g.SonucDocNum</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">-</span>
+                                            }
+                                        </td>
+                                        <td style="max-width:280px;" class="text-truncate" title="@g.Aciklama">@g.Aciklama</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="bos-durum">
+                    <i class="fas fa-clock-rotate-left d-block mb-3"></i>
+                    <h6 class="fw-bold text-secondary">Henüz portal üzerinden onay/ret işlemi yapılmamış</h6>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- DETAY -->
+<div class="modal fade" id="detayModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+            <div class="modal-header text-white" style="background:linear-gradient(135deg,#0f172a,#1e293b);">
+                <h5 class="modal-title fw-bold" id="detayBaslik">Taslak Detayı</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="detayGovde"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ÖNİZLEME (belge görünümü + ekli dosyalar) -->
+<div class="modal fade" id="onizlemeModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered onizleme-dialog">
+        <div class="modal-content d-flex flex-column" style="overflow:hidden; height:100%; border-radius:14px;">
+            <div class="modal-header text-white py-2" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);">
+                <h6 class="modal-title fw-bold mb-0"><i class="fas fa-file-pdf me-2"></i><span id="onizlemeBaslik">Önizleme</span></h6>
+                <div class="d-flex align-items-center gap-2">
+                    <a id="onizlemeYeniSekme" href="#" target="_blank" class="btn btn-sm btn-light"><i class="fas fa-up-right-from-square me-1"></i>Yeni sekmede aç</a>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+            </div>
+            <div class="modal-body p-0 d-flex flex-column" style="background:#e5e7eb; overflow:hidden; flex:1 1 auto; min-height:0;">
+                <div class="d-flex flex-wrap align-items-center gap-2 px-3 py-2 bg-white border-bottom" id="onizlemeArac">
+                    <button type="button" class="btn btn-sm btn-danger" id="onizlemeQnbBtn" title="Tedarikçinin QNB üzerinden gelen e-Faturasının gerçek görüntüsü"><i class="fas fa-file-invoice-dollar me-1"></i>QNB Gerçek Görüntü</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" id="onizlemeQnbPdfBtn" title="QNB'den PDF olarak"><i class="fas fa-file-pdf me-1"></i>QNB PDF</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="onizlemeBelgeBtn"><i class="fas fa-file-invoice me-1"></i>SAP Taslak Görünümü</button>
+                    <span class="text-muted small ms-2"><i class="fas fa-paperclip me-1"></i>Ekli dosyalar:</span>
+                    <span id="onizlemeEkler" class="d-flex flex-wrap gap-1"><span class="text-muted small">yükleniyor...</span></span>
+                </div>
+                <div id="onizlemeUyari" class="alert alert-warning py-2 px-3 mb-0 rounded-0 small" style="display:none;"></div>
+                <iframe id="onizlemeCerceve" src="about:blank" style="width:100%; flex:1 1 auto; min-height:0; border:0; background:#fff;"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- FATURA NO BİLDİRİM MAİLİ -->
+<div class="modal fade" id="mailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+            <div class="modal-header text-white py-2" style="background:linear-gradient(135deg,#b45309,#f59e0b);">
+                <h6 class="modal-title fw-bold mb-0"><i class="fas fa-envelope me-2"></i>İlgililere E-posta — <span id="mailBaslikCari"></span></h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div id="mailKontrol" class="alert py-2 small mb-3"></div>
+                <div class="mb-2">
+                    <label class="form-label small fw-bold mb-1">Alıcılar <span class="text-muted fw-normal">(cari kartı, cari notları ve ilgili kişilerden otomatik bulundu; işaretleyin)</span></label>
+                    <div id="mailAdresListesi" class="d-flex flex-wrap gap-2"></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-md-7">
+                        <label class="form-label small fw-bold mb-1">Ek alıcı(lar) <span class="text-muted fw-normal">(virgülle ayırın)</span></label>
+                        <input type="text" class="form-control form-control-sm" id="mailEkAlici" placeholder="kullanici@@ornek.local, kullanici@@ornek.local">
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small fw-bold mb-1">Kendi e-postam <span class="text-muted fw-normal">(CC ve yanıt adresi)</span></label>
+                        <input type="email" class="form-control form-control-sm" id="mailKendi" placeholder="kullanici@@ornek.local">
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small fw-bold mb-1">Konu</label>
+                    <input type="text" class="form-control form-control-sm" id="mailKonu">
+                </div>
+                <div class="mb-1">
+                    <label class="form-label small fw-bold mb-1">Mesaj</label>
+                    <textarea class="form-control form-control-sm" id="mailGovde" rows="9"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                <button type="button" class="btn btn-warning fw-bold" id="mailGonderBtn" onclick="mailGonder()"><i class="fas fa-paper-plane me-1"></i>Gönder</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ONAY -->
+<div class="modal fade" id="onayModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:16px;">
+            <div class="modal-header text-white" style="background:linear-gradient(135deg,#10b981,#059669);">
+                <h5 class="modal-title fw-bold"><i class="fas fa-check-circle me-2"></i>Belgeyi Onayla</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="onayDocEntry">
+                <p class="mb-3" id="onayMetin"></p>
+
+                <div class="alert alert-light border py-2" style="font-size:.8rem;">
+                    <i class="fas fa-circle-info me-1"></i>
+                    Onayladığınızda taslak <b>Service Layer</b> üzerinden gerçek belgeye dönüştürülür ve taslak kaydı kaldırılır.
+                    SAP'nin kendi doğrulamaları çalışır; hata olursa belge oluşmaz ve taslak yerinde kalır.
+                </div>
+
+                <label class="form-label small fw-bold">Onay Notu (belge açıklamasına eklenir)</label>
+                <textarea class="form-control" id="onayNotu" rows="2" placeholder="İsteğe bağlı"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-success" id="btnOnayla" onclick="onayla()"><i class="fas fa-check me-2"></i>Onayla ve Belgeyi Oluştur</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- RET -->
+<div class="modal fade" id="retModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:16px;">
+            <div class="modal-header text-white" style="background:linear-gradient(135deg,#f43f5e,#be123c);">
+                <h5 class="modal-title fw-bold"><i class="fas fa-xmark-circle me-2"></i>Belgeyi Reddet</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="retDocEntry">
+                <p class="mb-3" id="retMetin"></p>
+
+                <div class="alert alert-light border py-2" style="font-size:.8rem;">
+                    <i class="fas fa-shield-halved me-1"></i>
+                    Taslak <b>silinmez</b>. Ret notu Service Layer ile taslağın açıklamasına yazılır ve kayıt listenizden düşer.
+                </div>
+
+                <label class="form-label small fw-bold">Ret Nedeni <span class="text-danger">*</span></label>
+                <textarea class="form-control" id="retNedeni" rows="3" placeholder="Neden onaylanmadığını yazın"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-danger" id="btnReddet" onclick="reddet()"><i class="fas fa-xmark me-2"></i>Reddet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function token() { return $('input[name="__RequestVerificationToken"]').first().val(); }
+
+        function bildir(ok, mesaj) {
+            if (window.toastr) { toastr.options = { positionClass: 'toast-bottom-right', timeOut: 6000 }; ok ? toastr.success(mesaj) : toastr.error(mesaj); }
+            else { alert(mesaj); }
+        }
+
+        function kacis(s) { return $('<div>').text(s == null ? '' : s).html(); }
+
+        // Konsolide görünümde her taslak kendi şirketinden okunur/işlenir: tüm çağrılara db=... eklenir.
+        var aktifDb = '';
+        function dbAyarla(db) { aktifDb = db || ''; }
+        function dbEk(url) { if (!aktifDb) return url; return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'db=' + encodeURIComponent(aktifDb); }
+
+        // ---------------- FATURA NO KONTROLÜ + MAİL ----------------
+        function faturaNoKontrolJs(no) {
+            no = (no || '').trim();
+            if (!no) return { ok: false, mesaj: 'Fatura numarası (Belge Referansı) boş.' };
+            if (no.indexOf(' ') >= 0) return { ok: false, mesaj: 'Fatura numarasında boşluk var.' };
+            if (no.length !== 16) return { ok: false, mesaj: 'Fatura numarası 16 karakter olmalı, ' + no.length + ' karakter girilmiş (' + (no.length > 16 ? (no.length - 16) + ' fazla' : (16 - no.length) + ' eksik') + ').' };
+            if (!/^[A-Z0-9]{3}\d{4}\d{9}$/.test(no)) return { ok: false, mesaj: 'Biçim hatalı: 3 harf/rakam seri + 4 haneli yıl + 9 haneli sıra olmalı.' };
+            return { ok: true, mesaj: 'Biçim uygun.' };
+        }
+
+        var mailDocEntry = 0;
+        function mailAc(docEntry, db) {
+            if (db !== undefined) dbAyarla(db);
+            mailDocEntry = docEntry;
+            $('#mailAdresListesi').html('<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>adresler aranıyor...</span>');
+            $('#mailKontrol').removeClass('alert-danger alert-success').addClass('alert-secondary').text('...');
+            $('#mailEkAlici').val('');
+            new bootstrap.Modal(document.getElementById('mailModal')).show();
+            $.getJSON(dbEk('/OnayEkrani/MailAdresleri'), { docEntry: docEntry }, function (r) {
+                if (!r.success) { $('#mailAdresListesi').html('<span class="text-danger small">' + kacis(r.message) + '</span>'); return; }
+                $('#mailBaslikCari').text(r.cardName);
+                $('#mailKontrol').removeClass('alert-secondary alert-danger alert-success').addClass(r.kontrol.ok ? 'alert-success' : 'alert-danger')
+                    .html('<i class="fas ' + (r.kontrol.ok ? 'fa-check-circle' : 'fa-triangle-exclamation') + ' me-1"></i>Fatura no: <b>' + kacis(r.numAtCard || '(boş)') + '</b> — ' + kacis(r.kontrol.mesaj));
+                var h = '';
+                (r.adresler || []).forEach(function (a, i) {
+                    h += '<label class="border rounded px-2 py-1 small bg-white" style="cursor:pointer"><input type="checkbox" class="form-check-input me-1 mail-alici" value="' + kacis(a.mail) + '" ' + (i === 0 ? 'checked' : '') + '>' + kacis(a.mail) + ' <span class="text-muted">· ' + kacis(a.kaynak) + '</span></label>';
+                });
+                $('#mailAdresListesi').html(h || '<span class="text-muted small">Cari kartında, notlarında ve ilgili kişilerinde e-posta bulunamadı; ek alıcı alanına yazın.</span>');
+                if (!$('#mailKendi').val()) $('#mailKendi').val(r.kullaniciMail || '');
+                $('#mailKonu').val(r.konu || '');
+                $('#mailGovde').val(r.govde || '');
+            });
+        }
+
+        function mailGonder() {
+            var alicilar = $('#mailAdresListesi .mail-alici:checked').map(function () { return this.value; }).get();
+            ($('#mailEkAlici').val() || '').split(/[,;\s]+/).forEach(function (a) { if (a && a.indexOf('@@') > 0) alicilar.push(a.trim()); });
+            if (!alicilar.length) { Swal.fire('Alıcı yok', 'En az bir alıcı işaretleyin ya da ek alıcı yazın.', 'warning'); return; }
+            var btn = $('#mailGonderBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i>Gönderiliyor');
+            $.ajax({
+                url: dbEk('/OnayEkrani/FaturaNoBildir'), type: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ DocEntry: mailDocEntry, Alicilar: alicilar, KendiMail: $('#mailKendi').val(), Konu: $('#mailKonu').val(), Govde: $('#mailGovde').val() }),
+                success: function (r) {
+                    btn.prop('disabled', false).html('<i class="fas fa-paper-plane me-1"></i>Gönder');
+                    if (!r.success) { Swal.fire('Gönderilemedi', r.message, 'error'); return; }
+                    bootstrap.Modal.getInstance(document.getElementById('mailModal')).hide();
+                    Swal.fire({ icon: 'success', title: 'Gönderildi', text: r.message, timer: 2500, showConfirmButton: false });
+                },
+                error: function () { btn.prop('disabled', false).html('<i class="fas fa-paper-plane me-1"></i>Gönder'); Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); }
+            });
+        }
+
+        // ---------------- ÖNİZLEME (PDF belge görünümü + SAP ekleri) ----------------
+        function onizlemeAc(docEntry, docNum, objType, db) {
+            if (db !== undefined) dbAyarla(db);
+            var belgeUrl = dbEk('/OnayEkrani/Onizleme?docEntry=' + docEntry);
+            var qnbUrl = dbEk('/OnayEkrani/QnbGoruntu?docEntry=' + docEntry);
+            var qnbPdfUrl = dbEk('/OnayEkrani/QnbGoruntu?docEntry=' + docEntry + '&format=PDF');
+            // Gelen e-Fatura yalnızca satıcı faturası / satıcı iadesinde vardır; orada QNB görüntüsü varsayılandır.
+            var qnbVar = (objType === '18' || objType === '19');
+
+            function goster(url, etiket, btn) {
+                $('#onizlemeBaslik').text('Taslak No: ' + (docNum || docEntry) + ' — ' + etiket);
+                $('#onizlemeYeniSekme').attr('href', url);
+                $('#onizlemeCerceve').attr('src', url);
+                $('#onizlemeArac .btn').removeClass('active');
+                if (btn) $(btn).addClass('active');
+            }
+
+            $('#onizlemeQnbBtn, #onizlemeQnbPdfBtn').toggle(qnbVar);
+            $('#onizlemeQnbBtn').off('click').on('click', function () { goster(qnbUrl, 'QNB Gerçek Görüntü', this); });
+            $('#onizlemeQnbPdfBtn').off('click').on('click', function () { goster(qnbPdfUrl, 'QNB PDF', this); });
+            $('#onizlemeBelgeBtn').off('click').on('click', function () { goster(belgeUrl, 'SAP Taslak Görünümü', this); });
+
+            $('#onizlemeUyari').hide().text('');
+            if (qnbVar) {
+                // Önce QNB'de belge var mı bakılır; yoksa pencere hata sayfasında takılmaz,
+                // SAP taslak görünümü açılır ve neden üstte yazılır.
+                $('#onizlemeBaslik').text('Taslak No: ' + (docNum || docEntry) + ' — QNB kontrol ediliyor...');
+                $('#onizlemeCerceve').attr('src', 'about:blank');
+                $.getJSON(dbEk('/OnayEkrani/QnbGoruntuDurum'), { docEntry: docEntry }, function (d) {
+                    if (d && d.bulundu) { goster(qnbUrl, 'QNB Gerçek Görüntü', '#onizlemeQnbBtn'); return; }
+                    goster(belgeUrl, 'SAP Taslak Görünümü', '#onizlemeBelgeBtn');
+                    $('#onizlemeUyari').html('<i class="fas fa-triangle-exclamation me-1"></i><b>QNB görüntüsü bulunamadı:</b> ' + kacis((d && d.mesaj) || 'bilinmeyen neden') + (d && d.ipucu ? ' <span class="text-muted">— ' + kacis(d.ipucu) + '</span>' : '')).show();
+                }).fail(function () {
+                    goster(belgeUrl, 'SAP Taslak Görünümü', '#onizlemeBelgeBtn');
+                    $('#onizlemeUyari').html('<i class="fas fa-triangle-exclamation me-1"></i>QNB kontrolü yapılamadı, SAP taslak görünümü gösteriliyor.').show();
+                });
+            }
+            else goster(belgeUrl, 'SAP Taslak Görünümü', '#onizlemeBelgeBtn');
+            $('#onizlemeEkler').html('<span class="text-muted small">yükleniyor...</span>');
+            new bootstrap.Modal(document.getElementById('onizlemeModal')).show();
+
+            $.getJSON(dbEk('/OnayEkrani/Ekler'), { docEntry: docEntry }, function (res) {
+                if (!res.success) { $('#onizlemeEkler').html('<span class="text-danger small">' + kacis(res.message) + '</span>'); return; }
+                if (!res.ekler.length) { $('#onizlemeEkler').html('<span class="text-muted small">Bu taslakta ekli dosya yok.</span>'); return; }
+                var h = '';
+                res.ekler.forEach(function (e) {
+                    var url = dbEk('/OnayEkrani/EkGoster?docEntry=' + docEntry + '&line=' + e.line);
+                    var ikon = e.uzanti === 'pdf' ? 'fa-file-pdf text-danger' : (/^(png|jpg|jpeg|gif|bmp|webp)$/.test(e.uzanti) ? 'fa-file-image text-success' : 'fa-file text-secondary');
+                    if (!e.mevcut) {
+                        h += '<span class="btn btn-sm btn-outline-secondary disabled" title="Dosyaya sunucudan erişilemiyor"><i class="fas ' + ikon + ' me-1"></i>' + kacis(e.ad) + ' <i class="fas fa-triangle-exclamation text-warning ms-1"></i></span>';
+                    } else if (e.goruntulenebilir) {
+                        h += '<button type="button" class="btn btn-sm btn-outline-dark ek-btn" data-url="' + url + '" data-ad="' + kacis(e.ad) + '"><i class="fas ' + ikon + ' me-1"></i>' + kacis(e.ad) + '</button>';
+                    } else {
+                        h += '<a class="btn btn-sm btn-outline-dark" href="' + url + '" target="_blank"><i class="fas ' + ikon + ' me-1"></i>' + kacis(e.ad) + ' <i class="fas fa-download ms-1"></i></a>';
+                    }
+                });
+                $('#onizlemeEkler').html(h);
+                $('#onizlemeEkler .ek-btn').on('click', function () {
+                    var url = $(this).data('url'), ad = $(this).data('ad');
+                    $('#onizlemeBaslik').text('Taslak No: ' + (docNum || docEntry) + ' — Ek: ' + ad);
+                    $('#onizlemeYeniSekme').attr('href', url);
+                    $('#onizlemeCerceve').attr('src', url);
+                    $('#onizlemeArac .btn').removeClass('active');
+                    $(this).addClass('active');
+                });
+            });
+        }
+        $('#onizlemeModal').on('hidden.bs.modal', function () { $('#onizlemeCerceve').attr('src', 'about:blank'); });
+
+        $(document).ready(function () {
+            $('.modal').each(function () {
+                var $m = $(this);
+                if (!$m.parent().is('body')) $m.appendTo('body');
+            });
+            suz();
+
+            if ($('.sekme-cubugu').length) {
+                var kayitli = null;
+                try { kayitli = sessionStorage.getItem('onaySekme'); } catch (e) { }
+                if (kayitli && $('.sekme-panel[data-panel="' + kayitli + '"]').length) sekmeAc(kayitli);
+                gecmisSuz();
+            }
+        });
+
+        /* ---------- Sekmeler (yonetici) ---------- */
+        function sekmeAc(ad) {
+            $('.sekme-cubugu .nav-link').removeClass('active');
+            $('.sekme-cubugu .nav-link[data-sekme="' + ad + '"]').addClass('active');
+            $('.sekme-panel').addClass('d-none');
+            $('.sekme-panel[data-panel="' + ad + '"]').removeClass('d-none');
+            try { sessionStorage.setItem('onaySekme', ad); } catch (e) { }
+        }
+
+        function gecmisSuz() {
+            var q = ($('#gArama').val() || '').toLocaleLowerCase('tr-TR');
+            var gorunen = 0;
+
+            $('#gecmisGovde tr').each(function () {
+                var uygun = !q || ('' + $(this).data('ara')).indexOf(q) > -1;
+                $(this).toggle(uygun);
+                if (uygun) gorunen++;
+            });
+
+            $('#gBilgi').text(gorunen + ' kayıt gösteriliyor');
+        }
+
+        function suz() {
+            var q = ($('#fArama').val() || '').toLocaleLowerCase('tr-TR');
+            var gorunen = 0;
+
+            $('#liste .taslak').each(function () {
+                var uygun = !q || ('' + $(this).data('ara')).indexOf(q) > -1;
+                $(this).toggle(uygun);
+                if (uygun) gorunen++;
+            });
+
+            $('#sonucYok').toggleClass('d-none', gorunen > 0 || $('#liste .taslak').length === 0);
+            $('#sonucBilgi').text(gorunen + ' taslak gösteriliyor');
+        }
+
+        /* ---------- Detay ---------- */
+        function detayAc(docEntry, db) {
+            if (db !== undefined) dbAyarla(db);
+            $('#detayGovde').html('<div class="text-center py-5 text-muted"><i class="fas fa-spinner fa-spin fa-2x"></i></div>');
+            new bootstrap.Modal(document.getElementById('detayModal')).show();
+
+            $.getJSON(dbEk('/OnayEkrani/Detay'), { docEntry: docEntry }, function (res) {
+                if (!res.success) { $('#detayGovde').html('<div class="alert alert-danger">' + kacis(res.message) + '</div>'); return; }
+
+                var b = res.baslik;
+                $('#detayBaslik').text(b.belgeTipi + ' - Taslak No: ' + b.docNum);
+
+                var h = '<div class="det-grid">';
+                h += satir('Cari Kodu', b.cardCode) + satir('Cari Adı', b.cardName);
+                h += satir('Belge Tarihi', b.docDate) + satir('Vade Tarihi', b.docDueDate);
+                h += satir('KDV Tarihi', b.taxDate) + satir('Oluşturma', b.createDate);
+                h += satir('Belge Referansı', b.numAtCard) + satir('Para Birimi', b.paraBirimi);
+                if (b.objType === '18' || b.objType === '19') {
+                    var fnk = faturaNoKontrolJs(b.numAtCard);
+                    if (!fnk.ok) h += '<div class="alert alert-danger py-2 mt-2 d-flex justify-content-between align-items-center" style="font-size:.8rem;"><span><i class="fas fa-triangle-exclamation me-1"></i><b>Fatura numarası hatalı:</b> ' + kacis(fnk.mesaj) + '</span>'
+                                    + '<button class="btn btn-sm btn-warning" onclick="mailAc(' + b.docEntry + ')"><i class="fas fa-envelope me-1"></i>İlgililere bildir</button></div>';
+                }
+                h += satir('Onay Kime Düştü', b.sahipAdi + ' (personel #' + b.ownerCode + ')');
+                h += '</div>';
+
+                if (b.yonetici && !b.benimMi) {
+                    h += '<div class="alert alert-warning py-2 mt-2" style="font-size:.8rem;">'
+                       + '<i class="fas fa-user-shield me-1"></i>Bu taslağın onayı <b>' + kacis(b.sahipAdi)
+                       + '</b> kişisine düşmüş. Yönetici olarak vekaleten işlem yapabilirsiniz; '
+                       + 'işlem geçmişine sizin kullanıcı kodunuz yazılır.</div>';
+                }
+
+                if (b.comments) {
+                    h += '<div class="mt-2 p-3" style="background:var(--bg-subtle,#f8fafc); border-radius:10px; font-size:.83rem; white-space:pre-wrap;">'
+                       + '<b>Açıklama:</b><br/>' + kacis(b.comments) + '</div>';
+                }
+
+                h += '<div class="bolum-baslik">Satırlar (' + res.satirlar.length + ')</div>';
+                h += '<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0">'
+                   + '<thead><tr><th>#</th><th>Kalem</th><th>Açıklama</th><th class="text-end">Miktar</th><th>Birim</th>'
+                   + '<th class="text-end">Fiyat</th><th class="text-end">İsk.%</th><th class="text-end">Tutar</th>'
+                   + '<th class="text-end">KDV%</th><th>Depo</th><th>Muhasebe Hesabı</th></tr></thead><tbody>';
+
+                res.satirlar.forEach(function (l) {
+                    h += '<tr>'
+                       + '<td>' + kacis(l.lineNum + 1) + '</td>'
+                       + '<td class="fw-semibold">' + kacis(l.itemCode) + '</td>'
+                       + '<td>' + kacis(l.dscription) + '</td>'
+                       + '<td class="text-end">' + kacis(l.miktar) + '</td>'
+                       + '<td>' + kacis(l.unitMsr) + '</td>'
+                       + '<td class="text-end">' + kacis(l.fiyat) + '</td>'
+                       + '<td class="text-end">' + kacis(l.iskonto) + '</td>'
+                       + '<td class="text-end fw-bold">' + kacis(l.tutar) + '</td>'
+                       + '<td class="text-end">' + kacis(l.kdv) + '</td>'
+                       + '<td>' + kacis(l.whsCode) + '</td>'
+                       + '<td style="font-size:11.5px;">' + kacis(l.hesap) + '</td>'
+                       + '</tr>';
+                });
+
+                h += '</tbody><tfoot>'
+                   + '<tr><td colspan="7" class="text-end fw-bold">ARA TOPLAM</td><td class="text-end fw-bold">' + kacis(b.araToplam) + '</td><td colspan="3"></td></tr>'
+                   + '<tr><td colspan="7" class="text-end fw-bold">KDV</td><td class="text-end fw-bold">' + kacis(b.vatSum) + '</td><td colspan="3"></td></tr>'
+                   + '<tr class="table-primary"><td colspan="7" class="text-end fw-bold">GENEL TOPLAM</td><td class="text-end fw-bold">' + kacis(b.docTotal) + '</td><td colspan="3"></td></tr>'
+                   + '</tfoot></table></div>';
+
+                h += '<div class="d-flex justify-content-end gap-2 mt-3">'
+                   + '<button class="btn btn-outline-primary" onclick="onizlemeAc(' + b.docEntry + ', ' + b.docNum + ', \'' + kacis(b.objType) + '\')"><i class="fas fa-file-pdf me-1"></i>Önizleme</button>'
+                   + '<button class="btn btn-outline-danger" onclick="reddetAc(' + b.docEntry + ', \'' + kacis(b.cardName) + '\')"><i class="fas fa-xmark me-1"></i>Reddet</button>'
+                   + '<button class="btn btn-success" onclick="onaylaAc(' + b.docEntry + ', \'' + kacis(b.cardName) + '\', \'' + kacis(b.docTotal) + '\')"><i class="fas fa-check me-1"></i>Onayla</button>'
+                   + '</div>';
+
+                $('#detayGovde').html(h);
+            }).fail(function () { $('#detayGovde').html('<div class="alert alert-danger">Detay alınamadı.</div>'); });
+        }
+
+        function satir(k, v) {
+            return '<div class="det-satir"><div class="k">' + k + '</div><div class="v">' + (v ? kacis(v) : '-') + '</div></div>';
+        }
+
+        /* ---------- Onay ---------- */
+        function onaylaAc(docEntry, cari, tutar, db) {
+            if (db !== undefined) dbAyarla(db);
+            $('#onayDocEntry').val(docEntry);
+            $('#onayNotu').val('');
+            $('#onayMetin').html('<b>' + kacis(cari) + '</b> adına <b>' + kacis(tutar) + '</b> tutarındaki taslak belge onaylanacak.');
+            bootstrap.Modal.getInstance(document.getElementById('detayModal'))?.hide();
+            new bootstrap.Modal(document.getElementById('onayModal')).show();
+        }
+
+        function onayla() {
+            var $btn = $('#btnOnayla').prop('disabled', true)
+                .html('<i class="fas fa-spinner fa-spin me-2"></i>SAP\'ye gönderiliyor...');
+
+            $.post(dbEk('/OnayEkrani/Onayla'), {
+                docEntry: $('#onayDocEntry').val(),
+                onayNotu: $('#onayNotu').val(),
+                __RequestVerificationToken: token()
+            }, function (res) {
+                bildir(res.success, res.message);
+                if (res.success) { setTimeout(function () { location.reload(); }, 1200); }
+                else { $btn.prop('disabled', false).html('<i class="fas fa-check me-2"></i>Onayla ve Belgeyi Oluştur'); }
+            }).fail(function () {
+                bildir(false, 'Sunucuya ulaşılamadı.');
+                $btn.prop('disabled', false).html('<i class="fas fa-check me-2"></i>Onayla ve Belgeyi Oluştur');
+            });
+        }
+
+        /* ---------- Ret ---------- */
+        function reddetAc(docEntry, cari, db) {
+            if (db !== undefined) dbAyarla(db);
+            $('#retDocEntry').val(docEntry);
+            $('#retNedeni').val('');
+            $('#retMetin').html('<b>' + kacis(cari) + '</b> adına düzenlenen taslak reddedilecek.');
+            bootstrap.Modal.getInstance(document.getElementById('detayModal'))?.hide();
+            new bootstrap.Modal(document.getElementById('retModal')).show();
+        }
+
+        function reddet() {
+            var neden = $('#retNedeni').val();
+            if (!neden || !neden.trim()) { bildir(false, 'Ret nedeni zorunludur.'); return; }
+
+            var $btn = $('#btnReddet').prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>İşleniyor...');
+
+            $.post(dbEk('/OnayEkrani/Reddet'), {
+                docEntry: $('#retDocEntry').val(),
+                retNedeni: neden,
+                __RequestVerificationToken: token()
+            }, function (res) {
+                bildir(res.success, res.message);
+                if (res.success) { setTimeout(function () { location.reload(); }, 1000); }
+                else { $btn.prop('disabled', false).html('<i class="fas fa-xmark me-2"></i>Reddet'); }
+            }).fail(function () {
+                bildir(false, 'Sunucuya ulaşılamadı.');
+                $btn.prop('disabled', false).html('<i class="fas fa-xmark me-2"></i>Reddet');
+            });
+        }
+    </script>
+}

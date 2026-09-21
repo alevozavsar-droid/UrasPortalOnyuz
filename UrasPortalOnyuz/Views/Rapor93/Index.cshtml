@@ -1,0 +1,442 @@
+﻿@model List<FinansRaporlama.Controllers.Rapor93ListModel>
+@using System.Globalization
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Xsrf
+
+@{
+    ViewData["Title"] = "Mahsup İşlemleri (Rapor 93)";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var filter = ViewBag.Filter as FinansRaporlama.Controllers.Rapor93FilterModel;
+
+    // URL'den veya varsa Cookie'den aktif şirketi okuma (currentDb)
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["ActiveDb"] ?? "VarsayilanSirket";
+    }
+
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? currentDb;
+    var modelData = Model ?? new List<FinansRaporlama.Controllers.Rapor93ListModel>();
+
+    // KPI Hesaplamaları
+    var islemSayisi = modelData.Count;
+    var toplamBorc = modelData.Sum(d => d.TotalDebit);
+    var farkliKaynak = modelData.Select(d => d.DetailedSourceType).Where(k => !string.IsNullOrEmpty(k)).Distinct().Count();
+    var aktarilanSayisi = modelData.Count(d => d.U_BE1_AKTAR == "X" || d.U_BE1_AKTAR == "Y" || d.U_BE1_AKTAR == "R");
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+
+    <style>
+        /* ========================================================================= */
+        /* TAM EKRAN (FULL WIDTH) VE BOŞLUK SIFIRLAMA ZORLAMASI                      */
+        /* Tablonun kısıtlanmadan aşağı akması için ana kapsayıcılar serbest bırakıldı*/
+        /* ========================================================================= */
+        html, body { overflow-x: hidden; height: auto !important; margin: 0; padding: 0; }
+        
+        .container, .container-fluid, main, .content-wrapper, .page-content, .app-content, .content, .body-content { 
+            max-width: 100% !important; 
+            width: 100% !important; 
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            padding-left: 0.5rem !important; 
+            padding-right: 0.5rem !important; 
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            padding-bottom: 50px !important;
+        }
+
+        body { 
+            background-color: #f4f7fc; 
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            color: #2b3445; 
+            font-size: 0.75rem;
+        }
+
+        /* Dashboard Card Stilleri */
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 20px; transition: all 0.3s ease; position: relative; overflow: hidden; cursor: default; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        
+        .kpi-title { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; z-index: 2; position: relative; }
+        .kpi-value { font-size: 24px; font-weight: 900; color: #0f172a; margin-bottom: 2px; z-index: 2; position: relative; white-space: nowrap; letter-spacing: -0.5px; }
+        .kpi-desc { font-size: 11px; color: #94a3b8; z-index: 2; position: relative; }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 5rem; color: #e2e8f0; opacity: 0.4; z-index: 1; transform: rotate(-10deg); }
+        
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        .border-top-warning { border-top: 4px solid #f59e0b !important; }
+        .border-top-info { border-top: 4px solid #0ea5e9 !important; }
+        .border-top-success { border-top: 4px solid #10b981 !important; }
+
+        /* Toolbar ve Aksiyon Alanı */
+        .action-toolbar { background-color: #ffffff; padding: 12px 15px; border-radius: 10px; border: 1px solid #eef2f7; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; justify-content: space-between; align-items: center; }
+
+        /* TABLO KARTI - Yükseklik ve Overflow kısıtlaması TAMAMEN kaldırıldı! */
+        .report-table-card {
+            background: #ffffff; 
+            border-radius: 12px; 
+            border: 1px solid #eef2f7; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03); 
+            padding: 20px;
+            height: auto !important;
+            overflow: visible !important;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .table-container { 
+            width: 100%;
+            height: auto !important;
+            max-height: none !important;
+            overflow-y: visible !important; /* Dikey scroll iptal, sayfa uzayacak */
+            overflow-x: auto; /* Sadece yatayda taşma olursa kaydır */
+            background-color: white; 
+            border-radius: 8px; 
+            border: 1px solid #eef2f7; 
+            position: relative;
+        }
+        
+        table { width: 100%; table-layout: auto; border-collapse: separate; border-spacing: 0; min-width: 1200px; }
+        
+        th, td {
+            padding: 10px 12px !important;
+            font-size: 11.5px !important;
+            border-right: 1px solid #f1f5f9;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+            line-height: 1.3;
+        }
+
+        thead th { 
+            background-color: #f8fafc; 
+            color: #475569; 
+            font-weight: 700; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px; 
+            white-space: nowrap; 
+            position: sticky; 
+            top: 0; 
+            z-index: 100; 
+            border-bottom: 2px solid #e2e8f0 !important;
+        }
+        
+        .table-hover tbody tr:hover { background-color: #f8fafc; box-shadow: inset 2px 0 0 #3b82f6; }
+        
+        /* Özelleştirilmiş Kolon ve Metin Kesme */
+        .col-truncate-md { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .col-truncate-lg { max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .num { text-align: right; font-variant-numeric: tabular-nums; }
+        
+        /* Badges */
+        .badge-soft-primary { background-color: #dbeafe; color: #1e40af; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-success { background-color: #d1fae5; color: #065f46; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-warning { background-color: #fef3c7; color: #92400e; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-secondary { background-color: #f1f5f9; color: #475569; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px; border: 1px solid #cbd5e1; }
+        .badge-soft-danger { background-color: #fee2e2; color: #991b1b; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        
+        /* Toplam Satırı (Ekranın Altında Sabit Kalır) */
+        .total-row td { 
+            position: sticky; 
+            bottom: 0; 
+            background-color: #f8fafc !important; 
+            font-weight: 800; 
+            font-size: 12.5px !important; 
+            color: #0f172a; 
+            border-top: 2px solid #3b82f6 !important; 
+            z-index: 90;
+        }
+
+        /* Butonlar ve Form Elemanları */
+        .btn { font-weight: 600; letter-spacing: 0.2px; }
+        .btn-sm { font-size: 11.5px !important; padding: 4px 12px !important; height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+        .btn-primary { background-color: #3b82f6; border-color: #3b82f6; }
+        .btn-success { background-color: #10b981; border-color: #10b981; }
+        .btn-outline-secondary { color: #64748b; border-color: #cbd5e1; }
+        .btn-outline-secondary:hover { background-color: #f1f5f9; color: #0f172a; }
+
+        .bootstrap-select .dropdown-menu { z-index: 9999 !important; font-size: 11px; }
+        .bootstrap-select > .dropdown-toggle { border: 1px solid #ced4da; border-radius: 4px; padding: 2px 8px; font-size: 11px; height: 26px; line-height: 1.5; background-color: #fff; }
+    </style>
+}
+
+@Html.AntiForgeryToken()
+
+<div class="container-fluid">
+    <input type="hidden" id="currentDb" value="@currentDb" />
+
+    <!-- Başlık Alanı -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;"><i class="fas fa-file-invoice text-primary me-2"></i>Mahsup İşlemleri (Rapor 93)</h4>
+            <span class="text-muted" style="font-size: 13px;">Aktif Veritabanı: <strong class="text-primary">@currentSelectedDbDisplay</strong> | Yevmiye kayıtlarından mahsup fişi (PDF) oluşturma</span>
+        </div>
+        <div>
+            <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-sm btn-outline-secondary shadow-sm rounded-pill px-3">
+                <i class="fas fa-arrow-left"></i> Ana Sayfaya Dön
+            </a>
+        </div>
+    </div>
+
+    <!-- Alert Mesajları -->
+    @if (TempData["Warning"] != null)
+    {
+        <div class="alert alert-warning border-0 shadow-sm rounded-3 py-2 mb-3 fw-medium"><i class="fas fa-exclamation-triangle me-2"></i> @TempData["Warning"]</div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger border-0 shadow-sm rounded-3 py-2 mb-3 fw-medium"><i class="fas fa-times-circle me-2"></i> @TempData["Error"]</div>
+    }
+
+    <!-- KPI'lar -->
+    <div class="row mb-3 g-3">
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-primary hover-elevate">
+                <i class="fas fa-list-ol kpi-icon-bg"></i>
+                <div class="kpi-title">Listelenen Kayıt</div>
+                <div class="kpi-value text-primary">@islemSayisi</div>
+                <div class="kpi-desc">Filtrelenen yevmiye hareketi</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-info hover-elevate">
+                <i class="fas fa-layer-group kpi-icon-bg"></i>
+                <div class="kpi-title">Farklı Kaynak</div>
+                <div class="kpi-value text-info">@farkliKaynak</div>
+                <div class="kpi-desc">İşlem yapılan modül / belge türü</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-success hover-elevate">
+                <i class="fas fa-check-double kpi-icon-bg"></i>
+                <div class="kpi-title">Aktarım Durumu</div>
+                <div class="kpi-value text-success">@aktarilanSayisi</div>
+                <div class="kpi-desc">X, Y, R durumu atanmış kayıtlar</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-warning hover-elevate position-relative">
+                <i class="fas fa-coins kpi-icon-bg"></i>
+                <div class="kpi-title">Toplam Borç (TL)</div>
+                <div class="kpi-value text-warning">@toplamBorc.ToString("N2", new CultureInfo("tr-TR")) ₺</div>
+                <div class="kpi-desc">Listelenen kayıtların finansal büyüklüğü</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aksiyon ve Filtre Barı -->
+    <div class="action-toolbar mb-3">
+        <form method="post" asp-action="Index" class="w-100 d-flex flex-wrap align-items-end justify-content-between gap-3 m-0">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="db" value="@currentDb" />
+            
+            <div class="d-flex align-items-end gap-3 flex-grow-1 flex-wrap">
+                <div>
+                    <label class="form-label mb-1 fw-bold text-muted" style="font-size: 10px;">BAŞLANGIÇ:</label>
+                    <input type="date" name="StartDate" class="form-control form-control-sm" value="@(filter?.StartDate.ToString("yyyy-MM-dd"))" style="width: 120px; font-size: 11px; height: 26px;">
+                </div>
+                <div>
+                    <label class="form-label mb-1 fw-bold text-muted" style="font-size: 10px;">BİTİŞ:</label>
+                    <input type="date" name="EndDate" class="form-control form-control-sm" value="@(filter?.EndDate.ToString("yyyy-MM-dd"))" style="width: 120px; font-size: 11px; height: 26px;">
+                </div>
+                <div style="width: 180px;">
+                    <label class="form-label mb-1 fw-bold text-muted" style="font-size: 10px;">KAYNAK:</label>
+                    <select id="sourceTypeSelect" name="SourceTypes" class="selectpicker" data-container="body" data-width="100%" multiple data-live-search="true" data-none-selected-text="Seçiniz...">
+                        <option value="ALL" selected="@(filter?.SourceTypes?.Contains("ALL") == true)">Tümü</option>
+                        <option data-divider="true"></option>
+                        <option value="ALIS_FAT" selected="@(filter?.SourceTypes?.Contains("ALIS_FAT") == true)">Alış Faturası</option>
+                        <option value="YURTICI_SATIS" selected="@(filter?.SourceTypes?.Contains("YURTICI_SATIS") == true)">Yurt İçi Satış</option>
+                        <option value="YURTDISI_SATIS" selected="@(filter?.SourceTypes?.Contains("YURTDISI_SATIS") == true)">Yurt Dışı Satış</option>
+                        <option value="MANUEL_YEV" selected="@(filter?.SourceTypes?.Contains("MANUEL_YEV") == true)">Manuel Yevmiye</option>
+                        <option value="IBRAZ" selected="@(filter?.SourceTypes?.Contains("IBRAZ") == true)">İbraz</option>
+                        <option value="TAHSILAT" selected="@(filter?.SourceTypes?.Contains("TAHSILAT") == true)">Tahsilat</option>
+                        <option value="YAPILAN_ODEME" selected="@(filter?.SourceTypes?.Contains("YAPILAN_ODEME") == true)">Yapılan Ödemeler</option>
+                        <option value="DIGER" selected="@(filter?.SourceTypes?.Contains("DIGER") == true)">Diğer Belgeler</option>
+                    </select>
+                </div>
+                <div style="width: 80px;">
+                    <label class="form-label mb-1 fw-bold text-muted" style="font-size: 10px;">AKTARIM:</label>
+                    <select name="AktarTipi" class="form-select form-select-sm" style="font-size: 11px; height: 26px;">
+                        <option value="">Tümü</option>
+                        <option value="X" selected="@(filter?.AktarTipi == "X")">X</option>
+                        <option value="R" selected="@(filter?.AktarTipi == "R")">R</option>
+                        <option value="Y" selected="@(filter?.AktarTipi == "Y")">Y</option>
+                    </select>
+                </div>
+                <div style="width: 120px;">
+                    <label class="form-label mb-1 fw-bold text-primary" style="font-size: 10px;"><i class="fas fa-hashtag"></i> YEVMİYE NO:</label>
+                    <input type="number" name="TransId" class="form-control form-control-sm border-primary" placeholder="Örn: 24807" value="@filter?.TransId" style="font-size: 11px; height: 26px;">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-sm shadow-sm px-4">
+                    <i class="fas fa-search"></i> Kayıtları Getir
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- İşlem Listesi (Tablo) ve Mahsup Oluşturma -->
+    <div class="report-table-card mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="card-title mb-0 fw-bold text-dark" style="font-size: 14px;"><i class="fas fa-list-alt text-primary me-2"></i>Yevmiye Kayıtları Listesi</div>
+            <button type="button" id="btnMahsupOlustur" class="btn btn-sm btn-success shadow-sm px-4 fw-bold">
+                <i class="fas fa-file-pdf"></i> Seçilileri Mahsup Fişi Yap
+            </button>
+        </div>
+        
+        <!-- Yükseklik kısıtlaması TAMAMEN KALDIRILAN Tablo Konteyneri -->
+        <div class="table-container shadow-sm">
+            <form id="mahsupForm" method="post" asp-action="MahsupOlustur" target="_blank">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="db" value="@currentDb" />
+
+                <table class="table table-hover align-middle mb-0" id="rapor93Table">
+                    <thead>
+                        <tr>
+                            <th class="text-center" style="width:50px;">
+                                <input type="checkbox" id="chkAll" class="form-check-input" style="cursor: pointer;" />
+                            </th>
+                            <th class="text-center" style="width:100px;">Kayıt No</th>
+                            <th class="text-center">Kaynak Tipi</th>
+                            <th class="text-center" style="width:120px;">Tarih</th>
+                            <th style="min-width:250px;">Cari/Açıklama Adı</th>
+                            <th class="text-center" style="width:90px;">Aktarım</th>
+                            <th style="min-width:300px;">Açıklama</th>
+                            <th class="text-end" style="width:150px;">Toplam Borç (TL)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (modelData.Any())
+                        {
+                            foreach (var item in modelData)
+                            {
+                                <tr>
+                                    <td class="text-center">
+                                        <input type="checkbox" name="selectedTransIds" value="@item.TransId" class="form-check-input chk-item" style="cursor: pointer;" />
+                                    </td>
+                                    <td class="text-center"><span class="badge-soft-secondary">@item.TransId</span></td>
+                                    <td class="text-center">
+                                        @switch (item.DetailedSourceType)
+                                        {
+                                            case "ALIS_FAT": <span class="badge-soft-info">Alış Faturası</span> break;
+                                            case "YURTICI_SATIS": <span class="badge-soft-success">Yurt İçi Satış</span> break;
+                                            case "YURTDISI_SATIS": <span class="badge-soft-primary">Yurt Dışı Satış</span> break;
+                                            case "MANUEL_YEV": <span class="badge-soft-warning">Manuel Yevmiye</span> break;
+                                            case "TAHSILAT": <span class="badge-soft-success border border-success">Tahsilat</span> break;
+                                            case "YAPILAN_ODEME": <span class="badge-soft-danger">Yapılan Ödeme</span> break;
+                                            case "IBRAZ": <span class="badge-soft-secondary">İbraz</span> break;
+                                            default: <span class="badge-soft-dark border">Diğer (@item.TransType)</span> break;
+                                        }
+                                    </td>
+                                    <td class="text-center fw-medium text-secondary"><i class="far fa-calendar-alt me-1"></i> @item.RefDate.ToString("dd.MM.yyyy")</td>
+                                    <td class="fw-bold text-dark col-truncate-lg" title="@item.CardName">@item.CardName</td>
+                                    <td class="text-center">
+                                        @if(!string.IsNullOrEmpty(item.U_BE1_AKTAR)) {
+                                            <span class="badge-soft-danger px-2 border border-danger">@item.U_BE1_AKTAR</span>
+                                        } else {
+                                            <span class="text-muted">-</span>
+                                        }
+                                    </td>
+                                    <td class="text-muted col-truncate-lg" title="@item.Memo" style="font-size: 10.5px;">@item.Memo</td>
+                                    <td class="text-end fw-bold text-primary num">@item.TotalDebit.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center py-5">
+                                    <div class="text-muted mb-3"><i class="fas fa-search fa-3x opacity-25 text-primary"></i></div>
+                                    <h6 class="fw-bold text-secondary">Kriterlerinize uygun yevmiye kaydı bulunamadı.</h6>
+                                    <p class="small text-muted mb-0">Lütfen filtreleri değiştirerek tekrar deneyin.</p>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                    @if (modelData.Any())
+                    {
+                        <tfoot>
+                            <tr class="total-row">
+                                <td colspan="7" class="text-end pe-3">LİSTELENEN TOPLAM:</td>
+                                <td class="text-end text-primary fs-6 num">@toplamBorc.ToString("N2", new CultureInfo("tr-TR")) ₺</td>
+                            </tr>
+                        </tfoot>
+                    }
+                </table>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            // Selectpicker'ı başlat
+            $('.selectpicker').selectpicker();
+
+            // "Tümü" seçeneğinin diğerleriyle birlikte seçilmesini engelleyen mantık
+            $('#sourceTypeSelect').on('changed.bs.select', function (e, clickedIndex, isSelected, previousValue) {
+                var selectObj = $(this);
+                var values = selectObj.val() || [];
+                
+                if (isSelected) {
+                    var clickedValue = selectObj.find('option').eq(clickedIndex).val();
+                    
+                    if (clickedValue === 'ALL') {
+                        // Eğer "Tümü" seçilirse diğer tüm seçimleri kaldır
+                        selectObj.selectpicker('val', ['ALL']);
+                    } else {
+                        // Eğer başka bir şey seçilirse ve "Tümü" de işaretliyse, "Tümü"nün işaretini kaldır
+                        if (values.indexOf('ALL') !== -1) {
+                            var newValues = values.filter(function(v) { return v !== 'ALL'; });
+                            selectObj.selectpicker('val', newValues);
+                        }
+                    }
+                } else {
+                    // Eğer kullanıcı son seçeneği de kaldırırsa, varsayılan olarak "Tümü"nü tekrar seç
+                    if (values.length === 0) {
+                        selectObj.selectpicker('val', ['ALL']);
+                    }
+                }
+            });
+
+            // Tümünü Seç / Kaldır
+            $('#chkAll').change(function () {
+                $('.chk-item').prop('checked', $(this).prop('checked'));
+                highlightSelectedRows();
+            });
+
+            // Tekil checkbox değiştiğinde
+            $('.chk-item').change(function () {
+                if ($('.chk-item:checked').length === $('.chk-item').length) {
+                    $('#chkAll').prop('checked', true);
+                } else {
+                    $('#chkAll').prop('checked', false);
+                }
+                highlightSelectedRows();
+            });
+
+            // Seçilen satırların arkaplan rengini değiştir (UX geliştirmesi)
+            function highlightSelectedRows() {
+                $('.chk-item').each(function() {
+                    if ($(this).is(':checked')) {
+                        $(this).closest('tr').css('background-color', '#fffbeb');
+                    } else {
+                        $(this).closest('tr').css('background-color', '');
+                    }
+                });
+            }
+
+            // Mahsup Oluştur butonuna tıklandığında formu submit et
+            $('#btnMahsupOlustur').click(function () {
+                if ($('.chk-item:checked').length === 0) {
+                    alert('Lütfen PDF oluşturmak için listeden en az bir yevmiye kaydı seçiniz.');
+                    return;
+                }
+                $('#mahsupForm').submit();
+            });
+        });
+    </script>
+}

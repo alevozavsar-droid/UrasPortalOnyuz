@@ -1,0 +1,1466 @@
+@{
+    ViewData["Title"] = "Arıza & Bakım";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-screwdriver-wrench me-2 text-primary"></i> Arıza &amp; Bakım İzleme</h2>
+    <button class="btn btn-primary btn-sm" onclick="yeniArizaAc()"><i class="fas fa-plus me-1"></i>Yeni Arıza / Bakım</button>
+</div>
+<div class="alert alert-info py-2 small mb-3">
+    <i class="fas fa-circle-info me-1"></i> Tüm kayıt/güncelleme/silme işlemleri SAP Service Layer üzerinden yapılır (URASKIMYA, üstteki şirket seçiciden bağımsız).
+    Checklist şablon yönetimi var, saha cevap girişi yok (canlı şema doğrulaması bekliyor).
+</div>
+
+<ul class="nav nav-tabs mb-3" id="bakimTab">
+    <li class="nav-item"><button class="nav-link active" data-tab="ozet" onclick="sekmeSec('ozet')">Özet</button></li>
+    <li class="nav-item"><button class="nav-link" data-tab="arizalar" onclick="sekmeSec('arizalar')">Arıza / Bakım Kayıtları</button></li>
+    <li class="nav-item"><button class="nav-link" data-tab="periyodik" onclick="sekmeSec('periyodik')">Periyodik Bakım Planı</button></li>
+    <li class="nav-item"><button class="nav-link" data-tab="makineler" onclick="sekmeSec('makineler')">Makineler</button></li>
+    <li class="nav-item"><button class="nav-link" data-tab="analiz" onclick="sekmeSec('analiz')">Analiz</button></li>
+    <li class="nav-item"><button class="nav-link" data-tab="tanimlar" onclick="sekmeSec('tanimlar')">Personel / Kodlar / Kataloglar</button></li>
+    <li class="nav-item"><button class="nav-link" data-tab="ayarlar" onclick="sekmeSec('ayarlar')">Ayarlar</button></li>
+</ul>
+
+<!-- ÖZET -->
+<div id="tab-ozet" class="bakim-tab">
+    <div id="ozetYukleniyor" class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm me-2"></span>Yükleniyor…</div>
+    <div class="row g-3" id="ozetKartlari" style="display:none;"></div>
+</div>
+
+<!-- ARIZALAR -->
+<div id="tab-arizalar" class="bakim-tab" style="display:none;">
+    <div class="card dash-card mb-3">
+        <div class="card-body">
+            <div class="row g-2 align-items-end">
+                <div class="col-6 col-md-2">
+                    <label class="form-label small fw-bold">Durum</label>
+                    <select id="fDurum" class="form-select form-select-sm" onchange="arizalariYukle()">
+                        <option value="Acik" selected>Açık</option><option value="Kapali">Kapalı</option><option value="Tumu">Tümü</option>
+                        <option value="Beklemede">Beklemede</option><option value="Atandi">Atandı</option><option value="DevamEdiyor">Devam Ediyor</option><option value="OnayBekliyor">Onay Bekliyor</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small fw-bold">Tip</label>
+                    <select id="fTip" class="form-select form-select-sm" onchange="arizalariYukle()"><option value="">Tümü</option><option value="ARIZA">Arıza</option><option value="BAKIM">Bakım</option><option value="PLANLI">Planlı</option></select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small fw-bold">Öncelik</label>
+                    <select id="fOncelik" class="form-select form-select-sm" onchange="arizalariYukle()"><option value="">Tümü</option><option value="Acil">Acil</option><option value="Yuksek">Yüksek</option><option value="Normal">Normal</option></select>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label small fw-bold">Makine</label>
+                    <select id="fResCode" class="form-select form-select-sm" onchange="arizalariYukle()"><option value="">Tümü</option></select>
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label small fw-bold">Ara</label>
+                    <input type="text" id="fAra" class="form-control form-control-sm" placeholder="Arıza no, makine, açıklama…" oninput="aramaDegisti()">
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="arizaYukleniyor" class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm me-2"></span>Yükleniyor…</div>
+    <div class="table-responsive" style="display:none;" id="arizaTabloKutu">
+        <table class="table table-hover table-custom mb-0">
+            <thead><tr><th>No</th><th>Tip</th><th>Durum</th><th>Öncelik</th><th>Makine</th><th>Atanan</th><th>Bildirim</th><th class="text-end">Süre</th><th class="text-end">Tutar</th><th></th></tr></thead>
+            <tbody id="tbodyArizalar"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- PERİYODİK BAKIM -->
+<div id="tab-periyodik" class="bakim-tab" style="display:none;">
+    <div class="d-flex justify-content-end mb-2">
+        <button class="btn btn-outline-primary btn-sm" onclick="yeniPeriyodikAc()"><i class="fas fa-plus me-1"></i>Yeni Planlı Bakım</button>
+    </div>
+    <div id="periyodikYukleniyor" class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm me-2"></span>Yükleniyor…</div>
+    <div class="table-responsive" style="display:none;" id="periyodikTabloKutu">
+        <table class="table table-hover table-custom mb-0">
+            <thead><tr><th>Makine</th><th>Bakım İşlemi</th><th>Planlanan Tarih</th><th class="text-end">Kalan Gün</th><th>Öncelik</th><th>Durum</th><th></th></tr></thead>
+            <tbody id="tbodyPeriyodik"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- MAKİNELER -->
+<div id="tab-makineler" class="bakim-tab" style="display:none;">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <input type="text" id="fMakineAra" class="form-control form-control-sm" style="max-width:280px" placeholder="Makine ara…" oninput="cizMakineler()">
+        <button class="btn btn-outline-primary btn-sm" onclick="makineDuzenleAc(null)"><i class="fas fa-plus me-1"></i>Yeni Makine</button>
+    </div>
+    <div id="makineYukleniyor" class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm me-2"></span>Yükleniyor…</div>
+    <div class="row g-3" id="makineKartlari"></div>
+</div>
+
+<!-- ANALİZ -->
+<div id="tab-analiz" class="bakim-tab" style="display:none;">
+    <div class="card dash-card mb-3">
+        <div class="card-body">
+            <div class="row g-2 align-items-end">
+                <div class="col-6 col-md-3"><label class="form-label small fw-bold">Başlangıç</label><input type="date" id="aBas" class="form-control form-control-sm"></div>
+                <div class="col-6 col-md-3"><label class="form-label small fw-bold">Bitiş</label><input type="date" id="aBit" class="form-control form-control-sm"></div>
+                <div class="col-12 col-md-3"><button class="btn btn-primary btn-sm" onclick="analizYukle()"><i class="fas fa-rotate me-1"></i>Getir</button></div>
+            </div>
+        </div>
+    </div>
+    <div id="analizYukleniyor" class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm me-2"></span>Yükleniyor…</div>
+    <div id="analizIcerik" style="display:none;">
+        <div class="row g-3 mb-3" id="analizKpi"></div>
+        <div class="row g-3 mb-3">
+            <div class="col-12 col-xl-7">
+                <div class="card dash-card h-100"><div class="card-header bg-white fw-bold small text-uppercase text-muted">Aylık Arıza / Bakım</div><div class="card-body"><div id="chartAylik" style="min-height:260px;"></div></div></div>
+            </div>
+            <div class="col-12 col-xl-5">
+                <div class="card dash-card h-100"><div class="card-header bg-white fw-bold small text-uppercase text-muted">Kategoriye Göre Arıza</div><div class="card-body"><div id="chartKategori" style="min-height:260px;"></div></div></div>
+            </div>
+        </div>
+        <div class="card dash-card">
+            <div class="card-header bg-white fw-bold small text-uppercase text-muted">Makine Bazlı</div>
+            <div class="table-responsive">
+                <table class="table table-hover table-custom mb-0">
+                    <thead><tr><th>Makine</th><th class="text-end">Arıza</th><th class="text-end">Bakım</th><th class="text-end">Duruş (dk)</th><th class="text-end">MTTR (dk)</th><th class="text-end">Tutar</th></tr></thead>
+                    <tbody id="tbodyAnalizMakine"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- PERSONEL / KODLAR / KATALOGLAR -->
+<div id="tab-tanimlar" class="bakim-tab" style="display:none;">
+    <div class="row g-3">
+        <div class="col-12 col-lg-6">
+            <div class="card dash-card">
+                <div class="card-header bg-white fw-bold small text-uppercase text-muted d-flex justify-content-between align-items-center">
+                    Bakım Personeli
+                    <button class="btn btn-outline-primary btn-sm py-0" onclick="personelDuzenleAc(null)"><i class="fas fa-plus"></i></button>
+                </div>
+                <div class="table-responsive"><table class="table table-hover table-custom mb-0">
+                    <thead><tr><th>Ad</th><th>Tip</th><th>Uzmanlık</th><th class="text-end">Açık İş</th><th></th></tr></thead>
+                    <tbody id="tbodyPersonel"></tbody>
+                </table></div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-6">
+            <div class="card dash-card">
+                <div class="card-header bg-white fw-bold small text-uppercase text-muted d-flex justify-content-between align-items-center">
+                    Arıza/Bakım Kodları
+                    <button class="btn btn-outline-primary btn-sm py-0" onclick="kodDuzenleAc(null)"><i class="fas fa-plus"></i></button>
+                </div>
+                <div class="table-responsive"><table class="table table-hover table-custom mb-0">
+                    <thead><tr><th>Tip</th><th>Ad</th><th>Açıklama</th><th></th></tr></thead>
+                    <tbody id="tbodyKodlar"></tbody>
+                </table></div>
+            </div>
+        </div>
+        <div class="col-12">
+            <div class="card dash-card">
+                <div class="card-header bg-white fw-bold small text-uppercase text-muted d-flex justify-content-between align-items-center">
+                    Bakım İşlem Kataloğu (periyodik bakım tanımları)
+                    <button class="btn btn-outline-primary btn-sm py-0" onclick="bakimIslemDuzenleAc(null)"><i class="fas fa-plus"></i></button>
+                </div>
+                <div class="table-responsive"><table class="table table-hover table-custom mb-0">
+                    <thead><tr><th>İşlem</th><th>Periyot</th><th>Makine Türü</th><th>Bakım Tipi</th><th class="text-end">Süre</th><th>Malzeme</th><th></th></tr></thead>
+                    <tbody id="tbodyBakimIslem"></tbody>
+                </table></div>
+            </div>
+        </div>
+        <div class="col-12">
+            <div class="card dash-card">
+                <div class="card-header bg-white fw-bold small text-uppercase text-muted d-flex justify-content-between align-items-center">
+                    Checklist Şablonları
+                    <button class="btn btn-outline-primary btn-sm py-0" onclick="checklistDuzenleAc(null)"><i class="fas fa-plus"></i></button>
+                </div>
+                <div class="table-responsive"><table class="table table-hover table-custom mb-0">
+                    <thead><tr><th>Makine Türü</th><th>Tip</th><th>İşlem</th><th class="text-end">Soru Sayısı</th><th>Durum</th><th></th></tr></thead>
+                    <tbody id="tbodyChecklist"></tbody>
+                </table></div>
+            </div>
+        </div>
+        <div class="col-12">
+            <div class="card dash-card">
+                <div class="card-header bg-white fw-bold small text-uppercase text-muted">Malzeme Ara (Stok)</div>
+                <div class="card-body">
+                    <input type="text" id="fMlzAra" class="form-control form-control-sm mb-2" style="max-width:320px" placeholder="Kalem kodu / adı…" oninput="malzemeAramaDegisti()">
+                    <div class="table-responsive"><table class="table table-sm table-custom mb-0">
+                        <thead><tr><th>Kod</th><th>Ad</th><th class="text-end">Stok</th><th>Depo</th></tr></thead>
+                        <tbody id="tbodyMalzeme"></tbody>
+                    </table></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AYARLAR -->
+<div id="tab-ayarlar" class="bakim-tab" style="display:none;">
+    <div class="row g-3">
+        <div class="col-12 col-lg-6">
+            <div class="card dash-card">
+                <div class="card-header bg-white fw-bold small text-uppercase text-muted">Genel Ayarlar</div>
+                <div class="card-body">
+                    <div class="row g-2">
+                        <div class="col-6"><label class="form-label small fw-bold">Arıza Kod Öneki</label><input type="text" id="ayArizaOnek" class="form-control form-control-sm"></div>
+                        <div class="col-6"><label class="form-label small fw-bold">Bakım Kod Öneki</label><input type="text" id="ayBakimOnek" class="form-control form-control-sm"></div>
+                        <div class="col-6"><label class="form-label small fw-bold">Mesai Başlangıç</label><input type="text" id="ayMesaiBas" class="form-control form-control-sm" placeholder="08:00"></div>
+                        <div class="col-6"><label class="form-label small fw-bold">Mesai Bitiş</label><input type="text" id="ayMesaiBit" class="form-control form-control-sm" placeholder="18:00"></div>
+                        <div class="col-6"><label class="form-label small fw-bold">Hatırlatma Günü</label><input type="number" id="ayHatirlatmaGun" class="form-control form-control-sm"></div>
+                        <div class="col-6"><label class="form-label small fw-bold">Para Birimi</label><input type="text" id="ayParaBirimi" class="form-control form-control-sm"></div>
+                        <div class="col-12"><label class="form-label small fw-bold">Varsayılan Depo</label><input type="text" id="ayVarsayilanDepo" class="form-control form-control-sm"></div>
+                        <div class="col-6"><div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" id="ayOnayZorunlu"><label class="form-check-label small" for="ayOnayZorunlu">Onay zorunlu</label></div></div>
+                        <div class="col-6"><div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" id="ayOnayDisServis"><label class="form-check-label small" for="ayOnayDisServis">Dış servis onayı</label></div></div>
+                        <div class="col-6"><label class="form-label small fw-bold">Onay Tutar Eşiği</label><input type="number" id="ayOnayTutar" class="form-control form-control-sm"></div>
+                        <div class="col-12"><label class="form-label small fw-bold">Ek Hatırlatma E-postaları (; ile ayır)</label><input type="text" id="ayHatirlatmaMail" class="form-control form-control-sm"></div>
+                    </div>
+                </div>
+                <div class="card-footer bg-white d-flex gap-2">
+                    <button class="btn btn-primary btn-sm" onclick="ayarlarKaydet()"><i class="fas fa-check me-1"></i>Kaydet</button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="hatirlatmaGonderTiklandi()"><i class="fas fa-bell me-1"></i>Hatırlatma Gönder</button>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-6">
+            <div class="card dash-card mb-3">
+                <div class="card-header bg-white fw-bold small text-uppercase text-muted">Test Maili</div>
+                <div class="card-body">
+                    <div class="input-group input-group-sm">
+                        <input type="email" id="testMailAdres" class="form-control" placeholder="kullanici@@ornek.local">
+                        <button class="btn btn-outline-primary" onclick="testMailGonder()"><i class="fas fa-paper-plane me-1"></i>Gönder</button>
+                    </div>
+                </div>
+            </div>
+            <div class="card dash-card">
+                <div class="card-header bg-white fw-bold small text-uppercase text-muted d-flex justify-content-between align-items-center">
+                    Mail Alıcıları
+                    <button class="btn btn-outline-primary btn-sm py-0" onclick="mailAliciDuzenleAc(null)"><i class="fas fa-plus"></i></button>
+                </div>
+                <div class="table-responsive"><table class="table table-hover table-custom mb-0">
+                    <thead><tr><th>Olay</th><th>E-posta</th><th>Durum</th><th></th></tr></thead>
+                    <tbody id="tbodyMailAlici"></tbody>
+                </table></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ARIZA DETAY MODAL -->
+<div class="modal fade" id="detayModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" id="detayBaslik">Kayıt Detayı</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body" id="detayIcerik"><div class="text-center py-4"><span class="spinner-border"></span></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- YENİ ARIZA / BAKIM MODAL -->
+<div class="modal fade" id="yeniArizaModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Yeni Arıza / Bakım Bildirimi</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Tip</label>
+                        <select id="yaTip" class="form-select form-select-sm"><option value="ARIZA">Arıza</option><option value="PLANLI">Planlı Bakım</option></select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Öncelik</label>
+                        <select id="yaOncelik" class="form-select form-select-sm"><option value="Normal">Normal</option><option value="Yuksek">Yüksek</option><option value="Acil">Acil</option></select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-bold">Makine *</label>
+                        <select id="yaResCode" class="form-select form-select-sm"><option value="">Seçin…</option></select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Kategori</label>
+                        <input type="text" id="yaKategori" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Neden</label>
+                        <input type="text" id="yaNeden" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-bold">Açıklama *</label>
+                        <textarea id="yaAciklama" class="form-control form-control-sm" rows="3"></textarea>
+                    </div>
+                    <div class="col-6">
+                        <div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" id="yaUretimDurdu"><label class="form-check-label small" for="yaUretimDurdu">Üretim durdu</label></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-primary btn-sm" onclick="yeniArizaKaydet()"><i class="fas fa-check me-1"></i>Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- YENİ PLANLI (PERİYODİK) BAKIM MODAL -->
+<div class="modal fade" id="periyodikModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Yeni Planlı Bakım</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Makine *</label>
+                        <select id="pbResCode" class="form-select form-select-sm"><option value="">Seçin…</option></select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Bakım İşlemi (periyot) *</label>
+                        <select id="pbBkmPeriodEntry" class="form-select form-select-sm"><option value="">Seçin…</option></select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Planlanan Tarih</label>
+                        <input type="date" id="pbPlanlananTarih" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Periyot (Gün) — boşsa kataloğun periyodu kullanılır</label>
+                        <input type="number" id="pbBakimGun" class="form-control form-control-sm" value="0">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Tonaj</label>
+                        <input type="number" id="pbTonaj" class="form-control form-control-sm" value="0">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-bold">Açıklama</label>
+                        <input type="text" id="pbAciklama" class="form-control form-control-sm">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-primary btn-sm" onclick="periyodikKaydetTiklandi()"><i class="fas fa-check me-1"></i>Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- DURUŞ KAYDET MODAL -->
+<div class="modal fade" id="durusModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Duruş Kaydı</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="drDocEntry">
+                <div class="row g-2">
+                    <div class="col-12"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="drUretimDurdu"><label class="form-check-label small fw-bold" for="drUretimDurdu">Üretim durdu / duruyor</label></div></div>
+                    <div class="col-6"><label class="form-label small fw-bold">Duruş Başlangıcı</label><input type="datetime-local" id="drBas" class="form-control form-control-sm"></div>
+                    <div class="col-6"><label class="form-label small fw-bold">Duruş Bitişi (devam ediyorsa boş bırakın)</label><input type="datetime-local" id="drBit" class="form-control form-control-sm"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-primary btn-sm" onclick="durusKaydetTiklandi()"><i class="fas fa-check me-1"></i>Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MAKİNE DÜZENLE MODAL -->
+<div class="modal fade" id="makineModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" id="makineModalBaslik">Makine</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="mkEskiKod">
+                <div class="row g-2">
+                    <div class="col-6"><label class="form-label small fw-bold">Kod *</label><input type="text" id="mkCode" class="form-control form-control-sm"></div>
+                    <div class="col-6"><label class="form-label small fw-bold">Ad *</label><input type="text" id="mkAd" class="form-control form-control-sm"></div>
+                    <div class="col-4"><label class="form-label small fw-bold">Tür</label><input type="text" id="mkTur" class="form-control form-control-sm"></div>
+                    <div class="col-4"><label class="form-label small fw-bold">Marka</label><input type="text" id="mkMarka" class="form-control form-control-sm"></div>
+                    <div class="col-4"><label class="form-label small fw-bold">Model</label><input type="text" id="mkModel" class="form-control form-control-sm"></div>
+                    <div class="col-4"><label class="form-label small fw-bold">Seri No</label><input type="text" id="mkSeriNo" class="form-control form-control-sm"></div>
+                    <div class="col-4"><label class="form-label small fw-bold">Konum</label><input type="text" id="mkKonum" class="form-control form-control-sm"></div>
+                    <div class="col-4"><label class="form-label small fw-bold">Kritiklik</label><input type="text" id="mkKritiklik" class="form-control form-control-sm"></div>
+                    <div class="col-6"><label class="form-label small fw-bold">Sorumlu Adı</label><input type="text" id="mkSorumluAd" class="form-control form-control-sm"></div>
+                    <div class="col-6"><label class="form-label small fw-bold">Sorumlu E-posta</label><input type="email" id="mkSorumluEmail" class="form-control form-control-sm"></div>
+                    <div class="col-6"><label class="form-label small fw-bold">Servis Firma</label><input type="text" id="mkServisFirma" class="form-control form-control-sm"></div>
+                    <div class="col-6"><label class="form-label small fw-bold">Kapasite</label><input type="text" id="mkKapasite" class="form-control form-control-sm"></div>
+                    <div class="col-12"><label class="form-label small fw-bold">Açıklama</label><textarea id="mkAciklama" class="form-control form-control-sm" rows="2"></textarea></div>
+                    <div class="col-6"><div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" id="mkAktif" checked><label class="form-check-label small" for="mkAktif">Aktif</label></div></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-danger btn-sm me-auto" id="mkSilBtn" style="display:none" onclick="makineSilTiklandi()"><i class="fas fa-trash me-1"></i>Sil</button>
+                <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-primary btn-sm" onclick="makineKaydetTiklandi()"><i class="fas fa-check me-1"></i>Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- KOD DÜZENLE MODAL -->
+<div class="modal fade" id="kodModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Arıza/Bakım Kodu</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="kdCode">
+                <div class="row g-2">
+                    <div class="col-6"><label class="form-label small fw-bold">Tip *</label>
+                        <select id="kdTip" class="form-select form-select-sm"><option value="KATEGORI">Kategori</option><option value="NEDEN">Neden</option><option value="ROL">Rol</option></select>
+                    </div>
+                    <div class="col-6"><label class="form-label small fw-bold">Sıra</label><input type="number" id="kdSira" class="form-control form-control-sm" value="0"></div>
+                    <div class="col-12"><label class="form-label small fw-bold">Ad *</label><input type="text" id="kdAd" class="form-control form-control-sm"></div>
+                    <div class="col-12"><label class="form-label small fw-bold">Açıklama</label><input type="text" id="kdAciklama" class="form-control form-control-sm"></div>
+                    <div class="col-12"><div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" id="kdAktif" checked><label class="form-check-label small" for="kdAktif">Aktif</label></div></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-primary btn-sm" onclick="kodKaydetTiklandi()"><i class="fas fa-check me-1"></i>Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- PERSONEL DÜZENLE MODAL -->
+<div class="modal fade" id="personelModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Bakım Personeli</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="psCode">
+                <div class="row g-2">
+                    <div class="col-6"><label class="form-label small fw-bold">Ad *</label><input type="text" id="psAd" class="form-control form-control-sm"></div>
+                    <div class="col-6"><label class="form-label small fw-bold">Tip</label>
+                        <select id="psTip" class="form-select form-select-sm"><option value="I">İç Personel</option><option value="D">Dış Servis</option></select>
+                    </div>
+                    <div class="col-6"><label class="form-label small fw-bold">Telefon</label><input type="text" id="psTel" class="form-control form-control-sm"></div>
+                    <div class="col-6"><label class="form-label small fw-bold">E-posta</label><input type="email" id="psEmail" class="form-control form-control-sm"></div>
+                    <div class="col-12"><label class="form-label small fw-bold">Uzmanlık</label><input type="text" id="psUzmanlik" class="form-control form-control-sm"></div>
+                    <div class="col-12"><div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" id="psAktif" checked><label class="form-check-label small" for="psAktif">Aktif</label></div></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-primary btn-sm" onclick="personelKaydetTiklandi()"><i class="fas fa-check me-1"></i>Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- BAKIM İŞLEM KATALOĞU DÜZENLE MODAL -->
+<div class="modal fade" id="bakimIslemModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Bakım İşlem Kataloğu</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="biDocEntry" value="0">
+                <div class="row g-2">
+                    <div class="col-12"><label class="form-label small fw-bold">İşlem Adı *</label><input type="text" id="biIslemAdi" class="form-control form-control-sm"></div>
+                    <div class="col-4"><label class="form-label small fw-bold">Periyot (Gün)</label><input type="number" id="biGun" class="form-control form-control-sm" value="0"></div>
+                    <div class="col-4"><label class="form-label small fw-bold">Periyot (Tonaj)</label><input type="number" id="biTonaj" class="form-control form-control-sm" value="0"></div>
+                    <div class="col-4"><label class="form-label small fw-bold">Tahmini Süre (dk)</label><input type="number" id="biSure" class="form-control form-control-sm" value="0"></div>
+                    <div class="col-4"><label class="form-label small fw-bold">Makine Türü</label><input type="text" id="biMakineTuru" class="form-control form-control-sm"></div>
+                    <div class="col-4"><label class="form-label small fw-bold">Bakım Tipi</label><input type="text" id="biBakimTipi" class="form-control form-control-sm"></div>
+                    <div class="col-4"><label class="form-label small fw-bold">İç/Dış</label>
+                        <select id="biIcDis" class="form-select form-select-sm"><option value="I">İç</option><option value="D">Dış</option></select>
+                    </div>
+                    <div class="col-12"><label class="form-label small fw-bold">Talimat</label><textarea id="biTalimat" class="form-control form-control-sm" rows="2"></textarea></div>
+                    <div class="col-12"><div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" id="biAktif" checked><label class="form-check-label small" for="biAktif">Aktif</label></div></div>
+                </div>
+                <hr>
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="fw-bold small text-uppercase text-muted">Malzemeler</div>
+                    <button class="btn btn-outline-primary btn-sm py-0" onclick="biMalzemeSatiriEkle()"><i class="fas fa-plus"></i></button>
+                </div>
+                <table class="table table-sm table-custom mb-0"><thead><tr><th>Kalem Kodu</th><th>Kalem Adı</th><th>Miktar</th><th>Birim</th><th></th></tr></thead><tbody id="biMalzemeSatirlari"></tbody></table>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-danger btn-sm me-auto" id="biSilBtn" style="display:none" onclick="bakimIslemSilTiklandi()"><i class="fas fa-trash me-1"></i>Sil</button>
+                <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-primary btn-sm" onclick="bakimIslemKaydetTiklandi()"><i class="fas fa-check me-1"></i>Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CHECKLIST ŞABLONU DÜZENLE MODAL -->
+<div class="modal fade" id="checklistModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Checklist Şablonu</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="ckDocEntry" value="0">
+                <div class="row g-2">
+                    <div class="col-6"><label class="form-label small fw-bold">Makine Türü (RES) *</label><input type="text" id="ckResCode" class="form-control form-control-sm" placeholder="Makine kodu veya türü"></div>
+                    <div class="col-6"><label class="form-label small fw-bold">Tip *</label>
+                        <select id="ckTip" class="form-select form-select-sm"><option value="ARIZA">Arıza</option><option value="BAKIM">Bakım</option></select>
+                    </div>
+                    <div class="col-12"><label class="form-label small fw-bold">İlişkili Bakım İşlemi (opsiyonel)</label>
+                        <select id="ckIslemEntry" class="form-select form-select-sm"><option value="">—</option></select>
+                    </div>
+                    <div class="col-12"><div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" id="ckAktif" checked><label class="form-check-label small" for="ckAktif">Aktif</label></div></div>
+                </div>
+                <hr>
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="fw-bold small text-uppercase text-muted">Sorular</div>
+                    <button class="btn btn-outline-primary btn-sm py-0" onclick="ckSoruEkle()"><i class="fas fa-plus"></i></button>
+                </div>
+                <table class="table table-sm table-custom mb-0"><thead><tr><th style="width:60px">Sıra</th><th>Soru</th><th style="width:90px">Zorunlu</th><th></th></tr></thead><tbody id="ckSorular"></tbody></table>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-danger btn-sm me-auto" id="ckSilBtn" style="display:none" onclick="checklistSilTiklandi()"><i class="fas fa-trash me-1"></i>Sil</button>
+                <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-primary btn-sm" onclick="checklistKaydetTiklandi()"><i class="fas fa-check me-1"></i>Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MAIL ALICI DÜZENLE MODAL -->
+<div class="modal fade" id="mailAliciModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Mail Alıcısı</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="maCode">
+                <div class="row g-2">
+                    <div class="col-6"><label class="form-label small fw-bold">Olay *</label>
+                        <select id="maOlay" class="form-select form-select-sm"><option value="HATIRLATMA">Hatırlatma</option><option value="ARIZA">Arıza Bildirimi</option><option value="TUMU">Tümü</option></select>
+                    </div>
+                    <div class="col-6"><label class="form-label small fw-bold">E-posta *</label><input type="email" id="maEmail" class="form-control form-control-sm"></div>
+                    <div class="col-12"><div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" id="maAktif" checked><label class="form-check-label small" for="maAktif">Aktif</label></div></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-primary btn-sm" onclick="mailAliciKaydetTiklandi()"><i class="fas fa-check me-1"></i>Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; color: #5a5c69; }
+    .kpi-card { border-radius: 10px; border: 1px solid #e3e6f0; padding: 12px 16px; background: #fff; height: 100%; }
+    .kpi-card .l { font-size: .68rem; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: #858796; }
+    .kpi-card .v { font-size: 1.2rem; font-weight: 700; color: #1e293b; }
+    .kpi-card .s { font-size: .72rem; color: #94a3b8; }
+    .rozet { font-size: .68rem; font-weight: 700; padding: .2em .55em; border-radius: 6px; }
+    .rozet-yesil { background:#e6f7ee; color:#0f9d58; } .rozet-sari { background:#fff8e6; color:#b7791f; }
+    .rozet-turuncu { background:#fff1e6; color:#c2410c; } .rozet-kirmizi { background:#fde8e8; color:#c0392b; } .rozet-gri { background:#f1f3f5; color:#495057; } .rozet-mavi { background:#eaf2ff; color:#2a5fb0; }
+    .makine-kart { cursor:pointer; }
+    .satir-tikla { cursor: pointer; } .satir-tikla:hover { background: #f8f9fc; }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script>
+    let makinelerCache = [], personelCache = [], kodlarCache = [], bakimIslemCache = [], checklistCache = [], mailAliciCache = [], malzemeZamanlayici = null, aramaZamanlayici = null;
+    let chartAylik = null, chartKategori = null;
+
+    function fmt(n, d) { return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+
+    function sekmeSec(tab) {
+        document.querySelectorAll('.bakim-tab').forEach(e => e.style.display = 'none');
+        document.getElementById('tab-' + tab).style.display = '';
+        document.querySelectorAll('#bakimTab .nav-link').forEach(e => e.classList.toggle('active', e.dataset.tab === tab));
+        if (tab === 'arizalar' && !document.getElementById('tbodyArizalar').dataset.yuklendi) arizalariYukle();
+        if (tab === 'periyodik' && !document.getElementById('tbodyPeriyodik').dataset.yuklendi) periyodikYukle();
+        if (tab === 'makineler' && !makinelerCache.length) makineleriYukle();
+        if (tab === 'analiz' && !document.getElementById('analizIcerik').dataset.yuklendi) { analizVarsayilanTarih(); analizYukle(); }
+        if (tab === 'tanimlar' && !personelCache.length) tanimlariYukle();
+        if (tab === 'ayarlar' && !document.getElementById('tab-ayarlar').dataset.yuklendi) ayarlarYukle();
+    }
+
+    function durumRozet(d) {
+        return { Beklemede: 'rozet-gri', Atandi: 'rozet-mavi', DevamEdiyor: 'rozet-sari', OnayBekliyor: 'rozet-turuncu', Kapatildi: 'rozet-yesil', Tamamlandi: 'rozet-yesil', Iptal: 'rozet-kirmizi' }[d] || 'rozet-gri';
+    }
+    function oncelikRozet(o) { return { Acil: 'rozet-kirmizi', Yuksek: 'rozet-turuncu', Normal: 'rozet-gri' }[o] || 'rozet-gri'; }
+
+    // ================= ÖZET =================
+    async function ozetYukle() {
+        const res = await fetch('/UrasUretimBakim/GetOzet').then(r => r.json());
+        document.getElementById('ozetYukleniyor').style.display = 'none';
+        if (!res.success) { alert('Özet alınamadı: ' + res.message); return; }
+        const o = res.data;
+        document.getElementById('ozetKartlari').style.display = '';
+        document.getElementById('ozetKartlari').innerHTML = `
+            <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #e34948"><div class="l">Açık Arıza</div><div class="v">${o.AcikAriza}</div><div class="s">${o.AcilAriza} acil</div></div></div>
+            <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #eda100"><div class="l">Devam Eden</div><div class="v">${o.DevamEdenAriza}</div><div class="s">${o.OnayBekleyen} onay bekliyor</div></div></div>
+            <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #c0392b"><div class="l">Üretim Duran (Açık)</div><div class="v">${o.UretimDuranAcik}</div><div class="s">bu ay duruş ${fmt(o.BuAyDurusDk, 0)} dk</div></div></div>
+            <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #1baf7a"><div class="l">Bu Ay Kapatılan</div><div class="v">${o.BuAyKapatilan}</div><div class="s">maliyet ${fmt(o.BuAyToplamMaliyet, 0)}</div></div></div>
+            <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #2a78d6"><div class="l">Ort. Arıza Süresi</div><div class="v">${fmt(o.OrtArizaSureDk, 0)} <small>dk</small></div></div></div>
+            <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #e34948"><div class="l">Gecikmiş Bakım</div><div class="v">${o.GecikmisBakim}</div></div></div>
+            <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #eda100"><div class="l">Yaklaşan Bakım (7g)</div><div class="v">${o.YaklasanBakim}</div></div></div>
+            <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #4a3aa7"><div class="l">Toplam Planlı Bakım</div><div class="v">${o.ToplamPlanliBakim}</div><div class="s">${o.DevamEdenBakim} devam ediyor</div></div></div>`;
+    }
+
+    // ================= ARIZALAR =================
+    function aramaDegisti() { clearTimeout(aramaZamanlayici); aramaZamanlayici = setTimeout(arizalariYukle, 350); }
+
+    async function arizaMakineFiltresiniDoldur() {
+        if (!makinelerCache.length) {
+            const res = await fetch('/UrasUretimBakim/GetMakineler?tumu=true').then(r => r.json());
+            if (res.success) makinelerCache = res.data;
+        }
+        const sel = document.getElementById('fResCode');
+        if (sel.dataset.dolduruldu) return;
+        sel.dataset.dolduruldu = '1';
+        makinelerCache.forEach(m => { const o = document.createElement('option'); o.value = m.Code; o.textContent = m.Code + ' - ' + m.Ad; sel.appendChild(o); });
+    }
+
+    // ================= YENİ ARIZA / BAKIM =================
+    async function yeniArizaAc() {
+        await arizaMakineFiltresiniDoldur();
+        const sel = document.getElementById('yaResCode');
+        if (!sel.dataset.dolduruldu) {
+            sel.dataset.dolduruldu = '1';
+            makinelerCache.forEach(m => { const o = document.createElement('option'); o.value = m.Code; o.textContent = m.Code + ' - ' + m.Ad; sel.appendChild(o); });
+        }
+        document.getElementById('yaTip').value = 'ARIZA';
+        document.getElementById('yaOncelik').value = 'Normal';
+        document.getElementById('yaResCode').value = '';
+        document.getElementById('yaKategori').value = '';
+        document.getElementById('yaNeden').value = '';
+        document.getElementById('yaAciklama').value = '';
+        document.getElementById('yaUretimDurdu').checked = false;
+        new bootstrap.Modal(document.getElementById('yeniArizaModal')).show();
+    }
+
+    async function yeniArizaKaydet() {
+        const resCode = document.getElementById('yaResCode').value;
+        const aciklama = document.getElementById('yaAciklama').value.trim();
+        if (!resCode) { alert('Makine seçin.'); return; }
+        if (!aciklama) { alert('Açıklama girin.'); return; }
+        const makine = makinelerCache.find(m => m.Code === resCode);
+        const istek = {
+            ResCode: resCode, ResName: makine ? makine.Ad : '', Tip: document.getElementById('yaTip').value,
+            Oncelik: document.getElementById('yaOncelik').value, Kategori: document.getElementById('yaKategori').value,
+            Neden: document.getElementById('yaNeden').value, Aciklama: aciklama, UretimDurdu: document.getElementById('yaUretimDurdu').checked
+        };
+        const res = await fetch('/UrasUretimBakim/ArizaOlustur', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(istek) }).then(r => r.json());
+        if (!res.success) { alert('Kaydedilemedi: ' + res.message); return; }
+        bootstrap.Modal.getInstance(document.getElementById('yeniArizaModal')).hide();
+        alert(res.message);
+        document.getElementById('tbodyArizalar').dataset.yuklendi = '';
+        if (document.getElementById('tab-arizalar').style.display !== 'none') arizalariYukle();
+    }
+
+    // ================= ARIZA İŞLEMLERİ (ata / başlat / tamamla / satır ekle) =================
+    async function arizaIslemi(url, govde, basariMesaji) {
+        const res = await fetch('/UrasUretimBakim/' + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(govde) }).then(r => r.json());
+        if (!res.success) { alert('İşlem başarısız: ' + res.message); return false; }
+        return true;
+    }
+
+    async function arizaAta(docEntry) {
+        const atananAd = prompt('Atanacak kişi/servis adı:');
+        if (atananAd === null) return;
+        if (await arizaIslemi('Ata', { DocEntry: docEntry, AtananAd: atananAd, AtananKod: atananAd }, '')) { detayAc(docEntry); document.getElementById('tbodyArizalar').dataset.yuklendi = ''; arizalariYukle(); }
+    }
+
+    async function arizaBaslat(docEntry) {
+        if (await arizaIslemi('Baslat', { DocEntry: docEntry }, '')) { detayAc(docEntry); document.getElementById('tbodyArizalar').dataset.yuklendi = ''; arizalariYukle(); }
+    }
+
+    async function arizaTamamla(docEntry) {
+        const yapilan = prompt('Yapılan işlem özeti:');
+        if (!yapilan) return;
+        if (await arizaIslemi('Tamamla', { DocEntry: docEntry, YapilanIslem: yapilan }, '')) { detayAc(docEntry); document.getElementById('tbodyArizalar').dataset.yuklendi = ''; arizalariYukle(); }
+    }
+
+    function durusKaydetAc(docEntry) {
+        document.getElementById('drDocEntry').value = docEntry;
+        document.getElementById('drUretimDurdu').checked = false;
+        document.getElementById('drBas').value = '';
+        document.getElementById('drBit').value = '';
+        new bootstrap.Modal(document.getElementById('durusModal')).show();
+    }
+
+    async function durusKaydetTiklandi() {
+        const docEntry = parseInt(document.getElementById('drDocEntry').value, 10);
+        // datetime-local değeri zaten "yyyy-MM-ddTHH:mm" (ISO, belirsizliksiz) biçiminde —
+        // sunucu tarafında InvariantCulture ile doğrudan ve güvenle ayrıştırılabiliyor.
+        const govde = {
+            DocEntry: docEntry,
+            UretimDurdu: document.getElementById('drUretimDurdu').checked,
+            DurusBas: document.getElementById('drBas').value,
+            DurusBit: document.getElementById('drBit').value
+        };
+        if (await arizaIslemi('DurusKaydet', govde, '')) {
+            bootstrap.Modal.getInstance(document.getElementById('durusModal'))?.hide();
+            detayAc(docEntry);
+            document.getElementById('tbodyArizalar').dataset.yuklendi = '';
+        }
+    }
+
+    async function arizaErtele(docEntry) {
+        const gun = parseInt(prompt('Kaç gün ertelensin?', '1') || '0', 10);
+        if (!gun || gun < 1) return;
+        const aciklama = prompt('Erteleme açıklaması (zorunlu):');
+        if (!aciklama) return;
+        if (await arizaIslemi('Ertele', { DocEntry: docEntry, Gun: gun, Aciklama: aciklama, Tip: 'ARIZA' }, '')) { detayAc(docEntry); document.getElementById('tbodyArizalar').dataset.yuklendi = ''; arizalariYukle(); }
+    }
+
+    async function arizaIptalEt(docEntry) {
+        const notu = prompt('İptal nedeni (zorunlu):');
+        if (!notu) return;
+        if (!confirm('Bu kaydı iptal etmek istediğinize emin misiniz?')) return;
+        if (await arizaIslemi('Iptal', { DocEntry: docEntry, Not: notu }, '')) { detayAc(docEntry); document.getElementById('tbodyArizalar').dataset.yuklendi = ''; arizalariYukle(); }
+    }
+
+    async function arizaSilTiklandi(docEntry) {
+        if (!confirm('Bu kaydı kalıcı olarak silmek istediğinize emin misiniz?')) return;
+        if (await arizaIslemi('ArizaSil', { DocEntry: docEntry }, '')) {
+            bootstrap.Modal.getInstance(document.getElementById('detayModal'))?.hide();
+            document.getElementById('tbodyArizalar').dataset.yuklendi = '';
+            arizalariYukle();
+        }
+    }
+
+    async function onayKararVer(docEntry, onay) {
+        let notu = '';
+        if (!onay) {
+            notu = prompt('Red nedeni (zorunlu):');
+            if (!notu) return;
+        } else if (!confirm('Bu iş emrini onaylayıp kapatmak istediğinize emin misiniz?')) return;
+        if (await arizaIslemi('OnayKarar', { DocEntry: docEntry, Onay: onay, Not: notu }, '')) { detayAc(docEntry); document.getElementById('tbodyArizalar').dataset.yuklendi = ''; arizalariYukle(); }
+    }
+
+    async function islemSatiriEkle(docEntry) {
+        const aciklama = document.getElementById('yeniIslemAciklama').value.trim();
+        if (!aciklama) { alert('Açıklama girin.'); return; }
+        if (await arizaIslemi('IslemKaydet', { DocEntry: docEntry, Aciklama: aciklama, SureDk: parseInt(document.getElementById('yeniIslemSure').value || '0', 10) }, '')) detayAc(docEntry);
+    }
+
+    async function personelSatiriEkle(docEntry) {
+        const ad = document.getElementById('yeniPersonelAd').value.trim();
+        if (!ad) { alert('Ad girin.'); return; }
+        if (await arizaIslemi('PersonelSatirKaydet', { DocEntry: docEntry, Ad: ad, Saat: parseFloat(document.getElementById('yeniPersonelSaat').value || '0') }, '')) detayAc(docEntry);
+    }
+
+    async function arizalariYukle() {
+        await arizaMakineFiltresiniDoldur();
+        document.getElementById('arizaYukleniyor').style.display = '';
+        document.getElementById('arizaTabloKutu').style.display = 'none';
+        const qs = new URLSearchParams({
+            durum: document.getElementById('fDurum').value, tip: document.getElementById('fTip').value, oncelik: document.getElementById('fOncelik').value,
+            resCode: document.getElementById('fResCode').value, q: document.getElementById('fAra').value
+        });
+        const res = await fetch('/UrasUretimBakim/GetArizalar?' + qs.toString()).then(r => r.json());
+        document.getElementById('arizaYukleniyor').style.display = 'none';
+        if (!res.success) { alert('Kayıtlar alınamadı: ' + res.message); return; }
+        document.getElementById('arizaTabloKutu').style.display = '';
+        document.getElementById('tbodyArizalar').dataset.yuklendi = '1';
+        document.getElementById('tbodyArizalar').innerHTML = res.data.map(a => `
+            <tr class="satir-tikla" onclick="detayAc(${a.DocEntry})">
+                <td class="fw-bold">${a.ArizaNo || '#' + a.DocEntry}</td>
+                <td>${a.Tip}</td>
+                <td><span class="rozet ${durumRozet(a.Durum)}">${a.Durum}</span></td>
+                <td><span class="rozet ${oncelikRozet(a.Oncelik)}">${a.Oncelik}</span></td>
+                <td>${a.ResName || a.ResCode}<div class="text-muted small">${a.ResCode}</div></td>
+                <td>${a.AtananAd || '<span class="text-muted">—</span>'}</td>
+                <td class="text-nowrap">${a.BildTarih ? a.BildTarih.split('-').reverse().join('.') : ''} ${a.BildSaat || ''}</td>
+                <td class="text-end">${a.Sure ? fmt(a.Sure, 0) + ' dk' : ''}</td>
+                <td class="text-end">${a.ToplamTutar ? fmt(a.ToplamTutar, 0) + ' ' + (a.ParaBirimi || '') : ''}</td>
+                <td><i class="fas fa-chevron-right text-muted"></i></td></tr>`).join('') || '<tr><td colspan="10" class="text-center text-muted py-4">Kayıt yok.</td></tr>';
+    }
+
+    async function detayAc(docEntry) {
+        document.getElementById('detayIcerik').innerHTML = '<div class="text-center py-4"><span class="spinner-border"></span></div>';
+        document.getElementById('detayBaslik').textContent = 'Kayıt Detayı';
+        new bootstrap.Modal(document.getElementById('detayModal')).show();
+        const res = await fetch('/UrasUretimBakim/GetArizaDetay?docEntry=' + docEntry).then(r => r.json());
+        if (!res.success || !res.data.Kayit) { document.getElementById('detayIcerik').innerHTML = `<div class="text-danger">${res.message || 'Kayıt bulunamadı.'}</div>`; return; }
+        const k = res.data.Kayit, m = res.data.Makine;
+        document.getElementById('detayBaslik').textContent = (k.ArizaNo || '#' + k.DocEntry) + ' — ' + (k.ResName || k.ResCode);
+        const malzemeRows = res.data.Malzemeler.map(x => `<tr><td>${x.ItemName || x.ItemCode}<div class="text-muted small">${x.ItemCode}</div></td><td class="text-end">${fmt(x.Quantity, 2)} ${x.ItemUom}</td><td>${x.WhsCode}</td><td class="text-end">${fmt(x.Tutar, 2)} ${x.ParaBirimi}</td></tr>`).join('') || '<tr><td colspan="4" class="text-muted text-center py-2">Malzeme yok.</td></tr>';
+        const islemRows = res.data.Islemler.map(x => `<tr><td>${x.Aciklama}</td><td>${x.Yapan}</td><td class="text-end">${x.SureDk} dk</td><td>${x.Sonuc}</td></tr>`).join('') || '<tr><td colspan="4" class="text-muted text-center py-2">İşlem kaydı yok.</td></tr>';
+        const personelRows = res.data.Personel.map(x => `<tr><td>${x.Ad}</td><td>${x.Rol}</td><td class="text-end">${fmt(x.Saat, 1)} saat</td><td class="text-end">${fmt(x.Ucret, 2)} ${x.ParaBirimi}</td></tr>`).join('') || '<tr><td colspan="4" class="text-muted text-center py-2">Personel kaydı yok.</td></tr>';
+        const logRows = res.data.Loglar.map(x => `<tr><td class="text-nowrap small">${x.Zaman}</td><td>${x.Kullanici}</td><td>${x.Islem}</td><td class="small">${x.Eski} → ${x.Yeni}</td></tr>`).join('') || '<tr><td colspan="4" class="text-muted text-center py-2">Log yok.</td></tr>';
+        const kapali = k.Durum === 'Kapatildi' || k.Durum === 'Iptal' || k.Durum === 'Tamamlandi';
+        const acikCalisma = !kapali && k.Durum !== 'OnayBekliyor';
+        const erteleUygun = k.Durum === 'Beklemede' || k.Durum === 'Atandi';
+        const silUygun = k.Durum === 'Beklemede' || k.Durum === 'Iptal';
+
+        document.getElementById('detayIcerik').innerHTML = `
+            <div class="d-flex gap-2 flex-wrap mb-3">
+                ${k.Durum === 'OnayBekliyor' ? `
+                    <button class="btn btn-sm btn-success" onclick="onayKararVer(${k.DocEntry}, true)"><i class="fas fa-check me-1"></i>Onayla</button>
+                    <button class="btn btn-sm btn-danger" onclick="onayKararVer(${k.DocEntry}, false)"><i class="fas fa-times me-1"></i>Reddet</button>` : ''}
+                ${acikCalisma ? `
+                    <button class="btn btn-sm btn-outline-primary" onclick="arizaAta(${k.DocEntry})"><i class="fas fa-user-check me-1"></i>Ata</button>
+                    <button class="btn btn-sm btn-outline-warning" onclick="arizaBaslat(${k.DocEntry})"><i class="fas fa-play me-1"></i>Başlat</button>
+                    <button class="btn btn-sm btn-outline-success" onclick="arizaTamamla(${k.DocEntry})"><i class="fas fa-flag-checkered me-1"></i>Tamamla</button>
+                    <button class="btn btn-sm btn-outline-info" onclick="durusKaydetAc(${k.DocEntry})"><i class="fas fa-pause me-1"></i>Duruş Kaydet</button>` : ''}
+                ${erteleUygun ? `<button class="btn btn-sm btn-outline-secondary" onclick="arizaErtele(${k.DocEntry})"><i class="fas fa-clock me-1"></i>Ertele</button>` : ''}
+                ${!kapali ? `<button class="btn btn-sm btn-outline-danger" onclick="arizaIptalEt(${k.DocEntry})"><i class="fas fa-ban me-1"></i>İptal Et</button>` : ''}
+                ${silUygun ? `<button class="btn btn-sm btn-outline-danger" onclick="arizaSilTiklandi(${k.DocEntry})"><i class="fas fa-trash me-1"></i>Sil</button>` : ''}
+            </div>
+            <div class="d-flex gap-2 flex-wrap mb-3">
+                <a class="btn btn-sm btn-outline-secondary" href="/UrasUretimBakim/Rapor?docEntry=${k.DocEntry}" target="_blank"><i class="fas fa-file-pdf me-1"></i>PDF Rapor</a>
+                <button class="btn btn-sm btn-outline-secondary" onclick="raporMailGonder(${k.DocEntry})"><i class="fas fa-paper-plane me-1"></i>Mail Gönder</button>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-md-3"><div class="kpi-card"><div class="l">Durum</div><div class="v" style="font-size:1rem"><span class="rozet ${durumRozet(k.Durum)}">${k.Durum}</span></div></div></div>
+                <div class="col-md-3"><div class="kpi-card"><div class="l">Öncelik</div><div class="v" style="font-size:1rem"><span class="rozet ${oncelikRozet(k.Oncelik)}">${k.Oncelik}</span></div></div></div>
+                <div class="col-md-3"><div class="kpi-card"><div class="l">Atanan</div><div class="v" style="font-size:.95rem">${k.AtananAd || '—'}</div></div></div>
+                <div class="col-md-3"><div class="kpi-card"><div class="l">Toplam Tutar</div><div class="v" style="font-size:.95rem">${fmt(k.ToplamTutar, 2)} ${k.ParaBirimi || ''}</div></div></div>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-md-6"><b>Kategori:</b> ${k.Kategori || '—'} &nbsp; <b>Neden:</b> ${k.Neden || '—'}</div>
+                <div class="col-md-6"><b>Üretim Durdu mu:</b> ${k.UretimDurdu === 'Y' ? `<span class="rozet rozet-kirmizi">Evet (${k.DurusDk} dk)</span>` : 'Hayır'}</div>
+            </div>
+            <div class="mb-3"><b>Açıklama:</b><div class="text-muted small">${k.Aciklama || '—'}</div></div>
+            ${k.YapilanIslem ? `<div class="mb-3"><b>Yapılan İşlem:</b><div class="text-muted small">${k.YapilanIslem}</div></div>` : ''}
+            ${k.Sonuc ? `<div class="mb-3"><b>Sonuç:</b><div class="text-muted small">${k.Sonuc}</div></div>` : ''}
+            <div class="row g-3">
+                <div class="col-12 col-lg-6">
+                    <div class="fw-bold small text-uppercase text-muted mb-1">Malzemeler</div>
+                    <table class="table table-sm table-custom mb-2"><thead><tr><th>Kalem</th><th class="text-end">Miktar</th><th>Depo</th><th class="text-end">Tutar</th></tr></thead><tbody>${malzemeRows}</tbody></table>
+                    <div class="fw-bold small text-uppercase text-muted mb-1">Personel</div>
+                    <table class="table table-sm table-custom mb-2"><thead><tr><th>Ad</th><th>Rol</th><th class="text-end">Süre</th><th class="text-end">Ücret</th></tr></thead><tbody>${personelRows}</tbody></table>
+                    ${!kapali ? `<div class="input-group input-group-sm mb-3">
+                        <input type="text" id="yeniPersonelAd" class="form-control" placeholder="Personel/servis adı">
+                        <input type="number" id="yeniPersonelSaat" class="form-control" placeholder="Saat" style="max-width:90px">
+                        <button class="btn btn-outline-primary" onclick="personelSatiriEkle(${k.DocEntry})"><i class="fas fa-plus"></i></button>
+                    </div>` : ''}
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="fw-bold small text-uppercase text-muted mb-1">İşlem Kayıtları</div>
+                    <table class="table table-sm table-custom mb-2"><thead><tr><th>Açıklama</th><th>Yapan</th><th class="text-end">Süre</th><th>Sonuç</th></tr></thead><tbody>${islemRows}</tbody></table>
+                    ${!kapali ? `<div class="input-group input-group-sm mb-3">
+                        <input type="text" id="yeniIslemAciklama" class="form-control" placeholder="Yapılan işlem açıklaması">
+                        <input type="number" id="yeniIslemSure" class="form-control" placeholder="Dk" style="max-width:80px">
+                        <button class="btn btn-outline-primary" onclick="islemSatiriEkle(${k.DocEntry})"><i class="fas fa-plus"></i></button>
+                    </div>` : ''}
+                    <div class="fw-bold small text-uppercase text-muted mb-1">Geçmiş / Loglar</div>
+                    <table class="table table-sm table-custom mb-0"><thead><tr><th>Zaman</th><th>Kullanıcı</th><th>İşlem</th><th>Değişiklik</th></tr></thead><tbody>${logRows}</tbody></table>
+                </div>
+            </div>
+            <div class="mt-3">
+                <div class="fw-bold small text-uppercase text-muted mb-1">Belgeler</div>
+                <div class="input-group input-group-sm mb-2">
+                    <input type="file" id="detayBelgeInput" class="form-control">
+                    <button class="btn btn-outline-primary" onclick="belgeYukleTiklandi('detayBelgeInput', ${k.DocEntry}, '', 'detayBelgeler')"><i class="fas fa-upload me-1"></i>Yükle</button>
+                </div>
+                <table class="table table-sm table-custom mb-0"><thead><tr><th>Dosya</th><th>Tür</th><th>Yükleyen</th><th></th></tr></thead><tbody id="detayBelgeler"></tbody></table>
+            </div>`;
+        window.__belgeYenile = () => belgeleriYukle(k.DocEntry, '', 'detayBelgeler');
+        belgeleriYukle(k.DocEntry, '', 'detayBelgeler');
+    }
+
+    // ================= PERİYODİK BAKIM =================
+    async function periyodikYukle() {
+        document.getElementById('periyodikYukleniyor').style.display = '';
+        document.getElementById('periyodikTabloKutu').style.display = 'none';
+        const res = await fetch('/UrasUretimBakim/GetPeriyodikBakimlar').then(r => r.json());
+        document.getElementById('periyodikYukleniyor').style.display = 'none';
+        if (!res.success) { alert('Periyodik bakım listesi alınamadı: ' + res.message); return; }
+        document.getElementById('periyodikTabloKutu').style.display = '';
+        document.getElementById('tbodyPeriyodik').dataset.yuklendi = '1';
+        document.getElementById('tbodyPeriyodik').innerHTML = res.data.map(p => `
+            <tr><td>${p.ResName || p.ResCode}<div class="text-muted small">${p.ResCode}</div></td>
+                <td>${p.Aciklama || p.BakimAciklama || '—'}</td>
+                <td class="text-nowrap">${p.PlanTarih ? p.PlanTarih.split('-').reverse().join('.') : ''}</td>
+                <td class="text-end ${p.KalanGun < 0 ? 'text-danger fw-bold' : (p.KalanGun <= 7 ? 'text-warning fw-bold' : '')}">${p.KalanGun}</td>
+                <td><span class="rozet ${oncelikRozet(p.Oncelik)}">${p.Oncelik}</span></td>
+                <td><span class="rozet ${durumRozet(p.Durum)}">${p.Durum}</span></td>
+                <td class="text-end text-nowrap">
+                    ${p.Durum === 'Beklemede' ? `
+                        <button class="btn btn-sm btn-link p-0 me-2" title="İş Emri Aç" onclick="planSatiriIsEmriAc(${p.MakBakDoc}, ${p.MakBakLine})"><i class="fas fa-clipboard-list"></i></button>
+                        <button class="btn btn-sm btn-link p-0 text-muted me-2" title="Ertele" onclick="bakimSatiriErtele(${p.MakBakDoc}, ${p.MakBakLine})"><i class="fas fa-clock"></i></button>
+                        <button class="btn btn-sm btn-link p-0 text-danger" title="Sil" onclick="bakimSatiriSil(${p.MakBakDoc}, ${p.MakBakLine})"><i class="fas fa-trash"></i></button>` : ''}
+                    ${p.Durum === 'DevamEdiyor' && p.IsEmri > 0 ? `<button class="btn btn-sm btn-link p-0" title="İş emrini gör" onclick="detayAc(${p.IsEmri})"><i class="fas fa-eye"></i> #${p.IsEmri}</button>` : ''}
+                </td></tr>`).join('') || '<tr><td colspan="7" class="text-center text-muted py-4">Bekleyen periyodik bakım yok.</td></tr>';
+    }
+
+    async function planSatiriIsEmriAc(makBakDoc, lineId) {
+        if (!confirm('Bu plan satırı için bakım iş emri açılsın mı?')) return;
+        const res = await fetch('/UrasUretimBakim/PlanSatirIsEmriOlustur', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ MakBakDoc: makBakDoc, LineId: lineId }) }).then(r => r.json());
+        if (!res.success) { alert('İş emri açılamadı: ' + res.message); return; }
+        alert(res.message);
+        document.getElementById('tbodyPeriyodik').dataset.yuklendi = '';
+        periyodikYukle();
+        if (res.data) detayAc(res.data);
+    }
+
+    async function bakimSatiriErtele(makBakDoc, lineId) {
+        const gun = parseInt(prompt('Kaç gün ertelensin?', '1') || '0', 10);
+        if (!gun || gun < 1) return;
+        const aciklama = prompt('Erteleme açıklaması (zorunlu):');
+        if (!aciklama) return;
+        const res = await fetch('/UrasUretimBakim/Ertele', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ DocEntry: makBakDoc, LineId: lineId, Gun: gun, Aciklama: aciklama, Tip: 'BAKIM' }) }).then(r => r.json());
+        if (!res.success) { alert('Ertelenemedi: ' + res.message); return; }
+        document.getElementById('tbodyPeriyodik').dataset.yuklendi = '';
+        periyodikYukle();
+    }
+
+    async function bakimSatiriSil(makBakDoc, lineId) {
+        if (!confirm('Bu bakım plan satırını silmek istediğinize emin misiniz?')) return;
+        const res = await fetch('/UrasUretimBakim/BakimSatirSil', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ DocEntry: makBakDoc, LineId: lineId }) }).then(r => r.json());
+        if (!res.success) { alert('Silinemedi: ' + res.message); return; }
+        document.getElementById('tbodyPeriyodik').dataset.yuklendi = '';
+        periyodikYukle();
+    }
+
+    // ================= YENİ PLANLI (PERİYODİK) BAKIM =================
+    async function yeniPeriyodikAc() {
+        if (!makinelerCache.length) { const r = await fetch('/UrasUretimBakim/GetMakineler?tumu=true').then(r => r.json()); if (r.success) makinelerCache = r.data; }
+        if (!bakimIslemCache.length) { const r = await fetch('/UrasUretimBakim/GetBakimIslemleri?tumu=true').then(r => r.json()); if (r.success) bakimIslemCache = r.data; }
+        const selRes = document.getElementById('pbResCode');
+        selRes.innerHTML = '<option value="">Seçin…</option>' + makinelerCache.map(m => `<option value="${m.Code}">${m.Code} - ${m.Ad}</option>`).join('');
+        const selBi = document.getElementById('pbBkmPeriodEntry');
+        selBi.innerHTML = '<option value="">Seçin…</option>' + bakimIslemCache.map(b => `<option value="${b.DocEntry}">${b.IslemAdi}${b.Gun > 0 ? ' (' + b.Gun + ' gün)' : ''}</option>`).join('');
+        document.getElementById('pbPlanlananTarih').value = new Date().toISOString().split('T')[0];
+        document.getElementById('pbBakimGun').value = 0;
+        document.getElementById('pbTonaj').value = 0;
+        document.getElementById('pbAciklama').value = '';
+        new bootstrap.Modal(document.getElementById('periyodikModal')).show();
+    }
+
+    async function periyodikKaydetTiklandi() {
+        const resCode = document.getElementById('pbResCode').value;
+        const bkmPeriodEntry = parseInt(document.getElementById('pbBkmPeriodEntry').value || '0', 10);
+        if (!resCode) { alert('Makine seçin.'); return; }
+        if (!bkmPeriodEntry) { alert('Bakım işlemi (periyot) seçin.'); return; }
+        const makine = makinelerCache.find(m => m.Code === resCode);
+        const istek = {
+            ResCode: resCode, ResName: makine ? makine.Ad : '', BkmPeriodEntry: bkmPeriodEntry,
+            PlanlananTarih: document.getElementById('pbPlanlananTarih').value,
+            BakimGun: parseInt(document.getElementById('pbBakimGun').value || '0', 10),
+            Tonaj: parseFloat(document.getElementById('pbTonaj').value || '0'),
+            Aciklama: document.getElementById('pbAciklama').value
+        };
+        const res = await fetch('/UrasUretimBakim/PeriyodikBakimOlustur', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(istek) }).then(r => r.json());
+        if (!res.success) { alert('Kaydedilemedi: ' + res.message); return; }
+        bootstrap.Modal.getInstance(document.getElementById('periyodikModal')).hide();
+        alert(res.message);
+        document.getElementById('tbodyPeriyodik').dataset.yuklendi = '';
+        periyodikYukle();
+    }
+
+    // ================= MAKİNELER =================
+    async function makineleriYukle() {
+        document.getElementById('makineYukleniyor').style.display = '';
+        const res = await fetch('/UrasUretimBakim/GetMakineler?tumu=false').then(r => r.json());
+        document.getElementById('makineYukleniyor').style.display = 'none';
+        if (!res.success) { alert('Makine listesi alınamadı: ' + res.message); return; }
+        makinelerCache = res.data;
+        cizMakineler();
+    }
+
+    function cizMakineler() {
+        const arama = (document.getElementById('fMakineAra').value || '').toLowerCase();
+        const list = makinelerCache.filter(m => !arama || (m.Code || '').toLowerCase().includes(arama) || (m.Ad || '').toLowerCase().includes(arama));
+        document.getElementById('makineKartlari').innerHTML = list.map(m => `
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="card dash-card makine-kart h-100" onclick="makineDetayAc('${m.Code}')">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div><div class="fw-bold">${m.Ad || m.Code}</div><div class="text-muted small">${m.Code} ${m.Konum ? '• ' + m.Konum : ''}</div></div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="rozet ${m.Durum === 'Aktif' ? 'rozet-yesil' : 'rozet-gri'}">${m.Durum}</span>
+                                ${m.Kaynak === 'M' ? `<button class="btn btn-sm btn-link p-0 text-muted" title="Düzenle" onclick="event.stopPropagation(); makineDuzenleAc(${JSON.stringify(m.Code)})"><i class="fas fa-pen"></i></button>` : ''}
+                            </div>
+                        </div>
+                        <div class="d-flex gap-3 mt-2 small">
+                            <span class="${m.AcikAriza > 0 ? 'text-danger fw-bold' : 'text-muted'}"><i class="fas fa-triangle-exclamation me-1"></i>${m.AcikAriza} açık arıza</span>
+                            <span class="${m.BekleyenBakim > 0 ? 'text-warning fw-bold' : 'text-muted'}"><i class="fas fa-clock me-1"></i>${m.BekleyenBakim} bekleyen bakım</span>
+                        </div>
+                    </div>
+                </div>
+            </div>`).join('') || '<div class="col-12 text-center text-muted py-4">Makine bulunamadı.</div>';
+    }
+
+    // ================= MAKİNE YÖNETİMİ (CRUD) =================
+    function makineDuzenleAc(code) {
+        const m = code ? makinelerCache.find(x => x.Code === code) : null;
+        document.getElementById('makineModalBaslik').textContent = m ? 'Makine Düzenle' : 'Yeni Makine';
+        document.getElementById('mkEskiKod').value = m ? m.Code : '';
+        document.getElementById('mkCode').value = m ? m.Code : '';
+        document.getElementById('mkCode').disabled = !!m;
+        document.getElementById('mkAd').value = m ? (m.Ad || '') : '';
+        document.getElementById('mkTur').value = m ? (m.Tur || '') : '';
+        document.getElementById('mkMarka').value = m ? (m.Marka || '') : '';
+        document.getElementById('mkModel').value = m ? (m.Model || '') : '';
+        document.getElementById('mkSeriNo').value = m ? (m.SeriNo || '') : '';
+        document.getElementById('mkKonum').value = m ? (m.Konum || '') : '';
+        document.getElementById('mkKritiklik').value = m ? (m.Kritiklik || '') : '';
+        document.getElementById('mkSorumluAd').value = m ? (m.SorumluAd || '') : '';
+        document.getElementById('mkSorumluEmail').value = m ? (m.SorumluEmail || '') : '';
+        document.getElementById('mkServisFirma').value = m ? (m.ServisFirma || '') : '';
+        document.getElementById('mkKapasite').value = m ? (m.Kapasite || '') : '';
+        document.getElementById('mkAciklama').value = m ? (m.Aciklama || '') : '';
+        document.getElementById('mkAktif').checked = m ? (m.Aktif === 'Y') : true;
+        document.getElementById('mkSilBtn').style.display = m ? '' : 'none';
+        new bootstrap.Modal(document.getElementById('makineModal')).show();
+    }
+
+    async function makineKaydetTiklandi() {
+        const code = document.getElementById('mkCode').value.trim();
+        const ad = document.getElementById('mkAd').value.trim();
+        if (!code || !ad) { alert('Makine kodu ve adı zorunludur.'); return; }
+        const istek = {
+            Code: code, Ad: ad, Tur: document.getElementById('mkTur').value, Marka: document.getElementById('mkMarka').value,
+            Model: document.getElementById('mkModel').value, SeriNo: document.getElementById('mkSeriNo').value, Konum: document.getElementById('mkKonum').value,
+            Kritiklik: document.getElementById('mkKritiklik').value, SorumluAd: document.getElementById('mkSorumluAd').value,
+            SorumluEmail: document.getElementById('mkSorumluEmail').value, ServisFirma: document.getElementById('mkServisFirma').value,
+            Kapasite: document.getElementById('mkKapasite').value, Aciklama: document.getElementById('mkAciklama').value, Aktif: document.getElementById('mkAktif').checked
+        };
+        const res = await fetch('/UrasUretimBakim/MakineKaydet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(istek) }).then(r => r.json());
+        if (!res.success) { alert('Kaydedilemedi: ' + res.message); return; }
+        bootstrap.Modal.getInstance(document.getElementById('makineModal')).hide();
+        makinelerCache = [];
+        makineleriYukle();
+    }
+
+    async function makineSilTiklandi() {
+        const code = document.getElementById('mkEskiKod').value;
+        if (!code || !confirm('Bu makineyi silmek istediğinize emin misiniz?')) return;
+        const fd = new FormData(); fd.append('code', code);
+        const res = await fetch('/UrasUretimBakim/MakineSil', { method: 'POST', body: fd }).then(r => r.json());
+        if (!res.success) { alert('Silinemedi: ' + res.message); return; }
+        bootstrap.Modal.getInstance(document.getElementById('makineModal')).hide();
+        makinelerCache = [];
+        makineleriYukle();
+    }
+
+    async function makineDetayAc(code) {
+        document.getElementById('detayIcerik').innerHTML = '<div class="text-center py-4"><span class="spinner-border"></span></div>';
+        document.getElementById('detayBaslik').textContent = 'Makine Detayı';
+        new bootstrap.Modal(document.getElementById('detayModal')).show();
+        const res = await fetch('/UrasUretimBakim/GetMakineDetay?code=' + encodeURIComponent(code)).then(r => r.json());
+        if (!res.success) { document.getElementById('detayIcerik').innerHTML = `<div class="text-danger">${res.message}</div>`; return; }
+        const m = res.data.Makine;
+        document.getElementById('detayBaslik').textContent = (m ? (m.Ad || m.Code) : code) + ' — Makine Geçmişi';
+        const kayitRows = res.data.Kayitlar.slice(0, 100).map(k => `<tr><td class="fw-bold">${k.ArizaNo || '#' + k.DocEntry}</td><td>${k.Tip}</td><td><span class="rozet ${durumRozet(k.Durum)}">${k.Durum}</span></td><td class="text-nowrap">${k.BildTarih ? k.BildTarih.split('-').reverse().join('.') : ''}</td></tr>`).join('') || '<tr><td colspan="4" class="text-muted text-center py-2">Kayıt yok.</td></tr>';
+        const planRows = res.data.Plan.map(p => `<tr><td>${p.Aciklama || p.BakimAciklama}</td><td class="text-nowrap">${p.PlanTarih ? p.PlanTarih.split('-').reverse().join('.') : ''}</td><td><span class="rozet ${durumRozet(p.Durum)}">${p.Durum}</span></td></tr>`).join('') || '<tr><td colspan="3" class="text-muted text-center py-2">Plan yok.</td></tr>';
+        document.getElementById('detayIcerik').innerHTML = `
+            <div class="d-flex gap-2 flex-wrap mb-3">
+                <a class="btn btn-sm btn-outline-secondary" href="/UrasUretimBakim/MakineRapor?code=${encodeURIComponent(code)}" target="_blank"><i class="fas fa-file-pdf me-1"></i>Geçmiş Raporu (PDF)</a>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-md-3"><div class="kpi-card"><div class="l">Marka/Model</div><div class="v" style="font-size:.95rem">${m ? (m.Marka || '—') + ' / ' + (m.Model || '—') : '—'}</div></div></div>
+                <div class="col-md-3"><div class="kpi-card"><div class="l">Konum</div><div class="v" style="font-size:.95rem">${m?.Konum || '—'}</div></div></div>
+                <div class="col-md-3"><div class="kpi-card"><div class="l">Sorumlu</div><div class="v" style="font-size:.95rem">${m?.SorumluAd || '—'}</div></div></div>
+                <div class="col-md-3"><div class="kpi-card"><div class="l">Son Bakım</div><div class="v" style="font-size:.95rem">${m?.SonBakim || '—'}</div></div></div>
+            </div>
+            <div class="row g-3">
+                <div class="col-12 col-lg-7">
+                    <div class="fw-bold small text-uppercase text-muted mb-1">Arıza/Bakım Geçmişi (son 100)</div>
+                    <table class="table table-sm table-custom mb-0"><thead><tr><th>No</th><th>Tip</th><th>Durum</th><th>Tarih</th></tr></thead><tbody>${kayitRows}</tbody></table>
+                </div>
+                <div class="col-12 col-lg-5">
+                    <div class="fw-bold small text-uppercase text-muted mb-1">Periyodik Bakım Planı</div>
+                    <table class="table table-sm table-custom mb-0"><thead><tr><th>İşlem</th><th>Tarih</th><th>Durum</th></tr></thead><tbody>${planRows}</tbody></table>
+                </div>
+            </div>
+            <div class="mt-3">
+                <div class="fw-bold small text-uppercase text-muted mb-1">Belgeler</div>
+                <div class="input-group input-group-sm mb-2">
+                    <input type="file" id="makineBelgeInput" class="form-control">
+                    <button class="btn btn-outline-primary" onclick="belgeYukleTiklandi('makineBelgeInput', 0, ${JSON.stringify(code)}, 'makineBelgeler')"><i class="fas fa-upload me-1"></i>Yükle</button>
+                </div>
+                <table class="table table-sm table-custom mb-0"><thead><tr><th>Dosya</th><th>Tür</th><th>Yükleyen</th><th></th></tr></thead><tbody id="makineBelgeler"></tbody></table>
+            </div>`;
+        window.__belgeYenile = () => belgeleriYukle(0, code, 'makineBelgeler');
+        belgeleriYukle(0, code, 'makineBelgeler');
+    }
+
+    // ================= ANALİZ =================
+    function analizVarsayilanTarih() {
+        const bit = new Date(); const bas = new Date(); bas.setMonth(bas.getMonth() - 6);
+        document.getElementById('aBas').value = bas.toISOString().slice(0, 10);
+        document.getElementById('aBit').value = bit.toISOString().slice(0, 10);
+    }
+
+    async function analizYukle() {
+        document.getElementById('analizYukleniyor').style.display = '';
+        document.getElementById('analizIcerik').style.display = 'none';
+        const qs = new URLSearchParams({ bas: document.getElementById('aBas').value, bit: document.getElementById('aBit').value });
+        const res = await fetch('/UrasUretimBakim/GetAnaliz?' + qs.toString()).then(r => r.json());
+        document.getElementById('analizYukleniyor').style.display = 'none';
+        if (!res.success) { alert('Analiz alınamadı: ' + res.message); return; }
+        const v = res.data;
+        document.getElementById('analizIcerik').style.display = '';
+        document.getElementById('analizIcerik').dataset.yuklendi = '1';
+        const o = v.Ozet || {};
+        document.getElementById('analizKpi').innerHTML = `
+            <div class="col-6 col-md-2"><div class="kpi-card" style="border-left:3px solid #2a78d6"><div class="l">Toplam</div><div class="v">${o.Toplam || 0}</div></div></div>
+            <div class="col-6 col-md-2"><div class="kpi-card" style="border-left:3px solid #e34948"><div class="l">Arıza</div><div class="v">${o.Ariza || 0}</div></div></div>
+            <div class="col-6 col-md-2"><div class="kpi-card" style="border-left:3px solid #eda100"><div class="l">Bakım</div><div class="v">${o.Bakim || 0}</div></div></div>
+            <div class="col-6 col-md-2"><div class="kpi-card" style="border-left:3px solid #1baf7a"><div class="l">MTTR</div><div class="v">${fmt(o.Mttr, 0)} <small>dk</small></div></div></div>
+            <div class="col-6 col-md-2"><div class="kpi-card" style="border-left:3px solid #4a3aa7"><div class="l">Duruş</div><div class="v">${fmt(o.DurusDk, 0)} <small>dk</small></div></div></div>
+            <div class="col-6 col-md-2"><div class="kpi-card" style="border-left:3px solid #eb6834"><div class="l">Toplam Tutar</div><div class="v" style="font-size:1rem">${fmt((o.MalzemeTutar || 0) + (o.ServisTutar || 0), 0)}</div></div></div>`;
+
+        document.getElementById('tbodyAnalizMakine').innerHTML = (v.Makine || []).map(m => `
+            <tr><td>${m.ResName || m.ResCode}<div class="text-muted small">${m.ResCode}</div></td><td class="text-end">${m.Ariza}</td><td class="text-end">${m.Bakim}</td>
+                <td class="text-end">${fmt(m.DurusDk, 0)}</td><td class="text-end">${fmt(m.Mttr, 0)}</td><td class="text-end">${fmt(m.Tutar, 0)}</td></tr>`).join('') || '<tr><td colspan="6" class="text-center text-muted py-3">Kayıt yok.</td></tr>';
+
+        if (chartAylik) chartAylik.destroy();
+        chartAylik = new ApexCharts(document.getElementById('chartAylik'), {
+            chart: { type: 'bar', height: 260, toolbar: { show: false } },
+            series: [{ name: 'Arıza', data: (v.Aylik || []).map(a => a.Ariza) }, { name: 'Bakım', data: (v.Aylik || []).map(a => a.Bakim) }],
+            xaxis: { categories: (v.Aylik || []).map(a => a.Ay) }, colors: ['#e34948', '#2a78d6'], dataLabels: { enabled: false }
+        });
+        chartAylik.render();
+
+        if (chartKategori) chartKategori.destroy();
+        chartKategori = new ApexCharts(document.getElementById('chartKategori'), {
+            chart: { type: 'pie', height: 260 },
+            series: (v.Kategori || []).map(k => k.Sayi), labels: (v.Kategori || []).map(k => k.Ad)
+        });
+        chartKategori.render();
+    }
+
+    // ================= PERSONEL / KODLAR / KATALOGLAR / MALZEME =================
+    async function tanimlariYukle() {
+        const [pRes, kRes, biRes, ckRes] = await Promise.all([
+            fetch('/UrasUretimBakim/GetPersoneller?tumu=true').then(r => r.json()),
+            fetch('/UrasUretimBakim/GetKodlar?tumu=true').then(r => r.json()),
+            fetch('/UrasUretimBakim/GetBakimIslemleri?tumu=true').then(r => r.json()),
+            fetch('/UrasUretimBakim/GetChecklistSablonlar').then(r => r.json())
+        ]);
+        if (pRes.success) {
+            personelCache = pRes.data;
+            document.getElementById('tbodyPersonel').innerHTML = personelCache.map(p => `<tr>
+                <td>${p.Ad}</td><td>${p.Tip === 'I' ? 'İç' : 'Dış'}</td><td>${p.Uzmanlik || '—'}</td><td class="text-end ${p.AcikIs > 0 ? 'text-danger fw-bold' : ''}">${p.AcikIs}</td>
+                <td class="text-end"><button class="btn btn-sm btn-link p-0 text-muted me-2" onclick='personelDuzenleAc(${JSON.stringify(p.Code)})'><i class="fas fa-pen"></i></button><button class="btn btn-sm btn-link p-0 text-danger" onclick='personelSilTiklandi(${JSON.stringify(p.Code)})'><i class="fas fa-trash"></i></button></td></tr>`).join('') || '<tr><td colspan="5" class="text-center text-muted py-3">Personel yok.</td></tr>';
+        }
+        if (kRes.success) {
+            kodlarCache = kRes.data;
+            document.getElementById('tbodyKodlar').innerHTML = kodlarCache.map(k => `<tr>
+                <td>${k.Tip}</td><td>${k.Ad}</td><td class="text-muted small">${k.Aciklama || ''}</td>
+                <td class="text-end"><button class="btn btn-sm btn-link p-0 text-muted me-2" onclick='kodDuzenleAc(${JSON.stringify(k.Code)})'><i class="fas fa-pen"></i></button><button class="btn btn-sm btn-link p-0 text-danger" onclick='kodSilTiklandi(${JSON.stringify(k.Code)})'><i class="fas fa-trash"></i></button></td></tr>`).join('') || '<tr><td colspan="4" class="text-center text-muted py-3">Kod tanımı yok.</td></tr>';
+        }
+        if (biRes.success) {
+            bakimIslemCache = biRes.data;
+            document.getElementById('tbodyBakimIslem').innerHTML = bakimIslemCache.map(b => `<tr>
+                <td>${b.IslemAdi}</td><td>${b.Gun > 0 ? b.Gun + ' gün' : ''}${b.Gun > 0 && b.Tonaj > 0 ? ' / ' : ''}${b.Tonaj > 0 ? fmt(b.Tonaj, 0) + ' ton' : ''}</td>
+                <td>${b.MakineTuru || '—'}</td><td>${b.BakimTipi || '—'}</td><td class="text-end">${b.TahminiSureDk} dk</td><td>${(b.Malzemeler || []).length} kalem</td>
+                <td class="text-end"><button class="btn btn-sm btn-link p-0 text-muted" onclick="bakimIslemDuzenleAc(${b.DocEntry})"><i class="fas fa-pen"></i></button></td></tr>`).join('') || '<tr><td colspan="7" class="text-center text-muted py-3">Bakım işlem kataloğu boş.</td></tr>';
+        }
+        if (ckRes.success) {
+            checklistCache = ckRes.data;
+            document.getElementById('tbodyChecklist').innerHTML = checklistCache.map(c => `<tr>
+                <td>${c.ResCode}</td><td>${c.Tip}</td><td>${c.IslemAdi || '—'}</td><td class="text-end">${(c.Items || []).length}</td>
+                <td><span class="rozet ${c.Active === 'Y' ? 'rozet-yesil' : 'rozet-gri'}">${c.Active === 'Y' ? 'Aktif' : 'Pasif'}</span></td>
+                <td class="text-end"><button class="btn btn-sm btn-link p-0 text-muted" onclick="checklistDuzenleAc(${c.DocEntry})"><i class="fas fa-pen"></i></button></td></tr>`).join('') || '<tr><td colspan="6" class="text-center text-muted py-3">Checklist şablonu yok.</td></tr>';
+        }
+        malzemeAra();
+    }
+
+    function malzemeAramaDegisti() { clearTimeout(malzemeZamanlayici); malzemeZamanlayici = setTimeout(malzemeAra, 350); }
+
+    async function malzemeAra() {
+        const qs = new URLSearchParams({ q: document.getElementById('fMlzAra').value, pageSize: 30 });
+        const res = await fetch('/UrasUretimBakim/MalzemeAra?' + qs.toString()).then(r => r.json());
+        if (!res.success) return;
+        document.getElementById('tbodyMalzeme').innerHTML = res.data.Liste.map(m => `<tr><td>${m.ItemCode}</td><td>${m.ItemName}</td><td class="text-end">${fmt(m.OnHand, 2)} ${m.ItemUom}</td><td>${m.WhsCode || '—'}</td></tr>`).join('') || '<tr><td colspan="4" class="text-center text-muted py-3">Kayıt yok.</td></tr>';
+    }
+
+    // ================= KOD YÖNETİMİ (CRUD) =================
+    function kodDuzenleAc(code) {
+        const k = code ? kodlarCache.find(x => x.Code === code) : null;
+        document.getElementById('kdCode').value = k ? k.Code : '';
+        document.getElementById('kdTip').value = k ? k.Tip : 'KATEGORI';
+        document.getElementById('kdSira').value = k ? k.Sira : 0;
+        document.getElementById('kdAd').value = k ? k.Ad : '';
+        document.getElementById('kdAciklama').value = k ? (k.Aciklama || '') : '';
+        document.getElementById('kdAktif').checked = k ? (k.Aktif === 'Y') : true;
+        new bootstrap.Modal(document.getElementById('kodModal')).show();
+    }
+
+    async function kodKaydetTiklandi() {
+        const ad = document.getElementById('kdAd').value.trim();
+        if (!ad) { alert('Ad zorunludur.'); return; }
+        const istek = { Code: document.getElementById('kdCode').value, Tip: document.getElementById('kdTip').value, Ad: ad, Sira: parseInt(document.getElementById('kdSira').value || '0', 10), Aciklama: document.getElementById('kdAciklama').value, Aktif: document.getElementById('kdAktif').checked };
+        const res = await fetch('/UrasUretimBakim/KodKaydet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(istek) }).then(r => r.json());
+        if (!res.success) { alert('Kaydedilemedi: ' + res.message); return; }
+        bootstrap.Modal.getInstance(document.getElementById('kodModal')).hide();
+        kodlarCache = []; tanimlariYukle();
+    }
+
+    async function kodSilTiklandi(code) {
+        if (!confirm('Bu kodu silmek istediğinize emin misiniz?')) return;
+        const fd = new FormData(); fd.append('code', code);
+        const res = await fetch('/UrasUretimBakim/KodSil', { method: 'POST', body: fd }).then(r => r.json());
+        if (!res.success) { alert('Silinemedi: ' + res.message); return; }
+        tanimlariYukle();
+    }
+
+    // ================= PERSONEL YÖNETİMİ (CRUD) =================
+    function personelDuzenleAc(code) {
+        const p = code ? personelCache.find(x => x.Code === code) : null;
+        document.getElementById('psCode').value = p ? p.Code : '';
+        document.getElementById('psAd').value = p ? p.Ad : '';
+        document.getElementById('psTip').value = p ? p.Tip : 'I';
+        document.getElementById('psTel').value = p ? (p.Telefon || '') : '';
+        document.getElementById('psEmail').value = p ? (p.Email || '') : '';
+        document.getElementById('psUzmanlik').value = p ? (p.Uzmanlik || '') : '';
+        document.getElementById('psAktif').checked = p ? (p.Aktif === 'Y') : true;
+        new bootstrap.Modal(document.getElementById('personelModal')).show();
+    }
+
+    async function personelKaydetTiklandi() {
+        const ad = document.getElementById('psAd').value.trim();
+        if (!ad) { alert('Ad zorunludur.'); return; }
+        const istek = { Code: document.getElementById('psCode').value, Ad: ad, Tip: document.getElementById('psTip').value, Telefon: document.getElementById('psTel').value, Email: document.getElementById('psEmail').value, Uzmanlik: document.getElementById('psUzmanlik').value, Aktif: document.getElementById('psAktif').checked };
+        const res = await fetch('/UrasUretimBakim/PersonelKaydet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(istek) }).then(r => r.json());
+        if (!res.success) { alert('Kaydedilemedi: ' + res.message); return; }
+        bootstrap.Modal.getInstance(document.getElementById('personelModal')).hide();
+        personelCache = []; tanimlariYukle();
+    }
+
+    async function personelSilTiklandi(code) {
+        if (!confirm('Bu personeli silmek istediğinize emin misiniz?')) return;
+        const fd = new FormData(); fd.append('code', code);
+        const res = await fetch('/UrasUretimBakim/PersonelSil', { method: 'POST', body: fd }).then(r => r.json());
+        if (!res.success) { alert('Silinemedi: ' + res.message); return; }
+        tanimlariYukle();
+    }
+
+    // ================= BAKIM İŞLEM KATALOĞU (CRUD) =================
+    function biMalzemeSatiriEkle(m) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td><input type="text" class="form-control form-control-sm biItemCode" value="${m ? m.ItemCode : ''}"></td>
+            <td><input type="text" class="form-control form-control-sm biItemName" value="${m ? (m.ItemName || '') : ''}"></td>
+            <td><input type="number" class="form-control form-control-sm biQuantity" value="${m ? m.Quantity : 0}"></td>
+            <td><input type="text" class="form-control form-control-sm biItemUom" value="${m ? (m.ItemUom || '') : ''}"></td>
+            <td><button class="btn btn-sm btn-link p-0 text-danger" onclick="this.closest('tr').remove()"><i class="fas fa-times"></i></button></td>`;
+        document.getElementById('biMalzemeSatirlari').appendChild(tr);
+    }
+
+    function bakimIslemDuzenleAc(docEntry) {
+        const b = docEntry ? bakimIslemCache.find(x => x.DocEntry === docEntry) : null;
+        document.getElementById('biDocEntry').value = b ? b.DocEntry : 0;
+        document.getElementById('biIslemAdi').value = b ? b.IslemAdi : '';
+        document.getElementById('biGun').value = b ? b.Gun : 0;
+        document.getElementById('biTonaj').value = b ? b.Tonaj : 0;
+        document.getElementById('biSure').value = b ? b.TahminiSureDk : 0;
+        document.getElementById('biMakineTuru').value = b ? (b.MakineTuru || '') : '';
+        document.getElementById('biBakimTipi').value = b ? (b.BakimTipi || '') : '';
+        document.getElementById('biIcDis').value = b ? b.IcDis : 'I';
+        document.getElementById('biTalimat').value = b ? (b.Talimat || '') : '';
+        document.getElementById('biAktif').checked = b ? (b.Aktif === 'Y') : true;
+        document.getElementById('biMalzemeSatirlari').innerHTML = '';
+        (b?.Malzemeler || []).forEach(m => biMalzemeSatiriEkle(m));
+        document.getElementById('biSilBtn').style.display = b ? '' : 'none';
+        new bootstrap.Modal(document.getElementById('bakimIslemModal')).show();
+    }
+
+    async function bakimIslemKaydetTiklandi() {
+        const islemAdi = document.getElementById('biIslemAdi').value.trim();
+        if (!islemAdi) { alert('İşlem adı zorunludur.'); return; }
+        const malzemeler = [...document.querySelectorAll('#biMalzemeSatirlari tr')].map(tr => ({
+            ItemCode: tr.querySelector('.biItemCode').value.trim(), ItemName: tr.querySelector('.biItemName').value.trim(),
+            Quantity: parseFloat(tr.querySelector('.biQuantity').value || '0'), ItemUom: tr.querySelector('.biItemUom').value.trim()
+        })).filter(m => m.ItemCode);
+        const istek = {
+            DocEntry: parseInt(document.getElementById('biDocEntry').value || '0', 10), IslemAdi: islemAdi,
+            Gun: parseInt(document.getElementById('biGun').value || '0', 10), Tonaj: parseFloat(document.getElementById('biTonaj').value || '0'),
+            TahminiSureDk: parseInt(document.getElementById('biSure').value || '0', 10), MakineTuru: document.getElementById('biMakineTuru').value,
+            BakimTipi: document.getElementById('biBakimTipi').value, IcDis: document.getElementById('biIcDis').value, Talimat: document.getElementById('biTalimat').value,
+            Aktif: document.getElementById('biAktif').checked, Malzemeler: malzemeler
+        };
+        const res = await fetch('/UrasUretimBakim/BakimIslemKaydet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(istek) }).then(r => r.json());
+        if (!res.success) { alert('Kaydedilemedi: ' + res.message); return; }
+        bootstrap.Modal.getInstance(document.getElementById('bakimIslemModal')).hide();
+        bakimIslemCache = []; tanimlariYukle();
+    }
+
+    async function bakimIslemSilTiklandi() {
+        const docEntry = document.getElementById('biDocEntry').value;
+        if (!docEntry || docEntry === '0' || !confirm('Bu bakım işlemini silmek istediğinize emin misiniz?')) return;
+        const fd = new FormData(); fd.append('docEntry', docEntry);
+        const res = await fetch('/UrasUretimBakim/BakimIslemSil', { method: 'POST', body: fd }).then(r => r.json());
+        if (!res.success) { alert('Silinemedi: ' + res.message); return; }
+        bootstrap.Modal.getInstance(document.getElementById('bakimIslemModal')).hide();
+        bakimIslemCache = []; tanimlariYukle();
+    }
+
+    // ================= CHECKLİST ŞABLONLARI (CRUD) =================
+    function ckSoruEkle(s) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td><input type="number" class="form-control form-control-sm ckOrder" value="${s ? s.Sira : 0}"></td>
+            <td><input type="text" class="form-control form-control-sm ckQuestion" value="${s ? (s.Question || '').replace(/"/g, '&quot;') : ''}"></td>
+            <td class="text-center"><input type="checkbox" class="form-check-input ckZorunlu" ${s && s.Zorunlu === 'Y' ? 'checked' : ''}></td>
+            <td><button class="btn btn-sm btn-link p-0 text-danger" onclick="this.closest('tr').remove()"><i class="fas fa-times"></i></button></td>`;
+        document.getElementById('ckSorular').appendChild(tr);
+    }
+
+    function ckIslemSelectDoldur(secili) {
+        const sel = document.getElementById('ckIslemEntry');
+        sel.innerHTML = '<option value="">—</option>' + bakimIslemCache.map(b => `<option value="${b.DocEntry}" ${secili === b.DocEntry ? 'selected' : ''}>${b.IslemAdi}</option>`).join('');
+    }
+
+    function checklistDuzenleAc(docEntry) {
+        const c = docEntry ? checklistCache.find(x => x.DocEntry === docEntry) : null;
+        document.getElementById('ckDocEntry').value = c ? c.DocEntry : 0;
+        document.getElementById('ckResCode').value = c ? c.ResCode : '';
+        document.getElementById('ckTip').value = c ? c.Tip : 'ARIZA';
+        ckIslemSelectDoldur(c ? c.IslemEntry : null);
+        document.getElementById('ckAktif').checked = c ? (c.Active === 'Y') : true;
+        document.getElementById('ckSorular').innerHTML = '';
+        (c?.Items || []).forEach(s => ckSoruEkle(s));
+        document.getElementById('ckSilBtn').style.display = c ? '' : 'none';
+        new bootstrap.Modal(document.getElementById('checklistModal')).show();
+    }
+
+    async function checklistKaydetTiklandi() {
+        const resCode = document.getElementById('ckResCode').value.trim();
+        if (!resCode) { alert('Makine türü zorunludur.'); return; }
+        const sorular = [...document.querySelectorAll('#ckSorular tr')].map(tr => ({
+            Order: parseInt(tr.querySelector('.ckOrder').value || '0', 10), Question: tr.querySelector('.ckQuestion').value.trim(), Zorunlu: tr.querySelector('.ckZorunlu').checked
+        })).filter(s => s.Question);
+        if (sorular.length === 0) { alert('En az bir soru girin.'); return; }
+        const islemEntry = document.getElementById('ckIslemEntry').value;
+        const istek = {
+            DocEntry: parseInt(document.getElementById('ckDocEntry').value || '0', 10), ResCode: resCode, Tip: document.getElementById('ckTip').value,
+            IslemEntry: islemEntry ? parseInt(islemEntry, 10) : null, Aktif: document.getElementById('ckAktif').checked, Sorular: sorular
+        };
+        const res = await fetch('/UrasUretimBakim/ChecklistSablonKaydet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(istek) }).then(r => r.json());
+        if (!res.success) { alert('Kaydedilemedi: ' + res.message); return; }
+        bootstrap.Modal.getInstance(document.getElementById('checklistModal')).hide();
+        checklistCache = []; tanimlariYukle();
+    }
+
+    async function checklistSilTiklandi() {
+        const docEntry = document.getElementById('ckDocEntry').value;
+        if (!docEntry || docEntry === '0' || !confirm('Bu checklist şablonunu silmek istediğinize emin misiniz?')) return;
+        const fd = new FormData(); fd.append('docEntry', docEntry);
+        const res = await fetch('/UrasUretimBakim/ChecklistSablonSil', { method: 'POST', body: fd }).then(r => r.json());
+        if (!res.success) { alert('Silinemedi: ' + res.message); return; }
+        bootstrap.Modal.getInstance(document.getElementById('checklistModal')).hide();
+        checklistCache = []; tanimlariYukle();
+    }
+
+    // ================= AYARLAR =================
+    async function ayarlarYukle() {
+        const [aRes, mRes] = await Promise.all([
+            fetch('/UrasUretimBakim/GetAyar').then(r => r.json()),
+            fetch('/UrasUretimBakim/GetMailAlicilar').then(r => r.json())
+        ]);
+        if (aRes.success) {
+            const a = aRes.data;
+            document.getElementById('ayArizaOnek').value = a.ArizaOnek || '';
+            document.getElementById('ayBakimOnek').value = a.BakimOnek || '';
+            document.getElementById('ayMesaiBas').value = a.MesaiBas || '';
+            document.getElementById('ayMesaiBit').value = a.MesaiBit || '';
+            document.getElementById('ayHatirlatmaGun').value = a.HatirlatmaGun || 7;
+            document.getElementById('ayParaBirimi').value = a.ParaBirimi || '';
+            document.getElementById('ayVarsayilanDepo').value = a.VarsayilanDepo || '';
+            document.getElementById('ayOnayZorunlu').checked = !!a.OnayZorunlu;
+            document.getElementById('ayOnayDisServis').checked = !!a.OnayDisServis;
+            document.getElementById('ayOnayTutar').value = a.OnayTutar || 0;
+        }
+        if (mRes.success) {
+            mailAliciCache = mRes.data;
+            document.getElementById('tbodyMailAlici').innerHTML = mailAliciCache.map(m => `<tr>
+                <td>${m.Olay}</td><td>${m.Email}</td><td><span class="rozet ${m.Aktif === 'Y' ? 'rozet-yesil' : 'rozet-gri'}">${m.Aktif === 'Y' ? 'Aktif' : 'Pasif'}</span></td>
+                <td class="text-end"><button class="btn btn-sm btn-link p-0 text-muted me-2" onclick='mailAliciDuzenleAc(${JSON.stringify(m.Code)})'><i class="fas fa-pen"></i></button><button class="btn btn-sm btn-link p-0 text-danger" onclick='mailAliciSilTiklandi(${JSON.stringify(m.Code)})'><i class="fas fa-trash"></i></button></td></tr>`).join('') || '<tr><td colspan="4" class="text-center text-muted py-3">Mail alıcısı yok.</td></tr>';
+        }
+        document.getElementById('tab-ayarlar').dataset.yuklendi = '1';
+    }
+
+    async function ayarlarKaydet() {
+        const istek = {
+            ArizaOnek: document.getElementById('ayArizaOnek').value, BakimOnek: document.getElementById('ayBakimOnek').value,
+            MesaiBas: document.getElementById('ayMesaiBas').value, MesaiBit: document.getElementById('ayMesaiBit').value,
+            HatirlatmaGun: parseInt(document.getElementById('ayHatirlatmaGun').value || '7', 10), ParaBirimi: document.getElementById('ayParaBirimi').value,
+            VarsayilanDepo: document.getElementById('ayVarsayilanDepo').value, OnayZorunlu: document.getElementById('ayOnayZorunlu').checked,
+            OnayDisServis: document.getElementById('ayOnayDisServis').checked, OnayTutar: parseFloat(document.getElementById('ayOnayTutar').value || '0'),
+            HatirlatmaMail: document.getElementById('ayHatirlatmaMail').value
+        };
+        const res = await fetch('/UrasUretimBakim/AyarKaydet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(istek) }).then(r => r.json());
+        alert(res.success ? 'Ayarlar kaydedildi.' : 'Kaydedilemedi: ' + res.message);
+    }
+
+    async function hatirlatmaGonderTiklandi() {
+        if (!confirm('Yaklaşan/gecikmiş periyodik bakımlar için tanımlı mail alıcılarına hatırlatma göndermek istiyor musunuz?')) return;
+        const res = await fetch('/UrasUretimBakim/HatirlatmaGonder', { method: 'POST' }).then(r => r.json());
+        alert(res.message);
+    }
+
+    async function testMailGonder() {
+        const email = document.getElementById('testMailAdres').value.trim();
+        if (!email) { alert('E-posta girin.'); return; }
+        const fd = new FormData(); fd.append('email', email);
+        const res = await fetch('/UrasUretimBakim/TestMail', { method: 'POST', body: fd }).then(r => r.json());
+        alert(res.message);
+    }
+
+    // ================= MAIL ALICILARI (CRUD) =================
+    function mailAliciDuzenleAc(code) {
+        const m = code ? mailAliciCache.find(x => x.Code === code) : null;
+        document.getElementById('maCode').value = m ? m.Code : '';
+        document.getElementById('maOlay').value = m ? m.Olay : 'HATIRLATMA';
+        document.getElementById('maEmail').value = m ? m.Email : '';
+        document.getElementById('maAktif').checked = m ? (m.Aktif === 'Y') : true;
+        new bootstrap.Modal(document.getElementById('mailAliciModal')).show();
+    }
+
+    async function mailAliciKaydetTiklandi() {
+        const email = document.getElementById('maEmail').value.trim();
+        if (!email || email.indexOf('@@') < 0) { alert('Geçerli bir e-posta girin.'); return; }
+        const istek = { Code: document.getElementById('maCode').value, Olay: document.getElementById('maOlay').value, Email: email, Aktif: document.getElementById('maAktif').checked };
+        const res = await fetch('/UrasUretimBakim/MailAliciKaydet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(istek) }).then(r => r.json());
+        if (!res.success) { alert('Kaydedilemedi: ' + res.message); return; }
+        bootstrap.Modal.getInstance(document.getElementById('mailAliciModal')).hide();
+        ayarlarYukle();
+    }
+
+    async function mailAliciSilTiklandi(code) {
+        if (!confirm('Bu mail alıcısını silmek istediğinize emin misiniz?')) return;
+        const fd = new FormData(); fd.append('code', code);
+        const res = await fetch('/UrasUretimBakim/MailAliciSil', { method: 'POST', body: fd }).then(r => r.json());
+        if (!res.success) { alert('Silinemedi: ' + res.message); return; }
+        ayarlarYukle();
+    }
+
+    // ================= BELGE / DOSYA YÖNETİMİ =================
+    function belgeSatirlariCiz(liste, konteynerId) {
+        document.getElementById(konteynerId).innerHTML = liste.map(b => `<tr>
+            <td>${b.DosyaAdi}</td><td>${b.BelgeTuru || '—'}</td><td class="text-muted small">${b.Yukleyen || ''} ${b.Zaman || ''}</td>
+            <td class="text-end">
+                <a class="btn btn-sm btn-link p-0 me-2" href="/UrasUretimBakim/BelgeIndir?code=${encodeURIComponent(b.Code)}" target="_blank" title="Görüntüle"><i class="fas fa-eye"></i></a>
+                <a class="btn btn-sm btn-link p-0 me-2" href="/UrasUretimBakim/BelgeIndir?code=${encodeURIComponent(b.Code)}&indir=true" title="İndir"><i class="fas fa-download"></i></a>
+                <button class="btn btn-sm btn-link p-0 text-danger" onclick='belgeSilTiklandi(${JSON.stringify(b.Code)})'><i class="fas fa-trash"></i></button>
+            </td></tr>`).join('') || '<tr><td colspan="4" class="text-center text-muted py-2">Belge yok.</td></tr>';
+    }
+
+    async function belgeleriYukle(docEntry, makineKod, konteynerId) {
+        const qs = new URLSearchParams({ docEntry: docEntry || 0, makineKod: makineKod || '' });
+        const res = await fetch('/UrasUretimBakim/GetBelgeler?' + qs.toString()).then(r => r.json());
+        if (res.success) belgeSatirlariCiz(res.data, konteynerId);
+    }
+
+    async function belgeYukleTiklandi(inputId, docEntry, makineKod, konteynerId) {
+        const input = document.getElementById(inputId);
+        if (!input.files || !input.files[0]) { alert('Dosya seçin.'); return; }
+        const fd = new FormData();
+        fd.append('dosya', input.files[0]);
+        fd.append('docEntry', docEntry || 0);
+        fd.append('makineKod', makineKod || '');
+        const res = await fetch('/UrasUretimBakim/BelgeYukle', { method: 'POST', body: fd }).then(r => r.json());
+        if (!res.success) { alert('Yüklenemedi: ' + res.message); return; }
+        input.value = '';
+        belgeleriYukle(docEntry, makineKod, konteynerId);
+    }
+
+    async function belgeSilTiklandi(code) {
+        if (!confirm('Bu belgeyi silmek istediğinize emin misiniz?')) return;
+        const fd = new FormData(); fd.append('code', code);
+        const res = await fetch('/UrasUretimBakim/BelgeSil', { method: 'POST', body: fd }).then(r => r.json());
+        if (!res.success) { alert('Silinemedi: ' + res.message); return; }
+        if (window.__belgeYenile) window.__belgeYenile();
+    }
+
+    // ================= PDF / MAIL =================
+    async function raporMailGonder(docEntry) {
+        const alici = prompt('Rapor gönderilecek e-posta adresi:');
+        if (!alici) return;
+        const fd = new FormData(); fd.append('docEntry', docEntry); fd.append('alici', alici);
+        const res = await fetch('/UrasUretimBakim/RaporMail', { method: 'POST', body: fd }).then(r => r.json());
+        alert(res.message);
+    }
+
+    ozetYukle();
+</script>

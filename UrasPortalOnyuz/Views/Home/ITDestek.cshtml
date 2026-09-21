@@ -1,0 +1,891 @@
+﻿@model WebApplication3.Models.ITDestekViewModel
+@{
+    ViewData["Title"] = "IT Destek & Yardım Masası";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var talepler = Model?.Talepler ?? new List<WebApplication3.Models.ITSorunIstek>();
+    var ist = Model?.Istatistik ?? new WebApplication3.Models.ITIstatistik();
+    bool yetkili = Model?.ITYetkilisi ?? false;
+}
+
+@section Styles {
+    <style>
+        .it-wrap { width: 100%; }
+
+        /* ---------- Başlık ---------- */
+        .it-head {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 16px; flex-wrap: wrap; margin-bottom: 1.4rem;
+        }
+        .it-head h3 {
+            margin: 0; font-size: 1.35rem; font-weight: 800; letter-spacing: -.03em;
+            color: var(--text-primary);
+        }
+        .it-head p { margin: 4px 0 0; font-size: .86rem; color: var(--text-secondary); }
+
+        /* ---------- İstatistik kutuları ---------- */
+        .stat-grid {
+            display: grid; gap: 12px; margin-bottom: 1.4rem;
+            grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+        }
+        .stat-box {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: var(--r-lg, 18px); padding: 1rem 1.1rem;
+            box-shadow: var(--shadow-sm); position: relative; overflow: hidden;
+            transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+        }
+        .stat-box.tiklanir { cursor: pointer; }
+        .stat-box:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+        .stat-box.secili { border-color: var(--metro-primary); box-shadow: 0 0 0 3px rgba(0,158,247,.14); }
+        .stat-box .sb-lbl {
+            font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+        .stat-box .sb-val { font-size: 1.55rem; font-weight: 800; letter-spacing: -.04em; margin-top: 4px; line-height: 1; }
+        .stat-box .sb-ico {
+            position: absolute; right: -6px; bottom: -10px; font-size: 3.4rem;
+            opacity: .07; transform: rotate(-10deg);
+        }
+
+        /* ---------- Filtre çubuğu ---------- */
+        .it-filters {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: var(--r-lg, 18px); padding: 12px 14px; margin-bottom: 1.2rem;
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            box-shadow: var(--shadow-sm);
+        }
+        .durum-pill {
+            border: 1px solid var(--border-color); background: var(--bg-card);
+            color: var(--text-secondary); border-radius: 999px; padding: .42rem 1rem;
+            font-size: .82rem; font-weight: 600; cursor: pointer; transition: all .18s ease;
+        }
+        .durum-pill:hover { background: var(--metro-primary-light); color: var(--metro-primary); }
+        .durum-pill.active {
+            background: linear-gradient(135deg,#009ef7,#6366f1); color: #fff;
+            border-color: transparent; box-shadow: 0 5px 14px rgba(0,158,247,.28);
+        }
+
+        /* ---------- Talep kartı ---------- */
+        .ticket {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: var(--r-lg, 18px); padding: 1rem 1.15rem 1rem 1.35rem;
+            margin-bottom: 10px; display: flex; gap: 16px; align-items: flex-start;
+            position: relative; overflow: hidden; cursor: pointer;
+            box-shadow: var(--shadow-sm);
+            transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+        }
+        .ticket:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: color-mix(in srgb, var(--metro-primary) 34%, transparent); }
+        .ticket::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #cbd5e1; }
+        .ticket[data-oncelik="Kritik"]::before { background: #f43f5e; }
+        .ticket[data-oncelik="Yüksek"]::before { background: #f59e0b; }
+        .ticket[data-oncelik="Normal"]::before { background: #009ef7; }
+        .ticket[data-oncelik="Düşük"]::before { background: #94a3b8; }
+        .ticket.kapali { opacity: .72; }
+
+        .t-id {
+            flex-shrink: 0; width: 54px; height: 54px; border-radius: 14px;
+            background: var(--metro-primary-light); color: var(--metro-primary);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            font-weight: 800; line-height: 1;
+        }
+        .t-id small { font-size: .55rem; letter-spacing: .1em; opacity: .75; font-weight: 700; }
+        .t-body { flex: 1; min-width: 0; }
+        .t-title { font-size: .96rem; font-weight: 700; color: var(--text-primary); letter-spacing: -.015em; margin: 0 0 5px; }
+        .t-meta { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: .76rem; color: var(--text-secondary); font-weight: 500; }
+        .t-meta span { display: inline-flex; align-items: center; gap: 5px; }
+        .t-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+        .tag {
+            font-size: .68rem; font-weight: 700; padding: .24rem .6rem; border-radius: 6px;
+            letter-spacing: .02em; white-space: nowrap;
+        }
+        .tag-gri   { background: #f1f5f9; color: #475569; }
+        .tag-mavi  { background: #dbeafe; color: #1e40af; }
+        .tag-yesil { background: #d1fae5; color: #065f46; }
+        .tag-sari  { background: #fef3c7; color: #92400e; }
+        .tag-kirmizi { background: #fee2e2; color: #991b1b; }
+        .tag-mor   { background: #ede9fe; color: #5b21b6; }
+        [data-theme="dark"] .tag-gri { background: #1f2937; color: #cbd5e1; }
+
+        .sla-nokta { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .sla-yeni { background: #10b981; }
+        .sla-bekliyor { background: #f59e0b; }
+        .sla-gecikmis { background: #f43f5e; box-shadow: 0 0 0 3px rgba(244,63,94,.18); }
+        .sla-kapali { background: #cbd5e1; }
+
+        /* ---------- Dosya bırakma alanı ---------- */
+        .dropzone {
+            border: 2px dashed var(--border-color); border-radius: var(--r-md, 13px);
+            padding: 26px 18px; text-align: center; cursor: pointer;
+            background: var(--bg-subtle, #f8fafc); transition: all .2s ease;
+        }
+        .dropzone:hover, .dropzone.uzerinde {
+            border-color: var(--metro-primary); background: var(--metro-primary-light);
+        }
+        .dropzone i { font-size: 1.8rem; color: var(--metro-primary); }
+        .dz-list { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+        .dz-item {
+            position: relative; width: 84px; height: 84px; border-radius: 12px; overflow: hidden;
+            border: 1px solid var(--border-color); background: var(--bg-card);
+            display: flex; align-items: center; justify-content: center; flex-direction: column;
+            font-size: .6rem; color: var(--text-secondary); text-align: center; padding: 4px;
+        }
+        .dz-item img { width: 100%; height: 100%; object-fit: cover; }
+        .dz-item .dz-sil {
+            position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%;
+            background: rgba(15,23,42,.72); color: #fff; border: none; font-size: .62rem;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+
+        /* ---------- Detay modalı ---------- */
+        .det-satir { display: flex; gap: 10px; padding: 7px 0; font-size: .84rem; border-bottom: 1px dashed var(--border-color); }
+        .det-satir:last-child { border-bottom: none; }
+        .det-satir .k { width: 130px; flex-shrink: 0; color: var(--text-secondary); font-weight: 600; }
+        .det-satir .v { color: var(--text-primary); font-weight: 600; word-break: break-word; }
+
+        .ek-galeri { display: flex; flex-wrap: wrap; gap: 10px; }
+        .ek-kutu {
+            position: relative; width: 104px; border-radius: 12px; overflow: hidden;
+            border: 1px solid var(--border-color); background: var(--bg-card);
+        }
+        .ek-kutu img { width: 100%; height: 78px; object-fit: cover; display: block; cursor: zoom-in; }
+        .ek-kutu .ek-dosya {
+            height: 78px; display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem; color: var(--metro-primary); background: var(--bg-subtle, #f8fafc);
+        }
+        .ek-kutu .ek-ad { font-size: .58rem; padding: 5px 6px; color: var(--text-secondary); word-break: break-all; line-height: 1.25; }
+        .ek-kutu .ek-sil {
+            position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%;
+            background: rgba(244,63,94,.9); color: #fff; border: none; font-size: .6rem; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .yorum { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px dashed var(--border-color); }
+        .yorum:last-child { border-bottom: none; }
+        .yorum .av {
+            width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+            background: linear-gradient(135deg,#009ef7,#6366f1); color: #fff;
+            display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: .72rem;
+        }
+        .yorum.sistem .av { background: #e2e8f0; color: #64748b; }
+        .yorum .yz { flex: 1; min-width: 0; }
+        .yorum .yz .ust { display: flex; gap: 8px; align-items: center; font-size: .76rem; }
+        .yorum .yz .ust b { color: var(--text-primary); }
+        .yorum .yz .ust span { color: var(--text-secondary); }
+        .yorum .yz .mt { font-size: .84rem; color: var(--text-primary); margin-top: 3px; white-space: pre-wrap; word-break: break-word; }
+        .yorum.sistem .mt { color: var(--text-secondary); font-style: italic; font-size: .78rem; }
+
+        .lightbox {
+            position: fixed; inset: 0; background: rgba(2,6,23,.92); z-index: 20000;
+            display: none; align-items: center; justify-content: center; padding: 30px;
+        }
+        .lightbox.acik { display: flex; }
+        .lightbox img { max-width: 100%; max-height: 100%; border-radius: 14px; box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+        .lightbox .kapat {
+            position: absolute; top: 22px; right: 26px; font-size: 1.8rem; color: #fff;
+            background: none; border: none; cursor: pointer; opacity: .8;
+        }
+
+        .bos-durum { text-align: center; padding: 56px 20px; color: var(--text-secondary); }
+        .bos-durum i { font-size: 3rem; opacity: .18; }
+
+        @@media (max-width: 767px) {
+            .ticket { flex-direction: column; }
+            .det-satir .k { width: 105px; }
+        }
+    </style>
+}
+
+<div class="it-wrap">
+    @Html.AntiForgeryToken()
+
+    @if (!string.IsNullOrEmpty(Model?.Hata))
+    {
+        <div class="alert alert-danger"><i class="fas fa-triangle-exclamation me-2"></i>@Model.Hata</div>
+    }
+
+    <!-- BAŞLIK -->
+    <div class="it-head">
+        <div>
+            <h3><i class="fas fa-headset me-2" style="color:var(--metro-primary);"></i>IT Destek &amp; Yardım Masası</h3>
+            <p>
+                Sorun bildirin, istek açın, ekran görüntüsü ekleyin ve talebinizin durumunu buradan takip edin.
+                @if (yetkili)
+                {
+                    <span class="tag tag-mor ms-1">IT YETKİLİSİ GÖRÜNÜMÜ</span>
+                }
+            </p>
+        </div>
+        <button class="btn btn-primary" onclick="yeniTalepAc()">
+            <i class="fas fa-plus me-2"></i>Yeni Talep Oluştur
+        </button>
+    </div>
+
+    <!-- İSTATİSTİK -->
+    <div class="stat-grid">
+        <div class="stat-box tiklanir secili" data-durum="Tümü" onclick="durumSec('Tümü', this)">
+            <i class="fas fa-inbox sb-ico"></i>
+            <div class="sb-lbl">Toplam</div>
+            <div class="sb-val" style="color:var(--text-primary);">@ist.Toplam</div>
+        </div>
+        <div class="stat-box tiklanir" data-durum="Açık" onclick="durumSec('Açık', this)">
+            <i class="fas fa-envelope-open-text sb-ico"></i>
+            <div class="sb-lbl">Açık</div>
+            <div class="sb-val" style="color:#009ef7;">@ist.Acik</div>
+        </div>
+        <div class="stat-box tiklanir" data-durum="İşlemde" onclick="durumSec('İşlemde', this)">
+            <i class="fas fa-spinner sb-ico"></i>
+            <div class="sb-lbl">İşlemde</div>
+            <div class="sb-val" style="color:#8b5cf6;">@ist.Islemde</div>
+        </div>
+        <div class="stat-box tiklanir" data-durum="Beklemede" onclick="durumSec('Beklemede', this)">
+            <i class="fas fa-hourglass-half sb-ico"></i>
+            <div class="sb-lbl">Beklemede</div>
+            <div class="sb-val" style="color:#f59e0b;">@ist.Beklemede</div>
+        </div>
+        <div class="stat-box tiklanir" data-durum="Tamamlandı" onclick="durumSec('Tamamlandı', this)">
+            <i class="fas fa-circle-check sb-ico"></i>
+            <div class="sb-lbl">Tamamlanan</div>
+            <div class="sb-val" style="color:#10b981;">@ist.Tamamlanan</div>
+        </div>
+        <div class="stat-box">
+            <i class="fas fa-triangle-exclamation sb-ico"></i>
+            <div class="sb-lbl">Kritik / Açık</div>
+            <div class="sb-val" style="color:#f43f5e;">@ist.Kritik</div>
+        </div>
+        <div class="stat-box" title="İş saati bazlı (hafta içi 08:30-18:00), son 90 günde kapanan @ist.CozumOrneklemi talep. Tipik = medyan: taleplerin yarısı bu sürede çözüldü. Takvim saatiyle ortalama: @ist.TakvimOrtCozumMetni.">
+            <i class="fas fa-stopwatch sb-ico"></i>
+            <div class="sb-lbl">Tipik Çözüm <span style="opacity:.6; font-weight:500;">(iş saati)</span></div>
+            <div class="sb-val" style="font-size:1.15rem; color:var(--text-primary);">@ist.MedyanCozumMetni</div>
+            <div style="font-size:.68rem; color:var(--text-secondary, #64748b); margin-top:2px;">ortalama @ist.OrtCozumMetni · takvimle @ist.TakvimOrtCozumMetni</div>
+        </div>
+    </div>
+
+    <!-- FİLTRELER -->
+    <div class="it-filters">
+        <button class="durum-pill active" data-durum="Tümü" onclick="durumSec('Tümü', this)">Tümü</button>
+        @foreach (var d in Model.Durumlar)
+        {
+            <button class="durum-pill" data-durum="@d" onclick="durumSec('@d', this)">@d</button>
+        }
+
+        <div class="ms-auto d-flex gap-2 flex-wrap">
+            <select class="form-select form-select-sm" id="fKategori" style="width:190px;" onchange="listeyiSuz()">
+                <option value="">Tüm kategoriler</option>
+                @foreach (var k in Model.Kategoriler)
+                {
+                    <option value="@k">@k</option>
+                }
+            </select>
+            <select class="form-select form-select-sm" id="fOncelik" style="width:150px;" onchange="listeyiSuz()">
+                <option value="">Tüm öncelikler</option>
+                @foreach (var o in Model.Oncelikler)
+                {
+                    <option value="@o">@o</option>
+                }
+            </select>
+            <input type="text" class="form-control form-control-sm" id="fArama" style="width:220px;"
+                   placeholder="Başlık, açıklama, kişi ara..." onkeyup="listeyiSuz()">
+        </div>
+    </div>
+
+    <!-- TALEP LİSTESİ -->
+    <div id="ticketList">
+        @if (talepler.Any())
+        {
+            foreach (var t in talepler)
+            {
+                <div class="ticket @(t.Kapali ? "kapali" : "")"
+                     data-id="@t.Id"
+                     data-durum="@t.Durum"
+                     data-kategori="@t.Kategori"
+                     data-oncelik="@t.Oncelik"
+                     data-ara="@($"{t.Id} {t.Baslik} {t.Aciklama} {t.KullaniciAdi} {t.UserCode} {t.Kategori} {t.TalepTipi}".ToLower())"
+                     onclick="detayAc(@t.Id)">
+
+                    <div class="t-id">
+                        <small>TALEP</small>
+                        #@t.Id
+                    </div>
+
+                    <div class="t-body">
+                        <div class="t-title">@t.Baslik</div>
+
+                        <div class="t-meta">
+                            <span><i class="fas fa-user"></i> @t.KullaniciAdi</span>
+                            <span><i class="fas fa-calendar"></i> @t.OlusturmaTarihi.ToString("dd.MM.yyyy HH:mm")</span>
+                            <span>
+                                <i class="sla-nokta sla-@t.SlaDurumu"></i>
+                                @(t.Kapali ? "Çözüm: " : "Geçen: ")@t.GecenSureMetni
+                            </span>
+                            @if (t.EkSayisi > 0)
+                            {
+                                <span><i class="fas fa-paperclip"></i> @t.EkSayisi ek</span>
+                            }
+                            @if (t.YorumSayisi > 0)
+                            {
+                                <span><i class="fas fa-comment-dots"></i> @t.YorumSayisi not</span>
+                            }
+                            @if (!string.IsNullOrEmpty(t.AtananAdi))
+                            {
+                                <span><i class="fas fa-user-gear"></i> @t.AtananAdi</span>
+                            }
+                        </div>
+
+                        <div class="t-tags">
+                            <span class="tag @(t.Durum == "Açık" ? "tag-mavi" : t.Durum == "İşlemde" ? "tag-mor" : t.Durum == "Beklemede" ? "tag-sari" : t.Durum == "Tamamlandı" ? "tag-yesil" : "tag-gri")">@t.Durum</span>
+                            <span class="tag @(t.Oncelik == "Kritik" ? "tag-kirmizi" : t.Oncelik == "Yüksek" ? "tag-sari" : "tag-gri")">@t.Oncelik</span>
+                            <span class="tag tag-gri">@t.Kategori</span>
+                            <span class="tag tag-gri">@t.TalepTipi</span>
+                        </div>
+                    </div>
+
+                    <div class="d-none d-md-flex align-items-center">
+                        <i class="fas fa-chevron-right text-muted"></i>
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="bos-durum">
+                <i class="fas fa-mug-hot d-block mb-3"></i>
+                <h6 class="fw-bold text-secondary">Henüz talep yok</h6>
+                <p class="mb-3">Bir sorun bildirmek veya istek açmak için yeni talep oluşturun.</p>
+                <button class="btn btn-primary" onclick="yeniTalepAc()"><i class="fas fa-plus me-2"></i>Yeni Talep Oluştur</button>
+            </div>
+        }
+    </div>
+
+    <div id="sonucYok" class="bos-durum d-none">
+        <i class="fas fa-magnifying-glass d-block mb-3"></i>
+        <h6 class="fw-bold text-secondary">Filtreye uyan talep bulunamadı</h6>
+    </div>
+</div>
+
+<!-- ============================ YENİ TALEP MODALI ============================ -->
+<div class="modal fade" id="yeniTalepModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header text-white" style="background:linear-gradient(135deg,#009ef7,#6366f1);">
+                <h5 class="modal-title fw-bold"><i class="fas fa-plus-circle me-2"></i>Yeni IT Talebi</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="yeniTalepForm">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold small">Bildirim Tipi <span class="text-danger">*</span></label>
+                            <select class="form-select" name="talepTipi" required>
+                                @foreach (var tt in Model.TalepTipleri)
+                                {
+                                    <option value="@tt">@tt</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold small">Kategori <span class="text-danger">*</span></label>
+                            <select class="form-select" name="kategori" required>
+                                @foreach (var k in Model.Kategoriler)
+                                {
+                                    <option value="@k">@k</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold small">Öncelik</label>
+                            <select class="form-select" name="oncelik">
+                                @foreach (var o in Model.Oncelikler)
+                                {
+                                    <option value="@o" selected="@(o == "Normal")">@o</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-bold small">Başlık <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="baslik" maxlength="300" required
+                                   placeholder="Sorunu tek cümlede özetleyin">
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-bold small">Açıklama</label>
+                            <textarea class="form-control" name="aciklama" rows="5"
+                                      placeholder="Ne yaptığınızda oluyor? Hata mesajı var mı? Hangi ekran / rapor?"></textarea>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold small">E-Posta <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" name="email" required value="@Model.Email"
+                                   placeholder="kullanici@@ornek.local">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold small">Departman</label>
+                            <input type="text" class="form-control" name="departman" maxlength="100" placeholder="Muhasebe, Satış...">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold small">Telefon / Dahili</label>
+                            <input type="text" class="form-control" name="telefon" maxlength="40" placeholder="1234">
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-bold small">
+                                Ekran Görüntüsü / Dosya
+                                <span class="text-muted fw-normal">(en fazla 6 dosya, her biri 10 MB)</span>
+                            </label>
+                            <div class="dropzone" id="dropzone">
+                                <i class="fas fa-cloud-arrow-up d-block mb-2"></i>
+                                <div class="fw-bold" style="font-size:.9rem;">Dosyaları buraya sürükleyin veya tıklayıp seçin</div>
+                                <div class="text-muted" style="font-size:.75rem; margin-top:4px;">
+                                    Ekran görüntüsünü <b>Ctrl+V</b> ile de yapıştırabilirsiniz &middot; jpg, png, gif, webp, pdf, docx, xlsx, txt
+                                </div>
+                                <input type="file" id="dosyaInput" multiple class="d-none"
+                                       accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.pdf,.txt,.log,.doc,.docx,.xls,.xlsx,.csv">
+                            </div>
+                            <div class="dz-list" id="dzList"></div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                <button type="button" class="btn btn-primary" id="btnTalepGonder" onclick="talepGonder()">
+                    <i class="fas fa-paper-plane me-2"></i>Talebi Gönder
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================ DETAY MODALI ============================ -->
+<div class="modal fade" id="detayModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header text-white" style="background:linear-gradient(135deg,#0f172a,#1e293b);">
+                <h5 class="modal-title fw-bold" id="detayBaslik">Talep Detayı</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="detayGovde">
+                <div class="text-center py-5 text-muted">
+                    <i class="fas fa-spinner fa-spin fa-2x"></i>
+                    <div class="mt-2">Yükleniyor...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Görsel büyütme -->
+<div class="lightbox" id="lightbox" onclick="lightboxKapat()">
+    <button class="kapat" type="button"><i class="fas fa-times"></i></button>
+    <img id="lightboxImg" alt="Ek görsel">
+</div>
+
+@section Scripts {
+    <script>
+        var YETKILI = @(yetkili ? "true" : "false");
+        var DURUMLAR = @Html.Raw(Json.Serialize(Model.Durumlar));
+        var ONCELIKLER = @Html.Raw(Json.Serialize(Model.Oncelikler));
+        var PERSONELLER = @Html.Raw(Json.Serialize(Model.Personeller.Select(x => new { kod = x.Kod, ad = x.Ad })));
+        var KULLANICI = '@Model.KullaniciKodu';
+        var seciliDurum = 'Tümü';
+        var secilenDosyalar = [];
+        var aktifTalepId = 0;
+
+        function token() { return $('input[name="__RequestVerificationToken"]').first().val(); }
+
+        function bildir(basarili, mesaj) {
+            if (window.toastr) {
+                toastr.options = { positionClass: 'toast-bottom-right', timeOut: 4000, progressBar: true };
+                basarili ? toastr.success(mesaj) : toastr.error(mesaj);
+            } else {
+                alert(mesaj);
+            }
+        }
+
+        function kacir(s) { return $('<div>').text(s == null ? '' : s).html(); }
+
+        /* =================== FİLTRELEME =================== */
+        function durumSec(durum, el) {
+            seciliDurum = durum;
+            $('.durum-pill').removeClass('active');
+            $('.durum-pill[data-durum="' + durum + '"]').addClass('active');
+            $('.stat-box.tiklanir').removeClass('secili');
+            $('.stat-box[data-durum="' + durum + '"]').addClass('secili');
+            listeyiSuz();
+        }
+
+        function listeyiSuz() {
+            var kat = $('#fKategori').val();
+            var onc = $('#fOncelik').val();
+            var q = ($('#fArama').val() || '').toLocaleLowerCase('tr-TR');
+            var gorunen = 0;
+
+            $('#ticketList .ticket').each(function () {
+                var $t = $(this);
+                var uygun = true;
+
+                if (seciliDurum !== 'Tümü' && $t.data('durum') !== seciliDurum) uygun = false;
+                if (uygun && kat && $t.data('kategori') !== kat) uygun = false;
+                if (uygun && onc && $t.data('oncelik') !== onc) uygun = false;
+                if (uygun && q && ('' + $t.data('ara')).indexOf(q) === -1) uygun = false;
+
+                $t.toggle(uygun);
+                if (uygun) gorunen++;
+            });
+
+            $('#sonucYok').toggleClass('d-none', gorunen > 0 || $('#ticketList .ticket').length === 0);
+        }
+
+        /* =================== YENİ TALEP =================== */
+        function yeniTalepAc() {
+            secilenDosyalar = [];
+            $('#dzList').empty();
+            $('#yeniTalepForm')[0].reset();
+            new bootstrap.Modal(document.getElementById('yeniTalepModal')).show();
+        }
+
+        function dosyaEkle(files) {
+            for (var i = 0; i < files.length; i++) {
+                if (secilenDosyalar.length >= 6) { bildir(false, 'En fazla 6 dosya ekleyebilirsiniz.'); break; }
+                var f = files[i];
+                if (f.size > 10 * 1024 * 1024) { bildir(false, '"' + f.name + '" 10 MB sınırını aşıyor.'); continue; }
+                secilenDosyalar.push(f);
+            }
+            dosyaListesiCiz();
+        }
+
+        function dosyaListesiCiz() {
+            var $l = $('#dzList').empty();
+
+            secilenDosyalar.forEach(function (f, i) {
+                var $k = $('<div class="dz-item"></div>');
+                $k.append('<button type="button" class="dz-sil" onclick="dosyaCikar(' + i + ')"><i class="fas fa-times"></i></button>');
+
+                if (f.type && f.type.indexOf('image/') === 0) {
+                    var img = $('<img alt="önizleme">');
+                    var okuyucu = new FileReader();
+                    okuyucu.onload = function (e) { img.attr('src', e.target.result); };
+                    okuyucu.readAsDataURL(f);
+                    $k.append(img);
+                } else {
+                    $k.append('<i class="fas fa-file-lines fa-lg mb-1" style="color:var(--metro-primary);"></i>');
+                    $k.append('<span>' + kacir(f.name.substring(0, 18)) + '</span>');
+                }
+                $l.append($k);
+            });
+        }
+
+        function dosyaCikar(i) {
+            secilenDosyalar.splice(i, 1);
+            dosyaListesiCiz();
+        }
+
+        function talepGonder() {
+            var form = document.getElementById('yeniTalepForm');
+            if (!form.checkValidity()) { form.reportValidity(); return; }
+
+            var fd = new FormData(form);
+            fd.append('__RequestVerificationToken', token());
+            secilenDosyalar.forEach(function (f) { fd.append('dosyalar', f); });
+
+            var $btn = $('#btnTalepGonder').prop('disabled', true)
+                .html('<i class="fas fa-spinner fa-spin me-2"></i>Gönderiliyor...');
+
+            $.ajax({
+                url: '/Home/YeniITIstek',
+                type: 'POST',
+                data: fd,
+                processData: false,
+                contentType: false
+            }).done(function (res) {
+                if (res.success) {
+                    bildir(true, res.message);
+                    setTimeout(function () { location.reload(); }, 900);
+                } else {
+                    bildir(false, res.message);
+                    $btn.prop('disabled', false).html('<i class="fas fa-paper-plane me-2"></i>Talebi Gönder');
+                }
+            }).fail(function () {
+                bildir(false, 'Sunucuya ulaşılamadı.');
+                $btn.prop('disabled', false).html('<i class="fas fa-paper-plane me-2"></i>Talebi Gönder');
+            });
+        }
+
+        /* =================== DETAY =================== */
+        function detayAc(id) {
+            aktifTalepId = id;
+            $('#detayBaslik').text('Talep #' + id);
+            $('#detayGovde').html('<div class="text-center py-5 text-muted"><i class="fas fa-spinner fa-spin fa-2x"></i><div class="mt-2">Yükleniyor...</div></div>');
+            new bootstrap.Modal(document.getElementById('detayModal')).show();
+
+            $.getJSON('/Home/ITTalepDetay', { id: id }, function (res) {
+                if (!res.success) { $('#detayGovde').html('<div class="alert alert-danger">' + kacir(res.message) + '</div>'); return; }
+                $('#detayGovde').html(detayHtml(res));
+            }).fail(function () {
+                $('#detayGovde').html('<div class="alert alert-danger">Detay alınamadı.</div>');
+            });
+        }
+
+        function durumRozet(d) {
+            var s = d === 'Açık' ? 'tag-mavi' : d === 'İşlemde' ? 'tag-mor'
+                  : d === 'Beklemede' ? 'tag-sari' : d === 'Tamamlandı' ? 'tag-yesil' : 'tag-gri';
+            return '<span class="tag ' + s + '">' + kacir(d) + '</span>';
+        }
+
+        function detayHtml(res) {
+            var t = res.talep;
+            var h = '<div class="row g-4">';
+
+            /* --- SOL: bilgi + açıklama + ekler + yorumlar --- */
+            h += '<div class="col-lg-7">';
+            h += '<h5 class="fw-bold mb-3" style="letter-spacing:-.02em;">' + kacir(t.baslik) + '</h5>';
+
+            h += '<div class="mb-3">' + durumRozet(t.durum)
+               + ' <span class="tag ' + (t.oncelik === 'Kritik' ? 'tag-kirmizi' : t.oncelik === 'Yüksek' ? 'tag-sari' : 'tag-gri') + '">' + kacir(t.oncelik) + '</span>'
+               + ' <span class="tag tag-gri">' + kacir(t.kategori) + '</span>'
+               + ' <span class="tag tag-gri">' + kacir(t.talepTipi) + '</span></div>';
+
+            h += '<div class="mb-3" style="background:var(--bg-subtle,#f8fafc); border-left:4px solid var(--metro-primary); padding:14px; border-radius:10px; font-size:.86rem; white-space:pre-wrap;">'
+               + (t.aciklama ? kacir(t.aciklama) : '<span class="text-muted">Açıklama girilmemiş.</span>') + '</div>';
+
+            if (t.cozumNotu) {
+                h += '<div class="mb-3" style="background:#ecfdf5; border-left:4px solid #10b981; padding:14px; border-radius:10px; font-size:.86rem; white-space:pre-wrap;">'
+                   + '<b>Çözüm Notu</b><br/>' + kacir(t.cozumNotu) + '</div>';
+            }
+
+            /* Ekler */
+            h += '<div class="d-flex align-items-center justify-content-between mb-2 mt-4">'
+               + '<h6 class="fw-bold mb-0"><i class="fas fa-paperclip me-2"></i>Ekler (' + res.ekler.length + ')</h6>'
+               + '<button class="btn btn-sm btn-light-primary" onclick="$(\'#ekEkleInput\').click()"><i class="fas fa-plus me-1"></i>Dosya ekle</button>'
+               + '<input type="file" id="ekEkleInput" multiple class="d-none" onchange="ekYukle(this.files)">'
+               + '</div>';
+
+            if (res.ekler.length) {
+                h += '<div class="ek-galeri mb-3">';
+                res.ekler.forEach(function (e) {
+                    h += '<div class="ek-kutu">';
+                    if (res.yetkili) {
+                        h += '<button class="ek-sil" onclick="ekSil(' + e.id + ')" title="Sil"><i class="fas fa-times"></i></button>';
+                    }
+                    if (e.resimMi) {
+                        h += '<img src="' + e.dosyaYolu + '" onclick="lightboxAc(\'' + e.dosyaYolu + '\')" alt="' + kacir(e.dosyaAdi) + '">';
+                    } else {
+                        h += '<a href="' + e.dosyaYolu + '" target="_blank" class="ek-dosya"><i class="fas fa-file-arrow-down"></i></a>';
+                    }
+                    h += '<div class="ek-ad">' + kacir(e.dosyaAdi) + '<br/><span class="text-muted">' + kacir(e.boyut) + '</span></div>';
+                    h += '</div>';
+                });
+                h += '</div>';
+            } else {
+                h += '<div class="text-muted small mb-3">Ek yok.</div>';
+            }
+
+            /* Yorumlar */
+            h += '<h6 class="fw-bold mb-2 mt-4"><i class="fas fa-comments me-2"></i>Hareketler &amp; Notlar</h6>';
+            h += '<div style="max-height:280px; overflow-y:auto; padding-right:6px;">';
+
+            if (res.yorumlar.length) {
+                res.yorumlar.forEach(function (y) {
+                    var ad = y.kullanciGosterim || '';
+                    var bas = ad ? ad.trim().substring(0, 2).toLocaleUpperCase('tr-TR') : '?';
+                    h += '<div class="yorum ' + (y.sistemNotuMu ? 'sistem' : '') + '">'
+                       + '<div class="av">' + (y.sistemNotuMu ? '<i class="fas fa-gear"></i>' : kacir(bas)) + '</div>'
+                       + '<div class="yz"><div class="ust"><b>' + kacir(ad) + '</b><span>' + kacir(y.tarih) + '</span></div>'
+                       + '<div class="mt">' + kacir(y.yorum) + '</div></div></div>';
+                });
+            } else {
+                h += '<div class="text-muted small">Henüz not yok.</div>';
+            }
+            h += '</div>';
+
+            h += '<div class="input-group mt-3">'
+               + '<input type="text" class="form-control" id="yeniYorum" placeholder="Not / yorum yazın..." onkeydown="if(event.key===\'Enter\'){ event.preventDefault(); yorumEkle(); }">'
+               + '<button class="btn btn-primary" id="yorumGonderBtn" onclick="yorumEkle()"><i class="fas fa-paper-plane"></i></button>'
+               + '</div>';
+
+            h += '</div>';
+
+            /* --- SAĞ: bilgi kartı + IT aksiyonları --- */
+            h += '<div class="col-lg-5">';
+            h += '<div style="background:var(--bg-subtle,#f8fafc); border:1px solid var(--border-color); border-radius:14px; padding:14px 16px;">';
+            h += satir('Talep No', '#' + t.id);
+            h += satir('Talep Eden', t.kullaniciAdi + ' (' + t.userCode + ')');
+            h += satir('E-Posta', t.email);
+            h += satir('Departman', t.departman || '-');
+            h += satir('Telefon', t.telefon || '-');
+            h += satir('Oluşturma', t.olusturma);
+            h += satir('Son Güncelleme', t.guncelleme || '-');
+            h += satir('Atanan', t.atananAdi || '-');
+            if (t.tamamlanma) { h += satir('Kapanış', t.tamamlanma + (t.tamamlayanAdi ? ' · ' + t.tamamlayanAdi : '')); }
+            h += '</div>';
+
+            if (res.yetkili) {
+                h += '<div style="border:1px solid var(--border-color); border-radius:14px; padding:16px; margin-top:14px;">';
+                h += '<h6 class="fw-bold mb-3"><i class="fas fa-user-gear me-2"></i>IT İşlemleri</h6>';
+
+                h += '<label class="form-label small fw-bold">Durum</label>';
+                h += '<select class="form-select form-select-sm mb-2" id="dDurum">' + secenekler(DURUMLAR, t.durum) + '</select>';
+
+                h += '<label class="form-label small fw-bold">Öncelik</label>';
+                h += '<select class="form-select form-select-sm mb-2" id="dOncelik">' + secenekler(ONCELIKLER, t.oncelik) + '</select>';
+
+                h += '<label class="form-label small fw-bold">Atanan Kişi</label>';
+                h += '<select class="form-select form-select-sm mb-2" id="dAtanan">'
+                   + '<option value="">- Atanmadı -</option>'
+                   + PERSONELLER.map(function (pr) {
+                         return '<option value="' + kacir(pr.kod) + '"' + (t.atanan === pr.kod ? ' selected' : '') + '>' + kacir(pr.ad) + '</option>';
+                     }).join('')
+                   + '</select>';
+
+                h += '<label class="form-label small fw-bold">Çözüm Notu</label>';
+                h += '<textarea class="form-control form-control-sm mb-3" id="dCozum" rows="4" placeholder="Yapılan işlem / çözüm...">' + kacir(t.cozumNotu || '') + '</textarea>';
+
+                h += '<div class="d-grid gap-2">';
+                h += '<button class="btn btn-primary btn-sm" onclick="talepGuncelle()"><i class="fas fa-floppy-disk me-2"></i>Kaydet</button>';
+                h += '<button class="btn btn-success btn-sm" onclick="$(\'#dDurum\').val(\'Tamamlandı\'); talepGuncelle();"><i class="fas fa-circle-check me-2"></i>Çöz ve Kapat</button>';
+                h += '</div></div>';
+            }
+
+            h += '</div></div>';
+            return h;
+        }
+
+        function secenekler(liste, secili) {
+            return (liste || []).map(function (x) {
+                return '<option value="' + kacir(x) + '"' + (x === secili ? ' selected' : '') + '>' + kacir(x) + '</option>';
+            }).join('');
+        }
+
+        function satir(k, v) {
+            return '<div class="det-satir"><div class="k">' + kacir(k) + '</div><div class="v">' + kacir(v) + '</div></div>';
+        }
+
+        /* =================== DETAY AKSİYONLARI =================== */
+        function talepGuncelle() {
+            $.post('/Home/ITTalepGuncelle', {
+                id: aktifTalepId,
+                durum: $('#dDurum').val(),
+                oncelik: $('#dOncelik').val(),
+                atanan: $('#dAtanan').val(),
+                cozumNotu: $('#dCozum').val(),
+                __RequestVerificationToken: token()
+            }, function (res) {
+                bildir(res.success, res.message);
+                if (res.success) setTimeout(function () { location.reload(); }, 800);
+            }).fail(function () { bildir(false, 'Sunucuya ulaşılamadı.'); });
+        }
+
+        // Ayni yorumun iki kez gitmesini onler: istek surerken yeni gonderim
+        // kabul edilmez, kutu bosaltilir ve dugme kilitlenir. Sunucu tarafinda da
+        // ayrica mukerrer kontrolu vardir.
+        var yorumGonderiliyor = false;
+
+        function yorumEkle() {
+            if (yorumGonderiliyor) return;
+
+            var kutu = $('#yeniYorum');
+            var y = (kutu.val() || '').trim();
+            if (!y) return;
+
+            var dugme = $('#yorumGonderBtn');
+
+            yorumGonderiliyor = true;
+            kutu.prop('disabled', true);
+            dugme.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+
+            $.post('/Home/ITTalepYorumEkle', {
+                id: aktifTalepId, yorum: y, __RequestVerificationToken: token()
+            }, function (res) {
+                bildir(res.success, res.message);
+                if (res.success) {
+                    kutu.val('');            // ikinci basista gonderilecek metin kalmasin
+                    detayAc(aktifTalepId);   // liste yeniden cizilir
+                }
+            }).fail(function () {
+                bildir(false, 'Sunucuya ulaşılamadı.');
+            }).always(function () {
+                yorumGonderiliyor = false;
+                kutu.prop('disabled', false);
+                dugme.prop('disabled', false).html('<i class="fas fa-paper-plane"></i>');
+            });
+        }
+
+        function ekYukle(files) {
+            if (!files || !files.length) return;
+
+            var fd = new FormData();
+            fd.append('id', aktifTalepId);
+            fd.append('__RequestVerificationToken', token());
+            for (var i = 0; i < files.length; i++) fd.append('dosyalar', files[i]);
+
+            $.ajax({ url: '/Home/ITTalepEkYukle', type: 'POST', data: fd, processData: false, contentType: false })
+                .done(function (res) {
+                    bildir(res.success, res.message);
+                    if (res.success) detayAc(aktifTalepId);
+                })
+                .fail(function () { bildir(false, 'Dosya yüklenemedi.'); });
+        }
+
+        function ekSil(ekId) {
+            if (!confirm('Bu ek silinsin mi?')) return;
+
+            $.post('/Home/ITTalepEkSil', { ekId: ekId, __RequestVerificationToken: token() }, function (res) {
+                bildir(res.success, res.message);
+                if (res.success) detayAc(aktifTalepId);
+            }).fail(function () { bildir(false, 'Sunucuya ulaşılamadı.'); });
+        }
+
+        /* =================== LIGHTBOX =================== */
+        function lightboxAc(src) {
+            $('#lightboxImg').attr('src', src);
+            $('#lightbox').addClass('acik');
+        }
+        function lightboxKapat() { $('#lightbox').removeClass('acik'); }
+
+        /* =================== BAĞLAMALAR =================== */
+        $(document).ready(function () {
+            // Modal ve lightbox sayfa içeriğinin (.main-content > .table-container) içinde
+            // kalırsa, Bootstrap backdrop'u body'ye eklediği için üstlerine biniyor ve
+            // ekran bulanık/tıklanamaz görünüyor. Bunları doğrudan body'ye taşıyoruz.
+            ['#yeniTalepModal', '#detayModal', '#lightbox'].forEach(function (sec) {
+                var $e = $(sec);
+                if ($e.length && !$e.parent().is('body')) $e.appendTo('body');
+            });
+
+            var dz = document.getElementById('dropzone');
+
+            dz.addEventListener('click', function () { $('#dosyaInput').click(); });
+            $('#dosyaInput').on('change', function () { dosyaEkle(this.files); this.value = ''; });
+
+            ['dragenter', 'dragover'].forEach(function (ev) {
+                dz.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); dz.classList.add('uzerinde'); });
+            });
+            ['dragleave', 'drop'].forEach(function (ev) {
+                dz.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); dz.classList.remove('uzerinde'); });
+            });
+            dz.addEventListener('drop', function (e) {
+                if (e.dataTransfer && e.dataTransfer.files) dosyaEkle(e.dataTransfer.files);
+            });
+
+            // Ekran görüntüsünü Ctrl+V ile yapıştırma
+            document.addEventListener('paste', function (e) {
+                if (!$('#yeniTalepModal').hasClass('show')) return;
+                var items = (e.clipboardData || {}).items || [];
+                var bulunanlar = [];
+
+                for (var i = 0; i < items.length; i++) {
+                    if (items[i].kind === 'file') {
+                        var f = items[i].getAsFile();
+                        if (f) bulunanlar.push(f);
+                    }
+                }
+                if (bulunanlar.length) { dosyaEkle(bulunanlar); bildir(true, 'Görsel panodan eklendi.'); }
+            });
+
+            $(document).on('keydown', function (e) {
+                if (e.key === 'Escape') lightboxKapat();
+            });
+        });
+    </script>
+}

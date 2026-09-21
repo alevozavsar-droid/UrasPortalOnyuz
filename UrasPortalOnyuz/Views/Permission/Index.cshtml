@@ -1,0 +1,2118 @@
+﻿@model Dictionary<string, List<WebApplication3.Models.AppMenu>>
+@{
+    ViewData["Title"] = "Sistem Yetki Yönetimi";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    
+    var roles = ViewBag.Roles as List<WebApplication3.Models.AppRole>;
+    var databases = ViewBag.Databases as List<WebApplication3.Models.AppDatabase>;
+    var kategoriler = ViewBag.Categories as List<string> ?? new List<string>();
+    var baslikTanimlari = ViewBag.MenuCategories as List<WebApplication3.Models.AppMenuCategory>
+                          ?? new List<WebApplication3.Models.AppMenuCategory>();
+
+    string[] borderColors = { "primary", "warning", "success", "danger", "purple" };
+    int colorIndex = 0;
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f4f7fc; font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #2b3445; }
+        
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); transition: all 0.3s ease; position: relative; overflow: hidden; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        .border-top-warning { border-top: 4px solid #f59e0b !important; }
+        .border-top-danger { border-top: 4px solid #ef4444 !important; }
+        .border-top-success { border-top: 4px solid #10b981 !important; }
+        .border-top-purple { border-top: 4px solid #8b5cf6 !important; }
+        .border-top-info { border-top: 4px solid #0dcaf0 !important; }
+
+        .role-list-item { border: none; border-bottom: 1px solid #f1f5f9; padding: 15px 20px; transition: all 0.2s; cursor: pointer; display: flex; flex-direction: column; justify-content: center; }
+        .role-list-item:last-child { border-bottom: none; }
+        .role-list-item:hover { background-color: #f8fafc; padding-left: 25px; border-left: 3px solid #cbd5e1; }
+        .role-list-item.active-role { background-color: #eff6ff; border-left: 4px solid #3b82f6; padding-left: 25px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); }
+        
+        .role-code-badge { background-color: #e2e8f0; color: #475569; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 11px; }
+        .active-role .role-code-badge { background-color: #3b82f6; color: #ffffff; }
+
+        .category-title { font-size: 13px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 15px; }
+        
+        .menu-item-row { padding: 8px 10px; border-radius: 6px; transition: background-color 0.2s; }
+        .menu-item-row:hover { background-color: #f8fafc; }
+        
+        .form-check-input { cursor: pointer; border-color: #cbd5e1; }
+        .form-check-label { cursor: pointer; font-size: 13px; font-weight: 600; color: #475569; margin-top: 3px; }
+        
+        /* ---- Kullanıcı yetkileri ---- */
+        .yonetim-sekme .nav-link { border-radius: 10px; font-weight: 600; font-size: .86rem; color: #475569; padding: 9px 16px; margin-right: 6px; background: #fff; border: 1px solid #e2e8f0; }
+        .yonetim-sekme .nav-link:hover { background: #eef7ff; color: #2563eb; }
+        .yonetim-sekme .nav-link.active { background: linear-gradient(135deg,#3b82f6,#6366f1); color: #fff; border-color: transparent; box-shadow: 0 6px 14px rgba(59,130,246,.25); }
+        .kisi-panel { padding: 0; overflow: hidden; }
+        .kisi-liste { }
+        .kisi-satir { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background .15s; }
+        .kisi-satir:hover { background: #f8fafc; }
+        .kisi-satir.aktif { background: #eef7ff; box-shadow: inset 4px 0 0 #3b82f6; }
+        .kisi-satir.kilitli { opacity: .75; background: #fafafa; }
+        .kisi-altsekme { display: flex; background: #f1f5f9; border-radius: 9px; padding: 3px; gap: 3px; }
+        .kisi-altsekme button { flex: 1; border: none; background: transparent; color: #475569; font-weight: 600; font-size: .76rem; padding: 5px 8px; border-radius: 7px; cursor: pointer; }
+        .kisi-altsekme button .cnt { font-size: .66rem; background: #e2e8f0; color: #475569; border-radius: 20px; padding: 1px 7px; margin-left: 4px; }
+        .kisi-altsekme button.active { background: #fff; color: #2563eb; box-shadow: 0 1px 4px rgba(15,23,42,.12); }
+        .kisi-altsekme button[data-durum="pasif"].active { color: #b91c1c; }
+        .kisi-altsekme button.active .cnt { background: #dbeafe; color: #1d4ed8; }
+        .kisi-altsekme button[data-durum="pasif"].active .cnt { background: #fee2e2; color: #b91c1c; }
+        .kisi-kilit { border: 1px solid #e2e8f0; background: #fff; color: #64748b; border-radius: 7px; font-size: .66rem; font-weight: 700; padding: 2px 7px; cursor: pointer; white-space: nowrap; flex: 0 0 auto; }
+        .kisi-kilit:hover { border-color: #f59e0b; color: #b45309; background: #fffbeb; }
+        .kisi-kilit.aktifle:hover { border-color: #16a34a; color: #15803d; background: #f0fdf4; }
+        .kisi-avatar { width: 36px; height: 36px; border-radius: 50%; color: #fff; font-weight: 700; font-size: .8rem; display: flex; align-items: center; justify-content: center; flex: 0 0 36px; letter-spacing: .03em; }
+        .kisi-avatar.buyuk { width: 48px; height: 48px; flex-basis: 48px; font-size: 1rem; }
+        .kisi-kod { font-weight: 700; font-size: .84rem; color: #1e293b; }
+        .kisi-yetki { background: #e2e8f0; color: #475569; border-radius: 6px; padding: 1px 7px; font-size: .68rem; font-weight: 700; }
+        .kisi-ad { font-size: .76rem; color: #475569; }
+        .kisi-alt { font-size: .7rem; color: #94a3b8; }
+        .kisi-baslik { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding: 16px 20px; border-bottom: 1px solid #eef2f7; background: linear-gradient(180deg,#fbfcfe,#f5f7fb); position: sticky; top: 0; z-index: 3; }
+        .kisi-bos { text-align: center; color: #94a3b8; padding: 90px 20px; }
+        .kisi-bos i { font-size: 3rem; opacity: .35; }
+        .kisi-bolum { margin-bottom: 18px; }
+        .kisi-bolum-baslik { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: .86rem; color: #1e293b; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #e2e8f0; }
+        .kisi-bolum-baslik a { font-size: .74rem; font-weight: 600; text-decoration: none; }
+        .kisi-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #e2e8f0; border-radius: 999px; padding: 4px 12px 4px 8px; font-size: .78rem; background: #fff; cursor: pointer; transition: all .15s; margin: 0; }
+        .kisi-chip:has(input:checked) { background: #eef7ff; border-color: #3b82f6; color: #1d4ed8; font-weight: 600; }
+        .kisi-chip input { margin: 0; }
+        .kisi-kat-kart { border: 1px solid #e9eef5; border-radius: 12px; background: #fff; height: 100%; overflow: hidden; }
+        .kisi-kat-baslik { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #f8fafc; font-weight: 700; font-size: .78rem; color: #334155; cursor: pointer; border-bottom: 1px solid #eef2f7; }
+        .kisi-kat-baslik:hover { background: #eef7ff; }
+        .kisi-kat-sayac { font-size: .68rem; background: #e2e8f0; color: #475569; border-radius: 999px; padding: 1px 8px; font-weight: 600; }
+        .kisi-kat-sayac.tam { background: #3b82f6; color: #fff; }
+        .kisi-menu { display: flex; align-items: center; gap: 8px; padding: 5px 12px; font-size: .78rem; margin: 0; cursor: pointer; border-bottom: 1px solid #f6f8fb; }
+        .kisi-menu:hover { background: #f8fafc; }
+        .kisi-menu:has(input:checked) { background: #f0f7ff; color: #1d4ed8; font-weight: 600; }
+        .kisi-menu input { margin: 0; }
+        #kisiEditor { }
+        
+        .nav-tabs .nav-link { color: #64748b; font-size: 14px; border: none; border-bottom: 2px solid transparent; padding: 10px 20px; }
+        .nav-tabs .nav-link:hover { border-color: #cbd5e1; }
+        .nav-tabs .nav-link.active { color: #3b82f6; border-color: #3b82f6; background: transparent; font-weight: 700; }
+
+        /* ==================================================================
+           MODERN GÖRÜNÜM KATMANI (portalın yeni tasarım dili)
+           ================================================================== */
+        body { background-color: var(--bg-main, #f4f6fb); }
+
+        .dashboard-card {
+            border-radius: var(--r-lg, 18px);
+            border: 1px solid var(--border-color, #e8ecf4);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* Sekmeler: hap görünümü */
+        .nav-tabs { border-bottom: none !important; gap: 8px; }
+        .nav-tabs .nav-link {
+            border: 1px solid var(--border-color, #e8ecf4) !important;
+            border-radius: 999px !important;
+            background: var(--bg-card, #fff);
+            padding: .45rem 1.15rem !important;
+            font-size: .84rem; font-weight: 600;
+        }
+        .nav-tabs .nav-link:hover { background: var(--metro-primary-light, #eef7ff); color: var(--metro-primary, #009ef7); }
+        .nav-tabs .nav-link.active {
+            background: linear-gradient(135deg,#009ef7,#6366f1) !important;
+            color: #fff !important; border-color: transparent !important;
+            box-shadow: 0 5px 14px rgba(0,158,247,.28);
+        }
+
+        /* Rol listesi */
+        .role-list-item { padding: 12px 18px; border-radius: 12px; margin: 4px 8px; border-bottom: none; }
+        .role-list-item:hover { background: var(--metro-primary-light, #eef7ff); padding-left: 22px; border-left: none; }
+        .role-list-item.active-role {
+            background: linear-gradient(135deg, rgba(0,158,247,.12), rgba(99,102,241,.12));
+            border-left: 3px solid var(--metro-primary, #009ef7);
+            box-shadow: none;
+        }
+        .role-code-badge { border-radius: 7px; font-size: 10.5px; letter-spacing: .04em; }
+        .active-role .role-code-badge { background: linear-gradient(135deg,#009ef7,#6366f1); }
+
+        /* Kategori kartları */
+        .category-title {
+            font-size: .72rem; letter-spacing: .08em;
+            border-bottom: 2px solid var(--border-color, #eef2f7);
+            display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        }
+        .kategori-sayac {
+            font-size: .65rem; font-weight: 800; padding: .15rem .5rem; border-radius: 999px;
+            background: var(--metro-primary-light, #eef7ff); color: var(--metro-primary, #009ef7);
+        }
+        .menu-item-row { padding: 6px 8px; border-radius: 8px; }
+        .menu-item-row:hover { background: var(--metro-primary-light, #eef7ff); }
+        .form-check-label { font-size: 12.5px; }
+
+        .menu-list { max-height: 320px; overflow-y: auto; padding-right: 4px; }
+        .menu-list::-webkit-scrollbar { width: 8px; }
+        .menu-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+
+        /* Arama ve toplu seçim çubuğu */
+        .yetki-arac-cubugu {
+            background: var(--bg-card, #fff); border: 1px solid var(--border-color, #e8ecf4);
+            border-radius: var(--r-lg, 18px); padding: 12px 14px; margin-bottom: 1rem;
+            display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+            box-shadow: var(--shadow-sm);
+        }
+        .yetki-arac-cubugu .form-control { height: 38px; border-radius: 10px; font-size: .84rem; }
+
+        .kategori-gizli { display: none !important; }
+
+        .btn { border-radius: 10px; font-weight: 600; }
+        .text-purple { color: #8b5cf6 !important; }
+
+        /* Rapor duzenleme kalemi: satirin uzerine gelince cikar */
+        .menu-duzenle {
+            opacity: 0; border: none; background: transparent; cursor: pointer;
+            color: var(--text-secondary, #64748b); padding: 2px 6px; border-radius: 6px;
+            font-size: .78rem; transition: opacity .15s ease, background .15s ease;
+        }
+        .menu-item-row:hover .menu-duzenle { opacity: 1; }
+        .menu-duzenle:hover { background: var(--metro-primary-light, #eef7ff); color: var(--metro-primary, #009ef7); }
+
+        .baslik-duzenle {
+            border: none; background: transparent; cursor: pointer; padding: 0 4px;
+            color: var(--text-secondary, #94a3b8); font-size: .7rem;
+        }
+        .baslik-duzenle:hover { color: var(--metro-primary, #009ef7); }
+
+        .menu-sira {
+            font-size: .62rem; font-weight: 800; color: var(--text-secondary, #94a3b8);
+            min-width: 18px; text-align: right;
+        }
+
+        /* ---- Menu / sirket secim kutulari: net gorunur tik ---- */
+        .menu-item-row { display: flex; align-items: center; gap: 10px; padding-left: 8px !important; }
+        .menu-item-row .form-check-input {
+            flex: 0 0 auto;
+            width: 1.15rem; height: 1.15rem;
+            margin: 0; float: none;
+            border: 2px solid #b8c2d4; border-radius: 5px;
+            background-color: #fff;
+            cursor: pointer; transition: background-color .15s ease, border-color .15s ease;
+        }
+        .menu-item-row .form-check-input:hover { border-color: var(--metro-primary, #009ef7); }
+        .menu-item-row .form-check-input:checked {
+            background-color: var(--metro-primary, #009ef7);
+            border-color: var(--metro-primary, #009ef7);
+        }
+        .menu-item-row .form-check-input:focus {
+            box-shadow: 0 0 0 3px rgba(0,158,247,.22); border-color: var(--metro-primary, #009ef7);
+        }
+        .menu-item-row .form-check-label { margin: 0; flex: 1; min-width: 0; }
+        .menu-item-row:has(.form-check-input:checked) {
+            background: var(--metro-primary-light, #eef7ff);
+        }
+        .menu-item-row:has(.form-check-input:checked) .form-check-label {
+            color: var(--metro-primary, #009ef7); font-weight: 700;
+        }
+    </style>
+}
+
+<div class="container-fluid py-4">
+    @Html.AntiForgeryToken()
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;">Kullanıcı Yetki Yönetimi</h4>
+            <span class="text-muted" style="font-size: 14px;">Her kullanıcının görebileceği raporlar ve şirketler kişi bazında tanımlanır.</span>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <!-- YENİ EKLENEN ŞİRKETLERİ SENKRONİZE ET BUTONU -->
+            <button class="btn btn-outline-warning rounded-pill px-3 shadow-sm hover-elevate fw-bold bg-white" onclick="syncDatabases()">
+                <i class="fas fa-sync me-1"></i> Şirketleri Çek
+            </button>
+
+            <!-- SAP KULLANICI YÖNETİMİ BUTONU -->
+            <button class="btn btn-outline-success rounded-pill px-3 shadow-sm hover-elevate fw-bold bg-white" onclick="openSapUserModal()">
+                <i class="fas fa-users-cog me-1"></i> SAP Kullanıcı
+            </button>
+            <button class="btn btn-outline-primary rounded-pill px-3 shadow-sm hover-elevate fw-bold bg-white" onclick="$('#addReportModal').modal('show')">
+                <i class="fas fa-plus me-1"></i> Yeni Rapor
+            </button>
+        </div>
+    </div>
+
+    <!-- ================= SEKMELER ================= -->
+    <ul class="nav nav-pills yonetim-sekme mb-3" id="permissionsTab" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="kisi-tab" data-bs-toggle="tab" data-bs-target="#kisi-pane" type="button" role="tab">
+                <i class="fas fa-user-shield me-2"></i>Kullanıcı Yetkileri
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="rapor-tab" data-bs-toggle="tab" data-bs-target="#rapor-pane" type="button" role="tab">
+                <i class="fas fa-eye me-2"></i>Rapor Bazlı Yetki
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="menus-tab" data-bs-toggle="tab" data-bs-target="#menus-pane" type="button" role="tab">
+                <i class="fas fa-file-alt me-2"></i>Raporlar & Menüler
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="dbs-tab" data-bs-toggle="tab" data-bs-target="#dbs-pane" type="button" role="tab">
+                <i class="fas fa-database me-2"></i>Şirketler
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="cats-tab" data-bs-toggle="tab" data-bs-target="#cats-pane" type="button" role="tab">
+                <i class="fas fa-folder-tree me-2"></i>Menü Başlıkları
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="yeni-tab" data-bs-toggle="tab" data-bs-target="#yeni-pane" type="button" role="tab">
+                <i class="fas fa-wand-magic-sparkles me-2"></i>Projeden Algılananlar
+                <span id="yeniRaporRozet" class="badge bg-danger ms-1" style="display:none;">0</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="sistem-tab" data-bs-toggle="tab" data-bs-target="#sistem-pane" type="button" role="tab">
+                <i class="fas fa-server me-2"></i>Sistem İşlemleri
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="wa-tab" data-bs-toggle="tab" data-bs-target="#wa-pane" type="button" role="tab">
+                <i class="fab fa-whatsapp me-2"></i>WhatsApp
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="permissionsTabContent">
+
+        <!-- ================= SİSTEM İŞLEMLERİ (Bakım Planla / Sistemi Kapat / Üretim Portalı) ================= -->
+        <div class="tab-pane fade" id="sistem-pane" role="tabpanel">
+            <div class="row g-3">
+                <div class="col-xl-4 col-md-6">
+                    <div class="dashboard-card hover-elevate p-4 h-100" style="border-top: 4px solid #f59e0b;">
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            <span class="d-inline-flex align-items-center justify-content-center rounded-3" style="width:48px;height:48px;background:linear-gradient(135deg,#f59e0b,#f97316);color:#fff;font-size:1.25rem;"><i class="fas fa-tools"></i></span>
+                            <div><h5 class="fw-bold mb-0">Bakım Planla</h5><small class="text-muted">Planlı bakım duyurusu ve sürüm notları</small></div>
+                        </div>
+                        <p class="text-muted" style="font-size:.85rem;">Tüm kullanıcılara üst şeritte geri sayımlı bakım uyarısı gösterir; sürüm notlarını son değişikliklerden otomatik doldurabilir. Aynı pencereden bakımı iptal edebilirsiniz.</p>
+                        <button type="button" class="btn btn-warning fw-bold text-white w-100" onclick="if (typeof bakimPlaniOlustur === 'function') bakimPlaniOlustur(); else Swal.fire('Uyarı', 'Bu işlev bu sayfada yüklenmedi; sayfayı yenileyin.', 'warning');">
+                            <i class="fas fa-tools me-1"></i> Bakım Planla / İptal Et
+                        </button>
+                    </div>
+                </div>
+                <div class="col-xl-4 col-md-6">
+                    <div class="dashboard-card hover-elevate p-4 h-100" style="border-top: 4px solid #ef4444;">
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            <span class="d-inline-flex align-items-center justify-content-center rounded-3" style="width:48px;height:48px;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-size:1.25rem;"><i class="fas fa-power-off"></i></span>
+                            <div><h5 class="fw-bold mb-0">Sistemi Kapat</h5><small class="text-muted">Acil durum: uygulamayı çevrim dışına al</small></div>
+                        </div>
+                        <p class="text-muted" style="font-size:.85rem;">Sunucuda <code>app_offline.htm</code> oluşturur; tüm kullanıcılar için site anında kapanır. Geri açmak için dosyanın sunucudan silinmesi gerekir. <b>Geri alınamaz, iki kez sorulur.</b></p>
+                        <button type="button" class="btn btn-danger fw-bold w-100" onclick="if (typeof imhaEtProtokolu === 'function') imhaEtProtokolu(); else Swal.fire('Uyarı', 'Bu işlev bu sayfada yüklenmedi; sayfayı yenileyin.', 'warning');">
+                            <i class="fas fa-skull-crossbones me-1"></i> Sistemi Kapat
+                        </button>
+                    </div>
+                </div>
+                <div class="col-xl-4 col-md-12">
+                    <div class="dashboard-card hover-elevate p-4 h-100" style="border-top: 4px solid #2563eb;">
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            <span class="d-inline-flex align-items-center justify-content-center rounded-3" style="width:48px;height:48px;background:linear-gradient(135deg,#2563eb,#0ea5e9);color:#fff;font-size:1.25rem;"><i class="fas fa-industry"></i></span>
+                            <div><h5 class="fw-bold mb-0">Uras Üretim Portalı</h5><small class="text-muted">Giriş düğmesi ve ekran yetkileri</small></div>
+                        </div>
+                        <p class="text-muted mb-2" style="font-size:.85rem;">
+                            Sol menüdeki <b>Uras Üretim Portalı</b> düğmesi, <b>Kullanıcı Yetkileri</b> sekmesinde <i>Uras Üretim: Portal › Uras Üretim Portalı (Giriş Düğmesi)</i> işaretli kullanıcılara görünür.
+                            Portal içindeki ekranlar da aynı sekmedeki <i>Uras Üretim: …</i> başlıklarından kişi bazında verilir; verilmeyen ekran portal menüsünde çıkmaz ve adresten de açılamaz.
+                        </p>
+                        <a class="btn btn-outline-primary fw-bold w-100" href="/UrasUretim" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square me-1"></i> Portalı Aç</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= WHATSAPP EKSTRE ASİSTANI ================= -->
+        <div class="tab-pane fade" id="wa-pane" role="tabpanel">
+            <div class="row g-3">
+                <div class="col-xl-7">
+                    <div class="dashboard-card p-4 h-100" style="border-top: 4px solid #25d366;">
+                        <div class="d-flex align-items-center gap-3 mb-2">
+                            <span class="d-inline-flex align-items-center justify-content-center rounded-3" style="width:48px;height:48px;background:linear-gradient(135deg,#25d366,#128c7e);color:#fff;font-size:22px;"><i class="fab fa-whatsapp"></i></span>
+                            <div><h5 class="fw-bold mb-0">WhatsApp Cari Ekstre Asistanı</h5><small class="text-muted">Satışçı şirket hattına cari adını yazar, ekstre PDF'i otomatik gelir</small></div>
+                            <span class="ms-auto badge rounded-pill" id="waAnahtarRozet">…</span>
+                        </div>
+                        <p class="text-muted mb-3" style="font-size:.85rem;">Yalnızca aşağıdaki numaralar cevap alır. Her numara bir portal kullanıcısına bağlanır; o kullanıcının <b>şirket yetkileri</b> geçerlidir. Komutlar: <code>ekstre AKSA</code>, <code>şirket</code>, <code>tarih 2025</code>, <code>yardım</code>.</p>
+                        <div class="row g-2 align-items-end mb-3">
+                            <div class="col-md-3"><label class="form-label small fw-bold mb-1">Telefon</label><input id="waTelefon" class="form-control form-control-sm" placeholder="0532 123 45 67" /></div>
+                            <div class="col-md-3"><label class="form-label small fw-bold mb-1">Portal kullanıcısı</label><select id="waKullanici" class="form-select form-select-sm"></select></div>
+                            <div class="col-md-2"><label class="form-label small fw-bold mb-1">Ad</label><input id="waAd" class="form-control form-control-sm" placeholder="Ahmet" /></div>
+                            <div class="col-md-2"><label class="form-label small fw-bold mb-1">Varsayılan şirket</label><select id="waSirket" class="form-select form-select-sm"><option value="">(ilk yetkili)</option></select></div>
+                            <div class="col-md-1"><label class="form-label small fw-bold mb-1" title="WhatsApp kimliği (lid): numara çözülemezse asistanın cevabında yazar, buraya girilir">Kimlik</label><input id="waLid" class="form-control form-control-sm" placeholder="1802…" /></div>
+                            <div class="col-md-1 d-grid"><button type="button" class="btn btn-sm btn-success fw-bold" id="waEkleBtn" title="Ekle / güncelle"><i class="fas fa-plus"></i></button></div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0" id="waTablo">
+                                <thead class="table-light"><tr><th>Telefon</th><th>Kullanıcı</th><th>Ad</th><th>Varsayılan şirket</th><th>Aktif</th><th style="width:60px"></th></tr></thead>
+                                <tbody><tr><td colspan="6" class="text-center text-muted py-3">yükleniyor…</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-5">
+                    <div class="dashboard-card p-4 h-100" style="border-top: 4px solid #0ea5e9;">
+                        <h6 class="fw-bold mb-1"><i class="fas fa-vial me-2 text-info"></i>Deneme (köprü olmadan)</h6>
+                        <p class="text-muted mb-2" style="font-size:.82rem;">Seçtiğin numaradan mesaj gelmiş gibi işler; cevabı ve PDF'i burada görürsün.</p>
+                        <div class="row g-2 mb-2">
+                            <div class="col-5"><select id="waSimTelefon" class="form-select form-select-sm"></select></div>
+                            <div class="col-5"><input id="waSimMesaj" class="form-control form-control-sm" placeholder="ekstre AKSA" /></div>
+                            <div class="col-2 d-grid"><button type="button" class="btn btn-sm btn-info text-white fw-bold" id="waSimBtn"><i class="fas fa-paper-plane"></i></button></div>
+                        </div>
+                        <div id="waSimCevap" class="border rounded-3 p-3 bg-light" style="min-height:120px;white-space:pre-wrap;font-size:.85rem;"><span class="text-muted">Cevap burada görünür.</span></div>
+                        <h6 class="fw-bold mt-3 mb-1"><i class="fas fa-list me-2 text-secondary"></i>Son mesajlar</h6>
+                        <div class="table-responsive" style="max-height:260px;overflow:auto;">
+                            <table class="table table-sm mb-0" id="waLogTablo" style="font-size:.78rem;"><thead class="table-light"><tr><th>Zaman</th><th>Telefon</th><th>Mesaj</th><th>Cevap</th><th>PDF</th></tr></thead><tbody></tbody></table>
+                        </div>
+                        <div class="mt-3 small text-muted">Köprü kurulumu: <code>Tools\whatsapp-koprusu\README.md</code></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= KULLANICI YETKİLERİ ================= -->
+        <div class="tab-pane fade show active" id="kisi-pane" role="tabpanel">
+            <div class="row g-3">
+                <div class="col-xl-3 col-lg-4">
+                    <div class="dashboard-card kisi-panel">
+                        <div class="p-3 border-bottom">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-white border-end-0"><i class="fas fa-search text-muted"></i></span>
+                                <input type="text" class="form-control border-start-0" id="kisiAra" placeholder="Kullanıcı ara..." onkeyup="kisiListesiCiz()">
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mt-2" style="font-size:.72rem;">
+                                <span class="text-muted" id="kisiSayac"></span>
+                                <label class="text-muted mb-0" style="cursor:pointer"><input type="checkbox" id="kisiSadeceYetkili" class="form-check-input me-1" checked onchange="kisiListesiCiz()">Sadece yetki kodu olanlar</label>
+                            </div>
+                            @* Aktif / Pasif alt sekmeleri: pasif = SAP'de kilitli kullanıcı (giremez, atama listelerinde görünmez) *@
+                            <div class="kisi-altsekme mt-2">
+                                <button type="button" class="active" data-durum="aktif" onclick="kisiDurumSec('aktif')"><i class="fas fa-user-check me-1"></i>Aktif <span class="cnt" id="kisiCntAktif">0</span></button>
+                                <button type="button" data-durum="pasif" onclick="kisiDurumSec('pasif')"><i class="fas fa-user-slash me-1"></i>Pasif <span class="cnt" id="kisiCntPasif">0</span></button>
+                            </div>
+                        </div>
+                        <div id="kisiListe" class="kisi-liste"><div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin"></i></div></div>
+                    </div>
+                </div>
+                <div class="col-xl-9 col-lg-8">
+                    <div class="dashboard-card kisi-panel">
+                        <div id="kisiEditor">
+                            <div class="kisi-bos">
+                                <i class="fas fa-user-shield"></i>
+                                <div class="fw-bold mt-2">Bir kullanıcı seçin</div>
+                                <div class="text-muted small">Soldaki listeden kullanıcıyı seçince görebileceği raporlar ve şirketler burada düzenlenir.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= RAPOR BAZLI YETKİ ================= -->
+        <div class="tab-pane fade" id="rapor-pane" role="tabpanel">
+            <div class="row g-3">
+                <div class="col-xl-3 col-lg-4">
+                    <div class="dashboard-card kisi-panel">
+                        <div class="p-3 border-bottom">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-white border-end-0"><i class="fas fa-search text-muted"></i></span>
+                                <input type="text" class="form-control border-start-0" id="rbRaporAra" placeholder="Rapor ara..." onkeyup="rbRaporListesiCiz()">
+                            </div>
+                            <div class="text-muted mt-2" style="font-size:.72rem;" id="rbRaporSayac"></div>
+                        </div>
+                        <div id="rbRaporListe" class="kisi-liste" style="max-height:72vh; overflow:auto;"></div>
+                    </div>
+                </div>
+                <div class="col-xl-9 col-lg-8">
+                    <div class="dashboard-card kisi-panel">
+                        <div id="rbEditor">
+                            <div class="kisi-bos">
+                                <i class="fas fa-eye"></i>
+                                <div class="fw-bold mt-2">Bir rapor seçin</div>
+                                <div class="text-muted small">Soldaki listeden raporu seçince onu görebilen kullanıcılar burada listelenir; kullanıcı eklenir ya da çıkarılır.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+                    <!-- RAPOR VE MENÜLER SEKMESİ -->
+                    <div class="tab-pane fade" id="menus-pane" role="tabpanel">
+
+                        <div class="yetki-arac-cubugu">
+                            <div class="input-group" style="width:280px;">
+                                <span class="input-group-text bg-white border-end-0"><i class="fas fa-search text-muted" style="font-size:.78rem;"></i></span>
+                                <input type="text" class="form-control border-start-0 ps-0" id="menuArama"
+                                       placeholder="Rapor ara..." onkeyup="menuAra()">
+                            </div>
+
+                            <span class="ms-auto text-muted" style="font-size:.78rem;"><i class="fas fa-info-circle me-1"></i>Rapor adı, başlığı, ikonu ve sırası buradan düzenlenir; kimin göreceği "Kullanıcı Yetkileri" sekmesinde.</span>
+                        </div>
+
+                        <div class="row g-3">
+                            @if (Model != null && Model.Any())
+                            {
+                                foreach (var category in Model)
+                                {
+                                    string cardBorderColor = borderColors[colorIndex % borderColors.Length];
+                                    colorIndex++;
+
+                                    string catIcon = category.Key.ToLower() switch
+                                    {
+                                        var k when k.Contains("finans") => "fas fa-coins text-warning",
+                                        var k when k.Contains("satış") => "fas fa-shopping-cart text-primary",
+                                        var k when k.Contains("muhasebe") => "fas fa-calculator text-success",
+                                        var k when k.Contains("satınalma") => "fas fa-truck-loading text-purple",
+                                        var k when k.Contains("üretim") => "fas fa-industry text-danger",
+                                        var k when k.Contains("cari") => "fas fa-users text-info",
+                                        var k when k.Contains("stok") => "fas fa-boxes text-secondary",
+                                        var k when k.Contains("ithalat") || k.Contains("ihracat") => "fas fa-globe text-primary",
+                                        _ => "fas fa-folder-open text-dark"
+                                    };
+
+                                    <div class="col-xl-4 col-md-6">
+                                        <div class="dashboard-card border-top-@cardBorderColor hover-elevate p-4 h-100">
+                                            <div class="category-title">
+                                                <span>
+                                                    <i class="@catIcon me-2"></i> @category.Key
+                                                    <button type="button" class="baslik-duzenle"
+                                                            title="Başlığı yeniden adlandır"
+                                                            onclick="baslikDuzenle('@Html.Raw(Html.Encode(category.Key))')">
+                                                        <i class="fas fa-pen"></i>
+                                                    </button>
+                                                </span>
+                                                <span class="kategori-sayac">@category.Value.Count</span>
+                                            </div>
+                                            
+                                            <div class="menu-list">
+                                                @foreach (var menu in category.Value)
+                                                {
+                                                    <div class="form-check menu-item-row d-flex align-items-center" data-menu-id="@menu.Id">
+                                                        <label class="form-check-label w-100 @(menu.IsActive ? "" : "text-muted text-decoration-line-through")" style="padding-left:2px;">
+                                                            @menu.MenuTitle
+                                                            @if (!menu.IsActive)
+                                                            {
+                                                                <span class="badge bg-secondary ms-1" style="font-size:.6rem;">GİZLİ</span>
+                                                            }
+                                                        </label>
+                                                        <span class="menu-sira" title="Sıra">@menu.DisplayOrder</span>
+                                                        <button type="button" class="menu-duzenle" title="Raporu düzenle"
+                                                                data-id="@menu.Id" data-baslik="@menu.MenuTitle" data-kategori="@menu.Category" data-ikon="@menu.Icon" data-sira="@menu.DisplayOrder"
+                                                                onclick="menuDuzenleBtn(this)">
+                                                            <i class="fas fa-pen"></i>
+                                                        </button>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="col-12 text-center py-5">
+                                    <i class="fas fa-box-open fa-3x text-muted mb-3 opacity-50"></i>
+                                    <h5 class="text-muted">Henüz sistemde rapor bulunmuyor.</h5>
+                                    <p class="text-muted">Lütfen önce İlk Kurulum (Seed) işlemini yapın veya Yeni Rapor Ekle butonunu kullanın.</p>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- ŞİRKET/VERİTABANI SEKMESİ -->
+                    <div class="tab-pane fade" id="dbs-pane" role="tabpanel">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <div class="dashboard-card border-top-info hover-elevate p-4">
+                                    <div class="category-title text-info">
+                                        <span><i class="fas fa-building me-2"></i> Erişilebilir Şirketler (Veritabanları)</span>
+                                    </div>
+                                    <div class="text-muted mb-3" style="font-size:.78rem;">
+                                        Kullanıcıların hangi şirketleri göreceği "Kullanıcı Yetkileri" sekmesinden verilir. Buradaki <b>Görünen Ad</b>,
+                                        şirket seçicisinde ve raporlarda gösterilen isimdir; veritabanı bağlantısı (DbKey) değişmez.
+                                        <b>Önerilen Adları Doldur</b> tüm şirketlere okunaklı ad yazar (<code>_AS</code>/<code>_A.S</code> ve yıl taşıyanların sonuna <b>A.Ş.</b>);
+                                        sonra istediğinizi satırdan elle değiştirebilirsiniz.
+                                    </div>
+                                    <div class="d-flex flex-wrap gap-2 mb-3">
+                                        <button type="button" class="btn btn-sm btn-primary" onclick="sirketAdlariniDoldur(false)"><i class="fas fa-wand-magic-sparkles me-1"></i> Önerilen Adları Doldur (tümü)</button>
+                                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="sirketAdlariniDoldur(true)" title="Yalnızca hâlâ ham veritabanı adı taşıyan şirketleri doldurur"><i class="fas fa-broom me-1"></i> Yalnızca Boşları Doldur</button>
+                                        <input type="text" class="form-control form-control-sm ms-auto" style="max-width:240px;" placeholder="Şirket ara…" oninput="sirketAra(this.value)">
+                                    </div>
+                                    @{
+                                        var tumSirketler = ViewBag.TumSirketler as List<WebApplication3.Models.AppDatabase> ?? new List<WebApplication3.Models.AppDatabase>();
+                                        var sirketDbAdlari = ViewBag.SirketDbAdlari as Dictionary<string, string> ?? new Dictionary<string, string>();
+                                    }
+                                    @if (tumSirketler.Any())
+                                    {
+                                        <div class="table-responsive">
+                                            <table class="table table-sm align-middle" id="tblSirketler" style="font-size:.85rem;">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th style="width:26%;">Veritabanı</th>
+                                                        <th style="width:34%;">Görünen Ad (seçicide böyle görünür)</th>
+                                                        <th style="width:24%;">Öneri</th>
+                                                        <th class="text-center" style="width:8%;">Seçicide</th>
+                                                        <th style="width:8%;"></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var db in tumSirketler)
+                                                    {
+                                                        string dbAdi = sirketDbAdlari.TryGetValue(db.DbKey, out var _a) ? _a : "";
+                                                        string oneri = WebApplication3.Controllers.PermissionController.SirketAdiOner(string.IsNullOrEmpty(dbAdi) ? db.Display : dbAdi);
+                                                        <tr data-sirket-id="@db.Id" class="@(db.IsActive ? "" : "table-secondary opacity-75")">
+                                                            <td>
+                                                                <span class="fw-bold">@(string.IsNullOrEmpty(dbAdi) ? db.DbKey : dbAdi)</span>
+                                                                <small class="d-block text-muted" style="font-size:10px;">@db.DbKey</small>
+                                                            </td>
+                                                            <td><input type="text" class="form-control form-control-sm sirket-ad" value="@db.Display" maxlength="100" onkeydown="if(event.key==='Enter'){sirketAdiKaydet(@db.Id);}"></td>
+                                                            <td>
+                                                                @if (!string.IsNullOrEmpty(oneri) && oneri != db.Display)
+                                                                {
+                                                                    <a href="javascript:void(0)" class="text-decoration-none" title="Öneriyi kutuya yaz" onclick="sirketOneriUygula(@db.Id, this.dataset.oneri)" data-oneri="@oneri"><i class="fas fa-arrow-left me-1 small"></i>@oneri</a>
+                                                                }
+                                                                else { <span class="text-success small"><i class="fas fa-check me-1"></i>Uygun</span> }
+                                                            </td>
+                                                            <td class="text-center">
+                                                                <div class="form-check form-switch d-inline-block m-0">
+                                                                    <input class="form-check-input" type="checkbox" @(db.IsActive ? "checked" : "") onchange="sirketAktifDegistir(@db.Id, this.checked)" title="Kapalıysa şirket seçicide görünmez (yetkiler silinmez)">
+                                                                </div>
+                                                            </td>
+                                                            <td class="text-end"><button type="button" class="btn btn-sm btn-success" onclick="sirketAdiKaydet(@db.Id)" title="Görünen adı kaydet"><i class="fas fa-save"></i></button></td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="text-muted">Şirket veritabanı bulunamadı. Lütfen "Şirketleri Çek" butonunu kullanarak yeni veritabanlarını aktarın.</div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- MENÜ BAŞLIKLARI SEKMESİ -->
+                    <!-- PROJEDEN ALGILANAN RAPORLAR -->
+                    <div class="tab-pane fade" id="yeni-pane" role="tabpanel">
+
+                        <div class="alert alert-info border-0 d-flex align-items-start gap-2">
+                            <i class="fas fa-circle-info mt-1"></i>
+                            <div class="small">
+                                Projede kodu bulunan ama <b>menüye hiç eklenmemiş</b> raporlar burada listelenir.
+                                <br>
+                                <b class="text-danger">Önemli:</b> Menüde kaydı olmayan bir rapor yetki denetiminden
+                                geçmez; adresini bilen her kullanıcı açabilir. Buradan ekleyip yetkilendirin.
+                            </div>
+                        </div>
+
+                        <div class="yetki-arac-cubugu">
+                            <button type="button" class="btn btn-sm btn-primary" onclick="yeniRaporlariTara()">
+                                <i class="fas fa-rotate me-1"></i>Projeyi Tara
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="yeniTumunuSec(true)">
+                                <i class="fas fa-check-double me-1"></i>Tümünü Seç
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="yeniTumunuSec(false)">
+                                <i class="fas fa-xmark me-1"></i>Seçimi Temizle
+                            </button>
+                            <button type="button" class="btn btn-sm btn-success fw-bold ms-auto" id="btnYeniEkle"
+                                    onclick="yeniRaporlariEkle()" disabled>
+                                <i class="fas fa-plus me-1"></i>Seçilenleri Menüye Ekle (<span id="yeniSecimSayisi">0</span>)
+                            </button>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width:40px;"></th>
+                                        <th style="width:150px;">Controller</th>
+                                        <th style="width:150px;">Adres</th>
+                                        <th>Menüde Görünecek Ad</th>
+                                        <th style="width:230px;">Hangi Başlık Altına</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-yeni-raporlar">
+                                    <tr><td colspan="5" class="text-center text-muted py-4">
+                                        <i class="fas fa-hand-pointer me-1"></i>Projeyi Tara deyin
+                                    </td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <datalist id="yeniKategoriListesi"></datalist>
+                    </div>
+
+                    <div class="tab-pane fade" id="cats-pane" role="tabpanel">
+                        <div class="dashboard-card border-top-purple hover-elevate p-4">
+                            <div class="category-title">
+                                <span><i class="fas fa-folder-tree me-2 text-purple"></i> Sol Menüdeki Başlıklar</span>
+                                <button type="button" class="btn btn-sm btn-primary" onclick="baslikEkle()">
+                                    <i class="fas fa-plus me-1"></i> Yeni Başlık
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-dark ms-1" onclick="menuDuzeniUygula()" title="Başlıkları rapor/işlem ayrımıyla üst gruplar altında birleştirip sıralar; önce önizleme gösterir">
+                                    <i class="fas fa-wand-magic-sparkles me-1"></i> Önerilen Düzeni Uygula
+                                </button>
+                            </div>
+
+                            <div class="text-muted mb-3" style="font-size:.78rem;">
+                                Buradaki ad, ikon ve sıra sol menüye doğrudan yansır. Sıra küçükten büyüğe dizilir.
+                                Bir başlığın adını değiştirdiğinizde altındaki tüm raporlar da o adla taşınır.
+                                <b>Üst Grup</b> yazılan başlıklar sol menüde o grubun altında toplanır (Üst Grup › Başlık › Rapor);
+                                boş bırakılan başlık en üst seviyede görünür. Aynı üst grup adını birden çok başlığa yazmanız yeterlidir.
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0" style="font-size:.85rem;">
+                                    <thead style="background:var(--bg-subtle,#f8fafc);">
+                                        <tr>
+                                            <th style="width:60px;">Sıra</th>
+                                            <th style="width:70px;">İkon</th>
+                                            <th>Başlık</th>
+                                            <th style="width:200px;">Üst Grup</th>
+                                            <th style="width:110px;" class="text-center">Rapor</th>
+                                            <th style="width:130px;" class="text-end">İşlem</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @if (baslikTanimlari.Any())
+                                        {
+                                            foreach (var b in baslikTanimlari)
+                                            {
+                                                var raporSayisi = Model != null && Model.ContainsKey(b.Name) ? Model[b.Name].Count : 0;
+                                                var ikonSinifi = string.IsNullOrWhiteSpace(b.Icon) ? "fas fa-star text-warning" : b.Icon;
+                                                <tr>
+                                                    <td class="fw-bold text-muted">@b.DisplayOrder</td>
+                                                    <td><i class="@ikonSinifi" style="font-size:1.1rem;"></i></td>
+                                                    <td class="fw-bold">@b.Name</td>
+                                                    <td>
+                                                        @if (string.IsNullOrWhiteSpace(b.UstGrup))
+                                                        {
+                                                            <span class="text-muted" style="font-size:.75rem;">— (en üst seviye)</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge bg-light text-dark border">@b.UstGrup</span>
+                                                        }
+                                                    </td>
+                                                    <td class="text-center">
+                                                        <span class="kategori-sayac">@raporSayisi</span>
+                                                    </td>
+                                                    <td class="text-end">
+                                                        <button class="btn btn-sm btn-outline-primary"
+                                                                onclick="baslikDuzenleModal(@b.Id, '@Html.Raw(Html.Encode(b.Name))', '@Html.Raw(Html.Encode(b.Icon))', @b.DisplayOrder, '@Html.Raw(Html.Encode(b.UstGrup))')">
+                                                            <i class="fas fa-pen"></i>
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-danger"
+                                                                onclick="baslikSil(@b.Id, '@Html.Raw(Html.Encode(b.Name))', @raporSayisi)">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <tr><td colspan="6" class="text-center text-muted py-4">Henüz başlık tanımı yok.</td></tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+</div>
+
+<!-- BAŞLIK EKLEME / DÜZENLEME MODALI -->
+<div class="modal fade" id="catModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:16px;">
+            <div class="modal-header text-white" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);">
+                <h5 class="modal-title fw-bold"><i class="fas fa-folder-tree me-2"></i><span id="catModalBaslik">Yeni Başlık</span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="catId">
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Başlık Adı <span class="text-danger">*</span></label>
+                    <input type="text" id="catName" class="form-control" placeholder="Örn: Finans Raporları">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Üst Grup <span class="text-muted fw-normal">(boş = en üst seviye)</span></label>
+                    <input type="text" id="catUstGrup" class="form-control" list="ustGrupListesi" placeholder="Örn: Finans & Muhasebe">
+                    <datalist id="ustGrupListesi">
+                        @foreach (var ug in baslikTanimlari.Select(x => x.UstGrup).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
+                        {
+                            <option value="@ug"></option>
+                        }
+                    </datalist>
+                    <div class="form-text" style="font-size:.72rem;">Mevcut bir grubu seçin ya da yeni bir grup adı yazın.</div>
+                </div>
+
+                <div class="row g-2">
+                    <div class="col-8">
+                        <label class="form-label small fw-bold">İkon (Font Awesome sınıfı)</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white"><i id="catIconPreview" class="fas fa-star text-warning"></i></span>
+                            <input type="text" id="catIcon" class="form-control" list="ikonListesi"
+                                   placeholder="fas fa-coins text-warning" onkeyup="ikonOnizle()">
+                        </div>
+                        <datalist id="ikonListesi">
+                            <option value="fas fa-coins text-warning">Finans</option>
+                            <option value="fas fa-user-friends text-info">Cari</option>
+                            <option value="fas fa-calculator text-success">Muhasebe</option>
+                            <option value="fas fa-shopping-bag text-primary">Satış</option>
+                            <option value="fas fa-truck text-purple">Satınalma</option>
+                            <option value="fas fa-industry text-danger">Üretim</option>
+                            <option value="fas fa-boxes text-secondary">Stok</option>
+                            <option value="fas fa-ship text-secondary">İthalat</option>
+                            <option value="fas fa-plane-departure text-info">İhracat</option>
+                            <option value="fas fa-laptop-code text-dark">Bilgi İşlem</option>
+                            <option value="fas fa-robot text-primary">Otomasyon</option>
+                            <option value="fas fa-file-invoice text-primary">Belge</option>
+                            <option value="fas fa-clipboard-check text-success">Onay</option>
+                            <option value="fas fa-chart-line text-primary">Analiz</option>
+                            <option value="fas fa-star text-warning">Genel</option>
+                        </datalist>
+                        <div class="form-text" style="font-size:.72rem;">
+                            <a href="https://fontawesome.com/search?o=r&m=free" target="_blank">Font Awesome</a>
+                            listesinden herhangi bir sınıf yazabilirsiniz.
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small fw-bold">Sıra</label>
+                        <input type="number" id="catOrder" class="form-control" min="0" value="0">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-primary" onclick="baslikKaydet()"><i class="fas fa-save me-2"></i>Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================== -->
+<!-- SİSTEM ROLÜ EKLEME/DÜZENLEME MODALI -->
+<!-- ============================================== -->
+<!-- RAPOR DÜZENLEME MODALI -->
+<div class="modal fade" id="menuEditModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:16px;">
+            <div class="modal-header text-white" style="background:linear-gradient(135deg,#009ef7,#6366f1);">
+                <h5 class="modal-title fw-bold"><i class="fas fa-pen-to-square me-2"></i>Raporu Düzenle</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editMenuId">
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Rapor Adı <span class="text-danger">*</span></label>
+                    <input type="text" id="editMenuTitle" class="form-control">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Başlık (Kategori)</label>
+                    <input type="text" id="editMenuCategory" class="form-control" list="kategoriListesi"
+                           placeholder="Mevcut başlığı seçin veya yeni bir başlık yazın">
+                    <datalist id="kategoriListesi">
+                        @foreach (var k in kategoriler)
+                        {
+                            <option value="@k"></option>
+                        }
+                    </datalist>
+                    <div class="form-text" style="font-size:.75rem;">
+                        Listede olmayan bir ad yazarsanız <b>yeni başlık</b> oluşur ve rapor oraya taşınır.
+                    </div>
+                </div>
+
+                <div class="row g-2">
+                    <div class="col-8">
+                        <label class="form-label small fw-bold">İkon (Font Awesome)</label>
+                        <input type="text" id="editMenuIcon" class="form-control" placeholder="fas fa-chart-line">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small fw-bold">Sıra</label>
+                        <input type="number" id="editMenuOrder" class="form-control" min="0">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer d-flex">
+                <button class="btn btn-outline-danger me-auto" onclick="menuSil()">
+                    <i class="fas fa-trash me-1"></i>Menüden Sil
+                </button>
+                <button class="btn btn-outline-secondary" onclick="menuGizleAc()">
+                    <i class="fas fa-eye-slash me-1"></i>Gizle / Göster
+                </button>
+                <button class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                <button class="btn btn-primary" onclick="menuKaydet()"><i class="fas fa-save me-2"></i>Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================== -->
+<!-- YENİ RAPOR EKLEME MODALI -->
+<!-- ============================================== -->
+<div class="modal fade" id="addReportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
+            <div class="modal-header bg-light border-bottom-0">
+                <h5 class="modal-title fw-bold text-dark"><i class="fas fa-plus-circle text-primary me-2"></i>Sisteme Yeni Rapor Ekle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-muted">Kategori (Grubu)</label>
+                    <select id="newCategory" class="form-select form-select-solid">
+                        <option value="Finans">Finans</option>
+                        <option value="Satış">Satış</option>
+                        <option value="Muhasebe">Muhasebe</option>
+                        <option value="Cari Yönetimi">Cari Yönetimi</option>
+                        <option value="Satınalma">Satınalma</option>
+                        <option value="Üretim">Üretim</option>
+                        <option value="İthalat/İhracat">İthalat/İhracat</option>
+                        <option value="Stok & Ürün">Stok & Ürün</option>
+                        <option value="Aktarım İşlemleri">Aktarım İşlemleri</option>
+                        <option value="Özel Raporlar">Özel Raporlar</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-muted">Rapor Başlığı (Ekranda Görünen İsim)</label>
+                    <input type="text" id="newMenuTitle" class="form-control form-control-solid" placeholder="Örn: 2026 Konsolide Satış Analizi">
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold small text-muted">Controller Adı</label>
+                        <input type="text" id="newController" class="form-control form-control-solid" placeholder="Örn: Rapor150">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold small text-muted">Action Adı</label>
+                        <input type="text" id="newAction" class="form-control form-control-solid" value="Index">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-muted">İkon Sınıfı (FontAwesome)</label>
+                    <input type="text" id="newIcon" class="form-control form-control-solid" value="fas fa-chart-line" placeholder="Örn: fas fa-file-excel">
+                </div>
+            </div>
+            <div class="modal-footer border-top-0 bg-light">
+                <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold" onclick="saveNewReport()">Sisteme Ekle</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================== -->
+<!-- SAP KULLANICI YÖNETİMİ MODALI -->
+<!-- ============================================== -->
+<div class="modal fade" id="sapUserModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
+            <div class="modal-header bg-light border-bottom-0">
+                <h5 class="modal-title fw-bold text-dark"><i class="fas fa-users text-success me-2"></i>SAP Kullanıcı Yönetimi</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <ul class="nav nav-tabs mb-3" id="sapUserTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active fw-bold" id="list-tab" data-bs-toggle="tab" data-bs-target="#list-pane" type="button" role="tab">Kullanıcı Listesi</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link fw-bold" id="form-tab" data-bs-toggle="tab" data-bs-target="#form-pane" type="button" role="tab">Kullanıcı Ekle / Düzenle</button>
+                    </li>
+                </ul>
+                <div class="tab-content" id="sapUserTabContent">
+                    
+                    <div class="tab-pane fade show active" id="list-pane" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div class="input-group input-group-sm w-50 shadow-sm">
+                                <span class="input-group-text bg-white border-end-0"><i class="fas fa-search text-muted"></i></span>
+                                <input type="text" id="sapUserSearchInput" class="form-control border-start-0" placeholder="Kullanıcı Kodu veya Adı Ara..." onkeyup="filterSapUsers()">
+                            </div>
+                            <button class="btn btn-sm btn-primary rounded-pill shadow-sm" onclick="prepareNewSapUser()">
+                                <i class="fas fa-plus me-1"></i> Yeni SAP Kullanıcısı
+                            </button>
+                        </div>
+                        
+                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-hover table-bordered align-middle">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Kullanıcı Kodu</th>
+                                        <th>Ad Soyad</th>
+                                        <th>Şifre</th>
+                                        <th>Yetki (U_BE1_YETKI)</th>
+                                        <th class="text-center">İşlem</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sapUserTableBody">
+                                    <tr><td colspan="5" class="text-center py-3 text-muted">Kullanıcılar yükleniyor...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="form-pane" role="tabpanel">
+                        <input type="hidden" id="sapInternalKey" value="0">
+                        <input type="hidden" id="sapIsEdit" value="0">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold small text-muted">SAP Kullanıcı Kodu <span class="text-danger">*</span></label>
+                                <input type="text" id="sapUserCode" class="form-control form-control-solid" placeholder="Örn: manager">
+                                <small class="text-danger" style="font-size:11px;">Düzenlerken değiştirilemez.</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold small text-muted">Adı Soyadı</label>
+                                <input type="text" id="sapUserName" class="form-control form-control-solid" placeholder="Örn: Ahmet Yılmaz">
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-muted">E-Posta Adresi</label>
+                            <input type="email" id="sapEmail" class="form-control form-control-solid" placeholder="Örn: kullanici@ornek.local">
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold small text-muted">Portal Şifresi (U_BE1_PASSWORD)</label>
+                                <input type="text" id="sapPassword" class="form-control form-control-solid" placeholder="Şifre Girin">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold small text-muted">Yetki Kodu (U_BE1_YETKI) <span class="text-muted fw-normal">isteğe bağlı</span></label>
+                                <select id="sapAuthority" class="form-select form-select-solid">
+                                    <option value="">-- Yetki kodu yok (raporlar kişi / rapor bazlı verilir) --</option>
+                                    @if(roles != null)
+                                    {
+                                        foreach (var r in roles)
+                                        {
+                                            <option value="@r.RoleCode">@r.RoleName (@r.RoleCode)</option>
+                                        }
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="text-end mt-3 border-top pt-3">
+                            <button type="button" class="btn btn-secondary rounded-pill px-4" onclick="document.getElementById('list-tab').click()">İptal / Listeye Dön</button>
+                            <button type="button" class="btn btn-success rounded-pill px-4 fw-bold" onclick="saveSapUser()">
+                                <i class="fas fa-save me-1"></i> Kaydet
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/whatsapp-yonetim.js" asp-append-version="true"></script>
+    <script>
+        // ==========================================
+        // KULLANICI (KİŞİ) BAZLI YETKİLER
+        // ==========================================
+        var TUM_MENULER = @Html.Raw(Json.Serialize((Model ?? new Dictionary<string, List<WebApplication3.Models.AppMenu>>()).Select(k => new { kategori = k.Key, menuler = k.Value.Select(m => new { id = m.Id, ad = m.MenuTitle, aktif = m.IsActive }).ToList() }).ToList()));
+        var TUM_SIRKETLER = @Html.Raw(Json.Serialize((databases ?? new List<WebApplication3.Models.AppDatabase>()).Select(d => new { id = d.Id, ad = d.Display, key = d.DbKey }).ToList()));
+        var kisiler = [];
+        var seciliKisi = null;
+
+        function kacisK(v) { return $('<div>').text(v == null ? '' : String(v)).html(); }
+        function basHarf(k) {
+            var ad = (k.adSoyad || k.userCode || '').trim().split(/\s+/);
+            var h = (ad[0] ? ad[0][0] : '') + (ad[1] ? ad[1][0] : '');
+            return (h || (k.userCode || '?').substr(0, 2)).toLocaleUpperCase('tr-TR');
+        }
+        function avatarRenk(kod) { var r = ['#4361ee', '#2dce89', '#fb6340', '#11cdef', '#8e54e9', '#f5a623', '#e53950']; var t = 0; for (var i = 0; i < (kod || '').length; i++) t += kod.charCodeAt(i); return r[t % r.length]; }
+        function tamYetkiMi(k) { return k && (k.yetki === 'A' || k.yetki === 'S'); }
+
+        function kisileriYukle(secilecek) {
+            $.getJSON('/Permission/KisiListesi', function (r) {
+                if (!r.success) { $('#kisiListe').html('<div class="alert alert-danger m-2 small">' + kacisK(r.message) + '</div>'); return; }
+                kisiler = r.data || [];
+                kisiListesiCiz();
+                if (secilecek) kisiSec(secilecek);
+            }).fail(function () { $('#kisiListe').html('<div class="alert alert-danger m-2 small">Kullanıcı listesi alınamadı.</div>'); });
+        }
+
+        var kisiDurum = 'aktif';   // alt sekme: aktif | pasif (SAP kilidi)
+        function kisiDurumSec(d) { kisiDurum = d; $('.kisi-altsekme button').each(function () { $(this).toggleClass('active', $(this).data('durum') === d); }); kisiListesiCiz(); }
+
+        function kisiListesiCiz() {
+            var ara = ($('#kisiAra').val() || '').toLocaleLowerCase('tr-TR');
+            var sadeceYetkili = $('#kisiSadeceYetkili').is(':checked');
+            var h = '', gosterilen = 0, aktifSayi = 0, pasifSayi = 0;
+            kisiler.forEach(function (k) {
+                if (sadeceYetkili && !k.yetki) return;
+                var metin = (k.userCode + ' ' + k.adSoyad + ' ' + k.yetki).toLocaleLowerCase('tr-TR');
+                if (ara && metin.indexOf(ara) < 0) return;
+                if (k.kilitli) pasifSayi++; else aktifSayi++;
+                if ((kisiDurum === 'pasif') !== !!k.kilitli) return;
+                gosterilen++;
+                var tam = tamYetkiMi(k);
+                var alt = tam ? '<span class="text-success">Tam yetki</span>' : (k.menuSayisi + ' rapor · ' + k.sirketSayisi + ' şirket');
+                if (!tam && k.menuSayisi === 0 && k.sirketSayisi === 0) alt = '<span class="text-danger">Yetki tanımlı değil</span>';
+                var kilitBtn = k.kilitli
+                    ? '<button type="button" class="kisi-kilit aktifle" title="Aktife al: tekrar giriş yapabilir" onclick="event.stopPropagation(); kisiKilit(' + k.userId + ', \'' + kacisK(k.userCode) + '\', false)"><i class="fas fa-unlock"></i> Aktife al</button>'
+                    : '<button type="button" class="kisi-kilit" title="Pasife çek: giriş yapamaz, atama listelerinde görünmez" onclick="event.stopPropagation(); kisiKilit(' + k.userId + ', \'' + kacisK(k.userCode) + '\', true)"><i class="fas fa-user-slash"></i> Pasife al</button>';
+                h += '<div class="kisi-satir ' + (seciliKisi === k.userCode ? 'aktif' : '') + (k.kilitli ? ' kilitli' : '') + '" onclick="kisiSec(\'' + kacisK(k.userCode) + '\')">'
+                   + '<div class="kisi-avatar" style="background:' + avatarRenk(k.userCode) + '">' + kacisK(basHarf(k)) + '</div>'
+                   + '<div class="flex-grow-1 min-w-0"><div class="d-flex justify-content-between align-items-center gap-1"><span class="kisi-kod">' + kacisK(k.userCode) + '</span>'
+                   + '<span class="d-flex align-items-center gap-1">' + (k.yetki ? '<span class="kisi-yetki">' + kacisK(k.yetki) + '</span>' : '') + kilitBtn + '</span></div>'
+                   + '<div class="kisi-ad text-truncate">' + kacisK(k.adSoyad || '—') + '</div>'
+                   + '<div class="kisi-alt">' + alt + (k.kilitli ? ' · <span class="text-danger">pasif</span>' : '') + '</div></div></div>';
+            });
+            $('#kisiCntAktif').text(aktifSayi); $('#kisiCntPasif').text(pasifSayi);
+            $('#kisiSayac').text(gosterilen + ' kullanıcı');
+            $('#kisiListe').html(h || '<div class="text-center text-muted py-4 small">' + (kisiDurum === 'pasif' ? 'Pasif kullanıcı yok.' : 'Kullanıcı bulunamadı.') + '</div>');
+        }
+
+        // Pasife çek / aktife al (SAP Locked). SAP Kullanıcı Yönetimi'ndeki uçla aynı; liste yenilenir.
+        function kisiKilit(userId, kod, kilitle) {
+            Swal.fire({
+                title: kilitle ? kod + ' pasife alınsın mı?' : kod + ' aktife alınsın mı?',
+                html: kilitle ? 'Kullanıcı SAP\'de kilitlenir: portala ve SAP\'ye giremez, Gider/Gelir atama listelerinde görünmez. İstediğinizde aktife alabilirsiniz.' : 'Kilit kaldırılır; kullanıcı tekrar giriş yapabilir ve listelerde görünür.',
+                icon: 'question', showCancelButton: true, confirmButtonText: kilitle ? 'Pasife al' : 'Aktife al', cancelButtonText: 'Vazgeç', confirmButtonColor: kilitle ? '#f59e0b' : '#16a34a'
+            }).then(function (s) {
+                if (!s.isConfirmed) return;
+                Swal.fire({ title: 'İşleniyor...', allowOutsideClick: false, didOpen: function () { Swal.showLoading(); } });
+                $.post('/Permission/SetSapUserLocked', { internalKey: userId, kilitle: kilitle }, function (res) {
+                    if (!res.success) { Swal.fire('Hata', res.message, 'error'); return; }
+                    Swal.fire({ icon: 'success', title: 'Tamam', text: res.message, timer: 2200, showConfirmButton: false });
+                    kisileriYukle(seciliKisi);
+                }).fail(function () { Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); });
+            });
+        }
+
+        function kisiSec(userCode) {
+            seciliKisi = userCode;
+            kisiListesiCiz();
+            $('#kisiEditor').html('<div class="kisi-bos"><i class="fas fa-spinner fa-spin"></i></div>');
+            $.getJSON('/Permission/KisiYetkileri', { userCode: userCode }, function (r) {
+                if (!r.success) { $('#kisiEditor').html('<div class="alert alert-danger m-3">' + kacisK(r.message) + '</div>'); return; }
+                kisiEditorCiz(r);
+            });
+        }
+
+        function kisiEditorCiz(r) {
+            var k = kisiler.find(function (x) { return x.userCode === r.userCode; }) || { adSoyad: '', yetki: '' };
+            var tam = tamYetkiMi(k);
+            var menuSet = {}; (r.menuIds || []).forEach(function (id) { menuSet[id] = true; });
+            var dbSet = {}; (r.dbIds || []).forEach(function (id) { dbSet[id] = true; });
+
+            var h = '<div class="kisi-baslik">';
+            h += '<div class="d-flex align-items-center gap-3"><div class="kisi-avatar buyuk" style="background:' + avatarRenk(r.userCode) + '">' + kacisK(basHarf(k)) + '</div>'
+               + '<div><div class="fw-bold fs-5 lh-1">' + kacisK(r.userCode) + '</div><div class="text-muted small mt-1">' + kacisK(k.adSoyad || '') + (k.yetki ? ' · SAP yetki kodu <b>' + kacisK(k.yetki) + '</b>' : '')
+               + (r.guncelleme ? ' · son değişiklik ' + kacisK(r.guncelleyen) + ' ' + kacisK(r.guncelleme) : '') + '</div></div></div>';
+            h += '<div class="d-flex gap-2 align-items-center flex-wrap">';
+            h += '<div class="input-group input-group-sm" style="width:auto;"><select id="kisiKopyaKaynak" class="form-select form-select-sm" style="max-width:230px;"><option value="">Başka kullanıcıdan kopyala…</option>';
+            kisiler.filter(function (x) { return x.userCode !== r.userCode && !tamYetkiMi(x) && (x.menuSayisi > 0 || x.sirketSayisi > 0); })
+                   .forEach(function (x) { h += '<option value="' + kacisK(x.userCode) + '">' + kacisK(x.userCode) + ' — ' + kacisK(x.adSoyad || '') + ' (' + x.menuSayisi + ' rapor)</option>'; });
+            h += '</select><button class="btn btn-outline-secondary" onclick="kisidenKopyala()" ' + (tam ? 'disabled' : '') + '><i class="fas fa-copy"></i></button></div>';
+            h += '<button class="btn btn-sm btn-success fw-bold px-3" onclick="kisiKaydet()" ' + (tam ? 'disabled' : '') + '><i class="fas fa-save me-1"></i>Kaydet</button>';
+            h += '</div></div>';
+
+            h += '<div class="p-3">';
+            if (tam) h += '<div class="alert alert-info py-2 small mb-3"><i class="fas fa-shield-halved me-1"></i>SAP yetki kodu <b>' + kacisK(k.yetki) + '</b> olan kullanıcı her raporu ve her şirketi görür; kişi bazlı seçim uygulanmaz.</div>';
+
+            h += '<div class="kisi-bolum"><div class="kisi-bolum-baslik"><span><i class="fas fa-database me-2 text-info"></i>Şirketler <span class="text-muted fw-normal" id="kisiDbSayac"></span></span>'
+               + '<span><a href="javascript:void(0)" onclick="kisiTumunuSec(\'kdb\', true)">tümü</a> · <a href="javascript:void(0)" onclick="kisiTumunuSec(\'kdb\', false)">hiçbiri</a></span></div>';
+            h += '<div class="d-flex flex-wrap gap-2">';
+            TUM_SIRKETLER.forEach(function (d) {
+                h += '<label class="kisi-chip"><input type="checkbox" class="kdb" value="' + d.id + '" ' + (dbSet[d.id] ? 'checked' : '') + ' ' + (tam ? 'disabled' : '') + ' onchange="kisiSayaclar()"><span>' + kacisK(d.ad) + '</span></label>';
+            });
+            h += '</div></div>';
+
+            h += '<div class="kisi-bolum"><div class="kisi-bolum-baslik"><span><i class="fas fa-file-alt me-2 text-primary"></i>Raporlar <span class="text-muted fw-normal" id="kisiMenuSayac"></span></span>'
+               + '<span class="d-flex align-items-center gap-2"><input type="text" class="form-control form-control-sm" style="width:190px" placeholder="rapor ara..." oninput="kisiMenuAra(this.value)">'
+               + '<a href="javascript:void(0)" onclick="kisiTumunuSec(\'kmenu\', true)">görünenleri seç</a> · <a href="javascript:void(0)" onclick="kisiTumunuSec(\'kmenu\', false)">kaldır</a></span></div>';
+            h += '<div class="row g-2" id="kisiMenuAlan">';
+            TUM_MENULER.forEach(function (kat) {
+                h += '<div class="col-xl-4 col-md-6 kisi-kat"><div class="kisi-kat-kart">'
+                   + '<div class="kisi-kat-baslik" onclick="kisiKategoriSec(this)" title="Kategorinin tamamını seç / kaldır"><span>' + kacisK(kat.kategori) + '</span><span class="kisi-kat-sayac"></span></div>';
+                kat.menuler.forEach(function (m) {
+                    h += '<label class="kisi-menu" data-ad="' + kacisK(m.ad).toLocaleLowerCase('tr-TR') + '"><input type="checkbox" class="kmenu" value="' + m.id + '" ' + (menuSet[m.id] ? 'checked' : '') + ' ' + (tam ? 'disabled' : '') + ' onchange="kisiSayaclar()">'
+                       + '<span class="' + (m.aktif ? '' : 'text-muted text-decoration-line-through') + '">' + kacisK(m.ad) + '</span></label>';
+                });
+                h += '</div></div>';
+            });
+            h += '</div></div></div>';
+            $('#kisiEditor').html(h);
+            kisiSayaclar();
+        }
+
+        function kisiSayaclar() {
+            $('#kisiMenuSayac').text('(' + $('#kisiEditor .kmenu:checked').length + ' / ' + $('#kisiEditor .kmenu').length + ')');
+            $('#kisiDbSayac').text('(' + $('#kisiEditor .kdb:checked').length + ' / ' + $('#kisiEditor .kdb').length + ')');
+            $('#kisiEditor .kisi-kat').each(function () {
+                var t = $(this).find('.kmenu').length, c = $(this).find('.kmenu:checked').length;
+                $(this).find('.kisi-kat-sayac').text(c + '/' + t).toggleClass('tam', t > 0 && c === t);
+            });
+        }
+        function kisiTumunuSec(sinif, durum) {
+            $('#kisiEditor .' + sinif + ':not(:disabled)').each(function () { if (sinif !== 'kmenu' || $(this).closest('.kisi-menu').is(':visible')) this.checked = durum; });
+            kisiSayaclar();
+        }
+        function kisiKategoriSec(el) {
+            var kutu = $(el).closest('.kisi-kat');
+            var gorunen = kutu.find('.kmenu:not(:disabled)').filter(function () { return $(this).closest('.kisi-menu').is(':visible'); });
+            var hepsi = gorunen.length > 0 && gorunen.filter(':checked').length === gorunen.length;
+            gorunen.prop('checked', !hepsi);
+            kisiSayaclar();
+        }
+        function kisiMenuAra(metin) {
+            metin = (metin || '').toLocaleLowerCase('tr-TR');
+            $('#kisiEditor .kisi-menu').each(function () { $(this).toggle(!metin || String($(this).data('ad')).indexOf(metin) >= 0); });
+            $('#kisiEditor .kisi-kat').each(function () { $(this).toggle($(this).find('.kisi-menu:visible').length > 0); });
+        }
+
+        function kisiKaydet() {
+            if (!seciliKisi) return;
+            var menuIds = $('#kisiEditor .kmenu:checked').map(function () { return parseInt(this.value); }).get();
+            var dbIds = $('#kisiEditor .kdb:checked').map(function () { return parseInt(this.value); }).get();
+            $.ajax({
+                url: '/Permission/KisiYetkileriKaydet', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ UserCode: seciliKisi, MenuIds: menuIds, DbIds: dbIds }),
+                success: function (r) {
+                    if (!r.success) { Swal.fire('Hata', r.message, 'error'); return; }
+                    Swal.fire({ icon: 'success', title: 'Kaydedildi', text: r.message, timer: 1500, showConfirmButton: false });
+                    kisileriYukle(seciliKisi);
+                },
+                error: function () { Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); }
+            });
+        }
+
+        function kisidenKopyala() {
+            if (!seciliKisi) return;
+            var kaynak = $('#kisiKopyaKaynak').val();
+            if (!kaynak) { Swal.fire('Kaynak seçin', 'Yetkileri kopyalanacak kullanıcıyı listeden seçin.', 'info'); return; }
+            Swal.fire({ title: 'Yetkiler kopyalansın mı?', html: '<b>' + kacisK(kaynak) + '</b> kullanıcısının rapor ve şirket yetkileri <b>' + kacisK(seciliKisi) + '</b> kullanıcısına kopyalanacak; mevcut seçimleri değişecek.', icon: 'question', showCancelButton: true, confirmButtonText: 'Kopyala', cancelButtonText: 'Vazgeç' })
+                .then(function (s) {
+                    if (!s.isConfirmed) return;
+                    $.post('/Permission/KisidenKopyala', { userCode: seciliKisi, kaynakUserCode: kaynak }, function (r) {
+                        if (!r.success) { Swal.fire('Hata', r.message, 'error'); return; }
+                        Swal.fire({ icon: 'success', title: 'Kopyalandı', text: r.message, timer: 1800, showConfirmButton: false });
+                        kisileriYukle(seciliKisi);
+                    });
+                });
+        }
+
+        $(function () { kisileriYukle(null); });
+
+        // ====================================================================
+        // RAPOR BAZLI YETKİ: raporu seç → kim görüyor, kullanıcı ekle / çıkar
+        // ====================================================================
+        var rbSeciliMenu = null, rbVeri = null;
+        var RB_KAYNAK = {
+            TAM: ['Tam yetki (A/S)', 'bg-success'],
+            ACIK: ['Herkese açık ekran', 'bg-secondary'],
+            KISI: ['Kişiye özel', 'bg-primary'],
+            ROL: ['Rol şablonu', 'bg-info text-dark'],
+            ROLVARSAYILAN: ['Rolünden (profili yok)', 'bg-warning text-dark']
+        };
+
+        function rbRaporListesiCiz() {
+            var ara = ($('#rbRaporAra').val() || '').toLocaleLowerCase('tr-TR');
+            var h = '', sayac = 0;
+            TUM_MENULER.forEach(function (kat) {
+                var satirlar = '';
+                kat.menuler.forEach(function (m) {
+                    if (ara && (m.ad + ' ' + kat.kategori).toLocaleLowerCase('tr-TR').indexOf(ara) < 0) return;
+                    sayac++;
+                    satirlar += '<div class="kisi-satir ' + (rbSeciliMenu === m.id ? 'aktif' : '') + '" onclick="rbRaporSec(' + m.id + ')">'
+                        + '<div class="flex-grow-1 min-w-0"><div class="kisi-kod text-truncate ' + (m.aktif ? '' : 'text-muted text-decoration-line-through') + '">' + kacisK(m.ad) + '</div></div>'
+                        + '<i class="fas fa-chevron-right text-muted" style="font-size:.7rem;"></i></div>';
+                });
+                if (satirlar) h += '<div class="px-3 pt-2 pb-1 text-uppercase fw-bold text-muted" style="font-size:.66rem; letter-spacing:.04em; background:#f8fafc;">' + kacisK(kat.kategori) + '</div>' + satirlar;
+            });
+            $('#rbRaporSayac').text(sayac + ' rapor');
+            $('#rbRaporListe').html(h || '<div class="text-center text-muted py-4 small">Rapor bulunamadı.</div>');
+        }
+
+        function rbRaporSec(menuId) {
+            rbSeciliMenu = menuId;
+            rbRaporListesiCiz();
+            $('#rbEditor').html('<div class="kisi-bos"><i class="fas fa-spinner fa-spin"></i></div>');
+            $.getJSON('/Permission/RaporKullanicilari', { menuId: menuId }, function (r) {
+                if (!r.success) { $('#rbEditor').html('<div class="alert alert-danger m-3">' + kacisK(r.message) + '</div>'); return; }
+                rbVeri = r; rbEditorCiz();
+            }).fail(function () { $('#rbEditor').html('<div class="alert alert-danger m-3">Sunucu ile iletişim kurulamadı.</div>'); });
+        }
+
+        function rbEditorCiz() {
+            var r = rbVeri; if (!r) return;
+            var h = '<div class="kisi-baslik">';
+            h += '<div><div class="fw-bold fs-5 lh-1"><i class="fas fa-file-alt text-primary me-2"></i>' + kacisK(r.rapor.ad) + (r.rapor.aktif ? '' : ' <span class="badge bg-secondary">pasif</span>') + '</div>'
+               + '<div class="text-muted small mt-1">' + kacisK(r.rapor.kategori || '') + ' · /' + kacisK(r.rapor.controller) + '/' + kacisK(r.rapor.action || 'Index')
+               + (r.roller.length ? ' · Rol şablonları: ' + r.roller.map(function (x) { return '<span class="badge bg-light text-dark border">' + kacisK(x.roleCode) + '</span>'; }).join(' ') : ' · <span class="text-warning">hiçbir rol şablonunda yok</span>') + '</div></div>';
+            h += '<div class="text-end"><div class="fw-bold fs-4 lh-1 text-primary">' + r.gorenler.length + '</div><div class="text-muted" style="font-size:.7rem;">kullanıcı görüyor</div></div>';
+            h += '</div><div class="p-3">';
+
+            if (r.herkeseAcik) h += '<div class="alert alert-info py-2 small mb-3"><i class="fas fa-info-circle me-1"></i>Bu ekran herkese açık; kullanıcı bazlı kısıtlanamaz.</div>';
+
+            // Kullanıcı ekleme
+            h += '<div class="kisi-bolum"><div class="kisi-bolum-baslik"><span><i class="fas fa-user-plus me-2 text-success"></i>Rapora kullanıcı ekle</span></div>';
+            if (r.herkeseAcik) h += '<div class="text-muted small">Gerekmez; herkes görür.</div>';
+            else if (!r.adaylar.length) h += '<div class="text-muted small">Eklenebilecek kullanıcı kalmadı; herkes görüyor.</div>';
+            else {
+                h += '<div class="d-flex gap-2 flex-wrap align-items-center"><input type="text" class="form-control form-control-sm" style="width:220px" id="rbAdayAra" placeholder="kod / ad ara..." oninput="rbAdaylariDoldur()">'
+                   + '<select id="rbAday" class="form-select form-select-sm" style="max-width:380px;"></select>'
+                   + '<button class="btn btn-sm btn-success fw-bold px-3" onclick="rbEkle()"><i class="fas fa-plus me-1"></i>Ekle</button>'
+                   + '<span class="text-muted" style="font-size:.72rem;">Eklenen kullanıcı kişi bazlı profile geçer; diğer yetkileri korunur.</span></div>';
+            }
+            h += '</div>';
+
+            // Görenler
+            h += '<div class="kisi-bolum"><div class="kisi-bolum-baslik"><span><i class="fas fa-users me-2 text-primary"></i>Raporu görebilenler <span class="text-muted fw-normal">(' + r.gorenler.length + ')</span></span>'
+               + '<input type="text" class="form-control form-control-sm" style="width:200px" placeholder="listede ara..." oninput="rbGorenAra(this.value)"></div>';
+            if (!r.gorenler.length) h += '<div class="text-muted small py-3 text-center">Bu raporu henüz kimse görmüyor.</div>';
+            else {
+                h += '<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0" id="rbGorenTablo"><thead class="table-light"><tr><th>Kullanıcı</th><th>Ad Soyad</th><th>SAP yetki</th><th>Nereden görüyor</th><th class="text-end"></th></tr></thead><tbody>';
+                r.gorenler.forEach(function (u) {
+                    var k = RB_KAYNAK[u.kaynak] || [u.kaynak, 'bg-light text-dark'];
+                    var kaldirilabilir = u.kaynak !== 'TAM' && u.kaynak !== 'ACIK';
+                    h += '<tr data-ara="' + kacisK((u.userCode + ' ' + u.adSoyad + ' ' + u.yetki).toLocaleLowerCase('tr-TR')) + '" class="' + (u.kilitli ? 'text-muted' : '') + '">'
+                       + '<td><span class="kisi-avatar me-2" style="width:26px;height:26px;flex-basis:26px;font-size:.62rem;display:inline-flex;background:' + avatarRenk(u.userCode) + '">' + kacisK((u.userCode || '?').substr(0, 2).toLocaleUpperCase('tr-TR')) + '</span><b>' + kacisK(u.userCode) + '</b>' + (u.kilitli ? ' <span class="badge bg-danger">kilitli</span>' : '') + '</td>'
+                       + '<td>' + kacisK(u.adSoyad || '—') + '</td>'
+                       + '<td>' + (u.yetki ? '<span class="kisi-yetki">' + kacisK(u.yetki) + '</span>' : '—') + '</td>'
+                       + '<td><span class="badge ' + k[1] + '">' + kacisK(k[0]) + '</span></td>'
+                       + '<td class="text-end">' + (kaldirilabilir ? '<button class="btn btn-sm btn-outline-danger py-0" title="Bu raporu kullanıcıdan kaldır" onclick="rbKaldir(\'' + kacisK(u.userCode) + '\')"><i class="fas fa-times"></i></button>' : '<span class="text-muted" style="font-size:.7rem;">kaldırılamaz</span>') + '</td></tr>';
+                });
+                h += '</tbody></table></div>';
+            }
+            h += '</div></div>';
+            $('#rbEditor').html(h);
+            rbAdaylariDoldur();
+        }
+
+        function rbAdaylariDoldur() {
+            var sel = $('#rbAday'); if (!sel.length || !rbVeri) return;
+            var ara = ($('#rbAdayAra').val() || '').toLocaleLowerCase('tr-TR');
+            var h = '', n = 0;
+            rbVeri.adaylar.forEach(function (u) {
+                var metin = (u.userCode + ' ' + u.adSoyad + ' ' + u.yetki).toLocaleLowerCase('tr-TR');
+                if (ara && metin.indexOf(ara) < 0) return;
+                n++;
+                h += '<option value="' + kacisK(u.userCode) + '">' + kacisK(u.userCode) + ' — ' + kacisK(u.adSoyad || '') + (u.yetki ? ' (' + kacisK(u.yetki) + ')' : ' (yetki kodu yok)') + (u.kilitli ? ' · kilitli' : '') + '</option>';
+            });
+            sel.html(h || '<option value="">eşleşen kullanıcı yok</option>');
+            sel.attr('size', 1);
+            if (n) sel.prepend('<option value="" selected>' + n + ' kullanıcı — seçin…</option>');
+        }
+        function rbGorenAra(metin) {
+            metin = (metin || '').toLocaleLowerCase('tr-TR');
+            $('#rbGorenTablo tbody tr').each(function () { $(this).toggle(!metin || String($(this).data('ara')).indexOf(metin) >= 0); });
+        }
+        function rbAyarla(userCode, ver) {
+            if (!rbSeciliMenu) return;
+            $.post('/Permission/RaporKullaniciAyarla', { menuId: rbSeciliMenu, userCode: userCode, ver: ver }, function (r) {
+                if (!r.success) { Swal.fire('Hata', r.message, 'error'); return; }
+                Swal.fire({ icon: 'success', title: ver ? 'Eklendi' : 'Kaldırıldı', text: r.message, timer: 1600, showConfirmButton: false });
+                rbRaporSec(rbSeciliMenu);
+                kisileriYukle(seciliKisi);   // Kullanıcı Yetkileri sekmesindeki sayaçlar da güncellensin
+            }).fail(function () { Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); });
+        }
+        function rbEkle() {
+            var kod = $('#rbAday').val();
+            if (!kod) { Swal.fire('Kullanıcı seçin', 'Rapora eklenecek kullanıcıyı listeden seçin.', 'info'); return; }
+            rbAyarla(kod, true);
+        }
+        function rbKaldir(kod) {
+            Swal.fire({ title: 'Rapor kaldırılsın mı?', html: '<b>' + kacisK(kod) + '</b> kullanıcısı artık <b>' + kacisK(rbVeri.rapor.ad) + '</b> raporunu göremeyecek.', icon: 'question', showCancelButton: true, confirmButtonText: 'Kaldır', cancelButtonText: 'Vazgeç', confirmButtonColor: '#dc3545' })
+                .then(function (s) { if (s.isConfirmed) rbAyarla(kod, false); });
+        }
+        $(function () { rbRaporListesiCiz(); });
+    </script>
+    <script>
+        // ---- Yetki ekranı yardımcıları (arama / toplu seçim / sayaç) ----
+        // ==========================================
+        // RAPOR (MENÜ) DÜZENLEME
+        // ==========================================
+        // Rapor adı / kategori tırnak içerebilir; değerler data-* özniteliklerinden okunur (onclick içine gömülmez).
+        function menuDuzenleBtn(btn) {
+            var d = btn.dataset;
+            menuDuzenle(parseInt(d.id), d.baslik || '', d.kategori || '', d.ikon || '', parseInt(d.sira) || 0);
+        }
+        function menuDuzenle(id, baslik, kategori, ikon, sira) {
+            $('#editMenuId').val(id);
+            $('#editMenuTitle').val(baslik);
+            $('#editMenuCategory').val(kategori);
+            $('#editMenuIcon').val(ikon || '');
+            $('#editMenuOrder').val(sira);
+            // Pencere .table-container içinde kaldıysa (yığın bağlamı) body'ye taşı; aksi halde arka perdenin altında kalır.
+            var el = document.getElementById('menuEditModal');
+            if (el && el.parentElement !== document.body) document.body.appendChild(el);
+            bootstrap.Modal.getOrCreateInstance(el).show();
+        }
+
+        function menuKaydet() {
+            var baslik = ($('#editMenuTitle').val() || '').trim();
+            if (!baslik) { Swal.fire('Eksik Bilgi', 'Rapor adı boş olamaz.', 'warning'); return; }
+
+            var payload = {
+                Id: parseInt($('#editMenuId').val()),
+                MenuTitle: baslik,
+                Category: ($('#editMenuCategory').val() || '').trim(),
+                Icon: ($('#editMenuIcon').val() || '').trim(),
+                DisplayOrder: parseInt($('#editMenuOrder').val()) || 0
+            };
+
+            $.ajax({
+                url: '/Permission/UpdateMenu',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(payload),
+                headers: { 'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val() },
+                success: function (res) {
+                    if (res.success) {
+                        Swal.fire({ icon: 'success', title: 'Kaydedildi', text: res.message, timer: 1400, showConfirmButton: false })
+                            .then(function () { location.reload(); });
+                    } else {
+                        Swal.fire('Hata', res.message, 'error');
+                    }
+                },
+                error: function () { Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); }
+            });
+        }
+
+        // ==========================================
+        // RAPORU SILME / GIZLEME
+        // ==========================================
+        function menuSil() {
+            var id = parseInt($('#editMenuId').val());
+            var ad = ($('#editMenuTitle').val() || '').trim();
+            if (!id) return;
+
+            Swal.fire({
+                icon: 'warning',
+                title: 'Menüden silinsin mi?',
+                html: '<b>' + ad + '</b> menüden kaldırılacak.<br><br>'
+                    + 'Rol yetkileri ve kullanıcı favorileri de temizlenir.<br>'
+                    + '<span class="text-danger small">Raporun kodu projede kalır; kaydı silinince '
+                    + 'yetki denetiminden geçmez ve adresini bilen açabilir. '
+                    + 'Sadece görünmesin istiyorsanız <b>Gizle</b> daha doğrudur.</span>',
+                showCancelButton: true,
+                confirmButtonText: 'Evet, sil',
+                cancelButtonText: 'Vazgeç',
+                confirmButtonColor: '#ef4444'
+            }).then(function (sonuc) {
+                if (!sonuc.isConfirmed) return;
+
+                $.ajax({
+                    url: '/Permission/DeleteMenu',
+                    type: 'POST',
+                    data: { id: id },
+                    headers: { 'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val() },
+                    success: function (res) {
+                        if (res.success) {
+                            Swal.fire({ icon: 'success', title: 'Silindi', text: res.message, timer: 1600, showConfirmButton: false })
+                                .then(function () { location.reload(); });
+                        } else {
+                            Swal.fire('Hata', res.message, 'error');
+                        }
+                    },
+                    error: function () { Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); }
+                });
+            });
+        }
+
+        function menuGizleAc() {
+            var id = parseInt($('#editMenuId').val());
+            if (!id) return;
+
+            $.ajax({
+                url: '/Permission/ToggleMenuActive',
+                type: 'POST',
+                data: { id: id },
+                headers: { 'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val() },
+                success: function (res) {
+                    if (res.success) {
+                        Swal.fire({ icon: 'success', title: 'Tamam', text: res.message, timer: 1600, showConfirmButton: false })
+                            .then(function () { location.reload(); });
+                    } else {
+                        Swal.fire('Hata', res.message, 'error');
+                    }
+                },
+                error: function () { Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); }
+            });
+        }
+
+        // ==========================================
+        // PROJEDEN ALGILANAN RAPORLAR
+        // ==========================================
+        var yeniRaporlar = [];
+
+        function yeniSecimGuncelle() {
+            var n = $('#tbody-yeni-raporlar .yeni-sec:checked').length;
+            $('#yeniSecimSayisi').text(n);
+            $('#btnYeniEkle').prop('disabled', n === 0);
+        }
+
+        function yeniTumunuSec(sec) {
+            $('#tbody-yeni-raporlar .yeni-sec').prop('checked', sec);
+            yeniSecimGuncelle();
+        }
+
+        function yeniRaporlariTara() {
+            $('#tbody-yeni-raporlar').html('<tr><td colspan="5" class="text-center py-4">'
+                + '<i class="fas fa-spinner fa-spin me-1"></i>Proje taranıyor...</td></tr>');
+
+            $.getJSON('/Permission/GetUnregisteredReports', function (res) {
+                if (!res || !res.success) {
+                    $('#tbody-yeni-raporlar').html('<tr><td colspan="5" class="text-danger text-center py-4">'
+                        + ((res && res.message) ? res.message : 'Tarama başarısız.') + '</td></tr>');
+                    return;
+                }
+
+                yeniRaporlar = res.data || [];
+
+                var secenekler = (res.kategoriler || []).map(function (k) {
+                    return '<option value="' + k + '"></option>';
+                }).join('');
+                $('#yeniKategoriListesi').html(secenekler);
+
+                $('#yeniRaporRozet').text(yeniRaporlar.length).toggle(yeniRaporlar.length > 0);
+
+                if (!yeniRaporlar.length) {
+                    $('#tbody-yeni-raporlar').html('<tr><td colspan="5" class="text-success text-center py-4 fw-bold">'
+                        + '<i class="fas fa-circle-check me-1"></i>Menüye eklenmemiş rapor yok.</td></tr>');
+                    yeniSecimGuncelle();
+                    return;
+                }
+
+                var html = '';
+                yeniRaporlar.forEach(function (r, i) {
+                    html += '<tr>'
+                          + '<td><input type="checkbox" class="form-check-input yeni-sec" data-idx="' + i + '" onclick="yeniSecimGuncelle()"></td>'
+                          + '<td><span class="badge bg-dark">' + r.controllerName + '</span></td>'
+                          + '<td><code class="small">' + r.rota + '</code></td>'
+                          + '<td><input type="text" class="form-control form-control-sm yeni-ad" data-idx="' + i + '" value="'
+                            + $('<div>').text(r.onerilenBaslik || r.controllerName).html() + '"></td>'
+                          + '<td><input type="text" class="form-control form-control-sm yeni-kat" data-idx="' + i + '" list="yeniKategoriListesi" value="'
+                            + $('<div>').text(r.onerilenKategori || '').html() + '" placeholder="Başlık seçin veya yazın"></td>'
+                          + '</tr>';
+                });
+
+                $('#tbody-yeni-raporlar').html(html);
+                yeniSecimGuncelle();
+            }).fail(function () {
+                $('#tbody-yeni-raporlar').html('<tr><td colspan="5" class="text-danger text-center py-4">'
+                    + 'Sunucuya ulaşılamadı.</td></tr>');
+            });
+        }
+
+        function yeniRaporlariEkle() {
+            var paket = [];
+
+            $('#tbody-yeni-raporlar .yeni-sec:checked').each(function () {
+                var i = $(this).data('idx');
+                var r = yeniRaporlar[i];
+                if (!r) return;
+
+                paket.push({
+                    ControllerName: r.controllerName,
+                    ActionName: r.actionName,
+                    MenuTitle: ($('.yeni-ad[data-idx="' + i + '"]').val() || r.controllerName).trim(),
+                    Category: ($('.yeni-kat[data-idx="' + i + '"]').val() || '').trim(),
+                    Icon: 'fas fa-chart-line'
+                });
+            });
+
+            if (!paket.length) return;
+
+            $('#btnYeniEkle').prop('disabled', true);
+
+            $.ajax({
+                url: '/Permission/AddDetectedReports',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(paket),
+                headers: { 'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val() },
+                success: function (res) {
+                    if (res.success) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Eklendi',
+                            html: res.message + '<br><span class="small text-muted">Rol yetkilerini vermeyi unutmayın.</span>'
+                        }).then(function () { location.reload(); });
+                    } else {
+                        Swal.fire('Hata', res.message, 'error');
+                        yeniSecimGuncelle();
+                    }
+                },
+                error: function () {
+                    Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error');
+                    yeniSecimGuncelle();
+                }
+            });
+        }
+
+        // Sekmeye ilk girildiginde kendiliginden tara
+        $(document).on('shown.bs.tab', '#yeni-tab', function () {
+            if (!yeniRaporlar.length) yeniRaporlariTara();
+        });
+
+        function baslikDuzenle(eskiAd) {
+            Swal.fire({
+                title: 'Başlığı Yeniden Adlandır',
+                input: 'text',
+                inputValue: eskiAd,
+                inputLabel: 'Bu başlık altındaki tüm raporlar yeni başlığa taşınır.',
+                showCancelButton: true,
+                confirmButtonText: 'Kaydet',
+                cancelButtonText: 'Vazgeç',
+                confirmButtonColor: '#3b82f6',
+                inputValidator: function (deger) {
+                    if (!deger || !deger.trim()) return 'Başlık adı boş olamaz.';
+                }
+            }).then(function (sonuc) {
+                if (!sonuc.isConfirmed) return;
+
+                $.post('/Permission/RenameCategory',
+                    { eskiAd: eskiAd, yeniAd: sonuc.value.trim(), __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() },
+                    function (res) {
+                        if (res.success) {
+                            Swal.fire({ icon: 'success', title: 'Kaydedildi', text: res.message, timer: 1600, showConfirmButton: false })
+                                .then(function () { location.reload(); });
+                        } else {
+                            Swal.fire('Hata', res.message, 'error');
+                        }
+                    }).fail(function () { Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); });
+            });
+        }
+
+        // ==========================================
+        // MENÜ BAŞLIKLARI
+        // ==========================================
+        function ikonOnizle() {
+            var sinif = ($('#catIcon').val() || '').trim() || 'fas fa-star text-warning';
+            $('#catIconPreview').attr('class', sinif);
+        }
+
+        function baslikEkle() {
+            $('#catModalBaslik').text('Yeni Başlık');
+            $('#catId').val(0);
+            $('#catName').val('');
+            $('#catIcon').val('');
+            $('#catUstGrup').val('');
+            $('#catOrder').val(0);
+            ikonOnizle();
+            new bootstrap.Modal(document.getElementById('catModal')).show();
+        }
+
+        function baslikDuzenleModal(id, ad, ikon, sira, ustGrup) {
+            $('#catModalBaslik').text('Başlığı Düzenle');
+            $('#catId').val(id);
+            $('#catName').val(ad);
+            $('#catIcon').val(ikon || '');
+            $('#catUstGrup').val(ustGrup || '');
+            $('#catOrder').val(sira);
+            ikonOnizle();
+            new bootstrap.Modal(document.getElementById('catModal')).show();
+        }
+
+        function baslikKaydet() {
+            var ad = ($('#catName').val() || '').trim();
+            if (!ad) { Swal.fire('Eksik Bilgi', 'Başlık adı boş olamaz.', 'warning'); return; }
+
+            var payload = {
+                Id: parseInt($('#catId').val()) || 0,
+                Name: ad,
+                Icon: ($('#catIcon').val() || '').trim(),
+                UstGrup: ($('#catUstGrup').val() || '').trim(),
+                DisplayOrder: parseInt($('#catOrder').val()) || 0
+            };
+
+            $.ajax({
+                url: '/Permission/SaveCategory',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(payload),
+                success: function (res) {
+                    if (res.success) {
+                        Swal.fire({ icon: 'success', title: 'Kaydedildi', text: res.message, timer: 1600, showConfirmButton: false })
+                            .then(function () { location.reload(); });
+                    } else {
+                        Swal.fire('Hata', res.message, 'error');
+                    }
+                },
+                error: function () { Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); }
+            });
+        }
+
+        function baslikSil(id, ad, raporSayisi) {
+            // Icinde rapor yoksa dogrudan sil
+            if (!raporSayisi) {
+                Swal.fire({
+                    title: 'Başlık silinsin mi?',
+                    text: ad + ' başlığı kaldırılacak.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Evet, sil',
+                    cancelButtonText: 'Vazgeç',
+                    confirmButtonColor: '#ef4444'
+                }).then(function (sonuc) {
+                    if (sonuc.isConfirmed) baslikSilGonder(id, null);
+                });
+                return;
+            }
+
+            // Icinde rapor varsa once nereye tasinacagini soralim
+            $.post('/Permission/DeleteCategory', { id: id }, function (res) {
+                if (res.success) { location.reload(); return; }
+
+                if (!res.tasimaGerekli) { Swal.fire('Hata', res.message, 'error'); return; }
+
+                var secenekler = {};
+                (res.secenekler || []).forEach(function (k) { secenekler[k] = k; });
+
+                Swal.fire({
+                    title: ad + ' silinsin mi?',
+                    html: 'Bu başlıkta <b>' + res.raporSayisi + ' rapor</b> var.<br>'
+                        + 'Silmeden önce hepsi seçtiğiniz başlığa taşınacak.',
+                    icon: 'warning',
+                    input: 'select',
+                    inputOptions: secenekler,
+                    inputPlaceholder: 'Raporlar hangi başlığa taşınsın?',
+                    showCancelButton: true,
+                    confirmButtonText: 'Taşı ve sil',
+                    cancelButtonText: 'Vazgeç',
+                    confirmButtonColor: '#ef4444',
+                    inputValidator: function (deger) {
+                        if (!deger) return 'Bir hedef başlık seçmelisiniz.';
+                    }
+                }).then(function (sonuc) {
+                    if (sonuc.isConfirmed) baslikSilGonder(id, sonuc.value);
+                });
+            }).fail(function () { Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); });
+        }
+
+        function baslikSilGonder(id, hedefKategori) {
+            $.post('/Permission/DeleteCategory', { id: id, hedefKategori: hedefKategori || '' }, function (res) {
+                if (res.success) {
+                    Swal.fire({ icon: 'success', title: 'Tamam', text: res.message, timer: 1800, showConfirmButton: false })
+                        .then(function () { location.reload(); });
+                } else {
+                    Swal.fire('Hata', res.message, 'error');
+                }
+            }).fail(function () { Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); });
+        }
+
+        // ==========================================
+        // ŞİRKETİN GÖRÜNEN ADI
+        // ==========================================
+        function sirketAdiDuzenle(id, mevcutAd, dbKey) {
+            Swal.fire({
+                title: 'Şirket Adını Değiştir',
+                input: 'text',
+                inputValue: mevcutAd,
+                inputLabel: 'Üst menüdeki şirket seçicisinde bu ad görünür. Veritabanı: ' + dbKey,
+                showCancelButton: true,
+                confirmButtonText: 'Kaydet',
+                cancelButtonText: 'Vazgeç',
+                confirmButtonColor: '#3b82f6',
+                inputValidator: function (deger) {
+                    if (!deger || !deger.trim()) return 'Görünen ad boş olamaz.';
+                }
+            }).then(function (sonuc) {
+                if (!sonuc.isConfirmed) return;
+
+                $.post('/Permission/UpdateDatabaseDisplay',
+                    { id: id, display: sonuc.value.trim(), __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() },
+                    function (res) {
+                        if (res.success) {
+                            Swal.fire({ icon: 'success', title: 'Kaydedildi', text: res.message, timer: 1600, showConfirmButton: false })
+                                .then(function () { location.reload(); });
+                        } else {
+                            Swal.fire('Hata', res.message, 'error');
+                        }
+                    }).fail(function () { Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); });
+            });
+        }
+
+        // Başlık yönetimi role bağlı değildir; o sekme açıkken alan kilidi kalkar.
+        $(document).ready(function () {
+            $('#cats-tab').on('shown.bs.tab', function () {
+            });
+
+            $('#menus-tab, #dbs-tab').on('shown.bs.tab', function () {
+            });
+        });
+
+        function menuAra() {
+            var q = (document.getElementById('menuArama').value || '').toLocaleLowerCase('tr-TR');
+
+            document.querySelectorAll('#menus-pane .dashboard-card').forEach(function (kart) {
+                var gorunenSatir = 0;
+
+                kart.querySelectorAll('.menu-item-row').forEach(function (satir) {
+                    var metin = (satir.textContent || '').toLocaleLowerCase('tr-TR');
+                    var uygun = !q || metin.indexOf(q) > -1;
+                    satir.style.display = uygun ? '' : 'none';
+                    if (uygun) gorunenSatir++;
+                });
+
+                var kolon = kart.closest('[class*="col-"]');
+                if (kolon) kolon.classList.toggle('kategori-gizli', gorunenSatir === 0);
+            });
+        }
+
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+
+        // ==========================================
+        // ŞİRKETLERİ OTOMATİK SENKRONİZE ETME JAVASCRIPT
+        // ==========================================
+        function syncDatabases() {
+            Swal.fire({
+                title: 'Şirketler Taranıyor...',
+                text: 'appsettings.json üzerindeki yeni şirketler kontrol ediliyor.',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            $.get('/Permission/SyncDatabasesFromConfig', function (res) {
+                if (res.success) {
+                    Swal.fire('Başarılı!', res.message, 'success').then(() => {
+                        location.reload();
+                    });
+                } else {
+                    Swal.fire('Hata', res.message, 'error');
+                }
+            }).fail(function () {
+                Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error');
+            });
+        }
+
+        function saveNewReport() {
+            const payload = {
+                Category: $('#newCategory').val(),
+                MenuTitle: $('#newMenuTitle').val().trim(),
+                ControllerName: $('#newController').val().trim(),
+                ActionName: $('#newAction').val().trim(),
+                Icon: $('#newIcon').val().trim()
+            };
+
+            if (!payload.MenuTitle || !payload.ControllerName) {
+                Swal.fire('Uyarı', 'Rapor Başlığı ve Controller Adı zorunludur.', 'warning');
+                return;
+            }
+
+            Swal.fire({ title: 'Sisteme Ekleniyor...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+            $.ajax({
+                url: '/Permission/AddNewReport',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(payload),
+                success: function (res) {
+                    if (res.success) {
+                        $('#addReportModal').modal('hide');
+                        Swal.fire('Başarılı!', res.message, 'success').then(() => {
+                            location.reload(); 
+                        });
+                    } else {
+                        Swal.fire('Hata', res.message, 'error');
+                    }
+                },
+                error: function () {
+                    Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error');
+                }
+            });
+        }
+
+        // ==========================================
+        // SAP KULLANICI YÖNETİMİ JAVASCRIPT
+        // ==========================================
+        function openSapUserModal() {
+            $('#sapUserModal').modal('show');
+            document.getElementById('list-tab').click(); 
+            $('#sapUserSearchInput').val(''); 
+            loadSapUsers();
+        }
+
+        function filterSapUsers() {
+            let value = $('#sapUserSearchInput').val().toLowerCase();
+            $("#sapUserTableBody tr").not('.sap-ayrac').filter(function() {
+                $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
+            });
+        }
+
+        function toggleSapUserLock(internalKey, code, kilitle) {
+            Swal.fire({
+                title: kilitle ? 'Pasife çekilsin mi?' : 'Aktife alınsın mı?',
+                html: kilitle ? `<b>${code}</b> kullanıcısı SAP'de kilitlenir: portala ve SAP'ye giremez, Gider/Gelir atama listelerinde ve kullanıcı seçimlerinde görünmez. İstediğinizde tekrar aktife alabilirsiniz.` : `<b>${code}</b> kullanıcısının kilidi kaldırılır; tekrar giriş yapabilir ve listelerde görünür.`,
+                icon: 'question', showCancelButton: true, confirmButtonText: kilitle ? 'Pasife çek' : 'Aktife al', cancelButtonText: 'Vazgeç', confirmButtonColor: kilitle ? '#f59e0b' : '#16a34a'
+            }).then(function (s) {
+                if (!s.isConfirmed) return;
+                Swal.fire({ title: 'İşleniyor...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                $.post('/Permission/SetSapUserLocked', { internalKey: internalKey, kilitle: kilitle }, function (res) {
+                    if (res.success) { Swal.fire({ icon: 'success', title: 'Tamam', text: res.message, timer: 2500, showConfirmButton: false }); loadSapUsers(); }
+                    else Swal.fire('Hata', res.message, 'error');
+                }).fail(function () { Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); });
+            });
+        }
+
+        function deleteSapUser(internalKey, code) {
+            Swal.fire({
+                title: 'Kullanıcı silinsin mi?',
+                html: `<b>${code}</b> SAP'den kalıcı olarak silinecek; portal yetki kayıtları da temizlenir.<br><small class="text-muted">SAP, daha önce giriş yapmış ya da belge oluşturmuş kullanıcının silinmesine izin vermez; o durumda "Pasife çek" kullanın.</small>`,
+                icon: 'warning', showCancelButton: true, confirmButtonText: 'Sil', cancelButtonText: 'Vazgeç', confirmButtonColor: '#dc3545'
+            }).then(function (s) {
+                if (!s.isConfirmed) return;
+                Swal.fire({ title: 'SAP Service Layer İşlemi Yapılıyor...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                $.post('/Permission/DeleteSapUser', { internalKey: internalKey }, function (res) {
+                    if (res.success) { Swal.fire({ icon: 'success', title: 'Silindi', text: res.message, timer: 2500, showConfirmButton: false }); loadSapUsers(); }
+                    else Swal.fire({ icon: 'error', title: 'Silinemedi', text: res.message, showCancelButton: true, confirmButtonText: 'Pasife çek', cancelButtonText: 'Kapat', confirmButtonColor: '#f59e0b' })
+                        .then(function (t) { if (t.isConfirmed) toggleSapUserLock(internalKey, code, true); });
+                }).fail(function () { Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); });
+            });
+        }
+
+        // Diğer şirketteki kullanıcıyı URASKIMYA'da açmak için formu doldurur.
+        function digerSirkettenAc(btn) {
+            const d = btn.dataset;
+            prepareNewSapUser();
+            $('#sapUserCode').val(decodeURIComponent(d.code));
+            $('#sapUserName').val(decodeURIComponent(d.name));
+            $('#sapEmail').val(decodeURIComponent(d.email));
+            $('#sapPassword').val(decodeURIComponent(d.pass));
+            const yetki = decodeURIComponent(d.yetki);
+            if (yetki && $('#sapAuthority option[value="' + yetki + '"]').length) $('#sapAuthority').val(yetki);
+            if (!$('#sapAuthority').val()) $('#sapAuthority').focus();
+        }
+
+        function loadSapUsers() {
+            $('#sapUserTableBody').html('<tr><td colspan="5" class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>SAP\'den Kullanıcılar Yükleniyor...</td></tr>');
+            
+            $.get('/Permission/GetSapUsers', function(res) {
+                if(res.success) {
+                    let html = '';
+                    res.data.forEach(u => {
+                        let internalKey = u.InternalKey || u.internalKey || 0; 
+                        let code = u.UserCode || u.userCode || 'Bilinmiyor';
+                        let name = u.UserName || u.userName || '-';
+                        let email = u.eMail || u.email || '';
+                        let yetki = u.U_BE1_YETKI || u.u_BE1_YETKI || '';
+                        let pass = u.U_BE1_PASSWORD || u.u_BE1_PASSWORD || '';
+                        let kilitli = (u.Locked || u.locked || '') === 'tYES';
+
+                        let yetkiBadge = yetki ? `<span class="badge bg-info text-dark">${yetki}</span>` : `<span class="badge bg-secondary">Yetki Yok</span>`;
+                        if (kilitli) yetkiBadge += ' <span class="badge bg-danger" title="Pasif: SAP ve portala giremez, atama listelerinde görünmez">pasif</span>';
+                        let passDisplay = pass ? `<span class="text-muted fw-bold">${pass}</span>` : `<span class="badge bg-light text-secondary border">Şifre Yok</span>`;
+                        
+                        let escapedUserName = name.replace(/'/g, "\\'");
+                        let escapedEmail = email.replace(/'/g, "\\'");
+                        let escapedPass = pass.replace(/'/g, "\\'");
+                        
+                        html += `
+                            <tr class="${kilitli ? 'text-muted' : ''}" style="${kilitli ? 'background:#fafafa;' : ''}">
+                                <td class="fw-bold">${code}</td>
+                                <td>${name}</td>
+                                <td>${passDisplay}</td>
+                                <td>${yetkiBadge}</td>
+                                <td class="text-center text-nowrap">
+                                    <button class="btn btn-sm btn-light border" onclick="editSapUser(${internalKey}, '${code}', '${escapedUserName}', '${escapedEmail}', '${yetki}', '${escapedPass}')">
+                                        <i class="fas fa-edit text-primary"></i> Düzenle
+                                    </button>
+                                    <button class="btn btn-sm ${kilitli ? 'btn-outline-success' : 'btn-outline-warning'}" title="${kilitli ? 'Aktife al' : 'Pasife çek: giriş yapamaz, atama listelerinde görünmez'}" onclick="toggleSapUserLock(${internalKey}, '${code}', ${kilitli ? 'false' : 'true'})">
+                                        <i class="fas ${kilitli ? 'fa-unlock' : 'fa-user-slash'}"></i> ${kilitli ? 'Aktife al' : 'Pasife çek'}
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" title="SAP'den sil (SAP izin vermezse pasife çekin)" onclick="deleteSapUser(${internalKey}, '${code}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+
+                    // DİĞER ŞİRKETLERDEKİ KULLANICILAR (URASKIMYA'da kaydı yok).
+                    // "URASKIMYA'da Aç" formu bu bilgilerle dolu açar; yönetici yetkiyi seçip kaydeder.
+                    const digerler = res.digerler || [];
+                    if (digerler.length) {
+                        html += `<tr class="sap-ayrac"><td colspan="5" class="bg-light fw-bold text-secondary small py-2">
+                                    <i class="fas fa-building me-1"></i> Diğer şirketlerdeki kullanıcılar (URASKIMYA'da yok) — ${digerler.length} kişi
+                                 </td></tr>`;
+                        digerler.forEach(u => {
+                            let code = u.userCode || u.UserCode || '';
+                            let name = u.userName || u.UserName || '';
+                            let email = u.eMail || u.EMail || '';
+                            let yetki = u.u_BE1_YETKI || u.U_BE1_YETKI || '';
+                            let pass = u.u_BE1_PASSWORD || u.U_BE1_PASSWORD || '';
+                            let sirketler = (u.sirketler || u.Sirketler || []).join(', ');
+                            let tel = u.personelTel || u.PersonelTel || '';
+                            html += `
+                                <tr class="sap-diger" style="background:#fbfbff;">
+                                    <td class="fw-bold">${code}<br><span class="badge bg-secondary" title="Bu kodun bulunduğu şirketler">${sirketler}</span></td>
+                                    <td>${name || '-'}${email ? '<br><span class="text-muted small">' + email + '</span>' : ''}${tel ? '<br><span class="text-muted small">' + tel + '</span>' : ''}</td>
+                                    <td>${pass ? '<span class="text-muted">' + pass + '</span>' : '<span class="badge bg-light text-secondary border">Şifre Yok</span>'}</td>
+                                    <td>${yetki ? '<span class="badge bg-info text-dark">' + yetki + '</span>' : '<span class="badge bg-secondary">Yetki Yok</span>'}</td>
+                                    <td class="text-center">
+                                        <button class="btn btn-sm btn-outline-success fw-bold" data-code="${encodeURIComponent(code)}" data-name="${encodeURIComponent(name)}" data-email="${encodeURIComponent(email)}" data-yetki="${encodeURIComponent(yetki)}" data-pass="${encodeURIComponent(pass)}" onclick="digerSirkettenAc(this)">
+                                            <i class="fas fa-user-plus"></i> URASKIMYA'da Aç
+                                        </button>
+                                    </td>
+                                </tr>`;
+                        });
+                    }
+                    $('#sapUserTableBody').html(html);
+                } else {
+                    $('#sapUserTableBody').html(`<tr><td colspan="5" class="text-center text-danger">${res.message}</td></tr>`);
+                }
+            }).fail(function() {
+                $('#sapUserTableBody').html('<tr><td colspan="5" class="text-center text-danger">Sunucu ile bağlantı koptu.</td></tr>');
+            });
+        }
+
+        function prepareNewSapUser() {
+            $('#sapIsEdit').val('0');
+            $('#sapInternalKey').val('0'); 
+            $('#sapUserCode').val('').prop('readonly', false);
+            $('#sapUserName').val('');
+            $('#sapEmail').val('');
+            $('#sapPassword').val('');
+            $('#sapAuthority').val('');
+            
+            document.getElementById('form-tab').click(); 
+        }
+
+        function editSapUser(internalKey, userCode, userName, email, auth, pass) {
+            $('#sapIsEdit').val('1');
+            $('#sapInternalKey').val(internalKey); 
+            $('#sapUserCode').val(userCode).prop('readonly', true);
+            $('#sapUserName').val(userName);
+            $('#sapEmail').val(email);
+            $('#sapPassword').val(pass); 
+            $('#sapAuthority').val(auth);
+            
+            document.getElementById('form-tab').click(); 
+        }
+
+        function saveSapUser() {
+            const isEdit = $('#sapIsEdit').val() === '1';
+            const internalKey = $('#sapInternalKey').val(); 
+            const userCode = $('#sapUserCode').val().trim();
+            
+            const payload = {
+                UserCode: userCode,
+                UserName: $('#sapUserName').val().trim(),
+                eMail: $('#sapEmail').val().trim(),
+                U_BE1_PASSWORD: $('#sapPassword').val().trim(),
+                U_BE1_YETKI: $('#sapAuthority').val()
+            };
+
+            if (!payload.UserCode) {
+                Swal.fire('Uyarı', 'Kullanıcı Kodu zorunludur!', 'warning');
+                return;
+            }
+
+            const url = isEdit ? `/Permission/UpdateSapUser?internalKey=${internalKey}` : `/Permission/CreateSapUser`;
+
+            Swal.fire({ title: 'SAP Service Layer İşlemi Yapılıyor...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+            $.ajax({
+                url: url,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(payload),
+                success: function (res) {
+                    if (res.success) {
+                        Swal.fire('Başarılı!', res.message, 'success').then(() => {
+                            document.getElementById('list-tab').click(); 
+                            loadSapUsers(); 
+                        });
+                    } else {
+                        Swal.fire('Hata', res.message, 'error');
+                    }
+                },
+                error: function () {
+                    Swal.fire('Hata', 'Sunucu ile iletişim hatası oluştu.', 'error');
+                }
+            });
+        }
+
+        /* ===== Önerilen modern menü düzeni (Menü Başlıkları sekmesi) ===== */
+        function menuDuzeniUygula() {
+            $.get('/Permission/MenuDuzeniOnizle', function (res) {
+                if (!res || !res.success) { Swal.fire('Hata', (res && res.message) || 'Önizleme alınamadı.', 'error'); return; }
+                var kac = (s) => $('<div>').text(s == null ? '' : String(s)).html();
+                var gruplar = {};
+                res.plan.forEach(function (p) { (gruplar[p.ustGrup] = gruplar[p.ustGrup] || []).push(p); });
+                var html = '<div class="text-start" style="max-height:52vh;overflow:auto;font-size:.85rem;">';
+                Object.keys(gruplar).forEach(function (g) {
+                    html += '<div class="fw-bold mt-2 mb-1" style="color:#1d4ed8;"><i class="fas fa-folder me-1"></i>' + kac(g) + '</div><ul class="mb-1 ps-3">';
+                    gruplar[g].forEach(function (p) {
+                        var birlesen = p.kaynaklar.filter(function (k) { return k.ad.toLowerCase() !== p.hedef.toLowerCase(); }).map(function (k) { return kac(k.ad) + ' (' + k.adet + ')'; });
+                        html += '<li><i class="' + kac(p.ikon) + ' me-1 text-muted"></i><b>' + kac(p.hedef) + '</b>'
+                             + (birlesen.length ? ' <span class="text-muted">← ' + birlesen.join(', ') + '</span>' : '') + '</li>';
+                    });
+                    html += '</ul>';
+                });
+                if (res.planDisi && res.planDisi.length) html += '<div class="mt-2 small text-muted">Plan dışı başlıklar (sona alınır, silinmez): ' + res.planDisi.map(kac).join(', ') + '</div>';
+                html += '</div><div class="small text-muted mt-2">Yalnızca başlık adı/sırası/ikonu ve üst grup değişir; raporlar ve kullanıcı yetkileri korunur. Tekrar çalıştırmak zararsızdır.</div>';
+                Swal.fire({ title: 'Önerilen menü düzeni uygulansın mı?', html: html, width: 760, icon: 'question', showCancelButton: true, confirmButtonText: 'Evet, uygula', cancelButtonText: 'Vazgeç', confirmButtonColor: '#2563eb' })
+                    .then(function (r) {
+                        if (!r.isConfirmed) return;
+                        $.ajax({ url: '/Permission/MenuDuzeniUygula', type: 'POST', headers: { 'RequestVerificationToken': $('#antiForgeryForm input[name="__RequestVerificationToken"]').val() || '' } })
+                            .done(function (s) {
+                                if (s && s.success) Swal.fire({ title: 'Uygulandı', html: '<div class="text-start small" style="max-height:40vh;overflow:auto;">' + (s.log || []).map(kac).join('<br>') + '</div>', icon: 'success' }).then(function () { location.reload(); });
+                                else Swal.fire('Hata', (s && s.message) || 'Uygulanamadı.', 'error');
+                            })
+                            .fail(function (x) { Swal.fire('Hata', x.responseText || x.statusText, 'error'); });
+                    });
+            }).fail(function (x) { Swal.fire('Hata', x.responseText || x.statusText, 'error'); });
+        }
+
+        /* ===== Şirketler sekmesi: görünen ad / öneri / aktiflik ===== */
+        function sirketSatir(id) { return $('#tblSirketler tr[data-sirket-id="' + id + '"]'); }
+        function sirketAdiKaydet(id) {
+            var kutu = sirketSatir(id).find('.sirket-ad');
+            var ad = (kutu.val() || '').trim();
+            if (!ad) { Swal.fire('Uyarı', 'Görünen ad boş olamaz.', 'warning'); return; }
+            $.post('/Permission/UpdateDatabaseDisplay', { id: id, display: ad, __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() }, function (res) {
+                if (res.success) { kutu.addClass('is-valid'); setTimeout(function () { kutu.removeClass('is-valid'); }, 1500); toastr && toastr.success ? toastr.success(res.message) : null; }
+                else Swal.fire('Hata', res.message, 'error');
+            }).fail(function () { Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); });
+        }
+        function sirketOneriUygula(id, oneri) { sirketSatir(id).find('.sirket-ad').val(oneri).focus(); }
+        function sirketAktifDegistir(id, aktif) {
+            $.post('/Permission/SirketAktifDegistir', { id: id, aktif: aktif, __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() }, function (res) {
+                if (!res.success) { Swal.fire('Hata', res.message || 'Kaydedilemedi.', 'error'); return; }
+                sirketSatir(id).toggleClass('table-secondary opacity-75', !aktif);
+            }).fail(function () { Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); });
+        }
+        function sirketAdlariniDoldur(sadeceBos) {
+            Swal.fire({
+                title: sadeceBos ? 'Boş adlar doldurulsun mu?' : 'Tüm şirket adları doldurulsun mu?',
+                html: sadeceBos ? 'Yalnızca hâlâ ham veritabanı adı taşıyan şirketlere önerilen ad yazılır.' : 'Tüm şirketlerin görünen adı önerilen adla <b>değiştirilir</b> (elle yazdıklarınız dâhil). Sonra tek tek düzeltebilirsiniz.',
+                icon: 'question', showCancelButton: true, confirmButtonText: 'Evet, doldur', cancelButtonText: 'Vazgeç', confirmButtonColor: '#2563eb'
+            }).then(function (r) {
+                if (!r.isConfirmed) return;
+                $.post('/Permission/SirketAdlariniDoldur', { sadeceBos: sadeceBos, __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() }, function (res) {
+                    if (res.success) Swal.fire({ icon: 'success', title: 'Tamam', text: res.message, timer: 1500, showConfirmButton: false }).then(function () { location.reload(); });
+                    else Swal.fire('Hata', res.message, 'error');
+                }).fail(function () { Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error'); });
+            });
+        }
+        function sirketAra(q) {
+            q = (q || '').toLocaleLowerCase('tr-TR');
+            $('#tblSirketler tbody tr').each(function () {
+                var m = ($(this).find('td').first().text() + ' ' + $(this).find('.sirket-ad').val()).toLocaleLowerCase('tr-TR');
+                $(this).toggle(!q || m.indexOf(q) >= 0);
+            });
+        }
+    </script>
+}

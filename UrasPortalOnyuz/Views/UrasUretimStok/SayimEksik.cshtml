@@ -1,0 +1,167 @@
+@{
+    ViewData["Title"] = "Sayılmayan Kalemler";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-clipboard-question me-2 text-primary"></i> Sayılmayan Kalemler</h2>
+    <button class="btn btn-outline-secondary btn-sm" onclick="window.print()"><i class="fas fa-print me-1"></i>Yazdır</button>
+</div>
+<p class="text-muted mb-3">Seçilen depo ve tarih aralığında hiç sayılmamış, pozitif stoklu kalemler.</p>
+
+<div class="card dash-card mb-3">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-2"><label class="form-label small fw-bold">Başlangıç</label><input type="date" id="fBas" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-2"><label class="form-label small fw-bold">Bitiş</label><input type="date" id="fBit" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small fw-bold">Depo</label>
+                <select id="fDepo" class="form-select form-select-sm"><option value="">Depo seçin...</option></select>
+            </div>
+            <div class="col-6 col-md-3 d-flex align-items-end"><button class="btn btn-primary btn-sm w-100" onclick="yukle()"><i class="fas fa-rotate me-1"></i>Getir</button></div>
+        </div>
+    </div>
+</div>
+
+<div id="yukleniyor" class="text-center text-muted py-5" style="display:none;"><span class="spinner-border spinner-border-sm me-2"></span>Yükleniyor…</div>
+
+<div id="icerik" style="display:none;">
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #2a78d6"><div class="l">Dönemde Sayım Belgesi</div><div class="v" id="kpiBelge">0</div></div></div>
+        <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #1baf7a"><div class="l">Sayılan Farklı Kalem</div><div class="v" id="kpiSayilan">0</div></div></div>
+        <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #e34948"><div class="l">Sayılmayan Kalem</div><div class="v" id="kpiSayilmayan">0</div></div></div>
+    </div>
+
+    <div class="card dash-card">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span class="fw-bold small text-uppercase text-muted">Kalemler <span id="kalemSayisi" class="badge bg-primary ms-1">0</span></span>
+            <div class="d-flex gap-2 align-items-center">
+                <span id="seciliSayisi" class="small text-muted"></span>
+                <button class="btn btn-outline-success btn-sm" onclick="excelAktar()"><i class="fas fa-file-excel me-1"></i>Excel</button>
+                <button class="btn btn-warning btn-sm" onclick="topluCikisAc()" id="btnTopluCikis" disabled><i class="fas fa-arrow-right-from-bracket me-1"></i>Seçilenler için Sıfır-Sayım Çıkışı</button>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-custom mb-0">
+                <thead><tr><th width="30"><input type="checkbox" onclick="tumunuSec(this.checked)"></th><th>Kalem</th><th class="text-end">Mevcut Stok</th><th>Son Sayım</th><th>Partiler</th></tr></thead>
+                <tbody id="tbodyKalemler"></tbody>
+            </table>
+            <div id="bosMesaj" class="text-center text-muted py-4" style="display:none;"><i class="fas fa-circle-check me-1"></i>Seçilen aralıkta bu depo için sayılmayan kalem yok.</div>
+        </div>
+    </div>
+</div>
+
+<!-- Toplu Çıkış Modal -->
+<div class="modal fade" id="topluCikisModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h6 class="modal-title fw-bold">Sıfır-Sayım ile Toplu Çıkış</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <p class="small text-muted">Seçilen kalemler için "0 sayıldı" bir sayım belgesi oluşturulur ve doğrudan stok kaydına çevrilerek kapatılır — yani bu kalemlerin mevcut stoğu SIFIRLANMIŞ sayılır. Depoda gerçekten stok yoksa kullanın.</p>
+                <div id="topluCikisListe" class="small mb-3" style="max-height:200px; overflow-y:auto;"></div>
+                <label class="form-label small fw-bold">Açıklama</label>
+                <input type="text" id="tcAciklama" class="form-control form-control-sm">
+            </div>
+            <div class="modal-footer"><button class="btn btn-warning" onclick="topluCikisKaydet()">Onayla ve Çıkış Yap</button></div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; color: #5a5c69; }
+    .kpi-card { border-radius: 10px; border: 1px solid #e3e6f0; padding: 12px 16px; background: #fff; }
+    .kpi-card .l { font-size: .68rem; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: #858796; }
+    .kpi-card .v { font-size: 1.15rem; font-weight: 700; color: #1e293b; }
+</style>
+
+<script>
+    let kalemlerSon = [], secili = new Set();
+    function fmt(n, d) { return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+
+    async function depolariYukle() {
+        const res = await fetch('/UrasUretimStok/GetSayimDepolar').then(r => r.json());
+        if (res.success) document.getElementById('fDepo').innerHTML = '<option value="">Depo seçin...</option>' + (res.data || []).map(d => `<option value="${d.WhsCode}">${d.WhsCode} — ${d.WhsName}</option>`).join('');
+    }
+
+    async function yukle() {
+        const depo = document.getElementById('fDepo').value;
+        if (!depo) { alert('Depo seçin.'); return; }
+        document.getElementById('yukleniyor').style.display = '';
+        document.getElementById('icerik').style.display = 'none';
+        const qs = new URLSearchParams({ bas: document.getElementById('fBas').value, bit: document.getElementById('fBit').value, depo });
+        const res = await fetch('/UrasUretimStok/GetSayimEksik?' + qs.toString()).then(r => r.json());
+        document.getElementById('yukleniyor').style.display = 'none';
+        if (!res.success) { alert(res.message); return; }
+        document.getElementById('icerik').style.display = '';
+        kalemlerSon = res.data.Kalemler || [];
+        secili.clear();
+        document.getElementById('kpiBelge').textContent = res.data.Ozet.BelgeSayisi;
+        document.getElementById('kpiSayilan').textContent = res.data.Ozet.SayilanKalem;
+        document.getElementById('kpiSayilmayan').textContent = kalemlerSon.length;
+        ciz();
+    }
+
+    function ciz() {
+        document.getElementById('kalemSayisi').textContent = kalemlerSon.length;
+        document.getElementById('bosMesaj').style.display = kalemlerSon.length ? 'none' : '';
+        document.getElementById('tbodyKalemler').innerHTML = kalemlerSon.map(k => `
+            <tr><td><input type="checkbox" ${secili.has(k.ItemCode) ? 'checked' : ''} onchange="satirSec('${k.ItemCode}', this.checked)"></td>
+                <td><div class="fw-semibold">${k.ItemName || k.ItemCode}</div><div class="text-muted small">${k.ItemCode}${k.PartiYonetimli ? ' • partili' : ''}</div></td>
+                <td class="text-end fw-bold">${fmt(k.Miktar, 3)} ${k.Uom}</td><td>${k.SonSayim || '—'}</td>
+                <td class="small">${(k.Partiler || []).map(p => `${p.PartiNo}: ${fmt(p.Miktar, 2)}`).join(', ') || '—'}</td></tr>`).join('');
+        updateToplu();
+    }
+
+    function satirSec(itemCode, checked) { checked ? secili.add(itemCode) : secili.delete(itemCode); updateToplu(); }
+    function tumunuSec(checked) { secili.clear(); if (checked) kalemlerSon.forEach(k => secili.add(k.ItemCode)); ciz(); }
+    function updateToplu() {
+        document.getElementById('seciliSayisi').textContent = secili.size ? secili.size + ' seçili' : '';
+        document.getElementById('btnTopluCikis').disabled = secili.size === 0;
+    }
+
+    function topluCikisAc() {
+        document.getElementById('topluCikisListe').innerHTML = [...secili].map(c => `<div>${c}</div>`).join('');
+        document.getElementById('tcAciklama').value = '';
+        new bootstrap.Modal(document.getElementById('topluCikisModal')).show();
+    }
+    function excelAktar() {
+        if (!kalemlerSon.length) { alert('Aktarılacak satır yok.'); return; }
+        if (typeof XLSX === 'undefined') { alert('Excel kütüphanesi yüklenemedi; sayfayı yenileyip tekrar deneyin.'); return; }
+        const depo = document.getElementById('fDepo').value;
+        const yuvarla = v => Math.round((Number(v) || 0) * 1000) / 1000;
+
+        const kalemler = kalemlerSon.map(k => ({
+            'Kalem': k.ItemCode, 'Kalem Adı': k.ItemName, 'Depo': depo, 'Birim': k.Uom,
+            'Stok': yuvarla(k.Miktar), 'Birim Fiyat': yuvarla(k.Fiyat), 'Değer': yuvarla((k.Fiyat || 0) * (k.Miktar || 0)),
+            'Son Sayım': k.SonSayim || 'Hiç sayılmadı', 'Parti Sayısı': (k.Partiler || []).length
+        }));
+        const partiler = [];
+        kalemlerSon.forEach(k => (k.Partiler || []).forEach(p => partiler.push({ 'Kalem': k.ItemCode, 'Kalem Adı': k.ItemName, 'Depo': depo, 'Parti': p.PartiNo, 'Miktar': yuvarla(p.Miktar) })));
+
+        const wb = XLSX.utils.book_new();
+        const ws1 = XLSX.utils.json_to_sheet(kalemler);
+        ws1['!cols'] = [{ wch: 16 }, { wch: 34 }, { wch: 6 }, { wch: 9 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 11 }];
+        XLSX.utils.book_append_sheet(wb, ws1, 'Sayılmayanlar');
+        if (partiler.length) {
+            const ws2 = XLSX.utils.json_to_sheet(partiler);
+            ws2['!cols'] = [{ wch: 16 }, { wch: 34 }, { wch: 6 }, { wch: 16 }, { wch: 12 }];
+            XLSX.utils.book_append_sheet(wb, ws2, 'Partiler');
+        }
+        XLSX.writeFile(wb, `sayilmayan_${depo}_${document.getElementById('fBas').value}_${document.getElementById('fBit').value}.xlsx`);
+    }
+
+    async function topluCikisKaydet() {
+        const govde = { Bas: document.getElementById('fBas').value, Bit: document.getElementById('fBit').value, Depo: document.getElementById('fDepo').value, Kalemler: [...secili], Remarks: document.getElementById('tcAciklama').value };
+        const res = await fetch('/UrasUretimStok/SayimEksikCikis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(govde) }).then(r => r.json());
+        alert(res.message);
+        if (res.success) { bootstrap.Modal.getInstance(document.getElementById('topluCikisModal')).hide(); yukle(); }
+    }
+
+    (function () {
+        const bit = new Date(); const bas = new Date(); bas.setDate(bas.getDate() - 30);
+        document.getElementById('fBas').value = bas.toISOString().slice(0, 10);
+        document.getElementById('fBit').value = bit.toISOString().slice(0, 10);
+    })();
+    depolariYukle();
+</script>

@@ -1,0 +1,401 @@
+﻿@model List<WebApplication3.Controllers.StockReportViewModel>
+@using System.Globalization
+@using Newtonsoft.Json
+@using System.Linq
+
+@{
+    ViewData["Title"] = "Stok Listesi Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // 1. KURAL: URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+
+    var reportDataJson = Model != null ? JsonConvert.SerializeObject(Model) : "[]";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+    <style>
+        :root {
+            --light-bg: #f8f9fa;
+            --white-bg: #ffffff;
+            --border-color: #e0e0e0;
+            --text-color: #333;
+            --header-bg: #2c3e50;
+            --header-text: #ffffff;
+            --hover-color: #f1f3f5;
+        }
+        body { background-color: var(--light-bg); font-family: 'Poppins', sans-serif; color: var(--text-color); font-size: 0.85rem; }
+        .table-container { overflow-x: auto; max-height: calc(100vh - 200px); overflow-y: auto; background-color: var(--white-bg); border: 1px solid var(--border-color); border-radius: 6px; margin-top: 0.5rem; }
+        .rapor-tablo { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: auto; min-width: 1000px; }
+        .rapor-tablo thead { position: sticky; top: 0; z-index: 101; background-color: #ffffff; }
+        .rapor-tablo thead .main-header-row th { background-color: var(--header-bg); color: var(--header-text); padding: 8px 5px; text-align: center; font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--border-color); }
+        .rapor-tablo thead .filter-row th { padding: 4px 5px; background-color: #ffffff; border-bottom: 1px solid var(--border-color); vertical-align: top;}
+        .rapor-tablo th, .rapor-tablo td { padding: 4px 8px; vertical-align: middle; border-right: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); }
+        .table-hover tbody tr:hover { background-color: var(--hover-color) !important; }
+        .item-image { max-width: 60px; max-height: 60px; border-radius: 4px; object-fit: cover; border: 1px solid #ccc; background-color: #fafafa; }
+        .filter-input, .filter-row th .bootstrap-select .btn { width: 100%; height: 28px; font-size: 0.85em; padding: 2px 5px; border: 1px solid #ced4da; border-radius: 0.25rem; background-color: #fff;}
+        .footer-info-bar { background-color: #f1f3f5; border: 1px solid var(--border-color); border-radius: 4px; padding: 6px 12px; }
+    </style>
+}
+
+@* 2. KURAL: Güvenlik (CSRF) - Yetkisiz veri okuma ve dışa aktarma manipülasyonlarını engellemek amacıyla eklendi *@
+@Html.AntiForgeryToken()
+
+<div class="container-fluid py-4">
+    <div class="row g-0">
+        <div class="col-md-12">
+            @if (ViewBag.ErrorMessage != null)
+            {
+                <div class="alert alert-danger" role="alert">@ViewBag.ErrorMessage</div>
+            }
+
+            <div id="alertContainer" class="mt-3"></div>
+
+            @if (Model != null && Model.Any())
+            {
+                <div class="d-flex justify-content-between align-items-center mb-2 mt-3">
+                    <div>
+                        <span class="fw-bold">Toplam Kayıt:</span>
+                        <strong id="totalRecordsTop" class="text-danger">@(Model?.Count ?? 0)</strong>
+                    </div>
+                    <button id="btnExportExcel" class="btn btn-success btn-sm shadow-sm">
+                        <i class="fas fa-file-excel me-1"></i> Excel'e Aktar
+                    </button>
+                </div>
+
+                <div class="table-container">
+                    <table class="table table-bordered table-hover rapor-tablo" id="rapor75Table">
+                        <thead>
+                            <tr class="main-header-row">
+                                <th class="sortable-column" data-column="ItemCode" data-sort-type="text" style="width: 25%;">Stok Kodu <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="ItemName" data-sort-type="text" style="width: 40%;">Stok Adı <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="Quantity" data-sort-type="number" style="width: 15%;">Stok Miktarı <i class="fas fa-sort float-end"></i></th>
+                                <th class="no-sort" style="width: 20%;">Resim</th>
+                            </tr>
+                            <tr class="filter-row">
+                                <th data-column="ItemCode">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" title="Kod Seçin...">
+                                        @if(ViewBag.ItemCodeList != null)
+                                        {
+                                            foreach(var item in ViewBag.ItemCodeList)
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="ItemName">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" title="Ad Seçin...">
+                                        @if(ViewBag.ItemNameList != null)
+                                        {
+                                            foreach(var item in ViewBag.ItemNameList)
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="Quantity"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Miktar Filtrele..."></th>
+                                <th></th> 
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @* JS Tarafından Doldurulacak *@
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="footer-info-bar mt-3 mb-3 d-flex justify-content-between align-items-center">
+                    <div class="text-start">
+                        Toplam Kayıt: <strong id="totalRecords">@(Model?.Count ?? 0)</strong>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-info text-center shadow-sm">Gösterilecek veri bulunamadı.</div>
+            }
+
+            @* 4. KURAL: UI/UX Standartlarına uygun şık, db parametreli Ana Sayfa Dönüş butonu *@
+            <div class="mt-4 text-center">
+                <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+                    <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+                </a>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+
+    <script>
+        // 1. KURAL İÇİN JS DEĞİŞKENİ: Aktif veritabanı kodunu JS tarafında hafızaya alıyoruz
+        const activeDbCode = '@currentDb';
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const allReportData = @Html.Raw(reportDataJson);
+            const tableBody = document.querySelector('#rapor75Table tbody');
+            const totalRecordsSpan = document.getElementById('totalRecords');
+            const totalRecordsTopSpan = document.getElementById('totalRecordsTop');
+
+            if (!tableBody) return;
+
+            let currentlyFilteredRows = [...allReportData];
+            let currentSortColumn = null;
+            let currentSortDirection = 'none';
+
+            const columnMappings = {
+                'ItemCode': 'ItemCode',
+                'ItemName': 'ItemName',
+                'Quantity': 'Quantity'
+            };
+
+            $('.filter-select-bs').selectpicker({
+                liveSearch: true,
+                actionsBox: true,
+                selectedTextFormat: 'count > 2',
+                width: '100%',
+                container: 'body'
+            }).on('changed.bs.select', function () {
+                filterTableAndRender();
+            });
+
+            function renderTable(data) {
+                tableBody.innerHTML = '';
+                if (data.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="4" class="text-center">Gösterilecek veri bulunamadı.</td></tr>';
+                    if(totalRecordsSpan) totalRecordsSpan.textContent = "0"; 
+                    if(totalRecordsTopSpan) totalRecordsTopSpan.textContent = "0";
+                    return;
+                }
+
+                let htmlChunks = [];
+
+                data.forEach(item => {
+                    const qtyStr = item.Quantity != null ? item.Quantity.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00';
+                    let imgHtml = '<i class="fas fa-image text-muted fs-3" title="Resim eklenmemiş"></i>';
+
+                    if (item.ImagePath) {
+                        const encodedPath = encodeURIComponent(item.ImagePath);
+                        imgHtml = `<img src="/Rapor75/GetImage?imagePath=${encodedPath}&db=${activeDbCode}" loading="lazy" class="item-image" alt="Stok Resmi" onerror="this.outerHTML='<i class=\\'fas fa-image text-muted fs-3\\' title=\\'Resim bulunamadı\\'></i>'" />`;
+                    }
+
+                    htmlChunks.push(`
+                        <tr>
+                            <td>${item.ItemCode || ''}</td>
+                            <td>${item.ItemName || ''}</td>
+                            <td style="text-align: right;">${qtyStr}</td>
+                            <td style="text-align: center;">${imgHtml}</td>
+                        </tr>
+                    `);
+                });
+
+                tableBody.innerHTML = htmlChunks.join('');
+                
+                if(totalRecordsSpan) totalRecordsSpan.textContent = data.length; 
+                if(totalRecordsTopSpan) totalRecordsTopSpan.textContent = data.length; 
+            }
+
+            function filterTableAndRender() {
+                const filters = {};
+
+                document.querySelectorAll('.filter-input').forEach(input => {
+                    const th = input.closest('th');
+                    if (th) {
+                        const columnKey = th.dataset.column;
+                        const val = input.value.toLowerCase().trim();
+                        if (val) filters[columnKey] = [val]; 
+                    }
+                });
+
+                $('.filter-select-bs').each(function () {
+                    const columnKey = $(this).closest('th').data('column');
+                    const selectedValues = $(this).val();
+                    if (selectedValues && selectedValues.length > 0) {
+                        filters[columnKey] = selectedValues.map(v => (v || '').toLowerCase().trim());
+                    }
+                });
+
+                let filteredData = allReportData.filter(item => {
+                    let isMatch = true;
+                    for (const column in filters) {
+                        const filterValues = filters[column];
+                        const propName = columnMappings[column];
+                        if (!propName) continue;
+                        let itemVal = item[propName] != null ? item[propName].toString().toLowerCase() : '';
+
+                        if (column === 'Quantity') {
+                            const filterVal = filterValues[0];
+                            const numericFilter = parseFloat(filterVal.replace(/\./g, '').replace(',', '.'));
+                            const itemNumeric = parseFloat(itemVal.replace(',', '.'));
+                            
+                            if (!isNaN(numericFilter) && Math.round(itemNumeric * 100) !== Math.round(numericFilter * 100)) {
+                                isMatch = false; break;
+                            } else if (isNaN(numericFilter) && !itemVal.includes(filterVal)) {
+                                isMatch = false; break;
+                            }
+                        } else {
+                            const isMatchFound = filterValues.some(filterVal => itemVal.includes(filterVal));
+                            if (!isMatchFound) {
+                                isMatch = false; break;
+                            }
+                        }
+                    }
+                    return isMatch;
+                });
+
+                if (currentSortColumn && currentSortDirection !== 'none') {
+                    const propName = columnMappings[currentSortColumn];
+                    const sortType = document.querySelector(`th[data-column="${currentSortColumn}"]`).dataset.sortType;
+                    
+                    filteredData.sort((a, b) => {
+                        let valA = a[propName];
+                        let valB = b[propName];
+                        let comp = 0;
+
+                        if (sortType === 'number') {
+                            valA = parseFloat((valA || 0).toString().replace(',', '.')) || 0;
+                            valB = parseFloat((valB || 0).toString().replace(',', '.')) || 0;
+                            comp = valA - valB;
+                        } else {
+                            comp = (valA || '').toString().localeCompare((valB || '').toString(), 'tr');
+                        }
+                        return currentSortDirection === 'asc' ? comp : -comp;
+                    });
+                }
+
+                currentlyFilteredRows = filteredData;
+                renderTable(currentlyFilteredRows);
+            }
+
+            document.querySelectorAll('.filter-input').forEach(input => {
+                input.addEventListener('keyup', (e) => {
+                    if (input.classList.contains('number-filter')) {
+                        if (e.key === 'Enter') filterTableAndRender();
+                    } else {
+                        filterTableAndRender();
+                    }
+                });
+            });
+
+            document.querySelectorAll('th.sortable-column').forEach(header => {
+                header.addEventListener('click', function () {
+                    const columnKey = this.dataset.column;
+                    if (currentSortColumn === columnKey) {
+                        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : (currentSortDirection === 'desc' ? 'none' : 'asc');
+                    } else {
+                        if (currentSortColumn) {
+                            const prevIcon = document.querySelector(`th[data-column="${currentSortColumn}"] i`);
+                            if(prevIcon) prevIcon.className = 'fas fa-sort float-end';
+                        }
+                        currentSortDirection = 'asc';
+                        currentSortColumn = columnKey;
+                    }
+
+                    document.querySelectorAll('th.sortable-column i').forEach(i => i.className = 'fas fa-sort float-end');
+                    const icon = this.querySelector('i');
+                    if (currentSortDirection !== 'none') {
+                        icon.className = `fas fa-sort-${currentSortDirection === 'asc' ? 'up' : 'down'} float-end`;
+                    }
+                    filterTableAndRender();
+                });
+            });
+
+            renderTable(allReportData);
+
+            // --- GÜÇLENDİRİLMİŞ EXCEL İNDİRME İŞLEMİ ---
+            const btnExportExcel = document.getElementById('btnExportExcel');
+            if (btnExportExcel) {
+                btnExportExcel.addEventListener('click', async function () {
+                    const btn = this;
+                    const originalHtml = btn.innerHTML;
+                    
+                    try {
+                        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Hazırlanıyor...';
+                        btn.disabled = true;
+
+                        const filters = [];
+                        
+                        document.querySelectorAll('.filter-input').forEach(input => {
+                            const th = input.closest('th');
+                            if(th) {
+                                const columnKey = th.dataset.column;
+                                const val = input.value.trim();
+                                if (val && columnKey === 'Quantity') {
+                                    filters.push({ ColumnIndex: 2, Values: [val] });
+                                }
+                            }
+                        });
+
+                        $('.filter-select-bs').each(function () {
+                            const th = $(this).closest('th');
+                            if(th) {
+                                const columnKey = th.data('column');
+                                const selectedValues = $(this).val();
+                                if (selectedValues && selectedValues.length > 0) {
+                                    let colIndex = 0;
+                                    if (columnKey === 'ItemCode') colIndex = 0;
+                                    else if (columnKey === 'ItemName') colIndex = 1;
+
+                                    filters.push({ ColumnIndex: colIndex, Values: selectedValues });
+                                }
+                            }
+                        });
+
+                        let sortObj = { ColumnIndex: 0, Direction: 'none' };
+                        if (currentSortColumn && currentSortDirection !== 'none') {
+                            let colIndex = 0;
+                            if (currentSortColumn === 'ItemName') colIndex = 1;
+                            else if (currentSortColumn === 'Quantity') colIndex = 2;
+                            
+                            sortObj = { ColumnIndex: colIndex, Direction: currentSortDirection };
+                        }
+
+                        const requestData = { Filters: filters, Sort: sortObj };
+
+                        // 1. KURAL & 2. KURAL: İsteğe db parametresi ekleniyor ve güvenlik için CSRF token başlığa gömülüyor
+                        const response = await fetch('/Rapor75/ExportToExcel?db=' + activeDbCode, {
+                            method: 'POST',
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value
+                            },
+                            body: JSON.stringify(requestData)
+                        });
+
+                        if (!response.ok) {
+                            const errText = await response.text();
+                            throw new Error(errText || `Sunucu Hatası (${response.status})`);
+                        }
+
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.style.display = 'none';
+                        a.href = url;
+                        
+                        const now = new Date();
+                        const dateStr = now.getFullYear().toString() + (now.getMonth() + 1).toString().padStart(2, '0') + now.getDate().toString().padStart(2, '0') + "_" + now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+                                        
+                        a.download = `StokRaporu_${dateStr}.xlsx`;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+
+                    } catch (error) {
+                        console.error('Excel Export Hatası:', error);
+                        alert('Excel dosyası indirilemedi! \nSebep: ' + error.message + '\nLütfen biraz filtreleme yapıp satır sayısını azaltmayı deneyin.');
+                    } finally {
+                        btn.innerHTML = originalHtml;
+                        btn.disabled = false;
+                    }
+                });
+            }
+        });
+    </script>
+}

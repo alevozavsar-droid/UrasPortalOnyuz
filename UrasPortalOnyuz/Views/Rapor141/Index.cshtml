@@ -1,0 +1,1606 @@
+﻿@model WebApplication3.Controllers.Rapor141ViewModel
+@{
+    ViewData["Title"] = "Cari Ekstre / Hesap Ekstresi Mutabakatı";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var satirlar = Model?.Satirlar ?? new List<WebApplication3.Controllers.CariMutabakatSatir>();
+    var eslesmeyen = Model?.EslesmeyenHesaplar ?? new List<WebApplication3.Controllers.BagliHesap>();
+
+    int toplamCari = satirlar.Count;
+    // Satir etiketiyle ayni olcut: hesabi tanimsiz olanlar "Hesabı Tanımsız"
+    // kartina aittir, "Uyuşanlar" sayisina girmemeli. Aksi hâlde kartta yazan
+    // sayi ile karta tiklayinca gelen satir sayisi tutmuyordu.
+    int uyusanCount = satirlar.Count(x => x.HesapVar && !x.Uyusmuyor);
+    int uyusmayanCount = satirlar.Count(x => x.Uyusmuyor && x.HesapVar);
+    int hesapYokCount = satirlar.Count(x => !x.HesapVar);
+    decimal toplamCariBakiye = satirlar.Sum(x => x.CariBakiye);
+    decimal toplamHesapBakiye = satirlar.Sum(x => x.HesapBakiye);
+    decimal toplamFark = satirlar.Sum(x => x.Fark);
+
+    decimal s1Cari = satirlar.Sum(x => x.Sirket1CariBakiye);
+    decimal s1Hesap = satirlar.Sum(x => x.Sirket1HesapBakiye);
+    decimal s2Cari = satirlar.Sum(x => x.Sirket2CariBakiye);
+    decimal s2Hesap = satirlar.Sum(x => x.Sirket2HesapBakiye);
+
+    int konsolideUyusmayan = satirlar.Count(x => x.KonsolideDurum == "FARK");
+
+    string secilenTiplerCsv = string.Join("||", Model?.SecilenTipler ?? new List<string>());
+    bool konsolideMi = !string.IsNullOrWhiteSpace(Model.KonsolideKodu);
+    string basStr = Model.BasTarih.ToString("yyyy-MM-dd");
+    string bitStr = Model.BitTarih.ToString("yyyy-MM-dd");
+}
+
+@functions {
+    /// <summary>Uyuşma durumunu rozet olarak basar. Fark tutarı tooltip'te gösterilir.</summary>
+    Microsoft.AspNetCore.Html.IHtmlContent DurumHucresi(string durum, decimal fark)
+    {
+        string sinif, ikon, metin;
+
+        switch (durum)
+        {
+            case "OK":        sinif = "badge-soft-success";   ikon = "fa-check";       metin = "Uyuşuyor";   break;
+            case "FARK":      sinif = "badge-soft-danger";    ikon = "fa-xmark";       metin = "UYUŞMUYOR";  break;
+            case "HESAPYOK":  sinif = "badge-soft-warning";   ikon = "fa-link-slash";  metin = "HESAP YOK";  break;
+            case "TEKSIRKET": sinif = "badge-soft-primary";   ikon = "fa-check";       metin = "Tek şirket"; break;
+            default:          sinif = "badge-soft-secondary"; ikon = "fa-minus";       metin = "Cari yok";   break;
+        }
+
+        var ipucu = durum == "TEKSIRKET"
+            ? "Cari yalnızca tek şirkette var; o şirketin kolonları eşit."
+            : $"Kolonlar arası en büyük sapma: {fark:N2}";
+
+        var html = $"<td class=\"text-center\" title=\"{ipucu}\">" +
+                   $"<span class=\"{sinif}\"><i class=\"fas {ikon} me-1\"></i>{metin}</span>" +
+                   $"</td>";
+
+        return new Microsoft.AspNetCore.Html.HtmlString(html);
+    }
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f4f7fc; font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #2b3445; }
+
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 20px; height: 100%; transition: all 0.3s ease; position: relative; overflow: hidden; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        .dashboard-card.filter-card { cursor: pointer; }
+        .dashboard-card.active-filter { border: 2px solid #3b82f6; background-color: #f8fafc; }
+
+        .kpi-title { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; z-index: 2; position: relative; }
+        .kpi-value { font-size: 23px; font-weight: 900; color: #0f172a; margin-bottom: 2px; z-index: 2; position: relative; }
+        .kpi-desc { font-size: 11px; color: #94a3b8; z-index: 2; position: relative; }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 5rem; color: #e2e8f0; opacity: 0.4; z-index: 1; transform: rotate(-10deg); }
+
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        .border-top-warning { border-top: 4px solid #f59e0b !important; }
+        .border-top-danger { border-top: 4px solid #ef4444 !important; }
+        .border-top-success { border-top: 4px solid #10b981 !important; }
+        .border-top-purple { border-top: 4px solid #8b5cf6 !important; }
+
+        .table > thead { background-color: #f8fafc; font-size: 12px; color: #475569; font-weight: 700; border-bottom: 2px solid #e2e8f0; }
+        .table > thead > tr > th { text-transform: uppercase; letter-spacing: 0.5px; padding: 12px; border-bottom: none; }
+        .table > tbody > tr > td { font-size: 13px; color: #334155; vertical-align: middle; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+        .table-hover tbody tr:hover { background-color: #f8fafc; transition: all 0.2s; box-shadow: inset 2px 0 0 #3b82f6; }
+
+        tr.satir-fark > td { background-color: #fff7f7; }
+        tr.satir-fark:hover > td { background-color: #fee2e2 !important; }
+        tr.satir-hesapyok > td { background-color: #fffbeb; }
+
+        .badge-soft-primary { background-color: #dbeafe; color: #1e40af; border-radius: 6px; padding: 5px 10px; font-weight: 700; font-size: 11px; }
+        .badge-soft-success { background-color: #d1fae5; color: #065f46; border-radius: 6px; padding: 5px 10px; font-weight: 700; font-size: 11px; }
+        .badge-soft-danger { background-color: #fee2e2; color: #991b1b; border-radius: 6px; padding: 5px 10px; font-weight: 700; font-size: 11px; }
+        .badge-soft-warning { background-color: #fef3c7; color: #92400e; border-radius: 6px; padding: 5px 10px; font-weight: 700; font-size: 11px; }
+        .badge-soft-secondary { background-color: #f1f5f9; color: #475569; border-radius: 6px; padding: 5px 10px; font-weight: 700; font-size: 11px; }
+
+        /* Siralanabilir baslik ikonlari */
+        th.sirali { cursor: pointer; user-select: none; white-space: nowrap; }
+        th.sirali .ok { opacity: .35; font-size: 10px; margin-left: 3px; }
+        th.sirali:hover .ok { opacity: .75; }
+        th.sirali.aktif .ok { opacity: 1; color: #0d6efd; }
+
+        /* Karsi hesap listesi */
+        .kh-satir { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:5px; cursor:pointer; font-size:12.5px; }
+        .kh-satir:hover { background:#eef2f7; }
+        .kh-satir.secili { background:#e7f1ff; }
+        .kh-yildiz { cursor:pointer; color:#cbd5e1; }
+        .kh-yildiz.dolu { color:#f59e0b; }
+
+        .filtre-kutusu { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 18px 20px; }
+        .filtre-label { font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 4px; }
+        .tip-dropdown { max-height: 320px; overflow-y: auto; min-width: 340px; padding: 10px 14px; }
+        .tip-dropdown label { font-size: 12.5px; color: #334155; }
+
+        .tutar { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+        .fark-var { color: #b91c1c; font-weight: 800; }
+        .fark-yok { color: #94a3b8; }
+        .kaynak-etiket { font-size: 10px; font-weight: 800; letter-spacing: .3px; padding: 2px 6px; border-radius: 4px; }
+        .kaynak-r20 { background: #dbeafe; color: #1e40af; }
+        .kaynak-r39 { background: #ede9fe; color: #5b21b6; }
+    </style>
+}
+
+<div class="container-fluid py-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;">Cari Ekstre / Hesap Ekstresi Mutabakatı</h4>
+            <span class="text-muted" style="font-size: 14px;">
+                Cari bakiyesi <span class="kaynak-etiket kaynak-r20">RAPOR20 CARİ EKSTRE</span>,
+                muhatap ana verisindeki kontrol hesabının bakiyesi <span class="kaynak-etiket kaynak-r39">RAPOR39 HESAP EKSTRESİ</span>
+                mantığıyla hesaplanır. Tek cari - tek hesap; uyuşmayanlar işaretlenir.
+                @if (konsolideMi)
+                {
+                    <span class="badge-soft-success ms-2"><i class="fas fa-layer-group me-1"></i>KONSOLİDE: @Model.Sirket1Adi + @Model.Sirket2Adi</span>
+                }
+                else
+                {
+                    <span class="badge-soft-primary ms-2">@Model.SecilenDbAdi</span>
+                }
+            </span>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <a class="btn btn-success rounded-pill px-4 shadow hover-elevate fw-bold" id="btnExcel" href="#">
+                <i class="fas fa-file-excel me-2"></i> Excel'e Aktar
+            </a>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Model.Hata))
+    {
+        <div class="alert alert-danger rounded-3 shadow-sm">
+            <i class="fas fa-triangle-exclamation me-2"></i> @Model.Hata
+        </div>
+    }
+
+    <!-- FİLTRE PANELİ -->
+    <form method="get" action="/Rapor141" id="filtreForm" class="filtre-kutusu mb-4">
+        <input type="hidden" name="tipler" id="tiplerInput" value="@secilenTiplerCsv" />
+        <div class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <div class="filtre-label">Başlangıç Tarihi</div>
+                <input type="date" class="form-control form-control-sm" name="bas" id="inpBas" value="@basStr" />
+            </div>
+            <div class="col-md-2">
+                <div class="filtre-label">Bitiş Tarihi</div>
+                <input type="date" class="form-control form-control-sm" name="bit" id="inpBit" value="@bitStr" />
+            </div>
+            <div class="col-md-3">
+                <div class="filtre-label">Konsolide Şirket Çifti</div>
+                <select class="form-select form-select-sm" name="konsolide" id="selKonsolide">
+                    <option value="">Tek şirket (@Model.SecilenDbAdi)</option>
+                    @foreach (var secenek in Model.KonsolideSecenekleri)
+                    {
+                        <option value="@secenek.Key" selected="@(secenek.Key == Model.KonsolideKodu)">@secenek.Value</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <div class="filtre-label">Cari Tipi</div>
+                <select class="form-select form-select-sm" name="cariTipi" id="selCariTipi">
+                    <option value="" selected="@(Model.CariTipi == "")">Tümü</option>
+                    <option value="C" selected="@(Model.CariTipi == "C")">Müşteri</option>
+                    <option value="S" selected="@(Model.CariTipi == "S")">Tedarikçi</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <div class="filtre-label">İşlem Tipi (U_BE1_AKTAR)</div>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary w-100 text-start dropdown-toggle" type="button"
+                            id="tipDropdownBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                        <span id="tipDropdownLabel">Tüm işlem tipleri</span>
+                    </button>
+                    <div class="dropdown-menu tip-dropdown shadow" aria-labelledby="tipDropdownBtn">
+                        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                            <span class="fw-bold" style="font-size:12px; color:#475569;">İşlem tipleri (OJDT.U_BE1_AKTAR)</span>
+                            <div>
+                                <button type="button" class="btn btn-link btn-sm p-0 me-2" onclick="tumTipler(true)">Tümü</button>
+                                <button type="button" class="btn btn-link btn-sm p-0 text-secondary" onclick="tumTipler(false)">Temizle</button>
+                            </div>
+                        </div>
+                        @if (Model.IslemTipleri != null && Model.IslemTipleri.Any())
+                        {
+                            var sira = 0;
+                            foreach (var t in Model.IslemTipleri)
+                            {
+                                sira++;
+                                <div class="form-check">
+                                    <input class="form-check-input tip-check" type="checkbox" value="@t.Kod" id="tip_@sira"
+                                           @(Model.SecilenTipler.Contains(t.Kod) ? "checked" : "") />
+                                    <label class="form-check-label" for="tip_@sira">
+                                        @t.Kod <span class="text-muted">(@t.Adet)</span>
+                                    </label>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="text-muted" style="font-size:12px;">Seçili tarih aralığında U_BE1_AKTAR değeri olan kayıt bulunamadı.</div>
+                        }
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="filtre-label">Cari Kodu / Adı</div>
+                <input type="text" class="form-control form-control-sm" name="arama" id="inpArama" value="@Model.Arama" placeholder="Ara..." />
+            </div>
+            <div class="col-md-1">
+                <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold rounded-pill">
+                    <i class="fas fa-filter me-1"></i> Uygula
+                </button>
+            </div>
+        </div>
+
+        <div class="row g-3 align-items-end mt-1">
+            <div class="col-md-12 d-flex align-items-center gap-4 flex-wrap">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="devirDahil" value="true" id="chkDevir" @(Model.DevirDahil ? "checked" : "") />
+                    <label class="form-check-label fw-bold" for="chkDevir" style="font-size:13px;">
+                        <i class="fas fa-clock-rotate-left me-1"></i> Devir dahil (başlangıç tarihi yok sayılır)
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="sadeceUyusmayanlar" value="true" id="chkSadeceUyusmayan" @(Model.SadeceUyusmayanlar ? "checked" : "") />
+                    <label class="form-check-label fw-bold text-danger" for="chkSadeceUyusmayan" style="font-size:13px;">
+                        <i class="fas fa-not-equal me-1"></i> Sadece uyuşmayanları getir
+                    </label>
+                </div>
+            </div>
+        </div>
+        <div class="row mt-2">
+            <div class="col-12">
+                @if (konsolideMi)
+                {
+                    <span class="text-muted" style="font-size:12px;">
+                        <i class="fas fa-circle-info me-1"></i>
+                        Konsolide modda cariler <b>vergi numarası</b>, yoksa <b>unvan</b>, o da yoksa <b>cari kodu</b> ile eşleştirilir
+                        (Mizan Karşılaştırma ekranındaki şirket çiftleri kullanılır).
+                    </span>
+                    <br />
+                }
+                <span class="text-muted" style="font-size:12px;">
+                    Tarih aralığı OJDT.RefDate üzerinden uygulanır. Her iki taraf da TL (Debit/Credit) tutarlarıdır ve iptal / storno / çek bölme kuralları
+                    Rapor20 ile Rapor39'daki sorgularla birebir aynıdır.
+                </span>
+            </div>
+        </div>
+    </form>
+
+    <!-- KPI KARTLARI -->
+    @* DURUM SEKMELERI
+       Onceden burada dort tiklanabilir KPI karti vardi; sekmelerle ayni seyi
+       FARKLI bir olcutle sayiyorlardi (kart: toplam cari vs toplam hesap;
+       sekme: kolonlarin tek tek esitligi) ve iki sayi tutmadigi icin
+       karisikliga yol aciyordu. Tek sayim kaldi: asagidaki sekmeler. *@
+    <ul class="nav nav-pills gap-1 mb-3" id="uyusmaSekmeleri">
+        <li class="nav-item"><button class="nav-link active" data-durum="">Tümü <span class="badge bg-light text-dark ms-1">0</span></button></li>
+        <li class="nav-item"><button class="nav-link" data-durum="OK">Uyuşuyor <span class="badge bg-light text-dark ms-1">0</span></button></li>
+        <li class="nav-item"><button class="nav-link" data-durum="FARK">Uyuşmuyor <span class="badge bg-light text-dark ms-1">0</span></button></li>
+        <li class="nav-item"><button class="nav-link" data-durum="TEKSIRKET">Tek şirkette <span class="badge bg-light text-dark ms-1">0</span></button></li>
+        <li class="nav-item"><button class="nav-link" data-durum="HESAPYOK">Kontrol hesabı yok <span class="badge bg-light text-dark ms-1">0</span></button></li>
+        <li class="nav-item"><button class="nav-link" data-durum="YOK">Cari yok <span class="badge bg-light text-dark ms-1">0</span></button></li>
+        <li class="nav-item">
+            @* Bu sekme tabloyu suzmez: hareketsiz cariler ana raporda hic yer almaz
+               (rapor yalnizca aralikta hareketi olanlari listeler). Tiklayinca
+               tarihten bagimsiz kendi listesi acilir. *@
+            <button class="nav-link" type="button" onclick="hareketsizleriGetir()"
+                    title="Bakiyesi sıfır, hiç yevmiye satırı ve belgesi olmayan cariler. Ayrı sorguyla getirilir.">
+                <i class="fas fa-ghost me-1"></i>Hareketsiz cariler
+            </button>
+        </li>
+        <li class="nav-item d-flex align-items-center">
+            <button class="nav-link" type="button" onclick="ortakHesaplariGetir()"
+                    title="Aynı kontrol hesabına bağlı birden fazla cari.">
+                <i class="fas fa-users-rectangle me-1"></i>Ortak cariler
+            </button>
+            <button type="button" class="btn btn-sm btn-link text-secondary px-1"
+                    title="Ortak cari ne demek?" onclick="ortakCariNedir()">
+                <i class="fas fa-circle-question"></i>
+            </button>
+        </li>
+    </ul>
+
+    <div class="row mb-4 g-3">
+        <div class="col-md-2">
+            <div class="dashboard-card p-3 border-0 border-top-purple hover-elevate">
+                <i class="fas fa-scale-balanced kpi-icon-bg"></i>
+                <div class="kpi-title">Cari / Hesap (TL)</div>
+                <div class="kpi-value" style="font-size:17px;">
+                    @toplamCariBakiye.ToString("N2")<br />
+                    <span style="color:#8b5cf6;">@toplamHesapBakiye.ToString("N2")</span>
+                </div>
+                <div class="kpi-desc">
+                    @if (konsolideMi)
+                    {
+                        <text>
+                            @Model.Sirket1Adi: @s1Cari.ToString("N0") / @s1Hesap.ToString("N0")<br />
+                            @Model.Sirket2Adi: @s2Cari.ToString("N0") / @s2Hesap.ToString("N0")
+                        </text>
+                    }
+                    else
+                    {
+                        <text>Rapor20 / Rapor39 toplamı</text>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="dashboard-card p-3 border-0 border-top-danger hover-elevate">
+                <i class="fas fa-scale-unbalanced kpi-icon-bg"></i>
+                <div class="kpi-title">Toplam Fark (TL)</div>
+                <div class="kpi-value @(Math.Abs(toplamFark) > 0.01m ? "text-danger" : "text-secondary")">@toplamFark.ToString("N2")</div>
+                <div class="kpi-desc">Cari − Hesap</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KARŞILAŞTIRMA TABLOSU -->
+    <div class="dashboard-card border-0 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="card-title mb-0 fw-bold">
+                <i class="fas fa-list-check text-primary me-2"></i>Cari Bazlı Karşılaştırma
+                @if (konsolideMi)
+                {
+                    <button type="button" class="btn btn-sm btn-outline-info rounded-pill ms-2 py-0 px-2"
+                            style="font-size:11.5px;" data-bs-toggle="modal" data-bs-target="#olcutModal">
+                        <i class="fas fa-circle-question me-1"></i>Sayılar neden farklı?
+                    </button>
+                }
+            </div>
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                @if (konsolideMi)
+                {
+                    @* Hangi kolon kumesine bakiliyor: 1. sirket, 2. sirket ya da 4 kolonun tamami *@
+                    <select class="form-select form-select-sm" id="selKapsam" style="width:210px;" onchange="tabloyuSuz()">
+                        <option value="3">Konsolide (4 kolon)</option>
+                        <option value="1">@Model.Sirket1Adi içinde</option>
+                        <option value="2">@Model.Sirket2Adi içinde</option>
+                    </select>
+                }
+                <input type="text" class="form-control form-control-sm" id="tabloAra" placeholder="Tabloda ara..." style="width: 220px;">
+                <div class="text-muted" style="font-size: 12px;" id="filterStatusText">Tüm kayıtlar gösteriliyor.</div>
+            </div>
+        </div>
+
+        <div class="table-responsive" style="max-height: 62vh; overflow-y: auto;">
+            <table class="table table-hover align-middle mb-0" id="cariTable">
+                <thead class="sticky-top shadow-sm">
+                    <tr>
+                        <th class="sirali" style="width:110px;" data-sira="kod">Cari Kodu <span class="ok">&#8645;</span></th>
+                        <th class="sirali" Cari Adı</th>
+                        <th style="width:85px;">Tip</th>
+                        @if (konsolideMi)
+                        {
+                            <th class="sirali text-end" style="width:115px;" data-sira="s1cari">@Model.Sirket1Adi<br /><small class="text-muted">Cari</small> <span class="ok">&#8645;</span></th>
+                            <th class="sirali text-end" style="width:115px;" data-sira="s1hesap">@Model.Sirket1Adi<br /><small class="text-muted">Hesap</small> <span class="ok">&#8645;</span></th>
+                            <th class="sirali text-end" style="width:115px;" data-sira="s2cari">@Model.Sirket2Adi<br /><small class="text-muted">Cari</small> <span class="ok">&#8645;</span></th>
+                            <th class="sirali text-end" style="width:115px;" data-sira="s2hesap">@Model.Sirket2Adi<br /><small class="text-muted">Hesap</small> <span class="ok">&#8645;</span></th>
+                            <th style="width:180px;">Bağlı Muhasebe Hesabı</th>
+                            <th class="text-center" style="width:105px;">
+                                @Model.Sirket1Adi<br /><small class="text-muted">uyuşma</small>
+                            </th>
+                            <th class="text-center" style="width:105px;">
+                                @Model.Sirket2Adi<br /><small class="text-muted">uyuşma</small>
+                            </th>
+                            <th class="text-center" style="width:125px;"
+                                title="Dört kolonun dördü de birbirine eşit mi? Toplama yapılmaz.">
+                                KONSOLİDE<br /><small class="text-muted">4 kolon eşit mi</small>
+                            </th>
+                        }
+                        else
+                        {
+                            <th class="sirali text-end" style="width:135px;" data-sira="cari">Cari Ekstre Bakiye <span class="ok">&#8645;</span></th>
+                            <th style="width:200px;">Bağlı Muhasebe Hesabı</th>
+                            <th class="sirali text-end" style="width:140px;" data-sira="hesap">Hesap Ekstre Bakiye <span class="ok">&#8645;</span></th>
+                            <th class="sirali text-end" style="width:120px;" data-sira="fark">Fark <span class="ok">&#8645;</span></th>
+                            <th class="text-center" style="width:110px;">Durum</th>
+                        }
+                        <th class="text-center" style="width:130px;">İşlem</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (satirlar.Any())
+                    {
+                        foreach (var s in satirlar)
+                        {
+                            var durum = !s.HesapVar ? "YOK" : (s.Uyusmuyor ? "FARK" : "OK");
+                            <tr data-durum="@durum"
+                                data-durum1="@s.Sirket1Durum"
+                                data-durum2="@s.Sirket2Durum"
+                                data-durum3="@s.KonsolideDurum"
+                                data-cardcode="@s.CardCode"
+                                data-cardname="@s.CardName"
+                                data-hesaplar="@s.AcctCode"
+                                data-vergino="@s.VergiNo"
+                                data-s1cari="@s.Sirket1CariBakiye.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                data-s1hesap="@s.Sirket1HesapBakiye.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                data-s2cari="@s.Sirket2CariBakiye.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                data-s2hesap="@s.Sirket2HesapBakiye.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                data-cari="@s.CariBakiye.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                data-hesap="@s.HesapBakiye.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                data-fark="@s.Fark.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                data-fark1="@s.Sirket1Fark.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                data-fark2="@s.Sirket2Fark.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                data-unvan="@s.CardName"
+                                class="@(durum == "FARK" ? "satir-fark" : (durum == "YOK" ? "satir-hesapyok" : ""))">
+                                <td class="fw-bold text-dark">
+                                    @s.CardCode
+                                    @if (konsolideMi && s.BirlesenKartSayisi > 1)
+                                    {
+                                        <span class="badge-soft-warning d-block mt-1" style="font-size:10px;"
+                                              title="Bu satır aynı VKN/unvana sahip @s.BirlesenKartSayisi cari kartının toplamıdır.">
+                                            @s.BirlesenKartSayisi kart
+                                        </span>
+                                    }
+                                </td>
+                                <td class="text-secondary fw-semibold" title="@s.CardName">@s.CardName</td>
+                                <td><span class="badge-soft-secondary">@s.CardTypeAdi</span></td>
+                                @if (konsolideMi)
+                                {
+                                    <td class="tutar text-muted" title="@Model.Sirket1Adi - cari ekstre">
+                                        @(s.Sirket1Var ? s.Sirket1CariBakiye.ToString("N2") : "-")
+                                    </td>
+                                    <td class="tutar text-muted" title="@Model.Sirket1Adi - hesap ekstresi">
+                                        @(s.Sirket1HesapVar ? s.Sirket1HesapBakiye.ToString("N2") : (s.Sirket1Var ? "hesap yok" : "-"))
+                                    </td>
+                                    <td class="tutar text-muted" title="@Model.Sirket2Adi - cari ekstre">
+                                        @(s.Sirket2Var ? s.Sirket2CariBakiye.ToString("N2") : "-")
+                                    </td>
+                                    <td class="tutar text-muted" title="@Model.Sirket2Adi - hesap ekstresi">
+                                        @(s.Sirket2HesapVar ? s.Sirket2HesapBakiye.ToString("N2") : (s.Sirket2Var ? "hesap yok" : "-"))
+                                    </td>
+                                    <td style="font-size:11.5px;" title="@s.HesapAdi">
+                                        @if (s.HesapVar)
+                                        {
+                                            <span class="badge-soft-primary">@s.HesapKodu</span>
+                                            <div class="text-muted" style="font-size:11px;">@s.HesapAdi</div>
+                                            @if (s.PaylasanCariSayisi > 1)
+                                            {
+                                                <span class="badge-soft-warning" style="cursor:pointer; text-decoration:underline dotted;"
+                                                      title="Bu kontrol hesabı @s.PaylasanCariSayisi cari tarafından paylaşılıyor. Tıklayın: hesabı paylaşan carileri görün. Hesabın tamamı: @s.HesapToplamBakiye.ToString("N2")"
+                                                      onclick="ortakCarileriGoster('@s.AcctCode', '@s.HesapKodu', event)">ORTAK: @s.PaylasanCariSayisi cari</span>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="badge-soft-warning">Ana veride hesap tanımsız</span>
+                                        }
+                                    </td>
+                                    @DurumHucresi(s.Sirket1Durum, s.Sirket1Fark)
+                                    @DurumHucresi(s.Sirket2Durum, s.Sirket2Fark)
+                                    @DurumHucresi(s.KonsolideDurum, s.KonsolideFark)
+                                }
+                                else
+                                {
+                                    <td class="tutar fw-bold">@s.CariBakiye.ToString("N2")</td>
+                                    <td style="font-size:11.5px;" title="@s.HesapAdi">
+                                        @if (s.HesapVar)
+                                        {
+                                            <span class="badge-soft-primary">@s.HesapKodu</span>
+                                            <div class="text-muted" style="font-size:11px;">@s.HesapAdi</div>
+                                            @if (s.PaylasanCariSayisi > 1)
+                                            {
+                                                <span class="badge-soft-warning" style="cursor:pointer; text-decoration:underline dotted;"
+                                                      title="Bu kontrol hesabı @s.PaylasanCariSayisi cari tarafından paylaşılıyor. Tıklayın: hesabı paylaşan carileri görün. Hesabın tamamı: @s.HesapToplamBakiye.ToString("N2")"
+                                                      onclick="ortakCarileriGoster('@s.AcctCode', '@s.HesapKodu', event)">ORTAK: @s.PaylasanCariSayisi cari</span>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="badge-soft-warning">Ana veride hesap tanımsız</span>
+                                        }
+                                    </td>
+                                    <td class="tutar fw-bold">@(s.HesapVar ? s.HesapBakiye.ToString("N2") : "-")</td>
+                                    <td class="tutar @(s.HesapVar && s.Uyusmuyor ? "fark-var" : "fark-yok")">@(s.HesapVar ? s.Fark.ToString("N2") : "-")</td>
+                                    <td class="text-center">
+                                        @if (!s.HesapVar)
+                                        {
+                                            <span class="badge-soft-warning">HESAP TANIMSIZ</span>
+                                        }
+                                        else if (s.Uyusmuyor)
+                                        {
+                                            <span class="badge-soft-danger"><i class="fas fa-xmark me-1"></i>UYUŞMUYOR</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge-soft-success"><i class="fas fa-check me-1"></i>Uyuşuyor</span>
+                                        }
+                                    </td>
+                                }
+                                <td class="text-center text-nowrap">
+                                    <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 fw-bold" onclick="ekstreAc(this)">
+                                        <i class="fas fa-magnifying-glass"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-warning rounded-pill px-3 fw-bold ms-1"
+                                            title="Farkı kapatmak için virman fişi kes"
+                                            onclick="duzeltmeAc(this)">
+                                        <i class="fas fa-screwdriver-wrench"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="@(konsolideMi ? 12 : 9)" class="text-center py-5">
+                                <div class="text-muted mb-2"><i class="fas fa-inbox fa-3x opacity-25"></i></div>
+                                <h6 class="fw-bold text-secondary">Seçilen kriterlerde kayıt bulunamadı.</h6>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                @if (satirlar.Any())
+                {
+                    <tfoot>
+                        <tr style="background-color:#f8fafc; font-weight:800;">
+                            <td colspan="3" class="text-end">GENEL TOPLAM</td>
+                            @if (konsolideMi)
+                            {
+                                <td class="tutar">@s1Cari.ToString("N2")</td>
+                                <td class="tutar">@s1Hesap.ToString("N2")</td>
+                                <td class="tutar">@s2Cari.ToString("N2")</td>
+                                <td class="tutar">@s2Hesap.ToString("N2")</td>
+                                <td></td>
+                                <td class="tutar text-center @(Math.Abs(s1Cari - s1Hesap) > 0.01m ? "fark-var" : "fark-yok")">
+                                    @((s1Cari - s1Hesap).ToString("N2"))
+                                </td>
+                                <td class="tutar text-center @(Math.Abs(s2Cari - s2Hesap) > 0.01m ? "fark-var" : "fark-yok")">
+                                    @((s2Cari - s2Hesap).ToString("N2"))
+                                </td>
+                                @* Bu sayi UST KARTTAN FARKLI bir olcut kullanir:
+                                   ust kart iki sirketin TOPLAMINI karsilastirir, bu ise
+                                   dort kolonun TEK TEK esitligini arar. Bu yuzden burasi
+                                   normalde daha buyuk cikar; ikisi de dogrudur. *@
+                                <td class="text-center @(konsolideUyusmayan > 0 ? "fark-var" : "fark-yok")"
+                                    title="Dört kolonun (her iki şirketin cari ve hesap bakiyeleri) birbirine eşit olmadığı cari sayısı. Üstteki 'Uyuşmayanlar' kartı ise yalnızca TOPLAM cari ile TOPLAM hesabı karşılaştırır; o yüzden iki sayı farklıdır.">
+                                    @(konsolideUyusmayan > 0
+                                        ? konsolideUyusmayan + " caride 4 kolon farklı"
+                                        : "4 kolon da uyuşuyor")
+                                </td>
+                            }
+                            else
+                            {
+                                <td class="tutar">@toplamCariBakiye.ToString("N2")</td>
+                                <td></td>
+                                <td class="tutar">@toplamHesapBakiye.ToString("N2")</td>
+                                <td class="tutar @(Math.Abs(toplamFark) > 0.01m ? "fark-var" : "fark-yok")">@toplamFark.ToString("N2")</td>
+                                <td></td>
+                            }
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                }
+            </table>
+        </div>
+    </div>
+
+    <!-- EŞLEŞMEYEN HESAPLAR -->
+    <div class="dashboard-card border-0">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="card-title mb-0 fw-bold">
+                <i class="fas fa-link-slash me-2" style="color:#f59e0b;"></i>Hiçbir Cariye Düşmeyen Kontrol Hesapları
+                <span class="text-muted fw-normal" style="font-size:12px;">
+                    (Rapor39 mantığıyla bakiyesi olan, ama listedeki hiçbir carinin ana verisinde kontrol hesabı olarak görünmeyen hesaplar)
+                </span>
+            </div>
+            <div>
+                <span class="badge-soft-warning">@eslesmeyen.Count hesap</span>
+                <button class="btn btn-sm btn-outline-secondary rounded-pill ms-2" type="button" data-bs-toggle="collapse" data-bs-target="#eslesmeyenDiv">
+                    <i class="fas fa-chevron-down"></i> Göster / Gizle
+                </button>
+            </div>
+        </div>
+        <div class="collapse" id="eslesmeyenDiv">
+            <div class="table-responsive" style="max-height: 45vh; overflow-y: auto;">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="sticky-top shadow-sm">
+                        <tr>
+                            <th style="width:160px;">Hesap Kodu</th>
+                            <th>Hesap Adı</th>
+                            <th class="text-end" style="width:140px;">Borç</th>
+                            <th class="text-end" style="width:140px;">Alacak</th>
+                            <th class="text-end" style="width:150px;">Bakiye (TL)</th>
+                            <th class="text-center" style="width:100px;">Hareket</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (eslesmeyen.Any())
+                        {
+                            foreach (var h in eslesmeyen)
+                            {
+                                <tr>
+                                    <td class="fw-bold text-dark">@h.HesapKodu</td>
+                                    <td class="text-secondary">@h.HesapAdi</td>
+                                    <td class="tutar">@h.Borc.ToString("N2")</td>
+                                    <td class="tutar">@h.Alacak.ToString("N2")</td>
+                                    <td class="tutar fw-bold">@h.Bakiye.ToString("N2")</td>
+                                    <td class="text-center">@h.HareketSayisi</td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr><td colspan="6" class="text-center py-4 text-muted">Tüm hesaplar bir cariye bağlandı.</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ÖLÇÜT AÇIKLAMA MODALI
+     Üstteki "Uyuşmayanlar" kartı ile alt satırdaki "4 kolon farklı" sayısı
+     bilerek farklı ölçütler kullanıyor. Kullanıcı bunu ekranda göremediği
+     için iki sayıyı çelişki sanıyordu; burada örnekle anlatılıyor. -->
+<div class="modal fade" id="olcutModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title fw-bold">
+                    <i class="fas fa-circle-question text-info me-2"></i>Üstteki sayı ile alttaki sayı neden farklı?
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+            </div>
+            <div class="modal-body" style="font-size:13px;">
+
+                <p class="mb-3">
+                    Ekranda iki ayrı uyuşmazlık sayısı var ve <b>ikisi de doğru</b>.
+                    Farklı sorulara cevap verdikleri için farklı çıkıyorlar.
+                </p>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <div class="border rounded p-3 h-100" style="border-top:3px solid #ef4444 !important;">
+                            <div class="fw-bold text-danger mb-1">Üstteki kart — "Uyuşmayanlar"</div>
+                            <div class="text-muted mb-2" style="font-size:12px;">Toplam cari ≠ toplam hesap</div>
+                            <code style="font-size:11.5px;">|toplam cari − toplam hesap| &gt; 0,01</code>
+                            <p class="mb-0 mt-2" style="font-size:12.5px;">
+                                İki şirketin bakiyeleri <b>toplanır</b>, sonra karşılaştırılır.
+                                Bir şirketteki artı fark diğerindeki eksi farkı kapatırsa
+                                bu cari uyuşuyor sayılır ve sayıya girmez.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="border rounded p-3 h-100" style="border-top:3px solid #8b5cf6 !important;">
+                            <div class="fw-bold" style="color:#8b5cf6;">Alt satır — "4 kolon farklı"</div>
+                            <div class="text-muted mb-2" style="font-size:12px;">Dört kolonun tek tek eşitliği</div>
+                            <code style="font-size:11.5px;">max(4 kolon) − min(4 kolon) &gt; eşik</code>
+                            <p class="mb-0 mt-2" style="font-size:12.5px;">
+                                Toplama yapılmaz. Her iki şirketin cari ve hesap bakiyesi
+                                <b>dördü birden</b> eşit değilse fark sayılır.
+                                Bu ölçüt çok daha sıkıdır.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <h6 class="fw-bold mt-4 mb-2">Örnek — tek bir cari</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle mb-2">
+                        <thead class="table-light">
+                            <tr><th>Kolon</th><th class="text-end">Tutar</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>@Model.Sirket1Adi — Cari ekstre</td><td class="text-end">150.000,00</td></tr>
+                            <tr><td>@Model.Sirket1Adi — Hesap ekstresi</td><td class="text-end">100.000,00</td></tr>
+                            <tr><td>@Model.Sirket2Adi — Cari ekstre</td><td class="text-end">80.000,00</td></tr>
+                            <tr><td>@Model.Sirket2Adi — Hesap ekstresi</td><td class="text-end">130.000,00</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="alert alert-light border py-2 mb-2" style="font-size:12.5px;">
+                    <b>Üstteki karta göre:</b>
+                    toplam cari = 150.000 + 80.000 = <b>230.000</b>,
+                    toplam hesap = 100.000 + 130.000 = <b>230.000</b> →
+                    fark <b>0</b> → <span class="text-success fw-bold">uyuşuyor sayılır, sayıya girmez.</span>
+                </div>
+
+                <div class="alert alert-light border py-2 mb-3" style="font-size:12.5px;">
+                    <b>Alt satıra göre:</b>
+                    dört kolon 150.000 / 100.000 / 80.000 / 130.000 →
+                    en büyük − en küçük = <b>70.000</b> →
+                    <span class="text-danger fw-bold">fark sayılır.</span>
+                </div>
+
+                <p class="mb-2" style="font-size:12.5px;">
+                    Bu carinin gerçekte bir sorunu var: bir şirkette 50.000 eksik, diğerinde 50.000 fazla
+                    kayıt görünüyor. Toplamı bakınca kayboluyor, kolon kolon bakınca ortaya çıkıyor.
+                    Grup içi mutabakatta bakmanız gereken <b>alt satırdaki</b> ölçüttür.
+                </p>
+
+                <div class="alert alert-info py-2 mb-0" style="font-size:12.5px;">
+                    <i class="fas fa-lightbulb me-1"></i>
+                    Bu carilerin listesini görmek için tablonun üstündeki
+                    <b>Uyuşmuyor</b> sekmesini kullanın — o sekme alt satırla aynı ölçütü kullanır.
+                    Diğer sekmeler (<b>Kontrol hesabı yok</b>, <b>Cari yok</b>, <b>Tek şirkette</b>)
+                    karşılaştırılamayan carileri gösterir; hiçbir kayıt gizli kalmaz.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- EKSTRE DETAY MODALI -->
+<div class="modal fade" id="ekstreModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius: 14px; overflow: hidden;">
+            <div class="modal-header text-white" style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);">
+                <h6 class="modal-title fw-bold" id="ekstreModalBaslik">Ekstre Karşılaştırması</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="ekstreModalBody">
+                <div class="text-center py-5 text-muted">Yükleniyor...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@@11"></script>
+    <script>
+        var KONSOLIDE_MI = @(konsolideMi ? "true" : "false");
+        var SAYFA_DB = '@(Model.SecilenDbKey ?? "")';
+
+        var aktifDurumFiltresi = 'ALL';
+
+        // ---- ORTAK CARILER --------------------------------------------------
+        // Kontrol hesabini paylasan carileri gosterir; tablodaki bakiyenin neden
+        // hesabin tamamiyla ayni olmadigi burada gorulur.
+        function ortakCarileriGoster(acctCode, hesapKodu, olay, dbKey) {
+            if (olay) olay.stopPropagation();
+            if (!acctCode) return;
+
+            Swal.fire({
+                title: 'Ortak cariler yükleniyor...',
+                html: '<i class="fas fa-spinner fa-spin fa-2x text-primary"></i>',
+                showConfirmButton: false, allowOutsideClick: false
+            });
+
+            $.get('/Rapor141/OrtakCariler', { acctCode: acctCode, dbKey: dbKey || SAYFA_DB }, function (res) {
+                if (!res.success) { Swal.fire('Hata', res.message || 'Liste alınamadı.', 'error'); return; }
+                if (!res.liste || res.liste.length === 0) {
+                    Swal.fire('Bilgi', 'Bu hesaba bağlı cari bulunamadı.', 'info'); return;
+                }
+
+                var toplam = 0;
+                var satirlar = res.liste.map(function (c) {
+                    toplam += (c.bakiye || 0);
+                    return '<tr>'
+                         + '<td class="fw-bold">' + htmlKacis(c.kod) + '</td>'
+                         + '<td class="text-start">' + htmlKacis(c.ad) + '</td>'
+                         + '<td class="text-center">' + (c.tip === 'S' ? 'Tedarikçi' : (c.tip === 'L' ? 'Potansiyel' : 'Müşteri')) + '</td>'
+                         + '<td class="text-end">' + tutarFormat(c.bakiye) + '</td>'
+                         + '</tr>';
+                }).join('');
+
+                Swal.fire({
+                    title: (hesapKodu || acctCode) + ' hesabını paylaşan cariler',
+                    width: 760,
+                    html:
+                      '<div class="text-muted mb-2" style="font-size:12.5px;">'
+                    + res.liste.length + ' cari bu kontrol hesabına bağlı. '
+                    + 'Ekstre tablosunda görünen bakiye yalnızca ilgili carinin payıdır.</div>'
+                    + '<div style="max-height:56vh; overflow:auto;">'
+                    + '<table class="table table-sm table-hover align-middle mb-0">'
+                    + '<thead class="table-light"><tr>'
+                    + '<th style="width:120px;">Cari Kodu</th><th class="text-start">Cari Adı</th>'
+                    + '<th style="width:100px;">Tip</th><th class="text-end" style="width:130px;">Bakiye</th>'
+                    + '</tr></thead><tbody>' + satirlar + '</tbody>'
+                    + '<tfoot><tr style="font-weight:800; background:#f8fafc;">'
+                    + '<td colspan="3" class="text-end">HESABIN TOPLAMI</td>'
+                    + '<td class="text-end">' + tutarFormat(toplam) + '</td>'
+                    + '</tr></tfoot></table></div>',
+                    confirmButtonText: 'Kapat'
+                });
+            }).fail(function () { Swal.fire('Hata', 'Sunucuya bağlanılamadı.', 'error'); });
+        }
+
+        // Sayfanin kendi filtresi: sirket ust seciciden degil buradan gelir.
+        function filtreParametreleri() {
+            return {
+                konsolide: $('#selKonsolide').val() || '',
+                cariTipi: $('#selCariTipi').val() || ''
+            };
+        }
+
+        // ---- ORTAK CARI: ACIKLAMA -------------------------------------------
+        function ortakCariNedir() {
+            Swal.fire({
+                title: 'Ortak cari ne demek?',
+                width: 720,
+                html:
+                  '<div class="text-start" style="font-size:13.5px; line-height:1.65;">'
+                + '<p>SAP\'de her carinin bir <b>mutabakat (kontrol) hesabı</b> vardır; carinin bütün '
+                + 'borç ve alacağı muhasebede o hesaba işlenir.</p>'
+                + '<p><b>Ortak cari</b>, aynı kontrol hesabına <b>birden fazla carinin</b> bağlı olması '
+                + 'demektir. Bu durumda hesabın bakiyesi tek bir cariye ait değildir; o hesaba bağlı '
+                + 'bütün carilerin toplamıdır.</p>'
+                + '<div class="alert alert-info py-2 mb-3"><b>Örnek:</b> 120.01.0007 hesabına '
+                + 'ABC Ltd. ve XYZ A.Ş. bağlıysa, hesap ekstresi 150.000 TL gösterirken '
+                + 'ABC\'nin cari ekstresi 90.000, XYZ\'ninki 60.000 olabilir. Tek tek bakıldığında '
+                + '"tutmuyor" görünür, oysa toplam doğrudur.</div>'
+                + '<p>Bu ekranda böyle satırlarda <span class="badge-soft-warning">ORTAK: n cari</span> '
+                + 'rozeti çıkar ve tabloda gösterilen bakiye <b>yalnızca o carinin payıdır</b>. '
+                + 'Rozete ya da <b>Ortak cariler</b> sekmesine tıklayarak hesabı paylaşan carileri görebilirsiniz.</p>'
+                + '<p class="mb-0 text-muted" style="font-size:12.5px;">Not: Ortak cari kullanmak hatalı '
+                + 'değildir; ancak cari bazlı mutabakatı zorlaştırır. Ayrıştırmak isterseniz Muhattap Ana '
+                + 'Verileri ekranından her cariye kendi kırılım hesabını verebilirsiniz.</p>'
+                + '</div>',
+                confirmButtonText: 'Anladım'
+            });
+        }
+
+        // ---- ORTAK CARILER (SEKME) ------------------------------------------
+        function ortakHesaplariGetir() {
+            Swal.fire({
+                title: 'Ortak hesaplar taranıyor...',
+                html: '<i class="fas fa-spinner fa-spin fa-2x text-primary"></i>',
+                showConfirmButton: false, allowOutsideClick: false
+            });
+
+            $.get('/Rapor141/OrtakHesaplar', filtreParametreleri(), function (res) {
+                if (!res.success) { Swal.fire('Hata', res.message || 'Liste alınamadı.', 'error'); return; }
+                if (!res.liste || res.liste.length === 0) {
+                    Swal.fire('Temiz', 'Filtredeki şirket(ler)de ortak kullanılan kontrol hesabı yok.', 'success');
+                    return;
+                }
+
+                var cokSirket = res.liste.some(function (h) { return h.sirket !== res.liste[0].sirket; });
+
+                var satirlar = res.liste.map(function (h) {
+                    return '<tr style="cursor:pointer;" onclick="ortakCarileriGoster(\'' + h.acctCode + '\', \''
+                         + h.hesapKodu + '\', null, \'' + h.dbKey + '\')">'
+                         + (cokSirket ? '<td class="text-start" style="font-size:11.5px;">' + htmlKacis(h.sirket) + '</td>' : '')
+                         + '<td class="fw-bold">' + htmlKacis(h.hesapKodu) + '</td>'
+                         + '<td class="text-start">' + htmlKacis(h.hesapAdi) + '</td>'
+                         + '<td class="text-center"><span class="badge bg-warning text-dark">' + h.cariSayisi + '</span></td>'
+                         + '<td class="text-end">' + tutarFormat(h.carilerToplami) + '</td>'
+                         + '</tr>';
+                }).join('');
+
+                Swal.fire({
+                    title: res.liste.length + ' ortak kontrol hesabı',
+                    width: 880,
+                    html:
+                      '<div class="alert alert-info py-2 text-start" style="font-size:12.5px;">'
+                    + 'Bu hesapların her birine <b>birden fazla cari</b> bağlı. Hesabın bakiyesi tek bir '
+                    + 'cariye ait değildir. Satıra tıklayınca o hesabı paylaşan cariler açılır.</div>'
+                    + '<div style="max-height:52vh; overflow:auto;">'
+                    + '<table class="table table-sm table-hover align-middle mb-0"><thead class="table-light"><tr>'
+                    + (cokSirket ? '<th class="text-start" style="width:120px;">Şirket</th>' : '')
+                    + '<th style="width:140px;">Hesap Kodu</th><th class="text-start">Hesap Adı</th>'
+                    + '<th style="width:90px;">Cari</th><th class="text-end" style="width:150px;">Carilerin Toplamı</th>'
+                    + '</tr></thead><tbody>' + satirlar + '</tbody></table></div>',
+                    confirmButtonText: 'Kapat'
+                });
+            }).fail(function () { Swal.fire('Hata', 'Sunucuya bağlanılamadı.', 'error'); });
+        }
+
+        // ---- HAREKETSIZ CARILER ---------------------------------------------
+        function hareketsizleriGetir() {
+            Swal.fire({
+                title: 'Hareketsiz cariler taranıyor...',
+                html: '<div class="text-muted" style="font-size:12.5px;">Bakiye, yevmiye ve tüm belge tabloları kontrol ediliyor.</div>'
+                    + '<i class="fas fa-spinner fa-spin fa-2x text-primary mt-3"></i>',
+                showConfirmButton: false, allowOutsideClick: false
+            });
+
+            $.get('/Rapor141/HareketsizCariler', filtreParametreleri(), function (res) {
+                if (!res.success) { Swal.fire('Hata', res.message || 'Liste alınamadı.', 'error'); return; }
+
+                if (!res.liste || res.liste.length === 0) {
+                    Swal.fire('Temiz', res.sirket + ' şirketinde hareketsiz cari bulunamadı.', 'success');
+                    return;
+                }
+
+                var cokSirket = res.liste.some(function (c) { return c.sirket !== res.liste[0].sirket; });
+
+                var satirlar = res.liste.map(function (c) {
+                    return '<tr>'
+                         + '<td class="text-center"><input type="checkbox" class="hsz-kutu" value="' + htmlKacis(c.kod) + '" data-db="' + htmlKacis(c.dbKey) + '"></td>'
+                         + (cokSirket ? '<td class="text-start" style="font-size:11.5px;">' + htmlKacis(c.sirket) + '</td>' : '')
+                         + '<td class="fw-bold">' + htmlKacis(c.kod) + '</td>'
+                         + '<td class="text-start">' + htmlKacis(c.ad) + '</td>'
+                         + '<td class="text-center">' + (c.tip === 'S' ? 'Tedarikçi' : (c.tip === 'L' ? 'Potansiyel' : 'Müşteri')) + '</td>'
+                         + '<td class="text-start" style="font-size:11.5px;">' + htmlKacis(c.hesapKodu || '-') + '</td>'
+                         + '</tr>';
+                }).join('');
+
+                Swal.fire({
+                    title: res.liste.length + ' hareketsiz cari',
+                    width: 860,
+                    html:
+                      '<div class="alert alert-warning py-2 text-start" style="font-size:12.5px;">'
+                    + '<b>' + htmlKacis(res.sirket) + '</b> şirketinde bakiyesi sıfır, hiç yevmiye satırı ve '
+                    + 'hiçbir belgesi bulunmayan cariler. Silme işlemi SAP Service Layer ile yapılır; '
+                    + 'sunucu her kartı tekrar denetler, SAP reddederse kart olduğu gibi kalır. '
+                    + '<b>Güvenlik için hiçbiri önceden seçili değildir</b> - silmek istediklerinizi işaretleyin.</div>'
+                    + '<div class="text-start mb-2"><label style="font-size:12.5px;cursor:pointer;">'
+                    + '<input type="checkbox" id="hszHepsi"> Tümünü seç</label></div>'
+                    + '<div style="max-height:50vh; overflow:auto;">'
+                    + '<table class="table table-sm table-hover align-middle mb-0">'
+                    + '<thead class="table-light"><tr><th style="width:40px;"></th>'
+                    + (cokSirket ? '<th class="text-start" style="width:120px;">Şirket</th>' : '')
+                    + '<th style="width:120px;">Cari Kodu</th><th class="text-start">Cari Adı</th>'
+                    + '<th style="width:100px;">Tip</th><th class="text-start" style="width:170px;">Mutabakat Hesabı</th>'
+                    + '</tr></thead><tbody>' + satirlar + '</tbody></table></div>',
+                    showCancelButton: true,
+                    confirmButtonText: 'Seçilenleri SAP\'den sil',
+                    cancelButtonText: 'Kapat',
+                    confirmButtonColor: '#dc3545',
+                    didOpen: function () {
+                        $('#hszHepsi').on('change', function () {
+                            $('.hsz-kutu').prop('checked', $(this).is(':checked'));
+                        });
+                    },
+                    preConfirm: function () {
+                        var secili = $('.hsz-kutu:checked').map(function () {
+                            return { Kod: this.value, DbKey: $(this).data('db') || '' };
+                        }).get();
+                        if (secili.length === 0) {
+                            Swal.showValidationMessage('Hiç cari seçilmedi.');
+                            return false;
+                        }
+                        return secili;
+                    }
+                }).then(function (secim) {
+                    if (secim.isConfirmed && secim.value) hareketsizleriSil(secim.value);
+                });
+            }).fail(function () { Swal.fire('Hata', 'Sunucuya bağlanılamadı.', 'error'); });
+        }
+
+        // ---- HAREKETSIZ CARILERI SILME --------------------------------------
+        // Ekranda gorunen (suzulmus) hareketsiz carileri Service Layer ile siler.
+        // Sunucu her kart icin tarih araligindan bagimsiz yeniden denetim yapar.
+        function hareketsizleriSil(kayitlar) {
+            kayitlar = (kayitlar || []).filter(function (k) { return k && k.Kod; });
+            if (kayitlar.length === 0) { Swal.fire('Bilgi', 'Silinecek cari seçilmedi.', 'info'); return; }
+
+            var sirketler = [];
+            kayitlar.forEach(function (k) { if (sirketler.indexOf(k.DbKey) < 0) sirketler.push(k.DbKey); });
+
+            Swal.fire({
+                title: kayitlar.length + ' cari silinsin mi?',
+                html: '<div style="text-align:left; font-size:13px;">'
+                    + '<b>Şirket:</b> ' + htmlKacis(sirketler.join(', ')) + '<br><br>'
+                    + 'Bu kartların bakiyesi sıfır ve hiç hareketi yok. Silmeden önce her biri '
+                    + 'tarih aralığından bağımsız olarak yeniden denetlenir; yevmiye satırı veya '
+                    + 'belgesi bulunan kart <b>silinmez</b>. Silme SAP Service Layer ile yapılır, '
+                    + 'SAP reddederse kart olduğu gibi kalır.'
+                    + '<div class="mt-2" style="max-height:160px; overflow:auto; font-size:12px;">'
+                    + kayitlar.map(function (k) { return htmlKacis(k.Kod); }).join(', ') + '</div></div>',
+                icon: 'warning', showCancelButton: true,
+                confirmButtonText: 'Evet, sil', cancelButtonText: 'Vazgeç',
+                confirmButtonColor: '#dc3545'
+            }).then(function (secim) {
+                if (!secim.isConfirmed) return;
+
+                Swal.fire({
+                    title: 'Siliniyor...', html: '<i class="fas fa-spinner fa-spin fa-2x text-danger"></i>',
+                    showConfirmButton: false, allowOutsideClick: false
+                });
+
+                $.ajax({
+                    url: '/Rapor141/HareketsizCarileriSil',
+                    type: 'POST', contentType: 'application/json',
+                    data: JSON.stringify({ Kayitlar: kayitlar }),
+                    success: function (res) {
+                        if (!res.success) { Swal.fire('Hata', res.message || 'İşlem başarısız.', 'error'); return; }
+
+                        var satir = (res.sonuclar || []).map(function (s) {
+                            var renk = s.durum === 'silindi' ? 'text-success'
+                                     : (s.durum === 'hata' ? 'text-danger' : 'text-warning');
+                            return '<tr><td class="fw-bold">' + htmlKacis(s.kod) + '</td>'
+                                 + '<td style="font-size:11.5px;">' + htmlKacis(s.sirket || '') + '</td>'
+                                 + '<td class="' + renk + ' text-start">' + htmlKacis(s.mesaj) + '</td></tr>';
+                        }).join('');
+
+                        Swal.fire({
+                            title: res.silinen + ' / ' + res.toplam + ' cari silindi',
+                            width: 720,
+                            html: '<div style="max-height:56vh; overflow:auto;">'
+                                + '<table class="table table-sm align-middle mb-0"><tbody>' + satir + '</tbody></table></div>',
+                            icon: res.silinen > 0 ? 'success' : 'info',
+                            confirmButtonText: 'Kapat'
+                        }).then(function () { if (res.silinen > 0) location.reload(); });
+                    },
+                    error: function (x) {
+                        Swal.fire('Sunucu Hatası (' + x.status + ')',
+                                  (x.responseText || x.statusText || '').substring(0, 400), 'error');
+                    }
+                });
+            });
+        }
+
+
+        $(document).ready(function () {
+            // Modal sayfa gövdesinin içinde kalırsa Bootstrap backdrop'u üstüne biner
+            // ve pencere bulanık / tıklanamaz görünür.
+            $('.modal').each(function () {
+                var $m = $(this);
+                if (!$m.parent().is('body')) $m.appendTo('body');
+            });
+
+            tipEtiketiGuncelle();
+
+            $('.tip-check').on('change', tipEtiketiGuncelle);
+            $('#inpBas, #inpBit, #selCariTipi, #inpArama, #chkDevir, #chkSadeceUyusmayan, #selKonsolide').on('change keyup', excelLinkiGuncelle);
+
+            $('#filtreForm').on('submit', function () {
+                $('#tiplerInput').val(secilenTiplerCsv());
+            });
+
+            $('#tabloAra').on('keyup', tabloyuSuz);
+
+            // Sekme rozetleri ilk aciliste da dolsun.
+            tabloyuSuz();
+
+            excelLinkiGuncelle();
+        });
+
+        function secilenTipler() {
+            var t = [];
+            $('.tip-check:checked').each(function () { t.push($(this).val()); });
+            return t;
+        }
+
+        function secilenTiplerCsv() {
+            var adet = $('.tip-check:checked').length;
+            var toplam = $('.tip-check').length;
+            return (adet === toplam) ? '' : secilenTipler().join('||');
+        }
+
+        function tumTipler(sec) {
+            $('.tip-check').prop('checked', sec);
+            tipEtiketiGuncelle();
+        }
+
+        function tipEtiketiGuncelle() {
+            var adet = $('.tip-check:checked').length;
+            var toplam = $('.tip-check').length;
+            $('#tipDropdownLabel').text((adet === 0 || adet === toplam) ? 'Tüm işlem tipleri' : adet + ' işlem tipi seçili');
+            $('#tiplerInput').val(secilenTiplerCsv());
+            excelLinkiGuncelle();
+        }
+
+        function excelLinkiGuncelle() {
+            var url = '/Rapor141/ExcelExport'
+                + '?bas=' + encodeURIComponent($('#inpBas').val())
+                + '&bit=' + encodeURIComponent($('#inpBit').val())
+                + '&tipler=' + encodeURIComponent($('#tiplerInput').val())
+                + '&cariTipi=' + encodeURIComponent($('#selCariTipi').val())
+                + '&devirDahil=' + ($('#chkDevir').is(':checked') ? 'true' : 'false')
+                + '&sadeceUyusmayanlar=' + ($('#chkSadeceUyusmayan').is(':checked') ? 'true' : 'false')
+                + '&arama=' + encodeURIComponent($('#inpArama').val())
+                + '&konsolide=' + encodeURIComponent($('#selKonsolide').val() || '');
+            $('#btnExcel').attr('href', url);
+        }
+
+        // Secili uyusma sekmesi ('' = tumu)
+        var aktifUyusmaDurumu = '';
+
+        function tabloyuSuz() {
+            var q = ($('#tabloAra').val() || '').toLocaleLowerCase('tr-TR');
+            var kapsam = $('#selKapsam').val() || '3';   // 1 / 2 / 3 (konsolide)
+
+            var gorunen = 0;
+            var sayim = { '': 0, 'OK': 0, 'FARK': 0, 'TEKSIRKET': 0, 'HESAPYOK': 0, 'YOK': 0 };
+
+            $('#cariTable tbody tr[data-durum]').each(function () {
+                var $tr = $(this);
+
+                var durumUygun = (aktifDurumFiltresi === 'ALL') || ($tr.data('durum') === aktifDurumFiltresi);
+                var metin = $tr.text().toLocaleLowerCase('tr-TR');
+                var metinUygun = metin.indexOf(q) > -1;
+
+                // Kapsamdaki uyusma durumu. Konsolide degilken data-durum1/2/3
+                // dolmaz; o durumda satirin kendi durumu kullanilir.
+                var uDurum = KONSOLIDE_MI
+                    ? String($tr.data('durum' + kapsam) || '')
+                    : String($tr.data('durum') || '');
+
+
+                // Sekme rozetleri, uyusma sekmesi DISINDAKI suzgeclere gore sayilir;
+                // boylece bir sekmeye gecince digerlerinin sayisi degismez.
+                if (durumUygun && metinUygun) {
+                    sayim[''] = sayim[''] + 1;
+                    if (sayim.hasOwnProperty(uDurum)) sayim[uDurum] = sayim[uDurum] + 1;
+                }
+
+                var uyusmaUygun = (aktifUyusmaDurumu === '') || (uDurum === aktifUyusmaDurumu);
+                var uygun = durumUygun && metinUygun && uyusmaUygun;
+
+                $tr.toggle(uygun);
+                if (uygun) gorunen++;
+            });
+
+            $('#uyusmaSekmeleri button').each(function () {
+                var dur = String($(this).data('durum') || '');
+                $(this).find('.badge').text(sayim.hasOwnProperty(dur) ? sayim[dur] : 0);
+            });
+
+            if (aktifUyusmaDurumu !== '' || q) {
+                $('#filterStatusText').text(gorunen + ' cari gösteriliyor.');
+            }
+        }
+
+        $(document).on('click', '#uyusmaSekmeleri button[data-durum]', function () {
+            $('#uyusmaSekmeleri button').removeClass('active');
+            $(this).addClass('active');
+            aktifUyusmaDurumu = String($(this).data('durum') || '');
+            tabloyuSuz();
+        });
+
+        function filterTable(durum, element) {
+            aktifDurumFiltresi = durum;
+            $('.dashboard-card.filter-card').removeClass('active-filter');
+            $(element).addClass('active-filter');
+            tabloyuSuz();
+
+            var metinler = {
+                'ALL': 'Tüm kayıtlar gösteriliyor.',
+                'OK': 'Sadece uyuşan cariler gösteriliyor.',
+                'FARK': 'Sadece UYUŞMAYAN cariler gösteriliyor.',
+                'YOK': 'Sadece ana verisinde kontrol hesabı tanımsız cariler gösteriliyor.'
+            };
+            $('#filterStatusText').text(metinler[durum]);
+        }
+
+        function tutarFormat(x) {
+            return (x || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function htmlKacis(s) {
+            return $('<div>').text(s == null ? '' : s).html();
+        }
+
+        function ozetKutu(baslik, deger, sinif) {
+            return '<div class="col-md-4"><div class="dashboard-card p-3 border-0 ' + sinif + '">'
+                 + '<div class="kpi-title">' + htmlKacis(baslik) + '</div>'
+                 + '<div class="kpi-value" style="font-size:18px;">' + htmlKacis(deger) + '</div>'
+                 + '</div></div>';
+        }
+
+        function farkTablosu(baslik, satirlar, toplam, renkSinifi) {
+            var html = '<h6 class="fw-bold mt-3 mb-2" style="font-size:.85rem;">' + htmlKacis(baslik) + '</h6>'
+                     + '<div class="table-responsive" style="max-height:260px; overflow-y:auto;">'
+                     + '<table class="table table-sm table-hover align-middle mb-0"><thead class="sticky-top"><tr>'
+                     + '<th>Tarih</th><th>Yevmiye No</th><th>Satır</th><th>İşlem Tipi</th><th>Hesap</th>'
+                     + '<th>Açıklama</th><th class="text-end">Tutar</th><th>Neden</th>'
+                     + '</tr></thead><tbody>';
+
+            satirlar.forEach(function (r) {
+                html += '<tr>'
+                     + '<td>' + htmlKacis(r.tarih) + '</td>'
+                     + '<td class="fw-bold">' + htmlKacis(r.yevmiyeNo) + '</td>'
+                     + '<td>' + htmlKacis(r.satirNo) + '</td>'
+                     + '<td>' + htmlKacis(r.islemTipi) + '</td>'
+                     + '<td>' + htmlKacis(r.hesapKodu) + '</td>'
+                     + '<td style="max-width:220px; font-size:11.5px;">' + htmlKacis(r.aciklama) + '</td>'
+                     + '<td class="tutar fw-bold">' + tutarFormat(r.tutar) + '</td>'
+                     + '<td><span class="badge-soft-warning">' + htmlKacis(r.neden) + '</span></td>'
+                     + '</tr>';
+            });
+
+            html += '</tbody><tfoot><tr class="' + renkSinifi + '">'
+                  + '<td colspan="6" class="text-end fw-bold">TOPLAM ETKİ</td>'
+                  + '<td class="tutar fw-bold">' + htmlKacis(toplam) + '</td><td></td>'
+                  + '</tr></tfoot></table></div>';
+
+            return html;
+        }
+
+        function ekstreTablosu(satirlar, baslik, renkSinifi) {
+            if (!satirlar || satirlar.length === 0) {
+                return '<div class="alert alert-light border">' + baslik + ': kayıt yok.</div>';
+            }
+
+            var bakiye = 0;
+            var html = '<h6 class="fw-bold mt-3 mb-2">' + baslik + '</h6>'
+                + '<div class="table-responsive" style="max-height:320px; overflow-y:auto;">'
+                + '<table class="table table-sm table-hover align-middle mb-0"><thead class="sticky-top"><tr>'
+                + '<th>Tarih</th><th>İşlem No</th><th>Belge Tipi</th><th>İşlem Tipi</th><th>Hesap</th><th>Açıklama</th>'
+                + '<th class="text-end">Borç</th><th class="text-end">Alacak</th><th class="text-end">Bakiye</th>'
+                + '</tr></thead><tbody>';
+
+            for (var i = 0; i < satirlar.length; i++) {
+                var r = satirlar[i];
+                bakiye += (r.borc - r.alacak);
+                html += '<tr>'
+                    + '<td>' + htmlKacis(r.tarih) + '</td>'
+                    + '<td>' + htmlKacis(r.islemNo) + '</td>'
+                    + '<td>' + htmlKacis(r.islemTipi) + '</td>'
+                    + '<td><span class="badge-soft-secondary">' + htmlKacis(r.aktarimTipi) + '</span></td>'
+                    + '<td>' + htmlKacis(r.hesapKodu) + '<div class="text-muted" style="font-size:11px;">' + htmlKacis(r.hesapAdi) + '</div></td>'
+                    + '<td style="max-width:240px; font-size:11.5px;">' + htmlKacis(r.aciklama) + '</td>'
+                    + '<td class="tutar">' + tutarFormat(r.borc) + '</td>'
+                    + '<td class="tutar">' + tutarFormat(r.alacak) + '</td>'
+                    + '<td class="tutar fw-bold">' + tutarFormat(bakiye) + '</td>'
+                    + '</tr>';
+            }
+
+            html += '</tbody><tfoot><tr class="' + renkSinifi + '"><td colspan="8" class="text-end fw-bold">TOPLAM BAKİYE</td>'
+                + '<td class="tutar fw-bold">' + tutarFormat(bakiye) + '</td></tr></tfoot></table></div>';
+            return html;
+        }
+
+        function ekstreAc(btn) {
+            var satir = $(btn).closest('tr');
+            var cardCode = satir.data('cardcode');
+            var cardName = satir.data('cardname');
+            var hesaplar = satir.data('hesaplar');
+
+            $('#ekstreModalBaslik').text('Ekstre Karşılaştırması - ' + cardCode + ' / ' + cardName);
+            $('#ekstreModalBody').html('<div class="text-center py-5 text-muted"><i class="fas fa-spinner fa-spin fa-2x"></i><div class="mt-2">Ekstre satırları getiriliyor...</div></div>');
+
+            var modal = new bootstrap.Modal(document.getElementById('ekstreModal'));
+            modal.show();
+
+            $.getJSON('/Rapor141/Detay', {
+                cardCode: cardCode,
+                hesaplar: hesaplar,
+                bas: $('#inpBas').val(),
+                bit: $('#inpBit').val(),
+                tipler: $('#tiplerInput').val(),
+                devirDahil: $('#chkDevir').is(':checked'),
+                konsolide: $('#selKonsolide').val() || '',
+                vergiNo: satir.data('vergino') || '',
+                unvan: satir.data('unvan') || ''
+            }, function (res) {
+                if (!res.success) {
+                    $('#ekstreModalBody').html('<div class="alert alert-danger">' + htmlKacis(res.message) + '</div>');
+                    return;
+                }
+
+                var html = '';
+
+                (res.bolumler || []).forEach(function (b) {
+                    html += '<div class="mb-4">';
+                    html += '<h6 class="fw-bold mb-2" style="letter-spacing:-.02em;">'
+                          + '<i class="fas fa-building me-2 text-primary"></i>' + htmlKacis(b.sirket) + '</h6>';
+
+                    if (!b.bulundu) {
+                        html += '<div class="alert alert-warning py-2" style="font-size:12.5px;">'
+                              + htmlKacis(b.mesaj) + '</div></div>';
+                        return;
+                    }
+
+                    /* Özet şeridi */
+                    html += '<div class="row g-2 mb-3">'
+                          + ozetKutu('Cari Ekstre (Rapor20)', b.cariBakiye, 'border-top-primary')
+                          + ozetKutu('Hesap Ekstresi (Rapor39) - ' + (b.hesapKodu || '-'), b.hesapBakiye, 'border-top-purple')
+                          + ozetKutu('Fark', b.fark, b.farkVar ? 'border-top-danger' : 'border-top-success')
+                          + '</div>';
+
+                    /* FARK ANALİZİ */
+                    if (b.sadeceCaride.length || b.sadeceHesapta.length) {
+                        html += '<div class="alert alert-warning py-2 mb-2" style="font-size:12.5px;">'
+                              + '<i class="fas fa-magnifying-glass-chart me-1"></i> <b>Farkı oluşturan kayıtlar</b> — '
+                              + 'iki ekstre yevmiye no + satır no ile eşleştirildi, eşleşmeyenler aşağıda.</div>';
+
+                        if (b.sadeceCaride.length) {
+                            html += farkTablosu('Yalnızca CARİ ekstresinde olanlar (' + b.sadeceCaride.length + ')',
+                                                b.sadeceCaride, b.sadeceCarideToplam, 'table-primary');
+                        }
+                        if (b.sadeceHesapta.length) {
+                            html += farkTablosu('Yalnızca HESAP ekstresinde olanlar (' + b.sadeceHesapta.length + ')',
+                                                b.sadeceHesapta, b.sadeceHesaptaToplam, 'table-secondary');
+                        }
+                    } else {
+                        html += '<div class="alert alert-success py-2 mb-2" style="font-size:12.5px;">'
+                              + '<i class="fas fa-circle-check me-1"></i> İki ekstrenin bütün satırları eşleşiyor.</div>';
+                    }
+
+                    /* Tam ekstreler */
+                    var kartBilgi = (b.cariKartSayisi > 1) ? (' [' + b.cariKartSayisi + ' cari kartı]') : '';
+                    html += ekstreTablosu(b.cariSatirlar, 'Cari Ekstresi (Rapor20) - ' + (b.cariKodu || '') + kartBilgi, 'table-primary');
+                    html += ekstreTablosu(b.hesapSatirlar, 'Kontrol Hesabı Ekstresi (Rapor39) - ' + (b.hesapKodu || ''), 'table-secondary');
+
+                    html += '</div>';
+                });
+
+                $('#ekstreModalBody').html(html);
+            }).fail(function () {
+                $('#ekstreModalBody').html('<div class="alert alert-danger">Sunucu ile iletişim kurulurken bir hata oluştu.</div>');
+            });
+        }
+    </script>
+
+    @* ---- DÜZELTME (VİRMAN) PENCERESİ -------------------------------------- *@
+    <div class="modal fade" id="duzeltmeModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+          <div class="modal-header bg-light">
+            <h5 class="modal-title fw-bold">
+              <i class="fas fa-screwdriver-wrench text-warning me-2"></i>Düzeltme Fişi — 1. Şirkete Yevmiye
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+          </div>
+
+          <div class="modal-body">
+            <div class="alert alert-light border py-2 mb-3" style="font-size:12.5px;">
+              <b id="dzCariAdi">-</b> <span class="text-muted" id="dzCariKodu"></span>
+              <div class="text-muted mt-1" id="dzFarkBilgi"></div>
+            </div>
+
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="filtre-label">Fişin kesileceği şirket <span class="text-muted" style="text-transform:none;">(her zaman 1. şirket; 2. şirkete fiş atılmaz)</span></label>
+                <input type="text" class="form-control form-control-sm bg-light fw-bold" id="dzSirketAd" readonly />
+                <input type="hidden" id="dzSirket" />
+              </div>
+              <div class="col-md-4">
+                <label class="filtre-label">Tarih</label>
+                <input type="date" class="form-control form-control-sm" id="dzTarih" />
+              </div>
+              <div class="col-md-4">
+                <label class="filtre-label">İşlem Tipi (U_BE1_AKTAR)</label>
+                <select class="form-select form-select-sm" id="dzIslemTipi"></select>
+              </div>
+              <div class="col-md-4">
+                <label class="filtre-label">Aktarılmasın (U_BE1_AKTARMA)</label>
+                <select class="form-select form-select-sm" id="dzAktarilmasin">
+                  <option value="Y" selected>Evet</option>
+                  <option value="N">Hayır</option>
+                </select>
+              </div>
+
+              <div class="col-md-6">
+                <label class="filtre-label">Cari satırının yönü</label>
+                <select class="form-select form-select-sm" id="dzYon">
+                  <option value="B">Cari BORÇ / karşı hesap ALACAK</option>
+                  <option value="A">Cari ALACAK / karşı hesap BORÇ</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="filtre-label">Tutar</label>
+                <input type="number" step="0.01" min="0" class="form-control form-control-sm" id="dzTutar" />
+              </div>
+
+              <div class="col-12">
+                <label class="filtre-label">Karşı hesap <span class="text-muted" style="text-transform:none;">(yıldıza tıklayarak favoriye alın; favoriler en üstte gelir)</span></label>
+                <input type="text" class="form-control form-control-sm mb-2" id="dzHesapAra" placeholder="Hesap kodu veya adı ile ara..." autocomplete="off" />
+                <div id="dzHesapListe" style="max-height:230px; overflow:auto; border:1px solid #e2e8f0; border-radius:8px; padding:4px;">
+                  <div class="text-muted text-center py-3" style="font-size:12.5px;">Şirket seçilince yüklenecek.</div>
+                </div>
+                <input type="hidden" id="dzKarsiHesap" />
+              </div>
+
+              <div class="col-12">
+                <label class="filtre-label">Açıklama</label>
+                <input type="text" class="form-control form-control-sm" id="dzAciklama" maxlength="50"
+                       placeholder="Fiş açıklaması (en fazla 50 karakter)" />
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer bg-light border-top-0">
+            <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">İptal</button>
+            <button type="button" class="btn btn-warning px-4 fw-bold" id="dzKaydet">
+              <i class="fas fa-check me-1"></i>Fişi Kes
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+        // =============== TABLO SIRALAMA ===================================
+        // Basliklara tiklayinca satirlar yerinde siralanir; ok yonu hangi
+        // kolona gore siralandigini gosterir.
+        var siraDurumu = { alan: null, yon: 1 };
+
+        function sayiyaCevir(x) { var s = parseFloat(x); return isNaN(s) ? 0 : s; }
+
+        $(document).on('click', '#cariTable th.sirali', function () {
+            var alan = $(this).data('sira');
+            siraDurumu = (siraDurumu.alan === alan)
+                ? { alan: alan, yon: -siraDurumu.yon }
+                : { alan: alan, yon: 1 };
+
+            $('#cariTable th.sirali').removeClass('aktif').find('.ok').html('&#8645;');
+            $(this).addClass('aktif').find('.ok').html(siraDurumu.yon > 0 ? '&#9650;' : '&#9660;');
+
+            var govde = $('#cariTable tbody');
+            var satirlar = govde.find('tr[data-durum]').get();
+
+            satirlar.sort(function (a, b) {
+                var $a = $(a), $b = $(b), x, y;
+
+                if (alan === 'kod' || alan === 'ad') {
+                    x = String($a.data(alan === 'kod' ? 'cardcode' : 'cardname') || '');
+                    y = String($b.data(alan === 'kod' ? 'cardcode' : 'cardname') || '');
+                    return x.localeCompare(y, 'tr') * siraDurumu.yon;
+                }
+
+                x = sayiyaCevir($a.data(alan));
+                y = sayiyaCevir($b.data(alan));
+                return (x - y) * siraDurumu.yon;
+            });
+
+            $.each(satirlar, function (i, tr) { govde.append(tr); });
+        });
+
+        // =============== DÜZELTME FİŞİ ====================================
+        var dzSatir = null;
+        var dzHesaplar = [];
+
+        var DZ_ISLEM_TIPLERI = [@Html.Raw(string.Join(",", (Model.IslemTipleri ?? new List<WebApplication3.Controllers.IslemTipiOgesi>()).Select(t => "'" + t.Kod.Replace("'", "\\'") + "'")))];
+
+        function duzeltmeAc(dugme) {
+            dzSatir = $(dugme).closest('tr');
+
+            $('#dzCariAdi').text(dzSatir.data('cardname') || '');
+            $('#dzCariKodu').text('· ' + (dzSatir.data('cardcode') || ''));
+            $('#dzKarsiHesap').val('');
+            $('#dzHesapAra').val('');
+            $('#dzAciklama').val('Mutabakat düzeltme ' + (dzSatir.data('cardcode') || ''));
+            $('#dzTarih').val(new Date().toISOString().substring(0, 10));
+
+            // İşlem tipi listesi
+            var it = '<option value="">(boş)</option>';
+            DZ_ISLEM_TIPLERI.forEach(function (t) { it += '<option value="' + t + '">' + t + '</option>'; });
+            $('#dzIslemTipi').html(it);
+
+            // Şirket listesi: sayfanın filtresinden gelir (A.Ş. / normal)
+            $.get('/Rapor141/FiltreSirketleri', { konsolide: $('#selKonsolide').val() || '' }, function (res) {
+                if (!res.success) { Swal.fire('Hata', 'Şirket listesi alınamadı.', 'error'); return; }
+
+                if (!res.liste || !res.liste.length) { Swal.fire('Hata', 'Şirket listesi boş.', 'error'); return; }
+                // Fiş her zaman 1. şirkete kesilir; 2. şirket yalnızca eşitlenecek bakiyeyi verir.
+                $('#dzSirket').val(res.liste[0].key);
+                $('#dzSirketAd').val(res.liste[0].ad + (res.liste.length > 1 ? '   |   2. şirket: ' + res.liste[1].ad : ''));
+                $('#dzAktarilmasin').val('Y');
+
+                farkiUygula();
+                hesaplariYukle();
+                new bootstrap.Modal(document.getElementById('duzeltmeModal')).show();
+            }).fail(function () { Swal.fire('Hata', 'Sunucuya bağlanılamadı.', 'error'); });
+        }
+
+        // 1. şirketin cari bakiyesi, 2. şirketteki cari bakiyeye eşitlenir.
+        // 2. şirkette aynı cari karşı taraftır (müşteri <-> tedarikçi), bakiyesi ters işaretle alınır.
+        // Örnek: 1. şirkette 100 borç, 2. şirkette 120 alacak -> 1. şirkete 20 BORÇ kesilir.
+        function farkiUygula() {
+            var s1 = sayiyaCevir(dzSatir.data('s1cari'));
+            var s2 = sayiyaCevir(dzSatir.data('s2cari'));
+            var hedef = -s2;
+            var fark = Math.round((hedef - s1) * 100) / 100;
+            $('#dzTutar').val(Math.abs(fark).toFixed(2));
+            // fark > 0: 1. şirketteki bakiye artmalı -> cari BORÇ; fark < 0 -> cari ALACAK. Öneridir, değiştirilebilir.
+            $('#dzYon').val(fark >= 0 ? 'B' : 'A');
+            $('#dzFarkBilgi').html(
+                '1. şirket cari bakiyesi: <b>' + tutarFormat(s1) + '</b>'
+              + ' &nbsp;|&nbsp; 2. şirket bakiyesi (ters işaret): <b>' + tutarFormat(hedef) + '</b>'
+              + ' &nbsp;|&nbsp; ' + (fark
+                    ? '1. şirkete kesilecek: <b class="' + (fark > 0 ? 'text-danger' : 'text-success') + '">'
+                      + tutarFormat(Math.abs(fark)) + ' ' + (fark > 0 ? 'BORÇ' : 'ALACAK') + '</b>'
+                    : '<b class="text-success">Bakiyeler eşit, fark yok.</b>'));
+        }
+        function hesaplariYukle() {
+            $('#dzHesapListe').html('<div class="text-muted text-center py-3" style="font-size:12.5px;">' +
+                '<i class="fas fa-spinner fa-spin me-1"></i>Yükleniyor...</div>');
+
+            $.get('/Rapor141/KarsiHesaplar', {
+                dbKey: $('#dzSirket').val(),
+                arama: $('#dzHesapAra').val() || ''
+            }, function (res) {
+                if (!res.success) {
+                    $('#dzHesapListe').html('<div class="text-danger p-2" style="font-size:12.5px;">' + htmlKacis(res.message || 'Liste alınamadı.') + '</div>');
+                    return;
+                }
+
+                dzHesaplar = res.liste || [];
+                hesaplariCiz();
+            }).fail(function () {
+                $('#dzHesapListe').html('<div class="text-danger p-2">Sunucuya bağlanılamadı.</div>');
+            });
+        }
+
+        function hesaplariCiz() {
+            if (dzHesaplar.length === 0) {
+                $('#dzHesapListe').html('<div class="text-muted text-center py-3" style="font-size:12.5px;">Hesap bulunamadı.</div>');
+                return;
+            }
+
+            var secili = $('#dzKarsiHesap').val();
+            var oncekiFavori = true;
+
+            var h = dzHesaplar.map(function (x, i) {
+                var ayirici = '';
+                if (x.favori) oncekiFavori = true;
+                else if (oncekiFavori && i > 0) { ayirici = '<div class="border-top my-1"></div>'; oncekiFavori = false; }
+                else if (i === 0) oncekiFavori = false;
+
+                return ayirici
+                     + '<div class="kh-satir' + (x.kod === secili ? ' secili' : '') + '" data-kod="' + htmlKacis(x.kod) + '">'
+                     + '<i class="fas fa-star kh-yildiz' + (x.favori ? ' dolu' : '') + '" data-fav="' + htmlKacis(x.kod) + '" title="Favori"></i>'
+                     + '<span class="fw-bold" style="min-width:120px;">' + htmlKacis(x.hesapKodu) + '</span>'
+                     + '<span class="text-truncate">' + htmlKacis(x.ad) + '</span>'
+                     + '</div>';
+            }).join('');
+
+            $('#dzHesapListe').html(h);
+        }
+
+        $(document).on('click', '#dzHesapListe .kh-yildiz', function (e) {
+            e.stopPropagation();
+            var kod = $(this).data('fav');
+            var kayit = dzHesaplar.filter(function (x) { return x.kod === kod; })[0];
+            if (!kayit) return;
+
+            var yeni = !kayit.favori;
+            $.ajax({
+                url: '/Rapor141/HesapFavoriDegistir', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ DbKey: $('#dzSirket').val(), AcctCode: kod, Favori: yeni }),
+                success: function (res) {
+                    if (!res.success) { toastr.error(res.message || 'Favori kaydedilemedi.'); return; }
+                    kayit.favori = yeni;
+                    // Favoriler en üste taşınsın diye listeyi yeniden sırala.
+                    dzHesaplar.sort(function (a, b) {
+                        if (a.favori !== b.favori) return a.favori ? -1 : 1;
+                        return String(a.kod).localeCompare(String(b.kod));
+                    });
+                    hesaplariCiz();
+                }
+            });
+        });
+
+        $(document).on('click', '#dzHesapListe .kh-satir', function () {
+            $('#dzKarsiHesap').val($(this).data('kod'));
+            $('#dzHesapListe .kh-satir').removeClass('secili');
+            $(this).addClass('secili');
+        });
+
+        $(document).on('change', '#dzSirket', function () { farkiUygula(); hesaplariYukle(); });
+
+        var dzAramaZaman = null;
+        $(document).on('input', '#dzHesapAra', function () {
+            clearTimeout(dzAramaZaman);
+            dzAramaZaman = setTimeout(hesaplariYukle, 350);
+        });
+
+        $(document).on('click', '#dzKaydet', function () {
+            var karsi = $('#dzKarsiHesap').val();
+            var tutar = parseFloat($('#dzTutar').val() || '0');
+
+            if (!karsi) { toastr.warning('Karşı hesap seçin.'); return; }
+            if (!(tutar > 0)) { toastr.warning('Tutar sıfırdan büyük olmalı.'); return; }
+
+            var dugme = $(this).prop('disabled', true)
+                               .html('<span class="spinner-border spinner-border-sm me-1"></span>Kesiliyor...');
+
+            $.ajax({
+                url: '/Rapor141/DuzeltmeYevmiyesi', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify({
+                    DbKey: $('#dzSirket').val(),
+                    CardCode: dzSatir.data('cardcode'),
+                    KarsiHesap: karsi,
+                    Tutar: tutar,
+                    Yon: $('#dzYon').val(),
+                    Tarih: $('#dzTarih').val(),
+                    IslemTipi: $('#dzIslemTipi').val(),
+                    Aciklama: $('#dzAciklama').val(),
+                    Aktarilmasin: $('#dzAktarilmasin').val()
+                }),
+                success: function (res) {
+                    if (!res.success) { Swal.fire({ title: 'Fiş kesilemedi', html: res.message, icon: 'error' }); return; }
+
+                    bootstrap.Modal.getInstance(document.getElementById('duzeltmeModal')).hide();
+                    Swal.fire({ title: 'Tamam', html: res.message, icon: 'success' })
+                        .then(function () { location.reload(); });
+                },
+                error: function (x) {
+                    Swal.fire('Sunucu Hatası (' + x.status + ')', (x.responseText || '').substring(0, 400), 'error');
+                },
+                complete: function () {
+                    dugme.prop('disabled', false).html('<i class="fas fa-check me-1"></i>Fişi Kes');
+                }
+            });
+        });
+    </script>
+}

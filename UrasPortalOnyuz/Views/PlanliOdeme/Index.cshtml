@@ -1,0 +1,717 @@
+﻿@using System.Globalization
+@using WebApplication3.Services
+@model List<WebApplication3.Services.PlanliOdeme>
+@{
+    ViewData["Title"] = "Planlı Ödemeler";
+    var sirketler = (List<(string DbName, string Ad)>)ViewBag.Sirketler;
+    var alicilar = (List<dynamic>)ViewBag.Alicilar;
+    var gecmis = (List<dynamic>)ViewBag.Gecmis;
+    var bugun = (DateTime)ViewBag.Bugun;
+    var tr = new CultureInfo("tr-TR");
+
+    string SirketAdi(string db) => sirketler.FirstOrDefault(s => s.DbName == db).Ad ?? db;
+
+    // Bir sonraki ödeme günü: bu ay geçtiyse gelecek ay.
+    DateTime SonrakiOdeme(int ayinGunu)
+    {
+        var b = PlanliOdemeServisi.OdemeTarihi(bugun.Year, bugun.Month, ayinGunu);
+        if (b < bugun) { var g = bugun.AddMonths(1); b = PlanliOdemeServisi.OdemeTarihi(g.Year, g.Month, ayinGunu); }
+        return b;
+    }
+
+    // Taksit planı özetleri (IT #63)
+    var taksitOzet = ((List<dynamic>)ViewBag.TaksitOzet) ?? new List<dynamic>();
+    var sonrakiTaksitler = ((List<PlanliOdemeTaksit>)ViewBag.SonrakiTaksitler) ?? new List<PlanliOdemeTaksit>();
+    dynamic TaksitOzeti(int planId) => taksitOzet.FirstOrDefault(t => (int)t.PlanId == planId);
+    PlanliOdemeTaksit SonrakiTaksit(int planId) => sonrakiTaksitler.FirstOrDefault(t => t.PlanId == planId);
+    string PlanTipiAdi(string tip) => tip == "ARTAN" ? "Artan faizli" : tip == "YAPILANDIRMA" ? "Yapılandırma" : "Eşit taksit";
+    string PlanTipiSinif(string tip) => tip == "ARTAN" ? "po-tip-artan" : tip == "YAPILANDIRMA" ? "po-tip-yapi" : "po-tip-esit";
+    int? taksitAc = TempData["TaksitAc"] as int?;
+
+    // Sıradaki ödeme: taksit planı varsa sıradaki taksitin tarihi/tutarı, yoksa sabit plan.
+    DateTime SonrakiOdemePlan(PlanliOdeme p) { var t = SonrakiTaksit(p.Id); return t != null ? t.OdemeTarihi : SonrakiOdeme(p.AyinGunu); }
+    decimal SonrakiTutar(PlanliOdeme p) { var t = SonrakiTaksit(p.Id); return t != null ? t.Toplam : p.Tutar; }
+
+    var aktifler = Model.Where(p => p.Aktif).ToList();
+    var aylikToplam = aktifler.Where(p => p.ParaBirimi == "TRY").Sum(p => SonrakiTutar(p));
+    var yaklasan = aktifler.Count(p => (SonrakiOdemePlan(p) - bugun).TotalDays <= 7);
+}
+
+<style>
+    .po-kart { background: #fff; border: 1px solid #e9eef5; border-radius: 14px;
+               box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.12); }
+    .po-baslik { font-size: 13px; font-weight: 700; color: #0f172a; }
+    .po-etiket { font-size: 10.5px; font-weight: 700; letter-spacing: .5px; color: #94a3b8; text-transform: uppercase; }
+    .po-tablo th { font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: #64748b;
+                   background: linear-gradient(180deg,#fbfdff,#f4f7fb); font-weight: 700; }
+    .po-tablo td, .po-tablo th { padding: 9px 12px; border-bottom: 1px solid #f2f5f9; vertical-align: middle; font-size: 12.5px; }
+    .po-tablo tbody tr:hover { box-shadow: inset 3px 0 0 #3b82f6; }
+    .po-rozet { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 10.5px; font-weight: 700; border: 1px solid transparent; }
+    .po-aktif { background: #ecfdf5; color: #047857; border-color: #d1fae5; }
+    .po-pasif { background: #f8fafc; color: #64748b; border-color: #e2e8f0; }
+    .po-yakin { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+    .po-tutar { font-variant-numeric: tabular-nums; font-weight: 700; color: #1d4ed8; }
+    .po-kpi { font-size: 24px; font-weight: 900; color: #0f172a; }
+    .po-tip { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; margin-top: 3px; }
+    .po-tip-esit { background: #eff6ff; color: #1d4ed8; } .po-tip-artan { background: #fff7ed; color: #c2410c; } .po-tip-yapi { background: #f5f3ff; color: #6d28d9; }
+    .po-taksit-alan { display: none; }
+    .po-taksit-alan.on { display: block; }
+    .po-onizle { max-height: 220px; overflow: auto; border: 1px solid #e9eef5; border-radius: 10px; margin-top: 8px; }
+    .po-onizle table { font-size: 11.5px; margin: 0; }
+    .po-onizle th, .po-onizle td { padding: 5px 8px !important; }
+    table.tk td input { border: 1px solid #d7dce5; border-radius: 6px; padding: 4px 6px; font-size: 12px; width: 100%; }
+    table.tk td input[type=number] { text-align: right; min-width: 90px; }
+    table.tk tr.odendi td { background: #f0fdf4; color: #64748b; }
+    table.tk tr.odendi td input { background: #f8fafc; color: #64748b; }
+    table.tk tr.gecmis td { background: #fff7ed; }
+    table.tk tfoot td { font-weight: 700; background: #f8fafc; }
+</style>
+
+<div class="container-fluid px-0">
+
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1"><i class="fas fa-calendar-check text-primary me-2"></i>Planlı Ödemeler</h5>
+            <div class="text-muted" style="font-size: 12px;">
+                Her ayın belirli bir gününde tekrarlayan ödemeler. Ödeme gününden önce hatırlatma gider,
+                ödeme günü nakit akışına satır düşer.
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#planModal" onclick="planiHazirla(null)">
+                <i class="fas fa-plus me-1"></i> Yeni Planlı Ödeme
+            </button>
+            <form method="post" asp-action="HatirlatmalariCalistir" class="d-inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-outline-secondary btn-sm" title="Bugünün hatırlatma ve aktarımlarını hemen çalıştırır">
+                    <i class="fas fa-bolt me-1"></i> Bugünü İşle
+                </button>
+            </form>
+        </div>
+    </div>
+
+    @if (TempData["Mesaj"] != null)
+    {
+        <div class="alert alert-success py-2"><i class="fas fa-check-circle me-2"></i>@TempData["Mesaj"]</div>
+    }
+    @if (TempData["Hata"] != null)
+    {
+        <div class="alert alert-danger py-2"><i class="fas fa-exclamation-triangle me-2"></i>@TempData["Hata"]</div>
+    }
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-4">
+            <div class="po-kart p-3">
+                <div class="po-etiket">Aktif Plan</div>
+                <div class="po-kpi">@aktifler.Count</div>
+                <div class="text-muted" style="font-size: 11px;">Toplam @Model.Count tanım</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="po-kart p-3">
+                <div class="po-etiket">Aylık Toplam (TRY)</div>
+                <div class="po-kpi">@aylikToplam.ToString("N2", tr) ₺</div>
+                <div class="text-muted" style="font-size: 11px;">Yalnızca TRY tanımlar</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="po-kart p-3">
+                <div class="po-etiket">7 Gün İçinde</div>
+                <div class="po-kpi">@yaklasan</div>
+                <div class="text-muted" style="font-size: 11px;">Yaklaşan ödeme sayısı</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Planlar -->
+    <div class="po-kart mb-3">
+        <div class="p-3 border-bottom"><span class="po-baslik"><i class="fas fa-list me-2 text-primary"></i>Tanımlı Planlı Ödemeler</span></div>
+        <div class="table-responsive">
+            <table class="table po-tablo mb-0">
+                <thead>
+                    <tr>
+                        <th>Durum</th>
+                        <th>Ödeme Sebebi</th>
+                        <th>Şirket</th>
+                        <th class="text-end">Tutar</th>
+                        <th class="text-center">Ödeme Günü</th>
+                        <th class="text-center">Sonraki Ödeme</th>
+                        <th class="text-center">Hatırlatma</th>
+                        <th class="text-end">İşlem</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @if (Model.Count == 0)
+                {
+                    <tr><td colspan="8" class="text-center text-muted py-4">
+                        Henüz planlı ödeme tanımlanmamış. Sağ üstteki <b>Yeni Planlı Ödeme</b> ile başlayın.
+                    </td></tr>
+                }
+                else
+                {
+                    foreach (var p in Model)
+                    {
+                        var ozet = TaksitOzeti(p.Id);
+                        var sonrakiTaksit = SonrakiTaksit(p.Id);
+                        var sonraki = SonrakiOdemePlan(p);
+                        var kalan = (int)(sonraki - bugun).TotalDays;
+                        bool taksitli = ozet != null;
+                        bool bitti = taksitli && (int)ozet.Odenen >= (int)ozet.Toplam;
+                        <tr>
+                            <td><span class="po-rozet @(p.Aktif ? "po-aktif" : "po-pasif")">@(p.Aktif ? "Aktif" : "Pasif")</span></td>
+                            <td>
+                                <div class="fw-semibold">@p.OdemeSebebi</div>
+                                <span class="po-tip @PlanTipiSinif(p.PlanTipi)">@PlanTipiAdi(p.PlanTipi)@(taksitli ? $" · {ozet.Odenen}/{ozet.Toplam} taksit" : "")</span>
+                                @if (!string.IsNullOrWhiteSpace(p.Aciklama))
+                                {
+                                    <div class="text-muted" style="font-size: 11px;">@p.Aciklama</div>
+                                }
+                            </td>
+                            <td>@SirketAdi(p.SirketDb)</td>
+                            <td class="text-end po-tutar">
+                                @if (taksitli && sonrakiTaksit != null)
+                                {
+                                    @sonrakiTaksit.Toplam.ToString("N2", tr) <span class="text-muted fw-normal" style="font-size:11px;">@p.ParaBirimi</span>
+                                    <div class="text-muted fw-normal" style="font-size:10.5px;">taksit @sonrakiTaksit.TaksitNo · anapara @sonrakiTaksit.Anapara.ToString("N2", tr) + faiz @sonrakiTaksit.Faiz.ToString("N2", tr)@(sonrakiTaksit.GecikmeBedeli != 0 ? " + gecikme " + sonrakiTaksit.GecikmeBedeli.ToString("N2", tr) : "")</div>
+                                }
+                                else if (bitti)
+                                {
+                                    <span class="text-muted fw-normal" style="font-size:11px;">tüm taksitler ödendi</span>
+                                }
+                                else
+                                {
+                                    @p.Tutar.ToString("N2", tr) <span class="text-muted fw-normal" style="font-size:11px;">@p.ParaBirimi</span>
+                                }
+                            </td>
+                            <td class="text-center">Her ayın @p.AyinGunu'i</td>
+                            <td class="text-center">
+                                @if (bitti) { <span class="text-muted">—</span> }
+                                else
+                                {
+                                    @sonraki.ToString("dd.MM.yyyy")
+                                    @if (p.Aktif && kalan <= 7)
+                                    {
+                                        <span class="po-rozet po-yakin ms-1">@kalan gün</span>
+                                    }
+                                }
+                            </td>
+                            <td class="text-center">@p.HatirlatmaGunOnce gün önce</td>
+                            <td class="text-end text-nowrap">
+                                <button class="btn btn-sm @(taksitli ? "btn-outline-dark" : "btn-outline-secondary")" title="Taksit planı" onclick="taksitAc(@p.Id)">
+                                    <i class="fas fa-table-list"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary" title="Düzenle"
+                                        data-bs-toggle="modal" data-bs-target="#planModal"
+                                        onclick='planiHazirla(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(p)))'>
+                                    <i class="fas fa-pen"></i>
+                                </button>
+                                <form method="post" asp-action="SimdiGonder" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@p.Id" />
+                                    <button class="btn btn-sm btn-outline-secondary" title="Hatırlatmayı şimdi gönder"><i class="fas fa-paper-plane"></i></button>
+                                </form>
+                                <form method="post" asp-action="DurumDegistir" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@p.Id" />
+                                    <button class="btn btn-sm btn-outline-secondary" title="@(p.Aktif ? "Pasife al" : "Aktifleştir")">
+                                        <i class="fas @(p.Aktif ? "fa-pause" : "fa-play")"></i>
+                                    </button>
+                                </form>
+                                <form method="post" asp-action="Sil" class="d-inline"
+                                      onsubmit="return confirm('@p.OdemeSebebi planlı ödemesi silinsin mi?');">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@p.Id" />
+                                    <button class="btn btn-sm btn-outline-danger" title="Sil"><i class="fas fa-trash"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <!-- Alıcılar -->
+        <div class="col-lg-5">
+            <div class="po-kart h-100">
+                <div class="p-3 border-bottom"><span class="po-baslik"><i class="fas fa-envelope me-2 text-primary"></i>Bildirim Alıcıları (Finans)</span></div>
+                <div class="p-3">
+                    <form method="post" asp-action="AliciEkle" class="row g-2 mb-3">
+                        @Html.AntiForgeryToken()
+                        <div class="col-6"><input name="eposta" type="email" class="form-control form-control-sm" placeholder="e-posta" required /></div>
+                        <div class="col-4"><input name="adSoyad" class="form-control form-control-sm" placeholder="ad soyad" /></div>
+                        <div class="col-2 d-grid"><button class="btn btn-sm btn-primary"><i class="fas fa-plus"></i></button></div>
+                    </form>
+
+                    @if (alicilar.Count == 0)
+                    {
+                        <div class="alert alert-warning py-2 mb-0" style="font-size: 12px;">
+                            <i class="fas fa-exclamation-triangle me-1"></i>
+                            Alıcı listesi boş. En az bir e-posta eklenmeden hatırlatma gönderilemez.
+                        </div>
+                    }
+                    else
+                    {
+                        <ul class="list-group list-group-flush">
+                            @foreach (var a in alicilar)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                                    <span style="font-size: 12.5px;">
+                                        <span class="fw-semibold">@a.Eposta</span>
+                                        @if (!string.IsNullOrWhiteSpace((string)a.AdSoyad))
+                                        {
+                                            <span class="text-muted"> — @a.AdSoyad</span>
+                                        }
+                                    </span>
+                                    <form method="post" asp-action="AliciSil">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@a.Id" />
+                                        <button class="btn btn-sm btn-link text-danger p-0"><i class="fas fa-times"></i></button>
+                                    </form>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Geçmiş -->
+        <div class="col-lg-7">
+            <div class="po-kart h-100">
+                <div class="p-3 border-bottom"><span class="po-baslik"><i class="fas fa-clock-rotate-left me-2 text-primary"></i>Son İşlemler</span></div>
+                <div class="table-responsive" style="max-height: 340px; overflow-y: auto;">
+                    <table class="table po-tablo mb-0">
+                        <thead><tr><th>Tarih</th><th>Ödeme</th><th>Dönem</th><th>Tür</th><th>Sonuç</th></tr></thead>
+                        <tbody>
+                        @if (gecmis.Count == 0)
+                        {
+                            <tr><td colspan="5" class="text-center text-muted py-3">Henüz işlem yok.</td></tr>
+                        }
+                        else
+                        {
+                            foreach (var g in gecmis)
+                            {
+                                <tr>
+                                    <td class="text-nowrap">@(((DateTime)g.Tarih).ToString("dd.MM.yyyy HH:mm"))</td>
+                                    <td>@g.OdemeSebebi</td>
+                                    <td>@g.Donem</td>
+                                    <td>@(g.Tur == "HATIRLATMA" ? "Hatırlatma" : "Nakit akışı")</td>
+                                    <td>
+                                        @if ((string)g.Sonuc == "BASARILI")
+                                        {
+                                            <span class="po-rozet po-aktif">Başarılı</span>
+                                        }
+                                        else if ((string)g.Sonuc == "ISLENIYOR")
+                                        {
+                                            <span class="po-rozet" style="background:#eff6ff;color:#1d4ed8;border-color:#dbeafe;">İşleniyor</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="po-rozet" style="background:#fef2f2;color:#b91c1c;border-color:#fee2e2;"
+                                                  title="@g.Mesaj">Hata</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Plan tanım penceresi -->
+<div class="modal fade" id="planModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <form method="post" asp-action="Kaydet" id="planForm" class="modal-content" style="border-radius: 16px;">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="Id" id="pId" value="0" />
+            <div class="modal-header">
+                <h6 class="modal-title fw-bold" id="planModalBaslik">Yeni Planlı Ödeme</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="po-etiket">Ödeme Sebebi *</label>
+                        <input name="OdemeSebebi" id="pSebep" class="form-control form-control-sm" required
+                               placeholder="Kredi taksiti, MTV, yapılandırma..." />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="po-etiket">Şirket *</label>
+                        <select name="SirketDb" id="pSirket" class="form-select form-select-sm" required>
+                            @foreach (var s in sirketler)
+                            {
+                                <option value="@s.DbName">@s.Ad</option>
+                            }
+                        </select>
+                    </div>
+                    @* IT #63: taksit planı türü *@
+                    <div class="col-md-4">
+                        <label class="po-etiket">Ödeme Planı Türü *</label>
+                        <select name="PlanTipi" id="pTip" class="form-select form-select-sm" onchange="planTipiDegisti()">
+                            <option value="ESIT">Eşit taksit (her ay aynı tutar)</option>
+                            <option value="ARTAN">Artan faizli (anapara sabit, faiz artar)</option>
+                            <option value="YAPILANDIRMA">Yapılandırma (her taksit elle)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="po-etiket">Taksit Sayısı</label>
+                        <input name="TaksitSayisi" id="pTaksit" type="number" min="0" max="600" class="form-control form-control-sm" placeholder="ör. 12" oninput="onizleGuncelle()" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="po-etiket" id="pTutarEtiket">Aylık Tutar *</label>
+                        <input name="Tutar" id="pTutar" type="text" inputmode="decimal" class="form-control form-control-sm tr-para" oninput="onizleGuncelle()" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="po-etiket">Para Birimi</label>
+                        <select name="ParaBirimi" id="pPb" class="form-select form-select-sm">
+                            <option value="TRY">TRY</option>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                        </select>
+                    </div>
+                    <div class="col-12 po-taksit-alan" id="pArtanAlan">
+                        <div class="row g-2 p-2 rounded" style="background:#fff7ed; border:1px solid #fed7aa;">
+                            <div class="col-md-3">
+                                <label class="po-etiket">Anapara Toplamı *</label>
+                                <input name="AnaparaToplam" id="pAnapara" type="text" inputmode="decimal" class="form-control form-control-sm tr-para" oninput="onizleGuncelle()" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="po-etiket">İlk Taksit Faizi</label>
+                                <input name="IlkFaiz" id="pIlkFaiz" type="text" inputmode="decimal" class="form-control form-control-sm tr-para" oninput="onizleGuncelle()" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="po-etiket">Her Taksit Faiz Artışı</label>
+                                <input name="FaizArtis" id="pFaizArtis" type="text" inputmode="decimal" class="form-control form-control-sm tr-para" oninput="onizleGuncelle()" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="po-etiket">Artış Tipi</label>
+                                <select name="FaizArtisTipi" id="pArtisTipi" class="form-select form-select-sm" onchange="onizleGuncelle()">
+                                    <option value="TUTAR">Tutar (her taksit + X)</option>
+                                    <option value="YUZDE">Yüzde (her taksit × %X)</option>
+                                </select>
+                            </div>
+                            <div class="col-12 text-muted" style="font-size:11px;">
+                                Anapara her taksitte eşit bölünür; faiz ilk taksit faizinden başlayıp her taksit artar. Örnek: 120.000 anapara, 12 taksit, ilk faiz 1.000, artış 250 → 1. taksit 11.000, 12. taksit 13.750.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 po-taksit-alan" id="pYapiAlan">
+                        <div class="row g-2 p-2 rounded" style="background:#f5f3ff; border:1px solid #ddd6fe;">
+                            <div class="col-md-4">
+                                <label class="po-etiket">Anapara Toplamı (isteğe bağlı)</label>
+                                <input name="AnaparaToplam" id="pAnaparaYapi" type="text" inputmode="decimal" class="form-control form-control-sm tr-para" oninput="onizleGuncelle()" disabled />
+                            </div>
+                            <div class="col-md-8 text-muted" style="font-size:11px; align-self:end;">
+                                Kaydettikten sonra <b>Taksit Planı</b> penceresi açılır; her taksitin tarihini, anapara, faiz ve gecikme bedelini ayrı ayrı girersiniz. Kuruma ve mevzuata göre her satır serbestçe değiştirilebilir.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 po-taksit-alan" id="pOnizleAlan">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="po-etiket">Taksit Önizlemesi</span>
+                            <span class="text-muted" style="font-size:11px;" id="pOnizleOzet"></span>
+                        </div>
+                        <div class="po-onizle" id="pOnizle"></div>
+                        <div class="form-check mt-2" id="pYenidenUretAlan" style="display:none;">
+                            <input class="form-check-input" type="checkbox" name="TaksitleriUret" id="pYenidenUret" value="true" />
+                            <label class="form-check-label" for="pYenidenUret" style="font-size:12px;">Kaydederken taksit tablosunu bu parametrelerle yeniden üret (ödenmiş taksitler korunur, elle yapılan düzenlemeler silinir)</label>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="po-etiket">Ayın Günü *</label>
+                        <input name="AyinGunu" id="pGun" type="number" min="1" max="31" value="28" class="form-control form-control-sm" required oninput="onizleGuncelle()" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="po-etiket">Kaç Gün Önce Hatırlat</label>
+                        <input name="HatirlatmaGunOnce" id="pOnce" type="number" min="0" max="28" value="3" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="po-etiket">Kurum / Banka</label>
+                        <input name="Kurum" id="pKurum" class="form-control form-control-sm" placeholder="Nakit akışında Kurum alanına yazılır" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="po-etiket">Satınalmacı</label>
+                        <input name="Satinalmaci" id="pSatinalmaci" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="po-etiket">Ödeme Yöntemi</label>
+                        <input name="OdemeYontemi" id="pYontem" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="po-etiket">Başlangıç <span id="pBasNot" class="fw-normal text-muted" style="text-transform:none;"></span></label>
+                        <input name="BaslangicTarihi" id="pBas" type="date" class="form-control form-control-sm" onchange="onizleGuncelle()" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="po-etiket">Bitiş</label>
+                        <input name="BitisTarihi" id="pBit" type="date" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-12">
+                        <label class="po-etiket">Açıklama</label>
+                        <textarea name="Aciklama" id="pAciklama" rows="2" class="form-control form-control-sm"
+                                  placeholder="Hatırlatma e-postasında ve nakit akışı notunda görünür."></textarea>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="Aktif" id="pAktif" value="true" checked />
+                            <input type="hidden" name="Aktif" value="false" />
+                            <label class="form-check-label" for="pAktif" style="font-size: 12.5px;">Aktif</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light btn-sm border" data-bs-dismiss="modal">Vazgeç</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save me-1"></i> Kaydet</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Taksit planı penceresi (IT #63) -->
+<div class="modal fade" id="taksitModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius: 16px;">
+            <div class="modal-header">
+                <div>
+                    <h6 class="modal-title fw-bold" id="tkBaslik">Taksit Planı</h6>
+                    <div class="text-muted" style="font-size:11.5px;" id="tkAlt"></div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="taksitYenidenUret()" title="Plan parametrelerinden yeniden üretir; ödenmiş taksitler korunur"><i class="fas fa-rotate me-1"></i> Parametrelerden Üret</button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="taksitSatirEkle()"><i class="fas fa-plus me-1"></i> Satır Ekle</button>
+                    <span class="text-muted ms-auto" style="font-size:11.5px;">Toplam = anapara + faiz + gecikme. Ödenmiş ya da nakit akışına düşmüş taksit değiştirilemez. Tarihi geçmiş, ödenmemiş satır turuncu.</span>
+                </div>
+                <div class="table-responsive" style="max-height:60vh;">
+                    <table class="table po-tablo tk mb-0" id="tkTablo">
+                        <thead><tr><th>#</th><th>Ödeme Tarihi</th><th class="text-end">Anapara</th><th class="text-end">Faiz</th><th class="text-end">Gecikme Bedeli</th><th class="text-end">Toplam</th><th>Açıklama</th><th class="text-center">Ödendi</th><th>Nakit Akışı</th><th></th></tr></thead>
+                        <tbody id="tkBody"></tbody>
+                        <tfoot><tr><td colspan="2">Toplam</td><td class="text-end" id="tkTAnapara"></td><td class="text-end" id="tkTFaiz"></td><td class="text-end" id="tkTGecikme"></td><td class="text-end" id="tkTToplam"></td><td colspan="4" id="tkTOzet"></td></tr></tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light btn-sm border" data-bs-dismiss="modal">Kapat</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="taksitKaydet()"><i class="fas fa-save me-1"></i> Taksitleri Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Pencereler sayfa gövdesinde duruyor; layout @@RenderBody()'yi .table-container
+        // içinde render ettiği için oluşan stacking context yüzünden modal
+        // backdrop'un altında kalabiliyor. Body'ye taşıyoruz.
+        (function () {
+            ['planModal', 'taksitModal'].forEach(id => { const el = document.getElementById(id); if (el && el.parentElement !== document.body) document.body.appendChild(el); });
+        })();
+
+        const TR = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const para = n => TR.format(Number(n || 0));
+        const tarihTr = s => { if (!s) return ''; const d = new Date(s); return isNaN(d) ? '' : d.toLocaleDateString('tr-TR'); };
+        const tarihInput = s => { if (!s) return ''; const d = new Date(s); return isNaN(d) ? '' : d.toISOString().substring(0, 10); };
+        const esc = s => (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+        // planForm "Kaydet" ile native POST (fetch değil) yapıyor; sunucu kültürü ne olursa olsun doğru ayrıştırılsın diye
+        // gönderim anında tr-para alanları (1.550,25 görünümü) sunucuya invariant (nokta-ondalık, binlik ayraçsız) gider.
+        (function () {
+            const form = document.getElementById('planForm');
+            if (!form) return;
+            form.addEventListener('submit', function () {
+                form.querySelectorAll('input.tr-para').forEach(function (el) {
+                    if (el.disabled) return; // devre dışı alan zaten gönderilmiyor
+                    el.value = el.value.trim() === '' ? '' : String(parseTurkishNumber(el.value));
+                });
+            });
+        })();
+
+        // ---- plan penceresi
+        function planTipiDegisti() {
+            const tip = document.getElementById('pTip').value;
+            const artan = tip === 'ARTAN', yapi = tip === 'YAPILANDIRMA';
+            document.getElementById('pArtanAlan').classList.toggle('on', artan);
+            document.getElementById('pYapiAlan').classList.toggle('on', yapi);
+            // Aynı alan adı (AnaparaToplam) iki bölümde var; yalnızca görünen gönderilir.
+            document.getElementById('pAnapara').disabled = !artan;
+            document.getElementById('pAnaparaYapi').disabled = !yapi;
+            const tutar = document.getElementById('pTutar');
+            document.getElementById('pTutarEtiket').textContent = tip === 'ESIT' ? 'Aylık Tutar *' : 'İlk Taksit (otomatik)';
+            tutar.readOnly = tip !== 'ESIT'; tutar.required = tip === 'ESIT';
+            document.getElementById('pTaksit').required = tip !== 'ESIT';
+            document.getElementById('pBasNot').textContent = tip === 'ESIT' ? '' : '(1. taksitin ayı)';
+            onizleGuncelle();
+        }
+        let onizleZaman;
+        function onizleGuncelle() {
+            clearTimeout(onizleZaman);
+            onizleZaman = setTimeout(onizleCek, 250);
+        }
+        function formdanPlan() {
+            const v = id => document.getElementById(id).value;
+            const tip = v('pTip');
+            const anapara = tip === 'YAPILANDIRMA' ? v('pAnaparaYapi') : v('pAnapara');
+            return {
+                id: Number(v('pId')) || 0, planTipi: tip, taksitSayisi: Number(v('pTaksit')) || 0, tutar: parseTurkishNumber(v('pTutar')),
+                anaparaToplam: anapara === '' ? null : parseTurkishNumber(anapara), ilkFaiz: v('pIlkFaiz') === '' ? null : parseTurkishNumber(v('pIlkFaiz')),
+                faizArtis: v('pFaizArtis') === '' ? null : parseTurkishNumber(v('pFaizArtis')), faizArtisTipi: v('pArtisTipi'),
+                ayinGunu: Number(v('pGun')) || 28, baslangicTarihi: v('pBas') || null, paraBirimi: v('pPb')
+            };
+        }
+        function onizleCek() {
+            const p = formdanPlan();
+            const alan = document.getElementById('pOnizleAlan');
+            if (!p.taksitSayisi) { alan.classList.remove('on'); return; }
+            alan.classList.add('on');
+            fetch('/PlanliOdemeler/TaksitOnizle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) })
+                .then(r => r.json()).then(res => {
+                    if (!res.success) { document.getElementById('pOnizle').innerHTML = '<div class="p-2 text-danger small">' + esc(res.message) + '</div>'; return; }
+                    const t = res.taksitler || [];
+                    if (p.planTipi !== 'ESIT' && t.length) document.getElementById('pTutar').value = para(t[0].toplam);
+                    document.getElementById('pOnizle').innerHTML = '<table class="table mb-0"><thead><tr><th>#</th><th>Tarih</th><th class="text-end">Anapara</th><th class="text-end">Faiz</th><th class="text-end">Toplam</th></tr></thead><tbody>'
+                        + t.map(x => `<tr><td>${x.taksitNo}</td><td>${tarihTr(x.odemeTarihi)}</td><td class="text-end">${para(x.anapara)}</td><td class="text-end">${para(x.faiz)}</td><td class="text-end fw-bold">${para(x.toplam)}</td></tr>`).join('') + '</tbody></table>';
+                    document.getElementById('pOnizleOzet').textContent = `${t.length} taksit · anapara ${para(res.anapara)} · faiz ${para(res.faiz)} · toplam ${para(res.toplam)} ${p.paraBirimi}`;
+                }).catch(() => { });
+        }
+
+        function planiHazirla(plan) {
+            const yaz = (id, deger) => { document.getElementById(id).value = (deger === null || deger === undefined) ? '' : deger; };
+            const yazPara = (id, deger) => { document.getElementById(id).value = (deger === null || deger === undefined || deger === '') ? '' : formatTurkishNumber(deger); };
+            const tarihYaz = (id, d) => { document.getElementById(id).value = d ? String(d).substring(0, 10) : ''; };
+
+            if (!plan) {
+                document.getElementById('planModalBaslik').textContent = 'Yeni Planlı Ödeme';
+                yaz('pId', 0); yaz('pSebep', ''); yazPara('pTutar', ''); yaz('pKurum', '');
+                yaz('pSatinalmaci', ''); yaz('pYontem', ''); yaz('pAciklama', '');
+                yaz('pGun', 28); yaz('pOnce', 3);
+                yaz('pTaksit', ''); yazPara('pAnapara', ''); yazPara('pAnaparaYapi', ''); yazPara('pIlkFaiz', ''); yazPara('pFaizArtis', '');
+                document.getElementById('pTip').value = 'ESIT'; document.getElementById('pArtisTipi').value = 'TUTAR';
+                document.getElementById('pPb').value = 'TRY';
+                document.getElementById('pSirket').selectedIndex = 0;
+                tarihYaz('pBas', null); tarihYaz('pBit', null);
+                document.getElementById('pAktif').checked = true;
+                document.getElementById('pYenidenUretAlan').style.display = 'none';
+                document.getElementById('pYenidenUret').checked = false;
+                planTipiDegisti();
+                return;
+            }
+
+            document.getElementById('planModalBaslik').textContent = 'Planlı Ödemeyi Düzenle';
+            yaz('pId', plan.Id);
+            yaz('pSebep', plan.OdemeSebebi);
+            yazPara('pTutar', plan.Tutar);
+            yaz('pGun', plan.AyinGunu);
+            yaz('pOnce', plan.HatirlatmaGunOnce);
+            yaz('pKurum', plan.Kurum);
+            yaz('pSatinalmaci', plan.Satinalmaci);
+            yaz('pYontem', plan.OdemeYontemi);
+            yaz('pAciklama', plan.Aciklama);
+            yaz('pTaksit', plan.TaksitSayisi); yazPara('pAnapara', plan.AnaparaToplam); yazPara('pAnaparaYapi', plan.AnaparaToplam);
+            yazPara('pIlkFaiz', plan.IlkFaiz); yazPara('pFaizArtis', plan.FaizArtis);
+            document.getElementById('pTip').value = plan.PlanTipi || 'ESIT';
+            document.getElementById('pArtisTipi').value = plan.FaizArtisTipi || 'TUTAR';
+            document.getElementById('pPb').value = plan.ParaBirimi || 'TRY';
+            document.getElementById('pSirket').value = plan.SirketDb;
+            tarihYaz('pBas', plan.BaslangicTarihi);
+            tarihYaz('pBit', plan.BitisTarihi);
+            document.getElementById('pAktif').checked = !!plan.Aktif;
+            document.getElementById('pYenidenUretAlan').style.display = '';
+            document.getElementById('pYenidenUret').checked = false;
+            planTipiDegisti();
+        }
+
+        // ---- taksit planı penceresi
+        let TK_PLAN = null, TK = [];
+        function taksitAc(planId) {
+            fetch('/PlanliOdemeler/Taksitler?planId=' + planId).then(r => r.json()).then(res => {
+                if (!res.success) { alert(res.message); return; }
+                TK_PLAN = res.plan; TK = res.taksitler || [];
+                const tipAd = { ESIT: 'Eşit taksit', ARTAN: 'Artan faizli', YAPILANDIRMA: 'Yapılandırma' }[TK_PLAN.planTipi] || 'Eşit taksit';
+                document.getElementById('tkBaslik').textContent = `Taksit Planı — ${TK_PLAN.odemeSebebi}`;
+                document.getElementById('tkAlt').textContent = `${tipAd} · ${TK_PLAN.paraBirimi} · her ayın ${TK_PLAN.ayinGunu}'i` + (TK_PLAN.anaparaToplam ? ` · anapara toplamı ${para(TK_PLAN.anaparaToplam)}` : '');
+                tkCiz();
+                new bootstrap.Modal(document.getElementById('taksitModal')).show();
+            });
+        }
+        function tkCiz() {
+            const bugun = new Date().toISOString().substring(0, 10);
+            const tb = document.getElementById('tkBody');
+            if (!TK.length) {
+                tb.innerHTML = `<tr><td colspan="10" class="text-center text-muted py-4">Bu planın taksit tablosu yok. ${TK_PLAN.planTipi === 'ESIT' ? 'Eşit taksitte tablo zorunlu değildir; her ay sabit tutar işlenir. İsterseniz plana taksit sayısı girip "Parametrelerden Üret" ile tablo oluşturabilirsiniz.' : '"Parametrelerden Üret" ile oluşturun ya da "Satır Ekle" ile elle girin.'}</td></tr>`;
+                tkToplamlar(); return;
+            }
+            tb.innerHTML = TK.map((t, i) => {
+                const kilitli = t.odendi || t.nakitAkisDocEntry != null;
+                const gecmis = !kilitli && tarihInput(t.odemeTarihi) < bugun;
+                return `<tr data-i="${i}" class="${kilitli ? 'odendi' : ''} ${gecmis ? 'gecmis' : ''}">
+                    <td class="fw-bold">${i + 1}</td>
+                    <td><input type="date" value="${tarihInput(t.odemeTarihi)}" ${kilitli ? 'disabled' : ''} onchange="tkDegis(${i}, 'odemeTarihi', this.value)"></td>
+                    <td><input type="text" inputmode="decimal" class="tr-para" value="${formatTurkishNumber(t.anapara)}" ${kilitli ? 'disabled' : ''} oninput="tkDegis(${i}, 'anapara', this.value)"></td>
+                    <td><input type="text" inputmode="decimal" class="tr-para" value="${formatTurkishNumber(t.faiz)}" ${kilitli ? 'disabled' : ''} oninput="tkDegis(${i}, 'faiz', this.value)"></td>
+                    <td><input type="text" inputmode="decimal" class="tr-para" value="${formatTurkishNumber(t.gecikmeBedeli)}" ${kilitli ? 'disabled' : ''} oninput="tkDegis(${i}, 'gecikmeBedeli', this.value)"></td>
+                    <td class="text-end po-tutar tk-toplam">${para(Number(t.anapara) + Number(t.faiz) + Number(t.gecikmeBedeli))}</td>
+                    <td><input type="text" value="${esc(t.aciklama || '')}" maxlength="300" oninput="tkDegis(${i}, 'aciklama', this.value)" placeholder="not"></td>
+                    <td class="text-center"><input type="checkbox" class="form-check-input" ${t.odendi ? 'checked' : ''} ${t.id ? '' : 'disabled'} onchange="tkOdendi(${i}, this.checked)" title="Elle ödendi işaretle"></td>
+                    <td style="font-size:11px;">${t.nakitAkisDocEntry != null ? '<span class="po-rozet po-aktif">satır #' + t.nakitAkisDocEntry + '</span>' : (t.odendi ? '<span class="text-muted">elle kapatıldı</span>' : '<span class="text-muted">bekliyor</span>')}</td>
+                    <td class="text-end">${kilitli ? '' : `<button class="btn btn-sm btn-outline-danger py-0" onclick="tkSil(${i})" title="Satırı sil"><i class="fas fa-times"></i></button>`}</td>
+                </tr>`;
+            }).join('');
+            tkToplamlar();
+        }
+        function tkToplamlar() {
+            const s = (k) => TK.reduce((a, t) => a + Number(t[k] || 0), 0);
+            document.getElementById('tkTAnapara').textContent = para(s('anapara'));
+            document.getElementById('tkTFaiz').textContent = para(s('faiz'));
+            document.getElementById('tkTGecikme').textContent = para(s('gecikmeBedeli'));
+            document.getElementById('tkTToplam').textContent = para(s('anapara') + s('faiz') + s('gecikmeBedeli'));
+            const odenen = TK.filter(t => t.odendi || t.nakitAkisDocEntry != null).length;
+            document.getElementById('tkTOzet').textContent = TK.length ? `${odenen} / ${TK.length} taksit ödendi` + (TK_PLAN && TK_PLAN.anaparaToplam ? ` · anapara farkı ${para(s('anapara') - Number(TK_PLAN.anaparaToplam))}` : '') : '';
+        }
+        function tkDegis(i, alan, deger) {
+            TK[i][alan] = alan === 'odemeTarihi' || alan === 'aciklama' ? deger : parseTurkishNumber(deger);
+            const tr = document.querySelector(`#tkBody tr[data-i="${i}"]`);
+            if (tr) tr.querySelector('.tk-toplam').textContent = para(Number(TK[i].anapara) + Number(TK[i].faiz) + Number(TK[i].gecikmeBedeli));
+            tkToplamlar();
+        }
+        function tkSil(i) { TK.splice(i, 1); tkCiz(); }
+        function taksitSatirEkle() {
+            const son = TK[TK.length - 1];
+            let tarih = new Date(); if (son) { tarih = new Date(son.odemeTarihi); tarih.setMonth(tarih.getMonth() + 1); }
+            TK.push({ id: 0, planId: TK_PLAN.id, taksitNo: TK.length + 1, odemeTarihi: tarih.toISOString().substring(0, 10), anapara: son ? son.anapara : 0, faiz: son ? son.faiz : 0, gecikmeBedeli: 0, aciklama: '', odendi: false, nakitAkisDocEntry: null });
+            tkCiz();
+        }
+        function tkOdendi(i, odendi) {
+            const t = TK[i]; if (!t.id) return;
+            fetch('/PlanliOdemeler/TaksitOdendi', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: `id=${t.id}&odendi=${odendi}` })
+                .then(r => r.json()).then(res => { if (!res.success) { alert(res.message); return; } t.odendi = odendi; tkCiz(); });
+        }
+        function taksitYenidenUret() {
+            if (!TK_PLAN) return;
+            if (!confirm('Taksitler plan parametrelerinden yeniden üretilecek. Ödenmiş taksitler korunur, elle yaptığınız düzenlemeler silinir. Devam edilsin mi?')) return;
+            fetch('/PlanliOdemeler/TaksitUret', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'planId=' + TK_PLAN.id })
+                .then(r => r.json()).then(res => { if (!res.success) { alert(res.message); return; } taksitAc(TK_PLAN.id); });
+        }
+        function taksitKaydet() {
+            if (!TK_PLAN) return;
+            const gonder = TK.map(t => ({ id: t.id || 0, planId: TK_PLAN.id, taksitNo: t.taksitNo || 0, donem: '', odemeTarihi: t.odemeTarihi, anapara: Number(t.anapara || 0), faiz: Number(t.faiz || 0), gecikmeBedeli: Number(t.gecikmeBedeli || 0), toplam: 0, aciklama: t.aciklama || '', odendi: !!t.odendi, nakitAkisDocEntry: t.nakitAkisDocEntry }));
+            if (gonder.some(t => !t.odemeTarihi)) { alert('Her taksitin ödeme tarihi olmalı.'); return; }
+            fetch('/PlanliOdemeler/TaksitKaydet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: TK_PLAN.id, taksitler: gonder }) })
+                .then(r => r.json()).then(res => { if (!res.success) { alert(res.message); return; } location.reload(); });
+        }
+
+        @if (taksitAc.HasValue)
+        {
+            <text>document.addEventListener('DOMContentLoaded', function () { taksitAc(@taksitAc.Value); });</text>
+        }
+    </script>
+}

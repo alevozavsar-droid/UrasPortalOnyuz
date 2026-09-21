@@ -1,0 +1,1062 @@
+﻿@model WebApplication3.Models.AlvFiyatViewModel
+
+@{
+    ViewData["Title"] = "ALV Fiyat";
+    var months = new List<string> { "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık" };
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // Aktif şirketi URL veya Cookie'den alıyoruz ki işlemler sırasında kaybolmasın.
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"];
+    }
+}
+
+<style>
+    /* Genel Yazı ve Satır Yüksekliği Ayarları */
+    html, body {
+        font-size: 0.8rem;
+        line-height: 1.2;
+        background-color: #f0f2f5;
+    }
+
+    /* Modern Kart Stili */
+    .card.modern {
+        border: none;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+        padding: 30px;
+        background-color: #fff;
+    }
+
+    /* Üst Alan Form Grupları */
+    .header-form-group {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        height: 100%;
+    }
+
+    .form-group label {
+        font-weight: 600;
+        color: #555;
+        margin-bottom: 5px;
+    }
+
+    /* Form Kontrol ve Seçim Kutuları */
+    .form-control, .form-select {
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        transition: border-color 0.3s ease;
+        flex-grow: 1;
+        height: 22px;
+        font-size: 0.65rem;
+    }
+
+    .customer-select {
+        min-width: 180px;
+    }
+
+    .country-select {
+        min-width: 150px;
+    }
+
+    .form-control:focus, .form-select:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+
+    /* Tablo ve Hücre Ölçüleri */
+    .table-responsive {
+        border: 1px solid #e9ecef;
+        border-radius: 12px;
+        overflow-x: auto;
+    }
+
+    .table {
+        line-height: 1.1; /* Genel tablo satır yüksekliği */
+    }
+
+        .table thead th {
+            background-color: #f8f9fa;
+            color: #495057;
+            font-weight: 600;
+            text-align: center;
+            vertical-align: middle;
+            white-space: nowrap;
+            height: 40px;
+            font-size: 0.65rem;
+            line-height: 1.2; /* Tablo başlıkları için satır yüksekliği */
+        }
+
+        .table tbody td {
+            vertical-align: middle;
+            height: 25px;
+            font-size: 0.7rem;
+            line-height: 1.1; /* Tablo hücreleri için satır yüksekliği */
+        }
+
+    /* Butonlar */
+    .btn-primary, .btn-secondary {
+        border-radius: 25px;
+        padding: 10px 25px;
+    }
+
+    /* Başlık Stili */
+    .section-title {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #333;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #007bff;
+    }
+
+    /* Yeni CSS: Para birimi vurgusu */
+    .active-currency-column {
+        background-color: #e6f7ff !important;
+        font-weight: bold;
+    }
+
+    /* Yeni CSS: USD ve EUR sembolleri için */
+    .currency-symbol {
+        background-color: #e9ecef;
+        border: 1px solid #ddd;
+        border-radius: 8px 0 0 8px;
+        padding: 0.375rem 0.75rem;
+        font-size: 0.65rem;
+        color: #6c757d;
+        height: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .input-group > .form-control {
+        border-radius: 0 8px 8px 0 !important;
+    }
+
+    .report-row {
+        cursor: pointer;
+    }
+
+        .report-row:hover {
+            background-color: #f0f2f5;
+        }
+</style>
+
+<div class="container-fluid py-4">
+    @Html.AntiForgeryToken()
+
+    <div class="row justify-content-center">
+        <div class="col-12">
+            <div class="card modern p-4 mb-4">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <div class="header-form-group">
+                            <label for="customerSelect" class="form-label">Customer</label>
+                            <select id="customerSelect" class="form-select customer-select"></select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="header-form-group">
+                            <label for="countrySelect" class="form-label">Ülke</label>
+                            <select id="countrySelect" class="form-select country-select"></select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="header-form-group">
+                            <label for="monthSelect" class="form-label">Ay</label>
+                            <select id="monthSelect" class="form-select">
+                                @foreach (var month in months)
+                                {
+                                    <option>@month</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="header-form-group">
+                            <label for="currencySelect" class="form-label">Para Birimi</label>
+                            <select id="currencySelect" class="form-select">
+                                <option>USD</option>
+                                <option>EUR</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card modern p-4 mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="section-title">Ürün Fiyat Detayları</h5>
+                    <div>
+                        <button id="addRow" class="btn btn-primary me-2">Satır Ekle</button>
+                        <button id="deleteRow" class="btn btn-secondary">Satır Sil</button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Counter Type</th>
+                                <th>Products</th>
+                                <th>Kazan İçi USD</th>
+                                <th>Kazan İçi Euro</th>
+                                <th>Karlılık Oranı</th>
+                                <th>Karlılık Yüzdesi</th>
+                                <th>Ambalaj IBC</th>
+                                <th>Ambalaj Drums</th>
+                                <th>Ambalaj Bulk</th>
+                                <th>İndirim</th>
+                                <th>Kar</th>
+                                <th>Komisyon</th>
+                                <th>Vade</th>
+                                <th>EXW Masraf</th>
+                                <th>EXW - IBC USD/KG</th>
+                                <th>EXW - DRUMS USD/KG</th>
+                                <th>FOB - IBC USD/KG</th>
+                                <th>FOB - DRUMS USD/KG</th>
+                            </tr>
+                        </thead>
+                        <tbody id="productTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card modern p-4">
+                <h5 class="section-title">Hesaplamalar ve Diğer Bilgiler</h5>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="pariteEuroUsd" class="form-label">Parite Euro/USD</label>
+                            <input type="number" step="0.001" id="pariteEuroUsd" class="form-control" value="@Model.EuroUsdParity" />
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="cofasLimit" class="form-label">Cofas Limiti</label>
+                            <input type="number" step="0.001" id="cofasLimit" class="form-control" value="@Model.CofasLimit" />
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="vade" class="form-label">Vade</label>
+                            <input type="text" id="vade" class="form-control" value="@Model.Term" />
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="bakiye" class="form-label">Bakiye</label>
+                            <input type="number" step="0.001" id="bakiye" class="form-control" value="@Model.Balance" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label class="form-label text-primary">Exwork Masraf</label>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text currency-symbol">$</span>
+                                <input type="number" step="0.001" class="form-control exwork-cost-input-usd" placeholder="Liman (USD)" id="exworkLimanUsd" value="@Model.ExworkLiman" />
+                                <span class="input-group-text currency-symbol">€</span>
+                                <input type="number" step="0.001" class="form-control exwork-cost-input-eur" placeholder="Liman (EUR)" id="exworkLimanEur" readonly />
+                            </div>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text currency-symbol">$</span>
+                                <input type="number" step="0.001" class="form-control exwork-cost-input-usd" placeholder="Banka (USD)" id="exworkBankaUsd" value="@Model.ExworkBanka" />
+                                <span class="input-group-text currency-symbol">€</span>
+                                <input type="number" step="0.001" class="form-control exwork-cost-input-eur" placeholder="Banka (EUR)" id="exworkBankaEur" readonly />
+                            </div>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text currency-symbol">$</span>
+                                <input type="number" step="0.001" class="form-control exwork-cost-input-usd" placeholder="Gümrük (USD)" id="exworkGumrukUsd" value="@Model.ExworkGumruk" />
+                                <span class="input-group-text currency-symbol">€</span>
+                                <input type="number" step="0.001" class="form-control exwork-cost-input-eur" placeholder="Gümrük (EUR)" id="exworkGumrukEur" readonly />
+                            </div>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text currency-symbol">$</span>
+                                <input type="number" step="0.001" class="form-control exwork-cost-input-usd" placeholder="Diğer (USD)" id="exworkDigerUsd" value="@Model.ExworkDiger" />
+                                <span class="input-group-text currency-symbol">€</span>
+                                <input type="number" step="0.001" class="form-control exwork-cost-input-eur" placeholder="Diğer (EUR)" id="exworkDigerEur" readonly />
+                            </div>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text currency-symbol">$</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="Toplam (USD)" id="exworkToplamUsd" value="@Model.ExworkToplam" readonly />
+                                <span class="input-group-text currency-symbol">€</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="Toplam (EUR)" id="exworkToplamEur" readonly />
+                            </div>
+                            <label class="form-label mt-2">Tonaj Masrafı</label>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text">$</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="IBC Masraf (USD)" id="exworkIbcMasrafUsd" value="@Model.ExworkMasraf" readonly />
+                                <span class="input-group-text">€</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="IBC Masraf (EUR)" id="exworkIbcMasrafEur" readonly />
+                            </div>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text">$</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="Drums Masraf (USD)" id="exworkDrumsMasrafUsd" readonly />
+                                <span class="input-group-text">€</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="Drums Masraf (EUR)" id="exworkDrumsMasrafEur" readonly />
+                            </div>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="Bulk Masraf (USD)" id="exworkBulkMasrafUsd" readonly />
+                                <span class="input-group-text">€</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="Bulk Masraf (EUR)" id="exworkBulkMasrafEur" readonly />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label class="form-label text-primary">FOB Masraf</label>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text currency-symbol">$</span>
+                                <input type="number" step="0.001" class="form-control fob-cost-input-usd" placeholder="Liman (USD)" id="fobLimanUsd" value="@Model.FobLiman" />
+                                <span class="input-group-text currency-symbol">€</span>
+                                <input type="number" step="0.001" class="form-control fob-cost-input-eur" placeholder="Liman (EUR)" id="fobLimanEur" readonly />
+                            </div>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text currency-symbol">$</span>
+                                <input type="number" step="0.001" class="form-control fob-cost-input-usd" placeholder="Banka (USD)" id="fobBankaUsd" value="@Model.FobBanka" />
+                                <span class="input-group-text currency-symbol">€</span>
+                                <input type="number" step="0.001" class="form-control fob-cost-input-eur" placeholder="Banka (EUR)" id="fobBankaEur" readonly />
+                            </div>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text currency-symbol">$</span>
+                                <input type="number" step="0.001" class="form-control fob-cost-input-usd" placeholder="Gümrük (USD)" id="fobGumrukUsd" value="@Model.FobGumruk" />
+                                <span class="input-group-text currency-symbol">€</span>
+                                <input type="number" step="0.001" class="form-control fob-cost-input-eur" placeholder="Gümrük (EUR)" id="fobGumrukEur" readonly />
+                            </div>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text currency-symbol">$</span>
+                                <input type="number" step="0.001" class="form-control fob-cost-input-usd" placeholder="Diğer (USD)" id="fobDigerUsd" value="@Model.FobDiger" />
+                                <span class="input-group-text currency-symbol">€</span>
+                                <input type="number" step="0.001" class="form-control fob-cost-input-eur" placeholder="Diğer (EUR)" id="fobDigerEur" readonly />
+                            </div>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text currency-symbol">$</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="Toplam (USD)" id="fobToplamUsd" value="@Model.FobToplam" readonly />
+                                <span class="input-group-text currency-symbol">€</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="Toplam (EUR)" id="fobToplamEur" readonly />
+                            </div>
+                            <label class="form-label mt-2">Tonaj Masrafı</label>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text">$</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="IBC Masraf (USD)" id="fobIbcMasrafUsd" readonly />
+                                <span class="input-group-text">€</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="IBC Masraf (EUR)" id="fobIbcMasrafEur" readonly />
+                            </div>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text">$</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="Drums Masraf (USD)" id="fobDrumsMasrafUsd" readonly />
+                                <span class="input-group-text">€</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="Drums Masraf (EUR)" id="fobDrumsMasrafEur" readonly />
+                            </div>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="Bulk Masraf (USD)" id="fobBulkMasrafUsd" readonly />
+                                <span class="input-group-text">€</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="Bulk Masraf (EUR)" id="fobBulkMasrafEur" readonly />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label class="form-label text-primary">Flexi Masraf</label>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text currency-symbol">$</span>
+                                <input type="number" step="0.001" class="form-control flexi-cost-input-usd" placeholder="Navlun (USD)" id="flexiNavlunUsd" value="@Model.FlexiNavlun" />
+                                <span class="input-group-text currency-symbol">€</span>
+                                <input type="number" step="0.001" class="form-control flexi-cost-input-eur" placeholder="Navlun (EUR)" id="flexiNavlunEur" readonly />
+                            </div>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text currency-symbol">$</span>
+                                <input type="number" step="0.001" class="form-control flexi-cost-input-usd" placeholder="Banka (USD)" id="flexiBankaUsd" value="@Model.FlexiBanka" />
+                                <span class="input-group-text currency-symbol">€</span>
+                                <input type="number" step="0.001" class="form-control flexi-cost-input-eur" placeholder="Banka (EUR)" id="flexiBankaEur" readonly />
+                            </div>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text currency-symbol">$</span>
+                                <input type="number" step="0.001" class="form-control flexi-cost-input-usd" placeholder="Gümrük (USD)" id="flexiGumrukUsd" value="@Model.FlexiGumruk" />
+                                <span class="input-group-text currency-symbol">€</span>
+                                <input type="number" step="0.001" class="form-control flexi-cost-input-eur" placeholder="Gümrük (EUR)" id="flexiGumrukEur" readonly />
+                            </div>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text currency-symbol">$</span>
+                                <input type="number" step="0.001" class="form-control flexi-cost-input-usd" placeholder="Nakliye (USD)" id="flexiNakliyeUsd" value="@Model.FlexiNakliye" />
+                                <span class="input-group-text currency-symbol">€</span>
+                                <input type="number" step="0.001" class="form-control flexi-cost-input-eur" placeholder="Nakliye (EUR)" id="flexiNakliyeEur" readonly />
+                            </div>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text currency-symbol">$</span>
+                                <input type="number" step="0.001" class="form-control flexi-cost-input-usd" placeholder="Flexi (USD)" id="flexiFlexiUsd" value="@Model.FlexiFlexi" />
+                                <span class="input-group-text currency-symbol">€</span>
+                                <input type="number" step="0.001" class="form-control flexi-cost-input-eur" placeholder="Flexi (EUR)" id="flexiFlexiEur" readonly />
+                            </div>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text currency-symbol">$</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="Toplam (USD)" id="flexiToplamUsd" value="@Model.FlexiToplam" readonly />
+                                <span class="input-group-text currency-symbol">€</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="Toplam (EUR)" id="flexiToplamEur" readonly />
+                            </div>
+                            <label class="form-label mt-2">Tonaj Masrafı</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="Masraf (USD)" id="flexiMasrafUsd" value="@Model.FlexiMasraf" readonly />
+                                <span class="input-group-text">€</span>
+                                <input type="number" step="0.001" class="form-control" placeholder="Masraf (EUR)" id="flexiMasrafEur" readonly />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label class="form-label text-primary">Tonaj</label>
+                            <input type="number" step="0.001" class="form-control mb-2 tonaj-input" placeholder="IBC" id="tonajIbc" value="@Model.TonajIbc" />
+                            <input type="number" step="0.001" class="form-control mb-2 tonaj-input" placeholder="Drums" id="tonajDrums" value="@Model.TonajDrums" />
+                            <input type="number" step="0.001" class="form-control tonaj-input" placeholder="Bulk" id="tonajBulk" value="@Model.TonajBulk" />
+                        </div>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="form-group">
+                            <label class="form-label text-primary">Yarı Mamül Fiyatları</label>
+                            <div class="row g-3">
+                                <div class="col-6">
+                                    <input type="text" class="form-control mb-2" placeholder="1. Yarı Mamül Adı" value="@Model.Yarimamul1Name" id="yarimamul1Name" />
+                                    <input type="number" step="0.001" class="form-control" placeholder="1. Yarı Mamül Fiyatı" value="@Model.Yarimamul1Price" id="yarimamul1Price" />
+                                </div>
+                                <div class="col-6">
+                                    <input type="text" class="form-control mb-2" placeholder="2. Yarı Mamül Adı" value="@Model.Yarimamul2Name" id="yarimamul2Name" />
+                                    <input type="number" step="0.001" class="form-control" placeholder="2. Yarı Mamül Fiyatı" value="@Model.Yarimamul2Price" id="yarimamul2Price" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-12">
+                        <div class="form-group">
+                            <label class="form-label text-primary">Açıklama</label>
+                            <textarea class="form-control" rows="3" placeholder="Açıklama giriniz..." id="aciklama">@Model.Aciklama</textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-center my-4">
+                <button id="saveButton" class="btn btn-success me-3">Kaydet</button>
+                <button id="cancelButton" class="btn btn-danger" onclick="location.reload()">İptal</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-12">
+            <div class="card modern p-4">
+                <h5 class="section-title">Kaydedilmiş Raporlar</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Rapor Numarası</th>
+                                <th>Müşteri</th>
+                                <th>Kayıt Tarihi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="savedReportsBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+
+        $(document).ready(function () {
+            // Şirket parametresini ve güvenlik tokenını JavaScript değişkenine alalım
+            const dbParam = '@currentDb';
+            const dbQueryString = dbParam ? `?db=${dbParam}` : '';
+            const antiForgeryToken = $('input[name="__RequestVerificationToken"]').val();
+
+            // Müşterileri AJAX ile yükle
+            $.ajax({
+                url: '/Rapor16/GetCustomers' + dbQueryString,
+                type: 'GET',
+                success: function (data) {
+                    const customerSelect = $('#customerSelect');
+                    customerSelect.empty();
+                    customerSelect.append('<option value="">Müşteri Seçin...</option>');
+                    if (data && data.length > 0) {
+                        $.each(data, function (index, customer) {
+                            customerSelect.append('<option value="' + customer.cardCode + '">' + customer.cardName + '</option>');
+                        });
+                        // Load saved data if available
+                        if ('@Model.CustomerCode') {
+                            customerSelect.val('@Model.CustomerCode');
+                        }
+                    } else {
+                        customerSelect.append('<option value="">Veri bulunamadı</option>');
+                    }
+                },
+                error: function (error) {
+                    console.log("Müşteri verileri yüklenirken hata oluştu: ", error.responseText);
+                    const customerSelect = $('#customerSelect');
+                    customerSelect.html('<option value="">Hata oluştu</option>');
+                }
+            });
+
+            // Ülkeleri AJAX ile yükle
+            $.ajax({
+                url: '/Rapor16/GetCountries' + dbQueryString,
+                type: 'GET',
+                success: function (data) {
+                    const countrySelect = $('#countrySelect');
+                    countrySelect.empty();
+                    countrySelect.append('<option value="">Ülke Seçin...</option>');
+                    if (data && data.length > 0) {
+                        $.each(data, function (index, country) {
+                            countrySelect.append('<option value="' + country.code + '">' + country.name + '</option>');
+                        });
+                        if ('@Model.CountryCode') {
+                            countrySelect.val('@Model.CountryCode');
+                        }
+                    } else {
+                        countrySelect.append('<option value="">Veri bulunamadı</option>');
+                    }
+                },
+                error: function (error) {
+                    console.log("Ülke verileri yüklenirken hata oluştu: ", error.responseText);
+                    const countrySelect = $('#countrySelect');
+                    countrySelect.html('<option value="">Hata oluştu</option>');
+                }
+            });
+
+            // Ay ve Para Birimi seçicilerini yükle
+            if ('@Model.Month') {
+                $('#monthSelect').val('@Model.Month');
+            }
+            if ('@Model.Currency') {
+                $('#currencySelect').val('@Model.Currency');
+            }
+
+            // Sayfa yüklendiğinde en son Euro/USD paritesini çek
+            $.ajax({
+                url: '/Rapor16/GetLatestEuroUsdParity' + dbQueryString,
+                type: 'GET',
+                success: function (data) {
+                    if (data.parity > 0) {
+                        $('#pariteEuroUsd').val(data.parity.toFixed(4));
+                        updateAllCosts();
+                    } else {
+                        $('#pariteEuroUsd').val('0');
+                    }
+                },
+                error: function (error) {
+                    console.log("Parite verisi çekilirken hata oluştu:", error.responseText);
+                    $('#pariteEuroUsd').val('0');
+                }
+            });
+
+            let allProducts = [];
+
+            $.ajax({
+                url: '/Rapor16/GetProducts' + dbQueryString,
+                type: 'GET',
+                success: function (data) {
+                    allProducts = data;
+                    const tableBody = $('#productTableBody');
+                    tableBody.empty();
+                    // Load saved data if available
+                    const savedDetails = @Html.Raw(Json.Serialize(Model.Details));
+                    if (savedDetails && savedDetails.length > 0) {
+                        savedDetails.forEach(detail => addRow(detail));
+                    } else {
+                        addRow();
+                    }
+                },
+                error: function (error) {
+                    console.log("Ürün verileri yüklenirken hata oluştu: ", error.responseText);
+                    const tableBody = $('#productTableBody');
+                    tableBody.append('<tr><td colspan="18" class="text-center">Ürün verisi bulunamadı.</td></tr>');
+                }
+            });
+
+            // Kaydedilmiş raporları yükle
+            loadSavedReports();
+
+            function loadSavedReports() {
+                $.ajax({
+                    url: '/Rapor16/GetSavedReports' + dbQueryString,
+                    type: 'GET',
+                    success: function (data) {
+                        const savedReportsBody = $('#savedReportsBody');
+                        savedReportsBody.empty();
+                        if (data && data.length > 0) {
+                            $.each(data, function (index, report) {
+                                const newRow = `
+                                    <tr class="report-row" data-docentry="${report.docEntry}">
+                                        <td>${report.docNum}</td>
+                                        <td>${report.customer}</td>
+                                        <td>${report.createDate}</td>
+                                    </tr>
+                                `;
+                                savedReportsBody.append(newRow);
+                            });
+                        } else {
+                            savedReportsBody.append('<tr><td colspan="3" class="text-center">Henüz kaydedilmiş rapor bulunamadı.</td></tr>');
+                        }
+                    },
+                    error: function (error) {
+                        console.log("Kaydedilmiş raporlar yüklenirken hata oluştu: ", error.responseText);
+                        $('#savedReportsBody').html('<tr><td colspan="3" class="text-center">Hata oluştu</td></tr>');
+                    }
+                });
+            }
+
+            $('#savedReportsBody').on('click', '.report-row', function () {
+                const docEntry = $(this).data('docentry');
+                window.location.href = '@Url.Action("Index", "Rapor16")' + dbQueryString + (dbQueryString ? '&' : '?') + 'docEntry=' + docEntry;
+            });
+
+            function addRow(data = null) {
+                const tableBody = $('#productTableBody');
+                const rowCount = tableBody.find('tr').length + 1;
+                const productSelectOptions = allProducts.map(p => `<option value="${p.itemCode}">${p.itemName}</option>`).join('');
+
+                const newRow = `
+                    <tr>
+                        <td>${rowCount}</td>
+                        <td><input type="text" class="form-control counter-type-input" placeholder="Counter Type" value="${data ? data.counterType : ''}" /></td>
+                        <td>
+                            <select class="form-select product-select">
+                                <option value="">Ürün Seçin...</option>
+                                ${productSelectOptions}
+                            </select>
+                        </td>
+                        <td><input type="number" step="0.001" class="form-control kazan-ici-usd-input" value="${data ? data.kazanIciUsd : ''}" /></td>
+                        <td><input type="number" step="0.001" class="form-control kazan-ici-eur-input" value="${data ? data.kazanIciEur : ''}" /></td>
+                        <td><input type="number" step="0.001" class="form-control karlilik-orani-input" value="${data ? data.karlilikOrani : ''}" /></td>
+                        <td><input type="number" step="0.001" class="form-control karlilik-yuzdesi-input" value="${data ? data.karlilikYuzdesi : ''}" /></td>
+                        <td><input type="number" step="0.001" class="form-control ambalaj-ibc-input" value="${data ? data.ambalajIbc : ''}" /></td>
+                        <td><input type="number" step="0.001" class="form-control ambalaj-drums-input" value="${data ? data.ambalajDrums : ''}" /></td>
+                        <td><input type="number" step="0.001" class="form-control ambalaj-bulk-input" value="${data ? data.ambalajBulk : ''}" /></td>
+                        <td><input type="number" step="0.001" class="form-control indirim-input" value="${data ? data.indirim : ''}" /></td>
+                        <td><input type="number" step="0.001" class="form-control kar-input" value="${data ? data.kar : ''}" /></td>
+                        <td><input type="number" step="0.001" class="form-control komisyon-input" value="${data ? data.komisyon : ''}" /></td>
+                        <td><input type="text" class="form-control vade-input" value="${data ? data.vade : ''}" /></td>
+                        <td><input type="number" step="0.001" class="form-control exw-masraf-input" value="${data ? data.exwMasraf : ''}" readonly/></td>
+                        <td><input type="number" step="0.001" class="form-control exw-ibc-usd-kg-input" value="${data ? data.exwIbcUsdKg : ''}" readonly /></td>
+                        <td><input type="number" step="0.001" class="form-control exw-drums-usd-kg-input" value="${data ? data.exwDrumsUsdKg : ''}" readonly /></td>
+                        <td><input type="number" step="0.001" class="form-control fob-ibc-usd-kg-input" value="${data ? data.fobIbcUsdKg : ''}" readonly /></td>
+                        <td><input type="number" step="0.001" class="form-control fob-drums-usd-kg-input" value="${data ? data.fobDrumsUsdKg : ''}" readonly /></td>
+                    </tr>
+                `;
+                tableBody.append(newRow);
+
+                if (data) {
+                    const newRowObj = tableBody.find('tr').last();
+                    newRowObj.find('.product-select').val(data.itemCode);
+                }
+            }
+
+
+            $('#addRow').on('click', function () {
+                addRow();
+            });
+
+            $('#deleteRow').on('click', function () {
+                const tableBody = $('#productTableBody');
+                if (tableBody.find('tr').length > 1) {
+                    tableBody.find('tr').last().remove();
+                }
+            });
+
+            $('#productTableBody').on('input', '.kazan-ici-usd-input', function () {
+                const row = $(this).closest('tr');
+                const usdValue = parseFloat($(this).val()) || 0;
+                const parity = parseFloat($('#pariteEuroUsd').val()) || 0;
+                const kazanIciEurInput = row.find('.kazan-ici-eur-input');
+
+                if (parity > 0) {
+                    const euroValue = usdValue / parity;
+                    kazanIciEurInput.val(euroValue.toFixed(3));
+                } else {
+                    kazanIciEurInput.val('0.000');
+                }
+                hesaplaKarlilikYuzdesi(row);
+                updateTableRowCalculations(row);
+            });
+
+            $('#productTableBody').on('input', '.kazan-ici-eur-input', function () {
+                const row = $(this).closest('tr');
+                const eurValue = parseFloat($(this).val()) || 0;
+                const parity = parseFloat($('#pariteEuroUsd').val()) || 0;
+                const kazanIciUsdInput = row.find('.kazan-ici-usd-input');
+
+                if (parity > 0) {
+                    const usdValue = eurValue * parity;
+                    kazanIciUsdInput.val(usdValue.toFixed(3));
+                } else {
+                    kazanIciUsdInput.val('0.000');
+                }
+                hesaplaKarlilikYuzdesi(row);
+                updateTableRowCalculations(row);
+            });
+
+            $('#currencySelect').on('change', function () {
+                $('#productTableBody tr').each(function () {
+                    const row = $(this);
+                    const currentCurrency = $('#currencySelect').val();
+                    const kazanIciUsdInput = row.find('.kazan-ici-usd-input');
+                    const kazanIciEurInput = row.find('.kazan-ici-eur-input');
+                    const parity = parseFloat($('#pariteEuroUsd').val()) || 0;
+                    const usdValue = parseFloat(kazanIciUsdInput.val()) || 0;
+                    const eurValue = parseFloat(kazanIciEurInput.val()) || 0;
+
+                    if (currentCurrency === 'EUR' && parity > 0) {
+                        const newEuroValue = usdValue / parity;
+                        kazanIciEurInput.val(newEuroValue.toFixed(3));
+                    } else if (currentCurrency === 'USD' && parity > 0) {
+                        const newUsdValue = eurValue * parity;
+                        kazanIciUsdInput.val(newUsdValue.toFixed(3));
+                    }
+                    hesaplaKarlilikYuzdesi(row);
+                    updateTableRowCalculations(row);
+                });
+
+                updateAllCosts();
+            });
+
+            $('#productTableBody').on('input', '.karlilik-orani-input', function () {
+                const row = $(this).closest('tr');
+                hesaplaKarlilikYuzdesi(row);
+                updateTableRowCalculations(row);
+            });
+
+            // Diğer input değişikliklerinde de hesaplama fonksiyonunu çağır
+            $('#productTableBody').on('input', '.ambalaj-ibc-input, .indirim-input, .kar-input, .vade-input, .komisyon-input, .ambalaj-drums-input, .ambalaj-bulk-input', function () {
+                const row = $(this).closest('tr');
+                updateTableRowCalculations(row);
+            });
+
+
+            $('#productTableBody').on('change', '.product-select', function () {
+                const selectedItemCode = $(this).val();
+                const row = $(this).closest('tr');
+                const kazanIciUsdInput = row.find('.kazan-ici-usd-input');
+                const kazanIciEurInput = row.find('.kazan-ici-eur-input');
+
+                // Update the hidden product name for saving
+                const itemName = $(this).find('option:selected').text();
+                row.data('itemname', itemName);
+
+                if (selectedItemCode) {
+                    $.ajax({
+                        url: '/Rapor16/GetProductCost' + dbQueryString,
+                        type: 'GET',
+                        data: { itemCode: selectedItemCode },
+                        success: function (data) {
+                            if (data && data.totalCost) {
+                                kazanIciUsdInput.val(data.totalCost);
+                                const parity = parseFloat($('#pariteEuroUsd').val());
+                                const usdValue = parseFloat(data.totalCost);
+                                if (!isNaN(parity) && !isNaN(usdValue) && parity > 0) {
+                                    const euroValue = usdValue / parity;
+                                    kazanIciEurInput.val(euroValue.toFixed(3));
+                                } else {
+                                    kazanIciEurInput.val('0.000');
+                                }
+                            } else {
+                                kazanIciUsdInput.val('0.000');
+                                kazanIciEurInput.val('0.000');
+                            }
+                            hesaplaKarlilikYuzdesi(row);
+                            updateTableRowCalculations(row);
+                        },
+                        error: function (error) {
+                            console.log("Ürün maliyeti çekilirken hata oluştu:", error.responseText);
+                            kazanIciUsdInput.val('0.000');
+                            kazanIciEurInput.val('0.000');
+                            hesaplaKarlilikYuzdesi(row);
+                            updateTableRowCalculations(row);
+                        }
+                    });
+                } else {
+                    kazanIciUsdInput.val('0.000');
+                    kazanIciEurInput.val('0.000');
+                    hesaplaKarlilikYuzdesi(row);
+                    updateTableRowCalculations(row);
+                }
+            });
+
+            function hesaplaKarlilikYuzdesi(row) {
+                const currency = $('#currencySelect').val();
+                let kazanIciMaliyet = 0;
+                const karlilikOrani = parseFloat(row.find('.karlilik-orani-input').val()) || 0;
+                const karlilikYuzdesiInput = row.find('.karlilik-yuzdesi-input');
+
+                if (currency === 'USD') {
+                    kazanIciMaliyet = parseFloat(row.find('.kazan-ici-usd-input').val()) || 0;
+                } else if (currency === 'EUR') {
+                    kazanIciMaliyet = parseFloat(row.find('.kazan-ici-eur-input').val()) || 0;
+                }
+
+                if (kazanIciMaliyet > 0) {
+                    const yuzde = (karlilikOrani / kazanIciMaliyet) * 100;
+                    karlilikYuzdesiInput.val(yuzde.toFixed(3));
+                } else {
+                    karlilikYuzdesiInput.val('0.000');
+                }
+            }
+
+            function updateCosts(prefix) {
+                const parity = parseFloat($('#pariteEuroUsd').val()) || 1;
+                const inputsUsd = $(`.${prefix}-cost-input-usd`);
+                const totalUsdInput = $(`#${prefix}ToplamUsd`);
+                const totalEurInput = $(`#${prefix}ToplamEur`);
+
+                let totalUsd = 0;
+                inputsUsd.each(function () {
+                    const value = parseFloat($(this).val()) || 0;
+                    totalUsd += value;
+                    const euroInput = $(`#${$(this).attr('id').replace('Usd', 'Eur')}`);
+                    if (parity > 0) {
+                        euroInput.val((value / parity).toFixed(3));
+                    } else {
+                        euroInput.val('0.000');
+                    }
+                });
+                totalUsdInput.val(totalUsd.toFixed(3));
+                if (parity > 0) {
+                    totalEurInput.val((totalUsd / parity).toFixed(3));
+                } else {
+                    totalEurInput.val('0.000');
+                }
+            }
+
+            function updatePerTonCosts() {
+                const parity = parseFloat($('#pariteEuroUsd').val()) || 1;
+                const exwToplamUsd = parseFloat($('#exworkToplamUsd').val()) || 0;
+                const fobToplamUsd = parseFloat($('#fobToplamUsd').val()) || 0;
+                const flexiToplamUsd = parseFloat($('#flexiToplamUsd').val()) || 0;
+
+                const tonajIbc = parseFloat($('#tonajIbc').val()) || 0;
+                const tonajDrums = parseFloat($('#tonajDrums').val()) || 0;
+                const tonajBulk = parseFloat($('#tonajBulk').val()) || 0;
+                const toplamTonaj = tonajIbc + tonajDrums + tonajBulk;
+
+                const exwIbcMasrafUsd = tonajIbc > 0 ? exwToplamUsd / tonajIbc : 0;
+                const exwDrumsMasrafUsd = tonajDrums > 0 ? exwToplamUsd / tonajDrums : 0;
+                const exwBulkMasrafUsd = tonajBulk > 0 ? exwToplamUsd / tonajBulk : 0;
+
+                $('#exworkIbcMasrafUsd').val(exwIbcMasrafUsd.toFixed(3));
+                $('#exworkIbcMasrafEur').val((exwIbcMasrafUsd / parity).toFixed(3));
+                $('#exworkDrumsMasrafUsd').val(exwDrumsMasrafUsd.toFixed(3));
+                $('#exworkDrumsMasrafEur').val((exwDrumsMasrafUsd / parity).toFixed(3));
+                $('#exworkBulkMasrafUsd').val(exwBulkMasrafUsd.toFixed(3));
+                $('#exworkBulkMasrafEur').val((exwBulkMasrafUsd / parity).toFixed(3));
+
+                const fobIbcMasrafUsd = tonajIbc > 0 ? fobToplamUsd / tonajIbc : 0;
+                const fobDrumsMasrafUsd = tonajDrums > 0 ? fobToplamUsd / tonajDrums : 0;
+                const fobBulkMasrafUsd = tonajBulk > 0 ? fobToplamUsd / tonajBulk : 0;
+
+                $('#fobIbcMasrafUsd').val(fobIbcMasrafUsd.toFixed(3));
+                $('#fobIbcMasrafEur').val((fobIbcMasrafUsd / parity).toFixed(3));
+                $('#fobDrumsMasrafUsd').val(fobDrumsMasrafUsd.toFixed(3));
+                $('#fobDrumsMasrafEur').val((fobDrumsMasrafUsd / parity).toFixed(3));
+                $('#fobBulkMasrafUsd').val(fobBulkMasrafUsd.toFixed(3));
+                $('#fobBulkMasrafEur').val((fobBulkMasrafUsd / parity).toFixed(3));
+
+                const flexiMasrafUsd = toplamTonaj > 0 ? flexiToplamUsd / toplamTonaj : 0;
+                $('#flexiMasrafUsd').val(flexiMasrafUsd.toFixed(3));
+                $('#flexiMasrafEur').val((flexiMasrafUsd / parity).toFixed(3));
+
+                $('#productTableBody tr').each(function () {
+                    const row = $(this);
+                    updateTableRowCalculations(row);
+                });
+            }
+
+            function updateTableRowCalculations(row) {
+                const currency = $('#currencySelect').val();
+                const parity = parseFloat($('#pariteEuroUsd').val()) || 1;
+
+                let kazanIciMaliyet = 0;
+                if (currency === 'USD') {
+                    kazanIciMaliyet = parseFloat(row.find('.kazan-ici-usd-input').val()) || 0;
+                } else if (currency === 'EUR') {
+                    kazanIciMaliyet = parseFloat(row.find('.kazan-ici-eur-input').val()) || 0;
+                }
+
+                const karlilikOrani = parseFloat(row.find('.karlilik-orani-input').val()) || 0;
+                const ambalajIbc = parseFloat(row.find('.ambalaj-ibc-input').val()) || 0;
+                const ambalajDrums = parseFloat(row.find('.ambalaj-drums-input').val()) || 0;
+                const ambalajBulk = parseFloat(row.find('.ambalaj-bulk-input').val()) || 0;
+                const indirim = parseFloat(row.find('.indirim-input').val()) || 0;
+                const kar = parseFloat(row.find('.kar-input').val()) || 0;
+                const komisyon = parseFloat(row.find('.komisyon-input').val()) || 0;
+                const vade = parseFloat(row.find('.vade-input').val()) || 0;
+                const exwMasraf = parseFloat($('#exworkIbcMasrafUsd').val()) || 0;
+                const fobMasraf = parseFloat($('#fobIbcMasrafUsd').val()) || 0;
+
+                // EXW IBC USD/KG
+                let exwIbcUsdKg = (kazanIciMaliyet + karlilikOrani + ambalajIbc + vade + exwMasraf + komisyon) - indirim + kar;
+                if (currency === 'EUR' && parity > 0) {
+                    exwIbcUsdKg = (kazanIciMaliyet * parity + karlilikOrani * parity + ambalajIbc * parity + vade * parity + exwMasraf * parity + komisyon * parity) - indirim * parity + kar * parity;
+                }
+                row.find('.exw-ibc-usd-kg-input').val(exwIbcUsdKg.toFixed(3));
+
+                // EXW DRUMS USD/KG
+                let exwDrumsUsdKg = (kazanIciMaliyet + karlilikOrani + ambalajDrums + vade + exwMasraf + komisyon) - indirim + kar;
+                if (currency === 'EUR' && parity > 0) {
+                    exwDrumsUsdKg = (kazanIciMaliyet * parity + karlilikOrani * parity + ambalajDrums * parity + vade * parity + exwMasraf * parity + komisyon * parity) - indirim * parity + kar * parity;
+                }
+                row.find('.exw-drums-usd-kg-input').val(exwDrumsUsdKg.toFixed(3));
+
+                // FOB IBC USD/KG
+                let fobIbcUsdKg = (kazanIciMaliyet + karlilikOrani + ambalajIbc + vade + fobMasraf + komisyon) - indirim + kar;
+                if (currency === 'EUR' && parity > 0) {
+                    fobIbcUsdKg = (kazanIciMaliyet * parity + karlilikOrani * parity + ambalajIbc * parity + vade * parity + fobMasraf * parity + komisyon * parity) - indirim * parity + kar * parity;
+                }
+                row.find('.fob-ibc-usd-kg-input').val(fobIbcUsdKg.toFixed(3));
+
+                // FOB DRUMS USD/KG
+                let fobDrumsUsdKg = (kazanIciMaliyet + karlilikOrani + ambalajDrums + vade + fobMasraf + komisyon) - indirim + kar;
+                if (currency === 'EUR' && parity > 0) {
+                    fobDrumsUsdKg = (kazanIciMaliyet * parity + karlilikOrani * parity + ambalajDrums * parity + vade * parity + fobMasraf * parity + komisyon * parity) - indirim * parity + kar * parity;
+                }
+                row.find('.fob-drums-usd-kg-input').val(fobDrumsUsdKg.toFixed(3));
+            }
+
+            function updateAllCosts() {
+                updateCosts('exwork');
+                updateCosts('fob');
+                updateCosts('flexi');
+                updatePerTonCosts();
+            }
+
+            // Parite değiştiğinde tüm masrafları yeniden hesapla
+            $('#pariteEuroUsd').on('input', function () {
+                updateAllCosts();
+            });
+
+            // Masraf inputlarına event listener ekle
+            $('.exwork-cost-input-usd, .fob-cost-input-usd, .flexi-cost-input-usd').on('input', () => updateAllCosts());
+            $('.tonaj-input').on('input', () => updatePerTonCosts());
+            $('#productTableBody').on('input', '.counter-type-input', () => updatePerTonCosts());
+
+            // Save functionality
+        $('#saveButton').on('click', function () {
+    const model = {
+        DocEntry: parseInt('@Model.DocEntry') || 0, // DocEntry'yi tam sayı olarak al
+        CustomerCode: $('#customerSelect').val(),
+        CountryCode: $('#countrySelect').val(),
+        Month: $('#monthSelect').val(),
+        Currency: $('#currencySelect').val(),
+        EuroUsdParity: parseFloat($('#pariteEuroUsd').val()) || 0,
+        CofasLimit: parseFloat($('#cofasLimit').val()) || 0,
+        Term: $('#vade').val(),
+        Balance: parseFloat($('#bakiye').val()) || 0,
+        // Exwork Costs
+        ExworkLiman: parseFloat($('#exworkLimanUsd').val()) || 0,
+        ExworkBanka: parseFloat($('#exworkBankaUsd').val()) || 0,
+        ExworkGumruk: parseFloat($('#exworkGumrukUsd').val()) || 0,
+        ExworkDiger: parseFloat($('#exworkDigerUsd').val()) || 0,
+        ExworkToplam: parseFloat($('#exworkToplamUsd').val()) || 0,
+        ExworkMasraf: parseFloat($('#exworkIbcMasrafUsd').val()) || 0,
+        // FOB Costs
+        FobLiman: parseFloat($('#fobLimanUsd').val()) || 0,
+        FobBanka: parseFloat($('#fobBankaUsd').val()) || 0,
+        FobGumruk: parseFloat($('#fobGumrukUsd').val()) || 0,
+        FobDiger: parseFloat($('#fobDigerUsd').val()) || 0,
+        FobToplam: parseFloat($('#fobToplamUsd').val()) || 0,
+        FobMasraf: parseFloat($('#fobIbcMasrafUsd').val()) || 0,
+        // Flexi Costs
+        FlexiNavlun: parseFloat($('#flexiNavlunUsd').val()) || 0,
+        FlexiBanka: parseFloat($('#flexiBankaUsd').val()) || 0,
+        FlexiGumruk: parseFloat($('#flexiGumrukUsd').val()) || 0,
+        FlexiNakliye: parseFloat($('#flexiNakliyeUsd').val()) || 0,
+        FlexiFlexi: parseFloat($('#flexiFlexiUsd').val()) || 0,
+        FlexiToplam: parseFloat($('#flexiToplamUsd').val()) || 0,
+        FlexiMasraf: parseFloat($('#flexiMasrafUsd').val()) || 0,
+        // Tonnage
+        TonajIbc: parseFloat($('#tonajIbc').val()) || 0,
+        TonajDrums: parseFloat($('#tonajDrums').val()) || 0,
+        TonajBulk: parseFloat($('#tonajBulk').val()) || 0,
+        // Semi-finished Product Prices
+        Yarimamul1Name: $('#yarimamul1Name').val(),
+        Yarimamul1Price: parseFloat($('#yarimamul1Price').val()) || 0,
+        Yarimamul2Name: $('#yarimamul2Name').val(),
+        Yarimamul2Price: parseFloat($('#yarimamul2Price').val()) || 0,
+        Aciklama: $('#aciklama').val(),
+        Details: []
+    };
+
+    $('#productTableBody tr').each(function () {
+        const row = $(this);
+        const itemCode = row.find('.product-select').val();
+        if (itemCode) {
+            model.Details.push({
+                ItemCode: itemCode,
+                ItemName: row.find('.product-select option:selected').text(),
+                CounterType: row.find('.counter-type-input').val(),
+                KazanIciUsd: parseFloat(row.find('.kazan-ici-usd-input').val()) || 0,
+                KazanIciEur: parseFloat(row.find('.kazan-ici-eur-input').val()) || 0,
+                KarlilikOrani: parseFloat(row.find('.karlilik-orani-input').val()) || 0,
+                KarlilikYuzdesi: parseFloat(row.find('.karlilik-yuzdesi-input').val()) || 0,
+                AmbalajIbc: parseFloat(row.find('.ambalaj-ibc-input').val()) || 0,
+                AmbalajDrums: parseFloat(row.find('.ambalaj-drums-input').val()) || 0,
+                AmbalajBulk: parseFloat(row.find('.ambalaj-bulk-input').val()) || 0,
+                Indirim: parseFloat(row.find('.indirim-input').val()) || 0,
+                Kar: parseFloat(row.find('.kar-input').val()) || 0,
+                Komisyon: parseFloat(row.find('.komisyon-input').val()) || 0,
+                Vade: row.find('.vade-input').val(),
+                ExwMasraf: parseFloat(row.find('.exw-masraf-input').val()) || 0,
+                ExwIbcUsdKg: parseFloat(row.find('.exw-ibc-usd-kg-input').val()) || 0,
+                ExwDrumsUsdKg: parseFloat(row.find('.exw-drums-usd-kg-input').val()) || 0,
+                FobIbcUsdKg: parseFloat(row.find('.fob-ibc-usd-kg-input').val()) || 0,
+                FobDrumsUsdKg: parseFloat(row.find('.fob-drums-usd-kg-input').val()) || 0
+            });
+        }
+    });
+
+    // Asıl SaveData metodunu çağırın
+    $.ajax({
+        url: '/Rapor16/SaveData' + dbQueryString, 
+        type: 'POST',
+        contentType: 'application/json',
+        headers: { 'RequestVerificationToken': antiForgeryToken }, // CSRF Token Eklendi
+        data: JSON.stringify(model),
+        success: function (response) {
+            if (response.success) {
+                alert('Veriler başarıyla kaydedildi!');
+                window.location.href = '/Rapor16/Index' + dbQueryString + (dbQueryString ? '&' : '?') + 'docEntry=' + response.docEntry;
+            } else {
+                alert('Hata: ' + response.error);
+            }
+        },
+        error: function (error) {
+            alert('Kaydetme işlemi sırasında bir hata oluştu.');
+            console.log("Kaydetme hatası: ", error.responseText);
+        }
+    });
+});
+
+            // Sayfa yüklendiğinde masrafları ilk kez hesapla
+            updateAllCosts();
+        });
+    </script>
+}

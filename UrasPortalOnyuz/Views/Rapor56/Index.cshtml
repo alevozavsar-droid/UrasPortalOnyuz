@@ -1,0 +1,649 @@
+﻿@{
+    ViewData["Title"] = "Konsolide 0 TL Kalem Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // 1. KURAL: URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+
+    <style>
+        /* --- KURUMSAL TASARIM (Sıkılaştırılmış) --- */
+        :root {
+            --primary-color: #0d6efd;
+            --secondary-color: #6c757d;
+            --info-color: #0dcaf0;
+            --light-bg: #f8f9fa;
+            --dark-text: #212529;
+            --border-color: #dee2e6;
+            --header-bg: #212529;
+            --header-text: #ffffff;
+            --box-shadow-medium: 0 1px 3px rgba(0, 0, 0, 0.1);
+            /* Yükseklik Tanımları (Çakışmayı önlemek için sabit değerler) */
+            --toolbar-height: 42px;
+            --header-row-height: 32px;
+            --filter-row-height: 30px;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 11.5px;
+            background-color: var(--light-bg);
+            color: var(--dark-text);
+            overflow-y: hidden; /* Ana scroll'u tabloya bırak */
+        }
+
+        /* Ana İçerik Kutusu */
+        .main-content {
+            margin-top: 0 !important;
+            padding: 0; /* İç boşluğu sıfırladık */
+            background-color: #ffffff;
+            border-radius: 0;
+            height: 100vh; /* Ekranı tam kapla */
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- TOOLBAR --- */
+        .sticky-toolbar {
+            flex: 0 0 var(--toolbar-height); /* Sabit yükseklik */
+            background-color: #ffffff;
+            border-bottom: 1px solid var(--border-color);
+            padding: 0 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .total-amount-display span {
+            font-weight: 600;
+            color: #555;
+            font-size: 0.85em;
+        }
+
+        .total-amount-display strong {
+            font-size: 1.05em;
+            margin-left: 4px;
+        }
+
+        /* --- TABLO ALANI --- */
+        .table-container {
+            flex: 1; /* Kalan tüm alanı kapla */
+            overflow: auto; /* Hem yatay hem dikey scroll burada olacak */
+            position: relative;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .rapor-tablo {
+            width: max-content;
+            min-width: 100%;
+            border-collapse: separate; /* Sticky header için şart */
+            border-spacing: 0;
+            font-size: 0.82em;
+            color: var(--dark-text);
+            table-layout: fixed;
+        }
+
+            /* --- HEADER SABİTLEME (Sticky Logic) --- */
+            .rapor-tablo thead {
+                background-color: #ffffff;
+                position: sticky;
+                top: 0;
+                z-index: 102;
+            }
+
+                /* 1. Satır: Başlıklar */
+                .rapor-tablo thead tr.main-header-row th {
+                    position: sticky;
+                    top: 0; /* Toolbar artık tablonun dışında, o yüzden 0 */
+                    z-index: 103;
+                    background-color: var(--header-bg);
+                    color: var(--header-text);
+                    padding: 0 4px;
+                    text-align: center;
+                    font-weight: 700;
+                    border-right: 1px solid #444;
+                    border-bottom: 1px solid #444;
+                    height: var(--header-row-height);
+                    vertical-align: middle;
+                    white-space: nowrap;
+                    cursor: pointer;
+                }
+
+                /* 2. Satır: Filtreler */
+                .rapor-tablo thead tr.filter-row th {
+                    position: sticky;
+                    top: var(--header-row-height); /* Tam olarak üst satırın bittiği yer */
+                    z-index: 102;
+                    padding: 2px;
+                    height: var(--filter-row-height);
+                    background-color: #f1f3f5; /* Hafif gri */
+                    border-right: 1px solid #ccc;
+                    border-bottom: 2px solid #bbb; /* Veriden ayırmak için kalın çizgi */
+                    vertical-align: middle;
+                }
+
+            /* --- HÜCRELER --- */
+            .rapor-tablo td {
+                padding: 1px 4px;
+                vertical-align: middle;
+                border-right: 1px solid var(--border-color);
+                border-bottom: 1px solid var(--border-color);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                height: 26px;
+            }
+
+            .rapor-tablo tbody tr.selected {
+                background-color: #e6f7ff;
+            }
+
+            .rapor-tablo tbody tr:hover {
+                background-color: #f8f9fa;
+            }
+
+        /* --- CHECKBOX SÜTUNU --- */
+        .checkbox-column {
+            width: 28px !important;
+            min-width: 28px !important;
+            max-width: 28px !important;
+            text-align: center !important;
+            padding: 0 !important;
+            vertical-align: middle !important;
+        }
+
+            .checkbox-column input {
+                margin: 0;
+                vertical-align: middle;
+                cursor: pointer;
+                width: 13px;
+                height: 13px;
+                display: inline-block;
+            }
+
+        /* --- INPUT & SELECT STİLLERİ --- */
+        .filter-input, .filter-select {
+            width: 100%;
+            height: 22px; /* Çok kompakt */
+            padding: 0 4px;
+            font-size: 0.75rem;
+            border: 1px solid #ced4da;
+            border-radius: 2px;
+            background-color: white;
+        }
+
+            .filter-input:focus, .filter-select:focus {
+                border-color: var(--primary-color);
+                outline: none;
+            }
+
+        /* --- SÜTUN GENİŞLİKLERİ --- */
+        .w-sirket {
+            width: 95px;
+            min-width: 95px;
+        }
+
+        .w-belgeno {
+            width: 75px;
+            min-width: 75px;
+        }
+
+        .w-tur {
+            width: 65px;
+            min-width: 65px;
+        }
+
+        .w-tarih {
+            width: 80px;
+            min-width: 80px;
+        }
+
+        .w-musteri {
+            width: 230px;
+            min-width: 230px;
+        }
+
+        .w-temsilci {
+            width: 130px;
+            min-width: 130px;
+        }
+
+        .w-stokkod {
+            width: 120px;
+            min-width: 120px;
+        }
+
+        .w-stokadi {
+            width: 260px;
+            min-width: 260px;
+        }
+
+        .w-miktar {
+            width: 65px;
+            min-width: 65px;
+        }
+
+        .w-birim {
+            width: 65px;
+            min-width: 65px;
+        }
+
+        .w-kaynak {
+            width: 90px;
+            min-width: 90px;
+        }
+
+        .w-fiyat {
+            width: 90px;
+            min-width: 90px;
+        }
+
+        .w-tutar {
+            width: 110px;
+            min-width: 110px;
+        }
+
+        /* --- BADGES --- */
+        .badge {
+            font-weight: normal;
+            font-size: 0.75em;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+
+        .badge-uraskimya {
+            background-color: #0d6efd;
+        }
+
+        .badge-ursmakine {
+            background-color: #6610f2;
+        }
+
+        .badge-avrupa {
+            background-color: #fd7e14;
+        }
+
+        .badge-default {
+            background-color: #6c757d;
+        }
+
+        .badge-type {
+            width: 100%;
+            display: block;
+            padding: 1px 0;
+        }
+
+        .badge-fatura {
+            background-color: #198754;
+            color: white;
+        }
+
+        .badge-iade {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .badge-source {
+            width: 100%;
+            display: block;
+            padding: 1px 0;
+        }
+
+        .src-fatura {
+            background-color: #198754;
+            color: white;
+        }
+
+        .src-siparis {
+            background-color: #0dcaf0;
+            color: black;
+        }
+
+        .src-teslimat {
+            background-color: #6610f2;
+            color: white;
+        }
+
+        .src-acilis {
+            background-color: #ffc107;
+            color: black;
+        }
+
+        .src-yok {
+            background-color: #adb5bd;
+            color: white;
+        }
+
+        /* Footer */
+        .footer-info {
+            flex: 0 0 24px;
+            background-color: #f8f9fa;
+            border-top: 1px solid #dee2e6;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 10px;
+            font-size: 0.75rem;
+            color: #666;
+        }
+    </style>
+}
+
+@* 2. KURAL: Güvenlik (CSRF) - Yetkisiz veri işlemlerini engellemek için eklendi *@
+@Html.AntiForgeryToken()
+
+<div class="container-fluid py-1 px-1 h-100">
+    <div class="row g-0 h-100">
+        <div class="col-md-12 main-content">
+
+            <div id="loadingOverlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background-color: rgba(255, 255, 255, 0.85); z-index: 2000;">
+                <div class="spinner-border text-primary" style="width: 2rem; height: 2rem;" role="status"></div>
+                <div class="mt-2 fw-bold text-primary" style="font-size:0.9em;">Veriler Toplanıyor...</div>
+            </div>
+
+            <div class="sticky-toolbar">
+                <div class="d-flex align-items-center">
+                    <div class="me-3">
+                        <span class="badge bg-dark text-white"><i class="fas fa-layer-group me-1"></i> Konsolide 0 TL</span>
+                    </div>
+
+                    <div class="total-amount-display me-3 ps-3 border-start">
+                        <span>Seçili:</span>
+                        <strong id="selectedTotalAmount" class="text-primary">0,00 TL</strong>
+                    </div>
+
+                    <div class="total-amount-display ms-2 ps-3 border-start">
+                        <span>Genel:</span>
+                        <strong id="grandTotalAmount" class="text-success">0,00 TL</strong>
+                    </div>
+                </div>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary" style="font-size:0.75rem; padding: 2px 8px;" onclick="loadData()">
+                        <i class="fas fa-sync-alt"></i> Yenile
+                    </button>
+                    <button class="btn btn-sm btn-outline-success ms-1" style="font-size:0.75rem; padding: 2px 8px;" onclick="exportToExcel()">
+                        <i class="fas fa-file-excel"></i> Excel
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table class="table table-bordered table-striped table-hover rapor-tablo" id="reportTable">
+                    <thead>
+                        <tr class="main-header-row">
+                            <th class="w-check checkbox-column" title="Tümünü Seç">
+                                <input type="checkbox" id="selectAllCheckbox" class="form-check-input" />
+                            </th>
+                            <th class="w-sirket sortable-column" data-column="sirketAdi">Şirket <i class="fas fa-sort float-end"></i></th>
+                            <th class="w-belgeno sortable-column" data-column="belgeNumarasi">Belge No <i class="fas fa-sort float-end"></i></th>
+                            <th class="w-tur sortable-column text-center" data-column="belgeTipi">Tür <i class="fas fa-sort float-end"></i></th>
+                            <th class="w-tarih sortable-column" data-column="belgeTarihiRaw">Tarih <i class="fas fa-sort float-end"></i></th>
+                            <th class="w-musteri sortable-column" data-column="musteriAdi">Müşteri Adı <i class="fas fa-sort float-end"></i></th>
+                            <th class="w-temsilci sortable-column" data-column="satisTemsilcisi">Temsilci <i class="fas fa-sort float-end"></i></th>
+                            <th class="w-stokkod sortable-column" data-column="stokKodu">Stok Kodu <i class="fas fa-sort float-end"></i></th>
+                            <th class="w-stokadi sortable-column" data-column="stokAdi">Stok Adı <i class="fas fa-sort float-end"></i></th>
+                            <th class="w-miktar sortable-column text-end" data-column="miktar">Miktar <i class="fas fa-sort float-end"></i></th>
+                            <th class="w-birim sortable-column text-center" data-column="birim">Birim <i class="fas fa-sort float-end"></i></th>
+                            <th class="w-kaynak sortable-column text-center" data-column="fiyatKaynagi">Kaynak <i class="fas fa-sort float-end"></i></th>
+                            <th class="w-fiyat sortable-column text-end" data-column="sonBirimFiyat">Ref. Fiyat <i class="fas fa-sort float-end"></i></th>
+                            <th class="w-tutar sortable-column text-end" data-column="tahminiToplamDeger">Tahmini <i class="fas fa-sort float-end"></i></th>
+                        </tr>
+
+                        <tr class="filter-row">
+                            <th class="checkbox-column"></th>
+                            <th><select class="filter-select" data-column="sirketAdi"><option value="">Tümü</option></select></th>
+                            <th><input type="text" class="filter-input" data-column="belgeNumarasi" placeholder="Ara..." /></th>
+                            <th><select class="filter-select" data-column="belgeTipi"><option value="">Tümü</option></select></th>
+                            <th><input type="text" class="filter-input" data-column="belgeTarihi" placeholder="Ara..." /></th>
+                            <th><select class="filter-select" data-column="musteriAdi"><option value="">Tümü</option></select></th>
+                            <th><select class="filter-select" data-column="satisTemsilcisi"><option value="">Tümü</option></select></th>
+                            <th><input type="text" class="filter-input" data-column="stokKodu" placeholder="Ara..." /></th>
+                            <th><input type="text" class="filter-input" data-column="stokAdi" placeholder="Ara..." /></th>
+                            <th></th>
+                            <th></th>
+                            <th><select class="filter-select" data-column="fiyatKaynagi"><option value="">Tümü</option></select></th>
+                            <th></th>
+                            <th><input type="text" class="filter-input" data-column="tahminiToplamDeger" placeholder="> Tutar" /></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="footer-info">
+                <span><i class="fas fa-info-circle me-1"></i>Öncelik: Fatura > Sipariş > Teslimat > Açılış</span>
+                <div>
+                    Toplam Kayıt: <strong id="totalRecordsCount">0</strong>
+                </div>
+            </div>
+
+            @* 4. KURAL: UI/UX Standartlarına uygun şık, db parametreli Ana Sayfa butonu *@
+            <div class="mt-4 mb-2 text-center">
+                <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+                    <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+                </a>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <script>
+        // 1. KURAL İÇİN JS DEĞİŞKENİ: Aktif Şirketi JavaScript tarafında hafızaya alıyoruz
+        const activeDbCode = '@currentDb';
+
+        let fullData = [];
+        let filteredData = [];
+        let currentSortColumn = "belgeTarihiRaw";
+        let currentSortDirection = "desc";
+
+        $(document).ready(function () {
+            loadData();
+
+            $('.filter-input').on('keyup', function () { applyFilters(); });
+            $('.filter-select').on('change', function () { applyFilters(); });
+
+            $('.sortable-column').on('click', function () {
+                const column = $(this).data('column');
+                if (currentSortColumn === column) {
+                    currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSortColumn = column;
+                    currentSortDirection = 'asc';
+                }
+
+                $('.sortable-column i.fas').removeClass('fa-sort-up fa-sort-down text-primary').addClass('fa-sort text-muted');
+                $(this).find('i.fas').removeClass('fa-sort text-muted').addClass(currentSortDirection === 'asc' ? 'fa-sort-up text-primary' : 'fa-sort-down text-primary');
+
+                applySorting();
+                renderTable();
+            });
+
+            $('#selectAllCheckbox').on('change', function() {
+                const isChecked = this.checked;
+                $('.row-selector').prop('checked', isChecked);
+                if(isChecked) $('.row-selector').closest('tr').addClass('selected');
+                else $('.row-selector').closest('tr').removeClass('selected');
+                calculateSelectedTotal();
+            });
+
+            $(document).on('change', '.row-selector', function() {
+                const row = $(this).closest('tr');
+                if(this.checked) row.addClass('selected');
+                else row.removeClass('selected');
+                calculateSelectedTotal();
+            });
+        });
+
+        function loadData() {
+            $('#loadingOverlay').show();
+            $('#selectAllCheckbox').prop('checked', false);
+
+            $.ajax({
+                // 1. KURAL: URL sonuna ?db= eklenerek veri çekme işleminde şirket kaybetme sorunu çözüldü
+                url: '/Rapor56/GetData?db=' + activeDbCode,
+                type: 'GET',
+                success: function (response) {
+                    fullData = response.data;
+                    populateDropdowns();
+                    applyFilters();
+
+                    let grandTotal = fullData.reduce((acc, item) => acc + item.tahminiToplamDeger, 0);
+                    $('#grandTotalAmount').text(formatNumber(grandTotal) + ' TL');
+
+                    toastr.success(`${response.totalRecords} kayıt yüklendi.`);
+                },
+                error: function (err) {
+                    console.error(err);
+                    toastr.error('Veri hatası.');
+                },
+                complete: function () {
+                    $('#loadingOverlay').hide();
+                }
+            });
+        }
+
+        function populateDropdowns() {
+            const cols = ['sirketAdi', 'belgeTipi', 'musteriAdi', 'satisTemsilcisi', 'fiyatKaynagi'];
+            cols.forEach(colKey => {
+                const uniqueValues = [...new Set(fullData.map(item => item[colKey]))].filter(x => x).sort();
+                const selectEl = $(`.filter-select[data-column="${colKey}"]`);
+                selectEl.find('option:not(:first)').remove();
+                uniqueValues.forEach(val => {
+                    selectEl.append(`<option value="${val}">${val}</option>`);
+                });
+            });
+        }
+
+        function applyFilters() {
+            filteredData = fullData.filter(item => {
+                let isValid = true;
+
+                $('.filter-input').each(function() {
+                    const col = $(this).data('column');
+                    const val = $(this).val().toLowerCase();
+                    if (val && item[col] != null) {
+                        if (!item[col].toString().toLowerCase().includes(val)) {
+                            isValid = false; return false;
+                        }
+                    }
+                });
+                if (!isValid) return false;
+
+                $('.filter-select').each(function() {
+                    const col = $(this).data('column');
+                    const val = $(this).val();
+                    if (val && val !== "") {
+                        if (item[col] !== val) {
+                            isValid = false; return false;
+                        }
+                    }
+                });
+                return isValid;
+            });
+
+            $('#totalRecordsCount').text(filteredData.length);
+            applySorting();
+            renderTable();
+        }
+
+        function applySorting() {
+            filteredData.sort((a, b) => {
+                let valA = a[currentSortColumn];
+                let valB = b[currentSortColumn];
+                if (valA == null) valA = "";
+                if (valB == null) valB = "";
+
+                if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
+
+                if (valA < valB) return currentSortDirection === 'asc' ? -1 : 1;
+                if (valA > valB) return currentSortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
+        function renderTable() {
+            const tbody = $('#tableBody');
+            tbody.empty();
+
+            if (filteredData.length === 0) {
+                tbody.append('<tr><td colspan="14" class="text-center py-4 text-muted">Kayıt yok.</td></tr>');
+                calculateSelectedTotal();
+                return;
+            }
+
+            const rows = filteredData.map(item => {
+                let badgeClass = 'badge-default';
+                if (item.sirketAdi.includes('URASKIMYA')) badgeClass = 'badge-uraskimya';
+                else if (item.sirketAdi.includes('MAKINE')) badgeClass = 'badge-ursmakine';
+                else if (item.sirketAdi.includes('AVRUPA')) badgeClass = 'badge-avrupa';
+
+                let typeBadge = item.belgeTipi === 'İade'
+                    ? '<span class="badge-type badge-iade">İade</span>'
+                    : '<span class="badge-type badge-fatura">Fatura</span>';
+
+                let srcClass = 'src-yok';
+                if (item.fiyatKaynagi === 'Son Fatura') srcClass = 'src-fatura';
+                else if (item.fiyatKaynagi === 'Sipariş') srcClass = 'src-siparis';
+                else if (item.fiyatKaynagi === 'Teslimat') srcClass = 'src-teslimat';
+                else if (item.fiyatKaynagi === 'Açılış Bak.') srcClass = 'src-acilis';
+
+                return `
+                    <tr data-val="${item.tahminiToplamDeger}">
+                        <td class="checkbox-column">
+                            <input type="checkbox" class="form-check-input row-selector" />
+                        </td>
+                        <td><span class="badge-company badge text-white ${badgeClass}">${item.sirketAdi}</span></td>
+                        <td>${item.belgeNumarasi}</td>
+                        <td>${typeBadge}</td>
+                        <td>${item.belgeTarihi}</td>
+                        <td title="${item.musteriAdi}">${item.musteriAdi}</td>
+                        <td title="${item.satisTemsilcisi}">${item.satisTemsilcisi}</td>
+                        <td>${item.stokKodu}</td>
+                        <td title="${item.stokAdi}">${item.stokAdi}</td>
+                        <td class="text-end">${formatNumber(item.miktar)}</td>
+                        <td class="text-center">${item.birim}</td>
+                        <td><span class="badge-source ${srcClass}">${item.fiyatKaynagi}</span></td>
+                        <td class="text-end text-muted">${formatNumber(item.sonBirimFiyat)} ${item.paraBirimi}</td>
+                        <td class="text-end fw-bold text-primary">${formatNumber(item.tahminiToplamDeger)} ${item.paraBirimi}</td>
+                    </tr>
+                `;
+            });
+
+            tbody.html(rows.join(''));
+            $('#selectAllCheckbox').prop('checked', false);
+            calculateSelectedTotal();
+        }
+
+        function calculateSelectedTotal() {
+            let total = 0;
+            $('.row-selector:checked').each(function() {
+                const val = parseFloat($(this).closest('tr').data('val'));
+                if (!isNaN(val)) total += val;
+            });
+            $('#selectedTotalAmount').text(formatNumber(total) + " TL");
+        }
+
+        function formatNumber(num) {
+            if (num === null || num === undefined) return '0,00';
+            return parseFloat(num).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function exportToExcel() {
+            const table = document.getElementById("reportTable");
+            const wb = XLSX.utils.table_to_book(table, {sheet: "Rapor"});
+            XLSX.writeFile(wb, "0TL_Rapor.xlsx");
+        }
+    </script>
+}

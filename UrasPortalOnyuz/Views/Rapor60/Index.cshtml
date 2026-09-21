@@ -1,0 +1,522 @@
+﻿@model WebApplication3.Models.CekEkstreSonucModel
+@{
+    ViewData["Title"] = "Belge Ekstresi ve Hareket Analizi";
+    Layout = "~/Views/Shared/_Layout.cshtml"; 
+    
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+
+    var checkList = ViewBag.CekListesi as List<WebApplication3.Models.CekListeItem>;
+    var selectedCheckNum = ViewBag.SelectedCheckNum as string;
+    var mainRecord = Model?.MainRecord;
+    bool konsolideAktif = ViewBag.Konsolide is bool kb && kb;
+
+    // Belgenin türüne göre ekranda yazan "Çek" kelimelerini dinamik hale getiriyoruz
+    string belgeAdi = mainRecord != null && !string.IsNullOrEmpty(mainRecord.BelgeTipi) ? mainRecord.BelgeTipi : "Çek/Senet";
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <style>
+        .card-header-custom {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 0.75rem 1rem; 
+        }
+
+        .info-label { font-size: 0.65rem; color: #6c757d; text-transform: uppercase; font-weight: 700; margin-bottom: 0px; letter-spacing: 0.5px; }
+        .info-val { font-weight: 700; font-size: 0.95rem;  color: #212529; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .story-container { background-color: #f8f9fa; border-left: 4px solid #ffc107; border-radius: 5px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .story-title { font-weight: bold; color: #495057; font-size: 1.1rem; border-bottom: 1px solid #e9ecef; padding-bottom: 8px; margin-bottom: 12px; }
+        .story-timeline { border-left: 2px solid #dee2e6; padding-left: 15px; margin-left: 10px; }
+        .story-item { position: relative; padding-bottom: 10px; font-size: 0.9rem; }
+        .story-icon { position: absolute; left: -22px; top: 4px; background: #f8f9fa; border-radius: 50%; padding: 2px; }
+
+        .table-compact th { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; background-color: #f8f9fa; color: #6c757d; padding: 8px 5px;  vertical-align: middle; }
+        .table-compact td { font-size: 0.75rem; padding: 6px 5px; vertical-align: middle; }
+
+        .row-iptal { background-color: #fff5f5 !important; opacity: 0.9; }
+        .row-iptal td { color: #c0392b; }
+
+        .badge-islem { font-size: 0.65rem; font-weight: 600; padding: 4px 8px; }
+        .badge-link { font-size: 0.7rem; font-weight: 700; padding: 4px 6px; letter-spacing: 0.5px; }
+        
+        .table-hover tbody tr:hover { background-color: #f1f3f5 !important; }
+    </style>
+}
+
+@Html.AntiForgeryToken()
+
+<div class="container-fluid mt-3">
+
+    @if (ViewBag.ErrorMessage != null)
+    {
+        <div class="alert alert-danger shadow-sm border-0 py-2" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i> @ViewBag.ErrorMessage
+        </div>
+    }
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success shadow-sm border-0 py-2 d-print-none" role="alert">
+            <i class="fas fa-check-circle me-2"></i> @TempData["SuccessMessage"]
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger shadow-sm border-0 py-2 d-print-none" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i> @TempData["ErrorMessage"]
+        </div>
+    }
+
+@{
+    // Nereden gelindiyse oraya donulur. Yalnizca site ici goreli yol kabul
+    // edilir ("//" ile baslayan disari yonlendirme denemesi reddedilir).
+    var geriAdres = Context.Request.Query["geri"].ToString();
+    if (string.IsNullOrWhiteSpace(geriAdres) || !geriAdres.StartsWith("/") || geriAdres.StartsWith("//"))
+    {
+        geriAdres = "/CekAkibeti" + (string.IsNullOrEmpty(currentDb) ? "" : "?db=" + currentDb);
+    }
+}
+
+    <div class="mb-3 d-print-none" data-html2canvas-ignore="true">
+        <a href="@geriAdres" class="btn btn-outline-secondary btn-sm fw-bold shadow-sm">
+            <i class="fas fa-arrow-left me-2"></i> Çek Akıbetine Dön
+        </a>
+    </div>
+
+    <div class="card shadow-sm mb-3 border-0 d-print-none" data-html2canvas-ignore="true">
+        <div class="card-body p-3">
+            <form method="get" asp-action="Index" asp-controller="Rapor60">
+                <input type="hidden" name="db" value="@currentDb" />
+                @* Baska bir cek secilse de donus adresi kaybolmasin *@
+                <input type="hidden" name="geri" value="@Context.Request.Query["geri"]" />
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-8">
+                        <label class="form-label text-muted small fw-bold mb-1">BELGE SEÇİMİ</label>
+                        <select class="form-select form-select-sm" id="checkSelect" name="checkNum">
+                            <option value="">-- Çek veya Senet Numarası Seçiniz --</option>
+                            @if (checkList != null)
+                            {
+                                foreach (var item in checkList)
+                                {
+                                    <option value="@item.CheckNum" selected="@(item.CheckNum == selectedCheckNum)">
+                                        @item.CheckNum - @item.CheckSum.ToString("N2") @item.Currency (@item.BankCode)
+                                    </option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="form-check form-switch pb-1">
+                            <input class="form-check-input" type="checkbox" role="switch" id="konsolideCheck" name="konsolide" value="true" checked="@konsolideAktif" />
+                            <label class="form-check-label small fw-bold text-muted" for="konsolideCheck" title="Aynı çek no + aynı banka koduyla diğer tüm şirketlerdeki hareketleri de listeye ekler.">
+                                Konsolide (Tüm Şirketler)
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold shadow-sm" style="height: 34px;">
+                            <i class="fas fa-search me-1"></i> GETİR
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (mainRecord != null)
+    {
+        <div id="pdfPrintArea">
+            
+            <div class="d-flex justify-content-between align-items-center mb-3" data-html2canvas-ignore="true">
+                <h5 class="m-0 text-secondary fw-bold">@belgeAdi Raporu</h5>
+                
+                <div class="d-flex gap-2">
+                    @if (ViewBag.FizikselBelgeYolu != null)
+                    {
+                        <a href="@ViewBag.FizikselBelgeYolu" target="_blank" class="btn btn-info btn-sm shadow-sm fw-bold text-white">
+                            <i class="fas fa-eye me-1"></i> Görüntüle
+                        </a>
+                    }
+
+                    <button type="button" class="btn btn-outline-primary btn-sm shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                        <i class="fas fa-upload me-1"></i> Dosya Yükle
+                    </button>
+
+                    <button onclick="downloadPDF()" class="btn btn-danger btn-sm shadow-sm fw-bold">
+                        <i class="fas fa-file-pdf me-1"></i> PDF Kaydet
+                    </button>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(ViewBag.KritikUyari))
+            {
+                @Html.Raw(ViewBag.KritikUyari)
+            }
+
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-header card-header-custom">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-file-invoice-dollar fa-lg me-2 opacity-75"></i>
+                            <div>
+                                <span class="opacity-75 small d-block text-uppercase" style="line-height:1;">@belgeAdi NO</span>
+                                <span class="fw-bold font-monospace fs-5">@mainRecord.CekNumarasi</span>
+                            </div>
+                        </div>
+                        @{
+                            string headerBadgeClass = "bg-secondary";
+                            var lastStatus = mainRecord.KullanimDurumu;
+
+                            if (lastStatus.Contains("Portföy")) headerBadgeClass = "bg-warning text-dark";
+                            else if (mainRecord.IptalMi) headerBadgeClass = "bg-danger text-white";
+                            else headerBadgeClass = "bg-success text-white";
+                        }
+                        <div class="text-end">
+                            <span class="opacity-75 small d-block" style="line-height:1;">GERÇEK GÜNCEL KONUM</span>
+                            <span class="badge @headerBadgeClass rounded-pill shadow-sm text-uppercase" style="font-size: 0.75rem;">
+                                @lastStatus
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body bg-white py-3">
+                    <div class="row g-3">
+                        <div class="col-md-2 border-end">
+                            <div class="info-label">TUTAR</div>
+                            <div class="info-val text-primary">@((mainRecord.CekTutari).ToString("N2")) @mainRecord.ParaBirimi</div>
+                            <div class="text-muted fw-bold" style="font-size: 0.7rem;">
+                                TL: @((mainRecord.TLKarsiligi).ToString("N2")) ₺
+                            </div>
+                        </div>
+
+                        <div class="col-md-3 border-end">
+                            <div class="info-label text-uppercase">@belgeAdi KİMDEN GELDİ</div>
+                            <div class="info-val text-truncate" title="@mainRecord.CekKimdenGeldi">
+                                <i class="fas fa-arrow-down text-success me-1 small"></i>
+                                @if (!string.IsNullOrEmpty(mainRecord.CekKimdenGeldiKod))
+                                {
+                                    <span class="badge bg-light text-dark border font-monospace me-1" style="font-size:0.7rem;">@mainRecord.CekKimdenGeldiKod</span>
+                                }
+                                @(!string.IsNullOrEmpty(mainRecord.CekKimdenGeldi) ? mainRecord.CekKimdenGeldi : "-")
+                            </div>
+                        </div>
+
+                        <div class="col-md-3 border-end">
+                            <div class="info-label">ASIL BORÇLU</div>
+                            <div class="info-val text-truncate" title="@mainRecord.AsilBorclu">
+                                <i class="fas fa-user-tag text-info me-1 small"></i>
+                                @(!string.IsNullOrEmpty(mainRecord.AsilBorclu) ? mainRecord.AsilBorclu : "-")
+                            </div>
+                        </div>
+
+                        <div class="col-md-2 border-end">
+                            <div class="info-label">BANKA / ŞUBE</div>
+                            <div class="info-val text-truncate" title="@mainRecord.BankaAdi">@mainRecord.BankaAdi</div>
+                            <div class="small text-muted text-truncate">@mainRecord.Sube</div>
+                        </div>
+
+                        <div class="col-md-2">
+                            <div class="info-label">VADE TARİHİ</div>
+                            <div class="info-val text-danger">
+                                <i class="far fa-calendar-alt me-1"></i> @mainRecord.VadeTarihi
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(Model.HikayeHtml))
+            {
+                <div class="story-container shadow-sm">
+                    <div class="story-title"><i class="fas fa-book-open me-2 text-warning"></i> @belgeAdi Serüveni</div>
+                    @Html.Raw(Model.HikayeHtml)
+                </div>
+            }
+
+            <div class="card shadow-sm border-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-compact align-middle mb-0 text-nowrap">
+                        <thead>
+                            <tr>
+                                <th style="width: 2%" class="text-center">#</th>
+                                <th style="width: 8%">TARİH</th>
+                                <th style="width: 12%">İŞLEM TÜRÜ</th>
+                                <th style="width: 18%">AÇIKLAMA (Ne Oldu?)</th>
+                                <th style="width: 10%">TAHSİLAT NO</th>
+                                <th style="width: 10%">İBRAZ / CİRO NO</th>
+                                <th style="width: 10%">VADELİ İBRAZ NO</th>
+                                <th style="width: 12%">İŞLEM YERİ / MUHATAP</th>
+                                <th style="width: 8%" class="text-center">KONUM</th>
+                                <th style="width: 8%" class="text-center">İŞLEM TİPİ</th>
+                                <th style="width: 10%">KULLANICI</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{
+                                int rowCount = 1;
+                                
+                                Func<string, Microsoft.AspNetCore.Html.IHtmlContent> FormatBelgeNo = (belgeNo) =>
+                                {
+                                    if (string.IsNullOrEmpty(belgeNo) || belgeNo == "-") 
+                                        return Html.Raw("<span class='text-muted'>-</span>");
+                                    
+                                    if (belgeNo.Contains("-> İPTAL YEVMİYE:"))
+                                    {
+                                        var parts = belgeNo.Split(new[] { "-> İPTAL YEVMİYE:" }, StringSplitOptions.None);
+                                        return Html.Raw($@"
+                                            <div class='d-flex flex-column gap-1' style='max-width: 120px;'>
+                                                <span class='badge bg-light text-dark border shadow-sm badge-link text-decoration-line-through text-muted'>{parts[0].Trim()}</span>
+                                                <span class='badge bg-danger shadow-sm' style='font-size: 0.65rem;'>İptal Yev: {parts[1].Trim()}</span>
+                                            </div>");
+                                    }
+                                    
+                                    if (belgeNo.Contains("-> İPTAL BELGE:"))
+                                    {
+                                        var parts = belgeNo.Split(new[] { "-> İPTAL BELGE:" }, StringSplitOptions.None);
+                                        return Html.Raw($@"
+                                            <div class='d-flex flex-column gap-1' style='max-width: 120px;'>
+                                                <span class='badge bg-light text-dark border shadow-sm badge-link text-decoration-line-through text-muted'>{parts[0].Trim()}</span>
+                                                <span class='badge bg-danger shadow-sm' style='font-size: 0.65rem;'>İptal Belge: {parts[1].Trim()}</span>
+                                            </div>");
+                                    }
+                                    
+                                    return Html.Raw($"<span class='badge bg-light text-dark border badge-link shadow-sm'>{belgeNo}</span>");
+                                };
+                            }
+                            @{ string sonSirket = null; }
+                            @foreach (var item in Model.Hareketler)
+                            {
+                                if (konsolideAktif && item.SirketAdi != sonSirket)
+                                {
+                                    sonSirket = item.SirketAdi;
+                                    bool anaSirketMi = sonSirket == ViewBag.CurrentDbDisplay as string;
+                                    <tr class="table-secondary">
+                                        <td colspan="11" class="fw-bold py-2" style="font-size:0.8rem; background-color:#eef2f7;">
+                                            <i class="fas fa-building me-1"></i> @sonSirket
+                                            @if (anaSirketMi)
+                                            {
+                                                <span class="badge bg-primary ms-1" style="font-size:0.6rem;">SEÇİLİ ŞİRKET</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+
+                                string rowClass = item.IptalMi ? "row-iptal" : "";
+                                string icon = item.IptalMi ? "fa-ban" : "fa-check-circle";
+                                string badgeClass = "bg-secondary";
+
+                                if (item.IptalMi) { badgeClass = "bg-danger"; }
+                                else if (item.CekIslemTuru.Contains("Tahsil") || item.CekIslemTuru.Contains("Bankada")) { icon = "fa-check-double"; badgeClass = "bg-success"; }
+                                else if (item.CekIslemTuru.Contains("Giriş")) { icon = "fa-arrow-right"; badgeClass = "bg-primary"; }
+                                else if (item.CekIslemTuru.Contains("Ciro")) { icon = "fa-hand-holding-usd"; badgeClass = "bg-warning text-dark"; }
+                                else if (item.CekIslemTuru.Contains("Vadeli")) { icon = "fa-clock"; badgeClass = "bg-info text-dark"; }
+
+                                <tr class="@rowClass">
+                                    <td class="text-center fw-bold text-muted">@rowCount</td>
+
+                                    <td class="fw-bold text-dark font-monospace">@item.IbrazTarihi</td>
+                                    
+                                    <td>
+                                        <span class="badge @badgeClass badge-islem w-100 text-start text-wrap" style="line-height:1.2">
+                                            <i class="fas @icon me-1"></i> @item.CekIslemTuru
+                                        </span>
+                                    </td>
+
+                                    <td>
+                                        <div class="text-wrap small fw-bold text-dark" style="max-width: 250px; line-height:1.3;">
+                                            @item.HareketDurumu
+                                        </div>
+                                        @if (item.IptalMi)
+                                        {
+                                            var cekDegisiklikleri = ViewBag.CekDegisiklikleri as Dictionary<string, WebApplication3.Models.CekDegisiklikOzeti>;
+                                            string degKey = $"{item.DocEntry}_{item.SirketAdi}_{item.SequenceID}";
+                                            WebApplication3.Models.CekDegisiklikOzeti degOzet = null;
+                                            cekDegisiklikleri?.TryGetValue(degKey, out degOzet);
+                                            string modalId = "degModal_" + Math.Abs(degKey.GetHashCode());
+
+                                            <button type="button" class="btn btn-outline-danger btn-sm mt-1 py-0 px-2 d-print-none" style="font-size:0.65rem;" data-bs-toggle="modal" data-bs-target="#@modalId" data-html2canvas-ignore="true">
+                                                <i class="fas fa-code-compare me-1"></i> Ne Değişti?
+                                            </button>
+
+                                            <div class="modal fade" id="@modalId" tabindex="-1" aria-hidden="true" data-html2canvas-ignore="true">
+                                                <div class="modal-dialog modal-lg">
+                                                    <div class="modal-content">
+                                                        <div class="modal-header bg-light">
+                                                            <h6 class="modal-title fw-bold"><i class="fas fa-code-compare me-2 text-danger"></i> İptal Edilip Baştan Girilen Belge - Değişiklikler</h6>
+                                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            @if (degOzet == null || !degOzet.YeniGirisVarMi)
+                                                            {
+                                                                <div class="alert alert-warning mb-0">Bu kayıt iptal edilmiş ancak yerine yeniden girilmiş bir belge henüz bulunamadı.</div>
+                                                            }
+                                                            else
+                                                            {
+                                                                <p class="text-muted small mb-2">İptal edilen kayıt ile <b>@degOzet.YeniIslemTarihi</b> tarihinde girilen yeni kayıt (Belge No: <b>@degOzet.YeniDocEntry</b>) karşılaştırıldı. Değişen alanlar sarı ile işaretlidir.</p>
+                                                                <table class="table table-sm table-bordered align-middle mb-2">
+                                                                    <thead class="table-light">
+                                                                        <tr><th>Alan</th><th>İptal Edilen (Eski)</th><th>Yeni Girilen</th></tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        @foreach (var fark in degOzet.Farklar)
+                                                                        {
+                                                                            <tr class="@(fark.Degisti ? "table-warning" : "")">
+                                                                                <td class="fw-bold">@fark.Alan</td>
+                                                                                <td>@fark.Eski</td>
+                                                                                <td class="@(fark.Degisti ? "fw-bold" : "")">@fark.Yeni</td>
+                                                                            </tr>
+                                                                        }
+                                                                    </tbody>
+                                                                </table>
+                                                                @if (!degOzet.Farklar.Any(f => f.Degisti))
+                                                                {
+                                                                    <div class="alert alert-info mb-0 py-2 small">Alanlarda bir farklılık tespit edilmedi; belge aynı bilgilerle yeniden girilmiş.</div>
+                                                                }
+                                                            }
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Kapat</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        }
+                                    </td>
+
+                                    <td>@FormatBelgeNo(item.BagliTahsilatNo)</td>
+                                    <td>@FormatBelgeNo(item.BagliIbrazNo)</td>
+                                    <td>@FormatBelgeNo(item.BagliVadeliIbrazNo)</td>
+
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(item.CekKimeVerildi))
+                                        {
+                                            <div class="text-truncate" style="max-width: 200px;" title="@item.CekKimeVerildi">
+                                                <i class="fas fa-building text-muted me-1 small"></i>
+                                                @if (!string.IsNullOrEmpty(item.CekKimeVerildiKod))
+                                                {
+                                                    <span class="badge bg-light text-dark border font-monospace me-1" style="font-size:0.65rem;">@item.CekKimeVerildiKod</span>
+                                                }
+                                                <b>@item.CekKimeVerildi</b>
+                                            </div>
+                                        }
+                                        else { <span class="text-muted small">-</span> }
+                                    </td>
+
+                                    <td class="text-center">
+                                        <span class="badge bg-light text-secondary border px-2 py-1 fw-normal text-truncate" style="max-width: 80px;">
+                                            @item.KullanimDurumu
+                                        </span>
+                                    </td>
+
+                                    <td class="text-center">
+                                        @if (!string.IsNullOrEmpty(item.IslemTipi))
+                                        {
+                                            <span class="badge bg-light text-dark border px-2 py-1 fw-normal font-monospace" title="U_BE1_AKTAR">@item.IslemTipi</span>
+                                        }
+                                        else { <span class="text-muted small">-</span> }
+                                    </td>
+
+                                    <td>
+                                        <div class="text-truncate" style="max-width: 100px;" title="@item.IslemiYapan">
+                                            <i class="fas fa-user-circle text-secondary me-1"></i><span class="small fw-bold">@item.IslemiYapan</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                rowCount++;
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        }
+    else if (!string.IsNullOrEmpty(selectedCheckNum))
+    {
+        <div class="alert alert-light mt-4 text-center p-5 shadow-sm border rounded-3">
+            <i class="fas fa-search mb-3 text-muted" style="font-size: 3rem; opacity: 0.3;"></i>
+            <h5 class="text-dark">Kayıt Bulunamadı</h5>
+            <p class="text-muted mb-0 small"><strong>@selectedCheckNum</strong> numaralı belgeye ait hareket bulunamadı.</p>
+        </div>
+    }
+
+    <div class="mt-4 mb-5 text-center d-print-none d-flex justify-content-center gap-2" data-html2canvas-ignore="true">
+        <a href="@geriAdres" class="btn btn-outline-primary fw-bold shadow-sm">
+            <i class="fas fa-arrow-left me-2"></i> Çek Akıbetine Dön
+        </a>
+        <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+            <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+        </a>
+    </div>
+
+</div>
+
+@if (mainRecord != null)
+{
+    <div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true" data-html2canvas-ignore="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-light">
+                    <h6 class="modal-title fw-bold" id="uploadModalLabel">@belgeAdi Görüntüsü Yükle</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                </div>
+                <form asp-action="DosyaYukle" asp-controller="Rapor60" method="post" enctype="multipart/form-data">
+                    <div class="modal-body">
+                        <input type="hidden" name="checkNum" value="@mainRecord.CekNumarasi" />
+                        <input type="hidden" name="db" value="@currentDb" />
+                        
+                        <div class="mb-3">
+                            <label class="form-label text-muted small fw-bold">Fiziksel Belgeyi Seçin (PDF, JPG, PNG vb.)</label>
+                            <input class="form-control" type="file" id="belgeDosyasi" name="belgeDosyasi" accept=".pdf, image/*" required>
+                        </div>
+                        <p class="small text-muted mb-0">Bu işlem seçili belgeye (<b>@mainRecord.CekNumarasi</b>) fiziksel tarama dosyasını kalıcı olarak atar. Önceki bir dosya varsa üzerine yazar.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                        <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save me-1"></i> Sisteme Kaydet</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <script>
+        $(document).ready(function() {
+            $('#checkSelect').select2({ 
+                theme: "bootstrap-5", 
+                placeholder: "Belge numarası seçiniz...", 
+                allowClear: true, 
+                language: "tr",
+                width: '100%' 
+            });
+        });
+
+        // PDF KAYDETME FONKSİYONU
+        function downloadPDF() {
+            var element = document.getElementById('pdfPrintArea');
+            
+            var belgeNo = '@(mainRecord?.CekNumarasi ?? "Rapor")';
+            var belgeTip = '@(belgeAdi)';
+            var fileName = belgeTip + '_' + belgeNo + '_Ekstresi.pdf';
+
+            var opt = {
+                margin:       [0.3, 0.3, 0.3, 0.3],
+                filename:     fileName,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true },
+                jsPDF:        { unit: 'in', format: 'a4', orientation: 'landscape' } 
+            };
+
+            html2pdf().set(opt).from(element).save();
+        }
+    </script>
+}

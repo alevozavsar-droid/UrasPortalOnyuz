@@ -1,0 +1,247 @@
+@model List<WebApplication3.Controllers.Rapor161Controller.IhracatDosyaSatir>
+@using System.Globalization
+@{
+    ViewData["Title"] = "İhracat Dosya Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var trCul = new CultureInfo("tr-TR");
+    var currentDbKey = (string)ViewBag.CurrentDbKey;
+    string Num(decimal d) => d.ToString("N2", trCul);
+}
+
+@section Styles {
+    <style>
+        :root {
+            --r161-primary: var(--metro-primary, #4f46e5);
+            --r161-card: var(--bg-card, #ffffff);
+            --r161-border: var(--border-color, #e6e8f0);
+            --r161-muted: var(--text-muted, #64748b);
+            --r161-radius: 16px;
+            --r161-shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
+        }
+        body { overflow-x: hidden; }
+        * { box-sizing: border-box; }
+        main, .container, .pb-3 { max-width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; width: 100% !important; }
+        .container-fluid { padding: 0 20px; max-width: 100%; }
+
+        .r161-hero { background: linear-gradient(120deg, var(--r161-primary) 0%, #7c3aed 100%); color: #fff; border-radius: var(--r161-radius); padding: 18px 22px; margin: 14px 0 16px; box-shadow: var(--r161-shadow); display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+        .r161-hero h4 { margin: 0; font-weight: 800; }
+        .r161-hero .sub { opacity: .9; font-size: .88rem; }
+        .r161-badge { background: rgba(255,255,255,.18); border-radius: 10px; padding: 6px 12px; font-weight: 700; }
+
+        .r161-card { background: var(--r161-card); border: 1px solid var(--r161-border); border-radius: var(--r161-radius); box-shadow: var(--r161-shadow); margin-bottom: 16px; }
+        .r161-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--r161-border); }
+        .r161-toolbar .form-control, .r161-toolbar .form-select { border-radius: 10px; border-color: var(--r161-border); height: 38px; }
+        .r161-search { flex: 1 1 260px; min-width: 200px; }
+        .r161-count { margin-left: auto; font-weight: 700; color: var(--r161-muted); white-space: nowrap; }
+
+        .r161-tablewrap { overflow: auto; max-height: calc(100vh - 300px); border-radius: 0 0 var(--r161-radius) var(--r161-radius); }
+        table.r161 { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .82rem; table-layout: fixed; }
+        table.r161 thead th { position: sticky; top: 0; z-index: 3; background: color-mix(in srgb, var(--r161-primary) 10%, var(--r161-card)); color: var(--r161-primary); text-transform: uppercase; font-size: .68rem; letter-spacing: .3px; font-weight: 800; padding: 9px 8px; border-bottom: 2px solid var(--r161-border); white-space: normal; cursor: pointer; user-select: none; }
+        table.r161 thead th .arrow { opacity: .35; margin-left: 3px; font-size: .7rem; }
+        table.r161 thead th.sort-asc .arrow, table.r161 thead th.sort-desc .arrow { opacity: 1; }
+        table.r161 tbody td { padding: 7px 8px; border-bottom: 1px solid var(--r161-border); vertical-align: middle; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+        table.r161 tbody tr:hover > td { background: color-mix(in srgb, var(--r161-primary) 6%, transparent); }
+        table.r161 td.num, table.r161 th.num { text-align: right; white-space: nowrap; }
+        /* Sabit kolon genislikleri: tablo ekrana sigar, uzun metin alt satira gecer */
+        table.r161 th.c-dosya, table.r161 td.c-dosya { width: 6%; }
+        table.r161 th.c-belge, table.r161 td.c-belge { width: 4.5%; }
+        table.r161 th.c-satisci, table.r161 td.c-satisci { width: 8%; }
+        table.r161 th.c-fno, table.r161 td.c-fno { width: 6%; }
+        table.r161 th.c-tarih, table.r161 td.c-tarih { width: 6%; white-space: nowrap; }
+        table.r161 th.c-musteri, table.r161 td.c-musteri { width: 13%; }
+        table.r161 th.c-ulke, table.r161 td.c-ulke { width: 6%; }
+        table.r161 th.c-kkod, table.r161 td.c-kkod { width: 8%; }
+        table.r161 th.c-kad, table.r161 td.c-kad { width: 13%; }
+        table.r161 th.c-miktar, table.r161 td.c-miktar { width: 6%; }
+        table.r161 th.c-olcu, table.r161 td.c-olcu { width: 4%; }
+        table.r161 th.c-tutar, table.r161 td.c-tutar { width: 8%; }
+        table.r161 th.c-pb, table.r161 td.c-pb { width: 3.5%; }
+        table.r161 th.c-yilay, table.r161 td.c-yilay { width: 6%; }
+        table.r161 th.c-gtip, table.r161 td.c-gtip { width: 7%; }
+        .r161 .badge-fatura { background: #e0f2fe; color: #075985; border-radius: 6px; padding: 2px 8px; font-weight: 700; font-size: .72rem; }
+        .r161 .badge-taslak { background: #fef3c7; color: #92400e; border-radius: 6px; padding: 2px 8px; font-weight: 700; font-size: .72rem; }
+        .r161-empty { padding: 40px; text-align: center; color: var(--r161-muted); }
+        .btn-r161 { border-radius: 10px; font-weight: 700; }
+    </style>
+}
+
+<div class="container-fluid">
+    <div class="r161-hero">
+        <div class="d-flex align-items-center gap-3">
+            <i class="fas fa-ship" style="font-size:1.6rem;opacity:.95;"></i>
+            <div>
+                <h4>İhracat Dosya Raporu</h4>
+                <div class="sub">Kesilen faturalar + açık taslaklar · dosya, GTİP, satışçı ve ülke bazlı kalem dökümü</div>
+            </div>
+        </div>
+        <span class="r161-badge"><i class="fas fa-building me-1"></i>@ViewBag.CurrentDbDisplay</span>
+    </div>
+
+    @if (ViewBag.Hata != null)
+    {
+        <div class="alert alert-danger">@ViewBag.Hata</div>
+    }
+
+    <div class="r161-card">
+        <div class="r161-toolbar">
+            <div class="r161-search">
+                <div class="input-group">
+                    <span class="input-group-text bg-transparent"><i class="fas fa-search text-muted"></i></span>
+                    <input type="text" id="globalSearch" class="form-control" placeholder="Tümünde ara (dosya, müşteri, kalem, GTİP...)">
+                </div>
+            </div>
+            <select id="fBelge" class="form-select" style="max-width:150px;"><option value="">Belge: Tümü</option></select>
+            <select id="fSatisci" class="form-select" style="max-width:180px;"><option value="">Satışçı: Tümü</option></select>
+            <select id="fUlke" class="form-select" style="max-width:170px;"><option value="">Ülke: Tümü</option></select>
+            <select id="fYilAy" class="form-select" style="max-width:170px;"><option value="">Yıl-Ay: Tümü</option></select>
+            <button id="btnTemizle" class="btn btn-outline-secondary btn-r161" title="Filtreleri temizle"><i class="fas fa-eraser"></i></button>
+            <button id="btnExcel" class="btn btn-success btn-r161"><i class="fas fa-file-excel me-1"></i> Excel</button>
+            <span class="r161-count"><span id="rowCount">0</span> / @Model.Count kayıt</span>
+        </div>
+
+        <div class="r161-tablewrap">
+            <table class="r161" id="grid">
+                <thead>
+                    <tr>
+                        <th class="c-dosya" data-key="DosyaNo" data-type="text">Dosya No <span class="arrow">↕</span></th>
+                        <th class="c-belge" data-key="BelgeTuru" data-type="text">Belge <span class="arrow">↕</span></th>
+                        <th class="c-satisci" data-key="Satisci" data-type="text">Satışçı <span class="arrow">↕</span></th>
+                        <th class="c-fno" data-key="FaturaNo" data-type="text">Fatura No <span class="arrow">↕</span></th>
+                        <th class="c-tarih" data-key="Tarih" data-type="date">Fatura Tarihi <span class="arrow">↕</span></th>
+                        <th class="c-musteri" data-key="Musteri" data-type="text">Müşteri <span class="arrow">↕</span></th>
+                        <th class="c-ulke" data-key="Ulke" data-type="text">Ülke <span class="arrow">↕</span></th>
+                        <th class="c-kkod" data-key="KalemKodu" data-type="text">Kalem Kodu <span class="arrow">↕</span></th>
+                        <th class="c-kad" data-key="KalemAdi" data-type="text">Kalem Adı <span class="arrow">↕</span></th>
+                        <th class="num c-miktar" data-key="Miktar" data-type="num">Miktar <span class="arrow">↕</span></th>
+                        <th class="c-olcu" data-key="Olcu" data-type="text">Ölçü <span class="arrow">↕</span></th>
+                        <th class="num c-tutar" data-key="Tutar" data-type="num">Tutar (Belge) <span class="arrow">↕</span></th>
+                        <th class="c-pb" data-key="ParaBirimi" data-type="text">PB <span class="arrow">↕</span></th>
+                        <th class="c-yilay" data-key="YilAy" data-type="text">Yıl-Ay <span class="arrow">↕</span></th>
+                        <th class="c-gtip" data-key="GTIP" data-type="text">GTİP <span class="arrow">↕</span></th>
+                    </tr>
+                </thead>
+                <tbody id="gridBody">
+                    @foreach (var x in Model)
+                    {
+                        <tr data-satisci="@x.Satisci" data-ulke="@x.Ulke" data-yilay="@x.YilAy" data-belge="@x.BelgeTuru">
+                            <td>@x.DosyaNo</td>
+                            <td><span class="@(x.BelgeTuru == "Taslak" ? "badge-taslak" : "badge-fatura")">@x.BelgeTuru</span></td>
+                            <td>@x.Satisci</td>
+                            <td>@x.FaturaNo</td>
+                            <td data-sort="@(x.RawDocDate?.ToString("yyyy-MM-dd") ?? "")">@x.FaturaTarihi</td>
+                            <td>@x.Musteri</td>
+                            <td>@x.Ulke</td>
+                            <td>@x.KalemKodu</td>
+                            <td>@x.KalemAdi</td>
+                            <td class="num" data-sort="@x.Miktar.ToString(CultureInfo.InvariantCulture)">@Num(x.Miktar)</td>
+                            <td>@x.Olcu</td>
+                            <td class="num" data-sort="@x.TutarBelge.ToString(CultureInfo.InvariantCulture)">@Num(x.TutarBelge)</td>
+                            <td>@x.ParaBirimi</td>
+                            <td>@x.YilAy</td>
+                            <td>@x.GTIP</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            @if (!Model.Any())
+            {
+                <div class="r161-empty"><i class="fas fa-inbox fa-2x mb-2"></i><br>Bu şirkette ihracat dosya no'lu kayıt bulunamadı.</div>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        (function () {
+            const body = document.getElementById('gridBody');
+            const allRows = Array.from(body.querySelectorAll('tr'));
+            const gs = document.getElementById('globalSearch');
+            const fBelge = document.getElementById('fBelge'), fSatisci = document.getElementById('fSatisci'),
+                  fUlke = document.getElementById('fUlke'), fYilAy = document.getElementById('fYilAy');
+            const rowCount = document.getElementById('rowCount');
+            const trCol = 'tr-TR';
+
+            // Hizli filtre dropdownlarini benzersiz degerlerle doldur
+            function doldur(sel, attr) {
+                const set = new Set();
+                allRows.forEach(r => { const v = (r.getAttribute(attr) || '').trim(); if (v) set.add(v); });
+                Array.from(set).sort((a, b) => a.localeCompare(b, trCol)).forEach(v => {
+                    const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o);
+                });
+            }
+            doldur(fBelge, 'data-belge'); doldur(fSatisci, 'data-satisci'); doldur(fUlke, 'data-ulke'); doldur(fYilAy, 'data-yilay');
+
+            function uygula() {
+                const q = (gs.value || '').toLocaleLowerCase(trCol);
+                const b = fBelge.value, s = fSatisci.value, u = fUlke.value, y = fYilAy.value;
+                let n = 0;
+                allRows.forEach(r => {
+                    let ok = true;
+                    if (b && r.getAttribute('data-belge') !== b) ok = false;
+                    if (ok && s && r.getAttribute('data-satisci') !== s) ok = false;
+                    if (ok && u && r.getAttribute('data-ulke') !== u) ok = false;
+                    if (ok && y && r.getAttribute('data-yilay') !== y) ok = false;
+                    if (ok && q && !r.textContent.toLocaleLowerCase(trCol).includes(q)) ok = false;
+                    r.style.display = ok ? '' : 'none';
+                    if (ok) n++;
+                });
+                rowCount.textContent = n;
+            }
+            [gs, fBelge, fSatisci, fUlke, fYilAy].forEach(el => el.addEventListener('input', uygula));
+            document.getElementById('btnTemizle').addEventListener('click', function () {
+                gs.value = ''; fBelge.value = ''; fSatisci.value = ''; fUlke.value = ''; fYilAy.value = ''; uygula();
+            });
+
+            // SIRALAMA (kolon basligina tikla)
+            const heads = document.querySelectorAll('#grid thead th');
+            heads.forEach((th, idx) => {
+                th.addEventListener('click', function () {
+                    const type = th.getAttribute('data-type') || 'text';
+                    const asc = !th.classList.contains('sort-asc');
+                    heads.forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+                    heads.forEach(h => { const a = h.querySelector('.arrow'); if (a) a.textContent = '↕'; });
+                    th.classList.add(asc ? 'sort-asc' : 'sort-desc');
+                    const a = th.querySelector('.arrow'); if (a) a.textContent = asc ? '▲' : '▼';
+
+                    const rows = allRows.slice();
+                    rows.sort((r1, r2) => {
+                        const c1 = r1.children[idx], c2 = r2.children[idx];
+                        let v1 = c1.getAttribute('data-sort'); let v2 = c2.getAttribute('data-sort');
+                        if (v1 === null) v1 = c1.textContent.trim();
+                        if (v2 === null) v2 = c2.textContent.trim();
+                        let cmp;
+                        if (type === 'num') { cmp = (parseFloat(v1) || 0) - (parseFloat(v2) || 0); }
+                        else if (type === 'date') { cmp = (v1 || '').localeCompare(v2 || ''); }
+                        else { cmp = (v1 || '').localeCompare(v2 || '', trCol, { numeric: true }); }
+                        return asc ? cmp : -cmp;
+                    });
+                    rows.forEach(r => body.appendChild(r));
+                });
+            });
+
+            // EXCEL (filtrelenmis / gorunen satirlar)
+            document.getElementById('btnExcel').addEventListener('click', function () {
+                const headers = ['Dosya No', 'Belge', 'Satışçı', 'Fatura No', 'Fatura Tarihi', 'Müşteri', 'Ülke', 'Kalem Kodu', 'Kalem Adı', 'Miktar', 'Ölçü', 'Tutar (Belge)', 'PB', 'Yıl-Ay', 'GTİP'];
+                const data = [headers];
+                allRows.forEach(r => {
+                    if (r.style.display === 'none') return;
+                    const cells = Array.from(r.children).map((td, i) => {
+                        if (i === 9 || i === 11) { const s = td.getAttribute('data-sort'); return s !== null ? parseFloat(s) : td.textContent.trim(); }
+                        return td.textContent.trim();
+                    });
+                    data.push(cells);
+                });
+                if (data.length <= 1) { alert('Dışa aktarılacak (görünen) kayıt yok.'); return; }
+                const ws = XLSX.utils.aoa_to_sheet(data);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'İhracat Dosya');
+                const dbn = "@ViewBag.CurrentDbDisplay".replace(/\s+/g, '_');
+                XLSX.writeFile(wb, 'Ihracat_Dosya_' + dbn + '.xlsx');
+            });
+
+            uygula();
+        })();
+    </script>
+}

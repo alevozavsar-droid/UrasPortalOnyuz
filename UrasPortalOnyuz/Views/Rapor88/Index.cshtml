@@ -1,0 +1,3012 @@
+﻿@model WebApplication3.Controllers.Rapor88DashboardViewModel
+@{
+    ViewData["Title"] = "e-Belge Gönderimi & Önizleme (Rapor88)";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? "Bilinmiyor";
+
+    var faturalar = Model.BekleyenFaturalar.Where(x => x.ObjType == "13" || x.ObjType == "19").ToList();
+    var eFaturaList = faturalar.Where(x => x.EBelgeMukellefi == "Y").ToList();
+    var eArsivList = faturalar.Where(x => x.EBelgeMukellefi != "Y").ToList();
+
+    var irsaliyeler = Model.BekleyenFaturalar.Where(x => x.ObjType == "15" || x.ObjType == "21").ToList();
+    var eIrsaliyeList = irsaliyeler.Where(x => x.EBelgeMukellefi == "Y").ToList();
+    var matbuIrsaliyeList = irsaliyeler.Where(x => x.EBelgeMukellefi != "Y").ToList();
+}
+
+@section Styles {
+    <style>
+        /* Layout'un tema degiskenleri kullanilir; sayfa acik/koyu temaya uyar. */
+
+        .eb-ust, .eb-filtre, .eb-toplu, .eb-panel {
+            background: var(--bg-card, #fff);
+            border: 1px solid var(--border-color, #e8ecf4);
+            border-radius: var(--r-lg, 14px);
+        }
+
+        .eb-ust { display: flex; align-items: center; justify-content: space-between;
+                  flex-wrap: wrap; gap: 10px; padding: 12px 16px; margin-bottom: 14px; }
+
+        .eb-filtre { display: flex; align-items: flex-end; flex-wrap: wrap;
+                     gap: 12px; padding: 12px 16px; margin-bottom: 14px; }
+
+        .eb-toplu { display: flex; align-items: center; flex-wrap: wrap;
+                    gap: 10px; padding: 10px 14px; margin-bottom: 14px; }
+
+        .eb-panel { padding: 14px 16px; margin-bottom: 24px; }
+
+        /* --- Ozet kartlari --- */
+        /* Filtre satirindaki kompakt sayaclar */
+        .eb-sayaclar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+        .eb-sayac {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 12px; border-radius: 999px; font-size: .82rem;
+            background: #f4f6fa; border: 1px solid #e6ebf2; white-space: nowrap;
+        }
+        .eb-sayac b { font-size: 1.05rem; font-weight: 800; }
+        .eb-sayac .etiket { color: var(--text-secondary, #7E8299); font-size: .74rem; }
+        .eb-sayac.sari    { border-color: #ffe2a8; } .eb-sayac.sari    i, .eb-sayac.sari    b { color: #b45309; }
+        .eb-sayac.kirmizi { border-color: #fecaca; } .eb-sayac.kirmizi i, .eb-sayac.kirmizi b { color: #b91c1c; }
+        .eb-sayac.yesil   { border-color: #bbf7d0; } .eb-sayac.yesil   i, .eb-sayac.yesil   b { color: #047857; }
+
+        .eb-kart { display: flex; align-items: center; gap: 14px; height: 100%;
+                   background: var(--bg-card, #fff);
+                   border: 1px solid var(--border-color, #e8ecf4);
+                   border-radius: var(--r-lg, 14px); padding: 14px 16px; }
+        .eb-kart .sayi   { font-size: 1.7rem; font-weight: 700; line-height: 1.1; }
+        .eb-kart .etiket { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+                           font-weight: 700; color: var(--text-secondary, #7E8299); }
+
+        .eb-ikon { width: 46px; height: 46px; border-radius: 12px; flex: 0 0 46px;
+                   display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .eb-ikon.sari    { background: rgba(246,194,62,.15);  color: #c9930b; }
+        .eb-ikon.kirmizi { background: rgba(231,74,59,.15);   color: #e74a3b; }
+        .eb-ikon.yesil   { background: rgba(28,200,138,.15);  color: #12a06a; }
+
+        /* --- Tablolar --- */
+        .table-custom { margin-bottom: 0; }
+        .table-custom th {
+            background: var(--bg-subtle, #f1f5f9);
+            text-transform: uppercase; font-size: .72rem; letter-spacing: .03em;
+            font-weight: 700; color: var(--text-secondary, #7E8299);
+            border-bottom: 1px solid var(--border-color, #e8ecf4);
+            position: sticky; top: 0; z-index: 2; white-space: nowrap;
+        }
+        .table-custom td { vertical-align: middle; font-size: .82rem; }
+
+        /* Tabloda DIKEY kisitlama yok: sayfa uzar, tarayici kaydirir.
+           Onceden max-height: calc(100vh - 430px) vardi; dizustu ekranlarda
+           (orn. 768px yukseklik) tabloya ~330px kaliyordu ve ekranin cogu bos
+           dururken yalnizca birkac satir gorunuyordu. Yatay kaydirma korunur,
+           basliklar sayfa kaydirilirken de ustte kalir. */
+        .tab-pane > .table-responsive {
+            border: 1px solid var(--border-color, #e8ecf4);
+            border-radius: 12px;
+            overflow-x: auto;
+            overflow-y: visible;
+        }
+
+        /* Sayfa kayarken tablo basliklari ustte kalsin. */
+        .tab-pane > .table-responsive thead th {
+            position: sticky;
+            top: 0;
+            z-index: 3;
+            background: #f8f9fc;
+        }
+
+        /* --- Sekmeler --- */
+        .nav-pills-custom .nav-link {
+            color: var(--text-secondary, #5a5c69); font-weight: 600;
+            border-radius: 10px; padding: 8px 16px; margin: 0 8px 6px 0;
+            border: 1px solid transparent; transition: all .15s ease;
+        }
+        .nav-pills-custom .nav-link:hover { background: var(--bg-subtle, #f1f5f9); }
+        .nav-pills-custom .nav-link.active {
+            background: var(--metro-primary, #0d6efd); color: #fff;
+            box-shadow: var(--shadow-sm, 0 2px 8px rgba(13,110,253,.25));
+        }
+        .nav-pills-custom .nav-link.active i,
+        .nav-pills-custom .nav-link.active .badge { color: #fff !important; }
+
+        .nav-tabs-custom { border-bottom: 1px solid var(--border-color, #e8ecf4); }
+        .nav-tabs-custom .nav-link {
+            font-weight: 600; color: var(--text-secondary, #6c757d); border: none;
+            border-bottom: 2px solid transparent; padding: 9px 16px; border-radius: 0;
+        }
+        .nav-tabs-custom .nav-link:hover { border-bottom-color: var(--border-color, #e9ecef); }
+        .nav-tabs-custom .nav-link.active {
+            color: var(--metro-primary, #0d6efd); background: transparent;
+            border-bottom-color: var(--metro-primary, #0d6efd);
+        }
+
+        /* --- Onizleme penceresi (A4) --- */
+        .modal-body-pdf-bg { background-color: #4a4f57; padding: 20px 0; overflow: auto; }
+
+        /* Onizleme penceresi: A4 sayfasi 21cm (~794px) sabit genisliktedir ve
+           modal-xl icinde dizustu ekranlarda kucuk kaliyordu. Pencere neredeyse
+           tam ekran yapildi; belge de "zoom" ile ekrana sigacak sekilde
+           buyutuluyor (zoom, transform'un aksine sayfa akisini de buyuttugu
+           icin kaydirma cubuklari dogru calisir). */
+        /* Portal yakinlastirmasi <html> uzerinde CSS zoom ile yapilir ve vw/vh
+           birimleri zoom oraniyla carpilir: %60 zoom'da pencere ekranin %58'i
+           kadar dar kaliyordu. Olculer --zoom'a bolunerek ekrana gore verilir. */
+        .onizleme-dialog {
+            width: calc(96vw / var(--zoom, 1));
+            max-width: calc(96vw / var(--zoom, 1));
+            height: calc(94vh / var(--zoom, 1));
+            margin: calc(3vh / var(--zoom, 1)) auto;
+        }
+        .onizleme-dialog .modal-content { height: 100%; }
+        .onizleme-dialog .modal-body { flex: 1 1 auto; min-height: 0; }
+
+        .pdf-a4-container { width: 21cm; min-height: 29.7cm; margin: 0 auto; background: #fff;
+                            box-shadow: 0 10px 40px rgba(0,0,0,.45); border-radius: 4px;
+                            zoom: var(--pdf-olcek, 1); }
+        /* XSLT'nin ekran stili belgeye ayrica cerceve/golge veriyor; kutu zaten
+           kagit gibi gorunuyor, ic ice cerceve olmasin. */
+        .pdf-a4-container .belgeSayfasi { border: none !important; box-shadow: none !important; }
+
+        /* PDF alinirken (html2canvas) kutu kagit gorunumunden cikar: sabit A4
+           yuksekligi yuvarlama yuzunden bos ikinci sayfa uretiyordu; golge ve
+           kose yuvarlama da ciktiya gitmesin. Ic bosluk yazdirma degeriyle ayni. */
+        .pdf-a4-container.pdf-cikti { min-height: 0; box-shadow: none; border-radius: 0; }
+        .pdf-a4-container.pdf-cikti .belgeSayfasi { padding: 20px !important; }
+
+        .fatura-satiri { transition: background-color .4s ease; }
+        .toplu-sec { cursor: pointer; }
+    </style>
+}
+
+<div class="container-fluid py-2">
+    <div class="eb-ust">
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            <span class="eb-ikon yesil"><i class="fas fa-database"></i></span>
+            <div>
+                <div class="etiket" style="font-size:.7rem; text-transform:uppercase; letter-spacing:.04em; font-weight:700; color:var(--text-secondary,#7E8299);">Aktif Şirket</div>
+                <div class="fw-bold" style="font-size:1.05rem;">@currentSelectedDbDisplay</div>
+            </div>
+
+            @if (ViewBag.IsTestEnvironment != null && (bool)ViewBag.IsTestEnvironment)
+            {
+                <span class="badge bg-danger ms-3 py-2 px-3"><i class="fas fa-flask me-1"></i> QNB TEST ORTAMI</span>
+            }
+            else
+            {
+                <span class="badge bg-success ms-3 py-2 px-3"><i class="fas fa-globe me-1"></i> CANLI ORTAM</span>
+            }
+        </div>
+
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <button class="btn btn-sm btn-outline-warning fw-bold" onclick="openQnbDownloadModal()">
+                <i class="fas fa-file-archive me-1"></i> QNB Arşiv İndir
+            </button>
+
+            @* QNB'de secili sirketin VKN'si icin tanimli e-Arsiv sube/kasa yapilandirmasi (AE00008 teshisi). *@
+            <button class="btn btn-sm btn-outline-info fw-bold" onclick="openEArsivAyarModal()" title="QNB e-Arşiv tarafında bu şirket için tanımlı şube / kasa / kaynak bilgisi">
+                <i class="fas fa-cogs me-1"></i> e-Arşiv Ayarları
+            </button>
+
+            @* Faturanin altindaki "Banka Hesap Bilgileri" tablosuna gidecek hesaplar (secili sirkete ozel). *@
+            <button class="btn btn-sm btn-outline-primary fw-bold" onclick="openIbanModal()" title="Faturaların altındaki Banka Hesap Bilgileri tablosunda gösterilecek IBAN'lar">
+                <i class="fas fa-university me-1"></i> IBAN'lar
+            </button>
+
+            @* Ortam degistirme yalnizca A yetkisinde. Digerleri her zaman canlida. *@
+            @if (ViewBag.TestOrtamiYetkisi != null && (bool)ViewBag.TestOrtamiYetkisi)
+            {
+                @if (ViewBag.IsTestEnvironment != null && (bool)ViewBag.IsTestEnvironment)
+                {
+                    <button class="btn btn-sm btn-success fw-bold" onclick="setTestMode(false)">
+                        <i class="fas fa-power-off me-1"></i> Canlı Ortama Geç
+                    </button>
+                }
+                else
+                {
+                    <button class="btn btn-sm btn-outline-danger fw-bold" onclick="setTestMode(true)">
+                        <i class="fas fa-flask me-1"></i> Test Ortamına Geç
+                    </button>
+                }
+            }
+
+            <button class="btn btn-sm btn-outline-secondary fw-bold" onclick="location.reload()">
+                <i class="fas fa-redo me-1"></i> Yenile
+            </button>
+        </div>
+    </div>
+    
+    <form method="get" action="/Rapor88/Index" class="eb-filtre" id="filterForm">
+        <div>
+            <label class="fw-bold small mb-1" style="color:var(--text-secondary,#7E8299);">Başlangıç Tarihi</label>
+            <input type="date" class="form-control form-control-sm" id="startDate" name="startDate" value="@ViewBag.StartDate" style="width:170px;" />
+        </div>
+        <div>
+            <label class="fw-bold small mb-1" style="color:var(--text-secondary,#7E8299);">Bitiş Tarihi</label>
+            <input type="date" class="form-control form-control-sm" id="endDate" name="endDate" value="@ViewBag.EndDate" style="width:170px;" />
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm fw-bold px-4">
+            <i class="fas fa-filter me-1"></i> Filtrele
+        </button>
+
+        @* Sayaclar ayri bir kart satiri olarak duruyordu ve dikeyde ~110px
+           yiyordu. Ayni bilgi filtre satirinin sagina sikistirildi; asagidaki
+           tabloya bir satir daha yer kaldi. *@
+        <div class="eb-sayaclar ms-auto">
+            <span class="eb-sayac sari" title="Gönderilmeyen (Bekleyen)">
+                <i class="fas fa-hourglass-half"></i>
+                <b id="dash-bekleyen">@Model.BekleyenSayisi.ToString("N0")</b>
+                <span class="etiket">Bekleyen</span>
+            </span>
+            <span class="eb-sayac kirmizi" title="Hatalı İşlemler">
+                <i class="fas fa-times-circle"></i>
+                <b id="dash-hatali">@Model.HataliSayisi.ToString("N0")</b>
+                <span class="etiket">Hatalı</span>
+            </span>
+            <span class="eb-sayac yesil" title="Başarılı İşlemler">
+                <i class="fas fa-check-double"></i>
+                <b id="dash-basarili">@Model.BasariliSayisi.ToString("N0")</b>
+                <span class="etiket">Başarılı</span>
+            </span>
+            <span class="small text-nowrap" style="color:var(--text-secondary,#7E8299);">
+                <i class="fas fa-sync fa-spin me-1 text-success"></i> 30 sn'de bir yenilenir
+            </span>
+        </div>
+    </form>
+
+    <div class="eb-panel">
+        <ul class="nav nav-pills nav-pills-custom mb-3 border-bottom pb-2" id="pills-tab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="pills-fatura-tab" data-bs-toggle="pill" data-bs-target="#pills-fatura" type="button" role="tab">
+                    <i class="fas fa-file-invoice text-info me-1"></i> Fatura Gönderimi
+                    <span class="badge bg-danger ms-1">@faturalar.Count</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="pills-irsaliye-tab" data-bs-toggle="pill" data-bs-target="#pills-irsaliye" type="button" role="tab">
+                    <i class="fas fa-truck text-warning me-1"></i> İrsaliye Gönderimi
+                    <span class="badge bg-danger ms-1">@irsaliyeler.Count</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="pills-cari-tab" data-bs-toggle="pill" data-bs-target="#pills-cari" type="button" role="tab">
+                    <i class="fas fa-search me-1 text-primary"></i> Mükellef Sorgula
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="pills-seri-tab" data-bs-toggle="pill" data-bs-target="#pills-seri" type="button" role="tab" onclick="loadSeriesStatus()">
+                    <i class="fas fa-list-ol me-1 text-success"></i> Seri & Sayaç Yönetimi
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="pills-giden-tab" data-bs-toggle="pill" data-bs-target="#pills-giden" type="button" role="tab" onclick="gidenIlkAcilis()">
+                    <i class="fas fa-paper-plane me-1 text-primary"></i> Giden Belgeler
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="pills-log-tab" data-bs-toggle="pill" data-bs-target="#pills-log" type="button" role="tab" onclick="loadIslemGecmisi()">
+                    <i class="fas fa-history me-1 text-secondary"></i> İşlem Geçmişi
+                </button>
+            </li>
+        </ul>
+
+        <!-- ==================== TOPLU GÖNDERİM ==================== -->
+        <div class="d-flex align-items-center flex-wrap gap-2 mb-3 p-2 rounded"
+             style="background:#f8fafc; border:1px solid #e8ecf4;">
+
+            <div class="form-check mb-0 me-2">
+                <input class="form-check-input" type="checkbox" id="chkTumunuSec" onchange="topluTumunuSec(this)">
+                <label class="form-check-label fw-bold small" for="chkTumunuSec">Görünen sekmedeki tümünü seç</label>
+            </div>
+
+            <span class="badge bg-dark" id="topluSayiRozet">0 belge seçili</span>
+            <span class="badge bg-primary" id="topluIlerleme" style="display:none;"></span>
+
+            <button class="btn btn-sm btn-success fw-bold" id="btnTopluGonder" onclick="topluGonder()" disabled>
+                <i class="fas fa-paper-plane me-1"></i>Seçilenleri Sırayla Gönder
+            </button>
+
+            <button class="btn btn-sm btn-outline-danger fw-bold" id="btnTopluDurdur" onclick="topluDurdur = true;" style="display:none;">
+                <i class="fas fa-stop me-1"></i>Durdur
+            </button>
+
+            <span class="small text-muted ms-auto">
+                Belgeler tek tek gönderilir. QNB onayı gelen satır yeşile döner ve listeden düşer.
+            </span>
+        </div>
+
+        <div class="tab-content" id="pills-tabContent">
+            
+            <!-- FATURA TAB -->
+            <div class="tab-pane fade show active" id="pills-fatura" role="tabpanel">
+                <ul class="nav nav-tabs nav-tabs-custom mb-3" id="fatura-sub-tabs" role="tablist">
+                    <li class="nav-item" role="presentation"><button class="nav-link active text-info" id="tab-efatura" data-bs-toggle="tab" data-bs-target="#pane-efatura" type="button" role="tab"><i class="fas fa-file-invoice me-1"></i> e-Fatura Bekleyenler <span class="badge bg-info text-dark ms-1">@eFaturaList.Count</span></button></li>
+                    <li class="nav-item" role="presentation"><button class="nav-link text-secondary" id="tab-earsiv" data-bs-toggle="tab" data-bs-target="#pane-earsiv" type="button" role="tab"><i class="fas fa-file-alt me-1"></i> e-Arşiv Bekleyenler <span class="badge bg-secondary text-white ms-1">@eArsivList.Count</span></button></li>
+                </ul>
+                <div class="tab-content" id="fatura-sub-tabs-content">
+                    <div class="tab-pane fade show active" id="pane-efatura" role="tabpanel">
+                        <div class="table-responsive mb-5">
+                            <table class="table table-hover table-custom mb-0">
+                                <thead class="sticky-top" style="background-color: #e3f2fd;">
+                                    <tr>
+                                        <th style="width: 8%;">SAP No</th>
+                                        <th style="width: 14%;">GİB Belge No</th>
+                                        <th style="width: 9%;">Tarih</th>
+                                        <th style="width: 25%;">Alıcı Unvan / Cari</th>
+                                        <th style="width: 14%;">Alıcı VKN / TC</th>
+                                        <th style="width: 10%;">Tutar</th>
+                                        <th class="text-center" style="width: 10%;">Tür</th>
+                                        <th class="text-center" style="width: 10%;">Aksiyon</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if(!eFaturaList.Any()){ <tr><td colspan="8" class="text-center py-4 text-success fw-bold"><i class="fas fa-check-circle me-1"></i> Bekleyen e-Fatura bulunmuyor!</td></tr> }
+                                    @foreach (var fatura in eFaturaList)
+                                    {
+                                        <tr id="row-belge-@fatura.DocEntry-@fatura.ObjType" class="fatura-satiri" data-vkn="@fatura.AliciVkn" data-tckn="@fatura.AliciTckn" data-cardcode="@fatura.CardCode" data-docentry="@fatura.DocEntry" data-objtype="@fatura.ObjType" data-usecari="false">
+                                            <td class="text-muted fw-bold"><input type="checkbox" class="form-check-input toplu-sec me-2" onchange="topluSecimSay()" title="Toplu gönderim için seç">@fatura.SapBelgeNo</td>
+                                            <td class="fw-bold text-primary">@(string.IsNullOrEmpty(fatura.BelgeNo) ? "Belirlenmedi" : fatura.BelgeNo)</td>
+                                            <td>@fatura.Tarih.ToString("dd.MM.yyyy")</td>
+                                            <td class="small fw-bold">@fatura.AliciUnvan<br><small class="text-muted">@fatura.CardCode</small></td>
+                                            <td>
+                                                @if(!string.IsNullOrEmpty(fatura.AliciVkn)) { <span class="badge bg-dark me-1" title="Vergi No (VKN)">V: @fatura.AliciVkn</span> }
+                                                @if(!string.IsNullOrEmpty(fatura.AliciTckn)) { <span class="badge bg-secondary me-1" title="TC Kimlik No">T: @fatura.AliciTckn</span> }
+                                                <button class="btn btn-sm btn-outline-primary px-2 py-0 border-0" onclick="mukellefGuncelle('@fatura.AliciVkn', '@fatura.AliciTckn', '@fatura.CardCode', 'belge', @fatura.DocEntry, '@fatura.ObjType', this)" title="GİB'den Sorgula"><i class="fas fa-sync-alt"></i></button>
+                                            </td>
+                                            <td class="fw-bold text-danger">@fatura.ToplamTutar.ToString("N2") @fatura.ParaBirimi</td>
+                                            <td class="text-center"><span class="badge @(fatura.ObjType == "13" ? "bg-primary" : "bg-danger") mb-1 d-block">@fatura.BelgeTipi</span><span class="badge bg-info text-dark d-block" id="lblTurBelge-@fatura.DocEntry-@fatura.ObjType"><i class="fas fa-file-invoice"></i> e-Fatura</span></td>
+                                            <td class="text-center border-start action-cell">
+                                                <div class="btn-group-vertical w-100">
+                                                    <button class="btn btn-sm btn-outline-dark shadow-sm fw-bold mb-1" onclick="previewDoc(@fatura.DocEntry, '@fatura.ObjType')"><i class="fas fa-eye"></i> Önizle</button>
+                                                    <div class="btn-group w-100 mb-1">
+                                                        <button class="btn btn-sm btn-outline-secondary shadow-sm fw-bold dropdown-toggle"
+                                                                type="button" data-bs-toggle="dropdown" data-toggle="dropdown" aria-expanded="false"
+                                                                title="Adres, şoför ve birim bilgileri">
+                                                            <i class="fas fa-sliders-h"></i> Bilgiler
+                                                        </button>
+                                                        <ul class="dropdown-menu dropdown-menu-end shadow">
+                                                            <li><button class="dropdown-item" type="button" onclick="openAddressModal(@fatura.DocEntry, '@fatura.ObjType', '@fatura.CardCode')"><i class="fas fa-map-marker-alt text-primary me-2"></i>Adres</button></li>
+                                                            <li><button class="dropdown-item" type="button" onclick="openDriverModal(@fatura.DocEntry, '@fatura.ObjType')"><i class="fas fa-id-card text-info me-2"></i>Şoför</button></li>
+                                                        </ul>
+                                                    </div>
+                                                    <button class="btn btn-sm btn-success shadow-sm fw-bold" onclick="sendDoc(@fatura.DocEntry, '@fatura.ObjType')"><i class="fas fa-paper-plane"></i> Gönder</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="pane-earsiv" role="tabpanel">
+                        <div class="table-responsive">
+                            <table class="table table-hover table-custom mb-0">
+                                <thead class="sticky-top" style="background-color: #f1f3f5;">
+                                    <tr>
+                                        <th style="width: 8%;">SAP No</th>
+                                        <th style="width: 14%;">GİB Belge No</th>
+                                        <th style="width: 9%;">Tarih</th>
+                                        <th style="width: 25%;">Alıcı Unvan / Cari</th>
+                                        <th style="width: 14%;">Alıcı VKN / TC</th>
+                                        <th style="width: 10%;">Tutar</th>
+                                        <th class="text-center" style="width: 10%;">Tür</th>
+                                        <th class="text-center" style="width: 10%;">Aksiyon</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if(!eArsivList.Any()){ <tr><td colspan="8" class="text-center py-4 text-success fw-bold"><i class="fas fa-check-circle me-1"></i> Bekleyen e-Arşiv bulunmuyor!</td></tr> }
+                                    @foreach (var fatura in eArsivList)
+                                    {
+                                        <tr id="row-belge-@fatura.DocEntry-@fatura.ObjType" class="fatura-satiri" data-vkn="@fatura.AliciVkn" data-tckn="@fatura.AliciTckn" data-cardcode="@fatura.CardCode" data-docentry="@fatura.DocEntry" data-objtype="@fatura.ObjType" data-usecari="false">
+                                            <td class="text-muted fw-bold"><input type="checkbox" class="form-check-input toplu-sec me-2" onchange="topluSecimSay()" title="Toplu gönderim için seç">@fatura.SapBelgeNo</td>
+                                            <td class="fw-bold text-primary">@(string.IsNullOrEmpty(fatura.BelgeNo) ? "Belirlenmedi" : fatura.BelgeNo)</td>
+                                            <td>@fatura.Tarih.ToString("dd.MM.yyyy")</td>
+                                            <td class="small fw-bold">@fatura.AliciUnvan<br><small class="text-muted">@fatura.CardCode</small></td>
+                                            <td>
+                                                @if(!string.IsNullOrEmpty(fatura.AliciVkn)) { <span class="badge bg-dark me-1" title="Vergi No (VKN)">V: @fatura.AliciVkn</span> }
+                                                @if(!string.IsNullOrEmpty(fatura.AliciTckn)) { <span class="badge bg-secondary me-1" title="TC Kimlik No">T: @fatura.AliciTckn</span> }
+                                                <button class="btn btn-sm btn-outline-primary px-2 py-0 border-0" onclick="mukellefGuncelle('@fatura.AliciVkn', '@fatura.AliciTckn', '@fatura.CardCode', 'belge', @fatura.DocEntry, '@fatura.ObjType', this)" title="GİB'den Sorgula"><i class="fas fa-sync-alt"></i></button>
+                                            </td>
+                                            <td class="fw-bold text-danger">@fatura.ToplamTutar.ToString("N2") @fatura.ParaBirimi</td>
+                                            <td class="text-center"><span class="badge @(fatura.ObjType == "13" ? "bg-primary" : "bg-danger") mb-1 d-block">@fatura.BelgeTipi</span><span class="badge bg-secondary text-white d-block" id="lblTurBelge-@fatura.DocEntry-@fatura.ObjType"><i class="fas fa-file-alt"></i> e-Arşiv</span></td>
+                                            <td class="text-center border-start action-cell">
+                                                <div class="btn-group-vertical w-100">
+                                                    <button class="btn btn-sm btn-outline-dark shadow-sm fw-bold mb-1" onclick="previewDoc(@fatura.DocEntry, '@fatura.ObjType')"><i class="fas fa-eye"></i> Önizle</button>
+                                                    <div class="btn-group w-100 mb-1">
+                                                        <button class="btn btn-sm btn-outline-secondary shadow-sm fw-bold dropdown-toggle"
+                                                                type="button" data-bs-toggle="dropdown" data-toggle="dropdown" aria-expanded="false"
+                                                                title="Adres, şoför ve birim bilgileri">
+                                                            <i class="fas fa-sliders-h"></i> Bilgiler
+                                                        </button>
+                                                        <ul class="dropdown-menu dropdown-menu-end shadow">
+                                                            <li><button class="dropdown-item" type="button" onclick="openAddressModal(@fatura.DocEntry, '@fatura.ObjType', '@fatura.CardCode')"><i class="fas fa-map-marker-alt text-primary me-2"></i>Adres</button></li>
+                                                            <li><button class="dropdown-item" type="button" onclick="openDriverModal(@fatura.DocEntry, '@fatura.ObjType')"><i class="fas fa-id-card text-info me-2"></i>Şoför</button></li>
+                                                        </ul>
+                                                    </div>
+                                                    <button class="btn btn-sm btn-success shadow-sm fw-bold" onclick="sendDoc(@fatura.DocEntry, '@fatura.ObjType')"><i class="fas fa-paper-plane"></i> Gönder</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- İRSALİYE TAB -->
+            <div class="tab-pane fade" id="pills-irsaliye" role="tabpanel">
+                <ul class="nav nav-tabs nav-tabs-custom mb-3" id="irsaliye-sub-tabs" role="tablist">
+                    <li class="nav-item" role="presentation"><button class="nav-link active text-warning" id="tab-eirsaliye" data-bs-toggle="tab" data-bs-target="#pane-eirsaliye" type="button" role="tab" style="color: #d39e00 !important;"><i class="fas fa-truck me-1"></i> e-İrsaliye Bekleyenler <span class="badge bg-warning text-dark ms-1">@eIrsaliyeList.Count</span></button></li>
+                    <li class="nav-item" role="presentation"><button class="nav-link text-secondary" id="tab-matbu" data-bs-toggle="tab" data-bs-target="#pane-matbu" type="button" role="tab"><i class="fas fa-file-signature me-1"></i> Matbu / Diğer İrsaliyeler <span class="badge bg-secondary text-white ms-1">@matbuIrsaliyeList.Count</span></button></li>
+                </ul>
+                <div class="tab-content" id="irsaliye-sub-tabs-content">
+                    <div class="tab-pane fade show active" id="pane-eirsaliye" role="tabpanel">
+                        <div class="table-responsive mb-5">
+                            <table class="table table-hover table-custom mb-0">
+                                <thead class="sticky-top" style="background-color: #fff8e1;">
+                                    <tr>
+                                        <th style="width: 8%;">SAP No</th>
+                                        <th style="width: 14%;">GİB Belge No</th>
+                                        <th style="width: 9%;">Tarih</th>
+                                        <th style="width: 25%;">Alıcı Unvan / Cari</th>
+                                        <th style="width: 14%;">Alıcı VKN / TC</th>
+                                        <th style="width: 10%;">Tutar</th>
+                                        <th class="text-center" style="width: 10%;">Tür</th>
+                                        <th class="text-center" style="width: 10%;">Aksiyon</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if(!eIrsaliyeList.Any()){ <tr><td colspan="8" class="text-center py-4 text-success fw-bold"><i class="fas fa-check-circle me-1"></i> Bekleyen e-İrsaliye bulunmuyor!</td></tr> }
+                                    @foreach (var irsaliye in eIrsaliyeList)
+                                    {
+                                        <tr id="row-belge-@irsaliye.DocEntry-@irsaliye.ObjType" class="fatura-satiri" data-vkn="@irsaliye.AliciVkn" data-tckn="@irsaliye.AliciTckn" data-cardcode="@irsaliye.CardCode" data-docentry="@irsaliye.DocEntry" data-objtype="@irsaliye.ObjType" data-usecari="false">
+                                            <td class="text-muted fw-bold"><input type="checkbox" class="form-check-input toplu-sec me-2" onchange="topluSecimSay()" title="Toplu gönderim için seç">@irsaliye.SapBelgeNo</td>
+                                            <td class="fw-bold text-primary">@(string.IsNullOrEmpty(irsaliye.BelgeNo) ? "Belirlenmedi" : irsaliye.BelgeNo)</td>
+                                            <td>@irsaliye.Tarih.ToString("dd.MM.yyyy")</td>
+                                            <td class="small fw-bold">@irsaliye.AliciUnvan<br><small class="text-muted">@irsaliye.CardCode</small></td>
+                                            <td>
+                                                @if(!string.IsNullOrEmpty(irsaliye.AliciVkn)) { <span class="badge bg-dark me-1" title="Vergi No (VKN)">V: @irsaliye.AliciVkn</span> }
+                                                @if(!string.IsNullOrEmpty(irsaliye.AliciTckn)) { <span class="badge bg-secondary me-1" title="TC Kimlik No">T: @irsaliye.AliciTckn</span> }
+                                                <button class="btn btn-sm btn-outline-primary px-2 py-0 border-0" onclick="mukellefGuncelle('@irsaliye.AliciVkn', '@irsaliye.AliciTckn', '@irsaliye.CardCode', 'belge', @irsaliye.DocEntry, '@irsaliye.ObjType', this)" title="GİB'den Sorgula"><i class="fas fa-sync-alt"></i></button>
+                                            </td>
+                                            <td class="fw-bold text-danger">@irsaliye.ToplamTutar.ToString("N2") @irsaliye.ParaBirimi</td>
+                                            <td class="text-center"><span class="badge @(irsaliye.ObjType == "15" ? "bg-primary" : "bg-danger") mb-1 d-block">@irsaliye.BelgeTipi</span><span class="badge bg-warning text-dark d-block" id="lblTurBelge-@irsaliye.DocEntry-@irsaliye.ObjType"><i class="fas fa-truck"></i> e-İrsaliye</span></td>
+                                            <td class="text-center border-start action-cell">
+                                                <div class="btn-group-vertical w-100">
+                                                    <button class="btn btn-sm btn-outline-dark shadow-sm fw-bold mb-1" onclick="previewDoc(@irsaliye.DocEntry, '@irsaliye.ObjType')"><i class="fas fa-eye"></i> Önizle</button>
+                                                    <div class="btn-group w-100 mb-1">
+                                                        <button class="btn btn-sm btn-outline-secondary shadow-sm fw-bold dropdown-toggle"
+                                                                type="button" data-bs-toggle="dropdown" data-toggle="dropdown" aria-expanded="false"
+                                                                title="Adres, şoför ve birim bilgileri">
+                                                            <i class="fas fa-sliders-h"></i> Bilgiler
+                                                        </button>
+                                                        <ul class="dropdown-menu dropdown-menu-end shadow">
+                                                            <li><button class="dropdown-item" type="button" onclick="openAddressModal(@irsaliye.DocEntry, '@irsaliye.ObjType', '@irsaliye.CardCode')"><i class="fas fa-map-marker-alt text-primary me-2"></i>Adres</button></li>
+                                                            <li><button class="dropdown-item" type="button" onclick="openDriverModal(@irsaliye.DocEntry, '@irsaliye.ObjType')"><i class="fas fa-id-card text-info me-2"></i>Şoför</button></li>
+                                                            <li><button class="dropdown-item" type="button" onclick="openBirimModal(@irsaliye.DocEntry, '@irsaliye.ObjType')"><i class="fas fa-balance-scale text-warning me-2"></i>Birim</button></li>
+                                                        </ul>
+                                                    </div>
+                                                    <button class="btn btn-sm btn-success shadow-sm fw-bold" onclick="sendDoc(@irsaliye.DocEntry, '@irsaliye.ObjType')"><i class="fas fa-paper-plane"></i> Gönder</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="pane-matbu" role="tabpanel">
+                        <div class="table-responsive">
+                            <table class="table table-hover table-custom mb-0">
+                                <thead class="sticky-top" style="background-color: #f1f3f5;">
+                                    <tr>
+                                        <th style="width: 8%;">SAP No</th>
+                                        <th style="width: 14%;">GİB Belge No</th>
+                                        <th style="width: 9%;">Tarih</th>
+                                        <th style="width: 25%;">Alıcı Unvan / Cari</th>
+                                        <th style="width: 14%;">Alıcı VKN / TC</th>
+                                        <th style="width: 10%;">Tutar</th>
+                                        <th class="text-center" style="width: 10%;">Tür</th>
+                                        <th class="text-center" style="width: 10%;">Aksiyon</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if(!matbuIrsaliyeList.Any()){ <tr><td colspan="8" class="text-center py-4 text-success fw-bold"><i class="fas fa-check-circle me-1"></i> Bekleyen Matbu/Diğer İrsaliye bulunmuyor!</td></tr> }
+                                    @foreach (var irsaliye in matbuIrsaliyeList)
+                                    {
+                                        <tr id="row-belge-@irsaliye.DocEntry-@irsaliye.ObjType" class="fatura-satiri" data-vkn="@irsaliye.AliciVkn" data-tckn="@irsaliye.AliciTckn" data-cardcode="@irsaliye.CardCode" data-docentry="@irsaliye.DocEntry" data-objtype="@irsaliye.ObjType" data-usecari="false">
+                                            <td class="text-muted fw-bold"><input type="checkbox" class="form-check-input toplu-sec me-2" onchange="topluSecimSay()" title="Toplu gönderim için seç">@irsaliye.SapBelgeNo</td>
+                                            <td class="fw-bold text-primary">@(string.IsNullOrEmpty(irsaliye.BelgeNo) ? "Belirlenmedi" : irsaliye.BelgeNo)</td>
+                                            <td>@irsaliye.Tarih.ToString("dd.MM.yyyy")</td>
+                                            <td class="small fw-bold">@irsaliye.AliciUnvan<br><small class="text-muted">@irsaliye.CardCode</small></td>
+                                            <td>
+                                                @if(!string.IsNullOrEmpty(irsaliye.AliciVkn)) { <span class="badge bg-dark me-1" title="Vergi No (VKN)">V: @irsaliye.AliciVkn</span> }
+                                                @if(!string.IsNullOrEmpty(irsaliye.AliciTckn)) { <span class="badge bg-secondary me-1" title="TC Kimlik No">T: @irsaliye.AliciTckn</span> }
+                                                <button class="btn btn-sm btn-outline-primary px-2 py-0 border-0" onclick="mukellefGuncelle('@irsaliye.AliciVkn', '@irsaliye.AliciTckn', '@irsaliye.CardCode', 'belge', @irsaliye.DocEntry, '@irsaliye.ObjType', this)" title="GİB'den Sorgula"><i class="fas fa-sync-alt"></i></button>
+                                            </td>
+                                            <td class="fw-bold text-danger">@irsaliye.ToplamTutar.ToString("N2") @irsaliye.ParaBirimi</td>
+                                            <td class="text-center"><span class="badge @(irsaliye.ObjType == "15" ? "bg-primary" : "bg-danger") mb-1 d-block">@irsaliye.BelgeTipi</span><span class="badge bg-secondary text-white d-block" id="lblTurBelge-@irsaliye.DocEntry-@irsaliye.ObjType"><i class="fas fa-file-signature"></i> Matbu İrsaliye</span></td>
+                                            <td class="text-center border-start action-cell">
+                                                <div class="btn-group-vertical w-100">
+                                                    <button class="btn btn-sm btn-outline-dark shadow-sm fw-bold mb-1" onclick="previewDoc(@irsaliye.DocEntry, '@irsaliye.ObjType')"><i class="fas fa-eye"></i> Önizle</button>
+                                                    <div class="btn-group w-100 mb-1">
+                                                        <button class="btn btn-sm btn-outline-secondary shadow-sm fw-bold dropdown-toggle"
+                                                                type="button" data-bs-toggle="dropdown" data-toggle="dropdown" aria-expanded="false"
+                                                                title="Adres, şoför ve birim bilgileri">
+                                                            <i class="fas fa-sliders-h"></i> Bilgiler
+                                                        </button>
+                                                        <ul class="dropdown-menu dropdown-menu-end shadow">
+                                                            <li><button class="dropdown-item" type="button" onclick="openAddressModal(@irsaliye.DocEntry, '@irsaliye.ObjType', '@irsaliye.CardCode')"><i class="fas fa-map-marker-alt text-primary me-2"></i>Adres</button></li>
+                                                            <li><button class="dropdown-item" type="button" onclick="openDriverModal(@irsaliye.DocEntry, '@irsaliye.ObjType')"><i class="fas fa-id-card text-info me-2"></i>Şoför</button></li>
+                                                            <li><button class="dropdown-item" type="button" onclick="openBirimModal(@irsaliye.DocEntry, '@irsaliye.ObjType')"><i class="fas fa-balance-scale text-warning me-2"></i>Birim</button></li>
+                                                        </ul>
+                                                    </div>
+                                                    <button class="btn btn-sm btn-success shadow-sm fw-bold" onclick="sendDoc(@irsaliye.DocEntry, '@irsaliye.ObjType')"><i class="fas fa-paper-plane"></i> Gönder</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CARİ SORGULAMA TAB -->
+            <div class="tab-pane fade" id="pills-cari" role="tabpanel">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white"><i class="fas fa-search"></i></span>
+                            <input type="text" id="txtCariAra" class="form-control" placeholder="Cari Kodu veya Ünvanı ile arayın (Örn: M0216)...">
+                            <button class="btn btn-primary fw-bold px-4" onclick="cariAra()">Ara / Getir</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-custom mb-0" id="tableCari">
+                        <thead class="sticky-top" style="background-color: #f8f9fc;">
+                            <tr>
+                                <th style="width: 15%;">Cari Kodu</th>
+                                <th style="width: 40%;">Unvan</th>
+                                <th style="width: 15%;">VKN / TC</th>
+                                <th style="width: 15%;">Mevcut Durum</th>
+                                <th class="text-center" style="width: 15%;">GİB Sorgula</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyCari">
+                            <tr><td colspan="5" class="text-center py-4 text-muted">Arama yaparak carileri listeleyebilirsiniz.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SERİ VE SAYAÇ YÖNETİMİ TAB -->
+            <div class="tab-pane fade" id="pills-seri" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="text-primary fw-bold mb-0"><i class="fas fa-list-ol me-1"></i> Aktif Seri Numaraları ve Sayaç Durumu</h5>
+                    <button class="btn btn-success fw-bold" onclick="openAddSeriesModal()">
+                        <i class="fas fa-plus-circle me-1"></i> Yeni Seri Ekle
+                    </button>
+                </div>
+                <div class="alert alert-info py-2 small mb-3">
+                    <i class="fas fa-info-circle me-1"></i> Seriler bu şirketin veritabanında saklanır (şirkete özel, herkeste aynı). Her seri <b>belge tipi</b> ve <b>yön</b> ile etiketlenir; belge gönderirken yalnızca uygun seriler listelenir. Sıradaki numara SAP'taki son belgeden otomatik hesaplanır.
+                </div>
+                <div class="table-responsive shadow-sm border rounded">
+                    <table class="table table-hover table-custom mb-0">
+                        <thead style="background-color: #e9ecef;">
+                            <tr>
+                                <th style="width: 8%;">Seri</th>
+                                <th style="width: 14%;">Belge Tipi</th>
+                                <th style="width: 12%;">Yön</th>
+                                <th style="width: 20%;">Açıklama</th>
+                                <th style="width: 16%;">Son Kullanılan GİB No</th>
+                                <th style="width: 14%;">Sıradaki GİB No</th>
+                                <th style="width: 16%;" title="Boş = herkes kullanabilir. Dolu ise yalnızca yazılan kullanıcı kodları (ve A yetkili yöneticiler) bu seriyle belge gönderebilir.">İzinli Kullanıcılar</th>
+                                <th class="text-center" style="width: 6%;">Sil</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodySeries">
+                            <tr><td colspan="7" class="text-center py-4"><i class="fas fa-spinner fa-spin me-2"></i> Seriler Yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- LOG TAB -->
+
+            <!-- ==================== GİDEN BELGELER ==================== -->
+            <div class="tab-pane fade" id="pills-giden" role="tabpanel">
+
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="fas fa-paper-plane text-primary me-2"></i>Giden Belgeler
+                        <span class="text-muted fw-normal" style="font-size:.85rem;">(QNB e-Belge kayıtları)</span>
+                    </h5>
+                    <span class="small text-muted" id="gbOzet"></span>
+                </div>
+
+                <div class="d-flex align-items-end gap-2 flex-wrap mb-3 p-3 rounded"
+                     style="background:#f8fafc; border:1px solid #e8ecf4;">
+
+                    <div>
+                        <label class="form-label small fw-bold mb-1">Başlangıç</label>
+                        <input type="date" id="gbBas" class="form-control form-control-sm" style="width:160px;">
+                    </div>
+
+                    <div>
+                        <label class="form-label small fw-bold mb-1">Bitiş</label>
+                        <input type="date" id="gbBit" class="form-control form-control-sm" style="width:160px;">
+                    </div>
+
+                    <div>
+                        <label class="form-label small fw-bold mb-1">Belge Türü</label>
+                        <select id="gbTur" class="form-select form-select-sm" style="width:210px;">
+                            <option value="">Tümü</option>
+                            <option value="FATURA">Fatura (e-Fatura / e-Arşiv)</option>
+                            <option value="IRSALIYE">İrsaliye (e-İrsaliye)</option>
+                        </select>
+                    </div>
+
+                    <div class="flex-grow-1" style="min-width:220px;">
+                        <label class="form-label small fw-bold mb-1">Ara</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text"><i class="fas fa-search"></i></span>
+                            <input type="text" id="gbAra" class="form-control" placeholder="GİB no / UUID / OID / SAP no / Cari adı">
+                        </div>
+                    </div>
+
+                    <button class="btn btn-sm btn-primary fw-bold" onclick="gidenBelgeleriGetir()">
+                        <i class="fas fa-rotate me-1"></i>Getir
+                    </button>
+                </div>
+
+                <div id="gbLoader" class="text-center py-4" style="display:none;">
+                    <i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br>Giden belgeler getiriliyor...
+                </div>
+
+                <div class="table-responsive" style="overflow-x:auto;">
+                    <table class="table table-hover table-sm align-middle mb-0">
+                        <thead class="table-light" style="position:sticky; top:0; z-index:2;">
+                            <tr>
+                                <th style="width:100px;">Tarih</th>
+                                <th style="width:130px;">Belge Türü</th>
+                                <th style="width:95px;">SAP No</th>
+                                <th style="min-width:200px;">Cari</th>
+                                <th style="width:165px;">GİB No</th>
+                                <th style="width:120px;">Durum</th>
+                                <th>UUID / OID</th>
+                                <th style="width:210px;" class="text-end">İşlem</th>
+                            </tr>
+                        </thead>
+                        <tbody id="gbTablo">
+                            <tr><td colspan="8" class="text-center text-muted py-4">Tarih aralığı seçip Getir deyin</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="pills-log" role="tabpanel">
+                <div class="alert alert-warning py-2 mb-3 small">
+                    <i class="fas fa-database me-1"></i> İşlemleriniz sunucu tarafında <b>Rapor88_IslemGecmisi</b> tablosunda kayıtlıdır. Aşağıda <strong>bugüne ait</strong> tüm işlemlerin loglarını görmektesiniz.
+                </div>
+                <div id="islemLoglari" class="alert alert-secondary mb-0 border" style="min-height: 300px; max-height: 550px; overflow-y: auto; font-size: 0.95rem; background-color: #f8f9fc;">
+                    <div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br>İşlem geçmişi yükleniyor...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= EKSİK/GÜNCEL ADRES MODALI ================= -->
+<div class="modal fade" id="addressUpdateModal" tabindex="-1" data-bs-backdrop="static" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white py-3">
+                <h5 class="modal-title"><i class="fas fa-map-marker-alt me-2"></i> Adres Kontrolü ve Güncelleme</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-warning small fw-bold" id="addressMissingMessage" style="display:none;"></div>
+                
+                <div class="card mb-3 border-secondary shadow-sm">
+                    <div class="card-header bg-secondary text-white py-1 fw-bold small"><i class="fas fa-file-invoice"></i> Belge Üzerindeki Adres (Değiştirilemez)</div>
+                    <div class="card-body py-2 small fw-bold text-dark" id="divBelgeAdresi">
+                        <i class="fas fa-spinner fa-spin"></i> Yükleniyor...
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-2 mt-4">
+                    <label class="fw-bold text-primary"><i class="fas fa-address-card"></i> Cari (Ana Veri) Adresi</label>
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 shadow-sm" onclick="copyBelgeToCari()" title="Belgedeki veriyi aşağıdaki forma kopyala">
+                        <i class="fas fa-arrow-down"></i> Belgeden Kopyala
+                    </button>
+                </div>
+                
+                <input type="hidden" id="hdnAddressDocEntry" />
+                <input type="hidden" id="hdnAddressObjType" />
+                <input type="hidden" id="hdnAddressCardCode" />
+                
+                <div class="mb-2">
+                    <label class="form-label fw-bold small">Sokak / Adres Satır 1 <span class="text-danger">*</span></label>
+                    <input type="text" id="txtAddressStreet" class="form-control" placeholder="Örn: Talatpaşa Mh. Fatih Cad. No:1">
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label fw-bold small">İlçe <span class="text-danger">*</span></label>
+                        <input type="text" id="txtAddressCity" class="form-control" placeholder="Örn: Esenyurt">
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label fw-bold small">İl <span class="text-danger">*</span></label>
+                        <input type="text" id="txtAddressCounty" class="form-control" placeholder="Örn: İstanbul">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label fw-bold small">Posta Kodu</label>
+                        <input type="text" id="txtAddressZipCode" class="form-control" placeholder="Örn: 34000">
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label fw-bold small">Ülke</label>
+                        <input type="text" id="txtAddressCountry" class="form-control" value="TR" placeholder="TR">
+                    </div>
+                </div>
+
+                <div class="form-check mt-3 pt-3 border-top border-secondary">
+                    <input class="form-check-input" type="checkbox" id="chkUseCariAddress" style="transform: scale(1.3); margin-top: 5px; cursor:pointer;">
+                    <label class="form-check-label fw-bold small text-danger ms-2" for="chkUseCariAddress" style="cursor:pointer;">
+                        Bu belge için Gönderimde ve Önizlemede "Belge Adresi" yerine YUKARIDAKİ GÜNCEL CARİ ADRESİNİ KULLAN
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer p-3 bg-light d-flex justify-content-between">
+                <button type="button" class="btn btn-secondary fw-bold rounded-pill" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-success fw-bold rounded-pill shadow-sm px-4" onclick="saveAddressInfo()">
+                    <i class="fas fa-save me-1"></i> Kaydet ve Devam Et
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= ŞOFÖR & PLAKA GÜNCELLEME MODALI ================= -->
+<div class="modal fade" id="driverUpdateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-info text-white py-3">
+                <h5 class="modal-title"><i class="fas fa-id-card me-2"></i> Belge Şoför & Araç Bilgisi Güncelleme</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-info small mb-3">
+                    <i class="fas fa-info-circle me-1"></i> Girdiğiniz bu bilgiler, ilgili belgenin UDF alanlarına <b>Service Layer</b> üzerinden kaydedilecektir.
+                </div>
+
+                <div class="mb-4 pb-3 border-bottom border-info" style="border-opacity:0.2;">
+                    <label class="form-label fw-bold small text-primary"><i class="fas fa-search"></i> Kayıtlı Şoförlerden Seç (Hızlı Doldur)</label>
+                    <div class="input-group">
+                        <select id="ddlKayitliSoforler" class="form-select bg-light">
+                            <option value="">-- Kayıtlı Şoför Seçin --</option>
+                        </select>
+                        <button class="btn btn-outline-primary" type="button" onclick="loadKayitliSoforler()" title="Listeyi Yenile"><i class="fas fa-sync-alt"></i></button>
+                    </div>
+                </div>
+                
+                <input type="hidden" id="hdnDriverDocEntry" />
+                <input type="hidden" id="hdnDriverObjType" />
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold small">Araç Plakası <span class="text-danger">*</span></label>
+                    <input type="text" id="txtDriverPlate" class="form-control text-uppercase" placeholder="Örn: 34ABC123">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold small">Şoför Adı Soyadı <span class="text-danger">*</span></label>
+                    <input type="text" id="txtDriverName" class="form-control text-uppercase" placeholder="Örn: AHMET YILMAZ">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold small">Şoför TCKN</label>
+                    <input type="text" id="txtDriverTckn" class="form-control" maxlength="11" placeholder="Örn: 12345678901">
+                </div>
+
+                <div class="form-check mt-4 pt-2 border-top">
+                    <input class="form-check-input" type="checkbox" id="chkSaveToPool">
+                    <label class="form-check-label fw-bold small text-success" for="chkSaveToPool">
+                        <i class="fas fa-plus-circle"></i> Bu şoförü yeni kayıt olarak "Şoför Havuzu"na ekle
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer p-3 bg-light">
+                <button type="button" class="btn btn-secondary fw-bold rounded-pill" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-info text-white fw-bold rounded-pill shadow-sm" onclick="saveDriverInfo()" id="btnSaveDriver">
+                    <i class="fas fa-save me-1"></i> SAP'ye Kaydet
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= QNB GİDEN BELGE İNDİRME MODALI ================= -->
+<!-- ================= e-ARŞİV AYARLARI MODALI ================= -->
+<div class="modal fade" id="eArsivAyarModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-info text-white py-3">
+                <h5 class="modal-title"><i class="fas fa-cogs me-2"></i> QNB e-Arşiv Yapılandırması</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-secondary small mb-3">
+                    <i class="fas fa-info-circle me-1"></i>
+                    e-Arşiv gönderiminde QNB'ye <b>VKN + şube + kasa</b> üçlüsü gider ve bu üçlü QNB portalında VKN bazında tanımlı olmalıdır.
+                    Tanımsız kombinasyon <b>AE00008</b> hatası verir. Aşağıda uygulamanın gönderdiği değerler ile QNB'nin bu VKN için döndürdüğü yapılandırma yan yana gösterilir.
+                </div>
+                <div id="eArsivAyarIcerik">
+                    <div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-1"></i> QNB'den yapılandırma alınıyor...</div>
+                </div>
+            </div>
+            <div class="modal-footer p-3 bg-light">
+                <button type="button" class="btn btn-outline-info fw-bold rounded-pill" onclick="eArsivAyarlariYukle()"><i class="fas fa-sync me-1"></i> Yenile</button>
+                <button type="button" class="btn btn-secondary fw-bold rounded-pill" data-bs-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="qnbDownloadModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-warning text-dark py-3">
+                <h5 class="modal-title"><i class="fas fa-file-archive me-2"></i> QNB Giden Belgeleri İndir</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-secondary small">
+                    <i class="fas fa-info-circle me-1"></i> QNB Entegratör portalından inmesini istediğiniz belgelerin <b>OID</b> numaralarını alt alta veya virgülle ayırarak giriniz (Maksimum 100 adet önerilir).
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold small">Belge OID Listesi <span class="text-danger">*</span></label>
+                    <textarea id="txtQnbOids" class="form-control" rows="5" placeholder="Örn:&#10;0niv9c1a7e10x1&#10;0niv9c1a7e10wr"></textarea>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold small">Belge Türü</label>
+                        <select id="ddlQnbBelgeTuru" class="form-select">
+                            <option value="IRSALIYE">İrsaliye</option>
+                            <option value="FATURA">Fatura</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold small">Format</label>
+                        <select id="ddlQnbBelgeFormati" class="form-select">
+                            <option value="UBL">UBL (XML)</option>
+                            <option value="PDF">PDF</option>
+                            <option value="HTML">HTML</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer p-3 bg-light">
+                <button type="button" class="btn btn-secondary fw-bold rounded-pill" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-warning text-dark fw-bold rounded-pill shadow-sm" onclick="downloadQnbDocs()" id="btnQnbDownload">
+                    <i class="fas fa-download me-1"></i> Zip Olarak İndir
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= ÖNİZLEME MODALI ================= -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable onizleme-dialog">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title"><i class="fas fa-file-invoice"></i> e-Belge Görsel Önizleme</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0 modal-body-pdf-bg">
+                <div id="previewModalBody" class="pdf-a4-container"></div>
+            </div>
+            <div class="modal-footer d-flex justify-content-between bg-light border-top">
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary fw-bold rounded-pill" onclick="$('#xmlDataContainer').slideToggle()">
+                        <i class="fas fa-code"></i> Ham XML Göster/Gizle
+                    </button>
+
+                    <div class="btn-group btn-group-sm ms-2" role="group" aria-label="Yakınlaştırma">
+                        <button type="button" class="btn btn-outline-secondary fw-bold" onclick="onizlemeOlcekle(-0.1)" title="Uzaklaştır">
+                            <i class="fas fa-magnifying-glass-minus"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary fw-bold" id="onizlemeOlcekYazi"
+                                onclick="onizlemeSigdir()" title="Varsayılan ölçeğe dön (%105)" style="min-width:64px;">%105</button>
+                        <button type="button" class="btn btn-outline-secondary fw-bold" onclick="onizlemeOlcekle(0.1)" title="Yakınlaştır">
+                            <i class="fas fa-magnifying-glass-plus"></i>
+                        </button>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger fw-bold rounded-pill ms-2" onclick="downloadPdf()" id="btnDownloadPdf">
+                        <i class="fas fa-file-pdf"></i> PDF Olarak İndir
+                    </button>
+                    <button class="btn btn-sm btn-outline-primary fw-bold rounded-pill ms-1" onclick="onizlemeYazdir()" id="btnOnizlemeYazdir" title="Belgeyi tarayıcının yazdırma penceresinde açar">
+                        <i class="fas fa-print"></i> Yazdır
+                    </button>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-secondary fw-bold rounded-pill" data-bs-dismiss="modal">Kapat</button>
+                    <input type="hidden" id="hdnActiveDocEntry" />
+                    <input type="hidden" id="hdnActiveObjType" />
+                    <button type="button" class="btn btn-success fw-bold rounded-pill px-4 shadow-sm" onclick="sendActiveDocFromModal()">
+                        <i class="fas fa-paper-plane me-1"></i> Bu Belgeyi GİB'e İlet
+                    </button>
+                </div>
+            </div>
+            <div id="xmlDataContainer" style="display:none; padding: 20px; background: #2b2b2b; color: #a9b7c6; max-height: 400px; overflow-y: auto; font-family: Consolas, monospace; font-size: 12px; border-top: 3px solid #000;">
+                <pre id="rawXmlContent" style="margin: 0; white-space: pre-wrap;"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= SERİ VE GÖNDERİM MODALI ================= -->
+<div class="modal fade" id="seriSecimModal" tabindex="-1" data-bs-backdrop="static" aria-hidden="true">
+    <div class="modal-dialog modal-md modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white py-3">
+                <h5 class="modal-title mb-0"><i class="fas fa-list-ol me-2"></i> Gönderim Parametreleri</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-info py-2 small mb-4">
+                    <i class="fas fa-info-circle me-1"></i> Lütfen kullanmak istediğiniz seriyi seçin. İlgili serideki sıradaki numara otomatik olarak getirilecektir. İhtiyaç halinde manuel olarak değiştirebilirsiniz.
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold text-dark">Gönderim Serisi</label>
+                    <select id="ddlSeriPrefix" class="form-select form-select-lg fw-bold border-primary shadow-sm" onchange="fetchNextNumber()">
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label fw-bold text-dark d-flex justify-content-between">
+                        <span>GİB Belge Numarası</span>
+                        <span class="badge bg-secondary">Tam 16 Hane Olmalı</span>
+                    </label>
+                    <input type="text" id="txtCalculatedGibNo" class="form-control form-control-lg text-primary fw-bold text-center border-primary shadow-sm" style="letter-spacing: 2px; font-size: 1.2rem;" maxlength="16" placeholder="Örn: SLV2026000000001">
+                    <div id="numLoader" class="text-center mt-2 text-primary fw-bold" style="display:none;">
+                        <i class="fas fa-spinner fa-spin me-1"></i> Sıradaki Numara Hesaplanıyor...
+                    </div>
+                </div>
+                @* İADE faturası: GİB, iade edilen faturanın 16 haneli no + tarihini zorunlu tutar (BillingReference). *@
+                <div id="iadeRefAlan" class="mt-3 p-3 rounded border" style="display:none; background:#fff7ed; border-color:#fed7aa !important;">
+                    <div class="fw-bold text-dark mb-2"><i class="fas fa-undo me-1 text-warning"></i> İade Edilen Fatura <span class="badge bg-warning text-dark">GİB zorunlu</span></div>
+                    <div class="row g-2">
+                        <div class="col-7">
+                            <label class="form-label small fw-bold mb-1">Orijinal Fatura No (16 hane)</label>
+                            <input type="text" id="txtIadeFaturaNo" class="form-control fw-bold text-uppercase" maxlength="16" placeholder="Örn: SLV2026000000012" oninput="this.value = this.value.replace(/\s/g, '').toUpperCase();">
+                        </div>
+                        <div class="col-5">
+                            <label class="form-label small fw-bold mb-1">Orijinal Fatura Tarihi</label>
+                            <input type="date" id="txtIadeFaturaTarihi" class="form-control">
+                        </div>
+                    </div>
+                    <div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>SAP belgesindeki "İADE Fatura No / Tarihi" alanlarından gelir. Burada girdiğiniz değer SAP belgesine de yazılır ve e-faturaya iade referansı olarak eklenir.</div>
+                </div>
+                <input type="hidden" id="hdnSendDocEntry" />
+                <input type="hidden" id="hdnSendObjType" />
+            </div>
+            <div class="modal-footer p-3 bg-light d-flex justify-content-between">
+                <button type="button" class="btn btn-outline-secondary fw-bold rounded-pill px-4" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-success fw-bold rounded-pill px-5 shadow-sm" onclick="executeSendDoc()">
+                    <i class="fas fa-paper-plane me-1"></i> GİB'e Gönder
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= YENİ SERİ EKLEME MODALI ================= -->
+<div class="modal fade" id="addSeriesModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-success text-white py-2">
+                <h6 class="modal-title mb-0"><i class="fas fa-plus me-1"></i> Yeni Seri Ekle</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold small">Seri (3 Harf)</label>
+                    <input type="text" id="txtNewSeriesPrefix" class="form-control fw-bold text-uppercase" maxlength="3" placeholder="Örn: ABC" oninput="this.value = this.value.replace(/[^A-Za-z]/g, '').toUpperCase();">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold small">Belge Tipi</label>
+                    <select id="ddlNewSeriesTip" class="form-select">
+                        <option value="EFATURA">e-Fatura</option>
+                        <option value="EARSIV">e-Arşiv</option>
+                        <option value="IRSALIYE">İrsaliye</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold small">Yön</label>
+                    <select id="ddlNewSeriesYon" class="form-select">
+                        <option value="YURTICI">Yurtiçi</option>
+                        <option value="YURTDISI">Yurtdışı</option>
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label fw-bold small">Açıklama (İsteğe Bağlı)</label>
+                    <input type="text" id="txtNewSeriesDesc" class="form-control" placeholder="Örn: Uras yurtiçi e-fatura">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label fw-bold small">İzinli Kullanıcılar (İsteğe Bağlı)</label>
+                    <input type="text" id="txtNewSeriesAuth" class="form-control text-uppercase" placeholder="Örn: MUH87 — boş bırakılırsa herkes">
+                    <div class="form-text">Doluysa yalnızca bu kullanıcılar (ve A yetkili yöneticiler) seriyi görür ve kullanır.</div>
+                </div>
+            </div>
+            <div class="modal-footer p-2 bg-light">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-success btn-sm fw-bold" onclick="saveNewSeries()">Ekle</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= ÖLÇÜ BİRİMİ GÜNCELLEME MODALI ================= -->
+<div class="modal fade" id="birimUpdateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-warning text-dark py-3">
+                <h5 class="modal-title"><i class="fas fa-balance-scale me-2"></i> Belge Kalemleri - Ölçü Birimi Güncelleme</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-info small mb-3">
+                    <i class="fas fa-info-circle me-1"></i> Sadece bu e-İrsaliye gönderiminde kullanılacak olan ölçü birimlerini aşağıdan değiştirebilirsiniz. (Örn: KOLİ, ÇUVAL, PAKET vb.). Stok ana veriniz <b>bozulmaz</b>.
+                </div>
+                <input type="hidden" id="hdnBirimDocEntry" />
+                <input type="hidden" id="hdnBirimObjType" />
+                
+                <div class="table-responsive border rounded shadow-sm">
+                    <table class="table table-hover table-sm mb-0" id="tableBirimler">
+                        <thead class="bg-light">
+                            <tr>
+                                <th style="width: 5%;">#</th>
+                                <th style="width: 15%;">Ürün Kodu</th>
+                                <th style="width: 40%;">Ürün Adı</th>
+                                <th style="width: 15%;">Miktar</th>
+                                <th style="width: 25%;">e-Belge Birimi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyBirimler">
+                            <tr><td colspan="5" class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer p-3 bg-light">
+                <button type="button" class="btn btn-secondary fw-bold rounded-pill" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-warning text-dark fw-bold rounded-pill shadow-sm" onclick="saveBirimler()" id="btnSaveBirim">
+                    <i class="fas fa-save me-1"></i> Birimleri Kaydet
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ============================================================
+   BANKA HESAPLARI / IBAN
+   Secili sirket icin faturalarin en altinda "Banka Hesap Bilgileri"
+   tablosunda (Banka Adi / Sube Adi / Para Birimi / IBAN No) gosterilecek
+   hesaplar. "Faturada goster" isaretli olanlar her e-Fatura / e-Arsiv
+   faturasina UBL cac:PaymentMeans olarak eklenir; fatura.xslt tabloyu basar.
+   Kayit: merkezi veritabaninda Z_EBelgeIban (sirket anahtariyla).
+   ============================================================ *@
+<div class="modal fade" id="ibanModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold"><i class="fas fa-university me-2 text-primary"></i>Faturada Gösterilecek Banka Hesapları (IBAN)</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-3">
+                    Bu liste yalnızca <b>seçili şirket</b> için geçerlidir. "Faturada göster" işaretli hesaplar, faturanın en altında
+                    <b>Banka Hesap Bilgileri</b> tablosunda (Banka Adı / Şube Adı / Para Birimi / IBAN No) gösterilir. İrsaliyelere eklenmez.
+                    Değişiklik bir sonraki önizleme ve gönderimden itibaren geçerlidir.
+                </p>
+
+                <div class="row g-2 align-items-end mb-2">
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1 fw-semibold" for="ibanBanka">Banka Adı <span class="text-danger">*</span></label>
+                        <input type="text" id="ibanBanka" class="form-control form-control-sm" maxlength="100" placeholder="Örn: GARANTİ BBVA">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1 fw-semibold" for="ibanSube">Şube Adı</label>
+                        <input type="text" id="ibanSube" class="form-control form-control-sm" maxlength="100" placeholder="Örn: BURSA TİCARİ ŞUBE">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small mb-1 fw-semibold" for="ibanParaBirimi">Para Birimi</label>
+                        <select id="ibanParaBirimi" class="form-select form-select-sm">
+                            <option value="TRY">TRY</option>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="GBP">GBP</option>
+                            <option value="CHF">CHF</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1 fw-semibold" for="ibanNo">IBAN No <span class="text-danger">*</span></label>
+                        <input type="text" id="ibanNo" class="form-control form-control-sm font-monospace" maxlength="42"
+                               placeholder="TR00 0000 0000 0000 0000 0000 00" autocomplete="off">
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="form-check form-switch m-0">
+                        <input class="form-check-input" type="checkbox" id="ibanYeniGoster" checked>
+                        <label class="form-check-label small" for="ibanYeniGoster">Faturada göster</label>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-primary" id="ibanEkleBtn"><i class="fas fa-plus me-1"></i>Ekle</button>
+                </div>
+
+                <table class="table table-sm align-middle mb-0" id="ibanTablo">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:36px;">#</th>
+                            <th>Banka Adı</th>
+                            <th>Şube Adı</th>
+                            <th style="width:90px;" class="text-center">Para Birimi</th>
+                            <th style="width:270px;">IBAN No</th>
+                            <th style="width:130px;" class="text-center">Faturada göster</th>
+                            <th style="width:60px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td colspan="7" class="text-center text-muted py-3">Yükleniyor...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha512-qZvrmS2ekKPF2mSznTQsxqPgnpkI4DNTlrdUmTzrDgektczlKNRRhy5X5AAOnx5S09ydFYWWNSfcEqDTTHgtNA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+    <script>
+        async function getMergedSeries(docEntry = 0, objType = "") {
+            // Seriler artık veritabanındaki tanımlardan (Rapor88_Seri) gelir; belgenin tipine+yönüne göre filtrelenir.
+            let dbSeries = [];
+            try {
+                let res = await $.get(`/Rapor88/SeriGonderimListe?docEntry=${docEntry}&objType=${objType}`);
+                if (res.success && res.data) {
+                    res.data.forEach(s => dbSeries.push({ prefix: s.prefix, desc: s.desc }));
+                }
+            } catch (e) {
+                console.error("Seri tanımları çekilemedi", e);
+            }
+            let map = new Map();
+            dbSeries.forEach(s => map.set(s.prefix, s));
+            return Array.from(map.values());
+        }
+
+        async function populateSeriesDropdown(docEntry = 0, objType = "") {
+            let series = await getMergedSeries(docEntry, objType);
+            let $ddl = $("#ddlSeriPrefix");
+            $ddl.empty();
+            
+            if(series.length === 0) {
+                $ddl.append(`<option value="">Bu belgeye uygun aktif seri bulunamadı</option>`);
+                return;
+            }
+
+            series.forEach(s => {
+                $ddl.append(`<option value="${s.prefix}">${s.prefix} - ${s.desc}</option>`);
+            });
+        }
+
+        $(document).ready(function() {
+            populateSeriesDropdown();
+            
+            // SAYFA YÜKLENDİĞİNDE OTOMATİK TOPLU MÜKELLEF SORGULAMASINI ÇALIŞTIR
+            otomatikMukellefSorgula();
+
+            // 30 saniyede bir arka planda tabloyu yenile
+            setInterval(otomatikTabloYenile, 30000);
+            // Sayfa açılışında sunucu tarafı satırlar onay kilidini bilmez; JS çizimi hemen devreye alınır.
+            setTimeout(otomatikTabloYenile, 800); 
+        });
+
+        // ================= OTOMATİK TABLO YENİLEME =================
+        function otomatikTabloYenile() {
+            if (topluCalisiyor || gonderimSuruyor) return;
+            // Onay bekleyen belgeler varsa önce QNB'de sorgulanır; onaylananların GİB no'su SAP'ye yazılır, sonra tablo çekilir.
+            $.getJSON('/Rapor88/OnayBekleyenleriKontrol').done(function (r) {
+                if (r && r.success && (r.tamamlanan > 0 || r.hatali > 0)) {
+                    (r.detay || []).forEach(function (d) {
+                        if (d.sonuc === 'BASARILI') addLog('[SAP: ' + d.sapBelgeNo + '] ' + d.mesaj, 'success', d.oid);
+                        else if (d.sonuc === 'HATA') addLog('[SAP: ' + d.sapBelgeNo + '] ' + d.mesaj, 'error', d.oid);
+                    });
+                    if (typeof gidenBelgeleriGetir === 'function' && $('#gbTablo').is(':visible')) gidenBelgeleriGetir();
+                }
+            }).always(function () { bekleyenTabloyuCek(); });
+        }
+
+        function bekleyenTabloyuCek() {
+            // Gonderim surerken tabloyu yeniden cizme: secimler ve islenmekte
+            // olan satirlar kaybolur, islenen satir DOM'dan kopar.
+            if (topluCalisiyor || gonderimSuruyor) return;
+
+            let startDate = $("#startDate").val();
+            let endDate = $("#endDate").val();
+
+            $.ajax({
+                url: '/Rapor88/GetBekleyenBelgelerJson',
+                type: 'GET',
+                data: { startDate: startDate, endDate: endDate },
+                success: function(res) {
+                    if (res.success) {
+                        // Sayacı güncelle
+                        $("#dash-bekleyen").text(res.bekleyenSayisi);
+
+                        let efaturaHtml = "";
+                        let earsivHtml = "";
+                        let eirsaliyeHtml = "";
+                        let matbuHtml = "";
+                        
+                        let eFaturaCount = 0;
+                        let eArsivCount = 0;
+                        let eIrsaliyeCount = 0;
+                        let matbuCount = 0;
+
+                        res.data.forEach(function(fatura) {
+                            let tarihObj = new Date(fatura.tarih);
+                            let gun = ("0" + tarihObj.getDate()).slice(-2);
+                            let ay = ("0" + (tarihObj.getMonth() + 1)).slice(-2);
+                            let yil = tarihObj.getFullYear();
+                            let tarih = `${gun}.${ay}.${yil}`;
+                            
+                            let tutar = fatura.toplamTutar.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + fatura.paraBirimi;
+                            
+                            let vknHtml = fatura.aliciVkn ? `<span class="badge bg-dark me-1" title="Vergi No (VKN)">V: ${fatura.aliciVkn}</span>` : '';
+                            let tcknHtml = fatura.aliciTckn ? `<span class="badge bg-secondary me-1" title="TC Kimlik No">T: ${fatura.aliciTckn}</span>` : '';
+                            let gibNo = fatura.belgeNo ? fatura.belgeNo : (fatura.sonGibNo ? fatura.sonGibNo + ' <small class="text-warning">(onay bekliyor)</small>' : 'Belirlenmedi');
+
+                            // QNB onayı bekleyen belge: SAP'ye numara henüz yazılmadı; yeniden gönderim kilitli, yalnızca durum sorgulanır.
+                            let onayKilit = fatura.sonDurum === 'ONAY_BEKLIYOR' || fatura.sonDurum === 'SL_HATASI';
+                            let gonderHtml = onayKilit
+                                ? `<div class="onay-kilit small text-start"><span class="badge bg-warning text-dark d-block mb-1"><i class="fas fa-hourglass-half me-1"></i>${fatura.sonDurum === 'SL_HATASI' ? 'QNB onayladı, SAP yazımı bekliyor' : 'QNB onayı bekleniyor'}</span>`
+                                  + `<div class="text-muted" style="line-height:1.2;">Tekrar <b>göndermeyin</b>. GİB no <b>${fatura.sonGibNo || ''}</b> ayrıldı; onay gelince SAP'ye otomatik yazılır (30 sn'de bir kontrol edilir).</div>`
+                                  + `<button class="btn btn-sm btn-outline-warning w-100 mt-1" onclick="durumSorgula('${fatura.sonOid}', ${fatura.docEntry}, '${fatura.objType}')"><i class="fas fa-satellite-dish me-1"></i>Şimdi Sorgula</button></div>`
+                                : `<button class="btn btn-sm btn-success shadow-sm fw-bold" onclick="sendDoc(${fatura.docEntry}, '${fatura.objType}')"><i class="fas fa-paper-plane"></i> Gönder</button>`;
+                            
+                            let isFatura = (fatura.objType === "13" || fatura.objType === "19");
+                            let isIrsaliye = (fatura.objType === "15" || fatura.objType === "21");
+                            
+                            let turBadgeClass = (fatura.objType === "13" || fatura.objType === "15") ? "bg-primary" : "bg-danger";
+                            
+                            let altBadge = "";
+                            if(isFatura && fatura.eBelgeMukellefi === "Y") altBadge = '<span class="badge bg-info text-dark d-block" id="lblTurBelge-'+fatura.docEntry+'-'+fatura.objType+'"><i class="fas fa-file-invoice"></i> e-Fatura</span>';
+                            else if(isFatura && fatura.eBelgeMukellefi !== "Y") altBadge = '<span class="badge bg-secondary text-white d-block" id="lblTurBelge-'+fatura.docEntry+'-'+fatura.objType+'"><i class="fas fa-file-alt"></i> e-Arşiv</span>';
+                            else if(isIrsaliye && fatura.eBelgeMukellefi === "Y") altBadge = '<span class="badge bg-warning text-dark d-block" id="lblTurBelge-'+fatura.docEntry+'-'+fatura.objType+'"><i class="fas fa-truck"></i> e-İrsaliye</span>';
+                            else altBadge = '<span class="badge bg-secondary text-white d-block" id="lblTurBelge-'+fatura.docEntry+'-'+fatura.objType+'"><i class="fas fa-file-signature"></i> Matbu İrsaliye</span>';
+
+                            // Birim yalnizca irsaliyelerde anlamli; "Bilgiler" listesine oge olarak girer.
+                            let birimBtn = isIrsaliye ? `<li><button class="dropdown-item" type="button" onclick="openBirimModal(${fatura.docEntry}, '${fatura.objType}')"><i class="fas fa-balance-scale text-warning me-2"></i>Birim</button></li>` : "";
+
+                            let rowHtml = `<tr id="row-belge-${fatura.docEntry}-${fatura.objType}" class="fatura-satiri ${onayKilit ? 'table-warning onay-bekliyor' : ''}" data-vkn="${fatura.aliciVkn}" data-tckn="${fatura.aliciTckn}" data-cardcode="${fatura.cardCode}" data-docentry="${fatura.docEntry}" data-objtype="${fatura.objType}" data-usecari="false">
+                                <td class="text-muted fw-bold"><input type="checkbox" class="form-check-input toplu-sec me-2" onchange="topluSecimSay()" title="Toplu gönderim için seç" ${onayKilit ? 'disabled' : ''}>${fatura.sapBelgeNo}</td>
+                                <td class="fw-bold text-primary">${gibNo}</td>
+                                <td>${tarih}</td>
+                                <td class="small fw-bold">${fatura.aliciUnvan}<br><small class="text-muted">${fatura.cardCode}</small></td>
+                                <td>
+                                    ${vknHtml}
+                                    ${tcknHtml}
+                                    <button class="btn btn-sm btn-outline-primary px-2 py-0 border-0" onclick="mukellefGuncelle('${fatura.aliciVkn}', '${fatura.aliciTckn}', '${fatura.cardCode}', 'belge', ${fatura.docEntry}, '${fatura.objType}', this)" title="GİB'den Sorgula"><i class="fas fa-sync-alt"></i></button>
+                                </td>
+                                <td class="fw-bold text-danger">${tutar}</td>
+                                <td class="text-center">
+                                    <span class="badge ${turBadgeClass} mb-1 d-block">${fatura.belgeTipi}</span>
+                                    ${altBadge}
+                                </td>
+                                <td class="text-center border-start action-cell">
+                                    <div class="btn-group-vertical w-100">
+                                        <button class="btn btn-sm btn-outline-dark shadow-sm fw-bold mb-1" onclick="previewDoc(${fatura.docEntry}, '${fatura.objType}')"><i class="fas fa-eye"></i> Önizle</button>
+                                                    <div class="btn-group w-100 mb-1">
+                                                        <button class="btn btn-sm btn-outline-secondary shadow-sm fw-bold dropdown-toggle"
+                                                                type="button" data-bs-toggle="dropdown" data-toggle="dropdown" aria-expanded="false"
+                                                                title="Adres, şoför ve birim bilgileri">
+                                                            <i class="fas fa-sliders-h"></i> Bilgiler
+                                                        </button>
+                                                        <ul class="dropdown-menu dropdown-menu-end shadow">
+                                                            <li><button class="dropdown-item" type="button" onclick="openAddressModal(${fatura.docEntry}, '${fatura.objType}', '${fatura.cardCode}')"><i class="fas fa-map-marker-alt text-primary me-2"></i>Adres</button></li>
+                                                            <li><button class="dropdown-item" type="button" onclick="openDriverModal(${fatura.docEntry}, '${fatura.objType}')"><i class="fas fa-id-card text-info me-2"></i>Şoför</button></li>
+                                                            ${birimBtn}
+                                                        </ul>
+                                                    </div>
+                                        ${gonderHtml}
+                                    </div>
+                                </td>
+                            </tr>`;
+
+                            if (isFatura && fatura.eBelgeMukellefi === "Y") { efaturaHtml += rowHtml; eFaturaCount++; }
+                            else if (isFatura && fatura.eBelgeMukellefi !== "Y") { earsivHtml += rowHtml; eArsivCount++; }
+                            else if (isIrsaliye && fatura.eBelgeMukellefi === "Y") { eirsaliyeHtml += rowHtml; eIrsaliyeCount++; }
+                            else if (isIrsaliye && fatura.eBelgeMukellefi !== "Y") { matbuHtml += rowHtml; matbuCount++; }
+                        });
+
+                        $("#pane-efatura tbody").html(efaturaHtml || '<tr><td colspan="8" class="text-center py-4 text-success fw-bold"><i class="fas fa-check-circle me-1"></i> Bekleyen e-Fatura bulunmuyor!</td></tr>');
+                        $("#pane-earsiv tbody").html(earsivHtml || '<tr><td colspan="8" class="text-center py-4 text-success fw-bold"><i class="fas fa-check-circle me-1"></i> Bekleyen e-Arşiv bulunmuyor!</td></tr>');
+                        $("#pane-eirsaliye tbody").html(eirsaliyeHtml || '<tr><td colspan="8" class="text-center py-4 text-success fw-bold"><i class="fas fa-check-circle me-1"></i> Bekleyen e-İrsaliye bulunmuyor!</td></tr>');
+                        $("#pane-matbu tbody").html(matbuHtml || '<tr><td colspan="8" class="text-center py-4 text-success fw-bold"><i class="fas fa-check-circle me-1"></i> Bekleyen Matbu/Diğer İrsaliye bulunmuyor!</td></tr>');
+                        
+                        // Tab sayısını guncelle
+                        $("#tab-efatura span.badge").text(eFaturaCount);
+                        $("#tab-earsiv span.badge").text(eArsivCount);
+                        $("#tab-eirsaliye span.badge").text(eIrsaliyeCount);
+                        $("#tab-matbu span.badge").text(matbuCount);
+                        
+                        // Ust butonlardaki bage'leri guncelle
+                        $("#pills-fatura-tab span.badge").text(eFaturaCount + eArsivCount);
+                        $("#pills-irsaliye-tab span.badge").text(eIrsaliyeCount + matbuCount);
+                    }
+                }
+            });
+        }
+        
+        // ================= OTOMATİK TOPLU MÜKELLEF SORGULAMA YÖNETİMİ =================
+        function otomatikMukellefSorgula() {
+            let sorgulanacakCariler = [];
+
+            $(".fatura-satiri").each(function() {
+                let vkn = $(this).data("vkn");
+                let tckn = $(this).data("tckn");
+                let cardCode = $(this).data("cardcode");
+                let kimlik = (vkn && vkn.toString().trim().length > 0) ? vkn : tckn;
+
+                if (kimlik && cardCode && !sorgulanacakCariler.some(x => x.CardCode === cardCode)) {
+                    sorgulanacakCariler.push({ Vkn: kimlik.toString(), CardCode: cardCode.toString() });
+                }
+            });
+
+            if (sorgulanacakCariler.length > 0) {
+                addLog(`Sayfa yüklendi, ${sorgulanacakCariler.length} farklı cari için otomatik GİB mükellefiyet sorgusu arka planda başlatıldı...`, "info");
+                
+                $.ajax({
+                    url: '/Rapor88/TopluMukellefSorgula',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(sorgulanacakCariler),
+                    success: function(res) {
+                        if (res.success) {
+                            addLog("Toplu mükellef sorgulamaları tamamlandı. Tablo güncelleniyor...", "success");
+                            
+                            res.data.forEach(item => {
+                                $(`.fatura-satiri[data-cardcode='${item.cardCode}']`).each(function() {
+                                    let dEntry = $(this).data("docentry");
+                                    let oType = $(this).data("objtype").toString();
+                                    let isIrsaliye = (oType === "15" || oType === "21");
+                                    let lbl = $(`#lblTurBelge-${dEntry}-${oType}`);
+                                    
+                                    if (item.yeniDurum === "Y") {
+                                        if(isIrsaliye) { lbl.removeClass("bg-secondary bg-danger text-white").addClass("bg-warning text-dark").html('<i class="fas fa-truck"></i> e-İrsaliye'); } 
+                                        else { lbl.removeClass("bg-secondary bg-danger text-white").addClass("bg-info text-dark").html('<i class="fas fa-file-invoice"></i> e-Fatura'); }
+                                    } else if (item.yeniDurum === "N") {
+                                        if(isIrsaliye) { lbl.removeClass("bg-warning bg-danger text-dark").addClass("bg-secondary text-white").html('<i class="fas fa-file-signature"></i> Matbu İrsaliye'); } 
+                                        else { lbl.removeClass("bg-info bg-danger text-dark").addClass("bg-secondary text-white").html('<i class="fas fa-file-alt"></i> e-Arşiv'); }
+                                    } else if (item.yeniDurum === "HATA") {
+                                        lbl.removeClass("bg-secondary bg-warning bg-info text-dark text-white").addClass("bg-danger text-white").html('<i class="fas fa-exclamation-triangle"></i> Eksik Cari Bilgisi');
+                                        
+                                        let actionCell = $(this).find('.action-cell');
+                                        if(actionCell.find('.text-danger.small').length === 0) {
+                                            actionCell.prepend(`<div class="text-danger small fw-bold mb-1 text-center" title="${item.mesaj}"><i class="fas fa-exclamation-circle"></i> SAP'den Cariyi Düzelt</div>`);
+                                        }
+                                    }
+                                });
+                            });
+                        } else {
+                            addLog("Toplu sorgulama başarısız: " + res.message, "error");
+                        }
+                    },
+                    error: function() {
+                        addLog("Toplu sorgulama için sunucuya ulaşılamadı.", "error");
+                    }
+                });
+            }
+        }
+
+        // ================= ADRES EKSİKLİĞİ YÖNETİMİ =================
+        function openAddressModal(docEntry, objType, cardCode, isErrorTrigger = false, errorMsg = "") {
+            $("#hdnAddressDocEntry").val(docEntry);
+            $("#hdnAddressObjType").val(objType);
+            $("#hdnAddressCardCode").val(cardCode);
+            
+            if(isErrorTrigger) {
+                $("#addressMissingMessage").html(errorMsg).show();
+            } else {
+                $("#addressMissingMessage").hide();
+            }
+
+            $("#divBelgeAdresi").html('<i class="fas fa-spinner fa-spin"></i> Yükleniyor...');
+            
+            let rowUseCari = $(`#row-belge-${docEntry}-${objType}`).attr('data-usecari') === 'true';
+            $("#chkUseCariAddress").prop('checked', rowUseCari);
+
+            new bootstrap.Modal(document.getElementById('addressUpdateModal')).show();
+
+            $.get('/Rapor88/GetAdresBilgileri', { docEntry: docEntry, objType: objType, cardCode: cardCode }, function(res) {
+                if(res.success) {
+                    let bAdres = `${res.belgeAdres.sokak} ${res.belgeAdres.ilce} ${res.belgeAdres.il} ${res.belgeAdres.postaKodu} ${res.belgeAdres.ulke}`;
+                    $("#divBelgeAdresi").html(res.belgeAdres.isDolu ? bAdres : "<span class='text-danger'><i class=\"fas fa-exclamation-circle\"></i> Belge üzerinde adres bilgisi BOŞ veya EKSİK!</span>");
+                    window.currentBelgeAdres = res.belgeAdres;
+                    
+                    $("#txtAddressStreet").val(res.cariAdres.sokak);
+                    $("#txtAddressCity").val(res.cariAdres.ilce);
+                    $("#txtAddressCounty").val(res.cariAdres.il);
+                    $("#txtAddressZipCode").val(res.cariAdres.postaKodu);
+                    $("#txtAddressCountry").val(res.cariAdres.ulke || "TR");
+
+                } else {
+                    $("#divBelgeAdresi").html("<span class='text-danger'>Hata: " + res.message + "</span>");
+                }
+            }).fail(function() {
+                $("#divBelgeAdresi").html("<span class='text-danger'>Sunucu bağlantı hatası!</span>");
+            });
+        }
+
+        function copyBelgeToCari() {
+            if(window.currentBelgeAdres) {
+                $("#txtAddressStreet").val(window.currentBelgeAdres.sokak);
+                $("#txtAddressCity").val(window.currentBelgeAdres.ilce);
+                $("#txtAddressCounty").val(window.currentBelgeAdres.il);
+                $("#txtAddressZipCode").val(window.currentBelgeAdres.postaKodu);
+                $("#txtAddressCountry").val(window.currentBelgeAdres.ulke || "TR");
+            }
+        }
+
+        function saveAddressInfo() {
+            let docEntry = $("#hdnAddressDocEntry").val();
+            let objType = $("#hdnAddressObjType").val();
+            let cardCode = $("#hdnAddressCardCode").val();
+            
+            let sokak = $("#txtAddressStreet").val().trim();
+            let ilce = $("#txtAddressCity").val().trim();
+            let il = $("#txtAddressCounty").val().trim();
+            let posta = $("#txtAddressZipCode").val().trim();
+            let ulke = $("#txtAddressCountry").val().trim();
+            
+            let useCariAddress = $("#chkUseCariAddress").is(":checked");
+
+            if(!sokak || !ilce || !il) {
+                alert("Lütfen Adres Satır 1, İlçe ve İl alanlarını boş bırakmayınız!");
+                return;
+            }
+
+            $(`#row-belge-${docEntry}-${objType}`).attr('data-usecari', useCariAddress ? "true" : "false");
+
+            let btn = $("#addressUpdateModal .btn-success");
+            let originalHtml = btn.html();
+            btn.html('<i class="fas fa-spinner fa-spin"></i> Güncelleniyor...').prop('disabled', true);
+
+            $.post('/Rapor88/UpdateCariAdres', { 
+                cardCode: cardCode, 
+                ilce: ilce, 
+                il: il, 
+                sokak: sokak, 
+                postaKodu: posta, 
+                ulke: ulke, 
+                objType: objType 
+            }, function (res) {
+                btn.html(originalHtml).prop('disabled', false);
+                if (res.success) {
+                    let modal = bootstrap.Modal.getInstance(document.getElementById('addressUpdateModal'));
+                    if(modal) modal.hide();
+                    
+                    addLog(res.message, "success");
+                    alert("Başarılı: " + res.message);
+                } else {
+                    alert("Hata: " + res.message);
+                }
+            }).fail(function() {
+                btn.html(originalHtml).prop('disabled', false);
+                alert("Sunucu ile iletişim kurulamadı.");
+            });
+        }
+        
+       // ================= ŞOFÖR & PLAKA YÖNETİMİ =================
+        function loadKayitliSoforler() {
+            let $ddl = $("#ddlKayitliSoforler");
+            $ddl.html('<option value="">Yükleniyor...</option>');
+            
+            $.ajax({
+                url: '/Rapor88/GetKayitliSoforler',
+                type: 'GET',
+                data: { q: '' },
+                cache: false, 
+                success: function(res) {
+                    if(res.success) {
+                        $ddl.html('<option value="">-- Kayıtlı Şoför Seçin --</option>');
+                        res.data.forEach(s => {
+                            let plaka = s.plaka || s.Plaka || "";
+                            let isim = s.soforAdSoyad || s.SoforAdSoyad || "";
+                            let tckn = s.soforTckn || s.SoforTckn || "";
+                            
+                            let option = $("<option></option>")
+                                .attr("value", "kayitli")
+                                .attr("data-plaka", plaka)
+                                .attr("data-isim", isim)
+                                .attr("data-tckn", tckn)
+                                .text(isim + " - " + plaka);
+                            $ddl.append(option);
+                        });
+                    } else {
+                        $ddl.html('<option value="">Hata oluştu</option>');
+                    }
+                },
+                error: function() {
+                    $ddl.html('<option value="">Bağlantı hatası</option>');
+                }
+            });
+        }
+
+        $(document).on('change', '#ddlKayitliSoforler', function() {
+            let selectedOption = $(this).find('option:selected');
+            let val = $(this).val();
+            
+            if(val) {
+                let plaka = selectedOption.attr('data-plaka') || "";
+                let isim = selectedOption.attr('data-isim') || "";
+                let tckn = selectedOption.attr('data-tckn') || "";
+
+                $("#txtDriverPlate").val(plaka);
+                $("#txtDriverName").val(isim);
+                $("#txtDriverTckn").val(tckn);
+            } else {
+                $("#txtDriverPlate").val("");
+                $("#txtDriverName").val("");
+                $("#txtDriverTckn").val("");
+            }
+        });
+
+        function openDriverModal(docEntry, objType) {
+            $("#hdnDriverDocEntry").val(docEntry);
+            $("#hdnDriverObjType").val(objType);
+            
+            $("#txtDriverPlate").val("Yükleniyor...");
+            $("#txtDriverName").val("Yükleniyor...");
+            $("#txtDriverTckn").val("Yükleniyor...");
+            $("#chkSaveToPool").prop('checked', false);
+            
+            new bootstrap.Modal(document.getElementById('driverUpdateModal')).show();
+            
+            loadKayitliSoforler();
+
+            $.get('/Rapor88/GetBelgeSofor', { docEntry: docEntry, objType: objType }, function(res) {
+                if(res.success && res.data) {
+                    let plaka = res.data.plaka || res.data.Plaka || "";
+                    let isim = res.data.soforAdSoyad || res.data.SoforAdSoyad || "";
+                    let tckn = res.data.soforTckn || res.data.SoforTckn || "";
+                    
+                    if(tckn === "11111111111") tckn = "";
+
+                    $("#txtDriverPlate").val(plaka);
+                    $("#txtDriverName").val(isim);
+                    $("#txtDriverTckn").val(tckn);
+                } else {
+                    $("#txtDriverPlate").val("");
+                    $("#txtDriverName").val("");
+                    $("#txtDriverTckn").val("");
+                }
+            }).fail(function() {
+                $("#txtDriverPlate").val("");
+                $("#txtDriverName").val("");
+                $("#txtDriverTckn").val("");
+            });
+        }
+        
+        function saveDriverInfo() {
+            let docEntry = $("#hdnDriverDocEntry").val();
+            let objType = $("#hdnDriverObjType").val();
+            let plaka = $("#txtDriverPlate").val().trim();
+            let isim = $("#txtDriverName").val().trim();
+            let tckn = $("#txtDriverTckn").val().trim();
+            let saveToPool = $("#chkSaveToPool").is(":checked");
+            
+            if(!plaka || !isim) {
+                alert("Araç plakası ve Şoför adı soyadı alanları zorunludur!");
+                return;
+            }
+
+            let btn = $("#btnSaveDriver");
+            let originalHtml = btn.html();
+            btn.html('<i class="fas fa-spinner fa-spin"></i> İşleniyor...').prop('disabled', true);
+            
+            if (saveToPool) {
+                $.post('/Rapor88/YeniSoforKaydet', { adSoyad: isim, plaka: plaka, tckn: tckn }, function(poolRes) {
+                    if(poolRes.success) {
+                        addLog("Şoför havuza kaydedildi: " + isim, "success");
+                    } else {
+                        console.warn("Havuza kayıt yapılamadı: " + poolRes.message);
+                    }
+                });
+            }
+
+            $.post('/Rapor88/UpdateBelgeSofor', {
+                docEntry: docEntry,
+                objType: objType,
+                plaka: plaka,
+                soforAdSoyad: isim,
+                soforTckn: tckn
+            }, function(res) {
+                btn.html(originalHtml).prop('disabled', false);
+                if(res.success) {
+                    let modal = bootstrap.Modal.getInstance(document.getElementById('driverUpdateModal'));
+                    if(modal) modal.hide();
+                    addLog(res.message, "success");
+                    alert("Başarılı: " + res.message);
+                } else {
+                    alert("Hata: " + res.message);
+                }
+            }).fail(function() {
+                btn.html(originalHtml).prop('disabled', false);
+                alert("Sunucuya ulaşılamadı.");
+            });
+        }
+        
+        // ================= QNB GİDEN BELGE İNDİRME =================
+        function openQnbDownloadModal() {
+            $("#txtQnbOids").val("");
+            new bootstrap.Modal(document.getElementById('qnbDownloadModal')).show();
+        }
+        
+        function downloadQnbDocs() {
+            let oidsRaw = $("#txtQnbOids").val();
+            let oids = oidsRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0);
+            
+            if (oids.length === 0) { 
+                alert("Lütfen indirilecek belgelerin OID numaralarını girin."); 
+                return; 
+            }
+            
+            let tur = $("#ddlQnbBelgeTuru").val();
+            let format = $("#ddlQnbBelgeFormati").val();
+            
+            let btn = $("#btnQnbDownload");
+            let originalHtml = btn.html();
+            btn.html('<i class="fas fa-spinner fa-spin"></i> İndiriliyor...').prop('disabled', true);
+            
+            fetch('/Rapor88/QnbGidenBelgeIndir?belgeTuru=' + tur + '&belgeFormati=' + format, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(oids)
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Ağ hatası veya indirme başarısız');
+                
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.indexOf('application/json') !== -1) {
+                    return response.json().then(data => {
+                        throw new Error(data.message || "İndirme hatası");
+                    });
+                }
+                
+                return response.blob();
+            })
+            .then(blob => {
+                btn.html(originalHtml).prop('disabled', false);
+                
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                const dateStr = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+                a.download = `Giden_${tur}_${dateStr}.zip`;
+                
+                document.body.appendChild(a);
+                a.click();
+                
+                window.URL.revokeObjectURL(url);
+                let modal = bootstrap.Modal.getInstance(document.getElementById('qnbDownloadModal'));
+                if(modal) modal.hide();
+                
+                addLog(`${oids.length} adet ${tur} belgesi başarıyla Zip olarak indirildi.`, "success");
+            })
+            .catch(error => {
+                btn.html(originalHtml).prop('disabled', false);
+                alert("Hata: " + error.message);
+                addLog("Zip İndirme Hatası: " + error.message, "error");
+            });
+        }
+        // ==========================================================
+
+        // ---- ÖNİZLEME YAKINLAŞTIRMA -------------------------------------
+        // A4 sayfası 21cm sabittir. Pencere her açıldığında ölçek %105'e döner;
+        // kullanıcı +/- düğmeleriyle değiştirir, ortadaki düğme %105'e alır.
+        var ONIZLEME_VARSAYILAN_OLCEK = 1.05;
+        var onizlemeOlcek = ONIZLEME_VARSAYILAN_OLCEK;
+
+        function onizlemeOlcekUygula() {
+            onizlemeOlcek = Math.min(4, Math.max(0.4, onizlemeOlcek));
+            document.getElementById('previewModalBody').style.setProperty('--pdf-olcek', onizlemeOlcek);
+
+            var yazi = document.getElementById('onizlemeOlcekYazi');
+            if (yazi) yazi.textContent = '%' + Math.round(onizlemeOlcek * 100);
+        }
+
+        function onizlemeOlcekle(fark) {
+            onizlemeOlcek += fark;
+            onizlemeOlcekUygula();
+        }
+
+        function onizlemeSigdir() {
+            onizlemeOlcek = ONIZLEME_VARSAYILAN_OLCEK;
+            onizlemeOlcekUygula();
+        }
+
+        function previewDoc(docEntry, objType) {
+            $("#hdnActiveDocEntry").val(docEntry); $("#hdnActiveObjType").val(objType);
+            $("#previewModalBody").html(`<div class="d-flex flex-column align-items-center justify-content-center" style="height: 29.7cm;"><i class="fas fa-spinner fa-spin fa-4x text-primary mb-3"></i><h4 class="text-muted">Belge görseli oluşturuluyor...</h4></div>`);
+            onizlemeSigdir();
+            $("#rawXmlContent").text("XML verisi bekleniyor..."); $("#xmlDataContainer").hide();
+            
+            let existingModal = bootstrap.Modal.getInstance(document.getElementById('previewModal'));
+            if (!existingModal) existingModal = new bootstrap.Modal(document.getElementById('previewModal'));
+            existingModal.show();
+
+            let cardCode = $(`#row-belge-${docEntry}-${objType}`).data("cardcode");
+            let useCari = $(`#row-belge-${docEntry}-${objType}`).attr('data-usecari') === 'true';
+
+            $.get('/Rapor88/PreviewFatura', { docEntry: docEntry, objType: objType, useCariAddress: useCari }, function (res) {
+                if (res.success) { 
+                    sonOnizlemeHtml = res.html || '';
+                    $("#previewModalBody").html(res.html); 
+                    $("#rawXmlContent").text(res.xml); 
+                } 
+                else if (res.message && res.message.toLowerCase().indexOf("adres bilgileri eksik") !== -1) {
+                    existingModal.hide();
+                    openAddressModal(docEntry, objType, cardCode, true, res.message);
+                }
+                else { 
+                    $("#previewModalBody").html(`<div class="alert alert-danger m-5 shadow-sm"><h4><i class="fas fa-exclamation-triangle"></i> Önizleme Hatası</h4><p>${res.message}</p></div>`); 
+                }
+            }).fail(function() { 
+                $("#previewModalBody").html('<div class="alert alert-danger m-5 shadow-sm">Sunucu ile bağlantı kurulamadı.</div>'); 
+            });
+        }
+
+        // Son onizlemenin XSLT ciktisi (tam HTML belgesi); yazdirma bundan yapilir.
+        var sonOnizlemeHtml = '';
+
+        // ---- PDF INDIR: ekranda gorunen belgenin birebir A4 kopyasi -----------
+        // Belge (.belgeSayfasi) dogrudan html2canvas ile resme cevrilir ve jsPDF ile
+        // A4 sayfa genisligine tam oturtulur. Onceki html2pdf katmani belgeyi kendi
+        // kabina kopyalayip yeniden olcekledigi icin sag/sol kenarlar kesiliyordu.
+        function downloadPdf() {
+            var docEntry = $("#hdnActiveDocEntry").val();
+            if (!docEntry) { alert("İndirilecek belge bulunamadı!"); return; }
+            if (typeof html2canvas !== 'function' || !window.jspdf || !window.jspdf.jsPDF) {
+                alert("PDF kütüphanesi yüklenemedi. Sayfayı yenileyip tekrar deneyin."); return;
+            }
+
+            var kutu = document.getElementById('previewModalBody');
+            var sayfa = kutu.querySelector('.belgeSayfasi') || kutu;
+            var btn = $("#btnDownloadPdf"); var originalHtml = btn.html();
+            btn.html('<i class="fas fa-spinner fa-spin"></i> Hazırlanıyor...').prop('disabled', true);
+
+            // Cekim 1:1 olculerle yapilir: onizleme olcegi ve portal zoom'u gecici kapatilir.
+            // (html2canvas CSS zoom altinda konumlari yanlis olcuyor.)
+            var olcekYedek = onizlemeOlcek;
+            kutu.style.setProperty('--pdf-olcek', 1);
+            kutu.classList.add('pdf-cikti');
+
+            var kok = document.documentElement;
+            var kokZoomYedek = kok.style.zoom;
+            var kokZoomDegiskenYedek = kok.style.getPropertyValue('--zoom');
+            kok.style.zoom = '';
+            kok.style.removeProperty('--zoom');
+
+            var govde = document.querySelector('#previewModal .modal-body');
+            var kaydirmaYedek = govde ? govde.scrollTop : 0;
+            if (govde) govde.scrollTop = 0;
+
+            function geriAl() {
+                kok.style.zoom = kokZoomYedek;
+                if (kokZoomDegiskenYedek) kok.style.setProperty('--zoom', kokZoomDegiskenYedek);
+                kutu.classList.remove('pdf-cikti');
+                onizlemeOlcek = olcekYedek;
+                onizlemeOlcekUygula();
+                if (govde) govde.scrollTop = kaydirmaYedek;
+                btn.html(originalHtml).prop('disabled', false);
+            }
+
+            html2canvas(sayfa, {
+                scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff',
+                scrollX: 0, scrollY: 0,
+                width: sayfa.offsetWidth, height: sayfa.offsetHeight,
+                windowWidth: Math.max(sayfa.offsetWidth, document.documentElement.clientWidth)
+            }).then(function (canvas) {
+                var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+                var sayfaGen = pdf.internal.pageSize.getWidth();
+                var sayfaYuk = pdf.internal.pageSize.getHeight();
+                var resimYuk = canvas.height * sayfaGen / canvas.width;
+                var veri = canvas.toDataURL('image/jpeg', 0.98);
+
+                if (resimYuk <= sayfaYuk + 1) {
+                    // Tek sayfa: genislik A4'e tam oturur, kucuk tasma payi kirpilir.
+                    pdf.addImage(veri, 'JPEG', 0, 0, sayfaGen, Math.min(resimYuk, sayfaYuk));
+                } else {
+                    // Uzun belge: ayni resim sayfa sayfa kaydirilarak basilir.
+                    var konum = 0;
+                    while (konum < resimYuk - 0.5) {
+                        if (konum > 0) pdf.addPage();
+                        pdf.addImage(veri, 'JPEG', 0, -konum, sayfaGen, resimYuk);
+                        konum += sayfaYuk;
+                    }
+                }
+                pdf.save('e-Belge_' + docEntry + '.pdf');
+                geriAl();
+            }).catch(function (err) {
+                console.error("PDF Hatası:", err); alert("PDF oluşturulurken bir hata meydana geldi.");
+                geriAl();
+            });
+        }
+
+        // ---- YAZDIR: tarayicinin yazdirma penceresi -----------------------------
+        // XSLT ciktisi (tam HTML) gizli bir cerceveye yuklenir ve oradan yazdirilir.
+        // Belgenin kendi yazdirma (print) stilleri ve A4 sayfa tanimi kullanilir; PDF olarak
+        // kaydetmek icin yazdirma penceresinde "PDF olarak kaydet" secilebilir.
+        function onizlemeYazdir() {
+            if (!sonOnizlemeHtml) { alert("Yazdırılacak belge yok. Önce önizleme oluşturun."); return; }
+
+            var eski = document.getElementById('onizlemeYazdirCerceve');
+            if (eski) eski.remove();
+
+            var yazdirStili = '<style>@@page { size: A4 portrait; margin: 8mm; } ' +
+                              '@@media print { html, body { zoom: 1 !important; background: #fff !important; } }</style>';
+            var html = sonOnizlemeHtml.indexOf('</head>') > -1
+                ? sonOnizlemeHtml.replace('</head>', yazdirStili + '</head>')
+                : yazdirStili + sonOnizlemeHtml;
+
+            var cerceve = document.createElement('iframe');
+            cerceve.id = 'onizlemeYazdirCerceve';
+            cerceve.setAttribute('aria-hidden', 'true');
+            // Ekran disinda ama gercek olculerde: 0x0 cerceveden yazdirma bazi
+            // tarayicilarda bos sayfa veriyor.
+            cerceve.style.cssText = 'position:fixed; left:-10000px; top:0; width:900px; height:1200px; border:0; opacity:0; pointer-events:none;';
+            cerceve.onload = function () {
+                // QR kodu ve gomulu logolar cizilsin diye kisa bekleme.
+                setTimeout(function () {
+                    try { cerceve.contentWindow.focus(); cerceve.contentWindow.print(); }
+                    catch (e) { console.error("Yazdırma hatası:", e); alert("Yazdırma penceresi açılamadı."); }
+                }, 400);
+            };
+            document.body.appendChild(cerceve);
+            cerceve.srcdoc = html;
+        }
+
+        function sendActiveDocFromModal() {
+            var docEntry = $("#hdnActiveDocEntry").val();
+            var objType = $("#hdnActiveObjType").val();
+            var modalInstance = bootstrap.Modal.getInstance(document.getElementById('previewModal'));
+            if(modalInstance) modalInstance.hide();
+            if(docEntry && objType) { sendDoc(docEntry, objType); }
+        }
+
+        async function sendDoc(docEntry, objType) {
+            // QNB onayı bekleyen belge yeniden gönderilmez (mükerrer belge). Sunucu da ayrıca kilitler.
+            if ($('#row-belge-' + docEntry + '-' + objType).hasClass('onay-bekliyor')) {
+                alert('Bu belge daha önce QNB\'ye gönderildi ve ONAY BEKLİYOR.\n\nTekrar göndermeyin; onay gelince GİB numarası SAP\'ye otomatik yazılır. İsterseniz "Şimdi Sorgula" ile durumu kontrol edin.');
+                return;
+            }
+            $("#hdnSendDocEntry").val(docEntry);
+            $("#hdnSendObjType").val(objType);
+            
+            $("#ddlSeriPrefix").html('<option value="">Seriler Yükleniyor...</option>');
+            await populateSeriesDropdown(docEntry, objType);
+
+            if(objType === "15" || objType === "21") {
+                if($("#ddlSeriPrefix option[value='IRS']").length > 0) $("#ddlSeriPrefix").val("IRS");
+                else $("#ddlSeriPrefix").prop('selectedIndex', 0);
+            } else {
+                if($("#ddlSeriPrefix option[value='SLV']").length > 0) $("#ddlSeriPrefix").val("SLV");
+                else $("#ddlSeriPrefix").prop('selectedIndex', 0);
+            }
+
+            // İade faturası mı? Orijinal fatura no/tarihi alanlarını göster ve SAP'deki değerle doldur.
+            $("#iadeRefAlan").hide(); $("#txtIadeFaturaNo, #txtIadeFaturaTarihi").val('');
+            try {
+                var iade = await $.get('/Rapor88/IadeReferans', { docEntry: docEntry, objType: objType });
+                if (iade && iade.success && iade.iadeMi) {
+                    $("#txtIadeFaturaNo").val(iade.faturaNo || '');
+                    $("#txtIadeFaturaTarihi").val(iade.tarih || iade.belgeTarihi || '');
+                    $("#iadeRefAlan").show();
+                }
+            } catch (e) { console.warn('İade referansı okunamadı', e); }
+
+            new bootstrap.Modal(document.getElementById('seriSecimModal')).show();
+            fetchNextNumber();
+        }
+
+        function fetchNextNumber() {
+            var prefix = $("#ddlSeriPrefix").val();
+            $("#txtCalculatedGibNo").val("");
+            $("#numLoader").show();
+
+            $.get('/Rapor88/GetNextSequence', { prefix: prefix }, function (res) {
+                $("#numLoader").hide();
+                if (res.success) { 
+                    let dbNext = res.nextNumber;
+                    let manualNext = localStorage.getItem("ManualCounter_" + prefix);
+                    let finalNext = dbNext;
+                    
+                    if(manualNext && manualNext > dbNext) {
+                        finalNext = manualNext;
+                    } else if(manualNext) {
+                        localStorage.removeItem("ManualCounter_" + prefix);
+                    }
+
+                    $("#txtCalculatedGibNo").val(finalNext); 
+                } 
+                else { alert("Sıradaki numara hesaplanamadı: " + res.message); }
+            });
+        }
+
+
+        // ==================== TOPLU GÖNDERİM ====================
+        var topluCalisiyor = false;
+        var topluDurdur = false;
+
+        // Tekli gonderim suruyor mu? Gonderim 30 saniyeye kadar surebildigi
+        // icin bu sirada tablonun yeniden cizilmesi satiri DOM'dan koparir.
+        var gonderimSuruyor = false;
+
+        function topluSecimSay() {
+            var n = $('.toplu-sec:checked').length;
+            $('#topluSayiRozet').text(n + ' belge seçili');
+            $('#btnTopluGonder').prop('disabled', n === 0 || topluCalisiyor);
+        }
+
+        /** Yalnizca o an gorunen sekmedeki satirlari secer. */
+        function topluTumunuSec(kaynak) {
+            $('.tab-pane.active .toplu-sec:visible').prop('checked', kaynak.checked);
+            topluSecimSay();
+        }
+
+        /**
+         * Belgeye uygun seriyi secer. GetActiveSeriesList zaten belge tipine
+         * gore filtreli donuyor; tek tek gonderimdeki tercih burada da korunur.
+         */
+        function topluSeriSec(seriler, objType) {
+            var tercih = (objType === '15' || objType === '21') ? 'IRS' : 'SLV';
+            for (var i = 0; i < seriler.length; i++) {
+                if (seriler[i].prefix === tercih) return tercih;
+            }
+            return seriler[0].prefix;
+        }
+
+        function topluSatirHata($row, $actionCell, butonlar, mesaj, sapNo) {
+            addLog('[SAP: ' + sapNo + '] ' + mesaj, 'error');
+            $row.removeClass('table-success table-warning').addClass('table-danger');
+            $actionCell.html(butonlar);
+            $actionCell.append('<div class="hata-mesaji text-danger mt-2 small fw-bold" '
+                + 'style="line-height:1.2; word-wrap:break-word; max-width:250px;">'
+                + '<i class="fas fa-exclamation-triangle"></i> ' + mesaj + '</div>');
+        }
+
+        /** Tek belgeyi gonderir. Doner: 'basarili' | 'bekleyen' | 'hatali' */
+        async function topluTekBelge(docEntry, objType) {
+            var $row = $('#row-belge-' + docEntry + '-' + objType);
+            var $actionCell = $row.find('.action-cell');
+            var butonlar = $actionCell.html();
+            var sapNo = $row.find('td:first').text().trim();
+            var useCari = $row.attr('data-usecari') === 'true';
+
+            $row.removeClass('table-danger table-warning table-success');
+            $actionCell.find('.hata-mesaji').remove();
+            $actionCell.html('<span class="text-primary fw-bold">'
+                + '<i class="fas fa-spinner fa-spin me-1"></i> İletiliyor...</span>');
+
+            // 1) Seri
+            var seriler;
+            try {
+                seriler = await getMergedSeries(docEntry, objType);
+            } catch (e) {
+                topluSatirHata($row, $actionCell, butonlar, 'Seri listesi alınamadı.', sapNo);
+                return 'hatali';
+            }
+            if (!seriler || seriler.length === 0) {
+                topluSatirHata($row, $actionCell, butonlar, 'Bu belgeye uygun aktif seri bulunamadı.', sapNo);
+                return 'hatali';
+            }
+            // İade faturasında orijinal fatura referansı yoksa QNB reddeder; toplu gönderimde atlanır, tekil gönderimden girilir.
+            try {
+                var iadeRef = await $.get('/Rapor88/IadeReferans', { docEntry: docEntry, objType: objType });
+                if (iadeRef && iadeRef.success && iadeRef.iadeMi && !iadeRef.gecerli) {
+                    topluSatirHata($row, $actionCell, butonlar, 'İade faturası: iade edilen faturanın 16 haneli numarası belgede yok. Satırdaki Gönder ile açılan pencereden girin.', sapNo);
+                    return 'hatali';
+                }
+            } catch (e) { /* okunamazsa gönderim sunucuda yine denetlenir */ }
+            var prefix = topluSeriSec(seriler, objType);
+
+            // 2) Sıradaki GİB numarası
+            var numRes;
+            try {
+                numRes = await $.get('/Rapor88/GetNextSequence', { prefix: prefix });
+            } catch (e) {
+                topluSatirHata($row, $actionCell, butonlar, 'Sıradaki numara alınamadı.', sapNo);
+                return 'hatali';
+            }
+            if (!numRes.success || !numRes.nextNumber || numRes.nextNumber.length !== 16) {
+                topluSatirHata($row, $actionCell, butonlar,
+                    'Sıradaki numara hesaplanamadı: ' + (numRes.message || 'geçersiz numara'), sapNo);
+                return 'hatali';
+            }
+            var gibNo = numRes.nextNumber;
+            addLog('[SAP: ' + sapNo + '] QNB iletimi başlatıldı (GİB No: ' + gibNo + ')...', 'info');
+
+            // 3) Gönder
+            var res;
+            try {
+                res = await $.post('/Rapor88/FaturaGonderOtomatik', {
+                    docEntry: docEntry, objType: objType,
+                    gibFaturaNo: gibNo, useCariAddress: useCari
+                });
+            } catch (e) {
+                topluSatirHata($row, $actionCell, butonlar,
+                    'Sunucu bağlantı hatası. Belgenin gidip gitmediği belirsiz, Giden Belgeler ekranından kontrol edin.', sapNo);
+                return 'hatali';
+            }
+
+            if (!res.success) {
+                topluSatirHata($row, $actionCell, butonlar, res.message, sapNo);
+                return 'hatali';
+            }
+
+            $row.find('.toplu-sec').prop('checked', false).prop('disabled', true);
+            $row.find('td:eq(1)').text(res.gibNo);
+
+            // QNB kesin sonuc vermedi: listeden DUSURULMEZ.
+            if (res.dogrulandi === false) {
+                addLog('[SAP: ' + sapNo + '] ONAY BEKLİYOR - ' + res.message + ' (OID: ' + res.oid + ')', 'warning', res.oid);
+                $row.addClass('table-warning');
+                $actionCell.html(
+                    '<span class="text-warning fw-bold d-block mb-1">'
+                  + '<i class="fas fa-hourglass-half me-1"></i>Onay bekliyor</span>'
+                  + '<button class="btn btn-sm btn-outline-warning" onclick="durumSorgula(\'' + res.oid + '\')">'
+                  + '<i class="fas fa-satellite-dish me-1"></i>Durum Sorgula</button>');
+                return 'bekleyen';
+            }
+
+            // QNB'de dogrulandi: yesil ve listeden dus.
+            addLog('[SAP: ' + sapNo + '] ' + res.message + ' (OID: ' + res.oid + ')', 'success', res.oid);
+            $row.addClass('table-success');
+            $actionCell.html('<span class="text-success fw-bold">'
+                + '<i class="fas fa-check-circle me-1"></i> QNB\'de doğrulandı</span>');
+
+            $row.fadeOut(1200, function () {
+                var $tbody = $(this).closest('tbody');
+                $(this).remove();
+                if ($tbody.find('tr').length === 0) {
+                    $tbody.html('<tr><td colspan="8" class="text-center py-4 text-success fw-bold">'
+                        + '<i class="fas fa-check-circle me-1"></i> Bu bölümde bekleyen belge bulunmuyor!</td></tr>');
+                }
+                topluSecimSay();
+            });
+            return 'basarili';
+        }
+
+        async function topluGonder() {
+            var secilenler = $('.toplu-sec:checked').map(function () {
+                var $r = $(this).closest('tr');
+                return { docEntry: $r.data('docentry'), objType: String($r.data('objtype')) };
+            }).get();
+
+            if (secilenler.length === 0) return;
+
+            if (!confirm(secilenler.length + ' belge SIRAYLA QNB\'ye gönderilecek.\n\n'
+                       + 'Her belge için sıradaki GİB numarası otomatik alınır.\n'
+                       + 'Onayı gelen satır yeşile döner ve listeden düşer.\n\n'
+                       + 'Devam edilsin mi?')) return;
+
+            topluCalisiyor = true;
+            topluDurdur = false;
+            $('#btnTopluGonder').prop('disabled', true);
+            $('#btnTopluDurdur').show();
+            $('#topluIlerleme').show();
+
+            var basarili = 0, bekleyen = 0, hatali = 0;
+
+            for (var i = 0; i < secilenler.length; i++) {
+                if (topluDurdur) {
+                    addLog('Toplu gönderim durduruldu. Kalan ' + (secilenler.length - i) + ' belge gönderilmedi.', 'warning');
+                    break;
+                }
+
+                $('#topluIlerleme').text('Gönderiliyor: ' + (i + 1) + ' / ' + secilenler.length);
+
+                var sonuc = await topluTekBelge(secilenler[i].docEntry, secilenler[i].objType);
+                if (sonuc === 'basarili') basarili++;
+                else if (sonuc === 'bekleyen') bekleyen++;
+                else hatali++;
+            }
+
+            topluCalisiyor = false;
+            $('#btnTopluDurdur').hide();
+            $('#topluIlerleme').hide();
+            $('#chkTumunuSec').prop('checked', false);
+            topluSecimSay();
+
+            var ozet = 'Toplu gönderim bitti.\n\n'
+                     + 'QNB\'de doğrulanan : ' + basarili + '\n'
+                     + 'Onay bekleyen      : ' + bekleyen + '\n'
+                     + 'Hata alan          : ' + hatali;
+            addLog(ozet.replace(/\n/g, ' | '), hatali > 0 ? 'error' : 'success');
+            alert(ozet);
+        }
+
+        // ================= BELGE GÖNDERİMİ (SARI/KIRMIZI/YEŞİL MANTIĞI) =================
+        function executeSendDoc() {
+            var docEntry = $("#hdnSendDocEntry").val();
+            var objType = $("#hdnSendObjType").val();
+            var finalGibNo = $("#txtCalculatedGibNo").val().trim(); 
+            var $row = $(`#row-belge-${docEntry}-${objType}`);
+            var sapNo = $row.find("td:first").text().trim();
+            var cardCode = $row.data("cardcode");
+            var useCari = $row.attr('data-usecari') === 'true';
+
+            if(finalGibNo.length !== 16) {
+                alert("GİB Belge numarası tam olarak 16 hane olmalıdır! (Örn: SLV2026000000001)");
+                $("#txtCalculatedGibNo").focus();
+                return;
+            }
+
+            // İade faturası: orijinal fatura no (16 hane) ve tarihi zorunlu
+            var iadeNo = '', iadeTarih = '';
+            if ($("#iadeRefAlan").is(':visible')) {
+                iadeNo = ($("#txtIadeFaturaNo").val() || '').trim().toUpperCase();
+                iadeTarih = $("#txtIadeFaturaTarihi").val() || '';
+                if (iadeNo.length !== 16) { alert("İade faturası: iade edilen (orijinal) faturanın numarası tam 16 hane olmalıdır. GİB bu referansı zorunlu tutar."); $("#txtIadeFaturaNo").focus(); return; }
+                if (!iadeTarih) { alert("İade faturası: iade edilen faturanın tarihini girin."); $("#txtIadeFaturaTarihi").focus(); return; }
+            }
+
+            var modalInstance = bootstrap.Modal.getInstance(document.getElementById('seriSecimModal'));
+            if(modalInstance) modalInstance.hide();
+
+            addLog(`[SAP: ${sapNo}] QNB iletimi başlatıldı (Kullanılacak GİB No: ${finalGibNo})...`, "info");
+            
+            var $actionCell = $row.find('.action-cell');
+            var originalButtons = $actionCell.html(); // Butonların yedeğini al
+            $actionCell.html(`<span class="text-primary fw-bold"><i class="fas fa-spinner fa-spin me-1"></i> İletiliyor...</span>`);
+
+            gonderimSuruyor = true;
+
+            $.post('/Rapor88/FaturaGonderOtomatik', { docEntry: docEntry, objType: objType, gibFaturaNo: finalGibNo, useCariAddress: useCari, iadeFaturaNo: iadeNo, iadeFaturaTarihi: iadeTarih }, function (res) {
+                // Yanit gecikirse tablo yeniden cizilmis olabilir; satiri
+                // DOM'dan tekrar coz ki dogru elemani guncelleyelim.
+                $row = $(`#row-belge-${docEntry}-${objType}`);
+                $actionCell = $row.find('.action-cell');
+
+                // QNB kesin sonuc vermediyse "gonderildi" deyip yesile boyamayiz.
+                // Belge QNB'ye girdi (OID var) ama sonucu henuz dogrulanmadi.
+                if (res.beklemede || (res.success && res.dogrulandi === false)) {
+                    addLog(`[SAP: ${sapNo}] ONAY BEKLİYOR - ${res.message} (OID: ${res.oid})`, "warning", res.oid);
+
+                    $row.removeClass('table-success table-danger').addClass('table-warning onay-bekliyor');
+                    $row.find("td:eq(1)").html(res.gibNo + ' <small class="text-warning">(onay bekliyor)</small>'); $row.find('.toplu-sec').prop('checked', false).prop('disabled', true);
+
+                    $actionCell.find('.hata-mesaji').remove();
+                    $actionCell.html(
+                        '<span class="text-warning fw-bold d-block mb-1">'
+                      + '<i class="fas fa-hourglass-half me-1"></i>Onay bekliyor</span>'
+                      + '<button class="btn btn-sm btn-outline-warning" onclick="durumSorgula(\'' + res.oid + '\', ' + docEntry + ', \'' + objType + '\')">'
+                      + '<i class="fas fa-satellite-dish me-1"></i>Durum Sorgula</button>');
+
+                    alert(res.message);
+                    return;
+                }
+
+                if (res.success) {
+                    // BAŞARILI İŞLEM -> SATIR YEŞİL OLUR VE KAYBOLUR
+                    let isWarning = res.message.includes("DİKKAT");
+                    let logType = isWarning ? "warning" : "success";
+
+                    addLog(`[SAP: ${sapNo}] ${res.message} (OID: ${res.oid})`, logType, res.oid);
+                    
+                    // Satırı yeşile boya ve GİB No'yu yaz
+                    $row.removeClass('table-danger table-warning').addClass('table-success');
+                    $row.find("td:eq(1)").text(res.gibNo);
+                    
+                    // Varsa önceki hata mesajını temizle ve "Başarılı" yaz
+                    $actionCell.find('.hata-mesaji').remove();
+                    $actionCell.html(`<span class="text-success fw-bold"><i class="fas fa-check-circle me-1"></i> Başarılı</span>`);
+                    
+                    if(isWarning) {
+                        alert(res.message);
+                    }
+                    
+                    // 2 Saniye sonra satırı yavaşça gizle ve DOM'dan sil
+                    $row.fadeOut(2000, function() { 
+                        let $tbody = $(this).closest("tbody"); 
+                        $(this).remove(); 
+                        if ($tbody.find("tr").length === 0) { 
+                            $tbody.html(`<tr><td colspan="8" class="text-center py-4 text-success fw-bold"><i class="fas fa-check-circle me-1"></i> Bu bölümde bekleyen belge bulunmuyor!</td></tr>`); 
+                        }
+                    });
+                } 
+                else if (res.message && res.message.toLowerCase().indexOf("adres bilgileri eksik") !== -1) {
+                    $actionCell.html(originalButtons);
+                    openAddressModal(docEntry, objType, cardCode, true, res.message);
+                }
+                else {
+                    // HATALI İŞLEM -> SATIR KIRMIZI OLUR VE EKRANDA KALIR (GİZLENMEZ)
+                    addLog(`[SAP: ${sapNo}] Gönderim Hata Aldı: ${res.message}`, "error");
+                    
+                    $row.removeClass('table-success table-warning').addClass('table-danger');
+                    $actionCell.html(originalButtons); // Tekrar deneyebilmesi için butonları geri getir
+                    
+                    // Butonların altına hata divini oluştur veya güncelle
+                    let $errorDiv = $actionCell.find('.hata-mesaji');
+                    if ($errorDiv.length === 0) {
+                        $actionCell.append('<div class="hata-mesaji text-danger mt-2 small fw-bold" style="line-height:1.2; word-wrap: break-word; max-width: 250px;"></div>');
+                        $errorDiv = $actionCell.find('.hata-mesaji');
+                    }
+                    $errorDiv.html(`<i class="fas fa-exclamation-triangle"></i> ${res.message}`);
+                }
+            }).fail(function () { 
+                // SUNUCU / BAĞLANTI HATASI -> SATIR KIRMIZI OLUR VE KALIR
+                addLog(`[SAP: ${sapNo}] Sunucu bağlantı hatası oluştu. Veri iletilemedi.`, "error"); 
+                
+                $row.removeClass('table-success table-warning').addClass('table-danger');
+                $actionCell.html(originalButtons);
+                
+                let $errorDiv = $actionCell.find('.hata-mesaji');
+                if ($errorDiv.length === 0) {
+                    $actionCell.append('<div class="hata-mesaji text-danger mt-2 small fw-bold" style="line-height:1.2; word-wrap: break-word; max-width: 250px;"></div>');
+                    $errorDiv = $actionCell.find('.hata-mesaji');
+                }
+                $errorDiv.html(`<i class="fas fa-plug"></i> Bağlantı Hatası! Sunucuya ulaşılamıyor.`);
+            }).always(function () {
+                // Hangi sonuc olursa olsun otomatik yenileme tekrar devreye girer.
+                gonderimSuruyor = false;
+            });
+        }
+
+        function seriTipEtiket(t){
+            if(t==='EFATURA') return '<span class="badge bg-info text-dark">e-Fatura</span>';
+            if(t==='EARSIV') return '<span class="badge bg-secondary">e-Arşiv</span>';
+            if(t==='IRSALIYE') return '<span class="badge bg-success">İrsaliye</span>';
+            return t||'';
+        }
+        function seriYonEtiket(y){
+            if(y==='YURTDISI') return '<span class="badge bg-warning text-dark">Yurtdışı</span>';
+            return '<span class="badge bg-light text-dark border">Yurtiçi</span>';
+        }
+
+        async function loadSeriesStatus() {
+            $("#tbodySeries").html(`<tr><td colspan="7" class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br>Seriler yükleniyor...</td></tr>`);
+            $.get('/Rapor88/SeriYonetimListe', function (res) {
+                if (!res.success) {
+                    $("#tbodySeries").html(`<tr><td colspan="7" class="text-danger text-center py-3">Hata: ${res.message}</td></tr>`);
+                    return;
+                }
+                if (!res.data || res.data.length === 0) {
+                    $("#tbodySeries").html(`<tr><td colspan="7" class="text-center py-4 text-muted">Henüz seri tanımlanmadı. "Yeni Seri Ekle" ile seri ekleyin.</td></tr>`);
+                    return;
+                }
+                let rows = "";
+                res.data.forEach(item => {
+                    rows += `
+                        <tr>
+                            <td class="fw-bold text-dark fs-5 align-middle">${item.seri}</td>
+                            <td class="align-middle">${seriTipEtiket(item.belgeTipi)}</td>
+                            <td class="align-middle">${seriYonEtiket(item.yon)}</td>
+                            <td class="text-muted align-middle small">${item.aciklama || ''}</td>
+                            <td class="text-danger fw-bold align-middle">${item.sonNumara}</td>
+                            <td class="text-success fw-bold align-middle">${item.siradaki}</td>
+                            <td class="align-middle">
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control seri-yetki-input ${item.yetkili ? 'border-warning fw-bold' : ''}" id="seriYetki_${item.id}" value="${(item.yetkili || '').replace(/"/g, '&quot;')}" placeholder="herkes" title="Virgülle kullanıcı kodları, ör. MUH87,IT02. Boş = herkes.">
+                                    <button class="btn btn-outline-primary" onclick="saveSeriesAuth(${item.id})" title="İzinli kullanıcıları kaydet"><i class="fas fa-save"></i></button>
+                                </div>
+                                ${item.yetkili ? `<div class="small mt-1 ${item.banaAcik ? 'text-warning' : 'text-danger'}"><i class="fas fa-lock"></i> Kısıtlı${item.banaAcik ? '' : ' — size kapalı'}</div>` : ''}
+                            </td>
+                            <td class="text-center align-middle">
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteSeries(${item.id})" title="Bu Seriyi Sil"><i class="fas fa-trash"></i></button>
+                            </td>
+                        </tr>`;
+                });
+                $("#tbodySeries").html(rows);
+            }).fail(()=> $("#tbodySeries").html(`<tr><td colspan="7" class="text-danger text-center py-3">Sunucu hatası.</td></tr>`));
+        }
+
+        function updateManualCounter(prefix) {
+            let val = $("#txtManualNext_" + prefix).val().trim();
+            if(val.length !== 16) { alert("Lütfen tam 16 haneli bir GİB numarası girin! (Örn: SLV2026000000015)"); return; }
+            localStorage.setItem("ManualCounter_" + prefix, val);
+            addLog(`Sistem Sayacı Geçersiz Kılındı: ${prefix} serisi için bir sonraki belge ${val} numarasından başlayacaktır.`, "success");
+            alert("Yeni başlangıç numarası kaydedildi!");
+            loadSeriesStatus();
+        }
+
+        function openAddSeriesModal() {
+            $("#txtNewSeriesPrefix").val("");
+            $("#txtNewSeriesDesc").val("");
+            $("#txtNewSeriesAuth").val("");
+            $("#ddlNewSeriesTip").val("EFATURA");
+            $("#ddlNewSeriesYon").val("YURTICI");
+            new bootstrap.Modal(document.getElementById('addSeriesModal')).show();
+        }
+
+        function saveNewSeries() {
+            let prefix = $("#txtNewSeriesPrefix").val().trim().toUpperCase();
+            let tip = $("#ddlNewSeriesTip").val();
+            let yon = $("#ddlNewSeriesYon").val();
+            let desc = $("#txtNewSeriesDesc").val().trim();
+
+            if (prefix.length !== 3) { alert("Seri ön eki tam 3 harf olmalıdır!"); return; }
+
+            $.ajax({
+                url: '/Rapor88/SeriKaydet', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ Seri: prefix, BelgeTipi: tip, Yon: yon, Aciklama: desc, YetkiliKullanicilar: $("#txtNewSeriesAuth").val().trim() }),
+                success: function(res) {
+                    if (!res.success) { alert(res.message || "Seri eklenemedi."); return; }
+                    bootstrap.Modal.getInstance(document.getElementById('addSeriesModal')).hide();
+                    loadSeriesStatus();
+                },
+                error: function(){ alert("Sunucu hatası: seri eklenemedi."); }
+            });
+        }
+
+        // IT #62: serinin izinli kullanıcı listesi (boş = herkes). Yalnızca A yetkisi kaydedebilir.
+        function saveSeriesAuth(id) {
+            let liste = $("#seriYetki_" + id).val().trim();
+            $.ajax({
+                url: '/Rapor88/SeriYetkiGuncelle', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ Id: id, YetkiliKullanicilar: liste }),
+                success: function (res) { if (!res.success) { alert(res.message || "Kaydedilemedi."); return; } if (window.toastr) toastr.success(res.message); loadSeriesStatus(); },
+                error: function () { alert("Sunucu hatası: izinli kullanıcılar kaydedilemedi."); }
+            });
+        }
+
+        function deleteSeries(id) {
+            if(!confirm("Bu seri tanımı silinecek. (SAP'taki mevcut belgeler etkilenmez.) Onaylıyor musunuz?")) return;
+            $.ajax({
+                url: '/Rapor88/SeriSilDb', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ Id: id }),
+                success: function(res){ if(!res.success){ alert(res.message||"Silinemedi."); return; } loadSeriesStatus(); },
+                error: function(){ alert("Sunucu hatası: silinemedi."); }
+            });
+        }
+
+        // ================= DİNAMİK İŞLEM GEÇMİŞİ (VERİTABANINDAN ÇEKME) =================
+        function loadIslemGecmisi() {
+            let $logContainer = $("#islemLoglari");
+            $logContainer.html('<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br>İşlem geçmişi yükleniyor...</div>');
+
+            $.get('/Rapor88/GetGunlukIslemGecmisi', function(res) {
+                if (res.success) {
+                    $logContainer.empty();
+                    
+                    if (res.data.length === 0) {
+                        $logContainer.html('<div class="text-center py-4 text-muted"><em>Bugün için veritabanında kayıtlı bir işlem bulunmuyor...</em></div>');
+                        return;
+                    }
+                    
+                    let html = '';
+                    res.data.forEach(log => {
+                        // Gelen nesnedeki property'ler duruma göre camelCase veya PascalCase gelebilir, ikisini de kontrol edelim.
+                        let durum = log.durum || log.Durum;
+                        let tarihObj = new Date(log.tarih || log.Tarih);
+                        let timeStr = tarihObj.toLocaleTimeString('tr-TR');
+                        let mesaj = log.mesaj || log.Mesaj;
+                        let sapNo = log.sapBelgeNo || log.SapBelgeNo;
+                        let islemTipi = log.islemTipi || log.IslemTipi;
+                        let oid = log.oid || log.Oid;
+
+                        let type = "info";
+                        if (durum === "BAŞARILI") type = "success";
+                        else if (durum === "HATA" || durum === "SL_HATASI" || durum === "SİSTEM_HATASI") type = "error";
+                        else if (durum === "UYARI") type = "warning";
+
+                        const colors = { success: 'text-success fw-bold', error: 'text-danger fw-bold', info: 'text-dark fw-bold', warning: 'text-warning fw-bold' };
+                        const icons = { success: '<i class="fas fa-check-circle me-1"></i>', error: '<i class="fas fa-times-circle me-1"></i>', info: '<i class="fas fa-info-circle me-1"></i>', warning: '<i class="fas fa-exclamation-triangle me-1"></i>'};
+                        
+                        let actionBtn = "";
+                        if (oid && oid.trim() !== "") {
+                            actionBtn = `<button class="btn btn-sm btn-outline-info ms-2 py-0" onclick="sorgulaFaturaDurumu('${oid}')" title="Bu belgenin güncel QNB durumunu sorgula">
+                                            <i class="fas fa-sync-alt"></i> Durum Sorgula
+                                         </button>`;
+                        }
+
+                        let msgText = `[SAP: ${sapNo}] ${islemTipi} - ${mesaj}`;
+
+                        html += `<div class="${colors[type]} mb-2 border-bottom pb-2 border-secondary" style="border-opacity: 0.1;">
+                                    [${timeStr}] ${icons[type]} ${msgText} ${actionBtn}
+                                 </div>`;
+                    });
+                    
+                    $logContainer.html(html);
+                } else {
+                    $logContainer.html(`<div class="text-danger fw-bold text-center py-4"><i class="fas fa-exclamation-triangle"></i> Geçmiş yüklenemedi: ${res.message}</div>`);
+                }
+            }).fail(function() {
+                $logContainer.html(`<div class="text-danger fw-bold text-center py-4"><i class="fas fa-plug"></i> Sunucuya bağlanırken hata oluştu. Veriler alınamadı.</div>`);
+            });
+        }
+
+        // (Sayfada ilk işlem yapıldığında da güncel geçici logları göstermek için standart addLog fonksiyonu)
+        function addLog(message, type = 'info', oid = null) {
+            const colors = { success: 'text-success fw-bold', error: 'text-danger fw-bold', info: 'text-dark fw-bold', warning: 'text-warning fw-bold' };
+            const icons = { success: '<i class="fas fa-check-circle me-1"></i>', error: '<i class="fas fa-times-circle me-1"></i>', info: '<i class="fas fa-info-circle me-1"></i>', warning: '<i class="fas fa-exclamation-triangle me-1"></i>'};
+            const time = new Date().toLocaleTimeString('tr-TR');
+            
+            let actionBtn = "";
+            if (oid) {
+                actionBtn = `<button class="btn btn-sm btn-outline-info ms-2 py-0" onclick="sorgulaFaturaDurumu('${oid}')" title="Bu belgenin güncel QNB durumunu sorgula">
+                                <i class="fas fa-sync-alt"></i> Durum Sorgula
+                             </button>`;
+            }
+
+            const logHtml = `<div class="${colors[type]} mb-2 border-bottom pb-2 border-secondary" style="border-opacity: 0.1;">
+                                [${time}] ${icons[type]} ${message} ${actionBtn}
+                             </div>`;
+            
+            // Eğer islemLoglari içinde "yükleniyor" veya "işlem bulunmuyor" varsa onları sil
+            $("#islemLoglari .text-center").remove();
+            $("#islemLoglari").prepend(logHtml);
+        }
+
+        function cariAra() {
+            let q = $("#txtCariAra").val().trim();
+            $("#tbodyCari").html(`<tr><td colspan="5" class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i></td></tr>`);
+
+            $.get('/Rapor88/AraCari?q=' + q, function (res) {
+                if (res.success && res.data.length > 0) {
+                    let rows = "";
+                    res.data.forEach((cari, index) => {
+                        let durumHtml = cari.eBelgeMukellefi === "Y" ? `<span class="badge bg-info text-dark" id="lblTurCari-${index}"><i class="fas fa-file-invoice"></i> e-Fatura / e-İrsaliye Mükellefi</span>` : `<span class="badge bg-secondary" id="lblTurCari-${index}"><i class="fas fa-file-alt"></i> e-Arşiv / Matbu Mükellefi</span>`;
+                        let kimlikHtml = "";
+                        if(cari.vkn) kimlikHtml += `<span class="badge bg-dark me-1" title="VKN">V: ${cari.vkn}</span>`;
+                        if(cari.tckn) kimlikHtml += `<span class="badge bg-secondary" title="TC">T: ${cari.tckn}</span>`;
+
+                        rows += `<tr><td class="fw-bold">${cari.cardCode}</td><td class="small fw-bold">${cari.cardName}</td><td>${kimlikHtml}</td><td>${durumHtml}</td><td class="text-center"><button class="btn btn-sm btn-primary rounded-pill fw-bold shadow-sm px-3" onclick="mukellefGuncelle('${cari.vkn}', '${cari.tckn}', '${cari.cardCode}', 'cari', ${index}, 'Cari', this)"><i class="fas fa-sync-alt me-1"></i> Sorgula</button></td></tr>`;
+                    });
+                    $("#tbodyCari").html(rows);
+                } else {
+                    $("#tbodyCari").html(`<tr><td colspan="5" class="text-center py-4 text-danger fw-bold">Sonuç bulunamadı.</td></tr>`);
+                }
+            });
+        }
+        $("#txtCariAra").on('keypress', function (e) { if (e.which === 13) cariAra(); });
+
+        function mukellefGuncelle(vkn, tckn, cardCode, source, id, objType, btnElement) {
+            let kimlik = (vkn && vkn.trim().length > 0) ? vkn : tckn;
+            if (!kimlik || kimlik.trim().length === 0) { alert("VKN/TCKN bilgisi eksik, sorgulama yapılamaz."); return; }
+            addLog(`[${cardCode}] Cari (VKN/TC: ${kimlik}) için GİB mükellefiyet sorgusu başlatıldı...`, "info");
+            let icon = $(btnElement).find("i"); icon.removeClass("fa-sync-alt").addClass("fa-spinner fa-spin");
+
+            $.ajax({
+                url: '/Rapor88/MukellefSorgulaVeGuncelle', type: 'POST', data: { vkn: kimlik, cardCode: cardCode },
+                success: function (res) {
+                    icon.removeClass("fa-spinner fa-spin").addClass("fa-sync-alt");
+                    if (res.success) {
+                        addLog(res.message, "success"); alert(res.message);
+                        if (source === "belge") {
+                            let lblId = `#lblTurBelge-${id}-${objType}`; let lbl = $(lblId); let isIrsaliye = (objType === "15" || objType === "21");
+                            if(res.yeniDurum === "Y") {
+                                if(isIrsaliye) { lbl.removeClass("bg-secondary bg-danger").addClass("bg-warning text-dark").html('<i class="fas fa-truck"></i> e-İrsaliye'); } 
+                                else { lbl.removeClass("bg-secondary bg-danger").addClass("bg-info text-dark").html('<i class="fas fa-file-invoice"></i> e-Fatura'); }
+                            } else {
+                                if(isIrsaliye) { lbl.removeClass("bg-warning text-dark bg-danger").addClass("bg-secondary").html('<i class="fas fa-file-signature"></i> Matbu İrsaliye'); } 
+                                else { lbl.removeClass("bg-info text-dark bg-danger").addClass("bg-secondary").html('<i class="fas fa-file-alt"></i> e-Arşiv'); }
+                            }
+                        } else {
+                            let lblId = `#lblTurCari-${id}`; let lbl = $(lblId);
+                            if(res.yeniDurum === "Y") { lbl.removeClass("bg-secondary bg-danger").addClass("bg-info text-dark").html('<i class="fas fa-file-invoice"></i> e-Fatura / e-İrsaliye Mükellefi'); } 
+                            else { lbl.removeClass("bg-info text-dark bg-danger").addClass("bg-secondary").html('<i class="fas fa-file-alt"></i> e-Arşiv / Matbu Mükellefi'); }
+                        }
+                    } else { addLog(res.message, "error"); alert("Hata: " + res.message); }
+                },
+                error: function () {
+                    icon.removeClass("fa-spinner fa-spin").addClass("fa-sync-alt");
+                    addLog(`Sunucu bağlantı hatası oluştu, mükellef sorgulanamadı.`, "error"); alert("Sorgulama yapılamadı, sunucu hatası.");
+                }
+            });
+        }
+
+        function setTestMode(isTest) {
+            let mesaj = isTest 
+                ? "Test ortamına geçiş yapmak üzeresiniz. Fatura gönderimleri gerçek GİB sistemine İLETİLMEYECEKTİR. Onaylıyor musunuz?" 
+                : "CANLI ortama geçiş yapmak üzeresiniz. Fatura gönderimleri GERÇEK GİB sistemine iletilecektir! Onaylıyor musunuz?";
+                
+            if (confirm(mesaj)) {
+                $.post('/Rapor88/ToggleTestMode', { isTest: isTest }, function (res) {
+                    if (res.success) {
+                        location.reload(); 
+                    }
+                }).fail(function() {
+                    alert("Ortam değiştirilirken bir hata oluştu.");
+                });
+            }
+        }
+
+        // ================= KALEM ÖLÇÜ BİRİMİ YÖNETİMİ =================
+        function openBirimModal(docEntry, objType) {
+            $("#hdnBirimDocEntry").val(docEntry);
+            $("#hdnBirimObjType").val(objType);
+            $("#tbodyBirimler").html(`<tr><td colspan="5" class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br>Kalemler SAP'den çekiliyor...</td></tr>`);
+            
+            new bootstrap.Modal(document.getElementById('birimUpdateModal')).show();
+
+            const standartBirimler = [
+                "ADET", "KG", "ÇUVAL", "KOLİ", "PAKET", "KUTU", 
+                "LİTRE", "METRE", "GRAM", "TON", "SET", 
+                "AY", "YIL", "SAAT", "GÜN"
+            ];
+
+            $.get('/Rapor88/GetBelgeKalemleri', { docEntry: docEntry, objType: objType }, function(res) {
+                if(res.success && res.data && res.data.length > 0) {
+                    let rows = "";
+                    res.data.forEach(kalem => {
+                        let defaultBirim = kalem.yeniBirim && kalem.yeniBirim !== "" ? kalem.yeniBirim.toUpperCase() : (kalem.mevcutBirim ? kalem.mevcutBirim.toUpperCase() : "ADET");
+                        
+                        if (defaultBirim === "C62" || defaultBirim === "AD") defaultBirim = "ADET";
+                        if (defaultBirim === "KGM") defaultBirim = "KG";
+                        if (defaultBirim === "LTR" || defaultBirim === "LT") defaultBirim = "LİTRE";
+                        if (defaultBirim === "MTR" || defaultBirim === "MT") defaultBirim = "METRE";
+
+                        let selectOptions = "";
+                        let bulundu = false;
+
+                        standartBirimler.forEach(birim => {
+                            let selected = (birim === defaultBirim) ? "selected" : "";
+                            if (selected) bulundu = true;
+                            selectOptions += `<option value="${birim}" ${selected}>${birim}</option>`;
+                        });
+
+                        if (!bulundu && defaultBirim !== "") {
+                            selectOptions = `<option value="${defaultBirim}" selected>${defaultBirim}</option>` + selectOptions;
+                        }
+
+                        rows += `
+                            <tr data-linenum="${kalem.lineNum}">
+                                <td class="align-middle fw-bold">${kalem.siraNo}</td>
+                                <td class="align-middle text-muted">${kalem.urunKodu}</td>
+                                <td class="align-middle small fw-bold">${kalem.urunAdi}</td>
+                                <td class="align-middle">${kalem.miktar}</td>
+                                <td class="align-middle">
+                                    <select class="form-select form-select-sm text-uppercase fw-bold text-primary input-yeni-birim">
+                                        ${selectOptions}
+                                    </select>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    $("#tbodyBirimler").html(rows);
+                } else {
+                    $("#tbodyBirimler").html(`<tr><td colspan="5" class="text-center py-4 text-danger">Kalem verisi alınamadı veya belge boş.</td></tr>`);
+                }
+            }).fail(function() {
+                $("#tbodyBirimler").html(`<tr><td colspan="5" class="text-center py-4 text-danger">Sunucu ile bağlantı hatası oluştu.</td></tr>`);
+            });
+        }
+        
+        function saveBirimler() {
+            let docEntry = $("#hdnBirimDocEntry").val();
+            let objType = $("#hdnBirimObjType").val();
+            
+            let kalemler = [];
+            $("#tbodyBirimler tr").each(function() {
+                let lineNum = $(this).data("linenum");
+                if(lineNum !== undefined) {
+                    let yeniBirim = $(this).find(".input-yeni-birim").val().trim().toUpperCase();
+                    kalemler.push({
+                        lineNum: lineNum,
+                        yeniBirim: yeniBirim
+                    });
+                }
+            });
+
+            if(kalemler.length === 0) {
+                alert("Güncellenecek kalem bulunamadı!");
+                return;
+            }
+
+            let btn = $("#btnSaveBirim");
+            let originalHtml = btn.html();
+            btn.html('<i class="fas fa-spinner fa-spin"></i> Kaydediliyor...').prop('disabled', true);
+
+            let requestData = {
+                docEntry: parseInt(docEntry),
+                objType: objType,
+                kalemler: kalemler
+            };
+
+            $.ajax({
+                url: '/Rapor88/UpdateKalemBirimleri',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(requestData),
+                success: function(res) {
+                    btn.html(originalHtml).prop('disabled', false);
+                    if(res.success) {
+                        let modal = bootstrap.Modal.getInstance(document.getElementById('birimUpdateModal'));
+                        if(modal) modal.hide();
+                        addLog(res.message, "success");
+                        alert("Başarılı: " + res.message);
+                    } else {
+                        alert("Hata: " + res.message);
+                    }
+                },
+                error: function() {
+                    btn.html(originalHtml).prop('disabled', false);
+                    alert("Sunucuya ulaşılamadı.");
+                }
+            });
+        }
+    
+    // ==================== GIDEN BELGELER ====================
+    // Liste, gonderim aninda kaydedilen OID'lerden kurulur.
+    // Goruntuleme/indirme QNB'nin gidenBelgeleriIndir metoduyla yapilir.
+    function gbKacir(m) { return $('<div>').text(m == null ? '' : m).html(); }
+
+    function gidenBelgeleriGetir() {
+        $('#gbLoader').show();
+
+        var istek = $.getJSON('/Rapor88/GetGidenBelgeler', {
+            tur: $('#gbTur').val() || '',
+            ara: $('#gbAra').val() || '',
+            bas: $('#gbBas').val() || '',
+            bit: $('#gbBit').val() || ''
+        });
+
+        istek.always(function () { $('#gbLoader').hide(); });
+
+        istek.done(function (res) {
+            if (!res || !res.success) {
+                $('#gbTablo').html('<tr><td colspan="8" class="text-center text-danger py-4">'
+                    + gbKacir((res && res.message) ? res.message : 'Liste alınamadı.') + '</td></tr>');
+                return;
+            }
+
+            var d = res.data || [];
+
+            if (!d.length) {
+                $('#gbTablo').html('<tr><td colspan="8" class="text-center text-muted py-4">'
+                    + gbKacir(res.mesaj || 'Bu kriterde giden belge yok.') + '</td></tr>');
+                return;
+            }
+
+            var html = '';
+
+            d.forEach(function (r) {
+                var durum = (r.Durum || '').trim();
+
+                var durumSinif = /Basar|Başar|Onay|Kabul/i.test(durum) ? 'bg-success'
+                               : (/Hata|Red|Iptal|İptal/i.test(durum) ? 'bg-danger'
+                               : (durum ? 'bg-info text-dark' : 'bg-secondary'));
+
+                // e-Arsiv belgelerinin OID'i YOKTUR; kimlikleri fatura numarasi + UUID'dir
+                // ve QNB'nin ayri e-Arsiv ucundan indirilirler.
+                var eArsivMi = (r.Kanal || '') === 'EARSIV';
+
+                var turMetin = eArsivMi ? 'e-Arşiv' : (r.BelgeTuru || '-');
+                var turSinif = r.BelgeTuru === 'eIrsaliye' ? 'bg-primary'
+                             : (eArsivMi ? 'bg-warning text-dark' : 'bg-success');
+
+                // Indirme icin OID gerekir; yoksa UUID ile denenir
+                var kimlik = (r.Oid && r.Oid.length) ? r.Oid : r.Uuid;
+
+                var kimlikHtml = '<code class="small">' + gbKacir(r.Uuid) + '</code>';
+                if (r.Oid) kimlikHtml += '<div class="small text-muted">OID: ' + gbKacir(r.Oid) + '</div>';
+                else if (eArsivMi) kimlikHtml += '<div class="small text-muted">e-Arşiv (OID kullanılmaz)</div>';
+                else kimlikHtml += '<div class="small text-danger">OID yok - indirme başarısız olabilir</div>';
+
+                // Indirme cagrisinin ortak eklentileri
+                var gbEk = ',\'' + gbKacir(r.Kanal || '') + '\',\'' + gbKacir(r.GibNo || '') + '\',\'' + gbKacir(r.Uuid || '') + '\'';
+
+                html += '<tr>'
+                      + '<td class="small">' + gbKacir(r.Tarih) + '</td>'
+                      + '<td><span class="badge ' + turSinif + '">' + gbKacir(turMetin) + '</span>'
+                        + (r.Kaynak === 'PORTAL'
+                            ? '<div><span class="badge bg-dark mt-1" style="font-size:.6rem;">PORTAL</span></div>' : '')
+                        + (r.Yon ? '<div class="small text-muted">' + gbKacir(r.Yon) + '</div>' : '') + '</td>'
+                      + '<td class="fw-bold">' + gbKacir(r.SapBelgeNo) + '</td>'
+                      + '<td class="small" title="' + gbKacir(r.CariAdi || '') + '">' + gbKacir(r.CariAdi || '-') + '</td>'
+                      + '<td class="small">' + gbKacir(r.GibNo) + '</td>'
+                      + '<td><span class="badge ' + durumSinif + '">' + gbKacir(durum || '-') + '</span></td>'
+                      + '<td>' + kimlikHtml + '</td>'
+                      + '<td class="text-end">'
+                        // Durum sorgusu e-Fatura konnektorunundur; e-Arsiv'de karsiligi yok.
+                        + (eArsivMi ? ''
+                            : '<button class="btn btn-sm btn-outline-warning me-1" title="QNB\'deki güncel durumu sorgula"'
+                              + ' onclick="durumSorgula(\'' + gbKacir(r.Oid) + '\')">'
+                              + '<i class="fas fa-satellite-dish"></i></button>')
+                        + '<button class="btn btn-sm btn-outline-danger me-1" title="PDF olarak aç"'
+                          + ' onclick="gidenBelgeIndir(\'' + gbKacir(kimlik) + '\',\'' + gbKacir(r.QnbTuru) + '\',\'PDF\'' + gbEk + ')">'
+                          + '<i class="fas fa-file-pdf me-1"></i>PDF</button>'
+                        + '<button class="btn btn-sm btn-outline-primary me-1" title="Tarayıcıda önizle"'
+                          + ' onclick="gidenBelgeIndir(\'' + gbKacir(kimlik) + '\',\'' + gbKacir(r.QnbTuru) + '\',\'HTML\'' + gbEk + ')">'
+                          + '<i class="fas fa-eye me-1"></i>Önizle</button>'
+                        + '<button class="btn btn-sm btn-outline-secondary" title="UBL (XML) indir"'
+                          + ' onclick="gidenBelgeIndir(\'' + gbKacir(kimlik) + '\',\'' + gbKacir(r.QnbTuru) + '\',\'UBL\'' + gbEk + ')">'
+                          + '<i class="fas fa-file-code"></i></button>'
+                      + '</td>'
+                      + '</tr>';
+            });
+
+            $('#gbTablo').html(html);
+            $('#gbOzet').text(d.length + ' belge' + (d.length >= 1000 ? ' (ilk 1000)' : ''));
+        });
+
+        istek.fail(function () {
+            $('#gbTablo').html('<tr><td colspan="7" class="text-center text-danger py-4">Sunucuya ulaşılamadı.</td></tr>');
+        });
+    }
+
+    /**
+     * Bir belgenin QNB'deki GUNCEL durumunu canli sorgular.
+     * Gonderimin gercekten QNB'ye ulasip ulasmadiginin dogrulama yoludur.
+     */
+    function durumSorgula(oid, docEntry, objType) {
+        if (!oid) {
+            alert('Bu belgenin QNB kimliği (OID) yok, sorgulanamaz.');
+            return;
+        }
+
+        $.getJSON('/Rapor88/DurumSorgula', { oid: oid, docEntry: docEntry || null, objType: objType || null })
+            .done(function (r) {
+                if (!r.success) { alert(r.message); return; }
+
+                var baslik = r.sorguHatasi ? 'DURUM ÖĞRENİLEMEDİ'
+                           : r.hatali ? 'BELGE HATALI'
+                           : (r.kesin ? 'BELGE QNB\'DE İŞLENDİ' : 'HENÜZ İŞLENİYOR (ONAY BEKLENİYOR)');
+
+                var ek = '';
+                if (r.sapYazildi) ek = '\n\n✔ ' + (r.tamamlandiMesaj || 'GİB numarası SAP\'ye yazıldı.');
+                else if (r.reddedildi) ek = '\n\n✖ ' + (r.tamamlandiMesaj || 'QNB belgeyi reddetti; düzeltip yeniden gönderebilirsiniz.');
+                else if (!r.kesin && !r.hatali && !r.sorguHatasi) ek = '\n\nSAP\'ye numara, onay gelince otomatik yazılacak. Tekrar göndermeyin.';
+
+                alert(baslik + '\n\n'
+                    + 'Ortam      : ' + r.ortam + '\n'
+                    + 'Durum kodu : ' + r.durumKodu + '\n\n'
+                    + r.mesaj + ek);
+
+                // Belge tamamlandıysa (SAP'ye yazıldı / reddedildi) bekleyen ve giden listeleri tazele
+                if (r.tamamlandi) {
+                    if (typeof otomatikTabloYenile === 'function') otomatikTabloYenile();
+                    if (typeof gidenBelgeleriGetir === 'function') gidenBelgeleriGetir();
+                }
+            })
+            .fail(function () { alert('Durum sorgulanamadı. Sunucuya ulaşılamıyor.'); });
+    }
+
+function gidenBelgeIndir(oid, belgeTuru, format, kanal, faturaNo, uuid) {
+        // e-Arsiv belgelerinin OID'i yoktur; kimlik fatura numarasi/UUID'dir.
+        var eArsivMi = (kanal || '') === 'EARSIV';
+        if (!oid && !eArsivMi) return;
+        if (eArsivMi && !faturaNo && !uuid) {
+            alert('Bu e-Arşiv belgesinin fatura numarası ve UUID bilgisi yok, indirilemiyor.');
+            return;
+        }
+
+        // Dosya indirmesi oldugu icin dogrudan yonlendiriyoruz; hata olursa
+        // sunucu metni tarayicida gorunur.
+        var url = '/Rapor88/GidenBelgeIndirTek'
+                + '?oid=' + encodeURIComponent(oid || '')
+                + '&belgeTuru=' + encodeURIComponent(belgeTuru || 'FATURA')
+                + '&format=' + encodeURIComponent(format || 'PDF')
+                + '&kanal=' + encodeURIComponent(kanal || '')
+                + '&faturaNo=' + encodeURIComponent(faturaNo || '')
+                + '&uuid=' + encodeURIComponent(uuid || '');
+
+        window.open(url, '_blank');
+    }
+
+    $(document).on('keypress', '#gbAra', function (e) {
+        if (e.which === 13) { e.preventDefault(); gidenBelgeleriGetir(); }
+    });
+
+    // Sekmeye ilk girildiginde son 30 gunu getirir; sonra secim korunur.
+    var gbAcildi = false;
+
+    function gidenIlkAcilis() {
+        if (gbAcildi) return;
+        gbAcildi = true;
+
+        var bugun = new Date();
+
+        function bicim(t) {
+            return t.getFullYear() + '-'
+                 + ('0' + (t.getMonth() + 1)).slice(-2) + '-'
+                 + ('0' + t.getDate()).slice(-2);
+        }
+
+        // Acilista bugun gelir; kullanici isterse araligi genisletir.
+        if (!$('#gbBas').val()) $('#gbBas').val(bicim(bugun));
+        if (!$('#gbBit').val()) $('#gbBit').val(bicim(bugun));
+
+        gidenBelgeleriGetir();
+    }
+
+    // ================= BANKA HESAPLARI / IBAN =================
+    function ibanKacir(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    // IBAN'i 4'lu gruplar halinde gosterir (TR12 0006 ...).
+    function ibanBicimle(s) {
+        return String(s || '').replace(/\s+/g, '').toUpperCase().replace(/(.{4})/g, '$1 ').trim();
+    }
+
+    function ibanListesiYukle() {
+        var tbody = $('#ibanTablo tbody');
+        tbody.html('<tr><td colspan="7" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-1"></i>Yükleniyor...</td></tr>');
+        $.get('/Rapor88/IbanListesi', function (c) {
+            if (!c || !c.success) { tbody.html('<tr><td colspan="7" class="text-danger text-center py-3">Liste alınamadı.</td></tr>'); return; }
+            if (!c.data || !c.data.length) {
+                tbody.html('<tr><td colspan="7" class="text-center text-muted py-3">Bu şirket için kayıtlı banka hesabı yok. Yukarıdan ekleyin.</td></tr>');
+                return;
+            }
+            var html = '';
+            c.data.forEach(function (s, i) {
+                // Eski surumden kalan tek satirlik kayitlarin IBAN'i bostur; faturaya gitmez.
+                var ibanYok = !s.iban;
+                html += '<tr data-id="' + s.id + '"' + (ibanYok ? ' class="table-warning"' : '') + '>'
+                    + '<td class="text-muted">' + (i + 1) + '</td>'
+                    + '<td class="fw-semibold">' + ibanKacir(s.bankaAdi) + '</td>'
+                    + '<td>' + ibanKacir(s.subeAdi) + '</td>'
+                    + '<td class="text-center">' + ibanKacir(s.paraBirimi) + '</td>'
+                    + '<td class="font-monospace small text-nowrap">'
+                    + (ibanYok
+                        ? '<span class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>IBAN eksik: bu satırı silip yeniden ekleyin</span>'
+                        : ibanKacir(ibanBicimle(s.iban)))
+                    + '</td>'
+                    + '<td class="text-center"><div class="form-check form-switch d-inline-block m-0">'
+                    + '<input class="form-check-input iban-goster" type="checkbox"' + (s.faturadaGoster ? ' checked' : '') + (ibanYok ? ' disabled' : '') + ' title="Faturada göster"></div></td>'
+                    + '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger border-0 iban-sil" title="Sil"><i class="fas fa-trash"></i></button></td>'
+                    + '</tr>';
+            });
+            tbody.html(html);
+        }).fail(function () { tbody.html('<tr><td colspan="7" class="text-danger text-center py-3">Sunucuya ulaşılamadı.</td></tr>'); });
+    }
+
+    function openIbanModal() {
+        ibanListesiYukle();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('ibanModal')).show();
+    }
+
+    // ---------------- e-ARSIV AYARLARI (AE00008 teshisi) ----------------
+    function openEArsivAyarModal() {
+        eArsivAyarlariYukle();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('eArsivAyarModal')).show();
+    }
+
+    function eArsivHtmlKacir(v) {
+        return $('<div>').text(v == null ? '' : String(v)).html();
+    }
+
+    function eArsivAyarlariYukle() {
+        var kutu = $('#eArsivAyarIcerik');
+        kutu.html('<div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-1"></i> QNB\'den yapılandırma alınıyor...</div>');
+
+        $.getJSON('/Rapor88/EArsivAyarlari').done(function (r) {
+            if (r.message && !r.vkn) {
+                kutu.html('<div class="alert alert-danger mb-0"><i class="fas fa-times-circle me-1"></i> ' + eArsivHtmlKacir(r.message) + '</div>');
+                return;
+            }
+
+            var ortamBadge = r.ortam === 'TEST'
+                ? '<span class="badge bg-danger">TEST</span>'
+                : '<span class="badge bg-success">CANLI</span>';
+
+            var html = '';
+            html += '<div class="row g-3 mb-3">';
+            html += '  <div class="col-md-6"><div class="card h-100 border-primary"><div class="card-header bg-primary text-white py-1 small fw-bold"><i class="fas fa-paper-plane me-1"></i> Uygulamanın Gönderdiği</div><div class="card-body p-2 small">';
+            html += '    <table class="table table-sm table-borderless mb-0">';
+            html += '      <tr><td class="text-muted" style="width:40%">Ortam</td><td>' + ortamBadge + '</td></tr>';
+            html += '      <tr><td class="text-muted">Şirket</td><td><code>' + eArsivHtmlKacir(r.sirket) + '</code></td></tr>';
+            html += '      <tr><td class="text-muted">VKN</td><td><b>' + eArsivHtmlKacir(r.vkn) + '</b></td></tr>';
+            html += '      <tr><td class="text-muted">QNB Kullanıcısı</td><td>' + eArsivHtmlKacir(r.kullanici) + '</td></tr>';
+            html += '      <tr><td class="text-muted">Şube</td><td><b>' + eArsivHtmlKacir(r.gonderilen.sube) + '</b></td></tr>';
+            html += '      <tr><td class="text-muted">Kasa</td><td><b>' + eArsivHtmlKacir(r.gonderilen.kasa) + '</b></td></tr>';
+            html += '      <tr><td class="text-muted">ERP Kodu</td><td>' + eArsivHtmlKacir(r.gonderilen.erpKodu) + '</td></tr>';
+            html += '    </table>';
+            html += '    <div class="text-muted mt-2" style="font-size:.72rem">Şirkete özel değer için appsettings: <code>QnbEArsiv:Sube:' + eArsivHtmlKacir(r.sirket) + '</code>, <code>QnbEArsiv:Kasa:' + eArsivHtmlKacir(r.sirket) + '</code></div>';
+            html += '  </div></div></div>';
+
+            var sonucSinif = r.success ? 'border-success' : 'border-danger';
+            var sonucBaslik = r.success ? 'bg-success' : 'bg-danger';
+            html += '  <div class="col-md-6"><div class="card h-100 ' + sonucSinif + '"><div class="card-header ' + sonucBaslik + ' text-white py-1 small fw-bold"><i class="fas fa-server me-1"></i> QNB\'nin Döndürdüğü</div><div class="card-body p-2 small">';
+            html += '    <div class="mb-2"><span class="badge ' + (r.success ? 'bg-success' : 'bg-danger') + '">' + eArsivHtmlKacir(r.sonucKodu || '-') + '</span> ' + eArsivHtmlKacir(r.mesaj || '') + '</div>';
+
+            var anahtarlar = r.ekler ? Object.keys(r.ekler) : [];
+            if (anahtarlar.length === 0) {
+                html += '    <div class="text-muted fst-italic">QNB bu sorguda şube/kasa listesini döndürmez; yalnızca kullanıcı adı, parola ve VKN\'nin geçerli olduğunu doğrular. Ham yanıt aşağıdadır.</div>';
+            } else {
+                html += '    <table class="table table-sm table-striped mb-0">';
+                anahtarlar.forEach(function (k) {
+                    var v = r.ekler[k];
+                    var vurgu = /sube|kasa|kaynak|erp|seri/i.test(k) ? ' class="fw-bold"' : '';
+                    html += '<tr><td class="text-muted" style="width:40%">' + eArsivHtmlKacir(k) + '</td><td' + vurgu + '>' + eArsivHtmlKacir(v) + '</td></tr>';
+                });
+                html += '    </table>';
+            }
+            html += '  </div></div></div>';
+            html += '</div>';
+
+            if (r.success) {
+                html += '<div class="alert alert-info small mb-3"><i class="fas fa-check-circle me-1"></i> Kimlik bilgileri ve VKN QNB tarafından kabul edildi. Buna rağmen gönderimde <b>AE00008</b> alınıyorsa sorun kesinlikle QNB portalındaki şube/kasa tanımındadır: yukarıdaki <b>Şube / Kasa</b> değerleri bu VKN adına QNB e-Arşiv portalında (Tanımlar &raquo; Şube / Kasa) açılmalı ya da QNB destekten istenmelidir. Tanım <b>DFLT / DFLT</b> olarak açılırsa uygulamada değişiklik gerekmez.</div>';
+            } else {
+                html += '<div class="alert alert-warning small mb-3"><i class="fas fa-exclamation-triangle me-1"></i> QNB bu VKN için yapılandırma vermedi. Önce kullanıcı adı, parola ve VKN eşleşmesini (appsettings QnbApi bölümü) kontrol edin.</div>';
+            }
+
+            html += '<div class="accordion" id="eArsivHamAkordiyon"><div class="accordion-item">';
+            html += '  <h2 class="accordion-header"><button class="accordion-button collapsed py-2 small" type="button" data-bs-toggle="collapse" data-bs-target="#eArsivHamPanel"><i class="fas fa-code me-1"></i> Ham QNB Yanıtı</button></h2>';
+            html += '  <div id="eArsivHamPanel" class="accordion-collapse collapse" data-bs-parent="#eArsivHamAkordiyon"><div class="accordion-body p-2">';
+            html += '    <pre class="bg-light border rounded p-2 mb-0" style="max-height:320px; overflow:auto; font-size:.72rem; white-space:pre-wrap;">' + eArsivHtmlKacir(r.ham || '(boş)') + '</pre>';
+            html += '  </div></div>';
+            html += '</div></div>';
+
+            kutu.html(html);
+        }).fail(function (xhr) {
+            kutu.html('<div class="alert alert-danger mb-0"><i class="fas fa-times-circle me-1"></i> İstek başarısız: ' + eArsivHtmlKacir(xhr.status + ' ' + xhr.statusText) + '</div>');
+        });
+    }
+
+    $(function () {
+        // IBAN alani yazilirken 4'lu gruplanir.
+        $('#ibanNo').on('input', function () {
+            var bicimli = ibanBicimle(this.value);
+            if (bicimli !== this.value) this.value = bicimli;
+        });
+
+        $('#ibanEkleBtn').on('click', function () {
+            var veri = {
+                bankaAdi: ($('#ibanBanka').val() || '').trim(),
+                subeAdi: ($('#ibanSube').val() || '').trim(),
+                paraBirimi: $('#ibanParaBirimi').val(),
+                iban: ($('#ibanNo').val() || '').trim(),
+                faturadaGoster: $('#ibanYeniGoster').is(':checked')
+            };
+            if (!veri.bankaAdi) { toastr.warning('Banka adı boş olamaz.'); $('#ibanBanka').focus(); return; }
+            if (!veri.iban) { toastr.warning('IBAN boş olamaz.'); $('#ibanNo').focus(); return; }
+
+            var btn = $(this).prop('disabled', true);
+            $.post('/Rapor88/IbanKaydet', veri, function (c) {
+                btn.prop('disabled', false);
+                if (!c || !c.success) { toastr.error((c && c.message) || 'Kaydedilemedi.'); return; }
+                $('#ibanBanka, #ibanSube, #ibanNo').val('');
+                toastr.success('Banka hesabı eklendi.');
+                ibanListesiYukle();
+                $('#ibanBanka').focus();
+            }).fail(function () { btn.prop('disabled', false); toastr.error('Sunucuya ulaşılamadı.'); });
+        });
+
+        $('#ibanBanka, #ibanSube, #ibanNo').on('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('#ibanEkleBtn').click(); } });
+
+        // Faturada goster tiki: aninda kaydedilir.
+        $('#ibanTablo').on('change', '.iban-goster', function () {
+            var tr = $(this).closest('tr');
+            var kutu = $(this);
+            $.post('/Rapor88/IbanGosterAyarla', { id: tr.data('id'), faturadaGoster: kutu.is(':checked') }, function (c) {
+                if (!c || !c.success) { toastr.error((c && c.message) || 'Güncellenemedi.'); kutu.prop('checked', !kutu.is(':checked')); return; }
+                toastr.success(kutu.is(':checked') ? 'Bu hesap faturalarda gösterilecek.' : 'Bu hesap faturalarda gösterilmeyecek.');
+            }).fail(function () { toastr.error('Sunucuya ulaşılamadı.'); kutu.prop('checked', !kutu.is(':checked')); });
+        });
+
+        $('#ibanTablo').on('click', '.iban-sil', function () {
+            var tr = $(this).closest('tr');
+            var ozet = tr.children().eq(1).text() + ' ' + tr.children().eq(4).text();
+            if (!confirm('Bu banka hesabı silinsin mi?\n\n' + ozet)) return;
+            $.post('/Rapor88/IbanSil', { id: tr.data('id') }, function (c) {
+                if (!c || !c.success) { toastr.error((c && c.message) || 'Silinemedi.'); return; }
+                toastr.success('Banka hesabı silindi.');
+                ibanListesiYukle();
+            }).fail(function () { toastr.error('Sunucuya ulaşılamadı.'); });
+        });
+    });
+    </script>
+}

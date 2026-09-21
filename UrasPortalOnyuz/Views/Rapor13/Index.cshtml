@@ -1,0 +1,1173 @@
+﻿@model List<WebApplication3.Models.ExportFileTrackingViewModel>
+@using WebApplication3.Models
+@using System.Globalization
+
+@{
+    ViewData["Title"] = "İhracat Dosya Takip Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // Modeli ve listeleri tanımlama - Sunucu taraflı veri hazırlığı
+    var musteriTemsilcisiList = Model?.Select(x => x.MusteriTemsilcisi).Where(x => !string.IsNullOrEmpty(x)).Distinct().OrderBy(x => x).ToList();
+    var ulkeList = Model?.Select(x => x.Ulke).Where(x => !string.IsNullOrEmpty(x)).Distinct().OrderBy(x => x).ToList();
+    var odemeYontemiList = Model?.Select(x => x.OdemeYontemi).Where(x => !string.IsNullOrEmpty(x)).Distinct().OrderBy(x => x).ToList();
+    var belgeTuruList = Model?.Select(x => x.BelgeTuru).Where(x => !string.IsNullOrEmpty(x)).Distinct().OrderBy(x => x).ToList();
+    var faturaAyiList = Model?.Select(x => x.FaturaAyi).Where(x => !string.IsNullOrEmpty(x)).Distinct().OrderBy(x => x).ToList();
+
+    // Aktif Veritabanını (Şirketi) URL veya Cookie'den alıyoruz ki javascript fonksiyonlarında ve linklerde kaybolmasın
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"] ?? "DefaultConnection";
+    }
+    
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? "URASKIMYA";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --info-color: #17a2b8;
+            --light-bg: #f8f9fa;
+            --white-bg: #ffffff;
+            --border-color: #e0e0e0;
+            --text-color: #333;
+            --header-bg: #e9ecef;
+            --shadow-light: 0 2px 8px rgba(0, 0, 0, 0.05);
+            --shadow-medium: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        a
+        /* GENEL SAYFA VE FONT AYARLARI */
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-size: 0.8rem;
+        }
+
+        body {
+            background-color: var(--light-bg);
+            font-family: 'Poppins', sans-serif;
+            color: var(--text-color);
+            line-height: 1.2;
+        }
+
+        /* Üst ve alt boşlukları kaldırmak için container'ı sıfırla */
+        .container.mt-4 {
+            max-width: 100%;
+            padding: 0;
+            margin-top: 0;
+        }
+
+        /* Buton ve özet alanının olduğu divin stilini ayarla - Üstteki boşluğu sıfırla ve arka planı kaldır */
+        .mb-3.d-flex.justify-content-between.align-items-center {
+            margin-top: 0 !important; /* Üst boşluğu tamamen kaldırmak için */
+            margin-bottom: 0 !important; /* Alt boşluğu tamamen kaldırmak için */
+            padding: 0; /* İç boşluğu kaldır */
+            background-color: transparent; /* Arka plan rengini kaldır */
+            border: none;
+            box-shadow: none;
+        }
+
+        /* Butonun boyutunu daha da küçült */
+        #clearAllFiltersBtn {
+            padding: 3px 8px; /* Daha küçük padding */
+            font-size: 0.7rem; /* Daha küçük font boyutu */
+            border-radius: 4px;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 1rem; /* Başlıklar için boşluğu azalt */
+        }
+
+        .table-container {
+            overflow-x: auto;
+            /* Üst boşluğu sıfırlayın veya azaltın */
+            margin-top: 5px; /* Butonun hemen altında başlaması için boşluk ayarı */
+            max-height: calc(100vh - 80px); /* Gerekirse bu değeri ekran yüksekliğine göre ayarla */
+            overflow-y: auto;
+            position: relative;
+            border-radius: 0;
+            box-shadow: none;
+            background-color: var(--white-bg);
+            border: none;
+        }
+
+        /* Bu kısım ana layout dosyasında tanımlı olduğu için burada tekrar edilmemeli. */
+        /* table {
+            width: 100%;
+            border-collapse: collapse;
+        } */
+
+        th {
+            background-color: var(--header-bg);
+            color: #495057;
+            padding: 0 12px;
+            height: 40px;
+            font-size: 0.65rem;
+            line-height: 1.2;
+            text-align: left;
+            white-space: nowrap;
+            cursor: pointer;
+            font-weight: 600;
+            border-bottom: 2px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+
+            th.has-filter {
+                padding-top: 5px;
+                padding-bottom: 5px;
+            }
+
+            th .filter-title {
+                display: block;
+            }
+
+            th .sort-icon {
+                margin-left: 8px;
+                font-size: 0.9em;
+                vertical-align: middle;
+                display: inline-block;
+                opacity: 0.6;
+                transition: opacity 0.2s ease-in-out;
+            }
+
+            th:hover .sort-icon {
+                opacity: 1;
+            }
+
+            th:first-child {
+                border-top-left-radius: 10px;
+            }
+
+            th:last-child {
+                border-top-right-radius: 10px;
+            }
+
+        td {
+            padding: 0 12px;
+            height: 25px;
+            font-size: 0.7rem;
+            line-height: 1.1;
+            vertical-align: middle;
+            border-bottom: 1px solid #f2f2f2;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .table-hover tbody tr:hover {
+            background-color: #f0f8ff;
+            cursor: pointer;
+        }
+
+        .table-hover tbody tr.selected {
+            background-color: #e0f2f7;
+            border-left: 5px solid var(--primary-color);
+            transition: background-color 0.2s ease-in-out, border-left 0.2s ease-in-out;
+        }
+
+        /* CHECKBOX SÜTUNU */
+        th:nth-child(1), td:nth-child(1) {
+            min-width: 50px;
+            width: 50px;
+            text-align: center;
+        }
+
+            td:nth-child(1) input[type="checkbox"] {
+                transform: scale(1.2);
+            }
+
+        /* FİLTRE VE ÇOKLU SEÇİM AYARLARI */
+        .filter-input, .multi-select-button {
+            width: 100%;
+            height: 22px;
+            padding: 2px 8px;
+            font-size: 0.65rem;
+            line-height: 1.2;
+            box-sizing: border-box;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background-color: var(--white-bg);
+            transition: all 0.2s ease-in-out;
+            margin-top: 5px;
+        }
+
+            .filter-input:focus {
+                border-color: var(--primary-color);
+                box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+                outline: none;
+            }
+
+        .multi-select-button {
+            cursor: pointer;
+            text-align: left;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+            .multi-select-button:hover {
+                border-color: var(--primary-color);
+                box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+            }
+
+            .multi-select-button::after {
+                display: inline-block;
+                margin-left: 0.5em;
+                vertical-align: middle;
+                content: "";
+                border-top: 0.3em solid var(--secondary-color);
+                border-right: 0.3em solid transparent;
+                border-bottom: 0;
+                border-left: 0.3em solid transparent;
+                transition: transform 0.2s ease-in-out;
+            }
+
+            .multi-select-button[aria-expanded="true"]::after {
+                transform: rotate(180deg);
+            }
+
+        /* Açılır menülerin konumlandırma stili */
+        .multi-select-options {
+            display: none;
+            position: fixed;
+            background-color: var(--white-bg);
+            box-shadow: var(--shadow-medium);
+            z-index: 9999;
+            border-radius: 8px;
+            padding: 10px;
+            max-height: 350px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+        }
+
+            .multi-select-options.show {
+                display: block;
+            }
+
+        .multi-select-option {
+            padding: 6px 0;
+            display: flex;
+            align-items: center;
+            transition: background-color 0.1s ease-in-out;
+            cursor: pointer;
+        }
+
+            .multi-select-option:hover {
+                background-color: #f8f8f8;
+            }
+
+            .multi-select-option label {
+                margin-left: 8px;
+                margin-bottom: 0;
+                cursor: pointer;
+                font-weight: 400;
+                flex-grow: 1;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .multi-select-option input[type="checkbox"] {
+                margin-right: 0;
+                cursor: pointer;
+                flex-shrink: 0;
+                transform: scale(1.1);
+            }
+
+        .multi-select-header {
+            padding-bottom: 8px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+        }
+
+            .multi-select-header label {
+                font-weight: 600;
+            }
+
+        .multi-select-search-input {
+            width: 100%;
+            padding: 8px 12px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+
+        .multi-select-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 15px;
+            border-top: 1px solid #e0e0e0;
+            padding-top: 10px;
+        }
+
+            .multi-select-actions button {
+                padding: 8px 15px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 0.9em;
+                font-weight: 500;
+                transition: all 0.2s ease-in-out;
+            }
+
+            .multi-select-actions .btn-primary {
+                background-color: var(--primary-color);
+                color: white;
+                border: 1px solid var(--primary-color);
+            }
+
+                .multi-select-actions .btn-primary:hover {
+                    background-color: #0056b3;
+                    border-color: #0056b3;
+                }
+
+            .multi-select-actions .btn-secondary {
+                background-color: var(--secondary-color);
+                color: white;
+                border: 1px solid var(--secondary-color);
+            }
+
+                .multi-select-actions .btn-secondary:hover {
+                    background-color: #5a6268;
+                    border-color: #5a6268;
+                }
+
+        .alert-success, .alert-danger {
+            margin-top: 1.5rem;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 1.05rem;
+            font-weight: 500;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+        }
+
+            .alert-success.show, .alert-danger.show {
+                opacity: 1;
+                transform: translateY(0);
+            }
+
+        /* Yeni Stil: Toplam Tutar Alanı */
+        .total-summary-container {
+            margin-top: 1rem;
+            padding: 15px 20px;
+            border-radius: 8px;
+            background-color: #e9f5ff;
+            border: 1px solid #cce5ff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #004085;
+            box-shadow: var(--shadow-light);
+        }
+
+        .total-summary-item {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .total-summary-label {
+            font-size: 0.8rem;
+            color: #555;
+            margin-bottom: 5px;
+        }
+
+        .total-summary-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+    </style>
+}
+
+<div class="container mt-4">
+    @if (ViewBag.ErrorMessage != null)
+    {
+        <div class="alert alert-danger" role="alert">
+            @ViewBag.ErrorMessage
+        </div>
+    }
+
+    <div id="alertContainer" class="mt-3"></div>
+
+    @if (Model != null && Model.Any())
+    {
+        <div class="mb-3 d-flex justify-content-between align-items-center">
+            <button id="clearAllFiltersBtn" class="btn btn-warning">Tüm Filtreleri Temizle</button>
+            <div id="selectedRowSummary" class="total-summary-container d-none">
+                <div class="total-summary-item">
+                    <span class="total-summary-label">Seçili Satır Toplam Gümrük Beyanname Tutarı:</span>
+                    <span class="total-summary-value" id="totalCustomsAmount">0.00</span>
+                </div>
+                <div class="total-summary-item">
+                    <span class="total-summary-label">Seçili Satır Toplam Kalan Ödeme Tutarı:</span>
+                    <span class="total-summary-value" id="totalRemainingAmount">0.00</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table class="table table-bordered table-striped table-hover rapor-tablo" id="rapor13Table">
+                <thead>
+                    <tr>
+                        <th style="width: 30px;"><input type="checkbox" id="selectAllCheckbox"></th>
+                        <th data-column="0" data-sort-type="text" class="has-filter">
+                            <span class="filter-title">İhracat Dosya Numarası <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele..." data-column="0">
+                        </th>
+                        <th data-column="1" data-sort-type="text" class="has-filter">
+                            <span class="filter-title">Müşteri Temsilcisi <i class="fas fa-sort sort-icon"></i></span>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="1" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" data-column="1">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @foreach (var item in musteriTemsilcisiList)
+                                    {
+                                        <div class="multi-select-option">
+                                            <input type="checkbox" value="@item.ToLower()">
+                                            <label>@item</label>
+                                        </div>
+                                    }
+                                    <div class="multi-select-actions">
+                                        <button type="button" class="btn btn-primary apply-filter-btn">Tamam</button>
+                                        <button type="button" class="btn btn-secondary cancel-filter-btn">İptal</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </th>
+                        <th data-column="2" data-sort-type="text" class="has-filter">
+                            <span class="filter-title">Şirket Adı <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele..." data-column="2">
+                        </th>
+                        <th data-column="3" data-sort-type="text" class="has-filter">
+                            <span class="filter-title">Fatura No <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele..." data-column="3">
+                        </th>
+                        <th data-column="4" data-sort-type="text" class="has-filter">
+                            <span class="filter-title">Müşteri Firma Adı <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele..." data-column="4">
+                        </th>
+                        <th data-column="5" data-sort-type="text" class="has-filter">
+                            <span class="filter-title">ÜLKE <i class="fas fa-sort sort-icon"></i></span>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="5" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" data-column="5">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @foreach (var item in ulkeList)
+                                    {
+                                        <div class="multi-select-option">
+                                            <input type="checkbox" value="@item.ToLower()">
+                                            <label>@item</label>
+                                        </div>
+                                    }
+                                    <div class="multi-select-actions">
+                                        <button type="button" class="btn btn-primary apply-filter-btn">Tamam</button>
+                                        <button type="button" class="btn btn-secondary cancel-filter-btn">İptal</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </th>
+                        <th data-column="6" data-sort-type="date" class="has-filter">
+                            <span class="filter-title">Gümrük Beyanname İntaç Tarihi <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele (gg.aa.yyyy)..." data-column="6">
+                        </th>
+                        <th data-column="7" data-sort-type="date" class="has-filter">
+                            <span class="filter-title">Taahhüt Dolum Tarihi <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele (gg.aa.yyyy)..." data-column="7">
+                        </th>
+                        <th data-column="8" data-sort-type="number" class="has-filter">
+                            <span class="filter-title">Kalan Gün Sayısı <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele..." data-column="8">
+                        </th>
+                        <th data-column="9" data-sort-type="text" class="has-filter">
+                            <span class="filter-title">Gümrük Beyanname Numarasi <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele..." data-column="9">
+                        </th>
+                        <th data-column="10" data-sort-type="number" class="has-filter">
+                            <span class="filter-title">Gümrük Beyanname Tutarı <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele..." data-column="10">
+                        </th>
+                        <th data-column="11" data-sort-type="text" class="has-filter">
+                            <span class="filter-title">Ödeme Yöntemi <i class="fas fa-sort sort-icon"></i></span>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="11" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" data-column="11">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @foreach (var item in odemeYontemiList)
+                                    {
+                                        <div class="multi-select-option">
+                                            <input type="checkbox" value="@item.ToLower()">
+                                            <label>@item</label>
+                                        </div>
+                                    }
+                                    <div class="multi-select-actions">
+                                        <button type="button" class="btn btn-primary apply-filter-btn">Tamam</button>
+                                        <button type="button" class="btn btn-secondary cancel-filter-btn">İptal</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </th>
+                        <th data-column="12" data-sort-type="date" class="has-filter">
+                            <span class="filter-title">Ödeme Tarihi1 <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele (gg.aa.yyyy)..." data-column="12">
+                        </th>
+                        <th data-column="13" data-sort-type="text" class="has-filter">
+                            <span class="filter-title">Ödeme Tutarı1 <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele..." data-column="13">
+                        </th>
+                        <th data-column="14" data-sort-type="date" class="has-filter">
+                            <span class="filter-title">Ödeme Tarihi2 <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele (gg.aa.yyyy)..." data-column="14">
+                        </th>
+                        <th data-column="15" data-sort-type="text" class="has-filter">
+                            <span class="filter-title">Ödeme Tutarı2 <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele..." data-column="15">
+                        </th>
+                        <th data-column="16" data-sort-type="date" class="has-filter">
+                            <span class="filter-title">Ödeme Tarihi3 <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele (gg.aa.yyyy)..." data-column="16">
+                        </th>
+                        <th data-column="17" data-sort-type="text" class="has-filter">
+                            <span class="filter-title">Ödeme Tutarı3 <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele..." data-column="17">
+                        </th>
+                        <th data-column="18" data-sort-type="date" class="has-filter">
+                            <span class="filter-title">Ödeme Tarihi4 <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele (gg.aa.yyyy)..." data-column="18">
+                        </th>
+                        <th data-column="19" data-sort-type="text" class="has-filter">
+                            <span class="filter-title">Ödeme Tutarı4 <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele..." data-column="19">
+                        </th>
+                        <th data-column="20" data-sort-type="text" class="has-filter">
+                            <span class="filter-title">Ödeme Gelecek Banka <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele..." data-column="20">
+                        </th>
+                        <th data-column="21" data-sort-type="number" class="has-filter">
+                            <span class="filter-title">Kalan Ödeme Tutarı <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele..." data-column="21">
+                        </th>
+                        <th data-column="22" data-sort-type="date" class="has-filter">
+                            <span class="filter-title">Fatura Vade Tarihi <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele (gg.aa.yyyy)..." data-column="22">
+                        </th>
+                        <th data-column="23" data-sort-type="text" class="has-filter">
+                            <span class="filter-title">VADEYE GÖRE GECİKME <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele..." data-column="23">
+                        </th>
+                        <th data-column="24" data-sort-type="text" class="has-filter">
+                            <span class="filter-title">Belge Türü <i class="fas fa-sort sort-icon"></i></span>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="24" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" data-column="24">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @foreach (var item in belgeTuruList)
+                                    {
+                                        <div class="multi-select-option">
+                                            <input type="checkbox" value="@item.ToLower()">
+                                            <label>@item</label>
+                                        </div>
+                                    }
+                                    <div class="multi-select-actions">
+                                        <button type="button" class="btn btn-primary apply-filter-btn">Tamam</button>
+                                        <button type="button" class="btn btn-secondary cancel-filter-btn">İptal</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </th>
+                        <th data-column="25" data-sort-type="number" class="has-filter">
+                            <span class="filter-title">Satış Sipariş No <i class="fas fa-sort sort-icon"></i></span>
+                            <input type="text" class="form-control filter-input" placeholder="Filtrele..." data-column="25">
+                        </th>
+                        <th data-column="26" data-sort-type="text" class="has-filter">
+                            <span class="filter-title">Fatura Ayı <i class="fas fa-sort sort-icon"></i></span>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="26" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" data-column="26">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @foreach (var item in faturaAyiList)
+                                    {
+                                        <div class="multi-select-option">
+                                            <input type="checkbox" value="@item.ToLower()">
+                                            <label>@item</label>
+                                        </div>
+                                    }
+                                    <div class="multi-select-actions">
+                                        <button type="button" class="btn btn-primary apply-filter-btn">Tamam</button>
+                                        <button type="button" class="btn btn-secondary cancel-filter-btn">İptal</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model)
+                    {
+                        <tr data-gumruk-tutari="@item.GumrukBeyannameTutari" data-kalan-odeme-tutari="@item.KalanOdemeTutari">
+                            <td><input type="checkbox" class="row-checkbox"></td>
+                            <td>@Html.DisplayFor(modelItem => item.IhracatDosyaNumarasi)</td>
+                            <td>@Html.DisplayFor(modelItem => item.MusteriTemsilcisi)</td>
+                            <td>@Html.DisplayFor(modelItem => item.SirketAdi)</td>
+                            <td>@Html.DisplayFor(modelItem => item.FaturaNo)</td>
+                            <td>@Html.DisplayFor(modelItem => item.MusteriFirmaAdi)</td>
+                            <td>@Html.DisplayFor(modelItem => item.Ulke)</td>
+                            <td>@Html.DisplayFor(modelItem => item.GumrukBeyannameIntacTarihi)</td>
+                            <td>@Html.DisplayFor(modelItem => item.TaahhutDolumTarihi)</td>
+                            <td>@Html.DisplayFor(modelItem => item.KalanGunSayisi)</td>
+                            <td>@Html.DisplayFor(modelItem => item.GumrukBeyannameNumarasi)</td>
+                            <td>@Html.DisplayFor(modelItem => item.GumrukBeyannameTutari)</td>
+                            <td>@Html.DisplayFor(modelItem => item.OdemeYontemi)</td>
+                            <td>@Html.DisplayFor(modelItem => item.OdemeTarihi1)</td>
+                            <td>@Html.DisplayFor(modelItem => item.OdemeTutari1)</td>
+                            <td>@Html.DisplayFor(modelItem => item.OdemeTarihi2)</td>
+                            <td>@Html.DisplayFor(modelItem => item.OdemeTutari2)</td>
+                            <td>@Html.DisplayFor(modelItem => item.OdemeTarihi3)</td>
+                            <td>@Html.DisplayFor(modelItem => item.OdemeTutari3)</td>
+                            <td>@Html.DisplayFor(modelItem => item.OdemeTarihi4)</td>
+                            <td>@Html.DisplayFor(modelItem => item.OdemeTutari4)</td>
+                            <td>@Html.DisplayFor(modelItem => item.OdemeGelecekBanka)</td>
+                            <td>@Html.DisplayFor(modelItem => item.KalanOdemeTutari)</td>
+                            <td>@Html.DisplayFor(modelItem => item.FaturaVadeTarihi)</td>
+                            <td>@Html.DisplayFor(modelItem => item.VadeyeGoreGecikme)</td>
+                            <td>@Html.DisplayFor(modelItem => item.BelgeTuru)</td>
+                            <td>@Html.DisplayFor(modelItem => item.SatisSiparisNo)</td>
+                            <td>@Html.DisplayFor(modelItem => item.FaturaAyi)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="text-center mt-2" id="pagination-info">
+            Toplam Kayıt: <strong>@ViewBag.TotalRecords</strong>
+        </div>
+    }
+    else
+    {
+        <p>Gösterilecek veri bulunamadı.</p>
+    }
+</div>
+
+<div>
+    <a asp-action="Index" asp-controller="Home" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm ms-3 mt-3">
+        <i class="fas fa-arrow-left me-2"></i> Ana Sayfaya Dön
+    </a>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            
+            // Aktif veritabanı parametresini değişkene alıyoruz (Filtre temizle butonu için)
+            const currentDbParam = '@currentDb';
+
+            const table = document.getElementById('rapor13Table');
+            const tableBody = table.querySelector('tbody');
+            const tableHeaders = table.querySelectorAll('th[data-column]');
+            const filterInputs = document.querySelectorAll('.filter-input');
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const alertContainer = document.getElementById('alertContainer');
+            const clearAllFiltersBtn = document.getElementById('clearAllFiltersBtn');
+            const multiSelectDropdowns = document.querySelectorAll('.multi-select-dropdown');
+            const totalSummaryContainer = document.getElementById('selectedRowSummary');
+            const totalCustomsAmountSpan = document.getElementById('totalCustomsAmount');
+            const totalRemainingAmountSpan = document.getElementById('totalRemainingAmount');
+
+            const allOriginalRows = Array.from(tableBody.querySelectorAll('tr'));
+            let currentlyFilteredRows = [...allOriginalRows];
+
+            const multiSelectFilterStates = {};
+            const initialMultiSelectValues = {};
+
+            let currentSortColumn = -1;
+            let currentSortDirection = 'none';
+
+            function updateHeaderIcons() {
+                tableHeaders.forEach(th => {
+                    const icon = th.querySelector('.sort-icon');
+                    if (icon && th.dataset.sortType) {
+                        icon.classList.remove('fa-sort-up', 'fa-sort-down', 'fa-sort');
+                        const columnIndex = parseInt(th.dataset.column);
+                        if (columnIndex === currentSortColumn) {
+                            if (currentSortDirection === 'asc') {
+                                icon.classList.add('fa-sort-up');
+                            } else if (currentSortDirection === 'desc') {
+                                icon.classList.add('fa-sort-down');
+                            } else {
+                                icon.classList.add('fa-sort');
+                            }
+                        } else {
+                            icon.classList.add('fa-sort');
+                        }
+                    } else if (icon) {
+                        icon.classList.add('fa-sort');
+                    }
+                });
+            }
+
+            function applyFiltersAndSort() {
+                const filters = [];
+                filterInputs.forEach(input => {
+                    const columnIndex = parseInt(input.dataset.column);
+                    const filterValue = input.value.toLowerCase().trim();
+                    if (filterValue) {
+                        filters.push({ column: columnIndex, value: filterValue, type: 'input' });
+                    }
+                });
+
+                for (const colIndex in multiSelectFilterStates) {
+                    const selectedValues = multiSelectFilterStates[colIndex];
+                    if (selectedValues && selectedValues.length > 0) {
+                        filters.push({ column: parseInt(colIndex), values: selectedValues, type: 'multi-select' });
+                    }
+                }
+
+                let filteredRows = allOriginalRows.filter(row => {
+                    let isVisible = true;
+                    for (const filter of filters) {
+                        const actualCellIndex = filter.column + 1;
+                        const cell = row.cells[actualCellIndex];
+                        if (cell) {
+                            let cellText = (cell.textContent || cell.innerText).toLowerCase().trim();
+
+                            if (filter.type === 'input') {
+                                if (!cellText.includes(filter.value)) {
+                                    isVisible = false;
+                                    break;
+                                }
+                            } else if (filter.type === 'multi-select') {
+                                if (!filter.values.includes(cellText)) {
+                                    isVisible = false;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    return isVisible;
+                });
+
+                if (currentSortColumn !== -1 && currentSortDirection !== 'none') {
+                    filteredRows.sort((rowA, rowB) => {
+                        const sortCellIndex = currentSortColumn + 1;
+                        const cellA = rowA.cells[sortCellIndex].textContent.trim();
+                        const cellB = rowB.cells[sortCellIndex].textContent.trim();
+                        const sortType = table.querySelector(`th[data-column="${currentSortColumn}"]`).dataset.sortType;
+
+                        let comparison = 0;
+                        if (sortType === 'number') {
+                            const parseNumber = (str) => {
+                                if (!str) return NaN;
+                                const cleanStr = str.replace(/[^0-9,.]/g, '').replace(',', '.');
+                                const parsed = parseFloat(cleanStr);
+                                return isNaN(parsed) ? 0 : parsed;
+                            };
+                            const valA = parseNumber(cellA);
+                            const valB = parseNumber(cellB);
+                            comparison = (isNaN(valA) ? (isNaN(valB) ? 0 : 1) : (isNaN(valB) ? -1 : valA - valB));
+                        } else if (sortType === 'date') {
+                            const parseDate = (dateString) => {
+                                if (!dateString) return null;
+                                const parts = dateString.split('.');
+                                if (parts.length === 3) {
+                                    return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+                                }
+                                return null;
+                            };
+                            const dateA = parseDate(cellA);
+                            const dateB = parseDate(cellB);
+                            if (dateA === null && dateB === null) comparison = 0;
+                            else if (dateA === null) comparison = 1;
+                            else if (dateB === null) comparison = -1;
+                            else comparison = dateA.getTime() - dateB.getTime();
+                        } else {
+                            comparison = cellA.localeCompare(cellB, 'tr', { sensitivity: 'base' });
+                        }
+                        return currentSortDirection === 'asc' ? comparison : -comparison;
+                    });
+                }
+
+                currentlyFilteredRows = filteredRows;
+                while (tableBody.firstChild) {
+                    tableBody.removeChild(tableBody.firstChild);
+                }
+                currentlyFilteredRows.forEach(row => {
+                    tableBody.appendChild(row);
+                });
+                updateSelectAllCheckboxState();
+                updateHeaderIcons();
+                updatePaginationInfo();
+                updateTotalSummary();
+            }
+
+            function updatePaginationInfo() {
+                const totalRecords = currentlyFilteredRows.length;
+                document.getElementById('pagination-info').innerHTML = `Toplam Kayıt: <strong>${totalRecords}</strong>`;
+            }
+
+            function updateTotalSummary() {
+                let totalCustomsAmount = 0;
+                let totalRemainingAmount = 0;
+                let anyChecked = false;
+
+                const parseNumericValue = (str) => {
+                    if (!str) return 0;
+
+                    // Metinden para birimi sembollerini, harfleri ve boşlukları temizle.
+                    const cleanStr = str.replace(/[^\d.,]/g, '');
+
+                    // Sayının son ayıracını kontrol et.
+                    const lastCommaIndex = cleanStr.lastIndexOf(',');
+                    const lastDotIndex = cleanStr.lastIndexOf('.');
+
+                    let formattedStr = cleanStr;
+
+                    // Eğer son ayraç virgüldür ve ondan sonra nokta yoksa (Türkçe format)
+                    if (lastCommaIndex > lastDotIndex) {
+                        // Binlik ayıracı olan noktaları kaldır, ondalık ayıracı olan virgülü noktaya çevir.
+                        formattedStr = cleanStr.replace(/\./g, '').replace(',', '.');
+                    } else {
+                        // Eğer son ayraç noktadır veya sadece nokta varsa (Amerikan formatı)
+                        // Binlik ayıracı olan virgülleri kaldır.
+                        formattedStr = cleanStr.replace(/,/g, '');
+                    }
+
+                    const parsed = parseFloat(formattedStr);
+                    return isNaN(parsed) ? 0 : parsed;
+                };
+
+                currentlyFilteredRows.forEach(row => {
+                    const checkbox = row.querySelector('.row-checkbox');
+                    if (checkbox && checkbox.checked) {
+                        anyChecked = true;
+                        // Gümrük Beyanname Tutarı (11. kolon)
+                        const customsAmountText = row.cells[11].textContent;
+                        // Kalan Ödeme Tutarı (22. kolon)
+                        const remainingAmountText = row.cells[22].textContent;
+
+                        totalCustomsAmount += parseNumericValue(customsAmountText);
+                        totalRemainingAmount += parseNumericValue(remainingAmountText);
+                    }
+                });
+
+                if (anyChecked) {
+                    totalCustomsAmountSpan.textContent = totalCustomsAmount.toFixed(2);
+                    totalRemainingAmountSpan.textContent = totalRemainingAmount.toFixed(2);
+                    totalSummaryContainer.classList.remove('d-none');
+                } else {
+                    totalSummaryContainer.classList.add('d-none');
+                }
+            }
+
+            selectAllCheckbox.addEventListener('change', function () {
+                currentlyFilteredRows.forEach(row => {
+                    const checkbox = row.querySelector('.row-checkbox');
+                    if (checkbox) {
+                        checkbox.checked = this.checked;
+                    }
+                });
+                updateSelectAllCheckboxState();
+                updateTotalSummary();
+            });
+
+            tableBody.addEventListener('change', function (event) {
+                if (event.target.classList.contains('row-checkbox')) {
+                    updateSelectAllCheckboxState();
+                    updateTotalSummary();
+                }
+            });
+
+            function updateSelectAllCheckboxState() {
+                const visibleCheckboxes = currentlyFilteredRows.map(row => row.querySelector('.row-checkbox')).filter(Boolean);
+                if (visibleCheckboxes.length === 0) {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = false;
+                    return;
+                }
+                const allSelected = visibleCheckboxes.every(checkbox => checkbox.checked);
+                const anySelected = visibleCheckboxes.some(checkbox => checkbox.checked);
+                if (allSelected) {
+                    selectAllCheckbox.checked = true;
+                    selectAllCheckbox.indeterminate = false;
+                } else if (anySelected) {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = true;
+                } else {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = false;
+                }
+            }
+
+            filterInputs.forEach(input => {
+                input.addEventListener('keyup', () => {
+                    applyFiltersAndSort();
+                });
+            });
+
+            tableHeaders.forEach(header => {
+                header.addEventListener('click', function (event) {
+                    if (event.target.closest('.multi-select-dropdown') || event.target.classList.contains('filter-input') || event.target.type === 'checkbox') {
+                        return;
+                    }
+
+                    if (!this.dataset.sortType) {
+                        return;
+                    }
+
+                    const columnIndex = parseInt(this.dataset.column);
+                    if (isNaN(columnIndex)) {
+                        return;
+                    }
+
+                    if (currentSortColumn !== columnIndex) {
+                        currentSortColumn = columnIndex;
+                        currentSortDirection = 'asc';
+                    } else if (currentSortDirection === 'asc') {
+                        currentSortDirection = 'desc';
+                    } else if (currentSortDirection === 'desc') {
+                        currentSortDirection = 'none';
+                        currentSortColumn = -1;
+                    }
+                    applyFiltersAndSort();
+                });
+            });
+
+            function showAlert(message, type) {
+                const alertDiv = document.createElement('div');
+                alertDiv.classList.add('alert', `alert-${type}`, 'alert-dismissible', 'fade');
+                alertDiv.setAttribute('role', 'alert');
+                alertDiv.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Kapat"></button>`;
+                alertContainer.innerHTML = '';
+                alertContainer.appendChild(alertDiv);
+
+                setTimeout(() => {
+                    alertDiv.classList.add('show');
+                }, 10);
+
+                setTimeout(() => {
+                    const bootstrapAlert = bootstrap.Alert.getInstance(alertDiv);
+                    if (bootstrapAlert) {
+                        bootstrapAlert.dispose();
+                    } else {
+                        alertDiv.remove();
+                    }
+                }, 5000);
+            }
+
+            multiSelectDropdowns.forEach(dropdown => {
+                const button = dropdown.querySelector('.multi-select-button');
+                const optionsContainer = dropdown.querySelector('.multi-select-options');
+                const searchInput = optionsContainer.querySelector('.multi-select-search-input');
+                const selectAllInFilterCheckbox = optionsContainer.querySelector('.select-all-options-in-filter');
+                const optionCheckboxes = optionsContainer.querySelectorAll('.multi-select-option input[type="checkbox"]');
+                const applyBtn = optionsContainer.querySelector('.apply-filter-btn');
+                const cancelBtn = optionsContainer.querySelector('.cancel-filter-btn');
+                const columnIndex = parseInt(button.dataset.column);
+
+                if (!multiSelectFilterStates[columnIndex]) {
+                    multiSelectFilterStates[columnIndex] = [];
+                }
+
+                button.addEventListener('click', (e) => {
+                    e.stopPropagation();
+
+                    // Konumlandırma için TH (tablo başlığı) elementinin koordinatlarını kullan
+                    const th = button.closest('th');
+                    const rect = th.getBoundingClientRect();
+
+                    optionsContainer.style.top = `${rect.bottom + window.scrollY}px`;
+                    optionsContainer.style.left = `${rect.left + window.scrollX}px`;
+
+                    // Ekranın sağ kenarından taşma kontrolü
+                    const rightEdge = window.innerWidth;
+                    const dropdownRight = optionsContainer.getBoundingClientRect().right;
+                    if (dropdownRight > rightEdge) {
+                        optionsContainer.style.left = `${rect.left + window.scrollX - (dropdownRight - rightEdge) - 20}px`;
+                    }
+
+                    document.querySelectorAll('.multi-select-options.show').forEach(otherOptions => {
+                        if (otherOptions !== optionsContainer) {
+                            otherOptions.classList.remove('show');
+                            const otherButton = otherOptions.closest('.multi-select-dropdown').querySelector('.multi-select-button');
+                            if (otherButton) otherButton.setAttribute('aria-expanded', 'false');
+                        }
+                    });
+
+                    optionsContainer.classList.toggle('show');
+                    button.setAttribute('aria-expanded', optionsContainer.classList.contains('show'));
+
+                    if (optionsContainer.classList.contains('show')) {
+                        initialMultiSelectValues[columnIndex] = Array.from(optionCheckboxes).filter(cb => cb.checked).map(cb => cb.value.toLowerCase());
+                        searchInput.value = '';
+                        optionsContainer.querySelectorAll('.multi-select-option').forEach(option => {
+                            option.style.display = 'flex';
+                        });
+                        updateSelectAllInFilterCheckboxState(optionsContainer);
+                    }
+                });
+
+                searchInput.addEventListener('keyup', (e) => {
+                    const searchText = e.target.value.toLowerCase().trim();
+                    optionsContainer.querySelectorAll('.multi-select-option').forEach(option => {
+                        const label = option.querySelector('label');
+                        const isMatch = label.textContent.toLowerCase().includes(searchText);
+                        option.style.display = isMatch ? 'flex' : 'none';
+                    });
+                    updateSelectAllInFilterCheckboxState(optionsContainer);
+                });
+
+                selectAllInFilterCheckbox.addEventListener('change', function () {
+                    const isChecked = this.checked;
+                    optionsContainer.querySelectorAll('.multi-select-option').forEach(option => {
+                        if (option.style.display !== 'none') {
+                            option.querySelector('input[type="checkbox"]').checked = isChecked;
+                        }
+                    });
+                });
+
+                optionCheckboxes.forEach(cb => {
+                    cb.addEventListener('change', () => {
+                        updateSelectAllInFilterCheckboxState(optionsContainer);
+                    });
+                });
+
+                function updateSelectAllInFilterCheckboxState(optionsContainerElement) {
+                    const visibleOptionCheckboxes = Array.from(optionsContainerElement.querySelectorAll('.multi-select-option input[type="checkbox"]')).filter(cb => cb.closest('.multi-select-option').style.display !== 'none');
+                    const selectAllCb = optionsContainerElement.querySelector('.select-all-options-in-filter');
+                    if (visibleOptionCheckboxes.length === 0) {
+                        selectAllCb.checked = false;
+                        selectAllCb.indeterminate = false;
+                        return;
+                    }
+                    const allVisibleChecked = visibleOptionCheckboxes.every(cb => cb.checked);
+                    const anyVisibleChecked = visibleOptionCheckboxes.some(cb => cb.checked);
+                    if (allVisibleChecked) {
+                        selectAllCb.checked = true;
+                        selectAllCb.indeterminate = false;
+                    } else if (anyVisibleChecked) {
+                        selectAllCb.checked = false;
+                        selectAllCb.indeterminate = true;
+                    } else {
+                        selectAllCb.checked = false;
+                        selectAllCb.indeterminate = false;
+                    }
+                }
+
+                applyBtn.addEventListener('click', () => {
+                    const selectedValues = Array.from(optionsContainer.querySelectorAll('.multi-select-option input[type="checkbox"]'))
+                        .filter(cb => cb.checked)
+                        .map(cb => cb.value);
+                    multiSelectFilterStates[columnIndex] = selectedValues;
+                    optionsContainer.classList.remove('show');
+                    button.setAttribute('aria-expanded', 'false');
+
+                    if (selectedValues.length === 0) {
+                        button.textContent = "Tümü";
+                    } else if (selectedValues.length === 1) {
+                        const selectedLabel = Array.from(optionsContainer.querySelectorAll('.multi-select-option input[type="checkbox"]'))
+                            .find(cb => cb.checked)
+                            .nextElementSibling.textContent;
+                        button.textContent = selectedLabel;
+                    } else {
+                        button.textContent = `${selectedValues.length} Seçili`;
+                    }
+                    applyFiltersAndSort();
+                });
+
+                cancelBtn.addEventListener('click', () => {
+                    optionCheckboxes.forEach(cb => {
+                        const originalState = initialMultiSelectValues[columnIndex] && initialMultiSelectValues[columnIndex].includes(cb.value.toLowerCase());
+                        cb.checked = originalState;
+                    });
+                    optionsContainer.classList.remove('show');
+                    button.setAttribute('aria-expanded', 'false');
+
+                    const originalSelectedCount = initialMultiSelectValues[columnIndex] ? initialMultiSelectValues[columnIndex].length : 0;
+                    if (originalSelectedCount === 0) {
+                        button.textContent = "Tümü";
+                    } else if (originalSelectedCount === 1) {
+                        const originalValue = initialMultiSelectValues[columnIndex][0];
+                        const originalOption = Array.from(optionsContainer.querySelectorAll('.multi-select-option')).find(opt => opt.querySelector('input[type="checkbox"]').value === originalValue);
+                        button.textContent = originalOption ? originalOption.querySelector('label').textContent : "Tümü";
+                    } else {
+                        button.textContent = `${originalSelectedCount} Seçili`;
+                    }
+                    updateSelectAllInFilterCheckboxState(optionsContainer);
+                    applyFiltersAndSort();
+                });
+            });
+
+            document.addEventListener('click', function (e) {
+                document.querySelectorAll('.multi-select-dropdown').forEach(dropdown => {
+                    const optionsContainer = dropdown.querySelector('.multi-select-options');
+                    const button = dropdown.querySelector('.multi-select-button');
+                    if (optionsContainer.classList.contains('show') && !dropdown.contains(e.target)) {
+                        optionsContainer.classList.remove('show');
+                        button.setAttribute('aria-expanded', 'false');
+                        applyFiltersAndSort();
+                    }
+                });
+            });
+
+            clearAllFiltersBtn.addEventListener('click', function () {
+                let currentUrl = window.location.href;
+                let baseUrl = currentUrl.split('?')[0];
+                let params = new URLSearchParams(currentUrl.split('?')[1]);
+                let newUrl = baseUrl;
+                if (currentDbParam) {
+                    newUrl += `?db=${currentDbParam}`;
+                }
+                window.location.href = newUrl;
+            });
+
+            applyFiltersAndSort();
+            updateTotalSummary();
+        });
+    </script>
+}

@@ -1,0 +1,512 @@
+﻿@using System.Globalization
+@model dynamic
+
+@{
+    ViewData["Title"] = "Tahsilat Analiz Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // Aktif Veritabanını (Şirketi) URL veya Cookie'den merkezi olarak alıyoruz ki linklerde kaybolmasın
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"];
+    }
+
+    string currentReportType = ViewBag.CurrentReportType ?? "Banka";
+    int currentReportYear = ViewBag.CurrentReportYear ?? 2025;
+
+    bool isKarma = currentReportType == "TahsilatKarma" || currentReportType == "TahsilatKarmaTL";
+    IEnumerable<dynamic> activeData = Model as IEnumerable<dynamic>;
+
+    string themeColor = currentReportType switch
+    {
+        "Banka" => "#2980b9",
+        "Nakit" => "#27ae60",
+        "Cek" => "#d35400",
+        "Senet" => "#8e44ad",
+        "TahsilatKarma" => "#4b6584",
+        "TahsilatKarmaTL" => "#16a085",
+        _ => "#2c3e50"
+    };
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .page-container {
+            position: relative !important;
+            z-index: 1 !important;
+            isolation: isolate;
+        }
+
+        .sidebar {
+            z-index: 999999 !important;
+        }
+
+        .rapor-tablo th {
+            background-color: var(--report-theme);
+            color: white;
+            padding: 12px 5px;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 10 !important;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.4);
+        }
+
+        .selection-sum-row {
+            background-color: #f1f2f6 !important;
+            font-weight: bold;
+            border-top: 2px solid var(--report-theme);
+            position: sticky;
+            bottom: 0;
+            z-index: 10 !important;
+        }
+
+        :root {
+            --report-theme: @themeColor;
+            --hover-cell: #fff9c4;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #f4f7f6;
+            font-size: 12px;
+        }
+
+        .report-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            padding: 20px;
+            margin-bottom: 30px;
+            border-top: 5px solid var(--report-theme);
+        }
+
+        .nav-pills .nav-link {
+            color: #555;
+            font-weight: 600;
+            border: 1px solid #dee2e6;
+            margin-right: 5px;
+            transition: all 0.3s;
+            font-size: 11px;
+            padding: 8px 12px;
+        }
+
+            .nav-pills .nav-link.active {
+                background-color: var(--report-theme) !important;
+                border-color: var(--report-theme);
+                color: white;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            }
+
+            .nav-pills .nav-link:hover:not(.active) {
+                background-color: #eee;
+            }
+
+        .table-responsive {
+            border-radius: 8px;
+            overflow: auto;
+            border: 1px solid #dee2e6;
+        }
+
+        .rapor-tablo {
+            margin-bottom: 0;
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+            .rapor-tablo td {
+                padding: 8px 10px;
+                border: 1px solid #eee;
+                vertical-align: middle;
+            }
+
+            .rapor-tablo tbody tr:hover td {
+                background-color: var(--hover-cell) !important;
+                color: #000 !important;
+            }
+
+        /* KIRMIZI ALT TOPLAM VE GENEL TOPLAM RENKLERİ */
+        .row-type-1 td {
+            background-color: #ffe6e6 !important;
+            font-weight: 700;
+            color: #b30000 !important;
+        }
+
+        .row-type-2 td {
+            background-color: #ff6666 !important;
+            font-weight: 800;
+            color: white !important;
+        }
+
+        .row-type-3 td {
+            background-color: #cc0000 !important;
+            font-weight: 900;
+            color: white !important;
+            font-size: 1.05em;
+        }
+
+        /* Ara toplam satırlarında Checkbox'ları gizle */
+        .row-type-1 input[type=checkbox],
+        .row-type-2 input[type=checkbox],
+        .row-type-3 input[type=checkbox] {
+            display: none;
+        }
+
+        .numeric {
+            text-align: right;
+            font-family: 'Roboto Mono', monospace;
+            white-space: nowrap;
+        }
+
+        .table-title {
+            border-left: 5px solid var(--report-theme);
+            padding-left: 10px;
+            margin: 20px 0 15px 0;
+            font-weight: bold;
+            color: var(--report-theme);
+        }
+
+        .badge-custom {
+            font-size: 0.9rem;
+            padding: 8px 15px;
+            border-radius: 50px;
+            background-color: var(--report-theme) !important;
+            color: white;
+        }
+
+        .currency-cell {
+            font-family: 'Consolas', monospace;
+            font-size: 11px;
+            white-space: pre-line;
+            text-align: right;
+            vertical-align: top;
+        }
+
+        .currency-line {
+            display: block;
+            border-bottom: 1px dashed #eee;
+            padding: 2px 0;
+        }
+
+            .currency-line:last-child {
+                border-bottom: none;
+            }
+            
+        .database-info {
+            background-color: #e9ecef;
+            border-left: 4px solid var(--report-theme);
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            color: #2c3e50;
+            display: inline-block;
+        }
+    </style>
+}
+
+<div class="container-fluid py-3">
+    @Html.AntiForgeryToken()
+
+    <div class="report-card">
+
+        <div class="d-flex justify-content-between align-items-end mb-4">
+            <div>
+                <h2 class="mb-1 fw-bold" style="color: var(--report-theme)">
+                    @if (currentReportType == "TahsilatKarma")
+                    {
+                        <i class="fas fa-layer-group"></i>
+                    }
+                    else if (currentReportType == "TahsilatKarmaTL")
+                    {
+
+                        <i class="fas fa-lira-sign"></i>
+                    }
+                    else if (currentReportType == "Banka")
+                    {
+
+                        <i class="fas fa-university"></i>
+                    }
+                    else if (currentReportType == "Nakit")
+                    {
+
+                        <i class="fas fa-coins"></i>
+                    }
+                    else if (currentReportType == "Cek")
+                    {
+
+                        <i class="fas fa-money-check-alt"></i>
+                    }
+                    else
+                    {
+
+                        <i class="fas fa-file-contract"></i>
+                    }
+
+                    @(currentReportYear == 0 ? "TÜM YILLAR" : currentReportYear.ToString()) Tahsilat Analizi
+                </h2>
+
+                <div class="d-flex align-items-center gap-3 mt-2">
+                    <span class="text-muted">Rapor Türü: <strong>@currentReportType.ToUpper()</strong></span>
+                    <span class="text-muted border-start ps-3"></span>
+
+                    <div class="btn-group shadow-sm" role="group" aria-label="Yıl Seçimi">
+                        <a href="@Url.Action("Index", "Rapor35", new { reportType = currentReportType, year = 0, db = currentDb })" class="btn @(currentReportYear == 0 ? "btn-primary" : "btn-outline-primary") fw-bold px-3">
+                            <i class="fas fa-calendar-alt me-1"></i> TÜMÜ
+                        </a>
+                        <a href="@Url.Action("Index", "Rapor35", new { reportType = currentReportType, year = 2024, db = currentDb })" class="btn @(currentReportYear == 2024 ? "btn-primary" : "btn-outline-primary") fw-bold px-3">
+                            <i class="fas fa-calendar me-1"></i> 2024
+                        </a>
+                        <a href="@Url.Action("Index", "Rapor35", new { reportType = currentReportType, year = 2025, db = currentDb })" class="btn @(currentReportYear == 2025 ? "btn-primary" : "btn-outline-primary") fw-bold px-3">
+                            <i class="fas fa-calendar me-1"></i> 2025
+                        </a>
+                        <a href="@Url.Action("Index", "Rapor35", new { reportType = currentReportType, year = 2026, db = currentDb })" class="btn @(currentReportYear == 2026 ? "btn-primary" : "btn-outline-primary") fw-bold px-3">
+                            <i class="fas fa-calendar me-1"></i> 2026
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-end">
+                <div class="database-info shadow-sm">
+                    <i class="fas fa-database me-2"></i> Aktif Şirket: <strong>@ViewBag.CurrentDbDisplay</strong>
+                </div>
+            </div>
+        </div>
+
+        @if (!isKarma)
+        {
+            <div class="d-flex gap-3 mb-3">
+                <div class="badge badge-custom shadow-sm p-3">
+                    <i class="fas fa-calculator me-2"></i>Seçili Toplam: <span id="sel-total" class="fs-6">0,00</span>
+                </div>
+            </div>
+        }
+
+        <ul class="nav nav-pills mb-4">
+            <li class="nav-item"><a class="nav-link @(currentReportType == "Banka" ? "active" : "")" href="@Url.Action("Index", "Rapor35", new { reportType = "Banka", year = currentReportYear, db = currentDb })"><i class="fas fa-university me-1"></i> BANKA</a></li>
+            <li class="nav-item"><a class="nav-link @(currentReportType == "Nakit" ? "active" : "")" href="@Url.Action("Index", "Rapor35", new { reportType = "Nakit", year = currentReportYear, db = currentDb })"><i class="fas fa-coins me-1"></i> NAKİT</a></li>
+            <li class="nav-item"><a class="nav-link @(currentReportType == "Cek" ? "active" : "")" href="@Url.Action("Index", "Rapor35", new { reportType = "Cek", year = currentReportYear, db = currentDb })"><i class="fas fa-money-check-alt me-1"></i> ÇEK</a></li>
+            <li class="nav-item"><a class="nav-link @(currentReportType == "Senet" ? "active" : "")" href="@Url.Action("Index", "Rapor35", new { reportType = "Senet", year = currentReportYear, db = currentDb })"><i class="fas fa-file-contract me-1"></i> SENET</a></li>
+            <li class="nav-item"><a class="nav-link @(currentReportType == "TahsilatKarma" ? "active" : "")" href="@Url.Action("Index", "Rapor35", new { reportType = "TahsilatKarma", year = currentReportYear, db = currentDb })"><i class="fas fa-layer-group me-1"></i> TAHSİLAT (KARMA DÖVİZLİ)</a></li>
+            <li class="nav-item"><a class="nav-link @(currentReportType == "TahsilatKarmaTL" ? "active" : "")" href="@Url.Action("Index", "Rapor35", new { reportType = "TahsilatKarmaTL", year = currentReportYear, db = currentDb })"><i class="fas fa-lira-sign me-1"></i> TAHSİLAT (KARMA TL)</a></li>
+        </ul>
+
+        @if (activeData != null && activeData.Any())
+        {
+            <h4 class="table-title">Tahsilat Detay Tablosu</h4>
+            <div class="table-responsive mb-5">
+                <table class="table table-bordered rapor-tablo" id="main-table">
+                    <thead>
+                        <tr>
+                            @if (!isKarma)
+                            {
+                                <th style="width: 40px;" class="text-center">
+                                    <input type="checkbox" class="select-all" data-target="main-table" title="Hepsini Seç">
+                                </th>
+                            }
+                            <th style="min-width: 250px;">AÇIKLAMA / İŞLEM TİPİ</th>
+                            @for (int i = 1; i <= 12; i++)
+                            {
+                                <th>@DateTimeFormatInfo.CurrentInfo.GetMonthName(i).ToUpper()</th>
+                            }
+                            <th>TOPLAM</th>
+                            @if (!isKarma)
+                            {
+                                <th>ORT.</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in activeData)
+                        {
+                            string aciklama = "";
+                            try { aciklama = item.Aciklama; } catch { aciklama = item.IslemTipi; }
+
+                            int rowType = 0;
+                            try { rowType = item.RowType; } catch { }
+
+                            string rowClass = "";
+                            bool disableCheckbox = false;
+
+                            if (rowType == 1) { rowClass = "row-type-1"; disableCheckbox = true; }
+                            else if (rowType == 2) { rowClass = "row-type-2"; disableCheckbox = true; }
+                            else if (rowType == 3) { rowClass = "row-type-3"; disableCheckbox = true; }
+
+                            <tr class="@rowClass">
+                                @if (!isKarma)
+                                {
+                                    <td class="text-center">
+                                        @if (!disableCheckbox)
+                                        {
+                                            <input type="checkbox" class="row-checkbox">
+                                        }
+                                    </td>
+                                }
+
+                                <td class="text-start fw-bold">@aciklama</td>
+
+                                @if (isKarma)
+                                {
+                                    <td class="currency-cell">@Html.Raw(FormatCurrency(item.Ocak))</td>
+                                    <td class="currency-cell">@Html.Raw(FormatCurrency(item.Subat))</td>
+                                    <td class="currency-cell">@Html.Raw(FormatCurrency(item.Mart))</td>
+                                    <td class="currency-cell">@Html.Raw(FormatCurrency(item.Nisan))</td>
+                                    <td class="currency-cell">@Html.Raw(FormatCurrency(item.Mayis))</td>
+                                    <td class="currency-cell">@Html.Raw(FormatCurrency(item.Haziran))</td>
+                                    <td class="currency-cell">@Html.Raw(FormatCurrency(item.Temmuz))</td>
+                                    <td class="currency-cell">@Html.Raw(FormatCurrency(item.Agustos))</td>
+                                    <td class="currency-cell">@Html.Raw(FormatCurrency(item.Eylul))</td>
+                                    <td class="currency-cell">@Html.Raw(FormatCurrency(item.Ekim))</td>
+                                    <td class="currency-cell">@Html.Raw(FormatCurrency(item.Kasim))</td>
+                                    <td class="currency-cell">@Html.Raw(FormatCurrency(item.Aralik))</td>
+                                    <td class="currency-cell bg-light border-start border-2">@Html.Raw(FormatCurrency(item.Toplam))</td>
+                                }
+                                else
+                                {
+                                    <td class="numeric col-m-1" data-val="@item.Ocak">@item.Ocak.ToString("N2")</td>
+                                    <td class="numeric col-m-2" data-val="@item.Subat">@item.Subat.ToString("N2")</td>
+                                    <td class="numeric col-m-3" data-val="@item.Mart">@item.Mart.ToString("N2")</td>
+                                    <td class="numeric col-m-4" data-val="@item.Nisan">@item.Nisan.ToString("N2")</td>
+                                    <td class="numeric col-m-5" data-val="@item.Mayis">@item.Mayis.ToString("N2")</td>
+                                    <td class="numeric col-m-6" data-val="@item.Haziran">@item.Haziran.ToString("N2")</td>
+                                    <td class="numeric col-m-7" data-val="@item.Temmuz">@item.Temmuz.ToString("N2")</td>
+                                    <td class="numeric col-m-8" data-val="@item.Agustos">@item.Agustos.ToString("N2")</td>
+                                    <td class="numeric col-m-9" data-val="@item.Eylul">@item.Eylul.ToString("N2")</td>
+                                    <td class="numeric col-m-10" data-val="@item.Ekim">@item.Ekim.ToString("N2")</td>
+                                    <td class="numeric col-m-11" data-val="@item.Kasim">@item.Kasim.ToString("N2")</td>
+                                    <td class="numeric col-m-12" data-val="@item.Aralik">@item.Aralik.ToString("N2")</td>
+                                    <td class="numeric col-row-total fw-bold" data-val="@item.Toplam">@item.Toplam.ToString("N2")</td>
+
+                                    decimal ort = 0;
+                                    try { ort = item.YillikOrtalama; } catch { }
+                                    <td class="numeric text-muted small">@ort.ToString("N2")</td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+
+                    @if (!isKarma)
+                    {
+                        <tfoot>
+                            <tr class="selection-sum-row">
+                                <td colspan="2" class="text-center" style="color: var(--report-theme)">
+                                    <i class="fas fa-calculator me-2"></i>SEÇİLİ SATIRLAR TOPLAMI
+                                </td>
+                                @for (int i = 1; i <= 12; i++)
+                                {
+                                    <td class="numeric" id="sum-m-@i">0,00</td>
+                                }
+                                <td class="numeric text-danger fs-6" id="sum-total">0,00</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    }
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-warning text-center mt-5 p-4 shadow-sm">
+                <i class="fas fa-exclamation-triangle fa-3x mb-3 text-warning"></i><br>
+                <h5 class="fw-bold">Görüntülenecek veri bulunamadı.</h5>
+            </div>
+        }
+    </div>
+    
+    <div class="mt-4 mb-4">
+        <a asp-action="Index" asp-controller="Home" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+            <i class="fas fa-arrow-left me-2"></i> Ana Sayfaya Dön
+        </a>
+    </div>
+
+</div>
+
+@functions {
+    public string FormatCurrency(object dataObj)
+    {
+        if (dataObj == null) return "-";
+        string data = dataObj.ToString();
+        if (string.IsNullOrEmpty(data) || data == "0.00") return "-";
+
+        var lines = data.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        string html = "";
+        foreach (var line in lines)
+        {
+            if (!string.IsNullOrWhiteSpace(line))
+            {
+                string trimmed = line.Trim();
+                // SQL'den gelen TOPLAM satırını yakalayıp üzerine çizgi (border) atıyoruz ve kalın (bold) yapıyoruz.
+                if (trimmed.StartsWith("TOPLAM:"))
+                {
+                    html += $"<span class='currency-line text-dark fw-bold border-top border-2 border-dark mt-1 pt-1' style='font-size:1.05em;'>{trimmed}</span>";
+                }
+                else
+                {
+                    html += $"<span class='currency-line'>{trimmed}</span>";
+                }
+            }
+        }
+        return html;
+    }
+}
+
+@section Scripts {
+
+    @if (!isKarma)
+    {
+        <script>
+            $(document).ready(function () {
+                $(".select-all").change(function () {
+                    let targetTable = "#" + $(this).data("target");
+                    $(targetTable + " .row-checkbox").prop("checked", $(this).prop("checked"));
+                    calculateGlobalSum();
+                });
+
+                $(document).on("change", ".row-checkbox", function () {
+                    calculateGlobalSum();
+                });
+
+                function calculateGlobalSum() {
+                    let monthlySums = new Array(13).fill(0);
+                    let grandSum = 0;
+
+                    $(".row-checkbox:checked").each(function () {
+                        let $row = $(this).closest("tr");
+
+                        for (let i = 1; i <= 12; i++) {
+                            let valText = $row.find(".col-m-" + i).attr("data-val");
+                            if (valText) {
+                                monthlySums[i] += parseLocaleNumber(valText);
+                            }
+                        }
+
+                        let rowTotalText = $row.find(".col-row-total").attr("data-val");
+                        if (rowTotalText) {
+                            grandSum += parseLocaleNumber(rowTotalText);
+                        }
+                    });
+
+                    for (let i = 1; i <= 12; i++) {
+                        $("#sum-m-" + i).text(formatMoney(monthlySums[i]));
+                    }
+
+                    $("#sum-total").text(formatMoney(grandSum));
+                    $("#sel-total").text(formatMoney(grandSum));
+                }
+
+                function formatMoney(val) {
+                    return val.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                }
+
+                function parseLocaleNumber(stringNumber) {
+                    if (!stringNumber) return 0;
+                    var cleaned = stringNumber.toString().replace(/\./g, '').replace(',', '.');
+                    return parseFloat(cleaned) || 0;
+                }
+            });
+        </script>
+    }
+}

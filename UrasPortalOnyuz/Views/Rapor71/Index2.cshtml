@@ -1,0 +1,886 @@
+﻿@model List<WebApplication3.Models.Rapor71ViewModel>
+@using System.Globalization
+@using Newtonsoft.Json
+
+@{
+    ViewData["Title"] = "Çek Akıbeti Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var queryDb = Context.Request.Query["db"].FirstOrDefault();
+    var currentDb = !string.IsNullOrEmpty(queryDb) 
+                    ? queryDb 
+                    : (Context.Request.Cookies["SelectedDatabase"] ?? "DefaultConnection");
+
+    var rawJson = ViewBag.JsonData as string;
+    if (string.IsNullOrWhiteSpace(rawJson)) { rawJson = "[]"; }   // boş gelirse "const rawData = ;" sözdizimi hatası oluşuyordu
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? currentDb;
+
+    // KPI Hesaplamaları
+    var islemSayisi = Model.Count;
+    var portfoySayisi = Model.Count(x => !string.IsNullOrEmpty(x.HareketDurumu) && x.HareketDurumu.ToLower().Contains("portföy"));
+    var tahsilBankaSayisi = Model.Count(x => !string.IsNullOrEmpty(x.HareketDurumu) && (x.HareketDurumu.ToLower().Contains("tahsil") || x.HareketDurumu.ToLower().Contains("banka")));
+    var toplamTutar = Model.Sum(x => x.Tutar ?? 0);
+
+    // Dropdown Listeleri (Server Side)
+    var distinctBanks = Model.Select(x => x.BankaAdi).Where(x => !string.IsNullOrEmpty(x)).Distinct().OrderBy(x => x).ToList();
+    var distinctStatus = Model.Select(x => x.HareketDurumu).Where(x => !string.IsNullOrEmpty(x)).Distinct().OrderBy(x => x).ToList();
+    var distinctBelgeTipi = Model.Select(x => x.BelgeTipi).Where(x => !string.IsNullOrEmpty(x)).Distinct().OrderBy(x => x).ToList();
+    var distinctIslemTipi = Model.Select(x => x.IslemTipiAdi).Where(x => !string.IsNullOrEmpty(x)).Distinct().OrderBy(x => x).ToList();
+    var distinctUsage = new List<string> { "Planlandı", "Uygun", "Çıkışı Yapıldı" }
+                        .Union(Model.Select(x => x.KullanımDurumu))
+                        .Where(x => !string.IsNullOrEmpty(x))
+                        .Distinct().ToList();
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        /* ========================================================================= */
+        /* TAM EKRAN (FULL WIDTH) VE BOŞLUK SIFIRLAMA ZORLAMASI                      */
+        /* Tablonun kısıtlanmadan aşağı akması için ana kapsayıcılar serbest bırakıldı*/
+        /* ========================================================================= */
+        html, body { overflow-x: hidden; height: auto !important; margin: 0; padding: 0; }
+        
+        .container, .container-fluid, main, .content-wrapper, .page-content, .app-content, .content, .body-content { 
+            max-width: 100% !important; 
+            width: 100% !important; 
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            padding-left: 0.5rem !important; 
+            padding-right: 0.5rem !important; 
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            padding-bottom: 50px !important;
+        }
+
+        body { 
+            background-color: #f4f7fc; 
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            color: #2b3445; 
+            font-size: 0.75rem;
+        }
+
+        /* Dashboard Card Stilleri */
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 20px; transition: all 0.3s ease; position: relative; overflow: hidden; cursor: default; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        
+        .kpi-title { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; z-index: 2; position: relative; }
+        .kpi-value { font-size: 24px; font-weight: 900; color: #0f172a; margin-bottom: 2px; z-index: 2; position: relative; white-space: nowrap; letter-spacing: -0.5px; }
+        .kpi-desc { font-size: 11px; color: #94a3b8; z-index: 2; position: relative; }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 5rem; color: #e2e8f0; opacity: 0.4; z-index: 1; transform: rotate(-10deg); }
+        
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        .border-top-warning { border-top: 4px solid #f59e0b !important; }
+        .border-top-danger { border-top: 4px solid #ef4444 !important; }
+        .border-top-info { border-top: 4px solid #0ea5e9 !important; }
+        .border-top-success { border-top: 4px solid #10b981 !important; }
+
+        /* Toolbar ve Aksiyon Alanı */
+        .action-toolbar { background-color: #ffffff; padding: 12px 15px; border-radius: 10px; border: 1px solid #eef2f7; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; justify-content: space-between; align-items: center; }
+
+        /* TABLO KARTI - Yükseklik kısıtlaması TAMAMEN kaldırıldı! */
+        .report-table-card {
+            background: #ffffff; 
+            border-radius: 12px; 
+            border: 1px solid #eef2f7; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03); 
+            padding: 20px;
+            height: auto !important;
+            overflow: visible !important;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .table-container { 
+            width: 100%;
+            height: auto !important;
+            max-height: none !important;
+            overflow-y: visible !important; 
+            overflow-x: auto; 
+            background-color: white; 
+            border-radius: 8px; 
+            border: 1px solid #eef2f7; 
+            position: relative;
+        }
+        
+        table { width: 100%; table-layout: auto; border-collapse: separate; border-spacing: 0; }
+
+        /* --- Kolon genislikleri ---------------------------------------------
+           Her kolon kendi en uzun verisi kadar yer kaplar; artan genislik
+           Islem Tipi kolonuna verilir. Boylece tablo ekrana sigar, kolonlar
+           bos yere genislemez. */
+        #mainTable th, #mainTable td { white-space: nowrap; }
+        #mainTable thead th { width: 1%; }
+        #mainTable thead th[data-col="IslemTipiAdi"] { width: auto; }
+        #mainTable tbody td:nth-child(5) { white-space: normal; }
+        /* Filtre kutulari kolon genisligini belirlemesin; daralabilsinler */
+        #mainTable thead .filter-input { min-width: 0; width: 100%; }
+        
+        th, td {
+            padding: 8px 10px !important;
+            font-size: 11.5px !important;
+            border-right: 1px solid #f1f5f9;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+            line-height: 1.3;
+        }
+
+        .sticky-th { 
+            background-color: #f8fafc !important; 
+            color: #475569 !important; 
+            font-weight: 700; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px; 
+            white-space: nowrap; 
+            position: sticky; 
+            top: 0; 
+            z-index: 100; 
+            border-bottom: 1px solid #e2e8f0 !important;
+        }
+
+        .sticky-filter {
+            position: sticky;
+            top: 36px; /* Sticky Header'ın hemen altı */
+            background-color: #ffffff !important;
+            z-index: 90;
+            border-bottom: 2px solid #e2e8f0 !important;
+            padding: 4px 6px !important;
+        }
+
+        /* Satır Renklendirmeleri (Soft Renkler) */
+        :root {
+            --info-row: #f0f9ff;
+            --success-row: #ecfdf5;
+            --danger-row: #fef2f2;
+            --warning-row: #fffbeb;
+            --select-highlight: #fef08a;
+        }
+
+        .row-portfoy { background-color: var(--info-row) !important; }
+        .row-ciro { background-color: var(--warning-row) !important; }
+        .row-banka { background-color: var(--success-row) !important; }
+        .row-iade { background-color: var(--danger-row) !important; }
+        
+        .row-selected { 
+            background-color: var(--select-highlight) !important; 
+            box-shadow: inset 3px 0 0 #eab308;
+        }
+
+        /* Form ve Tablo Input Elemanları */
+        .table-input {
+            border: 1px solid transparent;
+            background: transparent;
+            width: 100%;
+            font-size: 11px;
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .table-input:hover, .table-input:focus {
+            border: 1px solid #cbd5e1;
+            background: white;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+            outline: none;
+        }
+
+        .filter-input {
+            width: 100%;
+            font-size: 10.5px;
+            height: 26px;
+            padding: 2px 6px;
+        }
+
+        .sort-icon { float: right; opacity: 0.3; cursor: pointer; transition: opacity 0.2s; margin-top: 2px; }
+        .sortable:hover .sort-icon { opacity: 0.8; color: #3b82f6; }
+
+        .col-truncate-md { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* Badges */
+        .badge-soft-primary { background-color: #dbeafe; color: #1e40af; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+        .badge-soft-secondary { background-color: #f1f5f9; color: #475569; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px; border: 1px solid #cbd5e1;}
+        .badge-soft-dark { background-color: #f8fafc; color: #0f172a; border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 10.5px;}
+
+        /* Butonlar */
+        .btn { font-weight: 600; letter-spacing: 0.2px; }
+        .btn-sm { font-size: 11.5px !important; padding: 4px 12px !important; height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+        .btn-primary { background-color: #3b82f6; border-color: #3b82f6; }
+        .btn-success { background-color: #10b981; border-color: #10b981; }
+        .btn-outline-secondary { color: #64748b; border-color: #cbd5e1; }
+        .btn-outline-secondary:hover { background-color: #f1f5f9; color: #0f172a; }
+    
+        /* =====================================================================
+           MODERN GORUNUM
+           Tablo daraltildiktan sonra sayfanin sadelesmesi icin eklenen katman.
+           Onceki kurallardan sonra geldigi icin gerekli yerlerde onlari ezer.
+           ===================================================================== */
+
+        /* Secme kolonu: onceden 40px sabitti, gereginden genis duruyordu */
+        #mainTable .secim-kolon,
+        #mainTable tbody td:first-child { width: 34px !important; padding: 6px 4px !important; }
+        #mainTable tbody td:first-child .form-check-input { margin: 0; cursor: pointer; }
+
+        /* Kart cercevesi. Dikkat: .table-container layout'ta @@RenderBody()
+           sarmalayicisinda da kullaniliyor, o yuzden kurali rapor kartina
+           kisitliyoruz. overflow'a dokunulmuyor: yatay kaydirma ve yapiskan
+           baslik ona bagli. */
+        .report-table-card .table-container {
+            border: 1px solid #e9eef5;
+            border-radius: 14px;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px -12px rgba(15, 23, 42, .12);
+        }
+
+        /* Baslik satiri */
+        #mainTable .sticky-th {
+            background: linear-gradient(180deg, #fbfdff 0%, #f4f7fb 100%) !important;
+            color: #64748b !important;
+            font-size: 10.5px !important;
+            font-weight: 700;
+            letter-spacing: .6px;
+            padding: 10px 12px !important;
+            border-right: none;
+            border-bottom: 1px solid #e6ecf4 !important;
+        }
+        #mainTable .sticky-filter { border-right: none; padding: 5px 7px !important; }
+        #mainTable .filter-input {
+            height: 28px; border-radius: 7px; border-color: #e2e8f0;
+            font-size: 10.5px; background: #fbfcfe;
+        }
+        #mainTable .filter-input:focus {
+            background: #fff; border-color: #93c5fd;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, .12);
+        }
+
+        /* Govde: dikey cizgiler kalkti, satirlar nefes aliyor */
+        #mainTable tbody td {
+            border-right: none;
+            border-bottom: 1px solid #f2f5f9;
+            padding: 9px 12px !important;
+            font-size: 12px !important;
+        }
+        #mainTable tbody tr { transition: background-color .12s ease, box-shadow .12s ease; }
+        #mainTable tbody tr:hover { box-shadow: inset 3px 0 0 #3b82f6; }
+        #mainTable tbody tr:last-child td { border-bottom: none; }
+
+        /* Cek numarasi: detay penceresini acan baglanti */
+        .cek-detay {
+            color: #1d4ed8;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: .3px;
+            padding: 2px 6px;
+            border-radius: 6px;
+            transition: background-color .12s ease;
+        }
+        .cek-detay:hover { background: #e8f0ff; color: #1e40af; }
+        .cek-detay .fa-circle-info { font-size: 11px; }
+
+        /* Tutar kolonu: rakamlar hizali okunsun */
+        #mainTable tbody td:nth-child(4) {
+            font-variant-numeric: tabular-nums;
+            font-size: 12.5px !important;
+        }
+
+        /* Durum rozetleri */
+        .durum-rozet {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 10.5px;
+            font-weight: 700;
+            letter-spacing: .2px;
+            border: 1px solid transparent;
+            white-space: nowrap;
+        }
+        .dz-portfoy { background: #eff6ff; color: #1d4ed8; border-color: #dbeafe; }
+        .dz-ibraz   { background: #ecfdf5; color: #047857; border-color: #d1fae5; }
+        .dz-iade    { background: #fef2f2; color: #b91c1c; border-color: #fee2e2; }
+
+        /* Satir zemin renkleri yumusatildi; rozet zaten durumu soyluyor */
+        :root {
+            --info-row:    #fbfdff;
+            --success-row: #fbfefc;
+            --danger-row:  #fffafa;
+            --warning-row: #fffdf7;
+        }
+        .row-selected { background-color: #fff7cd !important; box-shadow: inset 3px 0 0 #eab308; }
+
+        /* Detay penceresi */
+        #cekDetayModal .modal-content { border-radius: 16px; }
+        #cekDetayModal .modal-header {
+            background: linear-gradient(180deg, #fbfdff 0%, #f4f7fb 100%);
+            border-bottom: 1px solid #e9eef5;
+            border-radius: 16px 16px 0 0;
+        }
+        #cekDetayModal .border.rounded {
+            border-color: #eef2f7 !important;
+            border-radius: 10px !important;
+            background: #fcfdff;
+        }
+        #cekDetayModal .border.rounded > div:first-child {
+            font-weight: 700; letter-spacing: .5px; color: #94a3b8 !important;
+        }
+        #cekDetayModal .border.rounded > div:last-child { margin-top: 2px; }
+
+        /* Ust bar ve KPI kartlari */
+        .dashboard-card { border-radius: 14px; border-color: #e9eef5; }
+        .action-toolbar { border-radius: 14px; }
+        .report-table-card { border-radius: 14px; }
+    </style>
+}
+
+@Html.AntiForgeryToken()
+
+<div class="container-fluid">
+    <!-- Başlık Alanı -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;"><i class="fas fa-money-check-alt text-primary me-2"></i>Çek Akıbeti Raporu</h4>
+            <span class="text-muted" style="font-size: 13px;">Aktif Veritabanı: <strong class="text-primary">@currentSelectedDbDisplay</strong> | Portföy, Ciro ve Tahsilattaki Çeklerin Detaylı Analizi</span>
+        </div>
+        <div>
+            <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-sm btn-outline-secondary shadow-sm rounded-pill px-3">
+                <i class="fas fa-arrow-left"></i> Ana Sayfaya Dön
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI'lar -->
+    <div class="row mb-3 g-3">
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-primary hover-elevate">
+                <i class="fas fa-list-ul kpi-icon-bg"></i>
+                <div class="kpi-title">Toplam Çek Sayısı</div>
+                <div class="kpi-value text-primary">@islemSayisi</div>
+                <div class="kpi-desc">Sistemdeki tüm çek hareketleri</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-info hover-elevate">
+                <i class="fas fa-folder-open kpi-icon-bg"></i>
+                <div class="kpi-title">Portföydeki Çekler</div>
+                <div class="kpi-value text-info">@portfoySayisi</div>
+                <div class="kpi-desc">İşlem bekleyen açık çekler</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-success hover-elevate">
+                <i class="fas fa-university kpi-icon-bg"></i>
+                <div class="kpi-title">Banka / Tahsilatta</div>
+                <div class="kpi-value text-success">@tahsilBankaSayisi</div>
+                <div class="kpi-desc">Bankada işlem gören çekler</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-warning hover-elevate position-relative">
+                <i class="fas fa-coins kpi-icon-bg"></i>
+                <div class="kpi-title">Genel Çek Tutarı</div>
+                <div class="kpi-value text-warning">@toplamTutar.ToString("N2", new CultureInfo("tr-TR")) ₺</div>
+                <div class="kpi-desc">Listelenen çeklerin finansal toplamı</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aksiyon ve Filtre Barı -->
+    <div class="action-toolbar mb-3">
+        <form method="get" action="@Url.Action("Index2", "Rapor71")" class="w-100 d-flex flex-wrap align-items-center justify-content-between gap-3 m-0">
+            <input type="hidden" name="db" value="@currentDb" />
+            
+            <div class="d-flex align-items-center gap-3 flex-grow-1 flex-wrap">
+                <div class="d-flex align-items-center gap-2">
+                    <label for="tarih" class="form-label mb-0 fw-bold text-muted" style="font-size: 11px;">DURUM TARİHİ:</label>
+                    <input type="date" id="tarih" class="form-control form-control-sm" name="tarih" value="@ViewBag.Tarih" style="width: 140px; font-size: 11.5px;">
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm shadow-sm px-4">
+                    <i class="fas fa-search"></i> Getir
+                </button>
+                <span class="text-muted" style="font-size: 11px;">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>@ViewBag.TarihGosterim</strong> günü sonu itibarıyla çeklerin bulunduğu durum
+                </span>
+            </div>
+
+            <div class="d-flex align-items-center gap-3">
+                <div class="d-flex align-items-center gap-2 text-muted small fw-bold bg-light px-3 py-1 rounded border">
+                    <span><i class="fas fa-list me-1 text-primary"></i> Görüntülenen: <span class="text-dark fs-6" id="totalRecords">0</span></span>
+                    <span class="border-start border-secondary ps-3 ms-1"><i class="fas fa-check-square me-1 text-success"></i> Seçilen: <span class="text-success fs-6" id="selectedTotal">0,00 ₺</span></span>
+                </div>
+                <button type="button" class="btn btn-sm btn-success shadow-sm px-3" id="btnExportExcel">
+                    <i class="fas fa-file-excel"></i> Excel İndir
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- İşlem Listesi (Tablo) -->
+    <div class="report-table-card mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="card-title mb-0 fw-bold text-dark" style="font-size: 14px;"><i class="fas fa-table text-primary me-2"></i>Çek Akıbeti Detay Tablosu</div>
+        </div>
+        
+        <!-- Yükseklik kısıtlaması TAMAMEN KALDIRILAN Tablo Konteyneri -->
+        <div class="table-container shadow-sm">
+            <table class="table table-hover align-middle mb-0" id="mainTable">
+                <thead>
+                    <tr>
+                        <th class="sticky-th text-center secim-kolon" style="z-index: 101;"><input type="checkbox" id="checkAll" class="form-check-input"></th>
+                        <th class="sticky-th sortable" data-col="CekNumarasi">Çek No <i class="fas fa-sort sort-icon"></i></th>
+                        <th class="sticky-th sortable" data-col="HareketDurumu">Hareket Durumu <i class="fas fa-sort sort-icon"></i></th>
+                        <th class="sticky-th sortable text-end" data-col="Tutar" data-type="number">Tutar <i class="fas fa-sort sort-icon"></i></th>
+                        <th class="sticky-th sortable" data-col="IslemTipiAdi">İşlem Tipi <i class="fas fa-sort sort-icon"></i></th>
+                        <th class="sticky-th sortable" data-col="BelgeTipi">Belge Tipi <i class="fas fa-sort sort-icon"></i></th>
+                        <th class="sticky-th sortable text-center" data-col="VadeTarihi" data-type="date">Vade Tarihi <i class="fas fa-sort sort-icon"></i></th>
+                    </tr>
+                    <tr class="bg-light">
+                        <th class="sticky-filter z-100"></th>
+                        <th class="sticky-filter"><input type="text" class="form-control form-control-sm filter-input" data-col="CekNumarasi" placeholder="Ara..."></th>
+                        <th class="sticky-filter">
+                            <select class="form-select form-select-sm filter-input" data-col="HareketDurumu" data-exact="true">
+                                <option value="">Tümü</option>
+                                @foreach (var st in distinctStatus)
+                                {
+                                    <option value="@st">@st</option>
+                                }
+                            </select>
+                        </th>
+                        <th class="sticky-filter"></th>
+                        <th class="sticky-filter">
+                            <select class="form-select form-select-sm filter-input" data-col="IslemTipiAdi" data-exact="true">
+                                <option value="">Tümü</option>
+                                @foreach (var it in distinctIslemTipi)
+                                {
+                                    <option value="@it">@it</option>
+                                }
+                            </select>
+                        </th>
+                        <th class="sticky-filter">
+                            <select class="form-select form-select-sm filter-input" data-col="BelgeTipi" data-exact="true">
+                                <option value="">Tümü</option>
+                                @foreach (var bt in distinctBelgeTipi)
+                                {
+                                    <option value="@bt">@bt</option>
+                                }
+                            </select>
+                        </th>
+                        <th class="sticky-filter"></th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+
+<!-- Çek Detay Penceresi: tabloda gösterilmeyen tüm alanlar burada -->
+<div class="modal fade" id="cekDetayModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold mb-0">
+                    <i class="fas fa-money-check-dollar me-2 text-primary"></i>
+                    Çek Detayı <span id="dtBaslikNo" class="text-muted fw-normal"></span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+            </div>
+            <div class="modal-body" style="font-size: 12.5px;">
+                <div class="alert alert-light border py-2 mb-3 d-flex align-items-center gap-2">
+                    <i class="fas fa-clock-rotate-left text-primary"></i>
+                    <span><strong>@ViewBag.TarihGosterim</strong> günü sonu itibarıyla durum:
+                        <span id="dtDurum" class="badge bg-secondary"></span></span>
+                </div>
+                <div class="row g-2">
+                    <div class="col-md-6"><div class="border rounded p-2 h-100"><div class="text-muted" style="font-size:11px;">BANKA</div><div id="dtBanka" class="fw-semibold"></div></div></div>
+                    <div class="col-md-6"><div class="border rounded p-2 h-100"><div class="text-muted" style="font-size:11px;">ŞUBE</div><div id="dtSube" class="fw-semibold"></div></div></div>
+                    <div class="col-md-6"><div class="border rounded p-2 h-100"><div class="text-muted" style="font-size:11px;">ÇEK KİMDEN GELDİ</div><div id="dtKimden" class="fw-semibold"></div></div></div>
+                    <div class="col-md-6"><div class="border rounded p-2 h-100"><div class="text-muted" style="font-size:11px;">ASIL BORÇLU</div><div id="dtBorclu" class="fw-semibold"></div></div></div>
+                    <div class="col-md-4"><div class="border rounded p-2 h-100"><div class="text-muted" style="font-size:11px;">TUTAR</div><div id="dtTutar" class="fw-bold text-primary"></div></div></div>
+                    <div class="col-md-4"><div class="border rounded p-2 h-100"><div class="text-muted" style="font-size:11px;">TL KARŞILIĞI</div><div id="dtTl" class="fw-semibold"></div></div></div>
+                    <div class="col-md-4"><div class="border rounded p-2 h-100"><div class="text-muted" style="font-size:11px;">VADE TARİHİ</div><div id="dtVade" class="fw-semibold"></div></div></div>
+                    <div class="col-md-4"><div class="border rounded p-2 h-100"><div class="text-muted" style="font-size:11px;">PORTFÖYE GİRİŞ</div><div id="dtGiris" class="fw-semibold"></div></div></div>
+                    <div class="col-md-4"><div class="border rounded p-2 h-100"><div class="text-muted" style="font-size:11px;">İBRAZ TARİHİ</div><div id="dtIbrazTar" class="fw-semibold"></div></div></div>
+                    <div class="col-md-4"><div class="border rounded p-2 h-100"><div class="text-muted" style="font-size:11px;">VADE AY/YIL</div><div id="dtVadeAy" class="fw-semibold"></div></div></div>
+                    <div class="col-md-4"><div class="border rounded p-2 h-100"><div class="text-muted" style="font-size:11px;">TAHSİLAT BELGE NO</div><div id="dtTahsilatNo" class="fw-semibold"></div></div></div>
+                    <div class="col-md-4"><div class="border rounded p-2 h-100"><div class="text-muted" style="font-size:11px;">İBRAZ BELGE NO</div><div id="dtIbrazNo" class="fw-semibold"></div></div></div>
+                    <div class="col-md-4"><div class="border rounded p-2 h-100"><div class="text-muted" style="font-size:11px;">ÇEK İŞLEM TÜRÜ</div><div id="dtIslemTur" class="fw-semibold"></div></div></div>
+                    <div class="col-md-12"><div class="border rounded p-2"><div class="text-muted" style="font-size:11px;">ÇEK KİME VERİLDİ</div><div id="dtKime" class="fw-semibold"></div></div></div>
+                </div>
+
+                <hr class="my-3">
+                <div class="row g-2" id="dtDuzenleAlani">
+                    <div class="col-md-7">
+                        <label class="form-label fw-bold text-muted mb-1" style="font-size:11px;">PLANLANAN TEDARİKÇİ</label>
+                        <input type="text" id="dtTedarikci" class="form-control form-control-sm update-supplier">
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label fw-bold text-muted mb-1" style="font-size:11px;">KULLANIM DURUMU</label>
+                        <select id="dtKullanim" class="form-select form-select-sm update-usage">
+                            <option value="Uygun">Uygun</option>
+                            <option value="Planlandı">Planlandı</option>
+                            <option value="Çıkışı Yapıldı">Çıkışı Yapıldı</option>
+                        </select>
+                    </div>
+                    <div class="col-12"><div class="form-text" id="dtDuzenleNot"></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <script>
+        // Aktif Şirket hafızaya alınıyor
+        const activeDbCode = '@currentDb';
+        // CSRF Koruma Tokenı
+        const tokenValue = document.querySelector('input[name="__RequestVerificationToken"]').value;
+
+        const rawData = @Html.Raw(rawJson);
+        let tableData = rawData; 
+        let sortCol = null;
+        let sortAsc = true;
+
+        const tableBody = document.getElementById('tableBody');
+        const totalRecordsEl = document.getElementById('totalRecords');
+        const selectedTotalEl = document.getElementById('selectedTotal');
+
+        function normalize(val) {
+            if (val === null || val === undefined) return "";
+            return val.toString().toLocaleLowerCase('tr-TR').trim();
+        }
+
+        function renderTable(data) {
+            tableBody.innerHTML = "";
+            if (!data || data.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted fw-bold"><i class="fas fa-info-circle fa-2x mb-2 text-primary"></i><br>Filtrelere uygun kayıt bulunamadı.</td></tr>';
+                totalRecordsEl.innerText = 0;
+                calculateTotals();
+                return;
+            }
+
+            const frag = document.createDocumentFragment();
+
+            data.forEach(item => {
+                const tr = document.createElement('tr');
+
+                let rowClass = "";
+                const durum = normalize(item.HareketDurumu);
+                
+                if(durum.includes("portföy")) rowClass = "row-portfoy";
+                else if(durum.includes("tahsil edildi") || durum.includes("işlem yapıldı")) rowClass = "row-banka"; 
+                else if(durum.includes("tahsile verildi") || durum.includes("bankaya")) rowClass = "row-banka"; 
+                else if(durum.includes("ciro") || durum.includes("çıkış")) rowClass = "row-ciro";
+                else if(durum.includes("iade")) rowClass = "row-iade";
+                tr.className = rowClass;
+
+                tr.dataset.id = item.DocEntry;
+                tr.dataset.tl = item.TlKarsiligi || 0;
+
+                const formatInfo = (dateStr) => dateStr ? new Date(dateStr).toLocaleDateString("tr-TR") : "-";
+                const tutar = item.Tutar ? item.Tutar.toLocaleString("tr-TR", {minimumFractionDigits: 2}) : "0,00";
+
+                tr.innerHTML = `
+                    <td class="text-center align-middle"><input type="checkbox" class="row-check form-check-input"></td>
+                    <td>
+                        <a href="#" class="cek-detay fw-bold text-decoration-none" data-id="${item.DocEntry}" title="Detayları göster">
+                            <i class="fas fa-circle-info me-1 opacity-75"></i>${item.CekNumarasi || '-'}
+                        </a>
+                    </td>
+                    <td><span class="durum-rozet ${durumSinifi(item.HareketDurumu)}">${item.HareketDurumu || '-'}</span></td>
+                    <td class="text-end fw-bold text-primary">
+                        ${tutar} <span class="text-muted fw-normal" style="font-size: 11px;">${item.ParaBirimi || ''}</span>
+                    </td>
+                    <td><span class="badge-soft-secondary">${item.IslemTipiAdi || '-'}</span></td>
+                    <td>${item.BelgeTipi || '-'}</td>
+                    <td class="text-center">${formatInfo(item.VadeTarihi)}</td>
+                `;
+                frag.appendChild(tr);
+            });
+
+            tableBody.appendChild(frag);
+            totalRecordsEl.innerText = data.length;
+            calculateTotals();
+        }
+
+
+
+        // Durum rozetinin rengi: portföy = mavi, ibraz/tahsilat = yeşil, iade = kırmızı
+        function durumSinifi(durum) {
+            const d = normalize(durum);
+            if (d.includes('portföy')) return 'dz-portfoy';
+            if (d.includes('iade'))    return 'dz-iade';
+            return 'dz-ibraz';
+        }
+
+        // ---- Çek detay penceresi -------------------------------------------
+        // Tabloda yalnızca özet kolonlar var; kalan alanlar buradan gösterilir.
+        // Modal, layout'un @@RenderBody() sarmalayicisi (.table-container) icinde
+        // duruyor; oradaki stacking context yuzunden backdrop'un altinda kalip
+        // acilmiyordu. Once body'ye tasiyoruz.
+        const detayEl = document.getElementById('cekDetayModal');
+        if (detayEl && detayEl.parentElement !== document.body) {
+            document.body.appendChild(detayEl);
+        }
+        const cekDetayModal = new bootstrap.Modal(detayEl);
+
+        function detayGoster(docEntry) {
+            const it = rawData.find(x => String(x.DocEntry) === String(docEntry));
+            if (!it) return;
+
+            const tarihYaz = d => d ? new Date(d).toLocaleDateString("tr-TR") : "-";
+            const paraYaz  = v => (v || v === 0)
+                ? Number(v).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                : "-";
+            const yaz = (id, deger) => { document.getElementById(id).textContent = (deger === null || deger === undefined || deger === '') ? '-' : deger; };
+
+            document.getElementById('dtBaslikNo').textContent = '#' + (it.CekNumarasi || '');
+
+            const rozet = document.getElementById('dtDurum');
+            rozet.textContent = it.HareketDurumu || '-';
+            const d = normalize(it.HareketDurumu);
+            rozet.className = 'badge ' + (d.includes('portföy') ? 'bg-info'
+                                        : d.includes('iade')    ? 'bg-danger'
+                                        : 'bg-success');
+
+            yaz('dtBanka',      it.BankaAdi);
+            yaz('dtSube',       it.Sube);
+            yaz('dtKimden',     it.CekKimdenGeldi);
+            yaz('dtBorclu',     it.AsilBorclu);
+            yaz('dtTutar',      paraYaz(it.Tutar) + ' ' + (it.ParaBirimi || ''));
+            yaz('dtTl',         paraYaz(it.TlKarsiligi) + ' TRY');
+            yaz('dtVade',       tarihYaz(it.VadeTarihi));
+            yaz('dtGiris',      tarihYaz(it.PortfoyeGirisTarihi));
+            yaz('dtIbrazTar',   tarihYaz(it.IbrazTarihi));
+            yaz('dtVadeAy',     it.VadeAyiVeYili);
+            yaz('dtTahsilatNo', it.TahsilatBelgeNo);
+            yaz('dtIslemTur',   it.CekIslemTuru);
+            yaz('dtKime',       it.CekKimeVerildi);
+
+            // İbraz belgesi varsa eki indirilebilir olsun
+            const ibrazEl = document.getElementById('dtIbrazNo');
+            if (it.IbrazBelgeNo) {
+                ibrazEl.innerHTML = '<a href="/CekAkibeti/DownloadAttachment/' + it.IbrazBelgeNo +
+                                    '" target="_blank" class="fw-bold text-decoration-none text-primary">' +
+                                    '<i class="fas fa-paperclip"></i> ' + it.IbrazBelgeNo + '</a>';
+            } else {
+                ibrazEl.textContent = '-';
+            }
+
+            // Düzenlenebilir alanlar yalnızca portföydeki çekler için açık
+            const portfoyde = d.includes('portföy');
+            const ted = document.getElementById('dtTedarikci');
+            const kul = document.getElementById('dtKullanim');
+            ted.value = it.PlanlananTedarikci || '';
+            ted.dataset.id = it.DocEntry;
+            ted.disabled = !portfoyde;
+            kul.value = it.KullanımDurumu || 'Uygun';
+            kul.dataset.id = it.DocEntry;
+            kul.disabled = !portfoyde;
+            document.getElementById('dtDuzenleNot').textContent =
+                portfoyde ? 'Değişiklik seçimden çıkınca kaydedilir.'
+                          : 'Çek portföyde olmadığı için bu alanlar düzenlenemez.';
+
+            cekDetayModal.show();
+        }
+
+        document.addEventListener('click', function (e) {
+            const bag = e.target.closest('.cek-detay');
+            if (!bag) return;
+            e.preventDefault();
+            detayGoster(bag.dataset.id);
+        });
+
+        const inputs = document.querySelectorAll('.filter-input');
+        function applyFilters() {
+            const activeFilters = [];
+            inputs.forEach(input => {
+                const val = normalize(input.value);
+                if (val.length > 0) {
+                    activeFilters.push({
+                        col: input.dataset.col,
+                        val: val,
+                        isExact: input.dataset.exact === "true"
+                    });
+                }
+            });
+
+            tableData = rawData.filter(row => {
+                return activeFilters.every(filter => {
+                    const rowValue = normalize(row[filter.col]);
+                    if (filter.isExact) return rowValue === filter.val;
+                    else return rowValue.includes(filter.val);
+                });
+            });
+
+            if (sortCol) applySorting();
+            renderTable(tableData);
+            document.getElementById('checkAll').checked = false;
+        }
+
+        inputs.forEach(input => {
+            input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', applyFilters);
+        });
+
+        document.querySelectorAll('.sortable').forEach(th => {
+            th.addEventListener('click', () => {
+                const col = th.dataset.col;
+                const type = th.dataset.type || 'string';
+
+                if (sortCol === col) sortAsc = !sortAsc;
+                else { sortCol = col; sortAsc = true; }
+
+                document.querySelectorAll('.sort-icon').forEach(i => i.className = 'fas fa-sort sort-icon');
+                th.querySelector('.sort-icon').className = `fas fa-sort-${sortAsc ? 'up' : 'down'} sort-icon text-primary`;
+
+                applySorting(type);
+                renderTable(tableData);
+            });
+        });
+
+        function applySorting(type = 'string') {
+            tableData.sort((a, b) => {
+                let valA = a[sortCol];
+                let valB = b[sortCol];
+                if (valA === null) valA = "";
+                if (valB === null) valB = "";
+
+                if (type === 'number') {
+                    return sortAsc ? valA - valB : valB - valA;
+                } else if (type === 'date') {
+                    const dateA = new Date(valA).getTime();
+                    const dateB = new Date(valB).getTime();
+                    return sortAsc ? dateA - dateB : dateB - dateA;
+                } else {
+                    return sortAsc ? valA.toString().localeCompare(valB.toString(), 'tr') : valB.toString().localeCompare(valA.toString(), 'tr');
+                }
+            });
+        }
+
+        document.getElementById('checkAll').addEventListener('change', function() {
+            const isChecked = this.checked;
+            document.querySelectorAll('.row-check').forEach(cb => {
+                cb.checked = isChecked;
+                cb.closest('tr').classList.toggle('row-selected', isChecked);
+            });
+            calculateTotals();
+        });
+
+        tableBody.addEventListener('change', function(e) {
+            if(e.target.classList.contains('row-check')) {
+                e.target.closest('tr').classList.toggle('row-selected', e.target.checked);
+                calculateTotals();
+            }
+        });
+
+        function calculateTotals() {
+            let total = 0;
+            document.querySelectorAll('.row-check:checked').forEach(cb => {
+                const tlValue = parseFloat(cb.closest('tr').dataset.tl);
+                if(!isNaN(tlValue)) total += tlValue;
+            });
+            selectedTotalEl.innerText = total.toLocaleString("tr-TR", {minimumFractionDigits: 2}) + " ₺";
+        }
+
+        document.getElementById('btnExportExcel').addEventListener('click', function () {
+            let exportData = [];
+            const selectedCheckboxes = document.querySelectorAll('.row-check:checked');
+
+            if (selectedCheckboxes.length > 0) {
+                const selectedIds = Array.from(selectedCheckboxes).map(cb => parseInt(cb.closest('tr').dataset.id));
+                exportData = rawData.filter(item => selectedIds.includes(item.DocEntry));
+                toastr.info(`${exportData.length} adet seçili kayıt aktarılıyor...`);
+            } else {
+                exportData = tableData;
+                toastr.info(`Görüntülenen ${exportData.length} kayıt aktarılıyor...`);
+            }
+
+            if (exportData.length === 0) {
+                toastr.warning("Aktarılacak veri bulunamadı.");
+                return;
+            }
+
+            const excelRows = exportData.map(item => {
+                return {
+                    "Çek No": item.CekNumarasi,
+                    "Banka": item.BankaAdi,
+                    "Şube": item.Sube,
+                    "Asıl Borçlu": item.AsilBorclu,
+                    "Tutar": item.Tutar,
+                    "P.B.": item.ParaBirimi,
+                    "Vade Tarihi": item.VadeTarihi ? new Date(item.VadeTarihi) : null,
+                    "Giriş Tarihi": item.PortfoyeGirisTarihi ? new Date(item.PortfoyeGirisTarihi) : null,
+                    "Belge Tipi": item.BelgeTipi,
+                    "İşlem Tipi": item.IslemTipiAdi,
+                    "İbraz Tarihi": item.IbrazTarihi ? new Date(item.IbrazTarihi) : null,
+                    "Tahsilat No": item.TahsilatBelgeNo,
+                    "İbraz No": item.IbrazBelgeNo,
+                    "Hareket Durumu": item.HareketDurumu,
+                    "Kime Verildi": item.CekKimeVerildi,
+                    "Planlanan Ted.": item.PlanlananTedarikci,
+                    "Kullanım Durumu": item.KullanımDurumu
+                };
+            });
+
+            const ws = XLSX.utils.json_to_sheet(excelRows);
+            const wscols = [
+                { wch: 10 }, { wch: 20 }, { wch: 10 }, { wch: 30 }, { wch: 12 },
+                { wch: 6 },  { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 15 },
+                { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 25 }, { wch: 25 },
+                { wch: 20 }, { wch: 15 }
+            ];
+            ws['!cols'] = wscols;
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Cek_Listesi");
+
+            const dateStr = new Date().toISOString().slice(0,10);
+            XLSX.writeFile(wb, `Cek_Raporu_${dateStr}.xlsx`);
+        });
+
+        tableBody.addEventListener('focusout', function(e) {
+            if(e.target.classList.contains('update-supplier')) {
+                const input = e.target;
+                if(input.defaultValue === input.value) return;
+                
+                // Şirket parametresi ve CSRF token gönderiliyor
+                fetch('/Rapor71/UpdatePlannedSupplier?db=' + activeDbCode, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': tokenValue
+                    },
+                    body: JSON.stringify({ DocEntry: parseInt(input.dataset.id), NewPlannedSupplier: input.value })
+                }).then(res => res.json()).then(data => {
+                    if(data.success) { toastr.success('Tedarikçi başarıyla güncellendi'); input.defaultValue = input.value; }
+                    else toastr.error(data.message);
+                }).catch(() => toastr.error("Sunucu bağlantı hatası!"));
+            }
+        });
+
+        tableBody.addEventListener('change', function(e) {
+            if(e.target.classList.contains('update-usage')) {
+                const select = e.target;
+                
+                // Şirket parametresi ve CSRF token gönderiliyor
+                fetch('/Rapor71/UpdateKullanimDurumu?db=' + activeDbCode, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': tokenValue
+                    },
+                    body: JSON.stringify({ DocEntry: parseInt(select.dataset.id), NewKullanimDurumu: select.value })
+                }).then(res => res.json()).then(data => {
+                    if(data.success) toastr.success('Kullanım durumu güncellendi');
+                    else { toastr.error(data.message); select.value = select.defaultValue; }
+                }).catch(() => toastr.error("Sunucu bağlantı hatası!"));
+            }
+        });
+
+        // Tabloyu ilk yükleme
+        renderTable(rawData);
+    </script>
+}

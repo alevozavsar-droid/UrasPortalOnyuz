@@ -1,0 +1,456 @@
+﻿@model WebApplication3.Models.MizanKarsilastirmaViewModel
+@using System.Globalization
+@{
+    ViewData["Title"] = "Grup Şirketleri - Karşılaştırmalı Mizan";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var cultureInfo = new CultureInfo("tr-TR");
+
+    // 1. KURAL: URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+
+    // --- Controller'dan Gelen Veriler ---
+    var selectedAktarimTipi = ViewBag.SelectedAktarimTipi as List<string> ?? new List<string>();
+    var bakiyeTipi = ViewBag.BakiyeTipi as string ?? "TRY";
+    var startDate = ViewBag.StartDate as string;
+    var endDate = ViewBag.EndDate as string;
+    var sadeceFarklar = (bool)ViewBag.SadeceFarklar;
+
+    // --- Dinamik Firma ve Filtre Bilgileri ---
+    var companyCode = ViewBag.CompanyCode as string ?? "ALV";
+    var srcName = ViewBag.SourceName as string ?? "Kaynak Firma";
+    var trgName = ViewBag.TargetName as string ?? "Hedef Firma";
+
+    // --- Dashboard Toplamları ---
+    // Sadece Ana Hesapları (Level 1 - Tek Haneli) toplayarak genel toplamı buluyoruz
+    var rootItems = Model.Items.Where(x => x.HesapKodu.Length == 1).ToList();
+    decimal totKBakiye = rootItems.Sum(x => x.KaynakBakiye);
+    decimal totHBakiye = rootItems.Sum(x => x.HedefBakiye);
+    decimal totFark = rootItems.Sum(x => x.FarkBakiye);
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+
+    <style>
+        body {
+            font-size: 0.9rem;
+            background-color: #f4f6fb;
+            color: #1f2937;
+        }
+
+        .form-control, .btn, .form-select, .form-check-label {
+            font-size: 0.9rem !important;
+        }
+        .form-select, .form-control { border-radius: 10px; }
+
+        /* Kart / başlık modern görünüm */
+        .card { border-radius: 14px; }
+        .card.shadow-sm { box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06) !important; }
+
+        /* KARŞILAŞTIRMA TABLOSU */
+        .comp-table {
+            font-size: 0.92rem;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        .comp-table th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            text-align: center;
+            border-bottom: 2px solid #cbd5e1;
+            border-right: 1px solid #e2e8f0;
+            padding: 11px 10px;
+            vertical-align: middle;
+            font-weight: 800;
+            font-size: 0.8rem;
+            letter-spacing: .3px;
+            box-shadow: 0 2px 4px rgba(0,0,0,.04);
+        }
+        .comp-table th.small { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .5px; }
+
+        .comp-table td {
+            padding: 9px 12px;
+            border-bottom: 1px solid #e5e9f2;
+            border-right: 1px solid #eef1f7;
+            vertical-align: middle;
+        }
+        .comp-table tbody tr:hover td { background-color: #eef4ff !important; }
+
+        /* Renk Temaları — daha okunaklı, kontrastlı */
+        .th-source { background-color: #d6f0d8; color: #14532d; }
+        .col-source { background-color: rgba(214, 240, 216, 0.28); }
+        .th-target { background-color: #ffe6c7; color: #7c2d12; }
+        .col-target { background-color: rgba(255, 230, 199, 0.28); }
+        .th-diff { background-color: #ffd9dc; color: #7f1d1d; }
+
+        /* Hiyerarşi Satır Renkleri — daha net kademe */
+        .level-0-row td {
+            background-color: #dbe3ea !important;
+            font-weight: 800;
+            font-size: 0.98rem;
+            border-top: 2px solid #b6c2cf;
+            border-bottom: 1px solid #b6c2cf;
+            color: #0f172a;
+        }
+        .level-1-row td { background-color: #eef2f6 !important; font-weight: 700; color: #1e293b; }
+        .level-2-row td { background-color: #f7f9fc !important; font-weight: 600; color: #334155; }
+        .level-3-row td { background-color: #ffffff !important; color: #334155; }
+
+        .num-cell {
+            font-family: 'Consolas', 'SF Mono', monospace;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            font-size: 0.95rem;
+            white-space: nowrap;
+        }
+        .comp-table td.fw-bold, .comp-table th.fw-bold { font-weight: 800; }
+
+        .clickable-diff {
+            cursor: pointer;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+            transition: all 0.15s;
+            border-radius: 6px;
+        }
+        .clickable-diff:hover { font-weight: 800; background-color: #ffd9dc !important; }
+
+        /* Modal detay tablosu */
+        .detail-table { font-size: 0.88rem; }
+        .detail-table th { font-size: 0.78rem; padding: 8px; text-transform: uppercase; letter-spacing: .3px; background: #eef4ff; }
+        .detail-table td { font-size: 0.88rem; padding: 7px 8px; vertical-align: middle; }
+
+        /* Özet kartları — etiket ve rakamları netleştir */
+        .text-xs { font-size: 0.82rem !important; letter-spacing: .3px; }
+        .card .h5 { font-size: 1.35rem; }
+        .table-responsive { border-radius: 12px; }
+    </style>
+}
+
+@* 2. KURAL: Güvenlik (CSRF) - Yetkisiz veri işlemlerini ve manipülasyonları engellemek için eklendi *@
+@Html.AntiForgeryToken()
+
+<div class="container-fluid py-3">
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold"><i class="fas fa-balance-scale me-2"></i>Mizan Karşılaştırma Paneli</h6>
+            <span class="badge bg-white text-primary">@srcName vs @trgName</span>
+        </div>
+        <div class="card-body p-2 bg-light">
+            <form asp-controller="Rapor70" asp-action="Index" method="get" id="filterForm">
+                
+                @* 1. KURAL: GET formuna şirket bilgisini ekleyen gizli input *@
+                <input type="hidden" name="db" value="@currentDb" />
+
+                <div class="row g-2 align-items-end">
+
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold text-primary mb-0">Firma Seçimi</label>
+                        <select class="form-select fw-bold border-primary" name="companyCode" onchange="this.form.submit()">
+                            @foreach (var opt in (List<(string Code, string Label)>)(ViewBag.CompanyOptions ?? new List<(string, string)>()))
+                            {
+                                <option value="@opt.Code" selected="@(companyCode == opt.Code)">@opt.Label</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold text-success mb-0">Başlangıç</label>
+                        <input type="date" class="form-control" name="startDate" value="@startDate">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold text-success mb-0">Bitiş</label>
+                        <input type="date" class="form-control" name="endDate" value="@endDate">
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold text-success mb-0">İşlem Tipi</label>
+                        <select class="form-select" id="aktarimTipi" name="aktarimTipi" multiple="multiple">
+                            <option value="Y" selected="@(selectedAktarimTipi.Contains("Y"))">Y (Yevmiye)</option>
+                            <option value="X" selected="@(selectedAktarimTipi.Contains("X"))">X (Kapanış)</option>
+                            <option value="R" selected="@(selectedAktarimTipi.Contains("R"))">R (Kur Farkı)</option>
+                            <option value="BOS" selected="@(selectedAktarimTipi.Contains("BOS"))">Boş (Diğer)</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-2 d-flex gap-1">
+                        <button type="submit" class="btn btn-success flex-fill fw-bold shadow-sm"><i class="fas fa-search me-1"></i> Raporla</button>
+                        <button type="button" class="btn btn-dark shadow-sm" onclick="downloadExcel()" title="Excel İndir"><i class="fas fa-file-excel"></i></button>
+                    </div>
+                </div>
+
+                <div class="row mt-2">
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold text-success mb-0">Para Birimi</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="bakiyeTipi" id="btnTry" value="TRY" @(bakiyeTipi == "TRY" ? "checked" : "")>
+                            <label class="btn btn-outline-success btn-sm" for="btnTry">TL</label>
+                            <input type="radio" class="btn-check" name="bakiyeTipi" id="btnDoviz" value="Doviz" @(bakiyeTipi == "Doviz" ? "checked" : "")>
+                            <label class="btn btn-outline-success btn-sm" for="btnDoviz">Döviz</label>
+                        </div>
+                    </div>
+                    <div class="col-md-10">
+                        <div class="form-check form-switch d-inline-block bg-white border rounded px-3 py-1 mt-3">
+                            <input class="form-check-input" type="checkbox" id="sadeceFarklar" name="sadeceFarklar" value="true" @(sadeceFarklar ? "checked" : "")>
+                            <label class="form-check-label fw-bold small text-danger" for="sadeceFarklar">Sadece Farklı Olan Hesapları Göster</label>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (Model.Items.Any())
+    {
+        // 10 TL'den büyük fark olup olmadığını kontrol et
+        bool mizanTutuyor = !Model.Items.Any(x => Math.Abs(x.FarkBakiye) > 10m);
+
+        <div class="row g-2 mb-3">
+            <div class="col-md-4">
+                <div class="card shadow-sm border-start border-4 border-success py-2 h-100">
+                    <div class="card-body py-1 text-center">
+                        <div class="text-xs fw-bold text-success text-uppercase">@srcName (NET)</div>
+                        <div class="h5 mb-0 fw-bold text-gray-800">@totKBakiye.ToString("N2", cultureInfo)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card shadow-sm border-start border-4 border-warning py-2 h-100">
+                    <div class="card-body py-1 text-center">
+                        <div class="text-xs fw-bold text-warning text-uppercase" style="color: #e65100 !important;">@trgName (NET)</div>
+                        <div class="h5 mb-0 fw-bold text-gray-800">@totHBakiye.ToString("N2", cultureInfo)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card shadow-sm border-start border-4 @(Math.Abs(totFark) > 0.01m ? "border-danger" : "border-info") py-2 h-100">
+                    <div class="card-body py-1 text-center">
+                        <div class="text-xs fw-bold @(Math.Abs(totFark) > 0.01m ? "text-danger" : "text-info") text-uppercase">TOPLAM FARK</div>
+                        <div class="h5 mb-0 fw-bold text-gray-800">@totFark.ToString("N2", cultureInfo)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (mizanTutuyor)
+        {
+            <div class="alert alert-success text-center shadow-sm border-2 border-success py-3 mb-3">
+                <i class="fas fa-check-circle fa-2x mb-2 text-success"></i><br />
+                <h5 class="fw-bold text-success mb-1">Tebrikler, İki Mizan Tutuyor!</h5>
+                <span class="text-dark">Hesap bazında <b>10 TL</b>'den büyük herhangi bir bakiye farkı bulunamadı.</span>
+            </div>
+        }
+
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive" style="height: 60vh;">
+                    <table class="comp-table table-hover w-100">
+                        <thead class="bg-light">
+                            <tr>
+                                <th rowspan="2" class="text-dark" style="width:15%">HESAP KODU</th>
+                                <th rowspan="2" class="text-dark">HESAP ADI</th>
+                                <th colspan="3" class="th-source">@srcName (@bakiyeTipi)</th>
+                                <th colspan="3" class="th-target">@trgName (@bakiyeTipi)</th>
+                                <th rowspan="2" class="bg-danger text-white" style="width:10%">FARK</th>
+                            </tr>
+                            <tr>
+                                <th class="th-source small">BORÇ</th>
+                                <th class="th-source small">ALACAK</th>
+                                <th class="th-source small fw-bold">BAKİYE</th>
+                                <th class="th-target small">BORÇ</th>
+                                <th class="th-target small">ALACAK</th>
+                                <th class="th-target small fw-bold">BAKİYE</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.Items)
+                            {
+                                string rowClass = "";
+                                if (item.HesapKodu.Length == 1) rowClass = "level-0-row";
+                                else if (item.HesapKodu.Length == 2) rowClass = "level-1-row";
+                                else if (item.HesapKodu.Length == 3) rowClass = "level-2-row";
+                                else if (item.HesapKodu.Contains(".")) rowClass = "level-3-row";
+
+                                bool hasDiff = Math.Abs(item.FarkBakiye) > 0.01m;
+                                int indent = item.Level * 15;
+                                if (item.Level == 0 && item.HesapKodu.Length > 1)
+                                {
+                                    if (item.HesapKodu.Length == 2) indent = 15;
+                                    if (item.HesapKodu.Length == 3) indent = 30;
+                                    if (item.HesapKodu.Length > 3) indent = 45;
+                                }
+
+                                <tr class="@rowClass">
+                                    <td class="text-nowrap" style="padding-left:@(indent)px;">@item.HesapKodu</td>
+                                    <td class="text-truncate" style="max-width:350px;" title="@item.HesapAdi">@item.HesapAdi</td>
+
+                                    <td class="num-cell col-source text-muted">@item.KaynakBorc.ToString("N2", cultureInfo)</td>
+                                    <td class="num-cell col-source text-muted">@item.KaynakAlacak.ToString("N2", cultureInfo)</td>
+                                    <td class="num-cell col-source fw-bold text-dark">@item.KaynakBakiye.ToString("N2", cultureInfo)</td>
+
+                                    <td class="num-cell col-target text-muted">@item.HedefBorc.ToString("N2", cultureInfo)</td>
+                                    <td class="num-cell col-target text-muted">@item.HedefAlacak.ToString("N2", cultureInfo)</td>
+                                    <td class="num-cell col-target fw-bold text-dark">@item.HedefBakiye.ToString("N2", cultureInfo)</td>
+
+                                    <td class="num-cell fw-bold @(hasDiff ? "text-danger clickable-diff" : "text-success")"
+                                        style="background-color: @(hasDiff ? "#ffebee" : "#f0fdf4");"
+                                        onclick="openDetailModal('@item.HesapKodu', '@item.HesapAdi')">
+                                        @item.FarkBakiye.ToString("N2", cultureInfo)
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-warning text-center mt-4 shadow-sm">
+            <i class="fas fa-exclamation-triangle fa-2x mb-2 text-warning"></i><br />Kriterlere uygun kayıt bulunamadı.
+        </div>
+    }
+
+    @* 4. KURAL: UI/UX Standartlarına uygun şık, db parametreli Ana Sayfa returned butonu *@
+    <div class="mt-4 mb-5 text-center">
+        <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+            <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+        </a>
+    </div>
+
+</div>
+
+<div class="modal fade" id="detailModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" style="max-width: 98vw;">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white py-2">
+                <h6 class="modal-title" id="detailModalTitle">Fark Analizi</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body bg-light p-0">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm detail-table mb-0 w-100">
+                        <thead class="text-center sticky-top bg-white shadow-sm">
+                            <tr>
+                                <th colspan="4" class="bg-success text-white bg-opacity-75 border-bottom-0 py-2">@srcName (Kaynak)</th>
+                                <th style="width: 30px;" class="bg-secondary text-white py-2 align-middle">VS</th>
+                                <th colspan="4" class="bg-warning text-dark bg-opacity-75 border-bottom-0 py-2">@trgName (Hedef)</th>
+                            </tr>
+                            <tr>
+                                <th style="width: 80px;">Tarih</th>
+                                <th style="width: 60px;">ID</th>
+                                <th>Açıklama</th>
+                                <th style="width: 100px;">Tutar</th>
+                                <th class="bg-light">Durum</th>
+                                <th style="width: 80px;">Tarih</th>
+                                <th style="width: 60px;">ID</th>
+                                <th>Açıklama</th>
+                                <th style="width: 100px;">Tutar</th>
+                            </tr>
+                        </thead>
+                        <tbody id="comparisonTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-1 bg-white">
+                <span class="me-auto text-muted small"><i class="fas fa-info-circle"></i> Satırlar Tarih ve Net Tutar eşleşmesine göre otomatik hizalanmıştır.</span>
+                <button type="button" class="btn-secondary btn-sm" data-bs-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- BURADAKİ BOOTSTRAP KALDIRILDI. LAYOUT.CSHTML İÇERİSİNDEKİ İLE ÇAKIŞIYORDU -->
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+
+    <script>
+        // 1. KURAL İÇİN JS DEĞİŞKENİ: Aktif Şirket kodunu JS tarafında hafızaya alıyoruz
+        const activeDbCode = '@currentDb';
+
+        $(document).ready(function () {
+            // Select2 başlatma
+            $('#aktarimTipi').select2({ theme: "bootstrap-5", placeholder: "İşlem Tipi Seçiniz", closeOnSelect: false, width: '100%' });
+        });
+
+        // Excel İndir (Form verilerini otomatik alır ve db parametresini korur)
+        function downloadExcel() {
+            var params = $('#filterForm').serialize();
+            var url = '@Url.Action("DownloadExcel", "Rapor70")' + '?' + params;
+            window.location.href = url;
+        }
+
+        // Detay Modal Açma
+        function openDetailModal(hesapKodu, hesapAdi) {
+            $('#detailModalTitle').html(`<i class="fas fa-search me-2"></i>Detay Analiz: <b>${hesapKodu}</b> - ${hesapAdi}`);
+            $('#comparisonTableBody').html('<tr><td colspan="9" class="text-center p-5"><div class="spinner-border text-success" role="status"></div><div class="mt-2 text-muted fw-bold">Eşleştirme Yapılıyor...</div></td></tr>');
+
+            var detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
+            detailModal.show();
+
+            // Tüm parametreleri topla
+            var startDate = $('input[name="startDate"]').val();
+            var endDate = $('input[name="endDate"]').val();
+            var bakiyeTipi = $('input[name="bakiyeTipi"]:checked').val();
+            var aktarimTipleri = $('#aktarimTipi').val();
+            var companyCode = $('select[name="companyCode"]').val();
+
+            $.ajax({
+                // 1. KURAL: Muavin detay isteklerinde şirket parametresini kaybetmemek için db eklendi
+                url: '@Url.Action("GetMuavinKarsilastirma", "Rapor70")?db=' + activeDbCode,
+                type: 'GET',
+                traditional: true,
+                data: {
+                    hesapKodu: hesapKodu,
+                    startDate: startDate,
+                    endDate: endDate,
+                    bakiyeTipi: bakiyeTipi,
+                    aktarimTipi: aktarimTipleri,
+                    companyCode: companyCode
+                },
+                success: function (res) {
+                    if (res.success) renderComparisonTable(res.data);
+                    else $('#comparisonTableBody').html('<tr><td colspan="9" class="text-center text-danger">Veri alınamadı.</td></tr>');
+                },
+                error: function () {
+                    $('#comparisonTableBody').html('<tr><td colspan="9" class="text-center text-danger">Sunucu hatası.</td></tr>');
+                }
+            });
+        }
+
+        // Modal Tabloyu Doldur
+        function renderComparisonTable(data) {
+            var html = '';
+            if (!data || data.length === 0) {
+                html = '<tr><td colspan="9" class="text-center text-muted p-4 fw-bold">Kayıt yok.</td></tr>';
+            } else {
+                var totalSrc = 0, totalTrg = 0, diffCount = 0;
+                data.forEach(function (row) {
+                    var src = row.source;
+                    var trg = row.target;
+                    if (src) totalSrc += src.tutar;
+                    if (trg) totalTrg += trg.tutar;
+                    if (!row.isEslesmeTamam) diffCount++;
+
+                    var rowStyle = row.isEslesmeTamam ? '' : 'background-color: #fff5f5;';
+                    var srcHtml = src ? `<td>${moment(src.tarih).format('DD.MM.YYYY')}</td><td class="text-muted small">${src.transId}</td><td class="text-truncate" style="max-width:200px;" title="${src.aciklama}">${src.aciklama}</td><td class="text-end fw-bold ${src.tutar>=0?'text-dark':'text-danger'}">${src.tutar.toLocaleString('tr-TR',{minimumFractionDigits:2})}</td>` : `<td colspan="4" class="text-center text-muted bg-warning bg-opacity-10">Kaynakta Yok</td>`;
+                    var iconHtml = row.isEslesmeTamam ? '<i class="fas fa-check-circle text-success fa-lg"></i>' : '<i class="fas fa-exclamation-circle text-danger fa-lg"></i>';
+                    var trgHtml = trg ? `<td>${moment(trg.tarih).format('DD.MM.YYYY')}</td><td class="text-muted small">${trg.transId}</td><td class="text-truncate" style="max-width:200px;" title="${trg.aciklama}">${trg.aciklama}</td><td class="text-end fw-bold ${trg.tutar>=0?'text-dark':'text-danger'}">${trg.tutar.toLocaleString('tr-TR',{minimumFractionDigits:2})}</td>` : `<td colspan="4" class="text-center text-muted bg-warning bg-opacity-10">Hedefte Yok</td>`;
+
+                    html += `<tr style="${rowStyle}">${srcHtml}<td class="text-center align-middle bg-white border-start border-end">${iconHtml}</td>${trgHtml}</tr>`;
+                });
+                var diffTotal = totalSrc - totalTrg;
+                var diffColor = Math.abs(diffTotal) > 0.01 ? 'text-danger' : 'text-success';
+                html += `<tr class="table-secondary fw-bold border-top border-dark"><td colspan="3" class="text-end">NET:</td><td class="text-end">${totalSrc.toLocaleString('tr-TR',{minimumFractionDigits:2})}</td><td></td><td colspan="3" class="text-end">NET:</td><td class="text-end">${totalTrg.toLocaleString('tr-TR',{minimumFractionDigits:2})}</td></tr>`;
+                html += `<tr><td colspan="9" class="text-center py-2"><span class="badge bg-light text-dark border me-3">Eşleşmeyen Kayıt: <b>${diffCount}</b></span><span class="badge bg-light ${diffColor} border">Fark Tutar: <b>${diffTotal.toLocaleString('tr-TR',{minimumFractionDigits:2})}</b></span></td></tr>`;
+            }
+            $('#comparisonTableBody').html(html);
+        }
+    </script>
+}

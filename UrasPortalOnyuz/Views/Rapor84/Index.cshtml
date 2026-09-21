@@ -1,0 +1,2630 @@
+﻿@model WebApplication3.Controllers.Rapor84ViewModel
+@{
+    ViewData["Title"] = "Aktarım Veri Denetimi (ALV KİMYA)";
+    string selectedCompany = ViewBag.SelectedCompany ?? "ALV_KIMYA";
+    string targetDbSuffix = ViewBag.TargetDbSuffix ?? "_AS";
+    
+    // Stok Belge Kontrol için formdan gelen Yıl/Ay değerleri
+    int selectedYear = ViewBag.SelectedYear ?? DateTime.Now.Year;
+    int selectedMonth = ViewBag.SelectedMonth ?? DateTime.Now.Month;
+}
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<style>
+    body { background-color: #f4f6f9; overflow-x: hidden; }
+    .dash-card { border-radius: 12px; border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.03); transition: transform 0.2s; background: white; }
+    .icon-box { width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+    .bg-gradient-primary { background: linear-gradient(45deg, #4e73df, #224abe); color: white; }
+    .bg-gradient-success { background: linear-gradient(45deg, #1cc88a, #13855c); color: white; }
+    .bg-gradient-warning { background: linear-gradient(45deg, #f6c23e, #dda20a); color: white; }
+    .bg-gradient-danger { background: linear-gradient(45deg, #e74a3b, #be2617); color: white; }
+    .bg-gradient-dark { background: linear-gradient(45deg, #343a40, #1d2124); color: white; }
+    .bg-gradient-purple { background: linear-gradient(45deg, #6f42c1, #4e2b8c); color: white; }
+    .bg-gradient-info { background: linear-gradient(45deg, #36b9cc, #258391); color: white; }
+    
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 12px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; color: #5a5c69; }
+    
+    /* Sekme stilleri (Yan yana dizilmesi için güncellendi) */
+    .nav-pills-custom {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px; /* Sekmeler arasına boşluk */
+    }
+    .nav-pills-custom .nav-link { 
+        color: #5a5c69; 
+        font-weight: 600; 
+        border-radius: 20px; 
+        padding: 8px 16px; 
+        margin-right: 0;
+        transition: all 0.2s ease-in-out;
+        background-color: transparent;
+        border: 1px solid transparent;
+        cursor: pointer;
+        font-size: 0.9rem;
+    }
+    .nav-pills-custom .nav-link:hover { background-color: #e3e6f0; }
+    .nav-pills-custom .nav-link.active { background-color: #212529; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    
+    .filter-bar { background-color: #f8f9fc; border-bottom: 1px solid #e3e6f0; padding: 10px 15px; border-radius: 12px 12px 0 0; }
+    .btn-filter, .btn-stok-filter, .btn-fiyat-filter { font-weight: 600; border-radius: 20px; font-size: 12px; padding: 6px 16px; transition: all 0.2s; }
+    
+    .full-page-table { max-height: calc(100vh - 310px); overflow-y: auto; }
+    .loading-overlay { display: none; text-align: center; padding: 40px; }
+    .initial-load-msg { display:flex; flex-direction:column; align-items:center; justify-content:center; padding: 60px 0; color: #858796; }
+
+    /* ==================================================================
+       MODERN GÖRÜNÜM KATMANI (portalın yeni tasarım dili)
+       Yukarıdaki kurallar korunur, buradakiler üzerine yazar.
+       ================================================================== */
+    body { background-color: var(--bg-main, #f4f6fb); }
+
+    .dash-card {
+        background: var(--bg-card, #fff);
+        border: 1px solid var(--border-color, #e8ecf4);
+        border-radius: var(--r-lg, 18px);
+        box-shadow: var(--shadow-sm, 0 2px 6px rgba(0,0,0,.04));
+        transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .dash-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md, 0 8px 20px rgba(0,0,0,.08)); }
+
+    /* KPI kutuları */
+    .icon-box {
+        width: 46px; height: 46px; border-radius: 14px;
+        font-size: 19px; box-shadow: 0 6px 14px rgba(0,0,0,.14);
+    }
+    .bg-gradient-primary { background: linear-gradient(135deg,#009ef7,#6366f1); }
+    .bg-gradient-success { background: linear-gradient(135deg,#10b981,#059669); }
+    .bg-gradient-warning { background: linear-gradient(135deg,#f59e0b,#d97706); }
+    .bg-gradient-danger  { background: linear-gradient(135deg,#f43f5e,#be123c); }
+    .bg-gradient-dark    { background: linear-gradient(135deg,#0f172a,#334155); }
+    .bg-gradient-purple  { background: linear-gradient(135deg,#8b5cf6,#6366f1); }
+    .bg-gradient-info    { background: linear-gradient(135deg,#06b6d4,#0891b2); }
+
+    /* Hap sekmeler */
+    .nav-pills-custom { gap: 8px; }
+    .nav-pills-custom .nav-link {
+        border: 1px solid var(--border-color, #e8ecf4);
+        border-radius: 999px;
+        background: var(--bg-card, #fff);
+        color: var(--text-secondary, #64748b);
+        font-size: .82rem; font-weight: 700;
+        padding: .45rem 1.1rem;
+    }
+    .nav-pills-custom .nav-link:hover {
+        background: var(--metro-primary-light, #eef7ff);
+        color: var(--metro-primary, #009ef7);
+        border-color: color-mix(in srgb, var(--metro-primary, #009ef7) 34%, transparent);
+    }
+    .nav-pills-custom .nav-link.active {
+        background: linear-gradient(135deg,#009ef7,#6366f1);
+        color: #fff; border-color: transparent;
+        box-shadow: 0 5px 14px rgba(0,158,247,.28);
+    }
+    /* Sekme üzerindeki sayaç rozetleri */
+    .nav-pills-custom .nav-link .badge {
+        border-radius: 999px; font-weight: 800; font-size: .62rem;
+    }
+    .nav-pills-custom .nav-link.active .badge {
+        background: rgba(255,255,255,.24) !important; color: #fff !important;
+    }
+
+    /* Filtre çubuğu */
+    .filter-bar {
+        background: var(--bg-card, #fff);
+        border: 1px solid var(--border-color, #e8ecf4);
+        border-bottom: 1px solid var(--border-color, #e8ecf4);
+        border-radius: var(--r-lg, 18px) var(--r-lg, 18px) 0 0;
+        padding: 12px 16px;
+        display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    }
+    .filter-bar .form-control, .filter-bar .form-select {
+        height: 36px; border-radius: 10px; font-size: .82rem;
+    }
+    .btn-filter, .btn-stok-filter, .btn-fiyat-filter { border-radius: 999px; }
+    .btn { border-radius: 10px; font-weight: 600; }
+
+    /* Tablolar */
+    .table-custom { font-size: .8rem; }
+    .table-custom thead th {
+        position: sticky; top: 0; z-index: 2;
+        background: var(--bg-subtle, #f8fafc);
+        color: var(--text-secondary, #64748b);
+        font-size: .66rem; font-weight: 800; letter-spacing: .06em;
+        border-bottom: 2px solid var(--border-color, #e8ecf4);
+        white-space: nowrap;
+    }
+    .table-custom td {
+        font-size: .8rem;
+        color: var(--text-primary, #2b3445);
+        border-color: var(--border-color, #eef2f7);
+    }
+    .table-custom tbody tr { transition: background .12s ease; }
+    .table-custom tbody tr:hover { background: var(--metro-primary-light, #eef7ff); }
+
+    .full-page-table {
+        max-height: calc(100vh - 300px);
+        overflow: auto;
+        border-radius: 0 0 var(--r-lg, 18px) var(--r-lg, 18px);
+    }
+    .full-page-table::-webkit-scrollbar { width: 9px; height: 9px; }
+    .full-page-table::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+
+    /* Boş / yükleniyor durumları */
+    .initial-load-msg, .loading-overlay { color: var(--text-secondary, #94a3b8); }
+    .initial-load-msg i, .loading-overlay i { opacity: .3; }
+
+    /* Rozetler */
+    .badge { font-weight: 700; letter-spacing: .01em; }
+
+    [data-theme="dark"] .table-custom thead th { background: #1f2937; }
+
+    /* Alis/Satis: sorunlu satir vurgusu */
+    #tbody-alis-satis tr.as-satir[data-sorunlu="1"] { background-color: rgba(244, 63, 94, .10); }
+    #tbody-alis-satis tr.as-satir:hover { background-color: var(--metro-primary-light, #eef7ff); }
+
+    /* Stok akis semasi */
+    .akis-zincir { font-size: .82rem; line-height: 1.7; }
+    .akis-satir { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .akis-kaynak { min-width: 210px; font-weight: 600; color: var(--text-primary, #2b3445); }
+    .akis-ok { color: var(--metro-primary, #009ef7); font-weight: 800; letter-spacing: -1px; }
+    .akis-hedef { font-weight: 600; color: #0f766e; }
+    .akis-not { padding-left: 14px; font-size: .74rem; color: var(--text-secondary, #94a3b8); }
+    .akis-dal { color: #f59e0b; margin-right: 4px; }
+    .akis-ters { padding-left: 26px; border-left: 2px dashed #cbd5e1; margin-left: 6px; }
+</style>
+
+<!-- Tam Sayfa Loader Animasyonu (Sadece POST işlemlerinde) -->
+<div id="pageLoader" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.7); z-index:9999; text-align:center; padding-top:20%;">
+    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+        <span class="visually-hidden">Yükleniyor...</span>
+    </div>
+    <h4 class="mt-2 text-primary fw-bold">İşlem Yapılıyor Lütfen Bekleyin...</h4>
+</div>
+
+<div class="container-fluid px-4 py-2">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h4 mb-0 text-gray-800 fw-bold">
+            <i class="fas fa-clipboard-check me-2 text-primary"></i> Aktarım Veri Denetim Paneli (@selectedCompany ➔ @(selectedCompany)@targetDbSuffix)
+        </h2>
+        <div class="d-flex align-items-center">
+            <button class="btn btn-primary btn-sm fw-bold shadow-sm rounded-pill px-3" onclick="location.reload()">
+                <i class="fas fa-redo me-1"></i> Sayfayı Yenile
+            </button>
+        </div>
+    </div>
+
+    <!-- ÖZET YÜKLEME PANELİ (AJAX İLE DOLDURULACAK) -->
+    <div id="ozet-panel" class="alert alert-secondary shadow-sm d-flex justify-content-between align-items-center py-2 mb-4 border-0">
+        <div>
+            <i class="fas fa-spinner fa-spin fs-5 me-2"></i>
+            <span class="fw-bold">Yevmiye Hacim Bilgileri Yükleniyor...</span>
+        </div>
+    </div>
+
+    <!-- ÜST KARTLAR -->
+    <div class="row mb-4">
+        <div class="col-md-2 mb-2">
+            <div class="card dash-card h-100 py-2 border-start border-4 border-warning">
+                <div class="card-body px-3 py-2">
+                    <div class="row align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs fw-bold text-warning text-uppercase mb-1">Bekleyen</div>
+                            <div class="h4 mb-0 fw-bold text-gray-800" id="card-bekleyen"><i class="fas fa-spinner fa-spin"></i></div>
+                        </div>
+                        <div class="col-auto"><div class="icon-box bg-gradient-warning" style="width:36px;height:36px;font-size:16px;"><i class="fas fa-hourglass-half"></i></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 mb-2">
+            <div class="card dash-card h-100 py-2 border-start border-4 border-danger">
+                <div class="card-body px-3 py-2">
+                    <div class="row align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs fw-bold text-danger text-uppercase mb-1">Hatalı İşlem</div>
+                            <div class="h4 mb-0 fw-bold text-gray-800" id="card-hatali"><i class="fas fa-spinner fa-spin"></i></div>
+                        </div>
+                        <div class="col-auto"><div class="icon-box bg-gradient-danger" style="width:36px;height:36px;font-size:16px;"><i class="fas fa-times-circle"></i></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 mb-2">
+            <div class="card dash-card h-100 py-2 border-start border-4 border-dark">
+                <div class="card-body px-3 py-2">
+                    <div class="row align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs fw-bold text-dark text-uppercase mb-1">Kayıp (Akmayan)</div>
+                            <div class="h4 mb-0 fw-bold text-gray-800" id="card-kayip"><i class="fas fa-spinner fa-spin"></i></div>
+                        </div>
+                        <div class="col-auto"><div class="icon-box bg-gradient-dark" style="width:36px;height:36px;font-size:16px;"><i class="fas fa-question-circle"></i></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 mb-2">
+            <div class="card dash-card h-100 py-2 border-start border-4 border-purple" style="border-color: #6f42c1 !important;">
+                <div class="card-body px-3 py-2">
+                    <div class="row align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs fw-bold text-uppercase mb-1" style="color: #6f42c1;">Eksik (Kaçak)</div>
+                            <div class="h4 mb-0 fw-bold text-gray-800" id="card-eksik"><i class="fas fa-spinner fa-spin"></i></div>
+                        </div>
+                        <div class="col-auto"><div class="icon-box bg-gradient-purple" style="width:36px;height:36px;font-size:16px;"><i class="fas fa-search-minus"></i></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 mb-2">
+            <div class="card dash-card h-100 py-2 border-start border-4 border-info">
+                <div class="card-body px-3 py-2">
+                    <div class="row align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs fw-bold text-info text-uppercase mb-1">İptal Farkı</div>
+                            <div class="h4 mb-0 fw-bold text-gray-800" id="card-iptal"><i class="fas fa-spinner fa-spin"></i></div>
+                        </div>
+                        <div class="col-auto"><div class="icon-box bg-gradient-info" style="width:36px;height:36px;font-size:16px;"><i class="fas fa-not-equal"></i></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 mb-2">
+            <div class="card dash-card h-100 py-2 border-start border-4 border-success">
+                <div class="card-body px-3 py-2">
+                    <div class="row align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs fw-bold text-success text-uppercase mb-1">Başarılı İşlem</div>
+                            <div class="h4 mb-0 fw-bold text-gray-800" id="card-basarili"><i class="fas fa-spinner fa-spin"></i></div>
+                        </div>
+                        <div class="col-auto"><div class="icon-box bg-gradient-success" style="width:36px;height:36px;font-size:16px;"><i class="fas fa-check-double"></i></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- YENİ DÜZEN SEKMELER (DROPDOWN YOK, HEPSİ YATAY) -->
+    <div class="card dash-card mb-4 p-2 w-100">
+        <ul class="nav nav-pills nav-pills-custom mb-3 border-bottom pb-2" id="pills-tab" role="tablist">
+            
+            
+            
+            
+
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-fazla" data-bs-toggle="pill" data-bs-target="#panel-fazla" type="button" role="tab">
+                    <i class="fas fa-ghost text-danger me-1"></i> Fazla Kayıtlar
+                    <span id="badge-fazla" class="badge bg-danger ms-1" style="display:none">0</span>
+                </button>
+            </li>
+
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-kimliksiz" data-bs-toggle="pill" data-bs-target="#panel-kimliksiz" type="button" role="tab">
+                    <i class="fas fa-link text-warning me-1"></i> Kimliksizler (Manager)
+                    <span id="badge-kimliksiz" class="badge bg-warning text-dark ms-1" style="display:none">0</span>
+                </button>
+            </li>
+
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-manuel" data-bs-toggle="pill" data-bs-target="#panel-manuel" type="button" role="tab">
+                    <i class="fas fa-keyboard text-success me-1"></i> Manuel Girilenler
+                    <span id="badge-manuel" class="badge bg-success ms-1" style="display:none">0</span>
+                </button>
+            </li>
+
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-manuel-analiz" data-bs-toggle="pill" data-bs-target="#panel-manuel-analiz" type="button" role="tab">
+                    <i class="fas fa-user-cog text-warning me-1"></i> Manuel İşlem Analizi
+                    <span id="badge-manuel-analiz" class="badge bg-warning text-dark ms-1" style="display:none">0</span>
+                </button>
+            </li>
+
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="tab-eksik" data-bs-toggle="pill" data-bs-target="#panel-eksik" type="button" role="tab">
+                    <i class="fas fa-search-minus text-dark me-1"></i> Eksik Yevmiye Kayıtları
+                    <span id="badge-eksik" class="badge bg-dark ms-1" style="display:none">0</span>
+                </button>
+            </li>
+
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-kapali-donem" data-bs-toggle="pill" data-bs-target="#panel-kapali-donem" type="button" role="tab">
+                    <i class="fas fa-lock text-danger me-1"></i> Kayıt Dönemi Kilitli (Akmayan)
+                    <span id="badge-kapali-donem" class="badge bg-danger ms-1" style="display:none">0</span>
+                </button>
+            </li>
+
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-isaret-degismis" data-bs-toggle="pill" data-bs-target="#panel-isaret-degismis" type="button" role="tab">
+                    <i class="fas fa-flag text-warning me-1"></i> İşareti Değişmiş (Hedefte Var)
+                    <span id="badge-isaret-degismis" class="badge bg-warning text-dark ms-1" style="display:none">0</span>
+                </button>
+            </li>
+
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-iptal" data-bs-toggle="pill" data-bs-target="#panel-iptal" type="button" role="tab">
+                    <i class="fas fa-not-equal text-info me-1"></i> İptal Farkları
+                    <span id="badge-iptal" class="badge bg-info ms-1" style="display:none">0</span>
+                </button>
+            </li>
+
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-stok-akis" data-bs-toggle="pill" data-bs-target="#panel-stok-akis" type="button" role="tab">
+                    <i class="fas fa-diagram-project text-success me-1"></i> Stok Akış Şeması
+                    <span id="badge-stok-akis" class="badge bg-success ms-1" style="display:none">0</span>
+                </button>
+            </li>
+
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-alis-satis" data-bs-toggle="pill" data-bs-target="#panel-alis-satis" type="button" role="tab">
+                    <i class="fas fa-scale-balanced text-primary me-1"></i> Alış / Satış Kontrolü
+                    <span id="badge-alis-satis" class="badge bg-primary ms-1" style="display:none">0</span>
+                </button>
+            </li>
+
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-fiyat-fark" data-bs-toggle="pill" data-bs-target="#panel-fiyat-fark" type="button" role="tab">
+                    <i class="fas fa-tags text-warning me-1"></i> Birim Fiyat Uyuşmazlığı
+                    <span id="badge-fiyat-fark" class="badge bg-warning text-dark ms-1" style="display:none">0</span>
+                </button>
+            </li>
+
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-mukerrer" data-bs-toggle="pill" data-bs-target="#panel-mukerrer" type="button" role="tab">
+                    <i class="fas fa-radiation-alt text-danger me-1"></i> Mükerrerler (Çift)
+                    <span id="badge-mukerrer" class="badge bg-danger ms-1" style="display:none">0</span>
+                </button>
+            </li>
+
+
+            <!-- Sağ köşeye yaslanan son buton -->
+            <li class="nav-item ms-auto" role="presentation">
+                <button class="nav-link" id="tab-yoksayilan" data-bs-toggle="pill" data-bs-target="#panel-yoksayilan" type="button" role="tab">
+                    <i class="fas fa-eye-slash text-secondary me-1"></i> Yoksayılanlar
+                    <span id="badge-yoksayilan" class="badge bg-secondary ms-1" style="display:none">0</span>
+                </button>
+            </li>
+            
+        </ul>
+
+        <div class="tab-content" id="pills-tabContent">
+            
+            <!-- ÖZET TAB -->
+
+            <!-- STOK BELGE KONTROL TAB -->
+
+            <!-- STOK HAREKET TAB -->
+
+            <!-- FİYAT STOK KONTROL TAB -->
+
+            <!-- FAZLA TAB -->
+            <div class="tab-pane fade" id="panel-fazla" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-2 px-2 mt-2">
+                    <span class="text-muted fw-bold small"><i class="fas fa-ghost me-1 text-danger"></i> Hedefte <b>(U_SrcTransId)</b> dolu olmasına rağmen Kaynak Sistemde böyle bir yevmiye olmayan hayalet/fazla kayıtlar.</span>
+                </div>
+                <div id="loader-fazla" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-danger"></i><br/>Fazla / Hayalet kayıtlar aranıyor...</div>
+                <div class="table-responsive full-page-table w-100 border rounded">
+                    <table class="table table-hover table-custom mb-0 w-100">
+                        <thead class="sticky-top shadow-sm" style="background-color: #fce4e4;">
+                            <tr>
+                                <th>Hedef Yevmiye No</th>
+                                <th>Kaynak Yevmiye No</th>
+                                <th>Tarih</th>
+                                <th>Açıklama (Memo)</th>
+                                <th>Kullanıcı (Hedef)</th>
+                                <th class="text-end">Tutar</th>
+                                <th>Fazlalık Sebebi / Analiz</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-fazla">
+                            <tr><td colspan="7"><div class="initial-load-msg"><i class="fas fa-hand-pointer fs-1 mb-2 text-primary"></i><h4>Verileri getirmek için sekmeye tıklayın</h4></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- KİMLİKSİZ TAB -->
+            <div class="tab-pane fade" id="panel-kimliksiz" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-2 px-2 mt-2">
+                    <span class="text-muted fw-bold small"><i class="fas fa-info-circle me-1"></i> Sadece <b>"manager" (Aktarım Robotu)</b> tarafından oluşturulup referans ID'si boş kalan hatalı kayıtlar.</span>
+                    <button class="btn btn-sm btn-outline-primary fw-bold rounded-pill" onclick="fixBrokenLinks()">
+                        <i class="fas fa-wrench me-1"></i> Kopan Bağları (UDF) Lehimle
+                    </button>
+                </div>
+                <div id="loader-kimliksiz" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br/>Kimliksiz kayıtlar taranıyor...</div>
+                <div class="table-responsive full-page-table w-100 border rounded">
+                    <table class="table table-hover table-custom mb-0 w-100">
+                        <thead class="table-light sticky-top shadow-sm">
+                            <tr>
+                                <th>Hedef Yevmiye No</th>
+                                <th>Belge No (BaseRef)</th>
+                                <th>Tarih</th>
+                                <th>Belge Tipi</th>
+                                <th>Açıklama (Memo)</th>
+                                <th class="text-end">Tutar</th>
+                                <th class="text-center">Durum</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-kimliksiz">
+                            <tr><td colspan="7"><div class="initial-load-msg"><i class="fas fa-hand-pointer fs-1 mb-2 text-primary"></i><h4>Verileri getirmek için sekmeye tıklayın</h4></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- MANUEL TAB -->
+            <div class="tab-pane fade" id="panel-manuel" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-2 px-2 mt-2">
+                    <span class="text-muted fw-bold small"><i class="fas fa-keyboard me-1"></i> Hedef veri tabanına <b>elle girilmiş</b> kayıtlar veya robot tarafından oluşturulup <b>kullanıcılar tarafından müdahale edilmiş</b> kayıtlar.</span>
+                </div>
+                <div id="loader-manuel" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br/>Manuel kayıtlar aranıyor...</div>
+                <div class="table-responsive full-page-table w-100 border rounded">
+                    <table class="table table-hover table-custom mb-0 w-100">
+                        <thead class="sticky-top shadow-sm" style="background-color: #d1e7dd;">
+                            <tr>
+                                <th>Müdahale Tipi</th>
+                                <th>Hedef Yevmiye No</th>
+                                <th>Belge No (BaseRef)</th>
+                                <th>Tarih</th>
+                                <th>Belge Tipi</th>
+                                <th>Açıklama (Memo)</th>
+                                <th>Kaynak ID (Kopya)</th>
+                                <th>Kullanıcılar (Oluşturan/Güncelleyen)</th>
+                                <th class="text-end">Tutar</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-manuel">
+                            <tr><td colspan="9"><div class="initial-load-msg"><i class="fas fa-hand-pointer fs-1 mb-2 text-primary"></i><h4>Verileri getirmek için sekmeye tıklayın</h4></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- MANUEL ANALİZ TAB -->
+            <div class="tab-pane fade" id="panel-manuel-analiz" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-2 px-2 mt-2">
+                    <span class="text-muted fw-bold small"><i class="fas fa-user-cog me-1"></i> Tüm manuel müdahalelerin detaylı analizi ve iptal/işlem uyuşmazlıklarındaki tüm olasılıklar bu sekmede listelenir.</span>
+                </div>
+                <div id="loader-manuel-analiz" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-warning"></i><br/>Manuel işlem analizi yükleniyor...</div>
+                <div class="table-responsive full-page-table w-100 border rounded">
+                    <table class="table table-hover table-custom mb-0 w-100">
+                        <thead class="sticky-top shadow-sm" style="background-color: #fff3cd;">
+                            <tr>
+                                <th>Hedef Yevmiye No</th>
+                                <th>Kaynak Yevmiye No</th>
+                                <th>Tarih</th>
+                                <th>Açıklama (Memo)</th>
+                                <th>Kullanıcı (Ekl / Günc)</th>
+                                <th class="text-end">Tutar</th>
+                                <th>Müdahale Nedeni / Analiz</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-manuel-analiz">
+                            <tr><td colspan="7"><div class="initial-load-msg"><i class="fas fa-hand-pointer fs-1 mb-2 text-primary"></i><h4>Verileri getirmek için sekmeye tıklayın</h4></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- EKSİK TAB -->
+            <div class="tab-pane fade show active" id="panel-eksik" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-2 px-2 mt-2">
+                    <span class="text-muted fw-bold small"><i class="fas fa-info-circle me-1"></i> Bu kayıtlar kaynakta "Aktar (R/Y)" seçilmesine rağmen hedefte yok.</span>
+                    <div class="d-flex gap-2" id="action-buttons-eksik" style="display:none;">
+                        <button class="btn btn-sm btn-secondary fw-bold shadow-sm rounded-pill" onclick="yoksaySecilenEksikler()">
+                            <i class="fas fa-eye-slash me-1"></i> Seçilenleri Yoksay
+                        </button>
+                        <button class="btn btn-sm btn-warning fw-bold shadow-sm rounded-pill" onclick="kuyrugaItSecilenEksikler()">
+                            <i class="fas fa-bolt me-1"></i> Seçilenleri Kuyruğa İt
+                        </button>
+                        <button class="btn btn-sm btn-danger fw-bold shadow-sm rounded-pill" onclick="forceAddMissing()">
+                            <i class="fas fa-bolt me-1"></i> Tümünü Kuyruğa İt
+                        </button>
+                    </div>
+                    <div class="d-flex gap-2" id="kuyruk-action-buttons"></div>
+                </div>
+                <div id="loader-eksik" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br/>Eksik kayıtlar bulunuyor...</div>
+                <div class="table-responsive full-page-table w-100 border rounded">
+                    <table class="table table-hover table-custom mb-0 w-100">
+                        <thead class="sticky-top shadow-sm" style="background-color: #f3e8ff;">
+                            <tr>
+                                <th style="width: 40px;"><input type="checkbox" id="chkAllEksik" onclick="$('.chk-eksik').prop('checked', this.checked)"></th>
+                                <th>Kaynak Yevmiye No</th>
+                                <th>Belge No</th>
+                                <th>Tarih</th>
+                                <th>Belge Tipi</th>
+                                <th style="min-width: 340px;">Neden Akmadı?</th>
+                                <th>Açıklama (Memo)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-eksik">
+                            <tr><td colspan="7"><div class="initial-load-msg"><i class="fas fa-hand-pointer fs-1 mb-2 text-primary"></i><h4>Verileri getirmek için sekmeye tıklayın</h4></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- KAYIT DÖNEMİ KİLİTLİ TAB -->
+            <div class="tab-pane fade" id="panel-kapali-donem" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-2 px-2 mt-2">
+                    <span class="text-muted fw-bold small"><i class="fas fa-info-circle me-1"></i>
+                        Kaynakta aktarıma işaretli olup <b>hedefte olmayan</b> ve tarihi <b>hedef şirkette kilitli döneme</b> denk gelen fişler.
+                        Robot bunları "Posting period locked" hatasıyla atlar; dönem açılmadan aktarılamazlar. Bu fişler "Eksik Yevmiye Kayıtları" sekmesinde ve yevmiye hacmi farkında <b>sayılmaz</b>.
+                    </span>
+                </div>
+                <div id="loader-kapali-donem" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br/>Kapalı dönemdeki fişler bulunuyor...</div>
+                <div class="table-responsive full-page-table w-100 border rounded">
+                    <table class="table table-hover table-custom mb-0 w-100">
+                        <thead class="sticky-top shadow-sm" style="background-color: #fde8e8;">
+                            <tr>
+                                <th>Kaynak Yevmiye No</th>
+                                <th>Belge No</th>
+                                <th>Tarih</th>
+                                <th>Belge Tipi</th>
+                                <th>Hedefteki Dönem</th>
+                                <th class="text-end">Tutar</th>
+                                <th>Açıklama (Memo)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-kapali-donem">
+                            <tr><td colspan="7"><div class="initial-load-msg"><i class="fas fa-hand-pointer fs-1 mb-2 text-primary"></i><h4>Verileri getirmek için sekmeye tıklayın</h4></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- İŞARETİ DEĞİŞMİŞ TAB -->
+            <div class="tab-pane fade" id="panel-isaret-degismis" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-2 px-2 mt-2">
+                    <span class="text-muted fw-bold small"><i class="fas fa-info-circle me-1"></i>
+                        Robot bu fişleri hedefe <b>aktarmış</b>; sonra kaynakta işareti X yapılmış, silinmiş, tutarı sıfırlanmış ya da yoksay listesine alınmış.
+                        Kaynak sayımına girmedikleri için fark oluştururlar. Robot hedeften geri almaz: ya kaynakta işareti R'ye alın ya da hedefteki fişi iptal edin.
+                    </span>
+                </div>
+                <div id="loader-isaret-degismis" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br/>Kayıtlar bulunuyor...</div>
+                <div class="table-responsive full-page-table w-100 border rounded">
+                    <table class="table table-hover table-custom mb-0 w-100">
+                        <thead class="sticky-top shadow-sm" style="background-color: #fff4d6;">
+                            <tr>
+                                <th>Hedef Yevmiye No</th>
+                                <th>Kaynak Yevmiye No</th>
+                                <th>Belge No</th>
+                                <th>Tarih</th>
+                                <th>Belge Tipi</th>
+                                <th>Kaynaktaki İşaret</th>
+                                <th style="min-width: 300px;">Neden Kapsam Dışı?</th>
+                                <th class="text-end">Tutar</th>
+                                <th>Hedefe Yazılma</th>
+                                <th>Açıklama (Memo)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-isaret-degismis">
+                            <tr><td colspan="10"><div class="initial-load-msg"><i class="fas fa-hand-pointer fs-1 mb-2 text-primary"></i><h4>Verileri getirmek için sekmeye tıklayın</h4></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- İPTAL TAB -->
+            <div class="tab-pane fade" id="panel-iptal" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-2 px-2 mt-2">
+                    <span class="text-muted fw-bold small"><i class="fas fa-info-circle me-1"></i> Kaynak veri tabanındaki iptal (Storno) statüsü ile hedefteki statü uyuşmayan kayıtlar. Stok tarafı için <b>Stok Akış Şeması</b> sekmesine bakın.</span>
+                    <button id="btn-sync-iptal" class="btn btn-sm btn-info text-white fw-bold rounded-pill shadow-sm" onclick="syncIptalStatus()" style="display:none;">
+                        <i class="fas fa-sync me-1"></i> Hedefi Güncelle (Eşitle)
+                    </button>
+                </div>
+                <div id="loader-iptal" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br/>İptal farkları denetleniyor...</div>
+                <div class="table-responsive full-page-table w-100 border rounded">
+                    <table class="table table-hover table-custom mb-0 w-100">
+                        <thead class="sticky-top shadow-sm" style="background-color: #e3f2fd;">
+                            <tr>
+                                <th>Kyn. Yevmiye</th>
+                                <th>Kyn. Belge No</th>
+                                <th>Hdf. Yevmiye</th>
+                                <th>Hdf. Belge No</th>
+                                <th>Tarih</th>
+                                <th style="min-width:320px;">Sorun Ne?</th>
+                                <th>Açıklama</th>
+                                <th class="text-center">Kaynak İptal Durumu</th>
+                                <th class="text-center">Hedef İptal Durumu</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-iptal">
+                            <tr><td colspan="8"><div class="initial-load-msg"><i class="fas fa-hand-pointer fs-1 mb-2 text-primary"></i><h4>Verileri getirmek için sekmeye tıklayın</h4></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- MÜKERRER TAB -->
+            <div class="tab-pane fade" id="panel-mukerrer" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-2 px-2 mt-2">
+                    <span class="text-muted fw-bold small"><i class="fas fa-info-circle me-1"></i> Sadece <b>"manager" (Robot)</b> tarafından çift atılmış yevmiyeler listelenir.</span>
+                    <button id="btn-cancel-mukerrer" class="btn btn-sm btn-danger fw-bold rounded-pill shadow-sm" onclick="cancelDuplicates()" style="display:none;">
+                        <i class="fas fa-magic me-1"></i> Fazlalıkları İptal Et (Teke Düşür)
+                    </button>
+                </div>
+                <div id="loader-mukerrer" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br/>Mükerrer kayıtlar taranıyor...</div>
+                <div class="table-responsive full-page-table w-100 border rounded">
+                    <table class="table table-hover table-custom mb-0 w-100">
+                        <thead class="table-danger sticky-top shadow-sm">
+                            <tr>
+                                <th>Kaynak Yevmiye No</th>
+                                <th>Hedef Yevmiye No</th>
+                                <th>Belge No (BaseRef)</th>
+                                <th>Tarih</th>
+                                <th>Açıklama (Memo)</th>
+                                <th class="text-end">Tutar</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-mukerrer">
+                            <tr><td colspan="6"><div class="initial-load-msg"><i class="fas fa-hand-pointer fs-1 mb-2 text-primary"></i><h4>Verileri getirmek için sekmeye tıklayın</h4></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- STOK AKIŞ ŞEMASI TAB -->
+            <div class="tab-pane fade" id="panel-stok-akis" role="tabpanel">
+                <div class="filter-bar mt-2">
+                    <span class="fw-bold small text-muted me-2"><i class="fas fa-calendar-alt me-1"></i> Dönem:</span>
+                    <select id="akisYil" class="form-select form-select-sm" style="width:110px;"></select>
+                    <select id="akisAy" class="form-select form-select-sm" style="width:140px;"></select>
+                    <button class="btn btn-sm btn-primary btn-filter" onclick="stokAkisGetir()">
+                        <i class="fas fa-search me-1"></i> Getir
+                    </button>
+
+                    <div class="ms-auto d-flex flex-wrap gap-2">
+                        <button class="btn btn-sm btn-outline-dark btn-filter" onclick="akisSuz('all', this)">Tümü</button>
+                        <button class="btn btn-sm btn-outline-danger btn-filter" onclick="akisSuz('AKMAMIS', this)">Akmamış</button>
+                        <button class="btn btn-sm btn-outline-warning btn-filter" onclick="akisSuz('IPTAL_DAMGASIZ', this)">İptal damgası eksik</button>
+                        <button class="btn btn-sm btn-outline-warning btn-filter" onclick="akisSuz('FAZLADAN_IPTAL', this)">Fazladan iptal</button>
+                        <button class="btn btn-sm btn-outline-info btn-filter" onclick="akisSuz('FAZLADAN_MANUEL', this)">
+                            <i class="fas fa-inbox me-1"></i>Manuel / Kaynaksız
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger btn-filter" onclick="akisSuz('FAZLADAN_YANLIS_TIP', this)">
+                            <i class="fas fa-triangle-exclamation me-1"></i>Yanlış Akmış (R/Y değil)
+                        </button>
+                        <button class="btn btn-sm btn-outline-warning btn-filter" onclick="akisSuz('ESLESMEYEN_REFERANS', this)">
+                            <i class="fas fa-link-slash me-1"></i>Eşleşmeyen Referans
+                        </button>
+                        <button class="btn btn-sm btn-outline-success btn-filter" onclick="akisSuz('OK', this)">Sorunsuz</button>
+                    </div>
+                </div>
+
+                <div id="akisKuyrukBar" class="d-flex flex-wrap align-items-center gap-2 px-2 pb-2" style="display:none;">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="akisTumunuSec(true)">
+                        <i class="fas fa-check-double me-1"></i>Akmamışların tümünü seç
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="akisTumunuSec(false)">
+                        <i class="fas fa-eraser me-1"></i>Seçimi temizle
+                    </button>
+                    <button id="btnKuyrugaEkle" class="btn btn-sm btn-warning fw-bold" onclick="akisKuyrugaEkle()" disabled>
+                        <i class="fas fa-rotate-right me-1"></i>Seçilenleri Kuyruğa Ekle (<span id="akisSecimSayisi">0</span>)
+                    </button>
+                    <span class="small text-muted">
+                        Belge aktarım kuyruğuna geri konur; hedef şirkete asıl kaydı robot atar.
+                    </span>
+                </div>
+
+                <div class="text-muted small px-2 pb-2">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Ana datadaki fatura hedef şirkette hangi Mal Giriş/Çıkış belgesi olarak oluşmuş, iptal edildiyse
+                    karşı belgesi ve onun hedefteki karşılığı ne — zincir halinde gösterilir.
+                    Eşleştirme <b>belge numarası + tarih + kalem satır sayısı</b> üçlüsüyle yapılır.
+                    <b>Manuel / Kaynaksız</b>, <b>Yanlış Akmış</b> ve <b>Eşleşmeyen Referans</b> filtreleri
+                    ana datayla eşleşmeyen hedef belgeleri listeler; her birinin yanındaki
+                    <b>İptal Et</b> butonu ters kayıt oluşturup iki belgeye de İPTAL damgası basar
+                    (üretimden doğan giriş/çıkışlar hariç tutulur).
+                </div>
+
+                <div id="loader-stok-akis" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br/>Stok akışı çıkarılıyor...</div>
+
+                <div class="table-responsive full-page-table w-100 border rounded">
+                    <table class="table table-hover table-custom mb-0 w-100">
+                        <thead class="sticky-top shadow-sm" style="background-color:#e8f7ef;">
+                            <tr>
+                                <th style="width:150px;">Durum</th>
+                                <th style="min-width:520px;">Akış</th>
+                                <th>Cari</th>
+                                <th style="width:100px;">Tarih</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-stok-akis">
+                            <tr><td colspan="4"><div class="initial-load-msg"><i class="fas fa-hand-pointer fs-1 mb-2 text-primary"></i><h4>Dönem seçip "Getir" deyin</h4></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ALIŞ / SATIŞ KONTROLÜ TAB -->
+            <div class="tab-pane fade" id="panel-alis-satis" role="tabpanel">
+                <div class="filter-bar mt-2">
+                    <span class="fw-bold small text-muted me-2"><i class="fas fa-calendar-alt me-1"></i> Dönem:</span>
+                    <select id="asYil" class="form-select form-select-sm" style="width:110px;"></select>
+                    <select id="asAy" class="form-select form-select-sm" style="width:140px;"></select>
+                    <button class="btn btn-sm btn-primary btn-filter" onclick="alisSatisGetir()">
+                        <i class="fas fa-search me-1"></i> Getir
+                    </button>
+
+                    <select id="asTip" class="form-select form-select-sm" style="width:200px;" onchange="alisSatisSuz()">
+                        <option value="">Tüm belge tipleri</option>
+                        <option value="13">Satış Faturası</option>
+                        <option value="14">Satış İade Faturası</option>
+                        <option value="18">Alış Faturası</option>
+                        <option value="19">Alış İade Faturası</option>
+                    </select>
+
+                    <div class="form-check form-switch ms-2">
+                        <input class="form-check-input" type="checkbox" id="asSadeceFark" checked onchange="alisSatisSuz()">
+                        <label class="form-check-label small fw-bold" for="asSadeceFark">Sadece farklılar</label>
+                    </div>
+
+                    <input type="text" class="form-control form-control-sm ms-auto" id="asAra"
+                           style="width:240px;" placeholder="Stok kodu / adı ara..." onkeyup="alisSatisSuz()">
+                </div>
+
+                <ul class="nav nav-pills nav-pills-custom px-2 pb-2" id="asAltSekme">
+                    <li class="nav-item">
+                        <button class="nav-link active" data-as-mod="miktar" onclick="asModDegistir('miktar', this)">
+                            <i class="fas fa-cubes me-1"></i> Miktar Bazlı
+                            <span class="badge bg-danger ms-1" id="asRozetMiktar" style="display:none">0</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-as-mod="tutar" onclick="asModDegistir('tutar', this)">
+                            <i class="fas fa-turkish-lira-sign me-1"></i> Tutar Bazlı
+                            <span class="badge bg-danger ms-1" id="asRozetTutar" style="display:none">0</span>
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="text-muted small px-2 pb-2">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Seçilen ayda ana datada alınan/satılan <b>stok kalemi miktarları ve TL tutarları</b>,
+                    hedef şirkette oluşan Mal Giriş/Çıkış toplamlarıyla karşılaştırılır.
+                    Belge tipi hedef tarafta <code>U_BE1_TARGETTYPE</code> alanından okunur.
+                    İptal edilmiş belgeler ve İPTAL damgalı hedef belgeler hesaba katılmaz.
+                    <b>Tutar bazlı</b> sekmede kıyas <b>TL karşılığı birim fiyat</b> üzerinden yapılır;
+                    <b>10 TL'ye kadar tutar sapması fark sayılmaz</b> ama durum sütununda belirtilir.
+                </div>
+
+                <div id="loader-alis-satis" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br/>Alış/satış toplamları hesaplanıyor...</div>
+
+                <div class="table-responsive full-page-table w-100 border rounded">
+                    <table class="table table-hover table-custom mb-0 w-100">
+                        <thead class="sticky-top shadow-sm" style="background-color:#eef4ff;" id="thead-alis-satis"></thead>
+                        <tbody id="tbody-alis-satis">
+                            <tr><td colspan="11"><div class="initial-load-msg"><i class="fas fa-hand-pointer fs-1 mb-2 text-primary"></i><h4>Dönem seçip "Getir" deyin</h4></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- BİRİM FİYAT UYUŞMAZLIĞI TAB -->
+            <div class="tab-pane fade" id="panel-fiyat-fark" role="tabpanel">
+                <div class="filter-bar mt-2">
+                    <span class="fw-bold small text-muted me-2"><i class="fas fa-calendar-alt me-1"></i> Dönem:</span>
+                    <select id="ffYil" class="form-select form-select-sm" style="width:110px;"></select>
+                    <select id="ffAy" class="form-select form-select-sm" style="width:140px;"></select>
+                    <button class="btn btn-sm btn-primary btn-filter" onclick="fiyatFarkGetir()">
+                        <i class="fas fa-search me-1"></i> Getir
+                    </button>
+
+                    <button class="btn btn-sm btn-success fw-bold" id="btnFfDuzelt" onclick="ffSecilenleriDuzelt()" disabled>
+                        <i class="fas fa-wrench me-1"></i> Seçilenleri Düzelt (<span id="ffSecimSayisi">0</span>)
+                    </button>
+
+                    <input type="text" class="form-control form-control-sm ms-auto" id="ffAra"
+                           style="width:240px;" placeholder="Belge, cari, stok ara..." onkeyup="fiyatFarkSuz()">
+                </div>
+
+                <div class="text-muted small px-2 pb-2">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Kaynak fatura satırlarıyla hedefteki Mal Giriş/Çıkış satırları stok koduna göre eşleştirilir;
+                    Karşılaştırma <b>TL karşılığı birim fiyat</b> üzerinden yapılır (hedef belge TL değerlidir).
+                    İskontolu satırlarda hem <b>iskontolu</b> hem <b>iskontosuz</b> TL fiyat gösterilir;
+                    hedef ikisinden biriyle tutuyorsa satır listelenmez.
+                    Tutar farkı sıfır olan satırlar da gelmez.
+                    <b>Tutar farkı 1 TL'nin altında olan satırlar listelenmez</b> (kuruşluk yuvarlama farkları).
+                    <b>Belgeye tıklayın</b>, satır detayı açılsın.
+                </div>
+
+                <div id="loader-fiyat-fark" class="loading-overlay">
+                    <i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br/>
+                    <span id="ffLoaderMetin">Fiyat farkları hesaplanıyor...</span>
+
+                    <div id="ffIlerleme" class="mt-3 mx-auto" style="max-width:420px; display:none;">
+                        <div class="progress" style="height:18px;">
+                            <div id="ffIlerlemeCubuk" class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                                 role="progressbar" style="width:0%;">0 / 0</div>
+                        </div>
+                        <div class="small text-muted mt-2" id="ffIlerlemeNot"></div>
+                    </div>
+                </div>
+
+                <div class="table-responsive full-page-table w-100 border rounded">
+                    <table class="table table-hover table-custom mb-0 w-100">
+                        <thead class="sticky-top shadow-sm" style="background-color:#fff7e6;">
+                            <tr>
+                                <th style="width:36px;" class="text-center">
+                                    <input type="checkbox" id="ffTumu" onclick="ffTumunuSec(this)">
+                                </th>
+                                <th style="width:36px;"></th>
+                                <th>Kaynak Belge</th>
+                                <th>Cari</th>
+                                <th>Hedef Belge</th>
+                                <th style="width:110px;" class="text-center">Sorunlu Satır</th>
+                                <th style="width:100px;">Tarih</th>
+                                <th style="width:90px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-fiyat-fark">
+                            <tr><td colspan="8"><div class="initial-load-msg"><i class="fas fa-hand-pointer fs-1 mb-2 text-primary"></i><h4>Dönem seçip "Getir" deyin</h4></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- YOKSAYILAN TAB -->
+            <div class="tab-pane fade" id="panel-yoksayilan" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-2 px-2 mt-2">
+                    <span class="text-muted fw-bold small"><i class="fas fa-eye-slash me-1"></i> Bu kayıtlar sizin tarafınızdan gizlenmiştir ve hiçbir raporda sayıları listelenmez.</span>
+                    <button id="btn-unignore" class="btn btn-sm btn-success fw-bold shadow-sm rounded-pill" onclick="yoksaymaktanCikar()" style="display:none;">
+                        <i class="fas fa-undo me-1"></i> Seçilenleri Listeye Geri Al (Aktifleştir)
+                    </button>
+                </div>
+                <div id="loader-yoksayilan" class="loading-overlay"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><br/>Gizlenen kayıtlar çekiliyor...</div>
+                <div class="table-responsive full-page-table w-100 border rounded">
+                    <table class="table table-hover table-custom mb-0 w-100">
+                        <thead class="sticky-top shadow-sm" style="background-color: #e9ecef;">
+                            <tr>
+                                <th style="width: 40px;"><input type="checkbox" id="chkAllYoksay" onclick="$('.chk-yoksay').prop('checked', this.checked)"></th>
+                                <th>Kaynak Yevmiye No</th>
+                                <th>Belge No (BaseRef)</th>
+                                <th>Belge Tarihi</th>
+                                <th>Açıklama (Memo)</th>
+                                <th>Yoksayılma Tarihi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-yoksayilan">
+                            <tr><td colspan="6"><div class="initial-load-msg"><i class="fas fa-hand-pointer fs-1 mb-2 text-primary"></i><h4>Verileri getirmek için sekmeye tıklayın</h4></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+</div>
+
+<script>
+    // Global değişkenler
+    var loadedTabs = {};
+    var summaryData = null;
+
+    $(document).ready(function() {
+        ozetGetir();
+
+        // SAYFA AÇILDIĞINDA SADECE ÖZETİ YÜKLE
+        // SEKMELERE TIKLANINCA VERİYİ ÇEK (LAZY LOAD)
+        // Ay bazlı sekmeler (stok-akis, fiyat-fark, alis-satis) kendi
+        // shown.bs.tab dinleyicilerini kullanır; burada atlanır.
+        $('.nav-pills-custom [data-bs-toggle="pill"]').on('shown.bs.tab', function (e) {
+            var target = $(e.target).attr("data-bs-target").replace("#panel-", "");
+
+            if (target === 'stok-akis' || target === 'fiyat-fark' || target === 'alis-satis') return;
+
+            loadTab(target);
+        });
+    });
+
+    /** Sayi bicimi; deger yoksa tire gosterir. */
+    function ozetSayi(d) {
+        return (d === null || d === undefined) ? '-' : Number(d).toLocaleString('tr-TR');
+    }
+
+    /**
+     * Ust bant ve kartlari doldurur. Iki hafif sorgu (toplam ~25 ms),
+     * sayfa acilisini yavaslatmaz.
+     */
+    function ozetGetir() {
+        // Sekme yuklenene kadar bu ikisinin verisi yok; donen spinner
+        // yerine tire gosterilir.
+        $('#card-eksik, #card-iptal').text('-');
+
+        $.ajax({ url: '@Url.Action("GetOzetData", "Rapor84")', timeout: 120000 })
+            .done(function (res) {
+                if (!res || !res.success) {
+                    ozetBandiHata((res && res.message) ? res.message : 'Özet alınamadı.');
+                    return;
+                }
+
+                var o = res.summary || {};
+                var y = res.sayim || {};
+
+                $('#card-bekleyen').text(ozetSayi(o.bekleyenSayisi));
+                $('#card-hatali').text(ozetSayi(o.hataliSayisi));
+                $('#card-kayip').text(ozetSayi(o.kayipSayisi));
+                $('#card-basarili').text(ozetSayi(o.basariliSayisi));
+
+                var kilitli = y.kapaliDonemEksikSayi || 0;
+                if (kilitli > 0) $('#badge-kapali-donem').text(ozetSayi(kilitli)).show();
+                // Kilitli donemde bekleyenler robotun elinde degil; fark onlar HARIC hesaplanir
+                var kaynakNet = (y.kaynakSayi || 0) - kilitli;
+                // Hedefte olup kaynakta isareti degistirilmis fisler de farkin disinda tutulur
+                var isaretli = y.isaretDegismisSayi || 0;
+                if (isaretli > 0) $('#badge-isaret-degismis').text(ozetSayi(isaretli)).show();
+                var hedefNet = (y.hedefSayi || 0) - isaretli;
+                var fark = kaynakNet - hedefNet;
+                var renk = (fark === 0) ? 'alert-success' : 'alert-warning';
+                var ikon = (fark === 0) ? 'fa-circle-check' : 'fa-triangle-exclamation';
+
+                $('#ozet-panel').removeClass('alert-secondary alert-danger alert-warning alert-success')
+                                .addClass(renk)
+                                .html('<div><i class="fas ' + ikon + ' fs-5 me-2"></i>'
+                                    + '<span class="fw-bold">Yevmiye Hacmi:</span> '
+                                    + 'Ana data <b>' + ozetSayi(y.kaynakSayi) + '</b>'
+                                    + (kilitli > 0 ? ' <span class="small">(kilitli dönem hariç <b>' + ozetSayi(kaynakNet) + '</b>)</span>' : '')
+                                    + ' &nbsp;·&nbsp; Hedef <b>' + ozetSayi(y.hedefSayi) + '</b>'
+                                    + (isaretli > 0 ? ' <span class="small">(işareti değişmiş hariç <b>' + ozetSayi(hedefNet) + '</b>)</span>' : '')
+                                    + (isaretli > 0 ? ' &nbsp;·&nbsp; <span title="Hedefe aktarılmış ama kaynakta sonradan işareti X yapılmış / silinmiş fişler; farka dahil değildir"><i class="fas fa-flag me-1"></i>İşareti değişmiş <b>' + ozetSayi(isaretli) + '</b></span>' : '')
+                                    + ' &nbsp;·&nbsp; <span title="Hedefte olmayan ve tarihi hedef şirkette kilitli döneme denk gelen fişler; dönem açılmadan aktarılamaz, farka dahil değildir">'
+                                    + '<i class="fas fa-lock me-1"></i>Kayıt dönemi kilitli <b>' + ozetSayi(kilitli) + '</b></span>'
+                                    + '</div><div class="fw-bold">'
+                                    + (function () {
+                                        var haric = [];
+                                        if (kilitli > 0) haric.push('kilitli dönem');
+                                        if (isaretli > 0) haric.push('işareti değişmiş');
+                                        var ek = haric.length ? ' (' + haric.join(' ve ') + ' hariç)' : '';
+                                        return (fark === 0 ? 'Sayılar tutuyor' : 'Fark: ' + ozetSayi(fark)) + ek;
+                                    })()
+                                    + '</div>');
+            })
+            .fail(function (jqXHR, durum) {
+                if (durum === 'abort') return;
+                ozetBandiHata(durum === 'timeout' ? 'Özet sorgusu zaman aşımına uğradı.'
+                                                  : 'Özet alınamadı (sunucuya ulaşılamadı).');
+            });
+    }
+
+    function ozetBandiHata(mesaj) {
+        $('#card-bekleyen, #card-hatali, #card-kayip, #card-basarili').text('-');
+
+        $('#ozet-panel').removeClass('alert-secondary alert-warning alert-success')
+                        .addClass('alert-danger')
+                        .html('<div><i class="fas fa-triangle-exclamation fs-5 me-2"></i>'
+                            + '<span class="fw-bold">' + mesaj + '</span></div>');
+    }
+
+    function showLoader() {
+        document.getElementById('pageLoader').style.display = 'block';
+    }
+
+    function loadTab(tabName) {
+        if(loadedTabs[tabName]) return; 
+
+        $('#tbody-' + tabName).empty();
+        $('#loader-' + tabName).show();
+        
+        var endpoints = {
+            'fazla': '@Url.Action("GetFazlaData", "Rapor84")', 
+            'kimliksiz': '@Url.Action("GetKimliksizData", "Rapor84")',
+            'manuel': '@Url.Action("GetManuelData", "Rapor84")',
+            'eksik': '@Url.Action("GetEksikData", "Rapor84")',
+            'kapali-donem': '@Url.Action("GetKapaliDonemData", "Rapor84")',
+            'isaret-degismis': '@Url.Action("GetIsaretDegismisData", "Rapor84")',
+            'iptal': '@Url.Action("GetIptalData", "Rapor84")',
+            'mukerrer': '@Url.Action("GetMukerrerData", "Rapor84")',
+            'yoksayilan': '@Url.Action("GetYoksayilanData", "Rapor84")',
+            'manuel-analiz': '@Url.Action("GetManuelAnalizData", "Rapor84")'
+        };
+
+        if(!endpoints[tabName]) return;
+
+        $.get(endpoints[tabName], function(res) {
+            $('#loader-' + tabName).hide();
+            if(res.success) {
+                loadedTabs[tabName] = true;
+                renderTable(tabName, res.data);
+            } else {
+                $('#tbody-' + tabName).html(`<tr><td colspan="15" class="text-danger text-center fw-bold py-4"><i class="fas fa-times-circle"></i> ${res.message}</td></tr>`);
+            }
+        }).fail(function() {
+            $('#loader-' + tabName).hide();
+            $('#tbody-' + tabName).html(`<tr><td colspan="15" class="text-danger text-center fw-bold py-4"><i class="fas fa-exclamation-triangle"></i> Veri çekilemedi (Böyle bir işlem tanımlı olmayabilir veya Timeout).</td></tr>`);
+        });
+    }
+
+    // ==========================================
+    // STOK AKIŞ ŞEMASI
+    // ==========================================
+    var akisVerisi = [];
+    var akisFiltre = 'all';
+
+    function akisDonemDoldur() {
+        if ($('#akisYil option').length) return;
+
+        var simdi = new Date();
+        var yilSec = $('#akisYil'), aySec = $('#akisAy');
+
+        for (var y = simdi.getFullYear(); y >= simdi.getFullYear() - 2; y--) {
+            yilSec.append('<option value="' + y + '">' + y + '</option>');
+        }
+
+        var aylar = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+        for (var a = 1; a <= 12; a++) aySec.append('<option value="' + a + '">' + aylar[a-1] + '</option>');
+
+        yilSec.val(simdi.getFullYear());
+        aySec.val(simdi.getMonth() + 1);
+    }
+
+    // Suren istek. Kullanici ust uste "Getir" derse eskisi iptal edilir;
+    // aksi halde geç dönen eski cevap yeni veriyi eziyordu.
+    var akisIstek = null;
+
+    function akisHata(mesaj) {
+        $('#tbody-stok-akis').html('<tr><td colspan="4" class="text-danger text-center fw-bold py-4">'
+            + '<i class="fas fa-triangle-exclamation me-1"></i>' + mesaj + '</td></tr>');
+    }
+
+    function stokAkisGetir() {
+        akisDonemDoldur();
+
+        if (akisIstek) { try { akisIstek.abort(); } catch (e) { } }
+
+        $('#tbody-stok-akis').empty();
+        $('#loader-stok-akis').show();
+
+        akisIstek = $.ajax({
+            url: '@Url.Action("GetStokAkisData", "Rapor84")',
+            data: { yil: $('#akisYil').val(), ay: $('#akisAy').val() },
+            timeout: 300000
+        });
+
+        // ONEMLI: always() done()'dan ONCE baglanir. jQuery geri cagrilari
+        // baglanma sirasiyla calistirir; boylece cizim sirasinda bir hata
+        // olsa bile loader kesinlikle kapanmis olur.
+        akisIstek.always(function () {
+            akisIstek = null;
+            $('#loader-stok-akis').hide();
+        });
+
+        akisIstek.done(function (res) {
+            if (!res || !res.success) {
+                akisHata((res && res.message) ? res.message : 'Veri alınamadı.');
+                return;
+            }
+
+            akisVerisi = res.data || [];
+            akisCiz();
+        });
+
+        akisIstek.fail(function (jqXHR, durum) {
+            if (durum === 'abort') return;
+            akisHata(durum === 'timeout'
+                ? 'Zaman aşımı - sorgu çok uzun sürdü, daha dar bir dönem seçin.'
+                : 'Veri çekilemedi (sunucuya ulaşılamadı).');
+        });
+    }
+
+    function akisSuz(tip, el) {
+        akisFiltre = tip;
+        $('#panel-stok-akis .btn-filter').removeClass('active');
+        if (el) $(el).addClass('active');
+        akisCiz();
+    }
+
+    // Secim, belge kimligine gore tutulur (filtre degisse de kaybolmaz)
+    var akisSecim = {};
+
+    function akisAnahtar(a) { return (a.objType || '') + '|' + (a.kaynakDocEntry || 0); }
+
+    function akisSecilebilir(a) {
+        return a.akisDurumu === 'AKMAMIS' && a.kaynakDocEntry > 0;
+    }
+
+    function akisSecimSay() {
+        var n = 0;
+        for (var k in akisSecim) { if (akisSecim[k]) n++; }
+        return n;
+    }
+
+    function akisSecimGuncelle() {
+        var n = akisSecimSay();
+        $('#akisSecimSayisi').text(n);
+        $('#btnKuyrugaEkle').prop('disabled', n === 0);
+    }
+
+    function akisSecimDegisti(el) {
+        akisSecim[$(el).data('anahtar')] = el.checked;
+        akisSecimGuncelle();
+    }
+
+    function akisTumunuSec(sec) {
+        akisSecim = {};
+
+        if (sec) {
+            akisVerisi.forEach(function (a) {
+                if (akisSecilebilir(a)) akisSecim[akisAnahtar(a)] = true;
+            });
+        }
+
+        $('#tbody-stok-akis .akis-sec').each(function () {
+            $(this).prop('checked', !!akisSecim[$(this).data('anahtar')]);
+        });
+
+        akisSecimGuncelle();
+    }
+
+    /** Kuyruk durumunu rozet olarak gosterir. */
+    function akisKuyrukRozet(a) {
+        if (!akisSecilebilir(a)) return '';
+
+        var kod = (a.kuyrukDurum || '').trim();
+        var harita = {
+            'P': ['bg-warning text-dark', 'KUYRUKTA BEKLİYOR',   'fa-hourglass-half'],
+            'W': ['bg-warning text-dark', 'BEKLEMEDE',           'fa-hourglass-half'],
+            'S': ['bg-success',           'ROBOT BAŞARILI DEDİ', 'fa-check'],
+            'E': ['bg-danger',            'ROBOT HATA VERDİ',    'fa-circle-exclamation'],
+            'K': ['bg-secondary',         'ASKIYA ALINDI',       'fa-lock']
+        };
+
+        var h = harita[kod] || ['bg-dark', 'KUYRUKTA KAYIT YOK', 'fa-ghost'];
+
+        var metin = '<div class="akis-not"><span class="badge ' + h[0] + '">'
+                  + '<i class="fas ' + h[2] + ' me-1"></i>' + h[1] + '</span>';
+
+        if (a.kuyrukHata) {
+            metin += ' <span class="text-muted fst-italic">'
+                   + $('<div>').text(a.kuyrukHata).html() + '</span>';
+        }
+
+        return metin + '</div>';
+    }
+
+    function akisCiz() {
+        try { akisCizGovde(); }
+        catch (e) { akisHata('Çizim hatası: ' + (e && e.message ? e.message : e)); }
+    }
+
+    function akisCizGovde() {
+        // Ters kayitlar ana belgenin altina yerlesir
+        var bagliOlanlar = {};
+        akisVerisi.forEach(function (x) {
+            if (x.iptalDurumu === 'C' && x.bagliBelgeNo) bagliOlanlar[x.bagliBelgeNo + '|' + x.objType] = x;
+        });
+
+        var durumBilgi = {
+            'AKMAMIS':             { cls: 'bg-danger',            txt: 'AKMAMIŞ',            ikon: 'fa-xmark' },
+            'IPTAL_DAMGASIZ':      { cls: 'bg-warning text-dark', txt: 'İPTAL DAMGASI YOK',  ikon: 'fa-triangle-exclamation' },
+            'FAZLADAN_IPTAL':      { cls: 'bg-warning text-dark', txt: 'FAZLADAN İPTAL',     ikon: 'fa-ban' },
+            'IPTAL_TUTARLI':       { cls: 'bg-secondary',         txt: 'İPTAL (TUTARLI)',    ikon: 'fa-check' },
+            'AKMIS':               { cls: 'bg-success',           txt: 'AKMIŞ',              ikon: 'fa-check' },
+            'FAZLADAN_MANUEL':     { cls: 'bg-info text-dark',    txt: 'MANUEL / KAYNAKSIZ', ikon: 'fa-inbox' },
+            'FAZLADAN_YANLIS_TIP': { cls: 'bg-danger',            txt: 'YANLIŞ AKMIŞ',       ikon: 'fa-triangle-exclamation' },
+            'ESLESMEYEN_REFERANS': { cls: 'bg-warning text-dark',  txt: 'EŞLEŞMEYEN REFERANS', ikon: 'fa-link-slash' }
+        };
+
+        // 1) Filtreden gecenleri ayikla
+        var secilenler = akisVerisi.filter(function (a) {
+            if (a.iptalDurumu === 'C') return false;
+
+            var fazlaMi = (a.akisDurumu === 'FAZLADAN_MANUEL' || a.akisDurumu === 'FAZLADAN_YANLIS_TIP');
+            var sorunlu = (a.akisDurumu === 'AKMAMIS' || a.akisDurumu === 'IPTAL_DAMGASIZ'
+                           || a.akisDurumu === 'FAZLADAN_IPTAL' || fazlaMi);
+
+            if (akisFiltre === 'OK') return !sorunlu;
+            if (akisFiltre !== 'all') return a.akisDurumu === akisFiltre;
+            return true;
+        });
+
+        $('#badge-stok-akis').text(secilenler.length).show();
+
+        // Akmamis kayit varsa kuyruk araclarini goster
+        $('#akisKuyrukBar').toggle(akisVerisi.some(akisSecilebilir));
+        akisSecimGuncelle();
+
+        if (!secilenler.length) {
+            $('#tbody-stok-akis').html('<tr><td colspan="4" class="text-center py-4 text-success fw-bold">'
+                + '<i class="fas fa-check-circle me-1"></i> Bu kriterde kayıt yok.</td></tr>');
+            return;
+        }
+
+        // 2) Parca parca ciz - tarayici arada nefes alsin, ekran kilitlenmesin
+        $('#tbody-stok-akis').empty();
+
+        var PARCA = 100, indeks = 0;
+
+        function parcaCiz() {
+            try {
+                var html = '';
+                var sonIndeks = Math.min(indeks + PARCA, secilenler.length);
+
+                for (; indeks < sonIndeks; indeks++) {
+                    html += akisSatirHtml(secilenler[indeks], bagliOlanlar, durumBilgi);
+                }
+
+                $('#tbody-stok-akis').append(html);
+
+                if (indeks < secilenler.length) setTimeout(parcaCiz, 0);
+            }
+            catch (e) {
+                akisHata('Çizim hatası (satır ' + indeks + '): ' + (e && e.message ? e.message : e));
+            }
+        }
+
+        parcaCiz();
+    }
+
+    /** Tek bir akis satirinin HTML'ini uretir. */
+    function akisSatirHtml(a, bagliOlanlar, durumBilgi) {
+        var iptalRozet = function (metin) {
+            return (metin || '').replace(/\[İPTAL\]/g, '<span class="badge bg-danger ms-1">İPTAL</span>');
+        };
+
+        var fazlaMi = (a.akisDurumu === 'FAZLADAN_MANUEL'
+                    || a.akisDurumu === 'FAZLADAN_YANLIS_TIP'
+                    || a.akisDurumu === 'ESLESMEYEN_REFERANS');
+
+        var sorunlu = (a.akisDurumu === 'AKMAMIS' || a.akisDurumu === 'IPTAL_DAMGASIZ'
+                       || a.akisDurumu === 'FAZLADAN_IPTAL' || fazlaMi);
+
+        var d = durumBilgi[a.akisDurumu] || durumBilgi['AKMIS'];
+
+        // ---- Hedefte fazladan / manuel satirlar
+        if (fazlaMi) {
+            var zatenIptal = (a.hedefIptalVar === 1);
+
+            var solMetin = (a.akisDurumu === 'FAZLADAN_MANUEL')
+                ? '<span class="akis-kaynak text-danger">Ana datada karşılığı yok</span>'
+                : (a.akisDurumu === 'ESLESMEYEN_REFERANS')
+                    ? '<span class="akis-kaynak text-warning">Referans: ' + a.belgeNo + ' (eşleşmiyor)</span>'
+                    : '<span class="akis-kaynak text-warning">Ana data: ' + a.belgeNo + ' (R/Y değil)</span>';
+
+            var zincirF = '<div class="akis-zincir"><div class="akis-satir">'
+                        + solMetin
+                        + '<span class="akis-ok">──▶</span>'
+                        + '<span class="akis-hedef">' + iptalRozet(a.hedefBelgeler) + '</span>'
+                        + '</div><div class="akis-not"><i class="fas fa-circle-info akis-dal"></i>'
+                        + (a.neden || '') + '</div></div>';
+
+            var btn = zatenIptal
+                ? '<span class="badge bg-secondary"><i class="fas fa-check me-1"></i>İptal edilmiş</span>'
+                : '<button class="btn btn-sm btn-danger fw-bold as-iptal"'
+                  + ' data-kod="' + (a.hedefKod || '') + '"'
+                  + ' data-tip="' + (a.hedefTip || '') + '"'
+                  + ' data-entry="' + a.hedefDocEntry + '"'
+                  + ' data-num="' + (a.hedefDocNum || '') + '">'
+                  + '<i class="fas fa-ban me-1"></i>İptal Et</button>';
+
+            var satirSinif = (a.akisDurumu === 'FAZLADAN_YANLIS_TIP') ? 'table-danger'
+                           : (a.akisDurumu === 'ESLESMEYEN_REFERANS') ? 'table-warning' : 'table-info';
+
+            return '<tr class="akis-row ' + satirSinif + '">'
+                 + '<td><span class="badge ' + d.cls + '"><i class="fas ' + d.ikon + ' me-1"></i>' + d.txt + '</span>'
+                 + '<div class="mt-2">' + btn + '</div></td>'
+                 + '<td>' + zincirF + '</td>'
+                 + '<td class="small text-muted">' + a.cariAdi + '</td>'
+                 + '<td class="small">' + a.tarih + '</td></tr>';
+        }
+
+        // ---- Normal fatura zinciri
+        var zincir = '<div class="akis-zincir"><div class="akis-satir">'
+                   + '<span class="akis-kaynak">' + a.belgeTipi + ' <b>#' + a.belgeNo + '</b></span>'
+                   + '<span class="akis-ok">──▶</span>'
+                   + (a.hedefBelgeler
+                       ? '<span class="akis-hedef">' + iptalRozet(a.hedefBelgeler) + '</span>'
+                       : '<span class="text-danger fw-bold">hedefte belge yok</span>')
+                   + '</div>';
+
+        if (a.iptalDurumu === 'Y') {
+            zincir += '<div class="akis-not"><i class="fas fa-turn-down akis-dal"></i> Ana datada iptal edildi'
+                    + (a.bagliBelgeNo ? ', karşı belge <b>#' + a.bagliBelgeNo + '</b> oluştu' : '') + '</div>';
+        }
+
+        var ters = bagliOlanlar[a.belgeNo + '|' + a.objType];
+
+        if (ters) {
+            zincir += '<div class="akis-satir akis-ters">'
+                    + '<span class="akis-kaynak">Karşı Belge <b>#' + ters.belgeNo + '</b></span>'
+                    + '<span class="akis-ok">──▶</span>'
+                    + (ters.hedefBelgeler
+                        ? '<span class="akis-hedef">' + iptalRozet(ters.hedefBelgeler) + '</span>'
+                        : '<span class="text-danger fw-bold">ters kaydın hedefte karşılığı yok</span>')
+                    + '</div>';
+        }
+
+        zincir += '</div>';
+
+        // Kaynak gecerli oldugu halde hedefte iptal damgasi kalmissa temizleme butonu
+        var duzeltBtn = '';
+        if (a.akisDurumu === 'FAZLADAN_IPTAL' && a.hedefKimlikler) {
+            duzeltBtn = '<div class="mt-2"><button class="btn btn-sm btn-success fw-bold as-damga"'
+                      + ' data-kimlik="' + a.hedefKimlikler + '" data-belge="' + a.belgeNo + '">'
+                      + '<i class="fas fa-eraser me-1"></i>İptal Yazısını Kaldır</button></div>';
+        }
+
+        var secKutu = akisSecilebilir(a)
+            ? '<div class="mb-1"><input type="checkbox" class="form-check-input akis-sec"'
+              + ' data-anahtar="' + akisAnahtar(a) + '"'
+              + (akisSecim[akisAnahtar(a)] ? ' checked' : '')
+              + ' onclick="akisSecimDegisti(this);"></div>'
+            : '';
+
+        return '<tr class="akis-row ' + (sorunlu ? 'table-warning' : '') + '">'
+             + '<td>' + secKutu + '<span class="badge ' + d.cls + '"><i class="fas ' + d.ikon + ' me-1"></i>' + d.txt + '</span>'
+             + duzeltBtn + '</td>'
+             + '<td>' + zincir + akisKuyrukRozet(a) + '</td>'
+             + '<td class="small">' + a.cariAdi + '</td>'
+             + '<td class="small">' + a.tarih + '</td></tr>';
+    }
+
+    $(document).on('shown.bs.tab', '#tab-stok-akis', function () {
+        akisDonemDoldur();
+        if (!akisVerisi.length) stokAkisGetir();
+    });
+
+    // ==========================================
+    // ALIŞ / SATIŞ KONTROLÜ
+    // ==========================================
+    var asVerisi = [];
+
+    function asDonemDoldur() {
+        if ($('#asYil option').length) return;
+        var simdi = new Date();
+        for (var y = simdi.getFullYear(); y >= simdi.getFullYear() - 2; y--)
+            $('#asYil').append('<option value="' + y + '">' + y + '</option>');
+
+        var aylar = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+        for (var a = 1; a <= 12; a++) $('#asAy').append('<option value="' + a + '">' + aylar[a-1] + '</option>');
+
+        $('#asYil').val(simdi.getFullYear());
+        $('#asAy').val(simdi.getMonth() + 1);
+    }
+
+    function alisSatisGetir() {
+        asDonemDoldur();
+        $('#tbody-alis-satis').empty();
+        $('#loader-alis-satis').show();
+
+        $.get('@Url.Action("GetAlisSatisData", "Rapor84")',
+              { yil: $('#asYil').val(), ay: $('#asAy').val() }, function (res) {
+            $('#loader-alis-satis').hide();
+
+            if (!res.success) {
+                $('#tbody-alis-satis').html('<tr><td colspan="11" class="text-danger text-center fw-bold py-4">' + res.message + '</td></tr>');
+                return;
+            }
+
+            asVerisi = res.data || [];
+            asCiz();
+        }).fail(function () {
+            $('#loader-alis-satis').hide();
+            $('#tbody-alis-satis').html('<tr><td colspan="11" class="text-danger text-center fw-bold py-4">Veri çekilemedi (Timeout olabilir).</td></tr>');
+        });
+    }
+
+    function alisSatisSuz() { asCiz(); }
+
+    var asMod = 'miktar';   // 'miktar' | 'tutar'
+
+    function asModDegistir(mod, el) {
+        asMod = mod;
+        $('#asAltSekme .nav-link').removeClass('active');
+        if (el) $(el).addClass('active');
+        asCiz();
+    }
+
+    function asYonRozet(r) {
+        return (r.yon === 'Çıkış')
+            ? '<span class="badge bg-secondary"><i class="fas fa-arrow-up me-1"></i>Çıkış</span>'
+            : '<span class="badge bg-info text-dark"><i class="fas fa-arrow-down me-1"></i>Giriş</span>';
+    }
+
+    function asDurumRozet(r) {
+        var d = r.durum || '';
+
+        // Tam uyum yesil; tolerans icindekiler mavi (fark var ama onemsiz); sorunlular kirmizi
+        var cls = (d === 'Uyuşuyor' || d === 'Birim fiyat uyuşuyor'
+                   || d === 'İskontosuz birim fiyatla uyuşuyor') ? 'bg-success'
+                : (d.indexOf('10 TL altı') > -1) ? 'bg-info text-dark'
+                : (d === 'Hedefe hiç akmamış' || d === 'Miktar farklı'
+                   || d === 'Ana datada yok, hedefte var') ? 'bg-danger'
+                : 'bg-warning text-dark';
+
+        return '<span class="badge ' + cls + '">' + d + '</span>';
+    }
+
+    function asCiz() {
+        var q = ($('#asAra').val() || '').toLocaleLowerCase('tr-TR');
+        var tip = $('#asTip').val() || '';
+        var sadeceFark = $('#asSadeceFark').is(':checked');
+
+        // Rozet sayaclari: her iki modda kac sorunlu satir var
+        $('#asRozetMiktar').text(asVerisi.filter(function (r) { return !r.miktarUyusuyor; }).length).show();
+        $('#asRozetTutar').text(asVerisi.filter(function (r) { return !r.tutarUyusuyor; }).length).show();
+
+        var liste = asVerisi.filter(function (r) {
+            if (tip && r.objType !== tip) return false;
+
+            if (sadeceFark) {
+                if (asMod === 'miktar' && r.miktarUyusuyor) return false;
+                if (asMod === 'tutar'  && r.tutarUyusuyor)  return false;
+            }
+
+            if (!q) return true;
+            return (r.stokKodu + ' ' + r.stokAdi).toLocaleLowerCase('tr-TR').indexOf(q) > -1;
+        });
+
+        $('#badge-alis-satis').text(liste.length).show();
+
+        // Basliklar moda gore
+        var basliklar = (asMod === 'miktar')
+            ? ['<th style="width:36px;"></th>', '<th style="width:150px;">Belge Tipi</th>', '<th style="width:70px;">Yön</th>',
+               '<th>Stok Kodu</th>', '<th>Stok Adı</th>',
+               '<th class="text-end">Ana Miktar</th>', '<th class="text-end">Hedef Miktar</th>',
+               '<th class="text-end">Miktar Farkı</th>', '<th style="width:190px;">Durum</th>']
+            : ['<th style="width:36px;"></th>', '<th style="width:150px;">Belge Tipi</th>', '<th style="width:70px;">Yön</th>',
+               '<th>Stok Kodu</th>', '<th>Stok Adı</th>',
+               '<th class="text-end table-warning">Ana Birim TL<br/><small>(iskontolu)</small></th>',
+               '<th class="text-end table-warning">Ana Birim TL<br/><small>(iskontosuz)</small></th>',
+               '<th class="text-end table-warning">Hedef Birim TL</th>',
+               '<th class="text-end">Birim Farkı</th>',
+               '<th class="text-end">Ana Tutar</th>',
+               '<th class="text-end">Hedef Tutar</th>',
+               '<th class="text-end">Tutar Farkı</th>',
+               '<th style="width:230px;">Durum</th>'];
+
+        $('#thead-alis-satis').html('<tr>' + basliklar.join('') + '</tr>');
+
+        var kolonSayisi = basliklar.length;
+
+        if (!liste.length) {
+            $('#tbody-alis-satis').html('<tr><td colspan="' + kolonSayisi + '" class="text-center py-4 text-success fw-bold">'
+                + '<i class="fas fa-check-circle me-1"></i> Bu kriterde kayıt yok.</td></tr>');
+            return;
+        }
+
+        $('#tbody-alis-satis').empty();
+
+        var PARCA = 100, i = 0;
+
+        function parca() {
+            var html = '';
+            var son = Math.min(i + PARCA, liste.length);
+
+            for (; i < son; i++) {
+                var r = liste[i];
+
+                var sorunlu = (asMod === 'miktar') ? !r.miktarUyusuyor : !r.tutarUyusuyor;
+
+                var satirId = 'asd' + i;
+
+                var ortak = '<td class="text-center"><i class="fas fa-chevron-right" id="asok-' + satirId + '"></i></td>'
+                          + '<td class="small fw-bold">' + r.belgeTipi + '</td>'
+                          + '<td>' + asYonRozet(r) + '</td>'
+                          + '<td class="fw-bold">' + r.stokKodu + '</td>'
+                          + '<td class="small">' + r.stokAdi + '</td>';
+
+                var tikla = ' class="as-satir" style="cursor:pointer;"'
+                          + ' data-hedef="' + satirId + '"'
+                          + ' data-objtype="' + r.objType + '"'
+                          + ' data-stok="' + r.stokKodu + '"';
+
+                if (asMod === 'miktar') {
+                    html += '<tr' + tikla + (sorunlu ? ' data-sorunlu="1"' : '') + '>' + ortak
+                          + '<td class="text-end">' + ffMiktar(r.kaynakMiktar) + '</td>'
+                          + '<td class="text-end">' + ffMiktar(r.hedefMiktar) + '</td>'
+                          + '<td class="text-end fw-bold ' + (sorunlu ? 'text-danger' : 'text-success') + '">'
+                          + ffMiktar(r.miktarFarki) + '</td>'
+                          + '<td>' + asDurumRozet(r) + '</td></tr>'
+                          + '<tr id="' + satirId + '" style="display:none;"><td colspan="' + kolonSayisi + '" class="p-0"></td></tr>';
+                } else {
+                    var birimTutuyor = Math.abs(r.birimFarki) <= 0.01;
+                    var tutarKucuk   = Math.abs(r.tutarFarki) <= 10;
+
+                    html += '<tr' + tikla + (sorunlu ? ' data-sorunlu="1"' : '') + '>' + ortak
+                          + '<td class="text-end fw-bold table-warning">' + ffFiyat(r.kaynakBirimTL) + '</td>'
+                          + '<td class="text-end table-warning">' + ffFiyat(r.kaynakBirimBrutTL) + '</td>'
+                          + '<td class="text-end fw-bold table-warning">' + ffFiyat(r.hedefBirimTL) + '</td>'
+                          + '<td class="text-end fw-bold ' + (birimTutuyor ? 'text-success' : 'text-danger') + '">'
+                          + ffFiyat(r.birimFarki) + '</td>'
+                          + '<td class="text-end text-muted">' + ffSayi(r.kaynakTutar) + '</td>'
+                          + '<td class="text-end text-muted">' + ffSayi(r.hedefTutar) + '</td>'
+                          + '<td class="text-end fw-bold ' + (tutarKucuk ? 'text-success' : 'text-danger') + '">'
+                          + ffSayi(r.tutarFarki) + '</td>'
+                          + '<td>' + asDurumRozet(r) + '</td></tr>'
+                          + '<tr id="' + satirId + '" style="display:none;"><td colspan="' + kolonSayisi + '" class="p-0"></td></tr>';
+                }
+            }
+
+            $('#tbody-alis-satis').append(html);
+            if (i < liste.length) setTimeout(parca, 0);
+        }
+
+        parca();
+    }
+
+    /** Bir stok kaleminin belge kirilimini acar/kapatir. */
+    function asDetayAc(satirId, objType, stokKodu) {
+        var satir = $('#' + satirId);
+        var ok = $('#asok-' + satirId);
+
+        if (satir.is(':visible')) {
+            satir.hide();
+            ok.removeClass('fa-chevron-down').addClass('fa-chevron-right');
+            return;
+        }
+
+        satir.show();
+        ok.removeClass('fa-chevron-right').addClass('fa-chevron-down');
+
+        var hucre = satir.find('td');
+
+        if (hucre.data('yuklendi')) return;
+
+        hucre.html('<div class="p-3 text-center text-muted"><i class="fas fa-spinner fa-spin"></i> Belgeler getiriliyor...</div>');
+
+        $.get('@Url.Action("GetAlisSatisDetay", "Rapor84")',
+              { yil: $('#asYil').val(), ay: $('#asAy').val(), objType: objType, stok: stokKodu }, function (res) {
+
+            if (!res.success) {
+                hucre.html('<div class="p-3 text-danger">' + res.message + '</div>');
+                return;
+            }
+
+            if (!res.data || !res.data.length) {
+                hucre.html('<div class="p-3 text-muted">Bu kalem için belge bulunamadı.</div>');
+                return;
+            }
+
+            var h = '<div class="p-3" style="background:var(--bg-subtle,#f8fafc);">'
+                  + '<table class="table table-sm table-bordered mb-0" style="font-size:.78rem;">'
+                  + '<thead><tr><th style="width:110px;">Taraf</th><th>Belge</th><th style="width:100px;">Tarih</th>'
+                  + '<th>Açıklama</th><th class="text-end">Miktar</th><th class="text-end">Tutar (TL)</th>'
+                  + '<th style="width:210px;">Durum</th></tr></thead><tbody>';
+
+            res.data.forEach(function (d) {
+                var anaMi = (d.taraf === 'Ana Data');
+
+                var sorunlu = (d.durum.indexOf('AKMAMIŞ') > -1 || d.durum.indexOf('YOK') > -1);
+
+                h += '<tr class="' + (sorunlu ? 'table-danger' : '') + '">'
+                   + '<td>' + (anaMi
+                        ? '<span class="badge bg-primary">Ana Data</span>'
+                        : '<span class="badge bg-secondary">' + d.hedefTip + '</span>') + '</td>'
+                   + '<td class="fw-bold">#' + d.belgeNo + '</td>'
+                   + '<td>' + d.tarih + '</td>'
+                   + '<td class="small">' + d.aciklama + '</td>'
+                   + '<td class="text-end">' + ffMiktar(d.miktar) + '</td>'
+                   + '<td class="text-end">' + ffSayi(d.tutar) + '</td>'
+                   + '<td><span class="badge ' + (sorunlu ? 'bg-danger' : 'bg-success') + '">' + d.durum + '</span></td>'
+                   + '</tr>';
+            });
+
+            h += '</tbody></table></div>';
+
+            hucre.html(h).data('yuklendi', true);
+        }).fail(function () {
+            hucre.html('<div class="p-3 text-danger">Detay alınamadı.</div>');
+        });
+    }
+
+    /** FAZLADAN IPTAL: hedef belgelerdeki İPTAL damgasini Service Layer ile temizler. */
+    function akisDamgaKaldir(kimlikler, belgeNo) {
+        var liste = (kimlikler || '').split(';').filter(function (x) { return x; });
+        if (!liste.length) return;
+
+        var soru = '#' + belgeNo + ' için hedefteki ' + liste.length + ' belgenin İPTAL damgası kaldırılacak.'
+                 + String.fromCharCode(10)
+                 + 'Belge silinmez, ters kayıt atılmaz; yalnızca U_BE1_FRMADI alanı boşaltılır.'
+                 + String.fromCharCode(10) + String.fromCharCode(10)
+                 + 'İşlem Service Layer üzerinden yapılır. Onaylıyor musunuz?';
+
+        if (!confirm(soru)) return;
+
+        $('#loader-stok-akis').show();
+
+        var sonuclar = [];
+
+        function sirayla(i) {
+            if (i >= liste.length) {
+                $('#loader-stok-akis').hide();
+                alert(sonuclar.join(String.fromCharCode(10)));
+                stokAkisGetir();
+                return;
+            }
+
+            var parca = liste[i].split('|');
+
+            $.post('@Url.Action("IptalDamgasiniKaldir", "Rapor84")',
+                   { hedefKod: parca[0], docEntry: parca[1] }, function (res) {
+                sonuclar.push((res.success ? 'OK - ' : 'HATA - ') + res.message);
+                sirayla(i + 1);
+            }).fail(function () {
+                sonuclar.push('HATA - sunucuya ulaşılamadı (' + parca[1] + ')');
+                sirayla(i + 1);
+            });
+        }
+
+        sirayla(0);
+    }
+
+    $(document).on('click', '#tbody-stok-akis button.as-damga', function (e) {
+        e.stopPropagation();
+        akisDamgaKaldir($(this).data('kimlik'), $(this).data('belge'));
+    });
+
+    $(document).on('click', '#tbody-alis-satis tr.as-satir', function () {
+        asDetayAc($(this).data('hedef'), $(this).data('objtype'), $(this).data('stok'));
+    });
+
+    $(document).on('shown.bs.tab', '#tab-alis-satis', function () {
+        asDonemDoldur();
+        if (!asVerisi.length) alisSatisGetir();
+    });
+
+    // ==========================================
+    // BİRİM FİYAT UYUŞMAZLIĞI
+    // ==========================================
+    var ffVerisi = [], ffGruplar = [];
+
+    function ffDonemDoldur() {
+        if ($('#ffYil option').length) return;
+        var simdi = new Date();
+        for (var y = simdi.getFullYear(); y >= simdi.getFullYear() - 2; y--)
+            $('#ffYil').append('<option value="' + y + '">' + y + '</option>');
+
+        var aylar = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+        for (var a = 1; a <= 12; a++) $('#ffAy').append('<option value="' + a + '">' + aylar[a-1] + '</option>');
+
+        $('#ffYil').val(simdi.getFullYear());
+        $('#ffAy').val(simdi.getMonth() + 1);
+    }
+
+    function ffSayi(x) {
+        return (x || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    /** Birim fiyat: SAP 4 ondalikli tutar, yuvarlanirsa fark gorunmez olur. */
+    function ffFiyat(x) {
+        return (x || 0).toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    }
+
+    /** Miktar: 4 haneye kadar, gereksiz sifirlar gosterilmez. */
+    function ffMiktar(x) {
+        return (x || 0).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 4 });
+    }
+
+    function fiyatFarkGetir() {
+        ffDonemDoldur();
+        $('#tbody-fiyat-fark').empty();
+        $('#loader-fiyat-fark').show();
+
+        $.get('@Url.Action("GetFiyatFarkData", "Rapor84")',
+              { yil: $('#ffYil').val(), ay: $('#ffAy').val() }, function (res) {
+            $('#loader-fiyat-fark').hide();
+
+            if (!res.success) {
+                $('#tbody-fiyat-fark').html('<tr><td colspan="8" class="text-danger text-center fw-bold py-4">' + res.message + '</td></tr>');
+                return;
+            }
+
+            ffVerisi = res.data || [];
+
+            // Belge bazinda grupla
+            var harita = {};
+            ffVerisi.forEach(function (r) {
+                var k = r.belgeTipi + '|' + r.belgeNo;
+                if (!harita[k]) {
+                    harita[k] = { objType: r.objType, belgeTipi: r.belgeTipi, belgeNo: r.belgeNo, tarih: r.tarih,
+                                  cariAdi: r.cariAdi, hedefTip: r.hedefTip, hedefKod: r.hedefKod,
+                                  hedefBelgeNo: r.hedefBelgeNo,
+                                  hedefDocEntry: r.hedefDocEntry, satirlar: [] };
+                }
+                harita[k].satirlar.push(r);
+            });
+
+            ffGruplar = Object.keys(harita).map(function (k) { return harita[k]; });
+            ffCiz();
+        }).fail(function () {
+            $('#loader-fiyat-fark').hide();
+            $('#tbody-fiyat-fark').html('<tr><td colspan="8" class="text-danger text-center fw-bold py-4">Veri çekilemedi (Timeout olabilir).</td></tr>');
+        });
+    }
+
+    function ffCiz() {
+        var q = ($('#ffAra').val() || '').toLocaleLowerCase('tr-TR');
+
+        var gosterilecek = ffGruplar.filter(function (g) {
+            if (!q) return true;
+            var metin = (g.belgeNo + ' ' + g.cariAdi + ' ' + g.hedefBelgeNo + ' '
+                       + g.satirlar.map(function (x) { return x.stokKodu + ' ' + x.stokAdi; }).join(' ')).toLocaleLowerCase('tr-TR');
+            return metin.indexOf(q) > -1;
+        });
+
+        $('#badge-fiyat-fark').text(gosterilecek.length).show();
+
+        if (!gosterilecek.length) {
+            $('#tbody-fiyat-fark').html('<tr><td colspan="8" class="text-center py-4 text-success fw-bold">'
+                + '<i class="fas fa-check-circle me-1"></i> Uyuşmazlık bulunamadı.</td></tr>');
+            return;
+        }
+
+        $('#tbody-fiyat-fark').empty();
+
+        ffGosterilen = gosterilecek;
+        ffSecim = {};
+        $('#ffTumu').prop('checked', false);
+        ffSecimGuncelle();
+
+        var PARCA = 60, i = 0;
+
+        function parca() {
+            var html = '';
+            var son = Math.min(i + PARCA, gosterilecek.length);
+
+            for (; i < son; i++) {
+                var g = gosterilecek[i];
+                var id = 'ff' + i;
+
+                var duzeltilebilir = (g.hedefDocEntry > 0);
+
+                var secimKutu = duzeltilebilir
+                    ? '<input type="checkbox" class="ff-sec" data-idx="' + i + '"'
+                      + (ffSecim[i] ? ' checked' : '')
+                      + ' onclick="event.stopPropagation(); ffSecimDegisti(this);">'
+                    : '<span class="text-muted" title="Hedefte belge yok, düzeltilemez">-</span>';
+
+                var duzeltBtn = duzeltilebilir
+                    ? '<button class="btn btn-sm btn-outline-success" title="Bu belgeyi düzelt" '
+                      + 'onclick="event.stopPropagation(); ffDuzelt(' + i + ');"><i class="fas fa-wrench"></i></button>'
+                    : '';
+
+                html += '<tr class="ff-baslik" style="cursor:pointer;" onclick="ffAcKapa(\'' + id + '\')">'
+                      + '<td class="text-center">' + secimKutu + '</td>'
+                      + '<td class="text-center"><i class="fas fa-chevron-right" id="ok-' + id + '"></i></td>'
+                      + '<td class="fw-bold">' + g.belgeTipi + ' <span class="badge bg-dark">#' + g.belgeNo + '</span></td>'
+                      + '<td class="small">' + g.cariAdi + '</td>'
+                      + '<td>' + (g.hedefBelgeNo === '-'
+                            ? '<span class="badge bg-danger">Hedefte yok</span>'
+                            : g.hedefTip + ' <span class="badge bg-secondary">#' + g.hedefBelgeNo + '</span>') + '</td>'
+                      + '<td class="text-center"><span class="badge bg-warning text-dark">' + g.satirlar.length + '</span></td>'
+                      + '<td class="small">' + g.tarih + '</td>'
+                      + '<td class="text-center">' + duzeltBtn + '</td></tr>';
+
+                html += '<tr id="' + id + '" style="display:none;"><td colspan="8" class="p-0">'
+                      + '<div class="p-3" style="background:var(--bg-subtle,#f8fafc);">'
+                      + '<table class="table table-sm table-bordered mb-0" style="font-size:.76rem;">'
+                      + '<thead><tr>'
+                      + '<th>Stok Kodu</th><th>Stok Adı</th><th>Sorun</th>'
+                      + '<th class="text-end">Kyn. Miktar</th><th class="text-end">Kyn. Fiyat</th><th>PB</th><th class="text-end">İsk.%</th>'
+                      + '<th class="text-end table-warning">Kyn. Fiyat TL<br/><small>(iskontolu)</small></th>'
+                      + '<th class="text-end table-warning">Kyn. Fiyat TL<br/><small>(iskontosuz)</small></th>'
+                      + '<th class="text-end">Kyn. Tutar</th>'
+                      + '<th class="text-end">Hdf. Miktar</th><th class="text-end table-warning">Hdf. Fiyat (TL)</th><th class="text-end">Hdf. Tutar</th>'
+                      + '<th class="text-end">Tutar Farkı</th>'
+                      + '</tr></thead><tbody>';
+
+                g.satirlar.forEach(function (r) {
+                    var fark = (r.kaynakTutar || 0) - (r.hedefTutar || 0);
+                    html += '<tr>'
+                          + '<td class="fw-bold">' + r.stokKodu + '</td>'
+                          + '<td>' + r.stokAdi + '</td>'
+                          + '<td><span class="badge bg-danger">' + r.farkNedeni + '</span></td>'
+                          + '<td class="text-end">' + ffMiktar(r.kaynakMiktar) + '</td>'
+                          + '<td class="text-end">' + ffFiyat(r.kaynakFiyat) + '</td>'
+                          + '<td>' + (r.kaynakDoviz || 'TRY') + '</td>'
+                          + '<td class="text-end">' + (r.iskonto > 0 ? ffMiktar(r.iskonto) : '-') + '</td>'
+                          + '<td class="text-end fw-bold table-warning">' + ffFiyat(r.kaynakFiyatTL) + '</td>'
+                          + '<td class="text-end fw-bold table-warning">' + ffFiyat(r.kaynakBrutFiyatTL) + '</td>'
+                          + '<td class="text-end">' + ffSayi(r.kaynakTutar) + '</td>'
+                          + '<td class="text-end">' + ffMiktar(r.hedefMiktar) + '</td>'
+                          + '<td class="text-end fw-bold table-warning">' + ffFiyat(r.hedefFiyat) + '</td>'
+                          + '<td class="text-end">' + ffSayi(r.hedefTutar) + '</td>'
+                          + '<td class="text-end fw-bold ' + (Math.abs(fark) > 0.01 ? 'text-danger' : '') + '">' + ffSayi(fark) + '</td>'
+                          + '</tr>';
+                });
+
+                html += '</tbody></table></div></td></tr>';
+            }
+
+            $('#tbody-fiyat-fark').append(html);
+            if (i < gosterilecek.length) setTimeout(parca, 0);
+        }
+
+        parca();
+    }
+
+    function ffAcKapa(id) {
+        var satir = $('#' + id);
+        var ok = $('#ok-' + id);
+        if (satir.is(':visible')) { satir.hide(); ok.removeClass('fa-chevron-down').addClass('fa-chevron-right'); }
+        else { satir.show(); ok.removeClass('fa-chevron-right').addClass('fa-chevron-down'); }
+    }
+
+    function fiyatFarkSuz() { ffCiz(); }
+
+    // Ekranda gosterilen gruplar (indeks -> grup); duzeltme bunlar uzerinden yurur
+    var ffGosterilen = [];
+
+    // Secili satir indeksleri. Cizim parcali oldugu icin secim DOM'da degil
+    // burada tutulur; boylece henuz cizilmemis satirlar da secilebilir.
+    var ffSecim = {};
+
+    function ffSecimSay() {
+        var n = 0;
+        for (var k in ffSecim) { if (ffSecim[k]) n++; }
+        return n;
+    }
+
+    function ffTumunuSec(el) {
+        ffSecim = {};
+
+        if (el.checked) {
+            for (var i = 0; i < ffGosterilen.length; i++) {
+                if (ffGosterilen[i].hedefDocEntry > 0) ffSecim[i] = true;
+            }
+        }
+
+        $('#tbody-fiyat-fark .ff-sec').each(function () {
+            $(this).prop('checked', !!ffSecim[$(this).data('idx')]);
+        });
+
+        ffSecimGuncelle();
+    }
+
+    function ffSecimDegisti(el) {
+        ffSecim[$(el).data('idx')] = el.checked;
+        ffSecimGuncelle();
+    }
+
+    function ffSecimGuncelle() {
+        var n = ffSecimSay();
+        $('#ffSecimSayisi').text(n);
+        $('#btnFfDuzelt').prop('disabled', n === 0);
+    }
+
+    function ffDuzelt(idx) {
+        var g = ffGosterilen[idx];
+        if (!g) return;
+
+        var soru = g.belgeTipi + ' #' + g.belgeNo + ' için:'
+                 + String.fromCharCode(10)
+                 + '1) Hedefteki ' + g.hedefTip + ' #' + g.hedefBelgeNo + ' belgesinin TERS kaydı oluşturulacak'
+                 + String.fromCharCode(10)
+                 + '2) İki belgeye de U_BE1_FRMADI = İPTAL yazılacak'
+                 + String.fromCharCode(10)
+                 + '3) Doğru fiyatlarla YENİ belge oluşturulacak (kullanıcı alanları ve açıklama aynen korunur)'
+                 + String.fromCharCode(10) + String.fromCharCode(10)
+                 + 'İşlem Service Layer üzerinden yapılır. Onaylıyor musunuz?';
+
+        if (!confirm(soru)) return;
+
+        ffDuzeltSirayla([idx], 0);
+    }
+
+    function ffSecilenleriDuzelt() {
+        var idxler = [];
+        for (var k in ffSecim) { if (ffSecim[k]) idxler.push(parseInt(k)); }
+        idxler.sort(function (a, b) { return a - b; });
+
+        if (!idxler.length) return;
+
+        if (!confirm(idxler.length + ' belge düzeltilecek.' + String.fromCharCode(10)
+                   + 'Her biri için ters kayıt + İPTAL damgası + doğru belge oluşturulacak.' + String.fromCharCode(10)
+                   + 'İşlem Service Layer üzerinden yapılır. Onaylıyor musunuz?')) return;
+
+        ffDuzeltSirayla(idxler, 0);
+    }
+
+    /** Ilerleme cubugunu gunceller. */
+    function ffIlerlemeGoster(tamam, toplam, not) {
+        var yuzde = toplam ? Math.round(tamam * 100 / toplam) : 0;
+
+        $('#ffIlerleme').show();
+        $('#ffIlerlemeCubuk').css('width', yuzde + '%').text(tamam + ' / ' + toplam);
+        $('#ffIlerlemeNot').text(not || '');
+    }
+
+    /**
+     * Belgeleri PARCALAR halinde sunucuya gonderir.
+     * Her parca TEK Service Layer oturumu kullanir; belge basina ayri Login
+     * acmak hem cok yavasti hem de SAP oturum limitine takilip islemi
+     * yarida birakiyordu.
+     */
+    function ffDuzeltSirayla(idxler, sira, sonuclar) {
+        sonuclar = sonuclar || [];
+
+        var PARCA = 20;
+
+        if (sira >= idxler.length) {
+            var basarili = sonuclar.filter(function (x) { return x.ok; }).length;
+            var hatali = sonuclar.length - basarili;
+
+            ffIlerlemeGoster(idxler.length, idxler.length, 'Tamamlandı.');
+
+            setTimeout(function () {
+                $('#loader-fiyat-fark').hide();
+                $('#ffIlerleme').hide();
+                $('#ffLoaderMetin').text('Fiyat farkları hesaplanıyor...');
+
+                var hataMetni = sonuclar.filter(function (x) { return !x.ok; })
+                                        .slice(0, 15)
+                                        .map(function (x) { return '#' + x.no + ': ' + x.mesaj; })
+                                        .join(String.fromCharCode(10));
+
+                alert(idxler.length + ' belge işlendi.' + String.fromCharCode(10)
+                    + basarili + ' başarılı, ' + hatali + ' hatalı.'
+                    + (hataMetni ? String.fromCharCode(10) + String.fromCharCode(10) + 'İlk hatalar:'
+                                 + String.fromCharCode(10) + hataMetni : ''));
+
+                fiyatFarkGetir();
+            }, 400);
+            return;
+        }
+
+        $('#loader-fiyat-fark').show();
+        $('#ffLoaderMetin').text('Belgeler düzeltiliyor...');
+
+        var son = Math.min(sira + PARCA, idxler.length);
+        var paket = [];
+
+        for (var i = sira; i < son; i++) {
+            var g = ffGosterilen[idxler[i]];
+
+            if (!g || !(g.hedefDocEntry > 0)) {
+                sonuclar.push({ ok: false, no: (g ? g.belgeNo : '?'), mesaj: 'atlandı (hedef belge yok)' });
+                continue;
+            }
+
+            paket.push({
+                hedefTip: g.hedefTip,
+                hedefKod: g.hedefKod,
+                hedefDocEntry: g.hedefDocEntry,
+                objType: g.objType,
+                kaynakBelgeNo: g.belgeNo
+            });
+        }
+
+        ffIlerlemeGoster(sira, idxler.length, paket.length + ' belgelik paket gönderiliyor...');
+
+        if (!paket.length) {
+            ffDuzeltSirayla(idxler, son, sonuclar);
+            return;
+        }
+
+        $.ajax({
+            url: '@Url.Action("FiyatFarkiniTopluDuzelt", "Rapor84")',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(paket),
+            timeout: 600000
+        }).done(function (res) {
+            if (!res.success) {
+                sonuclar.push({ ok: false, no: 'paket', mesaj: res.message });
+            } else {
+                (res.data || []).forEach(function (r) {
+                    sonuclar.push({ ok: r.basarili, no: r.belgeNo, mesaj: r.mesaj });
+                });
+            }
+            ffDuzeltSirayla(idxler, son, sonuclar);
+        }).fail(function () {
+            sonuclar.push({ ok: false, no: 'paket', mesaj: 'sunucuya ulaşılamadı' });
+            ffDuzeltSirayla(idxler, son, sonuclar);
+        });
+    }
+
+    $(document).on('shown.bs.tab', '#tab-fiyat-fark', function () {
+        ffDonemDoldur();
+        if (!ffVerisi.length) fiyatFarkGetir();
+    });
+
+    $(document).on('click', '#tbody-stok-akis button.as-iptal', function (e) {
+        e.stopPropagation();
+        stokBelgesiniIptalEt($(this).data('tip'), $(this).data('kod'), $(this).data('entry'), $(this).data('num'));
+    });
+
+    /** Secili akmamis belgeleri aktarim kuyruguna geri koyar. */
+    function akisKuyrugaEkle() {
+        var paket = [];
+
+        akisVerisi.forEach(function (a) {
+            if (akisSecilebilir(a) && akisSecim[akisAnahtar(a)]) {
+                paket.push({ objType: a.objType, docEntry: a.kaynakDocEntry, belgeNo: a.belgeNo });
+            }
+        });
+
+        if (!paket.length) return;
+
+        var soru = paket.length + ' belge aktarım kuyruğuna eklenecek.' + String.fromCharCode(10)
+                 + 'SAP üzerinde bir değişiklik yapılmaz; belgeyi hedef şirkete robot atar.' + String.fromCharCode(10)
+                 + 'Onaylıyor musunuz?';
+
+        if (!confirm(soru)) return;
+
+        $('#loader-stok-akis').show();
+        $('#btnKuyrugaEkle').prop('disabled', true);
+
+        $.ajax({
+            url: '@Url.Action("KuyrugaEkle", "Rapor84")',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(paket),
+            timeout: 300000
+        }).done(function (res) {
+            $('#loader-stok-akis').hide();
+
+            if (!res || !res.success) {
+                alert((res && res.message) ? res.message : 'Kuyruğa eklenemedi.');
+                akisSecimGuncelle();
+                return;
+            }
+
+            var liste = res.data || [];
+            var basarili = liste.filter(function (x) { return x.basarili; }).length;
+
+            var hatalar = liste.filter(function (x) { return !x.basarili; })
+                               .slice(0, 10)
+                               .map(function (x) { return '#' + x.belgeNo + ': ' + x.mesaj; })
+                               .join(String.fromCharCode(10));
+
+            alert(liste.length + ' belge işlendi.' + String.fromCharCode(10)
+                + basarili + ' başarılı, ' + (liste.length - basarili) + ' hatalı.'
+                + String.fromCharCode(10) + String.fromCharCode(10)
+                + 'Robot sıradaki turunda bu belgeleri deneyecek.' + String.fromCharCode(10)
+                + 'Durumu görmek için birkaç dakika sonra Getir deyin.'
+                + (hatalar ? String.fromCharCode(10) + String.fromCharCode(10) + hatalar : ''));
+
+            akisSecim = {};
+            stokAkisGetir();
+        }).fail(function (jqXHR, durum) {
+            $('#loader-stok-akis').hide();
+            akisSecimGuncelle();
+            if (durum === 'abort') return;
+            alert(durum === 'timeout' ? 'Zaman aşımı.' : 'Sunucuya ulaşılamadı.');
+        });
+    }
+
+    function stokBelgesiniIptalEt(hedefTip, hedefKod, docEntry, docNum) {
+        var soru = hedefTip + ' #' + docNum + ' belgesi için TERS KAYIT oluşturulacak ve '
+                 + 'iki belgeye de U_BE1_FRMADI = İPTAL yazılacak.'
+                 + String.fromCharCode(10) + String.fromCharCode(10)
+                 + 'İşlem Service Layer üzerinden yapılır. Onaylıyor musunuz?';
+
+        if (!confirm(soru)) return;
+
+        $('#loader-stok-akis').show();
+
+        $.post('@Url.Action("StokBelgesiniIptalEt", "Rapor84")',
+               { hedefTip: hedefTip, hedefKod: hedefKod, docEntry: docEntry }, function (res) {
+            $('#loader-stok-akis').hide();
+            alert(res.message);
+            if (res.success) stokAkisGetir();
+        }).fail(function () {
+            $('#loader-stok-akis').hide();
+            alert('Sunucuya ulaşılamadı.');
+        });
+    }
+
+    /** Kuyruktaki ham durum kodunu rozete cevirir. */
+    function eksikDurumRozet(kod) {
+        var k = (kod || '').trim();
+        if (!k) return '<span class="badge bg-danger me-1">KUYRUKTA YOK</span>';
+
+        var harita = {
+            'P': ['bg-warning text-dark', 'BEKLİYOR'],
+            'W': ['bg-warning text-dark', 'BEKLEMEDE'],
+            'S': ['bg-success',           'BAŞARILI'],
+            'E': ['bg-danger',            'HATA'],
+            'K': ['bg-secondary',         'ASKIDA']
+        };
+
+        var h = harita[k] || ['bg-dark', k];
+        return '<span class="badge ' + h[0] + ' me-1">' + h[1] + '</span>';
+    }
+
+    /**
+     * Robotun yazdigi ham hata metni. Ceviri zaten ayni seyi soyluyorsa
+     * tekrar gostermeyiz.
+     */
+    function eksikHamHata(ham, neden) {
+        var h = (ham || '').trim();
+        if (!h) return '';
+        if (neden && neden.indexOf(h) > -1) return '';
+
+        var g = $('<div>').text(h).html();
+        return '<div class="small text-muted fst-italic mt-1">'
+             + '<i class="fas fa-robot me-1"></i>Robot kaydı: ' + g + '</div>';
+    }
+
+    /**
+     * Farkın neden kapanmadığını gösterir. Robot iptal bilgisini hedefteki
+     * fişi güncelleyerek geçirir; muhasebe dönemi kilitliyse bu işlem
+     * reddedilir ve robot bunu yalnızca kendi dosya loguna yazar.
+     */
+    function iptalEngelMetni(item) {
+        var engel = item.engel || '';
+        if (!engel) return '';
+
+        var d = (item.hedefDonemDurum || '').trim();
+
+        var rozet = (d === 'Y') ? ['bg-danger',            'DÖNEM KİLİTLİ',  'fa-lock']
+                  : (d === 'C') ? ['bg-warning text-dark', 'KAPANIŞ DÖNEMİ', 'fa-lock']
+                  : (d === '')  ? ['bg-dark',              'DÖNEM TANIMSIZ', 'fa-ghost']
+                                : ['bg-success',           'DÖNEM AÇIK',     'fa-lock-open'];
+
+        return '<div class="mt-1"><span class="badge ' + rozet[0] + '">'
+             + '<i class="fas ' + rozet[2] + ' me-1"></i>' + rozet[1]
+             + (item.hedefDonemKodu ? ' ' + item.hedefDonemKodu : '') + '</span> '
+             + '<span class="text-muted fw-normal">' + $('<div>').text(engel).html() + '</span></div>';
+    }
+
+    function renderTable(tab, data) {
+        var tbody = $('#tbody-' + tab);
+        tbody.empty();
+        
+        if(data && data.length > 0) {
+            $('#badge-' + tab).text(data.length).show();
+        }
+
+        // Ust kartlardan ikisi bu sekmelerin sonucundan beslenir
+        if (tab === 'eksik' || tab === 'iptal') {
+            $('#card-' + tab).text(ozetSayi(data ? data.length : 0));
+        }
+        
+        if(!data || data.length === 0) {
+            let emptyMsg = "Bu kriterde kayıt bulunamadı.";
+            if(tab === 'fazla') emptyMsg = "Hedefte olup kaynakta silinmiş herhangi bir fazla/hayalet kayıt bulunamadı.";
+            if(tab === 'kimliksiz') emptyMsg = "Aktarım aracına ait kimliksiz kayıt bulunamadı.";
+            if(tab === 'manuel') emptyMsg = "Sisteme manuel girilmiş kayıt bulunamadı.";
+            if(tab === 'eksik') emptyMsg = "Eksik veya kaçak kayıt bulunamadı.";
+            if(tab === 'iptal') emptyMsg = "İptal statülerinin hepsi eşit. Sorun yok.";
+            if(tab === 'kapali-donem') emptyMsg = "Kapalı döneme denk gelen fiş yok. Tüm fişlerin dönemi hedefte açık.";
+            if(tab === 'isaret-degismis') emptyMsg = "Aktarıldıktan sonra işareti değiştirilmiş fiş yok.";
+            if(tab === 'mukerrer') emptyMsg = "Mükerrer (çift) kayıt bulunamadı.";
+            if(tab === 'yoksayilan') emptyMsg = "Herhangi bir yoksayılan kayıt bulunmuyor.";
+            if(tab === 'manuel-analiz') emptyMsg = "Manuel müdahale analizi temiz.";
+
+            tbody.html(`<tr><td colspan="15" class="text-center py-4 text-success fw-bold"><i class="fas fa-check-circle me-1"></i> ${emptyMsg}</td></tr>`);
+            return;
+        }
+
+        let html = '';
+
+        if (tab === 'fazla') {
+            data.forEach(item => {
+                html += `<tr>
+                    <td class="fw-bold text-danger">${item.hedefYevmiyeNo}</td>
+                    <td><span class="badge bg-secondary">${item.kaynakYevmiyeNo}</span></td>
+                    <td>${item.tarih}</td>
+                    <td class="small">${item.aciklama}</td>
+                    <td><span class="badge bg-dark"><i class="fas fa-user me-1"></i> ${item.ekleyenKullanici}</span></td>
+                    <td class="text-end fw-bold">${item.tutar.toLocaleString(undefined, {minimumFractionDigits: 2})} ₺</td>
+                    <td><span class="badge bg-danger shadow-sm px-2 py-1"><i class="fas fa-search me-1"></i> ${item.sebep}</span></td>
+                </tr>`;
+            });
+        }
+        else if (tab === 'kimliksiz') {
+            data.forEach(item => {
+                html += `<tr>
+                    <td class="fw-bold text-primary">${item.hedefYevmiyeNo}</td>
+                    <td><span class="badge bg-dark">${item.olusanBelgeNo}</span></td>
+                    <td>${item.tarih}</td>
+                    <td><span class="badge bg-secondary">${item.belgeTipi}</span></td>
+                    <td class="small">${item.aciklama}</td>
+                    <td class="text-end fw-bold">${item.tutar.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                    <td class="text-center"><span class="badge bg-warning text-dark"><i class="fas fa-unlink me-1"></i> Bağ Kopuk</span></td>
+                </tr>`;
+            });
+        }
+        else if (tab === 'manuel') {
+            data.forEach(item => {
+                let mDurum = item.mudahaleTipi.includes("Bozdu") ? `<span class="badge bg-danger text-white shadow-sm"><i class="fas fa-exclamation-triangle me-1"></i> ${item.mudahaleTipi}</span>` : 
+                             item.mudahaleTipi.includes("Kopya") ? `<span class="badge bg-warning text-dark shadow-sm"><i class="fas fa-clone me-1"></i> ${item.mudahaleTipi}</span>` : 
+                             `<span class="badge bg-primary text-white shadow-sm"><i class="fas fa-keyboard me-1"></i> ${item.mudahaleTipi}</span>`;
+                
+                let kullanici = `<span class="badge bg-info text-dark fw-bold mb-1"><i class="fas fa-user-plus me-1"></i> ${item.olusturanKullanici}</span>`;
+                if(item.guncelleyenKullanici !== "Bilinmiyor" && item.guncelleyenKullanici !== item.olusturanKullanici) {
+                    kullanici += `<br><span class="badge bg-secondary text-white fw-bold"><i class="fas fa-user-edit me-1"></i> ${item.guncelleyenKullanici}</span>`;
+                }
+
+                html += `<tr>
+                    <td>${mDurum}</td>
+                    <td class="fw-bold text-success">${item.hedefYevmiyeNo}</td>
+                    <td><span class="badge bg-dark">${item.olusanBelgeNo}</span></td>
+                    <td>${item.tarih}</td>
+                    <td><span class="badge bg-secondary">${item.belgeTipi}</span></td>
+                    <td class="small">${item.aciklama}</td>
+                    <td>${item.kopyaKaynakId ? `<span class="badge bg-warning text-dark"><i class="fas fa-clone me-1"></i>${item.kopyaKaynakId}</span>` : '<span class="text-muted">-</span>'}</td>
+                    <td><div class="d-flex flex-column align-items-start">${kullanici}</div></td>
+                    <td class="text-end fw-bold">${item.tutar.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                </tr>`;
+            });
+        }
+        else if (tab === 'manuel-analiz') {
+            data.forEach(m => {
+                let mNedeni = m.mudahaleNedeni;
+                let mBadge = mNedeni.includes("❌") ? `<span class="badge bg-danger shadow-sm px-2 py-1">${mNedeni}</span>` :
+                             mNedeni.includes("⚠️") ? `<span class="badge bg-warning text-dark shadow-sm px-2 py-1">${mNedeni}</span>` :
+                             mNedeni.includes("✏️") ? `<span class="badge bg-info text-dark shadow-sm px-2 py-1">${mNedeni}</span>` :
+                             `<span class="badge bg-secondary text-white shadow-sm px-2 py-1">${mNedeni}</span>`;
+
+                html += `<tr>
+                    <td class="fw-bold text-success">${m.hedefYevmiyeNo}</td>
+                    <td>${m.kaynakYevmiyeNo ? `<span class="badge bg-secondary">${m.kaynakYevmiyeNo}</span>` : `<span class="text-muted">-</span>`}</td>
+                    <td>${m.tarih}</td>
+                    <td class="small">${m.aciklama}</td>
+                    <td><span class="badge bg-dark"><i class="fas fa-user-edit me-1"></i> ${m.ekleyenGuncelleyen}</span></td>
+                    <td class="text-end fw-bold">${m.tutar.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                    <td>${mBadge}</td>
+                </tr>`;
+            });
+        }
+        else if (tab === 'eksik') {
+            $('#action-buttons-eksik').show();
+            $('#card-eksik').text(data.length.toLocaleString());
+            data.forEach(item => {
+                let neden = item.neden || '';
+                let nClass = 'text-danger';
+                let nIcon = 'fa-circle-exclamation';
+
+                if (neden.indexOf('bekliyor') > -1 || neden.indexOf('beklemede') > -1) { nClass = 'text-warning'; nIcon = 'fa-hourglass-half'; }
+                else if (neden.indexOf('dönemi kilitli') > -1 || neden.indexOf('askıya') > -1) { nClass = 'text-warning'; nIcon = 'fa-lock'; }
+                else if (neden.indexOf('elle kuyruktan') > -1 || neden.indexOf('atlamış') > -1) { nClass = 'text-secondary'; nIcon = 'fa-user-check'; }
+                else if (neden.indexOf('Bağ kopmuş') > -1)     { nClass = 'text-dark';   nIcon = 'fa-link-slash'; }
+                else if (neden.indexOf('hiç eklenmemiş') > -1) { nClass = 'text-danger'; nIcon = 'fa-ghost'; }
+
+                html += `<tr>
+                    <td><input type="checkbox" class="chk-eksik" value="${item.kaynakYevmiyeNo}"></td>
+                    <td class="fw-bold" style="color: #6f42c1;">${item.kaynakYevmiyeNo}</td>
+                    <td><span class="badge bg-dark">${item.kaynakBelgeNo}</span></td>
+                    <td>${item.tarih}</td>
+                    <td><span class="badge bg-secondary">${item.belgeTipi}</span></td>
+                    <td class="small fw-semibold ${nClass}">
+                        ${eksikDurumRozet(item.durumKod)}
+                        <i class="fas ${nIcon} me-1"></i>${neden}
+                        ${eksikHamHata(item.hamHata, neden)}
+                    </td>
+                    <td class="small text-muted">${item.aciklama}</td>
+                </tr>`;
+            });
+        }
+        else if (tab === 'isaret-degismis') {
+            data.forEach(item => {
+                let isaret = item.kaynakIsaret
+                    ? `<span class="badge ${item.kaynakIsaret === 'X' ? 'bg-danger' : 'bg-secondary'}">${item.kaynakIsaret}</span>`
+                    : `<span class="badge bg-dark">yok</span>`;
+                html += `<tr>
+                    <td class="fw-bold text-dark">${item.hedefYevmiyeNo}</td>
+                    <td class="fw-bold text-primary">${item.kaynakYevmiyeNo}</td>
+                    <td><span class="badge bg-dark">${item.kaynakBelgeNo}</span></td>
+                    <td>${item.tarih}</td>
+                    <td><span class="badge bg-secondary">${item.belgeTipi || '-'}</span></td>
+                    <td>${isaret}</td>
+                    <td class="small fw-semibold text-warning-emphasis"><i class="fas fa-flag me-1"></i>${item.neden}</td>
+                    <td class="text-end fw-bold">${(item.tutar || 0).toLocaleString(undefined, {minimumFractionDigits: 2})} ₺</td>
+                    <td class="small">${item.hedefOlusturma}</td>
+                    <td class="small text-muted">${item.aciklama}</td>
+                </tr>`;
+            });
+        }
+        else if (tab === 'kapali-donem') {
+            data.forEach(item => {
+                let donem = item.donemDurum === 'Y'
+                    ? `<span class="badge bg-danger"><i class="fas fa-lock me-1"></i>${item.donemKodu} Kilitli</span>`
+                    : `<span class="badge bg-warning text-dark"><i class="fas fa-lock me-1"></i>${item.donemKodu} Kapanış dönemi</span>`;
+                let hedef = item.hedefYevmiyeNo
+                    ? `<span class="badge bg-success">Hedefte var (${item.hedefYevmiyeNo})</span> <span class="small text-muted">güncellenemez</span>`
+                    : `<span class="badge bg-danger">Hedefte yok</span> <span class="small text-danger fw-semibold">dönem açılmadan aktarılamaz</span>`;
+                html += `<tr>
+                    <td class="fw-bold text-danger">${item.kaynakYevmiyeNo}</td>
+                    <td><span class="badge bg-dark">${item.kaynakBelgeNo}</span></td>
+                    <td>${item.tarih}</td>
+                    <td><span class="badge bg-secondary">${item.belgeTipi}</span></td>
+                    <td>${donem}</td>
+                    <td class="text-end fw-bold">${(item.tutar || 0).toLocaleString(undefined, {minimumFractionDigits: 2})} ₺</td>
+                    <td class="small text-muted">${item.aciklama}</td>
+                </tr>`;
+            });
+        }
+        else if (tab === 'iptal') {
+            $('#btn-sync-iptal').show();
+            $('#card-iptal').text(data.length.toLocaleString());
+            data.forEach(item => {
+                let kIptal = item.kaynakIptalDurum == 'Y' ? `<span class="badge bg-danger">İptal Edilmiş (Y)</span>` : `<span class="badge bg-success">Aktif</span>`;
+                let hIptal = item.hedefIptalDurum == 'Y' ? `<span class="badge bg-danger">İptal Edilmiş (Y)</span>` : 
+                             !item.hedefIptalDurum ? `<span class="badge bg-success">Aktif (Boş)</span>` : `<span class="badge bg-secondary">${item.hedefIptalDurum}</span>`;
+                
+                html += `<tr>
+                    <td class="fw-bold text-primary">${item.kaynakYevmiyeNo}</td>
+                    <td><span class="badge bg-dark">${item.kaynakBelgeNo}</span></td>
+                    <td class="fw-bold text-dark">${item.hedefYevmiyeNo}</td>
+                    <td><span class="badge bg-dark">${item.hedefBelgeNo}</span></td>
+                    <td>${item.tarih}</td>
+                    <td class="small fw-semibold">
+                        <div class="text-danger"><i class="fas fa-circle-exclamation me-1"></i>${item.neden || ''}</div>
+                        ${iptalEngelMetni(item)}
+                    </td>
+                    <td class="small text-muted">${item.aciklama}</td>
+                    <td class="text-center">${kIptal}</td>
+                    <td class="text-center border-start">${hIptal}</td>
+                </tr>`;
+            });
+        }
+        else if (tab === 'mukerrer') {
+            $('#btn-cancel-mukerrer').show();
+            let prevKey = '';
+            data.forEach(item => {
+                let rowCls = (item.kaynakYevmiyeNo == prevKey) ? "bg-light" : "border-top border-danger border-2"; 
+                prevKey = item.kaynakYevmiyeNo;
+                
+                html += `<tr class="${rowCls}">
+                    <td class="fw-bold text-danger">${item.kaynakYevmiyeNo}</td>
+                    <td><span class="badge bg-danger px-2 fs-6">${item.hedefYevmiyeNo}</span></td>
+                    <td><span class="badge bg-dark">${item.olusanBelgeNo}</span></td>
+                    <td>${item.tarih}</td>
+                    <td class="small">${item.aciklama}</td>
+                    <td class="text-end fw-bold">${item.tutar.toLocaleString(undefined, {minimumFractionDigits: 2})} ₺</td>
+                </tr>`;
+            });
+        }
+        else if (tab === 'yoksayilan') {
+            $('#btn-unignore').show();
+            data.forEach(item => {
+                html += `<tr>
+                    <td><input type="checkbox" class="chk-yoksay" value="${item.kaynakYevmiyeNo}"></td>
+                    <td class="fw-bold text-secondary">${item.kaynakYevmiyeNo}</td>
+                    <td><span class="badge bg-dark">${item.kaynakBelgeNo}</span></td>
+                    <td>${item.tarih}</td>
+                    <td class="small">${item.aciklama}</td>
+                    <td class="text-muted"><i class="far fa-clock me-1"></i>${item.eklenmeTarihi}</td>
+                </tr>`;
+            });
+        }
+        
+        tbody.html(html);
+    }
+
+    // =====================================================================
+    // TABLO FİLTRELEME İŞLEMLERİ
+    // =====================================================================
+    function filterTable(status, btnElement) {
+        var buttons = document.querySelectorAll('.btn-filter');
+        buttons.forEach(b => {
+            b.className = 'btn btn-filter ' + (
+                b.innerText.includes('Tümü') ? 'btn-outline-dark text-dark' : 
+                b.innerText.includes('Hatalar') ? 'btn-outline-danger text-danger' : 
+                b.innerText.includes('Kayıplar') ? 'btn-outline-dark text-dark' : 
+                b.innerText.includes('Uyarılar') ? 'btn-outline-warning text-dark border-warning' : 'btn-outline-warning text-dark'
+            );
+        });
+        
+        if(status === 'all') btnElement.className = 'btn btn-dark btn-filter text-white';
+        else if(status === 'E') btnElement.className = 'btn btn-danger btn-filter text-white';
+        else if(status === 'M') btnElement.className = 'btn btn-dark btn-filter text-white';
+        else if(status === 'W') btnElement.className = 'btn btn-warning btn-filter text-dark border-warning';
+        else if(status === 'P') btnElement.className = 'btn btn-warning btn-filter text-dark';
+
+        var rows = document.querySelectorAll('.queue-row');
+        rows.forEach(row => {
+            if (status === 'all' || row.getAttribute('data-status') === status) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    function filterStokTable(tip, btnElement) {
+        var buttons = document.querySelectorAll('.btn-stok-filter');
+        buttons.forEach(b => {
+            b.className = 'btn btn-stok-filter ' + (
+                b.innerText.includes('Tümü') ? 'btn-outline-dark text-dark' : 
+                b.innerText.includes('Akmayanlar') ? 'btn-outline-danger text-danger' : 
+                'btn-outline-warning text-dark border-warning'
+            );
+        });
+
+        if(tip === 'all') btnElement.className = 'btn btn-dark btn-stok-filter text-white';
+        else if(tip === 'AKMAMIS') btnElement.className = 'btn btn-danger btn-stok-filter text-white';
+        else if(tip === 'MUKERRER') btnElement.className = 'btn btn-warning btn-stok-filter text-dark border-warning';
+
+        var rows = document.querySelectorAll('.stok-row');
+        rows.forEach(row => {
+            if (tip === 'all' || row.getAttribute('data-stok-tip') === tip) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    function filterFiyatTable(tip, btnElement) {
+        var buttons = document.querySelectorAll('.btn-fiyat-filter');
+        buttons.forEach(b => {
+            b.className = 'btn btn-fiyat-filter ' + (
+                b.innerText.includes('Tümü') ? 'btn-outline-dark text-dark' : 
+                b.innerText.includes('Akmayanlar') ? 'btn-outline-danger text-danger' : 
+                b.innerText.includes('Fiyat') ? 'btn-outline-warning text-dark border-warning' :
+                b.innerText.includes('Tutar') ? 'btn-outline-warning text-dark border-warning' :
+                'btn-outline-info text-dark border-info'
+            );
+        });
+
+        if(tip === 'all') btnElement.className = 'btn btn-dark btn-fiyat-filter text-white';
+        else if(tip === '❌') btnElement.className = 'btn btn-danger btn-fiyat-filter text-white';
+        else if(tip === 'Fiyat' || tip === 'Tutar') btnElement.className = 'btn btn-warning btn-fiyat-filter text-dark border-warning';
+        else if(tip === 'Para') btnElement.className = 'btn btn-info btn-fiyat-filter text-white';
+
+        var rows = document.querySelectorAll('.fiyat-row');
+        rows.forEach(row => {
+            var hataNedeni = row.getAttribute('data-fiyat-tip') || "";
+            if (tip === 'all' || hataNedeni.includes(tip)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    // =====================================================================
+    // OTOMATİK İŞLEMLER VE AKSİYON BUTONLARI (POST)
+    // =====================================================================
+
+    function stokFazlalikIptal() {
+        var yil = $('#selectYil').val() || new Date().getFullYear();
+        var ay = $('#selectAy').val() || (new Date().getMonth() + 1);
+        if(!confirm("Seçili dönem (" + yil + "-" + ay + ") için hedef veritabanındaki fazlalık belgelerin açıklama (U_BE1_FRMADI) alanına otomatik olarak 'İPTAL' yazılacaktır. Onaylıyor musunuz?")) return;
+        
+        showLoader();
+        $.ajax({
+            url: '@Url.Action("FazlaliklaraIptalYaz", "Rapor84")?yil=' + yil + '&ay=' + ay,
+            type: 'POST',
+            success: function(res) {
+                alert(res.message);
+                if(res.success) { location.reload(); } else { $('#pageLoader').hide(); }
+            },
+            error: function() { alert('Sunucu hatası!'); $('#pageLoader').hide(); }
+        });
+    }
+
+    function stokIptalEsitle() {
+        var yil = $('#selectYil').val() || new Date().getFullYear();
+        var ay = $('#selectAy').val() || (new Date().getMonth() + 1);
+        if(!confirm("Seçili dönem (" + yil + "-" + ay + ") için ana sistemde iptal edilmiş ancak hedefte 'İPTAL' yazmayan belgeler otomatik olarak bulunup eşitlenecektir. Onaylıyor musunuz?")) return;
+        
+        showLoader();
+        $.ajax({
+            url: '@Url.Action("IptalleriEsitleStok", "Rapor84")?yil=' + yil + '&ay=' + ay,
+            type: 'POST',
+            success: function(res) {
+                alert(res.message);
+                if(res.success) { location.reload(); } else { $('#pageLoader').hide(); }
+            },
+            error: function() { alert('Sunucu hatası!'); $('#pageLoader').hide(); }
+        });
+    }
+
+    function stokEksikKuyruga() {
+        var yil = $('#selectYil').val() || new Date().getFullYear();
+        var ay = $('#selectAy').val() || (new Date().getMonth() + 1);
+        if(!confirm("Seçili dönem (" + yil + "-" + ay + ") için ana sistemde olan ancak hedefte hiç izi bulunmayan (akmamış) belgeler otomatik olarak tespit edilip robot kuyruğuna eklenecektir. Onaylıyor musunuz?")) return;
+        
+        showLoader();
+        $.ajax({
+            url: '@Url.Action("EksikleriKuyrugaItStok", "Rapor84")?yil=' + yil + '&ay=' + ay,
+            type: 'POST',
+            success: function(res) {
+                alert(res.message);
+                if(res.success) { location.reload(); } else { $('#pageLoader').hide(); }
+            },
+            error: function() { alert('Sunucu hatası!'); $('#pageLoader').hide(); }
+        });
+    }
+
+    function retrySingle(id) {
+        var btn = document.getElementById('btn-retry-' + id);
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        btn.disabled = true;
+        $.ajax({
+            url: '@Url.Action("TekrarKuyrugaEkle", "Rapor84")', 
+            type: 'POST', 
+            data: { id: id },
+            success: function (res) {
+                if (res.success) {
+                    var badge = document.getElementById('status-badge-' + id);
+                    badge.className = 'badge bg-warning text-dark px-2 py-1';
+                    badge.innerHTML = '<i class="fas fa-hourglass-half me-1"></i> Bekliyor';
+                    var row = document.getElementById('row-' + id);
+                    row.setAttribute('data-status', 'P');
+                    btn.remove(); 
+                } else {
+                    alert(res.message); btn.innerHTML = '<i class="fas fa-redo-alt"></i>'; btn.disabled = false;
+                }
+            },
+            error: function () { alert('Sunucuya ulaşılamadı!'); btn.innerHTML = '<i class="fas fa-redo-alt"></i>'; btn.disabled = false; }
+        });
+    }
+
+    function retryAllErrors() {
+        if (!confirm("Tüm GERÇEK hatalı kayıtları tekrar kuyruğa alıp robotu tetiklemek istediğinize emin misiniz?")) return;
+        showLoader();
+        $.post('@Url.Action("TumHatalilariKuyrugaEkle", "Rapor84")', function(res){ if(res.success) { alert(res.message); location.reload(); } else { alert("Hata: " + res.message); $('#pageLoader').hide(); } }).fail(function(){ alert('Sunucu hatası!'); $('#pageLoader').hide(); });
+    }
+
+    function retryAllMissing() {
+        if (!confirm("Karşıya geçmemiş KAYIP (M) kayıtları tekrar kuyruğa alıp robotu tetiklemek istediğinize emin misiniz?")) return;
+        showLoader();
+        $.post('@Url.Action("TumKayiplariKuyrugaEkle", "Rapor84")', function(res){ if(res.success) { alert(res.message); location.reload(); } else { alert("Hata: " + res.message); $('#pageLoader').hide(); } }).fail(function(){ alert('Sunucu hatası!'); $('#pageLoader').hide(); });
+    }
+
+    function forceAddMissing() {
+        if (!confirm("Sisteme hiç girmemiş olan EKSİK (Kaçak) kayıtları zorla kuyruğa almak istediğinize emin misiniz?")) return;
+        showLoader();
+        $.post('@Url.Action("TumEksikleriKuyrugaEkle", "Rapor84")', function(res){ if(res.success) { alert(res.message); location.reload(); } else { alert("Hata: " + res.message); $('#pageLoader').hide(); } }).fail(function(){ alert('Sunucu hatası!'); $('#pageLoader').hide(); });
+    }
+
+    function fixBrokenLinks() {
+        if (!confirm("Hedefte U_SrcTransId alanı boş kalan kayıtları SQL üzerinden eşleştirip onarmak istediğinize emin misiniz?")) return;
+        showLoader();
+        $.post('@Url.Action("KopanBaglariLehimle", "Rapor84")', function(res){ if(res.success) { alert(res.message); location.reload(); } else { alert("Hata: " + res.message); $('#pageLoader').hide(); } }).fail(function(){ alert('Sunucu hatası!'); $('#pageLoader').hide(); });
+    }
+    
+    function syncIptalStatus() {
+        if (!confirm("Kaynak veritabanındaki iptal durumlarını okuyup hedef veritabanını buna göre güncellemek istediğinize emin misiniz?")) return;
+        showLoader();
+        $.post('@Url.Action("IptalDurumlariniEsitle", "Rapor84")', function(res){ if(res.success) { alert(res.message); location.reload(); } else { alert("Hata: " + res.message); $('#pageLoader').hide(); } }).fail(function(){ alert('Sunucu hatası!'); $('#pageLoader').hide(); });
+    }
+
+    function cancelDuplicates() {
+        if (!confirm("Hedef veritabanındaki mükerrer yevmiyelerden sadece ilki bırakılıp diğer kopyaların U_BE1_YEVIPTAL alanına 'Y' yazılacaktır. Onaylıyor musunuz?")) return;
+        showLoader();
+        $.post('@Url.Action("FazlaliklariIptalEt", "Rapor84")', function(res){ if(res.success) { alert(res.message); location.reload(); } else { alert("Hata: " + res.message); $('#pageLoader').hide(); } }).fail(function(){ alert('Sunucu hatası!'); $('#pageLoader').hide(); });
+    }
+
+    function getSelectedEksikler() { return $('.chk-eksik:checked').map(function() { return this.value; }).get(); }
+
+    function yoksaySecilenEksikler() {
+        var ids = getSelectedEksikler();
+        if (ids.length === 0) return alert("Lütfen yoksaymak için en az bir kayıt seçin!");
+        if (!confirm(ids.length + " adet kaydı yoksaymak istediğinize emin misiniz? Bu kayıtlar artık hiçbir raporda görünmeyecek.")) return;
+
+        showLoader();
+        $.ajax({
+            url: '@Url.Action("SecilenleriYoksay", "Rapor84")', type: 'POST', contentType: 'application/json', data: JSON.stringify(ids),
+            success: function (res) { if(res.success) { alert(res.message); location.reload(); } else { alert("Hata: " + res.message); $('#pageLoader').hide(); } },
+            error: function () { alert('Sunucu hatası!'); $('#pageLoader').hide(); }
+        });
+    }
+
+    function kuyrugaItSecilenEksikler() {
+        var ids = getSelectedEksikler();
+        if (ids.length === 0) return alert("Lütfen kuyruğa itmek için en az bir kayıt seçin!");
+        if (!confirm(ids.length + " adet kaydı kuyruğa itmek istediğinize emin misiniz?")) return;
+
+        showLoader();
+        $.ajax({
+            url: '@Url.Action("SecilenEksikleriKuyrugaEkle", "Rapor84")', type: 'POST', contentType: 'application/json', data: JSON.stringify(ids),
+            success: function (res) { if(res.success) { alert(res.message); location.reload(); } else { alert("Hata: " + res.message); $('#pageLoader').hide(); } },
+            error: function () { alert('Sunucu hatası!'); $('#pageLoader').hide(); }
+        });
+    }
+
+    function getSelectedYoksayilanlar() { return $('.chk-yoksay:checked').map(function() { return this.value; }).get(); }
+
+    function yoksaymaktanCikar() {
+        var ids = getSelectedYoksayilanlar();
+        if (ids.length === 0) return alert("Lütfen geri almak (aktifleştirmek) için en az bir kayıt seçin!");
+        if (!confirm(ids.length + " adet kaydı yoksayılanlar listesinden çıkarmak istediğinize emin misiniz?")) return;
+
+        showLoader();
+        $.ajax({
+            url: '@Url.Action("YoksaymaktanCikar", "Rapor84")', type: 'POST', contentType: 'application/json', data: JSON.stringify(ids),
+            success: function (res) { if(res.success) { alert(res.message); location.reload(); } else { alert("Hata: " + res.message); $('#pageLoader').hide(); } },
+            error: function () { alert('Sunucu hatası!'); $('#pageLoader').hide(); }
+        });
+    }
+</script>

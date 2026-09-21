@@ -1,0 +1,658 @@
+﻿@model List<WebApplication3.Models.TedarikciFinansalBorcRaporuViewModel>
+@using System.Globalization
+@using Microsoft.AspNetCore.Mvc.Rendering
+@using Newtonsoft.Json
+@using System.Linq
+
+@{
+    ViewData["Title"] = "Tedarikçi Finansal Borç Raporu"; 
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // 1. KURAL: URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+
+    var reportDataJson = Model != null ? JsonConvert.SerializeObject(Model) : "[]";
+
+    // Filtreleme için distinct değerler toplanır.
+    var distinctValues = new Dictionary<string, List<string>>();
+    if (Model != null && Model.Any())
+    {
+        distinctValues["CardCode"] = Model.Where(m => !string.IsNullOrEmpty(m.CardCode)).Select(m => m.CardCode).Distinct().OrderBy(s => s).ToList();
+        distinctValues["Tedarikci"] = Model.Where(m => !string.IsNullOrEmpty(m.Tedarikci)).Select(m => m.Tedarikci).Distinct().OrderBy(s => s).ToList(); 
+        distinctValues["SatisSorumlusu"] = Model.Where(m => !string.IsNullOrEmpty(m.SatisSorumlusu)).Select(m => m.SatisSorumlusu).Distinct().OrderBy(s => s).ToList();
+    }
+}
+
+@section Styles {
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+    
+    <style>
+        /* CSS Stilleri Rapor17'den kopyalandı */
+        :root {
+            --primary-color: #dc3545; /* Risk vurgusu için kırmızı ton */
+            --light-bg: #f8f9fa;
+            --white-bg: #ffffff;
+            --border-color: #e0e0e0;
+            --text-color: #333;
+            --header-bg: #2c3e50;
+            --header-text: #ffffff;
+            --shadow-medium: 0 3px 10px rgba(0, 0, 0, 0.08);
+            --hover-color: #fff3cd; /* Yeni belirgin hover rengi (Açık Sarı/Uyarı) */
+        }
+
+        body {
+            background-color: var(--light-bg);
+            font-family: 'Poppins', sans-serif;
+            color: var(--text-color);
+            line-height: 1.2;
+            font-size: 0.8rem;
+        }
+
+        .container-fluid {
+            padding: 0 8px;
+        }
+
+        .sticky-toolbar {
+            position: sticky;
+            top: 0;
+            background-color: #ffffff;
+            z-index: 1000;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 6px;
+            box-shadow: 0 2px 3px rgba(0, 0, 0, 0.06);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .total-amount-display {
+            font-size: 0.96em;
+            font-weight: bold;
+            color: var(--primary-color);
+            white-space: nowrap;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            max-height: calc(100vh - 130px);
+            overflow-y: auto;
+            position: relative;
+            border-radius: 6px;
+            box-shadow: var(--shadow-medium);
+            background-color: var(--white-bg);
+            margin-top: 0.6rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .rapor-tablo {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            table-layout: fixed;
+            min-width: 2000px; /* Yeni sütun için artırıldı */
+        }
+
+            .rapor-tablo thead {
+                position: sticky;
+                top: 0;
+                z-index: 101;
+                background-color: #ffffff;
+            }
+
+                .rapor-tablo thead .main-header-row th {
+                    background-color: var(--header-bg);
+                    color: var(--header-text);
+                    padding: 4px 3px;
+                    text-align: center;
+                    white-space: normal;
+                    font-weight: 700;
+                    border-bottom: 2px solid var(--border-color);
+                    height: auto;
+                    line-height: 1.3;
+                    cursor: pointer;
+                }
+
+                .rapor-tablo thead .filter-row th {
+                    padding: 2px 3px;
+                    height: 30px;
+                    line-height: normal;
+                    vertical-align: top;
+                    white-space: nowrap;
+                    background-color: #ffffff;
+                    border-bottom: 1px solid var(--border-color);
+                }
+
+            .rapor-tablo th,
+            .rapor-tablo td {
+                padding: 1px;
+                vertical-align: middle;
+                border-right: 1px solid var(--border-color);
+            }
+
+            .rapor-tablo td {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                height: 25px;
+                line-height: 25px;
+                border-bottom: 1px solid var(--border-color);
+            }
+
+        /* MOUS OVER SATIR RENGİ GÜNCELLEMESİ */
+        .table-hover tbody tr:hover {
+            background-color: var(--hover-color) !important;
+        }
+
+        /* Checkbox kolon stilleri */
+        .rapor-tablo th.checkbox-column,
+        .rapor-tablo td.checkbox-column {
+            min-width: 28px !important;
+            max-width: 28px !important;
+            width: 28px !important;
+            padding: 0 5px !important;
+            vertical-align: middle !important;
+            overflow: visible;
+        }
+
+        /* Checkbox'ın sağa yaslanması için flex düzenlemesi */
+        .rapor-tablo td.checkbox-column {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end; /* İçeriği sağa yaslar */
+            height: 27px; /* Eşitlemek için */
+        }
+
+        /* Başlık hücresi (Select All) için de sağa yaslama */
+        .rapor-tablo th.checkbox-column input {
+            display: block;
+            margin-left: auto; /* Checkbox'ı sağa iter */
+            margin-right: 5px; /* Sağdan boşluk */
+        }
+
+        .filter-row th .form-control,
+        .filter-row th .bootstrap-select .btn {
+            width: 100% !important;
+            box-sizing: border-box !important;
+            height: 28px !important;
+            line-height: normal !important;
+            padding: 2px 5px !important;
+            font-size: 0.85em !important;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border: 1px solid #ced4da;
+            border-radius: 0.25rem;
+        }
+    </style>
+}
+
+@* 2. KURAL: Güvenlik (CSRF) - Yetkisiz veri işlemlerini engellemek için eklendi *@
+@Html.AntiForgeryToken()
+
+<div class="container-fluid py-4">
+    <div class="row g-0">
+        <div class="col-md-12">
+            @if (ViewBag.ErrorMessage != null)
+            {
+                <div class="alert alert-danger" role="alert">
+                    @ViewBag.ErrorMessage
+                </div>
+            }
+
+            <div id="alertContainer" class="mt-3"></div>
+
+            @if (Model != null && Model.Any())
+            {
+                <div class="sticky-toolbar">
+                    <div class="d-flex align-items-center">
+                        <span class="me-2 total-amount-display">Toplam Seçili Borç:</span>
+                        <strong id="totalSelectedTlAmount" class="text-danger">0,00 TL</strong>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="table table-bordered table-striped table-hover rapor-tablo" id="rapor53Table">
+                        <thead>
+                            <tr class="main-header-row">
+                                <th class="checkbox-column no-drag" title="Seçim Kutusu" data-column="Checkbox">
+                                    <input type="checkbox" id="selectAllCheckbox" class="form-check-input" />
+                                </th>
+                                <th class="sortable-column" data-column="CardCode" title="Tedarikçi Kodu" data-sort-type="text">Tedarikçi Kodu <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="Tedarikci" title="Tedarikçi Adı" data-sort-type="text">Tedarikçi Adı <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="SatisSorumlusu" title="Satış Sorumlusu" data-sort-type="text">Satış Sorumlusu <i class="fas fa-sort float-end"></i></th>
+
+                                <th class="sortable-column" data-column="TedarikciGuncelBakiyesi" title="Güncel Bakiye (OCRD.Balance)" data-sort-type="number">Güncel Bakiye <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="ToplamAcikBorc" title="Toplam Açık Borç (Fatura + Fatura Dışı)" data-sort-type="number">Toplam Açık Borç <i class="fas fa-sort float-end"></i></th>
+
+                                <th class="sortable-column" data-column="VadesiGecmisBorcTutar" title="Vadesi Geçmiş Borç Tutarı" data-sort-type="number">V. Geçmiş Borç Tutar <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="VadesiGelecekBorcTutar" title="Vadesi Gelecek Borç Tutarı" data-sort-type="number">V. Gelecek Borç Tutar <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="MutabakattaAcikOdeme" title="Mutabakatta Açık Ödeme (Borç Toplam)" data-sort-type="number">Mutabakatta Açık Ödeme <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="MutabakattaKapanacakOdeme" title="Mutabakatta Kapanacak Ödeme (Alacak Toplam)" data-sort-type="number">Mutabakatta Kapanacak Ödeme <i class="fas fa-sort float-end"></i></th>
+
+                                <th class="sortable-column" data-column="VadesiGecmisAdet" title="Vadesi Geçmiş Kayıt Adedi (Fatura + Fatura Dışı)" data-sort-type="number">V.G. Adet <i class="fas fa-sort float-end"></i></th>
+
+                                <th class="sortable-column" data-column="OrtalamaAdat" title="Ortalama Adat (Gün)" data-sort-type="number">Ort. Adat (Gün) <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="OrtalamaOdemeYaslandirma" title="Ortalama Ödeme Yaşlandırması (Gün)" data-sort-type="number">Ort. Ödeme Yaş. (Gün) <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="EnEskiVadeTarihi" title="En Eski Vadesi Geçmiş Kayıt Tarihi" data-sort-type="date">En Eski Vade Tarihi <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="EnEskiFarkGun" title="En Eski Vade Tarihi ile Bugün Arasındaki Gün Farkı" data-sort-type="number">En Eski Fark (Gün) <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="EnSonSatinAlmaTarihi" title="En Son Satın Alma Faturası" data-sort-type="date">En Son Satın Alma <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="SonOdemeTarihi" title="En Son Kapanan Faturanın Belge Tarihi" data-sort-type="date">Son Ödeme <i class="fas fa-sort float-end"></i></th>
+                            </tr>
+                            <tr class="filter-row">
+                                <th data-column="Checkbox"></th>
+                                <th data-column="CardCode"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                <th data-column="Tedarikci">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Tedarikçi Adı">
+                                        @if (distinctValues.ContainsKey("Tedarikci"))
+                                        {
+                                            foreach (var item in distinctValues["Tedarikci"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="SatisSorumlusu">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Satış Sorumlusu">
+                                        @if (distinctValues.ContainsKey("SatisSorumlusu"))
+                                        {
+                                            foreach (var item in distinctValues["SatisSorumlusu"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="TedarikciGuncelBakiyesi"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="ToplamAcikBorc"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="VadesiGecmisBorcTutar"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="VadesiGelecekBorcTutar"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="MutabakattaAcikOdeme"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="MutabakattaKapanacakOdeme"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="VadesiGecmisAdet"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="OrtalamaAdat"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="OrtalamaOdemeYaslandirma"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="EnEskiVadeTarihi"><input type="text" class="form-control form-control-sm filter-input date-filter" placeholder="GG.AA.YYYY"></th>
+                                <th data-column="EnEskiFarkGun"><input type="text" class="form-control form-control-sm filter-input number-filter" placeholder="Filtrele..."></th>
+                                <th data-column="EnSonSatinAlmaTarihi"><input type="text" class="form-control form-control-sm filter-input date-filter" placeholder="GG.AA.YYYY"></th>
+                                <th data-column="SonOdemeTarihi"><input type="text" class="form-control form-control-sm filter-input date-filter" placeholder="GG.AA.YYYY"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @* Tablo içeriği dinamik olarak JavaScript tarafından doldurulacaktır. *@
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-info text-center">Gösterilecek veri bulunamadı.</div>
+            }
+
+            <div class="text-center mt-2 mb-3 text-muted small" id="pagination-info">
+                Toplam Kayıt: <strong id="totalRecords" class="text-dark">@(Model?.Count ?? 0)</strong>
+            </div>
+
+            @* 4. KURAL: UI/UX Standartlarına uygun şık, db parametreli Ana Sayfa butonu *@
+            <div class="mt-4 mb-5 text-center">
+                <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+                    <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+                </a>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const allReportData = @Html.Raw(reportDataJson);
+            const table = document.getElementById('rapor53Table');
+            const tableBody = table.querySelector('tbody');
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const totalSelectedTlAmountSpan = document.getElementById('totalSelectedTlAmount');
+            const totalRecordsSpan = document.getElementById('totalRecords');
+
+            let currentlyFilteredRows = [...allReportData];
+            let currentSortColumn = null;
+            let currentSortDirection = 'none';
+
+            // Genel Filtre Temizleyici (Layout'tan tetiklenir)
+            window.clearReportFilters = function () {
+                $('.filter-input').val('');
+                $('.filter-select-bs').selectpicker('val', '');
+                currentSortColumn = null;
+                currentSortDirection = 'none';
+                document.querySelectorAll('th.sortable-column i').forEach(icon => icon.className = 'fas fa-sort float-end');
+                
+                currentlyFilteredRows = [...allReportData];
+                renderTable(currentlyFilteredRows);
+                if(typeof toastr !== 'undefined') toastr.success('Filtreler temizlendi!');
+            };
+
+            const columnMappings = {
+                'Checkbox': null,
+                'CardCode': 'CardCode',
+                'Tedarikci': 'Tedarikci', 
+                'SatisSorumlusu': 'SatisSorumlusu',
+                'TedarikciGuncelBakiyesi': 'TedarikciGuncelBakiyesi', 
+                'ToplamAcikBorc': 'ToplamAcikBorc', 
+                'VadesiGecmisBorcTutar': 'VadesiGecmisBorcTutar', 
+                'VadesiGelecekBorcTutar': 'VadesiGelecekBorcTutar', 
+                'MutabakattaAcikOdeme': 'MutabakattaAcikOdeme', 
+                'MutabakattaKapanacakOdeme': 'MutabakattaKapanacakOdeme', 
+                'VadesiGecmisAdet': 'VadesiGecmisAdet',
+                'OrtalamaAdat': 'OrtalamaAdat',
+                'OrtalamaOdemeYaslandirma': 'OrtalamaOdemeYaslandirma', 
+                'EnEskiVadeTarihi': 'EnEskiVadeTarihi',
+                'EnEskiFarkGun': 'EnEskiFarkGun',
+                'EnSonSatinAlmaTarihi': 'EnSonSatinAlmaTarihi', 
+                'SonOdemeTarihi': 'SonOdemeTarihi' 
+            };
+
+            function updatePaginationInfo(totalCount) {
+                if (totalRecordsSpan) {
+                    totalRecordsSpan.textContent = totalCount;
+                }
+            }
+
+            function formatDate(dateString) {
+                if (!dateString) return '';
+                const date = new Date(dateString);
+                if (isNaN(date.getTime())) return '';
+                const day = date.getDate().toString().padStart(2, '0');
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                const year = date.getFullYear();
+                return `${day}.${month}.${year}`;
+            }
+
+            function renderTable(data) {
+                tableBody.innerHTML = '';
+                if (data.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="17" class="text-center">Gösterilecek veri bulunamadı.</td></tr>'; 
+                    updatePaginationInfo(0);
+                    return;
+                }
+
+                const frag = document.createDocumentFragment();
+                const visibleHeaders = document.querySelectorAll('#rapor53Table thead .main-header-row th:not([style*="display: none"])');
+
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+
+                    visibleHeaders.forEach((header) => {
+                        const cell = document.createElement('td');
+                        const columnKey = header.dataset.column;
+                        const propName = columnMappings[columnKey];
+                        let value = propName ? item[propName] : null;
+
+                        if (columnKey === 'Checkbox') {
+                            cell.className = 'checkbox-column';
+                            const checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+                            checkbox.className = 'form-check-input row-selector';
+                            checkbox.dataset.tlValue = item.ToplamAcikBorc || 0;
+                            cell.appendChild(checkbox);
+                        } else if (header.dataset.sortType === 'number') {
+                            if (['TedarikciGuncelBakiyesi', 'ToplamAcikBorc', 'VadesiGecmisBorcTutar', 'VadesiGelecekBorcTutar', 'MutabakattaAcikOdeme', 'MutabakattaKapanacakOdeme'].includes(columnKey)) {
+                                cell.textContent = value?.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '0,00';
+                            }
+                            else if (['OrtalamaAdat', 'OrtalamaOdemeYaslandirma'].includes(columnKey)) {
+                                cell.textContent = value?.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '0,00';
+                            }
+                            else {
+                                cell.textContent = value?.toLocaleString('tr-TR') ?? '0';
+                            }
+                            cell.style.textAlign = 'right';
+                        } else if (header.dataset.sortType === 'date') {
+                            cell.textContent = formatDate(value);
+                            cell.style.textAlign = 'center';
+                        } else {
+                            cell.textContent = value || '';
+                        }
+                        row.appendChild(cell);
+                    });
+                    frag.appendChild(row);
+                });
+                tableBody.appendChild(frag);
+                updatePaginationInfo(data.length);
+                calculateSelectedTotal();
+                updateSelectAllCheckboxState();
+            }
+
+            function filterTableAndRender() {
+                const filters = {};
+                const filterInputs = document.querySelectorAll('.filter-input');
+                const filterSelects = $('.filter-select-bs');
+
+                filterSelects.each(function () {
+                    const selectElement = $(this);
+                    const columnKey = selectElement.closest('th').data('column');
+                    const selectedValues = selectElement.val();
+                    if (selectedValues && selectedValues.length > 0) {
+                        filters[columnKey] = selectedValues.map(v => (v || '').toLowerCase().trim());
+                    }
+                });
+
+                filterInputs.forEach(input => {
+                    const columnKey = input.closest('th').dataset.column;
+                    const inputValue = input.value.toLowerCase().trim();
+                    if (inputValue) {
+                        filters[columnKey] = [inputValue];
+                    }
+                });
+
+                let filteredData = allReportData.filter(item => {
+                    let isMatch = true;
+                    for (const column in filters) {
+                        const filterValues = filters[column];
+                        const propName = columnMappings[column];
+                        let itemValue = item[propName];
+
+                        if (itemValue === null || itemValue === undefined) {
+                            itemValue = '';
+                        }
+
+                        const inputElement = document.querySelector(`.filter-row th[data-column="${column}"] .filter-input`);
+                        const isNumericFilter = inputElement && inputElement.classList.contains('number-filter');
+                        const isDateFilter = inputElement && inputElement.classList.contains('date-filter');
+
+                        if (!isNumericFilter && !isDateFilter) {
+                             const isMatchFound = filterValues.some(filterVal =>
+                                 itemValue.toString().toLowerCase().includes(filterVal)
+                             );
+                            if (!isMatchFound) {
+                                isMatch = false;
+                                break;
+                            }
+                        }
+                        else if (isDateFilter) {
+                            const formattedDate = formatDate(itemValue).toLowerCase();
+                            const filterValue = filterValues[0];
+                            if (!formattedDate.includes(filterValue)) {
+                                isMatch = false;
+                                break;
+                            }
+                        }
+                        else if (isNumericFilter) {
+                            const filterValue = filterValues[0];
+                            const numericFilterValue = parseFloat(filterValue.replace(/\./g, '').replace(',', '.'));
+                            const itemNumericValue = parseFloat(itemValue.toString().replace(',', '.'));
+
+                            if (isNaN(numericFilterValue)) {
+                                if (filterValue !== "") {
+                                    if (!itemValue.toString().toLowerCase().includes(filterValue)) {
+                                        isMatch = false;
+                                        break;
+                                    }
+                                }
+                            } else {
+                                if (Math.round(itemNumericValue * 100) !== Math.round(numericFilterValue * 100)) {
+                                    isMatch = false;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    return isMatch;
+                });
+
+                if (currentSortColumn && currentSortDirection !== 'none') {
+                    const sortType = document.querySelector(`th[data-column="${currentSortColumn}"]`)?.dataset.sortType;
+                    const propName = columnMappings[currentSortColumn];
+                    filteredData.sort((itemA, itemB) => {
+                        let valA = itemA[propName];
+                        let valB = itemB[propName];
+
+                        let comparison = 0;
+                        if (sortType === 'number') {
+                            valA = parseFloat(valA?.toString().replace(',', '.')) || 0;
+                            valB = parseFloat(valB?.toString().replace(',', '.')) || 0;
+                            comparison = valA - valB;
+                        } else if (sortType === 'date') {
+                            const dateA = valA ? new Date(valA) : new Date(0);
+                            const dateB = valB ? new Date(valB) : new Date(0);
+                            comparison = dateA.getTime() - dateB.getTime();
+                        }
+                         else {
+                            comparison = (valA || '').localeCompare((valB || ''), 'tr', { sensitivity: 'base' });
+                        }
+                        return currentSortDirection === 'asc' ? comparison : -comparison;
+                    });
+                }
+
+                currentlyFilteredRows = filteredData;
+                renderTable(currentlyFilteredRows);
+            }
+
+            function updateSelectAllCheckboxState() {
+                if (!selectAllCheckbox) return;
+                const visibleCheckboxes = document.querySelectorAll('#rapor53Table tbody tr input.row-selector');
+                if (visibleCheckboxes.length > 0) {
+                    const allChecked = Array.from(visibleCheckboxes).every(checkbox => checkbox.checked);
+                    const anyChecked = Array.from(visibleCheckboxes).some(checkbox => checkbox.checked);
+
+                    selectAllCheckbox.checked = allChecked;
+                    selectAllCheckbox.indeterminate = !allChecked && anyChecked;
+                } else {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = false;
+                }
+            }
+
+            function calculateSelectedTotal() {
+                let totalAmount = 0;
+                document.querySelectorAll('#rapor53Table tbody tr input.row-selector:checked').forEach(checkbox => {
+                    const tlValue = parseFloat(checkbox.dataset.tlValue);
+                    if (!isNaN(tlValue)) {
+                        totalAmount += tlValue;
+                    }
+                });
+                totalSelectedTlAmountSpan.textContent = totalAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL';
+            }
+
+            selectAllCheckbox.addEventListener('change', function () {
+                const isChecked = this.checked;
+                document.querySelectorAll('#rapor53Table tbody tr input.row-selector').forEach(checkbox => {
+                    checkbox.checked = isChecked;
+                });
+                calculateSelectedTotal();
+            });
+
+            tableBody.addEventListener('change', function (event) {
+                if (event.target.classList.contains('row-selector')) {
+                    calculateSelectedTotal();
+                    updateSelectAllCheckboxState();
+                }
+            });
+
+
+            function initializePage() {
+                $('.filter-select-bs').selectpicker({
+                    liveSearch: true,
+                    actionsBox: true,
+                    selectedTextFormat: 'count > 2',
+                    width: '100%',
+                    container: 'body'
+                }).on('changed.bs.select', function () {
+                    filterTableAndRender();
+                });
+
+                document.querySelectorAll('.filter-input').forEach(input => {
+                    if (input.classList.contains('number-filter') || input.classList.contains('date-filter')) {
+                             input.addEventListener('keyup', (e) => {
+                                 if (e.key === 'Enter') {
+                                     filterTableAndRender();
+                                 }
+                             });
+                    }
+                    else {
+                        input.addEventListener('keyup', () => filterTableAndRender());
+                    }
+                });
+
+                document.querySelectorAll('th.sortable-column').forEach(header => {
+                    header.addEventListener('click', function () {
+                        if (this.style.display === 'none' || this.classList.contains('no-sort')) { return; }
+
+                        const columnKey = this.dataset.column;
+                        let newSortDirection;
+
+                        if (currentSortColumn === columnKey) {
+                            if (currentSortDirection === 'asc') {
+                                newSortDirection = 'desc';
+                            } else if (currentSortDirection === 'desc') {
+                                newSortDirection = 'none';
+                            } else {
+                                newSortDirection = 'asc';
+                            }
+                        } else {
+                            if (currentSortColumn !== null) {
+                                const prevHeader = document.querySelector(`th.sortable-column[data-column="${currentSortColumn}"] i`);
+                                if (prevHeader) {
+                                    prevHeader.className = 'fas fa-sort float-end';
+                                }
+                            }
+                            newSortDirection = 'asc';
+                            currentSortColumn = columnKey;
+                        }
+
+                        currentSortDirection = newSortDirection;
+
+                        document.querySelectorAll('th.sortable-column i').forEach(icon => icon.className = 'fas fa-sort float-end');
+                        const sortIcon = this.querySelector('i');
+                        if (sortIcon && currentSortDirection !== 'none') {
+                            sortIcon.className = `fas fa-sort-${currentSortDirection === 'asc' ? 'up' : 'down'} float-end`;
+                        } else if (sortIcon && currentSortDirection === 'none') {
+                            sortIcon.className = 'fas fa-sort float-end';
+                        }
+
+                        filterTableAndRender();
+                    });
+                });
+
+                renderTable(allReportData);
+            }
+
+            function showAlert(message, type) {
+                if(typeof toastr !== 'undefined'){
+                    if(type === 'success') toastr.success(message);
+                    else toastr.error(message);
+                } else {
+                    alert(message);
+                }
+            }
+
+            window.addEventListener('columnConfigUpdated', () => {
+                renderTable(currentlyFilteredRows);
+                $('.filter-select-bs').selectpicker('refresh');
+            });
+
+            initializePage();
+        });
+    </script>
+}

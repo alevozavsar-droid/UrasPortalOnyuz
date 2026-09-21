@@ -1,0 +1,355 @@
+﻿@{
+    ViewData["Title"] = "Kur Farkı";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var currentDbDisplay = (string)ViewBag.CurrentDbDisplay;
+    var islemTipleri = (List<string>)ViewBag.IslemTipleri ?? new List<string>();
+    var paraBirimleri = (List<string>)ViewBag.ParaBirimleri ?? new List<string>();
+}
+
+@section Styles {
+    <style>
+        :root { --kf-bg:#f1f5f9; --kf-card:#fff; --kf-border:#e2e8f0; --kf-accent:#f59e0b; --kf-blue:#2563eb; }
+        #kfWrap { background:var(--kf-bg); min-height:calc(100vh - 60px); }
+        .kf-card { background:var(--kf-card); border:1px solid var(--kf-border); border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+        .kf-card-h { padding:.7rem 1rem; border-bottom:1px solid var(--kf-border); font-weight:700; color:#0f172a; font-size:.92rem; display:flex; align-items:center; gap:.5rem; }
+        .kf-card-b { padding:1rem; }
+        .kf-label { font-weight:600; color:#64748b; font-size:.72rem; text-transform:uppercase; letter-spacing:.02em; margin-bottom:.3rem; }
+        .kf-satir { padding:7px 10px; border-bottom:1px solid #f1f5f9; cursor:pointer; font-size:12.5px; display:flex; justify-content:space-between; gap:8px; }
+        .kf-satir:hover { background:#eff6ff; }
+        .kf-tablo { width:100%; border-collapse:collapse; }
+        .kf-tablo th { background:#f8fafc; color:#64748b; font-size:.68rem; font-weight:700; text-transform:uppercase; padding:7px 8px; border-bottom:2px solid var(--kf-border); position:sticky; top:0; }
+        .kf-tablo td { padding:6px 8px; border-bottom:1px solid #f1f5f9; font-size:12.5px; }
+        .kf-tablo tfoot th { padding:8px; border-top:2px solid var(--kf-border); font-size:12.5px; }
+        .num { text-align:right; font-variant-numeric:tabular-nums; }
+        .fark-kar { color:#15803d; font-weight:700; } .fark-zarar { color:#b91c1c; font-weight:700; }
+        .kf-chip { display:inline-flex; align-items:center; gap:6px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:20px; padding:4px 12px; margin:3px; font-size:12px; }
+        .kf-chip .x { cursor:pointer; color:#b91c1c; font-weight:800; }
+        /* Checkbox chip grubu (işlem tipi çoklu seçim) */
+        .kf-cbx-grup { display:flex; flex-wrap:wrap; gap:6px; }
+        .kf-cbx { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--kf-border); background:#fff; border-radius:20px; padding:5px 12px; font-size:12.5px; cursor:pointer; user-select:none; transition:.12s; }
+        .kf-cbx:hover { border-color:var(--kf-blue); }
+        .kf-cbx input { display:none; }
+        .kf-cbx.secili { background:var(--kf-blue); border-color:var(--kf-blue); color:#fff; font-weight:600; }
+        .kf-btn-x { border:none; background:none; }
+    </style>
+}
+
+<div id="kfWrap" class="py-4">
+<div class="container-fluid">
+    <div class="d-flex align-items-center mb-3 flex-wrap gap-2">
+        <h4 class="mb-0 fw-bold text-dark"><i class="fas fa-scale-balanced text-warning me-2"></i>Kur Farkı (Döviz Değerleme)</h4>
+        <span class="badge bg-dark fs-6 px-3 py-2">@currentDbDisplay</span>
+    </div>
+
+    <div class="row g-3">
+        <!-- SOL: Seçim -->
+        <div class="col-xl-5">
+            <div class="kf-card mb-3">
+                <div class="kf-card-h"><i class="fas fa-list-check text-primary"></i>1) Hesap / Cari Seç (çoklu, karışık)</div>
+                <div class="kf-card-b">
+                    <div class="row g-2">
+                        <div class="col-5">
+                            <label class="kf-label">Tür</label>
+                            <select id="kfTip" class="form-select form-select-sm">
+                                <option value="cari">Cari</option>
+                                <option value="hesap">Hesap</option>
+                            </select>
+                        </div>
+                        <div class="col-7">
+                            <label class="kf-label">Para Birimi (## ise)</label>
+                            <select id="kfParaBirimi" class="form-select form-select-sm">
+                                <option value="">Otomatik</option>
+                                @foreach (var p in paraBirimleri) { <option value="@p">@p</option> }
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <input type="text" id="kfAra" class="form-control form-control-sm" placeholder="Kod veya ad ile ara, tıkla = ekle..." autocomplete="off" />
+                            <div id="kfListe" style="max-height:190px; overflow:auto; border:1px solid var(--kf-border); border-radius:10px; margin-top:6px;">
+                                <div class="text-muted text-center py-3" style="font-size:12.5px;">Aramak için yazın.</div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <button type="button" class="btn btn-outline-primary btn-sm w-100 fw-bold" id="kfGetir">
+                                <i class="fas fa-magnifying-glass-dollar me-1"></i>Seçili Para Biriminde Kur Farkı Olan Hesap/Carileri Getir
+                            </button>
+                            <div class="small text-muted mt-1">Üstten para birimi seçip bu butona bas; çıkan listeden tümünü ya da bir kısmını seç.</div>
+                        </div>
+                        <div class="col-12">
+                            <label class="kf-label">Seçilenler (<span id="kfItSayi">0</span>)</label>
+                            <div id="kfItList" class="border rounded p-2 bg-light" style="min-height:52px;">
+                                <span class="text-muted small">Henüz seçim yok.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SAĞ: Süzgeç + fiş bilgileri -->
+        <div class="col-xl-7">
+            <div class="kf-card mb-3">
+                <div class="kf-card-h"><i class="fas fa-filter text-primary"></i>2) Süzgeç ve Fiş Bilgileri</div>
+                <div class="kf-card-b">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="kf-label">Süzgeç İşlem Tipi — tıklayarak birden fazla seç (boş = hepsi)</label>
+                            <div id="kfItTipleri" class="kf-cbx-grup">
+                                @if (islemTipleri.Any())
+                                {
+                                    foreach (var t in islemTipleri)
+                                    {
+                                        <label class="kf-cbx"><input type="checkbox" value="@t" /><span>@t</span></label>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Tanımlı işlem tipi yok.</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="kf-label">Başlangıç</label>
+                            <input type="date" id="kfBas" class="form-control form-control-sm" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="kf-label">Bitiş</label>
+                            <input type="date" id="kfBit" class="form-control form-control-sm" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="kf-label">Fiş / Kur Tarihi</label>
+                            <input type="date" id="kfFisTarih" class="form-control form-control-sm" />
+                            <div id="kfKurBilgi" class="small mt-1 fw-bold text-success" style="min-height:18px;"></div>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end pb-1">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="kfDevir" checked />
+                                <label class="form-check-label small" for="kfDevir">Devir dahil</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="kf-label">Fişin İşlem Kodu</label>
+                            <input type="text" class="form-control form-control-sm bg-light" value="KR — Kur Farkı" readonly />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="kf-label">Fişin İşlem Tipi (U_BE1_AKTAR)</label>
+                            <select id="kfFisIslemTipi" class="form-select form-select-sm">
+                                <option value="">(boş)</option>
+                                @foreach (var t in islemTipleri) { <option value="@t">@t</option> }
+                            </select>
+                        </div>
+                        <div class="col-12 d-flex gap-2 pt-1">
+                            <button type="button" class="btn btn-primary btn-sm px-4 fw-bold" id="kfOnizle"><i class="fas fa-calculator me-1"></i>Önizle</button>
+                            <button type="button" class="btn btn-warning btn-sm px-4 fw-bold" id="kfFisKes" disabled><i class="fas fa-check me-1"></i>Fişi Kes</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ALT: Önizleme tam genişlik -->
+        <div class="col-12">
+            <div class="kf-card">
+                <div class="kf-card-h"><i class="fas fa-eye text-warning"></i>3) Önizleme — Atılacak Yevmiye (sadece TL, işlem kodu KR)</div>
+                <div class="kf-card-b">
+                    <div id="kfKalemOzet" class="table-responsive mb-3"></div>
+                    <div class="table-responsive" style="max-height:340px; overflow:auto;">
+                        <table class="kf-tablo">
+                            <thead><tr><th>Hesap/Cari</th><th>Tür</th><th class="num">Borç (TL)</th><th class="num">Alacak (TL)</th><th>Açıklama</th></tr></thead>
+                            <tbody id="kfSatirlar"><tr><td colspan="5" class="text-muted text-center py-4">Seçim yapıp "Önizle" deyin.</td></tr></tbody>
+                            <tfoot id="kfToplam"></tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<div class="modal fade" id="kfBulkModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="fas fa-magnifying-glass-dollar me-2"></i>Kur Farkı Olan Hesap/Cariler — <span id="kfBulkPB"></span></h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div class="table-responsive" style="max-height:60vh; overflow:auto;">
+          <table class="kf-tablo">
+            <thead><tr>
+              <th style="width:38px;"><input type="checkbox" id="kfBulkAll" title="Tümünü seç" /></th>
+              <th>Kod</th><th>Ad</th><th>Tür</th><th class="num">Döviz</th><th class="num">TL Bakiye</th><th class="num">Kur</th><th class="num">Fark</th><th>Yön</th>
+            </tr></thead>
+            <tbody id="kfBulkBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer bg-light">
+        <span class="me-auto small text-muted"><span id="kfBulkSayi">0</span> kalem · <b id="kfBulkSecili">0</b> seçili</span>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+        <button type="button" class="btn btn-primary fw-bold" id="kfBulkEkle"><i class="fas fa-plus me-1"></i>Seçilenleri Listeye Ekle</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="kfOverlay" style="display:none; position:fixed; inset:0; background:rgba(255,255,255,.7); z-index:9999; align-items:center; justify-content:center;">
+    <div class="spinner-border text-warning" style="width:3rem;height:3rem;"></div>
+</div>
+
+@section Scripts {
+<script>
+    const bicim = v => (v==null?'':Number(v).toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}));
+    const kacir = m => { const d=document.createElement('div'); d.textContent=m==null?'':m; return d.innerHTML; };
+    let kfListe = [];
+    let kfItems = [];   // seçilenler: {tip, kod, ad, pb}
+
+    const bugun = new Date().toISOString().substring(0,10);
+    $('#kfBit').val(bugun); $('#kfFisTarih').val(bugun);
+    (function(){ const d=new Date(); d.setMonth(0,1); $('#kfBas').val(d.toISOString().substring(0,10)); })();
+
+    // Tarih/para birimi değişince: seçilen tarihe göre TCMB döviz alış kurunu tarihin yanında göster.
+    let kurZaman=null;
+    function kurGuncelle(){
+        const pb=($('#kfParaBirimi').val()||'').trim();
+        const tar=$('#kfFisTarih').val();
+        const kutu=$('#kfKurBilgi');
+        if(!tar){ kutu.text('').removeClass('text-danger text-success'); return; }
+        if(!pb || pb==='##' || pb==='TRY' || pb==='TL'){ kutu.removeClass('text-danger').addClass('text-success').html('<span class="text-muted fw-normal">Kur için para birimi seçin.</span>'); return; }
+        kutu.removeClass('text-danger').addClass('text-success').html('<span class="text-muted fw-normal">Kur alınıyor…</span>');
+        $.get('/Rapor160/TcmbKuru',{paraBirimi:pb, tarih:tar}, function(res){
+            if(res && res.success){
+                const k=Number(res.kur).toLocaleString('tr-TR',{minimumFractionDigits:4,maximumFractionDigits:4});
+                let et='1 '+pb+' = '+k+' ₺';
+                if(res.kurTarih && res.kurTarih!==tar) et+=' <span class="text-muted fw-normal">('+res.kurTarih+' kuru)</span>';
+                kutu.removeClass('text-danger').addClass('text-success').html('<i class="fas fa-money-bill-wave me-1"></i>'+et);
+            } else {
+                kutu.removeClass('text-success').addClass('text-danger').text((res && res.message) || 'Kur bulunamadı.');
+            }
+        }).fail(()=>kutu.removeClass('text-success').addClass('text-danger').text('Kur alınamadı.'));
+    }
+    $('#kfFisTarih, #kfParaBirimi').on('change', function(){ clearTimeout(kurZaman); kurZaman=setTimeout(kurGuncelle,150); });
+    kurGuncelle();
+
+    // İşlem tipi checkbox chip: tıkla = seç/kaldır
+    $(document).on('change','#kfItTipleri input[type=checkbox]', function(){
+        $(this).closest('.kf-cbx').toggleClass('secili', this.checked);
+    });
+    function secilenItTipleri(){
+        return $('#kfItTipleri input[type=checkbox]:checked').map(function(){ return this.value; }).get();
+    }
+
+    let araZaman=null;
+    $('#kfAra, #kfTip').on('input change', function(){ clearTimeout(araZaman); araZaman=setTimeout(araYap,300); });
+    function araYap(){
+        const q=$('#kfAra').val()||'';
+        $.get('/Rapor160/Ara',{tip:$('#kfTip').val(), q:q}, function(res){
+            if(!res.success){ $('#kfListe').html('<div class="text-danger p-2">'+kacir(res.message)+'</div>'); return; }
+            kfListe=res.liste||[];
+            if(!kfListe.length){ $('#kfListe').html('<div class="text-muted text-center py-3" style="font-size:12.5px;">Kayıt yok.</div>'); return; }
+            $('#kfListe').html(kfListe.map((x,i)=>`<div class="kf-satir" data-i="${i}"><span><b>${kacir(x.kod)}</b> · ${kacir(x.ad)}</span><span class="badge bg-light text-dark">${kacir(x.pb)}</span></div>`).join(''));
+        }).fail(()=>$('#kfListe').html('<div class="text-danger p-2">Sunucu hatası.</div>'));
+    }
+    $(document).on('click','#kfListe .kf-satir',function(){
+        const x = kfListe[$(this).data('i')]; if(!x) return;
+        const tip = $('#kfTip').val();
+        if(kfItems.some(k=>k.tip===tip && k.kod===x.kod)){ toastr.info('Zaten seçili.'); return; }
+        kfItems.push({tip:tip, kod:x.kod, ad:x.ad, pb:x.pb});
+        itemleriCiz();
+    });
+    function itemleriCiz(){
+        $('#kfItSayi').text(kfItems.length);
+        if(!kfItems.length){ $('#kfItList').html('<span class="text-muted small">Henüz seçim yok.</span>'); return; }
+        $('#kfItList').html(kfItems.map((k,i)=>`<span class="kf-chip">${k.tip==='cari'?'<i class="fas fa-user text-primary"></i>':'<i class="fas fa-book text-secondary"></i>'} <b>${kacir(k.kod)}</b> <span class="text-muted">${kacir(k.pb||'')}</span> <span class="x" data-i="${i}">✕</span></span>`).join(''));
+    }
+    $(document).on('click','#kfItList .x',function(){ kfItems.splice($(this).data('i'),1); itemleriCiz(); $('#kfFisKes').prop('disabled',true); });
+
+    function istekYap(){
+        return {
+            Kalemler: kfItems.map(k=>({ Tip:k.tip, Kod:k.kod, ParaBirimi:$('#kfParaBirimi').val()||k.pb })),
+            Bas:$('#kfBas').val(), Bit:$('#kfBit').val(), FisTarihi:$('#kfFisTarih').val(),
+            IslemTipleri:secilenItTipleri(), FisIslemTipi:$('#kfFisIslemTipi').val(),
+            DevirDahil:$('#kfDevir').is(':checked'), ParaBirimi:$('#kfParaBirimi').val()
+        };
+    }
+
+    $('#kfOnizle').click(function(){
+        if(!kfItems.length){ toastr.warning('En az bir hesap/cari seçin.'); return; }
+        $('#kfOverlay').css('display','flex'); $('#kfFisKes').prop('disabled',true);
+        $.ajax({url:'/Rapor160/Onizleme', type:'POST', contentType:'application/json', data:JSON.stringify(istekYap()),
+            success:function(res){
+                $('#kfOverlay').hide();
+                if(!res.success){ $('#kfSatirlar').html('<tr><td colspan="5" class="text-danger p-2">'+kacir(res.message)+'</td></tr>'); $('#kfToplam').html(''); $('#kfKalemOzet').html(''); return; }
+                $('#kfKalemOzet').html('<table class="kf-tablo"><thead><tr><th>Kod</th><th>PB</th><th class="num">Döviz</th><th class="num">TL Bakiye</th><th class="num">Kur</th><th class="num">Değerlenmiş TL</th><th class="num">Fark</th><th>Yön</th></tr></thead><tbody>'
+                    + res.kalemler.map(k=>`<tr><td><b>${kacir(k.kod)}</b></td><td>${kacir(k.paraBirimi)}</td><td class="num">${bicim(k.doviz)}</td><td class="num">${bicim(k.tlBakiye)}</td><td class="num">${Number(k.kur).toLocaleString('tr-TR',{minimumFractionDigits:4,maximumFractionDigits:4})}</td><td class="num">${bicim(k.hedefTL)}</td><td class="num ${k.fark>0?'fark-kar':'fark-zarar'}">${bicim(k.fark)}</td><td>${kacir(k.yon)}</td></tr>`).join('')
+                    + '</tbody></table>');
+                $('#kfSatirlar').html(res.satirlar.map(x=>`<tr><td><b>${kacir(x.hesap)}</b></td><td>${kacir(x.tur)}</td><td class="num">${x.borc?bicim(x.borc):''}</td><td class="num">${x.alacak?bicim(x.alacak):''}</td><td>${kacir(x.aciklama)}</td></tr>`).join(''));
+                $('#kfToplam').html(`<tr><th colspan="2" class="text-end">TOPLAM</th><th class="num">${bicim(res.toplamBorc)}</th><th class="num">${bicim(res.toplamAlacak)}</th><th></th></tr>`);
+                if(res.uyarilar && res.uyarilar.length) toastr.warning(res.uyarilar.length+' kalem atlandı.');
+                $('#kfFisKes').prop('disabled', false);
+            },
+            error:function(x){ $('#kfOverlay').hide(); toastr.error('Önizleme hatası ('+x.status+').'); }
+        });
+    });
+
+    $('#kfFisKes').click(function(){
+        if(!kfItems.length){ return; }
+        if(!confirm('Önizlenen kur farkı yevmiyesi SAP\'ye kesilecek (sadece TL, işlem kodu KR). Devam?')) return;
+        $('#kfOverlay').css('display','flex');
+        $.ajax({url:'/Rapor160/KurFarkiYevmiyesi', type:'POST', contentType:'application/json', data:JSON.stringify(istekYap()),
+            success:function(res){
+                $('#kfOverlay').hide();
+                if(!res.success){ Swal.fire({title:'Fiş kesilemedi', html:kacir(res.message).replace(/\n/g,'<br>'), icon:'error'}); return; }
+                Swal.fire({title:'Tamam', html:kacir(res.message).replace(/\n/g,'<br>'), icon:'success'}).then(()=>{ $('#kfOnizle').click(); });
+            },
+            error:function(x){ $('#kfOverlay').hide(); Swal.fire('Sunucu Hatası ('+x.status+')', (x.responseText||'').substring(0,400), 'error'); }
+        });
+    });
+
+    // ===== Toplu: kur farkı olan hesap/carileri getir =====
+    let kfBulk = [];
+    $('#kfGetir').click(function(){
+        const pb = $('#kfParaBirimi').val();
+        if(!pb){ toastr.warning('Önce üstten bir para birimi seçin (USD/EUR...).'); return; }
+        $('#kfOverlay').css('display','flex');
+        $.ajax({url:'/Rapor160/KurFarkiOlanlar', type:'POST', contentType:'application/json', data:JSON.stringify(istekYap()),
+            success:function(res){
+                $('#kfOverlay').hide();
+                if(!res.success){ toastr.error(res.message, '', {timeOut:8000}); return; }
+                kfBulk = res.liste || [];
+                $('#kfBulkPB').text(res.paraBirimi+' · kur '+Number(res.kur).toLocaleString('tr-TR',{minimumFractionDigits:4})+' ('+res.kurTarih+')');
+                $('#kfBulkSayi').text(kfBulk.length); $('#kfBulkSecili').text('0'); $('#kfBulkAll').prop('checked',false);
+                if(!kfBulk.length){ $('#kfBulkBody').html('<tr><td colspan="9" class="text-center text-muted py-4">Bu para biriminde kur farkı olan hesap/cari yok.</td></tr>'); }
+                else {
+                    $('#kfBulkBody').html(kfBulk.map((x,i)=>`<tr>
+                        <td><input type="checkbox" class="kfBulkCbx" data-i="${i}"></td>
+                        <td><b>${kacir(x.kod)}</b></td><td class="text-truncate" style="max-width:260px">${kacir(x.ad)}</td>
+                        <td>${x.tip==='cari'?'Cari':'Hesap'}</td>
+                        <td class="num">${bicim(x.doviz)}</td><td class="num">${bicim(x.tlBakiye)}</td>
+                        <td class="num">${Number(x.kur).toLocaleString('tr-TR',{minimumFractionDigits:4,maximumFractionDigits:4})}</td>
+                        <td class="num ${x.fark>0?'fark-kar':'fark-zarar'}">${bicim(x.fark)}</td><td>${kacir(x.yon)}</td></tr>`).join(''));
+                }
+                new bootstrap.Modal(document.getElementById('kfBulkModal')).show();
+            },
+            error:function(x){ $('#kfOverlay').hide(); toastr.error('Getirme hatası ('+x.status+').'); }
+        });
+    });
+    $(document).on('change','#kfBulkAll',function(){ $('.kfBulkCbx').prop('checked', this.checked); kfBulkSayac(); });
+    $(document).on('change','.kfBulkCbx', kfBulkSayac);
+    function kfBulkSayac(){ $('#kfBulkSecili').text($('.kfBulkCbx:checked').length); }
+    $('#kfBulkEkle').click(function(){
+        let eklenen=0;
+        $('.kfBulkCbx:checked').each(function(){
+            const x=kfBulk[$(this).data('i')]; if(!x) return;
+            if(kfItems.some(k=>k.tip===x.tip && k.kod===x.kod)) return;
+            kfItems.push({tip:x.tip, kod:x.kod, ad:x.ad, pb:x.paraBirimi}); eklenen++;
+        });
+        itemleriCiz();
+        bootstrap.Modal.getInstance(document.getElementById('kfBulkModal')).hide();
+        if(eklenen){ toastr.success(eklenen+' kalem listeye eklendi. "Önizle" ile kontrol edip fiş kesebilirsiniz.'); }
+        else toastr.info('Yeni kalem eklenmedi.');
+    });
+
+    araYap();
+</script>
+}

@@ -1,0 +1,2002 @@
+﻿@model List<WebApplication3.Models.Rapor2ViewModel>
+@using WebApplication3.Models
+@using System.Globalization;
+@using Newtonsoft.Json;
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Xsrf
+
+@{
+    ViewData["Title"] = "Çek Akıbeti Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // 1. KURAL: URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"] ?? "";
+    }
+
+    var checkTransactionTypes = (List<CheckTransactionType>)ViewBag.CheckTransactionTypes ?? new List<CheckTransactionType>();
+
+    // Kullanım Durumu için sabit seçenekler
+    var kullanumDurumuOptions = new List<string> {
+        "Portföyde", "Planlandı", "Çıkışı Yapıldı", "Tahsil Edildi",
+        "Karşılıksız (Resmi)", "Protestolu (Resmi)", "Riskli (Konkordato)", "Kapandı (İade/İptal)"
+    };
+
+    var reportDataJson = Model != null ? JsonConvert.SerializeObject(Model, new JsonSerializerSettings { DateFormatString = "yyyy-MM-dd" }) : "[]";
+    var checkTransactionTypesJson = JsonConvert.SerializeObject(checkTransactionTypes);
+
+    var distinctCekNumarasiList = Model?.Where(m => !string.IsNullOrEmpty(m.CekNumarasi)).Select(m => m.CekNumarasi).Distinct().OrderBy(s => s).ToList();
+    var distinctBankaAdiList = Model?.Where(m => !string.IsNullOrEmpty(m.BankaAdi)).Select(m => m.BankaAdi).Distinct().OrderBy(s => s).ToList();
+    var distinctSubeList = Model?.Where(m => !string.IsNullOrEmpty(m.Sube)).Select(m => m.Sube).Distinct().OrderBy(s => s).ToList();
+    var distinctCekKimdenGeldiList = Model?.Where(m => !string.IsNullOrEmpty(m.CekKimdenGeldi)).Select(m => m.CekKimdenGeldi).Distinct().OrderBy(s => s).ToList();
+    var distinctAsilBorcluList = Model?.Where(m => !string.IsNullOrEmpty(m.AsilBorclu)).Select(m => m.AsilBorclu).Distinct().OrderBy(s => s).ToList();
+    var distinctTutarList = Model?.Where(m => m.Tutar.HasValue).Select(m => m.Tutar.Value).Distinct().OrderBy(v => v).Select(v => v.ToString("N2", new CultureInfo("tr-TR"))).ToList();
+    var distinctParaBirimiList = Model?.Where(m => !string.IsNullOrEmpty(m.ParaBirimi)).Select(m => m.ParaBirimi).Distinct().OrderBy(s => s).ToList();
+    var distinctVadeTarihiList = Model?.Where(m => m.VadeTarihi.HasValue).Select(m => m.VadeTarihi.Value.ToString("dd.MM.yyyy")).Distinct().OrderBy(s => DateTime.Parse(s, new CultureInfo("tr-TR"))).ToList();
+    var distinctVadeAyiVeYiliList = Model?.Where(m => !string.IsNullOrEmpty(m.VadeAyiVeYili)).Select(m => m.VadeAyiVeYili).Distinct().OrderBy(s => s).ToList();
+    var distinctPortfoyVadeAyiYiliList = Model?.Where(m => !string.IsNullOrEmpty(m.PortfoyVadeAyiYili)).Select(m => m.PortfoyVadeAyiYili).Distinct().OrderBy(s => s).ToList();
+    var distinctPortfoyeGirisTarihiList = Model?.Where(m => m.PortfoyeGirisTarihi.HasValue).Select(m => m.PortfoyeGirisTarihi.Value.ToString("dd.MM.yyyy")).Distinct().OrderBy(s => DateTime.Parse(s, new CultureInfo("tr-TR"))).ToList();
+    var distinctIbrazTarihiList = Model?.Where(m => m.IbrazTarihi.HasValue).Select(m => m.IbrazTarihi.Value.ToString("dd.MM.yyyy")).Distinct().OrderBy(s => DateTime.Parse(s, new CultureInfo("tr-TR"))).ToList();
+    var distinctTahsilatBelgeNoList = Model?.Where(m => !string.IsNullOrEmpty(m.TahsilatBelgeNo)).Select(m => m.TahsilatBelgeNo).Distinct().OrderBy(s => s).ToList();
+    var distinctIbrazBelgeNoList = Model?.Where(m => !string.IsNullOrEmpty(m.IbrazBelgeNo)).Select(m => m.IbrazBelgeNo).Distinct().OrderBy(s => s).ToList();
+    var distinctHareketDurumuList = Model?.Where(m => !string.IsNullOrEmpty(m.HareketDurumu)).Select(m => m.HareketDurumu).Distinct().OrderBy(s => s).ToList();
+    var distinctBelgeTipiList = Model?.Where(m => !string.IsNullOrEmpty(m.BelgeTipi)).Select(m => m.BelgeTipi).Distinct().OrderBy(s => s).ToList();
+    var distinctCekIslemTuruList = Model?.Where(m => !string.IsNullOrEmpty(m.CekIslemTuru)).Select(m => m.CekIslemTuru).Distinct().OrderBy(s => s).ToList();
+    var distinctIslemTipiAdiList = Model?.Where(m => !string.IsNullOrEmpty(m.IslemTipiAdi)).Select(m => m.IslemTipiAdi).Distinct().OrderBy(s => s).ToList();
+    var distinctPlanlananTedarikciList = Model?.Where(m => !string.IsNullOrEmpty(m.PlanlananTedarikci)).Select(m => m.PlanlananTedarikci).Distinct().OrderBy(s => s).ToList();
+    var distinctCekKimeVerildiList = Model?.Where(m => !string.IsNullOrEmpty(m.CekKimeVerildi)).Select(m => m.CekKimeVerildi).Distinct().OrderBy(s => s).ToList();
+    var distinctTlKarsiligiList = Model?.Where(m => m.TlKarsiligi.HasValue).Select(m => m.TlKarsiligi.Value).Distinct().OrderBy(v => v).Select(v => v.ToString("N2", new CultureInfo("tr-TR"))).ToList();
+    var distinctSirketAdiList = Model?.Where(m => !string.IsNullOrEmpty(m.SirketAdi)).Select(m => m.SirketAdi).Distinct().OrderBy(s => s).ToList();
+    var distinctCekBankaAdiList = Model?.Where(m => !string.IsNullOrEmpty(m.CekBankaAdi)).Select(m => m.CekBankaAdi).Distinct().OrderBy(s => s).ToList();
+
+    var checkTransactionTypesForFilter = checkTransactionTypes.OrderBy(t => t.Description).ToList();
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --info-color: #17a2b8;
+            --light-bg: #f8f9fa;
+            --white-bg: #ffffff;
+            --border-color: #e0e0e0;
+            --text-color: #333;
+            --header-bg: #e9ecef;
+            --shadow-light: 0 2px 8px rgba(0,0,0,0.05);
+            --shadow-medium: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        body {
+            background-color: var(--light-bg);
+            font-family: 'Poppins', sans-serif;
+            line-height: 1.5;
+            font-size: 0.8rem;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container.mt-4 {
+            max-width: 100%;
+            padding: 0 15px;
+            margin-top: 0 !important;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 0.4rem;
+            font-size: 1.2rem;
+        }
+
+        .form-group.row {
+            display: none;
+        }
+
+        .form-group label {
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 0;
+            padding-right: 8px;
+            font-size: 0.8rem;
+        }
+
+        .form-group .col-sm-4 {
+            flex-grow: 1;
+            min-width: 150px;
+        }
+
+        select,
+        .filter-input,
+        .check-transaction-select,
+        .multi-select-button,
+        .planned-supplier-input {
+            width: 100%;
+            height: 30px;
+            padding: 4px 8px;
+            font-size: 0.8rem;
+            line-height: 1.5;
+            box-sizing: border-box;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: var(--white-bg);
+            transition: all 0.2s ease-in-out;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%236c757d' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.5rem center;
+            background-size: 12px 9px;
+        }
+
+            select:focus,
+            .filter-input:focus,
+            .check-transaction-select:focus,
+            .multi-select-button:focus,
+            .planned-supplier-input:focus {
+                border-color: var(--primary-color);
+                box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+                outline: none;
+            }
+
+            select#dbSelection.form-control {
+                max-width: 300px;
+                min-width: 150px;
+            }
+
+        .database-info {
+            background-color: #e6f7ff;
+            border-color: #b3e0ff;
+            color: #0056b3;
+            padding: 0.8rem 1rem;
+            margin-bottom: 1rem;
+            border-radius: 6px;
+            align-items: center;
+            font-size: 0.9rem;
+            box-shadow: var(--shadow-light);
+            display: none;
+        }
+
+            .database-info i {
+                margin-right: 0.6rem;
+                font-size: 1.1rem;
+                color: var(--info-color);
+            }
+
+        .table-container {
+            overflow: auto;
+            max-height: 72vh; /* Dengesiz div kapanış hatasını ve taşmaları önlemek için yükseklik güvenli sınıra çekildi */
+            border-radius: 8px;
+            box-shadow: var(--shadow-medium);
+            background-color: var(--white-bg);
+            margin-top: 0.5rem;
+            border: 1px solid var(--border-color);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            table-layout: fixed;
+            min-width: 1200px;
+        }
+
+        th {
+            background-color: var(--header-bg);
+            color: #495057;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            padding: 8px 5px;
+            text-align: left;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border-color);
+            line-height: 1.2;
+            vertical-align: middle;
+            font-size: 0.85rem;
+        }
+
+            th .column-title {
+                cursor: pointer;
+                user-select: none;
+                display: inline-block;
+                vertical-align: middle;
+                max-width: calc(100% - 30px);
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            th .multi-select-dropdown {
+                margin-top: 4px;
+            }
+
+            th.expanded {
+                white-space: normal;
+                overflow: visible;
+                text-overflow: initial;
+            }
+
+            th .sort-icon {
+                margin-left: 5px;
+                font-size: 0.8em;
+                vertical-align: middle;
+                display: inline-block;
+                opacity: 0.6;
+                transition: opacity 0.2s ease-in-out;
+            }
+
+            th:hover .sort-icon {
+                opacity: 1;
+            }
+
+            th:first-child {
+                border-top-left-radius: 8px;
+            }
+
+            th:last-child {
+                border-top-right-radius: 8px;
+            }
+
+        td {
+            padding: 6px 5px;
+            vertical-align: top;
+            border-bottom: 1px solid #f2f2f2;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            transition: background-color 0.2s ease-in-out;
+        }
+
+            td.expanded {
+                white-space: normal;
+                overflow: visible;
+                text-overflow: initial;
+                height: auto;
+            }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .table-hover tbody tr:hover {
+            background-color: #f0f8ff;
+            cursor: pointer;
+        }
+
+        .table-hover tbody tr.selected {
+            background-color: #e0f2f7;
+            border-left: 2px solid var(--primary-color);
+            transition: background-color 0.2s ease-in-out, border-left 0.2s ease-in-out;
+        }
+
+        th:nth-child(1),
+        td:nth-child(1) {
+            min-width: 50px;
+            width: 50px;
+            text-align: center;
+        }
+
+            td:nth-child(1) input[type="checkbox"] {
+                transform: scale(1.2);
+            }
+
+        td:nth-child(4),
+        td:nth-child(5),
+        td:nth-child(6),
+        td:nth-child(7),
+        td:nth-child(8),
+        td:nth-child(9),
+        td:nth-child(10),
+        td:nth-child(11),
+        td:nth-child(12),
+        td:nth-child(13) {
+            text-align: right;
+            font-weight: 500;
+        }
+
+        th:nth-child(2), td:nth-child(2) { min-width: 150px; max-width: 200px; }
+        th:nth-child(3), td:nth-child(3) { min-width: 250px; max-width: 350px; }
+        th:nth-child(4), td:nth-child(4) { min-width: 150px; }
+        th:nth-child(5), td:nth-child(5) { min-width: 180px; }
+        th:nth-child(6), td:nth-child(6) { min-width: 180px; }
+        th:nth-child(7), td:nth-child(7) { min-width: 180px; }
+        th:nth-child(8), td:nth-child(8) { min-width: 180px; }
+        th:nth-child(9), td:nth-child(9) { min-width: 180px; }
+        th:nth-child(10), td:nth-child(10) { min-width: 180px; }
+        th:nth-child(11), td:nth-child(11) { min-width: 180px; }
+        th:nth-child(12), td:nth-child(12) { min-width: 180px; }
+        th:nth-child(13), td:nth-child(13) { min-width: 180px; }
+
+        .alert-success, .alert-danger {
+            margin-top: 1.5rem;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 1.05rem;
+            font-weight: 500;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+        }
+
+            .alert-success.show, .alert-danger.show {
+                opacity: 1;
+                transform: translateY(0);
+            }
+
+        .multi-select-options {
+            display: none;
+            position: absolute;
+            background-color: var(--white-bg);
+            min-width: fit-content;
+            max-width: 350px;
+            box-shadow: var(--shadow-medium);
+            z-index: 9999;
+            border-radius: 8px;
+            padding: 10px;
+            max-height: 350px;
+            overflow-y: auto;
+            left: 0;
+            top: 100%;
+            border: 1px solid var(--border-color);
+            transform: translateY(10px);
+            opacity: 0;
+            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+        }
+
+        .multi-select-button {
+            width: 100%;
+            height: 28px;
+            padding: 4px 8px;
+            font-size: 0.8rem;
+            line-height: 1.5;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: var(--white-bg);
+            cursor: pointer;
+            text-align: left;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s ease-in-out;
+        }
+
+            .multi-select-button:hover {
+                border-color: var(--primary-color);
+                box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+            }
+
+            .multi-select-button::after {
+                display: inline-block;
+                margin-left: 0.5em;
+                vertical-align: middle;
+                content: "";
+                border-top: 0.3em solid var(--secondary-color);
+                border-right: 0.3em solid transparent;
+                border-bottom: 0;
+                border-left: 0.3em solid transparent;
+                transition: transform 0.2s ease-in-out;
+            }
+
+            .multi-select-button[aria-expanded="true"]::after {
+                transform: rotate(180deg);
+            }
+
+        .multi-select-options.show {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .multi-select-option {
+            padding: 6px 0;
+            display: flex;
+            align-items: center;
+            transition: background-color 0.1s ease-in-out;
+        }
+
+            .multi-select-option:hover {
+                background-color: #f8f8f8;
+            }
+
+            .multi-select-option label {
+                margin-left: 8px;
+                margin-bottom: 0;
+                cursor: pointer;
+                font-weight: 400;
+                flex-grow: 1;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .multi-select-option input[type="checkbox"] {
+                cursor: pointer;
+                flex-shrink: 0;
+                transform: scale(1.1);
+            }
+
+        .multi-select-header {
+            padding-bottom: 8px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+        }
+
+            .multi-select-header label {
+                font-weight: 600;
+            }
+
+        .multi-select-search-input {
+            width: 100%;
+            padding: 8px 12px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+
+        .multi-select-actions {
+            display: none;
+        }
+
+        .summary-and-export {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0 !important;
+            padding-top: 0px !important;
+        }
+
+        .total-amount-display {
+            font-weight: 600;
+            color: var(--success-color);
+            padding: 10px 15px;
+            background-color: #e8f5e9;
+            border: 1px solid #c8e6c9;
+            border-radius: 6px;
+            text-align: left;
+            font-size: 1rem;
+            box-shadow: var(--shadow-light);
+            margin-bottom: 0;
+        }
+
+        .export-button-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 0;
+        }
+
+            .export-button-container .btn {
+                height: 32px;
+                padding: 0 15px;
+                font-size: 0.9rem;
+                font-weight: 500;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+            }
+
+        .btn-warning, .btn-info, .btn-success {
+            border-radius: 4px;
+        }
+
+        .multi-select-dropdown {
+            position: relative;
+            display: block;
+            width: 100%;
+        }
+
+        .resizable-column-handle {
+            position: absolute;
+            right: -4px;
+            top: 0;
+            height: 100%;
+            width: 8px;
+            cursor: col-resize;
+            background-color: rgba(0, 0, 0, 0);
+            z-index: 1;
+        }
+
+        td a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+
+            td a:hover {
+                text-decoration: underline;
+            }
+
+        .sortable-list .list-group-item {
+            cursor: grab;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            background-color: var(--light-bg);
+            border: 1px solid var(--border-color);
+            transition: background-color 0.2s ease;
+        }
+
+            .sortable-list .list-group-item:active {
+                cursor: grabbing;
+            }
+
+            .sortable-list .list-group-item:hover {
+                background-color: #f0f0f0;
+            }
+
+            .sortable-list .list-group-item i.fas {
+                opacity: 0.5;
+                margin-right: 10px;
+            }
+    </style>
+}
+
+@* 2. KURAL: Güvenlik (CSRF) - Yetkisiz istekleri engellemek amacıyla eklendi *@
+@Html.AntiForgeryToken()
+
+<div class="container mt-4">
+
+    @if (ViewBag.ErrorMessage != null)
+    {
+        <div class="alert alert-danger" role="alert">
+            @ViewBag.ErrorMessage
+        </div>
+    }
+
+    <div id="alertContainer" class="mt-3"></div>
+
+    @if (Model != null && Model.Any())
+    {
+        <div class="mb-3">
+            <button id="clearAllFiltersBtn" class="btn btn-warning">Tüm Filtreleri Temizle</button>
+        </div>
+
+        <div class="summary-and-export">
+            <div class="total-amount-display">
+                Seçilen Toplam TL Tutarı: <span id="totalSelectedTlAmount">0,00</span>
+            </div>
+            <div class="export-button-container">
+                <button id="highlightTransactionsBtn" class="btn btn-primary me-2">
+                    <i class="fas fa-hand-holding-dollar me-2"></i> Şirketler Arası İşlemleri Vurgula
+                </button>
+                <button id="clearFiltersBtn" class="btn btn-warning">
+                    <i class="fas fa-filter-circle-xmark me-2"></i> Filtreleri Temizle
+                </button>
+                <button id="manageColumnsBtn" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#columnVisibilityModal">
+                    <i class="fas fa-table-list me-2"></i> Sütunları Yönet
+                </button>
+                <button id="exportToExcelBtn" class="btn btn-success">
+                    <i class="fas fa-file-excel me-2"></i> Excel'e Aktar
+                </button>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table class="table table-bordered table-striped table-hover rapor-tablo" id="rapor2Table">
+                <thead>
+                    <tr class="main-header-row">
+                        <th style="width: 20px;">
+                            <input type="checkbox" id="selectAllCheckbox">
+                        </th>
+                        <th data-column="0" data-sort-type="text" style="width: 150px;">
+                            <span class="column-title">Çek No</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="0" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-0">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctCekNumarasiList != null)
+                                    {
+                                        foreach (var item in distinctCekNumarasiList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="1" data-sort-type="text" style="width: 150px;">
+                            <span class="column-title">Çek Kimden Geldi</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="1" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-1">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctCekKimdenGeldiList != null)
+                                    {
+                                        foreach (var item in distinctCekKimdenGeldiList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="2" data-sort-type="text" style="width: 150px;">
+                            <span class="column-title">Asıl Borçlu</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="2" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-2">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctAsilBorcluList != null)
+                                    {
+                                        foreach (var item in distinctAsilBorcluList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="3" data-sort-type="number" style="width: 100px;">
+                            <span class="column-title">Çek Tutarı</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="3" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-3">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctTutarList != null)
+                                    {
+                                        foreach (var item in distinctTutarList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="4" data-sort-type="text" style="width: 80px;">
+                            <span class="column-title">Para Birimi</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="4" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-4">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctParaBirimiList != null)
+                                    {
+                                        foreach (var item in distinctParaBirimiList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="5" data-sort-type="date" style="width: 100px;">
+                            <span class="column-title">Vade Tarihi</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="5" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-5">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctVadeTarihiList != null)
+                                    {
+                                        foreach (var item in distinctVadeTarihiList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="6" data-sort-type="text" style="width: 120px;">
+                            <span class="column-title">Vade Ayı ve Yılı</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="6" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-6">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctVadeAyiVeYiliList != null)
+                                    {
+                                        foreach (var item in distinctVadeAyiVeYiliList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="7" data-sort-type="date" style="width: 120px;">
+                            <span class="column-title">Portföye Giriş Tarihi</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="7" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-7">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctPortfoyeGirisTarihiList != null)
+                                    {
+                                        foreach (var item in distinctPortfoyeGirisTarihiList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="8" data-sort-type="date" style="width: 120px;">
+                            <span class="column-title">İbraz Tarihi</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="8" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-8">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctIbrazTarihiList != null)
+                                    {
+                                        foreach (var item in distinctIbrazTarihiList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="9" data-sort-type="number" style="width: 120px;">
+                            <span class="column-title">Tahsilat Belge No</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="9" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-9">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctTahsilatBelgeNoList != null)
+                                    {
+                                        foreach (var item in distinctTahsilatBelgeNoList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="10" data-sort-type="text" style="width: 120px;">
+                            <span class="column-title">İbraz Belge No</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="10" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-10">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctIbrazBelgeNoList != null)
+                                    {
+                                        foreach (var item in distinctIbrazBelgeNoList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="11" data-sort-type="text" style="width: 100px;">
+                            <span class="column-title">Hareket Durumu</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="11" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-11">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctHareketDurumuList != null)
+                                    {
+                                        foreach (var item in distinctHareketDurumuList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="12" data-sort-type="text" style="width: 100px;">
+                            <span class="column-title">Belge Tipi</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="12" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-12">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctBelgeTipiList != null)
+                                    {
+                                        foreach (var item in distinctBelgeTipiList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="13" data-sort-type="text" style="width: 150px;" data-default-visibility="hidden">
+                            <span class="column-title">İşlem Türü</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="13" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-13">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @foreach (var type in checkTransactionTypesForFilter)
+                                    {
+                                        if (type.Code != "0" && type.Code != "12")
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@type.Code">
+                                                <label>@type.Description</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="14" data-sort-type="text" style="width: 150px;">
+                            <span class="column-title">İşlem Tipi Adı</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="14" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-14">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctIslemTipiAdiList != null)
+                                    {
+                                        foreach (var item in distinctIslemTipiAdiList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="15" data-sort-type="text" style="width: 180px;" data-default-visibility="hidden">
+                            <span class="column-title">Planlanan Tedarikçi</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="15" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-15">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctPlanlananTedarikciList != null)
+                                    {
+                                        foreach (var item in distinctPlanlananTedarikciList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="16" data-sort-type="text" style="width: 150px;">
+                            <span class="column-title">Çek Kime Verildi</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="16" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-16">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctCekKimeVerildiList != null)
+                                    {
+                                        foreach (var item in distinctCekKimeVerildiList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="17" data-sort-type="number" style="width: 100px;">
+                            <span class="column-title">TL Karşılığı</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="17" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-17">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctTlKarsiligiList != null)
+                                    {
+                                        foreach (var item in distinctTlKarsiligiList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="18" data-sort-type="text" style="width: 120px;">
+                            <span class="column-title">Şirket Adı</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="18" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-18">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctSirketAdiList != null)
+                                    {
+                                        foreach (var item in distinctSirketAdiList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                        <th data-column="19" data-sort-type="text" style="width: 150px;">
+                            <span class="column-title">Çekin Bankası</span> <i class="fas fa-sort sort-icon"></i>
+                            <div class="multi-select-dropdown">
+                                <button type="button" class="multi-select-button" data-column="19" aria-expanded="false">Tümü</button>
+                                <div class="multi-select-options" id="multi-select-options-19">
+                                    <input type="text" class="multi-select-search-input" placeholder="Ara...">
+                                    <div class="multi-select-header">
+                                        <input type="checkbox" class="select-all-options-in-filter">
+                                        <label>(Tümünü Seç)</label>
+                                    </div>
+                                    @if (distinctCekBankaAdiList != null)
+                                    {
+                                        foreach (var item in distinctCekBankaAdiList)
+                                        {
+                                            <div class="multi-select-option">
+                                                <input type="checkbox" value="@item">
+                                                <label>@item</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="resizable-column-handle"></div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    @if (Model != null)
+                    {
+                        foreach (var item in Model)
+                        {
+                            <tr data-docentry="@item.DocEntry" data-ibraz-belge-no="@item.IbrazBelgeNo"
+                                data-cek-numarasi="@item.CekNumarasi"
+                                data-tutar="@(item.Tutar?.ToString(CultureInfo.InvariantCulture) ?? "0")"
+                                data-cek-bankasi="@item.CekBankaAdi">
+                                <td>
+                                    <input type="checkbox" class="row-checkbox" data-tl-value="@(item.TlKarsiligi?.ToString(CultureInfo.InvariantCulture))">
+                                </td>
+                                <td>@Html.DisplayFor(modelItem => item.CekNumarasi)</td>
+                                <td>@Html.DisplayFor(modelItem => item.CekKimdenGeldi)</td>
+                                <td>@Html.DisplayFor(modelItem => item.AsilBorclu)</td>
+                                <td>@(item.Tutar?.ToString("N2"))</td>
+                                <td>@Html.DisplayFor(modelItem => item.ParaBirimi)</td>
+                                <td>@(item.VadeTarihi?.ToString("dd.MM.yyyy"))</td>
+                                <td>@Html.DisplayFor(modelItem => item.VadeAyiVeYili)</td>
+                                <td>@(item.PortfoyeGirisTarihi?.ToString("dd.MM.yyyy"))</td>
+                                <td>@(item.IbrazTarihi?.ToString("dd.MM.yyyy"))</td>
+                                <td>@Html.DisplayFor(modelItem => item.TahsilatBelgeNo)</td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(item.IbrazBelgeNo))
+                                    {
+                                        @* 1. KURAL: Ek indirme linkine db parametresi eklendi *@
+                                        <a href="@Url.Action("DownloadAttachment", "Rapor2", new { ibrazBelgeNo = item.IbrazBelgeNo, db = currentDb })"
+                                           title="Eki Görüntüle" target="_blank" onclick="event.stopPropagation();">
+                                            @Html.DisplayFor(modelItem => item.IbrazBelgeNo)
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        @Html.DisplayFor(modelItem => item.IbrazBelgeNo)
+                                    }
+                                </td>
+                                <td>@Html.DisplayFor(modelItem => item.HareketDurumu)</td>
+                                <td>@Html.DisplayFor(modelItem => item.BelgeTipi)</td>
+                                <td>
+                                    <select class="form-control check-transaction-select" data-docentry="@item.DocEntry" data-previous-value="@item.CekIslemTuru" disabled>
+                                        <option value=""></option>
+                                        @foreach (var type in checkTransactionTypes)
+                                        {
+                                            <option value="@type.Code" selected="@(item.CekIslemTuru == type.Code)">
+                                                @type.Description
+                                            </option>
+                                        }
+                                    </select>
+                                </td>
+                                <td>@Html.DisplayFor(modelItem => item.IslemTipiAdi)</td>
+                                <td>
+                                    @{
+                                        bool isDisabled = item.HareketDurumu != "Portföyde";
+                                    }
+                                    <input type="text" class="form-control planned-supplier-input"
+                                           list="suppliersList_@item.DocEntry"
+                                           value="@item.PlanlananTedarikci"
+                                           data-docentry="@item.DocEntry"
+                                           data-previous-value="@item.PlanlananTedarikci"
+                                           disabled="@isDisabled" readonly />
+                                    <datalist id="suppliersList_@item.DocEntry"></datalist>
+                                </td>
+                                <td>@Html.DisplayFor(modelItem => item.CekKimeVerildi)</td>
+                                <td>@(item.TlKarsiligi?.ToString("N2"))</td>
+                                <td>@Html.DisplayFor(modelItem => item.SirketAdi)</td>
+                                <td>@Html.DisplayFor(modelItem => item.CekBankaAdi)</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="row g-0 mt-2 p-2 border-top bg-light rounded-bottom">
+            <div class="col-md-4 d-flex align-items-center text-muted small fw-bold">
+                Toplam Kayıt: <span id="totalRecords" class="text-primary ms-1">@(Model?.Count ?? 0)</span>
+            </div>
+            <div class="col-md-8 text-end">
+            </div>
+        </div>
+    }
+</div>
+
+<div class="modal fade" id="columnVisibilityModal" tabindex="-1" aria-labelledby="columnVisibilityModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content column-visibility-modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="columnVisibilityModalLabel">Sütun Görünürlüğünü Yönet</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="columnVisibilityModalBody">
+                <p class="mb-3 text-secondary"><i class="fas fa-info-circle me-1"></i> Sütunları sürükleyip bırakarak sıralarını değiştirebilirsiniz.</p>
+                <div id="sortable-column-list" class="list-group">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+                <button type="button" class="btn btn-primary" id="saveColumnVisibilityBtn">Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* 4. KURAL: UI/UX Standartlarına uygun şık, db parametreli Ana Sayfa Dönüş butonu *@
+<div class="mt-4 text-center">
+    <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm mb-4">
+        <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+    </a>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            
+            const currentDbParam = '@currentDb';
+            const dbQueryString = currentDbParam ? `?db=${currentDbParam}` : '';
+            const antiForgeryToken = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+
+            const table = document.getElementById('rapor2Table');
+            if (!table) return;
+
+            const tableBody = table.querySelector('tbody');
+            let tableHeaders = Array.from(table.querySelectorAll('thead th'));
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const totalSelectedTlAmountSpan = document.getElementById('totalSelectedTlAmount');
+            const exportToExcelBtn = document.getElementById('exportToExcelBtn');
+            const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+            const highlightTransactionsBtn = document.getElementById('highlightTransactionsBtn');
+
+            let allOriginalRows = Array.from(tableBody.querySelectorAll('tr'));
+            let currentlyFilteredRows = [...allOriginalRows];
+            const multiSelectFilterStates = {};
+            const checkTransactionTypesJs = @Html.Raw(checkTransactionTypesJson) || [];
+            let currentSortColumn = -1;
+            let currentSortDirection = 'none';
+
+            // Sıralama simgeleri (diğer raporlardaki updateHeaderIcons ile aynı; bu görünümde tanımı eksikti)
+            function updateHeaderIcons() {
+                tableHeaders.forEach(th => {
+                    const icon = th.querySelector('.sort-icon');
+                    if (!icon) return;
+                    icon.classList.remove('fa-sort-up', 'fa-sort-down', 'fa-sort');
+                    const ayniKolon = th.dataset.column !== undefined && String(th.dataset.column) === String(currentSortColumn);
+                    if (ayniKolon && currentSortDirection === 'asc') icon.classList.add('fa-sort-up');
+                    else if (ayniKolon && currentSortDirection === 'desc') icon.classList.add('fa-sort-down');
+                    else icon.classList.add('fa-sort');
+                });
+            }
+            let isHighlighted = false;
+
+            const columnVisibilityKey = 'rapor2_column_visibility';
+            const savedVisibility = JSON.parse(localStorage.getItem(columnVisibilityKey)) || {};
+            const columnOrderKey = 'rapor2_column_order';
+            let savedOrder = JSON.parse(localStorage.getItem(columnOrderKey)) || [];
+
+            function updateSelectAllInFilterCheckboxState(optionsContainerElement) {
+                const visibleOptionCheckboxes = Array.from(optionsContainerElement.querySelectorAll('.multi-select-option input[type="checkbox"]'))
+                    .filter(cb => cb.closest('.multi-select-option').style.display !== 'none');
+                const selectAllCb = optionsContainerElement.querySelector('.select-all-options-in-filter');
+                if (!selectAllCb) return;
+
+                if (visibleOptionCheckboxes.length === 0) {
+                    selectAllCb.checked = false;
+                    selectAllCb.indeterminate = false;
+                    return;
+                }
+                const allVisibleChecked = visibleOptionCheckboxes.every(cb => cb.checked);
+                const anyVisibleChecked = visibleOptionCheckboxes.some(cb => cb.checked);
+                if (allVisibleChecked) {
+                    selectAllCb.checked = true;
+                    selectAllCb.indeterminate = false;
+                } else if (anyVisibleChecked) {
+                    selectAllCb.checked = false;
+                    selectAllCb.indeterminate = true;
+                } else {
+                    selectAllCb.checked = false;
+                    selectAllCb.indeterminate = false;
+                }
+            }
+
+            function updateButtonText(btn, selectedVals, allOpts, colIndex) {
+                const totalOptionsCount = allOpts.length;
+                if (selectedVals.length === 0 || selectedVals.length === totalOptionsCount) {
+                    btn.textContent = 'Tümü';
+                } else if (selectedVals.length === 1) {
+                    if (colIndex === 13) {
+                        const selectedCode = selectedVals[0];
+                        const matchingType = checkTransactionTypesJs.find(t => t.code && t.code.toLowerCase() === selectedCode);
+                        btn.textContent = matchingType ? matchingType.description : selectedCode;
+                    } else {
+                        const selectedLabelElement = Array.from(allOpts).find(opt => (opt.querySelector('input[type="checkbox"]')?.value || '').toLowerCase() === selectedVals[0]);
+                        btn.textContent = selectedLabelElement ? (selectedLabelElement.querySelector('label')?.textContent || '') : selectedVals[0];
+                    }
+                } else {
+                    btn.textContent = `${selectedVals.length} Seçili`;
+                }
+            }
+
+            function showAlert(message, type) {
+                const alertContainer = document.getElementById('alertContainer');
+                const existingAlert = alertContainer.querySelector('.alert');
+                if (existingAlert) {
+                    new bootstrap.Alert(existingAlert).close();
+                }
+                const alertDiv = document.createElement('div');
+                alertDiv.className = `alert alert-${type} fade show`;
+                alertDiv.setAttribute('role', 'alert');
+                alertDiv.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>`;
+                alertContainer.appendChild(alertDiv);
+                setTimeout(() => {
+                    const bsAlert = bootstrap.Alert.getOrCreateInstance(alertDiv);
+                    if (bsAlert) {
+                        bsAlert.close();
+                    }
+                }, 3000);
+            }
+
+            function applyColumnVisibilityAndOrder() {
+                const headerRow = table.querySelector('thead tr');
+                const originalHeaders = Array.from(headerRow.querySelectorAll('th'));
+                const originalBodyRows = Array.from(tableBody.querySelectorAll('tr'));
+                const newHeadersOrder = [];
+
+                if (savedOrder.length > 0) {
+                    savedOrder.forEach(colIndex => {
+                        const header = originalHeaders.find(h => parseInt(h.dataset.column) === colIndex);
+                        if (header) {
+                            newHeadersOrder.push(header);
+                        }
+                    });
+                    const firstColumnHeader = originalHeaders.find(h => !h.dataset.column);
+                    if (firstColumnHeader) newHeadersOrder.unshift(firstColumnHeader);
+                } else {
+                    newHeadersOrder.push(...originalHeaders);
+                }
+
+                while (headerRow.firstChild) {
+                    headerRow.removeChild(headerRow.firstChild);
+                }
+                newHeadersOrder.forEach(th => {
+                    const columnIndex = parseInt(th.dataset.column);
+                    const isHiddenByDefault = th.dataset.defaultVisibility === 'hidden';
+                    const isVisible = savedVisibility[columnIndex] !== undefined ? savedVisibility[columnIndex] : !isHiddenByDefault;
+
+                    if (isVisible) {
+                        headerRow.appendChild(th);
+                    }
+                });
+
+                originalBodyRows.forEach(row => {
+                    const originalCells = Array.from(row.cells);
+                    const newRow = row.cloneNode(true);
+                    while (newRow.firstChild) {
+                        newRow.removeChild(newRow.firstChild);
+                    }
+                    newHeadersOrder.forEach(th => {
+                        const columnIndex = parseInt(th.dataset.column);
+                        const originalIndex = Array.from(originalHeaders).indexOf(th);
+                        const isVisible = savedVisibility[columnIndex] !== undefined ? savedVisibility[columnIndex] : !(th.dataset.defaultVisibility === 'hidden');
+                        if (isVisible) {
+                            newRow.appendChild(originalCells[originalIndex].cloneNode(true));
+                        }
+                    });
+                    row.parentNode.replaceChild(newRow, row);
+                });
+                tableHeaders = Array.from(headerRow.querySelectorAll('th'));
+                allOriginalRows = Array.from(tableBody.querySelectorAll('tr'));
+                currentlyFilteredRows = [...allOriginalRows];
+                applyFiltersAndSort();
+            }
+
+            function createColumnVisibilityModal() {
+                const modalBody = document.getElementById('sortable-column-list');
+                if(!modalBody) return;
+                modalBody.innerHTML = '';
+
+                const headers = Array.from(document.querySelectorAll('#rapor2Table thead th')).filter(h => h.dataset.column);
+                const orderedHeaders = (savedOrder.length > 0) ? savedOrder.map(colIndex => headers.find(h => parseInt(h.dataset.column) === colIndex)).filter(h => h) : headers;
+
+                orderedHeaders.forEach(th => {
+                    const columnIndex = parseInt(th.dataset.column);
+                    const columnTitle = th.querySelector('.column-title')?.textContent || `Sütun ${columnIndex + 1}`;
+                    const isHiddenByDefault = th.dataset.defaultVisibility === 'hidden';
+                    const isVisible = savedVisibility[columnIndex] !== undefined ? savedVisibility[columnIndex] : !isHiddenByDefault;
+
+                    const div = document.createElement('div');
+                    div.className = 'list-group-item';
+                    div.setAttribute('data-column-index', columnIndex);
+                    div.innerHTML = `
+                        <div>
+                            <i class="fas fa-bars"></i>
+                            <input class="form-check-input me-2" type="checkbox" value="${columnIndex}" id="column-visibility-${columnIndex}" ${isVisible ? 'checked' : ''}>
+                            <label class="form-check-label" for="column-visibility-${columnIndex}">
+                                ${columnTitle}
+                            </label>
+                        </div>
+                    `;
+                    modalBody.appendChild(div);
+                });
+
+                new Sortable(modalBody, {
+                    animation: 150,
+                    ghostClass: 'sortable-ghost'
+                });
+            }
+
+            if (document.getElementById('manageColumnsBtn')) {
+                document.getElementById('manageColumnsBtn').addEventListener('click', createColumnVisibilityModal);
+            }
+
+            if (document.getElementById('saveColumnVisibilityBtn')) {
+                document.getElementById('saveColumnVisibilityBtn').addEventListener('click', () => {
+                    const modalBody = document.getElementById('sortable-column-list');
+                    const checkboxes = modalBody.querySelectorAll('.form-check-input');
+                    const newVisibility = {};
+                    const newOrder = [];
+
+                    Array.from(modalBody.children).forEach(item => {
+                        const columnIndex = parseInt(item.dataset.columnIndex);
+                        const checkbox = item.querySelector('.form-check-input');
+                        if (checkbox) {
+                            newVisibility[columnIndex] = checkbox.checked;
+                        }
+                        newOrder.push(columnIndex);
+                    });
+
+                    localStorage.setItem(columnVisibilityKey, JSON.stringify(newVisibility));
+                    localStorage.setItem(columnOrderKey, JSON.stringify(newOrder));
+                    Object.assign(savedVisibility, newVisibility);
+                    savedOrder = newOrder;
+
+                    applyColumnVisibilityAndOrder();
+
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('columnVisibilityModal'));
+                    modal.hide();
+                    showAlert('Sütun ayarları kaydedildi.', 'success');
+                });
+            }
+
+            function applyRowGroupingHighlight() {
+                const groupedRows = {};
+                allOriginalRows.forEach(row => {
+                    const cekNumarasi = row.dataset.cekNumarasi;
+                    const tutar = row.dataset.tutar;
+                    const cekBankasi = row.dataset.cekBankasi;
+                    const key = `${cekNumarasi}-${tutar}-${cekBankasi}`;
+                    if (!groupedRows[key]) {
+                        groupedRows[key] = [];
+                    }
+                    groupedRows[key].push(row);
+                });
+
+                allOriginalRows.forEach(row => {
+                    row.classList.remove('row-group-0', 'row-group-1', 'row-group-2', 'row-group-3', 'row-group-4');
+                    row.style.backgroundColor = '';
+                });
+
+                let colorIndex = 0;
+                for (const key in groupedRows) {
+                    if (groupedRows[key].length > 1) {
+                        groupedRows[key].forEach(row => {
+                            row.classList.add(`row-group-${colorIndex % 5}`);
+                        });
+                        colorIndex++;
+                    }
+                }
+            }
+
+            function updateTableDisplay() {
+                while (tableBody.firstChild) {
+                    tableBody.removeChild(tableBody.firstChild);
+                }
+                currentlyFilteredRows.forEach(row => {
+                    tableBody.appendChild(row);
+                });
+                calculateSelectedTotal();
+                updateSelectAllCheckboxState();
+                updatePaginationInfo();
+            }
+
+            function calculateSelectedTotal() {
+                let total = 0;
+                currentlyFilteredRows.forEach(row => {
+                    const checkbox = row.querySelector('.row-checkbox');
+                    if (checkbox && checkbox.checked) {
+                        const tlValueString = checkbox.dataset.tlValue;
+                        let tlValue;
+                        try {
+                            tlValue = parseFloat(tlValueString);
+                            if (!isNaN(tlValue)) {
+                                total += tlValue;
+                            }
+                        } catch (e) {
+                            console.error("TL değeri dönüştürülürken hata oluştu:", tlValueString, e);
+                        }
+                    }
+                });
+                totalSelectedTlAmountSpan.textContent = total.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+
+            function applyFiltersAndSort() {
+                const filters = [];
+                document.querySelectorAll('.multi-select-dropdown').forEach(dropdown => {
+                    const button = dropdown.querySelector('.multi-select-button');
+                    const columnIndex = parseInt(button.dataset.column);
+                    const selectedValues = multiSelectFilterStates[columnIndex];
+                    if (selectedValues && selectedValues.length > 0) {
+                        filters.push({ column: columnIndex, values: selectedValues, type: 'multi-select' });
+                    }
+                });
+
+                let filteredRows = allOriginalRows.filter(row => {
+                    return filters.every(filter => {
+                        let cellIndex = -1;
+                        tableHeaders.forEach((th, index) => {
+                            if (parseInt(th.dataset.column) === filter.column) {
+                                cellIndex = index;
+                            }
+                        });
+                        if (cellIndex === -1) return true;
+
+                        const cell = row.cells[cellIndex];
+                        if (!cell) return false;
+
+                        let cellValue;
+                        if (filter.column === 13) {
+                            const selectElement = cell.querySelector('.check-transaction-select');
+                            cellValue = selectElement ? selectElement.value : '';
+                        } else if (filter.column === 15) {
+                            const inputElement = cell.querySelector('.planned-supplier-input');
+                            cellValue = inputElement ? inputElement.value : '';
+                        } else {
+                            cellValue = (cell.textContent || cell.innerText);
+                        }
+                        const selectedValuesLower = filter.values.map(v => (v || '').toLowerCase().trim());
+                        const cellValueLower = (cellValue || '').toLowerCase().trim();
+
+                        if (filter.column === 3 || filter.column === 17) {
+                            const cellNumValue = parseFloat(cellValueLower.replace(/\./g, '').replace(',', '.'));
+                            const filterNumValues = selectedValuesLower.map(v => parseFloat(v.replace(/\./g, '').replace(',', '.')));
+                            return filterNumValues.includes(cellNumValue);
+                        } else {
+                            return selectedValuesLower.includes(cellValueLower);
+                        }
+                    });
+                });
+
+                if (isHighlighted) {
+                    filteredRows = filteredRows.filter(row => {
+                        const cekNumarasi = row.dataset.cekNumarasi;
+                        const tutar = row.dataset.tutar;
+                        const cekBankasi = row.dataset.cekBankasi;
+                        const key = `${cekNumarasi}-${tutar}-${cekBankasi}`;
+                        return allOriginalRows.filter(r => `${r.dataset.cekNumarasi}-${r.dataset.tutar}-${r.dataset.cekBankasi}` === key).length > 1;
+                    });
+                }
+
+                if (currentSortColumn !== -1 && currentSortDirection !== 'none') {
+                    filteredRows.sort((rowA, rowB) => {
+                        let sortCellIndex = -1;
+                        tableHeaders.forEach((th, index) => {
+                            if (parseInt(th.dataset.column) === currentSortColumn) {
+                                sortCellIndex = index;
+                            }
+                        });
+                        if (sortCellIndex === -1) return 0;
+
+                        const cellA = rowA.cells[sortCellIndex];
+                        const cellB = rowB.cells[sortCellIndex];
+
+                        let cellAValue, cellBValue;
+                        if (currentSortColumn === 13) {
+                            const selectA = cellA.querySelector('.check-transaction-select');
+                            const selectB = cellB.querySelector('.check-transaction-select');
+                            cellAValue = selectA ? selectA.value.trim() : '';
+                            cellBValue = selectB ? selectB.value.trim() : '';
+                        } else if (currentSortColumn === 15) {
+                            const inputA = cellA.querySelector('.planned-supplier-input');
+                            const inputB = cellB.querySelector('.planned-supplier-input');
+                            cellAValue = inputA ? inputA.value.trim() : '';
+                            cellBValue = inputB ? inputB.value.trim() : '';
+                        } else {
+                            cellAValue = cellA.textContent.trim();
+                            cellBValue = cellB.textContent.trim();
+                        }
+
+                        const sortType = table.querySelector(`th[data-column="${currentSortColumn}"]`).dataset.sortType;
+                        let comparison = 0;
+                        if (sortType === 'number') {
+                            const valA = parseFloat(cellAValue.replace(/\./g, '').replace(',', '.'));
+                            const valB = parseFloat(cellBValue.replace(/\./g, '').replace(',', '.'));
+                            comparison = (isNaN(valA) ? (isNaN(valB) ? 0 : 1) : (isNaN(valB) ? -1 : valA - valB));
+                        } else if (sortType === 'date') {
+                            const parseDate = (dateString) => {
+                                if (!dateString) return null;
+                                const parts = dateString.split('.');
+                                if (parts.length === 3) {
+                                    return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+                                }
+                                return null;
+                            };
+                            const dateA = parseDate(cellAValue);
+                            const dateB = parseDate(cellBValue);
+                            if (dateA === null && dateB === null) comparison = 0;
+                            else if (dateA === null) comparison = 1;
+                            else if (dateB === null) comparison = -1;
+                            else comparison = dateA.getTime() - dateB.getTime();
+                        } else {
+                            const lowerA = (cellAValue || '').toLowerCase();
+                            const lowerB = (cellBValue || '').toLowerCase();
+                            comparison = lowerA.localeCompare(lowerB, 'tr', { sensitivity: 'base' });
+                        }
+                        return currentSortDirection === 'asc' ? comparison : -comparison;
+                    });
+                }
+                currentlyFilteredRows = filteredRows;
+                updateTableDisplay();
+            }
+
+            function updatePaginationInfo() {
+                const totalRecords = currentlyFilteredRows.length;
+                const infoElement = document.getElementById('totalRecords');
+                if (infoElement) {
+                    infoElement.textContent = totalRecords;
+                }
+            }
+
+            if (selectAllCheckbox) {
+                selectAllCheckbox.addEventListener('change', function () {
+                    currentlyFilteredRows.forEach(row => {
+                        const checkbox = row.querySelector('.row-checkbox');
+                        if (checkbox) {
+                            checkbox.checked = this.checked;
+                        }
+                    });
+                    calculateSelectedTotal();
+                });
+            }
+
+            tableBody.addEventListener('change', function (event) {
+                if (event.target.classList.contains('row-checkbox')) {
+                    calculateSelectedTotal();
+                    updateSelectAllCheckboxState();
+                }
+            });
+
+            tableBody.addEventListener('click', function (event) {
+                const targetLink = event.target.closest('a');
+                if (targetLink) {
+                    event.stopPropagation();
+                }
+            });
+
+            function updateSelectAllCheckboxState() {
+                const visibleCheckboxes = Array.from(tableBody.querySelectorAll('.row-checkbox'));
+                const checkedVisible = visibleCheckboxes.filter(cb => cb && cb.checked);
+                selectAllCheckbox.checked = checkedVisible.length > 0 && checkedVisible.length === visibleCheckboxes.length;
+                selectAllCheckbox.indeterminate = checkedVisible.length > 0 && checkedVisible.length < visibleCheckboxes.length;
+            }
+
+            document.querySelectorAll('.multi-select-dropdown').forEach(dropdown => {
+                const button = dropdown.querySelector('.multi-select-button');
+                const optionsContainer = dropdown.querySelector('.multi-select-options');
+                const searchInput = optionsContainer.querySelector('.multi-select-search-input');
+                const selectAllInFilterCheckbox = optionsContainer.querySelector('.select-all-options-in-filter');
+                const allOptionsInFilter = optionsContainer.querySelectorAll('.multi-select-option');
+                const columnIndex = parseInt(button.dataset.column);
+                multiSelectFilterStates[columnIndex] = [];
+
+                const initialSelected = Array.from(optionsContainer.querySelectorAll('.multi-select-option input[type="checkbox"]')).filter(cb => cb.checked).map(cb => cb.value.toLowerCase());
+                multiSelectFilterStates[columnIndex] = initialSelected;
+                updateButtonText(button, initialSelected, allOptionsInFilter, columnIndex);
+                updateSelectAllInFilterCheckboxState(optionsContainer);
+
+                optionsContainer.addEventListener('click', (e) => { e.stopPropagation(); });
+
+                button.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    document.querySelectorAll('.multi-select-dropdown').forEach(otherDropdown => {
+                        const otherOptions = otherDropdown.querySelector('.multi-select-options');
+                        if (otherOptions && otherOptions !== optionsContainer && otherOptions.classList.contains('show')) {
+                            otherOptions.classList.remove('show');
+                            otherDropdown.querySelector('.multi-select-button').setAttribute('aria-expanded', 'false');
+                            dropdown.appendChild(otherOptions); 
+                        }
+                    });
+
+                    const isShown = optionsContainer.classList.toggle('show');
+                    button.setAttribute('aria-expanded', isShown);
+                    if (isShown) {
+                        document.body.appendChild(optionsContainer);
+                        const rect = button.getBoundingClientRect();
+                        const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+                        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+                        let calculatedTop, calculatedLeft;
+
+                        const spaceBelow = viewportHeight - rect.bottom;
+                        const spaceAbove = rect.top;
+
+                        if (spaceBelow >= optionsContainer.offsetHeight + 10) {
+                            calculatedTop = rect.bottom + 5 + window.scrollY;
+                        } else if (spaceAbove >= optionsContainer.offsetHeight + 10) {
+                            calculatedTop = rect.top - optionsContainer.offsetHeight - 5 + window.scrollY;
+                        } else {
+                            calculatedTop = rect.bottom + 5 + window.scrollY;
+                            optionsContainer.style.maxHeight = `${Math.max(100, spaceBelow - 15)}px`;
+                        }
+
+                        if (rect.left + optionsContainer.offsetWidth > viewportWidth - 10) {
+                            calculatedLeft = rect.right - optionsContainer.offsetWidth + window.scrollX;
+                        } else {
+                            calculatedLeft = rect.left + window.scrollX;
+                        }
+
+                        optionsContainer.style.top = `${calculatedTop}px`;
+                        optionsContainer.style.left = `${calculatedLeft}px`;
+                    }
+                });
+
+                document.addEventListener('click', (e) => {
+                    if (!dropdown.contains(e.target) && optionsContainer.classList.contains('show')) {
+                        optionsContainer.classList.remove('show');
+                        button.setAttribute('aria-expanded', 'false');
+                        dropdown.appendChild(optionsContainer);
+                        optionsContainer.style.top = ''; optionsContainer.style.left = ''; optionsContainer.style.right = '';
+                        optionsContainer.style.maxHeight = '';
+                    }
+                });
+
+                searchInput.addEventListener('keyup', (e) => {
+                    const searchText = e.target.value.toLowerCase().trim();
+                    allOptionsInFilter.forEach(option => {
+                        const label = option.querySelector('label');
+                        const labelText = (label?.textContent || '').toLowerCase();
+                        const isMatch = labelText.includes(searchText);
+                        option.style.display = isMatch ? 'flex' : 'none';
+                    });
+                    updateSelectAllInFilterCheckboxState(optionsContainer);
+                });
+
+                if (selectAllInFilterCheckbox) {
+                    selectAllInFilterCheckbox.addEventListener('change', function () {
+                        const isChecked = this.checked;
+                        optionsContainer.querySelectorAll('.multi-select-option').forEach(option => {
+                            if (option.style.display !== 'none') {
+                                option.querySelector('input[type="checkbox"]').checked = isChecked;
+                            }
+                        });
+
+                        const selectedValues = Array.from(optionsContainer.querySelectorAll('.multi-select-option input[type="checkbox"]'))
+                            .filter(cb => cb.checked)
+                            .map(cb => (cb.value || '').toLowerCase());
+                        multiSelectFilterStates[columnIndex] = selectedValues;
+                        updateButtonText(button, selectedValues, allOptionsInFilter, columnIndex);
+                        applyFiltersAndSort();
+                    });
+                }
+
+                optionsContainer.querySelectorAll('.multi-select-option input[type="checkbox"]').forEach(cb => {
+                    cb.addEventListener('change', () => {
+                        const selectedValues = Array.from(optionsContainer.querySelectorAll('.multi-select-option input[type="checkbox"]'))
+                            .filter(cb => cb.checked)
+                            .map(cb => (cb.value || '').toLowerCase());
+                        multiSelectFilterStates[columnIndex] = selectedValues;
+                        updateButtonText(button, selectedValues, allOptionsInFilter, columnIndex);
+                        updateSelectAllInFilterCheckboxState(optionsContainer);
+                        applyFiltersAndSort();
+                    });
+                });
+            });
+
+            tableHeaders.forEach(header => {
+                const sortType = header.dataset.sortType;
+                const columnIndex = parseInt(header.dataset.column);
+                const columnTitle = header.querySelector('.column-title');
+
+                if (sortType && columnTitle) {
+                    columnTitle.style.cursor = 'pointer';
+                    columnTitle.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (currentSortColumn === columnIndex) {
+                            if (currentSortDirection === 'asc') {
+                                currentSortDirection = 'desc';
+                            } else if (currentSortDirection === 'desc') {
+                                currentSortDirection = 'none';
+                            } else {
+                                currentSortDirection = 'asc';
+                            }
+                        } else {
+                            currentSortColumn = columnIndex;
+                            currentSortDirection = 'asc';
+                        }
+                        updateHeaderIcons();
+                        applyFiltersAndSort();
+                    });
+                }
+            });
+
+            if (clearFiltersBtn) {
+                clearFiltersBtn.addEventListener('click', () => {
+                    document.querySelectorAll('.multi-select-dropdown').forEach(dropdown => {
+                        const button = dropdown.querySelector('.multi-select-button');
+                        const optionsContainer = dropdown.querySelector('.multi-select-options');
+                        const allOptionsInFilter = optionsContainer?.querySelectorAll('.multi-select-option') || [];
+                        const optionCheckboxes = optionsContainer?.querySelectorAll('.multi-select-option input[type="checkbox"]') || [];
+                        const columnIndex = parseInt(button.dataset.column);
+
+                        optionCheckboxes.forEach(cb => {
+                            cb.checked = false;
+                        });
+
+                        multiSelectFilterStates[columnIndex] = [];
+                        updateButtonText(button, [], allOptionsInFilter, columnIndex);
+                        updateSelectAllInFilterCheckboxState(optionsContainer);
+                    });
+
+                    currentSortColumn = -1;
+                    currentSortDirection = 'none';
+                    updateHeaderIcons();
+                    isHighlighted = false;
+                    highlightTransactionsBtn.classList.remove('btn-dark');
+                    highlightTransactionsBtn.classList.add('btn-primary');
+                    highlightTransactionsBtn.innerHTML = '<i class="fas fa-hand-holding-dollar me-2"></i> Şirketler Arası İşlemleri Vurgula';
+
+                    currentlyFilteredRows = [...allOriginalRows];
+                    updateTableDisplay();
+
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = false;
+                    calculateSelectedTotal();
+
+                    showAlert('Tüm filtreler ve sıralama ayarları temizlendi.', 'success');
+                });
+            }
+
+            if (highlightTransactionsBtn) {
+                highlightTransactionsBtn.addEventListener('click', () => {
+                    isHighlighted = !isHighlighted;
+                    if (isHighlighted) {
+                        highlightTransactionsBtn.classList.remove('btn-primary');
+                        highlightTransactionsBtn.classList.add('btn-dark');
+                        highlightTransactionsBtn.innerHTML = '<i class="fas fa-list me-2"></i> Tüm Kayıtları Göster';
+                    } else {
+                        highlightTransactionsBtn.classList.remove('btn-dark');
+                        highlightTransactionsBtn.classList.add('btn-primary');
+                        highlightTransactionsBtn.innerHTML = '<i class="fas fa-hand-holding-dollar me-2"></i> Şirketler Arası İşlemleri Vurgula';
+                    }
+                    applyFiltersAndSort();
+                });
+            }
+
+            if (exportToExcelBtn) {
+                exportToExcelBtn.addEventListener('click', async () => {
+                    const exportFilters = [];
+                    document.querySelectorAll('.multi-select-dropdown').forEach(dropdown => {
+                        const button = dropdown.querySelector('.multi-select-button');
+                        const columnIndex = parseInt(button.dataset.column);
+                        const selectedValues = multiSelectFilterStates[columnIndex];
+                        if (selectedValues && selectedValues.length > 0) {
+                            let finalMappedValues = [];
+                            if (columnIndex === 13) {
+                                finalMappedValues = selectedValues.map(val => {
+                                    const matchingType = checkTransactionTypesJs.find(t => t.code && t.code.toLowerCase() === val.toLowerCase() || t.description && t.description.toLowerCase() === val.toLowerCase());
+                                    return matchingType ? matchingType.code : val;
+                                }).filter(v => v && !['', 'seçiniz', '0'].includes((v || '').toLowerCase()));
+                            } else if (columnIndex === 5 || columnIndex === 7 || columnIndex === 8) {
+                                finalMappedValues = selectedValues.map(val => {
+                                    if (!val) return null;
+                                    const parts = val.split('.');
+                                    if (parts.length === 3) {
+                                        return `${parts[2]}-${parts[1]}-${parts[0]}`;
+                                    }
+                                    return val;
+                                });
+                            } else if (columnIndex === 3 || columnIndex === 17) {
+                                finalMappedValues = selectedValues.map(val => {
+                                    if (!val) return null;
+                                    return val.replace(/\./g, '').replace(',', '.');
+                                });
+                            } else {
+                                finalMappedValues = selectedValues;
+                            }
+
+                            if (finalMappedValues.length > 0) {
+                                exportFilters.push({ ColumnIndex: columnIndex, Values: finalMappedValues, Type: 'multi-select' });
+                            }
+                        }
+                    });
+                    let exportSort = null;
+                    if (currentSortColumn !== -1 && currentSortDirection !== 'none') {
+                        exportSort = {
+                            ColumnIndex: currentSortColumn,
+                            SortType: table.querySelector(`th[data-column="${currentSortColumn}"]`)?.dataset.sortType,
+                            Direction: currentSortDirection
+                        };
+                    }
+                    const requestBody = {
+                        Filters: exportFilters,
+                        Sort: exportSort
+                    };
+                    try {
+                        const response = await fetch('/Rapor22/ExportToExcel' + dbQueryString, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'RequestVerificationToken': antiForgeryToken
+                            },
+                            body: JSON.stringify(requestBody)
+                        });
+                        if (response.ok) {
+                            const blob = await response.blob();
+                            const disposition = response.headers.get('Content-Disposition');
+                            let filename = 'CekAkibetiRaporu.xlsx';
+                            if (disposition && disposition.indexOf('attachment') !== -1) {
+                                const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                                const matches = filenameRegex.exec(disposition);
+                                if (matches != null && matches[1]) {
+                                    filename = decodeURIComponent(matches[1].replace(/['"]/g, ''));
+                                }
+                            }
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = filename;
+                            document.body.appendChild(a);
+                            a.click();
+                            a.remove();
+                            window.URL.revokeObjectURL(url);
+                            showAlert('Excel raporu başarıyla oluşturuldu ve indiriliyor.', 'success');
+                        } else {
+                            let errorMessage = `Excel dışa aktarılırken hata oluştu: ${response.status} ${response.statusText}`;
+                            try {
+                                const errorText = await response.text();
+                                errorMessage = `Excel dışa aktarılırken hata oluştu: ${response.status} - ${errorText || response.statusText}`;
+                            } catch (e) { }
+                            showAlert(errorMessage, 'danger');
+                        }
+                    } catch (error) {
+                        console.error('Excel dışa aktarılırken bir ağ hatası oluştu:', error);
+                        showAlert('Excel dışa aktarılırken bir ağ hatası oluştu: ' + error.message, 'danger');
+                    }
+                });
+            }
+
+            function makeColumnsResizable() {
+                const headers = document.querySelectorAll('#rapor2Table thead th');
+                headers.forEach((header, index) => {
+                    const columnIndex = index;
+                    let handle = header.querySelector('.resizable-column-handle');
+                    if (!handle) {
+                        handle = document.createElement('div');
+                        handle.classList.add('resizable-column-handle');
+                        header.appendChild(handle);
+                    }
+
+                    let isResizing = false;
+                    let startX = 0;
+                    let startWidth = 0;
+
+                    const onMouseMove = function (e) {
+                        if (!isResizing) return;
+                        const deltaX = e.clientX - startX;
+                        const newWidth = startWidth + deltaX;
+
+                        if (newWidth > 30) {
+                            header.style.width = `${newWidth}px`;
+                            header.style.minWidth = `${newWidth}px`;
+                            header.style.maxWidth = `${newWidth}px`;
+                            const allCells = document.querySelectorAll(`#rapor2Table tbody tr td:nth-child(${columnIndex + 1})`);
+                            allCells.forEach(cell => {
+                                cell.style.width = `${newWidth}px`;
+                                cell.style.minWidth = `${newWidth}px`;
+                                cell.style.maxWidth = `${newWidth}px`;
+                            });
+                        }
+                    };
+
+                    const onMouseUp = function () {
+                        if (!isResizing) return;
+                        isResizing = false;
+                        document.body.style.userSelect = '';
+                        document.removeEventListener('mousemove', onMouseMove);
+                        document.removeEventListener('mouseup', onMouseUp);
+                    };
+
+                    handle.addEventListener('mousedown', function (e) {
+                        isResizing = true;
+                        startX = e.clientX;
+                        startWidth = header.offsetWidth;
+                        e.preventDefault();
+                        document.body.style.userSelect = 'none';
+                        document.addEventListener('mousemove', onMouseMove);
+                        document.addEventListener('mouseup', onMouseUp);
+                    });
+                });
+            }
+
+            if (clearAllFiltersBtn) {
+                clearAllFiltersBtn.addEventListener('click', function () {
+                    if (activeDbCode) {
+                        window.location.href = window.location.pathname + '?db=' + encodeURIComponent(activeDbCode);
+                    } else {
+                        window.location.href = window.location.pathname;
+                    }
+                });
+            }
+
+            applyRowGroupingHighlight();
+            applyColumnVisibilityAndOrder();
+            updateHeaderIcons();
+            makeColumnsResizable();
+
+            currentlyFilteredRows = [...allOriginalRows];
+            updateTableDisplay();
+        });
+    </script>
+}

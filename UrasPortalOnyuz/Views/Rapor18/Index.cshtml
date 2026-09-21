@@ -1,0 +1,1293 @@
+﻿@model List<WebApplication3.Models.OrderTrackingViewModel>
+@using System.Globalization
+@using WebApplication3.Models
+@using Newtonsoft.Json
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Xsrf
+
+@{
+    ViewData["Title"] = "İhracat Sipariş Takip Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // Aktif Veritabanını (Şirketi) URL veya Cookie'den alıyoruz ki linklerde ve formlarda kaybolmasın
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"];
+    }
+
+    // Mevcut kullanıcı adını alın ve küçük harfe çevirin.
+    var currentUsername = User.Identity.Name?.ToLower();
+
+    // YETKİLENDİRME KONTROLÜ: Sadece it02 ve ykb kullanıcıları için finansal alanlar
+    var isFinanceUser = currentUsername == "it02" || currentUsername == "ykb";
+
+    // Modellerdeki tüm alanları (Finansal alanlar dahil) JSON serializasyonu
+    var reportDataJson = Model != null ? JsonConvert.SerializeObject(Model, new JsonSerializerSettings { DateFormatString = "yyyy-MM-dd" }) : "[]";
+
+    // Filtre listeleri
+    var distinctValues = new Dictionary<string, List<string>>();
+    if (Model != null)
+    {
+        distinctValues["SiparisAlanFirma"] = Model.Where(m => !string.IsNullOrEmpty(m.SiparisAlanFirma)).Select(m => m.SiparisAlanFirma).Distinct().OrderBy(s => s).ToList();
+        distinctValues["FaturaKesilenFirma"] = Model.Where(m => !string.IsNullOrEmpty(m.FaturaKesilenFirma)).Select(m => m.FaturaKesilenFirma).Distinct().OrderBy(s => s).ToList();
+        distinctValues["FaturaNo"] = Model.Where(m => m.FaturaNo.HasValue).Select(m => m.FaturaNo.Value.ToString()).Distinct().OrderBy(s => s).ToList();
+        distinctValues["TeklifNo"] = Model.Where(m => m.TeklifNo.HasValue).Select(m => m.TeklifNo.Value.ToString()).Distinct().OrderBy(s => s).ToList();
+        distinctValues["MusteriAdi"] = Model.Where(m => !string.IsNullOrEmpty(m.MusteriAdi)).Select(m => m.MusteriAdi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["Ulke"] = Model.Where(m => !string.IsNullOrEmpty(m.Ulke)).Select(m => m.Ulke).Distinct().OrderBy(s => s).ToList();
+        distinctValues["PlanlananHafta"] = Model.Where(m => !string.IsNullOrEmpty(m.PlanlananHafta)).Select(m => m.PlanlananHafta).Distinct().OrderBy(s => s).ToList();
+        distinctValues["SatisSorumlusu"] = Model.Where(m => !string.IsNullOrEmpty(m.SatisSorumlusu)).Select(m => m.SatisSorumlusu).Distinct().OrderBy(s => s).ToList();
+        distinctValues["UrunKodu"] = Model.Where(m => !string.IsNullOrEmpty(m.UrunKodu)).Select(m => m.UrunKodu).Distinct().OrderBy(s => s).ToList();
+        distinctValues["UrunModeli"] = Model.Where(m => !string.IsNullOrEmpty(m.UrunModeli)).Select(m => m.UrunModeli).Distinct().OrderBy(s => s).ToList();
+        distinctValues["SiparisDurumu"] = Model.Where(m => !string.IsNullOrEmpty(m.SiparisDurumu)).Select(m => m.SiparisDurumu).Distinct().OrderBy(s => s).ToList();
+        distinctValues["Durum"] = Model.Where(m => !string.IsNullOrEmpty(m.Durum)).Select(m => m.Durum).Distinct().OrderBy(s => s).ToList();
+        distinctValues["NakliyePlani"] = Model.Where(m => !string.IsNullOrEmpty(m.NakliyePlani)).Select(m => m.NakliyePlani).Distinct().OrderBy(s => s).ToList();
+        distinctValues["TeslimatDurumu"] = Model.Where(m => !string.IsNullOrEmpty(m.TeslimatDurumu)).Select(m => m.TeslimatDurumu).Distinct().OrderBy(s => s).ToList();
+        distinctValues["IhracatDosyaNo"] = Model.Where(m => !string.IsNullOrEmpty(m.IhracatDosyaNo)).Select(m => m.IhracatDosyaNo).Distinct().OrderBy(s => s).ToList();
+    }
+
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? "URSMAKINE";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <style>
+        :root {
+            --primary-color: #0d6efd;
+            --secondary-color: #6c757d;
+            --success-color: #198754;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #0dcaf0;
+            --light-bg: #f8f9fa;
+            --dark-text: black;
+            --border-color: #d0d0d0;
+            --header-bg: #212529;
+            --header-text: #ffffff;
+            --box-shadow-light: 0 0 8px rgba(0, 0, 0, 0.08);
+            --box-shadow-medium: 0 2px 3px rgba(0, 0, 0, 0.06);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 12px;
+            background-color: var(--light-bg);
+            color: var(--dark-text);
+        }
+
+        .main-content {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+            font-size: 1.15em;
+            padding: 8px;
+            background-color: #ffffff;
+            border-radius: 6px;
+            box-shadow: var(--box-shadow-light);
+            position: relative;
+        }
+
+        .container-fluid.py-4 {
+            padding-top: 5px;
+            padding-bottom: 10px;
+            padding-left: 5px;
+            padding-right: 5px;
+        }
+
+        .database-info {
+            background-color: var(--info-color);
+            color: #ffffff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-bottom: 6px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            font-size: 0.96em;
+            line-height: 1.1;
+        }
+
+            .database-info .fas {
+                margin-right: 4px;
+            }
+
+        .sticky-toolbar {
+            position: sticky;
+            top: 0;
+            background-color: #ffffff;
+            z-index: 1000;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+            margin-top: 0px !important;
+            margin-bottom: 6px;
+            box-shadow: var(--box-shadow-medium);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: nowrap;
+            gap: 10px;
+        }
+
+            .sticky-toolbar .total-amount-display {
+                font-size: 0.96em;
+                font-weight: bold;
+                color: var(--primary-color);
+                margin-left: 5px !important;
+                margin-right: 4px !important;
+                white-space: nowrap;
+            }
+
+        .table-container {
+            overflow-x: auto;
+            position: relative;
+            border-radius: 6px;
+            box-shadow: var(--box-shadow-medium);
+            background-color: #ffffff;
+            margin-top: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        .rapor-tablo {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 0.84em;
+            color: var(--dark-text);
+            table-layout: fixed;
+            min-width: 2500px; /* Yeni kolonlara göre ayarlandı */
+        }
+
+            .rapor-tablo thead {
+                position: sticky;
+                top: 0;
+                z-index: 101;
+                background-color: #ffffff;
+            }
+
+                .rapor-tablo thead .main-header-row th {
+                    background-color: var(--header-bg);
+                    color: var(--header-text);
+                    padding: 4px 3px;
+                    text-align: center;
+                    white-space: nowrap;
+                    font-weight: 700;
+                    border-bottom: 2px solid var(--border-color);
+                    height: auto;
+                    line-height: 1.3;
+                }
+
+                .rapor-tablo thead .filter-row th {
+                    padding: 2px 3px;
+                    height: 30px;
+                    line-height: normal;
+                    vertical-align: top;
+                    white-space: nowrap;
+                    background-color: #ffffff;
+                    border-bottom: 1px solid var(--border-color);
+                }
+
+            .rapor-tablo th,
+            .rapor-tablo td {
+                padding: 1px;
+                vertical-align: middle;
+                border-right: 1px solid var(--border-color);
+            }
+
+                .rapor-tablo th:last-child,
+                .rapor-tablo td:last-child {
+                    border-right: none;
+                }
+
+            .rapor-tablo td {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                height: 25px;
+                line-height: 25px;
+                border-bottom: 1px solid var(--border-color);
+            }
+
+                /* DÜZENLENEBİLİR ALAN STİLİ */
+                .rapor-tablo td.editable-field {
+                    cursor: pointer;
+                }
+
+                    .rapor-tablo td.editable-field:hover {
+                        background-color: #f0f0f0;
+                    }
+
+        .editable-input {
+            padding: 1px 3px !important;
+            height: 23px !important;
+            font-size: 0.9em !important;
+            border: 1px solid var(--primary-color) !important;
+            box-shadow: 0 0 5px rgba(13, 110, 253, 0.5) !important;
+        }
+
+        /* Tüm checkbox hücreleri için ortak özellikler */
+        .rapor-tablo th.checkbox-column,
+        .rapor-tablo td.checkbox-column {
+            min-width: 28px !important;
+            max-width: 28px !important;
+            width: 28px !important;
+            text-align: center !important;
+            padding: 0 !important;
+            vertical-align: middle !important;
+            overflow: visible;
+        }
+
+        .rapor-tablo td.checkbox-column {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end; 
+            height: 27px; 
+        }
+
+        .rapor-tablo th.checkbox-column input {
+            display: block;
+            margin-left: auto; 
+            margin-right: 5px; 
+        }
+
+        .filter-row th .form-control,
+        .filter-row th .bootstrap-select .btn {
+            width: 100% !important;
+            box-sizing: border-box !important;
+            height: 28px !important;
+            line-height: normal !important;
+            padding: 2px 5px !important;
+            font-size: 0.85em !important;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border: 1px solid #ced4da;
+            border-radius: 0.25rem;
+        }
+
+        .table-hover tbody tr:hover {
+            background-color: var(--light-bg);
+        }
+
+        .table-success {
+            background-color: #d1e7dd !important;
+        }
+
+        .table-danger {
+            background-color: #f8d7da !important;
+        }
+
+        .table-warning {
+            background-color: #fff3cd !important;
+        }
+    </style>
+}
+
+<div class="container-fluid py-4">
+    @Html.AntiForgeryToken()
+
+    <div class="row g-0">
+        <div class="col-md-12">
+            <div class="main-report-box">
+
+                <div class="sticky-toolbar">
+                    <div class="d-flex align-items-center">
+                        <span class="me-2 total-amount-display">Seçilen Toplam TL Tutarı:</span>
+                        <strong id="totalSelectedTlAmount" class="text-primary">0,00 TL</strong>
+                    </div>
+                    <div class="database-info">
+                        <i class="fas fa-database"></i>
+                        Veritabanı: <strong>@currentSelectedDbDisplay</strong>
+                    </div>
+                    <button id="clearAllFiltersBtn" class="btn btn-warning btn-sm">
+                        <i class="fas fa-eraser"></i> Filtreleri Temizle
+                    </button>
+                </div>
+
+                <div id="alertContainer" class="mt-3"></div>
+
+                <div class="table-container">
+                    <table class="table table-bordered table-striped table-hover rapor-tablo" id="rapor18Table">
+                        <thead>
+                            <tr class="main-header-row">
+                                <th class="checkbox-column no-drag" data-column="Checkbox">
+                                    <input type="checkbox" id="selectAllCheckbox" class="form-check-input" />
+                                </th>
+                                <th class="sortable-column" data-column="SiparisAlanFirma" title="Sip. Alan Firma" data-sort-type="text">Sip. Alan Firma <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="FaturaKesilenFirma" title="Fat. Kesilen Firma" data-sort-type="text">Fat. Kesilen Firma <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="SiparisNo" title="Sipariş No" data-sort-type="number">Sipariş No <i class="fas fa-sort float-end"></i></th>
+
+                                <th class="sortable-column" data-column="FaturaNo" title="Fatura No" data-sort-type="number">Fatura No <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="TeklifNo" title="Teklif No" data-sort-type="number">Teklif No <i class="fas fa-sort float-end"></i></th>
+
+                                @* Finansal Alanlar (Sadece it02 ve ykb) *@
+                                @if (isFinanceUser)
+                                {
+                                    <th class="sortable-column" data-column="FaturaTutari" title="Fatura Tutarı" data-sort-type="number">Fatura Tutarı <i class="fas fa-sort float-end"></i></th>
+                                    <th class="sortable-column editable-header" data-column="OnOdemeTarihi" title="Ön Ödeme Tarihi" data-sort-type="date">Ön Ödeme Tarihi <i class="fas fa-sort float-end"></i></th>
+                                    <th class="sortable-column" data-column="TahsilatTutari" title="Tahsilat Tutarı" data-sort-type="number">Tahsilat Tutarı <i class="fas fa-sort float-end"></i></th>
+                                    <th class="sortable-column" data-column="KalanBakiyeYuzde" title="Kalan Bakiye %" data-sort-type="number">Kalan Bakiye % <i class="fas fa-sort float-end"></i></th>
+                                }
+
+                                <th class="sortable-column" data-column="MusteriAdi" title="Müşteri Adı" data-sort-type="text">Müşteri Adı <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="Ulke" title="Ülke" data-sort-type="text">Ülke <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="SiparisTarihi" title="Sipariş Tarihi" data-sort-type="date">Sipariş Tarihi <i class="fas fa-sort float-end"></i></th>
+
+                                @if (!isFinanceUser)
+                                {
+                                    <th class="sortable-column" data-column="OnOdemeTarihi" title="Ön Ödeme Tarihi" data-sort-type="date">Ön Ödeme Tarihi <i class="fas fa-sort float-end"></i></th>
+                                }
+
+                                <th class="sortable-column editable-header" data-column="PlanlananTeslimTarihi" title="Planlanan Teslim Tarihi" data-sort-type="date">Planlanan Teslim Tarihi <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column editable-header" data-column="PlanlananHafta" title="Planlanan Hafta" data-sort-type="text">Planlanan Hafta <i class="fas fa-sort float-end"></i></th>
+
+                                <th class="sortable-column" data-column="SiparisTeslimatSuresi" title="Sip.-Plan. Tes. Süresi" data-sort-type="number">Sip.-Plan. Tes. Süresi <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="SatisSorumlusu" title="Satış Sorumlusu" data-sort-type="text">Satış Sorumlusu <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="UrunKodu" title="Ürün Kodu" data-sort-type="text">Ürün Kodu <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="UrunModeli" title="Ürün Modeli" data-sort-type="text">Ürün Modeli <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column editable-header" data-column="SiparisDurumu" title="Sip. Durumu" data-sort-type="text">Sip. Durumu <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column editable-header" data-column="UretimBaslangicTarihi" title="Üretim Baş. Tar." data-sort-type="date">Üretim Baş. Tar. <i class="fas fa-sort float-end"></i></th>
+
+                                <th class="sortable-column editable-header" data-column="PlanlananBitisTarihi" title="Plan. Bitiş Tar." data-sort-type="date">Plan. Bitiş Tar. <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column editable-header" data-column="GerceklesenBitisTarihi" title="Gerçek. Bitiş Tar." data-sort-type="date">Gerçek. Bitiş Tar. <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="Stokta" title="Stokta" data-sort-type="number">Stokta <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="Ihtiyac" title="İhtiyaç" data-sort-type="number">İhtiyaç <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column editable-header" data-column="Durum" title="Durum" data-sort-type="text">Durum <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column editable-header" data-column="NakliyePlani" title="Nakliye Planı" data-sort-type="text">Nakliye Planı <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column editable-header" data-column="FabrikaCikisTarihi" title="Fabrika Çıkış Tar." data-sort-type="date">Fabrika Çıkış Tar. <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column editable-header" data-column="TeslimatDurumu" title="Teslimat Durumu" data-sort-type="text">Teslimat Durumu <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column editable-header" data-column="AnlasilanBeyannameTarihi" title="Anl. Bey. Tar." data-sort-type="date">Anl. Bey. Tar. <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column editable-header" data-column="NavlunYuklemeTarihi" title="Navlun Yük. Tar." data-sort-type="date">Navlun Yük. Tar. <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column editable-header" data-column="TahminiMusteriTeslimatTarihi" title="Tah. Müş. Tes. Tar." data-sort-type="date">Tah. Müş. Tes. Tar. <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column editable-header" data-column="PlanlananKurulumTarihi" title="Plan. Kur. Tar." data-sort-type="date">Plan. Kur. Tar. <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column editable-header" data-column="Not" title="Not" data-sort-type="text">Not <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="IhracatDosyaNo" title="İhr. Dosya No" data-sort-type="text">İhr. Dosya No <i class="fas fa-sort float-end"></i></th>
+                            </tr>
+                            <tr class="filter-row">
+                                <th data-column="Checkbox"></th>
+                                <th data-column="SiparisAlanFirma">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Sip. Alan Firma">
+                                        @if (distinctValues.ContainsKey("SiparisAlanFirma"))
+                                        {
+                                            foreach (var item in distinctValues["SiparisAlanFirma"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="FaturaKesilenFirma">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Fat. Kesilen Firma">
+                                        @if (distinctValues.ContainsKey("FaturaKesilenFirma"))
+                                        {
+                                            foreach (var item in distinctValues["FaturaKesilenFirma"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="SiparisNo"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+
+                                <th data-column="FaturaNo">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Fatura No">
+                                        @if (distinctValues.ContainsKey("FaturaNo"))
+                                        {
+                                            foreach (var item in distinctValues["FaturaNo"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="TeklifNo">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Teklif No">
+                                        @if (distinctValues.ContainsKey("TeklifNo"))
+                                        {
+                                            foreach (var item in distinctValues["TeklifNo"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+
+                                @* Finansal Filtreler (Sadece it02 ve ykb) *@
+                                @if (isFinanceUser)
+                                {
+                                    <th data-column="FaturaTutari"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                    <th data-column="OnOdemeTarihi"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                    <th data-column="TahsilatTutari"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                    <th data-column="KalanBakiyeYuzde"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                }
+
+                                <th data-column="MusteriAdi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Müşteri Adı">
+                                        @if (distinctValues.ContainsKey("MusteriAdi"))
+                                        {
+                                            foreach (var item in distinctValues["MusteriAdi"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="Ulke">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Ülke">
+                                        @if (distinctValues.ContainsKey("Ulke"))
+                                        {
+                                            foreach (var item in distinctValues["Ulke"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="SiparisTarihi"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+
+                                @if (!isFinanceUser)
+                                {
+                                    <th data-column="OnOdemeTarihi"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                }
+
+                                <th data-column="PlanlananTeslimTarihi"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                <th data-column="PlanlananHafta">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Planlanan Hafta">
+                                        @if (distinctValues.ContainsKey("PlanlananHafta"))
+                                        {
+                                            foreach (var item in distinctValues["PlanlananHafta"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+
+                                <th data-column="SiparisTeslimatSuresi"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                <th data-column="SatisSorumlusu">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Satış Sorumlusu">
+                                        @if (distinctValues.ContainsKey("SatisSorumlusu"))
+                                        {
+                                            foreach (var item in distinctValues["SatisSorumlusu"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="UrunKodu">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Ürün Kodu">
+                                        @if (distinctValues.ContainsKey("UrunKodu"))
+                                        {
+                                            foreach (var item in distinctValues["UrunKodu"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="UrunModeli">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Ürün Modeli">
+                                        @if (distinctValues.ContainsKey("UrunModeli"))
+                                        {
+                                            foreach (var item in distinctValues["UrunModeli"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="SiparisDurumu">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Sip. Durumu">
+                                        @if (distinctValues.ContainsKey("SiparisDurumu"))
+                                        {
+                                            foreach (var item in distinctValues["SiparisDurumu"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="UretimBaslangicTarihi"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                <th data-column="PlanlananBitisTarihi"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                <th data-column="GerceklesenBitisTarihi"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                <th data-column="Stokta"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                <th data-column="Ihtiyac"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                <th data-column="Durum">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Durum">
+                                        @if (distinctValues.ContainsKey("Durum"))
+                                        {
+                                            foreach (var item in distinctValues["Durum"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="NakliyePlani">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Nakliye Planı">
+                                        @if (distinctValues.ContainsKey("NakliyePlani"))
+                                        {
+                                            foreach (var item in distinctValues["NakliyePlani"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="FabrikaCikisTarihi"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                <th data-column="TeslimatDurumu">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="Teslimat Durumu">
+                                        @if (distinctValues.ContainsKey("TeslimatDurumu"))
+                                        {
+                                            foreach (var item in distinctValues["TeslimatDurumu"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="AnlasilanBeyannameTarihi"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                <th data-column="NavlunYuklemeTarihi"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                <th data-column="TahminiMusteriTeslimatTarihi"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                <th data-column="PlanlananKurulumTarihi"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                <th data-column="Not"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                <th data-column="IhracatDosyaNo">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="İhr. Dosya No">
+                                        @if (distinctValues.ContainsKey("IhracatDosyaNo"))
+                                        {
+                                            foreach (var item in distinctValues["IhracatDosyaNo"])
+                                            {
+                                                <option value="@item">@item</option>
+                                            }
+                                        }
+                                    </select>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="row mt-2 d-flex justify-content-between align-items-center">
+                    <div class="col-md-4">
+                        <div id="pagination-info">
+                            Toplam Kayıt: <strong id="totalRecords">@(Model?.Count ?? 0)</strong>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <nav aria-label="Page navigation">
+                            <ul class="pagination pagination-sm justify-content-center mb-0" id="page-links"></ul>
+                        </nav>
+                    </div>
+                    <div class="col-md-4 text-right">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="packingListModal" tabindex="-1" aria-labelledby="packingListModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="packingListModalLabel">Packing Listesi Oluşturma/Düzenleme (Fatura No: <span id="modalFaturaNo"></span>)</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="packingListForm">
+                    <input type="hidden" id="plIhracatDosyaNo" name="IhracatDosyaNo">
+                    <input type="hidden" id="plFaturaNo" name="FaturaNo">
+
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Tarih:</label>
+                            <input type="date" id="plTarih" name="Tarih" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Nakliyeci:</label>
+                            <input type="text" id="plNakliyeci" name="Nakliyeci" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">TIR ID (Truck ID):</label>
+                            <input type="text" id="plTruckID" name="TruckID" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Demir Platform Sayısı:</label>
+                            <input type="number" step="1" id="plTotalDemirPlatform" name="TotalDemirPlatform" class="form-control form-control-sm">
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Gönderici Adresi (Sevk):</label>
+                            <textarea id="plGondericiAdresi" name="GondericiAdresi" class="form-control form-control-sm" rows="2"></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Alıcı Adresi (Bill To):</label>
+                            <textarea id="plAliciAdresi" name="AliciAdresi" class="form-control form-control-sm" rows="2"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Ana Açıklama (Sevkiyat Konusu):</label>
+                        <input type="text" id="plAnaAciklama" name="AnaAciklama" class="form-control form-control-sm">
+                    </div>
+
+                    <h6 class="mt-4 mb-2 text-primary fw-bold">Paketleme Satırları (Volume Detayları)</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered table-striped" id="packingListLinesTable">
+                            <thead>
+                                <tr class="bg-light">
+                                    <th>NO.</th>
+                                    <th>AÇIKLAMA (Ürün/Volume)</th>
+                                    <th>Miktar</th>
+                                    <th style="width: 100px;">NET (KG)</th>
+                                    <th style="width: 100px;">BRÜT (KG)</th>
+                                    <th style="width: 120px;">ÖLÇÜ (CM)</th>
+                                    <th style="width: 150px;">SATIR NOTU</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            </tbody>
+                            <tfoot>
+                                <tr class="table-info fw-bold">
+                                    <td colspan="3" class="text-end">TOPLAM AĞIRLIK:</td>
+                                    <td id="totalNetFooter" class="text-end">0.000</td>
+                                    <td id="totalBrutFooter" class="text-end">0.000</td>
+                                    <td colspan="2"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <div class="text-end mt-3">
+                        <button type="submit" id="savePackingListBtn" class="btn btn-success"><i class="fas fa-save"></i> Kaydet ve PDF Oluştur</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+
+            // Aktif veritabanı parametresini JS değişkenine alıyoruz
+            const currentDbParam = '@currentDb';
+            const dbQueryString = currentDbParam ? `?db=${currentDbParam}` : '';
+
+            const allReportData = @Html.Raw(reportDataJson);
+            const table = document.getElementById('rapor18Table');
+            const tableBody = table.querySelector('tbody');
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const totalSelectedTlAmountSpan = document.getElementById('totalSelectedTlAmount');
+            const clearAllFiltersBtn = document.getElementById('clearAllFiltersBtn');
+            const packingListModal = new bootstrap.Modal(document.getElementById('packingListModal'));
+            const savePackingListBtn = document.getElementById('savePackingListBtn');
+
+            let currentlyFilteredRows = [...allReportData];
+            let currentSortColumn = null;
+            let currentSortDirection = 'none';
+            const xsrfToken = '@Xsrf.GetAndStoreTokens(ViewContext.HttpContext).RequestToken';
+
+            // KULLANICI YETKİSİ JS'YE TAŞINIYOR
+            const isFinanceUser = @(isFinanceUser.ToString().ToLower());
+
+            // Modeldeki tüm alanları (görünür/gizli) içerir
+            const columnMappings = {
+                'Checkbox': null,
+                'SiparisAlanFirma': 'SiparisAlanFirma',
+                'FaturaKesilenFirma': 'FaturaKesilenFirma',
+                'SiparisNo': 'SiparisNo',
+                'FaturaNo': 'FaturaNo',
+                'TeklifNo': 'TeklifNo',
+
+                'FaturaTutari': 'FaturaTutari',
+                'TahsilatTutari': 'TahsilatTutari',
+                'KalanBakiyeYuzde': 'KalanBakiyeYuzde',
+                'OnOdemeTarihi': 'OnOdemeTarihi', // Finansal alan olarak da ele alınır
+
+                'MusteriAdi': 'MusteriAdi',
+                'Ulke': 'Ulke',
+                'SiparisTarihi': 'SiparisTarihi',
+
+                'PlanlananTeslimTarihi': 'PlanlananTeslimTarihi',
+                'PlanlananHafta': 'PlanlananHafta',
+                'SiparisTeslimatSuresi': 'SiparisTeslimatSuresi',
+                'SatisSorumlusu': 'SatisSorumlusu',
+                'UrunKodu': 'UrunKodu',
+                'UrunModeli': 'UrunModeli',
+                'SiparisDurumu': 'SiparisDurumu',
+                'UretimBaslangicTarihi': 'UretimBaslangicTarihi',
+                'PlanlananBitisTarihi': 'PlanlananBitisTarihi',
+                'GerceklesenBitisTarihi': 'GerceklesenBitisTarihi',
+                'Stokta': 'Stokta',
+                'Ihtiyac': 'Ihtiyac',
+                'Durum': 'Durum',
+                'NakliyePlani': 'NakliyePlani',
+                'FabrikaCikisTarihi': 'FabrikaCikisTarihi',
+                'TeslimatDurumu': 'TeslimatDurumu',
+                'AnlasilanBeyannameTarihi': 'AnlasilanBeyannameTarihi',
+                'NavlunYuklemeTarihi': 'NavlunYuklemeTarihi',
+                'TahminiMusteriTeslimatTarihi': 'TahminiMusteriTeslimatTarihi',
+                'PlanlananKurulumTarihi': 'PlanlananKurulumTarihi',
+                'Not': 'Not',
+                'IhracatDosyaNo': 'IhracatDosyaNo'
+            };
+
+            // ====================================================================
+            // YARDIMCI FONKSİYONLAR
+            // ====================================================================
+
+            function updatePaginationInfo(totalCount) {
+                const totalRecordsSpan = document.getElementById('totalRecords');
+                if (totalRecordsSpan) {
+                    totalRecordsSpan.textContent = totalCount;
+                }
+                const pageLinks = document.getElementById('page-links');
+                if (pageLinks) {
+                    pageLinks.innerHTML = '';
+                }
+            }
+
+            function showAlert(message, type) {
+                toastr[type](message);
+            }
+
+            function getInitialColumnConfig() {
+                // Sadece HTML'de GÖRÜNÜR olan kolonları alır
+                const headers = Array.from(table.querySelectorAll('thead .main-header-row th'));
+                return headers.map((header, index) => ({
+                    originalIndex: index,
+                    newIndex: index,
+                    visible: header.style.display !== 'none', // Razor'da gizlenen başlıkları atlamak için
+                    columnName: header.dataset.column || 'Unknown'
+                }));
+            }
+
+            function calculateSelectedTotal() {
+                let totalAmount = 0;
+                document.querySelectorAll('#rapor18Table tbody tr input.row-selector:checked').forEach(checkbox => {
+                    const tlValue = parseFloat(checkbox.dataset.tlValue);
+                    if (!isNaN(tlValue)) {
+                        totalAmount += tlValue;
+                    }
+                });
+                totalSelectedTlAmountSpan.textContent = totalAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL';
+            }
+
+            function updateSelectAllCheckboxState() {
+                if (!selectAllCheckbox) return;
+                const visibleCheckboxes = document.querySelectorAll('#rapor18Table tbody tr:not([style*="display: none"]) .row-selector');
+                if (visibleCheckboxes.length > 0) {
+                    const allChecked = Array.from(visibleCheckboxes).every(checkbox => checkbox.checked);
+                    const anyChecked = Array.from(visibleCheckboxes).some(checkbox => checkbox.checked);
+                    selectAllCheckbox.checked = allChecked;
+                    selectAllCheckbox.indeterminate = !allChecked && anyChecked;
+                } else {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = false;
+                }
+            }
+
+
+            function renderTable(data) {
+                tableBody.innerHTML = '';
+                const visibleColumns = window.currentColumnConfig || getInitialColumnConfig();
+                const visibleColumnsCount = visibleColumns.length;
+
+                if (data.length === 0) {
+                    tableBody.innerHTML = `<tr><td colspan="${visibleColumnsCount}" class="text-center">Gösterilecek veri bulunamadı.</td></tr>`;
+                    updatePaginationInfo(0);
+                    return;
+                }
+
+                const frag = document.createDocumentFragment();
+
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.dataset.ihracatDosyaNo = item.IhracatDosyaNo || '';
+                    const rowClass = item.Durum ? {
+                        'Ödendi': 'table-success',
+                        'Gecikti': 'table-danger',
+                        'Kısmi Ödeme Vadesi Geçti': 'table-warning'
+                    }[item.Durum?.trim()] || '' : '';
+                    row.className = rowClass;
+
+                    visibleColumns.forEach(col => {
+                        const cell = document.createElement('td');
+                        let content = '';
+                        let value = item[col.columnName];
+                        cell.dataset.column = col.columnName;
+
+                        if (col.columnName === 'Checkbox') {
+                            cell.className = 'checkbox-column d-flex align-items-center justify-content-center';
+                            cell.style.height = '25px';
+                            const checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+                            checkbox.className = 'form-check-input row-selector';
+                            checkbox.dataset.tlValue = item.FaturaTutari || 0;
+                            cell.appendChild(checkbox);
+                        } else if (col.columnName === 'FaturaNo') {
+                            // Fatura No Link (Packing List için)
+                            if (value) {
+                                const link = document.createElement('a');
+                                link.href = '#';
+                                link.textContent = value;
+                                link.title = `Packing List Oluştur/Düzenle: ${value}`;
+                                link.dataset.ihracatDosyaNo = item.IhracatDosyaNo;
+                                link.dataset.faturaNo = value;
+                                link.classList.add('packing-list-link');
+                                cell.appendChild(link);
+                                cell.style.textAlign = 'center';
+                            } else {
+                                cell.textContent = '-';
+                            }
+                        } else if (col.columnName === 'TeklifNo') {
+                            // Teklif No Link (Proforma için)
+                            if (value) {
+                                const link = document.createElement('a');
+                                link.href = `/Rapor18/ProformaFatura/${value}${dbQueryString}`;
+                                link.target = '_blank';
+                                link.textContent = value;
+                                cell.appendChild(link);
+                                cell.style.textAlign = 'center';
+                            } else {
+                                cell.textContent = '';
+                            }
+                        } else if (['FaturaTutari', 'TahsilatTutari'].includes(col.columnName)) {
+                            // Finansal Tutar Alanları (Sadece it02/ykb için görünür)
+                            if(isFinanceUser) {
+                                content = value?.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '';
+                                cell.textContent = content;
+                                cell.style.textAlign = 'right';
+                            } else {
+                                cell.textContent = '-'; // Yetkisiz kullanıcılar için boş bırak
+                            }
+                        } else if (col.columnName === 'KalanBakiyeYuzde') {
+                            // Yüzde Alanı (Sadece it02/ykb için görünür)
+                            if(isFinanceUser) {
+                                content = value !== null && value !== undefined ? value.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' %' : '';
+                                cell.textContent = content;
+                                cell.style.textAlign = 'center';
+                            } else {
+                                cell.textContent = '-';
+                            }
+                        } else if (col.columnName.includes('Tarihi')) {
+                            // Tarih Alanları (Düzenlenebilir)
+                            content = value ? new Date(value).toLocaleDateString('tr-TR') : '';
+                            cell.textContent = content;
+
+                            const fieldNameMapping = {
+                                'OnOdemeTarihi': 'U_BE1_ONTAR',
+                                'PlanlananTeslimTarihi': 'U_BE_PLTT',
+                                'UretimBaslangicTarihi': 'U_BE1_URBT',
+                                'PlanlananBitisTarihi': 'U_BE1_PLBT',
+                                'GerceklesenBitisTarihi': 'U_BE1_GBT',
+                                'FabrikaCikisTarihi': 'U_BE1_FBRKT',
+                                'AnlasilanBeyannameTarihi': 'U_BE1_ABT',
+                                'NavlunYuklemeTarihi': 'U_U_BE1_NYT',
+                                'TahminiMusteriTeslimatTarihi': 'U_BE1_TMT',
+                                'PlanlananKurulumTarihi': 'U_BE1_KRLTAR'
+                            };
+
+                            const fieldName = fieldNameMapping[col.columnName];
+
+                            // OnOdemeTarihi sadece finans kullanıcıları için düzenlenebilir. Diğer alanlar herkes için.
+                            if (fieldName === 'U_BE1_ONTAR') {
+                                if (isFinanceUser) {
+                                    cell.classList.add('editable-field');
+                                    cell.dataset.fieldName = fieldName;
+                                    cell.dataset.type = 'date';
+                                }
+                            } else if (fieldName) {
+                                cell.classList.add('editable-field');
+                                cell.dataset.fieldName = fieldName;
+                                cell.dataset.type = 'date';
+                            }
+
+                        } else if (['Stokta', 'Ihtiyac', 'SiparisTeslimatSuresi'].includes(col.columnName)) {
+                            // Sayısal Alanlar
+                            content = value?.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '';
+                            cell.textContent = content;
+                            cell.style.textAlign = 'right';
+                        } else if (['PlanlananHafta', 'SiparisDurumu', 'Durum', 'NakliyePlani', 'TeslimatDurumu', 'Not'].includes(col.columnName)) {
+                            // Düzenlenebilir Metin/Durum Alanları
+                            const fieldName = {
+                                'PlanlananHafta': 'U_be1_planhafta',
+                                'SiparisDurumu': 'U_BE1_SIPDUR',
+                                'Durum': 'U_BE1_DRM',
+                                'NakliyePlani': 'U_BE1_NKLP',
+                                'TeslimatDurumu': 'U_BE1_TSLMD',
+                                'Not': 'U_BE1_NOT'
+                            }[col.columnName];
+
+                            if (fieldName) {
+                                cell.classList.add('editable-field');
+                                cell.dataset.fieldName = fieldName;
+                                cell.dataset.type = 'text';
+                                content = value || '';
+                                cell.textContent = content;
+                            }
+                        } else {
+                            // Diğer Zorunlu Alanlar
+                            content = value || '';
+                            cell.textContent = content;
+                        }
+
+                        row.appendChild(cell);
+                    });
+
+                    frag.appendChild(row);
+                });
+                tableBody.appendChild(frag);
+                updatePaginationInfo(data.length);
+                calculateSelectedTotal();
+                updateSelectAllCheckboxState();
+                setupEditableFields(); // Tabloyu render ettikten sonra düzenlenebilir alanları tekrar kur
+            }
+
+            function filterTableAndRender() {
+                 // Filtreleme ve sıralama mantığı
+                const filters = {};
+                $('.filter-select-bs').each(function () {
+                    const selectElement = $(this);
+                    const columnKey = selectElement.closest('th').data('column');
+                    const selectedValues = selectElement.val();
+                    if (selectedValues && selectedValues.length > 0) {
+                        filters[columnKey] = selectedValues.map(v => (v || '').toLowerCase().trim());
+                    }
+                });
+
+                $('.filter-input').each(function () {
+                    const inputElement = $(this);
+                    const columnKey = inputElement.closest('th').data('column');
+                    const filterValue = inputElement.val().toLowerCase().trim();
+                    if (filterValue) {
+                        filters[columnKey] = [filterValue];
+                    }
+                });
+
+                let filteredData = allReportData.filter(item => {
+                    let isMatch = true;
+                    for (const column in filters) {
+                        const filterValues = filters[column];
+                        const propName = columnMappings[column];
+                        let itemValue = item[propName];
+
+                        // Değer formatlama ve filtreleme mantığı
+                        if (itemValue === null || itemValue === undefined) itemValue = '';
+                        else if (propName && propName.includes('Tarihi')) {
+                            itemValue = itemValue.toString();
+                            if (itemValue.includes('T')) itemValue = new Date(itemValue).toLocaleDateString('tr-TR');
+                        } else if (typeof itemValue === 'number' && column !== 'KalanBakiyeYuzde') {
+                            itemValue = itemValue.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        } else if (column === 'KalanBakiyeYuzde' && typeof itemValue === 'number') {
+                             itemValue = itemValue.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' %';
+                        } else {
+                            itemValue = itemValue.toString();
+                        }
+                        itemValue = itemValue.toLowerCase().trim();
+
+                        if (filterValues.length > 0 && !filterValues.some(val => itemValue.includes(val))) {
+                            isMatch = false;
+                            break;
+                        }
+                    }
+                    return isMatch;
+                });
+
+                // Sıralama mantığı
+                if (currentSortColumn && currentSortDirection !== 'none') {
+                    const sortType = document.querySelector(`th[data-column="${currentSortColumn}"]`)?.dataset.sortType;
+                    const propName = columnMappings[currentSortColumn];
+                    filteredData.sort((itemA, itemB) => {
+                         let valA = itemA[propName];
+                         let valB = itemB[propName];
+                         
+                         let comparison = 0;
+                         if (sortType === 'number') {
+                            valA = parseFloat(valA?.toString().replace(',', '.')) || 0;
+                            valB = parseFloat(valB?.toString().replace(',', '.')) || 0;
+                            comparison = valA - valB;
+                         } else if (sortType === 'date') {
+                            const dateA = valA ? new Date(valA) : new Date(0);
+                            const dateB = valB ? new Date(valB) : new Date(0);
+                            comparison = dateA.getTime() - dateB.getTime();
+                         } else {
+                            comparison = (valA || '').localeCompare((valB || ''), 'tr', { sensitivity: 'base' });
+                         }
+
+                         return currentSortDirection === 'asc' ? comparison : -comparison;
+                    });
+                }
+
+                currentlyFilteredRows = filteredData;
+                renderTable(currentlyFilteredRows);
+            }
+
+            function setupEditableFields() {
+                document.querySelectorAll('#rapor18Table tbody td.editable-field').forEach(cell => {
+                    if (cell.dataset.listenerAdded) return;
+                    cell.dataset.listenerAdded = 'true';
+
+                    cell.addEventListener('click', function (event) {
+                        if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+                            return;
+                        }
+
+                        const originalText = this.textContent.trim();
+                        const fieldName = this.dataset.fieldName;
+                        const dataType = this.dataset.type;
+
+                        // **GÜVENLİK KONTROLÜ:** OnOdemeTarihi (U_BE1_ONTAR) sadece finans kullanıcıları için düzenlenebilir.
+                        if (fieldName === 'U_BE1_ONTAR' && !isFinanceUser) {
+                            showAlert('Ön Ödeme Tarihi alanını düzenleme yetkiniz bulunmamaktadır.', 'warning');
+                            return;
+                        }
+
+                        this.dataset.originalValue = originalText;
+                        this.innerHTML = '';
+
+                        let inputElement;
+
+                        if (dataType === 'date') {
+                            inputElement = document.createElement('input');
+                            inputElement.type = 'date';
+                            inputElement.className = 'form-control form-control-sm editable-input';
+
+                            let dateValue = originalText.split('.');
+                            if (dateValue.length === 3) {
+                                inputElement.value = `${dateValue[2]}-${dateValue[1]}-${dateValue[0]}`;
+                            } else {
+                                inputElement.value = '';
+                            }
+                        } else if (fieldName === 'U_BE1_NOT') {
+                            inputElement = document.createElement('textarea');
+                            inputElement.className = 'form-control form-control-sm editable-input';
+                            inputElement.value = originalText;
+                            inputElement.rows = 2;
+                        } else {
+                            inputElement = document.createElement('input');
+                            inputElement.type = 'text';
+                            inputElement.className = 'form-control form-control-sm editable-input';
+                            inputElement.value = originalText;
+                        }
+
+                        this.appendChild(inputElement);
+                        inputElement.focus();
+
+                        inputElement.addEventListener('blur', function () {
+                            let newValue = this.value;
+
+                            if (dataType === 'date' && !newValue) {
+                                newValue = null;
+                            }
+
+                            if (newValue === originalText || (dataType !== 'date' && newValue === '')) {
+                                restoreOriginalValue(cell, originalText, dataType);
+                            } else {
+                                saveChange(cell, newValue);
+                            }
+                        });
+
+                        inputElement.addEventListener('keydown', function (e) {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                this.blur();
+                            }
+                        });
+                    });
+                });
+            }
+
+            function restoreOriginalValue(cell, value, type) {
+                if (type === 'date' && value) {
+                    const datePart = new Date(value);
+                    if (!isNaN(datePart)) {
+                        cell.textContent = datePart.toLocaleDateString('tr-TR');
+                    } else {
+                        cell.textContent = value;
+                    }
+                } else {
+                    cell.textContent = value || '';
+                }
+
+                delete cell.dataset.originalValue;
+            }
+
+            async function saveChange(cell, newValue) {
+                const ihracatDosyaNo = cell.closest('tr').dataset.ihracatDosyaNo;
+                const fieldName = cell.dataset.fieldName;
+                const dataType = cell.dataset.type;
+                const originalValue = cell.dataset.originalValue;
+
+                cell.textContent = 'Kaydediliyor...';
+                cell.classList.add('table-warning');
+
+                const dataToSend = {
+                    IhracatDosyaNo: ihracatDosyaNo,
+                    FieldName: fieldName,
+                    FieldValue: newValue
+                };
+
+                try {
+                    // API isteğine aktif şirket bilgisini db parametresi olarak ekliyoruz
+                    const response = await fetch('/Rapor18/update' + dbQueryString, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'RequestVerificationToken': xsrfToken
+                        },
+                        body: JSON.stringify(dataToSend)
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        showAlert(result.message, 'success');
+                        cell.classList.remove('table-warning');
+
+                        const rowData = allReportData.find(d => d.IhracatDosyaNo === ihracatDosyaNo);
+                        if (rowData) {
+                             const propName = columnMappings[cell.dataset.column];
+                             rowData[propName] = newValue;
+                        }
+                        filterTableAndRender();
+                    } else {
+                        const errorResult = await response.json().catch(() => ({ message: 'Bilinmeyen hata.' }));
+                        showAlert(`Hata: ${errorResult.message}`, 'danger');
+                        cell.classList.remove('table-warning');
+                        restoreOriginalValue(cell, originalValue, dataType);
+                    }
+                } catch (error) {
+                    console.error('Update operation failed:', error);
+                    showAlert('Kaydetme işlemi başarısız oldu.', 'danger');
+                    cell.classList.remove('table-warning');
+                    restoreOriginalValue(cell, originalValue, dataType);
+                }
+            }
+
+
+            function initializePage() {
+                window.currentColumnConfig = getInitialColumnConfig().filter(c => c.visible);
+
+                $('.filter-select-bs').selectpicker({
+                    liveSearch: true,
+                    actionsBox: true,
+                    selectedTextFormat: 'count > 2',
+                    width: '100%',
+                    container: 'body'
+                }).on('changed.bs.select', function () {
+                    filterTableAndRender();
+                });
+
+                document.querySelectorAll('th.sortable-column').forEach(header => {
+                    header.addEventListener('click', function () {
+                        const columnKey = this.dataset.column;
+                        let newSortDirection;
+
+                        if (currentSortColumn === columnKey) {
+                            if (currentSortDirection === 'asc') {
+                                newSortDirection = 'desc';
+                            } else if (currentSortDirection === 'desc') {
+                                newSortDirection = 'none';
+                                currentSortColumn = null;
+                            } else {
+                                newSortDirection = 'asc';
+                            }
+                        } else {
+                            if (currentSortColumn !== null) {
+                                const prevHeader = document.querySelector(`th.sortable-column[data-column="${currentSortColumn}"] i`);
+                                if (prevHeader) {
+                                    prevHeader.className = 'fas fa-sort float-end';
+                                }
+                            }
+                            newSortDirection = 'asc';
+                            currentSortColumn = columnKey;
+                        }
+
+                        currentSortDirection = newSortDirection;
+
+                        document.querySelectorAll('th.sortable-column i').forEach(icon => icon.className = 'fas fa-sort float-end');
+                        const sortIcon = this.querySelector('i');
+                        if (sortIcon && currentSortDirection !== 'none') {
+                            sortIcon.className = `fas fa-sort-${currentSortDirection === 'asc' ? 'up' : 'down'} float-end`;
+                        } else if (sortIcon && currentSortDirection === 'none') {
+                            sortIcon.className = 'fas fa-sort float-end';
+                        }
+                        
+                        filterTableAndRender();
+                    });
+                });
+
+                document.querySelectorAll('.filter-input').forEach(input => {
+                    input.addEventListener('keyup', function () {
+                        filterTableAndRender();
+                    });
+                });
+
+                // "Tüm Filtreleri Temizle" Butonuna tıklanınca URL'deki db parametresini kaybetmemek için güncelledik.
+                if (clearAllFiltersBtn) {
+                    clearAllFiltersBtn.addEventListener('click', function () {
+                        let currentUrl = window.location.href;
+                        let baseUrl = currentUrl.split('?')[0];
+                        let newUrl = baseUrl;
+                        if (currentDbParam) {
+                            newUrl += `?db=${currentDbParam}`;
+                        }
+                        window.location.href = newUrl;
+                    });
+                }
+
+                renderTable(allReportData);
+            }
+
+            // Tümü Seç, Satır Checkbox ve Modal olayları buraya dahil edildi
+            if (selectAllCheckbox) {
+                selectAllCheckbox.addEventListener('change', function () {
+                    const isChecked = this.checked;
+                    document.querySelectorAll('#rapor18Table tbody tr input.row-selector').forEach(checkbox => {
+                        checkbox.checked = isChecked;
+                    });
+                    calculateSelectedTotal();
+                });
+            }
+
+            tableBody.addEventListener('change', function (event) {
+                if (event.target.classList.contains('row-selector')) {
+                    calculateSelectedTotal();
+                    updateSelectAllCheckboxState();
+                }
+            });
+
+            // Satır tıklandığında Checkbox'ı tetikle
+            tableBody.addEventListener('click', function (event) {
+                const target = event.target;
+                
+                // Eğer Editable Field (inline edit), A linki (Packing list/Proforma) veya Select picker ise satır seçimi yapma!
+                if (target.classList.contains('editable-field') || target.closest('.editable-field') || target.tagName === 'A' || target.closest('.bootstrap-select') || target.tagName === 'INPUT') {
+                    return;
+                }
+
+                const row = target.closest('tr');
+                if (!row) return;
+
+                const checkbox = row.querySelector('.row-selector');
+                if (checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                    calculateSelectedTotal();
+                    updateSelectAllCheckboxState();
+                }
+            });
+
+            initializePage();
+        });
+    </script>
+}

@@ -1,0 +1,347 @@
+@{
+    ViewData["Title"] = "Aylık Alım Onay Ekranı";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string kullanici = (string)ViewBag.Kullanici ?? "";
+}
+@*
+    AYLIK ALIM ONAY EKRANI — liste Gider / Gelir Seçim Ekranı (Rapor163) kalıbında: satır sonunda "Detay" sütunu,
+    [Fatura] düğmesi belge detayını (kalemler, uyarılar, onay geçmişi, onay / red) pencerede, [Görüntü] düğmesi e-fatura
+    görüntüsünü tam ekran pencerede açar. Liste tam genişliktir; satıra tıklamak bir şey açmaz.
+    Muhasebe, yönetime sunulacak aylık alım raporunu (tedarikçi faturaları) hazırlar; satınalmacılar kendi faturalarını,
+    Tedarik Zinciri Direktörü tamamını ay sonunda onaylar; sonra ay kapatılır.
+    Veri: /AlimOnay/Liste?donem=  /AlimOnay/Detay?id=  /AlimOnay/Onay  /AlimOnay/AyKapat  /AlimOnay/Gorsel?id=  (Data/AlimOnayOrnek.cs, bellek içi).
+*@
+<style>
+    .ao-wrap { padding: 0 14px 30px; }
+    .ao-hero { background: linear-gradient(120deg, #0f766e 0%, #0d9488 55%, #5eead4 100%); color: #fff; border-radius: 16px; padding: 16px 22px; margin: 14px 0 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; box-shadow: 0 10px 30px -12px rgba(13,148,136,.55); }
+    .ao-hero h1 { font-size: 1.25rem; font-weight: 700; margin: 0; } .ao-hero p { margin: 3px 0 0; opacity: .92; font-size: .82rem; max-width: 900px; }
+    .ao-hero .rol { background: rgba(255,255,255,.18); padding: 8px 12px; border-radius: 10px; font-weight: 600; font-size: .82rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .ao-hero select { border: 1px solid rgba(255,255,255,.5); background: rgba(255,255,255,.92); color: #0f172a; border-radius: 8px; padding: 5px 8px; font-size: .8rem; font-weight: 600; }
+    .ao-kpi { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+    @@media (max-width: 1300px) { .ao-kpi { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .ao-kpi > div { background: #fff; border: 1px solid #e5e7eb; border-left: 4px solid var(--k, #0d9488); border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+    .ao-kpi .l { font-size: .64rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #64748b; } .ao-kpi .v { font-size: 1.05rem; font-weight: 800; color: #0f172a; line-height: 1.2; } .ao-kpi .s { font-size: .7rem; color: #64748b; }
+    .ao-tabs { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+    .ao-tab { display: flex; align-items: center; gap: 8px; border: 1px solid #d7dce5; background: #fff; color: #475569; font-weight: 700; font-size: .86rem; padding: 8px 14px; border-radius: 11px 11px 0 0; cursor: pointer; }
+    .ao-tab .cnt { font-size: .7rem; background: #e2e8f0; color: #475569; border-radius: 20px; padding: 1px 8px; }
+    .ao-tab.active { background: #f0fdfa; border-color: #99f6e4; color: #0f766e; border-bottom-color: #f0fdfa; }
+    .ao-filtre { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .ao-filtre select, .ao-filtre input { border: 1px solid #d7dce5; border-radius: 8px; padding: 6px 9px; font-size: .8rem; background: #fff; }
+    .ao-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 4px 14px -8px rgba(15,23,42,.15); overflow: hidden; }
+    .ao-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 14px; border-bottom: 1px solid #eef2f7; background: #f8fafc; font-weight: 700; font-size: .84rem; color: #334155; flex-wrap: wrap; }
+    .ao-listwrap { max-height: calc(100vh - 330px); overflow: auto; }
+    table.ao { width: 100%; border-collapse: collapse; font-size: .76rem; white-space: nowrap; }
+    table.ao thead th { position: sticky; top: 0; background: #f8fafc; color: #334155; font-weight: 700; font-size: .66rem; text-transform: uppercase; padding: 7px 8px; border-bottom: 2px solid #e2e8f0; text-align: left; z-index: 2; }
+    table.ao tbody td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; color: #1e293b; vertical-align: middle; }
+    table.ao tbody tr:hover td { background: #f8fafc; }
+    table.ao tfoot td { padding: 7px 8px; background: #f8fafc; font-weight: 700; border-top: 2px solid #e2e8f0; font-size: .74rem; }
+    .txt-r { text-align: right; font-variant-numeric: tabular-nums; }
+    .fno { font-family: Consolas, monospace; font-weight: 700; color: #0f766e; } .alt { display: block; font-size: .64rem; color: #94a3b8; font-family: inherit; font-weight: 500; }
+    .bd { display: inline-block; font-size: .64rem; font-weight: 700; padding: 2px 7px; border-radius: 20px; white-space: nowrap; }
+    .bd.bk { background: #fef3c7; color: #92400e; } .bd.dr { background: #dbeafe; color: #1e40af; } .bd.on { background: #dcfce7; color: #166534; } .bd.rd { background: #fee2e2; color: #b91c1c; } .bd.gr { background: #f1f5f9; color: #475569; }
+    .uy { display: inline-flex; align-items: center; gap: 4px; font-size: .66rem; font-weight: 700; color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 20px; padding: 1px 7px; cursor: pointer; }
+    .kat { display: inline-block; font-size: .64rem; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: #f1f5f9; color: #334155; }
+    .ao-empty { text-align: center; color: #94a3b8; padding: 40px 0; }
+    /* Detay sütunu düğmeleri (Gider / Gelir Seçim Ekranı ile aynı) */
+    .gg-detay { border: none; background: #eef2ff; color: #4f46e5; border-radius: 7px; padding: 4px 9px; font-size: .74rem; font-weight: 600; cursor: pointer; }
+    .gg-detay:hover { background: #4f46e5; color: #fff; }
+    .gg-goruntu { border: none; background: #fee2e2; color: #b91c1c; border-radius: 7px; padding: 4px 9px; font-size: .74rem; font-weight: 600; cursor: pointer; margin-left: 4px; }
+    .gg-goruntu:hover { background: #b91c1c; color: #fff; }
+    /* Pencereler */
+    .gg-modal-bg { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: none; align-items: center; justify-content: center; z-index: 1070; }
+    .gg-modal-bg.on { display: flex; }
+    .gg-modal { background: #fff; color: #0f172a; border-radius: 14px; width: min(1400px, 96vw); max-height: 94vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 60px -15px rgba(0,0,0,.4); }
+    .gg-modal-head { padding: 12px 18px; border-bottom: 1px solid #eef2f7; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; background: #f8fafc; }
+    .gg-modal-head h3 { margin: 0; font-size: 1rem; color: #0f172a; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .gg-modal-head .x { border: none; background: #f1f5f9; border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 1rem; color: #475569; }
+    .gg-modal-body { padding: 0; overflow-y: auto; flex: 1; }
+    .gg-fmodal { background: #fff; border-radius: 14px; width: min(1200px, 96vw); height: 92vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px -15px rgba(0,0,0,.45); }
+    .gg-fmodal-head { padding: 10px 16px; background: linear-gradient(135deg, #7f1d1d, #dc2626); color: #fff; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .gg-fmodal-head h3 { margin: 0; font-size: .98rem; }
+    .gg-fmodal-head .x { border: none; background: rgba(255,255,255,.2); color: #fff; border-radius: 8px; width: 32px; height: 32px; cursor: pointer; }
+    .gg-fmodal-arac { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 14px; border-bottom: 1px solid #e5e7eb; background: #fff; }
+    .gg-fbtn { border: 1px solid #d7dce5; background: #fff; color: #334155; border-radius: 8px; padding: 6px 12px; font-size: .8rem; font-weight: 600; cursor: pointer; text-decoration: none; }
+    .gg-fbtn.on, .gg-fbtn:hover { background: #dc2626; border-color: #dc2626; color: #fff; }
+    .gg-fmodal iframe { flex: 1; border: 0; width: 100%; background: #e5e7eb; }
+    /* Detay penceresi içeriği */
+    .ao-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 4px 16px; padding: 12px 18px; font-size: .78rem; }
+    .ao-kv div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed #eef2f7; padding: 3px 0; }
+    .ao-kv .k { color: #64748b; } .ao-kv .v { font-weight: 600; color: #0f172a; text-align: right; }
+    .ao-sub { font-size: .7rem; font-weight: 700; color: #475569; text-transform: uppercase; padding: 10px 18px 4px; letter-spacing: .04em; }
+    .ao-tbl { width: 100%; border-collapse: collapse; font-size: .76rem; }
+    .ao-tbl th { background: #f8fafc; text-align: left; padding: 6px 10px; border-bottom: 1px solid #e2e8f0; font-size: .64rem; text-transform: uppercase; color: #64748b; white-space: nowrap; }
+    .ao-tbl td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    .ao-tbl tfoot td { font-weight: 700; background: #f8fafc; }
+    .ao-tbl td.fark { color: #b45309; font-weight: 700; }
+    .ao-uyari-liste { margin: 0; padding: 8px 18px 8px 34px; font-size: .78rem; color: #92400e; background: #fffbeb; border-top: 1px solid #fde68a; border-bottom: 1px solid #fde68a; }
+    .ao-uyari-liste li { margin: 3px 0; }
+    .ao-iki { display: grid; grid-template-columns: 1fr 1fr; gap: 0; } @@media (max-width: 900px) { .ao-iki { grid-template-columns: 1fr; } }
+    .ao-onay-gecmis { padding: 6px 18px 10px; font-size: .78rem; }
+    .ao-adim { display: grid; grid-template-columns: 140px 1fr; gap: 6px 10px; padding: 7px 0; border-bottom: 1px dashed #eef2f7; align-items: start; }
+    .ao-adim .a { font-weight: 700; color: #334155; } .ao-adim .m { color: #64748b; font-size: .7rem; }
+    .ao-onay { padding: 12px 18px; border-top: 1px solid #eef2f7; background: #fafafa; display: grid; grid-template-columns: 1fr; gap: 8px; }
+    .ao-onay textarea { width: 100%; border: 1px solid #d7dce5; border-radius: 8px; padding: 8px 10px; font-size: .82rem; min-height: 56px; }
+    .ao-onay .btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .ao-btn { border: none; border-radius: 9px; padding: 8px 15px; font-weight: 700; font-size: .82rem; cursor: pointer; }
+    .ao-btn.ok { background: #16a34a; color: #fff; } .ao-btn.no { background: #fff; color: #b91c1c; border: 1px solid #fca5a5; } .ao-btn.gr { background: #fff; color: #334155; border: 1px solid #d7dce5; } .ao-btn.dk { background: #0f766e; color: #fff; }
+    .ao-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .ao-kapanis { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .78rem; color: #334155; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }
+    .ao-kapanis .bar { flex: 1; min-width: 160px; height: 8px; background: #f1f5f9; border-radius: 999px; overflow: hidden; border: 1px solid #e2e8f0; } .ao-kapanis .bar i { display: block; height: 100%; background: #16a34a; }
+    .ao-katlar { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px; padding: 8px 12px; }
+    .ao-katlar > div { font-size: .7rem; color: #475569; cursor: pointer; } .ao-katlar b { color: #0f172a; } .ao-katlar .bar { height: 5px; background: #f1f5f9; border-radius: 999px; overflow: hidden; margin-top: 3px; } .ao-katlar .bar i { display: block; height: 100%; background: #0d9488; } .ao-katlar .bar i.asim { background: #dc2626; }
+</style>
+
+<div class="ao-wrap">
+    <div class="ao-hero">
+        <div>
+            <h1><i class="fa-solid fa-cart-shopping"></i> Aylık Alım Onay Ekranı</h1>
+            <p>Muhasebe'nin yönetim için hazırladığı aylık alım raporu: dönemdeki tedarikçi faturaları, kalem detayı ve fatura görüntüsü. Satınalmacılar kendi faturalarını, Tedarik Zinciri Direktörü tamamını ay sonunda onaylar; tüm faturalar onaylanınca ay kapatılır ve rapor yönetime sunulur.</p>
+        </div>
+        <div class="rol"><i class="fa-solid fa-user"></i> @kullanici · rol: <select id="aoRol"></select></div>
+    </div>
+
+    <div class="ao-kpi" id="aoKpi"></div>
+    <div class="ao-card" style="margin-bottom:10px"><div class="ao-katlar" id="aoKatlar"></div></div>
+    <div class="ao-kapanis" id="aoKapanis"></div>
+
+    <div class="ao-tabs">
+        <div class="ao-tab active" data-d="BEKLIYOR"><i class="fa-solid fa-hourglass-half"></i> Onay Bekleyen <span class="cnt" id="cntBEKLIYOR">0</span></div>
+        <div class="ao-tab" data-d="ONAYLANDI"><i class="fa-solid fa-check"></i> Onaylananlar <span class="cnt" id="cntONAYLANDI">0</span></div>
+        <div class="ao-tab" data-d="RED"><i class="fa-solid fa-xmark"></i> Reddedilenler <span class="cnt" id="cntRED">0</span></div>
+        <div class="ao-tab" data-d="TUMU"><i class="fa-solid fa-list"></i> Tümü <span class="cnt" id="cntTUMU">0</span></div>
+        <div class="ao-filtre">
+            <select id="fDonem" title="Dönem"></select>
+            <select id="fSirket"><option value="">Fatura şirketi: tümü</option></select>
+            <select id="fSatinalmaci"><option value="">Satınalmacı: tümü</option></select>
+            <select id="fKategori"><option value="">Kategori: tümü</option></select>
+            <select id="fUyari"><option value="">Uyarı: tümü</option><option value="1">Yalnız uyarılı</option><option value="0">Uyarısız</option></select>
+            <input id="fAra" placeholder="Fatura no, tedarikçi, talep eden…" style="min-width:200px">
+            <button type="button" class="ao-btn gr" id="btnCsv" title="Görünen listeyi CSV olarak indir"><i class="fa-solid fa-file-csv"></i> CSV</button>
+        </div>
+    </div>
+
+    <div class="ao-card">
+        <div class="ao-card-head"><span><i class="fa-solid fa-file-invoice-dollar"></i> Alım faturaları <span id="ozet" style="font-weight:500;color:#64748b"></span></span><span style="font-size:.7rem;color:#64748b;font-weight:500"><b class="gg-detay" style="cursor:default">Fatura</b> kalem detayı ve onay · <b class="gg-goruntu" style="cursor:default">Görüntü</b> e-fatura görüntüsü</span></div>
+        <div class="ao-listwrap">
+            <table class="ao" id="aoTablo" data-dinamik="kapali">
+                <thead><tr><th>Fatura Şirketi</th><th>Kullanıcı Firma</th><th>Yansıtılma Durumu</th><th>Tarih</th><th>Fatura No</th><th>Tedarikçi</th><th>Talep Eden</th><th>Satınalmacı</th><th>Kategori</th><th>Sipariş</th><th class="txt-r">Net Alım</th><th class="txt-r">KDV</th><th class="txt-r">Brüt Tutar</th><th>Onay</th><th>Uyarı</th><th class="txt-r">Detay</th></tr></thead>
+                <tbody id="liste"><tr><td colspan="16" class="ao-empty">Yükleniyor...</td></tr></tbody>
+                <tfoot><tr id="toplam"></tr></tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+@* ---- Fatura detay penceresi: kalemler, uyarılar, onay geçmişi, onay / red ---- *@
+<div class="gg-modal-bg" id="detayModal">
+    <div class="gg-modal">
+        <div class="gg-modal-head">
+            <h3 id="mTitle"><i class="fa-solid fa-file-invoice"></i> Fatura Detayı</h3>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span id="mDurum"></span><button type="button" class="gg-goruntu" id="mGoruntu" style="padding:6px 12px;font-size:.8rem"><i class="fa-solid fa-eye"></i> Görüntü</button><button class="x" id="mKapat">✕</button></div>
+        </div>
+        <div class="gg-modal-body" id="mBody"></div>
+        <div class="ao-onay" id="onayAlan">
+            <div id="onayBilgi" style="font-size:.76rem;color:#475569"></div>
+            <textarea id="onayAciklama" placeholder="Açıklama (red için zorunlu): faturayı neden onaylıyor / reddediyorsunuz?"></textarea>
+            <div class="btns">
+                <button class="ao-btn ok" id="btnOnayla"><i class="fa-solid fa-check"></i> Onayla</button>
+                <button class="ao-btn no" id="btnReddet"><i class="fa-solid fa-xmark"></i> Reddet</button>
+                <button class="ao-btn gr" id="btnYenidenAc" style="display:none"><i class="fa-solid fa-rotate-left"></i> Yeniden onaya aç</button>
+                <button class="ao-btn gr" id="btnKapat2" style="margin-left:auto">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ---- Fatura görüntüsü penceresi (tam ekran çerçeve) ---- *@
+<div class="gg-modal-bg" id="faturaModal">
+    <div class="gg-fmodal">
+        <div class="gg-fmodal-head">
+            <h3><i class="fa-solid fa-file-invoice"></i> <span id="fBaslik">Fatura Görüntüsü</span></h3>
+            <div style="display:flex;gap:8px;align-items:center">
+                <a id="fYeniSekme" href="#" target="_blank" class="gg-fbtn" style="background:#fff;color:#7f1d1d"><i class="fa-solid fa-up-right-from-square"></i> Yeni sekmede aç</a>
+                <button class="x" id="fKapat">✕</button>
+            </div>
+        </div>
+        <div class="gg-fmodal-arac">
+            <button type="button" class="gg-fbtn on" id="fHtmlBtn"><i class="fa-solid fa-file-invoice-dollar"></i> e-Fatura Görüntüsü</button>
+            <button type="button" class="gg-fbtn" id="fYazdir"><i class="fa-solid fa-print"></i> Yazdır</button>
+            <button type="button" class="gg-fbtn" id="fDetayBtn" title="Kalem detayı, uyarılar ve onay"><i class="fa-solid fa-list"></i> Fatura Detayı ve Onay</button>
+            <span id="fBilgi" style="font-size:.78rem;color:#64748b"></span>
+        </div>
+        <iframe id="fCerceve" src="about:blank" title="Fatura görüntüsü"></iframe>
+    </div>
+</div>
+
+<script>
+(() => {
+    const $ = (s, k) => (k || document).querySelector(s), $$ = (s, k) => Array.from((k || document).querySelectorAll(s));
+    const esc = s => (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const fmt = n => (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmt0 = n => (Number(n) || 0).toLocaleString('tr-TR', { maximumFractionDigits: 0 });
+    const API = window.AO_API || '/AlimOnay/';
+    let D = null, LISTE = [], aktif = 'BEKLIYOR', seciliFatura = null;
+    const KULLANICI = @Html.Raw(Json.Serialize(kullanici));
+    const onayBd = d => d === 'Onaylandı' ? '<span class="bd on">Onaylandı</span>' : d === 'Reddedildi' ? '<span class="bd rd">Reddedildi</span>' : d === 'Direktör Bekliyor' ? '<span class="bd dr">Direktör Bekliyor</span>' : '<span class="bd bk">Satınalmacı Bekliyor</span>';
+    const yansitmaBd = f => f.yansitmaDurumu === 'Gerekmiyor' ? '<span style="color:#94a3b8">—</span>' : f.yansitmaDurumu === 'Yansıtıldı' ? `<span class="bd on" title="Yansıtma İşlemleri talebi">Yansıtıldı</span><span class="alt">${esc(f.yansitmaNo)}</span>` : '<span class="bd bk">Yansıtma Bekliyor</span>';
+    const odemeBd = f => f.odemeDurumu === 'Ödendi' ? '<span class="bd on">Ödendi</span>' : f.vadeGecti ? '<span class="bd rd">Vadesi geçti</span>' : f.odemeDurumu === 'Planlandı' ? '<span class="bd dr">Planlandı</span>' : '<span class="bd gr">Bekliyor</span>';
+    const mesaj = (tip, m) => { if (window.toastr) toastr[tip === 'danger' ? 'error' : tip](m); else alert(m); };
+
+    // ---- Rol: demo amaçlı seçilebilir (gerçekte kullanıcı yetkisinden gelir) ----
+    function rolSecenekleri() {
+        const s = $('#aoRol'); const eski = s.value;
+        s.innerHTML = D.satinalmacilar.map(x => `<option value="Satınalmacı|${esc(x.ad)}">Satınalmacı · ${esc(x.ad)}</option>`).join('') + `<option value="Direktör|${esc(D.direktor.ad)}">Tedarik Zinciri Direktörü · ${esc(D.direktor.ad)}</option><option value="Muhasebe|${esc(D.muhasebe.ad)}">Muhasebe (rapor hazırlar) · ${esc(D.muhasebe.ad)}</option><option value="İzleyici|${esc(KULLANICI)}">İzleyici · ${esc(KULLANICI)}</option>`;
+        s.value = eski || (D.satinalmacilar.some(x => x.ad === KULLANICI) ? `Satınalmacı|${KULLANICI}` : KULLANICI === D.direktor.ad ? `Direktör|${KULLANICI}` : s.options[0].value);
+    }
+    const rol = () => { const [r, k] = ($('#aoRol').value || '|').split('|'); return { rol: r, kisi: k }; };
+    $('#aoRol').addEventListener('change', () => { kapanisCiz(); ciz(); if (seciliFatura) onayAlaniCiz(seciliFatura); });
+
+    // ---- Yükleme ----
+    function yukle(donem, seciliId) {
+        fetch(API + 'Liste?donem=' + encodeURIComponent(donem || '')).then(r => r.json()).then(res => {
+            if (!res.success) { mesaj('danger', res.message); return; }
+            D = res; LISTE = res.faturalar || [];
+            rolSecenekleri();
+            const fd = $('#fDonem'); fd.innerHTML = D.donemler.map(d => `<option value="${esc(d.kod)}" ${d.kod === D.donem ? 'selected' : ''}>${esc(d.ad)}${d.kapali ? ' · kapalı' : ''}</option>`).join('');
+            const doldur = (id, ad, list) => { const s = $(id); const eski = s.value; s.innerHTML = `<option value="">${ad}: tümü</option>` + list.map(x => `<option ${x === eski ? 'selected' : ''}>${esc(x)}</option>`).join(''); };
+            doldur('#fSirket', 'Fatura şirketi', [...new Set(LISTE.map(f => f.faturaSirketi))].sort((a, b) => a.localeCompare(b, 'tr')));
+            doldur('#fSatinalmaci', 'Satınalmacı', [...new Set(LISTE.map(f => f.satinalmaci))].sort((a, b) => a.localeCompare(b, 'tr')));
+            doldur('#fKategori', 'Kategori', [...new Set(LISTE.map(f => f.kategori))].sort((a, b) => a.localeCompare(b, 'tr')));
+            kpiCiz(); kapanisCiz(); ciz();
+            if (seciliId && $('#detayModal').classList.contains('on')) detayAc(seciliId);
+        }).catch(e => mesaj('danger', 'Veri yüklenemedi: ' + e.message));
+    }
+
+    function kpiCiz() {
+        const o = D.ozet, kapsam = LISTE.length;
+        const kut = [
+            ['#0d9488', 'Net Alım (dönem)', fmt0(o.net) + ' TL', `${o.adet} fatura · ${o.tedarikci} tedarikçi`, ''],
+            ['#64748b', 'KDV', fmt0(o.kdv) + ' TL', 'indirilecek KDV', ''],
+            ['#0f172a', 'Brüt Tutar', fmt0(o.brut) + ' TL', `bütçe ${fmt0(o.butce)} TL (net)`, ''],
+            ['#16a34a', 'Onaylanan', `${o.onayli} / ${kapsam}`, `%${kapsam ? Math.round(o.onayli / kapsam * 100) : 0} tamamlandı`, 'ONAYLANDI'],
+            ['#f59e0b', 'Onay Bekleyen', `${o.satinalmaciBekleyen + o.direktorBekleyen}`, `${o.satinalmaciBekleyen} satınalmacı · ${o.direktorBekleyen} direktör`, 'BEKLIYOR'],
+            ['#dc2626', 'Uyarılı / Reddedilen', `${o.uyarili} / ${o.red}`, 'siparişsiz, fiyat, bütçe, mükerrer, vade', 'UYARI']
+        ];
+        $('#aoKpi').innerHTML = kut.map(k => `<div style="--k:${k[0]}" data-t="${k[4]}"><div class="l">${esc(k[1])}</div><div class="v">${esc(k[2])}</div><div class="s">${esc(k[3])}</div></div>`).join('');
+        $$('#aoKpi > div').forEach(d => d.addEventListener('click', () => { const t = d.dataset.t; if (t === 'UYARI') { $('#fUyari').value = '1'; sekme('TUMU'); } else if (t) { $('#fUyari').value = ''; sekme(t); } }));
+        $('#aoKatlar').innerHTML = o.kategoriler.map(k => { const y = k.butce ? Math.min(100, Math.round(k.net / k.butce * 100)) : 0; return `<div data-k="${esc(k.ad)}"><b>${esc(k.ad)}</b> · ${k.adet} fatura<br>${fmt0(k.net)} / ${fmt0(k.butce)} TL <span style="color:${k.net > k.butce ? '#dc2626' : '#16a34a'};font-weight:700">%${k.butce ? Math.round(k.net / k.butce * 100) : 0}</span><div class="bar"><i class="${k.net > k.butce ? 'asim' : ''}" style="width:${y}%"></i></div></div>`; }).join('');
+        $$('#aoKatlar > div').forEach(d => d.addEventListener('click', () => { $('#fKategori').value = $('#fKategori').value === d.dataset.k ? '' : d.dataset.k; ciz(); }));
+    }
+    function kapanisCiz() {
+        const o = D.ozet, kapsam = LISTE.length, tamam = o.onayli + o.red, r = rol();
+        const el = $('#aoKapanis');
+        if (D.kapali) { el.innerHTML = `<span class="bd on">Dönem kapatıldı</span> <b>${esc(D.donemAdi)}</b> alım onayı tamamlandı${D.kapanis ? ` · ${esc(D.kapanis.kisi)} · ${esc(D.kapanis.tarih)}${D.kapanis.not ? ' · ' + esc(D.kapanis.not) : ''}` : ''}. Onaylar değiştirilemez; rapor yönetime sunuldu.`; return; }
+        el.innerHTML = `<b>${esc(D.donemAdi)} ay sonu onayı</b><span class="bar"><i style="width:${kapsam ? Math.round(tamam / kapsam * 100) : 0}%"></i></span><span>${tamam} / ${kapsam} fatura sonuçlandı · ${o.satinalmaciBekleyen} satınalmacı, ${o.direktorBekleyen} direktör onayı bekliyor</span>
+            <button type="button" class="ao-btn dk" id="btnAyKapat" ${r.rol === 'Direktör' && tamam === kapsam && kapsam > 0 ? '' : 'disabled'} title="${r.rol !== 'Direktör' ? 'Ayı yalnız Tedarik Zinciri Direktörü kapatır' : tamam < kapsam ? 'Tüm faturalar sonuçlanmadan kapatılamaz' : 'Ayı kapat ve raporu yönetime sun'}"><i class="fa-solid fa-lock"></i> Ayı kapat ve yönetime sun</button>`;
+        const b = $('#btnAyKapat'); if (b) b.addEventListener('click', async () => { const not = prompt('Kapanış notu (isteğe bağlı):') ?? ''; const j = await post('AyKapat', { donem: D.donem, kisi: r.kisi, not }); mesaj(j.success ? 'success' : 'danger', j.message); if (j.success) yukle(D.donem); });
+    }
+    async function post(u, d) { const r = await fetch(API + u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) }); return r.json(); }
+
+    // ---- Liste ----
+    function filtreli() {
+        const r = rol(), ara = ($('#fAra').value || '').toLocaleLowerCase('tr-TR'), s = $('#fSirket').value, sa = $('#fSatinalmaci').value, k = $('#fKategori').value, u = $('#fUyari').value;
+        return LISTE.filter(f => (aktif === 'TUMU' || (aktif === 'BEKLIYOR' && f.siradakiAdim) || (aktif === 'ONAYLANDI' && f.onayDurumu === 'Onaylandı') || (aktif === 'RED' && f.onayDurumu === 'Reddedildi'))
+            && (!s || f.faturaSirketi === s) && (!sa || f.satinalmaci === sa) && (!k || f.kategori === k) && (u === '' || (u === '1') === (f.uyariSayisi > 0))
+            && (!ara || [f.faturaNo, f.tedarikci, f.talepEden, f.siparisNo, f.kullanimSirketi, f.masrafMerkezi].join(' ').toLocaleLowerCase('tr-TR').includes(ara))
+            && !(aktif === 'BEKLIYOR' && r.rol === 'Satınalmacı' && f.satinalmaci !== r.kisi && f.siradakiAdim === 'Satınalmacı'));   // satınalmacı yalnız kendi bekleyenlerini görür
+    }
+    function ciz() {
+        ['BEKLIYOR', 'ONAYLANDI', 'RED', 'TUMU'].forEach(d => $('#cnt' + d).textContent = LISTE.filter(f => d === 'TUMU' || (d === 'BEKLIYOR' && f.siradakiAdim) || (d === 'ONAYLANDI' && f.onayDurumu === 'Onaylandı') || (d === 'RED' && f.onayDurumu === 'Reddedildi')).length);
+        const l = filtreli();
+        $('#liste').innerHTML = l.length ? l.map(f => `<tr data-id="${f.id}">
+            <td>${esc(f.faturaSirketi)}</td><td>${f.kullanimSirketi === f.faturaSirketi ? esc(f.kullanimSirketi) : '<b style="color:#b45309">' + esc(f.kullanimSirketi) + '</b>'}</td><td>${yansitmaBd(f)}</td><td>${esc(f.tarih)}</td>
+            <td><span class="fno">${esc(f.faturaNo)}</span>${f.uyarilar.some(u => u.startsWith('Mükerrer fatura:')) ? ' <span class="bd rd" title="Aynı tedarikçi, aynı fatura no, aynı tutarla ikinci kayıt">MÜKERRER</span>' : ''}<span class="alt">${esc(f.faturaTuru)} · ${f.kalemSayisi} kalem</span></td>
+            <td title="${esc(f.tedarikci)}">${esc(f.tedarikci.length > 30 ? f.tedarikci.slice(0, 29) + '…' : f.tedarikci)}<span class="alt">VKN ${esc(f.tedarikciVkn)}</span></td>
+            <td>${esc(f.talepEden)}<span class="alt">${esc(f.talepEdenBirim)}</span></td><td>${esc(f.satinalmaci)}</td><td><span class="kat">${esc(f.kategori)}</span></td>
+            <td>${f.siparisNo ? esc(f.siparisNo) : '<span class="bd rd">yok</span>'}${f.irsaliyeNo ? `<span class="alt">${esc(f.irsaliyeNo)}</span>` : ''}</td>
+            <td class="txt-r">${fmt(f.net)}${f.paraBirimi !== 'TL' ? `<span class="alt">${fmt(f.dovizNet)} ${esc(f.paraBirimi)}</span>` : ''}</td><td class="txt-r">${fmt(f.kdv)}</td><td class="txt-r"><b>${fmt(f.brut)}</b></td>
+            <td>${onayBd(f.onayDurumu)}</td>
+            <td>${f.uyariSayisi ? `<span class="uy" data-detay="${f.id}" title="${esc(f.uyarilar.join('\n'))}"><i class="fa-solid fa-triangle-exclamation"></i> ${f.uyariSayisi}</span>` : '<span style="color:#94a3b8">—</span>'}</td>
+            <td class="txt-r" style="white-space:nowrap"><button type="button" class="gg-detay" data-detay="${f.id}" title="Kalem detayı, uyarılar, onay geçmişi"><i class="fa-solid fa-file-invoice"></i> Fatura</button><button type="button" class="gg-goruntu" data-goruntu="${f.id}" title="e-Fatura / e-Arşiv görüntüsü"><i class="fa-solid fa-eye"></i> Görüntü</button></td></tr>`).join('')
+            : '<tr><td colspan="16" class="ao-empty">Bu sekmede / filtrede fatura yok.</td></tr>';
+        const net = l.reduce((s, f) => s + f.net, 0), kdv = l.reduce((s, f) => s + f.kdv, 0);
+        $('#toplam').innerHTML = `<td colspan="10">Toplam · ${l.length} fatura</td><td class="txt-r">${fmt(net)}</td><td class="txt-r">${fmt(kdv)}</td><td class="txt-r">${fmt(net + kdv)}</td><td colspan="3">${l.filter(f => f.uyariSayisi).length} uyarılı · ${l.filter(f => f.yansitmaDurumu === 'Yansıtma Bekliyor').length} yansıtma bekliyor</td>`;
+        $('#ozet').textContent = `(${l.length} / ${LISTE.length})`;
+        $$('#liste [data-detay]').forEach(b => b.addEventListener('click', () => detayAc(+b.dataset.detay)));
+        $$('#liste [data-goruntu]').forEach(b => b.addEventListener('click', () => goruntuAc(LISTE.find(x => x.id === +b.dataset.goruntu))));
+    }
+    function sekme(d) { aktif = d; $$('.ao-tab').forEach(t => t.classList.toggle('active', t.dataset.d === d)); ciz(); }
+    $$('.ao-tab').forEach(t => t.addEventListener('click', () => sekme(t.dataset.d)));
+    ['#fSirket', '#fSatinalmaci', '#fKategori', '#fUyari', '#fAra'].forEach(s => $(s).addEventListener('input', ciz));
+    $('#fDonem').addEventListener('change', () => { seciliFatura = null; kapatDetay(); yukle($('#fDonem').value); });
+
+    // ---- CSV ----
+    $('#btnCsv').addEventListener('click', () => {
+        const l = filtreli(); const bas = ['Fatura Şirketi', 'Kullanıcı Firma', 'Yansıtılma Durumu', 'Yansıtma No', 'Tarih', 'Fatura No', 'Fatura Türü', 'Tedarikçi', 'VKN', 'Talep Eden', 'Birim', 'Satınalmacı', 'Kategori', 'Sipariş No', 'İrsaliye No', 'Masraf Merkezi', 'Net Alım', 'KDV', 'Brüt Tutar', 'Para Birimi', 'Vade', 'Ödeme', 'Onay Durumu', 'Uyarılar'];
+        const csv = [bas.join(';')].concat(l.map(f => [f.faturaSirketi, f.kullanimSirketi, f.yansitmaDurumu, f.yansitmaNo, f.tarih, f.faturaNo, f.faturaTuru, f.tedarikci, f.tedarikciVkn, f.talepEden, f.talepEdenBirim, f.satinalmaci, f.kategori, f.siparisNo, f.irsaliyeNo, f.masrafMerkezi, fmt(f.net), fmt(f.kdv), fmt(f.brut), f.paraBirimi, f.vade, f.odemeDurumu, f.onayDurumu, f.uyarilar.join(' | ')].map(v => '"' + String(v ?? '').replace(/"/g, '""') + '"').join(';'))).join('\r\n');
+        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })); a.download = `aylik-alim-${D.donem}.csv`; a.click();
+    });
+
+    // ---- Fatura detay penceresi ----
+    function kapatDetay() { $('#detayModal').classList.remove('on'); }
+    $('#mKapat').addEventListener('click', kapatDetay); $('#btnKapat2').addEventListener('click', kapatDetay);
+    $('#detayModal').addEventListener('click', e => { if (e.target.id === 'detayModal') kapatDetay(); });
+    $('#mGoruntu').addEventListener('click', () => { if (seciliFatura) goruntuAc(seciliFatura); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { kapatFatura(); kapatDetay(); } });
+    function detayAc(id) {
+        $('#mTitle').innerHTML = '<i class="fa-solid fa-file-invoice"></i> Fatura Detayı'; $('#mDurum').innerHTML = '';
+        $('#mBody').innerHTML = '<div class="ao-empty"><i class="fa-solid fa-spinner fa-spin"></i> Yükleniyor...</div>';
+        $('#detayModal').classList.add('on');
+        fetch(API + 'Detay?id=' + id).then(r => r.json()).then(res => { if (!res.success) { mesaj('danger', res.message); kapatDetay(); return; } seciliFatura = res.fatura; detayCiz(res.fatura); });
+    }
+    function detayCiz(f) {
+        $('#mTitle').innerHTML = `<i class="fa-solid fa-file-invoice"></i> <span class="fno">${esc(f.faturaNo)}</span> <span style="font-weight:500;color:#475569">· ${esc(f.tedarikci)} · ${esc(f.tarih)}</span>`;
+        $('#mDurum').innerHTML = onayBd(f.onayDurumu) + (f.donemKapali ? ' <span class="bd gr">dönem kapalı</span>' : '');
+        const brutMal = f.kalemler.reduce((s, k) => s + k.miktar * k.birimFiyat, 0);
+        const adim = (ad, o) => `<div class="ao-adim"><span class="a">${ad}</span><span>${o.durum === 'Onaylandı' ? '<span class="bd on">Onaylandı</span>' : o.durum === 'Reddedildi' ? '<span class="bd rd">Reddedildi</span>' : '<span class="bd bk">Bekliyor</span>'} ${o.kisi ? `<b>${esc(o.kisi)}</b>` : ''} <span class="m">${esc(o.tarih || '')}</span>${o.aciklama ? `<div class="m">${esc(o.aciklama)}</div>` : ''}</span></div>`;
+        $('#mBody').innerHTML = `<div class="ao-kv">
+            <div><span class="k">Fatura şirketi</span><span class="v">${esc(f.faturaSirketi)}</span></div><div><span class="k">Kullanıcı firma</span><span class="v">${esc(f.kullanimSirketi)}</span></div><div><span class="k">Yansıtılma durumu</span><span class="v">${yansitmaBd(f)}</span></div><div><span class="k">Fatura türü · ETTN</span><span class="v">${esc(f.faturaTuru)} · <span style="font-family:Consolas,monospace;font-size:.68rem">${esc(f.ettn)}</span></span></div>
+            <div><span class="k">Tedarikçi · VKN</span><span class="v">${esc(f.tedarikci)} · ${esc(f.tedarikciVkn)}</span></div><div><span class="k">Kategori</span><span class="v">${esc(f.kategori)}</span></div><div><span class="k">Masraf merkezi</span><span class="v">${esc(f.masrafMerkezi)}</span></div>
+            <div><span class="k">Talep eden</span><span class="v">${esc(f.talepEden)} (${esc(f.talepEdenBirim)})</span></div><div><span class="k">Satınalmacı</span><span class="v">${esc(f.satinalmaci)}</span></div><div><span class="k">Muhasebe fiş no</span><span class="v">${esc(f.muhasebeFisNo)}</span></div>
+            <div><span class="k">Sipariş no</span><span class="v">${f.siparisNo ? esc(f.siparisNo) : '<span class="bd rd">siparişsiz</span>'}</span></div><div><span class="k">İrsaliye no</span><span class="v">${f.irsaliyeNo ? esc(f.irsaliyeNo) : '—'}</span></div><div><span class="k">Vade · ödeme</span><span class="v">${esc(f.vade)} · ${odemeBd(f)}</span></div>
+            <div><span class="k">Para birimi</span><span class="v">${f.paraBirimi === 'TL' ? 'TL' : `${fmt(f.dovizNet)} ${esc(f.paraBirimi)} · kur ${esc(f.kur)}`}</span></div><div style="grid-column:span 2"><span class="k">Açıklama</span><span class="v" style="text-align:left">${esc(f.aciklama)}</span></div></div>
+            <div class="ao-sub">Fatura kalemleri (${f.kalemler.length})</div>
+            <div style="overflow:auto;padding:0 18px 10px"><table class="ao-tbl" data-dinamik="kapali"><thead><tr><th>#</th><th>Kod</th><th>Mal / Hizmet</th><th class="txt-r">Miktar</th><th>Birim</th><th class="txt-r">Birim Fiyat</th><th class="txt-r">Önceki Fiyat</th><th class="txt-r">Fark</th><th class="txt-r">İsk.</th><th class="txt-r">KDV %</th><th class="txt-r">KDV</th><th class="txt-r">Tutar</th></tr></thead>
+            <tbody>${f.kalemler.map(k => `<tr><td>${k.sira}</td><td style="font-family:Consolas,monospace">${esc(k.kod)}</td><td>${esc(k.aciklama)}</td><td class="txt-r">${fmt(k.miktar)}</td><td>${esc(k.birim)}</td><td class="txt-r">${fmt(k.birimFiyat)}</td><td class="txt-r" style="color:#64748b">${fmt(k.oncekiBirimFiyat)}</td><td class="txt-r ${k.fiyatFarkiYuzde >= 10 ? 'fark' : ''}">${k.fiyatFarkiYuzde ? '%' + k.fiyatFarkiYuzde.toLocaleString('tr-TR') : '—'}</td><td class="txt-r">${k.iskonto ? '%' + k.iskonto : '—'}</td><td class="txt-r">${k.kdvOrani}</td><td class="txt-r">${fmt(k.kdvTutar)}</td><td class="txt-r"><b>${fmt(k.tutar)}</b></td></tr>`).join('')}</tbody>
+            <tfoot><tr><td colspan="10">Mal / hizmet toplamı ${fmt(brutMal)} · iskonto ${fmt(brutMal - f.net)} · <b>Net alım ${fmt(f.net)}</b></td><td class="txt-r">${fmt(f.kdv)}</td><td class="txt-r">${fmt(f.brut)}</td></tr></tfoot></table></div>
+            ${f.uyarilar.length ? `<ul class="ao-uyari-liste">${f.uyarilar.map(u => `<li><i class="fa-solid fa-triangle-exclamation"></i> ${esc(u)}</li>`).join('')}</ul>` : '<div style="padding:8px 18px;font-size:.76rem;color:#166534;border-top:1px solid #eef2f7"><i class="fa-solid fa-circle-check"></i> Bu fatura için sistem uyarısı yok.</div>'}
+            <div class="ao-sub">Onay geçmişi</div>
+            <div class="ao-onay-gecmis"><div class="ao-adim"><span class="a">Muhasebe kaydı</span><span><span class="bd on">Kaydedildi</span> <b>${esc(D.muhasebe.ad)}</b> <span class="m">fiş ${esc(f.muhasebeFisNo)} · ${esc(f.tarih)}</span></span></div>${adim('1. Satınalmacı onayı', f.satinalmaciOnayi)}${adim('2. Direktör onayı', f.direktorOnayi)}<div class="ao-adim"><span class="a">3. Ay kapanışı</span><span>${f.donemKapali ? '<span class="bd on">Kapatıldı</span>' : '<span class="bd gr">Tüm faturalar onaylanınca</span>'}</span></div></div>`;
+        onayAlaniCiz(f);
+    }
+    function onayAlaniCiz(f) {
+        const r = rol(), bilgi = $('#onayBilgi');
+        const satinalmaciYetkili = r.rol === 'Satınalmacı' && f.satinalmaci === r.kisi, direktorYetkili = r.rol === 'Direktör';
+        const adimBenim = (f.siradakiAdim === 'Satınalmacı' && satinalmaciYetkili) || (f.siradakiAdim === 'Direktör' && direktorYetkili);
+        $('#btnOnayla').disabled = $('#btnReddet').disabled = !(adimBenim && !f.donemKapali);
+        $('#btnYenidenAc').style.display = f.onayDurumu === 'Reddedildi' && !f.donemKapali && (r.rol === 'Muhasebe' || direktorYetkili) ? '' : 'none';
+        bilgi.innerHTML = f.donemKapali ? 'Dönem kapatılmış; onay değiştirilemez.' : f.siradakiAdim === null ? (f.onayDurumu === 'Reddedildi' ? 'Fatura reddedildi. Muhasebe düzeltme sonrası yeniden onaya açabilir.' : 'Onay tamamlandı.') : adimBenim ? `<b>${esc(f.siradakiAdim)} onayı</b> sizde (${esc(r.kisi)}). Kalemleri ve fatura görüntüsünü inceleyip onaylayın ya da açıklama yazarak reddedin.` : `Sıradaki adım: <b>${esc(f.siradakiAdim)}</b> (${f.siradakiAdim === 'Satınalmacı' ? esc(f.satinalmaci) : esc(D.direktor.ad)}). Seçili rol bu adımı onaylayamaz.`;
+    }
+    async function onay(eylem) {
+        if (!seciliFatura) return; const r = rol(), a = $('#onayAciklama').value.trim();
+        if (eylem === 'Reddet' && !a) { mesaj('warning', 'Red için açıklama zorunludur.'); return; }
+        const j = await post('Onay', { id: seciliFatura.id, rol: r.rol, kisi: r.kisi, eylem, aciklama: a });
+        mesaj(j.success ? 'success' : 'danger', j.message); if (j.success) { $('#onayAciklama').value = ''; yukle(D.donem, seciliFatura.id); }
+    }
+    $('#btnOnayla').addEventListener('click', () => onay('Onayla')); $('#btnReddet').addEventListener('click', () => onay('Reddet'));
+    $('#btnYenidenAc').addEventListener('click', async () => { const j = await post('YenidenAc', { id: seciliFatura.id }); mesaj(j.success ? 'success' : 'danger', j.message); if (j.success) yukle(D.donem, seciliFatura.id); });
+
+    // ---- Fatura görüntüsü penceresi ----
+    let goruntuFatura = null;
+    function kapatFatura() { $('#faturaModal').classList.remove('on'); }
+    $('#fKapat').addEventListener('click', kapatFatura);
+    $('#faturaModal').addEventListener('click', e => { if (e.target.id === 'faturaModal') kapatFatura(); });
+    $('#fYazdir').addEventListener('click', () => { try { $('#fCerceve').contentWindow.print(); } catch (e) { } });
+    $('#fDetayBtn').addEventListener('click', () => { if (goruntuFatura) { kapatFatura(); detayAc(goruntuFatura.id); } });
+    function goruntuAc(f) {
+        if (!f) return; goruntuFatura = f;
+        const u = (window.AO_GORSEL || (API + 'Gorsel?id=')) + f.id;
+        $('#fBaslik').textContent = `Fatura ${f.faturaNo} — ${f.tedarikci}`; $('#fYeniSekme').href = u;
+        $('#fBilgi').textContent = `${f.faturaTuru} · ${f.tarih} · brüt ${fmt(f.brut)} TL · ${f.onayDurumu}`;
+        if ($('#fCerceve').dataset.id !== String(f.id)) { $('#fCerceve').src = u; $('#fCerceve').dataset.id = f.id; }
+        $('#faturaModal').classList.add('on');
+    }
+
+    yukle('');
+})();
+</script>

@@ -1,0 +1,394 @@
+﻿@model WebApplication3.Controllers.Rapor91ViewModel
+@using System.Globalization
+@using WebApplication3.Models
+
+@{
+    ViewData["Title"] = "SAP Mizan vs Excel Kıyaslama Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var cultureInfo = new CultureInfo("tr-TR");
+
+    var currentSelectedDbDisplay = ViewBag.CurrentDbDisplay as string ?? "URASKIMYA";
+    var hesapList = ViewBag.HesapList as List<HesapViewModel> ?? new List<HesapViewModel>();
+    var mainHesapList = ViewBag.MainHesapList as List<HesapViewModel> ?? new List<HesapViewModel>();
+    var hesapListWithLevels = ViewBag.HesapListWithLevels as Dictionary<string, int> ?? new Dictionary<string, int>();
+
+    decimal footerSapBorc = 0, footerSapAlacak = 0, footerSapBakiye = 0;
+    decimal footerExcelBorc = 0, footerExcelAlacak = 0, footerExcelBakiye = 0;
+
+    if (Model.KiyaslamaListesi != null && Model.KiyaslamaListesi.Any())
+    {
+        // Yalnızca en alt seviyedekileri topla
+        var enAltSeviyeHesaplar = Model.KiyaslamaListesi.Where(item =>
+            !Model.KiyaslamaListesi.Any(other => other.HesapKodu != item.HesapKodu && other.HesapKodu.StartsWith(item.HesapKodu))
+        ).ToList();
+
+        var targetList = enAltSeviyeHesaplar.Any() ? enAltSeviyeHesaplar : Model.KiyaslamaListesi;
+
+        footerSapBorc = targetList.Sum(x => x.SapBorc);
+        footerSapAlacak = targetList.Sum(x => x.SapAlacak);
+        footerSapBakiye = footerSapBorc - footerSapAlacak;
+
+        footerExcelBorc = targetList.Sum(x => x.ExcelBorc);
+        footerExcelAlacak = targetList.Sum(x => x.ExcelAlacak);
+        footerExcelBakiye = footerExcelBorc - footerExcelAlacak;
+    }
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --bg-body: #f8f9fc;
+            --primary: #4e73df;
+            
+            /* --- HİYERARŞİK RENK PALETİ --- */
+            --l0-bg: #d2b4de; --l0-text: #ffffff;
+            --l1-bg: #fa8072; --l1-text: #ffffff;
+            --l2-bg: #00bcd4; --l2-text: #ffffff;
+            --l3-bg: #ccf6ff; --l3-text: #000000;
+            --l-other-bg: #ffffff; --l-other-text: #333333;
+        }
+
+        body { font-family: 'Nunito', sans-serif; background-color: var(--bg-body); color: #5a5c69; font-size: 0.75rem; }
+        .form-control, .form-select, .btn { font-size: 0.75rem !important; padding: 0.25rem 0.5rem; }
+        .form-label { font-weight: 700; font-size: 0.7rem; margin-bottom: 2px; color: #4e73df; }
+        
+        .filter-card { background: white; border-radius: 0.5rem; box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15); margin-bottom: 1rem; }
+        .filter-header { background: #4e73df; color: white; padding: 0.5rem 1rem; border-radius: 0.5rem 0.5rem 0 0; display: flex; justify-content: space-between; align-items: center; }
+
+        .custom-radio-group { background: #fff; border: 1px solid #d1d3e2; border-radius: 6px; padding: 4px 10px; display: flex; align-items: center; gap: 15px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02); }
+        .custom-radio-item { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+        .custom-radio-item input { margin-top: 0; cursor: pointer; width: 14px; height: 14px; }
+        .custom-radio-item label { margin-bottom: 0; cursor: pointer; font-size: 0.75rem; font-weight: 700; }
+
+        .mizan-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.75rem; }
+        .mizan-table th { background-color: #eaecf4; color: #4e73df; font-weight: 800; padding: 8px; text-transform: uppercase; border: 1px solid #d1d3e2; position: sticky; top: 0; z-index: 10; }
+        .mizan-table td { padding: 5px 8px; vertical-align: middle; border-bottom: 1px solid rgba(0,0,0,0.05); border-right: 1px solid rgba(0,0,0,0.05); }
+        .mizan-table td:first-child { border-left: 1px solid rgba(0,0,0,0.05); }
+
+        .level-0-row td { background-color: var(--l0-bg) !important; color: var(--l0-text); font-weight: 800; border-bottom: 1px solid rgba(0,0,0,0.1); }
+        .level-1-row td { background-color: var(--l1-bg) !important; color: var(--l1-text); font-weight: 800; border-bottom: 1px solid rgba(0,0,0,0.1); }
+        .level-2-row td { background-color: var(--l2-bg) !important; color: var(--l2-text); font-weight: 800; border-bottom: 1px solid rgba(0,0,0,0.1); }
+        .level-3-row td { background-color: var(--l3-bg) !important; color: var(--l3-text); font-weight: 700; }
+        .level-other-row td { background-color: var(--l-other-bg) !important; color: var(--l-other-text); font-weight: normal; }
+        
+        .mizan-table tbody tr:hover td { filter: brightness(0.97); }
+        .num-cell { font-family: 'Consolas', monospace; text-align: right; font-weight: 600; }
+        
+        /* GÜNCELLENDİ: FARK HÜCRESİ İÇİN KESİN KURALLAR */
+        /* CSS Specificity artırıldı: Tablo -> Tbody -> Tr -> Td */
+        table.mizan-table tbody tr td.fark-cell { 
+            background-color: #fff0f0 !important; /* Göz yormayan açık kırmızı zemin */
+            color: #d90000 !important; /* Çok net, koyu ve parlak kırmızı metin */
+            font-weight: 900 !important; 
+            border-left: 3px solid #d90000 !important; /* Fark sütununu görsel olarak ayırmak için kalın çizgi */
+            box-shadow: inset 0 0 6px rgba(217, 0, 0, 0.15) !important;
+        }
+
+        /* GÜNCELLENDİ: TUTAN HÜCRESİ İÇİN KESİN KURALLAR */
+        table.mizan-table tbody tr td.tutan-cell { 
+            background-color: #e6ffe6 !important; /* Göz yormayan açık yeşil zemin */
+            color: #008000 !important; /* Koyu yeşil metin */
+            font-weight: 900 !important; 
+            border-left: 3px solid #008000 !important; /* Tutan sütununu görsel olarak ayırmak için kalın çizgi */
+            box-shadow: inset 0 0 6px rgba(0, 128, 0, 0.15) !important;
+        }
+
+        .summary-card { background: white; border-radius: 0.35rem; box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15); padding: 0.75rem 1rem; border-left: 0.25rem solid; margin-bottom: 1rem; }
+        .summary-card .h5 { font-size: 1rem; margin-bottom: 0; font-weight: bold; }
+        .summary-card .text-xs { font-size: 0.65rem; }
+        .border-left-primary { border-color: #4e73df !important; } .border-left-success { border-color: #1cc88a !important; } .border-left-info { border-color: #36b9cc !important; }
+
+        .select2-container--bootstrap-5 .select2-selection { min-height: 28px !important; padding-top: 2px; padding-bottom: 2px; font-size: 0.75rem; }
+    </style>
+}
+
+<div class="container-fluid pb-4 pt-2">
+
+    <div class="filter-card">
+        <div class="filter-header py-2">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-balance-scale me-2"></i>
+                <h6 class="mb-0 fw-bold">@ViewData["Title"]</h6>
+            </div>
+            <div class="small">Veritabanı: <strong>@currentSelectedDbDisplay</strong></div>
+        </div>
+
+        <div class="card-body p-2">
+            @if (!string.IsNullOrEmpty(Model.Message))
+            {
+                <div class="alert @(Model.IsSuccess ? "alert-success" : "alert-danger") py-2 mb-2" style="font-size:0.8rem;">
+                    @Model.Message
+                </div>
+            }
+
+            <form asp-controller="Rapor91" asp-action="Index" method="post" enctype="multipart/form-data">
+                <div class="row g-2">
+                    <div class="col-md-2">
+                        <label class="form-label">Ana Hesap</label>
+                        <select class="form-select form-select-sm" id="anaHesap" name="AnaHesap" multiple="multiple">
+                            @foreach (var hesap in mainHesapList)
+                            {
+                                <option value="@hesap.HesapKodu" selected="@(Model.AnaHesap.Contains(hesap.HesapKodu))">@hesap.HesapKodu - @hesap.HesapAdi</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Detay Hesap</label>
+                        <select class="form-select form-select-sm" id="hesapKodlari" name="HesapKodlari" multiple="multiple">
+                            @foreach (var hesap in hesapList)
+                            {
+                                <option value="@hesap.HesapKodu" selected="@(Model.HesapKodlari.Contains(hesap.HesapKodu))">@hesap.HesapKodu - @hesap.HesapAdi</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Başlangıç</label>
+                        <input type="date" class="form-control form-control-sm" name="StartDate" value="@Model.StartDate.ToString("yyyy-MM-dd")">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Bitiş</label>
+                        <input type="date" class="form-control form-control-sm" name="EndDate" value="@Model.EndDate.ToString("yyyy-MM-dd")">
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label text-success fw-bold"><i class="fas fa-file-excel"></i> Kıyaslanacak Excel</label>
+                        <input type="file" class="form-control form-control-sm border-success" name="excelFile" accept=".xlsx" @(Model.KiyaslamaListesi.Count == 0 ? "required" : "")>
+                    </div>
+                </div>
+
+                <div class="row g-2 mt-2 align-items-center mx-0 px-0">
+                    <div class="col-md-2 ps-0">
+                        <select class="form-select form-select-sm shadow-sm" id="aktarimTipi" name="AktarimTipi" multiple="multiple" data-placeholder="İşlem Tipi">
+                            <option value="Y" selected="@(Model.AktarimTipi.Contains("Y"))">Y (Yevmiye)</option>
+                            <option value="X" selected="@(Model.AktarimTipi.Contains("X"))">X (Kapanış)</option>
+                            <option value="R" selected="@(Model.AktarimTipi.Contains("R"))">R (Kur Farkı)</option>
+                            <option value="BOS" selected="@(Model.AktarimTipi.Contains("BOS"))">Boş</option>
+                        </select>
+                    </div>
+
+                    <div class="col d-flex align-items-center flex-wrap gap-3">
+                        
+                        <div class="custom-radio-group">
+                            <span class="text-muted small fw-bold me-1"><i class="fas fa-coins text-success"></i> Para:</span>
+                            <div class="custom-radio-item text-dark">
+                                <input type="radio" name="BakiyeTipi" id="tryMizan" value="TRY" @(Model.BakiyeTipi == "TRY" ? "checked" : "")>
+                                <label for="tryMizan">TL Mizan</label>
+                            </div>
+                            <div class="custom-radio-item text-dark">
+                                <input type="radio" name="BakiyeTipi" id="dovizliMizan" value="Doviz" @(Model.BakiyeTipi == "Doviz" ? "checked" : "")>
+                                <label for="dovizliMizan">Döviz Mizan</label>
+                            </div>
+                        </div>
+
+                        <div class="custom-radio-group">
+                            <span class="text-muted small fw-bold me-1"><i class="fas fa-filter text-info"></i> Filtre:</span>
+                            <div class="custom-radio-item text-dark">
+                                <input type="checkbox" id="includeZeroBalance" name="IncludeZeroBalance" value="true" @(Model.IncludeZeroBalance ? "checked" : "")>
+                                <label for="includeZeroBalance">0 Bakiyeler</label>
+                            </div>
+                            <div class="custom-radio-item text-dark">
+                                <input type="checkbox" id="kebirMizan" name="KebirMizan" value="true" @(Model.KebirMizan ? "checked" : "")>
+                                <label for="kebirMizan">Sadece Kebir</label>
+                            </div>
+                            <div class="custom-radio-item text-danger">
+                                <input type="checkbox" id="sadeceFark" name="SadeceFarklariGoster" value="true" @(Model.SadeceFarklariGoster ? "checked" : "")>
+                                <label for="sadeceFark">Sadece Farkları Göster</label>
+                            </div>
+                        </div>
+
+                        <div class="ms-auto">
+                            <button type="submit" class="btn btn-warning btn-sm fw-bold shadow-sm px-4">
+                                <i class="fas fa-sync-alt me-1"></i> SAP vs Excel Kıyasla
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (Model.KiyaslamaListesi.Any())
+    {
+        <div class="row mb-3 g-2">
+            <div class="col-md-4">
+                <div class="summary-card border-left-primary py-2 d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-xs fw-bold text-primary text-uppercase">SAP NET BAKİYE</div>
+                        <div class="h5 text-gray-800">@footerSapBakiye.ToString("N2", cultureInfo)</div>
+                    </div>
+                    <i class="fas fa-server fa-2x text-gray-300 opacity-25"></i>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="summary-card border-left-success py-2 d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-xs fw-bold text-success text-uppercase">EXCEL NET BAKİYE</div>
+                        <div class="h5 text-gray-800">@footerExcelBakiye.ToString("N2", cultureInfo)</div>
+                    </div>
+                    <i class="fas fa-file-excel fa-2x text-gray-300 opacity-25"></i>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="summary-card border-left-info py-2 d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-xs fw-bold text-info text-uppercase">GENEL FARK</div>
+                        <div class="h5 text-gray-800 @(Math.Abs(footerSapBakiye - footerExcelBakiye) > 0.01m ? "text-danger" : "")">
+                            @((footerSapBakiye - footerExcelBakiye).ToString("N2", cultureInfo))
+                        </div>
+                    </div>
+                    <i class="fas fa-balance-scale fa-2x text-gray-300 opacity-25"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="mizan-table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th rowspan="2" class="align-middle text-center" style="width: 10%;">HESAP KODU</th>
+                                <th rowspan="2" class="align-middle" style="width: 25%;">HESAP ADI</th>
+                                <th colspan="3" class="text-center bg-primary text-white border-end">SAP MİZAN VERİSİ</th>
+                                <th colspan="3" class="text-center bg-success text-white border-end">EXCEL MİZAN VERİSİ</th>
+                                <th colspan="1" class="text-center bg-danger text-white">SAP - EXCEL</th>
+                            </tr>
+                            <tr>
+                                <th class="num-cell text-white bg-primary">Borç</th>
+                                <th class="num-cell text-white bg-primary">Alacak</th>
+                                <th class="num-cell text-white bg-primary border-end">Bakiye</th>
+                                
+                                <th class="num-cell text-white bg-success">Borç</th>
+                                <th class="num-cell text-white bg-success">Alacak</th>
+                                <th class="num-cell text-white bg-success border-end">Bakiye</th>
+                                
+                                <th class="num-cell text-white bg-danger">Fark Bakiye</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.KiyaslamaListesi)
+                            {
+                                string rowClass = "";
+                                int indent = 0;
+                                int dotCount = item.HesapKodu?.Count(c => c == '.') ?? 0;
+                                int length = item.HesapKodu?.Length ?? 0;
+                                
+                                // Orijinal hiyerarşi belirleme mantığı
+                                if (length == 1) { rowClass = "level-0-row"; indent = 0; }
+                                else if (length == 2) { rowClass = "level-1-row"; indent = 15; }
+                                else if (length == 3) { rowClass = "level-2-row"; indent = 30; }
+                                else if (length > 3 && dotCount == 1) { rowClass = "level-3-row"; indent = 45; }
+                                else { rowClass = "level-other-row"; indent = 60; }
+
+                                <tr class="@rowClass">
+                                    <td><div style="padding-left: @(indent)px;" class="text-nowrap">@item.HesapKodu</div></td>
+                                    <td class="text-truncate" style="max-width: 350px;" title="@item.HesapAdi">@item.HesapAdi</td>
+                                    
+                                    <td class="num-cell">@(item.SapBorc == 0 ? "-" : item.SapBorc.ToString("N2", cultureInfo))</td>
+                                    <td class="num-cell">@(item.SapAlacak == 0 ? "-" : item.SapAlacak.ToString("N2", cultureInfo))</td>
+                                    <td class="num-cell fw-bold">@(item.SapBakiye == 0 ? "-" : item.SapBakiye.ToString("N2", cultureInfo))</td>
+
+                                    <td class="num-cell">@(item.ExcelBorc == 0 ? "-" : item.ExcelBorc.ToString("N2", cultureInfo))</td>
+                                    <td class="num-cell">@(item.ExcelAlacak == 0 ? "-" : item.ExcelAlacak.ToString("N2", cultureInfo))</td>
+                                    <td class="num-cell fw-bold">@(item.ExcelBakiye == 0 ? "-" : item.ExcelBakiye.ToString("N2", cultureInfo))</td>
+
+                                    <td class="num-cell @(item.FarkVarmi ? "fark-cell" : "tutan-cell")">
+                                        @(item.FarkBakiye == 0 ? "-" : item.FarkBakiye.ToString("N2", cultureInfo))
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <script>
+        function initializeSelect2WithButtons(selector, placeholderText) {
+            $(selector).select2({
+                theme: "bootstrap-5",
+                placeholder: placeholderText,
+                closeOnSelect: false,
+                allowClear: true,
+                width: '100%',
+                containerCssClass: 'select2-sm',
+                selectionCssClass: 'select2-sm',
+                dropdownCssClass: 'select2-sm',
+                templateResult: function (data) {
+                    if (!data.id) return data.text;
+                    return $(`<span><input type="checkbox" class="me-2 form-check-input" ${data.selected ? "checked" : ""}/>${data.text}</span>`);
+                },
+                templateSelection: function (data) { return data.text; },
+                escapeMarkup: function (markup) { return markup; }
+            }).on('select2:opening', function (e) {
+                 var $dropdown = $(this).next().find('.select2-dropdown');
+                if ($dropdown.find('.select2-actions').length === 0) {
+                    var actions = $('<div class="select2-actions p-1 bg-light border-bottom d-flex justify-content-between"><a href="#" class="btn btn-xs btn-link text-decoration-none select2-select-all" style="font-size:11px;">Hepsini Seç</a><a href="#" class="btn btn-xs btn-link text-decoration-none text-danger select2-clear-all" style="font-size:11px;">Temizle</a></div>');
+                    $dropdown.prepend(actions);
+
+                    $dropdown.find('.select2-select-all').on('click', function (e) {
+                        e.preventDefault();
+                        var $select = $(selector);
+                        $select.find('option').prop('selected', true);
+                        $select.trigger('change');
+                        setTimeout(function () { $select.select2('open'); }, 1);
+                    });
+
+                    $dropdown.find('.select2-clear-all').on('click', function (e) {
+                        e.preventDefault();
+                        var $select = $(selector);
+                        $select.val(null).trigger('change');
+                        setTimeout(function () { $select.select2('open'); }, 1);
+                    });
+                }
+            }).on('select2:select select2:unselect', function (e) {
+                updateSelect2Placeholder(selector, placeholderText);
+                $(this).select2('open');
+            });
+            updateSelect2Placeholder(selector, placeholderText);
+        }
+
+        function updateSelect2Placeholder(selector, placeholderText) {
+            var count = $(selector).select2('data').length;
+            var $selection = $(selector).next('.select2-container').find('.select2-selection__rendered');
+            if (count === 0) {
+                $selection.text(placeholderText).css('color', '#999');
+            } else {
+                $selection.text(count + " öğe").css('color', '#495057').css('font-weight', 'bold');
+            }
+        }
+
+        $(document).ready(function () {
+            initializeSelect2WithButtons('#anaHesap', 'Ana Hesap');
+            initializeSelect2WithButtons('#hesapKodlari', 'Detay Hesap');
+            initializeSelect2WithButtons('#aktarimTipi', 'İşlem Tipi');
+
+            $('#anaHesap').on('select2:select', function () {
+                if ($('#hesapKodlari').val().length > 0) $('#hesapKodlari').val(null).trigger('change');
+                $('#kebirMizan').prop('checked', false);
+            });
+
+            $('#hesapKodlari').on('select2:select', function () {
+                if ($('#anaHesap').val().length > 0) $('#anaHesap').val(null).trigger('change');
+                $('#kebirMizan').prop('checked', false);
+            });
+
+             $('#kebirMizan').on('change', function () {
+                if ($(this).is(':checked')) {
+                    if ($('#anaHesap').val().length > 0) $('#anaHesap').val(null).trigger('change');
+                    if ($('#hesapKodlari').val().length > 0) $('#hesapKodlari').val(null).trigger('change');
+                }
+            });
+        });
+    </script>
+}

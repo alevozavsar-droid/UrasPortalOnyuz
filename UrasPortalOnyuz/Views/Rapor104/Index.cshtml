@@ -1,0 +1,286 @@
+﻿@model System.Data.DataTable
+
+@{
+    ViewData["Title"] = "Maliyet ve Stok Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"];
+    }
+
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? "Unknown Database";
+}
+
+@section Styles {
+    <style>
+        body { 
+            background-color: #f4f6f9; 
+            /* Body overflow hidden KALDIRILDI - Sayfanın doğal akışı bozulmasın */
+        }
+        
+        .page-header { 
+            background: linear-gradient(135deg, #1d976c 0%, #20c997 100%); 
+            color: white; 
+            padding: 1rem; 
+            border-radius: 0 0 15px 15px; 
+            margin-bottom: 1rem; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .database-info { 
+            background-color: #ffffff; 
+            border-left: 5px solid #1d976c; 
+            padding: 10px 20px; 
+            margin-bottom: 1rem; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            font-size: 1rem;
+            color: #495057;
+        }
+
+        .filter-card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            margin-bottom: 1rem;
+            background-color: #ffffff;
+        }
+
+        /* --- TABLO DÜZENİ VE SCROLLBAR AYARLARI --- */
+        
+        .table-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            padding: 10px;
+            background: #fff;
+            border-radius: 12px 12px 0 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .table-wrapper { 
+            background-color: white; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08); 
+            margin-bottom: 2rem;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .table-responsive {
+            /* KRİTİK AYAR: Tablo yüksekliğini ekranın kalan kısmına zorla sığdırır.
+               Böylece YATAY SCROLLBAR her zaman ekranın altında görünür kalır. */
+            height: calc(100vh - 360px); 
+            min-height: 400px; /* Çok küçük ekranlarda tablonun fazla ezilmemesi için */
+            overflow-x: auto; 
+            overflow-y: auto; 
+        }
+
+        .custom-table { 
+            width: 100%; 
+            margin-bottom: 0;
+            border-collapse: separate; 
+            border-spacing: 0;
+        }
+
+        /* Üst üste binmeyi ve sıkışmayı engelleyen kodlar */
+        .custom-table th, .custom-table td { 
+            padding: 12px 15px !important; 
+            white-space: nowrap !important; /* Metinlerin alt satıra inmesini engeller */
+            border-right: 1px solid #e9ecef;
+            border-bottom: 1px solid #e9ecef;
+            font-size: 0.85rem;
+            vertical-align: middle;
+            min-width: 120px; /* Sütunların çok daralmasını önler */
+        }
+        
+        /* Özellikle Kalem İsmi sütununa biraz daha genişlik verelim ki rahat okunsun */
+        .custom-table th:nth-child(2), .custom-table td:nth-child(2) {
+            min-width: 250px;
+        }
+
+        .custom-table thead th { 
+            position: sticky; 
+            top: 0; 
+            background-color: #1d976c; 
+            color: white; 
+            z-index: 10; 
+            font-weight: 600;
+            text-transform: uppercase;
+            border-bottom: 2px solid #146c43;
+        }
+
+        .custom-table tbody tr:hover { background-color: #f1f3f5; }
+
+        /* JS ile eklenecek gizleme sınıfı */
+        .hidden-column { display: none !important; }
+
+        /* Daha belirgin Yatay/Dikey Scrollbar */
+        .table-responsive::-webkit-scrollbar { width: 14px; height: 14px; }
+        .table-responsive::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .table-responsive::-webkit-scrollbar-thumb { background: #adb5bd; border-radius: 4px; border: 3px solid #f1f1f1; }
+        .table-responsive::-webkit-scrollbar-thumb:hover { background: #6c757d; }
+    </style>
+}
+
+<div class="container-fluid px-4">
+    
+    <div class="page-header text-center">
+        <h3 class="m-0 fw-bold"><i class="fas fa-chart-line me-2"></i>Maliyet ve Stok Raporu</h3>
+    </div>
+
+    <div class="database-info">
+        <i class="fas fa-database me-2 text-success"></i> Aktif Veritabanı: <strong class="text-dark">@currentSelectedDbDisplay</strong>
+    </div>
+
+    <div class="card filter-card">
+        <div class="card-body p-3">
+            <form asp-controller="Rapor104" asp-action="Index" method="get" id="reportForm">
+                @if (!string.IsNullOrEmpty(currentDb))
+                {
+                    <input type="hidden" name="db" value="@currentDb" />
+                }
+
+                <div class="row g-3 align-items-end">
+                    <div class="col-12 col-md-4">
+                        <label for="startDate" class="form-label text-muted fw-bold mb-1">Başlangıç Tarihi</label>
+                        <input type="date" class="form-control bg-light" id="startDate" name="startDate" value="@ViewBag.StartDate" required>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label for="endDate" class="form-label text-muted fw-bold mb-1">Bitiş Tarihi</label>
+                        <input type="date" class="form-control bg-light" id="endDate" name="endDate" value="@ViewBag.EndDate" required>
+                    </div>
+                    <div class="col-12 col-md-4 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary flex-grow-1 shadow-sm">
+                            <i class="fas fa-search me-2"></i>Raporla
+                        </button>
+                        <a href="@Url.Action("DownloadExcel", "Rapor104", new { db = currentDb, startDate = ViewBag.StartDate, endDate = ViewBag.EndDate })" class="btn btn-success flex-grow-1 shadow-sm">
+                            <i class="fas fa-file-excel me-2"></i>Excel İndir
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (ViewBag.ErrorMessage != null)
+    {
+        <div class="alert alert-danger mb-4 shadow-sm rounded-3 border-0 border-start border-5 border-danger" role="alert">
+            <h5 class="alert-heading fw-bold"><i class="fas fa-exclamation-triangle me-2"></i>SQL Çalıştırma Hatası!</h5>
+            <hr>
+            <p class="mb-0" style="white-space: pre-wrap; font-family: monospace; font-size: 0.9rem;">@ViewBag.ErrorMessage</p>
+        </div>
+    }
+
+    <div class="table-wrapper">
+        @if (Model != null && Model.Rows.Count > 0)
+        {
+            <div class="table-toolbar">
+                <button type="button" id="btnToggleEmptyColumns" class="btn btn-outline-secondary btn-sm fw-bold" onclick="toggleEmptyColumns()">
+                    <i class="fas fa-eye-slash me-1"></i> Boş Kolonları Gizle
+                </button>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table custom-table table-striped" id="raporTablosu">
+                    <thead>
+                        <tr>
+                            @foreach (System.Data.DataColumn col in Model.Columns)
+                            {
+                                <th>@col.ColumnName</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (System.Data.DataRow row in Model.Rows)
+                        {
+                            <tr>
+                                @foreach (var cell in row.ItemArray)
+                                {
+                                    string displayValue = cell.ToString();
+                                    if (cell is decimal || cell is double || cell is float)
+                                    {
+                                        displayValue = Convert.ToDecimal(cell).ToString("N4");
+                                    }
+                                    <td>@displayValue</td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else if (Context.Request.Query.ContainsKey("startDate") && ViewBag.ErrorMessage == null)
+        {
+            <div class="alert alert-warning text-center m-4 p-4 border-0 rounded-3">
+                <i class="fas fa-info-circle fa-2x mb-3 text-warning"></i>
+                <h5 class="mb-0">Bu tarih aralığı için kayıt bulunamadı.</h5>
+            </div>
+        }
+        else if (ViewBag.ErrorMessage == null)
+        {
+            <div class="alert alert-info text-center m-4 p-4 border-0 rounded-3 bg-light text-muted">
+                <i class="fas fa-filter fa-2x mb-3 text-secondary"></i>
+                <h5 class="mb-0">Raporu görüntülemek için tarihleri seçip "Raporla" butonuna tıklayınız.</h5>
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let isHidingEmpty = false;
+
+        function toggleEmptyColumns() {
+            const table = document.getElementById('raporTablosu');
+            if (!table) return;
+
+            const tbodyRows = table.querySelectorAll('tbody tr');
+            const theadCells = table.querySelectorAll('thead th');
+            const numCols = theadCells.length;
+            const btn = document.getElementById('btnToggleEmptyColumns');
+
+            isHidingEmpty = !isHidingEmpty;
+
+            if (isHidingEmpty) {
+                // Gizleme Modu Aktif
+                btn.innerHTML = '<i class="fas fa-eye me-1"></i> Tüm Kolonları Göster';
+                btn.classList.remove('btn-outline-secondary');
+                btn.classList.add('btn-secondary');
+
+                // Sütunları tarayıp sadece boş veya 0 olanları bul
+                for (let colIndex = 0; colIndex < numCols; colIndex++) {
+                    let isColumnEmpty = true;
+
+                    for (let rowIndex = 0; rowIndex < tbodyRows.length; rowIndex++) {
+                        const cell = tbodyRows[rowIndex].cells[colIndex];
+                        if (cell) {
+                            const cellText = cell.innerText.trim();
+                            if (cellText !== '' && cellText !== '0' && cellText !== '0.0000' && cellText !== '0,0000') {
+                                isColumnEmpty = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (isColumnEmpty) {
+                        theadCells[colIndex].classList.add('hidden-column');
+                        for (let rowIndex = 0; rowIndex < tbodyRows.length; rowIndex++) {
+                            if (tbodyRows[rowIndex].cells[colIndex]) {
+                                tbodyRows[rowIndex].cells[colIndex].classList.add('hidden-column');
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Gösterme Modu Aktif (Eski haline getir)
+                btn.innerHTML = '<i class="fas fa-eye-slash me-1"></i> Boş Kolonları Gizle';
+                btn.classList.remove('btn-secondary');
+                btn.classList.add('btn-outline-secondary');
+
+                const hiddenElements = table.querySelectorAll('.hidden-column');
+                hiddenElements.forEach(el => el.classList.remove('hidden-column'));
+            }
+        }
+    </script>
+}

@@ -1,0 +1,141 @@
+@{ ViewData["Title"] = "Plastik Bazlı Kalite Kontrol"; }
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-vial me-2 text-primary"></i> Plastik Bazlı Kalite Kontrol</h2>
+</div>
+<p class="text-muted mb-3">Plastik bazlı ürünler için üretim çıkış ve tanık numunesi kalite kontrol formu.</p>
+
+<div class="card dash-card mb-3">
+    <div class="card-body d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm" onclick="formlariYukle()"><i class="fas fa-rotate me-1"></i>Formları Getir</button>
+        <button class="btn btn-primary btn-sm" onclick="yeniForm()"><i class="fas fa-plus me-1"></i>Yeni Form</button>
+    </div>
+</div>
+
+<div class="card dash-card mb-3" id="gecmisKart" style="display:none;">
+    <div class="card-header bg-white fw-bold small text-uppercase text-muted">Formlar <span id="formSayisi" class="badge bg-primary ms-1">0</span></div>
+    <div class="table-responsive">
+        <table class="table table-hover table-custom mb-0">
+            <thead><tr><th>Tarih</th><th>Form No</th><th>Kontrol Eden</th><th>Onaylayan</th><th class="text-end">Satır</th><th></th></tr></thead>
+            <tbody id="tbodyFormlar"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card dash-card" id="formKart" style="display:none;">
+    <div class="card-header bg-white fw-bold small text-uppercase text-muted">Form</div>
+    <div class="card-body">
+        <div class="row g-2 mb-3">
+            <div class="col-6 col-md-2"><label class="form-label small">Form Tarihi</label><input type="date" id="mFormDate" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-2"><label class="form-label small">Form No</label><input id="mFormNo" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-2"><label class="form-label small">Revizyon</label><input id="mRev" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-2"><label class="form-label small">Sayfa</label><input id="mPage" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-2"><label class="form-label small">Kontrol Eden</label><input id="mCtrlBy" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-2"><label class="form-label small">Onaylayan</label><input id="mAppBy" class="form-control form-control-sm"></div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-bold small text-uppercase text-muted">Satırlar</span>
+            <button class="btn btn-outline-primary btn-sm" onclick="satirEkle()"><i class="fas fa-plus me-1"></i>Satır Ekle</button>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-custom mb-0">
+                <thead><tr><th>Tarih</th><th>Ürün</th><th>Lot</th><th>Spindle</th><th>RPM</th><th>pH</th><th>Tork</th><th>Çıkış Cp</th><th>24h</th><th>Tanık 24h Cp</th><th>Tanık 15g Cp</th><th>Sonuç</th><th></th></tr></thead>
+                <tbody id="tbodySatirlar"></tbody>
+            </table>
+        </div>
+        <div class="mt-3 d-flex gap-2">
+            <button class="btn btn-primary" onclick="formKaydet()"><i class="fas fa-save me-1"></i>Kaydet</button>
+            <button class="btn btn-outline-success" onclick="pdfIndir()"><i class="fas fa-file-pdf me-1"></i>PDF</button>
+            <button class="btn btn-outline-secondary" onclick="document.getElementById('formKart').style.display='none';">Kapat</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 12px; }
+    .table-custom input { font-size: 11px; padding: 2px 4px; width: 90px; }
+</style>
+
+<script>
+    const GET_URL = '/UrasUretimKalite/GetPBQCForms', SAVE_URL = '/UrasUretimKalite/SavePBQCForm';
+    let satirlar = [], duzenlenenDocEntry = null;
+    function el(id) { return document.getElementById(id); }
+
+    async function formlariYukle() {
+        const res = await fetch(GET_URL).then(r => r.json());
+        if (!res.success) { alert('Formlar alınamadı: ' + res.message); return; }
+        const liste = res.data || [];
+        el('gecmisKart').style.display = '';
+        el('formSayisi').textContent = liste.length;
+        el('tbodyFormlar').innerHTML = liste.map(f => `
+            <tr><td>${(f.FormDate || '').slice(0, 10)}</td><td>${f.FormNo || ''}</td><td>${f.ControlledBy || ''}</td><td>${f.ApprovedBy || ''}</td>
+                <td class="text-end">${(f.Rows || []).length}</td>
+                <td><button class="btn btn-sm btn-outline-primary" onclick='formuAc(${JSON.stringify(f).replace(/'/g, "&apos;")})'>Aç</button></td></tr>`).join('')
+            || '<tr><td colspan="6" class="text-center text-muted py-3">Kayıt yok.</td></tr>';
+    }
+
+    function yeniForm() {
+        duzenlenenDocEntry = null;
+        el('mFormDate').value = new Date().toISOString().slice(0, 10);
+        el('mFormNo').value = ''; el('mRev').value = ''; el('mPage').value = ''; el('mCtrlBy').value = ''; el('mAppBy').value = '';
+        satirlar = [];
+        cizSatirlar();
+        el('formKart').style.display = '';
+    }
+
+    function formuAc(f) {
+        duzenlenenDocEntry = f.DocEntry;
+        el('mFormDate').value = (f.FormDate || '').slice(0, 10);
+        el('mFormNo').value = f.FormNo || ''; el('mRev').value = f.Rev || ''; el('mPage').value = f.Page || '';
+        el('mCtrlBy').value = f.ControlledBy || ''; el('mAppBy').value = f.ApprovedBy || '';
+        satirlar = (f.Rows || []).map(r => ({ ...r }));
+        cizSatirlar();
+        el('formKart').style.display = '';
+        el('formKart').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function satirEkle() { satirlar.push({}); cizSatirlar(); }
+    function satirSil(i) { satirlar.splice(i, 1); cizSatirlar(); }
+    function satirGuncelle(i, alan, deger) { satirlar[i][alan] = deger; }
+
+    function cizSatirlar() {
+        el('tbodySatirlar').innerHTML = satirlar.map((s, i) => `
+            <tr>
+                <td><input type="date" value="${(s.Date || '').slice(0, 10)}" onchange="satirGuncelle(${i},'Date',this.value)"></td>
+                <td><input value="${s.ProdName || ''}" onchange="satirGuncelle(${i},'ProdName',this.value)"></td>
+                <td><input value="${s.LotNo || ''}" onchange="satirGuncelle(${i},'LotNo',this.value)"></td>
+                <td><input value="${s.SpindleTip || ''}" onchange="satirGuncelle(${i},'SpindleTip',this.value)"></td>
+                <td><input value="${s.RPM ?? ''}" onchange="satirGuncelle(${i},'RPM',this.value)"></td>
+                <td><input value="${s.ProdPh ?? ''}" onchange="satirGuncelle(${i},'ProdPh',this.value)"></td>
+                <td><input value="${s.Torque || ''}" onchange="satirGuncelle(${i},'Torque',this.value)"></td>
+                <td><input value="${s.ProdOutputCp || ''}" onchange="satirGuncelle(${i},'ProdOutputCp',this.value)"></td>
+                <td><input value="${s.Prod24h ?? ''}" onchange="satirGuncelle(${i},'Prod24h',this.value)"></td>
+                <td><input value="${s.Witness24hCp ?? ''}" onchange="satirGuncelle(${i},'Witness24hCp',this.value)"></td>
+                <td><input value="${s.Witness15DayCp ?? ''}" onchange="satirGuncelle(${i},'Witness15DayCp',this.value)"></td>
+                <td><input value="${s.Result || ''}" onchange="satirGuncelle(${i},'Result',this.value)"></td>
+                <td><button class="btn btn-sm btn-outline-danger" onclick="satirSil(${i})"><i class="fas fa-trash"></i></button></td>
+            </tr>`).join('') || '<tr><td colspan="13" class="text-center text-muted py-2">Satır yok.</td></tr>';
+    }
+
+    function pdfIndir() {
+        htmlToPdfIndir('formKart', 'PlastikBazliKK_' + (document.getElementById('mFormNo').value || ''));
+    }
+
+    async function formKaydet() {
+        const sayi = (v) => v === '' || v === undefined ? null : Number(v);
+        const model = {
+            docEntry: duzenlenenDocEntry, formDate: el('mFormDate').value || null,
+            formNo: el('mFormNo').value, rev: el('mRev').value, page: el('mPage').value,
+            controlledBy: el('mCtrlBy').value, approvedBy: el('mAppBy').value,
+            rows: satirlar.map(s => ({ ...s, rpm: sayi(s.RPM), prodPh: sayi(s.ProdPh), prod24h: sayi(s.Prod24h), witness24hCp: sayi(s.Witness24hCp), witness15DayCp: sayi(s.Witness15DayCp) }))
+        };
+        const res = await fetch(SAVE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(model) }).then(r => r.json());
+        if (!res.success) { alert('Kaydedilemedi: ' + res.message); return; }
+        alert('Kaydedildi (DocEntry: ' + res.message + ').');
+        formlariYukle();
+    }
+</script>

@@ -1,0 +1,399 @@
+@{
+    ViewData["Title"] = "Stok Sayım";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-clipboard-list me-2 text-primary"></i> Stok Sayım</h2>
+    <button class="btn btn-primary btn-sm" onclick="yeniSayimAc()"><i class="fas fa-plus me-1"></i>Yeni Sayım</button>
+</div>
+<p class="text-muted mb-3">Sayım belgeleri, satır ekleme/silme, kapatma ve stok kaydına çevirme.</p>
+
+<div class="card dash-card mb-3">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-3">
+                <label class="form-label small fw-bold">Durum</label>
+                <select id="fDurum" class="form-select form-select-sm" onchange="belgeleriYukle()"><option value="O">Açık</option><option value="C">Kapalı</option><option value="">Tümü</option></select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small fw-bold">Depo</label>
+                <select id="fDepo" class="form-select form-select-sm" onchange="belgeleriYukle()"><option value="">Tümü</option></select>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label small fw-bold">Ara</label>
+                <input type="text" id="fSearch" class="form-control form-control-sm" placeholder="Belge no, açıklama, kalem..." oninput="belgeleriYukle()">
+            </div>
+            <div class="col-12 col-md-2"><button class="btn btn-outline-secondary btn-sm w-100" onclick="belgeleriYukle()"><i class="fas fa-rotate me-1"></i>Getir</button></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-12 col-xl-5">
+        <div class="card dash-card">
+            <div class="card-header bg-white fw-bold small text-uppercase text-muted">Sayım Belgeleri <span id="belgeSayisi" class="badge bg-primary ms-1">0</span></div>
+            <div class="table-responsive" style="max-height:620px;">
+                <table class="table table-sm table-hover table-custom mb-0">
+                    <thead><tr><th>No</th><th>Tarih</th><th>Depo</th><th>Durum</th><th class="text-end">Sayılan</th><th class="text-end">Farklı</th></tr></thead>
+                    <tbody id="tbodyBelgeler"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-xl-7">
+        <div id="detayYok" class="card dash-card p-4 text-center text-muted"><i class="fas fa-arrow-left fs-3 d-block mb-2"></i>Soldan bir sayım belgesi seçin.</div>
+        <div id="detay" style="display:none;">
+            <div class="card dash-card mb-3">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span class="fw-bold" id="detayBaslik"></span>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-success btn-sm" onclick="excelAktar()"><i class="fas fa-file-excel me-1"></i>Excel</button>
+                        <button class="btn btn-outline-primary btn-sm" onclick="satirEkleAc()"><i class="fas fa-plus me-1"></i>Satır Ekle/Say</button>
+                        <button class="btn btn-outline-warning btn-sm" id="btnKapat" onclick="sayimKapat()"><i class="fas fa-lock me-1"></i>Kapat</button>
+                        <button class="btn btn-success btn-sm" id="btnStokKaydi" onclick="stokKaydinaCevirAc()"><i class="fas fa-right-left me-1"></i>Stok Kaydına Çevir</button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-custom mb-0">
+                        <thead><tr><th></th><th>Kalem</th><th>Depo</th><th class="text-end">Sistem</th><th class="text-end">Sayılan</th><th class="text-end">Fark</th><th></th></tr></thead>
+                        <tbody id="tbodySatirlar"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Yeni Sayım Modal -->
+<div class="modal fade" id="yeniSayimModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h6 class="modal-title fw-bold">Yeni Sayım Belgesi</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-6"><label class="form-label small fw-bold">Depo</label><select id="ysDepo" class="form-select form-select-sm"></select></div>
+                    <div class="col-6"><label class="form-label small fw-bold">Açıklama</label><input type="text" id="ysAciklama" class="form-control form-control-sm"></div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small fw-bold"><i class="fas fa-barcode me-1"></i>Barkod Okut</label>
+                    <input type="text" class="form-control form-control-sm" placeholder="KalemKodu|PartiNo|Miktar yazıp Enter'a basın (barkod okuyucu ile de çalışır)"
+                           onkeydown="if(event.key==='Enter'){ barkodIsle('ys', this.value); this.value=''; event.preventDefault(); }">
+                </div>
+                <div id="ysSatirlar"></div>
+                <button class="btn btn-outline-primary btn-sm mt-2" onclick="ysSatirEkle()"><i class="fas fa-plus me-1"></i>Kalem Ekle</button>
+            </div>
+            <div class="modal-footer"><button class="btn btn-primary" onclick="yeniSayimKaydet()">Sayım Belgesini Oluştur</button></div>
+        </div>
+    </div>
+</div>
+
+<!-- Satır Ekle/Say Modal -->
+<div class="modal fade" id="satirEkleModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h6 class="modal-title fw-bold">Satır Ekle / Say</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="seDegistir"><label class="form-check-label small">Mevcut miktarı değiştir (kapalıysa üstüne eklenir)</label></div>
+                <div class="mb-2">
+                    <label class="form-label small fw-bold"><i class="fas fa-barcode me-1"></i>Barkod Okut</label>
+                    <input type="text" class="form-control form-control-sm" placeholder="KalemKodu|PartiNo|Miktar yazıp Enter'a basın (barkod okuyucu ile de çalışır)"
+                           onkeydown="if(event.key==='Enter'){ barkodIsle('se', this.value); this.value=''; event.preventDefault(); }">
+                </div>
+                <div id="seSatirlar"></div>
+                <button class="btn btn-outline-primary btn-sm mt-2" onclick="seSatirEkle()"><i class="fas fa-plus me-1"></i>Kalem Ekle</button>
+            </div>
+            <div class="modal-footer"><button class="btn btn-primary" onclick="satirEkleKaydet()">Kaydet</button></div>
+        </div>
+    </div>
+</div>
+
+<!-- Stok Kaydına Çevir Modal -->
+<div class="modal fade" id="stokKaydiModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h6 class="modal-title fw-bold">Stok Kaydına Çevir</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <p class="small text-muted">Sayılan ve sistemden farklı satırlar için stok kaydı (envanter mutabakatı) oluşturulur; sonrasında sayım belgesi kapatılır.</p>
+                <label class="form-label small fw-bold">Varsayılan Fiyat (kalemde fiyat yoksa)</label>
+                <input type="number" min="0" step="0.01" id="skVarsayilanFiyat" class="form-control form-control-sm mb-2" value="0">
+                <label class="form-label small fw-bold">Açıklama</label>
+                <input type="text" id="skAciklama" class="form-control form-control-sm">
+            </div>
+            <div class="modal-footer"><button class="btn btn-success" onclick="stokKaydinaCevirKaydet()">Onayla ve Oluştur</button></div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; color: #5a5c69; }
+    .fark-poz { color: #0f9d58; font-weight: 700; } .fark-neg { color: #c0392b; font-weight: 700; } .fark-sifir { color: #495057; }
+    .satir-tikla { cursor: pointer; } .satir-tikla:hover td { background: #f8fafd; }
+    .se-satir { border: 1px solid #e3e6f0; border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+</style>
+
+<script>
+    let belgeler = [], depolar = [], seciliDocEntry = null, detaySon = null;
+    function fmt(n, d) { return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+    function farkSinif(n) { return n > 0 ? 'fark-poz' : (n < 0 ? 'fark-neg' : 'fark-sifir'); }
+    function farkYaz(n) { return (n > 0 ? '+' : '') + fmt(n, 3); }
+
+    async function depolariYukle() {
+        const res = await fetch('/UrasUretimStok/GetSayimDepolar').then(r => r.json());
+        if (res.success) {
+            depolar = res.data || [];
+            const opt = depolar.map(d => `<option value="${d.WhsCode}">${d.WhsCode} — ${d.WhsName}</option>`).join('');
+            document.getElementById('fDepo').innerHTML = '<option value="">Tümü</option>' + opt;
+            document.getElementById('ysDepo').innerHTML = opt;
+        }
+    }
+
+    async function belgeleriYukle() {
+        const qs = new URLSearchParams({ durum: document.getElementById('fDurum').value, depo: document.getElementById('fDepo').value, search: document.getElementById('fSearch').value });
+        const res = await fetch('/UrasUretimStok/GetSayimBelgeleri?' + qs.toString()).then(r => r.json());
+        if (!res.success) { alert(res.message); return; }
+        belgeler = res.data || [];
+        document.getElementById('belgeSayisi').textContent = belgeler.length;
+        document.getElementById('tbodyBelgeler').innerHTML = belgeler.map(b => `
+            <tr class="satir-tikla ${seciliDocEntry === b.DocEntry ? 'table-primary' : ''}" onclick="belgeSec(${b.DocEntry})">
+                <td class="fw-bold">#${b.DocNum}</td><td>${b.CountDate}</td><td>${b.Depolar}</td>
+                <td><span class="badge ${b.Status === 'O' ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary'}">${b.Status === 'O' ? 'Açık' : 'Kapalı'}</span></td>
+                <td class="text-end">${b.SayilanSatir}/${b.SatirSayisi}</td><td class="text-end ${b.FarkliSatir ? 'text-warning fw-bold' : 'text-muted'}">${b.FarkliSatir}</td></tr>`).join('')
+            || '<tr><td colspan="6" class="text-center text-muted py-3">Kayıt yok.</td></tr>';
+    }
+
+    async function belgeSec(docEntry) {
+        seciliDocEntry = docEntry;
+        belgeleriYukle();
+        const res = await fetch('/UrasUretimStok/GetSayimDetay?docEntry=' + docEntry).then(r => r.json());
+        if (!res.success) { alert(res.message); return; }
+        detaySon = res.data;
+        document.getElementById('detayYok').style.display = 'none';
+        document.getElementById('detay').style.display = '';
+        const b = detaySon.Baslik;
+        document.getElementById('detayBaslik').textContent = `#${b.DocNum} — ${b.CountDate} (${b.Status === 'O' ? 'Açık' : 'Kapalı'})`;
+        document.getElementById('btnKapat').disabled = b.Status !== 'O';
+        document.getElementById('btnStokKaydi').disabled = b.Status !== 'O';
+        document.getElementById('tbodySatirlar').innerHTML = (detaySon.Satirlar || []).map(s => `
+            <tr><td>${s.Sayildi ? '<i class="fas fa-check text-success"></i>' : ''}</td>
+                <td><div class="fw-semibold">${s.ItemName || s.ItemCode}</div><div class="text-muted small">${s.ItemCode}${s.PartiYonetimli ? ' • partili' : ''}</div></td>
+                <td>${s.WhsCode}</td><td class="text-end">${fmt(s.SistemMiktar, 3)}</td><td class="text-end">${fmt(s.SayilanMiktar, 3)}</td>
+                <td class="text-end ${farkSinif(s.Fark)}">${farkYaz(s.Fark)}</td>
+                <td>${s.LineStatus !== 'C' && b.Status === 'O' ? `<button class="btn btn-sm btn-outline-danger" onclick="satirSil(${docEntry}, ${s.LineNum})"><i class="fas fa-trash"></i></button>` : ''}</td></tr>`).join('')
+            || '<tr><td colspan="7" class="text-center text-muted py-3">Satır yok.</td></tr>';
+    }
+
+    async function satirSil(docEntry, lineNum) {
+        if (!confirm('Bu satırı silmek istediğinize emin misiniz?')) return;
+        const res = await fetch(`/UrasUretimStok/SayimSatirSil?docEntry=${docEntry}&lineNum=${lineNum}`, { method: 'POST' }).then(r => r.json());
+        alert(res.message);
+        if (res.success) belgeSec(docEntry);
+    }
+
+    async function sayimKapat() {
+        if (!seciliDocEntry || !confirm('Sayım belgesini kapatmak istediğinize emin misiniz?')) return;
+        const res = await fetch('/UrasUretimStok/SayimKapat?docEntry=' + seciliDocEntry, { method: 'POST' }).then(r => r.json());
+        alert(res.message);
+        if (res.success) { belgeleriYukle(); belgeSec(seciliDocEntry); }
+    }
+
+    function excelAktar() {
+        if (!detaySon || !detaySon.Satirlar) { alert('Önce bir sayım belgesi seçin.'); return; }
+        if (typeof XLSX === 'undefined') { alert('Excel kütüphanesi yüklenemedi; sayfayı yenileyip tekrar deneyin.'); return; }
+        const b = detaySon.Baslik;
+        const yuvarla = v => Math.round((Number(v) || 0) * 1000) / 1000;
+
+        const satirlar = detaySon.Satirlar.map(s => ({
+            'Kalem': s.ItemCode, 'Kalem Adı': s.ItemName, 'Depo': s.WhsCode, 'Birim': s.Uom,
+            'Sistem': yuvarla(s.SistemMiktar), 'Sayılan': s.Sayildi ? yuvarla(s.SayilanMiktar) : null,
+            'Fark': s.Sayildi ? yuvarla(s.Fark) : null, 'Durum': s.Sayildi ? 'Sayıldı' : 'Sayılmadı'
+        }));
+        const partiler = [];
+        detaySon.Satirlar.forEach(s => (s.Partiler || []).forEach(p => partiler.push({
+            'Kalem': s.ItemCode, 'Kalem Adı': s.ItemName, 'Depo': s.WhsCode, 'Parti': p.PartiNo,
+            'Sistem': yuvarla(p.Sistem), 'Sayılan': yuvarla(p.Sayilan), 'Fark': yuvarla((p.Sayilan || 0) - (p.Sistem || 0))
+        })));
+
+        const wb = XLSX.utils.book_new();
+        const ws1 = XLSX.utils.json_to_sheet(satirlar);
+        ws1['!cols'] = [{ wch: 16 }, { wch: 34 }, { wch: 6 }, { wch: 9 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }];
+        XLSX.utils.book_append_sheet(wb, ws1, 'Satırlar');
+        if (partiler.length) {
+            const ws2 = XLSX.utils.json_to_sheet(partiler);
+            ws2['!cols'] = [{ wch: 16 }, { wch: 34 }, { wch: 6 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 10 }];
+            XLSX.utils.book_append_sheet(wb, ws2, 'Partiler');
+        }
+        XLSX.writeFile(wb, `sayim_${b.DocNum || b.DocEntry}.xlsx`);
+    }
+
+    // ---- Yeni Sayım ----
+    function yeniSayimAc() {
+        document.getElementById('ysAciklama').value = '';
+        document.getElementById('ysSatirlar').innerHTML = '';
+        ysSatirEkle();
+        new bootstrap.Modal(document.getElementById('yeniSayimModal')).show();
+    }
+    function satirHtml(prefix, idx) {
+        return `<div class="se-satir" id="${prefix}Satir${idx}">
+            <div class="row g-2">
+                <div class="col-3"><label class="small">Kalem Kodu</label><input type="text" class="form-control form-control-sm" id="${prefix}KalemInput${idx}" placeholder="Kalem kodu..." oninput="${prefix}KalemAra(${idx}, this.value)"><div class="small text-muted" id="${prefix}Sonuc${idx}"></div></div>
+                <div class="col-2"><label class="small">Depo</label><select class="form-control form-select form-select-sm" id="${prefix}Depo${idx}" onchange="${prefix}PartilerYukle(${idx})"></select></div>
+                <div class="col-3"><label class="small">Parti No <span class="text-muted" id="${prefix}PartiEtiket${idx}"></span></label>
+                    <input type="text" class="form-control form-control-sm" id="${prefix}PartiNo${idx}" list="${prefix}PartiListe${idx}" placeholder="Partisizse boş bırakın">
+                    <datalist id="${prefix}PartiListe${idx}"></datalist>
+                </div>
+                <div class="col-2"><label class="small">Miktar</label><input type="number" step="0.001" class="form-control form-control-sm" id="${prefix}Miktar${idx}"></div>
+                <div class="col-2 d-flex align-items-end"><button class="btn btn-outline-danger btn-sm" onclick="document.getElementById('${prefix}Satir${idx}').remove()"><i class="fas fa-trash"></i></button></div>
+            </div>
+            <input type="hidden" id="${prefix}ItemCode${idx}">
+            <input type="hidden" id="${prefix}Partili${idx}" value="0">
+        </div>`;
+    }
+
+    // Türkçe/ondalık güvenli tutar çözümleme (barkod ile taranan "1.234,56" gibi değerler için).
+    function miktarCoz(v) {
+        if (v === null || v === undefined) return null;
+        let s = v.toString().replace(/[^0-9.,]/g, '');
+        if (!s) return null;
+        const virgul = s.lastIndexOf(','), nokta = s.lastIndexOf('.');
+        if (virgul >= 0 && nokta >= 0) s = virgul > nokta ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+        else if (virgul >= 0) s = s.replace(',', '.');
+        const f = parseFloat(s);
+        return isNaN(f) ? null : f;
+    }
+
+    async function partilerYukleGenel(prefix, idx) {
+        const itemCode = document.getElementById(prefix + 'ItemCode' + idx).value;
+        const whsCode = document.getElementById(prefix + 'Depo' + idx).value;
+        const dl = document.getElementById(prefix + 'PartiListe' + idx);
+        if (!itemCode || !dl) return;
+        const res = await fetch('/UrasUretimStok/GetSayimKalemPartiler?itemCode=' + encodeURIComponent(itemCode) + '&whsCode=' + encodeURIComponent(whsCode || '')).then(r => r.json());
+        if (res.success) dl.innerHTML = (res.data || []).map(p => `<option value="${p.PartiNo}">${p.PartiNo} — mevcut ${fmt(p.Miktar, 2)}</option>`).join('');
+    }
+    function ysPartilerYukle(idx) { partilerYukleGenel('ys', idx); }
+    function sePartilerYukle(idx) { partilerYukleGenel('se', idx); }
+    let ysIdx = 0;
+    function ysSatirEkle() {
+        document.getElementById('ysSatirlar').insertAdjacentHTML('beforeend', satirHtml('ys', ysIdx));
+        const sel = document.getElementById('ysDepo' + ysIdx);
+        sel.innerHTML = depolar.map(d => `<option value="${d.WhsCode}">${d.WhsCode}</option>`).join('');
+        ysIdx++;
+    }
+    // Satır başına ayrı zamanlayıcı — TEK ortak zamanlayıcı kullanılsaydı, hızlıca birden fazla
+    // satıra kalem kodu yazıldığında önceki satırın araması iptal edilip o satır boş kalırdı.
+    const kalemAramaZamanlari = new Map();
+    function ysKalemAra(idx, q) { ysKalemAraGenel('ys', idx, q); }
+    function seKalemAra(idx, q) { ysKalemAraGenel('se', idx, q); }
+    function ysKalemAraGenel(prefix, idx, q) {
+        const anahtar = prefix + idx;
+        clearTimeout(kalemAramaZamanlari.get(anahtar));
+        kalemAramaZamanlari.set(anahtar, setTimeout(() => kalemCoz(prefix, idx, q), 300));
+    }
+
+    // Kalem kodunu (arama kutusundan ya da barkoddan) çözüp satıra uygular; parti yönetimli ise
+    // GetSayimKalemPartiler ile mevcut partileri öneri listesine (datalist) doldurur.
+    async function kalemCoz(prefix, idx, q) {
+        if (!q) return null;
+        const res = await fetch('/UrasUretimStok/GetSayimKalemler?search=' + encodeURIComponent(q)).then(r => r.json());
+        const k = res.success ? (res.data || []).find(x => x.ItemCode.toUpperCase() === q.trim().toUpperCase()) || res.data[0] : null;
+        if (!k) { document.getElementById(prefix + 'Sonuc' + idx).textContent = 'Bulunamadı'; return null; }
+        document.getElementById(prefix + 'ItemCode' + idx).value = k.ItemCode;
+        document.getElementById(prefix + 'Partili' + idx).value = k.PartiYonetimli ? '1' : '0';
+        document.getElementById(prefix + 'Sonuc' + idx).textContent = k.ItemCode + ' — ' + k.ItemName;
+        document.getElementById(prefix + 'PartiEtiket' + idx).textContent = k.PartiYonetimli ? '(zorunlu)' : '(partisiz kalem)';
+        partilerYukleGenel(prefix, idx);
+        return k;
+    }
+
+    function satirlariTopla(prefix) {
+        const satirlarDiv = document.querySelectorAll('#' + prefix + 'Satirlar .se-satir');
+        const satirlar = [];
+        satirlarDiv.forEach(div => {
+            const idx = div.id.replace(prefix + 'Satir', '');
+            const itemCode = document.getElementById(prefix + 'ItemCode' + idx).value;
+            if (!itemCode) return;
+            const miktar = parseFloat(document.getElementById(prefix + 'Miktar' + idx).value) || 0;
+            const partili = document.getElementById(prefix + 'Partili' + idx).value === '1';
+            const partiNo = (document.getElementById(prefix + 'PartiNo' + idx).value || '').trim();
+            satirlar.push({
+                ItemCode: itemCode, WhsCode: document.getElementById(prefix + 'Depo' + idx).value, Miktar: miktar, Partili: partili,
+                Partiler: (partili && partiNo) ? [{ PartiNo: partiNo, Miktar: miktar }] : []
+            });
+        });
+        return satirlar;
+    }
+
+    // KalemKodu|PartiNo|Miktar biçimindeki barkodu ayrıştırıp yeni bir satır ekler ve doldurur
+    // (kaynaktaki barkodIsle ile aynı format; barkod okuyucu tabancası da bu alana yazıp Enter basar).
+    async function barkodIsle(prefix, ham) {
+        const kod = (ham || '').trim();
+        if (!kod) return;
+        const parca = kod.split('|').map(x => x.trim());
+        const itemCode = parca[0], partiNo = parca[1] || '', miktar = parca.length > 2 ? miktarCoz(parca[2]) : null;
+        if (!itemCode) return;
+
+        const ekleFn = prefix === 'ys' ? ysSatirEkle : seSatirEkle;
+        const idxOncesi = prefix === 'ys' ? ysIdx : seIdx;
+        ekleFn();
+        const idx = idxOncesi;
+        const k = await kalemCoz(prefix, idx, itemCode);
+        if (!k) return;
+        if (k.PartiYonetimli && partiNo) document.getElementById(prefix + 'PartiNo' + idx).value = partiNo.toLocaleUpperCase('tr');
+        if (miktar != null && miktar > 0) document.getElementById(prefix + 'Miktar' + idx).value = miktar;
+        document.getElementById((k.PartiYonetimli ? prefix + 'PartiNo' : prefix + 'Miktar') + idx)?.focus();
+    }
+
+    async function yeniSayimKaydet() {
+        const satirlar = satirlariTopla('ys');
+        if (!satirlar.length) { alert('En az bir kalem eklemelisiniz.'); return; }
+        for (const s of satirlar) if (s.Partili && s.Partiler.length === 0) { alert(s.ItemCode + ' parti yönetimli; parti numarası girin.'); return; }
+        const govde = { WhsCode: satirlar[0].WhsCode, Remarks: document.getElementById('ysAciklama').value, Satirlar: satirlar };
+        const res = await fetch('/UrasUretimStok/YeniSayimOlustur', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(govde) }).then(r => r.json());
+        alert(res.message);
+        if (res.success) { bootstrap.Modal.getInstance(document.getElementById('yeniSayimModal')).hide(); belgeleriYukle(); }
+    }
+
+    // ---- Satır Ekle/Say ----
+    let seIdx = 0;
+    function satirEkleAc() {
+        document.getElementById('seSatirlar').innerHTML = '';
+        seIdx = 0;
+        seSatirEkle();
+        new bootstrap.Modal(document.getElementById('satirEkleModal')).show();
+    }
+    function seSatirEkle() {
+        document.getElementById('seSatirlar').insertAdjacentHTML('beforeend', satirHtml('se', seIdx));
+        const sel = document.getElementById('seDepo' + seIdx);
+        sel.innerHTML = depolar.map(d => `<option value="${d.WhsCode}">${d.WhsCode}</option>`).join('');
+        seIdx++;
+    }
+    async function satirEkleKaydet() {
+        if (!seciliDocEntry) return;
+        const satirlar = satirlariTopla('se');
+        if (!satirlar.length) { alert('En az bir kalem eklemelisiniz.'); return; }
+        for (const s of satirlar) if (s.Partili && s.Partiler.length === 0) { alert(s.ItemCode + ' parti yönetimli; parti numarası girin.'); return; }
+        const govde = { DocEntry: seciliDocEntry, Degistir: document.getElementById('seDegistir').checked, Satirlar: satirlar };
+        const res = await fetch('/UrasUretimStok/SayimSatirEkle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(govde) }).then(r => r.json());
+        alert(res.message);
+        if (res.success) { bootstrap.Modal.getInstance(document.getElementById('satirEkleModal')).hide(); belgeSec(seciliDocEntry); }
+    }
+
+    // ---- Stok Kaydına Çevir ----
+    function stokKaydinaCevirAc() {
+        document.getElementById('skAciklama').value = '';
+        document.getElementById('skVarsayilanFiyat').value = 0;
+        new bootstrap.Modal(document.getElementById('stokKaydiModal')).show();
+    }
+    async function stokKaydinaCevirKaydet() {
+        const govde = { DocEntry: seciliDocEntry, VarsayilanFiyat: parseFloat(document.getElementById('skVarsayilanFiyat').value) || 0, Remarks: document.getElementById('skAciklama').value };
+        const res = await fetch('/UrasUretimStok/SayimStokKaydinaCevir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(govde) }).then(r => r.json());
+        alert(res.message);
+        if (res.success) { bootstrap.Modal.getInstance(document.getElementById('stokKaydiModal')).hide(); belgeleriYukle(); belgeSec(seciliDocEntry); }
+    }
+
+    (async function init() {
+        await depolariYukle();
+        belgeleriYukle();
+    })();
+</script>

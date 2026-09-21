@@ -1,0 +1,1811 @@
+﻿@model List<WebApplication3.Models.KrediTeminatViewModel>
+@using System.Globalization
+@using WebApplication3.Models
+@using Newtonsoft.Json
+@using System.Reflection
+@using System.ComponentModel.DataAnnotations
+@using System.Linq
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Xsrf
+
+@{
+    ViewData["Title"] = "Kredi ve Teminat Takip Raporu (Rapor30)";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // Aktif Veritabanını (Şirketi) URL veya Cookie'den merkezi olarak alıyoruz
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"];
+    }
+
+    // --- YENİ İSTENEN ALANLARIN LİSTESİ (TAM SIRA) ---
+    var requestedFields = new List<string> {
+        "FirmaAdi", "SozlesmeNumarasi", "BankaAdi", "KrediTuru", "KrediBaslangicTarihi", "KrediBitisTarihi",
+        "DovizCinsi", "KrediDurumu", "Anapara", "FaizTutari", "FaizOrani", "AnaParaFaizliTutar",
+        "BSMV", "KKDF", "KDV", "AylikGecikmeCezasiOrani", "DigerGiderler", "TumMaliyetlerDahil",
+        "ToplamTaksitSayisi", "OdenenTaksitSayisi", "KalanTaksitSayisi", "AylikTaksitTutari",
+        "ToplamOdenenTutar", "KalanOdemeTutari", "KalanAnaparaTutari", "GuncelBakiye",
+        "YapilandirmaTarihi", "YAPAnaparadanDusulen", "YAPFaizdenDusulen", "YAPDigerMasraflardanDusulen",
+        "YAPToplamBorcAzalisi", "YAPToplamBorcAzalisOrani", "YAPYeniAnaparaTutari", "YAPYeniFaizTutari",
+        "YAPYeniDigerGiderlerToplami", "YAPYeniToplamBorc", "YAPYeniFaizOrani", "YAPYeniVade",
+        "YAPYeniAylikTaksit", "IlkTaksitTarihi", "SonTaksitTarihi"
+    };
+
+    // Modelden PropertyInfo'ları al
+    var allFieldsMap = typeof(KrediTeminatViewModel).GetProperties().ToDictionary(p => p.Name);
+    var allFields = requestedFields
+        .Where(name => allFieldsMap.ContainsKey(name))
+        .Select(name => allFieldsMap[name])
+        .ToList();
+
+    // Sadece Formül Atanabilir Sayısal Alanlar
+    var formulaEligibleFields = typeof(KrediTeminatViewModel).GetProperties()
+        .Where(p => p.PropertyType == typeof(decimal) || p.PropertyType == typeof(decimal?) || p.PropertyType == typeof(int) || p.PropertyType == typeof(int?))
+        .Select(p => p.Name).ToList();
+
+    // --- VARSAYILAN GÖRÜNÜR İSİMLER (Model Display Attribute'lerinden ve isteğinizden alınmıştır) ---
+    var displayNames = new Dictionary<string, string>
+    {
+        // KREDİ VE TEMEL BİLGİLER
+        { "FirmaAdi", "Firma Adı" }, { "SozlesmeNumarasi", "Sözleşme No" }, { "BankaAdi", "Banka Adı" },
+        { "KrediTuru", "Kredi Türü" }, { "KrediBaslangicTarihi", "Kredi Başlangıç Tarihi" }, { "KrediBitisTarihi", "Kredi Bitiş Tarihi" },
+        { "DovizCinsi", "Döviz Cinsi" }, { "KrediDurumu", "Kredi Durumu" },
+
+        // FİNANSAL ALANLAR
+        { "Anapara", "Anapara (₺)" }, { "FaizTutari", "Faiz Tutarı (₺)" }, { "FaizOrani", "Faiz Oranı (%)" },
+        { "AnaParaFaizliTutar", "Ana Para + Faiz Tutarı (₺)" }, { "BSMV", "BSMV (₺)" }, { "KKDF", "KKDF (₺)" }, { "KDV", "KDV (₺)" },
+        { "AylikGecikmeCezasiOrani", "Aylık Gecikme Cezası (%)" }, { "DigerGiderler", "Diğer Giderler Toplamı (₺)" },
+        { "TumMaliyetlerDahil", "Tüm Maliyetler Dahil Kredi Tutarı (₺)" },
+        { "ToplamTaksitSayisi", "Toplam Taksit Sayısı" }, { "OdenenTaksitSayisi", "Ödenen Taksit Sayısı" }, { "KalanTaksitSayisi", "Kalan Taksit Sayısı" },
+        { "AylikTaksitTutari", "Aylık Taksit Tutarı (₺)" },
+        { "ToplamOdenenTutar", "Toplam Ödenen Tutar (₺)" }, { "KalanOdemeTutari", "Kalan Ödeme Tutarı (₺)" },
+        { "KalanAnaparaTutari", "Kalan Anapara Tutarı (₺)" }, { "GuncelBakiye", "Güncel Bakiye Bilgisi (₺)" },
+
+        // YAPILANDIRMA ALANLARI
+        { "YapilandirmaTarihi", "Yapılandırma Tarihi" },
+        { "YAPAnaparadanDusulen", "Anaparadan Düşülen Tutar (₺)" }, { "YAPFaizdenDusulen", "Faizden Düşülen Tutar (₺)" },
+        { "YAPDigerMasraflardanDusulen", "Diğer Masraflardan Düşülen Tutar (₺)" },
+        { "YAPToplamBorcAzalisi", "Toplam Borç Azalış Tutarı (₺)" }, { "YAPToplamBorcAzalisOrani", "Toplam Borç Azalış Oranı (%)" },
+        { "YAPYeniAnaparaTutari", "Yeni Anapara Tutarı (₺)" }, { "YAPYeniFaizTutari", "Yeni Faiz Tutarı (₺)" },
+        { "YAPYeniDigerGiderlerToplami", "Yeni Diğer Giderler Toplamı (₺)" },
+        { "YAPYeniToplamBorc", "Yeni Toplam Borç (₺)" }, { "YAPYeniFaizOrani", "Yeni Faiz Oranı (%)" },
+        { "YAPYeniVade", "Yeni Vade (Ay)" }, { "YAPYeniAylikTaksit", "Yeni Aylık Taksit (₺)" },
+        { "IlkTaksitTarihi", "İlk Taksit Tarihi" }, { "SonTaksitTarihi", "Son Taksit Tarihi" },
+
+        // Detay Başlıkları (Aynı Kalır)
+        { "TeminatTuru", "Teminat Türü" }, { "Derece", "Derece" }, { "IpotekVeren", "İpotek Veren" },
+        { "AitOlduguTaraf", "Ait Olduğu Taraf" }, { "Tur", "Tür" }, { "EkspertizDegeri", "Ekspertiz Değeri (₺)" },
+        { "IpotekOrani", "İpotek Oranı (%)" }, { "IpotekBedeli", "İpotek Bedeli (₺)" }, { "EkspertizTarihi", "Ekspertiz Tarihi" },
+        { "KefilAdiUnvani", "Kefil Adı / Ünvanı" }, { "KefaletTuru", "Kefalet Türü" }, { "KefilTuru", "Kefil Türü" },
+        { "KefaletPayOrani", "Kefalet Pay Oranı (%)" }, { "Kapsam", "Kapsam" }
+    };
+
+    // DB'den gelen özel başlıkları yükle
+    var customTitlesFromDb = ViewBag.CustomTitles as Dictionary<string, string> ?? new Dictionary<string, string>();
+    foreach (var kvp in customTitlesFromDb)
+    {
+        if (kvp.Key.StartsWith("ColumnTitle_"))
+        {
+            string fieldName = kvp.Key.Substring("ColumnTitle_".Length);
+            if (displayNames.ContainsKey(fieldName))
+            {
+                displayNames[fieldName] = kvp.Value;
+            }
+        }
+    }
+
+    var reportDataJson = Model != null ? Newtonsoft.Json.JsonConvert.SerializeObject(Model, new Newtonsoft.Json.JsonSerializerSettings { DateFormatString = "yyyy-MM-ddTHH:mm:ss" }) : "[]";
+    var jsFieldNames = allFields.Select(p => p.Name).ToList();
+
+    var distinctValues = new Dictionary<string, List<string>>();
+    if (Model != null)
+    {
+        distinctValues["FirmaAdi"] = Model.Where(m => !string.IsNullOrEmpty(m.FirmaAdi)).Select(m => m.FirmaAdi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["BankaAdi"] = Model.Where(m => !string.IsNullOrEmpty(m.BankaAdi)).Select(m => m.BankaAdi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["KrediTuru"] = Model.Where(m => !string.IsNullOrEmpty(m.KrediTuru)).Select(m => m.KrediTuru).Distinct().OrderBy(s => s).ToList();
+        distinctValues["KrediDurumu"] = Model.Where(m => !string.IsNullOrEmpty(m.KrediDurumu)).Select(m => m.KrediDurumu).Distinct().OrderBy(s => s).ToList();
+        distinctValues["DovizCinsi"] = Model.Where(m => !string.IsNullOrEmpty(m.DovizCinsi)).Select(m => m.DovizCinsi).Distinct().OrderBy(s => s).ToList();
+    }
+
+    string defaultSutunRengi = Model?.FirstOrDefault()?.SutunKrediTuruRenk ?? "";
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? "URASKIMYA";
+}
+
+<div class="container-fluid py-4">
+    @Html.AntiForgeryToken()
+
+    <div class="row g-0">
+        <div class="col-md-12">
+            <div class="main-report-box">
+
+                <div class="sticky-toolbar">
+                    <div class="left-controls">
+                        <div class="database-info">
+                            <i class="fas fa-database"></i>
+                            Veritabanı: <strong>@currentSelectedDbDisplay</strong>
+                        </div>
+                        <button id="addNewRowBtn" class="btn btn-primary btn-sm">
+                            <i class="fas fa-plus"></i> Yeni Kayıt Ekle
+                        </button>
+                        <button id="openFormulaModalBtn" class="btn btn-warning btn-sm ms-2">
+                            <i class="fas fa-calculator"></i> Formül Ayarları
+                        </button>
+                    </div>
+                </div>
+
+                <div id="alertContainer" class="mt-3"></div>
+
+                <div class="table-container">
+                    <table class="table table-bordered table-striped table-hover rapor-tablo" id="rapor30Table">
+                        <thead>
+                            <tr class="main-header-row">
+                                <th style="width: 50px;" class="sortable-column" data-column="DocNum" title="Belge No" data-sort-type="number">Belge No <i class="fas fa-sort float-end"></i></th>
+                                @* DOSYA YÖNETİMİ KOLONU BAŞLIĞI *@
+                                <th style="width: 120px;" class="sortable-column" data-column="DosyaYolu" data-sort-type="text">Dosya Yönetimi <i class="fas fa-sort float-end"></i></th>
+                                @foreach (var prop in allFields)
+                                {
+                                    var display = displayNames.ContainsKey(prop.Name) ? displayNames[prop.Name] : prop.Name;
+                                    var sortType = "text";
+                                    if (prop.PropertyType == typeof(DateTime) || prop.PropertyType == typeof(DateTime?)) { sortType = "date"; }
+                                    else if (prop.PropertyType == typeof(decimal) || prop.PropertyType == typeof(decimal?) || prop.PropertyType == typeof(int) || prop.PropertyType == typeof(int?)) { sortType = "number"; }
+
+                                    // KrediTuru sütununa global renk uygulaması
+                                    string sutunClass = (prop.Name == "KrediTuru" && !string.IsNullOrEmpty(defaultSutunRengi)) ? $"row-color-{defaultSutunRengi.ToLower()}" : "";
+
+                                    <th style="width: @(sortType == "date" ? "120px" : sortType == "number" ? "130px" : "180px");"
+                                        class="sortable-column @sutunClass column-header-editable"
+                                        data-column="@prop.Name"
+                                        data-config-key="@($"ColumnTitle_{prop.Name}")"
+                                        data-original-title="@display"
+                                        data-sort-type="@sortType"
+                                        title="Kolon başlığını değiştirmek için çift tıklayın.">
+                                        @display <i class="fas fa-sort float-end"></i>
+                                    </th>
+                                }
+                            </tr>
+                            <tr class="filter-row">
+                                <th data-column="DocNum"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                @* DOSYA YÖNETİMİ KOLONU FİLTRE *@
+                                <th data-column="DosyaYolu"><input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele..."></th>
+                                @foreach (var prop in allFields)
+                                {
+                                    var columnName = prop.Name;
+                                    var isSelect = new List<string> { "FirmaAdi", "BankaAdi", "KrediTuru", "KrediDurumu", "DovizCinsi" }.Contains(columnName);
+
+                                    <th data-column="@columnName">
+                                        @if (isSelect)
+                                        {
+                                            var selectTitle = displayNames.ContainsKey(columnName) ? displayNames[columnName] : columnName;
+                                            <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-selected-text-format="count > 2" data-width="100%" title="@selectTitle">
+                                                @if (distinctValues.ContainsKey(columnName))
+                                                {
+                                                    foreach (var item in distinctValues[columnName])
+                                                    {
+                                                        <option value="@item">@item</option>
+                                                    }
+                                                }
+                                            </select>
+                                        }
+                                        else
+                                        {
+                                            <input type="text" class="form-control form-control-sm filter-input" placeholder="Filtrele...">
+                                        }
+                                    </th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody id="rapor30TableBody">
+                            @if (Model != null)
+                            {
+                                @foreach (var item in Model)
+                                {
+                                    string rowClass = string.IsNullOrEmpty(item.SatirRengi) ? "" : $"row-color-{item.SatirRengi.ToLower()}";
+                                    bool hasDetails = item.TeminatDetaylari.Any() || item.KefaletDetaylari.Any();
+
+                                    // MASTER SATIR
+                                    <tr data-doc-entry="@item.DocEntry" class="@rowClass master-row" data-line-id="0" data-table-name="@("@KREDI_TEMINAT")">
+
+                                        @* BELGE NO SÜTUNU: Alt detayları açma/kapama işlevi *@
+                                        <td class="toggle-details"
+                                            data-bs-toggle="collapse"
+                                            data-bs-target="#details-@item.DocEntry"
+                                            aria-expanded="false"
+                                            aria-controls="details-@item.DocEntry">
+                                            @(item.DocEntry < 0 ? "Yeni" : item.DocNum.HasValue ? item.DocNum.Value.ToString() : item.DocEntry.ToString())
+                                            @if (hasDetails)
+                                            {
+                                                <i class="fas fa-chevron-down float-end ms-2" style="font-size: 0.8em;"></i>
+                                            }
+                                        </td>
+
+                                        @* DOSYA YÖNETİMİ BUTONU SÜTUNU *@
+                                        <td data-column="DosyaYolu" style="text-align: center;">
+                                            @if (item.DocEntry > 0)
+                                            {
+                                                <button class="btn btn-sm file-manage-btn @(string.IsNullOrEmpty(item.DosyaYolu) ? "btn-secondary" : "btn-info text-white")"
+                                                        data-doc-entry="@item.DocEntry"
+                                                        data-sozlesme-no="@item.SozlesmeNumarasi"
+                                                        data-dosya-yolu="@item.DosyaYolu"
+                                                        title="@(string.IsNullOrEmpty(item.DosyaYolu) ? "Dosya Yok" : item.DosyaYolu)">
+                                                    <i class="fas fa-file-upload"></i> @(string.IsNullOrEmpty(item.DosyaYolu) ? "Dosya Ekle" : "Dosya Var")
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted" title="Kayıt Oluşturulmalı">Dosya Ekle</span>
+                                            }
+                                        </td>
+
+                                        @foreach (var prop in allFields)
+                                        {
+                                            var value = prop.GetValue(item);
+                                            var fieldName = prop.Name;
+                                            var type = (prop.PropertyType == typeof(DateTime) || prop.PropertyType == typeof(DateTime?)) ? "date" : (prop.PropertyType == typeof(decimal) || prop.PropertyType == typeof(decimal?) || prop.PropertyType == typeof(int) || prop.PropertyType == typeof(int?)) ? "number" : "text";
+
+                                            string cellColorClass = "";
+                                            if (!string.IsNullOrEmpty(item.HucreRenkleri) && item.HucreRenkleri != "NULL")
+                                            {
+                                                try
+                                                {
+                                                    var colors = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(item.HucreRenkleri);
+                                                    if (colors != null && colors.ContainsKey(fieldName))
+                                                    {
+                                                        cellColorClass = colors[fieldName];
+                                                    }
+                                                }
+                                                catch { /* JSON hatası durumunda atla */ }
+                                            }
+
+                                            string extraClass = "";
+
+                                            <td data-column="@fieldName"
+                                                class="editable-field @extraClass @cellColorClass"
+                                                data-field-name="@fieldName"
+                                                data-table-name="@("@KREDI_TEMINAT")"
+                                                data-line-id="0"
+                                                data-type="@type"
+                                                data-original-value="@(value != null ? value.ToString() : "")">
+                                                @(value != null ? value.ToString() : "")
+                                            </td>
+                                        }
+                                    </tr>
+
+                                    <tr class="collapse detail-row" id="details-@item.DocEntry">
+                                        <td colspan="@(allFields.Count + 2)" style="padding: 0;">
+                                            <div class="p-3">
+                                                @* TEMİNAT DETAYLARI (T3) *@
+                                                @if (item.TeminatDetaylari.Any())
+                                                {
+                                                    <h6 class="detail-header">Teminat Detayları (@item.TeminatDetaylari.Count)</h6>
+                                                    <table class="table table-sm table-bordered table-striped detail-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th style="width: 50px;">LineId</th>
+                                                                <th style="width: 80px;">Aksiyon</th>
+                                                                @foreach (var p in typeof(TeminatDetayViewModel).GetProperties().Where(p => p.Name != "U_DocEntry" && p.Name != "U_LineId"))
+                                                                {
+                                                                    <th>@(displayNames.ContainsKey(p.Name) ? displayNames[p.Name] : p.Name)</th>
+                                                                }
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            @foreach (var detail in item.TeminatDetaylari)
+                                                            {
+                                                                <tr data-doc-entry="@item.DocEntry" data-line-id="@detail.U_LineId" data-table-name="@("@KREDI_TEMINAT_T3")">
+                                                                    <td>@detail.U_LineId</td>
+                                                                    <td>
+                                                                        <button class="btn btn-danger btn-sm delete-detail-btn"
+                                                                                data-doc-entry="@item.DocEntry"
+                                                                                data-line-id="@detail.U_LineId"
+                                                                                data-table-name="@("@KREDI_TEMINAT_T3")"
+                                                                                title="Teminat detayını sil">
+                                                                            <i class="fas fa-trash-alt"></i>
+                                                                        </button>
+                                                                    </td>
+                                                                    @foreach (var p in typeof(TeminatDetayViewModel).GetProperties().Where(p => p.Name != "U_DocEntry" && p.Name != "U_LineId"))
+                                                                    {
+                                                                        var val = p.GetValue(detail);
+                                                                        var typeDetail = (p.PropertyType == typeof(DateTime?) ? "date" : (p.PropertyType == typeof(decimal?) || p.PropertyType == typeof(int?) ? "number" : "text"));
+
+                                                                        <td class="editable-detail-field"
+                                                                            data-field-name="@p.Name"
+                                                                            data-type="@typeDetail"
+                                                                            data-original-value="@(val != null ? val.ToString() : "")">
+                                                                            @(val != null ? val.ToString() : "")
+                                                                        </td>
+                                                                    }
+                                                                </tr>
+                                                            }
+                                                        </tbody>
+                                                    </table>
+                                                }
+
+                                                @* KEFALET DETAYLARI (T4) *@
+                                                @if (item.KefaletDetaylari.Any())
+                                                {
+                                                    <h6 class="detail-header mt-4">Kefalet Detayları (@item.KefaletDetaylari.Count)</h6>
+                                                    <table class="table table-sm table-bordered table-striped detail-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th style="width: 50px;">LineId</th>
+                                                                <th style="width: 80px;">Aksiyon</th>
+                                                                @foreach (var p in typeof(KefaletDetayViewModel).GetProperties().Where(p => p.Name != "U_DocEntry" && p.Name != "U_LineId"))
+                                                                {
+                                                                    <th>@(displayNames.ContainsKey(p.Name) ? displayNames[p.Name] : p.Name)</th>
+                                                                }
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            @foreach (var detail in item.KefaletDetaylari)
+                                                            {
+                                                                <tr data-doc-entry="@item.DocEntry" data-line-id="@detail.U_LineId" data-table-name="@("@KREDI_TEMINAT_T4")">
+                                                                    <td>@detail.U_LineId</td>
+                                                                    <td>
+                                                                        <button class="btn btn-danger btn-sm delete-detail-btn"
+                                                                                data-doc-entry="@item.DocEntry"
+                                                                                data-line-id="@detail.U_LineId"
+                                                                                data-table-name="@("@KREDI_TEMINAT_T4")"
+                                                                                title="Kefil detayını sil">
+                                                                            <i class="fas fa-trash-alt"></i>
+                                                                        </button>
+                                                                    </td>
+                                                                    @foreach (var p in typeof(KefaletDetayViewModel).GetProperties().Where(p => p.Name != "U_DocEntry" && p.Name != "U_LineId"))
+                                                                    {
+                                                                        var val = p.GetValue(detail);
+                                                                        var typeDetail = (p.PropertyType == typeof(decimal?) ? "number" : "text");
+
+                                                                        <td class="editable-detail-field"
+                                                                            data-field-name="@p.Name"
+                                                                            data-type="@typeDetail"
+                                                                            data-original-value="@(val != null ? val.ToString() : "")">
+                                                                            @(val != null ? val.ToString() : "")
+                                                                        </td>
+                                                                    }
+                                                                </tr>
+                                                            }
+                                                        </tbody>
+                                                    </table>
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-3 mb-4 ms-2">
+    <a asp-action="Index" asp-controller="Home" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+        <i class="fas fa-arrow-left me-2"></i> Ana Sayfaya Dön
+    </a>
+</div>
+
+<ul id="contextMenu" class="context-menu">
+    <li class="dropdown-header">1. SATIR Boyama</li>
+    <li data-action="set-row-color" data-color="blue">
+        <span class="color-indicator" style="background-color: #cfe2ff;"></span> Satırı Mavi Boya
+    </li>
+    <li data-action="set-row-color" data-color="yellow">
+        <span class="color-indicator" style="background-color: #fff3cd;"></span> Satırı Sarı Boya
+    </li>
+    <li data-action="clear-row">
+        <i class="fas fa-eraser"></i> **Satır Rengini Kaldır**
+    </li>
+
+    <li class="dropdown-divider"></li>
+
+    <li data-action="delete-row" style="color: #dc3545;">
+        <i class="fas fa-trash-alt"></i> **Seçili Satırı Sil**
+    </li>
+
+    <li class="dropdown-divider"></li>
+
+    <li class="dropdown-header" style="color: var(--primary-color);">4. ALT KAYIT YÖNETİMİ</li>
+
+    <li data-action="add-teminat-detail" data-target-table="@("@KREDI_TEMINAT_T3")" style="color: #198754;">
+        <i class="fas fa-plus-square"></i> Yeni **Teminat** Ekle (T3)
+    </li>
+    <li data-action="add-kefalet-detail" data-target-table="@("@KREDI_TEMINAT_T4")" style="color: #198754;">
+        <i class="fas fa-user-plus"></i> Yeni **Kefil** Ekle (T4)
+    </li>
+
+    <li class="dropdown-divider"></li>
+
+    <li class="dropdown-header">2. HÜCRE Boyama</li>
+    <li data-action="set-cell-color" data-color="green">
+        <span class="color-indicator" style="background-color: #d1e7dd;"></span> Hücreyi Yeşil Boya
+    </li>
+    <li data-action="set-cell-color" data-color="red">
+        <span class="color-indicator" style="background-color: #f8d7da;"></span> Hücreyi Kırmızı Boya
+    </li>
+    <li data-action="clear-cell">
+        <i class="fas fa-eraser"></i> **Hücre Rengini Kaldır**
+    </li>
+
+    <li class="dropdown-divider"></li>
+
+    <li class="dropdown-header">3. SÜTUN Boyama (Global)</li>
+    <li data-action="set-column-color" data-color="blue" data-field-name="SutunKrediTuruRenk">
+        <span class="color-indicator" style="background-color: #cfe2ff;"></span> Sütunu Mavi Boya
+    </li>
+    <li data-action="clear-column" data-field-name="SutunKrediTuruRenk">
+        <i class="fas fa-eraser"></i> Sütun Rengini Kaldır
+    </li>
+</ul>
+
+<div class="modal fade" id="fileUploadModal" tabindex="-1" aria-labelledby="fileUploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="fileUploadModalLabel">Dosya Yönetimi (<span id="modalSozlesmeNo"></span>)</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="uploadDocEntry">
+                <input type="hidden" id="currentDosyaYolu">
+
+                <div id="fileStatusContainer" class="mb-3">
+                </div>
+
+                <form id="fileUploadForm">
+                    <label for="dosyaInput" class="form-label">Yeni Dosya Seç (Eskisini üzerine yazar):</label>
+                    <input class="form-control" type="file" id="dosyaInput" name="file">
+                    <button type="submit" class="btn btn-success mt-3 w-100" id="uploadBtn">
+                        <i class="fas fa-upload"></i> Dosyayı Yükle
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="formulaConfigModal" tabindex="-1" aria-labelledby="formulaConfigModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-xl modal-dialog-centered modal-custom-xxl">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title" id="formulaConfigModalLabel"><i class="fas fa-calculator me-2"></i>Dinamik Formül Ayarları</h5>
+                <button type="button" class="btn-close btn-close-dark" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="card p-3 mb-4 bg-light shadow-sm">
+                    <h6 class="card-title text-primary"><i class="fas fa-lightbulb me-2"></i>Formül Yazım İpuçları</h6>
+                    <p class="card-text small m-0">
+                        **1. Alan Ekleme:** Alan adını hatırlamak zorunda değilsiniz. **"Alan Ekle"** kutusundan arayarak seçtiğinizde, formüle otomatik olarak `[AlanAdı]` formatında eklenir.
+                    </p>
+                    <p class="card-text small m-0">
+                        **2. Operatörler:** `+`, `-`, `*`, `/` ve `()` kullanın.
+                    </p>
+                    <p class="card-text small m-0">
+                        **3. Örnek:** `[Anapara] * 0.18 + [DigerGiderler]`
+                    </p>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover formula-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 25%;" class="text-start">Kolon Adı</th>
+                                <th style="width: 50%;">Formül Tanımı</th>
+                                <th style="width: 25%;">Aksiyon</th>
+                            </tr>
+                        </thead>
+                        <tbody id="formulaConfigBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
+
+    <style>
+        body { font-size: 12px; }
+        .row-color-green { background-color: #d1e7dd !important; }
+        .row-color-yellow { background-color: #fff3cd !important; }
+        .row-color-red { background-color: #f8d7da !important; }
+        .row-color-blue { background-color: #cfe2ff !important; }
+        .cell-color-green { background-color: #d1e7dd !important; }
+        .cell-color-red { background-color: #f8d7da !important; }
+        .cell-color-blue { background-color: #cfe2ff !important; }
+        .master-row { cursor: default; font-weight: bold; }
+        .master-row:hover { background-color: #e9ecef !important; }
+        .master-row.collapsed .fas.fa-chevron-down { transform: rotate(0deg); }
+        .master-row:not(.collapsed) .fas.fa-chevron-down { transform: rotate(180deg); }
+        .fas.fa-chevron-down { transition: transform 0.2s ease-in-out; }
+        .detail-row { padding: 0 !important; background-color: #f8f9fa; }
+        .detail-table { width: 100%; margin-bottom: 0; }
+        .detail-table th { font-weight: normal; font-size: 0.9em; background-color: #e9ecef; border-color: #ccc; }
+        .detail-table td { font-size: 0.9em; padding: 5px; }
+        .detail-header { margin-top: 15px; margin-bottom: 5px; font-size: 1.1em; color: var(--primary-color); border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+        .context-menu { position: fixed; width: 250px; background: white; border: 1px solid #ccc; box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2); z-index: 2000; display: none; list-style: none; padding: 5px 0; margin: 0; font-size: 0.9em; }
+        .context-menu li { padding: 8px 12px; cursor: pointer; }
+        .context-menu li:hover { background-color: #f2f2f2; }
+        .context-menu .color-indicator { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border: 1px solid #888; }
+        .toggle-details { cursor: pointer; user-select: none; }
+        .calculated-field { background-color: #e0f7fa !important; font-style: italic; }
+        .formula-input-container { display: flex; gap: 5px; align-items: center; }
+        .formula-table td:first-child strong { display: block; font-size: 1.1em; font-weight: 600; }
+        .formula-table td:first-child span { display: block; font-size: 0.8em; color: #6c757d; }
+        .formula-field-select + .dropdown-toggle { min-width: 120px !important; padding-left: 8px !important; padding-right: 8px !important; border-radius: .3rem !important; border-color: #ced4da; background-color: #f8f9fa; }
+        .modal-custom-xxl { --bs-modal-width: 95vw; max-width: 1600px; }
+        .formula-table .formula-input { height: 38px; }
+        .formula-table .btn-sm { padding: .35rem .7rem; }
+    </style>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+
+            toastr.options = {
+                "closeButton": true,
+                "progressBar": true,
+                "positionClass": "toast-bottom-right",
+                "timeOut": "4000",
+            };
+
+            // JS tarafında kullanmak üzere db parametresini değişkene alıyoruz
+            const currentDbParam = '@currentDb';
+            const dbQueryString = currentDbParam ? `?db=${currentDbParam}` : '';
+
+            // ====================================================================
+            // SABİTLER ve GLOBAL DEĞİŞKENLER
+            // ====================================================================
+            const jsFieldNames = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(allFields.Select(p => p.Name).ToList()));
+            let allReportData = @Html.Raw(reportDataJson);
+            const displayNames = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(displayNames));
+            const formulaEligibleFields = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(formulaEligibleFields));
+            const formulaFieldNamesAndDisplays = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(formulaEligibleFields.ToDictionary(k => k, v => displayNames.ContainsKey(v) ? displayNames[v] : v)));
+
+            const table = document.getElementById('rapor30Table');
+            const tableBody = document.getElementById('rapor30TableBody');
+            const addNewRowBtn = document.getElementById('addNewRowBtn');
+            const contextMenu = document.getElementById('contextMenu');
+            const fileUploadModal = new bootstrap.Modal(document.getElementById('fileUploadModal'), {});
+
+            const xsrfToken = $('input[name="__RequestVerificationToken"]').val();
+
+            const dateFields = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(typeof(KrediTeminatViewModel).GetProperties().Where(p => p.PropertyType == typeof(DateTime) || p.PropertyType == typeof(DateTime?)).Select(p => p.Name)));
+            const numberFields = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(typeof(KrediTeminatViewModel).GetProperties().Where(p => p.PropertyType == typeof(decimal) || p.PropertyType == typeof(decimal?) || p.PropertyType == typeof(int) || p.PropertyType == typeof(int?)).Select(p => p.Name)));
+
+            const MASTER_TABLE = '@("@KREDI_TEMINAT")';
+            const T3_TABLE = '@("@KREDI_TEMINAT_T3")';
+            const T4_TABLE = '@("@KREDI_TEMINAT_T4")';
+
+            let sortColumn = 'DocNum';
+            let sortDirection = 'asc';
+            let clickedRow = null;
+            let clickedCell = null;
+            let loadedFormulas = {};
+            let currentlyFilteredRows = [...allReportData];
+
+            // ====================================================================
+            // YARDIMCI VE FORMAT FONKSİYONLARI
+            // ====================================================================
+
+            function showAlert(message, type) {
+                toastr[type](message);
+            }
+
+            function formatValue(value, columnName) {
+                if (value === null || value === undefined) return '';
+
+                if (dateFields.includes(columnName) || columnName.includes('Tarihi') || (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}/))) {
+                    const date = new Date(value);
+                    if (isNaN(date) || date.getFullYear() < 1900) return '';
+                    return date.toLocaleDateString('tr-TR');
+                }
+
+                // Sayısal alanlar için format
+                if (numberFields.includes(columnName) || columnName.includes('Sayisi') || columnName.includes('Adedi') || columnName.includes('Vade') || columnName.includes('Tutar') || columnName.includes('Orani') || columnName.includes('Degeri')) {
+                    const number = parseFloat(value);
+                    if (isNaN(number)) return '';
+
+                    const isRate = columnName.includes('Orani') || columnName.includes('Oran');
+                    const isInteger = columnName.includes('Sayisi') || columnName.includes('Adedi') || columnName.includes('Vade');
+
+                    return number.toLocaleString('tr-TR', { minimumFractionDigits: isInteger ? 0 : (isRate ? 2 : 2), maximumFractionDigits: isInteger ? 0 : 3 });
+                }
+
+                return value.toString();
+            }
+
+            function restoreOriginalValue(cell, value, fieldName) {
+                cell.classList.remove('editing');
+                cell.dataset.originalValue = value;
+                cell.textContent = formatValue(value, fieldName);
+
+                const isCalculated = loadedFormulas.hasOwnProperty(fieldName) && loadedFormulas[fieldName];
+                if(isCalculated) {
+                    cell.classList.add('calculated-field');
+                } else {
+                    cell.classList.remove('calculated-field');
+                }
+            }
+
+            function restoreHeader(headerElement, title) {
+                const input = headerElement.querySelector('input');
+                if (input) {
+                    headerElement.removeChild(input);
+                }
+                let icon = headerElement.querySelector('i.fa-sort, i.fa-sort-up, i.fa-sort-down');
+                let textNode = document.createTextNode(title + ' ');
+                if (icon) {
+                    headerElement.insertBefore(textNode, icon);
+                } else {
+                    headerElement.appendChild(textNode);
+                }
+                headerElement.dataset.originalTitle = title;
+            }
+
+            // ====================================================================
+            // DİNAMİK BAĞLANTI İŞLEVİ
+            // ====================================================================
+
+            function setupEditableFields() {
+                document.querySelectorAll('.editing').forEach(cell => {
+                    const fieldName = cell.dataset.fieldName;
+                    const originalValue = cell.dataset.originalValue;
+                    restoreOriginalValue(cell, originalValue, fieldName);
+                });
+
+                document.querySelectorAll(`tr[data-table-name="${MASTER_TABLE}"] td.editable-field`).forEach(cell => {
+                    cell.removeEventListener('click', handleCellClick);
+                    cell.addEventListener('click', handleCellClick);
+                    const fieldName = cell.dataset.fieldName;
+                    if (loadedFormulas.hasOwnProperty(fieldName) && loadedFormulas[fieldName]) {
+                        cell.classList.add('calculated-field');
+                    } else {
+                        cell.classList.remove('calculated-field');
+                    }
+                });
+
+                document.querySelectorAll('td.editable-detail-field').forEach(cell => {
+                    cell.removeEventListener('click', handleDetailCellClick);
+                    cell.addEventListener('click', handleDetailCellClick);
+                });
+
+                document.querySelectorAll('.delete-detail-btn').forEach(btn => {
+                    btn.removeEventListener('click', handleDeleteDetail);
+                    btn.addEventListener('click', handleDeleteDetail);
+                });
+
+                document.querySelectorAll('.file-manage-btn').forEach(btn => {
+                    btn.removeEventListener('click', handleFileManageClick);
+                    btn.addEventListener('click', handleFileManageClick);
+                });
+            }
+
+            // ====================================================================
+            // HÜCRE DÜZENLEME MODU BAŞLATICI
+            // ====================================================================
+
+            function initializeCellEditing(cell, docEntry, lineId, tableName, fieldName, type, originalValue) {
+
+                if (cell.classList.contains('editing')) return;
+
+                cell.classList.add('editing');
+
+                let input;
+                let isMultiLine = ['AciklamaNot', 'DurumOzeti', 'BankaGorusu', 'KefilGorusu', 'Kapsam', 'CekUygulandigiKalem', 'IflasTahsilSekli', 'IflasHukmu', 'KefilIflasDurumu', 'BankaTahsilOnceligi', 'YapilandirmaDurumu', 'YasalDayanak', 'AzalisKalemi'].some(f => f === fieldName);
+
+                if (isMultiLine) {
+                    input = document.createElement('textarea');
+                    input.rows = 3;
+                    input.value = originalValue ?? '';
+                } else {
+                    input = document.createElement('input');
+                    input.type = type === 'date' ? 'date' : 'text';
+                    input.style.textAlign = type === 'number' ? 'right' : 'left';
+
+                    if (type === 'date' && originalValue) {
+                        try {
+                            const date = new Date(originalValue);
+                            if (!isNaN(date) && date.getFullYear() > 1900) {
+                                input.value = date.toISOString().substring(0, 10);
+                            }
+                        } catch { input.value = ''; }
+                    } else if (type === 'number') {
+                        input.value = (originalValue ?? '').toString().replace(/,/g, '.');
+                    } else {
+                        input.value = originalValue ?? '';
+                    }
+                }
+
+                input.className = 'form-control form-control-sm';
+                cell.innerHTML = '';
+                cell.appendChild(input);
+                input.focus();
+
+                const row = cell.closest('tr');
+                const rowData = allReportData.find(item => item.DocEntry == docEntry) || {};
+
+                const save = async () => {
+                    let newValue = input.value.trim();
+                    let valueToSave = newValue;
+
+                    if (type === 'date') {
+                        valueToSave = newValue || null;
+                    } else if (type === 'number') {
+                        valueToSave = newValue.replace(',', '.');
+                        if (valueToSave === '' || isNaN(parseFloat(valueToSave))) valueToSave = null;
+                    } else if (newValue === '') {
+                        valueToSave = null;
+                    }
+
+                    const normalizedOriginal = (originalValue ?? '').toString().trim().replace(/,/g, '.');
+                    const normalizedNew = (valueToSave ?? '').toString().trim().replace(/,/g, '.');
+
+                    if (normalizedNew === normalizedOriginal) {
+                        restoreOriginalValue(cell, originalValue, fieldName);
+                        return;
+                    }
+
+                    if (docEntry < 0 && tableName === MASTER_TABLE) {
+                        rowData[fieldName] = valueToSave;
+
+                        if (fieldName === 'FirmaAdi' || fieldName === 'SozlesmeNumarasi' || rowData.FirmaAdi || rowData.SozlesmeNumarasi) {
+
+                            const response = await saveNewRecord(rowData);
+
+                            if (response.success) {
+                                window.location.reload();
+                            } else {
+                                restoreOriginalValue(cell, originalValue, fieldName);
+                            }
+                        } else {
+                            restoreOriginalValue(cell, valueToSave, fieldName);
+                        }
+                    } else {
+                        const payload = {
+                            DocEntry: docEntry,
+                            LineId: lineId === 0 ? null : lineId,
+                            FieldName: fieldName,
+                            FieldValue: valueToSave,
+                            TableName: tableName
+                        };
+
+                        const updateResult = await saveUpdate(payload);
+                        if (updateResult.success) {
+                            restoreOriginalValue(cell, valueToSave, fieldName);
+
+                            if (tableName === MASTER_TABLE) {
+                                const localItem = allReportData.find(item => item.DocEntry == docEntry);
+                                if (localItem) localItem[fieldName] = valueToSave;
+
+                                if (Object.keys(loadedFormulas).length > 0) {
+                                    const recalculatedItem = applyFormulasToData([localItem])[0];
+
+                                    const masterRow = cell.closest('tr');
+                                    masterRow.querySelectorAll('.editable-field').forEach(td => {
+                                        const tdFieldName = td.dataset.fieldName;
+                                        if (loadedFormulas.hasOwnProperty(tdFieldName) && loadedFormulas[tdFieldName]) {
+                                            const newVal = recalculatedItem[tdFieldName];
+                                            td.dataset.originalValue = newVal;
+                                            td.textContent = formatValue(newVal, tdFieldName);
+                                            localItem[tdFieldName] = newVal;
+                                        }
+                                    });
+                                }
+                            }
+
+                            if (tableName === T3_TABLE || tableName === T4_TABLE) {
+                                window.location.reload();
+                            }
+                        } else {
+                            restoreOriginalValue(cell, originalValue, fieldName);
+                        }
+                    }
+                };
+
+                input.addEventListener('blur', save);
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        save();
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        restoreOriginalValue(cell, originalValue, fieldName);
+                    }
+                });
+            }
+
+            // ====================================================================
+            // HÜCRE TIKLAMA İŞLEYİCİLERİ
+            // ====================================================================
+
+            function handleCellClick(e) {
+                const cell = e.currentTarget;
+                const row = cell.closest('tr');
+                const docEntry = parseInt(row.dataset.docEntry);
+                const fieldName = cell.dataset.fieldName;
+                const tableName = cell.dataset.tableName;
+                const lineId = parseInt(cell.dataset.lineId);
+
+                if (cell.classList.contains('toggle-details') || fieldName === 'DosyaYolu') return;
+
+                if (loadedFormulas.hasOwnProperty(fieldName) && loadedFormulas[fieldName]) {
+                    showAlert(`'${displayNames[fieldName]}' alanı dinamik bir formülle hesaplanmaktadır. Düzenlenemez.`, 'warning');
+                    return;
+                }
+
+                if (docEntry < 0 && tableName === MASTER_TABLE && !(fieldName === 'FirmaAdi' || fieldName === 'SozlesmeNumarasi')) {
+                    const localItem = allReportData.find(item => item.DocEntry == docEntry);
+                    if (!localItem || (!localItem.FirmaAdi && !localItem.SozlesmeNumarasi)) {
+                        showAlert("Yeni kaydı tamamlamak için önce 'Firma Adı' veya 'Sözleşme Numarası'nı girip Enter'a basmalısınız.", "warning");
+                        return;
+                    }
+                }
+
+                const type = cell.dataset.type;
+                const originalValue = cell.dataset.originalValue;
+
+                initializeCellEditing(cell, docEntry, lineId, tableName, fieldName, type, originalValue);
+            }
+
+            function handleDetailCellClick(e) {
+                const cell = e.currentTarget;
+                const row = cell.closest('tr');
+                const docEntry = parseInt(row.dataset.docEntry);
+                const lineId = parseInt(row.dataset.lineId);
+                const tableName = row.dataset.tableName;
+                const fieldName = cell.dataset.fieldName;
+
+                const type = cell.dataset.type;
+                const originalValue = cell.dataset.originalValue;
+
+                if (docEntry <= 0 || isNaN(lineId) || lineId === 0) return;
+
+                initializeCellEditing(cell, docEntry, lineId, tableName, fieldName, type, originalValue);
+            }
+
+
+            // ====================================================================
+            // FORMÜL İŞLEYİCİLERİ
+            // ====================================================================
+
+            async function loadAndInitializeFormulas() {
+                try {
+                    const response = await fetch('/Rapor30/GetFormulas' + dbQueryString);
+                    if (response.ok) {
+                        loadedFormulas = await response.json();
+                    } else {
+                        showAlert('Formüller yüklenemedi.', 'error');
+                    }
+                } catch (error) {
+                    showAlert('Formül yükleme sırasında ağ hatası oluştu.', 'error');
+                }
+            }
+
+            function evaluateFormula(formula, dataItem) {
+                if (!formula) return null;
+
+                let jsCode = formula;
+                const fieldNames = jsCode.match(/\[(.*?)\]/g) || [];
+
+                for (const field of fieldNames) {
+                    const name = field.replace(/[\[\]]/g, '');
+                    let value = dataItem[name];
+
+                    if (value === null || value === undefined || value === "") {
+                        value = 0;
+                    } else {
+                        value = parseFloat(value.toString().replace(/,/g, '.'));
+                    }
+
+                    if (isNaN(value)) value = 0;
+
+                    jsCode = jsCode.replace(new RegExp('\\[' + name + '\\]', 'g'), value);
+                }
+
+                try {
+                    const result = eval(jsCode);
+                    return isNaN(result) ? null : result;
+                } catch (e) {
+                    console.error("Formül Hesaplama Hatası:", e, "Formül:", formula, "JS Kodu:", jsCode);
+                    return null;
+                }
+            }
+
+            function applyFormulasToData(data) {
+                if (Object.keys(loadedFormulas).length === 0) return data;
+
+                return data.map(item => {
+                    const newItem = { ...item };
+
+                    for (const [fieldName, formula] of Object.entries(loadedFormulas)) {
+                        if (formula) {
+                            const calculatedValue = evaluateFormula(formula, item);
+                            newItem[fieldName] = calculatedValue;
+                        }
+                    }
+                    return newItem;
+                });
+            }
+
+            function showFormulaModal() {
+                const body = document.getElementById('formulaConfigBody');
+                body.innerHTML = '';
+
+                let optionsHtml = '';
+                for (const [fieldName, display] of Object.entries(formulaFieldNamesAndDisplays)) {
+                    optionsHtml += `<option value="[${fieldName}]">${display} (${fieldName})</option>`;
+                }
+
+                $('.formula-field-select').selectpicker('destroy');
+
+                formulaEligibleFields.forEach(fieldName => {
+                    const currentFormula = loadedFormulas[fieldName] || '';
+
+                    const row = document.createElement('tr');
+
+                    row.innerHTML = `
+                        <td class="text-start">
+                            <strong>${displayNames[fieldName] || fieldName}</strong>
+                            <span>(${fieldName})</span>
+                        </td>
+                        <td>
+                            <div class="formula-input-container">
+                                <input type="text" class="form-control formula-input"
+                                    data-field-name="${fieldName}" value="${currentFormula}" placeholder="Örn: [Anapara] * 0.18">
+                                <select class="selectpicker formula-field-select"
+                                            data-live-search="true"
+                                            data-size="8"
+                                            data-width="auto"
+                                            title="Alan Ekle">
+                                    <option value="" disabled selected>Alan Ekle</option>
+                                    ${optionsHtml}
+                                </select>
+                            </div>
+                        </td>
+                        <td>
+                            <button type="button" class="btn btn-success btn-sm save-formula-btn w-100 mb-1"
+                                data-field-name="${fieldName}">
+                                <i class="fas fa-save"></i> Kaydet
+                            </button>
+                            <button type="button" class="btn btn-outline-danger btn-sm clear-formula-btn w-100"
+                                data-field-name="${fieldName}" title="Formülü Sil">
+                                <i class="fas fa-eraser"></i> Sil
+                            </button>
+                        </td>
+                    `;
+                    body.appendChild(row);
+                });
+
+                $('.formula-field-select').selectpicker({
+                    liveSearch: true,
+                    actionsBox: false,
+                    selectedTextFormat: 'none',
+                    noneSelectedText: 'Alan Ekle',
+                    container: 'body'
+                });
+
+                $('.formula-field-select').off('change').on('change', function() {
+                    const selectedValue = $(this).val();
+                    const input = $(this).closest('.formula-input-container').find('.formula-input');
+
+                    if (selectedValue) {
+                        input.val(input.val() + selectedValue);
+
+                        const inputElement = input[0];
+                        inputElement.focus();
+                        inputElement.setSelectionRange(inputElement.value.length, inputElement.value.length);
+
+                        $(this).selectpicker('val', '');
+                    }
+                });
+
+                const modal = new bootstrap.Modal(document.getElementById('formulaConfigModal'));
+                modal.show();
+
+                document.querySelectorAll('.save-formula-btn').forEach(btn => {
+                    btn.addEventListener('click', handleSaveFormula);
+                });
+                document.querySelectorAll('.clear-formula-btn').forEach(btn => {
+                    btn.addEventListener('click', handleClearFormula);
+                });
+            }
+
+            async function handleClearFormula(e) {
+                const fieldName = e.currentTarget.dataset.fieldName;
+                const input = e.currentTarget.closest('tr').querySelector('.formula-input');
+
+                if (!confirm(`'${displayNames[fieldName]}' kolonundaki formülü silmek istediğinizden emin misiniz?`)) return;
+
+                input.value = '';
+                await handleSaveFormula({ currentTarget: e.currentTarget.closest('tr').querySelector('.save-formula-btn') });
+            }
+
+            async function handleSaveFormula(e) {
+                const btn = e.currentTarget;
+                const fieldName = btn.dataset.fieldName;
+                const input = btn.closest('tr').querySelector('.formula-input');
+                const newFormula = input.value.trim();
+                const configKey = `Formula_${fieldName}`;
+
+                const formulaValueToSave = newFormula === '' ? null : newFormula;
+
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Kaydediliyor...';
+
+                try {
+                    const response = await fetch('/Rapor30/UpdateGlobalConfig' + dbQueryString, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': xsrfToken },
+                        body: JSON.stringify({
+                            ConfigKey: configKey,
+                            ConfigValue: formulaValueToSave
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok && result.success) {
+                        loadedFormulas[fieldName] = formulaValueToSave;
+
+                        showAlert(result.message + " Formüller yeniden uygulanıyor...", 'success');
+
+                        allReportData = applyFormulasToData(allReportData);
+                        filterAndRenderTable();
+
+                        const modalElement = document.getElementById('formulaConfigModal');
+                        const modal = bootstrap.Modal.getInstance(modalElement);
+                        if (modal) modal.hide();
+                    } else {
+                        showAlert(`Kaydetme Başarısız: ${result.message}`, 'error');
+                    }
+                } catch (error) {
+                    showAlert('Kaydetme sırasında bir ağ hatası oluştu.', 'error');
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            }
+
+
+            // ====================================================================
+            // CRUD VE SİLME İŞLEYİCİLERİ
+            // ====================================================================
+
+            async function saveUpdate(payload) {
+                try {
+                    const response = await fetch('/Rapor30/update' + dbQueryString, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': xsrfToken },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+
+                    if (response.ok && result.success) {
+                        showAlert(result.message, 'success');
+                        return { success: true, message: result.message };
+                    } else {
+                        showAlert(`Güncelleme Başarısız: ${result.message}`, 'error');
+                        return { success: false, message: result.message };
+                    }
+                } catch (error) {
+                    showAlert('Güncelleme sırasında bir ağ hatası oluştu.', 'error');
+                    return { success: false, message: error.message };
+                }
+            }
+
+            async function saveNewRecord(newRecord) {
+                const cleanRecord = { DocEntry: newRecord.DocEntry };
+                jsFieldNames.forEach(fieldName => {
+                    let value = newRecord[fieldName];
+                    if (value !== null && value !== undefined && value !== "") {
+                        cleanRecord[fieldName] = value;
+                    }
+                });
+
+                try {
+                    const response = await fetch('/Rapor30/Create' + dbQueryString, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': xsrfToken },
+                        body: JSON.stringify(cleanRecord)
+                    });
+                    const result = await response.json();
+
+                    if (response.ok && result.success) {
+                        const newDocNum = result.docNum || 'YENI';
+                        showAlert(result.message, 'success');
+                        return { success: true, docEntry: result.docEntry, docNum: newDocNum };
+                    } else {
+                        showAlert(`Kayıt Başarısız: ${result.message}`, 'error');
+                        return { success: false, message: result.message };
+                    }
+                } catch (error) {
+                    showAlert('Kayıt sırasında bir ağ hatası oluştu.', 'error');
+                    return { success: false };
+                }
+            }
+
+            async function handleDeleteDetail(e) {
+                const btn = e.currentTarget;
+                const row = btn.closest('tr');
+                const docEntry = parseInt(row.dataset.docEntry);
+                const lineId = parseInt(row.dataset.lineId);
+                const tableName = row.dataset.tableName;
+
+                if (!confirm(`LineId: ${lineId} olan detayı silmek istediğinizden emin misiniz?`)) return;
+
+                const payload = { DocEntry: docEntry, LineId: lineId, TableName: tableName };
+
+                const endpoint = tableName === T3_TABLE ? '/Rapor30/DeleteTeminatDetay' : '/Rapor30/DeleteKefaletDetay';
+
+                try {
+                    const response = await fetch(endpoint + dbQueryString, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': xsrfToken },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok && result.success) {
+                        showAlert(result.message, 'success');
+                        setTimeout(() => { window.location.reload(); }, 300);
+                    } else {
+                        showAlert(`Silme Başarısız: ${result.message}`, 'error');
+                    }
+                } catch (error) {
+                    showAlert('Silme sırasında bir ağ hatası oluştu.', 'error');
+                }
+            }
+
+            function handleFileManageClick(e) {
+                const btn = e.currentTarget;
+                const docEntry = parseInt(btn.dataset.docEntry);
+                const sozlesmeNo = btn.dataset.sozlesmeNo;
+                const dosyaYolu = btn.dataset.dosyaYolu;
+                showDosyaModal(docEntry, sozlesmeNo, dosyaYolu);
+            }
+
+            function showDosyaModal(docEntry, sozlesmeNo, dosyaYolu) {
+                document.getElementById('uploadDocEntry').value = docEntry;
+                document.getElementById('currentDosyaYolu').value = dosyaYolu;
+                document.getElementById('modalSozlesmeNo').textContent = sozlesmeNo || docEntry;
+
+                const statusContainer = document.getElementById('fileStatusContainer');
+                statusContainer.innerHTML = '';
+
+                if (dosyaYolu && dosyaYolu !== 'NULL') {
+                    const dbName = '@ViewBag.CurrentDbDisplay';
+                    const fileUrl = `/RaporDosyalar/${dbName}/Rapor30/${dosyaYolu}`;
+
+                    statusContainer.innerHTML = `
+                        <div class="alert alert-info d-flex align-items-center mb-2 p-2">
+                            <i class="fas fa-file-alt me-2"></i>
+                            Mevcut Dosya: <a href="${fileUrl}" target="_blank" class="ms-1">${dosyaYolu}</a>
+                        </div>
+                    `;
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'btn btn-sm btn-danger mt-1 w-100';
+                    deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Mevcut Dosyayı Sil';
+                    deleteBtn.onclick = async () => {
+                        if (confirm(`Dosyayı silmek istediğinizden emin misiniz: ${dosyaYolu}?`)) {
+                            const payload = { DocEntry: docEntry, FieldName: "DosyaYolu", FieldValue: null, TableName: MASTER_TABLE };
+
+                            const result = await saveUpdate(payload);
+                            if (result.success) {
+                                showAlert("Dosya yolu veritabanından silindi. Sayfa yenileniyor...", 'success');
+                                setTimeout(() => { window.location.reload(); }, 300);
+                            }
+                        }
+                    };
+                    statusContainer.appendChild(deleteBtn);
+
+                } else {
+                    statusContainer.innerHTML = '<div class="alert alert-warning p-2"><i class="fas fa-exclamation-triangle me-2"></i>Mevcut Dosya Yok.</div>';
+                }
+
+                document.getElementById('dosyaInput').value = '';
+
+                fileUploadModal.show();
+            }
+
+            document.getElementById('fileUploadForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const docEntry = document.getElementById('uploadDocEntry').value;
+                const fileInput = document.getElementById('dosyaInput');
+                const file = fileInput.files[0];
+                const uploadBtn = document.getElementById('uploadBtn');
+
+                if (!file) { showAlert("Lütfen bir dosya seçin.", "warning"); return; }
+                if (docEntry <= 0) { showAlert("Geçersiz belge numarası.", "error"); return; }
+
+                uploadBtn.disabled = true;
+                uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Yükleniyor...';
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const response = await fetch(`/Rapor30/UploadDosya/${docEntry}${dbQueryString}`, {
+                        method: 'POST',
+                        headers: { 'RequestVerificationToken': xsrfToken },
+                        body: formData
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok && result.success) {
+                        showAlert(result.message, 'success');
+                        fileUploadModal.hide();
+                        setTimeout(() => { window.location.reload(); }, 300);
+                    } else {
+                        showAlert(`Dosya Yükleme Başarısız: ${result.message}`, 'error');
+                    }
+                } catch (error) {
+                    showAlert('Dosya yükleme sırasında bir ağ hatası oluştu.', 'error');
+                } finally {
+                    uploadBtn.disabled = false;
+                    uploadBtn.innerHTML = '<i class="fas fa-upload"></i> Dosyayı Yükle';
+                }
+            });
+
+
+            // ====================================================================
+            // SÜTUN RENKLENDİRME İŞLEVİ (Context Menu için gerekli)
+            // ====================================================================
+            async function updateGlobalColor(fieldName, colorValue) {
+                const payload = {
+                    FieldName: fieldName,
+                    FieldValue: colorValue,
+                    TableName: MASTER_TABLE,
+                    DocEntry: 1
+                };
+
+                const endpoint = '/Rapor30/UpdateSutunRengi' + dbQueryString;
+
+                try {
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': xsrfToken },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+
+                    if (response.ok && result.success) {
+                        showAlert(result.message + " Sayfa yenileniyor...", 'success');
+                        setTimeout(() => { window.location.reload(); }, 300);
+                        return { success: true };
+                    } else {
+                        showAlert(`Sütun Rengi Güncelleme Başarısız: ${result.message}`, 'error');
+                        return { success: false };
+                    }
+                } catch (error) {
+                    showAlert('Sütun rengi güncelleme sırasında bir ağ hatası oluştu.', 'error');
+                    return { success: false };
+                }
+            }
+
+
+            // ====================================================================
+            // CONTEXT MENU İŞLEYİCİLERİ
+            // ====================================================================
+
+            document.body.addEventListener('contextmenu', function (e) {
+                contextMenu.style.display = 'none';
+
+                clickedRow = e.target.closest('.master-row');
+                clickedCell = e.target.closest('td');
+
+                if (clickedRow) {
+                    e.preventDefault();
+                    contextMenu.style.top = e.pageY + 'px';
+                    contextMenu.style.left = e.pageX + 'px';
+
+                    const docEntry = clickedRow.dataset.docEntry;
+                    const isNewRecord = docEntry && parseInt(docEntry) < 0;
+
+                    const altKayitMenusu = contextMenu.querySelectorAll('li[data-action*="-detail"]');
+                    altKayitMenusu.forEach(item => {
+                        item.style.display = isNewRecord ? 'none' : 'block';
+                    });
+
+                    const cellColorItems = contextMenu.querySelectorAll('li[data-action*="-cell-color"], li[data-action="clear-cell"]');
+                    const headerColorItems = contextMenu.querySelectorAll('li[data-action*="-column-color"], li[data-action="clear-column"]');
+
+                    if (clickedCell && clickedCell.classList.contains('editable-field') && clickedCell.dataset.tableName === MASTER_TABLE) {
+                        const isKrediTuruColumn = clickedCell.dataset.fieldName === "KrediTuru";
+                        headerColorItems.forEach(item => {
+                            item.style.display = isKrediTuruColumn ? 'block' : 'none';
+                        });
+
+                        cellColorItems.forEach(item => item.style.display = 'block');
+
+                    } else {
+                        cellColorItems.forEach(item => item.style.display = 'none');
+                        headerColorItems.forEach(item => item.style.display = 'none');
+                    }
+
+                    contextMenu.style.display = 'block';
+                }
+            });
+
+            document.body.addEventListener('click', function () {
+                contextMenu.style.display = 'none';
+            });
+
+            contextMenu.addEventListener('click', async function (e) {
+                e.stopPropagation();
+                const actionElement = e.target.closest('li[data-action]');
+                if (!actionElement || !clickedRow) return;
+
+                const action = actionElement.dataset.action;
+                const docEntry = parseInt(clickedRow.dataset.docEntry);
+                const cellFieldName = clickedCell ? clickedCell.dataset.fieldName : null;
+
+                contextMenu.style.display = 'none';
+
+                // SATIR BOYAMA
+                if (action.startsWith('set-row-color') || action === 'clear-row') {
+                    const newColor = actionElement.dataset.color || null;
+
+                    if (docEntry < 0) { showAlert('Yeni kayıtlar kaydedilmeden renklendirilemez.', 'warning'); return; }
+
+                    const payload = {
+                        DocEntry: docEntry, FieldName: "SatirRengi", FieldValue: newColor ?? 'NULL', TableName: MASTER_TABLE
+                    };
+
+                    const updateResult = await saveUpdate(payload);
+                    if (updateResult.success) {
+                        const newClass = newColor ? `row-color-${newColor}` : '';
+                        clickedRow.classList.remove('row-color-green', 'row-color-red', 'row-color-blue', 'row-color-yellow');
+                        if (newClass) clickedRow.classList.add(newClass);
+                        const localItem = allReportData.find(item => item.DocEntry === docEntry);
+                        if (localItem) localItem.SatirRengi = newColor;
+                    }
+
+                // KAYIT SİLME
+                } else if (action === 'delete-row') {
+                    if (docEntry < 0) {
+                        const detailRow = document.getElementById(`details-${docEntry}`);
+                        if(detailRow) detailRow.remove();
+                        clickedRow.remove();
+                        allReportData = allReportData.filter(item => item.DocEntry !== docEntry);
+                        showAlert("Yeni (Kaydedilmemiş) satır silindi.", "info");
+                        return;
+                    }
+
+                    if (!confirm(`DocEntry: ${docEntry} olan kaydı SİLMEK (İptal olarak işaretlemek) istediğinizden emin misiniz?`)) return;
+
+                    const payload = { DocEntry: docEntry };
+
+                    try {
+                        const response = await fetch('/Rapor30/Delete' + dbQueryString, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': xsrfToken },
+                            body: JSON.stringify(payload)
+                        });
+                        const result = await response.json();
+
+                        if (response.ok && result.success) {
+                            showAlert(result.message + " Sayfa yenileniyor...", 'success');
+                            setTimeout(() => { window.location.reload(); }, 300);
+                        } else {
+                            showAlert(`Silme Başarısız: ${result.message}`, 'error');
+                        }
+                    } catch (error) {
+                        showAlert('Silme sırasında bir ağ hatası oluştu.', 'error');
+                    }
+
+                // SÜTUN BOYAMA (GLOBAL)
+                } else if (action.startsWith('set-column-color') || action === 'clear-column') {
+                    const newColor = actionElement.dataset.color || null;
+                    const fieldName = actionElement.dataset.fieldName;
+                    const colorValue = newColor ?? 'NULL';
+
+                    if (!confirm(`"${displayNames[fieldName]}" sütununun rengini TÜM KAYITLAR için ${newColor ? newColor.toUpperCase() : 'KALDIRMAK'} istediğinizden emin misiniz?`)) return;
+
+                    await updateGlobalColor(fieldName, colorValue);
+
+                // HÜCRE BOYAMA
+                } else if (action.startsWith('set-cell-color') || action === 'clear-cell') {
+                    if (!clickedCell || clickedCell.dataset.tableName !== MASTER_TABLE) {
+                        showAlert('Hücre boyama sadece Ana Tablo hücrelerinde desteklenir.', 'warning');
+                        return;
+                    }
+                    if (docEntry < 0) { showAlert('Yeni kayıtlar kaydedilmeden boyanamaz.', 'warning'); return; }
+
+                    const newColor = actionElement.dataset.color || null;
+                    const localItem = allReportData.find(item => item.DocEntry === docEntry);
+                    let hucreRenkleri = {};
+
+                    try {
+                        hucreRenkleri = JSON.parse(localItem.HucreRenkleri && localItem.HucreRenkleri !== 'NULL' ? localItem.HucreRenkleri : '{}');
+                    } catch { hucreRenkleri = {}; }
+
+                    if (newColor) {
+                        hucreRenkleri[cellFieldName] = `cell-color-${newColor}`;
+                    } else {
+                        delete hucreRenkleri[cellFieldName];
+                    }
+
+                    const keys = Object.keys(hucreRenkleri);
+                    const newColorJson = keys.length === 0 ? 'NULL' : JSON.stringify(hucreRenkleri);
+
+                    const payload = {
+                        DocEntry: docEntry, FieldName: "HucreRenkleri", FieldValue: newColorJson, TableName: MASTER_TABLE
+                    };
+
+                    const updateResult = await saveUpdate(payload);
+
+                    if (updateResult.success) {
+                        const newClass = newColor ? `cell-color-${newColor}` : '';
+                        clickedCell.classList.remove('cell-color-green', 'cell-color-red', 'cell-color-blue');
+                        if (newClass) clickedCell.classList.add(newClass);
+                        if (localItem) localItem.HucreRenkleri = newColorJson;
+                    }
+
+                // ALT KAYIT EKLEME
+                } else if (action === 'add-teminat-detail' || action === 'add-kefalet-detail') {
+
+                    if (docEntry < 0) { showAlert('Kaydedilmemiş kayda detay eklenemez.', 'warning'); return; }
+
+                    const isTeminat = action === 'add-teminat-detail';
+                    const endpoint = isTeminat ? '/Rapor30/CreateTeminatDetay' : '/Rapor30/CreateKefaletDetay';
+
+                    const firmaAdiCell = clickedRow.querySelector('[data-field-name="FirmaAdi"]');
+                    const firmaAdi = firmaAdiCell ? firmaAdiCell.dataset.originalValue : 'Firma';
+
+                    let newDetail = { U_DocEntry: docEntry };
+
+                    if (isTeminat) {
+                        newDetail.TeminatTuru = "İpotek";
+                        newDetail.IpotekVeren = firmaAdi;
+                    } else {
+                        newDetail.KefilAdiUnvani = firmaAdi;
+                        newDetail.KefaletTuru = "Müşterek";
+                    }
+
+                    try {
+                        const response = await fetch(endpoint + dbQueryString, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': xsrfToken },
+                            body: JSON.stringify(newDetail)
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok && result.success) {
+                            showAlert(result.message + " Sayfa yenileniyor...", 'success');
+                            setTimeout(() => { window.location.reload(); }, 300);
+                        } else {
+                            showAlert(`Alt Kayıt Ekleme Başarısız: ${result.message}`, 'error');
+                        }
+                    } catch (error) {
+                        showAlert('Alt kayıt ekleme sırasında bir ağ hatası oluştu.', 'error');
+                    }
+                }
+            });
+
+
+            // ====================================================================
+            // SIRALAMA, FİLTRE VE RENDER LOGIC'İ
+            // ====================================================================
+
+            function getColumnValue(item, column) {
+                let value = item[column];
+                if (item.DocEntry < 0) return sortDirection === 'asc' ? -Infinity : Infinity;
+
+                if (value === null || value === undefined) return sortDirection === 'asc' ? '' : 'zzzzz';
+
+                if (column === "DocNum") return item.DocNum ?? 0;
+                if (column === "DosyaYolu") return value ? "Z_Var" : "A_Yok";
+
+                if (dateFields.includes(column) || column.includes('Tarihi')) {
+                    const date = new Date(value);
+                    return isNaN(date.getTime()) ? (sortDirection === 'asc' ? 0 : Number.MAX_SAFE_INTEGER) : date.getTime();
+                }
+
+                if (numberFields.includes(column) || column.includes('Sayisi') || column.includes('Adedi') || column.includes('Vade') || column.includes('Tutar') || column.includes('Orani') || column.includes('Degeri')) {
+                    const number = parseFloat(value);
+                    return isNaN(number) ? (sortDirection === 'asc' ? -Infinity : Infinity) : number;
+                }
+
+                return value.toString().toLowerCase();
+            }
+
+            function sortData(data, column, direction) {
+                data.sort((a, b) => {
+                    const valA = getColumnValue(a, column);
+                    const valB = getColumnValue(b, column);
+
+                    if (valA < valB) return direction === 'asc' ? -1 : 1;
+                    if (valA > valB) return direction === 'asc' ? 1 : -1;
+                    return 0;
+                });
+                return data;
+            }
+
+            function filterAndRenderTable() {
+                let filteredData = [...allReportData];
+
+                const filterInputs = document.querySelectorAll('.filter-input');
+                const filterSelects = $('.filter-select-bs');
+
+                // Metin Filtreleri
+                filterInputs.forEach(input => {
+                    const columnKey = input.closest('th').dataset.column;
+                    const filterValue = input.value.toLowerCase().trim();
+
+                    if (filterValue) {
+                        filteredData = filteredData.filter(item => {
+                            const val = item[columnKey];
+                            if (val === null || val === undefined) return false;
+                            
+                            // Sayısal ve Tarih alanlarının formata uygun aranması için
+                            const formattedStr = formatValue(val, columnKey).toLowerCase();
+                            return formattedStr.includes(filterValue) || val.toString().toLowerCase().includes(filterValue);
+                        });
+                    }
+                });
+
+                // Çoklu Seçim Filtreleri
+                filterSelects.each(function () {
+                    const selectElement = $(this);
+                    const columnKey = selectElement.closest('th').data('column');
+                    const selectedValues = selectElement.val();
+
+                    if (selectedValues && selectedValues.length > 0) {
+                        filteredData = filteredData.filter(item => {
+                            const val = item[columnKey];
+                            if (val === null || val === undefined) return false;
+                            
+                            return selectedValues.some(sv => val.toString().toLowerCase() === sv.toLowerCase());
+                        });
+                    }
+                });
+
+                currentlyFilteredRows = filteredData;
+
+                currentlyFilteredRows = applyFormulasToData(currentlyFilteredRows);
+
+                currentlyFilteredRows = sortData(currentlyFilteredRows, sortColumn, sortDirection);
+
+                renderTableBody(currentlyFilteredRows);
+                
+                // Kayıt sayısını güncelle
+                const recordBadge = document.getElementById('rowCountBadge');
+                if (recordBadge) {
+                    recordBadge.textContent = 'Kayıt: ' + currentlyFilteredRows.length;
+                }
+            }
+
+            function renderTableBody(data) {
+                const existingRows = Array.from(tableBody.children);
+                const rowMap = new Map();
+
+                for (let i = 0; i < existingRows.length; i++) {
+                    const row = existingRows[i];
+                    if (row.classList.contains('master-row')) {
+                        const docEntry = parseInt(row.dataset.docEntry);
+                        let details = [row];
+
+                        let next = existingRows[i + 1];
+                        while(next && next.classList.contains('detail-row')) {
+                            details.push(next);
+                            i++;
+                            next = existingRows[i + 1];
+                        }
+                        rowMap.set(docEntry, details);
+                    }
+                }
+
+                tableBody.innerHTML = '';
+
+                data.forEach(item => {
+                    const rowsToAppend = rowMap.get(item.DocEntry);
+                    if (rowsToAppend) {
+                        const masterRow = rowsToAppend[0];
+
+                        masterRow.querySelectorAll('td.editable-field').forEach(cell => {
+                            const fieldName = cell.dataset.fieldName;
+                            if (item.hasOwnProperty(fieldName)) {
+                                cell.dataset.originalValue = item[fieldName];
+                                cell.textContent = formatValue(item[fieldName], fieldName);
+
+                                if (loadedFormulas.hasOwnProperty(fieldName) && loadedFormulas[fieldName]) {
+                                    cell.classList.add('calculated-field');
+                                } else {
+                                    cell.classList.remove('calculated-field');
+                                }
+                            }
+                        });
+
+                        rowsToAppend.forEach(row => {
+                            tableBody.appendChild(row);
+                        });
+                    }
+                });
+
+                setupEditableFields();
+            }
+
+
+            // ====================================================================
+            // SAYFA BAŞLANGICI VE OLAY BAĞLANTILARI
+            // ====================================================================
+
+            async function initializePage() {
+                // 1. Formülleri Yükle ve Uygula
+                await loadAndInitializeFormulas();
+                allReportData = applyFormulasToData(allReportData);
+                currentlyFilteredRows = [...allReportData];
+
+                // 2. Tabloyu ilk kez sırala ve render et
+                filterAndRenderTable();
+
+                // 3. Select Picker'ları başlat
+                $('.filter-select-bs').selectpicker({
+                    liveSearch: true,
+                    actionsBox: true,
+                    selectedTextFormat: 'count > 2',
+                    width: '100%',
+                    container: 'body'
+                }).on('changed.bs.select', function() {
+                    filterAndRenderTable();
+                });
+                
+                // 4. Input filtrelerine event ekle
+                document.querySelectorAll('.filter-input').forEach(input => {
+                    input.addEventListener('keyup', filterAndRenderTable);
+                });
+
+                // --- SIRALAMA OLAYLARI ---
+                document.querySelectorAll('th.sortable-column').forEach(header => {
+                    header.addEventListener('click', function () {
+                        const column = this.dataset.column;
+
+                        document.querySelectorAll('th.sortable-column i').forEach(i => {
+                            i.classList.remove('fa-sort-up', 'fa-sort-down', 'fa-sort');
+                            i.classList.add('fa-sort');
+                        });
+
+                        if (sortColumn === column) {
+                            sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+                        } else {
+                            sortColumn = column;
+                            sortDirection = 'asc';
+                        }
+                        this.querySelector('i').classList.remove('fa-sort');
+                        this.querySelector('i').classList.add(sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down');
+
+                        filterAndRenderTable();
+
+                        showAlert(`Veriler '${column}' sütununa göre sıralandı.`, "info");
+                    });
+                });
+
+                // Formül Modal'ını açma olayını bağla
+                document.getElementById('openFormulaModalBtn').addEventListener('click', showFormulaModal);
+
+
+                // Bootstrap Collapse olay dinleyicisi
+                $('#rapor30Table').on('show.bs.collapse hide.bs.collapse', function (e) {
+                    const targetRow = $(e.target).prev('tr');
+                    const icon = targetRow.find('.fas.fa-chevron-down');
+                    if (e.type === 'show') {
+                        icon.addClass('fa-rotate-180');
+                    } else {
+                        icon.removeClass('fa-rotate-180');
+                    }
+                });
+
+                // Yeni Satır Ekleme Olayı (URL'den db paramını kaybetmemesi lazım)
+                if (addNewRowBtn) {
+                    addNewRowBtn.addEventListener('click', function() {
+                        if (allReportData.find(r => r.DocEntry < 0)) {
+                            showAlert('Zaten bir boş kayıt mevcut. Lütfen önce onu kaydedin.', 'warning');
+                            return;
+                        }
+
+                        showAlert('Boş satır eklendi. Sayfa yenileniyor...', 'info');
+                        
+                        let currentUrl = new URL(window.location.href);
+                        currentUrl.searchParams.set('new', 'true');
+                        if (currentDbParam && !currentUrl.searchParams.has('db')) {
+                            currentUrl.searchParams.set('db', currentDbParam);
+                        }
+                        
+                        window.location.href = currentUrl.toString();
+                    });
+                }
+
+                // Başlık düzenleme işleyicileri
+                document.querySelectorAll('.column-header-editable').forEach(header => {
+                    header.addEventListener('dblclick', function(e) {
+                        if (this.querySelector('input')) return;
+
+                        const originalHeader = this;
+                        const configKey = originalHeader.dataset.configKey;
+                        const currentTitle = originalHeader.dataset.originalTitle;
+
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.className = 'form-control form-control-sm';
+                        input.value = currentTitle;
+                        input.style.width = '100%';
+
+                        originalHeader.childNodes.forEach(node => {
+                            if (node.nodeType === 3 || node.nodeType === 1 && node.tagName !== 'I') {
+                                originalHeader.removeChild(node);
+                            }
+                        });
+                        originalHeader.prepend(input);
+                        input.focus();
+
+                        const saveTitle = async () => {
+                            const newTitle = input.value.trim();
+
+                            if (newTitle === currentTitle) {
+                                restoreHeader(originalHeader, currentTitle);
+                                return;
+                            }
+
+                            const updateResult = await updateGlobalColumnTitle(configKey, newTitle);
+
+                            if (updateResult.success) {
+                                showAlert(updateResult.message + " Sayfa yenileniyor...", 'success');
+                                setTimeout(() => { window.location.reload(); }, 300);
+                            } else {
+                                restoreHeader(originalHeader, currentTitle);
+                            }
+                        };
+
+                        input.addEventListener('blur', saveTitle);
+                        input.addEventListener('keydown', (e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                saveTitle();
+                            } else if (e.key === 'Escape') {
+                                e.preventDefault();
+                                restoreHeader(originalHeader, currentTitle);
+                            }
+                        });
+                    });
+                });
+            }
+
+            // Başlık/Formül Güncelleme İşlevselliği
+            async function updateGlobalColumnTitle(configKey, newTitle) {
+                if (configKey.startsWith("ColumnTitle_") && newTitle && newTitle.trim() === '') {
+                    showAlert("Başlık boş olamaz.", "warning");
+                    return { success: false };
+                }
+
+                try {
+                    const response = await fetch('/Rapor30/UpdateGlobalConfig' + dbQueryString, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': xsrfToken },
+                        body: JSON.stringify({
+                            ConfigKey: configKey,
+                            ConfigValue: newTitle
+                        })
+                    });
+
+                    const result = await response.json();
+                    return { success: response.ok && result.success, message: result.message };
+
+                } catch (error) {
+                    showAlert('Başlık/Formül kaydetme sırasında bir ağ hatası oluştu.', 'error');
+                    return { success: false, message: error.message };
+                }
+            }
+
+
+            initializePage();
+        });
+    </script>
+}

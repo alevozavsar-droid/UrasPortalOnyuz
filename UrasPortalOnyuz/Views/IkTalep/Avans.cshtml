@@ -1,0 +1,160 @@
+﻿@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string sekme = (string)ViewBag.Sekme ?? "yeni";
+    string no = (string)ViewBag.No ?? "";
+    string q = Context.Request.Query.ContainsKey("_sekme") ? "?_sekme=1" : "";
+}
+@*
+    NAKİT AVANS TALEP, ÖDEME, MAHSUP VE KAPATMA MODÜLÜ
+    Şartname: Uras Holding — IT Analiz ve Geliştirme Gereksinimleri v1.0 (20.09.2026)
+    Tek ekran, dört sekme: Yeni Talep (§4–§7, §17–§18) · Talep Detayı (§3 ekran mimarisi: üst bilgi, kişiler, detay, onay,
+    muhasebe yansıması, finans teslim, mahsup/kapatma, hareket geçmişi, ekler, audit) · Bekleyen Ödemeler (§10) · Takip Raporu (§25).
+    Finansal tutarlar elle girilmez; "kaynak sistem olayı" (§30) Talep No ile işlenir, ekran yeniden hesaplanır (§33).
+    Veri: /IkTalep/AvansVeri (JSON) — davranış: wwwroot/js/nakit-avans.js
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+}
+
+<div class="container-fluid py-3 na" id="na" data-sekme="@sekme" data-no="@no" data-q="@(q)">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-hand-holding-dollar"></i></span>Nakit Avans Talebi</h4>
+        <span class="ikt-akis" style="font-size:.68rem;font-weight:700;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px"><i class="fas fa-route me-1"></i>Talep → Yönetici → (Üst Yönetim) → Finans Uygunluk → Ödeme → Mahsup / İade → Kapanış</span>
+        <span class="sub w-100">Talep, onay, finans, muhasebe, mahsup, iade ve kapatma tek Talep No üzerinden izlenir. Teslim, mahsup, iade ve açık bakiye <b>elle girilmez</b>; Finans / Kasa / Muhasebe hareketlerinden otomatik okunur ve yeniden hesaplanır.</span>
+    </div>
+
+    <div class="na-turler" data-dinamik="kapali">
+        <a href="/IkTalep/Izin@(q)"><i class="fas fa-umbrella-beach"></i>İzin Talebi</a>
+        <a href="/IkTalep/Mesai@(q)"><i class="fas fa-business-time"></i>Mesai Talebi</a>
+        <a href="/IkTalep/Avans@(q)" class="aktif"><i class="fas fa-hand-holding-dollar"></i>Avans Talebi</a>
+        <a href="/IkTalep/Belge@(q)"><i class="fas fa-file-signature"></i>Belge Talebi</a>
+        <a href="/IkTalep/Seyahat@(q)"><i class="fas fa-plane-departure"></i>Seyahat Talebi</a>
+        <a href="/IkTalep/Arac@(q)"><i class="fas fa-car-side"></i>Araç Talebi</a>
+    </div>
+
+    <div class="na-kpi" id="naKpi" data-dinamik="kapali"></div>
+
+    <div class="na-sekme" id="naSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="yeni"><i class="fas fa-plus me-1"></i>Yeni Talep</button>
+        <button type="button" data-p="liste">Taleplerim <span class="n" id="naNListe">0</span></button>
+        <button type="button" data-p="detay"><i class="fas fa-file-lines me-1"></i>Talep Detayı <span class="n" id="naDetayNo">—</span></button>
+        <button type="button" data-p="bekleyen">Bekleyen Ödemeler <span class="n" id="naNBekleyen">0</span></button>
+        <button type="button" data-p="takip">Takip Raporu <span class="n" id="naNTakip">0</span></button>
+    </div>
+
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+
+    @* ---------------- YENİ TALEP (§4–§7, §17, §18) ---------------- *@
+    <div class="na-panel" data-p="yeni">
+        <form id="naForm" autocomplete="off" novalidate>
+            <div class="row g-2">
+                <div class="col-lg-8">
+                    <div class="na-kart">
+                        <div class="na-kart-b"><span><i class="fas fa-id-card me-1"></i>Talep Üst Bilgileri ve Kişiler</span><span class="not">Talep No, tarih, saat, departman, masraf merkezi sistemden otomatik</span></div>
+                        <div class="na-kart-g">
+                            <div class="row g-2">
+                                <div class="col-md-3"><label class="form-label">Talep No</label><input class="form-control" value="Sistem üretir (NA-2026-…)" disabled></div>
+                                <div class="col-md-3"><label class="form-label">Talep Tarihi / Saati</label><input class="form-control" id="naTarih" disabled></div>
+                                <div class="col-md-3"><label class="form-label">Şirket (ödeyecek) <span class="z">*</span></label><select class="form-select" name="sirket" id="naSirket"></select></div>
+                                <div class="col-md-3"><label class="form-label">Talep Türü</label><input class="form-control" value="Nakit Avans" disabled></div>
+                            </div>
+                            <div class="row g-2 mt-1">
+                                <div class="col-md-6">
+                                    <div class="na-oto" id="naOlusturan"><div class="h">Talebi oluşturan kişi (İK'dan otomatik)</div></div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Avansı kullanacak kişi <span class="z">*</span></label>
+                                    <select class="form-select" name="kullanan" id="naKullanan"></select>
+                                    <div class="na-oto mt-1" id="naKullananBilgi"><div class="h">Seçim sonrası İK / ERP'den otomatik</div></div>
+                                    <div class="na-uyari" id="naKullananUyari"></div>
+                                </div>
+                            </div>
+                            <div class="na-uyari" id="naGrupIci"></div>
+                        </div>
+                    </div>
+
+                    <div class="na-kart">
+                        <div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>Talep Detayları</span><span class="not">* zorunlu alan</span></div>
+                        <div class="na-kart-g">
+                            <div class="row g-2">
+                                <div class="col-md-8"><label class="form-label">Talep Konusu <span class="z">*</span></label><input class="form-control" name="konu" placeholder="Örn. Proje için gerekli malzeme alımları" required></div>
+                                <div class="col-md-4"><label class="form-label">Öncelik <span class="z">*</span></label><select class="form-select" name="oncelik" id="naOncelik"></select></div>
+                                <div class="col-12"><label class="form-label">Detaylı Açıklama <span class="z">*</span></label><textarea class="form-control" name="aciklama" rows="2" placeholder="Nakit ihtiyacının gerekçesi" required></textarea></div>
+                                <div class="col-md-3"><label class="form-label">Talep Tutarı <span class="z">*</span></label><input class="form-control" type="number" min="0" step="0.01" name="tutar" id="naTutar" placeholder="50.000" required></div>
+                                <div class="col-md-2"><label class="form-label">Para Birimi <span class="z">*</span></label><select class="form-select" name="paraBirimi" id="naPb"></select></div>
+                                <div class="col-md-3"><label class="form-label">Tahmini Kullanım Tarihi <span class="z">*</span></label><input class="form-control" type="date" name="kullanimTarihi" id="naKullanim" required></div>
+                                <div class="col-md-4"><label class="form-label">Beklenen Kapatma Tarihi <span class="z">*</span></label><input class="form-control" type="date" name="kapatmaTarihi" id="naKapatma" required></div>
+                                <div class="col-md-3"><label class="form-label">Fatura Durumu <span class="z">*</span></label><select class="form-select" name="faturaDurumu" id="naFatura"></select></div>
+                                <div class="col-md-5"><label class="form-label">Beklenen Belge Türü <span class="z">*</span> <span class="form-text d-inline">(çoklu)</span></label><div id="naBelgeler" class="d-flex flex-wrap gap-2 pt-1"></div></div>
+                                <div class="col-md-4"><label class="form-label">Harcama Kategorisi <span class="z">*</span></label><select class="form-select" name="kategori" id="naKategori"></select></div>
+                                <div class="col-md-6"><label class="form-label">Ek Dosya <span class="form-text d-inline">(teklif / proforma / liste / görsel)</span></label><input class="form-control" type="file" id="naEk" multiple></div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Bu tutar için onay akışı <span class="form-text d-inline">(§8 limit master, parametrik)</span></label>
+                                    <div class="na-akis" id="naAkisOnizleme"></div>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-end gap-2 mt-2 pt-2 border-top">
+                                <button type="reset" class="btn btn-light btn-sm"><i class="fas fa-eraser me-1"></i>Temizle</button>
+                                <button type="submit" class="btn btn-primary btn-sm" id="naGonder"><i class="fas fa-paper-plane me-1"></i>Talebi Oluştur</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="na-kart">
+                        <div class="na-kart-b"><span><i class="fas fa-wallet me-1"></i>Açık Avans Kontrolü</span><span class="not">Finans'tan canlı</span></div>
+                        <div class="na-kart-g" id="naAcikKontrol"></div>
+                    </div>
+                    <div class="na-kart">
+                        <div class="na-kart-b"><span><i class="fas fa-sliders me-1"></i>Parametreler</span><span class="not">§8.2 · §18.1</span></div>
+                        <div class="na-kart-g">
+                            <div class="na-param mb-1"><span>Açık avans varken:</span><select class="form-select" id="naPolitika"><option>Sadece uyar</option><option>Yönetici onayına gönder</option><option>Ek üst onay iste</option><option>Yeni talebi engelle</option></select></div>
+                            <div class="na-param"><span>Üst yönetim eşiği (10.001–49.999 TL bandı):</span><input class="form-control" type="number" id="naEsik" step="1000"> <span>TL</span><button type="button" class="btn btn-light btn-sm py-0" id="naParamKaydet">Kaydet</button></div>
+                            <table class="na-tablo mt-2" data-dinamik="kapali"><thead><tr><th>Min</th><th>Max</th><th>Yönetici</th><th>Üst Yön.</th><th>Finans</th></tr></thead><tbody id="naLimitTablo"></tbody></table>
+                        </div>
+                    </div>
+                    <div class="na-kart">
+                        <div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Kritik Kurallar</span></div>
+                        <div class="na-kart-g" style="font-size:.7rem;color:#475569">
+                            <ul class="mb-0 ps-3">
+                                <li>Masraf merkezi talebi oluşturana değil, avansı kullanacak kişiye göre belirlenir; elle yazılamaz.</li>
+                                <li>Aktif olmayan personele avans açılamaz.</li>
+                                <li>Ödeyen şirket ile masrafın şirketi farklıysa grup içi yansıtma gereksinimi otomatik oluşur.</li>
+                                <li>Talep, Ödeme ve Kapatma durumları üç ayrı statüdür; tek statüye birleştirilmez.</li>
+                                <li>Tutar revize edilirse onay matrisi yeniden hesaplanır.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    @* ---------------- TALEPLERİM ---------------- *@
+    <div class="na-panel" data-p="liste">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Taleplerim</span><span class="not">oluşturduğum ya da adıma açılan avanslar · satıra tıklayın</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="naListe" data-dinamik="kapali"><thead><tr><th>Talep No</th><th>Tarih</th><th>Kullanan</th><th>Konu</th><th class="s">Tutar</th><th>Talep Durumu</th><th>Ödeme Durumu</th><th>Kapatma Durumu</th><th class="s">Açık Tutar</th><th>Kapatma</th></tr></thead><tbody></tbody></table></div></div></div>
+    </div>
+
+    @* ---------------- TALEP DETAYI (§3 ekran mimarisi) ---------------- *@
+    <div class="na-panel" data-p="detay"><div id="naDetay"><div class="na-bos">Listeden bir talep seçin.</div></div></div>
+
+    @* ---------------- FİNANS — BEKLEYEN ÖDEMELER (§10) ---------------- *@
+    <div class="na-panel" data-p="bekleyen">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-money-bill-wave me-1"></i>Finans — Bekleyen Ödemeler</span><span class="not">onaylanmış ve ödeme bekleyen tüm talepler (konsolide) · satıra tıklayınca talep açılır</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="naBekleyen" data-dinamik="kapali"><thead><tr><th>Talep No</th><th>Şirket</th><th>Talebi Oluşturan</th><th>Avansı Kullanacak</th><th>Departman</th><th>Masraf Merkezi</th><th>Talep Tarihi</th><th>Onay Tarihi</th><th class="s">Onaylanan Tutar</th><th>PB</th><th>Ödeme Durumu</th><th class="s">Bekleyen Ödeme</th><th>Öncelik</th><th class="s">Bekleyen Gün</th><th>İşlem</th></tr></thead><tbody></tbody></table></div></div></div>
+    </div>
+
+    @* ---------------- TAKİP RAPORU (§25.1) ---------------- *@
+    <div class="na-panel" data-p="takip">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>Nakit Avans Takip Raporu</span><span class="not">tüm talepler · sütun başlığından sıralama / filtre</span></div>
+            <div class="na-kart-g">
+                <div class="na-filtre"><input class="form-control" id="naTakipAra" placeholder="Talep no, kişi, konu…"><select class="form-select" id="naTakipKapatma"><option value="">Kapatma: tümü</option></select><select class="form-select" id="naTakipOdeme"><option value="">Ödeme: tümü</option></select><label class="form-check-label ms-1"><input type="checkbox" class="form-check-input me-1" id="naTakipGecikmis">Sadece gecikmiş</label><span class="ms-auto na-mini" id="naTakipSayi"></span></div>
+                <div class="table-responsive"><table class="na-tablo" id="naTakip"><thead><tr><th>Talep No</th><th>Şirket</th><th>Talebi Oluşturan</th><th>Avansı Kullanacak</th><th>Departman</th><th>Masraf Merkezi</th><th>Talep Tarihi</th><th class="s">Talep Tutarı</th><th class="s">Onaylanan</th><th class="s">Teslim Edilen</th><th class="s">Mahsup Edilen</th><th class="s">İade Edilen</th><th class="s">Açık Tutar</th><th>PB</th><th>Fatura Durumu</th><th>Ödeme Durumu</th><th>Kapatma Durumu</th><th>Kapatma Tarihi</th><th class="s">Geciken Gün</th><th>Yönetici</th><th>Üst Onay</th><th>Finans Onayı</th><th>Muhasebe Fiş No</th><th>Yansıtma</th></tr></thead><tbody></tbody></table></div>
+            </div></div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="/js/nakit-avans.js?v=1"></script>
+}

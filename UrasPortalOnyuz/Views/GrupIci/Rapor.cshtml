@@ -1,0 +1,93 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var sirketler = (string[])ViewBag.Sirketler;
+    string q = Context.Request.Query.ContainsKey("_sekme") ? "?_sekme=1" : "";
+}
+@*
+    GRUP İÇİ ÖZEL FİNANSAL İŞLEMLER RAPORU — Yansıtma, Mahsup ve Temlik modüllerinin birleşik görünümü.
+    Veri: /IkTalep/TmVeri?kod=YANSITMA | MAHSUP | TEMLIK (talep motoru). Satıra tıklayınca ilgili işlem ekranındaki detay açılır.
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<style>
+    .na { --na-k: #0f766e; }
+    .gr-sirket { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .gr-sirket > div { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 9px; font-size: .7rem; }
+    .gr-sirket b { display: block; font-size: .78rem; color: #0f172a; margin-bottom: 2px; }
+    .gr-sirket .s { display: flex; justify-content: space-between; color: #475569; }
+    .gr-modul { font-size: .64rem; padding: 2px 7px; border-radius: 999px; font-weight: 700; color: #fff; display: inline-block; }
+</style>
+}
+
+<div class="container-fluid py-3 na" id="gr">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-diagram-project"></i></span>Grup İçi Özel Finansal İşlemler Raporu</h4>
+        <span class="sub w-100">Grup şirketleri arasındaki yansıtma, mahsup ve temlik işlemlerinin onay, kaynak sistem ve kapanış durumları; şirket bazında açık tutarlar. Satıra tıklayınca ilgili işlem ekranındaki detay açılır.</span>
+    </div>
+    @* Üst tür sekmeleri kaldırıldı: Yansıtma / Mahsup / Temlik ekranlarına geçiş sol menüden yapılır *@
+    <div class="na-kpi" id="grKpi" data-dinamik="kapali"></div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+    <div class="row g-2">
+        <div class="col-lg-8">
+            <div class="na-kart">
+                <div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>İşlem Listesi</span><span class="not" id="grSayi"></span></div>
+                <div class="na-kart-g">
+                    <div class="na-filtre"><input class="form-control" id="grAra" placeholder="Talep no, şirket, borçlu…"><select class="form-select" id="grModul"><option value="">İşlem: tümü</option><option value="YANSITMA">Yansıtma</option><option value="MAHSUP">Mahsup</option><option value="TEMLIK">Temlik</option></select><select class="form-select" id="grSirket"><option value="">Şirket: tümü</option>@foreach (var s in sirketler) { <option>@s</option> }</select><select class="form-select" id="grDurum"><option value="">Durum: tümü</option><option value="onay">Onay bekleyen</option><option value="acik">Açık (kapanmamış)</option><option value="kapandi">Kapanan</option><option value="red">Reddedilen / iptal</option></select></div>
+                    <div class="table-responsive"><table class="na-tablo" id="grTablo"><thead><tr><th>Talep No</th><th>İşlem</th><th>Tür</th><th>Taraflar</th><th>Karşı Taraf / Borçlu</th><th>Dönem / Tarih</th><th class="s">Tutar (TL)</th><th>Talep Durumu</th><th>Kaynak Sistem</th><th>Kapanış</th><th>İşlemi Yapan</th></tr></thead><tbody></tbody></table></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-building me-1"></i>Şirket Bazında Açık İşlemler</span><span class="not">onaylı, kapanmamış</span></div><div class="na-kart-g gr-sirket" id="grSirketler" style="grid-template-columns:repeat(2,1fr)"></div></div>
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-scale-balanced me-1"></i>Grup İçi Cari Bakiyeler (ERP)</span><span class="not">A → B: A'nın B'ye borcu</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:300px"><table class="na-tablo" id="grBakiye" data-dinamik="kapali"><thead><tr><th>Borçlu</th><th>Alacaklı</th><th class="s">Bakiye (TL)</th></tr></thead><tbody></tbody></table></div></div></div>
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Süreç Özeti</span></div><div class="na-kart-g" style="font-size:.7rem;color:#475569"><ul class="mb-0 ps-3"><li><b>Yansıtma:</b> Muhasebe → (Direktör) → Finans; e-fatura, karşı kabul, iki tarafta fiş, mutabakat, kapanış.</li><li><b>Mahsup:</b> Muhasebe → (Direktör) → Finans; ERP bakiyeleriyle sınırlı tutar, iki tarafta fiş, mutabakat, kapanış.</li><li><b>Temlik:</b> Muhasebe → Hukuk → (Direktör) → Finans; sözleşme, borçluya bildirim, teyit, tahsilat, kapanış.</li></ul></div></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+  const $ = (s, k) => (k || document).querySelector(s), $$ = (s, k) => Array.from((k || document).querySelectorAll(s));
+  const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const para = v => (Number(v) || 0).toLocaleString('tr-TR', { maximumFractionDigits: 0 });
+  const MOD = { YANSITMA: ['Yansıtma', '#0d9488', '/GrupIci/Yansitma'], MAHSUP: ['Mahsup', '#7c3aed', '/GrupIci/Mahsup'], TEMLIK: ['Temlik', '#b45309', '/GrupIci/Temlik'] };
+  const rozet = (m, t) => `<span class="rt-durum rt-${t}">${esc(m)}</span>`;
+  const talepRozet = d => rozet(d, d === 'Onaylandı' ? 'ok' : d === 'Reddedildi' || d === 'İptal Edildi' ? 'hata' : /Revizyon/.test(d) ? 'bilgi' : 'bekle');
+  const durumRozet = d => d === '—' || !d ? '<span class="text-muted">—</span>' : rozet(d, /Kapandı|Kabul|Muhasebeleşti|Kaydedildi$|Mutabık|Teyit|Tahsil Edildi/.test(d) ? 'ok' : /Red|Fark/.test(d) ? 'hata' : 'bekle');
+  const q = @Html.Raw(Json.Serialize(q));
+  let V = [];
+  const tutar = t => t.modul === 'YANSITMA' ? Number(t.hesap.toplamSayi) : Number(t.degerler.tutar);
+  const taraflar = t => t.modul === 'YANSITMA' ? [t.degerler.yansitan, t.degerler.yansitilan] : t.modul === 'MAHSUP' ? [t.degerler.sirketA, t.degerler.sirketB, t.degerler.sirketC].filter(Boolean) : [t.degerler.temlikEden, t.degerler.temlikAlan];
+  const karsi = t => t.modul === 'TEMLIK' ? t.degerler.borclu : t.modul === 'YANSITMA' ? (t.ek.faturaNo || '—') : (t.degerler.dayanak || '—');
+  const tarih = t => t.modul === 'YANSITMA' ? t.degerler.donem : t.modul === 'MAHSUP' ? (t.degerler.tarih || '').split('-').reverse().join('.') : 'vade ' + (t.degerler.vade || '').split('-').reverse().join('.');
+  const acikMi = t => t.onaylandi && !t.iptal && t.durum3 !== 'Kapandı';
+  function ciz() {
+    const ara = ($('#grAra').value || '').toLocaleLowerCase('tr-TR'), mf = $('#grModul').value, sf = $('#grSirket').value, df = $('#grDurum').value;
+    const l = V.filter(t => (!mf || t.modul === mf) && (!sf || taraflar(t).includes(sf)) && (!ara || [t.no, t.ozet, karsi(t), t.kullanan.adSoyad].join(' ').toLocaleLowerCase('tr-TR').includes(ara))
+      && (!df || (df === 'onay' && /Bekliyor$/.test(t.talepDurumu) && !/Revizyon/.test(t.talepDurumu)) || (df === 'acik' && acikMi(t)) || (df === 'kapandi' && t.durum3 === 'Kapandı') || (df === 'red' && (t.talepDurumu === 'Reddedildi' || t.iptal))));
+    $('#grTablo tbody').innerHTML = l.map(t => `<tr class="tik" data-url="${MOD[t.modul][2]}?no=${t.no}"><td><b>${t.no}</b></td><td><span class="gr-modul" style="background:${MOD[t.modul][1]}">${MOD[t.modul][0]}</span></td><td>${esc(t.turAdi)}</td><td>${taraflar(t).map(esc).join(' → ')}</td><td>${esc(karsi(t))}</td><td>${esc(tarih(t))}</td><td class="s">${para(tutar(t))}</td><td>${talepRozet(t.talepDurumu)}</td><td>${durumRozet(t.durum2)}</td><td>${durumRozet(t.durum3)}</td><td>${esc(t.kullanan.adSoyad)}</td></tr>`).join('') || '<tr><td colspan="11" class="na-bos">Kayıt yok.</td></tr>';
+    $('#grSayi').textContent = `${l.length} / ${V.length} işlem`;
+    $$('#grTablo tr.tik').forEach(r => r.addEventListener('click', () => { const u = r.dataset.url; if (window.top && window.top !== window && typeof window.top.portalSekmeAc === 'function') window.top.portalSekmeAc(r.querySelector('b').textContent, u); else location.href = u + (q ? '&_sekme=1' : ''); }));
+  }
+  ['#grAra', '#grModul', '#grSirket', '#grDurum'].forEach(s => $(s).addEventListener('input', ciz));
+  Promise.all(['YANSITMA', 'MAHSUP', 'TEMLIK'].map(k => fetch('/IkTalep/TmVeri?kod=' + k).then(r => r.json()))).then(vs => {
+    const bak = {}; V = [];
+    vs.forEach(v => { v.talepler.forEach(t => { t.modul = v.modul.kod; V.push(t); }); });
+    const onay = V.filter(t => /Bekliyor$/.test(t.talepDurumu) && !/Revizyon/.test(t.talepDurumu)), acik = V.filter(acikMi);
+    const top = k => V.filter(t => t.modul === k && acikMi(t)).reduce((s, t) => s + tutar(t), 0);
+    const kut = [['#0d9488', 'Açık Yansıtma', para(top('YANSITMA')) + ' TL', `${V.filter(t => t.modul === 'YANSITMA' && acikMi(t)).length} işlem`, 'YANSITMA'], ['#7c3aed', 'Açık Mahsup', para(top('MAHSUP')) + ' TL', `${V.filter(t => t.modul === 'MAHSUP' && acikMi(t)).length} işlem`, 'MAHSUP'], ['#b45309', 'Açık Temlik', para(top('TEMLIK')) + ' TL', `${V.filter(t => t.modul === 'TEMLIK' && acikMi(t)).length} işlem`, 'TEMLIK'],
+      ['#f59e0b', 'Onay Bekleyen', `${onay.length} Talep`, para(onay.reduce((s, t) => s + tutar(t), 0)) + ' TL', 'onay'], ['#dc2626', 'Sorunlu', `${V.filter(t => /Red|Fark/.test(t.durum2 + t.durum3)).length} İşlem`, 'karşı red / mutabakat farkı', 'sorun'], ['#16a34a', 'Kapanan (toplam)', `${V.filter(t => t.durum3 === 'Kapandı').length} İşlem`, para(V.filter(t => t.durum3 === 'Kapandı').reduce((s, t) => s + tutar(t), 0)) + ' TL', 'kapandi']];
+    $('#grKpi').innerHTML = kut.map(k => `<div style="--k:${k[0]}"><div class="l">${k[1]}</div><div class="v">${k[2]}</div><div class="s">${esc(k[3])}</div></div>`).join('');
+    $$('#grKpi > div').forEach((d, i) => d.addEventListener('click', () => { const e = kut[i][4]; $('#grModul').value = MOD[e] ? e : ''; $('#grDurum').value = e === 'onay' ? 'onay' : e === 'kapandi' ? 'kapandi' : MOD[e] ? 'acik' : ''; ciz(); }));
+    // şirket bazında
+    const sirk = {}; acik.forEach(t => taraflar(t).forEach(s => { sirk[s] = sirk[s] || { n: 0, tl: 0 }; sirk[s].n++; sirk[s].tl += tutar(t); }));
+    $('#grSirketler').innerHTML = Object.keys(sirk).sort((a, b) => sirk[b].tl - sirk[a].tl).map(s => `<div><b>${esc(s)}</b><div class="s"><span>${sirk[s].n} açık işlem</span><span>${para(sirk[s].tl)} TL</span></div></div>`).join('') || '<div class="na-bos">Açık işlem yok.</div>';
+    // bakiyeler
+    const b = @Html.Raw(Json.Serialize(WebApplication3.Data.TalepModulleri.GrupBakiyeleri));
+    $('#grBakiye tbody').innerHTML = Object.keys(b).map(k => { const [a1, b1] = k.split('|'); return `<tr><td>${esc(a1)}</td><td>${esc(b1)}</td><td class="s">${para(b[k])}</td></tr>`; }).join('');
+    ciz(); window.NA_HAZIR = true;
+  }).catch(e => { const s = $('#naSonuc'); s.className = 'alert alert-danger py-2 px-3'; s.style.display = 'block'; s.textContent = 'Veri yüklenemedi: ' + e.message; });
+})();
+</script>
+}

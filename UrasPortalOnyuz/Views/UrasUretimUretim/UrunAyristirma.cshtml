@@ -1,0 +1,446 @@
+@{
+    ViewData["Title"] = "Ürün Ayrıştırma";
+}
+
+<style>
+    .uras-card { background: #fff; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 20px rgba(0,0,0,0.03); margin-bottom: 24px; }
+    .uras-card-header { padding: 16px 20px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .uras-card-header h5, .uras-card-header h6 { margin: 0; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+    .uras-card-body { padding: 20px; }
+    .search-box { position: relative; width: 100%; max-width: 100%; }
+    .search-box input { border-radius: 20px; padding-left: 36px; background: #f1f5f9; border: none; }
+    .search-box i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #64748b; }
+    .empty-state { text-align: center; padding: 32px 20px; color: #94a3b8; }
+    .empty-state i { font-size: 2.2rem; margin-bottom: 10px; color: #cbd5e1; display: block; }
+    .siparis-item { cursor: pointer; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; transition: background .15s; }
+    .siparis-item:hover { background: #eff6ff; }
+    .siparis-item:last-child { border-bottom: none; }
+    .siparis-liste { border: 1px solid #e2e8f0; border-radius: 12px; max-height: 320px; overflow-y: auto; }
+    .uras-label { font-weight: 600; font-size: .85rem; color: #475569; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .step-num { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #3b82f6; color: #fff; font-size: .72rem; font-weight: 700; flex-shrink: 0; }
+    .secili-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .kaynak-toggle { display: flex; gap: 8px; background: #f1f5f9; border-radius: 12px; padding: 4px; }
+    .kaynak-btn { flex: 1; border: none; background: transparent; border-radius: 9px; padding: 10px 12px; font-size: .85rem; font-weight: 600; color: #64748b; }
+    .kaynak-btn.active { background: #fff; color: #3b82f6; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    .badge-ym { background: #dbeafe; color: #1e40af; }
+    .badge-ur { background: #fce7f3; color: #9d174d; }
+    .badge-other { background: #f1f5f9; color: #475569; }
+    .recete-toggle { font-size: .8rem; font-weight: 600; color: #3b82f6; cursor: pointer; user-select: none; }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; }
+    .status-badge { font-size: .75rem; padding: 4px 10px; border-radius: 8px; font-weight: 600; }
+    .status-badge.closed { background: #dcfce7; color: #166534; }
+    .status-badge.released { background: #dbeafe; color: #1e40af; }
+</style>
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-scissors me-2 text-primary"></i> Ürün Ayrıştırma</h2>
+</div>
+
+<!-- Onay modalı -->
+<div class="modal fade" id="onayModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0" style="border-radius:16px;">
+            <div class="modal-header bg-light border-0">
+                <h5 class="modal-title fw-bold"><i class="fas fa-shield-check text-primary me-2"></i>Ayrıştırma Onayı</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="p-3 rounded-3 mb-3 bg-light border">
+                    <table class="table table-sm table-borderless mb-0" id="onayTablo"></table>
+                </div>
+                <div class="alert alert-warning border-0 d-flex gap-2 align-items-start mb-0" style="font-size:.85rem;">
+                    <i class="fas fa-circle-info mt-1"></i>
+                    <span>Demontaj yapılacak; YM/UR olmayan kalemler stoktan düşülecek, her YM/UR kalem için ise yeni bir üretim siparişi açılacaktır.</span>
+                </div>
+            </div>
+            <div class="modal-footer border-0 bg-light">
+                <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-primary rounded-pill px-4" id="btnOnayla" onclick="onaylaVeGonder()">
+                    <span id="onaylaMetin"><i class="fas fa-check-double me-1"></i>Onayla</span>
+                    <span id="onaylaYukleniyor" style="display:none"><span class="spinner-border spinner-border-sm me-1"></span>İşleniyor...</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-xl-5 col-lg-6 mb-4 mb-lg-0">
+        <div class="uras-card">
+            <div class="uras-card-header"><h5><i class="fas fa-scissors"></i> Ayrıştırma İşlemi</h5></div>
+            <div class="uras-card-body">
+
+                <label class="uras-label"><span class="step-num">1</span> Ayrıştırma Kaynağı</label>
+                <div class="kaynak-toggle mb-3" id="kaynakToggle">
+                    <button type="button" class="kaynak-btn active" onclick="setKaynakTip('SIPARIS')" id="btnKaynakSiparis"><i class="fas fa-clipboard-check me-1"></i>Kapalı Üretim Siparişi</button>
+                    <button type="button" class="kaynak-btn" onclick="setKaynakTip('STOK')" id="btnKaynakStok"><i class="fas fa-box me-1"></i>Stoktaki Kalem</button>
+                </div>
+
+                <!-- Sipariş listesi -->
+                <div id="blokSiparisListe">
+                    <div class="search-box mb-2"><i class="fas fa-search"></i><input type="text" class="form-control" id="fSiparis" placeholder="Sipariş no, ürün kodu veya adı ile arayın..." oninput="siparisListesiCiz()"></div>
+                    <div class="siparis-liste" id="siparisListe"></div>
+                </div>
+
+                <!-- Stok listesi -->
+                <div id="blokStokListe" style="display:none">
+                    <div class="search-box mb-2"><i class="fas fa-search"></i><input type="text" class="form-control" id="fStok" placeholder="Kalem kodu, adı, depo veya lot ile arayın..." oninput="stokListesiCiz()"></div>
+                    <div class="siparis-liste" id="stokListe"></div>
+                </div>
+
+                <!-- Seçili sipariş -->
+                <div id="seciliSiparisBox" class="secili-box mb-3" style="display:none">
+                    <div>
+                        <div><span class="fw-bold text-primary" id="ssDocEntry"></span> <span class="ms-2 font-monospace fw-bold" id="ssItemCode" style="font-size:.85rem"></span></div>
+                        <div class="text-muted" style="font-size:.8rem" id="ssItemName"></div>
+                        <div class="mt-1" style="font-size:.8rem" id="ssBadges"></div>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="secimiTemizle()"><i class="fas fa-right-left me-1"></i>Değiştir</button>
+                </div>
+
+                <!-- Seçili stok -->
+                <div id="seciliStokBox" class="secili-box mb-3" style="display:none">
+                    <div>
+                        <div><span class="fw-bold font-monospace text-primary" id="stItemCode" style="font-size:.85rem"></span></div>
+                        <div class="text-muted" style="font-size:.8rem" id="stItemName"></div>
+                        <div class="mt-1" style="font-size:.8rem" id="stBadges"></div>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="secimiTemizle()"><i class="fas fa-right-left me-1"></i>Değiştir</button>
+                </div>
+
+                <!-- Miktar + reçete + onayla -->
+                <div id="blokMiktar" style="display:none">
+                    <label class="uras-label"><span class="step-num">2</span> Ayrıştırma Miktarı (<span id="birimEtiket"></span>)</label>
+                    <div class="row g-2 align-items-center mb-2">
+                        <div class="col">
+                            <input type="number" min="0.01" step="0.01" class="form-control fw-bold" id="ayristirmaMiktar" oninput="miktarDegisti()">
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-outline-secondary" onclick="tamaminiSec()" title="Tamamını Seç"><i class="fas fa-rotate-left"></i> Tamamı</button>
+                        </div>
+                    </div>
+                    <div id="miktarProgres" class="d-flex align-items-center gap-2 mb-3" style="display:none !important">
+                        <div class="progress flex-grow-1" style="height:8px;border-radius:8px;"><div class="progress-bar bg-primary" id="miktarProgresBar" style="width:0%;border-radius:8px;"></div></div>
+                        <small class="fw-bold text-primary" id="miktarProgresYuzde"></small>
+                    </div>
+
+                    <div class="mb-3" id="receteBlok" style="display:none">
+                        <span class="recete-toggle" onclick="receteAcKapa()"><i class="fas fa-chevron-down" id="receteIkon"></i> Reçete detayı (<span id="receteSayisi">0</span> satır)</span>
+                        <div class="table-responsive mt-2" id="receteTabloWrap" style="display:none;max-height:220px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:12px;">
+                            <table class="table table-sm table-custom mb-0">
+                                <thead><tr><th>Malzeme</th><th class="text-end" id="receteKolonBaslik">Orijinal</th><th class="text-end">Ayrıştırılacak</th><th class="text-center">Tip</th></tr></thead>
+                                <tbody id="receteGovde"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info border-0 d-flex gap-2 align-items-center mb-3" style="font-size:.82rem;">
+                        <i class="fas fa-circle-info"></i>
+                        <span id="bilgiMetni">Girilen miktar kadar mamül demonte edilir; yarı mamuller yeni siparişe döner, diğer kalemler stoktan düşülür.</span>
+                    </div>
+
+                    <button class="btn btn-primary w-100 py-3" id="btnBaslat" onclick="ayristirmayiBaslat()">
+                        <i class="fas fa-scissors me-2"></i>Ayrıştırmayı Başlat
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-7 col-lg-6">
+        <div class="uras-card">
+            <div class="uras-card-header">
+                <h6><i class="fas fa-clock-rotate-left"></i> Ayrıştırma Geçmişi <span class="badge bg-light text-secondary border ms-2" id="gecmisSayisi" style="display:none"></span></h6>
+                <div class="search-box" style="width:240px"><i class="fas fa-search"></i><input type="text" class="form-control" id="fGecmis" placeholder="Belge no, ürün veya depo ara..." oninput="gecmisCiz()"></div>
+            </div>
+            <div class="uras-card-body p-0">
+                <div class="table-responsive" style="max-height:calc(100vh - 210px); overflow-y:auto;">
+                    <table class="table table-custom mb-0">
+                        <thead class="sticky-top" style="z-index:1"><tr><th>Belge No</th><th>Kalem</th><th class="text-end">Miktar</th><th>Depo</th><th>Operatör / Parti</th><th>Tarih</th><th class="text-center">Durum</th></tr></thead>
+                        <tbody id="gecmisGovde"></tbody>
+                    </table>
+                    <div id="gecmisBos" class="empty-state" style="display:none"><i class="fas fa-inbox"></i>Henüz yapılmış bir ürün ayrıştırma işlemi yok.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let kaynakTip = 'SIPARIS';
+    let kapaliSiparisler = [], stokListesi = [];
+    let selectedSiparis = null, selectedStok = null;
+    let wor1Lines = [];
+    let ayristirmaList = [];
+    let receteAcik = false;
+
+    function fmt(n, d) { return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+
+    function secilenBirim() { return (kaynakTip === 'STOK' ? (selectedStok && selectedStok.Birim) : (selectedSiparis && selectedSiparis.Birim)) || 'KG'; }
+
+    // Kaynaktaki $scope.maxMiktar ile birebir: sipariş kaynağında PlannedQty üst sınır,
+    // KalanMiktar biliniyorsa VE PlannedQty'den küçükse o kullanılır (daha büyükse yok sayılır).
+    function maxMiktar() {
+        if (kaynakTip === 'STOK') return selectedStok ? Number(selectedStok.Stok) : 0;
+        if (!selectedSiparis) return 0;
+        let max = Number(selectedSiparis.PlannedQty);
+        if (selectedSiparis.KalanMiktar != null && Number(selectedSiparis.KalanMiktar) < max) max = Number(selectedSiparis.KalanMiktar);
+        return max;
+    }
+
+    // Kaynaktaki $scope.getOran ile birebir: stokta reçete satırları zaten "1 birim başına" döndüğü
+    // için çarpan doğrudan girilen miktarın kendisidir; siparişte WOR1 satırları ORİJİNAL sipariş
+    // miktarına göre mutlak olduğundan miktar/PlannedQty oranı kullanılır (KalanMiktar değil).
+    function getOran() {
+        const miktar = Number(document.getElementById('ayristirmaMiktar').value) || 0;
+        if (kaynakTip === 'STOK') return miktar;
+        if (!selectedSiparis || !miktar) return 0;
+        return miktar / Number(selectedSiparis.PlannedQty);
+    }
+
+    function setKaynakTip(t) {
+        kaynakTip = t;
+        document.getElementById('btnKaynakSiparis').classList.toggle('active', t === 'SIPARIS');
+        document.getElementById('btnKaynakStok').classList.toggle('active', t === 'STOK');
+        document.getElementById('blokSiparisListe').style.display = (t === 'SIPARIS' && !selectedSiparis) ? '' : 'none';
+        document.getElementById('blokStokListe').style.display = (t === 'STOK' && !selectedStok) ? '' : 'none';
+        if (t === 'STOK' && !stokListesi.length) stokVerileriniYukle();
+        document.getElementById('bilgiMetni').textContent = t === 'SIPARIS'
+            ? 'Girilen miktar kadar mamül demonte edilir; yarı mamuller yeni siparişe döner, diğer kalemler stoktan düşülür.'
+            : 'Seçilen kalem ürün ağacına göre stoktan demonte edilir; yarı mamuller yeni siparişe döner, diğer kalemler stoktan düşülür.';
+        secimGorunumunuGuncelle();
+    }
+
+    function secimGorunumunuGuncelle() {
+        document.getElementById('seciliSiparisBox').style.display = (kaynakTip === 'SIPARIS' && selectedSiparis) ? '' : 'none';
+        document.getElementById('seciliStokBox').style.display = (kaynakTip === 'STOK' && selectedStok) ? '' : 'none';
+        document.getElementById('kaynakToggle').style.display = (selectedSiparis || selectedStok) ? 'none' : '';
+        document.getElementById('blokSiparisListe').style.display = (kaynakTip === 'SIPARIS' && !selectedSiparis) ? '' : 'none';
+        document.getElementById('blokStokListe').style.display = (kaynakTip === 'STOK' && !selectedStok) ? '' : 'none';
+        document.getElementById('blokMiktar').style.display = (selectedSiparis || selectedStok) ? '' : 'none';
+    }
+
+    function secimiTemizle() {
+        selectedSiparis = null; selectedStok = null; wor1Lines = []; receteAcik = false;
+        document.getElementById('ayristirmaMiktar').value = '';
+        secimGorunumunuGuncelle();
+    }
+
+    // ---- Sipariş kaynağı ----
+    async function siparisleriYukle() {
+        // Kaynaktaki GetKapaliSiparisler gibi ymHaric=true: YM ile başlayan kalemler siparişten ayrıştırma kaynağı olarak listelenmez.
+        const res = await fetch('/UrasUretimUretim/GetKapaliUretimSiparisleri?ymHaric=true').then(r => r.json());
+        if (res.success) { kapaliSiparisler = res.data || []; siparisListesiCiz(); }
+    }
+    function siparisListesiCiz() {
+        const q = (document.getElementById('fSiparis').value || '').toLowerCase();
+        const list = kapaliSiparisler.filter(s => !q || String(s.DocEntry).includes(q) || (s.ItemCode || '').toLowerCase().includes(q) || (s.ItemName || '').toLowerCase().includes(q));
+        const el = document.getElementById('siparisListe');
+        if (!list.length) { el.innerHTML = '<div class="empty-state"><i class="fas fa-inbox"></i>Ayrıştırılabilir kapalı üretim siparişi yok.</div>'; return; }
+        el.innerHTML = list.map((it, i) => `
+            <div class="siparis-item" onclick="siparisSec(${i})">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div><span class="fw-bold text-primary">#${it.DocEntry}</span> <span class="ms-2 font-monospace" style="font-size:.85rem">${it.ItemCode}</span></div>
+                    <span>
+                        <span class="badge bg-light text-dark border">${fmt(it.PlannedQty, 2)} ${it.Birim || ''}</span>
+                        ${it.KalanMiktar != null ? `<span class="badge bg-light text-success border">Kalan: ${fmt(it.KalanMiktar, 2)}</span>` : ''}
+                    </span>
+                </div>
+                <div class="d-flex justify-content-between mt-1" style="font-size:.8rem">
+                    <span class="text-muted">${it.ItemName || ''}</span>
+                    <span class="text-muted">${it.U_BE1_KAZANLOTNO ? `<span class="text-primary fw-bold me-2">Lot: ${it.U_BE1_KAZANLOTNO}</span>` : ''}${(it.PostDate || '').substring(0, 10)}</span>
+                </div>
+            </div>`).join('');
+        el._list = list;
+    }
+    async function siparisSec(i) {
+        const list = document.getElementById('siparisListe')._list;
+        selectedSiparis = list[i];
+        secimGorunumunuGuncelle();
+        document.getElementById('ssDocEntry').textContent = '#' + selectedSiparis.DocEntry;
+        document.getElementById('ssItemCode').textContent = selectedSiparis.ItemCode;
+        document.getElementById('ssItemName').textContent = selectedSiparis.ItemName || '';
+        document.getElementById('ssBadges').innerHTML =
+            `<span class="badge bg-white text-dark border me-1">${fmt(selectedSiparis.PlannedQty, 2)} ${selectedSiparis.Birim || ''}</span>` +
+            (selectedSiparis.KalanMiktar != null ? `<span class="badge bg-white text-success border me-1">Kalan: ${fmt(selectedSiparis.KalanMiktar, 2)}</span>` : '') +
+            (selectedSiparis.U_BE1_KAZANLOTNO ? `<span class="badge bg-white text-primary border me-1">Lot: ${selectedSiparis.U_BE1_KAZANLOTNO}</span>` : '');
+        document.getElementById('birimEtiket').textContent = selectedSiparis.Birim || '';
+        document.getElementById('ayristirmaMiktar').setAttribute('max', maxMiktar());
+        document.getElementById('ayristirmaMiktar').setAttribute('placeholder', 'En fazla ' + fmt(maxMiktar(), 2) + ' ' + (selectedSiparis.Birim || ''));
+
+        const res = await fetch('/UrasUretimUretim/GetWOR1ForAyristirma?docEntry=' + selectedSiparis.DocEntry).then(r => r.json());
+        wor1Lines = res.success ? (res.data || []) : [];
+        receteBlokCiz();
+        miktarDegisti();
+    }
+
+    // ---- Stok kaynağı ----
+    async function stokVerileriniYukle() {
+        const res = await fetch('/UrasUretimUretim/GetStokDemonteList').then(r => r.json());
+        stokListesi = res.success ? (res.data || []) : [];
+        stokListesiCiz();
+    }
+    function stokListesiCiz() {
+        const q = (document.getElementById('fStok').value || '').toLowerCase();
+        const list = stokListesi.filter(s => !q || (s.ItemCode || '').toLowerCase().includes(q) || (s.ItemName || '').toLowerCase().includes(q) || (s.WhsCode || '').toLowerCase().includes(q) || (s.BatchNum || '').toLowerCase().includes(q));
+        const el = document.getElementById('stokListe');
+        if (!list.length) { el.innerHTML = '<div class="empty-state"><i class="fas fa-inbox"></i>Demonte edilebilir stok kalemi yok.</div>'; return; }
+        el.innerHTML = list.map((it, i) => `
+            <div class="siparis-item" onclick="stokSec(${i})">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div><span class="fw-bold font-monospace text-primary" style="font-size:.85rem">${it.ItemCode}</span></div>
+                    <span class="badge bg-light text-success border">Stok: ${fmt(it.Stok, 2)} ${it.Birim || ''}</span>
+                </div>
+                <div class="d-flex justify-content-between mt-1" style="font-size:.8rem">
+                    <span class="text-muted">${it.ItemName || ''}</span>
+                    <span class="text-muted">${it.BatchNum ? `<span class="text-primary fw-bold me-2">Lot: ${it.BatchNum}</span>` : ''}<i class="fas fa-building"></i> ${it.WhsCode}</span>
+                </div>
+            </div>`).join('');
+        el._list = list;
+    }
+    async function stokSec(i) {
+        const list = document.getElementById('stokListe')._list;
+        selectedStok = list[i];
+        secimGorunumunuGuncelle();
+        document.getElementById('stItemCode').textContent = selectedStok.ItemCode;
+        document.getElementById('stItemName').textContent = selectedStok.ItemName || '';
+        document.getElementById('stBadges').innerHTML =
+            `<span class="badge bg-white text-success border me-1">Stok: ${fmt(selectedStok.Stok, 2)} ${selectedStok.Birim || ''}</span>` +
+            (selectedStok.BatchNum ? `<span class="badge bg-white text-primary border me-1">Lot: ${selectedStok.BatchNum}</span>` : '') +
+            `<span class="badge bg-white text-dark border"><i class="fas fa-building me-1"></i>${selectedStok.WhsCode}</span>`;
+        document.getElementById('birimEtiket').textContent = selectedStok.Birim || '';
+        document.getElementById('ayristirmaMiktar').setAttribute('max', maxMiktar());
+        document.getElementById('ayristirmaMiktar').setAttribute('placeholder', 'En fazla ' + fmt(maxMiktar(), 2) + ' ' + (selectedStok.Birim || ''));
+
+        // Kaynaktaki $scope.GetOITT ile birebir: seçilen kalemin ürün ağacı, seçim anında o kaleme özel çekilir.
+        const res = await fetch('/UrasUretimUretim/GetOITTForAyristirma?itemCode=' + encodeURIComponent(selectedStok.ItemCode)).then(r => r.json());
+        wor1Lines = res.success ? (res.data || []) : [];
+        receteBlokCiz();
+        miktarDegisti();
+    }
+
+    function receteBlokCiz() {
+        document.getElementById('receteSayisi').textContent = wor1Lines.length;
+        document.getElementById('receteBlok').style.display = wor1Lines.length > 0 ? '' : 'none';
+        document.getElementById('receteKolonBaslik').textContent = kaynakTip === 'STOK' ? 'Birim Başına' : 'Orijinal';
+        receteSatirlariniCiz();
+    }
+    function receteAcKapa() {
+        receteAcik = !receteAcik;
+        document.getElementById('receteTabloWrap').style.display = receteAcik ? '' : 'none';
+        document.getElementById('receteIkon').className = receteAcik ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
+    }
+    function receteSatirlariniCiz() {
+        const oran = getOran();
+        document.getElementById('receteGovde').innerHTML = wor1Lines.map(l => `
+            <tr>
+                <td><span class="fw-bold font-monospace" style="font-size:.78rem">${l.ItemCode}</span><div class="text-muted" style="font-size:.75rem">${l.ItemName || ''}</div></td>
+                <td class="text-end text-muted">${fmt(l.PlannedQty, 2)} ${l.Birim || ''}</td>
+                <td class="text-end fw-bold text-primary">${fmt(l.PlannedQty * oran, 2)} ${l.Birim || ''}</td>
+                <td class="text-center">${l.ItemPrefix === 'YM' ? '<span class="badge badge-ym">YM</span>' : l.ItemPrefix === 'UR' ? '<span class="badge badge-ur">UR</span>' : `<span class="badge badge-other">${l.ItemPrefix || ''}</span>`}</td>
+            </tr>`).join('');
+    }
+
+    function tamaminiSec() { document.getElementById('ayristirmaMiktar').value = maxMiktar(); miktarDegisti(); }
+
+    function miktarDegisti() {
+        const miktar = Number(document.getElementById('ayristirmaMiktar').value) || 0;
+        const max = maxMiktar();
+        const pb = document.getElementById('miktarProgres');
+        if (max > 0 && miktar > 0 && miktar < max) {
+            pb.style.setProperty('display', 'flex', 'important');
+            document.getElementById('miktarProgresBar').style.width = ((miktar / max) * 100) + '%';
+            document.getElementById('miktarProgresYuzde').textContent = '%' + ((miktar / max) * 100).toFixed(1);
+        } else {
+            pb.style.setProperty('display', 'none', 'important');
+        }
+        receteSatirlariniCiz();
+    }
+
+    // ---- Onay + gönderim ----
+    function ayristirmayiBaslat() {
+        const miktar = Number(document.getElementById('ayristirmaMiktar').value) || 0;
+        if (!miktar || miktar <= 0) { alert('Geçerli bir miktar girin.'); return; }
+        if (miktar > maxMiktar()) { alert('Miktar en fazla ' + fmt(maxMiktar(), 2) + ' ' + secilenBirim() + ' olabilir.'); return; }
+
+        const satirlar = [];
+        if (kaynakTip === 'SIPARIS') satirlar.push(['Sipariş No', '#' + selectedSiparis.DocEntry]);
+        satirlar.push(['Mamul Kodu', kaynakTip === 'STOK' ? selectedStok.ItemCode : selectedSiparis.ItemCode]);
+        if (kaynakTip === 'SIPARIS') satirlar.push(['Sipariş Miktarı', fmt(selectedSiparis.PlannedQty, 2) + ' ' + (selectedSiparis.Birim || '')]);
+        if (kaynakTip === 'STOK') satirlar.push(['Mevcut Stok', fmt(selectedStok.Stok, 2) + ' ' + (selectedStok.Birim || '')]);
+        if (kaynakTip === 'STOK' && selectedStok.BatchNum) satirlar.push(['Lot / Parti', selectedStok.BatchNum]);
+        satirlar.push(['Ayrıştırma Miktarı', fmt(miktar, 2) + ' ' + secilenBirim() + (miktar < maxMiktar() ? ' (Kısmi)' : ' (Tam)')]);
+        satirlar.push(['Depo', kaynakTip === 'STOK' ? selectedStok.WhsCode : selectedSiparis.Warehouse]);
+        document.getElementById('onayTablo').innerHTML = satirlar.map(s => `<tr><td class="text-muted fw-bold w-50">${s[0]}</td><td class="fw-bold">${s[1]}</td></tr>`).join('');
+
+        new bootstrap.Modal(document.getElementById('onayModal')).show();
+    }
+
+    async function onaylaVeGonder() {
+        const miktar = Number(document.getElementById('ayristirmaMiktar').value) || 0;
+        document.getElementById('btnOnayla').disabled = true;
+        document.getElementById('onaylaMetin').style.display = 'none';
+        document.getElementById('onaylaYukleniyor').style.display = '';
+
+        let res;
+        try {
+            if (kaynakTip === 'SIPARIS') {
+                res = await fetch('/UrasUretimUretim/AddUrunAyristirma', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ DocEntry: selectedSiparis.DocEntry, Miktar: miktar })
+                }).then(r => r.json());
+            } else {
+                res = await fetch('/UrasUretimUretim/AddUrunAyristirmaStok', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ItemCode: selectedStok.ItemCode, WhsCode: selectedStok.WhsCode, BatchNum: selectedStok.BatchNum, Miktar: miktar })
+                }).then(r => r.json());
+            }
+        } catch (e) {
+            res = { success: false, message: 'Beklenmeyen hata: ' + e.message };
+        }
+
+        document.getElementById('btnOnayla').disabled = false;
+        document.getElementById('onaylaMetin').style.display = '';
+        document.getElementById('onaylaYukleniyor').style.display = 'none';
+        bootstrap.Modal.getInstance(document.getElementById('onayModal')).hide();
+
+        alert(res.message);
+        if (res.success) {
+            secimiTemizle();
+            siparisleriYukle();
+            if (kaynakTip === 'STOK' || stokListesi.length) stokVerileriniYukle();
+            gecmisiYukle();
+        }
+    }
+
+    // ---- Geçmiş ----
+    async function gecmisiYukle() {
+        const res = await fetch('/UrasUretimUretim/GetUrunAyristirmaList').then(r => r.json());
+        ayristirmaList = res.success ? (res.data || []) : [];
+        gecmisCiz();
+    }
+    function gecmisCiz() {
+        const q = (document.getElementById('fGecmis').value || '').toLowerCase();
+        const list = ayristirmaList.filter(it => !q || String(it.DocEntry).includes(q) || (it.ItemCode || '').toLowerCase().includes(q) || (it.Warehouse || '').toLowerCase().includes(q));
+        const sayiEl = document.getElementById('gecmisSayisi');
+        sayiEl.style.display = ayristirmaList.length ? '' : 'none';
+        sayiEl.textContent = ayristirmaList.length;
+        document.getElementById('gecmisBos').style.display = list.length ? 'none' : '';
+        document.getElementById('gecmisGovde').innerHTML = list.map(it => `
+            <tr>
+                <td class="fw-bold text-primary">#${it.DocEntry}</td>
+                <td><span class="fw-bold font-monospace" style="font-size:.78rem">${it.ItemCode}</span><div class="text-muted" style="font-size:.75rem">${it.ProdName || ''}</div></td>
+                <td class="text-end fw-bold">${fmt(it.PlannedQty, 2)} ${it.Birim || ''}</td>
+                <td><span class="badge bg-light text-dark border"><i class="fas fa-building me-1"></i>${it.Warehouse || ''}</span></td>
+                <td><div class="d-flex flex-column"><span style="font-size:.8rem">${it.U_BE1_OPERATOR || '-'}</span>${it.U_BE1_KAZANLOTNO ? `<small class="text-primary fw-bold">Lot: ${it.U_BE1_KAZANLOTNO}</small>` : ''}</div></td>
+                <td>${(it.PostDate || '').substring(0, 10)}</td>
+                <td class="text-center">${it.Status === 'L' ? '<span class="status-badge closed"><i class="fas fa-check-circle"></i> Kapalı</span>' : it.Status === 'R' ? '<span class="status-badge released"><i class="fas fa-play-circle"></i> Serbest</span>' : ''}</td>
+            </tr>`).join('');
+    }
+
+    setKaynakTip('SIPARIS');
+    siparisleriYukle();
+    gecmisiYukle();
+</script>

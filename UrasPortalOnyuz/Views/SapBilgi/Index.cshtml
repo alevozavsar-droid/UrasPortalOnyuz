@@ -1,0 +1,249 @@
+@model WebApplication3.Controllers.SapBilgiController.SapBilgiViewModel
+@{
+    ViewData["Title"] = "SAP Bilgilerim";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container-fluid px-3 py-3" style="max-width: 1200px;">
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <div>
+            <h4 class="fw-bold text-dark mb-0"><i class="fas fa-key text-primary me-2"></i>SAP Bilgilerim</h4>
+            <div class="text-muted small">Portalden SAP'ye atılan kayıtların, <b>şirket bazında</b>, hangi SAP kullanıcısıyla oluşturulacağını belirler.</div>
+        </div>
+        <span class="badge bg-light text-dark border">Portal kullanıcısı: <b>@Model.KullaniciKodu</b></span>
+    </div>
+
+    @if (!Model.Yetkili)
+    {
+        <div class="alert alert-warning shadow-sm">
+            <i class="fas fa-lock me-2"></i>Bu ekran için oturum açmanız gerekir.
+        </div>
+    }
+    else
+    {
+        @Html.AntiForgeryToken()
+
+        string uyari = Context.Request.Query["uyari"].ToString();
+        @if (!string.IsNullOrEmpty(uyari))
+        {
+            <div class="alert alert-danger shadow-sm py-2 mb-3"><i class="fas fa-exclamation-triangle me-2"></i>@uyari</div>
+        }
+
+        <div class="alert alert-info small shadow-sm py-2 mb-3">
+            <i class="fas fa-info-circle me-1"></i>
+            Portalden SAP'ye atılan tüm kayıtlar (yevmiye, fatura, e-belge, ...) <b>sizin SAP kullanıcınızla</b> oluşturulur.
+            Her şirket (veritabanı) için SAP kullanıcı adınız ve şifreniz farklı olabilir; bu yüzden bilgiler şirket şirket kaydedilir.
+            <b>Bilgisi girilmemiş şirkette SAP'ye kayıt atılamaz</b>; ekranda bu sayfaya yönlendiren bir uyarı çıkar.
+            @if (Model.VarsayilanSecilebilir)
+            {
+                <span>Sizin hesabınız ayrıca şirket bazında portalın varsayılan hesabını (<code>@Model.VarsayilanKullanici</code>) da seçebilir: "Kendi kullanıcımla" kapalıysa o şirkette varsayılan hesap kullanılır.</span>
+            }
+            Şifreler şifrelenmiş saklanır ve ekranda bir daha gösterilmez; boş bırakılan şifre alanı kayıtlı şifreyi değiştirmez.
+        </div>
+
+        <!-- HIZLI DOLDURMA -->
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-header bg-white fw-bold"><i class="fas fa-bolt me-2 text-warning"></i>Hızlı doldur: aynı bilgiyi seçili şirketlerin tümüne kaydet</div>
+            <div class="card-body">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold mb-1" for="topluKullanici">SAP kullanıcı adı</label>
+                        <input type="text" id="topluKullanici" class="form-control form-control-sm" maxlength="50" placeholder="Örn: it02" autocomplete="off">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold mb-1" for="topluSifre">SAP şifresi</label>
+                        <input type="password" id="topluSifre" class="form-control form-control-sm" autocomplete="new-password" placeholder="Zorunlu">
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-check form-switch mb-1" style="@(Model.VarsayilanSecilebilir ? "" : "display:none;")">
+                            <input class="form-check-input" type="checkbox" id="topluKendi" checked>
+                            <label class="form-check-label small" for="topluKendi">Kendi kullanıcımla kayıt at</label>
+                        </div>
+                    </div>
+                    <div class="col-md-3 text-md-end">
+                        <button type="button" class="btn btn-sm btn-warning fw-bold" id="btnTopluKaydet">
+                            <i class="fas fa-layer-group me-1"></i>Seçili şirketlere kaydet
+                        </button>
+                    </div>
+                </div>
+                <div class="form-text">Aşağıdaki tabloda ilk sütundaki kutuları işaretleyerek hangi şirketlere uygulanacağını seçin.</div>
+            </div>
+        </div>
+
+        <!-- ŞİRKET LİSTESİ -->
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span class="fw-bold"><i class="fas fa-building me-2 text-primary"></i>Şirketler (@Model.Sirketler.Count)</span>
+                <button type="button" class="btn btn-sm btn-outline-danger" id="btnTumunuSil" title="Tüm şirketlerdeki kayıtlı SAP bilgilerimi sil">
+                    <i class="fas fa-trash me-1"></i>Tümünü sil
+                </button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0" id="sirketTablo">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:36px;" class="text-center"><input type="checkbox" id="tumunuSec" title="Tümünü seç"></th>
+                            <th style="min-width:180px;">Şirket</th>
+                            <th style="min-width:160px;">SAP kullanıcı adı</th>
+                            <th style="min-width:200px;">SAP şifresi</th>
+                            @if (Model.VarsayilanSecilebilir)
+                            {
+                                <th style="width:170px;" class="text-center">Kendi kullanıcımla</th>
+                            }
+                            <th style="min-width:150px;">Durum</th>
+                            <th style="width:250px;" class="text-end">İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.Sirketler.Any())
+                        {
+                            <tr><td colspan="@(Model.VarsayilanSecilebilir ? 7 : 6)" class="text-center text-muted py-4">Yetkili olduğunuz şirket bulunamadı.</td></tr>
+                        }
+                        @foreach (var s in Model.Sirketler)
+                        {
+                            bool aktif = s.KendiKullanicisi && s.SifreKayitli && !string.IsNullOrEmpty(s.SapKullanici);
+                            <tr data-dbkey="@s.DbKey" data-dbname="@s.DbName" data-sifrekayitli="@(s.SifreKayitli ? "1" : "0")" class="@(s.Secili ? "table-primary" : "")">
+                                <td class="text-center"><input type="checkbox" class="sec-sirket"></td>
+                                <td>
+                                    <div class="fw-semibold">@s.Display</div>
+                                    <div class="text-muted small">@s.DbName @(s.Secili ? " · seçili şirket" : "")</div>
+                                </td>
+                                <td><input type="text" class="form-control form-control-sm inp-kullanici" maxlength="50" value="@s.SapKullanici" placeholder="Örn: it02" autocomplete="off"></td>
+                                <td>
+                                    <input type="password" class="form-control form-control-sm inp-sifre" autocomplete="new-password"
+                                           placeholder="@(s.SifreKayitli ? "Kayıtlı; değiştirmek için yazın" : "Şifre")">
+                                </td>
+                                @if (Model.VarsayilanSecilebilir)
+                                {
+                                    <td class="text-center">
+                                        <div class="form-check form-switch d-inline-block m-0">
+                                            <input class="form-check-input inp-kendi" type="checkbox" @(s.KendiKullanicisi ? "checked" : "")>
+                                        </div>
+                                    </td>
+                                }
+                                <td class="small">
+                                    @if (aktif)
+                                    {
+                                        <span class="badge bg-success">@s.SapKullanici ile atılıyor</span>
+                                    }
+                                    else if (s.KendiKullanicisi)
+                                    {
+                                        @if (Model.VarsayilanSecilebilir)
+                                        {
+                                            <span class="badge bg-warning text-dark">Eksik bilgi, varsayılan kullanılıyor</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger">Bilgi eksik, SAP'ye kayıt atılamaz</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Varsayılan (@Model.VarsayilanKullanici)</span>
+                                    }
+                                    @if (s.Guncelleme.HasValue)
+                                    {
+                                        <div class="text-muted" style="font-size:.72rem;">@s.Guncelleme.Value.ToString("dd.MM.yyyy HH:mm")</div>
+                                    }
+                                </td>
+                                <td class="text-end text-nowrap">
+                                    <button type="button" class="btn btn-sm btn-outline-primary btn-test" title="Bu şirkete bu hesapla giriş dene"><i class="fas fa-plug"></i> Test</button>
+                                    <button type="button" class="btn btn-sm btn-primary btn-kaydet" title="Bu şirket için kaydet"><i class="fas fa-save"></i> Kaydet</button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger border-0 btn-sil" title="Bu şirketteki kaydı sil" @(s.SifreKayitli || !string.IsNullOrEmpty(s.SapKullanici) ? "" : "disabled")><i class="fas fa-trash"></i></button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="sonuc" class="mt-3" style="display:none;"></div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            var token = $('input[name="__RequestVerificationToken"]').first().val();
+
+            function goster(basarili, mesaj) {
+                $('#sonuc').attr('class', 'mt-3 alert ' + (basarili ? 'alert-success' : 'alert-danger'))
+                    .html('<i class="fas ' + (basarili ? 'fa-check-circle' : 'fa-exclamation-triangle') + ' me-2"></i>' + $('<div>').text(mesaj || '').html())
+                    .show();
+                if (typeof toastr !== 'undefined') (basarili ? toastr.success : toastr.error)(mesaj || '');
+            }
+
+            function satirVerisi(tr) {
+                return {
+                    __RequestVerificationToken: token,
+                    dbKey: tr.data('dbkey'),
+                    sapKullanici: (tr.find('.inp-kullanici').val() || '').trim(),
+                    sapSifre: tr.find('.inp-sifre').val() || '',
+                    kendiKullanicisi: tr.find('.inp-kendi').length ? tr.find('.inp-kendi').is(':checked') : true
+                };
+            }
+
+            $('#tumunuSec').on('change', function () { $('.sec-sirket').prop('checked', this.checked); });
+
+            $('#sirketTablo').on('click', '.btn-test', function () {
+                var tr = $(this).closest('tr'), b = $(this).prop('disabled', true);
+                var v = satirVerisi(tr);
+                if (!v.sapKullanici) { goster(false, tr.data('dbname') + ': SAP kullanıcı adı boş.'); b.prop('disabled', false); return; }
+                $.post('/SapBilgi/Test', v, function (c) { goster(c && c.success, c && c.message); })
+                    .fail(function () { goster(false, 'Sunucuya ulaşılamadı.'); })
+                    .always(function () { b.prop('disabled', false); });
+            });
+
+            $('#sirketTablo').on('click', '.btn-kaydet', function () {
+                var tr = $(this).closest('tr'), b = $(this).prop('disabled', true);
+                $.post('/SapBilgi/Kaydet', satirVerisi(tr), function (c) {
+                    goster(c && c.success, c && c.message);
+                    if (c && c.success) setTimeout(function () { location.reload(); }, 900);
+                }).fail(function () { goster(false, 'Sunucuya ulaşılamadı.'); })
+                  .always(function () { b.prop('disabled', false); });
+            });
+
+            $('#sirketTablo').on('click', '.btn-sil', function () {
+                var tr = $(this).closest('tr');
+                if (!confirm(tr.data('dbname') + ' için kayıtlı SAP bilgileriniz silinsin mi?')) return;
+                var b = $(this).prop('disabled', true);
+                $.post('/SapBilgi/Sil', { __RequestVerificationToken: token, dbKey: tr.data('dbkey') }, function (c) {
+                    goster(c && c.success, c && c.message);
+                    if (c && c.success) setTimeout(function () { location.reload(); }, 900);
+                }).fail(function () { goster(false, 'Sunucuya ulaşılamadı.'); })
+                  .always(function () { b.prop('disabled', false); });
+            });
+
+            $('#btnTumunuSil').on('click', function () {
+                if (!confirm('TÜM şirketlerdeki kayıtlı SAP bilgileriniz silinsin mi?\nKayıtlar her yerde varsayılan hesapla atılmaya döner.')) return;
+                var b = $(this).prop('disabled', true);
+                $.post('/SapBilgi/Sil', { __RequestVerificationToken: token, dbKey: '' }, function (c) {
+                    goster(c && c.success, c && c.message);
+                    if (c && c.success) setTimeout(function () { location.reload(); }, 900);
+                }).fail(function () { goster(false, 'Sunucuya ulaşılamadı.'); })
+                  .always(function () { b.prop('disabled', false); });
+            });
+
+            $('#btnTopluKaydet').on('click', function () {
+                var secili = $('.sec-sirket:checked').map(function () { return $(this).closest('tr').data('dbkey'); }).get();
+                if (!secili.length) { goster(false, 'Önce tablodan şirket seçin.'); return; }
+                var kullanici = ($('#topluKullanici').val() || '').trim();
+                var sifre = $('#topluSifre').val() || '';
+                var kendi = $('#topluKendi').is(':visible') ? $('#topluKendi').is(':checked') : true;
+                if (kendi && (!kullanici || !sifre)) { goster(false, 'Kullanıcı adı ve şifre zorunlu.'); return; }
+                if (!confirm(secili.length + ' şirkete aynı SAP bilgileri kaydedilecek. Devam edilsin mi?')) return;
+
+                var b = $(this).prop('disabled', true);
+                $.ajax({
+                    url: '/SapBilgi/TumuneKaydet', type: 'POST', traditional: true,
+                    data: { __RequestVerificationToken: token, sapKullanici: kullanici, sapSifre: sifre, kendiKullanicisi: kendi, dbKeys: secili }
+                }).done(function (c) {
+                    goster(c && c.success, c && c.message);
+                    if (c && c.success) setTimeout(function () { location.reload(); }, 1200);
+                }).fail(function () { goster(false, 'Sunucuya ulaşılamadı.'); })
+                  .always(function () { b.prop('disabled', false); });
+            });
+        })();
+    </script>
+}

@@ -1,0 +1,826 @@
+﻿@model List<WebApplication3.Models.CariRiskRaporuViewModel>
+@{
+    ViewData["Title"] = "Cari Bakiye Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+
+    var currentDbDisplay = ViewBag.CurrentDbDisplay as string;
+    var selviContext = ViewBag.SelviContext as string;
+    string selviHeader = selviContext == "AVRUPA" ? "Selvi (Avrupa)" : (selviContext == "URAS" ? "Selvi (Uras)" : "Selvi (Diğer)");
+
+    var searchKeyword = ViewBag.SearchKeyword as string;
+    var hideZeroRisk = (bool)(ViewBag.HideZeroRisk ?? true);
+    var useBpDueDate = (bool)(ViewBag.UseBpDueDate ?? false);
+
+    var paymentTerms = ViewBag.PaymentTerms as List<WebApplication3.Controllers.Rapor65Controller.LookupModel> ?? new List<WebApplication3.Controllers.Rapor65Controller.LookupModel>();
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/fixedcolumns/4.3.0/css/fixedColumns.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        /* Modern Soft UI Temel Ayarları */
+        body { 
+            background-color: #f4f7fc; 
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            color: #2b3445; 
+        }
+        
+        .dashboard-card { 
+            background: #ffffff; 
+            border-radius: 12px; 
+            border: 1px solid #eef2f7; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03); 
+            padding: 24px; 
+            transition: all 0.3s ease; 
+        }
+        
+        .hover-elevate:hover { 
+            transform: translateY(-4px); 
+            box-shadow: 0 8px 15px rgba(0,0,0,0.08); 
+        }
+
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        
+        .section-title {
+            font-size: 0.85rem;
+            font-weight: 800;
+            color: #3b82f6;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #eff6ff;
+        }
+
+        .lbl-custom { 
+            font-weight: 700; 
+            color: #475569; 
+            font-size: 0.8rem;
+            margin-bottom: 0.3rem;
+            display: block;
+        }
+
+        .modern-input, .modern-select {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.85rem;
+            color: #334155;
+            transition: all 0.2s ease;
+            width: 100%;
+        }
+
+        .modern-input:focus, .modern-select:focus {
+            background-color: #ffffff;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+            outline: none;
+        }
+
+        /* TABLONUN ZIPLAMASINI (FOUC) ÖNLEYEN KOD */
+        #tableWrapper {
+            opacity: 0;
+            transition: opacity 0.4s ease-in-out;
+            overflow-x: auto;
+        }
+        
+        .risk-table {
+            font-size: 0.92rem;
+            width: 100% !important;
+            border-collapse: separate;
+            border-spacing: 0;
+            border-radius: 12px;
+        }
+
+        .risk-table > thead {
+            color: #3730a3;
+            font-weight: 800;
+        }
+
+        .risk-table > thead > tr > th {
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            font-size: 0.74rem;
+            padding: 13px 10px;
+            border-bottom: 2px solid #c7cbe0 !important;
+            border-top: none !important;
+            border-left: 1px solid #e6e8f0;
+            vertical-align: middle;
+            text-align: center;
+            white-space: nowrap;
+            background: #eef2ff;
+            box-shadow: 0 2px 4px rgba(0,0,0,.04);
+        }
+
+        .risk-table > tbody > tr > td {
+            font-size: 0.9rem;
+            color: #1f2937;
+            vertical-align: middle;
+            padding: 11px 12px;
+            border-bottom: 1px solid #eef1f7;
+            border-left: 1px solid #f3f5f9;
+            white-space: nowrap;
+            background-color: #fff;
+        }
+
+        .risk-table tbody tr:hover td {
+            background-color: #eff4ff !important;
+            transition: all 0.15s;
+        }
+        .risk-table .num-cell, .risk-table td.text-end { font-variant-numeric: tabular-nums; }
+        .bakiye-drill:hover { filter: brightness(0.9); }
+
+        .border-right-thick { border-right: 2px solid #cbd5e1 !important; }
+
+        /* DataTables Başlık Kayması (Misalignment) Düzeltmeleri */
+        .dataTables_scrollHeadInner, 
+        .dataTables_scrollHeadInner .risk-table {
+            width: 100% !important;
+        }
+
+        table.dataTable {
+            border-collapse: collapse !important;
+            box-sizing: border-box;
+        }
+
+        /* Filtre satırındaki hücrelerin gereksiz daralmasını engeller */
+        .risk-table thead tr.filter-row th {
+            padding: 4px 6px !important;
+            background-color: #f8fafc;
+            border-bottom: 2px solid #cbd5e1 !important;
+            min-width: 85px; 
+            box-sizing: border-box;
+        }
+
+        /* DataTables sabit kolonlarının z-index ve kenarlık çakışmalarını önler */
+        .DTFC_LeftHeadWrapper, .DTFC_LeftBodyWrapper {
+            border-right: 2px solid #cbd5e1 !important;
+        }
+
+        /* Dropdown Kolon Filtresi Modernizasyonu */
+        .filter-trigger-btn {
+            border: 1px solid #e2e8f0;
+            background-color: #fff;
+            color: #475569;
+            font-size: 0.7rem;
+            text-align: left;
+            width: 100%;
+            border-radius: 6px;
+            padding: 4px 8px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+            transition: all 0.2s ease;
+        }
+
+        .filter-trigger-btn::after {
+            content: "\25BC";
+            font-size: 0.6rem;
+            margin-left: 5px;
+            opacity: 0.5;
+        }
+
+        .filter-trigger-btn:hover { border-color: #94a3b8; }
+        .filter-trigger-btn.active-filter {
+            background-color: #eff6ff;
+            border-color: #3b82f6;
+            color: #1d4ed8;
+            font-weight: bold;
+        }
+
+        /* Listenin en üst katmanda görünmesini sağlar */
+        .custom-filter-dropdown-menu {
+            z-index: 99999 !important;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15) !important;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            background-color: #ffffff;
+            position: absolute;
+        }
+
+        /* Metin/Link Stilleri */
+        .clickable-card-name {
+            color: #3b82f6;
+            cursor: pointer;
+            font-weight: 700;
+            display: block;
+            max-width: 250px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .clickable-card-name:hover { text-decoration: underline; color: #1d4ed8; }
+
+        .bp-payment-term-select {
+            font-size: 0.75rem;
+            padding: 4px 20px 4px 8px;
+            max-width: 150px;
+            cursor: pointer;
+            border-color: #cbd5e1;
+        }
+
+        /* Modal Özet Kartları */
+        .summary-card {
+            border-radius: 12px;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 100px;
+            transition: transform 0.2s;
+        }
+        .summary-card:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); }
+        .bg-gradient-x { background: linear-gradient(135deg, #0ea5e9, #38bdf8); }
+        .bg-gradient-r { background: linear-gradient(135deg, #f43f5e, #fb7185); }
+        
+        .badge-soft-secondary { background-color: #f1f5f9; color: #475569; font-size: 11px; padding: 4px 8px; border-radius: 6px; font-weight: 700; }
+    </style>
+}
+
+@Html.AntiForgeryToken()
+
+<!-- Yükleniyor overlay (Verileri Yükle uzun sürebilir) -->
+<div id="riskLoadingOverlay" style="display:none;position:fixed;inset:0;z-index:20000;background:rgba(15,23,42,.55);backdrop-filter:blur(2px);align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:18px;padding:28px 34px;box-shadow:0 20px 50px rgba(0,0,0,.3);text-align:center;min-width:300px;">
+        <div class="spinner-border text-primary" style="width:3rem;height:3rem;" role="status"></div>
+        <h5 class="fw-bold mt-3 mb-1 text-dark">Veriler Yükleniyor…</h5>
+        <div class="text-muted small mb-2">Cari bakiyeleri hesaplanıyor, bu işlem biraz sürebilir. Lütfen bekleyin…</div>
+        <div class="progress" style="height:8px;border-radius:6px;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width:100%"></div>
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid py-4 w-100">
+    
+    <!-- Başlık ve Üst Bilgiler -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;">Cari Bakiye Raporu</h4>
+            <span class="text-muted" style="font-size: 14px;">Müşteri ve tedarikçilerin güncel risk, açık bakiye ve vade durumlarını konsolide olarak izleyin.</span>
+        </div>
+        <div class="d-flex gap-3 align-items-center">
+            <span class="badge bg-white text-dark border shadow-sm px-3 py-2 rounded-pill hover-elevate">
+                <i class="fas fa-database me-1 text-primary"></i> @currentDbDisplay
+            </span>
+            <span class="badge bg-white text-dark border shadow-sm px-3 py-2 rounded-pill hover-elevate">
+                <i class="far fa-clock me-1 text-primary"></i> @DateTime.Now.ToString("dd.MM.yyyy HH:mm")
+            </span>
+        </div>
+    </div>
+
+    <!-- Arama ve Parametre Filtre Formu Kartı -->
+    <div class="dashboard-card border-0 border-top-primary mb-4 p-4">
+        <h6 class="section-title"><i class="fas fa-filter me-2"></i>Rapor Filtreleri</h6>
+        <form method="get" action="/Rapor65" class="row g-3 align-items-end" id="riskLoadForm">
+            <input type="hidden" name="db" value="@currentDb" />
+            <input type="hidden" name="isLoad" value="true" />
+            
+            <div class="col-md-3">
+                <label class="lbl-custom">Arama</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-end-0"><i class="fas fa-search text-secondary"></i></span>
+                    <input type="text" class="form-control modern-input border-start-0 ps-0" name="searchKeyword" value="@searchKeyword" placeholder="Cari Kodu, Adı veya Temsilci Ara...">
+                </div>
+            </div>
+
+            @{ var stip = (string)ViewBag.SelectedCariTipi ?? ""; }
+            <div class="col-md-2">
+                <label class="lbl-custom">Cari Tipi</label>
+                <select name="cariTipi" class="form-select modern-input fw-bold">
+                    <option value="" selected="@(stip == "")">Tümü</option>
+                    <option value="Müşteri" selected="@(stip == "Müşteri")">Müşteri</option>
+                    <option value="Tedarikçi" selected="@(stip == "Tedarikçi")">Tedarikçi</option>
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <div class="form-check form-switch ps-5 mt-2">
+                    <input class="form-check-input" style="transform: scale(1.3); cursor: pointer;" type="checkbox" id="hideZeroRisk" name="hideZeroRisk" value="true" @(hideZeroRisk ? "checked" : "")>
+                    <label class="form-check-label fw-bold text-secondary ms-2" style="cursor: pointer; font-size:0.85rem;" for="hideZeroRisk">Riski Sıfır Olanları Gizle</label>
+                </div>
+            </div>
+            
+            <div class="col-md-3">
+                <div class="form-check form-switch ps-5 mt-2">
+                    <input class="form-check-input" style="transform: scale(1.3); cursor: pointer;" type="checkbox" id="useBpDueDate" name="useBpDueDate" value="true" @(useBpDueDate ? "checked" : "")>
+                    <label class="form-check-label fw-bold text-primary ms-2" style="cursor: pointer; font-size:0.85rem;" for="useBpDueDate">
+                        <i class="fas fa-calendar-alt me-1"></i>Ödeme Koşuluna Göre Hesapla
+                    </label>
+                </div>
+            </div>
+            
+            <div class="col-md-2 text-end">
+                <button type="submit" class="btn btn-primary rounded-pill w-100 fw-bold shadow hover-elevate">
+                    <i class="fas fa-database me-1"></i> Verileri Yükle
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Tablo Kartı (Eğer Veri Yüklendiyse) -->
+    <div class="dashboard-card border-0 p-0 mb-4 overflow-hidden">
+        
+        @if (ViewBag.IsLoad == true)
+        {
+            <div class="p-3 border-bottom d-flex justify-content-between align-items-center bg-light bg-opacity-50">
+                <div class="card-title mb-0 fw-bold"><i class="fas fa-table text-primary me-2"></i>Cari Bakiye Raporu</div>
+                <div class="d-flex gap-2 align-items-center">
+                    <button type="button" class="btn btn-outline-primary btn-sm rounded-pill shadow-sm hover-elevate px-3 fw-bold" data-bs-toggle="modal" data-bs-target="#eslestirmeModal" title="Bakiyeler ve eşleştirme nasıl hesaplanıyor?">
+                        <i class="fas fa-circle-info me-1"></i> Eşleştirme Nasıl Yapılıyor?
+                    </button>
+                    <button type="button" class="btn btn-success btn-sm rounded-pill shadow-sm hover-elevate px-4 fw-bold" onclick="downloadExcel()">
+                        <i class="fas fa-file-excel me-1"></i> Excel İndir
+                    </button>
+                </div>
+            </div>
+            <div class="p-3" id="tableWrapper">
+                <table class="table risk-table w-100" id="mainTable">
+                    <thead>
+                        <tr>
+                            <th class="text-center">Cari Kodu</th>
+                            <th class="text-center">Cari Adı</th>
+                            <th class="text-center">Ödeme Koşulu</th>
+                            <th class="text-center">Satışçı</th>
+                            <th class="text-center">Tip</th>
+                            @if (ViewBag.ShowSelviColumn == true)
+                            {
+                                <th class="text-center" title="@selviHeader">@selviHeader</th>
+                            }
+                            <th class="text-center" style="color:#4338ca;">Toplam ₺</th>
+                            <th class="text-center" style="color:#0ea5e9;">X Bakiye ₺</th>
+                            <th class="text-center" style="color:#f43f5e;">R Bakiye ₺</th>
+                            <th class="text-center" style="color:#64748b;">Diğer ₺</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model != null && Model.Any())
+                        {
+                            foreach (var item in Model)
+                            {
+                                <tr>
+                                    <td class="fw-bold text-secondary">@item.CardCode</td>
+                                    <td>
+                                        <span class="clickable-card-name" data-card-name="@item.CardName" data-card-code="@item.CardCode" title="Risk detayı / FIFO açık bakiye">
+                                            <i class="fas fa-external-link-alt me-1 small"></i>@item.CardName
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <select class="modern-select bp-payment-term-select bg-white" data-cardcode="@item.CardCode" data-original-value="@item.GroupNum">
+                                            <option value="-1">-- Seçiniz --</option>
+                                            @foreach (var pt in paymentTerms)
+                                            {
+                                                <option value="@pt.Id" selected="@(item.GroupNum == pt.Id ? "selected" : null)">@pt.Name</option>
+                                            }
+                                        </select>
+                                    </td>
+                                    <td class="text-secondary">@item.SatisSorumlusu</td>
+                                    <td class="text-center">
+                                        @{
+                                            var bM = (item.CariTipi ?? "").Contains("Müşteri");
+                                            var bT = (item.CariTipi ?? "").Contains("Tedarikçi");
+                                        }
+                                        @if (bM) { <span class="badge bg-success rounded-pill" style="font-weight:600;">Müşteri</span> }
+                                        @if (bT) { <span class="badge bg-warning text-dark rounded-pill @(bM ? "ms-1" : "")" style="font-weight:600;">Tedarikçi</span> }
+                                    </td>
+                                    @if (ViewBag.ShowSelviColumn == true)
+                                    {
+                                        <td class="text-end fw-bold" data-order="@item.SeciliSelviBakiye.ToString(System.Globalization.CultureInfo.InvariantCulture)">@item.SeciliSelviBakiye.ToString("N2")</td>
+                                    }
+                                    <td class="text-end fw-bold" style="color:#4338ca;" data-order="@item.BakiyeToplamGercek.ToString(System.Globalization.CultureInfo.InvariantCulture)">@item.BakiyeToplamGercek.ToString("N2")</td>
+                                    <td class="text-end fw-bold bakiye-drill" style="color:#0284c7;cursor:pointer;text-decoration:underline dotted;" title="Hangi hesapta ne kadar? (tıkla)" data-card-code="@item.CardCode" data-card-name="@item.CardName" data-tip="X" data-order="@item.ToplamBakiye_X.ToString(System.Globalization.CultureInfo.InvariantCulture)">@item.ToplamBakiye_X.ToString("N2")</td>
+                                    <td class="text-end fw-bold bakiye-drill" style="color:#e11d48;cursor:pointer;text-decoration:underline dotted;" title="Hangi hesapta ne kadar? (tıkla)" data-card-code="@item.CardCode" data-card-name="@item.CardName" data-tip="R" data-order="@item.ToplamBakiye_R.ToString(System.Globalization.CultureInfo.InvariantCulture)">@item.ToplamBakiye_R.ToString("N2")</td>
+                                    <td class="text-end bakiye-drill" style="color:#64748b;cursor:pointer;text-decoration:underline dotted;" title="Diğer aktarım tipleri (Y/BOS) - detay için tıkla" data-card-code="@item.CardCode" data-card-name="@item.CardName" data-tip="D" data-order="@item.BakiyeDiger.ToString(System.Globalization.CultureInfo.InvariantCulture)">@item.BakiyeDiger.ToString("N2")</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="text-center py-5">
+                <i class="fas fa-cloud-download-alt fa-4x text-primary mb-3" style="opacity: 0.3;"></i>
+                <h5 class="fw-bold text-dark">Rapor Verileri Bekleniyor</h5>
+                <p class="text-muted mb-4">
+                    Müşteri ve tedarikçilerin güncel risk durumu veritabanından yoğun bir sorgu ile getirilecektir.<br>
+                    Lütfen filtreleri ayarlayıp <b>"Verileri Yükle"</b> butonuna basınız.
+                </p>
+            </div>
+        }
+    </div>
+
+    <div class="mt-4 mb-5 text-center">
+        <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary rounded-pill px-4 fw-bold shadow-sm hover-elevate">
+            <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+        </a>
+    </div>
+</div>
+
+<!-- Risk Detay Modal -->
+<div class="modal fade" id="riskDetailModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
+            <div class="modal-header bg-white py-3 border-bottom">
+                <div>
+                    <h5 class="modal-title mb-0 fw-bold text-dark"><i class="fas fa-list-ul me-2 text-primary"></i>Risk Detay Analizi</h5>
+                    <small class="text-muted" id="modalCardName"></small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body bg-light p-4">
+                <div class="row g-3 mb-4">
+                    <div class="col-lg-2 col-md-4 col-6">
+                        <div class="summary-card bg-gradient-x">
+                            <div class="small text-white-50 fw-bold">X AÇIK BAKİYE</div>
+                            <div class="h5 fw-bold mb-0 mt-2" id="lblXAcik">0.00</div>
+                        </div>
+                    </div>
+                    <div class="col-lg-2 col-md-4 col-6">
+                        <div class="summary-card bg-gradient-x" style="filter: brightness(0.9);">
+                            <div class="small text-white-50 fw-bold">X VADESİ GEÇMİŞ</div>
+                            <div class="h5 fw-bold mb-0 mt-2" id="lblXGecmis">0.00</div>
+                        </div>
+                    </div>
+                    <div class="col-lg-2 col-md-4 col-12">
+                        <div class="summary-card bg-white text-success border-top border-4 border-success">
+                            <div class="small text-muted fw-bold">X ORT. VADE</div>
+                            <div class="h3 fw-bold mb-0 mt-1" id="lblXAdat">0</div>
+                            <small class="text-muted">Gün</small>
+                        </div>
+                    </div>
+                    <div class="col-lg-2 col-md-4 col-6">
+                        <div class="summary-card bg-gradient-r">
+                            <div class="small text-white-50 fw-bold">R AÇIK BAKİYE</div>
+                            <div class="h5 fw-bold mb-0 mt-2" id="lblRAcik">0.00</div>
+                        </div>
+                    </div>
+                    <div class="col-lg-2 col-md-4 col-6">
+                        <div class="summary-card bg-gradient-r" style="filter: brightness(0.9);">
+                            <div class="small text-white-50 fw-bold">R VADESİ GEÇMİŞ</div>
+                            <div class="h5 fw-bold mb-0 mt-2" id="lblRGecmis">0.00</div>
+                        </div>
+                    </div>
+                    <div class="col-lg-2 col-md-4 col-12">
+                        <div class="summary-card bg-white text-danger border-top border-4 border-danger">
+                            <div class="small text-muted fw-bold">R ORT. VADE</div>
+                            <div class="h3 fw-bold mb-0 mt-1" id="lblRAdat">0</div>
+                            <small class="text-muted">Gün</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-end mb-3">
+                    <div class="bg-white py-2 px-4 shadow-sm d-flex align-items-center" style="border-radius: 8px; border-left: 4px solid #3b82f6;">
+                        <i class="fas fa-wallet me-2 text-primary"></i>
+                        <span class="small me-2 text-muted fw-bold">GENEL TOPLAM RİSK:</span>
+                        <span class="fw-bold fs-5 text-dark" id="lblGenelToplam">0.00</span>
+                    </div>
+                </div>
+                <div class="dashboard-card p-0 overflow-hidden">
+                    <table id="detailTable" class="table table-hover mb-0 w-100" style="font-size: 0.85rem;">
+                        <thead class="bg-light">
+                            <tr>
+                                <th class="text-muted text-uppercase" style="font-size:11px;">Özel Kod</th>
+                                <th class="text-muted text-uppercase" style="font-size:11px;">Yön</th>
+                                <th class="text-muted text-uppercase" style="font-size:11px;">Vade Tarihi</th>
+                                <th class="text-muted text-uppercase" style="font-size:11px;">Gecikme (Gün)</th>
+                                <th class="text-end text-muted text-uppercase" style="font-size:11px;">Tutar</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-3 border-top bg-white">
+                <button type="button" class="btn btn-light rounded-pill px-4 fw-bold shadow-sm" data-bs-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============ X / R BAKİYE DRILL-DOWN MODALI (hangi hesapta ne kadar) ============ -->
+<div class="modal fade" id="bakiyeDetayModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg" style="border-radius:18px;overflow:hidden;">
+            <div class="modal-header text-white py-3" id="bakiyeDetayHeader" style="background:linear-gradient(120deg,#4f46e5,#7c3aed);">
+                <div>
+                    <h5 class="modal-title fw-bold mb-0"><i class="fas fa-sitemap me-2"></i><span id="bdBaslik">Bakiye Detayı</span></h5>
+                    <div class="small opacity-75" id="bdAltBaslik"></div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3" style="background:#f7f8fc;">
+                <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+                    <span class="text-muted small">Hangi hesapta ne kadar var (GL hesabı bazında)</span>
+                    <span class="badge rounded-pill" id="bdToplamRozet" style="background:#eef2ff;color:#4338ca;font-size:.9rem;">Toplam: 0,00 ₺</span>
+                </div>
+                <div class="dashboard-card p-0 overflow-hidden">
+                    <table class="table table-hover mb-0 w-100" id="bakiyeDetayTable" style="font-size:.9rem;">
+                        <thead class="bg-light">
+                            <tr>
+                                <th class="text-muted text-uppercase" style="font-size:11px;">Hesap Kodu</th>
+                                <th class="text-muted text-uppercase" style="font-size:11px;">Hesap Adı</th>
+                                <th class="text-end text-muted text-uppercase" style="font-size:11px;">Bakiye (₺)</th>
+                                <th class="text-end text-muted text-uppercase" style="font-size:11px;">Döviz Bakiye</th>
+                                <th class="text-center text-muted text-uppercase" style="font-size:11px;">Ekstre</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bakiyeDetayBody"></tbody>
+                    </table>
+                </div>
+                <div class="text-muted small mt-2 px-1"><i class="fas fa-lightbulb text-warning me-1"></i> Bir hesabın <b>Ekstre</b> ikonuna tıklayınca o hesabın tam hareket dökümü (Rapor39 – Hesap Ekstresi) açılır.</div>
+            </div>
+            <div class="modal-footer py-3 border-top bg-white">
+                <button type="button" class="btn btn-light rounded-pill px-4 fw-bold shadow-sm" data-bs-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============ EŞLEŞTİRME BİLGİLENDİRME MODALI ============ -->
+<div class="modal fade" id="eslestirmeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg" style="border-radius:18px;overflow:hidden;">
+            <div class="modal-header text-white py-3" style="background:linear-gradient(120deg,#0ea5e9,#4338ca);">
+                <h5 class="modal-title fw-bold mb-0"><i class="fas fa-circle-info me-2"></i>Bakiyeler ve Eşleştirme Nasıl Hesaplanıyor?</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4" style="font-size:.95rem;line-height:1.6;">
+                <div class="mb-3">
+                    <h6 class="fw-bold text-primary"><i class="fas fa-link me-2"></i>1) Cari ↔ Hesap eşleştirmesi</h6>
+                    Her müşterinin bakiyesi, yevmiye satırlarındaki <b>cari kodu</b> (JDT1.ShortName = OCRD.CardCode) üzerinden bulunur. Bir müşterinin birden çok muhasebe hesabı olabilir; bakiye şu hesap gruplarında toplanır: <b>120, 136, 159, 320, 336, 340, 420, 440</b> (OACT.FormatCode). Ayrı bir eşleştirme tablosu yoktur; bağ doğrudan yevmiye kaydından gelir.
+                </div>
+                <div class="mb-3">
+                    <h6 class="fw-bold" style="color:#0284c7;"><i class="fas fa-code-branch me-2"></i>2) X ve R bakiye nedir?</h6>
+                    Ayrım <b>U_BE1_AKTAR</b> (aktarım tipi) alanına göredir:
+                    <ul class="mb-0 mt-1">
+                        <li><b>X (Kapanış):</b> aktarım tipi <b>boş</b> veya <b>'X'</b> olan tüm kayıtlar (normal işleyiş).</li>
+                        <li><b>R (Kur Farkı):</b> aktarım tipi <b>'R'</b> olan kayıtlar (kur farkı aktarımları).</li>
+                    </ul>
+                    <span class="text-muted small">X/R Bakiye sütununa tıklayınca, o tutarın hangi GL hesabında ne kadar olduğu açılır; oradan hesabın tam ekstresine (Rapor39) gidebilirsiniz.</span>
+                </div>
+                <div class="mb-3">
+                    <h6 class="fw-bold text-success"><i class="fas fa-scale-balanced me-2"></i>3) Hesap Ekstresi (Rapor39) ile tutarlılık</h6>
+                    Bu rapordaki bakiyeler, <b>Hesap Ekstresi (Rapor39)</b> ile <b>aynı iptal/storno kurallarını</b> kullanır: iptal edilmiş yevmiyeler (U_BE1_YEVIPTAL), ters (storno) kayıtlar ve iptal çek ibrazları (ODPS/OCHH) elenir. Böylece müşteri bakiyesi hesap ekstresindeki bakiye ile birebir tutar.
+                </div>
+                <div class="mb-0">
+                    <h6 class="fw-bold" style="color:#f43f5e;"><i class="fas fa-building me-2"></i>4) SELVI (şirketler-arası) eşleştirme</h6>
+                    SELVI sütunundaki bakiye, ana şirketteki cari ile SELVI veritabanındaki cari <b>cari adı + cari tipi</b> (CardName + CardType) üzerinden eşleştirilir (kod değil, isim eşleşmesi). SELVI içinde 120.03 → Avrupa, 120.04 → Uras, diğeri → Selvi olarak ayrılır.
+                </div>
+            </div>
+            <div class="modal-footer py-3 border-top bg-white">
+                <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm" data-bs-dismiss="modal">Anladım</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/fixedcolumns/4.3.0/js/dataTables.fixedColumns.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        const activeDbCode = '@currentDb';
+
+        function downloadExcel() {
+            var searchKeyword = '@(searchKeyword ?? "")';
+            var hideZeroRisk = @(hideZeroRisk.ToString().ToLower());
+            var useBpDueDate = @(useBpDueDate.ToString().ToLower());
+
+            var form = $('<form method="post" action="/Rapor65/DownloadExcel"></form>');
+            form.append('<input type="hidden" name="searchKeyword" value="' + searchKeyword + '">');
+            form.append('<input type="hidden" name="hideZeroRisk" value="' + hideZeroRisk + '">');
+            form.append('<input type="hidden" name="useBpDueDate" value="' + useBpDueDate + '">');
+            
+            form.append('<input type="hidden" name="db" value="' + activeDbCode + '">');
+            form.append('<input type="hidden" name="cariTipi" value="' + ($('select[name="cariTipi"]').val() || '') + '">');
+            form.append('<input type="hidden" name="__RequestVerificationToken" value="' + $('input[name="__RequestVerificationToken"]').val() + '">');
+
+            $('body').append(form);
+            form.submit();
+            form.remove();
+        }
+
+        $(document).ready(function() {
+            $.fn.dataTable.ext.errMode = 'none';
+            var mainTableApi;
+
+            // "Verileri Yükle" — uzun sürebildiği için yükleniyor overlay'i + akışkan ilerleme çubuğu
+            $('#riskLoadForm').on('submit', function () {
+                var ov = document.getElementById('riskLoadingOverlay');
+                if (ov) ov.style.display = 'flex';
+                return true;
+            });
+
+
+            window.clearReportFilters = function() {
+                $('.filter-trigger-btn').text('Tümü').removeClass('active-filter');
+                $('.val-checker, .all-checker').prop('checked', true);
+                if (mainTableApi) {
+                    mainTableApi.columns().search('').order([]).draw();
+                }
+            };
+
+            $('body').on('click', '.clickable-card-name', function() {
+                var name = $(this).data('card-name');
+                var code = $(this).data('card-code');
+                openRiskModal(name, code);
+            });
+
+            // === X / R BAKİYE DRILL-DOWN (hangi hesapta ne kadar) ===
+            var fmtTL = function (n) { return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+            $('body').on('click', '.bakiye-drill', function () {
+                var code = $(this).data('card-code');
+                var name = $(this).data('card-name');
+                var tip = $(this).data('tip');
+                var grad = tip === 'R' ? 'linear-gradient(120deg,#e11d48,#7c3aed)'
+                    : (tip === 'D' ? 'linear-gradient(120deg,#475569,#0f172a)' : 'linear-gradient(120deg,#0284c7,#4338ca)');
+                var etiket = tip === 'R' ? 'R (Kur Farkı)' : (tip === 'D' ? 'Diğer (Y/BOS)' : 'X (Kapanış)');
+                $('#bakiyeDetayHeader').css('background', grad);
+                $('#bdBaslik').text(etiket + ' Bakiye Detayı');
+                $('#bdAltBaslik').text(code + ' — ' + name);
+                $('#bdToplamRozet').text('Yükleniyor...');
+                $('#bakiyeDetayBody').html('<tr><td colspan="5" class="text-center p-4"><div class="spinner-border spinner-border-sm text-primary"></div> Yükleniyor...</td></tr>');
+
+                var modal = new bootstrap.Modal(document.getElementById('bakiyeDetayModal'));
+                modal.show();
+
+                $.get('/Rapor65/GetBakiyeDetay', { cardName: name, cardCode: code, tip: tip, db: activeDbCode }, function (res) {
+                    if (!res || !res.success) {
+                        $('#bakiyeDetayBody').html('<tr><td colspan="5" class="text-center text-danger p-4">' + ((res && res.message) || 'Hata') + '</td></tr>');
+                        $('#bdToplamRozet').text('-');
+                        return;
+                    }
+                    if (!res.data || res.data.length === 0) {
+                        $('#bakiyeDetayBody').html('<tr><td colspan="5" class="text-center text-muted p-4">Bu aktarım tipinde hesap hareketi bulunamadı.</td></tr>');
+                        $('#bdToplamRozet').text('Toplam: 0,00 ₺');
+                        return;
+                    }
+                    var html = '';
+                    res.data.forEach(function (x) {
+                        var dov = (x.currency && x.currency !== 'TRY' && Math.abs(x.fc) > 0.005)
+                            ? (fmtTL(x.fc) + ' ' + x.currency) : '<span class="text-muted">-</span>';
+                        var ekstreUrl = '/Rapor39?bpCode=' + encodeURIComponent(x.acct) + '&aktarimTipi=' + encodeURIComponent(tip) + '&db=' + encodeURIComponent(res.dbKey || activeDbCode);
+                        html += '<tr>'
+                            + '<td class="fw-bold text-secondary">' + x.acct + '</td>'
+                            + '<td>' + (x.name || '') + '</td>'
+                            + '<td class="text-end fw-bold" style="color:' + (x.tl < 0 ? '#e11d48' : '#0f172a') + '">' + fmtTL(x.tl) + '</td>'
+                            + '<td class="text-end text-muted">' + dov + '</td>'
+                            + '<td class="text-center"><a href="' + ekstreUrl + '" target="_blank" class="btn btn-sm btn-outline-primary rounded-circle" title="Hesap ekstresini aç (Rapor39)"><i class="fas fa-up-right-from-square"></i></a></td>'
+                            + '</tr>';
+                    });
+                    $('#bakiyeDetayBody').html(html);
+                    $('#bdToplamRozet').text('Toplam: ' + fmtTL(res.toplamTL) + ' ₺');
+                }).fail(function () {
+                    $('#bakiyeDetayBody').html('<tr><td colspan="5" class="text-center text-danger p-4">Sunucu ile iletişim kurulamadı.</td></tr>');
+                    $('#bdToplamRozet').text('-');
+                });
+            });
+
+            // Ödeme Koşulu Değişikliği
+            $('.bp-payment-term-select').on('change', function() {
+                var select = $(this);
+                var cardCode = select.data('cardcode');
+                var newGroupNum = select.val();
+                var originalVal = select.data('original-value');
+
+                Swal.fire({
+                    title: 'Emin misiniz?',
+                    text: cardCode + " kodlu carinin SAP ödeme koşulunu güncellemek üzeresiniz.",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#3b82f6',
+                    cancelButtonColor: '#94a3b8',
+                    confirmButtonText: 'Evet, Güncelle',
+                    cancelButtonText: 'İptal'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        Swal.fire({ title: 'Güncelleniyor...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); }});
+                        $.ajax({
+                            url: '/Rapor65/UpdateBpPaymentTerm',
+                            type: 'POST',
+                            headers: { 'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val() },
+                            data: { cardCode: cardCode, groupNum: newGroupNum },
+                            success: function(res) {
+                                if(res.success) {
+                                    Swal.fire('Başarılı', res.message, 'success');
+                                    select.data('original-value', newGroupNum); 
+                                } else {
+                                    Swal.fire('Hata', res.message, 'error');
+                                    select.val(originalVal); 
+                                }
+                            },
+                            error: function() {
+                                Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error');
+                                select.val(originalVal); 
+                            }
+                        });
+                    } else {
+                        select.val(originalVal); 
+                    }
+                });
+            });
+
+            // TABLO YÜKLENDİYSE İŞLEMLERİ BAŞLAT
+            if ($('#mainTable').length > 0) {
+                mainTableApi = $('#mainTable').DataTable({
+                    "dom": 'rt<"row mt-3"<"col-md-6 text-muted small"i><"col-md-6"p>>',
+                    "language": { "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/tr.json" },
+                    "paging": false,
+                    "scrollY": "60vh",
+                    "scrollCollapse": true,
+                    "scrollX": true,
+                    "ordering": true,
+                    "orderCellsTop": false,
+                    "autoWidth": false,
+                    "fixedColumns": { left: 2 },
+                    "initComplete": function () {
+                        var api = this.api();
+
+                        // Başlık ve gövdenin tam hizalanması için ufak bir gecikme ekliyoruz
+                        setTimeout(function() {
+                            api.columns.adjust().draw();
+                            $('#tableWrapper').css('opacity', '1');
+                        }, 150);
+                    }
+                });
+            }
+        });
+
+        function formatMoney(amount) {
+            if (amount === undefined || amount === null) return "0.00";
+            return parseFloat(amount).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function openRiskModal(cardName, cardCode) {
+            $('#modalCardName').html(`<span class="badge bg-primary bg-opacity-10 text-primary border border-primary me-2 rounded-pill">${cardCode}</span> <span class="fw-bold">${cardName}</span>`);
+            var myModal = new bootstrap.Modal(document.getElementById('riskDetailModal'));
+            myModal.show();
+            $('#lblXAcik, #lblXGecmis, #lblRAcik, #lblRGecmis, #lblGenelToplam').text('Yükleniyor...');
+            $('#lblXAdat, #lblRAdat').text('-');
+            $('#detailTable tbody').empty();
+
+            if ($.fn.DataTable.isDataTable('#detailTable')) { $('#detailTable').DataTable().destroy(); }
+
+            $.ajax({
+                url: '@Url.Action("GetCariRiskDetay")?db=' + activeDbCode,
+                type: 'GET',
+                data: { cardName: cardName, cardCode: cardCode, useBpDueDate: @(useBpDueDate.ToString().ToLower()) },
+                success: function (data) {
+                    if(data.error) { alert(data.error); return; }
+                    var ozet = data.ozet || data.Ozet;
+                    $('#lblXAcik').text(formatMoney(ozet.x_AcikBakiye || ozet.X_AcikBakiye));
+                    $('#lblRAcik').text(formatMoney(ozet.r_AcikBakiye || ozet.R_AcikBakiye));
+                    $('#lblXGecmis').text(formatMoney(ozet.x_VadesiGecmis || ozet.X_VadesiGecmis));
+                    $('#lblRGecmis').text(formatMoney(ozet.r_VadesiGecmis || ozet.R_VadesiGecmis));
+                    $('#lblXAdat').text(ozet.x_AdatGun || ozet.X_AdatGun);
+                    $('#lblRAdat').text(ozet.r_AdatGun || ozet.R_AdatGun);
+                    $('#lblGenelToplam').text(formatMoney(ozet.genelToplam || ozet.GenelToplam));
+
+                    var satirlar = data.satirlar || data.Satirlar;
+                    var rows = "";
+                    if(satirlar && satirlar.length > 0) {
+                        $.each(satirlar, function (i, item) {
+                            var kod = item.ozelKod || item.OzelKod || "";
+                            var badgeClass = kod.indexOf('X') > -1 ? 'bg-primary bg-opacity-10 text-primary' : (kod.indexOf('R') > -1 ? 'bg-danger bg-opacity-10 text-danger' : 'bg-secondary bg-opacity-10 text-secondary');
+                            var gecikme = item.gecikmeGun !== undefined ? item.gecikmeGun : item.GecikmeGun;
+                            var delayClass = gecikme > 0 ? "text-danger fw-bold" : "text-success";
+                            var delayBadge = gecikme > 0 ? `<i class="fas fa-exclamation-circle text-danger ms-1"></i>` : "";
+                            rows += `<tr>
+                                <td><span class="badge ${badgeClass} w-100 py-2 border">${kod}</span></td>
+                                <td>${item.yon || item.Yon || ""}</td>
+                                <td>${item.vadeTarihi || item.VadeTarihi || ""}</td>
+                                <td class="${delayClass}">${gecikme} ${delayBadge}</td>
+                                <td class="text-end fw-bold font-monospace">${formatMoney(item.tutar || item.Tutar)}</td>
+                            </tr>`;
+                        });
+                    }
+                    $('#detailTable tbody').html(rows);
+                    $('#detailTable').DataTable({
+                        "language": { "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/tr.json" },
+                        "pageLength": 10,
+                        "dom": 'rt<"row mt-3"<"col-md-6 text-muted small"i><"col-md-6"p>>'
+                    });
+                },
+                error: function() { alert("Veri çekilemedi."); }
+            });
+        }
+    </script>
+}

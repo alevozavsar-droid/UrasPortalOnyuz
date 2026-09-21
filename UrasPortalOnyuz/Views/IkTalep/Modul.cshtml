@@ -1,0 +1,212 @@
+﻿@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string kod = (string)ViewBag.Kod;
+    string sekme = (string)ViewBag.Sekme ?? "yeni";
+    string no = (string)ViewBag.No ?? "";
+    string q = Context.Request.Query.ContainsKey("_sekme") ? "?_sekme=1" : "";
+    // Üstteki tür sekmeleri: aynı aileden ekranlar (İK talepleri ya da grup içi finansal işlemler). Denetleyici ViewBag.Sekmeler ile verir.
+    var moduller = ViewBag.Sekmeler as (string Url, string Ad, string Ikon, string Kod)[] ?? new[] { ("/IkTalep/Izin", "İzin Talebi", "fa-umbrella-beach", "IZIN"), ("/IkTalep/Mesai", "Mesai Talebi", "fa-business-time", "MESAI"), ("/IkTalep/Avans", "Avans Talebi", "fa-hand-holding-dollar", "AVANS"), ("/IkTalep/Belge", "Belge Talebi", "fa-file-signature", "BELGE"), ("/IkTalep/Seyahat", "Seyahat Talebi", "fa-plane-departure", "SEYAHAT"), ("/IkTalep/Arac", "Araç Talebi", "fa-car-side", "ARAC") };
+    string veriUcu = (string)ViewBag.VeriUcu ?? "/IkTalep";
+    // Grup İçi ekranları (Yansıtma / Mahsup / Temlik): aynı sayfada üç üst sekme — İşlem Ekranı (varsayılan), Raporu, Muhasebe Kontrolü.
+    // Kaynak: GRUP_ICI_OZEL_FINANSAL_ISLEMLER_SEKME_YAPISI.pdf. Betik: wwwroot/js/grup-ici-sekmeler.js
+    bool grupIci = ViewBag.GrupIci == true;
+    string ust = (string)ViewBag.Ust ?? "islem";
+    string kisa = kod == "YANSITMA" ? "Yansıtma" : kod == "MAHSUP" ? "Mahsup" : kod == "TEMLIK" ? "Temlik" : "";
+}
+@*
+    TALEP MOTORU EKRANI — Mesai / Belge / Seyahat / Araç (modül tanımı sunucudan gelir: /IkTalep/TmVeri?kod=…)
+    Nakit Avans ve İzin ile aynı yerleşim: gösterge kutucukları, Yeni Talep (alanlar modül tanımından çizilir, sistem hesabı ve
+    onay akışı canlı önizlenir), Taleplerim, Talep Detayı (üç statü, kişi kartları, detaylar, kilitli sistem / kaynak alanları, onay süreci,
+    kaynak sistem olayı simülasyonu, timeline, ekler, audit), Takvim (modül destekliyorsa), Onay Bekleyenler, Takip Raporu.
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<style>
+    .iz-hesap { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 10px; font-size: .72rem; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 6px 10px; }
+    .iz-hesap b { color: #0f172a; } .iz-hesap .h { grid-column: 1 / -1; font-size: .6rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; letter-spacing: .05em; }
+    .iz-tur-bilgi { font-size: .68rem; color: #64748b; margin-top: 2px; min-height: 14px; }
+    .iz-takvim { width: 100%; border-collapse: collapse; font-size: .66rem; table-layout: fixed; }
+    .iz-takvim th, .iz-takvim td { border: 1px solid #eef2f7; padding: 0; height: 24px; text-align: center; }
+    .iz-takvim th { background: #f8fafc; font-weight: 700; color: #475569; font-size: .6rem; }
+    .iz-takvim th.hs, .iz-takvim td.hs { background: #f1f5f9; color: #94a3b8; } .iz-takvim th.bugun { background: #dbeafe; color: #1d4ed8; }
+    .iz-takvim td.ad { text-align: left; padding: 0 6px; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .7rem; }
+    .iz-takvim td.ad small { color: #94a3b8; font-weight: 500; }
+    .iz-takvim td .iz { display: block; height: 18px; margin: 3px 0; border-radius: 3px; cursor: pointer; }
+    .iz-takvim td .iz.bekliyor { opacity: .45; background-image: repeating-linear-gradient(45deg, transparent 0 3px, rgba(255,255,255,.6) 3px 6px); }
+    .iz-lejant { display: flex; gap: 10px; flex-wrap: wrap; font-size: .66rem; color: #475569; margin-top: 6px; }
+    .iz-lejant span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--c); margin-right: 4px; vertical-align: -1px; }
+    .iz-ay { display: flex; align-items: center; gap: 8px; } .iz-ay b { min-width: 120px; text-align: center; font-size: .8rem; }
+    .iz-uyari-liste { margin: 0; padding-left: 16px; font-size: .7rem; color: #713f12; }
+    .tm-filo td .na-bs { font-size: .6rem; }
+    /* Grup İçi üst sekmeleri (aynı sayfa): İşlem Ekranı · Raporu · Muhasebe Kontrolü */
+    .gi-ust { margin-bottom: 10px; }
+    .gi-ust button { font-size: .74rem; font-weight: 700; color: #475569; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px 11px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+    .gi-ust button:hover { border-color: #cbd5e1; background: #f8fafc; }
+    .gi-ust button.aktif { background: var(--na-k); border-color: var(--na-k); color: #fff; }
+    .gi-ust button .n { font-size: .62rem; background: rgba(255,255,255,.25); border-radius: 999px; padding: 1px 6px; }
+    .gi-ust button:not(.aktif) .n { background: #f1f5f9; color: #475569; }
+    .gi-panel { display: none; } .gi-panel.aktif { display: block; }
+    .gi-sirket { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+    .gi-sirket > div { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 9px; font-size: .7rem; }
+    .gi-sirket b { display: block; font-size: .76rem; color: #0f172a; margin-bottom: 2px; }
+    .gi-sirket .s { display: flex; justify-content: space-between; color: #475569; }
+    .gi-dagilim { display: grid; gap: 5px; font-size: .7rem; }
+    .gi-dagilim .r { display: grid; grid-template-columns: 1fr 34px; gap: 8px; align-items: center; }
+    .gi-dagilim .b { height: 6px; background: #f1f5f9; border-radius: 999px; overflow: hidden; border: 1px solid #e2e8f0; grid-column: 1 / -1; }
+    .gi-dagilim .b i { display: block; height: 100%; background: var(--na-k); }
+    .gi-dagilim .v { text-align: right; font-weight: 700; color: #475569; }
+    .gi-kontrol-ozet { display: flex; gap: 10px; flex-wrap: wrap; font-size: .7rem; color: #475569; align-items: center; }
+    .gi-kontrol-ozet label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+    .gi-not { font-size: .7rem; color: #475569; } .gi-not li { margin-bottom: 3px; }
+    .gi-olay { font-size: .68rem; color: #475569; } .gi-olay code { font-size: .64rem; background: #f1f5f9; padding: 0 4px; border-radius: 4px; color: #0f172a; }
+</style>
+}
+
+<div class="container-fluid py-3 na" id="tm" data-kod="@kod" data-sekme="@sekme" data-no="@no">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas" id="tmIkon"></i></span><span id="tmAd">Talep</span></h4>
+        <span id="tmAkisOzeti" style="font-size:.68rem;font-weight:700;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px"><i class="fas fa-route me-1"></i>…</span>
+        <span class="sub w-100" id="tmAciklama"></span>
+    </div>
+    @* Tür sekmeleri: denetleyici boş dizi verirse (ör. Grup İçi ekranları) çizilmez; ekranlar arası geçiş sol menüden yapılır *@
+    @if (moduller.Length > 0)
+    {
+    <div class="na-turler" data-dinamik="kapali">
+        @foreach (var m in moduller) { <a href="@(m.Item1)@(q)" class="@(m.Item4 == kod ? "aktif" : "")"><i class="fas @m.Item3"></i>@m.Item2</a> }
+    </div>
+    }
+    @if (grupIci)
+    {
+    @* Sekme 1 varsayılan açılır; 2 ve 3 aynı sayfanın sekmeleridir (ayrı menü değil) *@
+    <div class="na-turler gi-ust" id="giUst" data-ust="@ust" data-dinamik="kapali">
+        <button type="button" data-u="islem" class="@(ust == "islem" ? "aktif" : "")"><i class="fas fa-pen-to-square"></i>@kisa İşlem Ekranı</button>
+        <button type="button" data-u="rapor" class="@(ust == "rapor" ? "aktif" : "")"><i class="fas fa-table-list"></i>@kisa Raporu <span class="n" id="giRaporN">…</span></button>
+        <button type="button" data-u="kontrol" class="@(ust == "kontrol" ? "aktif" : "")"><i class="fas fa-file-invoice"></i>@kisa Muhasebe Kontrolü <span class="n" id="giKontrolN">…</span></button>
+    </div>
+    }
+    <div class="gi-panel @(ust == "islem" ? "aktif" : "")" id="giIslem">
+    <div class="na-kpi" id="tmKpi" data-dinamik="kapali"></div>
+    <div class="na-sekme" id="tmSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="yeni"><i class="fas fa-plus me-1"></i>Yeni Talep</button>
+        <button type="button" data-p="liste">Taleplerim <span class="n" id="tmNListe">0</span></button>
+        <button type="button" data-p="detay"><i class="fas fa-file-lines me-1"></i>Talep Detayı <span class="n" id="tmDetayNo">—</span></button>
+        <button type="button" data-p="takvim" id="tmTakvimSekme" style="display:none"><i class="fas fa-calendar-days me-1"></i><span id="tmTakvimAd">Takvim</span></button>
+        <button type="button" data-p="onay">Onay Bekleyenler <span class="n" id="tmNOnay">0</span></button>
+        <button type="button" data-p="takip">Takip Raporu <span class="n" id="tmNTakip">0</span></button>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+
+    <div class="na-panel" data-p="yeni">
+        <form id="tmForm" autocomplete="off" novalidate>
+            <div class="row g-2">
+                <div class="col-lg-8">
+                    <div class="na-kart">
+                        <div class="na-kart-b"><span><i class="fas fa-id-card me-1"></i>Talep Üst Bilgileri ve Kişiler</span><span class="not">Talep No, tarih, şirket, departman sistemden otomatik</span></div>
+                        <div class="na-kart-g">
+                            <div class="row g-2">
+                                <div class="col-md-3"><label class="form-label">Talep No</label><input class="form-control" id="tmNoOnizleme" disabled></div>
+                                <div class="col-md-3"><label class="form-label">Talep Tarihi / Saati</label><input class="form-control" id="tmTarih" disabled></div>
+                                <div class="col-md-6"><label class="form-label"><span id="tmKullananEtiket">İlgili personel</span> <span class="z">*</span></label><select class="form-select" name="kullanan" id="tmKullanan"></select></div>
+                            </div>
+                            <div class="row g-2 mt-1"><div class="col-md-6"><div class="iz-hesap" id="tmOlusturan"></div></div><div class="col-md-6"><div class="iz-hesap" id="tmKullananBilgi"></div></div></div>
+                            <div class="na-uyari" id="tmKullananUyari"></div>
+                        </div>
+                    </div>
+                    <div class="na-kart">
+                        <div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>Talep Detayları</span><span class="not">* zorunlu alan</span></div>
+                        <div class="na-kart-g">
+                            <div class="row g-2">
+                                <div class="col-md-4"><label class="form-label">Talep Türü <span class="z">*</span></label><select class="form-select" name="_tur" id="tmTur"></select><div class="iz-tur-bilgi" id="tmTurBilgi"></div></div>
+                                <div class="col-md-8" id="tmAlanlarUst" style="display:contents"></div>
+                                <div id="tmAlanlar" style="display:contents"></div>
+                                <div class="col-12"><div class="iz-hesap" id="tmHesap"><div class="h">Sistem hesabı</div><span class="text-muted">Alanlar dolduruldukça hesaplanır.</span></div></div>
+                                <div class="col-md-4"><label class="form-label">Ek Dosya</label><input class="form-control" type="file" id="tmEk" multiple></div>
+                                <div class="col-md-8"><label class="form-label">Onay akışı <span class="form-text d-inline">(tür, süre, tutar ve kurallara göre parametrik)</span></label><div class="na-akis" id="tmAkis"></div></div>
+                                <div class="col-12"><label class="form-label">Kural kontrolleri</label><div id="tmKurallar" class="na-mini">—</div></div>
+                            </div>
+                            <div class="d-flex justify-content-end gap-2 mt-2 pt-2 border-top"><button type="reset" class="btn btn-light btn-sm"><i class="fas fa-eraser me-1"></i>Temizle</button><button type="submit" class="btn btn-primary btn-sm" id="tmGonder"><i class="fas fa-paper-plane me-1"></i>Talebi Oluştur</button></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="na-kart" id="tmMasterKart" style="display:none"><div class="na-kart-b"><span id="tmMasterBaslik"></span></div><div class="na-kart-g p-0" id="tmMaster"></div></div>
+                    <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-sliders me-1"></i>Parametreler</span><span class="not">iş kuralı eşikleri</span></div><div class="na-kart-g" id="tmParametreler"></div></div>
+                    <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Kritik Kurallar</span></div><div class="na-kart-g" style="font-size:.7rem;color:#475569"><ul class="mb-0 ps-3" id="tmKuralListesi"></ul></div></div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="na-panel" data-p="liste">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Taleplerim</span><span class="not">oluşturduğum ya da adıma açılan talepler · satıra tıklayın</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="tmListe" data-dinamik="kapali"><thead><tr><th>Talep No</th><th>Personel</th><th>Tür</th><th>Özet</th><th>Talep Durumu</th><th id="tmListeD2">Durum 2</th><th id="tmListeD3">Durum 3</th></tr></thead><tbody></tbody></table></div></div></div>
+    </div>
+    <div class="na-panel" data-p="detay"><div id="tmDetay"><div class="na-bos">Listeden bir talep seçin.</div></div></div>
+    <div class="na-panel" data-p="takvim">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-days me-1"></i><span id="tmTakvimBaslik">Takvim</span></span>
+            <span class="d-flex gap-2 align-items-center"><select class="form-select form-select-sm" id="tmTakvimFiltre" style="width:auto;font-size:.7rem;min-height:26px;padding:1px 24px 1px 6px"></select><span class="iz-ay"><button type="button" class="btn btn-light btn-sm py-0" id="tmAyOnce">‹</button><b id="tmAyAd"></b><button type="button" class="btn btn-light btn-sm py-0" id="tmAySonra">›</button><button type="button" class="btn btn-light btn-sm py-0" id="tmAyBugun">Bugün</button></span></span></div>
+            <div class="na-kart-g p-1"><div class="table-responsive"><table class="iz-takvim" id="tmTakvim" data-dinamik="kapali"></table></div><div class="iz-lejant" id="tmLejant"></div></div></div>
+    </div>
+    <div class="na-panel" data-p="onay">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clipboard-check me-1"></i>Onay Bekleyen Talepler</span><span class="not">yönetici / direktör / İK / idari işler kuyruğu · hızlı işlem ya da satıra tıklayın</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="tmOnayListe" data-dinamik="kapali"><thead><tr><th>Talep No</th><th>Personel</th><th>Departman</th><th>Tür</th><th>Özet</th><th>Bekleyen Adım</th><th>Onaycı</th><th class="s">Bekliyor</th><th>Kural Uyarısı</th><th>Hızlı İşlem</th></tr></thead><tbody></tbody></table></div></div></div>
+    </div>
+    <div class="na-panel" data-p="takip">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i><span id="tmTakipBaslik">Takip Raporu</span></span><span class="not">tüm talepler · sütun başlığından sıralama / filtre</span></div>
+            <div class="na-kart-g">
+                <div class="na-filtre"><input class="form-control" id="tmTakipAra" placeholder="Talep no, kişi, tür…"><select class="form-select" id="tmTakipTur"><option value="">Tür: tümü</option></select><select class="form-select" id="tmTakipDurum"><option value="">Talep durumu: tümü</option></select><select class="form-select" id="tmTakipD2"><option value="">Durum: tümü</option></select><span class="ms-auto na-mini" id="tmTakipSayi"></span></div>
+                <div class="table-responsive"><table class="na-tablo" id="tmTakip"><thead><tr></tr></thead><tbody></tbody></table></div>
+            </div></div>
+    </div>
+    </div>@* /giIslem *@
+
+    @if (grupIci)
+    {
+    @* ---- Sekme 2: <Modül> Raporu — bu modülün işlemleri; gösterge kutucukları, şirket bazında açık işlemler, tür dağılımı, liste ---- *@
+    <div class="gi-panel @(ust == "rapor" ? "aktif" : "")" id="giRapor">
+        <div class="na-kpi" id="giRaporKpi" data-dinamik="kapali"></div>
+        <div class="row g-2">
+            <div class="col-lg-8">
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>@kisa İşlem Listesi</span><span class="not" id="giRaporSayi"></span></div>
+                    <div class="na-kart-g">
+                        <div class="na-filtre"><input class="form-control" id="giRaporAra" placeholder="Talep no, şirket, kişi…"><select class="form-select" id="giRaporTur"><option value="">Tür: tümü</option></select><select class="form-select" id="giRaporDurum"><option value="">Durum: tümü</option><option value="onay">Onay bekleyen</option><option value="acik">Açık (kapanmamış)</option><option value="kapandi">Kapanan</option><option value="red">Reddedilen / iptal</option></select><span class="ms-auto na-mini">satıra tıklayınca detay işlem ekranında açılır</span></div>
+                        <div class="table-responsive"><table class="na-tablo" id="giRaporTablo"><thead><tr></tr></thead><tbody></tbody></table></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-building me-1"></i>Şirket Bazında Açık İşlemler</span><span class="not">onaylı, kapanmamış</span></div><div class="na-kart-g gi-sirket" id="giRaporSirket"></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-chart-simple me-1"></i>Türe Göre Dağılım</span><span class="not">tüm işlemler</span></div><div class="na-kart-g gi-dagilim" id="giRaporTurler"></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-route me-1"></i>Süreç Özeti</span></div><div class="na-kart-g gi-not" id="giRaporSurec"></div></div>
+            </div>
+        </div>
+    </div>
+
+    @* ---- Sekme 3: <Modül> Muhasebe Kontrolü — fiş / fatura / mutabakat / kapanış kontrolü; her işlem için kontrol sonucu ---- *@
+    <div class="gi-panel @(ust == "kontrol" ? "aktif" : "")" id="giKontrol">
+        <div class="na-kpi" id="giKontrolKpi" data-dinamik="kapali"></div>
+        <div class="row g-2">
+            <div class="col-lg-9">
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas fa-file-invoice me-1"></i>@kisa Muhasebe Kontrol Listesi</span><span class="not" id="giKontrolSayi"></span></div>
+                    <div class="na-kart-g">
+                        <div class="na-filtre gi-kontrol-ozet"><input class="form-control" id="giKontrolAra" placeholder="Talep no, şirket, fiş no…" style="max-width:240px"><select class="form-select" id="giKontrolSonuc"><option value="">Kontrol sonucu: tümü</option><option value="ok">Tamam</option><option value="bekle">Bekleyen adım var</option><option value="hata">Eksik / hatalı</option></select><label><input type="checkbox" id="giKontrolOnay"> Onay sürecindekileri de göster</label><label><input type="checkbox" id="giKontrolIptal"> İptal / red edilenleri göster</label></div>
+                        <div class="table-responsive"><table class="na-tablo" id="giKontrolTablo"><thead><tr></tr></thead><tbody></tbody></table></div>
+                    </div>
+                </div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Muhasebe Olay Kaydı</span><span class="not">kaynak sistemden gelen fiş, fatura, mutabakat ve kapanış olayları · son 30</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:280px"><table class="na-tablo" id="giKontrolOlay" data-dinamik="kapali"><thead><tr><th>Tarih</th><th>Talep No</th><th>Olay</th><th>Değer</th><th>Kaynak</th></tr></thead><tbody></tbody></table></div></div></div>
+            </div>
+            <div class="col-lg-3">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>Kontrol Adımları</span></div><div class="na-kart-g gi-not"><ol class="mb-0 ps-3" id="giKontrolAdimlar"></ol></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Kurallar</span></div><div class="na-kart-g gi-not"><ul class="mb-0 ps-3" id="giKontrolKurallar"></ul></div></div>
+            </div>
+        </div>
+    </div>
+    }
+</div>
+
+@section Scripts {
+<script src="/js/talep-modulu.js?v=2"></script>
+@if (grupIci) { <script src="/js/grup-ici-sekmeler.js?v=1"></script> }
+}

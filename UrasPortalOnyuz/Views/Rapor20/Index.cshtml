@@ -1,0 +1,1923 @@
+﻿@model List<WebApplication3.Controllers.Rapor20CariEkstreViewModel>
+@using WebApplication3.Models
+@using WebApplication3.Controllers
+@using System.Globalization
+@using Microsoft.AspNetCore.Routing
+
+@{
+    ViewData["Title"] = (bool)(ViewBag.IsEnglish ?? false) ? "Account Statement Report" : "Cari Ekstre Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    
+    // Aktif Veritabanını (Şirketi) URL veya Cookie'den merkezi olarak alıyoruz
+    var currentDb = Context.Request.Query["db"].ToString();
+    if (string.IsNullOrEmpty(currentDb))
+    {
+        currentDb = Context.Request.Cookies["SelectedDatabase"];
+    }
+
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? "URASKIMYA";
+    var selectedBpCode = (string)ViewBag.SelectedBpCode;
+    var selectedBpCodes = ViewBag.SelectedBpCodes as List<string> ?? new List<string>();
+    if (!selectedBpCodes.Any() && !string.IsNullOrEmpty(selectedBpCode)) { selectedBpCodes = new List<string> { selectedBpCode }; }
+    var selectedAktarimTipi = ViewBag.SelectedAktarimTipi as List<string> ?? new List<string>();
+    var selectedBakiyeDurumu = ViewBag.SelectedBakiyeDurumu as List<string> ?? new List<string>();
+    
+    // Yeni eklenen ve mevcut filtreler
+    var includeInitialBalance = (bool)(ViewBag.IncludeInitialBalance ?? false);
+    var includeConnectedBp = (bool)(ViewBag.IncludeConnectedBp ?? false);
+    var tlEkstre = (bool)(ViewBag.TlEkstre ?? false);
+    var isConsolidated = (bool)(ViewBag.IsConsolidated ?? false);
+    var useBpDueDate = (bool)(ViewBag.UseBpDueDate ?? false);
+    var includeOpenOrders = (bool)(ViewBag.IncludeOpenOrders ?? false);
+    var isEnglish = (bool)(ViewBag.IsEnglish ?? false);
+    var hasNotes = (bool)(ViewBag.HasNotes ?? false);
+
+    var connectedBpCode = (string)ViewBag.ConnectedBpCode;
+    var connectedBpName = (string)ViewBag.ConnectedBpName;
+
+    var bpRelatedAccountBalances = ViewBag.BpRelatedAccountBalances as List<AccountBalanceViewModel> ?? new List<AccountBalanceViewModel>();
+    var totalBpRelatedAccountBalance = bpRelatedAccountBalances.Sum(b => b.TLBalance);
+
+    var mutabakatUyarilari = ViewBag.MutabakatUyarilari as List<UyariViewModel> ?? new List<UyariViewModel>();
+
+    var bpName = ViewBag.SelectedBpName ?? (isEnglish ? "BP Name Not Found" : "Muhatap Adı Bulunamadı");
+    var cariList = ViewBag.CariList as List<CariViewModel> ?? new List<CariViewModel>();
+    var aktarimTipiList = ViewBag.AktarimTipiList as List<string> ?? new List<string>();
+    var modelData = Model ?? new List<Rapor20CariEkstreViewModel>();
+
+    // 1. Önce Cari Koda göre gruplama
+    var groupedByBp = modelData.GroupBy(d => d.MuhatapKodu).ToList();
+    int baseColSpan = isConsolidated ? 10 : 9;
+
+    // Excel/PDF İndirme Butonları için Route Değerleri
+    var routeValues = new RouteValueDictionary();
+    if (!string.IsNullOrEmpty(currentDb)) { routeValues.Add("db", currentDb); }
+    for (int i = 0; i < selectedBpCodes.Count; i++)
+    {
+        routeValues.Add($"bpCode[{i}]", selectedBpCodes[i]);
+    }
+    routeValues.Add("startDate", ViewBag.StartDate);
+    routeValues.Add("endDate", ViewBag.EndDate);
+    routeValues.Add("includeInitialBalance", includeInitialBalance);
+    routeValues.Add("includeConnectedBp", includeConnectedBp);
+    routeValues.Add("tlEkstre", tlEkstre);
+    routeValues.Add("isConsolidated", isConsolidated);
+    routeValues.Add("useBpDueDate", useBpDueDate);
+    routeValues.Add("includeOpenOrders", includeOpenOrders);
+    routeValues.Add("isEnglish", isEnglish);
+    
+    for (int i = 0; i < selectedAktarimTipi.Count; i++)
+    {
+        routeValues.Add($"aktarimTipi[{i}]", selectedAktarimTipi[i]);
+    }
+    for (int i = 0; i < selectedBakiyeDurumu.Count; i++)
+    {
+        routeValues.Add($"bakiyeDurumu[{i}]", selectedBakiyeDurumu[i]);
+    }
+    // Mutabakat formu tek cariye hitaben üretildiği için ilk seçili cariyi
+    // düz "bpCode" anahtarıyla da geçiyoruz.
+    var mutabakatRouteValues = new RouteValueDictionary(routeValues);
+    foreach (var anahtar in mutabakatRouteValues.Keys.Where(k => k.StartsWith("bpCode[")).ToList())
+    {
+        mutabakatRouteValues.Remove(anahtar);
+    }
+    if (selectedBpCodes.Any()) { mutabakatRouteValues["bpCode"] = selectedBpCodes.First(); }
+
+    var portraitRouteValues = new RouteValueDictionary(routeValues) { { "orientation", "Portrait" } };
+    var landscapeRouteValues = new RouteValueDictionary(routeValues) { { "orientation", "Landscape" } };
+
+    // Şirket ve Genel Kümülatif Özet Tabloları İçin Değişkenler
+    var allRowsForTotal = modelData.Where(d => d.IslemTipi != "AT").ToList();
+    var companyGroupsForTotal = allRowsForTotal.GroupBy(d => d.Sirket).ToList();
+    var currencyGroupsForTotal = allRowsForTotal.GroupBy(d => d.IslemPB).ToList();
+
+    decimal finalTotalBorcTRY = allRowsForTotal.Where(d => d.IslemTipi != "DB" && d.IslemTipi != "OB").Sum(d => d.TRYB ?? 0) + allRowsForTotal.Where(d => (d.IslemTipi == "DB" || d.IslemTipi == "OB") && (d.TRY_KmlBky ?? 0) > 0).Sum(d => d.TRY_KmlBky ?? 0);
+    decimal finalTotalAlacakTRY = allRowsForTotal.Where(d => d.IslemTipi != "DB" && d.IslemTipi != "OB").Sum(d => d.TRYA ?? 0) + allRowsForTotal.Where(d => (d.IslemTipi == "DB" || d.IslemTipi == "OB") && (d.TRY_KmlBky ?? 0) < 0).Sum(d => Math.Abs(d.TRY_KmlBky ?? 0));
+    decimal finalNetBalanceTRY = finalTotalBorcTRY - finalTotalAlacakTRY;
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8f9fa; overflow-x: hidden; }
+        .container-fluid { width: 100% !important; max-width: 100% !important; padding-left: 15px !important; padding-right: 15px !important; margin: 0 !important; }
+        .header { background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%); color: white; padding: 20px; border-radius: 0 0 10px 10px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
+        .database-info { background-color: #e9ecef; border-left: 4px solid #6a11cb; padding: 10px 15px; margin-bottom: 20px; border-radius: 5px; }
+        .select2-container { width: 100% !important; max-width: 100%; }
+        .table-container { margin-top: 1rem; background-color: white; width: 100%; padding: 10px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow-x: auto; }
+        table.rapor-tablo { width: 100% !important; border-collapse: collapse; table-layout: auto; margin-bottom: 0; font-size: 0.75rem; }
+        /* Sütun genişlikleri aşağıdaki "TABLOYU EKRANA SIĞDIR" bölümünde yönetiliyor. */
+        table th, table td { padding: 8px 5px; text-align: left; border: 1px solid #dee2e6; vertical-align: middle; }
+        th { background-color: #6a11cb; color: white; position: sticky; top: 0; z-index: 10; }
+        tr { background-color: white; }
+        tr:hover { background-color: #e9ecef; }
+        .text-right { text-align: right !important; }
+        .text-center { text-align: center !important; }
+        .borc { color: #dc3545; font-weight: bold; }
+        .alacak { color: #198754; font-weight: bold; }
+        .btn-action-custom { border: none; padding: 8px 15px; border-radius: 50px; font-weight: bold; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); transition: all 0.3s; }
+        .btn-action-custom:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15); }
+        .btn-download { background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%); color: white; }
+        .btn-download-landscape { background-image: linear-gradient(135deg, #ffc107 0%, #ff9800 100%); color: #343a40; }
+        .btn-download-excel { background-image: linear-gradient(135deg, #28a745 0%, #218838 100%); color: white; }
+        .btn-download-form { background-image: linear-gradient(135deg, #e53935 0%, #b71c1c 100%); color: white; border: none; }
+        .btn-recon { background-image: linear-gradient(135deg, #17a2b8 0%, #117a8b 100%); color: white; }
+        .btn-save-recon { background-image: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); color: white; }
+        .cari-bilgi { background-color: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #6a11cb; width: 100%; }
+        .logo { font-size: 24px; font-weight: bold; color: #6a11cb; }
+        .at-row td { background-color: #e0f7fa !important; font-weight: bold !important; }
+        .db-row td { background-color: #e9ecef !important; font-weight: bold !important; }
+        .order-row td { background-color: #fff8e1 !important; color: #5c3a21; font-style: italic; border-left: 3px solid #ffc107; }
+        .bp-group-header { background-color: #6a11cb; color: white; padding: 10px; border-radius: 5px 5px 0 0; margin: 20px 0 0 0; font-size: 1.1rem; }
+        .bp-contact-info { background-color: #f1f3f5; border: 1px solid #dee2e6; border-top: none; border-radius: 0 0 5px 5px; padding: 10px 15px; margin-bottom: 10px; font-size: 0.9rem; color: #495057; }
+        .selectable-text { user-select: all; cursor: pointer; padding: 2px 4px; border-radius: 3px; transition: background-color 0.2s; }
+        .selectable-text:hover { background-color: #e2e6ea; }
+        .btn-copy { border: 1px solid #ced4da; background-color: white; color: #6c757d; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; transition: all 0.2s; }
+        .btn-copy:hover { background-color: #6a11cb; color: white; border-color: #6a11cb; }
+        .account-balance-table th { background-color: #dc3545; color: white; }
+        .modal-xxl { max-width: 95vw; }
+        .amount-input { width: 120px; font-weight: bold; text-align: right; border-radius: 6px; border: 1px solid #ced4da; padding: 5px 10px; }
+        .amount-input:disabled { background-color: #e9ecef; color: #6c757d; }
+        .amount-input:focus { border-color: #6a11cb; box-shadow: 0 0 0 0.2rem rgba(106, 17, 203, 0.25); outline: none; }
+        .chk-row { transform: scale(1.4); cursor: pointer; accent-color: #6a11cb; }
+        .summary-box { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px 15px; border-radius: 8px; min-width: 160px; }
+        .note-bubble { background-color: #e3f2fd; border-radius: 12px; padding: 15px; margin-bottom: 12px; position: relative; border-left: 5px solid #0dcaf0; }
+        .note-bubble.task-pending { background-color: #fff3cd; border-left-color: #ffc107; }
+        .note-bubble.task-done { background-color: #d1e7dd; border-left-color: #198754; opacity: 0.85; }
+        .note-meta { font-size: 0.85rem; color: #6c757d; margin-bottom: 8px; border-bottom: 1px solid #dee2e6; padding-bottom: 6px; }
+        .nav-pills .nav-link.active { background-color: #6a11cb; color: white; border-radius: 6px; }
+        .nav-pills .nav-link { color: #495057; border-radius: 6px; margin-right: 5px; background-color: #e9ecef; }
+
+        /* ==================================================================
+           MODERN GÖRÜNÜM KATMANI
+           Portalın yeni tasarım diline uyum + tam sayfa sığdırma.
+           ================================================================== */
+        body { font-family: 'Inter', 'Segoe UI', Tahoma, sans-serif; background-color: var(--bg-main, #f4f6fb); }
+
+        .container-fluid { padding-left: 0 !important; padding-right: 0 !important; }
+
+        .header {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #0f172a 100%);
+            border-radius: 18px; padding: 18px 22px; margin-bottom: 16px;
+            box-shadow: var(--shadow-md, 0 10px 30px rgba(15,23,42,.10));
+            position: relative; overflow: hidden;
+        }
+        .header::after {
+            content: ""; position: absolute; inset: 0; pointer-events: none;
+            background: radial-gradient(520px 240px at 6% -30%, rgba(0,158,247,.42), transparent 62%),
+                        radial-gradient(420px 240px at 98% 130%, rgba(99,102,241,.36), transparent 60%);
+        }
+        .header > * { position: relative; z-index: 1; }
+        .logo { color: #fff; }
+
+        .database-info {
+            background: var(--bg-card, #fff); border: 1px solid var(--border-color, #e8ecf4);
+            border-left: 4px solid var(--metro-primary, #009ef7);
+            border-radius: 12px; padding: 10px 14px; margin-bottom: 14px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .card { border-radius: 18px !important; border: 1px solid var(--border-color, #e8ecf4) !important; }
+
+        .secim-ipucu { font-size: .72rem; color: var(--text-secondary, #64748b); margin-top: 5px; font-weight: 600; }
+        .badge-secim {
+            background: linear-gradient(135deg,#009ef7,#6366f1); color: #fff;
+            padding: .2rem .6rem; border-radius: 999px; font-size: .7rem; font-weight: 700;
+        }
+
+        /* ---------- Tabloyu tam sayfaya sığdır ----------
+           Not: .table-container sınıfı layout'ta gövdeyi saran dış kutuda da
+           kullanılıyor. Yükseklik sınırı yalnızca rapor tablosunun kendi kutusuna
+           uygulanmalı, yoksa tüm sayfa iki kez kaydırılabilir hâle geliyor. */
+        .main-content > .table-container {
+            max-height: none !important;
+            overflow: visible !important;
+        }
+
+        .table-container {
+            padding: 0; border-radius: 16px; margin-top: 12px;
+            border: 1px solid var(--border-color, #e8ecf4);
+            box-shadow: var(--shadow-sm);
+            overflow: visible;          /* kendi scroll'u yok; sayfa ile birlikte kayar */
+        }
+
+        table.rapor-tablo { font-size: 0.655rem; }
+
+        table.rapor-tablo th,
+        table.rapor-tablo td { padding: 3px 5px !important; border-color: #eef2f7 !important; }
+
+        /* Başlık satırı sayfa kaydıkça üst barın altına yapışır */
+        table.rapor-tablo th {
+            background: #0f172a !important;
+            color: #fff !important;
+            font-size: .58rem; font-weight: 700;
+            letter-spacing: .03em; text-transform: uppercase;
+            line-height: 1.25;
+            white-space: normal;          /* başlık iki satıra inebilsin */
+            overflow-wrap: anywhere;
+            vertical-align: bottom;
+            position: sticky; top: var(--header-height, 72px); z-index: 12;
+            border-color: #1e293b !important;
+        }
+
+        table.rapor-tablo tbody tr:nth-child(even) td { background-color: #fbfcfe; }
+        table.rapor-tablo tbody tr:hover td { background-color: #eef7ff !important; }
+
+
+        .bp-group-header {
+            background: linear-gradient(135deg,#009ef7,#6366f1);
+            border-radius: 12px 12px 0 0; font-size: .92rem; font-weight: 700;
+            padding: 9px 14px; margin: 14px 0 0 0;
+        }
+        .bp-contact-info { border-radius: 0 0 12px 12px; font-size: .78rem; padding: 8px 14px; }
+
+        .account-balance-table th { background-color: #0f172a !important; }
+
+        .btn-action-custom { padding: .5rem 1rem; font-size: .82rem; border-radius: 10px; }
+        .btn-download { background: linear-gradient(135deg,#009ef7,#6366f1); }
+
+        .summary-box { border-radius: 12px; border-color: var(--border-color, #e8ecf4); }
+
+        @@media (min-width: 1600px) {
+            table.rapor-tablo { font-size: 0.70rem; }
+            table.rapor-tablo th { font-size: .61rem; }
+        }
+        @@media (max-width: 1440px) {
+            table.rapor-tablo { font-size: 0.62rem; }
+            table.rapor-tablo th,
+            table.rapor-tablo td { padding: 2px 4px !important; }
+        }
+
+        /* ==================================================================
+           FİLTRE ALANI - hizalı ve modern
+           Bootstrap kolon genişlikleri yerine eşit paylaşan bir ızgara
+           kullanılıyor; böylece bütün alanlar aynı yükseklik ve hizada.
+           ================================================================== */
+        form .row.g-3.align-items-end {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+            gap: 12px !important;
+            align-items: end;
+            margin: 0 !important;
+        }
+        form .row.g-3.align-items-end > [class*="col-"] {
+            width: auto !important; max-width: none !important;
+            flex: none !important; padding: 0 !important;
+            display: flex; flex-direction: column;
+        }
+        form .row.g-3.align-items-end .form-label {
+            font-size: .68rem !important; font-weight: 800 !important;
+            letter-spacing: .06em; text-transform: uppercase;
+            color: var(--text-secondary, #64748b) !important; margin-bottom: 5px;
+        }
+
+        /* Tüm giriş alanları aynı yükseklikte */
+        form .form-control,
+        form .select2-container--bootstrap-5 .select2-selection {
+            min-height: 40px !important; height: 40px !important;
+            border-radius: 10px !important;
+            border: 1px solid var(--border-color, #e8ecf4) !important;
+            font-size: .85rem;
+        }
+        form .select2-container--bootstrap-5 .select2-selection--multiple {
+            padding: 0 10px !important; display: flex !important; align-items: center !important;
+            overflow: hidden;
+        }
+        form .form-control:focus,
+        form .select2-container--bootstrap-5.select2-container--focus .select2-selection {
+            border-color: var(--metro-primary, #009ef7) !important;
+            box-shadow: 0 0 0 3px rgba(0,158,247,.18) !important;
+        }
+
+        /* Seçilenler tek tek listelenmesin; yerine "N seçildi" özeti */
+        .select2-container--bootstrap-5 .select2-selection--multiple .select2-selection__rendered {
+            display: flex !important; align-items: center; flex-wrap: nowrap !important;
+            padding: 0 !important; margin: 0 !important; overflow: hidden;
+        }
+        .select2-container--bootstrap-5 .select2-selection--multiple .select2-selection__choice {
+            display: none !important;
+        }
+        .select2-container--bootstrap-5 .select2-selection--multiple .select2-search--inline {
+            flex: 1; min-width: 40px;
+        }
+        .secim-ozet-li { list-style: none; margin: 0 6px 0 0; display: flex; align-items: center; }
+        .secim-ozet {
+            background: linear-gradient(135deg,#009ef7,#6366f1); color: #fff;
+            font-size: .72rem; font-weight: 700; white-space: nowrap;
+            padding: .22rem .65rem; border-radius: 999px;
+        }
+
+        /* Yukaridaki "tek tek listeleme" gizlemesi SADECE filtre alanlari
+           icindir. Cari Notlari penceresindeki mail alanlarinda kullanicinin
+           kimi sectigini gormesi gerekir; orada etiketler geri acilir. */
+        #notesModal .select2-container--bootstrap-5 .select2-selection--multiple .select2-selection__rendered {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            overflow: visible;
+            padding: .2rem .3rem !important;
+            gap: 4px;
+        }
+        #notesModal .select2-container--bootstrap-5 .select2-selection--multiple .select2-selection__choice {
+            display: inline-flex !important;
+            align-items: center;
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+            color: #3730a3;
+            border-radius: 999px;
+            padding: .12rem .5rem;
+            font-size: .74rem;
+            font-weight: 600;
+            max-width: 100%;
+        }
+        #notesModal .select2-container--bootstrap-5 .select2-selection--multiple .select2-selection__choice__remove {
+            color: #4338ca;
+            margin-right: 4px;
+            font-weight: 700;
+            border: none;
+            background: transparent;
+        }
+        #notesModal .select2-container--bootstrap-5 .select2-selection--multiple {
+            min-height: 38px;
+            height: auto !important;
+        }
+
+        /* Onay kutuları eşit yükseklikte kart görünümünde */
+        form .row.g-3.mt-2 > .col-12.d-flex {
+            gap: 10px !important; flex-wrap: wrap;
+        }
+        form .form-check.custom-checkbox {
+            display: flex !important; align-items: center; gap: .5rem;
+            min-height: 40px; margin: 0 !important;
+            padding: .35rem .8rem !important;
+            border: 1px solid var(--border-color, #e8ecf4);
+            border-radius: 10px; background: var(--bg-card, #fff);
+            transition: border-color .18s ease, background .18s ease;
+        }
+        form .form-check.custom-checkbox:hover { border-color: var(--metro-primary, #009ef7); }
+        form .form-check.custom-checkbox .form-check-input { margin: 0 !important; float: none !important; flex-shrink: 0; }
+        form .form-check.custom-checkbox .form-check-label { margin: 0 !important; font-size: .8rem; white-space: nowrap; }
+
+        form button[type="submit"] { border-radius: 12px; height: 44px; }
+
+        /* ==================================================================
+           TABLOYU EKRANA SIĞDIR
+           Eski kural bütün sütunlara nowrap + width:1% veriyordu; bu yüzden
+           tablo sağa taşıyordu. Artık yalnızca tutar sütunları tek satır.
+           ================================================================== */
+        table.rapor-tablo { width: 100% !important; table-layout: auto; }
+
+        table.rapor-tablo th:not(.text-right),
+        table.rapor-tablo td:not(.text-right) {
+            width: auto !important;
+            max-width: none !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            line-height: 1.28;
+        }
+
+        /* Metin sütunlarına alt sınır verilmiyor: ekrana sığmak için daralabilmeliler */
+        table.rapor-tablo th:not(.text-right),
+        table.rapor-tablo td:not(.text-right) { min-width: 0 !important; }
+
+        /* Tutar ve tarih sütunları bölünmesin */
+        table.rapor-tablo td.text-right { white-space: nowrap !important; text-align: right !important; font-variant-numeric: tabular-nums; }
+        table.rapor-tablo th.text-right { text-align: right !important; }
+        table.rapor-tablo td:nth-child(1),
+        table.rapor-tablo td:nth-child(2),
+        table.rapor-tablo td:nth-child(3) { white-space: nowrap !important; }
+
+        /* Rozetler ve satır içi etiketler de küçülsün */
+        table.rapor-tablo .badge { font-size: .55rem; padding: .15rem .3rem; }
+
+        table.rapor-tablo .badge { font-size: .6rem; padding: .2rem .4rem; }
+
+        /* Dar ekranda yatay kaydırmaya izin ver (bu durumda başlık kutuya yapışır) */
+        @@media (max-width: 1200px) {
+            .table-container { overflow-x: auto; }
+            table.rapor-tablo th { top: 0; }
+        }
+    </style>
+    <link rel="stylesheet" href="~/css/ekstre-tema.css" asp-append-version="true" />
+}
+
+<div class="container-fluid">
+    @Html.AntiForgeryToken()
+
+    <div class="header text-center">
+        <h1 class="logo"></h1>
+        <h2>@(isEnglish ? "ACCOUNT STATEMENT REPORT" : "CARİ EKSTRE RAPORU")</h2>
+        <p class="mb-0">@(isEnglish ? "Track your financial transaction details" : "Finansal işlem detaylarınızı takip edin")</p>
+    </div>
+
+    <div class="database-info d-flex justify-content-between align-items-center">
+        <div>
+            <i class="fas fa-database me-2"></i> @(isEnglish ? "Active database:" : "Aktif veritabanı:") <strong>@currentSelectedDbDisplay</strong>
+            @if(isConsolidated)
+            {
+                <span class="badge bg-success ms-3"><i class="fas fa-globe"></i> @(isEnglish ? "Consolidated (All Companies) Report" : "Konsolide (Tüm Şirketler) Rapor")</span>
+            }
+        </div>
+        <div>
+            <button type="button" class="btn btn-sm btn-outline-primary shadow-sm fw-bold" onclick="setupRapor20Udfs()">
+                <i class="fas fa-cogs me-1"></i> @(isEnglish ? "Setup UDFs" : "Sistemi Kur (UDF'leri Aç)")
+            </button>
+        </div>
+    </div>
+
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title fw-bold text-dark mb-3"><i class="fas fa-filter text-primary me-2"></i>@(isEnglish ? "Report Filters" : "Rapor Filtreleri")</h5>
+            <form asp-controller="Rapor20" asp-action="Index" method="get">
+                
+                @if (!string.IsNullOrEmpty(currentDb))
+                {
+                    <input type="hidden" name="db" value="@currentDb" />
+                }
+
+                <div class="row g-3 align-items-end">
+                    <div class="col-12 col-md-6 col-lg-3 col-xl-3">
+                        <label for="bpCode" class="form-label fw-bold text-muted small">@(isEnglish ? "Select BP" : "Cari Seçimi")</label>
+                        <select class="form-control" id="bpCode" name="bpCode" multiple="multiple">
+                            @if (cariList.Any())
+                            {
+                                foreach (var cari in cariList)
+                                {
+                                    <option value="@cari.CardCode" selected="@(selectedBpCodes.Contains(cari.CardCode))">@cari.CardCode - @cari.CardName</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-3 col-xl-2">
+                        <label for="aktarimTipi" class="form-label fw-bold text-muted small">@(isEnglish ? "Transfer Type" : "Aktarım Tipi")</label>
+                        <select class="form-control" id="aktarimTipi" name="aktarimTipi" multiple="multiple">
+                            @if (aktarimTipiList.Any())
+                            {
+                                foreach (var tip in aktarimTipiList)
+                                {
+                                    <option value="@tip" selected="@(selectedAktarimTipi.Contains(tip))">@tip</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-4 col-lg-2 col-xl-3">
+                        <label for="bakiyeDurumu" class="form-label fw-bold text-muted small">@(isEnglish ? "Balance Status" : "Bakiye Durumu (Kapanma)")</label>
+                        <select class="form-control" id="bakiyeDurumu" name="bakiyeDurumu" multiple="multiple">
+                            <option value="Açık" selected="@(selectedBakiyeDurumu.Contains("Açık") || selectedBakiyeDurumu.Contains("Open"))">@(isEnglish ? "Open (Unreconciled)" : "Açık (Kapanmamış)")</option>
+                            <option value="Kısmi" selected="@(selectedBakiyeDurumu.Contains("Kısmi") || selectedBakiyeDurumu.Contains("Partial"))">@(isEnglish ? "Partial" : "Kısmi (Eksik Kapanmış)")</option>
+                            <option value="Kapalı" selected="@(selectedBakiyeDurumu.Contains("Kapalı") || selectedBakiyeDurumu.Contains("Closed"))">@(isEnglish ? "Closed (Reconciled)" : "Kapalı (Tam Kapanmış)")</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-4 col-lg-2 col-xl-2">
+                        <label for="startDate" class="form-label fw-bold text-muted small">@(isEnglish ? "Start Date" : "Başlangıç Tarihi")</label>
+                        <input type="date" class="form-control" id="startDate" name="startDate" value="@ViewBag.StartDate">
+                    </div>
+                    <div class="col-12 col-md-4 col-lg-2 col-xl-2">
+                        <label for="endDate" class="form-label fw-bold text-muted small">@(isEnglish ? "End Date" : "Bitiş Tarihi")</label>
+                        <input type="date" class="form-control" id="endDate" name="endDate" value="@ViewBag.EndDate">
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-2">
+                    <div class="col-12 d-flex flex-wrap gap-4 align-items-center">
+                        <div class="form-check custom-checkbox">
+                            <input type="checkbox" class="form-check-input" id="includeInitialBalance" name="includeInitialBalance" value="true" @(includeInitialBalance ? "checked" : "")>
+                            <label class="form-check-label" style="cursor:pointer;" for="includeInitialBalance">@(isEnglish ? "Include Opening Balance" : "Devir Bakiyesini Dahil Et")</label>
+                        </div>
+                        <div class="form-check custom-checkbox">
+                            <input type="checkbox" class="form-check-input" id="includeConnectedBp" name="includeConnectedBp" value="true" @(includeConnectedBp ? "checked" : "")>
+                            <label class="form-check-label" style="cursor:pointer;" for="includeConnectedBp">@(isEnglish ? "Include Connected BP" : "Bağlı Cariyi Dahil Et")</label>
+                        </div>
+                        <div class="form-check custom-checkbox">
+                            <input type="checkbox" class="form-check-input" id="tlEkstre" name="tlEkstre" value="true" @(tlEkstre ? "checked" : "")>
+                            <label class="form-check-label text-primary fw-bold" style="cursor:pointer;" for="tlEkstre">@(isEnglish ? "Only TRY Statement (Hide FC)" : "Sadece TL Ekstre (YPB Gizle)")</label>
+                        </div>
+                        <div class="form-check custom-checkbox">
+                            <input type="checkbox" class="form-check-input" id="includeOpenOrders" name="includeOpenOrders" value="true" @(includeOpenOrders ? "checked" : "")>
+                            <label class="form-check-label text-dark fw-bold" style="cursor:pointer;" for="includeOpenOrders"><i class="fas fa-shopping-cart me-1"></i> @(isEnglish ? "Include Open Orders" : "Açık Siparişleri Dahil Et")</label>
+                        </div>
+                        
+                        <div class="form-check ms-md-3 p-2 rounded bg-success-subtle border border-success custom-checkbox">
+                            <input type="checkbox" class="form-check-input ms-1" id="isConsolidated" name="isConsolidated" value="true" @(isConsolidated ? "checked" : "")>
+                            <label class="form-check-label text-success fw-bold ms-2 pe-2" style="cursor:pointer;" for="isConsolidated"><i class="fas fa-globe me-1"></i> @(isEnglish ? "Consolidated Statement (All Comps)" : "Konsolide Ekstre (Tüm Şirketler)")</label>
+                        </div>
+                        
+                        <div class="form-check ms-md-3 p-2 rounded bg-warning-subtle border border-warning custom-checkbox">
+                            <input type="checkbox" class="form-check-input ms-1" id="useBpDueDate" name="useBpDueDate" value="true" @(useBpDueDate ? "checked" : "")>
+                            <label class="form-check-label text-dark fw-bold ms-2 pe-2" style="cursor:pointer;" for="useBpDueDate"><i class="fas fa-calendar-alt me-1"></i> @(isEnglish ? "Due Date by Payment Terms" : "Ödeme Koşuluna Göre Vade")</label>
+                        </div>
+
+                        <div class="form-check ms-md-3 p-2 rounded bg-info-subtle border border-info custom-checkbox">
+                            <input type="checkbox" class="form-check-input ms-1" id="isEnglish" name="isEnglish" value="true" @(isEnglish ? "checked" : "")>
+                            <label class="form-check-label text-info-emphasis fw-bold ms-2 pe-2" style="cursor:pointer;" for="isEnglish"><i class="fas fa-language me-1"></i> İngilizce (English)</label>
+                        </div>
+                    </div>
+                    <div class="col-12 mt-3">
+                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold fs-6"><i class="fas fa-chart-line me-2"></i>@(isEnglish ? "Generate Report" : "Raporla")</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(selectedBpCode))
+    {
+        @if (ViewBag.MutabakatUyariTipi != null && ViewBag.MutabakatUyariTipi != "none")
+        {
+            <div class="alert alert-@(ViewBag.MutabakatUyariTipi == "warning" ? "warning" : "success") d-flex align-items-center shadow-sm mb-4" role="alert">
+                <i class="fas @(ViewBag.MutabakatUyariTipi == "warning" ? "fa-exclamation-triangle" : "fa-check-circle") fa-2x me-3"></i>
+                <div>@Html.Raw(ViewBag.MutabakatUyariMesaji)</div>
+            </div>
+        }
+
+        @if (mutabakatUyarilari.Any())
+        {
+            <div class="alert alert-danger shadow-sm mb-4 border-0 border-start border-danger border-5">
+                <h5 class="alert-heading fw-bold text-danger"><i class="fas fa-exclamation-triangle me-2"></i>@(isEnglish ? "Unreconciled Records Warning Analysis" : "Kapanmayan Kayıtlar Uyarı Analizi")</h5>
+                <p class="mb-2 text-muted small">@(isEnglish ? "The following transactions cannot be reconciled due to the discrepancies specified below:" : "Aşağıdaki işlemler, belirtilen uyuşmazlıklar sebebiyle mutabakat ekranında eşleşememektedir:")</p>
+                <hr>
+                <ul class="mb-0">
+                    @foreach (var uyari in mutabakatUyarilari)
+                    {
+                        <li class="mb-1">
+                            <strong class="text-dark">@uyari.UyariTipi:</strong> 
+                            <span class="text-danger">@uyari.AnalizSonucu</span>
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
+
+        <div class="row align-items-center mb-4">
+            <div class="col-md-5">
+                <div class="cari-bilgi d-flex justify-content-between align-items-center">
+                    <div class="cari-header-content">
+                        <h4 class="mb-0">
+                            @(isEnglish ? "Main BP:" : "Ana Cari:") <strong>@selectedBpCode - @bpName</strong>
+                        </h4>
+                        @if (includeConnectedBp && !string.IsNullOrEmpty(connectedBpCode))
+                        {
+                            <div class="connected-bp-info mt-2">
+                                <i class="fas fa-link me-2"></i> @(isEnglish ? "Connected BP Included:" : "Bağlı Cari de Dahil Edildi:") <strong>@connectedBpCode - @connectedBpName</strong>
+                            </div>
+                        }
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-sm btn-action-custom @(hasNotes ? "btn-warning text-dark" : "btn-outline-secondary") position-relative" onclick="openNotesModal()">
+                            <i class="fas fa-cloud"></i> @(isEnglish ? "BP Notes" : "Cari Notları")
+                            @if (hasNotes) { <span class="position-absolute top-0 start-100 translate-middle p-2 bg-danger border border-light rounded-circle"><span class="visually-hidden">New notes</span></span> }
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-7 text-end mt-3 mt-md-0 d-flex flex-wrap justify-content-md-end gap-2">
+                <button type="button" class="btn btn-action-custom btn-save-recon" onclick="checkAndOpenMutabakatModal()">
+                    <i class="fas fa-save me-2"></i>@(isEnglish ? "Save Reconciliation" : "Mutabakat Kaydet")
+                </button>
+                <button type="button" class="btn btn-action-custom btn-recon" onclick="openReconModal()">
+                    <i class="fas fa-handshake me-2"></i>@(isEnglish ? "Reconcile" : "Mutabakat Yap")
+                </button>
+                <a href="@Url.Action("DownloadExcel", "Rapor20", routeValues)" class="btn btn-action-custom btn-download-excel">
+                    <i class="fas fa-file-excel me-1"></i>Excel
+                </a>
+                <a href="@Url.Action("DownloadMutabakatFormuPdf", "Rapor20", mutabakatRouteValues)" class="btn btn-action-custom btn-download-form">
+                    <i class="fas fa-file-signature me-1"></i>@(isEnglish ? "Statement Form" : "Mutabakat Formu")
+                </a>
+                <a href="@Url.Action("DownloadPdf", "Rapor20", portraitRouteValues)" class="btn btn-action-custom btn-download">
+                    <i class="fas fa-file-pdf me-1"></i>@(isEnglish ? "Portrait PDF" : "Dikey PDF")
+                </a>
+                <a href="@Url.Action("DownloadPdf", "Rapor20", landscapeRouteValues)" class="btn btn-action-custom btn-download-landscape">
+                    <i class="fas fa-file-pdf me-1"></i>@(isEnglish ? "Landscape PDF" : "Yatay PDF")
+                </a>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <div class="alert alert-info d-flex align-items-center mb-3 py-2 shadow-sm border-0 border-start border-info border-4">
+                <i class="fas fa-info-circle fa-2x me-3 text-info"></i>
+                <div>
+                    <strong class="text-dark">@(isEnglish ? "Statement Balance Coloring Info:" : "Ekstre Bakiye Renklendirme Bilgisi:")</strong><br/>
+                    <span class="badge bg-success me-2 mt-1">@(isEnglish ? "Closed" : "Kapalı")</span> @(isEnglish ? "Fully reconciled and closed transactions." : "Tamamen mutabakatı yapılmış (kapanmış) belgeler.")<br/>
+                    <span class="badge bg-warning text-dark me-2 mt-1">@(isEnglish ? "Partial" : "Kısmi")</span> @(isEnglish ? "Partially paid/closed transactions." : "Kısmi ödemesi/kapanışı yapılmış belgeler.")<br/>
+                    <span class="badge bg-danger me-2 mt-1">@(isEnglish ? "Open" : "Açık")</span> @(isEnglish ? "Open transactions with no reconciliation." : "Henüz hiçbir işlem görmemiş açık belgeler.")
+                </div>
+            </div>
+
+            @if (groupedByBp.Any())
+            {
+                foreach (var bpGroup in groupedByBp)
+                {
+                    var currentBpCode = bpGroup.Key;
+                    var currentBpName = bpGroup.First()?.MuhatapAdi ?? (isEnglish ? "Unknown" : "Bilinmiyor");
+
+                    var firstRecord = bpGroup.FirstOrDefault();
+                    var phone = firstRecord?.Phone1;
+                    var fullAddress = string.Join(" ",
+                    new[] { firstRecord?.Street, firstRecord?.County, firstRecord?.State, firstRecord?.Country }
+                    .Where(s => !string.IsNullOrWhiteSpace(s)));
+
+                    var safeBpCode = currentBpCode.Replace(".", "").Replace(" ", "");
+
+                    <div class="bp-group-header">
+                        <i class="fas fa-user-tie me-2"></i>
+                        @if (currentBpCode == selectedBpCode)
+                        {
+                            <strong>@(isEnglish ? "MAIN BP STATEMENT:" : "ANA CARİ EKSTRESİ:")</strong>
+                        }
+                        else
+                        {
+                            <strong>@(isEnglish ? "CONNECTED BP STATEMENT:" : "BAĞLI CARİ EKSTRESİ:")</strong>
+                        }
+                        @currentBpCode - @currentBpName
+                    </div>
+
+                    <div class="bp-contact-info">
+                        <div class="row gy-2 align-items-center">
+                            @if (!string.IsNullOrEmpty(phone))
+                            {
+                                <div class="col-md-4 d-flex align-items-center">
+                                    <i class="fas fa-phone-alt me-2 text-secondary"></i>
+                                    <span class="fw-bold me-2">Tel:</span>
+                                    <span id="phone-@safeBpCode" class="selectable-text me-2" title="Tıklayarak seç">@phone</span>
+                                    <button class="btn btn-copy" onclick="copyToClipboard('phone-@safeBpCode', this)" title="Kopyala">
+                                        <i class="far fa-copy"></i>
+                                    </button>
+                                </div>
+                            }
+                            @if (!string.IsNullOrEmpty(fullAddress))
+                            {
+                                <div class="col-md-8 d-flex align-items-center">
+                                    <i class="fas fa-map-marker-alt me-2 text-secondary"></i>
+                                    <span class="fw-bold me-2">@(isEnglish ? "Address:" : "Adres:")</span>
+                                    <span id="addr-@safeBpCode" class="selectable-text me-2 text-truncate" style="max-width: 70%;" title="@fullAddress">@fullAddress</span>
+                                    <button class="btn btn-copy" onclick="copyToClipboard('addr-@safeBpCode', this)" title="Kopyala">
+                                        <i class="far fa-copy"></i>
+                                    </button>
+                                </div>
+                            }
+                            @if (string.IsNullOrEmpty(phone) && string.IsNullOrEmpty(fullAddress))
+                            {
+                                <div class="col-12 text-muted fst-italic">@(isEnglish ? "Contact info not found." : "İletişim bilgisi bulunamadı.")</div>
+                            }
+                        </div>
+                    </div>
+
+                    var groupedByCurrency = bpGroup.GroupBy(d => d.IslemPB).ToList();
+
+                    foreach (var group in groupedByCurrency)
+                    {
+                        <h5 class="mt-4 ms-2 fw-bold"><i class="fas fa-money-bill-wave me-2 text-success"></i>@(isEnglish ? "Currency:" : "Para Birimi:") @group.Key</h5>
+                        <table class="table table-bordered table-hover rapor-tablo" id="cariEkstreTable-@currentBpCode-@group.Key">
+                            <thead>
+                                <tr>
+                                    <th>@(isEnglish ? "Doc No" : "İşlem No")</th>
+                                    <th>@(isEnglish ? "Posting Date" : "Kayıt Tarihi")</th>
+                                    <th>@(isEnglish ? "Due Date" : "Vade Tarihi")</th>
+                                    @if(isConsolidated) { <th>@(isEnglish ? "Company Name" : "Şirket Adı")</th> }
+                                    <th>@(isEnglish ? "BP Code" : "Muhatap Kodu")</th>
+                                    <th>@(isEnglish ? "BP Name" : "Muhatap Adı")</th>
+                                    <th>@(isEnglish ? "Remarks" : "Ayrıntı")</th>
+                                    <th>@(isEnglish ? "Status" : "Durum")</th>
+                                    <th>@(isEnglish ? "Type" : "İşlem Tipi")</th>
+                                    <th>@(isEnglish ? "Trans. Type" : "Aktarım")</th>
+                                    <th class="text-right">@(isEnglish ? "Debit (TRY)" : "Borç (TL)")</th>
+                                    <th class="text-right">@(isEnglish ? "Credit (TRY)" : "Alacak (TL)")</th>
+                                    <th class="text-right">@(isEnglish ? "Cum. Bal. (TRY)" : "Kml. Bakiye (TL)")</th>
+                                    @if (!tlEkstre)
+                                    {
+                                        <th class="text-right">@(isEnglish ? "Debit (FC)" : "Borç (PB)")</th>
+                                        <th class="text-right">@(isEnglish ? "Credit (FC)" : "Alacak (PB)")</th>
+                                        <th class="text-right">@(isEnglish ? "Cum. Bal. (FC)" : "Kml. Bakiye (PB)")</th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in group.ToList().OrderBy(i => i.KayitTarihi).ThenBy(i => i.IslemNo))
+                                {
+                                    string rowClass = "";
+                                    if (item.IslemTipi == "AT") { rowClass = "at-row"; }
+                                    else if (item.IslemTipi == "DB" || item.IslemTipi == "OB") { rowClass = "db-row"; }
+                                    else if (item.IslemTipi == "S.SİP" || item.IslemTipi == "A.SİP" || item.IslemTipi == "S.ORD" || item.IslemTipi == "P.ORD") { rowClass = "order-row"; }
+
+                                    <tr class="@(rowClass)">
+                                        <td>@(item.IslemNo == -1 ? (isEnglish ? "Opening" : "Devir") : (item.IslemTipi == "AT" ? "-" : item.IslemNo.ToString()))</td>
+                                        <td>@(item.KayitTarihi?.ToString("dd.MM.yyyy") ?? "-")</td>
+                                        <td>@(item.VadeTarihi?.ToString("dd.MM.yyyy") ?? "-")</td>
+                                        @if(isConsolidated) { <td><span class="badge bg-secondary">@(item.Sirket ?? "-")</span></td> }
+                                        <td>@Html.DisplayFor(modelItem => item.MuhatapKodu)</td>
+                                        <td>@Html.DisplayFor(modelItem => item.MuhatapAdi)</td>
+                                        <td>@Html.DisplayFor(modelItem => item.Aciklama)</td>
+                                        <td class="text-center">
+                                            @if(item.IslemTipi != "AT" && item.IslemTipi != "DB" && item.IslemTipi != "OB")
+                                            {
+                                                if(item.BakiyeDurumu == "Kapalı" || item.BakiyeDurumu == "Closed") { <span class="badge bg-success">@(isEnglish ? "Closed" : "Kapalı")</span> }
+                                                else if(item.BakiyeDurumu == "Kısmi" || item.BakiyeDurumu == "Partial") { <span class="badge bg-warning text-dark">@(isEnglish ? "Partial" : "Kısmi")</span> }
+                                                else { <span class="badge bg-danger">@(isEnglish ? "Open" : "Açık")</span> }
+                                            }
+                                        </td>
+                                        <td>@Html.DisplayFor(modelItem => item.IslemTipi)</td>
+                                        <td>@Html.DisplayFor(modelItem => item.AktarimTipi)</td>
+                                        <td class="text-right @(item.TRYB.HasValue && item.TRYB.Value > 0 ? "borc" : "")">@item.TRYB?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                        <td class="text-right @(item.TRYA.HasValue && item.TRYA.Value > 0 ? "alacak" : "")">@item.TRYA?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                        <td class="text-right">@item.TRY_KmlBky?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                        @if (!tlEkstre)
+                                        {
+                                            <td class="text-right @(item.IslemB.HasValue && item.IslemB.Value > 0 ? "borc" : "")">@item.IslemB?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                            <td class="text-right @(item.IslemA.HasValue && item.IslemA.Value > 0 ? "alacak" : "")">@item.IslemA?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                            <td class="text-right">@item.Islem_KmlBky?.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr class="table-info">
+                                    <td colspan="@baseColSpan" class="text-right text-dark"><strong>@(isEnglish ? "BP Subtotal" : "Cari Alt Toplam") (@group.Key)</strong></td>
+                                    
+                                    <td class="text-right borc" style="font-size:1.05em;"><strong>@group.Where(d => d.IslemTipi != "AT" && d.IslemTipi != "DB" && d.IslemTipi != "OB").Sum(d => d.TRYB ?? 0).ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                                    <td class="text-right alacak" style="font-size:1.05em;"><strong>@group.Where(d => d.IslemTipi != "AT" && d.IslemTipi != "DB" && d.IslemTipi != "OB").Sum(d => d.TRYA ?? 0).ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                                    <td class="text-right text-dark" style="font-size:1.05em;"><strong>@group.LastOrDefault()?.TRY_KmlBky?.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                                    
+                                    @if (!tlEkstre)
+                                    {
+                                        <td class="text-right borc" style="font-size:1.05em;"><strong>@group.Where(d => d.IslemTipi != "AT" && d.IslemTipi != "DB" && d.IslemTipi != "OB").Sum(d => d.IslemB ?? 0).ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                                        <td class="text-right alacak" style="font-size:1.05em;"><strong>@group.Where(d => d.IslemTipi != "AT" && d.IslemTipi != "DB" && d.IslemTipi != "OB").Sum(d => d.IslemA ?? 0).ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                                        <td class="text-right text-dark" style="font-size:1.05em;"><strong>@group.LastOrDefault()?.Islem_KmlBky?.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                                    }
+                                </tr>
+                            </tfoot>
+                        </table>
+                    }
+                }
+
+                <br /><hr class="my-4 border-2" />
+
+                <h5 class="mt-4 fw-bold text-dark"><i class="fas fa-building me-2"></i>@(isEnglish ? "Company Based Balance Summary (TRY)" : "Şirket Bazlı Bakiye Özeti (TRY)")</h5>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover mb-5">
+                        <thead>
+                            <tr class="thead-marka">
+                                <th class="align-middle">@(isEnglish ? "Company Name" : "Şirket Adı")</th>
+                                <th class="align-middle text-right">@(isEnglish ? "Total Debit (TL)" : "Toplam Borç (TL)")</th>
+                                <th class="align-middle text-right">@(isEnglish ? "Total Credit (TL)" : "Toplam Alacak (TL)")</th>
+                                <th class="align-middle text-right">@(isEnglish ? "Net Balance (TL)" : "Net Bakiye (TL)")</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var cGroup in companyGroupsForTotal)
+                            {
+                                var cMovements = cGroup.Where(d => d.IslemTipi != "DB" && d.IslemTipi != "OB").ToList();
+                                var cDevir = cGroup.Where(d => d.IslemTipi == "DB" || d.IslemTipi == "OB").ToList();
+
+                                decimal cTotalBorc = cMovements.Sum(d => d.TRYB ?? 0) + cDevir.Where(d => (d.TRY_KmlBky ?? 0) > 0).Sum(d => d.TRY_KmlBky ?? 0);
+                                decimal cTotalAlacak = cMovements.Sum(d => d.TRYA ?? 0) + cDevir.Where(d => (d.TRY_KmlBky ?? 0) < 0).Sum(d => Math.Abs(d.TRY_KmlBky ?? 0));
+                                decimal cNet = cTotalBorc - cTotalAlacak;
+
+                                <tr>
+                                    <td class="align-middle fw-bold">@cGroup.Key</td>
+                                    <td class="text-right align-middle borc">@cTotalBorc.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                    <td class="text-right align-middle alacak">@cTotalAlacak.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                    <td class="text-right align-middle fw-bold text-dark">@cNet.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <h5 class="mt-4 fw-bold text-dark"><i class="fas fa-chart-pie me-2"></i>@(isEnglish ? "All BPs General Cumulative Summary" : "Tüm Cariler Genel Toplam Kümülatif Özeti")</h5>
+                <div class="table-responsive">
+                    <table class="table table-bordered total-summary-row" style="width: 100%;">
+                        <thead>
+                            <tr class="table-dark text-white text-center">
+                                <th style="width: 25%;" class="align-middle">@(isEnglish ? "Balance Summary (Currency)" : "Bakiye Özeti (Para Birimi)")</th>
+                                <th style="width: 12.5%;" class="align-middle text-right">@(isEnglish ? "Total Debit (FC)" : "Toplam Borç (PB)")</th>
+                                <th style="width: 12.5%;" class="align-middle text-right">@(isEnglish ? "Total Credit (FC)" : "Toplam Alacak (PB)")</th>
+                                <th style="width: 12.5%;" class="align-middle text-right">@(isEnglish ? "Net Balance (FC)" : "Net Bakiye (PB)")</th>
+                                <th style="width: 12.5%;" class="align-middle text-right">@(isEnglish ? "Total Debit (TL)" : "Toplam Borç (TL)")</th>
+                                <th style="width: 12.5%;" class="align-middle text-right">@(isEnglish ? "Total Credit (TL)" : "Toplam Alacak (TL)")</th>
+                                <th style="width: 12.5%;" class="align-middle text-right">@(isEnglish ? "Net Balance (TL)" : "Net Bakiye (TL)")</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var pbGroup in currencyGroupsForTotal)
+                            {
+                                var pbMovements = pbGroup.Where(d => d.IslemTipi != "DB" && d.IslemTipi != "OB").ToList();
+                                var pbDevir = pbGroup.Where(d => d.IslemTipi == "DB" || d.IslemTipi == "OB").ToList();
+
+                                decimal pbTotalBorc = pbGroup.Key == "TRY" 
+                                    ? pbMovements.Sum(d => d.TRYB ?? 0) + pbDevir.Where(d => (d.TRY_KmlBky ?? 0) > 0).Sum(d => d.TRY_KmlBky ?? 0)
+                                    : pbMovements.Sum(d => d.IslemB ?? 0) + pbDevir.Where(d => (d.Islem_KmlBky ?? 0) > 0).Sum(d => d.Islem_KmlBky ?? 0);
+                                
+                                decimal pbTotalAlacak = pbGroup.Key == "TRY"
+                                    ? pbMovements.Sum(d => d.TRYA ?? 0) + pbDevir.Where(d => (d.TRY_KmlBky ?? 0) < 0).Sum(d => Math.Abs(d.TRY_KmlBky ?? 0))
+                                    : pbMovements.Sum(d => d.IslemA ?? 0) + pbDevir.Where(d => (d.Islem_KmlBky ?? 0) < 0).Sum(d => Math.Abs(d.Islem_KmlBky ?? 0));
+                                
+                                decimal pbNetBakiye = pbTotalBorc - pbTotalAlacak;
+
+                                decimal groupTotalBorcTRY = pbMovements.Sum(d => d.TRYB ?? 0) + pbDevir.Where(d => (d.TRY_KmlBky ?? 0) > 0).Sum(d => d.TRY_KmlBky ?? 0);
+                                decimal groupTotalAlacakTRY = pbMovements.Sum(d => d.TRYA ?? 0) + pbDevir.Where(d => (d.TRY_KmlBky ?? 0) < 0).Sum(d => Math.Abs(d.TRY_KmlBky ?? 0));
+                                decimal groupNetBakiyeTRY = groupTotalBorcTRY - groupTotalAlacakTRY;
+
+                                <tr class="satir-pb">
+                                    <td class="align-middle text-dark"><strong>@pbGroup.Key @(isEnglish ? "Currency Cumulative Summary" : "Para Birimi Kümülatif Özeti")</strong></td>
+                                    
+                                    <td class="text-right align-middle borc" style="font-size: 1.05em;"><strong>@pbTotalBorc.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                                    <td class="text-right align-middle alacak" style="font-size: 1.05em;"><strong>@pbTotalAlacak.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                                    <td class="text-right align-middle text-dark" style="font-size: 1.05em;"><strong>@pbNetBakiye.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                                    
+                                    <td class="text-right align-middle borc" style="font-size: 1.05em;"><strong>@groupTotalBorcTRY.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                                    <td class="text-right align-middle alacak" style="font-size: 1.05em;"><strong>@groupTotalAlacakTRY.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                                    <td class="text-right align-middle text-dark" style="font-size: 1.05em;"><strong>@groupNetBakiyeTRY.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                                </tr>
+                            }
+
+                            <tr class="satir-genel">
+                                <td colspan="4" class="align-middle text-right"><strong>@(isEnglish ? "ALL BPs GENERAL CUMULATIVE BALANCE SUMMARY (TRY)" : "TÜM CARİLER GENEL KÜMÜLATİF BAKİYE ÖZETİ (TRY)")</strong></td>
+                                <td class="text-right align-middle borc-acik"><strong>@finalTotalBorcTRY.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                                <td class="text-right align-middle alacak-acik"><strong>@finalTotalAlacakTRY.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                                <td class="text-right align-middle" style="font-size: 1.1em;"><strong>@finalNetBalanceTRY.ToString("N2", new CultureInfo("tr-TR"))</strong></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (bpRelatedAccountBalances.Any())
+                {
+                    <h5 class="mt-4 text-danger"><i class="fas fa-balance-scale-left me-2"></i> @(isEnglish ? "Accounting Balances Summary (Accounts 159,340,420,440)" : "Muhasebe Hesap Bakiyeleri Özeti (420'li Hesaplar)")</h5>
+                    <div class="card bg-danger-subtle border-danger shadow-sm mb-5">
+                        <div class="card-body p-2">
+                            <p class="mb-2 fw-bold text-danger">@(isEnglish ? $"Exact match account balances for BP '{bpName}':" : $"\"{bpName}\" cari unvanı ile birebir eşleşen hesapların bakiye dökümü:")</p>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered account-balance-table mb-0">
+                                    <thead>
+                                        <tr>
+                                            @if(isConsolidated) { <th>@(isEnglish ? "Company" : "Şirket")</th> }
+                                            <th>@(isEnglish ? "Acc Code" : "Hesap Kodu")</th>
+                                            <th>@(isEnglish ? "Acc Name" : "Hesap Adı")</th>
+                                            <th class="text-right">@(isEnglish ? "Currency" : "Döviz Tipi")</th>
+                                            <th class="text-right">@(isEnglish ? "FC Balance" : "Döviz Bakiyesi")</th>
+                                            <th class="text-right">@(isEnglish ? "TL Equivalent" : "TL Karşılığı")</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var bal in bpRelatedAccountBalances.OrderBy(b => b.CompanyName).ThenByDescending(b => b.TLBalance))
+                                        {
+                                            <tr class="@(bal.TLBalance < 0 ? "table-success" : "table-danger")">
+                                                @if(isConsolidated) { <td class="fw-bold">@bal.CompanyName</td> }
+                                                <td>@bal.AccountCode</td>
+                                                <td>@bal.AccountName</td>
+                                                <td class="text-right">@bal.Currency</td>
+                                                <td class="text-right">@(bal.Currency != "TRY" ? bal.CurrencyBalance.ToString("N2", new CultureInfo("tr-TR")) : "-")</td>
+                                                <td class="text-right fw-bold">@bal.TLBalance.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                            </tr>
+                                        }
+                                        <tr class="bg-danger text-white">
+                                            <td colspan="@(isConsolidated ? 5 : 4)" class="text-right"><strong>@(isEnglish ? "GENERAL TL TOTAL BALANCE:" : "GENEL TL TOPLAM BAKİYESİ:")</strong></td>
+                                            <td class="text-right fw-bold"><strong>@totalBpRelatedAccountBalance.ToString("N2", new CultureInfo("tr-TR")) TRY</strong></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                @if (!string.IsNullOrEmpty((string)ViewBag.SorguHatasi))
+                {
+                    <div class="alert alert-danger mt-4"><i class="fas fa-triangle-exclamation me-2"></i><b>@(isEnglish ? "Query error:" : "Sorgu hatası:")</b> @ViewBag.SorguHatasi</div>
+                }
+                else
+                {
+                    <div class="alert alert-info text-center mt-4">
+                        @(isEnglish ? "No records found. Please check your filter options." : "Kayıt bulunamadı. Lütfen filtreleme seçeneklerini kontrol edin.")
+                    </div>
+                }
+            }
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-warning text-center mt-4" role="alert">
+            <i class="fas fa-exclamation-circle me-2"></i> @(isEnglish ? "Please select a BP and click 'Generate Report' to view the statement." : "Lütfen bir cari seçimi yapın ve raporu görüntülemek için 'Raporla' butonuna tıklayın.")
+        </div>
+    }
+</div>
+
+<!-- Mutabakat (Kapama) Modal -->
+<div class="modal fade" id="reconModal" tabindex="-1" aria-labelledby="reconModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xxl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title" id="reconModalLabel"><i class="fas fa-handshake me-2"></i> @(isEnglish ? "Reconciliation Center" : "Mutabakat / Kapama Merkezi") (@selectedBpCode)</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body bg-light">
+                <div class="d-flex flex-wrap justify-content-between mb-3">
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-dark fw-bold" onclick="triggerAutoReconciliation()">
+                            <i class="fas fa-robot text-warning me-1"></i> @(isEnglish ? "Auto Reconcile" : "Otomatik Kapat")
+                        </button>
+                        <div id="currencyFilterContainer" class="d-flex flex-wrap gap-2 ms-2" style="display: none;"></div>
+                    </div>
+                    <button class="btn btn-danger fw-bold" onclick="triggerCancelAllReconciliations()">
+                        <i class="fas fa-undo me-1"></i> @(isEnglish ? "Cancel All" : "Tümünü İptal Et")
+                    </button>
+                </div>
+                
+                <div id="divTransactions" style="display: none;"></div>
+
+                <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 p-3 bg-white border rounded shadow-sm">
+                    <div class="d-flex flex-wrap gap-3 mb-2 mb-md-0">
+                        <div class="summary-box border-danger border-opacity-50 border-start border-4">
+                            <span class="text-muted d-block small fw-bold text-uppercase"><i class="fas fa-arrow-down text-danger me-1"></i> @(isEnglish ? "Selected Debit" : "Seçilen Borç")</span>
+                            <span class="h5 mb-0 fw-bold text-danger" id="lblTotalDebit">0,00 ₺</span>
+                        </div>
+                        <div class="summary-box border-success border-opacity-50 border-start border-4">
+                            <span class="text-muted d-block small fw-bold text-uppercase"><i class="fas fa-arrow-up text-success me-1"></i> @(isEnglish ? "Selected Credit" : "Seçilen Alacak")</span>
+                            <span class="h5 mb-0 fw-bold text-success" id="lblTotalCredit">0,00 ₺</span>
+                        </div>
+                        <div class="summary-box ms-md-3 bg-light border border-secondary">
+                            <span class="text-muted d-block small fw-bold text-uppercase">@(isEnglish ? "Balance Difference" : "Kalan Bakiye Farkı")</span>
+                            <span class="h4 mb-0 fw-bold text-dark" id="lblDifference">0,00 ₺</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary btn-lg fw-bold shadow" id="btnReconcile" onclick="performManualReconciliation()" disabled>
+                        <i class="fas fa-check-double me-2"></i> @(isEnglish ? "Reconcile Selected" : "Seçilenleri Kapat")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Mutabakatı Veritabanına Kaydet Modal -->
+<div class="modal fade" id="mutabakatKayitModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-save me-2"></i> @(isEnglish ? "Save Reconciliation" : "Mutabakatı Kaydet")</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold text-dark">@(isEnglish ? "Reconciliation Date" : "Mutabakat Tarihi")</label>
+                    <input type="date" class="form-control border-secondary" id="txtMutabakatTarih" value="@DateTime.Now.ToString("yyyy-MM-dd")">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold text-dark">@(isEnglish ? "Agreed Balance (TRY)" : "Mutabık Kalınan Bakiye (TRY)")</label>
+                    <div class="input-group">
+                        @* type="number" tarayıcı dilinde (en-US) virgülü reddediyordu; metin kutusu + sayısal klavye: "15.450,50" ya da "15450,50" yazılabilir *@
+                        <input type="text" inputmode="decimal" autocomplete="off" class="form-control border-secondary" id="txtMutabakatBakiye" placeholder="Örn: 15.450,50" pattern="^-?[0-9.,]+$" title="Örn: 15.450,50 veya 15450,50">
+                        <span class="input-group-text bg-light border-secondary fw-bold">₺</span>
+                    </div>
+                    <small class="text-muted mt-1 d-block"><i class="fas fa-info-circle text-info"></i> @(isEnglish ? "Enter positive for debit, negative (-) for credit." : "Borç bakiyesi için pozitif, alacak bakiyesi için negatif (-) değer girebilirsiniz.")</small>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times me-1"></i> @(isEnglish ? "Cancel" : "İptal")</button>
+                <button type="button" class="btn btn-success fw-bold" onclick="saveManualMutabakat()"><i class="fas fa-check me-1"></i> @(isEnglish ? "Save & Close" : "Kaydet ve Kapat")</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Cari Notlar Modal -->
+<div class="modal fade" id="notesModal" tabindex="-1" aria-labelledby="notesModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark border-bottom-0">
+                <h5 class="modal-title fw-bold" id="notesModalLabel"><i class="fas fa-tasks me-2"></i> @(isEnglish ? "BP Notes and Tasks" : "Cari Notları ve İşlemler") (@selectedBpCode)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body bg-light p-4">
+                <div id="notesHistoryList" style="max-height: 350px; overflow-y: auto; padding-right: 10px;" class="mb-4">
+                    <div class="text-center text-muted fst-italic my-4" id="notesLoadingText">@(isEnglish ? "Loading history..." : "Geçmiş kayıtlar yükleniyor...")</div>
+                </div>
+
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white fw-bold"><i class="fas fa-plus-circle text-success me-1"></i> @(isEnglish ? "Add New Note / Task" : "Yeni Not / İşlem Ekle")</div>
+                    <div class="card-body p-3">
+                        <div class="mb-3">
+                            <textarea class="form-control border-secondary" id="txtNewNote" rows="3" placeholder="@(isEnglish ? "Enter note or task details here..." : "İşlem veya not detayını buraya yazın...")"></textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="fileAttachments" class="form-label fw-bold small text-muted"><i class="fas fa-paperclip"></i> @(isEnglish ? "Attachments (Optional)" : "Dosya Eklentileri (Opsiyonel)")</label>
+                            <input class="form-control form-control-sm border-secondary" type="file" id="fileAttachments" multiple>
+                            <div class="form-text" style="font-size: 0.75rem;">@(isEnglish ? "You can select multiple files. Attached files will be included in the task email." : "Birden fazla dosya seçebilirsiniz. Eklenen dosyalar görevlendirme mailine dahil edilecektir.")</div>
+                        </div>
+
+                        <div class="p-3 bg-light border border-secondary border-opacity-25 rounded-3 mb-3">
+                            <div class="form-check form-switch fs-6 mb-0">
+                                <input class="form-check-input" type="checkbox" id="chkIsTask" style="cursor: pointer;">
+                                <label class="form-check-label fw-bold text-primary user-select-none" for="chkIsTask" style="cursor: pointer;">
+                                    <i class="fas fa-tasks me-1"></i> @(isEnglish ? "This is a Task (Email will be sent)" : "Bu Bir İşlemdir (Görev Ataması Yapılacak)")
+                                </label>
+                            </div>
+
+                           <div id="taskEmailSection" style="display: none; margin-top: 15px;">
+                                <hr class="text-secondary opacity-25 mt-0 mb-3">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold small text-muted"><i class="fas fa-info-circle text-info"></i> @(isEnglish ? "CC" : "Bilgi Verilecekler (CC)")</label>
+                                        <select class="form-control select2-email w-100" id="txtAssignerEmail" multiple="multiple" data-placeholder="@(isEnglish ? "Select email addresses..." : "Mail adreslerini seçin...")">
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold small text-muted"><i class="fas fa-user-cog text-danger"></i> @(isEnglish ? "Assign To (To)" : "Görev Atanacak Kişiler (To)")</label>
+                                        <select class="form-control select2-email w-100" id="txtAssigneeEmail" multiple="multiple" data-placeholder="@(isEnglish ? "Select assignees..." : "Atanacak kişileri seçin...")">
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                            <option value="kullanici@ornek.local">kullanici@ornek.local</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <button type="button" class="btn btn-success fw-bold" onclick="saveNewNote()">
+                                <i class="fas fa-paper-plane me-1"></i> @(isEnglish ? "Save & Send" : "Kaydet ve Gönder")
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        const antiForgeryToken = $('input[name="__RequestVerificationToken"]').val();
+        const currentBpCode = '@selectedBpCode';
+        const dbParam = '@currentDb';
+        const dbQueryString = dbParam ? '?db=' + dbParam : '';
+        const isConsolidatedJS = @(isConsolidated.ToString().ToLower());
+        const isEnglishJS = @(isEnglish.ToString().ToLower());
+        
+        let currentTargetDb = dbParam;
+        let robotInterval = null;
+
+        (function () {
+            var fixGlobalFunction = function (functionName) {
+                if (window[functionName]) {
+                    var originalFunction = window[functionName];
+                    window[functionName] = function () {
+                        var table = document.querySelector('.rapor-tablo');
+                        if (table) { originalFunction.apply(this, arguments); }
+                    };
+                }
+            };
+            fixGlobalFunction('applyColumnConfig');
+            fixGlobalFunction('loadAndApplyColumnConfig');
+        })();
+
+        function copyToClipboard(elementId, btnElement) {
+            var textElement = document.getElementById(elementId);
+            if (!textElement) return;
+
+            var tempInput = document.createElement("textarea");
+            tempInput.value = textElement.innerText || textElement.textContent;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+
+            try {
+                document.execCommand("copy");
+                var originalHtml = btnElement.innerHTML;
+                btnElement.innerHTML = '<i class="fas fa-check text-success"></i>';
+                btnElement.classList.add('border-success');
+                setTimeout(function() {
+                    btnElement.innerHTML = originalHtml;
+                    btnElement.classList.remove('border-success');
+                }, 1500);
+            } catch (err) {
+                alert(isEnglishJS ? "Could not copy." : "Kopyalama yapılamadı.");
+            }
+            document.body.removeChild(tempInput);
+        }
+
+        $(document).ready(function () {
+            // Modaller sayfa gövdesinin (.main-content > .table-container) içinde kalırsa,
+            // Bootstrap backdrop'u body'ye eklediği için modalin üstüne biniyor:
+            // ekran bulanık ve tıklanamaz görünüyor. Hepsini doğrudan body'ye taşıyoruz.
+            $('.modal').each(function () {
+                var $m = $(this);
+                if (!$m.parent().is('body')) $m.appendTo('body');
+            });
+
+            $('#bpCode').select2({
+                theme: "bootstrap-5",
+                width: '100%',
+                closeOnSelect: false,
+                allowClear: true,
+                placeholder: isEnglishJS ? "-- Select one or more BPs --" : "-- Cari seçiniz (birden fazla seçebilirsiniz) --"
+            });
+            $('#aktarimTipi').select2({ theme: "bootstrap-5", width: '100%', placeholder: isEnglishJS ? "Select Transfer Type" : "Aktarım Tipi Seçiniz", closeOnSelect: false, allowClear: true });
+            $('#bakiyeDurumu').select2({ theme: "bootstrap-5", width: '100%', placeholder: isEnglishJS ? "Select Status" : "Durum Seçiniz", closeOnSelect: false, allowClear: true });
+
+            // Seçilenleri tek tek göstermek yerine "N seçildi" özeti bas.
+            function secimOzetiGuncelle(secici, birim) {
+                var $s = $(secici);
+                if (!$s.length) return;
+
+                var adet = ($s.val() || []).length;
+                var $kutu = $s.next('.select2-container').find('.select2-selection__rendered');
+
+                $kutu.find('.secim-ozet-li').remove();
+                if (adet > 0) {
+                    var metin = isEnglishJS ? (adet + ' selected') : (adet + ' ' + birim + ' seçildi');
+                    $kutu.prepend('<li class="secim-ozet-li"><span class="secim-ozet">' + metin + '</span></li>');
+                }
+            }
+
+            var ozetAlanlari = [
+                { sec: '#bpCode', birim: 'cari' },
+                { sec: '#aktarimTipi', birim: 'tip' },
+                { sec: '#bakiyeDurumu', birim: 'durum' }
+            ];
+
+            ozetAlanlari.forEach(function (a) {
+                secimOzetiGuncelle(a.sec, a.birim);
+                $(a.sec).on('change select2:select select2:unselect select2:clear', function () {
+                    secimOzetiGuncelle(a.sec, a.birim);
+                });
+            });
+
+            $('.select2-email').select2({
+                theme: "bootstrap-5",
+                allowClear: true,
+                dropdownParent: $('#notesModal'),
+                tags: true,
+                tokenSeparators: [',', ';', ' '],
+                width: '100%'
+            });
+
+            $('#chkIsTask').change(function() {
+                var isTask = $(this).is(':checked');
+                if (isTask) {
+                    $('#taskEmailSection').slideDown(300);
+                } else {
+                    $('#taskEmailSection').slideUp(300);
+                    $('#txtAssigneeEmail').val(null).trigger('change');
+                }
+            });
+        });
+
+        // Arayüzdeki Sisteme UDF Kur Butonu Tıklanma Eventi
+        function setupRapor20Udfs() {
+            Swal.fire({ title: isEnglishJS ? 'Setting up UDFs...' : 'UDF\'ler Kuruluyor...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+            
+            $.post('/Rapor20/SetupRapor20UDFs', { __RequestVerificationToken: antiForgeryToken }, function (response) {
+                if (response.success) {
+                    Swal.fire(isEnglishJS ? 'Success' : 'Başarılı', response.message, 'success');
+                } else {
+                    Swal.fire(isEnglishJS ? 'Error' : 'Hata', response.message, 'error');
+                }
+            }).fail(function() {
+                Swal.fire(isEnglishJS ? 'Error' : 'Hata', 'Sunucu ile iletişim kurulamadı.', 'error');
+            });
+        }
+
+        /* CRM NOTLARI VE İŞLEM JS METOTLARI */
+        function openNotesModal() {
+            if (!currentBpCode) return;
+            var notesModal = new bootstrap.Modal(document.getElementById('notesModal'));
+            notesModal.show();
+            loadNotes();
+        }
+
+        function loadNotes() {
+            $('#notesHistoryList').html('<div class="text-center text-muted fst-italic my-4">' + (isEnglishJS ? 'Loading...' : 'Yükleniyor...') + '</div>');
+            $.ajax({
+                url: '/Rapor20/GetCariNotlar' + dbQueryString,
+                type: 'GET',
+                data: { cardCode: currentBpCode },
+                success: function(res) {
+                    if (res.success && res.data.length > 0) {
+                        var html = '';
+                        res.data.forEach(function(note) {
+                            var isTask = note.durum !== 'Bilgi';
+                            var isPending = note.durum === 'Bekliyor';
+                            var bubbleClass = isTask ? (isPending ? 'task-pending' : 'task-done') : '';
+                            var icon = isTask ? (isPending ? '<i class="fas fa-hourglass-half text-warning"></i>' : '<i class="fas fa-check-circle text-success"></i>') : '<i class="fas fa-info-circle text-info"></i>';
+                            
+                            var assignInfo = note.atananMail ? `<span class="badge bg-secondary ms-2"><i class="fas fa-arrow-right"></i> ${note.atananMail}</span>` : '';
+                            
+                            var actionBtn = isPending ? `<button class="btn btn-sm btn-success float-end mt-2" onclick="markTaskDone(${note.id})"><i class="fas fa-check"></i> ${isEnglishJS ? 'Mark as Done' : 'Tamamlandı İşaretle'}</button>` : '';
+                            var doneDate = note.tamamlanmaTarihi ? `<div class="mt-2 small text-success fw-bold"><i class="fas fa-check-double"></i> ${isEnglishJS ? 'Task Completed' : 'İşlem Tamamlandı'} (${note.tamamlanmaTarihi})</div>` : '';
+                            
+                            var safeText = encodeURIComponent(note.notIcerigi);
+                            var editBtn = `<button class="btn btn-sm btn-outline-primary float-end mt-2 me-2" onclick="editNotePrompt(${note.id}, decodeURIComponent('${safeText}'))"><i class="fas fa-edit"></i> ${isEnglishJS ? 'Edit' : 'Düzenle'}</button>`;
+
+                            html += `
+                            <div class="note-bubble shadow-sm ${bubbleClass}">
+                                <div class="note-meta d-flex justify-content-between align-items-center">
+                                    <div>
+                                        ${icon} <strong>${note.kullanici}</strong> (${note.sirket}) ${assignInfo}
+                                    </div>
+                                    <span><i class="far fa-clock"></i> ${note.tarih}</span>
+                                </div>
+                                <div class="mt-2 text-dark" style="white-space: pre-wrap;">${note.notIcerigi}</div>
+                                ${doneDate}
+                                ${actionBtn}
+                                ${editBtn}
+                                <div class="clearfix"></div>
+                            </div>`;
+                        });
+                        $('#notesHistoryList').html(html);
+                    } else {
+                        $('#notesHistoryList').html('<div class="text-center text-muted fst-italic my-4">' + (isEnglishJS ? 'No records yet for this BP.' : 'Henüz bu cari için bir kayıt yok.') + '</div>');
+                    }
+                },
+                error: function() { $('#notesHistoryList').html('<div class="text-danger text-center my-4">' + (isEnglishJS ? 'An error occurred while loading notes.' : 'Notlar yüklenirken bir hata oluştu.') + '</div>'); }
+            });
+        }
+
+        function editNotePrompt(id, currentText) {
+            Swal.fire({
+                title: isEnglishJS ? 'Edit Note' : 'Notu Düzenle',
+                input: 'textarea',
+                inputValue: currentText,
+                showCancelButton: true,
+                confirmButtonText: `<i class="fas fa-save"></i> ${isEnglishJS ? 'Update' : 'Güncelle'}`,
+                cancelButtonText: isEnglishJS ? 'Cancel' : 'İptal',
+                confirmButtonColor: '#0d6efd'
+            }).then((result) => {
+                if (result.isConfirmed && result.value) {
+                    $.ajax({
+                        url: '/Rapor20/UpdateCariNot' + dbQueryString,
+                        type: 'POST',
+                        headers: { 'RequestVerificationToken': antiForgeryToken },
+                        data: { noteId: id, noteContent: result.value },
+                        success: function(res) {
+                            if(res.success) {
+                                Swal.fire(isEnglishJS ? 'Success' : 'Başarılı', res.message, 'success');
+                                loadNotes();
+                            } else {
+                                Swal.fire(isEnglishJS ? 'Error' : 'Hata', res.message, 'error');
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        function saveNewNote() {
+            var note = $('#txtNewNote').val().trim();
+            var assignerVals = $('#txtAssignerEmail').val();
+            var assigneeVals = $('#txtAssigneeEmail').val();
+            
+            var assignerEmail = assignerVals ? (Array.isArray(assignerVals) ? assignerVals.join(',') : assignerVals) : '';
+            var assigneeEmail = assigneeVals ? (Array.isArray(assigneeVals) ? assigneeVals.join(',') : assigneeVals) : '';
+
+            var isTask = $('#chkIsTask').is(':checked');
+            var files = $('#fileAttachments')[0].files;
+
+            if (!note) {
+                Swal.fire(isEnglishJS ? 'Missing Info' : 'Eksik Bilgi', isEnglishJS ? 'Please write note or task content.' : 'Lütfen işlem / not içeriğini yazınız.', 'warning');
+                return;
+            }
+
+            if (isTask && !assigneeEmail) {
+                Swal.fire(isEnglishJS ? 'Missing Info' : 'Eksik Bilgi', isEnglishJS ? 'You must select assignee email for a task.' : 'İşlem ataması için atanan kişinin mail adresini seçmelisiniz.', 'warning');
+                return;
+            }
+
+            var btn = event.currentTarget;
+            var originalText = btn.innerHTML;
+            $(btn).prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> ' + (isEnglishJS ? 'Saving...' : 'Kaydediliyor...'));
+
+            var formData = new FormData();
+            formData.append('cardCode', currentBpCode);
+            formData.append('note', note);
+            formData.append('assignerEmail', assignerEmail);
+            formData.append('assigneeEmail', assigneeEmail);
+            formData.append('isTask', isTask);
+
+            for (var i = 0; i < files.length; i++) {
+                formData.append('attachments', files[i]);
+            }
+
+            $.ajax({
+                url: '/Rapor20/AddCariNot' + dbQueryString,
+                type: 'POST',
+                headers: { 'RequestVerificationToken': antiForgeryToken },
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function(res) {
+                    if(res.success) {
+                        $('#txtNewNote').val('');
+                        $('#chkIsTask').prop('checked', false).trigger('change'); 
+                        $('#txtAssigneeEmail').val(null).trigger('change');
+                        $('#fileAttachments').val(''); 
+                        loadNotes();
+                        Swal.fire({ title: isEnglishJS ? 'Success' : 'Başarılı', text: res.message, icon: 'success', timer: 2000, showConfirmButton: false });
+                        $('.fa-cloud').parent().removeClass('btn-outline-secondary').addClass('btn-warning text-dark');
+                    } else {
+                        Swal.fire(isEnglishJS ? 'Error' : 'Hata', res.message, 'error');
+                    }
+                },
+                error: function() { Swal.fire(isEnglishJS ? 'Error' : 'Hata', isEnglishJS ? 'Could not communicate with server.' : 'Sunucu ile iletişim kurulamadı.', 'error'); },
+                complete: function() { $(btn).prop('disabled', false).html(originalText); }
+            });
+        }
+
+        function markTaskDone(noteId) {
+            Swal.fire({
+                title: isEnglishJS ? 'Complete Task' : 'İşlemi Tamamla', 
+                text: isEnglishJS ? "Mark this task as completed? (Email will be sent to the assigner.)" : "Bu işlem tamamlandı olarak işaretlensin mi? (İşlemi atayan kişiye mail gidecektir.)", 
+                icon: 'question', 
+                showCancelButton: true, 
+                confirmButtonColor: '#198754', 
+                confirmButtonText: isEnglishJS ? 'Yes, Completed' : 'Evet, Tamamlandı',
+                cancelButtonText: isEnglishJS ? 'Cancel' : 'İptal'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: '/Rapor20/MarkCariNotAsDone', type: 'POST', data: { noteId: noteId },
+                        success: function (res) {
+                            if (res.success) { 
+                                Swal.fire(isEnglishJS ? 'Success' : 'Başarılı', res.message, 'success'); 
+                                loadNotes(); 
+                            } 
+                            else { Swal.fire(isEnglishJS ? 'Error' : 'Hata', res.message, 'error'); }
+                        }
+                    });
+                }
+            });
+        }
+
+        /* MANUEL MUTABAKAT KAYDET JS METOTLARI */
+        function checkAndOpenMutabakatModal() {
+            if (!currentBpCode) return;
+            Swal.fire({ title: isEnglishJS ? 'Checking Open Transactions' : 'Açık İşlem Kontrolü', text: isEnglishJS ? 'Checking open documents in system...' : 'Sistemdeki açık belgeler kontrol ediliyor...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+            $.ajax({
+                url: '/Rapor20/CheckUnreconciledForMutabakat' + dbQueryString,
+                type: 'GET',
+                data: { cardCode: currentBpCode, isConsolidated: isConsolidatedJS },
+                success: function (res) {
+                    if (res.success) {
+                        if (res.hasOpen) {
+                            Swal.fire({
+                                title: isEnglishJS ? 'Attention! Open Transactions Found' : 'Dikkat! Açık İşlemler Var',
+                                html: res.message,
+                                icon: 'warning',
+                                confirmButtonColor: '#dc3545',
+                                confirmButtonText: `<i class="fas fa-times"></i> ${isEnglishJS ? 'I Understand' : 'Anladım'}`
+                            });
+                        } else {
+                            Swal.close();
+                            var modal = new bootstrap.Modal(document.getElementById('mutabakatKayitModal'));
+                            modal.show();
+                        }
+                    } else {
+                        Swal.fire(isEnglishJS ? 'Error' : 'Hata', res.message, 'error');
+                    }
+                },
+                error: function () {
+                    Swal.fire(isEnglishJS ? 'Error' : 'Hata', isEnglishJS ? 'Connection Error.' : 'Bağlantı hatası.', 'error');
+                }
+            });
+        }
+
+        // "15.450,50" → "15450.50", "25,26" → "25.26", "1234.5" → "1234.5" (binlik nokta yalnızca virgülle birlikteyse silinir)
+        function trSayiNormalle(s) {
+            s = String(s || '').trim().replace(/\s/g, '');
+            if (s.indexOf(',') >= 0 && s.indexOf('.') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+            else s = s.replace(',', '.');
+            var n = parseFloat(s);
+            return isNaN(n) ? '' : String(n);
+        }
+
+        function saveManualMutabakat() {
+            var mDate = $('#txtMutabakatTarih').val();
+            var mBakiye = $('#txtMutabakatBakiye').val();
+            if (mBakiye !== "" && trSayiNormalle(mBakiye) === "") {
+                Swal.fire(isEnglishJS ? 'Invalid amount' : 'Geçersiz tutar', isEnglishJS ? 'Enter a number like 15450,50.' : 'Tutarı 15.450,50 veya 15450,50 gibi yazın.', 'warning');
+                return;
+            }
+
+            if (!mDate || mBakiye === "") {
+                Swal.fire(isEnglishJS ? 'Missing Info' : 'Eksik Bilgi', isEnglishJS ? 'Date and Balance are required.' : 'Tarih ve Bakiye alanları zorunludur.', 'warning');
+                return;
+            }
+
+            Swal.fire({ title: isEnglishJS ? 'Saving...' : 'Kaydediliyor...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+            $.ajax({
+                url: '/Rapor20/SaveManualMutabakat' + dbQueryString,
+                type: 'POST',
+                headers: { 'RequestVerificationToken': antiForgeryToken },
+                // Tutar Türkçe yazılır ("15.450,50" / "15450,50" / "25,26"), sunucuya kültürden bağımsız "15450.50" gider; sunucu InvariantCulture ile okur.
+                data: { cardCode: currentBpCode, mutabakatTarihi: mDate, bakiye: trSayiNormalle(mBakiye), isConsolidated: isConsolidatedJS },
+                success: function (res) {
+                    if (res.success) {
+                        Swal.fire(isEnglishJS ? 'Success' : 'Başarılı', res.message, 'success').then(() => {
+                            location.reload(); 
+                        });
+                    } else {
+                        Swal.fire(isEnglishJS ? 'Error' : 'Hata', res.message, 'error');
+                    }
+                },
+                error: function () {
+                    Swal.fire(isEnglishJS ? 'Error' : 'Hata', isEnglishJS ? 'Server error while saving.' : 'Kaydetme işlemi sırasında sunucu hatası oluştu.', 'error');
+                }
+            });
+        }
+
+        /* MUTABAKAT YAP (RECONCILIATION) JS METOTLARI */
+        function openReconModal() {
+            if (!currentBpCode) {
+                Swal.fire(isEnglishJS ? 'Warning' : 'Uyarı', isEnglishJS ? 'Please select a BP first.' : 'Lütfen önce bir cari hesap seçip raporlayın.', 'warning');
+                return;
+            }
+            $('#divTransactions').hide();
+            $('#divTransactions').empty();
+            $('#currencyFilterContainer').empty().hide();
+            calculateTotals();
+            var reconModal = new bootstrap.Modal(document.getElementById('reconModal'));
+            reconModal.show();
+
+            loadOpenTransactions(); 
+        }
+
+        function formatMoney(amount) {
+            return amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function filterByCurrency(currency, btnElement) {
+            $('.currency-filter-btn').removeClass('btn-primary').addClass('btn-outline-primary');
+            $(btnElement).removeClass('btn-outline-primary').addClass('btn-primary');
+
+            if (currency === 'ALL') {
+                $('.recon-row').show();
+            } else {
+                $('.recon-row').hide();
+                $('.recon-row').filter(function() {
+                    var mainCurr = $(this).data('currency');
+                    var kfCurr = $(this).data('kfcurrency');
+                    return mainCurr === currency || kfCurr === currency;
+                }).show();
+            }
+
+            $('.recon-row:hidden .chk-row:checked').each(function() {
+                $(this).prop('checked', false);
+                var rawMaxAmount = parseFloat($(this).data('maxamount'));
+                handleRowCheck(this, rawMaxAmount, true);
+            });
+
+            $('.chk-all-row').prop('checked', false);
+            calculateTotals();
+        }
+
+        function loadOpenTransactions() {
+            Swal.fire({ title: isEnglishJS ? 'Fetching Open Transactions...' : 'Açık İşlemler Çekiliyor...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+            
+            let useBpDueDateVal = $('#useBpDueDate').is(':checked');
+            var urlParams = dbQueryString ? dbQueryString + '&isConsolidated=' + isConsolidatedJS : '?isConsolidated=' + isConsolidatedJS;
+            urlParams += '&useBpDueDate=' + useBpDueDateVal;
+
+            $.ajax({
+                url: '/Rapor20/GetOpenTransactions' + urlParams,
+                type: 'GET',
+                data: { cardCode: currentBpCode },
+                success: function (res) {
+                    Swal.close();
+                    if (res.success) {
+                        renderReconTable(res.data);
+                    } else { Swal.fire(isEnglishJS ? 'Error' : 'Hata', res.message, 'error'); }
+                },
+                error: function () { Swal.fire(isEnglishJS ? 'Error' : 'Hata', isEnglishJS ? 'Connection Error.' : 'Bağlantı hatası.', 'error'); }
+            });
+        }
+
+        function renderReconTable(data) {
+            var container = $('#divTransactions');
+            container.empty();
+            $('#currencyFilterContainer').empty().hide();
+
+            if (data.length === 0) {
+                container.html('<div class="alert alert-success text-center py-4 fw-bold"><i class="fas fa-check-circle fa-2x d-block mb-2"></i> ' + (isEnglishJS ? 'Balance is perfectly clear! No open transactions to reconcile.' : 'Bakiye tamamen temiz! Kapatılacak açık işlem yok.') + '</div>');
+                container.fadeIn();
+                calculateTotals(); 
+                return;
+            }
+
+            var uniqueCurrencies = new Set();
+            data.forEach(function(item) {
+                if (item.paraBirimi) uniqueCurrencies.add(item.paraBirimi);
+                if (item.kurFarkiParaBirimi) uniqueCurrencies.add(item.kurFarkiParaBirimi);
+            });
+
+            var currencyList = Array.from(uniqueCurrencies).filter(c => c && c.trim() !== '');
+
+            if (currencyList.length > 0) {
+                var filterHtml = `<button class="btn btn-sm btn-primary currency-filter-btn" data-currency="ALL" onclick="filterByCurrency('ALL', this)"><i class="fas fa-filter"></i> ${isEnglishJS ? 'All' : 'Tümü'}</button>`;
+                currencyList.forEach(function(curr) {
+                    filterHtml += `<button class="btn btn-sm btn-outline-primary currency-filter-btn" data-currency="${curr}" onclick="filterByCurrency('${curr}', this)">${curr}</button>`;
+                });
+                $('#currencyFilterContainer').html(filterHtml).show();
+            }
+
+            var groupedData = {};
+            data.forEach(function(item) {
+                var db = item.dbName || '@currentDb';
+                if (!groupedData[db]) {
+                    groupedData[db] = { companyName: item.companyName || db, items: [] };
+                }
+                groupedData[db].items.push(item);
+            });
+
+            var tabsHtml = '<ul class="nav nav-pills mb-3 mt-2" id="companyReconTabs" role="tablist">';
+            var contentHtml = '<div class="tab-content" id="companyReconTabsContent">';
+
+            var isFirst = true;
+            for (var db in groupedData) {
+                var comp = groupedData[db];
+                var activeClass = isFirst ? 'active' : '';
+                
+                tabsHtml += `
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link ${activeClass} fw-bold shadow-sm" id="tab-${db}" data-bs-toggle="pill" data-bs-target="#pane-${db}" type="button" role="tab" data-dbname="${db}">
+                            <i class="fas fa-building me-1"></i> ${comp.companyName}
+                            <span class="badge bg-danger ms-2">${comp.items.length}</span>
+                        </button>
+                    </li>
+                `;
+
+                contentHtml += `
+                    <div class="tab-pane fade ${isFirst ? 'show active' : ''}" id="pane-${db}" role="tabpanel">
+                        <div class="table-responsive bg-white border rounded shadow-sm" style="max-height: 500px; overflow-y: auto;">
+                            <table class="table table-hover rapor-tablo" id="tbl-${db}">
+                                <thead>
+                                    <tr>
+                                        <th class="text-center" style="width: 50px;">
+                                            <div class="form-check d-flex justify-content-center mb-0">
+                                                <input class="form-check-input chk-all-row bg-warning border-0" type="checkbox" onchange="toggleSelectAll(this, '${db}')" title="${isEnglishJS ? 'Select All' : 'Tümünü Seç'}">
+                                            </div>
+                                        </th>
+                                        <th>${isEnglishJS ? 'Post Date' : 'Kayıt T.'}</th>
+                                        <th>${isEnglishJS ? 'Due Date' : 'Vade T.'}</th>
+                                        <th>${isEnglishJS ? 'Doc/Line' : 'Yevm/Satır'}</th>
+                                        <th>${isEnglishJS ? 'Type' : 'İşlem Tipi'}</th>
+                                        <th>${isEnglishJS ? 'Currency' : 'Para Birimi'}</th>
+                                        <th>${isEnglishJS ? 'Diff. Curr' : 'Kur Farkı Para Birimi'}</th>
+                                        <th class="text-right">${isEnglishJS ? 'FC Debit' : 'Dövizli Borç'}</th>
+                                        <th class="text-right">${isEnglishJS ? 'FC Credit' : 'Dövizli Alacak'}</th>
+                                        <th class="text-right">${isEnglishJS ? 'Open Debit (TL)' : 'Açık Borç (TL)'}</th>
+                                        <th class="text-right">${isEnglishJS ? 'Open Credit (TL)' : 'Açık Alacak (TL)'}</th>
+                                        <th>${isEnglishJS ? 'Remarks' : 'Açıklama'}</th>
+                                        <th class="text-end pe-3">${isEnglishJS ? 'Amount to Recon' : 'Kapatılacak Tutar'}</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-${db}">
+                `;
+
+                comp.items.forEach(function(item) {
+                    var isDebit = item.openDebit > 0;
+                    var maxAmount = isDebit ? item.openDebit : item.openCredit;
+                    var rawMaxAmount = parseFloat(maxAmount).toFixed(2);
+                    
+                    var formattedDebit = isDebit ? formatMoney(item.openDebit) : '-';
+                    var formattedCredit = !isDebit ? formatMoney(item.openCredit) : '-';
+                    var fcDebit = isDebit && item.dovizliBorc > 0 ? formatMoney(item.dovizliBorc) : '-';
+                    var fcCredit = !isDebit && item.dovizliAlacak > 0 ? formatMoney(item.dovizliAlacak) : '-';
+                    
+                    var pBirim = item.paraBirimi || 'TRY';
+                    var kfBirim = item.kurFarkiParaBirimi || '';
+
+                    var isEnglishVal = isEnglishJS;
+                    var kfTitle = isEnglishVal ? 'Diff Currency' : 'Kur Farkı Cinsi';
+
+                    var kfBadge = (kfBirim && kfBirim !== '') 
+                        ? `<span class="badge bg-success" title="${kfTitle}"><i class="fas fa-coins me-1"></i>KF: ${kfBirim}</span>` 
+                        : '<span class="text-muted">-</span>';
+
+                    contentHtml += `
+                        <tr class="recon-row" data-transid="${item.transId}" data-lineid="${item.lineId}" data-isdebit="${isDebit}" data-currency="${pBirim}" data-kfcurrency="${kfBirim}">
+                            <td class="text-center">
+                                <input type="checkbox" class="chk-row" data-maxamount="${rawMaxAmount}" onchange="handleRowCheck(this, ${rawMaxAmount})">
+                            </td>
+                            <td>${item.docDate}</td>
+                            <td>${item.dueDate}</td>
+                            <td><span class="fw-bold text-primary">${item.transId}</span><span class="text-muted small">/${item.lineId}</span></td>
+                            <td><span class="badge border border-primary text-primary">${item.islemTipi || '-'}</span></td>
+                            <td><span class="badge bg-dark">${pBirim}</span></td>
+                            <td class="text-center">${kfBadge}</td>
+                            <td class="text-right text-primary">${fcDebit}</td>
+                            <td class="text-right text-primary">${fcCredit}</td>
+                            <td class="text-right text-danger fw-bold">${formattedDebit}</td>
+                            <td class="text-right text-success fw-bold">${formattedCredit}</td>
+                            <td title="${item.memo}" class="text-truncate" style="max-width:200px;">${item.memo}</td>
+                            <td class="text-end pe-3">
+                                <input type="number" class="amount-input ms-auto" value="0.00" max="${rawMaxAmount}" min="0" step="0.01" disabled onkeyup="validateInput(this); calculateTotals()" onchange="validateInput(this); calculateTotals()">
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                contentHtml += `</tbody></table></div></div>`;
+                if (isFirst) { currentTargetDb = db; isFirst = false; }
+            }
+
+            tabsHtml += '</ul>';
+            contentHtml += '</div>';
+
+            container.html(tabsHtml + contentHtml);
+
+            $('button[data-bs-toggle="pill"]').on('shown.bs.tab', function (e) {
+                currentTargetDb = $(e.target).data('dbname');
+                $('#currencyFilterContainer button[data-currency="ALL"]').click();
+                calculateTotals();
+            });
+
+            container.fadeIn();
+            calculateTotals();
+        }
+
+        function toggleSelectAll(chkAllElem, dbName) {
+            var isChecked = $(chkAllElem).is(':checked');
+            $(`#tbody-${dbName} .recon-row:visible .chk-row`).each(function() {
+                if ($(this).is(':checked') !== isChecked) {
+                    $(this).prop('checked', isChecked);
+                    var rawMaxAmount = parseFloat($(this).data('maxamount'));
+                    handleRowCheck(this, rawMaxAmount, true);
+                }
+            });
+            calculateTotals(); 
+        }
+
+        function validateInput(input) {
+            var val = parseFloat($(input).val()) || 0;
+            var max = parseFloat($(input).attr('max')) || 0;
+            if (val > max) { $(input).val(max.toFixed(2)); } 
+            else if (val < 0) { $(input).val("0.00"); }
+        }
+
+        function handleRowCheck(checkbox, maxAmount, skipCalc = false) {
+            var row = $(checkbox).closest('tr');
+            var input = row.find('.amount-input');
+            if ($(checkbox).is(':checked')) {
+                row.addClass('table-primary');
+                input.prop('disabled', false).val(parseFloat(maxAmount).toFixed(2));
+            } else {
+                row.removeClass('table-primary');
+                input.prop('disabled', true).val("0.00");
+            }
+            if(!skipCalc) calculateTotals();
+        }
+
+        function calculateTotals() {
+            var totalDebit = 0.0, totalCredit = 0.0;
+            $(`#tbody-${currentTargetDb} .chk-row:checked`).each(function () {
+                var row = $(this).closest('tr');
+                var isDebit = row.data('isdebit');
+                var val = parseFloat(row.find('.amount-input').val()) || 0;
+                if (isDebit) totalDebit += val; else totalCredit += val;
+            });
+
+            var diff = Math.round(Math.abs(totalDebit - totalCredit) * 100) / 100; 
+            $('#lblTotalDebit').text(formatMoney(totalDebit) + ' ₺');
+            $('#lblTotalCredit').text(formatMoney(totalCredit) + ' ₺');
+            $('#lblDifference').text(formatMoney(diff) + ' ₺');
+
+            if (totalDebit > 0 && totalCredit > 0 && diff === 0) {
+                $('#lblDifference').removeClass('text-danger').addClass('text-success');
+                $('#btnReconcile').prop('disabled', false).removeClass('btn-secondary').addClass('btn-success').css('background-color', '#198754');
+            } else {
+                $('#lblDifference').removeClass('text-success').addClass('text-danger');
+                $('#btnReconcile').prop('disabled', true).removeClass('btn-success').addClass('btn-secondary').css('background-color', '');
+            }
+        }
+
+        function startRobotPolling(matchedCardCode, dbName) {
+            Swal.fire({
+                title: isEnglishJS ? 'SAP UI Robot in Progress' : 'SAP UI Robot İşlemde',
+                html: `
+                    <p class="text-muted small">${isEnglishJS ? 'Running reconciliations in background. Please do not close the tab...' : 'Arka planda kapanışlar yapılıyor. Lütfen sekmeyi kapatmayın...'}</p>
+                    <div id="robotStatusText" class="alert alert-warning fw-bold mt-2 border-warning">${isEnglishJS ? 'Waiting in queue...' : 'Robot sırası bekleniyor...'}</div>
+                `,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            if(robotInterval) clearInterval(robotInterval);
+            
+            robotInterval = setInterval(() => {
+                $.ajax({
+                    url: '/Rapor20/GetRobotCheckStatus',
+                    type: 'GET',
+                    data: { matchedCardCode: matchedCardCode, dbName: dbName },
+                    success: function(res) {
+                        if (res.success) {
+                            $('#robotStatusText').html(res.statusMessage);
+                            
+                            if (res.isFinished) {
+                                clearInterval(robotInterval);
+                                Swal.fire(isEnglishJS ? 'Completed' : 'İşlem Tamamlandı', res.statusMessage, 'success').then(() => {
+                                    loadOpenTransactions();
+                                });
+                            }
+                        }
+                    }
+                });
+            }, 3000);
+        }
+
+        function performManualReconciliation() {
+            var lines = [];
+            $(`#tbody-${currentTargetDb} .chk-row:checked`).each(function () {
+                var row = $(this).closest('tr');
+                var amt = parseFloat(row.find('.amount-input').val()) || 0;
+                if (amt > 0) { lines.push({ TransId: parseInt(row.data('transid')), LineId: parseInt(row.data('lineid')), ReconcileAmount: amt }); }
+            });
+
+            let useBpDueDateVal = $('#useBpDueDate').is(':checked');
+
+            Swal.fire({
+                title: isEnglishJS ? 'Reconciliation Confirm' : 'Mutabakat Onayı', 
+                html: isEnglishJS ? `Selected transactions will be reconciled in <b class='text-danger'>${currentTargetDb}</b> company. Confirm?` : `Seçilen işlemler <b class='text-danger'>${currentTargetDb}</b> şirketinde kapatılacaktır. Onaylıyor musunuz?`, 
+                icon: 'warning', showCancelButton: true, confirmButtonColor: '#198754', 
+                confirmButtonText: isEnglishJS ? 'Yes, Reconcile' : 'Evet, Kapat',
+                cancelButtonText: isEnglishJS ? 'Cancel' : 'İptal'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({ title: isEnglishJS ? 'Processing...' : 'İşleniyor...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+                    
+                    $.ajax({
+                        url: '/Rapor20/PerformReconciliation' + dbQueryString, 
+                        type: 'POST', contentType: 'application/json', headers: { 'RequestVerificationToken': antiForgeryToken },
+                        data: JSON.stringify({ CardCode: currentBpCode, TargetDbName: currentTargetDb, Lines: lines, UseBpDueDate: useBpDueDateVal }),
+                        success: function (res) {
+                            if (res.success) { 
+                                if(res.isRobotPending) {
+                                    startRobotPolling(res.matchedCardCode, currentTargetDb);
+                                } else {
+                                    Swal.fire(isEnglishJS ? 'Success' : 'Başarılı', res.message, 'success').then(() => { loadOpenTransactions(); }); 
+                                }
+                            } 
+                            else { Swal.fire({ title: isEnglishJS ? 'Error' : 'Hata', html: res.message, icon: 'error' }); }
+                        },
+                        error: function (xhr) { 
+                            let errMsg = isEnglishJS ? "Unknown Error" : "Bilinmeyen Hata";
+                            if(xhr.status === 400) errMsg = isEnglishJS ? "Bad Request (400)." : "Parametre eşleşmedi (400 Bad Request).";
+                            if(xhr.status === 404) errMsg = isEnglishJS ? "Not Found (404)." : "Metod bulunamadı (404 Not Found).";
+                            if(xhr.status === 500) errMsg = isEnglishJS ? "Internal Server Error (500)." : "C# tarafında kod çöktü (500 Internal Error).";
+                            Swal.fire((isEnglishJS ? 'Server Error (Code: ' : 'Sunucu Hatası (Kod: ') + xhr.status + ')', errMsg + '<br><br><span style="font-size:12px;color:red;">Detay: ' + (xhr.responseText ? xhr.responseText.substring(0, 150) : '') + '</span>', 'error'); 
+                        }
+                    });
+                }
+            });
+        }
+        
+        function triggerAutoReconciliation() {
+            let useBpDueDateVal = $('#useBpDueDate').is(':checked');
+
+            Swal.fire({
+                title: isEnglishJS ? 'Auto Reconcile' : 'Otomatik Kapatma',
+                html: isEnglishJS ? `All open transactions in <b>(${currentTargetDb})</b> will be analyzed and matching balances will be reconciled.<br><br>Do you confirm?` : `Seçili carideki <b>(${currentTargetDb})</b> tüm açık işlemler analiz edilecek ve eşleşen bakiyeler kapatılacaktır.<br><br>Onaylıyor musunuz?`,
+                icon: 'info',
+                showCancelButton: true,
+                confirmButtonColor: '#2575fc',
+                cancelButtonColor: '#d33',
+                confirmButtonText: isEnglishJS ? '<i class="fas fa-play"></i> Yes, Start' : '<i class="fas fa-play"></i> Evet, Başlat',
+                cancelButtonText: isEnglishJS ? 'Cancel' : 'İptal'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    let progressInterval;
+                    
+                    Swal.fire({ 
+                        title: isEnglishJS ? 'Reconciling Transactions' : 'İşlemler Kapatılıyor', 
+                        html: `
+                            <div id="autoReconProgressContainer" class="p-3 text-start bg-light border rounded shadow-sm" style="min-height: 100px;">
+                                <div class="text-center text-muted"><i class="fas fa-spinner fa-spin fa-2x mb-2"></i><br>${isEnglishJS ? 'System preparing...' : 'Sistem hazırlanıyor...'}</div>
+                            </div>
+                        `,
+                        allowOutsideClick: false, 
+                        showConfirmButton: false,
+                        didOpen: () => { 
+                            progressInterval = setInterval(() => {
+                                $.get('/Rapor20/GetAutoReconcileProgress' + dbQueryString + '&cardCode=' + currentBpCode + '&targetDbName=' + currentTargetDb, function(res) {
+                                    if(res && res.success && res.message) {
+                                        $('#autoReconProgressContainer').html(res.message);
+                                    }
+                                });
+                            }, 800);
+                        },
+                        willClose: () => { clearInterval(progressInterval); }
+                    });
+
+                    $.ajax({
+                        url: '/Rapor20/AutoReconcile' + dbQueryString,
+                        type: 'POST',
+                        headers: { 'RequestVerificationToken': antiForgeryToken },
+                        data: { cardCode: currentBpCode, targetDbName: currentTargetDb, useBpDueDate: useBpDueDateVal },
+                        success: function (res) {
+                            if (res.success) {
+                                if(res.isRobotPending) {
+                                    startRobotPolling(res.matchedCardCode, currentTargetDb);
+                                } else {
+                                    Swal.fire(isEnglishJS ? 'Successfully Completed' : 'İşlem Kusursuz Tamamlandı', res.message, 'success').then(() => { loadOpenTransactions(); });
+                                }
+                            } else {
+                                Swal.fire({ title: isEnglishJS ? 'Result Report' : 'İşlem Sonucu Raporu', html: res.message, icon: 'warning', width: 700 }).then(() => { loadOpenTransactions(); });
+                            }
+                        },
+                        error: function (xhr) {
+                            let errMsg = isEnglishJS ? "Unknown Error" : "Bilinmeyen Hata";
+                            if(xhr.status === 400) errMsg = isEnglishJS ? "Parameter Error." : "Parametre hatası.";
+                            if(xhr.status === 500) errMsg = isEnglishJS ? "Internal Server Error." : "C# tarafında kod çöktü.";
+                            Swal.fire((isEnglishJS ? 'Server Error (Code: ' : 'Sunucu Hatası (Kod: ') + xhr.status + ')', errMsg + '<br><br><span style="font-size:12px;color:red;">Detay: ' + (xhr.responseText ? xhr.responseText.substring(0, 150) : '') + '</span>', 'error');
+                        }
+                    });
+                }
+            });
+        }
+        
+        function triggerCancelAllReconciliations() {
+            Swal.fire({
+                title: isEnglishJS ? 'Bulk Cancel Confirm' : 'Toplu İptal Onayı',
+                html: isEnglishJS ? `All internal reconciliations for BP <b>(${currentBpCode})</b> in <b class="text-danger">${currentTargetDb}</b> will be canceled via Service Layer.<br><br>This action cannot be undone. Confirm?` : `Seçili cariye <b>(${currentBpCode})</b> ait <b class="text-danger">${currentTargetDb}</b> şirketindeki tüm açık ve geçerli iç mutabakatlar Service Layer üzerinden iptal edilecektir.<br><br>Bu işlemi geri alamazsınız. Onaylıyor musunuz?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: isEnglishJS ? '<i class="fas fa-undo"></i> Yes, Cancel All' : '<i class="fas fa-undo"></i> Evet, Tümünü İptal Et',
+                cancelButtonText: isEnglishJS ? 'Cancel' : 'Vazgeç'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({
+                        title: isEnglishJS ? 'Canceling...' : 'İptal İşlemi Sürüyor...',
+                        text: isEnglishJS ? 'Communicating with Service Layer, this might take a moment...' : 'Service Layer ile iletişim kuruluyor, bu işlem mutabakat sayısına göre biraz sürebilir...',
+                        allowOutsideClick: false,
+                        didOpen: () => { Swal.showLoading(); }
+                    });
+
+                    $.ajax({
+                        url: '/Rapor20/CancelReconciliations' + dbQueryString,
+                        type: 'POST',
+                        headers: { 'RequestVerificationToken': antiForgeryToken },
+                        data: { cardCode: currentBpCode, targetDbName: currentTargetDb },
+                        success: function (res) {
+                            if (res.success) {
+                                if(res.hasError) {
+                                    Swal.fire({ title: isEnglishJS ? 'Partial Success / Errors' : 'Kısmi Başarı / İptal Edilemeyenler', html: res.message, icon: 'warning', width: 700 }).then(() => { loadOpenTransactions(); });
+                                } else {
+                                    Swal.fire(isEnglishJS ? 'Completely Canceled' : 'Tamamen İptal Edildi', res.message, 'success').then(() => { loadOpenTransactions(); });
+                                }
+                            } else {
+                                Swal.fire(isEnglishJS ? 'Error' : 'Hata', res.message, 'error');
+                            }
+                        },
+                        error: function (xhr) {
+                            let errMsg = isEnglishJS ? "Unknown Error" : "Bilinmeyen Hata";
+                            if(xhr.status === 400) errMsg = isEnglishJS ? "Parameter Error." : "Parametre hatası (400).";
+                            if(xhr.status === 500) errMsg = isEnglishJS ? "Internal Server Error." : "C# tarafında kod çöktü (500).";
+                            Swal.fire((isEnglishJS ? 'Server Error (Code: ' : 'Sunucu Hatası (Kod: ') + xhr.status + ')', errMsg + '<br><br><span style="font-size:12px;color:red;">Detay: ' + (xhr.responseText ? xhr.responseText.substring(0, 150) : '') + '</span>', 'error');
+                        }
+                    });
+                }
+            });
+        }
+    </script>
+}

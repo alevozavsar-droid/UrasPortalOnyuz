@@ -1,0 +1,504 @@
+﻿@model List<WebApplication3.Models.DengeMalzemeViewModel>
+@using WebApplication3.Models
+@using System.Globalization
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Xsrf
+
+@{
+    ViewData["Title"] = "Denge Malzeme Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? currentDb;
+    int selectedYear = ViewBag.SelectedYear ?? DateTime.Now.Year;
+    int selectedMonth = ViewBag.SelectedMonth ?? DateTime.Now.Month;
+    
+    var modelData = Model ?? new List<DengeMalzemeViewModel>();
+
+    // KPI Hesaplamaları
+    var islemSayisi = modelData.Count;
+    var totalGirisTutari = modelData.Sum(x => x.ToplamGirisTutari);
+    var totalCikisTutari = modelData.Sum(x => x.ToplamCikisTutari);
+    var totalBakiyeTutari = modelData.Sum(x => x.KalanTutar);
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        /* ========================================================================= */
+        /* TAM EKRAN (FULL WIDTH) VE BOŞLUK SIFIRLAMA ZORLAMASI                      */
+        /* Tablonun kısıtlanmadan aşağı akması için ana kapsayıcılar serbest bırakıldı*/
+        /* ========================================================================= */
+        html, body { overflow-x: hidden; height: auto !important; margin: 0; padding: 0; }
+        
+        .container, .container-fluid, main, .content-wrapper, .page-content, .app-content, .content, .body-content { 
+            max-width: 100% !important; 
+            width: 100% !important; 
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            padding-left: 0.5rem !important; 
+            padding-right: 0.5rem !important; 
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            padding-bottom: 50px !important;
+        }
+
+        body { 
+            background-color: #f4f7fc; 
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            color: #2b3445; 
+            font-size: 0.75rem;
+        }
+
+        /* Dashboard Card Stilleri */
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 20px; transition: all 0.3s ease; position: relative; overflow: hidden; cursor: default; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        
+        .kpi-title { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; z-index: 2; position: relative; }
+        .kpi-value { font-size: 24px; font-weight: 900; color: #0f172a; margin-bottom: 2px; z-index: 2; position: relative; white-space: nowrap; letter-spacing: -0.5px; }
+        .kpi-desc { font-size: 11px; color: #94a3b8; z-index: 2; position: relative; }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 5rem; color: #e2e8f0; opacity: 0.4; z-index: 1; transform: rotate(-10deg); }
+        
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        .border-top-warning { border-top: 4px solid #f59e0b !important; }
+        .border-top-danger { border-top: 4px solid #ef4444 !important; }
+        .border-top-success { border-top: 4px solid #10b981 !important; }
+        .border-top-info { border-top: 4px solid #0ea5e9 !important; }
+
+        /* Toolbar ve Aksiyon Alanı */
+        .action-toolbar { background-color: #ffffff; padding: 12px 15px; border-radius: 10px; border: 1px solid #eef2f7; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; justify-content: space-between; align-items: center; }
+
+        /* TABLO KARTI - Yükseklik ve Overflow kısıtlaması TAMAMEN kaldırıldı! */
+        .report-table-card {
+            background: #ffffff; 
+            border-radius: 12px; 
+            border: 1px solid #eef2f7; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03); 
+            padding: 20px;
+            height: auto !important;
+            overflow: visible !important;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .table-container { 
+            width: 100%;
+            height: auto !important;
+            max-height: none !important;
+            overflow-y: visible !important; /* Dikey scroll iptal, sayfa uzayacak */
+            overflow-x: auto; /* Sadece yatayda taşma olursa kaydır */
+            background-color: white; 
+            border-radius: 8px; 
+            border: 1px solid #eef2f7; 
+            position: relative;
+        }
+        
+        table { width: 100%; table-layout: auto; border-collapse: separate; border-spacing: 0; min-width: 1800px; }
+        
+        th, td {
+            padding: 8px 10px !important;
+            font-size: 11px !important;
+            border-right: 1px solid #f1f5f9;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+            line-height: 1.3;
+        }
+
+        /* 2 Kademeli Sticky Header */
+        thead th { 
+            position: sticky; 
+            z-index: 100; 
+            font-weight: 700; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px; 
+            border-bottom: 1px solid #e2e8f0 !important;
+            text-align: center;
+        }
+        thead tr:nth-child(1) th { top: 0; z-index: 101; }
+        thead tr:nth-child(2) th { top: 38px; z-index: 100; } /* Birinci satırın yüksekliğine göre ayarlandı */
+        
+        .table-hover tbody tr:hover { background-color: #f8fafc; }
+        
+        /* Renk Grupları (Stok Konsepti) */
+        :root {
+            --devir-bg: #f8fafc; --devir-text: #475569;
+            --giren-bg: #ecfdf5; --giren-text: #065f46;
+            --cikan-bg: #fef2f2; --cikan-text: #991b1b;
+            --kalan-bg: #fffbeb; --kalan-text: #92400e;
+            --toplam-giren-bg: #d1fae5;
+            --toplam-cikan-bg: #fee2e2;
+        }
+
+        .group-devir { background-color: var(--devir-bg) !important; color: var(--devir-text) !important; }
+        .group-giren { background-color: var(--giren-bg) !important; color: var(--giren-text) !important; }
+        .group-cikan { background-color: var(--cikan-bg) !important; color: var(--cikan-text) !important; }
+        .group-kalan { background-color: var(--kalan-bg) !important; color: var(--kalan-text) !important; }
+        .group-giren-toplam { background-color: var(--toplam-giren-bg) !important; color: var(--giren-text) !important; font-weight: 700; }
+        .group-cikan-toplam { background-color: var(--toplam-cikan-bg) !important; color: var(--cikan-text) !important; font-weight: 700; }
+        
+        /* Tıklanabilir Hücreler */
+        .clickable-cell { color: #0d6efd; font-weight: 600; cursor: pointer; transition: all 0.2s ease; text-align: right; }
+        .clickable-cell:hover { color: #0a58ca; background-color: rgba(13, 110, 253, 0.1); border-radius: 4px; }
+        .clickable-cell.text-danger { color: #dc3545 !important; }
+        .clickable-cell.text-danger:hover { background-color: rgba(220, 53, 69, 0.1); color: #b02a37 !important;}
+
+        .balance-highlight { font-weight: 800; font-size: 11.5px; }
+        .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+        /* Butonlar */
+        .btn { font-weight: 600; letter-spacing: 0.2px; }
+        .btn-sm { font-size: 11.5px !important; padding: 4px 12px !important; height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+        .btn-primary { background-color: #3b82f6; border-color: #3b82f6; }
+        .btn-success { background-color: #10b981; border-color: #10b981; }
+        .btn-outline-secondary { color: #64748b; border-color: #cbd5e1; }
+        .btn-outline-secondary:hover { background-color: #f1f5f9; color: #0f172a; }
+
+        /* Modal Düzeltmeleri */
+        .modal-content { border-radius: 12px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .modal-header { border-bottom: 1px solid #e2e8f0; background: #f8fafc; border-radius: 12px 12px 0 0; }
+    </style>
+}
+
+@Html.AntiForgeryToken()
+
+<div class="container-fluid">
+    <input type="hidden" id="currentDb" value="@currentDb" />
+
+    <!-- Başlık Alanı -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;"><i class="fas fa-balance-scale text-primary me-2"></i>Denge Malzeme Raporu</h4>
+            <span class="text-muted" style="font-size: 13px;">Aktif Veritabanı: <strong class="text-primary">@currentSelectedDbDisplay</strong> | Aylık Stok Girdi/Çıktı ve Bakiye Kontrolü</span>
+        </div>
+        <div>
+            <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-sm btn-outline-secondary shadow-sm rounded-pill px-3">
+                <i class="fas fa-arrow-left"></i> Ana Sayfaya Dön
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI'lar -->
+    <div class="row mb-3 g-3">
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-info hover-elevate">
+                <i class="fas fa-cubes kpi-icon-bg"></i>
+                <div class="kpi-title">Listelenen Kalem Sayısı</div>
+                <div class="kpi-value text-info">@islemSayisi</div>
+                <div class="kpi-desc">İşlem gören farklı stok kalemi</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-success hover-elevate">
+                <i class="fas fa-arrow-down kpi-icon-bg"></i>
+                <div class="kpi-title">Toplam Giriş Tutarı</div>
+                <div class="kpi-value text-success">@totalGirisTutari.ToString("N2", new CultureInfo("tr-TR")) ₺</div>
+                <div class="kpi-desc">Dönem içi stoğa giren (Alış, Üretim vb.)</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-danger hover-elevate">
+                <i class="fas fa-arrow-up kpi-icon-bg"></i>
+                <div class="kpi-title">Toplam Çıkış Tutarı</div>
+                <div class="kpi-value text-danger">@totalCikisTutari.ToString("N2", new CultureInfo("tr-TR")) ₺</div>
+                <div class="kpi-desc">Dönem içi stoktan çıkan (Satış, Sarf vb.)</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-warning hover-elevate position-relative">
+                <span class="badge bg-warning text-dark position-absolute top-0 end-0 mt-3 me-3 rounded-pill shadow-sm">NET</span>
+                <i class="fas fa-wallet kpi-icon-bg"></i>
+                <div class="kpi-title">Dönem Sonu Bakiye</div>
+                <div class="kpi-value text-warning">@totalBakiyeTutari.ToString("N2", new CultureInfo("tr-TR")) ₺</div>
+                <div class="kpi-desc">Mevcut stok finansal karşılığı</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aksiyon ve Filtre Barı -->
+    <div class="action-toolbar mb-3">
+        <form asp-controller="Rapor125" asp-action="Index" method="get" id="raporForm" class="w-100 d-flex flex-wrap align-items-center justify-content-between gap-3 m-0">
+            <input type="hidden" name="db" value="@currentDb" />
+            
+            <div class="d-flex align-items-center gap-3 flex-grow-1 flex-wrap">
+                <div class="d-flex align-items-center gap-2">
+                    <label class="form-label mb-0 fw-bold text-muted" style="font-size: 11px;">YIL:</label>
+                    <select class="form-select form-select-sm" name="year" style="width: 100px; font-size: 11.5px;">
+                        @for (int y = DateTime.Now.Year + 1; y >= DateTime.Now.Year - 5; y--)
+                        {
+                            <option value="@y" selected="@(y == selectedYear)">@y</option>
+                        }
+                    </select>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <label class="form-label mb-0 fw-bold text-muted" style="font-size: 11px;">AY:</label>
+                    <select class="form-select form-select-sm" name="month" style="width: 120px; font-size: 11.5px;">
+                        <option value="1" selected="@(selectedMonth == 1)">Ocak</option>
+                        <option value="2" selected="@(selectedMonth == 2)">Şubat</option>
+                        <option value="3" selected="@(selectedMonth == 3)">Mart</option>
+                        <option value="4" selected="@(selectedMonth == 4)">Nisan</option>
+                        <option value="5" selected="@(selectedMonth == 5)">Mayıs</option>
+                        <option value="6" selected="@(selectedMonth == 6)">Haziran</option>
+                        <option value="7" selected="@(selectedMonth == 7)">Temmuz</option>
+                        <option value="8" selected="@(selectedMonth == 8)">Ağustos</option>
+                        <option value="9" selected="@(selectedMonth == 9)">Eylül</option>
+                        <option value="10" selected="@(selectedMonth == 10)">Ekim</option>
+                        <option value="11" selected="@(selectedMonth == 11)">Kasım</option>
+                        <option value="12" selected="@(selectedMonth == 12)">Aralık</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm shadow-sm px-4">
+                    <i class="fas fa-search"></i> Raporla
+                </button>
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-success shadow-sm px-3" onclick="exportDengeExcel()">
+                    <i class="fas fa-file-excel"></i> Excel'e Aktar
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- İşlem Listesi (Tablo) -->
+    <div class="report-table-card mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="card-title mb-0 fw-bold text-dark" style="font-size: 14px;"><i class="fas fa-table text-primary me-2"></i>Stok Miktar ve Değer Tablosu</div>
+            <div class="text-muted" style="font-size: 11.5px;">Mavi/Kırmızı değerlere tıklayarak detayları görebilirsiniz.</div>
+        </div>
+        
+        <!-- Yükseklik kısıtlaması TAMAMEN KALDIRILAN Tablo Konteyneri -->
+        <div class="table-container shadow-sm">
+            @if (modelData.Any())
+            {
+                <table class="table table-hover align-middle mb-0" id="raporDengeTable">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" class="group-devir text-center" style="vertical-align: middle;">Kalem Kodu</th>
+                            <th rowspan="2" class="group-devir text-center" style="min-width:250px; vertical-align: middle;">Kalem Tanımı</th>
+                            <th colspan="3" class="group-devir text-center border-start"><i class="fas fa-history me-1"></i> Dönem Başı Devir</th>
+                            <th colspan="8" class="group-giren text-center border-start"><i class="fas fa-arrow-down me-1"></i> Stoka Girenler</th> 
+                            <th colspan="8" class="group-cikan text-center border-start"><i class="fas fa-arrow-up me-1"></i> Stoktan Çıkanlar</th> 
+                            <th colspan="3" class="group-kalan text-center border-start"><i class="fas fa-equals me-1"></i> Dönem Sonu Kalan</th>
+                        </tr>
+                        <tr>
+                            <th class="group-devir border-start">Miktar</th>
+                            <th class="group-devir">Tutar</th>
+                            <th class="group-devir">B. Fiyat</th>
+
+                            <th class="group-giren border-start">Alış Mik.</th>
+                            <th class="group-giren">Alış Tut.</th>
+                            <th class="group-giren">Sat.İade Mik.</th>
+                            <th class="group-giren">Sat.İade Tut.</th>
+                            <th class="group-giren">Ürt.Giriş Mik.</th>
+                            <th class="group-giren">Ürt.Giriş Tut.</th>
+                            <th class="group-giren-toplam">Top. Giriş Mik.</th>
+                            <th class="group-giren-toplam">Top. Giriş Tut.</th>
+
+                            <th class="group-cikan border-start">Satış Mik.</th>
+                            <th class="group-cikan">Satış Tut.</th>
+                            <th class="group-cikan">Alış İade Mik.</th>
+                            <th class="group-cikan">Alış İade Tut.</th>
+                            <th class="group-cikan">Ürt.Çıkış Mik.</th>
+                            <th class="group-cikan">Ürt.Çıkış Tut.</th>
+                            <th class="group-cikan-toplam">Top. Çıkış Mik.</th>
+                            <th class="group-cikan-toplam">Top. Çıkış Tut.</th>
+
+                            <th class="group-kalan border-start">Bakiye Mik.</th>
+                            <th class="group-kalan">Bakiye Tut.</th>
+                            <th class="group-kalan">Ort. Maliyet</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model)
+                        {
+                            <tr>
+                                <td class="fw-bold text-dark">@item.KalemKodu</td>
+                                <td class="text-start" style="max-width:250px; white-space: normal;" title="@item.KalemTanimi">@item.KalemTanimi</td>
+
+                                <td class="num">@item.DevirMiktari.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="num">@item.DevirTutari.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="num text-muted">@item.DevirBirimFiyati.ToString("N2", new CultureInfo("tr-TR"))</td>
+
+                                <td class="clickable-cell" onclick="openDetay('@item.KalemKodu', '@item.KalemTanimi', 'AlisMiktari')">@item.AlisMiktari.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="clickable-cell" onclick="openDetay('@item.KalemKodu', '@item.KalemTanimi', 'AlisTutari')">@item.AlisTutari.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="clickable-cell" onclick="openDetay('@item.KalemKodu', '@item.KalemTanimi', 'SatisIadeMiktari')">@item.SatisIadeMiktari.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="clickable-cell" onclick="openDetay('@item.KalemKodu', '@item.KalemTanimi', 'SatisIadeTutari')">@item.SatisIadeTutari.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="clickable-cell" onclick="openDetay('@item.KalemKodu', '@item.KalemTanimi', 'UretimGirisMiktari')">@item.UretimGirisMiktari.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="clickable-cell" onclick="openDetay('@item.KalemKodu', '@item.KalemTanimi', 'UretimGirisTutari')">@item.UretimGirisTutari.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="num group-giren-toplam">@item.ToplamGirisMiktari.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="num group-giren-toplam">@item.ToplamGirisTutari.ToString("N2", new CultureInfo("tr-TR"))</td>
+
+                                <td class="clickable-cell text-danger" onclick="openDetay('@item.KalemKodu', '@item.KalemTanimi', 'SatisMiktari')">@item.SatisMiktari.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="clickable-cell text-danger" onclick="openDetay('@item.KalemKodu', '@item.KalemTanimi', 'SatisTutari')">@item.SatisTutari.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="clickable-cell text-danger" onclick="openDetay('@item.KalemKodu', '@item.KalemTanimi', 'AlisIadeMiktari')">@item.AlisIadeMiktari.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="clickable-cell text-danger" onclick="openDetay('@item.KalemKodu', '@item.KalemTanimi', 'AlisIadeTutari')">@item.AlisIadeTutari.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="clickable-cell text-danger" onclick="openDetay('@item.KalemKodu', '@item.KalemTanimi', 'UretimeCikisMiktari')">@item.UretimeCikisMiktari.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="clickable-cell text-danger" onclick="openDetay('@item.KalemKodu', '@item.KalemTanimi', 'UretimeCikisTutari')">@item.UretimeCikisTutari.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="num group-cikan-toplam">@item.ToplamCikisMiktari.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="num group-cikan-toplam">@item.ToplamCikisTutari.ToString("N2", new CultureInfo("tr-TR"))</td>
+
+                                <td class="num"><span class="balance-highlight text-dark">@item.KalanMiktar.ToString("N2", new CultureInfo("tr-TR"))</span></td>
+                                <td class="num"><span class="balance-highlight text-primary">@item.KalanTutar.ToString("N2", new CultureInfo("tr-TR"))</span></td>
+                                <td class="num fw-bold text-muted">@item.OrtalamaMaliyet.ToString("N2", new CultureInfo("tr-TR"))</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <div class="text-center py-5">
+                    <div class="text-muted mb-3"><i class="fas fa-box-open fa-3x opacity-25 text-primary"></i></div>
+                    <h6 class="fw-bold text-secondary">Kayıt Bulunamadı</h6>
+                    <p class="small text-muted mb-0">Seçili tarih aralığında gösterilecek stok hareketi bulunamadı.</p>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- STOK HAREKET DETAYI MODAL -->
+<div class="modal fade" id="hareketDetayModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold text-dark" style="font-size: 15px;"><i class="fas fa-list me-2 text-primary"></i>Stok Hareket Detayı</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4">
+        <div class="d-flex align-items-center mb-4 p-3 bg-light rounded border">
+            <div class="me-3"><i class="fas fa-box-open text-primary fs-3"></i></div>
+            <div>
+                <h6 class="mb-1 fw-bold text-dark" id="modalStokKodu"></h6>
+                <p class="mb-0 text-muted small" id="modalStokIslem"></p>
+            </div>
+        </div>
+        <div class="table-responsive border rounded shadow-sm">
+            <table class="table table-hover table-striped mb-0" id="modalDetayTable">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-secondary small fw-bold text-uppercase">Belge Tarihi</th>
+                        <th class="text-secondary small fw-bold text-uppercase">Belge Tipi</th>
+                        <th class="text-secondary small fw-bold text-uppercase">Belge No</th>
+                        <th class="text-secondary small fw-bold text-uppercase">Cari Kodu</th>
+                        <th class="text-secondary small fw-bold text-uppercase">Cari Adı</th>
+                        <th class="text-secondary small fw-bold text-uppercase text-end">Miktar</th>
+                        <th class="text-secondary small fw-bold text-uppercase text-end">Tutar</th>
+                    </tr>
+                </thead>
+                <tbody id="modalDetayBody"></tbody>
+            </table>
+        </div>
+        <div id="loadingSpinner" class="text-center py-5 d-none">
+            <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                <span class="visually-hidden"></span>
+            </div>
+            <p class="mt-3 text-muted fw-bold">Detaylar Çekiliyor...</p>
+        </div>
+      </div>
+      <div class="modal-footer bg-light py-2">
+        <button type="button" class="btn btn-secondary btn-sm px-4 shadow-sm" data-bs-dismiss="modal">Kapat</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+@section Scripts {
+    <script>
+        // Layout'tan gelen ve tabloyu bozan sütun scriptlerini eziyoruz
+        window.loadAndApplyColumnConfig = function() { };
+        window.applyColumnConfig = function() { return false; };
+        window.manageReportColumnWidths = function() { 
+            if(typeof toastr !== 'undefined') toastr.warning('Bu rapor karmaşık bir yapıya sahip olduğu için sütun genişlikleri sabittir.'); 
+        };
+        window.manageReportColumns = function() {
+            if(typeof toastr !== 'undefined') toastr.warning('Bu raporda sütun gizleme/sıralama yapılamaz.');
+        };
+
+        // Excel Export Fonksiyonu
+        function exportDengeExcel() {
+            var table = document.getElementById("raporDengeTable");
+            if(!table) {
+                if(typeof toastr !== 'undefined') toastr.error("Dışa aktarılacak veri bulunamadı.");
+                return;
+            }
+            if(typeof toastr !== 'undefined') toastr.info("Excel hazırlanıyor, lütfen bekleyin...");
+            
+            var wb = XLSX.utils.table_to_book(table, {sheet: "Denge Raporu"});
+            var fileName = "Denge_Raporu_@selectedYear" + "_" + "@selectedMonth" + ".xlsx";
+            XLSX.writeFile(wb, fileName);
+        }
+
+        // Tıklanabilir Hücre Modalı
+        function openDetay(itemCode, itemName, kolonTipi) {
+            var year = @selectedYear;
+            var month = @selectedMonth;
+
+            $('#modalStokKodu').text(itemCode + " - " + itemName);
+            
+            let islemMetni = kolonTipi;
+            if(kolonTipi === "AlisMiktari" || kolonTipi === "AlisTutari") islemMetni = "Alış Faturası ve İlgili Hareketler";
+            if(kolonTipi === "SatisMiktari" || kolonTipi === "SatisTutari") islemMetni = "Satış Faturası ve İlgili Hareketler";
+            if(kolonTipi === "SatisIadeMiktari" || kolonTipi === "SatisIadeTutari") islemMetni = "Satış İade Hareketleri";
+            if(kolonTipi === "AlisIadeMiktari" || kolonTipi === "AlisIadeTutari") islemMetni = "Alış İade Hareketleri";
+            if(kolonTipi === "UretimGirisMiktari" || kolonTipi === "UretimGirisTutari") islemMetni = "Üretimden Giriş Hareketleri";
+            if(kolonTipi === "UretimeCikisMiktari" || kolonTipi === "UretimeCikisTutari") islemMetni = "Üretime Çıkış Hareketleri";
+
+            $('#modalStokIslem').html("İncelenen Hareket Türü: <strong>" + islemMetni + "</strong>");
+
+            $('#modalDetayBody').empty();
+            $('#loadingSpinner').removeClass('d-none');
+            $('#modalDetayTable').addClass('d-none');
+
+            var myModal = new bootstrap.Modal(document.getElementById('hareketDetayModal'));
+            myModal.show();
+
+            $.ajax({
+                url: '@Url.Action("GetHareketDetay", "Rapor125")',
+                type: 'GET',
+                data: {
+                    itemCode: itemCode,
+                    kolonTipi: kolonTipi,
+                    year: year,
+                    month: month,
+                    db: '@currentDb'
+                },
+                success: function (data) {
+                    $('#loadingSpinner').addClass('d-none');
+                    $('#modalDetayTable').removeClass('d-none');
+
+                    if (data && data.length > 0) {
+                        $.each(data, function (index, item) {
+                            var miktarStr = (item.miktar).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            var tutarStr = (item.tutar).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                            var row = "<tr>" +
+                                "<td>" + (item.belgeTarihi || "-") + "</td>" +
+                                "<td><span class='badge-soft-secondary'>" + (item.belgeTipi || "-") + "</span></td>" +
+                                "<td class='fw-medium text-dark'>" + (item.belgeNo || "-") + "</td>" +
+                                "<td><strong class='text-dark'>" + (item.cariKodu || "-") + "</strong></td>" +
+                                "<td style='white-space:normal;' title='" + (item.cariAdi || "") + "'>" + (item.cariAdi || "-") + "</td>" +
+                                "<td class='text-end fw-bold text-primary'>" + miktarStr + "</td>" +
+                                "<td class='text-end fw-bold text-dark'>" + tutarStr + " ₺</td>" +
+                                "</tr>";
+                            $('#modalDetayBody').append(row);
+                        });
+                    } else {
+                        $('#modalDetayBody').append("<tr><td colspan='7' class='text-center py-4 text-muted'><i class='fas fa-info-circle me-2'></i>Bu kalem için ilgili dönemde (" + islemMetni + ") detayı bulunamadı.</td></tr>");
+                    }
+                },
+                error: function () {
+                    $('#loadingSpinner').addClass('d-none');
+                    $('#modalDetayBody').append("<tr><td colspan='7' class='text-center py-4 text-danger fw-bold'><i class='fas fa-exclamation-triangle me-2'></i>Veri çekilirken bir hata oluştu!</td></tr>");
+                    $('#modalDetayTable').removeClass('d-none');
+                }
+            });
+        }
+    </script>
+}

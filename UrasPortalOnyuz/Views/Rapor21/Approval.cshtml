@@ -1,0 +1,193 @@
+﻿@* @model List<WebApplication3.Models.CheckApprovalModel>
+@using System.Globalization
+@using System.Security.Claims
+
+@{
+    ViewData["Title"] = "Onay Ekranı";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var currentApproverName = ViewBag.CurrentApproverName as string ?? User.FindFirst(ClaimTypes.Name)?.Value ?? "Kullanıcı";
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+
+        .table-container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            margin-top: 2rem;
+        }
+
+        .status-y {
+            color: #198754;
+            font-weight: bold;
+        }
+
+        .status-o {
+            color: #ffc107;
+            font-weight: bold;
+        }
+
+        .status-n {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .approval-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+    </style>
+}
+
+<body>
+    <div class="container mt-4">
+        <div class="header text-center">
+            <h2>@currentApproverName, Onay Bekleyen Belgeleriniz</h2>
+            <p>Onayınıza sunulan çeklerin listesi</p>
+        </div>
+
+        @if (Model != null && Model.Any())
+        {
+            <div class="table-container">
+                <table class="table table-bordered table-striped">
+                    <thead>
+                        <tr>
+                            <th><input type="checkbox" id="masterApprovalCheckbox" /></th>
+                            <th>Cari Kodu</th>
+                            <th>Cari Adı</th>
+                            <th>Vade Tarihi</th>
+                            <th>Çek Numarası</th>
+                            <th class="text-right">Tutar</th>
+                            <th>Findeks Notu</th>
+                            <th>Durum</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var check in Model)
+                        {
+                            <tr data-id="@check.DocEntry">
+                                <td><input type="checkbox" class="approval-checkbox" value="@check.DocEntry" /></td>
+                                <td>@check.U_BE1_CARDCODE</td>
+                                <td>@check.U_BE1_CARDNAME</td>
+                                <td>@check.U_BE1_DUEDATE?.ToString("dd.MM.yyyy")</td>
+                                <td>@check.U_BE1_CHECKNUMBER</td>
+                                <td class="text-right">@check.U_BE1_AMOUNT.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td>@check.U_BE1_FINDEKS</td>
+                                <td><span class="status-o">Onay Bekliyor</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="approval-actions">
+                <button id="approveSelectedBtn" class="btn btn-success"><i class="fas fa-check-circle me-2"></i>Seçilenleri Onayla</button>
+                <button id="declineSelectedBtn" class="btn btn-danger"><i class="fas fa-times-circle me-2"></i>Seçilenleri Reddet</button>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-info mt-4 text-center">
+                <strong>Harika!</strong> Onayınızı bekleyen bir belge bulunmamaktadır.
+            </div>
+        }
+    </div>
+
+    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="confirmationModalLabel">İşlemi Onayla</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="modalMessage">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="button" class="btn btn-primary" id="confirmActionBtn">Onayla</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @section Scripts {
+        <script>
+            $(document).ready(function () {
+                const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+                let currentActionUrl = '';
+                let currentDocEntries = [];
+
+                $('#masterApprovalCheckbox').on('change', function () {
+                    $('.approval-checkbox').prop('checked', $(this).is(':checked'));
+                });
+
+                $('#approveSelectedBtn').on('click', function () {
+                    currentDocEntries = $('.approval-checkbox:checked').map(function () {
+                        return $(this).val();
+                    }).get();
+
+                    if (currentDocEntries.length === 0) {
+                        showCustomAlert("Lütfen onaylamak için en az bir belge seçin.");
+                        return;
+                    }
+
+                    $('#modalMessage').text('Seçilen belgeleri onaylamak istediğinizden emin misiniz?');
+                    currentActionUrl = 'PerformApproval';
+                    $('#confirmActionBtn').removeClass('btn-danger').addClass('btn-success').text('Onayla');
+                    confirmationModal.show();
+                });
+
+                $('#declineSelectedBtn').on('click', function () {
+                    currentDocEntries = $('.approval-checkbox:checked').map(function () {
+                        return $(this).val();
+                    }).get();
+
+                    if (currentDocEntries.length === 0) {
+                        showCustomAlert("Lütfen reddetmek için en az bir belge seçin.");
+                        return;
+                    }
+
+                    $('#modalMessage').text('Seçilen belgeleri reddetmek istediğinizden emin misiniz?');
+                    currentActionUrl = 'DeclineApproval';
+                    $('#confirmActionBtn').removeClass('btn-success').addClass('btn-danger').text('Reddet');
+                    confirmationModal.show();
+                });
+
+                $('#confirmActionBtn').on('click', function () {
+                    performApprovalAction(currentDocEntries, currentActionUrl);
+                    confirmationModal.hide();
+                });
+
+                function performApprovalAction(docEntries, actionUrl) {
+                    $.ajax({
+                        url: '/Rapor21/' + actionUrl,
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ DocEntries: docEntries }),
+                        success: function (response) {
+                            showCustomAlert(response);
+                            window.location.reload();
+                        },
+                        error: function (xhr) {
+                            const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : xhr.responseText;
+                            showCustomAlert("Hata oluştu: " + errorMsg);
+                        }
+                    });
+                }
+
+                function showCustomAlert(message) {
+                    alert(message);
+                }
+            });
+        </script>
+    }
+</body> *@

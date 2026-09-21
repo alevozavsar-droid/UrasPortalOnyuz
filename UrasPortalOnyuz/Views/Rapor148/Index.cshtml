@@ -1,0 +1,515 @@
+@using WebApplication3.Controllers
+@{
+    ViewData["Title"] = "Depo Bazlı Stok Raporu";
+    var depolar = ViewBag.Depolar as List<Rapor148Controller.SecenekOgesi> ?? new List<Rapor148Controller.SecenekOgesi>();
+    var gruplar = ViewBag.Gruplar as List<Rapor148Controller.SecenekOgesi> ?? new List<Rapor148Controller.SecenekOgesi>();
+    var sirket = ViewBag.CurrentDbDisplay as string ?? "-";
+    var secilenDb = ViewBag.SelectedDb as string ?? "";
+}
+
+<style>
+    .stk-sayfa { padding: 4px 2px 24px; }
+
+    .stk-baslik { font-size: 20px; font-weight: 800; color: #0f172a; letter-spacing: -.3px; }
+    .stk-alt { font-size: 12.5px; color: #64748b; }
+
+    .stk-kart { background: #fff; border: 1px solid #e8edf3; border-radius: 14px; box-shadow: 0 1px 3px rgba(15,23,42,.04); }
+    .stk-etiket { font-size: 11.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .3px; }
+
+    /* Coklu secim acilir listesi */
+    .stk-coklu { position: relative; }
+    .stk-coklu-panel {
+        display: none; position: absolute; z-index: 1050; top: calc(100% + 2px); left: 0;
+        min-width: 240px; max-height: 300px; overflow-y: auto; background: #fff;
+        border: 1px solid #ced4da; border-radius: .5rem; box-shadow: 0 8px 24px rgba(15,23,42,.14); padding: 6px;
+    }
+    .stk-coklu.acik .stk-coklu-panel { display: block; }
+    .stk-coklu-satir {
+        display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin: 0;
+        font-size: 12.5px; border-radius: 5px; cursor: pointer; white-space: nowrap;
+    }
+    .stk-coklu-satir:hover { background: #eef2f7; }
+    .stk-coklu-satir input { margin: 0; }
+
+    /* Ozet kutulari */
+    .stk-ozet { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+    .stk-ozet-kutu { background: #fff; border: 1px solid #e8edf3; border-radius: 12px; padding: 14px 16px; }
+    .stk-ozet-baslik { font-size: 11.5px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+    .stk-ozet-deger { font-size: 21px; font-weight: 800; color: #0f172a; margin-top: 2px; }
+    .stk-ozet-ek { font-size: 11.5px; color: #94a3b8; }
+
+    /* Tablo */
+    .stk-tablo { font-size: 12.8px; }
+    .stk-tablo thead th {
+        position: sticky; top: 0; z-index: 2; background: #f8fafc; color: #475569;
+        font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: .3px;
+        border-bottom: 2px solid #e2e8f0; white-space: nowrap; cursor: pointer; user-select: none;
+    }
+    .stk-tablo tbody tr:hover { background: #f8fafc; }
+    .stk-tablo td { vertical-align: middle; }
+    .stk-sayi { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .stk-kod { font-weight: 700; color: #0f172a; white-space: nowrap; }
+    .stk-sarma { max-height: 62vh; overflow: auto; border-radius: 12px; }
+
+    .stk-rozet { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
+    .stk-rozet-gri { background: #eef2f7; color: #475569; }
+    .stk-rozet-kirmizi { background: #fee2e2; color: #b91c1c; }
+
+    .stk-eksi { color: #b91c1c; font-weight: 700; }
+    .stk-sifir { color: #94a3b8; }
+
+    .stk-tfoot td { background: #f8fafc; font-weight: 800; border-top: 2px solid #e2e8f0; }
+</style>
+
+<div class="stk-sayfa">
+
+    <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-3">
+        <div>
+            <div class="stk-baslik"><i class="fas fa-warehouse text-primary me-2"></i>Depo Bazlı Stok Raporu</div>
+            <div class="stk-alt">
+                SAP anlık stok tablosundan okunur (hareket taraması yapmaz) &middot;
+                Şirket: <strong>@sirket</strong>
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" onclick="stokBilgi()">
+                <i class="fas fa-circle-question me-1"></i>Kolonlar ne anlama geliyor?
+            </button>
+            <button type="button" class="btn btn-sm btn-success rounded-pill px-3 fw-bold" onclick="excelIndir()">
+                <i class="fas fa-file-excel me-1"></i>Excel
+            </button>
+        </div>
+    </div>
+
+    <!-- FİLTRELER -->
+    <div class="stk-kart p-3 mb-3">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <div class="stk-etiket mb-1">Depo</div>
+                <div class="stk-coklu" id="depoSecici">
+                    <button type="button" class="form-select form-select-sm text-start" id="depoDugme">Tüm depolar</button>
+                    <div class="stk-coklu-panel">
+                        <label class="stk-coklu-satir fw-bold border-bottom">
+                            <input type="checkbox" id="depoHepsi" checked /> <span>Tüm depolar</span>
+                        </label>
+                        @foreach (var d in depolar)
+                        {
+                            <label class="stk-coklu-satir">
+                                <input type="checkbox" class="depoKutu" value="@d.Kod" />
+                                <span><strong>@d.Kod</strong> &middot; @d.Ad</span>
+                            </label>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="stk-etiket mb-1">Kalem Grubu</div>
+                <div class="stk-coklu" id="grupSecici">
+                    <button type="button" class="form-select form-select-sm text-start" id="grupDugme">Tüm gruplar</button>
+                    <div class="stk-coklu-panel">
+                        <label class="stk-coklu-satir fw-bold border-bottom">
+                            <input type="checkbox" id="grupHepsi" checked /> <span>Tüm gruplar</span>
+                        </label>
+                        @foreach (var g in gruplar)
+                        {
+                            <label class="stk-coklu-satir">
+                                <input type="checkbox" class="grupKutu" value="@g.Kod" /> <span>@g.Ad</span>
+                            </label>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="stk-etiket mb-1">Kalem ara</div>
+                <input type="text" id="arama" class="form-control form-control-sm"
+                       placeholder="Kod veya ad..." autocomplete="off" />
+            </div>
+
+            <div class="col-md-3">
+                <div class="d-flex flex-column gap-1">
+                    <label class="d-flex align-items-center gap-2" style="font-size:12.5px; cursor:pointer;">
+                        <input type="checkbox" id="sifirlar" /> Hareketsiz kalemleri de göster
+                    </label>
+                    <label class="d-flex align-items-center gap-2" style="font-size:12.5px; cursor:pointer;">
+                        <input type="checkbox" id="pasifler" /> Pasif kalemleri de göster
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+            <div class="stk-alt" id="durumMetni">Getir'e basın.</div>
+            <button type="button" class="btn btn-primary btn-sm rounded-pill px-4 fw-bold" onclick="getir()">
+                <i class="fas fa-rotate me-1"></i>Getir
+            </button>
+        </div>
+    </div>
+
+    <!-- ÖZET -->
+    <div class="stk-ozet mb-3" id="ozetAlani" style="display:none;">
+        <div class="stk-ozet-kutu">
+            <div class="stk-ozet-baslik">Kalem</div>
+            <div class="stk-ozet-deger" id="ozKalem">0</div>
+            <div class="stk-ozet-ek" id="ozSatir">0 depo satırı</div>
+        </div>
+        <div class="stk-ozet-kutu">
+            <div class="stk-ozet-baslik">Toplam Stok</div>
+            <div class="stk-ozet-deger" id="ozStok">0</div>
+            <div class="stk-ozet-ek">seçili depolarda</div>
+        </div>
+        <div class="stk-ozet-kutu">
+            <div class="stk-ozet-baslik">Rezerve</div>
+            <div class="stk-ozet-deger" id="ozRezerve">0</div>
+            <div class="stk-ozet-ek">açık satış siparişi</div>
+        </div>
+        <div class="stk-ozet-kutu">
+            <div class="stk-ozet-baslik">Sipariş</div>
+            <div class="stk-ozet-deger" id="ozSiparis">0</div>
+            <div class="stk-ozet-ek">açık satınalma</div>
+        </div>
+        <div class="stk-ozet-kutu">
+            <div class="stk-ozet-baslik">Tahmini Tutar</div>
+            <div class="stk-ozet-deger" id="ozTutar">0,00</div>
+            <div class="stk-ozet-ek">fiyat kaynağı satırda</div>
+        </div>
+    </div>
+
+    <!-- TABLO -->
+    <div class="stk-kart p-3">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <ul class="nav nav-pills gap-1" id="stokSekmeleri">
+                <li class="nav-item">
+                    <button class="nav-link active" data-gorunum="depo">
+                        <i class="fas fa-warehouse me-1"></i>Depo Bazlı
+                        <span class="badge bg-light text-dark ms-1" id="rozDepo">0</span>
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-gorunum="kalem">
+                        <i class="fas fa-boxes-stacked me-1"></i>Kalem Bazlı
+                        <span class="badge bg-light text-dark ms-1" id="rozKalem">0</span>
+                    </button>
+                </li>
+            </ul>
+            <input type="text" id="tabloAra" class="form-control form-control-sm" style="width:240px;"
+                   placeholder="Tabloda ara..." autocomplete="off" />
+        </div>
+
+        <div class="stk-sarma">
+            <table class="table table-hover align-middle mb-0 stk-tablo" id="stokTablo">
+                <thead id="stokBaslik"></thead>
+                <tbody id="stokGovde">
+                    <tr><td class="text-center text-muted py-5">Filtreleri seçip <strong>Getir</strong>'e basın.</td></tr>
+                </tbody>
+                <tfoot class="stk-tfoot" id="stokAlt"></tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    var SAYFA_DB = '@secilenDb';
+    var TUM_SATIRLAR = [];
+    var GORUNUM = 'depo';
+    var SIRA = { alan: null, yon: 1 };
+
+    // ---- Coklu secim kutulari -------------------------------------------
+    function cokluKur(seciciId, dugmeId, hepsiId, kutuSinifi, hepsiMetni) {
+        var secici = document.getElementById(seciciId);
+        var dugme = document.getElementById(dugmeId);
+        var hepsi = document.getElementById(hepsiId);
+
+        function secilenler() {
+            return Array.prototype.slice
+                .call(document.querySelectorAll('.' + kutuSinifi + ':checked'))
+                .map(function (k) { return k.value; });
+        }
+
+        function tazele() {
+            var s = secilenler();
+            hepsi.checked = (s.length === 0);
+            dugme.textContent = s.length === 0 ? hepsiMetni
+                              : (s.length === 1 ? s[0] : s.length + ' seçili');
+            dugme.title = s.length ? s.join(', ') : hepsiMetni;
+        }
+
+        dugme.addEventListener('click', function (e) { e.stopPropagation(); secici.classList.toggle('acik'); });
+        secici.addEventListener('click', function (e) { e.stopPropagation(); });
+        document.addEventListener('click', function () { secici.classList.remove('acik'); });
+
+        hepsi.addEventListener('change', function () {
+            document.querySelectorAll('.' + kutuSinifi).forEach(function (k) { k.checked = false; });
+            tazele();
+        });
+        document.querySelectorAll('.' + kutuSinifi).forEach(function (k) {
+            k.addEventListener('change', tazele);
+        });
+
+        tazele();
+        return secilenler;
+    }
+
+    var secilenDepolar = cokluKur('depoSecici', 'depoDugme', 'depoHepsi', 'depoKutu', 'Tüm depolar');
+    var secilenGruplar = cokluKur('grupSecici', 'grupDugme', 'grupHepsi', 'grupKutu', 'Tüm gruplar');
+
+    // ---- Yardimcilar -----------------------------------------------------
+    function sayi(x, basamak) {
+        if (basamak === undefined) basamak = 2;
+        return (x || 0).toLocaleString('tr-TR', { minimumFractionDigits: basamak, maximumFractionDigits: basamak });
+    }
+
+    function miktar(x) {
+        // Miktarlarda gereksiz sifir gosterme: 1.250 kg, 0,5 kg gibi.
+        var v = x || 0;
+        var basamak = (Math.abs(v % 1) < 0.0005) ? 0 : 3;
+        return v.toLocaleString('tr-TR', { minimumFractionDigits: basamak, maximumFractionDigits: basamak });
+    }
+
+    function kacir(s) {
+        var d = document.createElement('div');
+        d.textContent = (s == null ? '' : s);
+        return d.innerHTML;
+    }
+
+    function sinifSayi(v) {
+        if (v < 0) return 'stk-sayi stk-eksi';
+        if (!v) return 'stk-sayi stk-sifir';
+        return 'stk-sayi';
+    }
+
+    function parametreler() {
+        return 'depolar=' + encodeURIComponent(secilenDepolar().join(','))
+             + '&gruplar=' + encodeURIComponent(secilenGruplar().join(','))
+             + '&arama=' + encodeURIComponent(document.getElementById('arama').value || '')
+             + '&sifirlariGoster=' + (document.getElementById('sifirlar').checked ? 'true' : 'false')
+             + '&pasifleriGoster=' + (document.getElementById('pasifler').checked ? 'true' : 'false')
+             + (SAYFA_DB ? '&db=' + encodeURIComponent(SAYFA_DB) : '');
+    }
+
+    // ---- Veri ------------------------------------------------------------
+    async function getir() {
+        document.getElementById('stokGovde').innerHTML =
+            '<tr><td class="text-center text-muted py-5"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</td></tr>';
+        document.getElementById('stokAlt').innerHTML = '';
+
+        try {
+            var c = await fetch('/Rapor148/Veri?' + parametreler());
+            var v = await c.json();
+
+            if (!v.basarili) {
+                document.getElementById('stokGovde').innerHTML =
+                    '<tr><td class="text-center text-danger py-5">' + kacir(v.mesaj || 'Veri alınamadı.') + '</td></tr>';
+                return;
+            }
+
+            TUM_SATIRLAR = v.satirlar || [];
+            document.getElementById('durumMetni').textContent =
+                TUM_SATIRLAR.length + ' depo satırı getirildi.';
+
+            ozetiCiz();
+            ciz();
+        } catch (h) {
+            document.getElementById('stokGovde').innerHTML =
+                '<tr><td class="text-center text-danger py-5">Sunucuya bağlanılamadı.</td></tr>';
+        }
+    }
+
+    // ---- Kalem bazli toplama --------------------------------------------
+    function kalemBazli(satirlar) {
+        var harita = {};
+        satirlar.forEach(function (s) {
+            var k = harita[s.kalemKodu];
+            if (!k) {
+                k = harita[s.kalemKodu] = {
+                    kalemKodu: s.kalemKodu, kalemAdi: s.kalemAdi, birim: s.birim, grupAdi: s.grupAdi,
+                    depoSayisi: 0, stok: 0, rezerve: 0, siparis: 0, kullanilabilir: 0, tutar: 0,
+                    depolar: []
+                };
+            }
+            k.depoSayisi++;
+            k.stok += s.stok;
+            k.rezerve += s.rezerve;
+            k.siparis += s.siparis;
+            k.kullanilabilir += s.kullanilabilir;
+            k.tutar += s.tutar;
+            if (s.stok !== 0) k.depolar.push(s.depoKodu + ': ' + miktar(s.stok));
+        });
+
+        return Object.keys(harita).map(function (x) { return harita[x]; });
+    }
+
+    // ---- Suzme + siralama ------------------------------------------------
+    function gorunenSatirlar() {
+        var q = (document.getElementById('tabloAra').value || '').toLocaleLowerCase('tr-TR');
+        var kaynak = (GORUNUM === 'depo') ? TUM_SATIRLAR : kalemBazli(TUM_SATIRLAR);
+
+        if (q) {
+            kaynak = kaynak.filter(function (s) {
+                return (s.kalemKodu + ' ' + s.kalemAdi + ' ' + (s.grupAdi || '') + ' ' +
+                        (s.depoKodu || '') + ' ' + (s.depoAdi || '')).toLocaleLowerCase('tr-TR').indexOf(q) > -1;
+            });
+        }
+
+        if (SIRA.alan) {
+            kaynak = kaynak.slice().sort(function (a, b) {
+                var x = a[SIRA.alan], y = b[SIRA.alan];
+                if (typeof x === 'number' || typeof y === 'number') return ((x || 0) - (y || 0)) * SIRA.yon;
+                return String(x || '').localeCompare(String(y || ''), 'tr') * SIRA.yon;
+            });
+        }
+
+        return kaynak;
+    }
+
+    // ---- Cizim -----------------------------------------------------------
+    function ciz() {
+        var satirlar = gorunenSatirlar();
+
+        document.getElementById('rozDepo').textContent = TUM_SATIRLAR.length;
+        document.getElementById('rozKalem').textContent = kalemBazli(TUM_SATIRLAR).length;
+
+        var basliklar = (GORUNUM === 'depo')
+            ? [['kalemKodu', 'Kalem Kodu', ''], ['kalemAdi', 'Kalem Adı', ''], ['grupAdi', 'Grup', ''],
+               ['depoKodu', 'Depo', ''], ['stok', 'Stok', 'stk-sayi'], ['rezerve', 'Rezerve', 'stk-sayi'],
+               ['siparis', 'Sipariş', 'stk-sayi'], ['kullanilabilir', 'Kullanılabilir', 'stk-sayi'],
+               ['fiyat', 'Fiyat', 'stk-sayi'], ['tutar', 'Tutar', 'stk-sayi']]
+            : [['kalemKodu', 'Kalem Kodu', ''], ['kalemAdi', 'Kalem Adı', ''], ['grupAdi', 'Grup', ''],
+               ['depoSayisi', 'Depo', 'stk-sayi'], ['stok', 'Stok', 'stk-sayi'], ['rezerve', 'Rezerve', 'stk-sayi'],
+               ['siparis', 'Sipariş', 'stk-sayi'], ['kullanilabilir', 'Kullanılabilir', 'stk-sayi'],
+               ['tutar', 'Tutar', 'stk-sayi']];
+
+        document.getElementById('stokBaslik').innerHTML = '<tr>' + basliklar.map(function (b) {
+            var ok = (SIRA.alan === b[0]) ? (SIRA.yon > 0 ? ' &#9650;' : ' &#9660;') : '';
+            return '<th class="' + b[2] + '" data-alan="' + b[0] + '">' + b[1] + ok + '</th>';
+        }).join('') + '</tr>';
+
+        if (satirlar.length === 0) {
+            document.getElementById('stokGovde').innerHTML =
+                '<tr><td colspan="' + basliklar.length + '" class="text-center text-muted py-5">Kayıt bulunamadı.</td></tr>';
+            document.getElementById('stokAlt').innerHTML = '';
+            return;
+        }
+
+        var govde = satirlar.map(function (s) {
+            if (GORUNUM === 'depo') {
+                return '<tr>'
+                     + '<td class="stk-kod">' + kacir(s.kalemKodu) + '</td>'
+                     + '<td>' + kacir(s.kalemAdi)
+                     + (s.altindaMi ? ' <span class="stk-rozet stk-rozet-kirmizi" title="Asgari stok: ' + miktar(s.minStok) + '">MİN ALTI</span>' : '')
+                     + '</td>'
+                     + '<td><span class="stk-rozet stk-rozet-gri">' + kacir(s.grupAdi) + '</span></td>'
+                     + '<td><strong>' + kacir(s.depoKodu) + '</strong><div class="text-muted" style="font-size:11px;">' + kacir(s.depoAdi) + '</div></td>'
+                     + '<td class="' + sinifSayi(s.stok) + '">' + miktar(s.stok) + ' <span class="text-muted" style="font-size:10.5px;">' + kacir(s.birim) + '</span></td>'
+                     + '<td class="' + sinifSayi(s.rezerve) + '">' + miktar(s.rezerve) + '</td>'
+                     + '<td class="' + sinifSayi(s.siparis) + '">' + miktar(s.siparis) + '</td>'
+                     + '<td class="' + sinifSayi(s.kullanilabilir) + '">' + miktar(s.kullanilabilir) + '</td>'
+                     + '<td class="stk-sayi" title="' + kacir(s.fiyatKaynagi) + '">' + sayi(s.fiyat) + '</td>'
+                     + '<td class="stk-sayi">' + sayi(s.tutar) + '</td>'
+                     + '</tr>';
+            }
+
+            return '<tr>'
+                 + '<td class="stk-kod">' + kacir(s.kalemKodu) + '</td>'
+                 + '<td>' + kacir(s.kalemAdi) + '</td>'
+                 + '<td><span class="stk-rozet stk-rozet-gri">' + kacir(s.grupAdi) + '</span></td>'
+                 + '<td class="stk-sayi" title="' + kacir(s.depolar.join(' | ')) + '">' + s.depoSayisi + '</td>'
+                 + '<td class="' + sinifSayi(s.stok) + '">' + miktar(s.stok) + ' <span class="text-muted" style="font-size:10.5px;">' + kacir(s.birim) + '</span></td>'
+                 + '<td class="' + sinifSayi(s.rezerve) + '">' + miktar(s.rezerve) + '</td>'
+                 + '<td class="' + sinifSayi(s.siparis) + '">' + miktar(s.siparis) + '</td>'
+                 + '<td class="' + sinifSayi(s.kullanilabilir) + '">' + miktar(s.kullanilabilir) + '</td>'
+                 + '<td class="stk-sayi">' + sayi(s.tutar) + '</td>'
+                 + '</tr>';
+        }).join('');
+
+        document.getElementById('stokGovde').innerHTML = govde;
+
+        var t = { stok: 0, rezerve: 0, siparis: 0, kullanilabilir: 0, tutar: 0 };
+        satirlar.forEach(function (s) {
+            t.stok += s.stok; t.rezerve += s.rezerve; t.siparis += s.siparis;
+            t.kullanilabilir += s.kullanilabilir; t.tutar += s.tutar;
+        });
+
+        var bosluk = (GORUNUM === 'depo') ? 4 : 4;
+        document.getElementById('stokAlt').innerHTML =
+            '<tr><td colspan="' + bosluk + '" class="text-end">TOPLAM (' + satirlar.length + ' satır)</td>'
+          + '<td class="stk-sayi">' + miktar(t.stok) + '</td>'
+          + '<td class="stk-sayi">' + miktar(t.rezerve) + '</td>'
+          + '<td class="stk-sayi">' + miktar(t.siparis) + '</td>'
+          + '<td class="stk-sayi">' + miktar(t.kullanilabilir) + '</td>'
+          + (GORUNUM === 'depo' ? '<td></td>' : '')
+          + '<td class="stk-sayi">' + sayi(t.tutar) + '</td></tr>';
+    }
+
+    function ozetiCiz() {
+        var kalemler = kalemBazli(TUM_SATIRLAR);
+        var t = { stok: 0, rezerve: 0, siparis: 0, tutar: 0 };
+        TUM_SATIRLAR.forEach(function (s) {
+            t.stok += s.stok; t.rezerve += s.rezerve; t.siparis += s.siparis; t.tutar += s.tutar;
+        });
+
+        document.getElementById('ozKalem').textContent = kalemler.length.toLocaleString('tr-TR');
+        document.getElementById('ozSatir').textContent = TUM_SATIRLAR.length.toLocaleString('tr-TR') + ' depo satırı';
+        document.getElementById('ozStok').textContent = miktar(t.stok);
+        document.getElementById('ozRezerve').textContent = miktar(t.rezerve);
+        document.getElementById('ozSiparis').textContent = miktar(t.siparis);
+        document.getElementById('ozTutar').textContent = sayi(t.tutar);
+        document.getElementById('ozetAlani').style.display = '';
+    }
+
+    // ---- Olaylar ---------------------------------------------------------
+    document.getElementById('stokSekmeleri').addEventListener('click', function (e) {
+        var d = e.target.closest('button[data-gorunum]');
+        if (!d) return;
+        document.querySelectorAll('#stokSekmeleri .nav-link').forEach(function (x) { x.classList.remove('active'); });
+        d.classList.add('active');
+        GORUNUM = d.dataset.gorunum;
+        SIRA = { alan: null, yon: 1 };
+        ciz();
+    });
+
+    document.getElementById('stokBaslik').addEventListener('click', function (e) {
+        var th = e.target.closest('th[data-alan]');
+        if (!th) return;
+        var alan = th.dataset.alan;
+        SIRA = (SIRA.alan === alan) ? { alan: alan, yon: -SIRA.yon } : { alan: alan, yon: 1 };
+        ciz();
+    });
+
+    document.getElementById('tabloAra').addEventListener('input', ciz);
+    document.getElementById('arama').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); getir(); }
+    });
+
+    function excelIndir() {
+        window.location = '/Rapor148/Excel?' + parametreler();
+    }
+
+    function stokBilgi() {
+        Swal.fire({
+            title: 'Kolonlar ne anlama geliyor?',
+            width: 720,
+            html:
+              '<div class="text-start" style="font-size:13.5px; line-height:1.7;">'
+            + '<p>Sayılar SAP\'nin <b>anlık stok tablosundan</b> gelir; hareket taraması yapılmaz, '
+            + 'bu yüzden SAP\'nin kendi stok ekranıyla birebir aynıdır.</p>'
+            + '<ul class="mb-3">'
+            + '<li><b>Stok</b> — depodaki fiili miktar.</li>'
+            + '<li><b>Rezerve</b> — açık satış siparişleriyle bu depodan söz verilmiş miktar.</li>'
+            + '<li><b>Sipariş</b> — açık satınalma siparişleriyle yolda olan miktar.</li>'
+            + '<li><b>Kullanılabilir</b> — Stok − Rezerve. Satışa gerçekten hazır olan budur.</li>'
+            + '<li><b>MİN ALTI</b> — kalemin asgari stok seviyesinin altına düşmüş demektir.</li>'
+            + '</ul>'
+            + '<div class="alert alert-warning py-2 mb-0" style="font-size:12.5px;">'
+            + '<b>Tutar tahminidir.</b> Fiyat sırayla depo ortalama maliyeti → kalem ortalama maliyeti → '
+            + 'son alış fiyatı olarak aranır; hangisinin kullanıldığı Fiyat kolonunun üzerine gelince yazar. '
+            + 'Bu şirketlerin bir kısmında ortalama maliyet SAP\'de boş olduğu için tutar çoğunlukla '
+            + '<b>son alış fiyatı</b> üzerinden hesaplanır — muhasebe değeri değildir.'
+            + '</div></div>',
+            confirmButtonText: 'Anladım'
+        });
+    }
+</script>
+}

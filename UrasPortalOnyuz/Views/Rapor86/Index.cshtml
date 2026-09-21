@@ -1,0 +1,145 @@
+﻿@model WebApplication3.Controllers.Rapor86ViewModel
+
+@{
+    ViewData["Title"] = "Selvi Aktarım Onay Kokpiti";
+}
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<style>
+    .dash-card { border-radius: 12px; border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.05); background: white; margin-bottom: 20px; }
+    .table-custom th { background: #f8f9fc; color: #4e73df; text-transform: uppercase; font-size: 11px; font-weight: 700; padding: 12px; }
+    .badge-company { background: #e0e7ff; color: #3730a3; font-weight: 700; padding: 5px 10px; border-radius: 6px; }
+    .action-container { display: flex; gap: 5px; justify-content: center; }
+    .btn-modern { border-radius: 8px; font-size: 12px; font-weight: 600; padding: 6px 12px; transition: 0.2s; white-space: nowrap; }
+    .btn-modern:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+    .detail-row { background-color: #fcfcfd; border-left: 4px solid #36b9cc; }
+    .info-label { font-size: 10px; color: #a0a0a0; display: block; text-transform: uppercase; }
+</style>
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="h4 mb-0 fw-bold text-gray-800"><i class="fas fa-paper-plane text-primary me-2"></i> Selvi Aktarım Onay Kokpiti</h2>
+    </div>
+
+    <div class="card dash-card">
+        <div class="card-header bg-white py-3 d-flex justify-content-between">
+            <h6 class="m-0 fw-bold text-primary">Bekleyen Satınalma Talepleri</h6>
+            <span class="badge bg-primary rounded-pill">@Model.BekleyenTalepler.Count Talep</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-custom mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-4">Şirket</th>
+                            <th>Talep No</th>
+                            <th>Tarih</th>
+                            <th>Talep Eden / Açan</th>
+                            <th class="text-end">Tutar</th>
+                            <th class="text-center">İşlemler</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model.BekleyenTalepler)
+                        {
+                            string collapseId = $"detay_{item.Sirket.Replace("_", "")}_{item.KuyrukId}";
+                            <tr>
+                                <td class="ps-4"><span class="badge-company">@item.Sirket</span></td>
+                                <td><strong>@item.TalepNo</strong><br/><small class="text-muted">DE: @item.KaynakDocEntry</small></td>
+                                <td>@item.Tarih.ToString("dd.MM.yyyy")</td>
+                                <td>
+                                    <strong>@item.TalepEden</strong>
+                                    <span class="info-label">Açan: @item.TalebiAcanKullanici</span>
+                                </td>
+                                <td class="text-end text-success fw-bold">@item.Tutar.ToString("N2") ₺</td>
+                                <td>
+                                    <div class="action-container">
+                                        <button class="btn btn-outline-info btn-modern" onclick="$('#@collapseId').fadeToggle(200)">
+                                            <i class="fas fa-search"></i> İçerik
+                                        </button>
+                                        <button class="btn btn-success btn-modern" onclick="onayYonetimi('@item.Sirket', @item.KuyrukId, 'onay')">
+                                            <i class="fas fa-share-from-square"></i> Selvi'ye Aktar
+                                        </button>
+                                        <button class="btn btn-danger btn-modern" onclick="onayYonetimi('@item.Sirket', @item.KuyrukId, 'red')">
+                                            <i class="fas fa-trash-can"></i> Reddet
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr id="@collapseId" style="display:none;" class="detail-row">
+                                <td colspan="6" class="p-3">
+                                    <div class="card shadow-sm border-0">
+                                        <div class="card-header py-2 bg-light"><small class="fw-bold">KALEM DETAYLARI & SON SATINALMA BİLGİLERİ</small></div>
+                                        <table class="table table-sm mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Kalem</th>
+                                                    <th class="text-center">Miktar</th>
+                                                    <th>Son Tedarikçi</th>
+                                                    <th>Son Ödeme Şekli</th>
+                                                    <th class="text-end">Satır Tutarı</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var satir in item.Satirlar)
+                                                {
+                                                    <tr>
+                                                        <td><small><strong>@satir.KalemKodu</strong></small><br/>@satir.KalemAdi</td>
+                                                        <td class="text-center">@satir.Miktar.ToString("N2")</td>
+                                                        <td class="text-muted">@satir.SonTedarikci</td>
+                                                        <td><span class="badge bg-warning text-dark">@satir.SonOdemeSekli</span></td>
+                                                        <td class="text-end">@satir.SatirTutari.ToString("N2") ₺</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function onayYonetimi(sirket, id, tip) {
+        if (tip === 'onay') {
+            Swal.fire({
+                title: 'Emin misiniz?',
+                text: sirket + " talebi SELVI firmasına aktarılacak.",
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#198754',
+                confirmButtonText: 'Evet, Aktar'
+            }).then((result) => {
+                if (result.isConfirmed) ajaxGonder('/Rapor86/Onayla', { sirket, id });
+            });
+        } else {
+            Swal.fire({
+                title: 'Red Sebebi',
+                input: 'textarea',
+                inputPlaceholder: 'Neden reddediyorsunuz?',
+                showCancelButton: true,
+                confirmButtonColor: '#d33'
+            }).then((result) => {
+                if (result.isConfirmed) ajaxGonder('/Rapor86/Reddet', { sirket, id, sebep: result.value });
+            });
+        }
+    }
+
+    function ajaxGonder(url, data) {
+        Swal.fire({ title: 'İşlem Yapılıyor...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        $.post(url, data, (res) => {
+            if (res.success) {
+                Swal.fire('Başarılı', res.message, 'success').then(() => location.reload());
+            } else {
+                Swal.fire('Hata', res.message, 'error');
+            }
+        });
+    }
+</script>

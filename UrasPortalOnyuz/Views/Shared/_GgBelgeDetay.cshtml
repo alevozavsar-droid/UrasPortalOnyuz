@@ -1,0 +1,195 @@
+@* ============================================================================
+   GİDER / GELİR — ORTAK BELGE DETAYI VE QNB FATURA GÖRÜNTÜSÜ PENCERELERİ
+   Rapor163'teki (Gider/Gelir Seçim) detay ve görüntü mantığının şirket parametreli kopyası.
+   Kullanım: ggDetay(transId, "TransId-LineId" | '', dbKey) ve ggFaturaGoruntu(transId, belgeNo, dbKey).
+   Veri uçları Rapor163/BelgeDetay, Rapor163/FaturaGoruntuDurum ve Rapor163/FaturaGoruntu (?db= ile şirket).
+   Kod adı için sayfa isterse window.GG_AD = { "GDR.01.02.03": "Ana › Alt › Kalem" } tanımlar.
+   ============================================================================ *@
+<style>
+    .ggd-modal-bg { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: none; align-items: center; justify-content: center; z-index: 1070; }
+    .ggd-modal-bg.on { display: flex; }
+    .ggd-modal { background: #fff; color: #0f172a; border-radius: 14px; width: min(1600px, 97vw); max-height: 95vh !important; overflow-y: auto; box-shadow: 0 20px 60px -15px rgba(0,0,0,.4); }
+    .ggd-modal-head { padding: 16px 20px; border-bottom: 1px solid #eef2f7; display: flex; justify-content: space-between; align-items: center; }
+    .ggd-modal-head h3 { margin: 0; font-size: 1.05rem; color: #0f172a; }
+    .ggd-modal-head .x { border: none; background: #f1f5f9; border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 1rem; color: #475569; }
+    .ggd-modal-body { padding: 18px 20px; }
+    .ggd-modal-body .txt-r { text-align: right; }
+    table.gg-kalem { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    table.gg-kalem th { background: #f8fafc; text-align: left; padding: 7px 10px; border-bottom: 1px solid #e2e8f0; font-size: .72rem; text-transform: uppercase; color: #64748b; }
+    table.gg-kalem td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; }
+    table.gg-kalem tr.secili td { background: #ecfdf5; font-weight: 600; }
+    .hcode { font-weight: 700; color: #0f766e; }
+    .badge2 { display: inline-block; font-size: .68rem; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+    .badge2.ft { background: #dbeafe; color: #1d4ed8; } .badge2.yv { background: #ede9fe; color: #6d28d9; } .badge2.sb { background: #fef3c7; color: #92400e; }
+    .kod-uyari { color: #b91c1c; font-size: .7rem; font-weight: 700; }
+    .bd-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 16px; font-size: .84rem; margin-bottom: 12px; }
+    .bd-kv div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed #eef2f7; padding: 3px 0; }
+    .bd-kv .k { color: #64748b; } .bd-kv .v { font-weight: 600; color: #0f172a; text-align: right; word-break: break-word; }
+    .bd-kisiler { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .bd-kisi { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; background: #f8fafc; }
+    .bd-kisi.olusturan { border-color: #93c5fd; background: #eff6ff; } .bd-kisi.onaylayan { border-color: #86efac; background: #f0fdf4; }
+    .bd-kisi .rol { font-size: .68rem; font-weight: 700; text-transform: uppercase; color: #64748b; }
+    .bd-kisi .kim { font-size: 1rem; font-weight: 800; color: #0f172a; margin: 2px 0; }
+    .bd-kisi .kod { font-family: Consolas, monospace; font-weight: 700; color: #1d4ed8; font-size: .8rem; }
+    .bd-kisi .zaman { font-size: .74rem; color: #64748b; }
+    .bd-kisi .bos { color: #b91c1c; font-weight: 700; font-size: .84rem; }
+    .ggd-note { font-size: .78rem; color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 12px; margin-top: 12px; }
+    .gg-goruntu { border: none; background: #fee2e2; color: #b91c1c; border-radius: 7px; padding: 4px 9px; font-size: .74rem; font-weight: 600; cursor: pointer; margin-left: 4px; }
+    .gg-goruntu:hover { background: #b91c1c; color: #fff; }
+    .gg-fmodal { background: #fff; border-radius: 14px; width: min(1200px, 96vw); height: 92vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px -15px rgba(0,0,0,.45); }
+    .gg-fmodal-head { padding: 10px 16px; background: linear-gradient(135deg, #7f1d1d, #dc2626); color: #fff; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .gg-fmodal-head h3 { margin: 0; font-size: .98rem; }
+    .gg-fmodal-head .x { border: none; background: rgba(255,255,255,.2); color: #fff; border-radius: 8px; width: 32px; height: 32px; cursor: pointer; }
+    .gg-fmodal-arac { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 14px; border-bottom: 1px solid #e5e7eb; background: #fff; }
+    .gg-fbtn { border: 1px solid #d7dce5; background: #fff; color: #334155; border-radius: 8px; padding: 6px 12px; font-size: .8rem; font-weight: 600; cursor: pointer; text-decoration: none; }
+    .gg-fbtn.on, .gg-fbtn:hover { background: #dc2626; border-color: #dc2626; color: #fff; }
+    .gg-fmodal-uyari { display: none; background: #fffbeb; border-bottom: 1px solid #fde68a; color: #92400e; font-size: .8rem; padding: 7px 14px; }
+    .gg-fmodal iframe { flex: 1; border: 0; width: 100%; background: #e5e7eb; }
+</style>
+
+<div class="ggd-modal-bg" id="ggdDetayModal">
+    <div class="ggd-modal">
+        <div class="ggd-modal-head"><h3 id="ggdTitle">Belge Detayı</h3><button class="x" onclick="ggKapatDetay()">✕</button></div>
+        <div class="ggd-modal-body" id="ggdBody"></div>
+    </div>
+</div>
+
+<div class="ggd-modal-bg" id="ggdFaturaModal">
+    <div class="gg-fmodal">
+        <div class="gg-fmodal-head">
+            <h3><i class="fa-solid fa-file-invoice"></i> <span id="ggdFBaslik">Fatura Görüntüsü</span></h3>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <a id="ggdFYeniSekme" href="#" target="_blank" class="gg-fbtn" style="background:#fff; color:#7f1d1d;"><i class="fa-solid fa-up-right-from-square"></i> Yeni sekmede aç</a>
+                <button class="x" onclick="ggKapatFatura()">✕</button>
+            </div>
+        </div>
+        <div class="gg-fmodal-arac">
+            <button type="button" class="gg-fbtn on" id="ggdFHtmlBtn" title="QNB'den gelen/giden e-Faturanın gerçek görüntüsü"><i class="fa-solid fa-file-invoice-dollar"></i> QNB Gerçek Görüntü</button>
+            <button type="button" class="gg-fbtn" id="ggdFPdfBtn" title="QNB'den PDF olarak"><i class="fa-solid fa-file-pdf"></i> QNB PDF</button>
+            <button type="button" class="gg-fbtn" id="ggdFSatirBtn" title="Belgenin tüm yevmiye satırları ve fatura kalemleri"><i class="fa-solid fa-list"></i> Belge Satırları</button>
+            <span id="ggdFBilgi" style="font-size:.78rem; color:#64748b;"></span>
+            <a href="/Rapor166" target="_blank" class="gg-fbtn" style="margin-left:auto;" title="Fatura İnceleme ekranı"><i class="fa-solid fa-file-invoice"></i> Fatura İnceleme'de aç</a>
+        </div>
+        <div class="gg-fmodal-uyari" id="ggdFUyari"></div>
+        <iframe id="ggdFCerceve" src="about:blank"></iframe>
+    </div>
+</div>
+
+<script>
+    (function () {
+        const esc = s => (s == null ? "" : String(s)).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+        const fmt = n => (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const qsOf = dbKey => dbKey ? ('&db=' + encodeURIComponent(dbKey)) : '';
+        const kodAdi = kod => { kod = (kod || '').trim(); if (!kod) return ''; const m = window.GG_AD || {}; return m[kod] || m[kod.split('.').slice(0, 4).join('.')] || ''; };
+
+        window.ggKapatDetay = function () { document.getElementById('ggdDetayModal').classList.remove('on'); };
+        window.ggKapatFatura = function () { document.getElementById('ggdFaturaModal').classList.remove('on'); const c = document.getElementById('ggdFCerceve'); c.removeAttribute('srcdoc'); c.src = 'about:blank'; };
+        document.getElementById('ggdFaturaModal').addEventListener('click', e => { if (e.target.id === 'ggdFaturaModal') ggKapatFatura(); });
+        document.getElementById('ggdDetayModal').addEventListener('click', e => { if (e.target.id === 'ggdDetayModal') ggKapatDetay(); });
+
+        function belgeBaslik(res) {
+            const b = res.belge;
+            const kv = (k, v) => v == null || v === '' ? '' : `<div><span class="k">${k}</span><span class="v">${v}</span></div>`;
+            if (!b) return `<div class="bd-kv">${kv('Belge Türü', esc(res.baslik))}${kv('Belge No', esc(res.belgeNo))}${kv('Tarih', esc(res.tarih))}${kv('Cari', esc(res.cari))}</div>`;
+            return `<div class="bd-kv">`
+                + kv('Belge Türü', esc(res.baslik) + (b.kalemHizmet ? ' <span class="badge2 ft">' + esc(b.kalemHizmet) + '</span>' : '') + (b.iptal ? ' <span class="badge2" style="background:#fee2e2;color:#b91c1c;">İPTAL</span>' : ''))
+                + kv('Belge No', b.docNum ? esc(b.docNum) : esc(res.belgeNo)) + kv('Fatura No (tedarikçi / e-fatura)', esc(b.faturaNo)) + kv('Yevmiye No', esc(b.yevmiyeNo))
+                + kv('Belge Tarihi', esc(b.belgeTarihi)) + kv('Vade', esc(b.vade)) + kv('Vergi Tarihi', esc(b.vergiTarihi))
+                + kv('Cari', b.cariKodu ? '<span class="hcode">' + esc(b.cariKodu) + '</span> ' + esc(b.cariAdi) : esc(b.cariAdi || res.cari))
+                + (b.toplam ? kv('Toplam (KDV dahil)', fmt(b.toplam) + ' ' + esc(b.doviz)) + kv('KDV', fmt(b.kdv) + ' ' + esc(b.doviz)) + (b.doviz && b.doviz !== 'TRY' && b.doviz !== 'TL' && b.kur ? kv('Kur', fmt(b.kur)) : '') : '')
+                + kv('Durum', esc(b.durum)) + kv('Satıcı', esc(b.satici)) + kv('İşlem Kodu', esc(b.islemKodu))
+                + kv('Ref 1 / 2 / 3', [b.ref1, b.ref2, b.ref3].filter(x => x).map(esc).join(' / '))
+                + kv('Açıklama', esc(b.aciklama)) + (b.yevmiyeAciklama && b.yevmiyeAciklama !== b.aciklama ? kv('Yevmiye Açıklaması', esc(b.yevmiyeAciklama)) : '')
+                + (b.taslakEntry ? kv('Taslak No', esc(b.taslakEntry)) : '') + `</div>`;
+        }
+        function carilerKutusu(res) {
+            const c = res.cariler || []; if (!c.length) return '';
+            const tipSinif = t => t === 'Tedarikçi' ? 'ft' : t === 'Müşteri' ? 'yv' : 'sb';
+            return `<div style="font-size:.78rem;font-weight:700;color:#475569;margin:4px 0 6px;">Fişteki Cariler (${c.length})</div>
+                <table class="gg-kalem" style="margin-bottom:12px;"><thead><tr><th>Cari Kodu</th><th>Cari Adı</th><th>Tür</th><th>VKN</th><th class="txt-r">Satır</th><th class="txt-r">Borç</th><th class="txt-r">Alacak</th></tr></thead><tbody>`
+                + c.map(x => `<tr><td class="hcode" style="color:#7c3aed;">${esc(x.kod)}</td><td>${esc(x.ad)}</td><td><span class="badge2 ${tipSinif(x.tip)}">${esc(x.tip || 'cari')}</span></td><td style="font-size:.76rem;color:#64748b;">${esc(x.vkn)}</td><td class="txt-r">${x.satirSayisi}</td><td class="txt-r">${x.borc ? fmt(x.borc) : '—'}</td><td class="txt-r">${x.alacak ? fmt(x.alacak) : '—'}</td></tr>`).join('')
+                + `</tbody></table>`;
+        }
+        function kisilerKutusu(res) {
+            const k = res.kisiler; if (!k) return '';
+            const kutu = (rol, p, sinif) => p ? `<div class="bd-kisi ${sinif}"><div class="rol">${rol}</div><div class="kim">${p.ad ? esc(p.ad) : '<span class="bos">isim yok</span>'}</div><div class="kod">${esc(p.kod)}</div><div class="zaman">${esc(p.tarih)}</div>${p.not_ ? '<div class="zaman"><i>' + esc(p.not_) + '</i></div>' : ''}</div>` : '';
+            let h = '<div class="bd-kisiler">';
+            h += kutu(k.olusturan ? k.olusturan.kaynak : 'Oluşturan', k.olusturan, 'olusturan');
+            if (k.onaylayan) h += kutu(k.onaylayan.kaynak, k.onaylayan, 'onaylayan');
+            else if (res.faturaMi) h += `<div class="bd-kisi"><div class="rol">Onaylayan</div><div class="zaman">Bu belge taslak / onay akışından geçmemiş; doğrudan eklenmiş.</div></div>`;
+            if (k.guncelleyen) h += kutu(k.guncelleyen.kaynak, k.guncelleyen, '');
+            if (k.satinalmaci) h += `<div class="bd-kisi"><div class="rol">Satınalmacı (belge sahibi)</div><div class="kim">${esc(k.satinalmaci.ad)}</div><div class="kod">${esc(k.satinalmaci.kod)}</div></div>`;
+            return h + '</div>';
+        }
+
+        // ---- SAP belge detayı: fatura kalemleri + yevmiye fişi tüm satırları ----
+        window.ggDetay = function (transId, satirId, dbKey) {
+            const secLine = satirId ? parseInt(String(satirId).split('-')[1], 10) : -1;
+            document.getElementById('ggdTitle').textContent = 'Belge Detayı';
+            document.getElementById('ggdBody').innerHTML = `<div style="text-align:center;padding:30px;color:#94a3b8;"><i class="fa-solid fa-spinner fa-spin"></i> Yükleniyor...</div>`;
+            document.getElementById('ggdDetayModal').classList.add('on');
+            fetch(`/Rapor163/BelgeDetay?transId=${transId}${qsOf(dbKey)}`).then(r => r.json()).then(res => {
+                if (!res.success) { document.getElementById('ggdBody').innerHTML = `<div style="color:#b91c1c;padding:16px;">${esc(res.message)}</div>`; return; }
+                document.getElementById('ggdTitle').textContent = (res.baslik || 'Belge') + ' — ' + (res.belgeNo || '');
+                let kalem = '';
+                if (res.kalemler && res.kalemler.length) {
+                    const kt = res.kalemler.reduce((s, k) => s + (Number(k.tutar) || 0), 0);
+                    kalem = `<div style="font-size:.78rem;font-weight:700;color:#475569;margin:10px 0 6px;">Fatura Kalemleri (${res.kalemler.length})</div>`
+                        + `<table class="gg-kalem"><thead><tr><th>#</th><th>Kod</th><th>Kalem</th><th class="txt-r">Miktar</th><th class="txt-r">Birim Fiyat</th><th class="txt-r">Tutar</th><th>KDV</th><th>Depo</th><th>Bağlı Hesap</th><th>Gider / Gelir Kodu</th></tr></thead><tbody>`
+                        + res.kalemler.map((k, i) => `<tr style="${k.secilebilir ? '' : 'opacity:.55;'}"><td style="color:#94a3b8;">${i + 1}</td><td>${esc(k.kod)}</td><td>${esc(k.ad)}</td><td class="txt-r">${fmt(k.miktar)}</td><td class="txt-r">${fmt(k.birimFiyat)}</td><td class="txt-r">${fmt(k.tutar)}</td><td>${esc(k.kdvKodu)} ${k.kdv != null ? '%' + Number(k.kdv) : ''}</td><td>${esc(k.depo)}</td><td>${k.hesapKodu ? '<span class="hcode">' + esc(k.hesapKodu) + '</span> ' + esc(k.hesapAdi) : '<span style="color:#94a3b8;">—</span>'}</td><td>${k.ggKod ? '<span class="hcode">' + esc(k.ggKod) + '</span> <span style="color:#64748b;font-size:.75rem;">' + esc(kodAdi(k.ggKod)) + '</span>' : (k.secilebilir ? '<span class="kod-uyari">kod yok</span>' : '<span style="color:#94a3b8;">gerekmez</span>')}</td></tr>`).join('')
+                        + `<tr style="font-weight:700;background:#f8fafc;"><td colspan="5" class="txt-r">Toplam (KDV hariç)</td><td class="txt-r">${fmt(kt)}</td><td colspan="4"></td></tr></tbody></table>`;
+                }
+                let fis = '';
+                if (res.fisSatirlari && res.fisSatirlari.length) {
+                    const tb = res.fisSatirlari.reduce((s, x) => s + (Number(x.borc) || 0), 0), ta = res.fisSatirlari.reduce((s, x) => s + (Number(x.alacak) || 0), 0);
+                    const dovizli = res.fisSatirlari.some(x => x.doviz && x.doviz !== 'TRY' && x.doviz !== 'TL' && (x.dovizBorc || x.dovizAlacak));
+                    const ekKolon = res.fisSatirlari.some(x => x.masrafMerkezi || x.proje);
+                    fis = `<div style="font-size:.78rem;font-weight:700;color:#475569;margin:14px 0 6px;">Yevmiye Fişi — Tüm Satırlar (${res.fisSatirlari.length}) <span style="font-weight:500;color:#94a3b8;">— seçilen satır vurgulu</span></div>`
+                        + `<table class="gg-kalem"><thead><tr><th>#</th><th>Hesap / Cari</th><th>Ad</th><th class="txt-r">Borç</th><th class="txt-r">Alacak</th>${dovizli ? '<th class="txt-r">Döviz</th>' : ''}${ekKolon ? '<th>Masraf M. / Proje</th>' : ''}<th>Vade</th><th>Açıklama</th><th>Ref</th><th>Kod</th></tr></thead><tbody>`
+                        + res.fisSatirlari.map(s => {
+                            const hesapHucre = s.cariKodu ? '<span class="hcode" style="color:#7c3aed;">' + esc(s.cariKodu) + '</span><br><span style="font-size:.7rem;color:#94a3b8;">' + esc(s.hesapKodu) + '</span>' : '<span class="hcode"' + (s.secilebilir ? '' : ' style="color:#64748b;font-weight:600;"') + '>' + esc(s.hesapKodu) + '</span>';
+                            return `<tr class="${s.lineId === secLine ? 'secili' : ''}" style="${s.secilebilir ? '' : 'color:#64748b;'}"><td style="color:#94a3b8;">${s.lineId}</td><td>${hesapHucre}</td>
+                            <td>${s.cariAdi ? esc(s.cariAdi) + (s.cariTip ? ' <span class="badge2 ' + (s.cariTip === 'Tedarikçi' ? 'ft' : s.cariTip === 'Müşteri' ? 'yv' : 'sb') + '">' + esc(s.cariTip) + '</span>' : '') : esc(s.hesapAdi)}</td>
+                            <td class="txt-r">${s.borc ? fmt(s.borc) : '—'}</td><td class="txt-r">${s.alacak ? fmt(s.alacak) : '—'}</td>
+                            ${dovizli ? '<td class="txt-r">' + ((s.dovizBorc || s.dovizAlacak) ? fmt(s.dovizBorc || s.dovizAlacak) + ' ' + esc(s.doviz) : '—') + '</td>' : ''}
+                            ${ekKolon ? '<td style="font-size:.74rem;">' + esc(s.masrafMerkezi) + (s.proje ? ' / ' + esc(s.proje) : '') + '</td>' : ''}
+                            <td style="font-size:.74rem;">${esc(s.vade)}</td><td>${esc(s.aciklama)}</td><td style="font-size:.72rem;color:#64748b;">${esc(s.ref1)}${s.ref2 ? ' / ' + esc(s.ref2) : ''}</td>
+                            <td>${s.ggKod ? '<span class="hcode">' + esc(s.ggKod) + '</span>' : (s.secilebilir ? '<span class="kod-uyari">kod yok</span>' : '')}</td></tr>`; }).join('')
+                        + `<tr style="font-weight:700;background:#f8fafc;"><td colspan="3" class="txt-r">Toplam</td><td class="txt-r">${fmt(tb)}</td><td class="txt-r">${fmt(ta)}</td><td colspan="${5 + (dovizli ? 1 : 0) + (ekKolon ? 1 : 0)}"></td></tr></tbody></table>`;
+                } else fis = `<div class="ggd-note">Bu belgenin yevmiye satırı bulunamadı.</div>`;
+                document.getElementById('ggdBody').innerHTML =
+                    (res.faturaMi ? `<div style="margin-bottom:12px;"><button class="gg-goruntu" style="padding:8px 14px; font-size:.82rem; margin:0;" onclick="ggKapatDetay(); ggFaturaGoruntu(${transId}, '${esc(res.belgeNo)}', '${esc(dbKey || '')}')"><i class="fa-solid fa-eye"></i> Faturanın Gerçek Görüntüsü (QNB)</button></div>` : '')
+                    + belgeBaslik(res) + kisilerKutusu(res) + carilerKutusu(res) + kalem + fis;
+            }).catch(e => { document.getElementById('ggdBody').innerHTML = `<div style="color:#b91c1c;padding:16px;">Hata: ${esc(e)}</div>`; });
+        };
+
+        // ---- QNB fatura görüntüsü (HTML / PDF) ----
+        window.ggFaturaGoruntu = function (transId, belgeNo, dbKey) {
+            const q = qsOf(dbKey);
+            const htmlUrl = `/Rapor163/FaturaGoruntu?transId=${transId}${q}`, pdfUrl = `/Rapor163/FaturaGoruntu?transId=${transId}&format=PDF${q}`;
+            const goster = (url, etiket, btn) => {
+                document.getElementById('ggdFBaslik').textContent = `Fatura ${belgeNo || ''} — ${etiket}`;
+                document.getElementById('ggdFYeniSekme').href = url;
+                const c = document.getElementById('ggdFCerceve'); c.removeAttribute('srcdoc'); c.src = url;
+                document.querySelectorAll('#ggdFaturaModal .gg-fmodal-arac .gg-fbtn').forEach(b => b.classList.remove('on'));
+                if (btn) document.getElementById(btn).classList.add('on');
+            };
+            document.getElementById('ggdFHtmlBtn').onclick = () => goster(htmlUrl, 'QNB Gerçek Görüntü', 'ggdFHtmlBtn');
+            document.getElementById('ggdFPdfBtn').onclick = () => goster(pdfUrl, 'QNB PDF', 'ggdFPdfBtn');
+            document.getElementById('ggdFSatirBtn').onclick = () => { ggKapatFatura(); ggDetay(transId, '', dbKey); };
+            const uy = document.getElementById('ggdFUyari'); uy.style.display = 'none'; uy.textContent = '';
+            document.getElementById('ggdFBilgi').textContent = '';
+            document.getElementById('ggdFBaslik').textContent = `Fatura ${belgeNo || ''} — QNB kontrol ediliyor...`;
+            document.getElementById('ggdFCerceve').src = 'about:blank';
+            document.getElementById('ggdFaturaModal').classList.add('on');
+            fetch(`/Rapor163/FaturaGoruntuDurum?transId=${transId}${q}`).then(r => r.json()).then(d => {
+                document.getElementById('ggdFBilgi').innerHTML = d.yon ? `${d.yon === 'GELEN' ? 'Gelen (tedarikçi) e-Faturası' : 'Giden (müşteri) e-Faturası / e-Arşiv'}${d.faturaNo ? ' · No: <b>' + esc(d.faturaNo) + '</b>' : ''}` : '';
+                if (d && d.bulundu) { goster(htmlUrl, 'QNB Gerçek Görüntü', 'ggdFHtmlBtn'); if (d.ipucu) { uy.innerHTML = '<i class="fa-solid fa-circle-info"></i> ' + esc(d.ipucu); uy.style.display = 'block'; } return; }
+                document.getElementById('ggdFBaslik').textContent = `Fatura ${belgeNo || ''} — görüntü bulunamadı`;
+                uy.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> <b>QNB görüntüsü bulunamadı:</b> ' + esc((d && d.mesaj) || 'bilinmeyen neden') + (d && d.ipucu ? ' <span style="color:#64748b">— ' + esc(d.ipucu) + '</span>' : '');
+                uy.style.display = 'block';
+                document.getElementById('ggdFCerceve').srcdoc = `<div style="font-family:Segoe UI,Arial;padding:40px;color:#64748b;text-align:center">Belge görüntüsü QNB'de bulunamadı. "Belge Satırları" ile fişi inceleyebilirsiniz.</div>`;
+            }).catch(() => { uy.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> QNB kontrolü yapılamadı.'; uy.style.display = 'block'; });
+        };
+    })();
+</script>

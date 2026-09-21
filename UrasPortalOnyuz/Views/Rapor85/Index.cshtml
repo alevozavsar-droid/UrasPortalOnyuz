@@ -1,0 +1,458 @@
+﻿@model WebApplication3.Controllers.Rapor85ViewModel
+
+@{
+    ViewData["Title"] = "Konsolide Satınalma Talebi Denetimi";
+}
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<style>
+    .dash-card { 
+        border-radius: 12px; 
+        border: none; 
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
+        background: white; 
+        transition: transform 0.2s;
+    }
+    .dash-card:hover { transform: translateY(-2px); }
+    
+    .table-custom th { 
+        background-color: #f8f9fc; 
+        text-transform: uppercase; 
+        font-size: 11px; 
+        letter-spacing: 0.5px; 
+        color: #4e73df; 
+        border-bottom: 2px solid #e3e6f0; 
+        padding: 12px;
+        white-space: nowrap;
+    }
+    
+    .table-custom td { 
+        vertical-align: middle; 
+        font-size: 13px; 
+        color: #5a5c69; 
+    }
+
+    .badge-status {
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 11px;
+        display: inline-block;
+    }
+    .bg-error-row { background-color: #fff5f5 !important; }
+    .bg-warning-row { background-color: #fffdf5 !important; }
+    /* Robotun ham ciktisi - ceviriden farkliysa altta gosterilir */
+    .ham-cikti {
+        font-family: Consolas, monospace;
+        font-size: .72rem;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: var(--text-secondary, #6b7280);
+        background: rgba(148,163,184,.10);
+        border-radius: 6px;
+        padding: 5px 7px;
+        margin-top: 5px;
+    }
+</style>
+
+<div class="container-fluid py-3 mb-5">
+    
+    @if(Model.UyariMesajlari.Any())
+    {
+        <div class="alert alert-warning shadow-sm rounded-3">
+            <strong><i class="fas fa-exclamation-triangle me-2"></i> Bazı firmalara ulaşılamadı:</strong>
+            <ul class="mb-0 mt-2">
+                @foreach (var msj in Model.UyariMesajlari)
+                {
+                    <li>@msj</li>
+                }
+            </ul>
+        </div>
+    }
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <h2 class="h4 mb-0 fw-bold text-dark">
+            <i class="fas fa-sitemap me-2 text-primary"></i> Konsolide Aktarım Denetimi (Tüm Firmalar <i class="fas fa-arrow-right mx-1 text-muted"></i> SELVI)
+        </h2>
+        
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-success btn-sm rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#triggerModal">
+                <i class="fas fa-bolt me-1"></i> Manuel Tetikle
+            </button>
+            <button class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm" onclick="location.reload()">
+                <i class="fas fa-sync me-1"></i> Sayfayı Yenile
+            </button>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col mb-3">
+            <div class="card dash-card h-100 border-start border-4 border-warning">
+                <div class="card-body">
+                    <div class="small fw-bold text-warning text-uppercase">Bekleyen & Onayda Olan</div>
+                    <div class="h3 fw-bold mb-0">@Model.Bekleyen</div>
+                </div>
+            </div>
+        </div>
+        <div class="col mb-3">
+            <div class="card dash-card h-100 border-start border-4 border-danger">
+                <div class="card-body">
+                    <div class="small fw-bold text-danger text-uppercase">Hatalı</div>
+                    <div class="h3 fw-bold mb-0">@Model.Hatali</div>
+                </div>
+            </div>
+        </div>
+        <div class="col mb-3">
+            <div class="card dash-card h-100 border-start border-4 border-dark">
+                <div class="card-body">
+                    <div class="small fw-bold text-dark text-uppercase">Kayıp (Akmamış)</div>
+                    <div class="h3 fw-bold mb-0">@Model.Kayip</div>
+                </div>
+            </div>
+        </div>
+        <div class="col mb-3">
+            <div class="card dash-card h-100 border-start border-4 border-secondary">
+                <div class="card-body">
+                    <div class="small fw-bold text-secondary text-uppercase">Reddedilen</div>
+                    <div class="h3 fw-bold mb-0">@Model.Reddedilen</div>
+                </div>
+            </div>
+        </div>
+        <div class="col mb-3">
+            <div class="card dash-card h-100 border-start border-4 border-success">
+                <div class="card-body">
+                    <div class="small fw-bold text-success text-uppercase">Başarılı</div>
+                    <div class="h3 fw-bold mb-0">@Model.Basarili</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card dash-card">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 fw-bold text-primary">
+                <i class="fas fa-list me-2"></i>Tüm Firmaların Kuyruğu
+            </h6>
+            <div class="btn-group">
+                <button class="btn btn-outline-danger btn-sm rounded-pill me-2 fw-bold" onclick="bulkRetry('HATA')">
+                    <i class="fas fa-redo me-1"></i> Tüm Hatalıları Dene
+                </button>
+                <button class="btn btn-outline-dark btn-sm rounded-pill fw-bold" onclick="bulkRetry('KAYIP')">
+                    <i class="fas fa-ghost me-1"></i> Tüm Kayıpları Dene
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive" style="max-height:600px; overflow-y:auto;">
+                <table class="table table-hover table-custom align-middle mb-0">
+                    <thead class="sticky-top shadow-sm">
+                        <tr>
+                            <th class="ps-4">Firma</th>
+                            <th>Kaynak Belge</th>
+                            <th>Onay / SAP Durumu</th>
+                            <th>Aktarım Durumu</th>
+                            <th>Hedef (SELVI)</th>
+                            <th>İşlem Tarihi</th>
+                            <th style="min-width:320px;">Ne Oldu?</th>
+                            <th class="text-center">İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if(!Model.Listesi.Any())
+                        {
+                            <tr><td colspan="8" class="text-center py-4 text-muted">Hiçbir firmada kayıt bulunamadı.</td></tr>
+                        }
+                        
+                        @foreach (var item in Model.Listesi)
+                        {
+                            string rowClass = item.Durum == "E" ? "bg-error-row" : (!string.IsNullOrEmpty(item.OnayBekleyenKisi) ? "bg-warning-row" : "");
+                            
+                            // Null check'leri garanti altına alıyoruz
+                            string hedefNo = string.IsNullOrEmpty(item.HedefTalepNo) ? "-" : item.HedefTalepNo;
+                            string detayMesaji = string.IsNullOrEmpty(item.HataMesaji) ? "" : item.HataMesaji.Trim();
+
+                            string islemTarihi = item.IslemTarihi == DateTime.MinValue ? "-" : item.IslemTarihi.ToString("dd.MM.yyyy HH:mm");
+
+                            // ----------------------------------------------------------
+                            // SEBEP COZUMLEME
+                            // Kaynak: SelKimyaPurchaseRequestService/SelkimyaPurchaseService.cs
+                            // ve Rapor86 (onay ekrani). Uydurma kalip yok.
+                            // ----------------------------------------------------------
+                            string aciklama;
+                            string ipucu = "";      // ne yapmali
+                            string etiketler = "";  // satir / stok / SAP kodu rozetleri
+
+                            if (detayMesaji.Length == 0)
+                            {
+                                if (item.Durum == "W")
+                                    aciklama = "Talep, web onayı bekliyor. Henüz onaylanmadığı için aktarılmadı.";
+                                else if (item.Durum == "P")
+                                    aciklama = "Onaylandı, aktarım sırasında bekliyor.";
+                                else if (item.Durum == "S")
+                                    aciklama = "Başarıyla aktarıldı.";
+                                else
+                                    aciklama = "Servis bir sebep yazmamış.";
+                            }
+                            else if (detayMesaji.StartsWith("REDDEDİLDİ"))
+                            {
+                                string not = detayMesaji.Replace("REDDEDİLDİ:", "").Trim();
+                                aciklama = not.Length > 0
+                                    ? "Onaycı bu talebi reddetti. Red sebebi: " + not
+                                    : "Onaycı bu talebi reddetti (sebep yazılmamış).";
+                                ipucu = "Reddedilen talep aktarılmaz. Yeniden gönderilmesi gerekir.";
+                            }
+                            else if (detayMesaji.Contains("Web Onayı Verildi"))
+                            {
+                                aciklama = "Onaylandı. Servis sıradaki turunda hedefe aktaracak.";
+                            }
+                            else if (detayMesaji.Contains("Belge kaynakta bulunamadı")
+                                  || detayMesaji.Contains("bulunamadı veya desteklenmiyor"))
+                            {
+                                aciklama = "Servis talebi kaynak veritabanında bulamadı.";
+                                ipucu = "Talep silinmiş ya da taslak durumda olabilir. Kaynakta hâlâ duruyorsa kuyruğa yeniden ekleyin.";
+                            }
+                            else if (detayMesaji.Contains("Stok kartı hedefte açılamadı"))
+                            {
+                                aciklama = "Talepteki kalem hedef şirkette açılamadı; stok kartı oluşturulamadığı için talep de aktarılamadı.";
+                                ipucu = "SAP'nin verdiği sebep aşağıda. Genellikle kalem grubu, ölçü birimi veya zorunlu bir alan eksiktir.";
+                            }
+                            else if (detayMesaji.Contains("DI API Hatası Kodu"))
+                            {
+                                aciklama = "SAP talebi reddetti.";
+                                ipucu = "Sorun belge başlığında ya da kullanıcı tanımlı alan (UDF) kurallarında olabilir.";
+                            }
+                            else if (detayMesaji.Contains("Aktarım Çöktü"))
+                            {
+                                aciklama = "Aktarım satır işlenirken kesildi.";
+                                ipucu = "Hangi satırda ve hangi stokta durduğu yanda yazıyor; asıl SAP mesajı ham kayıtta.";
+                            }
+                            else if (detayMesaji.Contains("Manuel Tetiklendi") || detayMesaji.Contains("Manuel Eklendi"))
+                            {
+                                aciklama = "Bu ekrandan elle kuyruğa alınmış; servis sıradaki turunda deneyecek.";
+                            }
+                            else
+                            {
+                                aciklama = detayMesaji;
+                            }
+
+                            // --- Ham mesajdan islenebilir ayrintilari cikar
+                            var mSatir = System.Text.RegularExpressions.Regex.Match(detayMesaji, @"Satır:\s*(\d+)");
+                            if (mSatir.Success)
+                                etiketler += "<span class=\"badge bg-light text-dark border me-1\">Satır " + mSatir.Groups[1].Value + "</span>";
+
+                            // Stok kodlari nokta iceriyor (T07.SW.C10.36.30); bu yuzden
+                            // ilk noktaya kadar degil, "Hata Detayi" ibaresine kadar okunur.
+                            var mStok = System.Text.RegularExpressions.Regex.Match(detayMesaji, @"Stok Kodu:\s*(.+?)\.\s*Hata Detayı");
+                            if (!mStok.Success)
+                                mStok = System.Text.RegularExpressions.Regex.Match(detayMesaji, @"Stok Kodu:\s*(\S+)");
+                            if (mStok.Success && mStok.Groups[1].Value.Trim().Length > 0)
+                                etiketler += "<span class=\"badge bg-light text-dark border me-1\">Stok " + mStok.Groups[1].Value.Trim() + "</span>";
+
+                            var mKod = System.Text.RegularExpressions.Regex.Match(detayMesaji, @"Kodu:\s*\[(-?\d+)\]");
+                            if (mKod.Success)
+                                etiketler += "<span class=\"badge bg-danger me-1\">SAP " + mKod.Groups[1].Value + "</span>";
+
+                            var mSap = System.Text.RegularExpressions.Regex.Match(detayMesaji, @"SAP Mesajı:\s*(.+?)\.\s*\(");
+                            if (!mSap.Success)
+                                mSap = System.Text.RegularExpressions.Regex.Match(detayMesaji, @"SAP Hata:\s*(.+)$");
+                            if (mSap.Success)
+                                aciklama += " SAP'nin yanıtı: " + mSap.Groups[1].Value.Trim();
+
+                            <tr class="@rowClass">
+                                <td class="ps-4">
+                                    <span class="badge bg-primary text-white"><i class="fas fa-building me-1"></i> @item.KaynakDB</span>
+                                </td>
+                                
+                                <td>
+                                    <span class="fw-bold text-dark">Doc: @item.KaynakDocEntry</span>
+                                </td>
+                                
+                                <td>
+                                    @if (!string.IsNullOrEmpty(item.OnayBekleyenKisi))
+                                    {
+                                        <span class="badge bg-info text-dark badge-status border border-info" title="SAP İçinde Onay Bekliyor">
+                                            <i class="fas fa-user-clock me-1"></i> @item.OnayBekleyenKisi
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small"><i class="fas fa-check-circle text-success me-1"></i> Onaylı / Direkt</span>
+                                    }
+                                </td>
+                                
+                                <td>
+                                    @if (item.Durum == "S" && (hedefNo == "-" || hedefNo == "0"))
+                                    {
+                                        <span class="badge bg-dark badge-status"><i class="fas fa-ghost me-1"></i> KAYIP</span>
+                                    }
+                                    else if (item.Durum == "S")
+                                    {
+                                        <span class="badge bg-success badge-status"><i class="fas fa-check-double me-1"></i> BAŞARILI</span>
+                                    }
+                                    else if (item.Durum == "E")
+                                    {
+                                        <span class="badge bg-danger badge-status"><i class="fas fa-times-circle me-1"></i> HATA</span>
+                                    }
+                                    else if (item.Durum == "R")
+                                    {
+                                        <span class="badge bg-secondary badge-status"><i class="fas fa-ban me-1"></i> REDDEDİLDİ</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark badge-status"><i class="fas fa-hourglass-half me-1"></i> BEKLİYOR</span>
+                                    }
+                                </td>
+                                
+                                <td>
+                                    <span class="fw-bold text-success">@hedefNo</span>
+                                </td>
+                                
+                                <td class="small text-muted">@islemTarihi</td>
+                                
+                                <td class="small" style="min-width:340px; max-width:560px;">
+                                    <div class="@(item.Durum == "E" ? "text-danger fw-semibold" : "text-body")"
+                                         style="white-space:normal; word-break:break-word;">
+                                        @aciklama
+                                    </div>
+
+                                    @if (!string.IsNullOrEmpty(etiketler))
+                                    {
+                                        <div class="mt-1">@Html.Raw(etiketler)</div>
+                                    }
+
+                                    @if (!string.IsNullOrEmpty(ipucu))
+                                    {
+                                        <div class="text-muted mt-1" style="white-space:normal;">
+                                            <i class="fas fa-lightbulb me-1 text-warning"></i>@ipucu
+                                        </div>
+                                    }
+
+                                    @if (detayMesaji.Length > 0 && aciklama != detayMesaji)
+                                    {
+                                        <div class="ham-cikti">
+                                            <i class="fas fa-robot me-1"></i>@detayMesaji
+                                        </div>
+                                    }
+                                </td>
+                                
+                                <td class="text-center">
+                                    @if (item.Durum == "E" || (item.Durum == "S" && (hedefNo == "-" || hedefNo == "0")))
+                                    {
+                                        <button class="btn btn-sm btn-outline-primary rounded-circle" onclick="retry('@item.KaynakDB', @item.Id)" title="Tekrar Dene">
+                                            <i class="fas fa-redo"></i>
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <span>-</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="triggerModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title"><i class="fas fa-bolt me-2"></i>Belgeyi Kuyruğa Zorla (Manuel)</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-3">Servise düşmemiş bir Satınalma Talebini ilgili firmayı seçerek kuyruğa ekleyebilirsiniz.</p>
+        <div class="mb-3">
+            <label class="form-label fw-bold">Kaynak Firma Seçin</label>
+            <select id="manualDbName" class="form-select form-select-lg">
+                @foreach (var db in Model.DatabaseList)
+                {
+                    <option value="@db.Value">@db.Text</option>
+                }
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label fw-bold">Belge Numarası (DocEntry)</label>
+            <input type="number" class="form-control form-control-lg" id="manualDocEntry" placeholder="Örn: 1254">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Kapat</button>
+        <button type="button" class="btn btn-success" onclick="triggerManual()"><i class="fas fa-paper-plane me-1"></i> Servise Gönder</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+    function retry(dbName, id) {
+        Swal.fire({
+            title: 'Tekrar Denensin mi?',
+            text: dbName + " firmasındaki bu kayıt yeniden işleme alınacak.",
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#4e73df',
+            confirmButtonText: 'Evet, Dene'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.post("/Rapor85/TekrarDene", { dbName: dbName, id: id }, function(res) {
+                    if(res.success) {
+                        Swal.fire('Başarılı', 'Kayıt kuyruğa eklendi.', 'success').then(() => location.reload());
+                    } else {
+                        Swal.fire('Hata', res.message, 'error');
+                    }
+                });
+            }
+        });
+    }
+
+    function bulkRetry(tip) {
+        Swal.fire({
+            title: 'Toplu İşlem Onayı',
+            text: "TÜM FİRMALARDAKİ " + tip + " kayıtları tekrar denenecek, onaylıyor musunuz?",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#e74a3b',
+            confirmButtonText: 'Evet, Hepsini Dene'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({ title: 'İşleniyor...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                $.post("/Rapor85/TopluTekrarDene", { tip: tip }, function(res) {
+                    if(res.success) {
+                        Swal.fire('Başarılı', res.message, 'success').then(() => location.reload());
+                    } else {
+                        Swal.fire('Hata', res.message, 'error');
+                    }
+                });
+            }
+        });
+    }
+
+    function triggerManual() {
+        var dbName = $("#manualDbName").val();
+        var docEntry = $("#manualDocEntry").val();
+        
+        if(!docEntry) {
+            Swal.fire('Uyarı', 'Lütfen geçerli bir DocEntry numarası girin!', 'warning');
+            return;
+        }
+
+        Swal.fire({ title: 'Gönderiliyor...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        
+        $.post("/Rapor85/ManuelTetikle", { dbName: dbName, docEntry: docEntry }, function(res) {
+            if(res.success) {
+                Swal.fire('Tetiklendi!', res.message, 'success').then(() => {
+                    $('#triggerModal').modal('hide');
+                    location.reload();
+                });
+            } else {
+                Swal.fire('Hata', res.message, 'error');
+            }
+        });
+    }
+</script>

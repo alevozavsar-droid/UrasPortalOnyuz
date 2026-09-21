@@ -1,0 +1,107 @@
+﻿@using WebApplication3.Helpers
+@using WebApplication3.Services
+@inject WebApplication3.Data.ApplicationDbContext UDb
+@model WebApplication3.Controllers.UretimDashboardVM
+@{
+    ViewData["Title"] = "Dashboard";
+    Layout = "_UretimLayout";
+    Func<int?, string> g = v => v.HasValue ? v.Value.ToString("N0", new System.Globalization.CultureInfo("tr-TR")) : "—";
+    // Kartlar kişi bazlı yetkiye göre (Sistem Yetkileri); null = tümü (A/S).
+    var dYetkiler = YetkiServisi.UretimEkranYetkileri(UDb, User.Identity?.Name, User.FindFirst("UserAuthority")?.Value ?? "");
+    Func<string, string, bool> dIzin = (c, a) => dYetkiler == null || dYetkiler.Contains(c + "/" + a);
+    var dDisEkranlar = UretimMenu.DisEkranlar(UDb);
+}
+
+<style>
+    /* Ana portal dashboard'uyla aynı dil: cam hero, yumuşak gölgeli kartlar, marka gradienti */
+    .u-hero { position: relative; overflow: hidden; border-radius: 22px; padding: 26px 28px; margin-bottom: 22px;
+        background: rgba(255,255,255,.72); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+        border: 1px solid var(--u-border); box-shadow: var(--u-shadow); display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+    .u-hero::before { content: ""; position: absolute; width: 360px; height: 360px; right: -120px; top: -180px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(37,99,235,.18), transparent 65%); pointer-events: none; }
+    .u-hero-ic { width: 58px; height: 58px; border-radius: 16px; background: var(--u-gradient); color: #fff; font-size: 24px;
+        display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 24px rgba(37,99,235,.3); flex-shrink: 0; }
+    .u-hero-eyebrow { font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--u-muted); }
+    .u-hero-title { font-size: 1.45rem; font-weight: 800; letter-spacing: -.4px; margin: 2px 0 0; color: var(--u-ink); }
+    .u-hero-title span { background: linear-gradient(120deg, #1d4ed8, #0ea5e9); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .u-hero-sub { color: var(--u-muted); font-size: .88rem; margin-top: 4px; }
+    .u-hero-db { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px;
+        background: var(--u-primary-soft); color: var(--u-primary-dark); font-weight: 700; font-size: .8rem; border: 1px solid rgba(37,99,235,.15); }
+
+    .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 26px; }
+    .kpi { background: var(--u-card); border: 1px solid var(--u-border); border-radius: 16px; padding: 18px 20px;
+        box-shadow: var(--u-shadow); display: flex; align-items: center; gap: 16px; position: relative; overflow: hidden; transition: transform .15s, box-shadow .15s; }
+    .kpi::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--u-gradient); opacity: .9; }
+    .kpi:hover { transform: translateY(-3px); box-shadow: var(--u-shadow-deep); }
+    .kpi-ic { width: 50px; height: 50px; border-radius: 13px; display: flex; align-items: center; justify-content: center;
+        font-size: 22px; color: #fff; flex-shrink: 0; }
+    .kpi-val { font-size: 1.7rem; font-weight: 800; line-height: 1; }
+    .kpi-lbl { color: var(--u-muted); font-size: .82rem; font-weight: 600; margin-top: 4px; }
+    .ic-a { background: linear-gradient(45deg, #0b3d91, #2563eb); }
+    .ic-b { background: linear-gradient(45deg, #2563eb, #0ea5e9); }
+    .ic-c { background: linear-gradient(45deg, #0ea5e9, #7dd3fc); }
+    .ic-d { background: linear-gradient(45deg, #f59e0b, #d97706); }
+
+    .sec-title { font-weight: 800; font-size: 1.02rem; margin: 6px 0 12px; display: flex; align-items: center; gap: 10px; }
+    .sec-title .adet { color: var(--u-muted); font-weight: 600; font-size: .8rem; }
+    .mod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .scr { background: var(--u-card); border: 1px solid var(--u-border); border-radius: 14px; padding: 13px 15px;
+        box-shadow: var(--u-shadow); display: flex; align-items: center; gap: 12px; color: var(--u-ink);
+        transition: transform .15s, box-shadow .15s, border-color .15s; }
+    .scr:hover { transform: translateY(-3px); box-shadow: var(--u-shadow-deep); border-color: rgba(37,99,235,.35); color: var(--u-primary); }
+    .scr-ic { width: 38px; height: 38px; border-radius: 11px; background: var(--u-primary-soft); color: var(--u-primary);
+        display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; transition: transform .15s, background .15s, color .15s; }
+    .scr:hover .scr-ic { background: var(--u-gradient); color: #fff; transform: scale(1.06) rotate(-4deg); }
+    .scr-name { font-weight: 600; font-size: .9rem; flex: 1; }
+    .scr-go { color: var(--u-muted); font-size: .8rem; }
+    .scr:hover .scr-go { color: var(--u-primary); }
+    .db-warn { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 12px; padding: 12px 16px; margin-bottom: 20px; font-weight: 600; }
+</style>
+
+<div class="u-hero">
+    <div class="u-hero-ic"><i class="fas fa-industry"></i></div>
+    <div>
+        <div class="u-hero-eyebrow">Uras Üretim Portalı</div>
+        <h2 class="u-hero-title">Hoş geldin, <span>@(User.Identity?.Name)</span></h2>
+        <div class="u-hero-sub">Üretim, stok, kalite ve bakım ekranlarına buradan ulaşırsın. @DateTime.Now.ToString("d MMMM yyyy, dddd", new System.Globalization.CultureInfo("tr-TR"))</div>
+    </div>
+    <span class="u-hero-db"><i class="fas fa-database"></i> URASKIMYA</span>
+</div>
+
+@if (Model.BaglantiHatasi)
+{
+    <div class="db-warn"><i class="fas fa-triangle-exclamation me-2"></i> URASKIMYA veritabanına bağlanılamadı; özet sayılar geçici olarak gösterilemiyor. Ekranlara erişim etkilenmez.</div>
+}
+
+<div class="kpi-row">
+    <div class="kpi"><div class="kpi-ic ic-a"><i class="fas fa-gears"></i></div><div><div class="kpi-val">@g(Model.AcikIsEmri)</div><div class="kpi-lbl">Açık İş Emri</div></div></div>
+    <div class="kpi"><div class="kpi-ic ic-b"><i class="fas fa-clipboard-list"></i></div><div><div class="kpi-val">@g(Model.PlanliIsEmri)</div><div class="kpi-lbl">Planlı İş Emri</div></div></div>
+    <div class="kpi"><div class="kpi-ic ic-c"><i class="fas fa-calendar-day"></i></div><div><div class="kpi-val">@g(Model.BuAyAcilan)</div><div class="kpi-lbl">Bu Ay Açılan İş Emri</div></div></div>
+    <div class="kpi"><div class="kpi-ic ic-d"><i class="fas fa-boxes-stacked"></i></div><div><div class="kpi-val">@g(Model.StoktaKalem)</div><div class="kpi-lbl">Stokta Kalem Çeşidi</div></div></div>
+</div>
+
+@foreach (var mod in UretimMenu.Moduller)
+{
+    var izinli = mod.Ekranlar.Where(e => dIzin(mod.Key, e.Action)).ToArray();
+    var disEkranlar = (dDisEkranlar.TryGetValue(mod.Key, out var dl) ? dl : new List<UretimDisEkran>()).Where(d => dIzin(d.Controller, d.Action)).ToList();
+    if (izinli.Length == 0 && disEkranlar.Count == 0) { continue; }
+    <div class="sec-title"><i class="fas @mod.Ikon text-primary"></i> @mod.Baslik <span class="adet">(@(izinli.Length + disEkranlar.Count) ekran)</span></div>
+    <div class="mod-grid">
+        @foreach (var ek in izinli)
+        {
+            <a class="scr" href="@Url.Action(ek.Action, mod.Key)">
+                <span class="scr-ic"><i class="fas @mod.Ikon"></i></span>
+                <span class="scr-name">@ek.Etiket</span>
+                <i class="fas fa-arrow-right scr-go"></i>
+            </a>
+        }
+        @foreach (var d in disEkranlar)
+        {
+            <a class="scr" href="@d.Url">
+                <span class="scr-ic"><i class="@(string.IsNullOrWhiteSpace(d.Icon) ? "fas " + mod.Ikon : d.Icon)"></i></span>
+                <span class="scr-name">@d.Etiket</span>
+                <i class="fas fa-arrow-right scr-go"></i>
+            </a>
+        }
+    </div>
+}

@@ -1,0 +1,643 @@
+﻿@model List<WebApplication3.Controllers.SatisEkstreViewModel>
+@using System.Globalization
+@using Microsoft.AspNetCore.Routing
+@using WebApplication3.Controllers
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Xsrf
+
+@{
+    ViewData["Title"] = "Satış Ekstresi";
+    Layout = "~/Views/Shared/_Layout.cshtml"; // Merkezi layout şablonunu kullanır
+
+    // URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+    var currentSelectedDbDisplay = (string)ViewBag.CurrentDbDisplay ?? "URASKIMYA";
+
+    var selectedItemCodes = ViewBag.SelectedItemCodes as List<string> ?? new List<string>();
+    var selectedBpCodes = ViewBag.SelectedBpCodes as List<string> ?? new List<string>();
+    var selectedAktarimTipi = ViewBag.SelectedAktarimTipi as List<string> ?? new List<string>();
+
+    var itemList = ViewBag.ItemList as List<SatisItemViewModel> ?? new List<SatisItemViewModel>();
+    var cariList = ViewBag.CariList as List<SatisCariViewModel> ?? new List<SatisCariViewModel>();
+    var aktarimTipiList = ViewBag.AktarimTipiList as List<string> ?? new List<string>();
+    var modelData = Model ?? new List<SatisEkstreViewModel>();
+
+    foreach (var item in modelData)
+    {
+        if (string.IsNullOrWhiteSpace(item.ParaBirimi))
+        {
+            item.ParaBirimi = "TRY";
+        }
+    }
+
+    var faturalasanVeriler = new List<SatisEkstreViewModel>();
+    var irsaliyeVerileri = new List<SatisEkstreViewModel>();
+
+    foreach (var item in modelData)
+    {
+        string tip = item.IslemTipi?.Trim() ?? "";
+        if (tip.Contains("İrsaliye") || tip.Contains("Irsaliye"))
+        {
+            irsaliyeVerileri.Add(item);
+        }
+        else
+        {
+            faturalasanVeriler.Add(item);
+        }
+    }
+
+    var groupedFatura = faturalasanVeriler.GroupBy(d => d.ParaBirimi).ToList();
+    var groupedIrsaliye = irsaliyeVerileri.GroupBy(d => d.ParaBirimi).ToList();
+
+    // KPI Hesaplamaları
+    var islemSayisi = modelData.Count;
+    var faturalananSayisi = faturalasanVeriler.Count;
+    var acikIrsaliyeSayisi = irsaliyeVerileri.Count;
+    var farkliCariSayisi = modelData.Select(x => x.MuhatapKodu).Where(x => !string.IsNullOrEmpty(x)).Distinct().Count();
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    
+    <style>
+        /* ========================================================================= */
+        /* TAM EKRAN (FULL WIDTH) VE BOŞLUK SIFIRLAMA ZORLAMASI                      */
+        /* Tablonun kısıtlanmadan aşağı akması için ana kapsayıcılar serbest bırakıldı*/
+        /* ========================================================================= */
+        html, body { overflow-x: hidden; height: auto !important; margin: 0; padding: 0; }
+        
+        .container, .container-fluid, main, .content-wrapper, .page-content, .app-content, .content, .body-content { 
+            max-width: 100% !important; 
+            width: 100% !important; 
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            padding-left: 0.5rem !important; 
+            padding-right: 0.5rem !important; 
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            padding-bottom: 90px !important; /* Alt panel için ekstra boşluk */
+        }
+
+        body { 
+            background-color: #f4f7fc; 
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            color: #2b3445; 
+            font-size: 0.75rem;
+        }
+
+        /* Dashboard Card Stilleri */
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 20px; transition: all 0.3s ease; position: relative; overflow: hidden; cursor: default; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        
+        .kpi-title { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; z-index: 2; position: relative; }
+        .kpi-value { font-size: 24px; font-weight: 900; color: #0f172a; margin-bottom: 2px; z-index: 2; position: relative; white-space: nowrap; letter-spacing: -0.5px; }
+        .kpi-desc { font-size: 11px; color: #94a3b8; z-index: 2; position: relative; }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 5rem; color: #e2e8f0; opacity: 0.4; z-index: 1; transform: rotate(-10deg); }
+        
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        .border-top-warning { border-top: 4px solid #f59e0b !important; }
+        .border-top-danger { border-top: 4px solid #ef4444 !important; }
+        .border-top-success { border-top: 4px solid #10b981 !important; }
+        .border-top-info { border-top: 4px solid #0ea5e9 !important; }
+
+        /* Toolbar ve Aksiyon Alanı */
+        .action-toolbar { background-color: #ffffff; padding: 15px 20px; border-radius: 10px; border: 1px solid #eef2f7; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+
+        /* TABLO KARTI - Yükseklik ve Overflow kısıtlaması TAMAMEN kaldırıldı! */
+        .report-table-card {
+            background: #ffffff; 
+            border-radius: 12px; 
+            border: 1px solid #eef2f7; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03); 
+            padding: 20px;
+            height: auto !important;
+            overflow: visible !important;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .table-container { 
+            width: 100%;
+            height: auto !important;
+            max-height: none !important;
+            overflow-y: visible !important; /* Dikey scroll iptal, sayfa uzayacak */
+            overflow-x: auto; /* Sadece yatayda taşma olursa kaydır */
+            background-color: white; 
+            border-radius: 8px; 
+            border: 1px solid #eef2f7; 
+            position: relative;
+        }
+        
+        table { width: 100%; table-layout: auto; border-collapse: separate; border-spacing: 0; min-width: 1500px; }
+        
+        th, td {
+            padding: 8px 10px !important;
+            font-size: 11px !important;
+            border-right: 1px solid #f1f5f9;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+            line-height: 1.3;
+        }
+
+        thead th { 
+            background-color: #f8fafc; 
+            color: #475569; 
+            font-weight: 700; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px; 
+            white-space: nowrap; 
+            position: sticky; 
+            top: 0; 
+            z-index: 100; 
+            border-bottom: 2px solid #e2e8f0 !important;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        thead th:hover { background-color: #e2e8f0; color: #0f172a; }
+        thead th i { opacity: 0.4; font-size: 10px; margin-left: 4px; }
+        
+        /* Satır Renkleri ve Özelleştirmeler */
+        :root {
+            --iade-bg: #fef2f2;
+            --irsaliye-bg: #fffbeb;
+            --hover-bg: #f8fafc;
+            --selected-bg: #e0f2fe;
+            --selected-border: #bae6fd;
+        }
+
+        .table-hover tbody tr:hover td { background-color: var(--hover-bg); }
+        .iade-row td { background-color: var(--iade-bg) !important; color: #991b1b; border-bottom-color: #fecaca !important; }
+        .iade-row:hover td { background-color: #fee2e2 !important; }
+        .irsaliye-row td { background-color: var(--irsaliye-bg) !important; color: #92400e; border-bottom-color: #fde68a !important; }
+        .irsaliye-row:hover td { background-color: #fef3c7 !important; }
+
+        .selected-row td { background-color: var(--selected-bg) !important; border-color: var(--selected-border) !important; }
+        .selected-row td:first-child { border-left: 4px solid #0ea5e9; }
+        
+        .col-truncate-md { max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .col-truncate-lg { max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .num { text-align: right; font-variant-numeric: tabular-nums; }
+        
+        /* Badges */
+        .fatura-badge { background-color: #d1fae5; color: #065f46; padding: 4px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 700; border: 1px solid #34d399; }
+        .iade-badge { background-color: #fee2e2; color: #991b1b; padding: 4px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 700; border: 1px solid #f87171; }
+        .irsaliye-badge { background-color: #fef3c7; color: #92400e; padding: 4px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 700; border: 1px solid #fbbf24; }
+
+        /* Butonlar */
+        .btn { font-weight: 600; letter-spacing: 0.2px; }
+        .btn-sm { font-size: 11.5px !important; padding: 6px 14px !important; height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+        .btn-primary { background-color: #3b82f6; border-color: #3b82f6; }
+        .btn-success { background-color: #10b981; border-color: #10b981; }
+        .btn-danger { background-color: #ef4444; border-color: #ef4444; }
+        .btn-outline-secondary { color: #64748b; border-color: #cbd5e1; }
+        .btn-outline-secondary:hover { background-color: #f1f5f9; color: #0f172a; }
+
+        /* Select2 */
+        .select2-container { width: 100% !important; text-align: left; }
+        .select2-selection__rendered { font-size: 11px !important; line-height: 1.5 !important; }
+        .select2-results__option { font-size: 11px !important; }
+
+        /* Seçim Özeti Paneli */
+        #selectionSummaryPanel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: #1e293b;
+            color: white;
+            box-shadow: 0 -4px 15px rgba(0,0,0,0.15);
+            z-index: 1000;
+            display: none;
+            padding: 12px 0;
+            border-top: 3px solid #3b82f6;
+        }
+        .summary-val { font-size: 1.2rem; font-weight: 800; margin-left: 6px; letter-spacing: -0.5px;}
+        .summary-try { color: #34d399; }
+        .summary-usd { color: #38bdf8; }
+        .summary-eur { color: #fbbf24; }
+    </style>
+}
+
+@Html.AntiForgeryToken()
+
+<div class="container-fluid">
+    <!-- Başlık Alanı -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;"><i class="fas fa-file-invoice text-primary me-2"></i>Satış Ekstresi</h4>
+            <span class="text-muted" style="font-size: 13px;">Aktif Veritabanı: <strong class="text-primary">@currentSelectedDbDisplay</strong> | Müşteriye veya kaleme göre geçmiş satış, iade ve açık irsaliye hareketleri</span>
+        </div>
+        <div>
+            <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-sm btn-outline-secondary shadow-sm rounded-pill px-3">
+                <i class="fas fa-arrow-left"></i> Ana Sayfaya Dön
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI'lar -->
+    <div class="row mb-3 g-3">
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-primary hover-elevate">
+                <i class="fas fa-list-ol kpi-icon-bg"></i>
+                <div class="kpi-title">Toplam İşlem Sayısı</div>
+                <div class="kpi-value text-primary">@islemSayisi</div>
+                <div class="kpi-desc">Filtrelenen satır sayısı</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-success hover-elevate">
+                <i class="fas fa-file-signature kpi-icon-bg"></i>
+                <div class="kpi-title">Faturalaşan İşlem</div>
+                <div class="kpi-value text-success">@faturalananSayisi</div>
+                <div class="kpi-desc">Fatura / İade hareketleri</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-warning hover-elevate">
+                <i class="fas fa-truck-loading kpi-icon-bg"></i>
+                <div class="kpi-title">Açık İrsaliye</div>
+                <div class="kpi-value text-warning">@acikIrsaliyeSayisi</div>
+                <div class="kpi-desc">Faturaya dönüşmemiş irsaliyeler</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card border-0 border-top-info hover-elevate position-relative">
+                <i class="fas fa-users kpi-icon-bg"></i>
+                <div class="kpi-title">Farklı Cari</div>
+                <div class="kpi-value text-info">@farkliCariSayisi</div>
+                <div class="kpi-desc">İşlem yapılan müşteri sayısı</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aksiyon ve Filtre Barı -->
+    <div class="action-toolbar mb-3">
+        <form asp-controller="Rapor74" asp-action="Index" method="get" id="raporForm" class="w-100 m-0">
+            <input type="hidden" name="db" value="@currentDb" />
+
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label fw-bold text-muted small mb-1"><i class="fas fa-users me-1 text-primary"></i> Müşteri (Cari) Seçimi</label>
+                    <select class="form-control" id="bpCode" name="bpCode" multiple="multiple">
+                        @foreach (var cari in cariList)
+                        {
+                            <option value="@cari.CardCode" selected="@(selectedBpCodes.Contains(cari.CardCode))">@cari.CardCode - @cari.CardName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-bold text-muted small mb-1"><i class="fas fa-box me-1 text-success"></i> Kalem Seçimi</label>
+                    <select class="form-control" id="itemCode" name="itemCode" multiple="multiple">
+                        @foreach (var item in itemList)
+                        {
+                            <option value="@item.ItemCode" selected="@(selectedItemCodes.Contains(item.ItemCode))">@item.ItemCode - @item.ItemName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-bold text-muted small mb-1"><i class="fas fa-tags me-1 text-info"></i> Aktarım Tipi</label>
+                    <select class="form-control" id="aktarimTipi" name="aktarimTipi" multiple="multiple">
+                        @foreach (var tip in aktarimTipiList)
+                        {
+                            <option value="@tip" selected="@(selectedAktarimTipi.Contains(tip))">@tip</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-bold text-muted small mb-1"><i class="fas fa-calendar-alt me-1"></i> Başlangıç</label>
+                    <input type="date" class="form-control form-control-sm border-secondary shadow-sm" id="startDate" name="startDate" value="@ViewBag.StartDate" style="height: 32px;">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-bold text-muted small mb-1"><i class="fas fa-calendar-check me-1"></i> Bitiş</label>
+                    <input type="date" class="form-control form-control-sm border-secondary shadow-sm" id="endDate" name="endDate" value="@ViewBag.EndDate" style="height: 32px;">
+                </div>
+                
+                <div class="col-12 mt-3 d-flex justify-content-between align-items-center border-top pt-3">
+                    <div class="text-muted small">
+                        @if (selectedBpCodes.Any()) { <span class="badge bg-primary text-white me-2">@(selectedBpCodes.Count > 1 ? $"{selectedBpCodes.Count} Müşteri" : selectedBpCodes.First())</span> }
+                        @if (selectedItemCodes.Any()) { <span class="badge bg-success text-white me-2">@(selectedItemCodes.Count > 1 ? $"{selectedItemCodes.Count} Kalem" : selectedItemCodes.First())</span> }
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-sm btn-primary shadow-sm px-4">
+                            <i class="fas fa-search"></i> Raporla
+                        </button>
+                        @{
+                            var routeValues = new RouteValueDictionary {
+                                { "startDate", ViewBag.StartDate }, { "endDate", ViewBag.EndDate }, { "db", currentDb }
+                            };
+                            for (int i = 0; i < selectedItemCodes.Count; i++) routeValues.Add($"itemCode[{i}]", selectedItemCodes[i]);
+                            for (int i = 0; i < selectedBpCodes.Count; i++) routeValues.Add($"bpCode[{i}]", selectedBpCodes[i]);
+                            for (int i = 0; i < selectedAktarimTipi.Count; i++) routeValues.Add($"aktarimTipi[{i}]", selectedAktarimTipi[i]);
+                        }
+                        <a href="@Url.Action("DownloadExcel", "Rapor74", routeValues)" class="btn btn-sm btn-success shadow-sm px-3">
+                            <i class="fas fa-file-excel"></i> Excel
+                        </a>
+                        <a href="@Url.Action("DownloadPdf", "Rapor74", routeValues)" class="btn btn-sm btn-danger shadow-sm px-3">
+                            <i class="fas fa-file-pdf"></i> PDF
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- İşlem Listesi (Tablo) -->
+    <div class="report-table-card mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="card-title mb-0 fw-bold text-dark" style="font-size: 14px;"><i class="fas fa-table text-primary me-2"></i>Satış Ekstresi Detay Tablosu</div>
+            <div class="text-muted" style="font-size: 11.5px;">Satırları seçerek alt panelden toplamları görebilirsiniz.</div>
+        </div>
+        
+        <!-- Yükseklik kısıtlaması TAMAMEN KALDIRILAN Tablo Konteyneri -->
+        <div class="table-container shadow-sm">
+            @if (modelData.Any())
+            {
+                <table class="table table-hover align-middle mb-0" id="mainTable">
+                    <thead>
+                        <tr>
+                            <th class="text-center" style="width: 40px;">
+                                <input type="checkbox" id="selectAllCheckbox" class="form-check-input m-0">
+                            </th>
+                            <th class="sortable" onclick="sortTable(1)">Tarih <i class="fas fa-sort"></i></th>
+                            <th class="sortable text-center" onclick="sortTable(2)">İşlem Tipi <i class="fas fa-sort"></i></th>
+                            <th class="sortable" onclick="sortTable(3, true)">Belge No <i class="fas fa-sort"></i></th>
+                            <th class="sortable" onclick="sortTable(4)">Cari Kodu / Adı <i class="fas fa-sort"></i></th>
+                            <th class="sortable" onclick="sortTable(5)">Kalem Kodu / Adı <i class="fas fa-sort"></i></th>
+                            <th class="text-center sortable" onclick="sortTable(6)">Birim <i class="fas fa-sort"></i></th>
+                            <th class="num text-primary sortable" onclick="sortTable(7, true)">G. Stok <i class="fas fa-sort"></i></th>
+                            <th class="num sortable" onclick="sortTable(8, true)">Miktar <i class="fas fa-sort"></i></th>
+                            <th class="num sortable" onclick="sortTable(9, true)">Ton <i class="fas fa-sort"></i></th>
+                            <th class="num sortable" onclick="sortTable(10, true)">Fiyat <i class="fas fa-sort"></i></th>
+                            <th class="num sortable" onclick="sortTable(11, true)">Tutar <i class="fas fa-sort"></i></th>
+                            <th class="text-center sortable" onclick="sortTable(12)">PB <i class="fas fa-sort"></i></th>
+                            <th class="num sortable" onclick="sortTable(13, true)">USD Karş. <i class="fas fa-sort"></i></th>
+                            <th class="num sortable" onclick="sortTable(14, true)">EUR Karş. <i class="fas fa-sort"></i></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in modelData)
+                        {
+                            string tip = item.IslemTipi?.Trim() ?? "";
+                            bool isIade = tip.Contains("İade") || tip.Contains("Iade");
+                            bool isIrsaliye = tip.Contains("İrsaliye") || tip.Contains("Irsaliye");
+
+                            string rowClass = isIade ? "iade-row" : (isIrsaliye ? "irsaliye-row" : "");
+                            string badgeClass = isIade ? "iade-badge" : (isIrsaliye ? "irsaliye-badge" : "fatura-badge");
+                            bool isMetrekare = item.Birim?.ToLower().Contains("metrekare") == true || item.Birim?.ToLower() == "m2" || item.Birim?.ToLower() == "m²";
+
+                            string tryVal = item.Tutar.ToString(CultureInfo.InvariantCulture);
+                            string usdVal = item.UsdKarsiligi.ToString(CultureInfo.InvariantCulture);
+                            string eurVal = item.EurKarsiligi.ToString(CultureInfo.InvariantCulture);
+
+                            <tr class="@rowClass">
+                                <td class="text-center">
+                                    <input type="checkbox" class="form-check-input m-0 row-checkbox" 
+                                           data-try="@tryVal" data-usd="@usdVal" data-eur="@eurVal">
+                                </td>
+                                <td class="text-center fw-medium text-secondary">@(item.KayitTarihi?.ToString("dd.MM.yyyy") ?? "-")</td>
+                                <td class="text-center"><span class="@badgeClass w-100 d-inline-block">@item.IslemTipi</span></td>
+                                <td class="fw-bold text-dark">@item.BelgeNo</td>
+                                <td>
+                                    <div><strong class="text-dark">@item.MuhatapKodu</strong></div>
+                                    <div class="text-muted col-truncate-md mt-1" style="font-size: 10px;" title="@item.MuhatapAdi">@item.MuhatapAdi</div>
+                                </td>
+                                <td>
+                                    <div><span class="badge-soft-secondary">@item.KalemKodu</span></div>
+                                    <div class="text-muted col-truncate-md mt-1" style="font-size: 10px;" title="@item.KalemAdi">@item.KalemAdi</div>
+                                </td>
+                                <td class="text-center fw-bold">@item.Birim</td>
+                                <td class="num fw-bold text-primary">@item.GuncelStok.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="num fw-bold text-dark">@item.Miktar.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="num text-muted fw-bold">
+                                    @(isMetrekare || item.TonMiktari != 0 ? item.TonMiktari.ToString("N4", new CultureInfo("tr-TR")) : "-")
+                                </td>
+                                <td class="num text-muted">@item.Fiyat.ToString("N4", new CultureInfo("tr-TR"))</td>
+                                <td class="num fw-bold text-dark">@item.Tutar.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="text-center"><span class="badge-soft-secondary border">@item.ParaBirimi</span></td>
+                                <td class="num fw-bold text-success">@item.UsdKarsiligi.ToString("N2", new CultureInfo("tr-TR"))</td>
+                                <td class="num fw-bold text-info">@item.EurKarsiligi.ToString("N2", new CultureInfo("tr-TR"))</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <div class="text-center py-5">
+                    <div class="text-muted mb-3"><i class="fas fa-receipt fa-3x opacity-25 text-primary"></i></div>
+                    <h6 class="fw-bold text-secondary">Kayıt Bulunamadı</h6>
+                    <p class="small text-muted mb-0">Belirtilen kriterlere uygun satış, iade veya açık irsaliye hareketi yoktur.</p>
+                </div>
+            }
+        </div>
+
+        @if (modelData.Any())
+        {
+            <div class="mt-4 pt-4 border-top">
+                <div class="row g-4">
+                    <!-- Faturalaşan Satışlar -->
+                    <div class="col-md-6 border-end pe-md-4">
+                        <h6 class="fw-bold text-success mb-2"><i class="fas fa-file-invoice-dollar me-2"></i>Faturalaşan Satışlar (Net)</h6>
+                        <small class="text-muted d-block mb-3">Fatura işlemlerinden <strong>Satış İadesi</strong> düşülmüş net tutarlardır.</small>
+
+                        <div class="d-flex flex-wrap gap-2">
+                            @if (groupedFatura.Any())
+                            {
+                                foreach (var group in groupedFatura)
+                                {
+                                    <div class="border rounded p-3 bg-light shadow-sm flex-fill" style="min-width: 180px;">
+                                        <div class="text-muted fw-bold border-bottom pb-1 mb-2" style="font-size: 11px;">Para Birimi: <span class="badge bg-secondary ms-1">@group.Key</span></div>
+                                        <div class="d-flex justify-content-between mb-1 text-dark" style="font-size: 12px;">
+                                            <span>Net Miktar:</span>
+                                            <strong class="font-monospace">@group.Sum(x => x.Miktar).ToString("N2", new CultureInfo("tr-TR"))</strong>
+                                        </div>
+                                        <div class="d-flex justify-content-between text-success mt-2" style="font-size: 13px;">
+                                            <span class="fw-bold">Net Tutar:</span>
+                                            <strong class="font-monospace">@group.Sum(x => x.Tutar).ToString("N2", new CultureInfo("tr-TR"))</strong>
+                                        </div>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <span class="text-muted small">Veri yok.</span>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Açık İrsaliyeler -->
+                    <div class="col-md-6 ps-md-4">
+                        <h6 class="fw-bold text-warning mb-2" style="color: #d39e00 !important;"><i class="fas fa-truck-loading me-2"></i>Açık İrsaliyeler (Bekleyen)</h6>
+                        <small class="text-muted d-block mb-3">İrsaliyelerden <strong>İade İrsaliyesi</strong> düşülmüş net tutarlardır.</small>
+
+                        <div class="d-flex flex-wrap gap-2">
+                            @if (groupedIrsaliye.Any())
+                            {
+                                foreach (var group in groupedIrsaliye)
+                                {
+                                    <div class="border rounded p-3 bg-light shadow-sm flex-fill" style="min-width: 180px; border-color: #fde68a !important;">
+                                        <div class="text-muted fw-bold border-bottom pb-1 mb-2" style="font-size: 11px;">Para Birimi: <span class="badge bg-warning text-dark ms-1">@group.Key</span></div>
+                                        <div class="d-flex justify-content-between mb-1 text-dark" style="font-size: 12px;">
+                                            <span>Net Açık Miktar:</span>
+                                            <strong class="font-monospace">@group.Sum(x => x.Miktar).ToString("N2", new CultureInfo("tr-TR"))</strong>
+                                        </div>
+                                        <div class="d-flex justify-content-between mt-2" style="font-size: 13px; color: #d39e00;">
+                                            <span class="fw-bold">Olası Tutar:</span>
+                                            <strong class="font-monospace">@group.Sum(x => x.Tutar).ToString("N2", new CultureInfo("tr-TR"))</strong>
+                                        </div>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <span class="text-muted small">Veri yok.</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Seçim Özeti Paneli (Sticky Bottom) -->
+<div id="selectionSummaryPanel">
+    <div class="container-fluid d-flex justify-content-between align-items-center px-4">
+        <div>
+            <i class="fas fa-check-square me-2 text-success"></i> 
+            <span class="text-light opacity-75">Seçili Satır Sayısı:</span> <span id="lblSelectedCount" class="badge bg-primary text-white fs-6 ms-1">0</span>
+        </div>
+        <div class="d-flex gap-4 align-items-center">
+            <div><span class="text-light opacity-75">Toplam TRY:</span> <span id="lblSelectedTry" class="summary-val summary-try">0,00</span></div>
+            <div class="border-start border-secondary ps-4"><span class="text-light opacity-75">Toplam USD:</span> <span id="lblSelectedUsd" class="summary-val summary-usd">0,00</span></div>
+            <div class="border-start border-secondary ps-4"><span class="text-light opacity-75">Toplam EUR:</span> <span id="lblSelectedEur" class="summary-val summary-eur">0,00</span></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            // Select2 Başlatmaları
+            $('#itemCode').select2({ theme: "bootstrap-5", placeholder: "Kalem Kod veya Adı Ara...", width: '100%', allowClear: true, closeOnSelect: false });
+            $('#bpCode').select2({ theme: "bootstrap-5", placeholder: "Müşteri Kod veya Adı Ara...", width: '100%', allowClear: true, closeOnSelect: false });
+            $('#aktarimTipi').select2({ theme: "bootstrap-5", placeholder: "Tümü", width: '100%', allowClear: true, closeOnSelect: false });
+
+            // Checkbox Seçim İşlemleri
+            $('#selectAllCheckbox').on('change', function() {
+                const isChecked = $(this).prop('checked');
+                $('.row-checkbox').prop('checked', isChecked);
+                $('.row-checkbox').closest('tr').toggleClass('selected-row', isChecked);
+                calculateTotals();
+            });
+
+            // Satıra tıklanınca seçimi toggle yapma
+            $('#mainTable tbody tr').on('click', function(e) {
+                if (!$(e.target).is('input, select, option, button, a')) {
+                    const cb = $(this).find('.row-checkbox');
+                    cb.prop('checked', !cb.prop('checked'));
+                    $(this).toggleClass('selected-row', cb.prop('checked'));
+                    checkAllStatus();
+                    calculateTotals();
+                }
+            });
+
+            $('.row-checkbox').on('change', function() {
+                $(this).closest('tr').toggleClass('selected-row', $(this).prop('checked'));
+                checkAllStatus();
+                calculateTotals();
+            });
+
+            function checkAllStatus() {
+                if ($('.row-checkbox:checked').length === $('.row-checkbox').length) {
+                    $('#selectAllCheckbox').prop('checked', true).prop('indeterminate', false);
+                } else if ($('.row-checkbox:checked').length > 0) {
+                    $('#selectAllCheckbox').prop('checked', false).prop('indeterminate', true);
+                } else {
+                    $('#selectAllCheckbox').prop('checked', false).prop('indeterminate', false);
+                }
+            }
+        });
+
+        // Seçili satırları toplama
+        function calculateTotals() {
+            let count = 0;
+            let sumTry = 0, sumUsd = 0, sumEur = 0;
+
+            $('.row-checkbox:checked').each(function() {
+                count++;
+                
+                // İade ve İade İrsaliye eksi çalışacak
+                const tr = $(this).closest('tr');
+                const isIade = tr.hasClass('iade-row');
+                const isIrsaliyeIade = tr.find('td:nth-child(3)').text().includes('İade');
+                const mult = (isIade || isIrsaliyeIade) ? -1 : 1;
+
+                sumTry += (parseFloat($(this).attr('data-try')) || 0) * mult;
+                sumUsd += (parseFloat($(this).attr('data-usd')) || 0) * mult;
+                sumEur += (parseFloat($(this).attr('data-eur')) || 0) * mult;
+            });
+
+            if(count > 0) {
+                $('#selectionSummaryPanel').slideDown(200);
+                $('#lblSelectedCount').text(count);
+                $('#lblSelectedTry').text(sumTry.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                $('#lblSelectedUsd').text(sumUsd.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                $('#lblSelectedEur').text(sumEur.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            } else {
+                $('#selectionSummaryPanel').slideUp(200);
+            }
+        }
+
+        // Tablo Sıralama Fonksiyonu
+        let sortDirections = {};
+        function sortTable(columnIndex, isNumeric = false) {
+            const table = document.getElementById("mainTable");
+            if (!table) return;
+            let rows = Array.from(table.rows).slice(1); // thead harici
+            
+            let dir = sortDirections[columnIndex] === 'asc' ? 'desc' : 'asc';
+            sortDirections[columnIndex] = dir;
+
+            rows.sort((a, b) => {
+                let valA = a.cells[columnIndex].innerText.trim();
+                let valB = b.cells[columnIndex].innerText.trim();
+
+                if (isNumeric) {
+                    valA = parseTurkishNumber(valA);
+                    valB = parseTurkishNumber(valB);
+                    return dir === 'asc' ? valA - valB : valB - valA;
+                } else {
+                    // Tarih kontrolü
+                    if(valA.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
+                        valA = valA.split('.').reverse().join('');
+                        valB = valB.split('.').reverse().join('');
+                    }
+                    return dir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                }
+            });
+
+            const tbody = table.querySelector("tbody");
+            rows.forEach(row => tbody.appendChild(row));
+            
+            // İkonları güncelle
+            $('#mainTable th i.fas').removeClass('fa-sort-up fa-sort-down text-primary').addClass('fa-sort text-secondary');
+            let clickedHeaderIcon = table.rows[0].cells[columnIndex].querySelector('i');
+            if (clickedHeaderIcon) {
+                clickedHeaderIcon.classList.remove('fa-sort', 'text-secondary');
+                clickedHeaderIcon.classList.add(dir === 'asc' ? 'fa-sort-up' : 'fa-sort-down', 'text-primary');
+            }
+        }
+
+        function parseTurkishNumber(str) {
+            if(!str || str === '-') return 0;
+            let cleaned = str.replace(/\./g, '').replace(/,/g, '.');
+            return parseFloat(cleaned) || 0;
+        }
+    </script>
+}

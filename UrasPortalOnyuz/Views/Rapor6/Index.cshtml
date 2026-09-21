@@ -1,0 +1,655 @@
+﻿@model List<WebApplication3.Models.ProductPriceComparisonViewModel>
+@using System.Globalization;
+@using Newtonsoft.Json;
+
+@{
+    ViewData["Title"] = "Ürün Fiyat Karşılaştırma Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // 1. KURAL: URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+
+    var reportDataJson = Model != null ? JsonConvert.SerializeObject(Model, new JsonSerializerSettings { DateFormatString = "yyyy-MM-dd" }) : "[]";
+
+    // Dropdown filtreleri için listeler (Controller'dan gelen ViewBag'leri kullanıyoruz veya Model üzerinden tekrar çekiyoruz)
+    var distinctValues = new Dictionary<string, List<string>>();
+    if (Model != null)
+    {
+        distinctValues["MalzemeKodu"] = Model.Where(m => !string.IsNullOrEmpty(m.MalzemeKodu)).Select(m => m.MalzemeKodu).Distinct().OrderBy(s => s).ToList();
+        distinctValues["MalzemeAciklamasi"] = Model.Where(m => !string.IsNullOrEmpty(m.MalzemeAciklamasi)).Select(m => m.MalzemeAciklamasi).Distinct().OrderBy(s => s).ToList();
+
+        distinctValues["SonSaticiAdi"] = Model.Where(m => !string.IsNullOrEmpty(m.SonSaticiAdi)).Select(m => m.SonSaticiAdi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["SonSaticiGrupAdi"] = Model.Where(m => !string.IsNullOrEmpty(m.SonSaticiGrupAdi)).Select(m => m.SonSaticiGrupAdi).Distinct().OrderBy(s => s).ToList();
+
+        distinctValues["OncekiSaticiAdi"] = Model.Where(m => !string.IsNullOrEmpty(m.OncekiSaticiAdi)).Select(m => m.OncekiSaticiAdi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["OncekiSaticiGrupAdi"] = Model.Where(m => !string.IsNullOrEmpty(m.OncekiSaticiGrupAdi)).Select(m => m.OncekiSaticiGrupAdi).Distinct().OrderBy(s => s).ToList();
+
+        distinctValues["SonParaBirimi"] = Model.Where(m => !string.IsNullOrEmpty(m.SonParaBirimi)).Select(m => m.SonParaBirimi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["ParaBirimiDurumu"] = Model.Where(m => !string.IsNullOrEmpty(m.ParaBirimiDurumu)).Select(m => m.ParaBirimiDurumu).Distinct().OrderBy(s => s).ToList();
+    }
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <style>
+        :root {
+            --primary-color: #0d6efd;
+            --secondary-color: #6c757d;
+            --success-color: #198754;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #0dcaf0;
+            --light-bg: #f8f9fa;
+            --dark-text: black;
+            --border-color: #d0d0d0;
+            --header-bg: #212529;
+            --header-text: #ffffff;
+            --box-shadow-light: 0 0 8px rgba(0, 0, 0, 0.08);
+            --box-shadow-medium: 0 2px 3px rgba(0, 0, 0, 0.06);
+            --selected-row-color-hex: #ffc107;
+            --selected-row-border: #e0a800;
+            --selected-row-hover-color: #ffda6a;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 12px;
+            background-color: var(--light-bg);
+            color: var(--dark-text);
+        }
+
+        .main-content {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+            font-size: 1.15em;
+            padding: 8px;
+            background-color: #ffffff;
+            border-radius: 6px;
+            box-shadow: var(--box-shadow-light);
+            position: relative;
+        }
+
+        .container-fluid.py-4 {
+            padding-top: 5px;
+            padding-bottom: 10px;
+            padding-left: 5px;
+            padding-right: 5px;
+        }
+
+        .database-info {
+            background-color: var(--info-color);
+            color: #ffffff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-bottom: 6px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            font-size: 0.96em;
+            line-height: 1.1;
+        }
+
+            .database-info .fas {
+                margin-right: 4px;
+            }
+
+        .sticky-toolbar {
+            position: sticky;
+            top: 0;
+            background-color: #ffffff;
+            z-index: 1000;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+            margin-top: 0px !important;
+            margin-bottom: 6px;
+            box-shadow: var(--box-shadow-medium);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: nowrap;
+            gap: 10px;
+        }
+
+            .sticky-toolbar .selected-check-count-display {
+                font-size: 0.96em;
+                font-weight: bold;
+                color: var(--success-color);
+                margin-left: 15px;
+                white-space: nowrap;
+            }
+
+        .table-container {
+            overflow-x: auto;
+            position: relative;
+            border-radius: 6px;
+            box-shadow: var(--box-shadow-medium);
+            background-color: #ffffff;
+            margin-top: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        .rapor-tablo {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 0.84em;
+            color: var(--dark-text);
+            table-layout: fixed;
+            min-width: 2400px; /* Sütun sayısı arttığı için genişliği artırdık */
+        }
+
+            .rapor-tablo thead {
+                position: sticky;
+                top: 0;
+                z-index: 101;
+                background-color: #ffffff;
+            }
+
+                .rapor-tablo thead .main-header-row th {
+                    background-color: var(--header-bg);
+                    color: var(--header-text);
+                    padding: 4px 3px;
+                    text-align: center;
+                    white-space: nowrap;
+                    font-weight: 700;
+                    border-bottom: 2px solid var(--border-color);
+                    height: auto;
+                    line-height: 1.3;
+                }
+
+                .rapor-tablo thead .filter-row th {
+                    padding: 2px 3px;
+                    height: 30px;
+                    line-height: normal;
+                    vertical-align: top;
+                    white-space: nowrap;
+                    background-color: #ffffff;
+                    border-bottom: 1px solid var(--border-color);
+                }
+
+            .rapor-tablo th, .rapor-tablo td {
+                padding: 1px;
+                vertical-align: middle;
+                border-right: 1px solid var(--border-color);
+            }
+
+                .rapor-tablo th:last-child, .rapor-tablo td:last-child {
+                    border-right: none;
+                }
+
+            .rapor-tablo td {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                height: 25px;
+                line-height: 25px;
+                border-bottom: 1px solid var(--border-color);
+            }
+
+        .table-hover tbody tr:hover {
+            background-color: var(--light-bg);
+        }
+
+        .rapor-tablo tbody tr.selected-hover:hover {
+            background-color: var(--selected-row-hover-color) !important;
+        }
+
+        .checkbox-column {
+            min-width: 28px !important;
+            max-width: 28px !important;
+            width: 28px !important;
+            text-align: right !important;
+            padding: 0 !important;
+            vertical-align: middle !important;
+            overflow: visible;
+        }
+
+        .filter-row th .form-control,
+        .filter-row th .bootstrap-select .btn {
+            width: 100% !important;
+            box-sizing: border-box !important;
+            height: 28px !important;
+            line-height: normal !important;
+            padding: 2px 5px !important;
+            font-size: 0.85em !important;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border: 1px solid #ced4da;
+            border-radius: 0.25rem;
+        }
+
+        /* Artış ve azalış renkleri */
+        .text-pos {
+            color: var(--success-color);
+            font-weight: 600;
+        }
+
+        .text-neg {
+            color: var(--danger-color);
+            font-weight: 600;
+        }
+    </style>
+}
+
+@* 2. KURAL: Güvenlik (CSRF) - Yetkisiz veri işlemlerini engellemek için eklendi *@
+@Html.AntiForgeryToken()
+
+<div class="container-fluid py-4">
+    <div class="row g-0">
+        <div class="col-md-12">
+            <div class="main-report-box">
+
+                <div class="sticky-toolbar">
+                    <div class="d-flex align-items-center">
+                        <span class="ms-4 selected-check-count-display">Seçilen Ürün Adedi:</span>
+                        <strong id="selectedCheckCount" class="text-success ms-1">0</strong>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <button onclick="clearReportFilters()" class="btn btn-sm btn-outline-secondary me-3" title="Filtreleri Temizle">
+                            <i class="fas fa-filter-circle-xmark"></i> Filtreleri Temizle
+                        </button>
+                        <div class="database-info">
+                            <i class="fas fa-database"></i>
+                            Veritabanı: <strong>@ViewBag.CurrentDbDisplay</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="table table-bordered table-striped table-hover rapor-tablo" id="rapor6Table">
+                        <thead>
+                            <tr class="main-header-row">
+                                <th class="checkbox-column no-drag" data-column="Checkbox"><input type="checkbox" id="selectAllCheckbox" class="form-check-input" /></th>
+
+                                <th class="sortable-column" data-column="MalzemeKodu" data-sort-type="text">Malzeme Kodu <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="MalzemeAciklamasi" data-sort-type="text">Malzeme Açıklaması <i class="fas fa-sort float-end"></i></th>
+
+                                <th class="sortable-column" data-column="SonFaturaTarihi" data-sort-type="date">Son Fat. Tarihi <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="SonFiyatTRY" data-sort-type="number">Son Fiyat (TRY) <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="SonParaBirimi" data-sort-type="text">Son PB <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="SonSaticiAdi" data-sort-type="text">Son Satıcı <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="SonSaticiGrupAdi" data-sort-type="text">Son Grup <i class="fas fa-sort float-end"></i></th>
+
+                                <th class="sortable-column" data-column="OncekiFaturaTarihi" data-sort-type="date">Önc. Fat. Tarihi <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="OncekiFiyatTRY" data-sort-type="number">Önc. Fiyat (TRY) <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="OncekiSaticiAdi" data-sort-type="text">Önc. Satıcı <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="OncekiSaticiGrupAdi" data-sort-type="text">Önc. Grup <i class="fas fa-sort float-end"></i></th>
+
+                                <th class="sortable-column" data-column="FiyatDegisimYuzdesiTRY" data-sort-type="number">Değ.% (TRY) <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="FiyatDegisimYuzdesiEUR" data-sort-type="number">Değ.% (EUR) <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="FiyatDegisimYuzdesiUSD" data-sort-type="number">Değ.% (USD) <i class="fas fa-sort float-end"></i></th>
+                                <th class="sortable-column" data-column="ParaBirimiDurumu" data-sort-type="text">PB Durumu <i class="fas fa-sort float-end"></i></th>
+                            </tr>
+                            <tr class="filter-row">
+                                <th class="checkbox-column"></th>
+
+                                <th data-column="MalzemeKodu">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-width="100%">
+                                        @foreach (var item in distinctValues["MalzemeKodu"])
+                                        {
+                                            <option value="@item">@item</option>
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="MalzemeAciklamasi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-width="100%">
+                                        @foreach (var item in distinctValues["MalzemeAciklamasi"])
+                                        {
+                                            <option value="@item">@item</option>
+                                        }
+                                    </select>
+                                </th>
+
+                                <th data-column="SonFaturaTarihi"></th>
+                                <th data-column="SonFiyatTRY"></th>
+                                <th data-column="SonParaBirimi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-width="100%">
+                                        @foreach (var item in distinctValues["SonParaBirimi"])
+                                        {
+                                            <option value="@item">@item</option>
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="SonSaticiAdi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-width="100%">
+                                        @foreach (var item in distinctValues["SonSaticiAdi"])
+                                        {
+                                            <option value="@item">@item</option>
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="SonSaticiGrupAdi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-width="100%">
+                                        @foreach (var item in distinctValues["SonSaticiGrupAdi"])
+                                        {
+                                            <option value="@item">@item</option>
+                                        }
+                                    </select>
+                                </th>
+
+                                <th data-column="OncekiFaturaTarihi"></th>
+                                <th data-column="OncekiFiyatTRY"></th>
+                                <th data-column="OncekiSaticiAdi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-width="100%">
+                                        @foreach (var item in distinctValues["OncekiSaticiAdi"])
+                                        {
+                                            <option value="@item">@item</option>
+                                        }
+                                    </select>
+                                </th>
+                                <th data-column="OncekiSaticiGrupAdi">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-actions-box="true" data-width="100%">
+                                        @foreach (var item in distinctValues["OncekiSaticiGrupAdi"])
+                                        {
+                                            <option value="@item">@item</option>
+                                        }
+                                    </select>
+                                </th>
+
+                                <th data-column="FiyatDegisimYuzdesiTRY"></th>
+                                <th data-column="FiyatDegisimYuzdesiEUR"></th>
+                                <th data-column="FiyatDegisimYuzdesiUSD"></th>
+                                <th data-column="ParaBirimiDurumu">
+                                    <select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" data-width="100%">
+                                        @foreach (var item in distinctValues["ParaBirimiDurumu"])
+                                        {
+                                            <option value="@item">@item</option>
+                                        }
+                                    </select>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+                <div class="row mt-2 d-flex justify-content-between align-items-center">
+                    <div class="col-md-4">
+                        <div id="pagination-info">
+                            Toplam Kayıt: <strong id="totalRecords">@(Model?.Count ?? 0)</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            @* 4. KURAL: UI/UX Standartlarına uygun şık, db parametreli Ana Sayfa butonu *@
+            <div class="mt-4 mb-3 text-center">
+                <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+                    <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+                </a>
+            </div>
+            
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const allReportData = @Html.Raw(reportDataJson);
+            const table = document.getElementById('rapor6Table');
+            const tableBody = table.querySelector('tbody');
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const selectedCheckCountSpan = document.getElementById('selectedCheckCount');
+            const totalRecordsSpan = document.getElementById('totalRecords');
+
+            const SELECTED_COLOR = '#ffc107';
+            const SELECTED_BORDER = '1px solid #e0a800';
+
+            let currentlyFilteredRows = [...allReportData];
+            let currentSortColumn = null;
+            let currentSortDirection = 'none';
+
+            // Veri Modeli ile Tablo Sütunları arasındaki eşleştirme
+            const columnMappings = {
+                'Checkbox': null,
+                'MalzemeKodu': 'MalzemeKodu',
+                'MalzemeAciklamasi': 'MalzemeAciklamasi',
+                'SonFaturaTarihi': 'SonFaturaTarihi',
+                'SonFiyatTRY': 'SonFiyatTRY',
+                'SonParaBirimi': 'SonParaBirimi',
+                'SonSaticiAdi': 'SonSaticiAdi',
+                'SonSaticiGrupAdi': 'SonSaticiGrupAdi',
+                'OncekiFaturaTarihi': 'OncekiFaturaTarihi',
+                'OncekiFiyatTRY': 'OncekiFiyatTRY',
+                'OncekiSaticiAdi': 'OncekiSaticiAdi',
+                'OncekiSaticiGrupAdi': 'OncekiSaticiGrupAdi',
+                'FiyatDegisimYuzdesiTRY': 'FiyatDegisimYuzdesiTRY',
+                'FiyatDegisimYuzdesiEUR': 'FiyatDegisimYuzdesiEUR',
+                'FiyatDegisimYuzdesiUSD': 'FiyatDegisimYuzdesiUSD',
+                'ParaBirimiDurumu': 'ParaBirimiDurumu'
+            };
+
+            function updatePaginationInfo(totalCount) {
+                if (totalRecordsSpan) {
+                    totalRecordsSpan.textContent = totalCount;
+                }
+            }
+
+            function updateSelectAllCheckboxState() {
+                if (!selectAllCheckbox) return;
+                const visibleCheckboxes = document.querySelectorAll('#rapor6Table tbody tr:not([style*="display: none"]) .row-selector');
+                if (visibleCheckboxes.length > 0) {
+                    const allChecked = Array.from(visibleCheckboxes).every(checkbox => checkbox.checked);
+                    const anyChecked = Array.from(visibleCheckboxes).some(checkbox => checkbox.checked);
+                    selectAllCheckbox.checked = allChecked;
+                    selectAllCheckbox.indeterminate = !allChecked && anyChecked;
+                } else {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = false;
+                }
+            }
+
+            function renderTable(data) {
+                tableBody.innerHTML = '';
+                if (data.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="16" class="text-center">Gösterilecek veri bulunamadı.</td></tr>';
+                    updatePaginationInfo(0);
+                    return;
+                }
+                const frag = document.createDocumentFragment();
+                // Varsayılan sütun konfigürasyonu (hepsi görünür)
+                const visibleColumns = Object.keys(columnMappings).map(key => ({ columnName: key, visible: true }));
+
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+
+                    visibleColumns.forEach(col => {
+                        const cell = document.createElement('td');
+                        cell.dataset.column = col.columnName;
+
+                        if (col.columnName === 'Checkbox') {
+                            cell.className = 'checkbox-column';
+                            const checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+                            checkbox.className = 'form-check-input row-selector';
+                            cell.appendChild(checkbox);
+                        } else {
+                            let value = item[col.columnName];
+
+                            // Formatlama Mantığı
+                            if (col.columnName.includes('Tarihi') && value) {
+                                cell.textContent = new Date(value).toLocaleDateString('tr-TR');
+                            } else if ((col.columnName.includes('Fiyat') || col.columnName.includes('Yuzdesi')) && typeof value === 'number') {
+                                cell.textContent = value.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                cell.style.textAlign = 'right';
+
+                                // Yüzde değişimleri için renklendirme
+                                if (col.columnName.includes('Yuzdesi')) {
+                                    if (value > 0) cell.classList.add('text-neg'); // Fiyat artışı kırmızı
+                                    else if (value < 0) cell.classList.add('text-pos'); // Fiyat düşüşü yeşil
+                                    cell.textContent += '%';
+                                }
+                            } else {
+                                cell.textContent = value ?? '';
+                            }
+                        }
+                        row.appendChild(cell);
+                    });
+                    frag.appendChild(row);
+                });
+
+                tableBody.appendChild(frag);
+                updatePaginationInfo(data.length);
+                calculateSelectedTotal();
+                updateSelectAllCheckboxState();
+            }
+
+            // Filtreleme Fonksiyonu
+            function filterTableAndRender() {
+                const filters = {};
+                $('.filter-select-bs').each(function () {
+                    const selectElement = $(this);
+                    const columnKey = selectElement.closest('th').data('column');
+                    const selectedValues = selectElement.val();
+                    if (selectedValues && selectedValues.length > 0) {
+                        filters[columnKey] = selectedValues.map(v => (v || '').toLowerCase().trim());
+                    }
+                });
+
+                let filteredData = allReportData.filter(item => {
+                    let isMatch = true;
+                    for (const column in filters) {
+                        const filterValues = filters[column];
+                        const propName = columnMappings[column];
+                        if (!propName) continue;
+
+                        let itemValue = item[propName];
+                        if (itemValue === null || itemValue === undefined) itemValue = '';
+                        else itemValue = itemValue.toString();
+
+                        itemValue = itemValue.toLowerCase().trim();
+
+                        if (filterValues.length > 0 && !filterValues.includes(itemValue)) {
+                            isMatch = false;
+                            break;
+                        }
+                    }
+                    return isMatch;
+                });
+
+                // Sıralama Mantığı
+                if (currentSortColumn && currentSortDirection !== 'none') {
+                    const sortType = document.querySelector(`th[data-column="${currentSortColumn}"]`)?.dataset.sortType;
+                    const propName = columnMappings[currentSortColumn];
+
+                    filteredData.sort((itemA, itemB) => {
+                        let valA = itemA[propName];
+                        let valB = itemB[propName];
+
+                        if (valA === null || valA === undefined) valA = '';
+                        if (valB === null || valB === undefined) valB = '';
+
+                        let comparison = 0;
+                        if (sortType === 'number') {
+                            comparison = (parseFloat(valA) || 0) - (parseFloat(valB) || 0);
+                        } else if (sortType === 'date') {
+                             const dateA = valA ? new Date(valA).getTime() : 0;
+                             const dateB = valB ? new Date(valB).getTime() : 0;
+                             comparison = dateA - dateB;
+                        } else {
+                            comparison = (valA.toString()).localeCompare(valB.toString(), 'tr', { sensitivity: 'base' });
+                        }
+                        return currentSortDirection === 'asc' ? comparison : -comparison;
+                    });
+                }
+
+                currentlyFilteredRows = filteredData;
+                renderTable(currentlyFilteredRows);
+            }
+
+            // Sayfa Yüklendiğinde Başlat
+            function initializePage() {
+                $('.filter-select-bs').selectpicker({
+                    liveSearch: true,
+                    actionsBox: true,
+                    selectedTextFormat: 'count > 2',
+                    width: '100%',
+                    container: 'body'
+                }).on('changed.bs.select', function () {
+                    filterTableAndRender();
+                });
+
+                document.querySelectorAll('th.sortable-column').forEach(header => {
+                    header.addEventListener('click', function () {
+                        const columnKey = this.dataset.column;
+                        if (currentSortColumn === columnKey) {
+                            if (currentSortDirection === 'asc') currentSortDirection = 'desc';
+                            else if (currentSortDirection === 'desc') { currentSortDirection = 'none'; currentSortColumn = null; }
+                            else currentSortDirection = 'asc';
+                        } else {
+                            currentSortColumn = columnKey;
+                            currentSortDirection = 'asc';
+                        }
+
+                        document.querySelectorAll('th.sortable-column i').forEach(icon => icon.className = 'fas fa-sort float-end');
+                        const sortIcon = this.querySelector('i');
+                        if (sortIcon && currentSortDirection !== 'none') {
+                            sortIcon.className = `fas fa-sort-${currentSortDirection === 'asc' ? 'up' : 'down'} float-end`;
+                        }
+                        filterTableAndRender();
+                    });
+                });
+
+                renderTable(allReportData);
+            }
+
+            initializePage();
+
+            // Checkbox Olayları (Seçim ve Renklendirme)
+            selectAllCheckbox.addEventListener('change', function () {
+                const isChecked = this.checked;
+                document.querySelectorAll('#rapor6Table tbody tr:not([style*="display: none"]) .row-selector').forEach(checkbox => {
+                    checkbox.checked = isChecked;
+                });
+                calculateSelectedTotal();
+            });
+
+            tableBody.addEventListener('change', function (event) {
+                if (event.target.classList.contains('row-selector')) {
+                    calculateSelectedTotal();
+                    const allVisible = document.querySelectorAll('#rapor6Table tbody tr:not([style*="display: none"]) .row-selector');
+                    const allChecked = document.querySelectorAll('#rapor6Table tbody tr:not([style*="display: none"]) .row-selector:checked');
+                    selectAllCheckbox.checked = (allVisible.length > 0 && allVisible.length === allChecked.length);
+                    selectAllCheckbox.indeterminate = (allChecked.length > 0 && allChecked.length < allVisible.length);
+                }
+            });
+
+            function calculateSelectedTotal() {
+                let selectedCount = 0;
+                document.querySelectorAll('#rapor6Table tbody tr').forEach(row => {
+                    const checkbox = row.querySelector('.row-selector');
+                    if (checkbox) {
+                        if (checkbox.checked) {
+                            selectedCount++;
+                            row.style.backgroundColor = SELECTED_COLOR;
+                            row.style.border = SELECTED_BORDER;
+                            row.classList.add('selected-hover');
+                        } else {
+                            row.style.backgroundColor = '';
+                            row.style.border = '';
+                            row.classList.remove('selected-hover');
+                        }
+                    }
+                });
+                selectedCheckCountSpan.textContent = selectedCount;
+            }
+
+            window.clearReportFilters = function () {
+                $('.filter-select-bs').selectpicker('val', '');
+                currentlyFilteredRows = [...allReportData];
+                currentSortColumn = null;
+                currentSortDirection = 'none';
+                document.querySelectorAll('th.sortable-column i').forEach(icon => {
+                    icon.className = 'fas fa-sort float-end';
+                });
+                renderTable(currentlyFilteredRows);
+                toastr.success('Filtreler temizlendi!');
+            };
+        });
+    </script>
+}

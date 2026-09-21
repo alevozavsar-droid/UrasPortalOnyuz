@@ -1,0 +1,495 @@
+@{
+    ViewData["Title"] = "Muhatap (Cari) Ana Verileri";
+    var temsilciler = ViewBag.SatisTemsilcileri as List<WebApplication3.Controllers.Rapor162Controller.LookupModel> ?? new List<WebApplication3.Controllers.Rapor162Controller.LookupModel>();
+    var odemeler = ViewBag.OdemeKosullari as List<WebApplication3.Controllers.Rapor162Controller.LookupModel> ?? new List<WebApplication3.Controllers.Rapor162Controller.LookupModel>();
+    var ulkeler = ViewBag.Ulkeler as List<WebApplication3.Controllers.Rapor162Controller.KodAd> ?? new List<WebApplication3.Controllers.Rapor162Controller.KodAd>();
+}
+
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet" />
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
+<style>
+    .mh-wrap { padding: 0 14px 40px; }
+    .mh-hero {
+        background: linear-gradient(120deg, #4f46e5 0%, #6366f1 60%, #818cf8 100%);
+        color: #fff; border-radius: 16px; padding: 20px 26px; margin: 14px 0 18px;
+        box-shadow: 0 10px 30px -12px rgba(79,70,229,.6);
+        display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+    }
+    .mh-hero h1 { font-size: 1.35rem; font-weight: 700; margin: 0; letter-spacing: .2px; }
+    .mh-hero p { margin: 4px 0 0; opacity: .9; font-size: .85rem; }
+    .mh-hero .mh-db { background: rgba(255,255,255,.18); padding: 8px 14px; border-radius: 10px; font-weight: 600; font-size: .9rem; }
+
+    .mh-grid { display: grid; grid-template-columns: 380px 1fr; gap: 16px; align-items: start; }
+    @@media (max-width: 1100px) { .mh-grid { grid-template-columns: 1fr; } }
+
+    .mh-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; box-shadow: 0 4px 14px -8px rgba(15,23,42,.15); }
+    .mh-list-head { padding: 14px 14px 10px; border-bottom: 1px solid #eef2f7; }
+    .mh-tip-btns { display: flex; gap: 6px; margin-bottom: 10px; }
+    .mh-tip-btns button {
+        flex: 1; border: 1px solid #d7dce5; background: #f8fafc; color: #475569; font-size: .82rem;
+        font-weight: 600; padding: 7px 4px; border-radius: 8px; cursor: pointer; transition: .15s;
+    }
+    .mh-tip-btns button.active { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+    .mh-search { position: relative; }
+    .mh-search input { width: 100%; padding: 9px 12px 9px 34px; border: 1px solid #d7dce5; border-radius: 9px; font-size: .88rem; }
+    .mh-search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; }
+
+    .mh-list { max-height: 68vh; overflow-y: auto; }
+    .mh-list table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .mh-list td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
+    .mh-list tr:hover td { background: #f5f7ff; }
+    .mh-list tr.sel td { background: #eef2ff; }
+    .mh-list .cn { font-weight: 600; color: #1e293b; }
+    .mh-list .cc { color: #64748b; font-size: .74rem; }
+    .mh-badge { display: inline-block; font-size: .66rem; font-weight: 700; padding: 2px 7px; border-radius: 20px; }
+    .mh-badge.m { background: #dbeafe; color: #1d4ed8; }
+    .mh-badge.t { background: #fef3c7; color: #b45309; }
+    .mh-badge.pasif { background: #fee2e2; color: #b91c1c; }
+    .mh-badge.aktif { background: #dcfce7; color: #15803d; }
+
+    .mh-detail { padding: 4px 20px 22px; }
+    .mh-detail .empty { text-align: center; color: #94a3b8; padding: 70px 20px; }
+    .mh-detail .empty i { font-size: 3rem; margin-bottom: 12px; display: block; opacity: .4; }
+
+    .mh-sec { margin-top: 18px; }
+    .mh-sec > h3 {
+        font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .6px;
+        color: #6366f1; margin: 0 0 12px; padding-bottom: 6px; border-bottom: 2px solid #eef2ff;
+    }
+    .mh-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 16px; }
+    @@media (max-width: 640px) { .mh-row { grid-template-columns: 1fr; } }
+    .mh-f { display: flex; flex-direction: column; }
+    .mh-f.full { grid-column: 1 / -1; }
+    .mh-f label { font-size: .74rem; font-weight: 600; color: #475569; margin-bottom: 4px; }
+    .mh-f label .req { color: #dc2626; margin-left: 2px; }
+    .mh-f input, .mh-f select, .mh-f textarea {
+        border: 1px solid #d7dce5; border-radius: 8px; padding: 8px 10px; font-size: .86rem; width: 100%; background: #fff;
+    }
+    .mh-f input:read-only, .mh-f select:disabled, .mh-f input:disabled { background: #f1f5f9; color: #94a3b8; }
+    .mh-f textarea { resize: vertical; min-height: 60px; }
+    .mh-udf-yok { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+    .mh-udf-yok .msg { font-size: .72rem; color: #b45309; }
+    .mh-udf-yok button {
+        font-size: .72rem; font-weight: 600; border: 1px solid #6366f1; color: #4f46e5; background: #eef2ff;
+        padding: 4px 10px; border-radius: 7px; cursor: pointer;
+    }
+    .mh-udf-yok button:hover { background: #4f46e5; color: #fff; }
+    .select2-container { width: 100% !important; }
+    .select2-container--default .select2-selection--single { height: 36px; border-color: #d7dce5; border-radius: 8px; }
+    .select2-container--default .select2-selection--single .select2-selection__rendered { line-height: 34px; }
+    .select2-container--default .select2-selection--single .select2-selection__arrow { height: 34px; }
+
+    .mh-toolbar {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 14px 20px; border-bottom: 1px solid #eef2f7; flex-wrap: wrap;
+    }
+    .mh-toolbar .title { font-weight: 700; color: #1e293b; font-size: 1rem; }
+    .mh-save {
+        background: #4f46e5; color: #fff; border: none; border-radius: 9px; padding: 9px 22px;
+        font-weight: 600; font-size: .88rem; cursor: pointer; transition: .15s;
+    }
+    .mh-save:hover { background: #4338ca; }
+    .mh-save:disabled { opacity: .5; cursor: not-allowed; }
+
+    .mh-switch { display: inline-flex; align-items: center; gap: 8px; }
+    .mh-switch input { width: 42px; height: 22px; }
+
+    .mh-overlay { position: absolute; inset: 0; background: rgba(255,255,255,.7); display: none; align-items: center; justify-content: center; border-radius: 14px; z-index: 5; }
+    .mh-overlay.on { display: flex; }
+    .mh-spin { width: 34px; height: 34px; border: 3px solid #c7d2fe; border-top-color: #4f46e5; border-radius: 50%; animation: mhspin .8s linear infinite; }
+    @@keyframes mhspin { to { transform: rotate(360deg); } }
+</style>
+
+<div class="mh-wrap">
+    <div class="mh-hero">
+        <div>
+            <h1><i class="fa-solid fa-address-book"></i> Muhatap (Cari) Ana Verileri</h1>
+            <p>Müşteri ve tedarikçi cari kartlarını görüntüle, bağımlı listelerle seç, Service Layer ile güncelle</p>
+        </div>
+        <div class="mh-db"><i class="fa-solid fa-database"></i> @ViewBag.SelectedDb</div>
+    </div>
+
+    @if (ViewBag.ErrorMessage != null)
+    {
+        <div class="alert alert-danger">@ViewBag.ErrorMessage</div>
+    }
+
+    <div class="mh-grid">
+        <div class="mh-card">
+            <div class="mh-list-head">
+                <div class="mh-tip-btns">
+                    <button data-tip="all" class="active">Tümü</button>
+                    <button data-tip="C">Müşteri</button>
+                    <button data-tip="S">Tedarikçi</button>
+                </div>
+                <div class="mh-search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="mhSearch" placeholder="Ad, kod veya vergi no ara..." />
+                </div>
+            </div>
+            <div class="mh-list" style="position:relative;">
+                <div class="mh-overlay" id="listOverlay"><div class="mh-spin"></div></div>
+                <table><tbody id="mhListBody">
+                    <tr><td style="text-align:center;color:#94a3b8;padding:30px;">Yükleniyor...</td></tr>
+                </tbody></table>
+            </div>
+        </div>
+
+        <div class="mh-card" style="position:relative;">
+            <div class="mh-overlay" id="detayOverlay"><div class="mh-spin"></div></div>
+            <div class="mh-toolbar">
+                <span class="title" id="mhTitle">Cari seçiniz</span>
+                <button class="mh-save" id="btnKaydet" disabled><i class="fa-solid fa-floppy-disk"></i> Service Layer ile Kaydet</button>
+            </div>
+            <div class="mh-detail" id="mhDetail">
+                <div class="empty"><i class="fa-regular fa-hand-pointer"></i>Düzenlemek için soldaki listeden bir cari seçin.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+    const DB_QS = new URLSearchParams(location.search).get('db');
+    const qs = DB_QS ? ('&db=' + encodeURIComponent(DB_QS)) : '';
+    const qs1 = DB_QS ? ('?db=' + encodeURIComponent(DB_QS)) : '';
+    const TEMSILCILER = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(temsilciler.Select(t => new { t.Id, t.Name })));
+    const ODEMELER = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(odemeler.Select(o => new { o.Id, o.Name })));
+    const ULKELER = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ulkeler.Select(u => new { u.Kod, u.Ad })));
+
+    // ---- Sabit listeler ----
+    const CARI_KART_TIPI = ["Müşteri", "Tedarikçi", "Finansal Kuruluşlar", "Resmi Kurumlar", "Personel Carileri"];
+    const CARI_BOLGE = ["Yurtiçi", "Yurtdışı"];
+    const ILISKI = ["Grup İçi", "İlişkili Cari", "Grup Dışı"];
+    const CARI_ROLU = ["Sadece Müşteri", "Sadece Tedarikçi", "Çift Rol", "Diğer"];
+    const ANA_FAALIYET = ["Evet", "Hayır"];
+    const FAAL_ANA = ["Boya Grubu", "Kağıt Grubu", "Binder Grubu", "Yardımcı Kimyasallar", "Baskı Makineleri"];
+    const FAAL_ALT = {
+        "Boya Grubu": ["Dijital", "Emprime"],
+        "Kağıt Grubu": ["Süblime Kağıt"],
+        "Binder Grubu": ["İnşaat ve Boya Binderleri", "Tekstil Binderleri", "Kağıt Kaplama Binderleri"],
+        "Yardımcı Kimyasallar": ["İnşaat ve Boya Yardımcı Kimyasalları", "Tekstil Yardımcı Kimyasalları", "Kağıt Kaplama Yardımcı Kimyasalları"],
+        "Baskı Makineleri": ["Dijital", "Emprime"]
+    };
+    const UDF_BASLIK = {
+        CariKartTipi: "Cari Kart Tipi", CariBolge: "Cari Bölge", Ulke: "Ülke", Sehir: "Şehir",
+        CariSinifi: "Cari Sınıfı", IliskiDurumu: "İlişki Durumu", CariRolu: "Cari Rolü",
+        EsCariKodu: "Eş Cari Kodu", FaalAnaGrup: "Faaliyet Ana Grubu", FaalGrup: "Faaliyet Grubu",
+        AnaFaaliyet: "Ana Faaliyet mi?"
+    };
+
+    function cariSinifOpts(kartTipi, bolge) {
+        if (kartTipi === "Müşteri")
+            return bolge === "Yurtdışı"
+                ? ["Yurtdışı Şube", "Yurtdışı Bayi", "Yurtdışı Distribütör", "Ticari Müşteriler", "Özel Takip"]
+                : ["Bayi", "Distribütör", "Ticari Müşteriler", "Özel Takip"];
+        if (kartTipi === "Tedarikçi") return ["Hammadde", "Yardımcı Malzemeler", "Fason", "Hizmetler", "Danışmanlık", "Özel Takip"];
+        if (kartTipi === "Finansal Kuruluşlar") return ["Banka", "Leasing", "Faktoring"];
+        if (kartTipi === "Resmi Kurumlar") return ["Vergi Dairesi", "SGK", "Gümrük / Harç"];
+        if (kartTipi === "Personel Carileri") return ["Personel", "Personel Avans", "Personel Masraf", "Emanet", "Özel Takip"];
+        return [];
+    }
+
+    function ulkeAdiToKod(ad) { const u = ULKELER.find(x => x.Ad === ad); return u ? u.Kod : ""; }
+
+    toastr.options = { positionClass: "toast-bottom-right", timeOut: 4000, progressBar: true };
+
+    let currentTip = "all", currentCode = null, alanDurumu = {};
+
+    function esc(s) { return (s == null ? "" : String(s)).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+    function loadList() {
+        const q = document.getElementById('mhSearch').value.trim();
+        document.getElementById('listOverlay').classList.add('on');
+        fetch(`/Rapor162/Liste?tip=${currentTip}&q=${encodeURIComponent(q)}${qs}`)
+            .then(r => r.json())
+            .then(res => {
+                document.getElementById('listOverlay').classList.remove('on');
+                const tb = document.getElementById('mhListBody');
+                if (!res.success) { tb.innerHTML = `<tr><td style="color:#b91c1c;padding:20px;">${esc(res.message)}</td></tr>`; return; }
+                if (!res.data.length) { tb.innerHTML = `<tr><td style="text-align:center;color:#94a3b8;padding:30px;">Kayıt bulunamadı.</td></tr>`; return; }
+                tb.innerHTML = res.data.map(r => `
+                    <tr data-code="${esc(r.cardCode)}" class="${r.cardCode === currentCode ? 'sel' : ''}">
+                        <td><div class="cn">${esc(r.cardName)}</div><div class="cc">${esc(r.cardCode)} · ${esc(r.vergiNo || '—')}</div></td>
+                        <td style="text-align:right;white-space:nowrap;">
+                            <span class="mh-badge ${r.tipKod === 'S' ? 't' : 'm'}">${esc(r.tip)}</span>
+                            <span class="mh-badge ${r.aktif ? 'aktif' : 'pasif'}">${r.aktif ? 'Aktif' : 'Pasif'}</span>
+                        </td></tr>`).join('');
+                tb.querySelectorAll('tr[data-code]').forEach(tr => tr.addEventListener('click', () => selectCari(tr.dataset.code)));
+            })
+            .catch(e => { document.getElementById('listOverlay').classList.remove('on'); toastr.error("Liste alınamadı: " + e); });
+    }
+
+    // arr: string[] veya {id,name}
+    function optlist(arr, val, useId) {
+        let h = `<option value=""></option>`;
+        (arr || []).forEach(o => {
+            const v = useId ? o.id : o, t = useId ? o.name : o;
+            h += `<option value="${esc(v)}" ${String(v) === String(val || "") ? 'selected' : ''}>${esc(t)}</option>`;
+        });
+        return h;
+    }
+
+    // UDF alani sarmalayici: mevcut degilse disable + "SL ile Aç"
+    function udfWrap(alias, innerHtml, req) {
+        const mevcut = alanDurumu[alias];
+        const reqStar = req ? '<span class="req">*</span>' : '';
+        let yok = mevcut ? '' : `
+            <div class="mh-udf-yok">
+                <span class="msg"><i class="fa-solid fa-triangle-exclamation"></i> Bu şirkette yok.</span>
+                <button type="button" onclick="alanAc('${alias}')"><i class="fa-solid fa-plus"></i> Service Layer ile Aç</button>
+            </div>`;
+        return `<div class="mh-f" data-udf="${alias}"><label>${esc(UDF_BASLIK[alias])}${reqStar}</label>${innerHtml}${yok}</div>`;
+    }
+    function dis(alias) { return alanDurumu[alias] ? '' : 'disabled'; }
+
+    function selectCari(code) {
+        currentCode = code;
+        document.querySelectorAll('#mhListBody tr').forEach(tr => tr.classList.toggle('sel', tr.dataset.code === code));
+        document.getElementById('detayOverlay').classList.add('on');
+        fetch(`/Rapor162/Detay?cardCode=${encodeURIComponent(code)}${qs}`)
+            .then(r => r.json())
+            .then(res => {
+                document.getElementById('detayOverlay').classList.remove('on');
+                if (!res.success) { toastr.error(res.message); return; }
+                alanDurumu = res.alanDurumu || {};
+                renderDetay(res.data);
+            })
+            .catch(e => { document.getElementById('detayOverlay').classList.remove('on'); toastr.error("Detay alınamadı: " + e); });
+    }
+
+    function renderDetay(d) {
+        const tipLabel = d.cardType === 'S' ? 'Tedarikçi' : 'Müşteri';
+        document.getElementById('mhTitle').textContent = d.cardName + " (" + d.cardCode + ")";
+        document.getElementById('btnKaydet').disabled = false;
+
+        document.getElementById('mhDetail').innerHTML = `
+            <div class="mh-sec"><h3>Kimlik & Ünvan</h3><div class="mh-row">
+                <div class="mh-f"><label>Cari Kodu</label><input type="text" value="${esc(d.cardCode)}" readonly></div>
+                <div class="mh-f"><label>SAP Kart Tipi</label><input type="text" value="${tipLabel}" readonly></div>
+                <div class="mh-f full"><label>Cari Kısa Adı</label><input type="text" id="f_cardName" value="${esc(d.cardName)}"></div>
+                <div class="mh-f"><label>Kısaltmalı Ünvan</label><input type="text" id="f_aliasName" value="${esc(d.aliasName)}"></div>
+                <div class="mh-f"><label>Resmi Ünvan</label><input type="text" id="f_cardFName" value="${esc(d.cardFName)}"></div>
+            </div></div>
+
+            <div class="mh-sec"><h3>Vergi Bilgileri</h3><div class="mh-row">
+                <div class="mh-f"><label>Vergi No / TCKN</label><input type="text" id="f_licTradNum" value="${esc(d.licTradNum)}"></div>
+                <div class="mh-f"><label>Vergi Dairesi</label><input type="text" id="f_addID" value="${esc(d.addID)}"></div>
+            </div></div>
+
+            <div class="mh-sec"><h3>Sınıflandırma</h3><div class="mh-row">
+                ${udfWrap('CariKartTipi', `<select id="f_CariKartTipi" ${dis('CariKartTipi')}>${optlist(CARI_KART_TIPI, d.u_CariKartTipi)}</select>`)}
+                ${udfWrap('CariBolge', `<select id="f_CariBolge" ${dis('CariBolge')}>${optlist(CARI_BOLGE, d.u_CariBolge)}</select>`)}
+                ${udfWrap('Ulke', `<select id="f_Ulke" ${dis('Ulke')}></select>`)}
+                ${udfWrap('Sehir', `<select id="f_Sehir" ${dis('Sehir')}></select>`)}
+                ${udfWrap('CariSinifi', `<select id="f_CariSinifi" ${dis('CariSinifi')}></select>`)}
+                ${udfWrap('IliskiDurumu', `<select id="f_IliskiDurumu" ${dis('IliskiDurumu')}>${optlist(ILISKI, d.u_IliskiDurumu)}</select>`)}
+                ${udfWrap('CariRolu', `<select id="f_CariRolu" ${dis('CariRolu')}>${optlist(CARI_ROLU, d.u_CariRolu)}</select>`)}
+                ${udfWrap('EsCariKodu', `<select id="f_EsCariKodu" ${dis('EsCariKodu')}></select>`)}
+            </div></div>
+
+            <div class="mh-sec"><h3>Faaliyet & Temsilci</h3><div class="mh-row">
+                ${udfWrap('FaalAnaGrup', `<select id="f_FaalAnaGrup" ${dis('FaalAnaGrup')}>${optlist(FAAL_ANA, d.u_FaalAnaGrup)}</select>`)}
+                ${udfWrap('FaalGrup', `<select id="f_FaalGrup" ${dis('FaalGrup')}></select>`)}
+                <div class="mh-f"><label>Satış Temsilcisi</label><select id="f_slpCode">${optlist2(TEMSILCILER, d.slpCode)}</select></div>
+                ${udfWrap('AnaFaaliyet', `<select id="f_AnaFaaliyet" ${dis('AnaFaaliyet')}>${optlist(ANA_FAALIYET, d.u_AnaFaaliyet)}</select>`)}
+            </div></div>
+
+            <div class="mh-sec"><h3>İletişim</h3><div class="mh-row">
+                <div class="mh-f full"><label>Yetkili Kişi</label><input type="text" id="f_cntctPrsn" value="${esc(d.cntctPrsn)}"></div>
+                <div class="mh-f"><label>Telefon</label><input type="text" id="f_phone1" value="${esc(d.phone1)}"></div>
+                <div class="mh-f"><label>E-posta</label><input type="text" id="f_email" value="${esc(d.email)}"></div>
+            </div></div>
+
+            <div class="mh-sec"><h3>Ticari & Durum</h3><div class="mh-row">
+                <div class="mh-f"><label>Vade / Ödeme Şartı</label><select id="f_groupNum">${optlist2(ODEMELER, d.groupNum)}</select></div>
+                <div class="mh-f"><label>Durum</label><div class="mh-switch"><input type="checkbox" id="f_aktif" ${d.aktif ? 'checked' : ''}> <span id="aktifLbl">${d.aktif ? 'Aktif' : 'Pasif'}</span></div></div>
+                <div class="mh-f full"><label>Not</label><textarea id="f_notes">${esc(d.notes)}</textarea></div>
+            </div></div>`;
+
+        wireDetay(d);
+    }
+
+    function optlist(arr, val) { return optlist2(arr.map(x => ({ id: x, name: x })), val); }
+    function optlist2(arr, val) {
+        let h = `<option value=""></option>`;
+        (arr || []).forEach(o => { h += `<option value="${esc(o.id)}" ${String(o.id) === String(val ?? "") ? 'selected' : ''}>${esc(o.name)}</option>`; });
+        return h;
+    }
+
+    function wireDetay(d) {
+        // basit select2'ler
+        $('#f_groupNum, #f_slpCode, #f_CariKartTipi, #f_CariBolge, #f_CariSinifi, #f_IliskiDurumu, #f_CariRolu, #f_FaalAnaGrup, #f_FaalGrup, #f_AnaFaaliyet, #f_Ulke, #f_Sehir')
+            .select2({ width: '100%', placeholder: 'Seçiniz', allowClear: true });
+
+        // Eş Cari Kodu: uzaktan aramalı select2
+        if (alanDurumu.EsCariKodu) {
+            const $es = $('#f_EsCariKodu');
+            if (d.u_EsCariKodu) $es.append(new Option(d.u_EsCariKodu, d.u_EsCariKodu, true, true));
+            $es.select2({
+                width: '100%', placeholder: 'Cari ara...', allowClear: true,
+                ajax: {
+                    url: '/Rapor162/CariAra' + qs1, dataType: 'json', delay: 250,
+                    data: p => ({ q: p.term || '' }), processResults: d2 => ({ results: d2.results })
+                }
+            });
+        }
+
+        // Ülke listesini bölgeye göre kur
+        function ulkeKur() {
+            const bolge = $('#f_CariBolge').val();
+            const $u = $('#f_Ulke');
+            if (!alanDurumu.Ulke) return;
+            if (bolge === 'Yurtiçi') {
+                const tr = ULKELER.find(x => /türk|turkey/i.test(x.Ad));
+                const ad = tr ? tr.Ad : 'Türkiye';
+                $u.html(`<option value="${esc(ad)}" selected>${esc(ad)}</option>`).val(ad).prop('disabled', true).trigger('change.select2');
+                sehirKur();
+            } else if (bolge === 'Yurtdışı') {
+                let h = `<option value=""></option>` + ULKELER.map(x => `<option value="${esc(x.Ad)}" ${x.Ad === d.u_Ulke ? 'selected' : ''}>${esc(x.Ad)}</option>`).join('');
+                $u.html(h).prop('disabled', false).trigger('change.select2');
+                sehirKur();
+            } else {
+                $u.html(`<option value=""></option>`).prop('disabled', false).trigger('change.select2');
+            }
+        }
+
+        // Şehir listesini ülkeye göre AJAX ile kur
+        function sehirKur(keep) {
+            if (!alanDurumu.Sehir) return;
+            const ulkeAd = $('#f_Ulke').val();
+            const kod = ulkeAdiToKod(ulkeAd);
+            const hedef = keep === undefined ? d.u_Sehir : keep;
+            const $s = $('#f_Sehir');
+            fetch(`/Rapor162/Sehirler?ulkeKod=${encodeURIComponent(kod)}${qs}`)
+                .then(r => r.json()).then(res => {
+                    let opts = (res.data || []).map(x => x.name);
+                    if (hedef && !opts.includes(hedef)) opts.unshift(hedef);
+                    $s.html(optlist(opts, hedef)).trigger('change.select2');
+                }).catch(() => { $s.html(optlist(hedef ? [hedef] : [], hedef)).trigger('change.select2'); });
+        }
+
+        // Cari Sınıfı: Kart Tipi + Bölge'ye bağlı
+        function sinifKur() {
+            if (!alanDurumu.CariSinifi) return;
+            const opts = cariSinifOpts($('#f_CariKartTipi').val(), $('#f_CariBolge').val());
+            const cur = d.u_CariSinifi && opts.includes(d.u_CariSinifi) ? d.u_CariSinifi : "";
+            $('#f_CariSinifi').html(optlist(opts, cur)).trigger('change.select2');
+        }
+
+        // Faaliyet Grubu: Ana Grup'a bağlı
+        function faalKur() {
+            if (!alanDurumu.FaalGrup) return;
+            const opts = FAAL_ALT[$('#f_FaalAnaGrup').val()] || [];
+            const cur = d.u_FaalGrup && opts.includes(d.u_FaalGrup) ? d.u_FaalGrup : "";
+            $('#f_FaalGrup').html(optlist(opts, cur)).prop('disabled', !opts.length).trigger('change.select2');
+            temsilciKur();
+        }
+        // Satış Temsilcisi: Faaliyet Grubu seçilmeden pasif
+        function temsilciKur() {
+            const secili = $('#f_FaalGrup').val();
+            $('#f_slpCode').prop('disabled', !secili).trigger('change.select2');
+        }
+        // Eş Cari: Çift Rol'de zorunlu
+        function rolKur() {
+            const cift = $('#f_CariRolu').val() === 'Çift Rol';
+            const lbl = document.querySelector('[data-udf="EsCariKodu"] label');
+            if (lbl) lbl.querySelector('.req')?.remove();
+            if (cift && lbl && !lbl.querySelector('.req')) { const s = document.createElement('span'); s.className = 'req'; s.textContent = '*'; lbl.appendChild(s); }
+        }
+
+        $('#f_CariBolge').on('change', () => { ulkeKur(); sinifKur(); });
+        $('#f_CariKartTipi').on('change', sinifKur);
+        $('#f_Ulke').on('change', () => sehirKur(''));
+        $('#f_FaalAnaGrup').on('change', faalKur);
+        $('#f_FaalGrup').on('change', temsilciKur);
+        $('#f_CariRolu').on('change', rolKur);
+        document.getElementById('f_aktif').addEventListener('change', function () { document.getElementById('aktifLbl').textContent = this.checked ? 'Aktif' : 'Pasif'; });
+
+        // ilk kurulum (kayıtlı değerlere göre)
+        ulkeKur(); sinifKur(); faalKur(); temsilciKur(); rolKur();
+    }
+
+    function val(id) { const e = document.getElementById(id); return e ? e.value : ""; }
+    function num(id) { const v = parseInt(val(id), 10); return isNaN(v) ? -1 : v; }
+
+    function alanAc(alias) {
+        Swal.fire({
+            title: UDF_BASLIK[alias] + " alanını aç?",
+            html: `Bu işlem <b>@ViewBag.SelectedDb</b> şirketinde OCRD tablosuna <code>U_${alias}</code> alanını Service Layer ile ekler. Bu bir SAP şema değişikliğidir.`,
+            icon: 'warning', showCancelButton: true, confirmButtonText: 'Evet, aç', cancelButtonText: 'Vazgeç', confirmButtonColor: '#4f46e5'
+        }).then(r => {
+            if (!r.isConfirmed) return;
+            fetch(`/Rapor162/AlanAc${qs1}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alias })
+            }).then(x => x.json()).then(res => {
+                if (res.success) { toastr.success(res.message); if (currentCode) selectCari(currentCode); }
+                else toastr.error(res.message, "", { timeOut: 8000 });
+            }).catch(e => toastr.error("Hata: " + e));
+        });
+    }
+
+    function kaydet() {
+        if (!currentCode) return;
+        // Zorunluluk kontrolleri (alan mevcutsa)
+        if (alanDurumu.CariBolge && alanDurumu.Ulke && val('f_CariBolge') === 'Yurtdışı' && !val('f_Ulke')) {
+            toastr.warning("Yurtdışı için Ülke seçmelisiniz."); return;
+        }
+        if (alanDurumu.CariRolu && alanDurumu.EsCariKodu && val('f_CariRolu') === 'Çift Rol' && !$('#f_EsCariKodu').val()) {
+            toastr.warning("Çift Rol için Eş Cari Kodu zorunludur."); return;
+        }
+        const btn = document.getElementById('btnKaydet'); btn.disabled = true;
+        const payload = {
+            cardCode: currentCode,
+            cardName: val('f_cardName'), aliasName: val('f_aliasName'), cardFName: val('f_cardFName'),
+            licTradNum: val('f_licTradNum'), addID: val('f_addID'),
+            groupNum: num('f_groupNum'), slpCode: num('f_slpCode'),
+            cntctPrsn: val('f_cntctPrsn'), phone1: val('f_phone1'), email: val('f_email'),
+            notes: val('f_notes'), aktif: document.getElementById('f_aktif').checked,
+            cariKartTipi: val('f_CariKartTipi'), cariBolge: val('f_CariBolge'),
+            ulke: val('f_Ulke'), sehir: val('f_Sehir'), cariSinifi: val('f_CariSinifi'),
+            iliskiDurumu: val('f_IliskiDurumu'), cariRolu: val('f_CariRolu'),
+            esCariKodu: $('#f_EsCariKodu').val() || "",
+            faalAnaGrup: val('f_FaalAnaGrup'), faalGrup: val('f_FaalGrup'), anaFaaliyet: val('f_AnaFaaliyet')
+        };
+        document.getElementById('detayOverlay').classList.add('on');
+        fetch(`/Rapor162/Kaydet${qs1}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        }).then(r => r.json()).then(res => {
+            document.getElementById('detayOverlay').classList.remove('on'); btn.disabled = false;
+            if (res.success) { toastr.success(res.message, "", { timeOut: 6000 }); loadList(); }
+            else toastr.error(res.message, "", { timeOut: 9000 });
+        }).catch(e => { document.getElementById('detayOverlay').classList.remove('on'); btn.disabled = false; toastr.error("Hata: " + e); });
+    }
+
+    document.querySelectorAll('.mh-tip-btns button').forEach(b => b.addEventListener('click', function () {
+        document.querySelectorAll('.mh-tip-btns button').forEach(x => x.classList.remove('active'));
+        this.classList.add('active'); currentTip = this.dataset.tip; loadList();
+    }));
+    let searchTimer;
+    document.getElementById('mhSearch').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadList, 300); });
+    document.getElementById('btnKaydet').addEventListener('click', kaydet);
+
+    // Sayfa açılışında eksik özel alanları (UDF) otomatik aç
+    function alanlariHazirla() {
+        fetch(`/Rapor162/AlanlariHazirla${qs1}`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+            .then(r => r.json()).then(res => {
+                if (res.alanDurumu) alanDurumu = res.alanDurumu;
+                if (res.olusturulan && res.olusturulan.length)
+                    toastr.success("Eksik alanlar açıldı: " + res.olusturulan.join(", "), "", { timeOut: 6000 });
+                if (res.hatalar && res.hatalar.length)
+                    toastr.warning("Bazı alanlar açılamadı: " + res.hatalar.join(" | "), "", { timeOut: 10000 });
+                // Detay açıksa güncel alan durumuyla yeniden çiz
+                if (currentCode) selectCari(currentCode);
+            }).catch(() => { });
+    }
+
+    alanlariHazirla();
+    loadList();
+</script>

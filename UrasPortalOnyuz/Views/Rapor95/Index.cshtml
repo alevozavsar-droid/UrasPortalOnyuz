@@ -1,0 +1,810 @@
+﻿@model dynamic
+
+@{
+    ViewData["Title"] = "Muhatap Özel Fiyatları";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    
+    // PERFORMANS: cari/stok listeleri artik sayfaya basilmiyor; select2 sunucudan (SearchCustomers/SearchItems) arar.
+    var databases = (List<WebApplication3.Controllers.Rapor95Controller.DatabaseConfig>)ViewBag.Databases;
+    var currentDbKey = (string)ViewBag.CurrentDbKey;
+
+    // Aktif şirketin görünen adını bulma
+    var currentDbDisplay = databases?.FirstOrDefault(d => d.Key == currentDbKey)?.Display ?? "Şirket Seçilmedi";
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <style>
+        :root {
+            --r95-primary: var(--metro-primary, #4f46e5);
+            --r95-card: var(--bg-card, #ffffff);
+            --r95-border: var(--border-color, #e6e8f0);
+            --r95-muted: var(--text-muted, #64748b);
+            --r95-radius: 16px;
+            --r95-shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
+        }
+        body { overflow-x: hidden; }
+        * { box-sizing: border-box; }
+        /* Tam ekran genislik */
+        main, .container, .pb-3 { max-width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; width: 100% !important; }
+        .container-fluid { padding-left: 1.4rem; padding-right: 1.4rem; max-width: 100%; }
+
+        /* HERO BASLIK */
+        .page-header { background: linear-gradient(120deg, var(--r95-primary) 0%, #7c3aed 100%); color: #fff; padding: 20px 24px; border-radius: var(--r95-radius); margin-bottom: 18px; box-shadow: var(--r95-shadow); border: none; }
+        .page-header h4 { color: #fff !important; font-weight: 800; }
+        .page-header .badge.bg-primary { background: rgba(255,255,255,.18) !important; }
+        .page-header .btn { border-radius: 10px; }
+
+        /* KARTLAR */
+        .card-custom { border-radius: var(--r95-radius); box-shadow: var(--r95-shadow); border: 1px solid var(--r95-border); margin-bottom: 1.4rem; background: var(--r95-card); }
+        .card-custom .card-header { border-top-left-radius: var(--r95-radius) !important; border-top-right-radius: var(--r95-radius) !important; }
+
+        /* TABLO */
+        .table-modern { border-collapse: separate; border-spacing: 0; width: 100%; }
+        .table-modern th { background: color-mix(in srgb, var(--r95-primary) 9%, var(--r95-card)); color: var(--r95-primary); font-size: 0.74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; padding: 12px; border-bottom: 2px solid var(--r95-border); vertical-align: middle; position: sticky; top: 0; z-index: 3; }
+        .table-modern td { padding: 10px 12px; vertical-align: middle; border-bottom: 1px solid var(--r95-border); font-size: 0.9rem; }
+        .table-hover > tbody > tr:hover > * { background-color: color-mix(in srgb, var(--r95-primary) 6%, transparent); }
+        .table-modern input.form-control, .table-modern select.form-select { border-radius: 8px; }
+
+        .upload-zone { border: 2px dashed #94a3b8; border-radius: var(--r95-radius); padding: 30px; text-align: center; background-color: var(--bg-subtle, #f8fafc); transition: all 0.25s ease; cursor: pointer; }
+        .upload-zone:hover { border-color: var(--r95-primary); background-color: color-mix(in srgb, var(--r95-primary) 7%, transparent); }
+        .mode-card { cursor: pointer; transition: all 0.2s; border: 2px solid var(--r95-border); border-radius: 8px; }
+        .mode-card.active { border-color: var(--r95-primary); background-color: color-mix(in srgb, var(--r95-primary) 8%, transparent); }
+
+        .is-modified td { background-color: #fffbeb !important; }
+        .bg-light-col { background-color: var(--bg-subtle, #f8fafc); }
+
+        /* Mod secici (radio) -> segmented buton hissi */
+        .search-mode-container { display: flex; gap: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--r95-border); padding-bottom: 16px; flex-wrap: wrap; }
+        .custom-radio { cursor: pointer; display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--r95-muted); border: 1px solid var(--r95-border); border-radius: 10px; padding: 8px 14px; transition: all .15s; }
+        .custom-radio:hover { border-color: var(--r95-primary); }
+        .custom-radio input[type="radio"] { cursor: pointer; width: 1.15em; height: 1.15em; accent-color: var(--r95-primary); }
+        .custom-radio input[type="radio"]:checked + span { color: var(--r95-primary); }
+
+        /* Tabloyu ekran altina kadar dinamik uzat */
+        .dynamic-table-container { max-height: calc(100vh - 300px); overflow-y: auto; border-radius: 0 0 var(--r95-radius) var(--r95-radius); }
+
+        /* select2 modern */
+        .select2-container--bootstrap-5 .select2-selection { border-radius: 10px !important; min-height: 40px; border-color: var(--r95-border) !important; }
+    </style>
+}
+
+<div class="container-fluid py-3">
+    
+    <div class="page-header d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <h4 class="fw-bold text-dark mb-0">
+                <i class="fas fa-tags text-primary me-2"></i>Özel Fiyat Yönetimi
+            </h4>
+            
+            <!-- ŞİRKET SEÇİMİ KALDIRILDI: YERİNE SABİT ROZET EKLENDİ -->
+            <span class="badge bg-primary fs-6 px-3 py-2 shadow-sm d-flex align-items-center gap-2">
+                <i class="fas fa-building"></i> @currentDbDisplay
+            </span>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <button class="btn btn-light shadow-sm fw-bold px-3 text-success" id="btnExportAll">
+                <i class="fas fa-file-download me-2"></i>Tüm Fiyatları Excel İndir
+            </button>
+            <button class="btn btn-light shadow-sm fw-bold px-3 text-primary" id="btnShowExcelModal">
+                <i class="fas fa-file-upload me-2"></i>Toplu Excel İçe Aktar
+            </button>
+        </div>
+    </div>
+
+    <div class="card card-custom bg-white">
+        <div class="card-body p-4">
+            
+            <div class="search-mode-container">
+                <label class="custom-radio">
+                    <input type="radio" name="searchMode" value="customer" checked>
+                    <span>Müşteriye (Cariye) Göre Arama</span>
+                </label>
+                <label class="custom-radio">
+                    <input type="radio" name="searchMode" value="item">
+                    <span>Kaleme (Stoka) Göre Arama</span>
+                </label>
+            </div>
+
+            <div class="row align-items-end">
+                <div class="col-md-8">
+                    <!-- CARİ SEÇİM ALANI (Varsayılan Açık) -->
+                    <div id="customerSearchContainer">
+                        <label class="fw-semibold text-muted mb-2">İşlem Yapılacak Müşteriyi Seçin</label>
+                        <select id="CustomerSelect" class="form-select">
+                            <option value="">-- Cari kodu veya adı yazıp arayın --</option>
+                        </select>
+                    </div>
+
+                    <!-- STOK SEÇİM ALANI (Gizli) -->
+                    <div id="itemSearchContainer" style="display:none;">
+                        <label class="fw-semibold text-muted mb-2">İşlem Yapılacak Kalemi (Stoku) Seçin</label>
+                        <select id="ItemSelectMain" class="form-select">
+                            <option value="" data-oran="">-- Stok kodu veya adı yazıp arayın --</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-4 text-end mt-3 mt-md-0">
+                    <button class="btn btn-dark px-4 py-2 w-100 fw-bold shadow-sm" id="btnLoadPrices">
+                        <i class="fas fa-search me-2"></i>Sistemden Fiyatları Getir
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card card-custom" id="pricesCard" style="display:none;">
+        <div class="card-header bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <h6 class="mb-0 fw-bold text-dark" id="tableTitle"><i class="fas fa-list text-secondary me-2"></i>Özel Fiyat Listesi</h6>
+                <span class="badge bg-primary rounded-pill" id="rowCountBadge">0 Kayıt</span>
+            </div>
+            
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="input-group" style="width: 250px;">
+                    <span class="input-group-text bg-light border-end-0"><i class="fas fa-search text-muted"></i></span>
+                    <input type="text" class="form-control border-start-0" id="tableSearchInput" placeholder="Tabloda ara...">
+                </div>
+                <button class="btn btn-outline-success fw-bold px-3 shadow-sm" id="btnExportFiltered" title="Ekranda görünen (filtrelenmiş) satırları Excel'e aktar">
+                    <i class="fas fa-file-excel me-1"></i> Filtreyi Excel'e Aktar
+                </button>
+                <button class="btn btn-info text-white fw-bold px-3 shadow-sm" id="btnShowAddModal">
+                    <i class="fas fa-plus me-1"></i> <span id="btnAddText">Yeni Kalem Ekle</span>
+                </button>
+                <button class="btn btn-warning fw-bold text-dark px-4 shadow-sm" id="btnSaveAllChanges" style="display:none;">
+                    <i class="fas fa-save me-2"></i>Değişiklikleri Kaydet (<span id="modifiedCount">0</span>)
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="dynamic-table-container">
+                <table class="table table-hover table-modern mb-0" id="pricesTable">
+                    <thead class="sticky-top bg-light" style="z-index: 1;">
+                        <tr>
+                            <th id="thCode" style="width: 150px;">Stok Kodu</th>
+                            <th id="thName">Kalem Tanımı / İsmi</th>
+                            <th style="width: 120px;" class="text-center">Birim Çeviri Oranı<br><small class="text-muted">(Çarpan)</small></th>
+                            <th style="width: 150px;">Birim Fiyat</th>
+                            <th style="width: 150px;">Ambalaj Fiyatı<br><small class="text-muted">(SAP)</small></th>
+                            <th style="width: 120px;" class="text-center">Döviz</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pricesBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- TEKLİ EKLEME MODALI (DİNAMİK) -->
+<div class="modal fade" id="singleAddModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white py-3">
+                <h5 class="modal-title fw-bold" id="singleAddModalTitle"><i class="fas fa-plus-circle me-2"></i>Listeye Yeni Ekle</h5>
+                <button type="button" class="btn-close btn-close-white close-modal-btn" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-info py-2 small border-0"><i class="fas fa-info-circle me-1"></i> Bu işlem anında SAP'ye yazmaz, tabloya ekler. Ana ekrandan "Kaydet" demeniz gerekir.</div>
+                
+                <div class="mb-3" id="modalItemSelectContainer">
+                    <label class="form-label fw-bold text-muted">Stok Kalemi Seçin</label>
+                    <select id="newItemSelect" class="form-select" style="width:100%;">
+                        <option value="" data-oran="" data-name="">-- Stok kodu/adı yazıp arayın --</option>
+                    </select>
+                </div>
+
+                <div class="mb-3" id="modalCustomerSelectContainer" style="display:none;">
+                    <label class="form-label fw-bold text-muted">Müşteri (Cari) Seçin</label>
+                    <select id="newCustomerSelect" class="form-select" style="width:100%;">
+                        <option value="" data-name="">-- Cari kodu/adı yazıp arayın --</option>
+                    </select>
+                </div>
+                
+                <div class="row align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold text-muted">Çarpan</label>
+                        <input type="text" id="newOranDisplay" class="form-control fw-bold text-secondary bg-light" readonly placeholder="-">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold text-muted">Birim Fiyat</label>
+                        <input type="number" id="newUnitPriceInput" step="0.01" class="form-control fw-bold text-primary" placeholder="0.00">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold text-muted">Ambalaj Fiyatı (SAP)</label>
+                        <input type="number" id="newPackagePriceInput" step="0.01" class="form-control fw-bold text-success" placeholder="0.00">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold text-muted">Döviz</label>
+                        <select id="newCurrencyInput" class="form-select">
+                            <option value="TRY" selected>TRY</option>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary close-modal-btn">İptal</button>
+                <button type="button" class="btn btn-primary fw-bold px-4" id="btnAddToTable"><i class="fas fa-check me-2"></i>Tabloya Ekle</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- EXCEL MODAL -->
+<div class="modal fade" id="excelModal" tabindex="-1" role="dialog" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white py-3">
+                <h5 class="modal-title fw-bold"><i class="fas fa-file-excel me-2"></i>Toplu Excel Fiyat İçe Aktarımı</h5>
+                <button type="button" class="btn-close btn-close-white close-modal-btn" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-warning py-2 small border-0 fw-bold">
+                    <i class="fas fa-exclamation-triangle me-1"></i> Excel dosyanızdaki fiyat sütununa BİRİM FİYATLARI yazmalısınız. (Sistem parantez içindeki sayıyla otomatik çarpıp SAP'ye yazar).
+                </div>
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card mode-card h-100 p-3 active" id="cardMode1">
+                            <div class="form-check"><input class="form-check-input" type="radio" name="importMode" id="mode1" value="code" checked><label class="form-check-label ms-2 fw-bold text-dark" for="mode1">Kodlara Göre Aktarım</label></div>
+                            <p class="text-muted small ms-4 mt-1 mb-2">Excel'de direkt Cari Kodu ve Stok Kodu varsa kullanın.</p>
+                            <a href="/Rapor95/DownloadTemplate?type=1" class="btn btn-sm btn-outline-success ms-4 mt-auto"><i class="fas fa-download me-1"></i>Örnek Şablon</a>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card mode-card h-100 p-3" id="cardMode2">
+                            <div class="form-check"><input class="form-check-input" type="radio" name="importMode" id="mode2" value="name"><label class="form-check-label ms-2 fw-bold text-dark" for="mode2">İsimlere Göre Aktarım</label></div>
+                            <p class="text-muted small ms-4 mt-1 mb-2">Kodlar bilinmiyorsa, sistem isimleri otomatik eşleştirir.</p>
+                            <a href="/Rapor95/DownloadTemplate?type=2" class="btn btn-sm btn-outline-primary ms-4 mt-auto"><i class="fas fa-download me-1"></i>Örnek Şablon</a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="upload-zone mb-3" onclick="$('#excelFileInput').click()">
+                    <i class="fas fa-cloud-upload-alt text-secondary mb-2" style="font-size: 2.5rem;"></i>
+                    <h5 class="fw-bold text-dark mt-2">Excel Dosyanızı Seçin (.xls, .xlsx, .csv)</h5>
+                    <input class="form-control d-none" type="file" id="excelFileInput" accept=".xls,.xlsx,.csv">
+                    <p id="selectedFileName" class="text-primary mt-2 mb-0 fw-bold" style="display:none;"></p>
+                </div>
+
+                <div id="importResults" class="mt-4 p-3 bg-light rounded" style="display:none; border: 1px solid #e2e8f0;">
+                    <div class="d-flex gap-3 text-center mb-3">
+                        <div class="p-2 bg-white rounded border border-success text-success fw-bold flex-fill">Başarılı: <span id="resSuccess" class="fs-5">0</span></div>
+                        <div class="p-2 bg-white rounded border border-danger text-danger fw-bold flex-fill">Hatalı: <span id="resError" class="fs-5">0</span></div>
+                    </div>
+                    <ul class="list-group list-group-flush border" id="resList" style="max-height: 200px; overflow-y:auto; font-size:0.85rem; border-radius: 6px;"></ul>
+                </div>
+            </div>
+            <div class="modal-footer bg-light px-4 py-3">
+                <button type="button" class="btn btn-secondary close-modal-btn">Kapat</button>
+                <button type="button" class="btn btn-primary fw-bold px-5" id="btnProcessExcel"><i class="fas fa-cogs me-2"></i> SAP Fiyatlarına İşle</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <script>
+        $(document).ready(function() {
+            // URL veya C# Tarafından gelen seçili veritabanı anahtarı
+            const dbParam = "@currentDbKey";
+
+            // Select2 SUNUCU-TARAFLI arama: binlerce cari/stok sayfaya basilmaz -> sayfa aninda acilir, yazdikca ilk 40 sonuc gelir.
+            function ajaxSelect(sel, url, parent) {
+                const opts = {
+                    theme: 'bootstrap-5', width: '100%',
+                    minimumInputLength: 1,
+                    language: {
+                        inputTooShort: function () { return 'Aramak için en az 1 karakter yazın...'; },
+                        searching: function () { return 'Aranıyor...'; },
+                        noResults: function () { return 'Sonuç bulunamadı'; }
+                    },
+                    ajax: {
+                        url: url, dataType: 'json', delay: 250,
+                        data: function (params) { return { q: params.term || '', db: dbParam }; },
+                        processResults: function (data) { return { results: (data && data.results) ? data.results : [] }; },
+                        cache: true
+                    }
+                };
+                if (parent) opts.dropdownParent = parent;
+                $(sel).select2(opts);
+            }
+            ajaxSelect('#CustomerSelect', '/Rapor95/SearchCustomers');
+            ajaxSelect('#ItemSelectMain', '/Rapor95/SearchItems');
+            ajaxSelect('#newItemSelect', '/Rapor95/SearchItems', $('#singleAddModal'));
+            ajaxSelect('#newCustomerSelect', '/Rapor95/SearchCustomers', $('#singleAddModal'));
+
+            // Secili select2 verisi (id/text/name/oran)
+            function selData(sel) { const d = $(sel).select2('data'); return (d && d.length && d[0].id) ? d[0] : null; }
+
+            // ARAMA MODU DEĞİŞİMİ (Müşteri <-> Stok)
+            $('input[name="searchMode"]').change(function() {
+                const mode = $(this).val();
+                $('#pricesCard').fadeOut(); // Tabloyu gizle
+                $('#pricesBody').empty(); // İçeriği temizle
+                $('#btnSaveAllChanges').hide();
+                $('#modifiedCount').text('0');
+
+                if (mode === 'customer') {
+                    $('#customerSearchContainer').show();
+                    $('#itemSearchContainer').hide();
+                    // Tablo başlıkları
+                    $('#thCode').text('Stok Kodu');
+                    $('#thName').text('Kalem Tanımı / İsmi');
+                    $('#tableTitle').html('<i class="fas fa-list text-secondary me-2"></i>Müşteri Fiyat Listesi');
+                    $('#btnAddText').text('Yeni Kalem Ekle');
+                } else {
+                    $('#customerSearchContainer').hide();
+                    $('#itemSearchContainer').show();
+                    // Tablo başlıkları
+                    $('#thCode').text('Cari Kodu');
+                    $('#thName').text('Cari Adı / Ünvanı');
+                    $('#tableTitle').html('<i class="fas fa-list text-secondary me-2"></i>Kalem Özel Fiyat Dağılımı');
+                    $('#btnAddText').text('Yeni Cari Ekle');
+                }
+            });
+
+            // Modallar
+            $('#btnShowAddModal').click(function(e) { 
+                e.preventDefault(); 
+                const mode = $('input[name="searchMode"]:checked').val();
+                
+                // Formu sıfırla
+                $('#newUnitPriceInput').val('');
+                $('#newPackagePriceInput').val('');
+                $('#newCurrencyInput').val('TRY');
+
+                if (mode === 'customer') {
+                    $('#singleAddModalTitle').html('<i class="fas fa-plus-circle me-2"></i>Listeye Yeni Kalem Ekle');
+                    $('#modalItemSelectContainer').show();
+                    $('#modalCustomerSelectContainer').hide();
+                    $('#newItemSelect').val(null).trigger('change');
+                    $('#newOranDisplay').val('-');
+                    $('#newUnitPriceInput').prop('disabled', true);
+                } else {
+                    $('#singleAddModalTitle').html('<i class="fas fa-plus-circle me-2"></i>Listeye Yeni Cari Ekle');
+                    $('#modalItemSelectContainer').hide();
+                    $('#modalCustomerSelectContainer').show();
+                    $('#newCustomerSelect').val(null).trigger('change');
+                    
+                    // Seçili olan stok bilgisinden çarpanı alıp ekrana yaz
+                    const selectedItemOran = (selData('#ItemSelectMain') || {}).oran;
+                    if(selectedItemOran) {
+                        $('#newOranDisplay').val(selectedItemOran);
+                        $('#newUnitPriceInput').prop('disabled', false);
+                    } else {
+                        $('#newOranDisplay').val('Bulunamadı');
+                        $('#newUnitPriceInput').prop('disabled', true);
+                    }
+                }
+
+                $('#singleAddModal').modal('show'); 
+            });
+
+            $('#btnShowExcelModal').click(function(e) { e.preventDefault(); $('#excelModal').modal('show'); });
+            $('.close-modal-btn').click(function() { $(this).closest('.modal').modal('hide'); });
+
+            // newItemSelect / newCustomerSelect zaten yukarida ajax select2 olarak init edildi (modal dropdownParent ile).
+
+            // TÜM FİYATLARI EXCEL İNDİRME
+            $('#btnExportAll').click(function(e) {
+                e.preventDefault();
+                const btn = $(this);
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>Dosya Hazırlanıyor...');
+                
+                $.get('/Rapor95/GetAllPrices', { db: dbParam }, function(res) {
+                    if(res.success && res.data && res.data.length > 0) {
+                        const excelData = res.data.map(x => ({
+                            "Cari Kodu": x.cardCode,
+                            "Cari Adı": x.cardName,
+                            "Stok Kodu": x.itemCode,
+                            "Stok Adı": x.itemName,
+                            "Çarpan (Birim Çeviri Oranı)": x.bcOran !== null ? x.bcOran : 'Bulunamadı',
+                            "Birim Fiyat": x.unitPrice !== null ? x.unitPrice : '-',
+                            "Ambalaj Fiyatı (SAP)": x.packagePrice,
+                            "Döviz": x.currency
+                        }));
+
+                        const ws = XLSX.utils.json_to_sheet(excelData);
+                        const wb = XLSX.utils.book_new();
+                        XLSX.utils.book_append_sheet(wb, ws, "Özel Fiyat Listesi");
+                        
+                        let currentDbName = "@currentDbDisplay".replace(/\s+/g, "_");
+                        XLSX.writeFile(wb, "Tum_Musteri_Fiyatlari_" + currentDbName + ".xlsx");
+                        
+                        toastr.success("Excel başarıyla indirildi.");
+                    } else {
+                        toastr.warning(res.message || "Sistemde dışa aktarılacak özel fiyat bulunamadı.");
+                    }
+                }).fail(function() {
+                    toastr.error("Sunucudan veriler çekilirken bir ağ hatası oluştu.");
+                }).always(function() {
+                    btn.prop('disabled', false).html('<i class="fas fa-file-download me-2"></i>Tüm Fiyatları Excel İndir');
+                });
+            });
+
+            $('#tableSearchInput').on('keyup', function() {
+                const value = $(this).val().toLowerCase();
+                $("#pricesBody tr").filter(function() { $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1); });
+            });
+
+            // FİLTRELENEN (ekranda görünen) VERİYİ EXCEL'E AKTAR
+            $('#btnExportFiltered').click(function() {
+                const mode = $('input[name="searchMode"]:checked').val();
+                const codeHeader = mode === 'customer' ? 'Stok Kodu' : 'Cari Kodu';
+                const nameHeader = mode === 'customer' ? 'Stok Adı' : 'Cari Adı';
+                const rows = [];
+                $('#pricesBody tr:visible').each(function() {
+                    const tr = $(this);
+                    if (tr.attr('id') === 'emptyRow' || !tr.attr('data-code')) return;
+                    const oran = tr.find('.bc-oran-cell').attr('data-oran');
+                    const obj = {};
+                    obj[codeHeader] = tr.attr('data-code');
+                    obj[nameHeader] = tr.find('td').eq(1).text().trim();
+                    obj['Çarpan (Oran)'] = oran ? oran : 'Bulunamadı';
+                    obj['Birim Fiyat'] = tr.find('.row-unit-price').val() || '';
+                    obj['Ambalaj Fiyatı (SAP)'] = tr.find('.row-package-price').val() || '';
+                    obj['Döviz'] = tr.find('.row-currency').val();
+                    rows.push(obj);
+                });
+                if (rows.length === 0) { toastr.warning('Dışa aktarılacak (görünen) satır yok. Önce fiyat getirin.'); return; }
+                const ws = XLSX.utils.json_to_sheet(rows);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Filtrelenmiş Fiyatlar');
+                const dbn = "@currentDbDisplay".replace(/\s+/g, '_');
+                XLSX.writeFile(wb, 'Ozel_Fiyat_Filtreli_' + dbn + '.xlsx');
+                toastr.success(rows.length + " satır Excel'e aktarıldı.");
+            });
+
+            function checkModifiedCount() {
+                const count = $('#pricesBody tr.is-modified').length;
+                $('#modifiedCount').text(count);
+                if(count > 0) $('#btnSaveAllChanges').fadeIn();
+                else $('#btnSaveAllChanges').fadeOut();
+            }
+
+            // ==========================================
+            // OTOMATİK HESAPLAMA (İKİ YÖNLÜ) - ANA TABLO
+            // ==========================================
+            $(document).on('input', '.row-unit-price', function() {
+                let tr = $(this).closest('tr');
+                tr.addClass('is-modified'); checkModifiedCount();
+                
+                let oranAttr = tr.find('.bc-oran-cell').attr('data-oran');
+                if (!oranAttr || oranAttr === 'null' || oranAttr === '') return;
+
+                let oran = parseFloat(oranAttr);
+                let unitPrice = parseFloat($(this).val());
+                
+                if (!isNaN(unitPrice)) tr.find('.row-package-price').val((unitPrice * oran).toFixed(4)); 
+                else tr.find('.row-package-price').val('');
+            });
+
+            $(document).on('input', '.row-package-price', function() {
+                let tr = $(this).closest('tr');
+                tr.addClass('is-modified'); checkModifiedCount();
+                
+                let oranAttr = tr.find('.bc-oran-cell').attr('data-oran');
+                if (!oranAttr || oranAttr === 'null' || oranAttr === '') {
+                    tr.find('.row-unit-price').val(''); return;
+                }
+
+                let oran = parseFloat(oranAttr);
+                let packagePrice = parseFloat($(this).val());
+                
+                if (!isNaN(packagePrice)) tr.find('.row-unit-price').val((packagePrice / oran).toFixed(4));
+                else tr.find('.row-unit-price').val('');
+            });
+
+            $(document).on('change', '.row-currency', function() {
+                $(this).closest('tr').addClass('is-modified');
+                checkModifiedCount();
+            });
+
+            // ==========================================
+            // SİSTEMDEN FİYATLARI GETİR
+            // ==========================================
+            $('#btnLoadPrices').click(function() {
+                const mode = $('input[name="searchMode"]:checked').val();
+                let url = '';
+                let queryData = { db: dbParam };
+
+                if (mode === 'customer') {
+                    const cardCode = $('#CustomerSelect').val();
+                    if(!cardCode) { toastr.warning("Lütfen işlem yapmak için bir müşteri seçiniz."); return; }
+                    url = '/Rapor95/GetCustomerSpecialPrices';
+                    queryData.cardCode = cardCode;
+                } else {
+                    const itemCode = $('#ItemSelectMain').val();
+                    if(!itemCode) { toastr.warning("Lütfen işlem yapmak için bir kalem (stok) seçiniz."); return; }
+                    url = '/Rapor95/GetItemSpecialPrices';
+                    queryData.itemCode = itemCode;
+                }
+
+                const btn = $(this);
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>Veriler Yükleniyor...');
+                $('#btnSaveAllChanges').hide();
+                $('#tableSearchInput').val('');
+
+                $.get(url, queryData, function(res) {
+                    if(res.success) {
+                        $('#pricesCard').fadeIn();
+                        $('#rowCountBadge').text(res.data.length + ' Kayıt');
+                        let html = '';
+                        if(res.data.length === 0) {
+                            html = `<tr id="emptyRow"><td colspan="6" class="text-center text-muted py-5"><i class="fas fa-box-open mb-3" style="font-size:3rem; color:#cbd5e1;"></i><br>Kayıtlı özel fiyat bulunamadı.<br>Tabloya yeni ekleme yapabilirsiniz.</td></tr>`;
+                        } else {
+                            res.data.forEach((p) => {
+                                let bcOranVal = p.bcOran !== null ? p.bcOran : 'Bulunamadı';
+                                let disabledAttr = p.bcOran === null ? 'disabled title="Çarpan bulunamadı"' : '';
+                                
+                                let fmtUnit = (p.unitPrice !== null && p.unitPrice > 0) ? parseFloat(p.unitPrice).toString() : '';
+                                let fmtPackage = p.packagePrice > 0 ? parseFloat(p.packagePrice).toString() : '';
+                                
+                                // Mod Customer ise kod Stok Kodudur, Mod Item ise kod Cari Kodudur.
+                                let displayCode = mode === 'customer' ? p.itemCode : p.cardCode;
+                                let displayName = mode === 'customer' ? p.itemName : p.cardName;
+
+                                html += `
+                                <tr data-code="${displayCode}">
+                                    <td class="fw-bold">${displayCode}</td>
+                                    <td>${displayName}</td>
+                                    <td class="text-center fw-bold text-secondary bg-light-col bc-oran-cell" data-oran="${p.bcOran !== null ? p.bcOran : ''}">${bcOranVal}</td>
+                                    <td><input type="number" step="0.01" class="form-control text-end fw-bold text-primary row-unit-price" value="${fmtUnit}" ${disabledAttr}></td>
+                                    <td><input type="number" step="0.01" class="form-control text-end fw-bold text-success row-package-price" value="${fmtPackage}"></td>
+                                    <td class="text-center">
+                                        <select class="form-select row-currency text-center">
+                                            <option value="TRY" ${p.currency === 'TRY' ? 'selected' : ''}>TRY</option>
+                                            <option value="USD" ${p.currency === 'USD' ? 'selected' : ''}>USD</option>
+                                            <option value="EUR" ${p.currency === 'EUR' ? 'selected' : ''}>EUR</option>
+                                        </select>
+                                    </td>
+                                </tr>`;
+                            });
+                        }
+                        $('#pricesBody').html(html);
+                        checkModifiedCount();
+                    } else toastr.error(res.message || "Fiyatlar yüklenirken hata oluştu.");
+                }).always(function() {
+                    btn.prop('disabled', false).html('<i class="fas fa-search me-2"></i>Sistemden Fiyatları Getir');
+                });
+            });
+
+            // ==========================================
+            // MODAL İÇİ OTOMATİK HESAP (YENİ EKLEME)
+            // ==========================================
+            $('#newItemSelect').change(function() {
+                const d = selData('#newItemSelect');
+                const oranAttr = d ? d.oran : null;
+
+                if (oranAttr) {
+                    $('#newOranDisplay').val(oranAttr);
+                    $('#newUnitPriceInput').prop('disabled', false).val('');
+                } else {
+                    $('#newOranDisplay').val('Bulunamadı');
+                    $('#newUnitPriceInput').prop('disabled', true).val('');
+                }
+                $('#newPackagePriceInput').val('');
+            });
+
+            $('#newUnitPriceInput').on('input', function() {
+                let oranAttr = $('#newOranDisplay').val();
+                if(!oranAttr || oranAttr === 'Bulunamadı') return;
+                
+                let oran = parseFloat(oranAttr);
+                let unit = parseFloat($(this).val());
+                if (!isNaN(unit)) $('#newPackagePriceInput').val((unit * oran).toFixed(4));
+                else $('#newPackagePriceInput').val('');
+            });
+
+            $('#newPackagePriceInput').on('input', function() {
+                let oranAttr = $('#newOranDisplay').val();
+                if(!oranAttr || oranAttr === 'Bulunamadı') {
+                    $('#newUnitPriceInput').val(''); return;
+                }
+                
+                let oran = parseFloat(oranAttr);
+                let pack = parseFloat($(this).val());
+                if (!isNaN(pack)) $('#newUnitPriceInput').val((pack / oran).toFixed(4));
+                else $('#newUnitPriceInput').val('');
+            });
+
+            // Tabloya Ekle Butonu
+            $('#btnAddToTable').click(function() {
+                const mode = $('input[name="searchMode"]:checked').val();
+                let selectedCode, selectedName, oranAttr;
+
+                if (mode === 'customer') {
+                    const d = selData('#newItemSelect');
+                    selectedCode = d ? d.id : '';
+                    selectedName = d ? d.name : '';
+                    oranAttr = d ? d.oran : null;
+                } else {
+                    const d = selData('#newCustomerSelect');
+                    selectedCode = d ? d.id : '';
+                    selectedName = d ? d.name : '';
+                    // Item modunda çarpan, arkadaki ana selectbox'tan gelir.
+                    oranAttr = (selData('#ItemSelectMain') || {}).oran;
+                }
+                
+                const unitPrice = $('#newUnitPriceInput').val();
+                const packagePrice = $('#newPackagePriceInput').val();
+                const currency = $('#newCurrencyInput').val();
+
+                if(!selectedCode || (!unitPrice && !packagePrice)) { 
+                    toastr.warning("Lütfen seçim yapıp Ambalaj veya Birim Fiyatı giriniz."); 
+                    return; 
+                }
+
+                if($('#pricesBody tr[data-code="' + selectedCode + '"]').length > 0) {
+                    toastr.warning("Bu kayıt zaten tabloda mevcut. Lütfen listeden bularak güncelleyin.");
+                    $('#singleAddModal').modal('hide');
+                    $('#tableSearchInput').val(selectedCode).trigger('keyup');
+                    return;
+                }
+
+                $('#emptyRow').remove();
+
+                let bcOranVal = oranAttr ? oranAttr : 'Bulunamadı';
+                let disabledAttr = !oranAttr ? 'disabled title="Çarpan bulunamadı"' : '';
+
+                const newRow = `
+                <tr data-code="${selectedCode}" class="is-modified">
+                    <td class="fw-bold text-primary">${selectedCode} <br><span class="badge bg-warning text-dark mt-1">Yeni</span></td>
+                    <td>${selectedName}</td>
+                    <td class="text-center fw-bold text-secondary bg-light-col bc-oran-cell" data-oran="${oranAttr ? oranAttr : ''}">${bcOranVal}</td>
+                    <td><input type="number" step="0.01" class="form-control text-end fw-bold text-primary row-unit-price" value="${unitPrice}" ${disabledAttr}></td>
+                    <td><input type="number" step="0.01" class="form-control text-end fw-bold text-success row-package-price" value="${packagePrice}"></td>
+                    <td class="text-center">
+                        <select class="form-select row-currency text-center">
+                            <option value="TRY" ${currency === 'TRY' ? 'selected' : ''}>TRY</option>
+                            <option value="USD" ${currency === 'USD' ? 'selected' : ''}>USD</option>
+                            <option value="EUR" ${currency === 'EUR' ? 'selected' : ''}>EUR</option>
+                        </select>
+                    </td>
+                </tr>`;
+
+                $('#pricesBody').prepend(newRow);
+                checkModifiedCount();
+
+                $('#singleAddModal').modal('hide');
+                toastr.success("Tabloya eklendi! Kalıcı olması için 'Değişiklikleri Kaydet' butonuna basmayı unutmayın.");
+            });
+
+            // ==========================================
+            // DEĞİŞİKLİKLERİ KAYDET (MODA GÖRE DİNAMİK API)
+            // ==========================================
+            $('#btnSaveAllChanges').click(function() {
+                const mode = $('input[name="searchMode"]:checked').val();
+                
+                const itemsToSave = [];
+                $('#pricesBody tr.is-modified').each(function() {
+                    itemsToSave.push({
+                        Code: $(this).data('code'), 
+                        PackagePrice: parseFloat($(this).find('.row-package-price').val()) || 0,
+                        Currency: $(this).find('.row-currency').val()
+                    });
+                });
+
+                if(itemsToSave.length === 0) return;
+
+                const btn = $(this);
+                btn.html('<i class="fas fa-spinner fa-spin me-2"></i>Kaydediliyor...').prop('disabled', true);
+
+                let ajaxUrl, payload;
+
+                if (mode === 'customer') {
+                    const cardCode = $('#CustomerSelect').val();
+                    if(!cardCode) return;
+                    ajaxUrl = '/Rapor95/SaveMultiplePrices?db=' + dbParam;
+                    // API ItemCode bekliyor
+                    payload = { CardCode: cardCode, Items: itemsToSave.map(x => ({ ItemCode: x.Code, PackagePrice: x.PackagePrice, Currency: x.Currency })) };
+                } else {
+                    const itemCode = $('#ItemSelectMain').val();
+                    if(!itemCode) return;
+                    ajaxUrl = '/Rapor95/SaveMultipleCustomerPrices?db=' + dbParam;
+                    // API CardCode bekliyor
+                    payload = { ItemCode: itemCode, Customers: itemsToSave.map(x => ({ CardCode: x.Code, PackagePrice: x.PackagePrice, Currency: x.Currency })) };
+                }
+
+                $.ajax({
+                    url: ajaxUrl,
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(payload),
+                    success: function(res) {
+                        if(res.success) {
+                            if(res.warning) toastr.warning(res.message); else toastr.success(res.message);
+                            $('#pricesBody tr.is-modified').removeClass('is-modified');
+                            checkModifiedCount();
+                            $('#pricesBody .badge.bg-warning').remove();
+                        } else toastr.error(res.message);
+                    },
+                    error: function() { toastr.error("Sunucu ile iletişim hatası."); },
+                    complete: function() { btn.html('<i class="fas fa-save me-2"></i>Değişiklikleri Kaydet (<span id="modifiedCount">'+$('#pricesBody tr.is-modified').length+'</span>)').prop('disabled', false); }
+                });
+            });
+
+            // ==========================================
+            // EXCEL İÇE AKTARIM İŞLEMLERİ
+            // ==========================================
+            $('input[name="importMode"]').change(function() {
+                $('.mode-card').removeClass('active border-primary');
+                $(this).closest('.mode-card').addClass('active border-primary');
+            });
+            $('#cardMode1').click(function() { $('#mode1').prop('checked', true).trigger('change'); });
+            $('#cardMode2').click(function() { $('#mode2').prop('checked', true).trigger('change'); });
+
+            $('#excelFileInput').change(function() {
+                const fileName = this.files[0] ? this.files[0].name : "";
+                if(fileName) $('#selectedFileName').text("Seçili Dosya: " + fileName).show();
+            });
+
+            $('#btnProcessExcel').click(function() {
+                const fileInput = document.getElementById('excelFileInput');
+                if(!fileInput.files.length) { toastr.warning("Lütfen işlem yapılacak Excel dosyasını seçiniz."); return; }
+
+                const btn = $(this);
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>Veriler İşleniyor...');
+                $('#importResults').hide();
+                const isMatchMode = $('#mode2').is(':checked');
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, {type: 'array'});
+                        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
+                        
+                        if(rows.length < 1) { toastr.error("Excel boş."); btn.prop('disabled', false).html('<i class="fas fa-cogs me-2"></i> SAP Fiyatlarına İşle'); return; }
+
+                        const parsedData = [];
+                        let startIdx = rows[0].join('').toLowerCase().includes("fiyat") ? 1 : 0;
+
+                        for(let i = startIdx; i < rows.length; i++) {
+                            const r = rows[i];
+                            if(!r || r.length < 3) continue;
+                            let dovizData = r[3] ? String(r[3]).trim().toUpperCase() : 'TRY';
+                            parsedData.push({ Cari: String(r[0] || '').trim(), Stok: String(r[1] || '').trim(), Fiyat: String(r[2] || '').trim(), Doviz: dovizData === 'TL' ? 'TRY' : dovizData });
+                        }
+
+                        if(parsedData.length === 0) { toastr.warning("Aktarılacak geçerli satır bulunamadı."); btn.prop('disabled', false).html('<i class="fas fa-cogs me-2"></i> SAP Fiyatlarına İşle'); return; }
+
+                        btn.html('<i class="fas fa-spinner fa-spin me-2"></i>SAP\'ye Yazılıyor...');
+                        $.ajax({
+                            url: '/Rapor95/BulkImport?db=' + dbParam,
+                            type: 'POST',
+                            contentType: 'application/json',
+                            data: JSON.stringify({ MatchNames: isMatchMode, Rows: parsedData }),
+                            success: function(res) {
+                                if(res.success) {
+                                    $('#importResults').slideDown();
+                                    $('#resSuccess').text(res.basarili);
+                                    $('#resError').text(res.hatali);
+                                    let liHtml = '';
+                                    res.detay.forEach(d => {
+                                        let bgClass = d.durum.includes('Başarılı') ? 'list-group-item-success' : 'list-group-item-danger';
+                                        let icon = d.durum.includes('Başarılı') ? '<i class="fas fa-check text-success me-2"></i>' : '<i class="fas fa-times text-danger me-2"></i>';
+                                        liHtml += `<li class="list-group-item py-2 ${bgClass}">${icon} <b>${d.durum}</b> <br><small class="text-muted ms-4">İşlenen: ${d.cari} / ${d.stok}</small></li>`;
+                                    });
+                                    $('#resList').html(liHtml);
+                                    if(res.hatali > 0) toastr.warning("Bazı kayıtlar SAP'ye aktarılamadı, lütfen detayları kontrol edin."); else toastr.success("Tüm veriler başarıyla SAP'ye işlendi.");
+                                    if($('#CustomerSelect').val()) $('#btnLoadPrices').click(); 
+                                } else toastr.error(res.message);
+                            },
+                            error: function() { toastr.error("Sunucu bağlantısı koptu."); },
+                            complete: function() { btn.prop('disabled', false).html('<i class="fas fa-cogs me-2"></i> SAP Fiyatlarına İşle'); }
+                        });
+                    } catch(err) { toastr.error("Excel ayrıştırılırken hata: " + err.message); btn.prop('disabled', false).html('<i class="fas fa-cogs me-2"></i> SAP Fiyatlarına İşle'); }
+                };
+                reader.readAsArrayBuffer(fileInput.files[0]);
+            });
+        });
+    </script>
+}

@@ -1,0 +1,683 @@
+﻿@{
+    ViewData["Title"] = "Satınalma Talebi";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var currentDbDisplay = (string)ViewBag.CurrentDbDisplay;
+    var users = ViewBag.Users as List<dynamic> ?? new List<dynamic>();
+    var employees = ViewBag.Employees as List<dynamic> ?? new List<dynamic>();
+    var departments = ViewBag.Departments as List<dynamic> ?? new List<dynamic>();
+    var branches = ViewBag.Branches as List<dynamic> ?? new List<dynamic>();
+    var items = (ViewBag.Items as System.Collections.IEnumerable)?.Cast<dynamic>().ToList() ?? new List<dynamic>();
+
+    var activeHUdfs = ViewBag.ActiveHeaderUDFs as HashSet<string> ?? new HashSet<string>();
+    var activeLUdfs = ViewBag.ActiveLineUDFs as HashSet<string> ?? new HashSet<string>();
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <style>
+        /* SAP B1 Renkleri ve Yapısı */
+        :root { --sap-bg: #f5f5f5; --sap-border: #cccccc; --sap-header: #e6e6e6; --sap-yellow: #f8e5b4; --sap-blue: #0066cc; }
+        body { background-color: var(--sap-bg); font-family: Tahoma, Arial, sans-serif; font-size: 12px; color: #000; }
+        
+        .sap-container { background: #fff; border: 1px solid var(--sap-border); padding: 5px; min-height: calc(100vh - 120px); display: flex; flex-direction: column;}
+        
+        /* Üst Toolbar (Sarı çizgi vb) */
+        .sap-top-bar { background-color: #fff; border-bottom: 3px solid #ffcc00; padding: 5px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .sap-toolbar-icons button { background: transparent; border: 1px solid transparent; cursor: pointer; padding: 3px 6px; color: #555; }
+        .sap-toolbar-icons button:hover { border: 1px solid #999; background: #eee; }
+        .sap-toolbar-icons i { font-size: 14px; }
+        
+        /* Form Label ve Inputlar */
+        .sap-form-row { display: flex; align-items: center; margin-bottom: 3px; }
+        .sap-label { width: 120px; font-size: 11px; text-align: left; padding-right: 10px; color: #333; }
+        .sap-input { flex: 1; height: 22px; border: 1px solid var(--sap-border); font-size: 11px; padding: 2px 5px; }
+        .sap-input:focus { border-color: var(--sap-blue); outline: none; background-color: #fffcf0; }
+        .sap-input[readonly] { background-color: #f0f0f0; color: #666; }
+        
+        /* Tab Yapısı */
+        .sap-tabs { border-bottom: 1px solid var(--sap-border); display:flex; gap:2px; margin-top: 15px;}
+        .sap-tab { padding: 4px 20px; background-color: #e0e0e0; border: 1px solid var(--sap-border); border-bottom: none; cursor: pointer; font-size: 11px; margin-bottom: -1px; border-radius: 3px 3px 0 0;}
+        .sap-tab.active { background-color: #fff; font-weight: bold; border-bottom: 1px solid #fff;}
+        .sap-tab-content { border: 1px solid var(--sap-border); padding: 10px; flex-grow:1; display:flex; flex-direction:column;}
+
+        /* Tablo (Grid) */
+        .sap-grid-container { flex-grow: 1; overflow: auto; border: 1px solid var(--sap-border); min-height: 250px; }
+        .sap-grid { width: 100%; border-collapse: collapse; min-width: 1500px; }
+        .sap-grid th { background-color: #f0f0f0; border: 1px solid var(--sap-border); padding: 4px; font-weight: normal; font-size: 11px; text-align: left; position: sticky; top: 0; z-index:2; }
+        .sap-grid td { border: 1px solid var(--sap-border); padding: 0; }
+        .sap-grid input, .sap-grid select { width: 100%; border: none; height: 20px; font-size: 11px; padding: 0 4px; background: transparent; }
+        .sap-grid input:focus, .sap-grid select:focus { background-color: var(--sap-yellow); outline: none; }
+        .sap-grid tr:nth-child(even) { background-color: #fafafa; }
+        .sap-grid tr:hover { background-color: #eef5ff; }
+        
+        /* Sağ UDF Paneli */
+        .udf-panel { position: fixed; right: -350px; top: 70px; width: 300px; height: calc(100% - 70px) /* zoom: vh yerine % */; background: #f9f9f9; border-left: 2px solid var(--sap-border); box-shadow: -3px 0 10px rgba(0,0,0,0.1); transition: 0.3s; z-index: 1000; padding: 15px; overflow-y: auto; }
+        .udf-panel.open { right: 0; }
+        .udf-close { float: right; cursor: pointer; color: red; font-weight: bold; }
+
+        /* Alt Alanlar */
+        .sap-footer { margin-top: 15px; display: flex; justify-content: space-between; }
+        .sap-btn { background: #f0f0f0; border: 1px solid #999; padding: 4px 15px; font-size: 11px; cursor: pointer; border-radius: 3px; font-weight: bold; color:#000; }
+        .sap-btn:hover { background: #e0e0e0; }
+        .sap-btn-yellow { background: #ffdf6b; border: 1px solid #b39700; }
+        .sap-btn-yellow:hover { background: #fcd53f; }
+
+        /* Arama Modu Renkleri */
+        .find-mode .searchable-field { background-color: #ffffe0 !important; }
+        .view-mode .searchable-field { background-color: #f0f0f0 !important; pointer-events: none; }
+        
+        #loadingOverlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.7); z-index:9999; flex-direction:column; justify-content:center; align-items:center; }
+    </style>
+}
+
+<div class="sap-container">
+    <div id="loadingOverlay">
+        <div class="spinner-border text-primary" role="status"></div>
+        <h6 class="mt-2 fw-bold">Yükleniyor...</h6>
+    </div>
+
+    <!-- Üst SAP Toolbar -->
+    <div class="sap-top-bar">
+        <div class="sap-toolbar-icons d-flex gap-1">
+            <button id="btnFindMode" title="Bul"><i class="fas fa-search text-info"></i></button>
+            <button id="btnNewDoc" title="Ekle"><i class="fas fa-file-medical text-success"></i></button>
+            <span style="border-left: 1px solid #ccc; margin: 0 5px;"></span>
+            <button class="nav-btn" data-dir="first" title="İlk Kayıt"><i class="fas fa-step-backward"></i></button>
+            <button class="nav-btn" data-dir="prev" title="Önceki Kayıt"><i class="fas fa-caret-left fs-5"></i></button>
+            <button class="nav-btn" data-dir="next" title="Sonraki Kayıt"><i class="fas fa-caret-right fs-5"></i></button>
+            <button class="nav-btn" data-dir="last" title="Son Kayıt"><i class="fas fa-step-forward"></i></button>
+        </div>
+        <div>
+            <span class="fw-bold fs-5 me-3">Satınalma Talebi</span>
+            <button class="sap-btn" id="btnToggleUDF"><i class="fas fa-list-ul me-1"></i> Kullanıcı Tanımlı Alanlar</button>
+            <span class="badge bg-secondary ms-2">@currentDbDisplay</span>
+        </div>
+    </div>
+
+    <form id="prForm" class="d-flex flex-column" style="flex-grow:1;">
+        <!-- Header (Üst Bilgiler) -->
+        <div class="row w-100 mx-0 mt-2">
+            <!-- Sol Üst: Talep Eden -->
+            <div class="col-md-5">
+                <div class="sap-form-row">
+                    <div class="sap-label">Talep eden</div>
+                    <select id="ReqType" class="sap-input searchable-field" style="max-width: 100px; margin-right:5px;">
+                        <option value="12">Kullanıcı</option>
+                        <option value="171">Çalışan</option>
+                    </select>
+                    <select id="RequesterUser" class="sap-input req-input searchable-field">
+                        <option value="">- Seçiniz -</option>
+                        @foreach(var u in users) { <option value="@u.ID" data-name="@u.Name">@u.Code</option> }
+                    </select>
+                    <select id="RequesterEmp" class="sap-input req-input searchable-field" style="display:none;">
+                        <option value="">- Seçiniz -</option>
+                        @foreach(var e in employees) { <option value="@e.ID" data-name="@e.Name">@e.Name</option> }
+                    </select>
+                </div>
+                <div class="sap-form-row">
+                    <div class="sap-label">Talep edenin adı</div>
+                    <input type="text" id="ReqName" class="sap-input searchable-field bg-light" />
+                </div>
+                <div class="sap-form-row">
+                    <div class="sap-label">Şube</div>
+                    <select id="BPLId" class="sap-input searchable-field">
+                        <option value="">- Seçiniz -</option>
+                        @foreach(var b in branches) { <option value="@b.Code">@b.Name</option> }
+                    </select>
+                </div>
+                <div class="sap-form-row">
+                    <div class="sap-label">Departman</div>
+                    <select id="Department" class="sap-input searchable-field">
+                        <option value="">- Seçiniz -</option>
+                        @foreach(var d in departments) { <option value="@d.Code">@d.Name</option> }
+                    </select>
+                </div>
+                <div class="sap-form-row mt-2">
+                    <label class="sap-label" style="display:flex; align-items:center;">
+                        <input type="checkbox" disabled style="margin-right:5px;"> E-posta gnd.
+                    </label>
+                </div>
+                <div class="sap-form-row">
+                    <div class="sap-label">E-posta adresi</div>
+                    <input type="text" disabled class="sap-input bg-light" />
+                </div>
+            </div>
+
+            <!-- Orta Boşluk -->
+            <div class="col-md-3"></div>
+
+            <!-- Sağ Üst: Numaralar ve Tarihler -->
+            <div class="col-md-4">
+                <div class="sap-form-row">
+                    <div class="sap-label">No.</div>
+                    <input type="text" value="Birincil" class="sap-input text-center" style="max-width:60px; background:#f0f0f0; margin-right:5px;" readonly>
+                    <input type="text" id="DocNum" class="sap-input searchable-field" placeholder="Bul/Oto" />
+                </div>
+                <div class="sap-form-row">
+                    <div class="sap-label">Durum</div>
+                    <input type="text" id="DocStatus" class="sap-input" value="Açık" readonly />
+                </div>
+                <div class="sap-form-row">
+                    <div class="sap-label">Kayıt tarihi</div>
+                    <input type="date" id="DocDate" class="sap-input searchable-field req-field" required />
+                </div>
+                <div class="sap-form-row">
+                    <div class="sap-label">Geçerlilik bitişi</div>
+                    <input type="date" id="ReqDate" class="sap-input searchable-field req-field" required />
+                </div>
+                <div class="sap-form-row">
+                    <div class="sap-label">Belge tarihi</div>
+                    <input type="date" id="TaxDate" class="sap-input searchable-field req-field" required />
+                </div>
+                <div class="sap-form-row">
+                    <div class="sap-label">Gerekli tarih</div>
+                    <input type="date" id="DocDueDate" class="sap-input searchable-field req-field" required />
+                </div>
+            </div>
+        </div>
+
+        <!-- Sekmeler -->
+        <div class="sap-tabs mx-2">
+            <div class="sap-tab active" data-target="icerikler">İçerikler</div>
+            <div class="sap-tab" data-target="ekler">Ekler</div>
+        </div>
+
+        <!-- Grid (İçerikler) -->
+        <div class="sap-tab-content mx-2" id="icerikler">
+            <div class="sap-form-row mb-2">
+                <div class="sap-label" style="width:auto; font-weight:bold;">Kalem/hizmet türü</div>
+                <select class="sap-input" style="max-width:150px; margin-left:10px;"><option>Kalem</option></select>
+            </div>
+            
+            <div class="sap-grid-container">
+                <table class="sap-grid" id="linesTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 30px;">#</th>
+                            <th style="width: 150px;">Kalem numarası</th>
+                            <th style="width: 250px;">Kalem tanımı</th>
+                            <th style="width: 100px;">Gerekli tarih</th>
+                            <th style="width: 80px;">Gerekli miktar</th>
+                            <th style="width: 80px;">Ölçü birimi kodu</th>
+                            <th style="width: 200px;">Serbest metin</th>
+                            
+                            @if(activeLUdfs.Contains("U_MARKA")) { <th>Marka</th> }
+                            @if(activeLUdfs.Contains("U_SATICI")) { <th>Satıcı</th> }
+                            @if(activeLUdfs.Contains("U_IHTIYACNEDENI")) { <th>İhtiyaç Nedeni</th> }
+                            
+                            <th style="width: 30px;" class="del-col"><i class="fas fa-trash"></i></th>
+                        </tr>
+                    </thead>
+                    <tbody id="linesBody">
+                        <!-- Satırlar dinamik eklenecek -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="sap-tab-content mx-2 d-none" id="ekler">
+            <p class="text-muted p-3">Ekler alanı bu sürümde aktif değildir.</p>
+        </div>
+
+        <!-- Footer (Alt Bilgiler) -->
+        <div class="sap-footer mx-2">
+            <div style="width: 400px;">
+                <div class="sap-form-row">
+                    <div class="sap-label">Sahip</div>
+                    <input type="text" class="sap-input bg-light" readonly />
+                </div>
+                <div class="sap-form-row align-items-start mt-3">
+                    <div class="sap-label">Açıklamalar</div>
+                    <textarea id="Comments" class="sap-input" style="height: 60px; resize:none;"></textarea>
+                </div>
+            </div>
+            
+            <div style="width: 300px;">
+                <!-- Sağ Alt Toplamlar (Talep ekranında genelde salt okunur boş durur, bilgi amaçlı) -->
+                <div class="sap-form-row">
+                    <div class="sap-label text-end w-100 me-2">İndirim öncesi toplam</div>
+                    <input type="text" class="sap-input text-end bg-light" value="0,00" readonly style="max-width:100px;"/>
+                </div>
+                <div class="sap-form-row mt-4">
+                    <button type="button" class="sap-btn sap-btn-yellow w-100 py-2 fs-6" id="btnSave">Ekle</button>
+                    <button type="button" class="sap-btn ms-2 py-2" id="btnCancel">İptal</button>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <!-- SAĞ UDF PANELİ -->
+    <div id="udfPanel" class="udf-panel">
+        <span class="udf-close" id="btnCloseUDF"><i class="fas fa-times fs-5"></i></span>
+        <h6 class="fw-bold border-bottom pb-2 mb-3 mt-1 text-primary"><i class="fas fa-sliders-h me-1"></i> Genel Bilgiler (UDF)</h6>
+        
+        <div id="udfContainer">
+            @foreach(var udf in activeHUdfs)
+            {
+                <div class="sap-form-row mb-2 flex-column align-items-start">
+                    <div class="sap-label w-100 mb-1 fw-bold text-secondary">@udf.Replace("U_", "")</div>
+                    <input type="text" id="@udf" class="sap-input w-100 searchable-field" />
+                </div>
+            }
+            @if(activeHUdfs.Count == 0)
+            {
+                <p class="text-muted small">Bu veritabanında (OPRQ) tanımlı aktif UDF bulunamadı.</p>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- ARAMA MODALI -->
+<div class="modal fade" id="searchModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content rounded-0">
+            <div class="modal-header bg-warning py-2">
+                <h6 class="modal-title fw-bold text-dark"><i class="fas fa-list me-2"></i>Arama Sonuçları</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive" style="max-height: 400px;">
+                    <table class="table table-hover mb-0" style="font-size: 11px;">
+                        <thead class="bg-light sticky-top">
+                            <tr>
+                                <th>DocEntry</th>
+                                <th>Numara</th>
+                                <th>Talep Eden Adı</th>
+                                <th>Kayıt Tarihi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="searchResultsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SATIR ŞABLONU -->
+<template id="rowTemplate">
+    <tr>
+        <td class="text-center row-index text-muted" style="background:#f9f9f9;">1</td>
+        <td>
+            <select class="item-select searchable-field">
+                <option value="">Seçiniz...</option>
+                @foreach (var item in items) { <option value="@item.ItemCode" data-name="@item.ItemName" data-uom="@item.UoM">@item.ItemCode</option> }
+            </select>
+        </td>
+        <td><input type="text" class="input-name bg-light" readonly /></td>
+        <td><input type="date" class="input-reqdate searchable-field" /></td>
+        <td><input type="number" class="text-end input-qty searchable-field" value="1" min="0.01" step="0.01" /></td>
+        <td><input type="text" class="input-uom bg-light" readonly /></td>
+        <td><input type="text" class="input-freetxt searchable-field" maxlength="100" /></td>
+        
+        @if(activeLUdfs.Contains("U_MARKA")) { <td><input type="text" class="input-udf-marka searchable-field" /></td> }
+        @if(activeLUdfs.Contains("U_SATICI")) { <td><input type="text" class="input-udf-satici searchable-field" /></td> }
+        @if(activeLUdfs.Contains("U_IHTIYACNEDENI")) { <td><input type="text" class="input-udf-neden searchable-field" /></td> }
+        
+        <td class="text-center del-col" style="background:#f9f9f9;">
+            <button type="button" class="btn-remove-row" style="background:transparent; border:none; color:red; cursor:pointer;"><i class="fas fa-times"></i></button>
+        </td>
+    </tr>
+</template>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        let currentMode = 'ADD';
+        let currentDocEntry = 0;
+        let isBindingData = false;
+
+        $(document).ready(function () {
+            toastr.options = { positionClass: "toast-bottom-right", timeOut: "3000" };
+            
+            // Tab Geçişleri
+            $('.sap-tab').click(function() {
+                $('.sap-tab').removeClass('active');
+                $(this).addClass('active');
+                $('.sap-tab-content').addClass('d-none');
+                $('#' + $(this).data('target')).removeClass('d-none');
+            });
+
+            // UDF Panel Toggle
+            $('#btnToggleUDF, #btnCloseUDF').click(function(e) {
+                e.preventDefault();
+                $('#udfPanel').toggleClass('open');
+            });
+
+            // Talep Eden Tipi Değişimi (Kullanıcı / Çalışan)
+            $('#ReqType').change(function() {
+                if($(this).val() === '12') {
+                    $('#RequesterEmp').hide().val('');
+                    $('#RequesterUser').show();
+                    $('#ReqName').val('');
+                } else {
+                    $('#RequesterUser').hide().val('');
+                    $('#RequesterEmp').show();
+                    $('#ReqName').val('');
+                }
+            });
+
+            $('.req-input').change(function() {
+                if(isBindingData) return;
+                const name = $(this).find('option:selected').data('name') || '';
+                $('#ReqName').val(name);
+            });
+
+            setFormMode('ADD');
+
+            $('#btnFindMode').click(() => setFormMode('FIND'));
+            $('#btnNewDoc').click(() => setFormMode('ADD'));
+
+            $(document).on('click', '.btn-remove-row', function () {
+                if (currentMode !== 'ADD') return;
+                $(this).closest('tr').find('.item-select').select2('destroy');
+                $(this).closest('tr').remove();
+                updateRowIndexes();
+            });
+
+            $(document).on('change', '.item-select', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+                const row = $(this).closest('tr');
+                const opt = $(this).find('option:selected');
+                row.find('.input-name').val(opt.data('name') || '');
+                row.find('.input-uom').val(opt.data('uom') || '');
+            });
+
+            $('.nav-btn').click(function(e) {
+                e.preventDefault();
+                if (isBindingData) return;
+                const dir = $(this).data('dir');
+                $('#loadingOverlay').css('display', 'flex');
+                
+                $.get('/Rapor113/GetPRNavigation', { currentDocEntry: currentDocEntry, direction: dir }, function(res) {
+                    if(res && res.success && res.data) {
+                        bindDataToForm(res.data);
+                    } else {
+                        toastr.info("Bu yönde başka kayıt bulunmuyor.");
+                    }
+                }).always(function() { $('#loadingOverlay').hide(); });
+            });
+
+            $('#prForm').submit(function (e) {
+                e.preventDefault();
+                if (currentMode === 'VIEW') return;
+
+                if (currentMode === 'FIND') {
+                    const searchPayload = {
+                        DocNum: $('#SearchDocNum').val() ? parseInt($('#SearchDocNum').val()) : null,
+                        ReqName: $('#ReqName').val() || null,
+                        DocDate: $('#DocDate').val() || null
+                    };
+
+                    $('#loadingOverlay').css('display', 'flex');
+                    $.ajax({
+                        url: '/Rapor113/FindPurchaseRequest',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify(searchPayload),
+                        success: function (res) {
+                            if (res.success && res.data && res.data.length > 0) {
+                                if (res.data.length === 1) loadPRDetails(res.data[0].docEntry);
+                                else populateSearchModal(res.data);
+                            } else {
+                                toastr.warning(res.message || "Kayıt bulunamadı.");
+                            }
+                        },
+                        complete: function () { $('#loadingOverlay').hide(); }
+                    });
+                    return;
+                }
+
+                // EKLEME MODU (ADD)
+                const reqType = $('#ReqType').val();
+                const requester = reqType === '12' ? $('#RequesterUser').val() : $('#RequesterEmp').val();
+
+                if(!requester) { toastr.error("Lütfen Talep Eden (Kullanıcı/Çalışan) seçiniz."); return; }
+
+                const lines = [];
+                let hasError = false;
+
+                $('#linesBody tr').each(function (index) {
+                    const itemCode = $(this).find('.item-select').val();
+                    const qty = parseFloat($(this).find('.input-qty').val()) || 0;
+                    
+                    if (itemCode) {
+                        if (qty <= 0) { hasError = true; toastr.error(`${index + 1}. satırda miktar 0'dan büyük olmalıdır.`); return false; }
+
+                        let lineObj = {
+                            ItemCode: itemCode, 
+                            Quantity: qty, 
+                            ReqDate: $(this).find('.input-reqdate').val() || $('#DocDueDate').val(),
+                            FreeTxt: $(this).find('.input-freetxt').val() || "",
+                            UDFs: {}
+                        };
+
+                        // Dinamik UDF satır verileri
+                        if($(this).find('.input-udf-marka').length) lineObj.UDFs["U_MARKA"] = $(this).find('.input-udf-marka').val();
+                        if($(this).find('.input-udf-satici').length) lineObj.UDFs["U_SATICI"] = $(this).find('.input-udf-satici').val();
+                        if($(this).find('.input-udf-neden').length) lineObj.UDFs["U_IHTIYACNEDENI"] = $(this).find('.input-udf-neden').val();
+
+                        lines.push(lineObj);
+                    }
+                });
+
+                if (hasError) return;
+                if (lines.length === 0) { toastr.warning("Lütfen en az bir kalem ekleyin."); return; }
+
+                // Header UDF verileri
+                let headerUDFs = {};
+                $('#udfContainer input, #udfContainer select').each(function() {
+                    let val = $(this).val();
+                    if(val) headerUDFs[$(this).attr('id')] = val;
+                });
+
+                const payload = {
+                    ReqType: reqType,
+                    Requester: requester,
+                    ReqName: $('#ReqName').val(),
+                    BPLId: $('#BPLId').val(),
+                    Department: $('#Department').val(),
+                    DocDate: $('#DocDate').val(),
+                    DocDueDate: $('#DocDueDate').val(),
+                    TaxDate: $('#TaxDate').val(),
+                    ReqDate: $('#ReqDate').val(),
+                    Comments: $('#Comments').val(),
+                    UDFs: headerUDFs,
+                    Lines: lines
+                };
+
+                const btn = $('#btnSave');
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> İşleniyor...');
+
+                $.ajax({
+                    url: '/Rapor113/CreatePurchaseRequest',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(payload),
+                    success: function (res) {
+                        if (res.success) {
+                            toastr.success(res.message);
+                            setTimeout(() => { window.location.reload(); }, 2000);
+                        } else toastr.error(res.message);
+                    },
+                    error: function (xhr) { toastr.error(xhr.responseJSON ? xhr.responseJSON.message : "Bağlantı hatası."); },
+                    complete: function () { btn.prop('disabled', false).text('Ekle'); }
+                });
+            });
+
+            $('#btnCancel').click(function() {
+                if (currentMode === 'VIEW' || currentMode === 'FIND') setFormMode('ADD');
+                else window.location.reload();
+            });
+        });
+
+        function setFormMode(mode) {
+            currentMode = mode;
+            
+            if (!isBindingData) {
+                $('#prForm')[0].reset();
+                $('#ReqType').trigger('change');
+                $('#linesBody').empty();
+                $('#udfContainer input, #udfContainer select').val('');
+            }
+
+            if (mode === 'VIEW') {
+                $('#mainContainer').removeClass('find-mode').addClass('view-mode');
+                $('.searchable-field').prop('disabled', true);
+                $('.req-field').prop('required', false);
+                
+                $('.del-col').hide();
+                $('#btnSave').hide();
+                
+                $('#btnCancel').text("Yeni").removeClass('btn-light').addClass('sap-btn');
+                $('#DocNum').prop('disabled', true);
+                $('#divDocNumSearch').hide();
+                
+                // Add 1 empty row just for visual structure if lines are empty (shouldnt happen in view)
+            } 
+            else if (mode === 'FIND') {
+                $('#mainContainer').removeClass('view-mode').addClass('find-mode');
+                $('.searchable-field').prop('disabled', false).val('');
+                $('.req-field').prop('required', false);
+                
+                $('#DocNum, #SearchDocNum').prop('disabled', false);
+                $('#divDocNumSearch').show();
+                $('.del-col').hide();
+                
+                $('#btnSave').show().text("Bul");
+                $('#btnCancel').text("İptal");
+            } 
+            else { 
+                $('#mainContainer').removeClass('view-mode find-mode');
+                $('.searchable-field').prop('disabled', false);
+                $('.req-field').prop('required', true);
+                
+                $('#DocNum').prop('disabled', true).val('');
+                $('#divDocNumSearch').hide();
+                
+                const today = new Date().toISOString().split('T')[0];
+                $('#DocDate, #DocDueDate, #TaxDate, #ReqDate').val(today);
+                
+                $('.del-col').show();
+                $('#btnSave').show().removeClass('btn-info text-white').addClass('sap-btn-yellow').text('Ekle');
+                $('#btnCancel').text("İptal");
+                
+                currentDocEntry = 0;
+                
+                // Form ilk açıldığında 5 boş satır ekleyelim (SAP mantığı)
+                $('#linesBody').empty();
+                for(let i=0; i<5; i++) addRow();
+            }
+        }
+
+        function loadPRDetails(docEntry) {
+            $('#loadingOverlay').css('display', 'flex');
+            $.get('/Rapor113/GetPurchaseRequest', { docEntry: docEntry }, function(res) {
+                if (res.success && res.data) bindDataToForm(res.data);
+                else toastr.error(res.message);
+            }).always(function() { $('#loadingOverlay').hide(); });
+        }
+
+        window.loadPRFromModal = function(docEntry) {
+            $('#searchModal').modal('hide');
+            loadPRDetails(docEntry);
+        }
+
+        function populateSearchModal(data) {
+            let html = '';
+            data.forEach(d => {
+                html += `
+                <tr style="cursor:pointer;" onclick="loadPRFromModal(${d.docEntry})">
+                    <td class="fw-bold">${d.docEntry}</td>
+                    <td>${d.docNum}</td>
+                    <td>${d.reqName || ''}</td>
+                    <td>${d.docDate}</td>
+                </tr>`;
+            });
+            $('#searchResultsBody').html(html);
+            $('#searchModal').modal('show');
+        }
+
+        function bindDataToForm(pr) {
+            isBindingData = true;
+            setFormMode('VIEW');
+
+            currentDocEntry = pr.docEntry;
+            
+            $('#DocNum').val(pr.docNum); 
+            $('#DocStatus').val(pr.docStatus);
+            $('#ReqType').val(pr.reqType).trigger('change');
+            
+            if(pr.reqType === '12') {
+                $('#RequesterUser').val(pr.requester).trigger('change');
+            } else {
+                $('#RequesterEmp').val(pr.requester).trigger('change');
+            }
+            
+            $('#ReqName').val(pr.reqName);
+            $('#BPLId').val(pr.bplId);
+            $('#Department').val(pr.department);
+            
+            $('#DocDate').val(pr.docDate); 
+            $('#DocDueDate').val(pr.docDueDate); 
+            $('#TaxDate').val(pr.taxDate);
+            $('#ReqDate').val(pr.reqDate);
+            $('#Comments').val(pr.comments); 
+
+            // UDF'leri doldur
+            for(let key in pr.udfs) {
+                $('#' + key).val(pr.udfs[key]);
+            }
+
+            $('#linesBody').empty();
+            
+            pr.lines.forEach((line, index) => {
+                addRow();
+                const tr = $('#linesBody tr').last();
+                
+                tr.find('.item-select').html(`<option value="${line.itemCode}">${line.itemCode}</option>`);
+                tr.find('.input-name').val(line.itemName);
+                tr.find('.input-reqdate').val(line.reqDate);
+                tr.find('.input-qty').val(line.quantity);
+                tr.find('.input-uom').val(line.uoM);
+                tr.find('.input-freetxt').val(line.freeTxt);
+                
+                // Line UDFs
+                if(line.udfs["U_MARKA"]) tr.find('.input-udf-marka').val(line.udfs["U_MARKA"]);
+                if(line.udfs["U_SATICI"]) tr.find('.input-udf-satici').val(line.udfs["U_SATICI"]);
+                if(line.udfs["U_IHTIYACNEDENI"]) tr.find('.input-udf-neden').val(line.udfs["U_IHTIYACNEDENI"]);
+            });
+
+            isBindingData = false;
+        }
+
+        function addRow() {
+            const template = document.getElementById('rowTemplate').innerHTML;
+            const $newRow = $(template);
+            $('#linesBody').append($newRow);
+            
+            if(currentMode === 'ADD') {
+                $newRow.find('.item-select').select2({ 
+                    theme: 'bootstrap-5',
+                    width: '100%',
+                    dropdownAutoWidth: true
+                });
+            } else {
+                $newRow.find('.item-select').css({'border':'none', 'appearance':'none', 'background':'#f0f0f0'});
+            }
+            
+            // Eğer yeni satır eklenirse ve ana ekranda Gerekli Tarih doluysa onu satıra kopyala
+            if(currentMode === 'ADD') {
+                let mainReqDate = $('#DocDueDate').val();
+                if(mainReqDate) $newRow.find('.input-reqdate').val(mainReqDate);
+            }
+
+            updateRowIndexes();
+        }
+
+        function updateRowIndexes() {
+            $('#linesBody tr').each(function (index) { $(this).find('.row-index').text(index + 1); });
+        }
+    </script>
+}

@@ -1,0 +1,90 @@
+@model List<WebApplication3.Data.PortalDegisiklik>
+@{
+    // PORTAL DEĞİŞİKLİK GÜNLÜĞÜ — ana sayfadaki "Yeni Eklenenler" ve "Son Değişiklikler" kartlarının tam listesi.
+    // Kaynak: Data/PortalDegisiklikler.cs (Yeni / Tasima / Guncelleme / Kaldirma satırları). Menü: Ayarlar › Sistem › Değişiklik Günlüğü.
+    ViewData["Title"] = "Portal Değişiklik Günlüğü";
+    string tur = (string)ViewBag.Tur ?? "";
+    string q = Context.Request.Query.ContainsKey("_sekme") ? "&_sekme=1" : "";
+    var tum = WebApplication3.Data.PortalDegisiklikler.Liste;
+    var sekmeler = new[] { ("", "Tümü", tum.Count), ("yeni", "Yeni Eklenenler", tum.Count(x => x.Tur == "yeni")), ("tasima", "Taşınanlar", tum.Count(x => x.Tur == "tasima")), ("guncelleme", "Güncellenenler", tum.Count(x => x.Tur == "guncelleme")), ("kaldirma", "Kaldırılanlar", tum.Count(x => x.Tur == "kaldirma")) };
+    var gunler = Model.GroupBy(x => x.Tarih.Date).OrderByDescending(g => g.Key).ToList();
+}
+@section Styles {
+    <link rel="stylesheet" href="~/css/grup-erp-ana.css" asp-append-version="true" />
+    <style>
+        .dg { max-width: 1100px; margin: 0 auto; padding: 14px 16px 30px; }
+        .dg .ust { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+        .dg .ust h1 { margin: 0; font-size: 17px; font-weight: 700; flex: 1; }
+        .dg .ust .sub { color: var(--text-2); font-size: 12px; width: 100%; }
+        .dg .sekmeler { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+        .dg .sekmeler a { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border-2); background: var(--surface); color: var(--text-2); font-size: 12px; font-weight: 600; }
+        .dg .sekmeler a:hover { text-decoration: none; background: var(--surface-2); }
+        .dg .sekmeler a.on { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
+        .dg .sekmeler a b { font-weight: 700; opacity: .75; margin-left: 4px; }
+        .dg .gun { margin-bottom: 10px; }
+        .dg .gun .gh { font-size: 10.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding: 6px 2px; }
+        .dg .gcard .satir { padding: 9px 12px; align-items: flex-start; gap: 10px; }
+        .dg .satir .tag { min-width: 76px; justify-content: center; margin-top: 1px; }
+        .dg .satir .t { font-size: 13px; }
+        .dg .satir .yol { color: var(--muted); font-size: 11px; margin-top: 1px; }
+        .dg .satir .s { white-space: normal; color: var(--text-2); font-size: 12px; margin-top: 3px; line-height: 1.4; }
+        .dg .satir .r { padding-top: 2px; }
+        .dg .filtre { margin-left: auto; }
+        .dg .filtre input { border: 1px solid var(--border-2); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 12px; min-width: 240px; background: var(--surface); color: var(--text); }
+        .dg .empty { padding: 20px 12px; text-align: center; }
+    </style>
+}
+
+<div class="gh-ana" id="ghAna">
+  <div class="dg">
+    <div class="ust">
+      <h1>Portal Değişiklik Günlüğü</h1>
+      <div class="filtre"><input id="dgAra" placeholder="Ekran, modül veya açıklamada ara…" autocomplete="off"></div>
+      <div class="sub">Portala eklenen yeni raporlar / ekranlar ile taşınan, güncellenen ve kaldırılan ekranların kaydı. Kayıtlar <code>Data/PortalDegisiklikler.cs</code> dosyasında tutulur; her yeni rapor ya da değişiklik oraya bir satır olarak eklenir.</div>
+    </div>
+    <div class="sekmeler">
+      @foreach (var s in sekmeler) { <a href="/Home/Degisiklikler?tur=@s.Item1@q" class="@(tur == s.Item1 ? "on" : "")">@s.Item2<b>@s.Item3</b></a> }
+    </div>
+
+    @if (gunler.Count == 0) { <div class="gcard"><div class="empty">Bu türde kayıt bulunmuyor.</div></div> }
+    @foreach (var g in gunler)
+    {
+      <div class="gun">
+        <div class="gh">@g.First().TarihMetni · @g.Key.ToString("d MMMM yyyy dddd", new System.Globalization.CultureInfo("tr-TR"))</div>
+        <div class="gcard">
+          @foreach (var d in g.OrderBy(x => x.Tur == "yeni" ? 0 : 1).ThenBy(x => x.Ekran))
+          {
+            <div class="satir dg-satir" data-ara="@((d.Ekran + " " + d.Yol + " " + d.Aciklama).ToLower(new System.Globalization.CultureInfo("tr-TR")))">
+              <span class="tag @d.TurRenk @(d.Tur == "yeni" ? "dot" : "")">@d.TurAdi</span>
+              <div class="grow">
+                <div class="t">@if (!string.IsNullOrEmpty(d.Href)) { <a href="@d.Href" data-sekme="@d.Ekran">@d.Ekran</a> } else { @d.Ekran }</div>
+                @if (!string.IsNullOrEmpty(d.Yol)) { <div class="yol">@d.Yol</div> }
+                <div class="s">@d.Aciklama</div>
+              </div>
+              <div class="r"><b>@d.Tarih.ToString("d MMM yyyy", new System.Globalization.CultureInfo("tr-TR"))</b></div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+  </div>
+</div>
+
+@section Scripts {
+    <script>
+      (() => {
+        const root = document.getElementById('ghAna');
+        root.addEventListener('click', e => {
+          const a = e.target.closest('a[data-sekme]');
+          if (!a || e.ctrlKey || e.metaKey || e.shiftKey) return;
+          if (window.portalSekmeAc) { e.preventDefault(); window.portalSekmeAc(a.dataset.sekme, a.getAttribute('href')); }
+        });
+        const ara = document.getElementById('dgAra');
+        ara.addEventListener('input', () => {
+          const q = ara.value.replace(/İ/g, 'i').replace(/I/g, 'ı').toLocaleLowerCase('tr-TR').trim();
+          document.querySelectorAll('.dg-satir').forEach(r => { r.style.display = !q || r.dataset.ara.includes(q) ? '' : 'none'; });
+          document.querySelectorAll('.dg .gun').forEach(g => { g.style.display = [...g.querySelectorAll('.dg-satir')].some(r => r.style.display !== 'none') ? '' : 'none'; });
+        });
+      })();
+    </script>
+}

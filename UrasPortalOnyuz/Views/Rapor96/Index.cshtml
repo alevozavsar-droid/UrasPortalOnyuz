@@ -1,0 +1,537 @@
+﻿@{
+    ViewData["Title"] = "Satış Analiz Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var customers = ViewBag.Customers as List<WebApplication3.Controllers.Rapor96Controller.CustomerModel>;
+    var items = ViewBag.Items as List<WebApplication3.Controllers.Rapor96Controller.ItemModel>;
+    var itemGroups = ViewBag.ItemGroups as List<string>;
+    var warehouses = ViewBag.Warehouses as List<WebApplication3.Controllers.Rapor96Controller.WarehouseModel>;
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    
+    <style>
+        body { background-color: var(--bg-main, #f4f7fe); }
+        
+        /* Modern ve Kompakt Kart Tasarımı */
+        .card-dash { border: none; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,0.04); margin-bottom: 1rem; }
+        .card-header-dash { background-color: var(--bg-card, #fff); border-bottom: 1px solid var(--border-color, #e9ecef); border-radius: 10px 10px 0 0; padding: 0.8rem 1.25rem; }
+        
+        /* Form Elemanları Daraltıldı */
+        .form-label { font-weight: 600; color: #344767; font-size: 0.75rem; margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .form-control, .form-select { border-radius: 6px; border: 1px solid #d2d6da; font-size: 0.8rem; padding: 0.4rem 0.75rem; min-height: 32px; }
+        .form-control:focus, .form-select:focus { box-shadow: 0 0 0 2px rgba(67, 97, 238, 0.15); border-color: #4361ee; }
+
+        /* MULTI-SELECT BOYUT KISITLAMASI (GÖRÜNTÜ BOZULMASINI ENGELLER) */
+        .select2-container--bootstrap-5 .select2-selection--multiple { 
+            max-height: 65px; /* Kutu uzamasını engeller */
+            overflow-y: auto; /* Taşanlar için scroll çıkarır */
+            border-radius: 6px; 
+            font-size: 0.8rem; 
+            border-color: #d2d6da; 
+        }
+        .select2-container--bootstrap-5 .select2-selection--multiple .select2-selection__rendered .select2-selection__choice { 
+            font-size: 0.7rem; background-color: #e9ecef; color: #344767; border: 1px solid var(--border-color, #dee2e6); margin-top: 4px; padding: 1px 6px;
+        }
+
+        /* Yan Yana Kompakt Switch Tasarımı */
+        .filter-switches { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; background: var(--bg-subtle, #f8f9fa); padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid var(--border-color, #e9ecef); }
+        .form-switch .form-check-input { width: 2em; height: 1em; cursor: pointer; }
+        .form-check-label { font-size: 0.8rem; font-weight: 600; color: #344767; cursor: pointer; margin-left: 0.3rem; margin-top: 0.1rem;}
+
+        /* Widget Kartları */
+        .widget-card { border-radius: 10px; border: none; color: #fff; position: relative; overflow: hidden; }
+        .widget-icon { position: absolute; right: -15px; bottom: -15px; font-size: 5rem; opacity: 0.15; transform: rotate(-10deg); }
+        .bg-grad-primary { background: linear-gradient(135deg, #4361ee 0%, #3f37c9 100%); }
+        .bg-grad-success { background: linear-gradient(135deg, #2dce89 0%, #20c997 100%); }
+        .bg-grad-info { background: linear-gradient(135deg, #11cdef 0%, #0fb9b1 100%); }
+        .bg-grad-warning { background: linear-gradient(135deg, #fb6340 0%, #f5365c 100%); }
+
+        /* Tablo Optimizasyonu */
+        .table-wrapper { border-radius: 8px; overflow: auto; max-height: 550px; border: 1px solid var(--border-color, #e9ecef); }
+        .table-dash { width: 100%; margin-bottom: 0; background: var(--bg-card, #fff);}
+        .table-dash thead th { position: sticky; top: 0; background-color: var(--bg-subtle, #f8f9fa); color: var(--text-secondary, #6c757d); font-size: 0.7rem; text-transform: uppercase; font-weight: 700; padding: 10px; border-bottom: 2px solid var(--border-color, #e9ecef); z-index: 2; white-space: nowrap; }
+        .table-dash tbody td { padding: 8px 10px; font-size: 0.8rem; color: #344767; border-bottom: 1px solid #f1f3f5; vertical-align: middle; white-space: nowrap; }
+        .table-dash tbody tr:hover td { background-color: var(--bg-subtle, #f8f9fa); }
+        .row-genel-toplam td { background-color: #e9ecef !important; font-weight: 700 !important; color: #111 !important; border-top: 2px solid var(--border-color, #ced4da); }
+        .row-alt-toplam td { background-color: #fdfdfe !important; font-weight: 600 !important; color: #344767 !important; font-style: italic; }
+
+        /* Hızlı Tarih Linkleri */
+        .quick-date { font-size: 0.7rem; color: #4361ee; cursor: pointer; font-weight: 600; text-decoration: none; margin-right: 8px; }
+        .quick-date:hover { text-decoration: underline; color: #3f37c9; }
+    </style>
+}
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="fw-bold text-dark mb-0"><i class="fas fa-chart-pie text-primary me-2"></i>Satış Analiz Dashboard</h4>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-light border fw-bold px-3 text-secondary" id="btnClearFilters">
+                <i class="fas fa-eraser me-1"></i>Temizle
+            </button>
+            <button class="btn btn-sm btn-primary shadow-sm fw-bold px-4" id="btnRunReport">
+                <i class="fas fa-play me-1"></i>Raporu Çalıştır
+            </button>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3" id="dashboardWidgets" style="display:none;">
+        <div class="col-xl-3 col-md-6">
+            <div class="card widget-card bg-grad-primary shadow-sm h-100 p-3">
+                <div class="text-uppercase fw-bold text-white-50" style="font-size:0.7rem;">Toplam Net Ciro (TL)</div>
+                <div class="h4 mb-0 fw-bold mt-1" id="wgtTotalTL">0,00 ₺</div>
+                <i class="fas fa-lira-sign widget-icon"></i>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card widget-card bg-grad-success shadow-sm h-100 p-3">
+                <div class="text-uppercase fw-bold text-white-50" style="font-size:0.7rem;">Toplam Net Ciro (EUR)</div>
+                <div class="h4 mb-0 fw-bold mt-1" id="wgtTotalDoviz">0,00</div>
+                @* Talep 47: USD karsiligi ayri satirda; daha once USD ile EUR toplanip tek rakam basiliyordu. *@
+                <div class="text-white-50 fw-semibold" style="font-size:0.72rem;" id="wgtTotalUsd"></div>
+                <i class="fas fa-euro-sign widget-icon"></i>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card widget-card bg-grad-info shadow-sm h-100 p-3">
+                <div class="text-uppercase fw-bold text-white-50" style="font-size:0.7rem;">Toplam Miktar</div>
+                <div class="h4 mb-0 fw-bold mt-1" id="wgtTotalQty">0</div>
+                <i class="fas fa-boxes widget-icon"></i>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card widget-card bg-grad-warning shadow-sm h-100 p-3">
+                <div class="text-uppercase fw-bold text-white-50" style="font-size:0.7rem;">Listelenen Satır Sayısı</div>
+                <div class="h4 mb-0 fw-bold mt-1" id="wgtRowCount">0</div>
+                <i class="fas fa-list-ol widget-icon"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="card card-dash mb-3">
+        <div class="card-header-dash d-flex justify-content-between align-items-center cursor-pointer" data-bs-toggle="collapse" data-bs-target="#filterBody">
+            <span class="fw-bold text-primary"><i class="fas fa-filter me-2"></i>Rapor Parametreleri</span>
+            <i class="fas fa-chevron-down text-muted small"></i>
+        </div>
+        <div class="collapse show" id="filterBody">
+            <div class="card-body p-3">
+                
+                <div class="row g-3 mb-3">
+                    <div class="col-lg-3">
+                        <label class="form-label">Rapor Tipi</label>
+                        <select class="form-select fw-bold text-primary" id="cbReportType">
+                            <option value="DETAY">Belge & Kalem Detaylı</option>
+                            <option value="BELGE">Belge Bazlı Özet (Faturalar)</option>
+                            <option value="ACIK_SIPARIS">Açık Satış Siparişleri</option>
+                            <option value="ACIK_TESLIMAT">Açık Teslimatlar</option>
+                            <option value="OZET_CARI">Müşteri Özet - Bölünmüş</option>
+                            <option value="OZET_CARI_TEK">Müşteri Özet - Tek Satır</option>
+                            <option value="OZET_MUSTERI_SATISCI">Müşteri & Satışçı Özet</option>
+                            <option value="OZET_KALEM">Ürün (Kalem) Özet</option>
+                            <option value="OZET_SLP">Satış Temsilcisi Özet</option>
+                            <option value="ICMAL" class="text-danger fw-bold">Şirket İcmal Raporu</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-lg-3">
+                        <div class="d-flex justify-content-between align-items-end mb-1">
+                            <label class="form-label mb-0">Tarih Aralığı</label>
+                            <div>
+                                <a class="quick-date" data-type="today">Bugün</a>
+                                <a class="quick-date" data-type="week">Bu Hafta</a>
+                                <a class="quick-date" data-type="month">Bu Ay</a>
+                            </div>
+                        </div>
+                        <div class="input-group input-group-sm">
+                            <input type="date" class="form-control" id="txtStartDate">
+                            <span class="input-group-text bg-light border-start-0 border-end-0">-</span>
+                            <input type="date" class="form-control" id="txtEndDate">
+                        </div>
+                    </div>
+
+                    <div class="col-lg-6">
+                        <label class="form-label text-transparent d-none d-lg-block">Belge Türleri</label>
+                        <div class="filter-switches h-100">
+                            <div class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" id="chkInvoice" checked><label class="form-check-label" for="chkInvoice">Fatura</label></div>
+                            <div class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" id="chkReturn" checked><label class="form-check-label" for="chkReturn">İade</label></div>
+                            <div class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" id="chkItem" checked><label class="form-check-label" for="chkItem">Kalem Türü</label></div>
+                            <div class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" id="chkService" checked><label class="form-check-label" for="chkService">Hizmet Türü</label></div>
+                            <div class="form-check form-switch m-0 ms-auto text-danger"><input class="form-check-input" type="checkbox" id="chkDraft"><label class="form-check-label text-danger" for="chkDraft">Taslakları Dahil Et</label></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-lg-3">
+                        <label class="form-label">Müşteriler</label>
+                        <select id="cbCustomers" class="form-select select2-multiple" multiple="multiple" data-placeholder="Tümü...">
+                            @if(customers != null){ foreach(var i in customers){ <option value="@i.CardCode">@i.CardCode - @i.CardName</option> } }
+                        </select>
+                    </div>
+                    <div class="col-lg-3">
+                        <label class="form-label">Ürün / Kalemler</label>
+                        <select id="cbItems" class="form-select select2-multiple" multiple="multiple" data-placeholder="Tümü...">
+                            @if(items != null){ foreach(var i in items){ <option value="@i.ItemCode">@i.ItemCode - @i.ItemName</option> } }
+                        </select>
+                    </div>
+                    <div class="col-lg-3">
+                        <label class="form-label">Ürün Grupları</label>
+                        <select id="cbItemGroups" class="form-select select2-multiple" multiple="multiple" data-placeholder="Tümü...">
+                            @if(itemGroups != null){ foreach(var i in itemGroups){ <option value="@i">@i</option> } }
+                        </select>
+                    </div>
+                    <div class="col-lg-3">
+                        <div class="d-flex justify-content-between align-items-end mb-1">
+                            <label class="form-label mb-0">Gösterilecek Kolonlar</label>
+                            <div><a href="#" id="btnClearCols" class="quick-date text-danger">Temizle</a></div>
+                        </div>
+                        <select id="cbColumns" class="form-select select2-multiple" multiple="multiple" data-placeholder="Kolon Seçimi..."></select>
+                    </div>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-lg-3">
+                        <label class="form-label">Depo Kısıtı</label>
+                        <select class="form-select form-select-sm" id="cbWarehouse">
+                            <option value="-1">-- Tüm Depolar --</option>
+                            @if(warehouses != null){ foreach(var i in warehouses){ <option value="@i.WhsCode">@i.WhsCode - @i.WhsName</option> } }
+                        </select>
+                    </div>
+                    <div class="col-lg-3">
+                        <label class="form-label">İşlem Tipi</label>
+                        <select class="form-select form-select-sm" id="cbProcessType">
+                            <option value="-1">Tümü</option>
+                            <option value="X">X</option><option value="R">R</option><option value="Y">Y</option>
+                            <option value="EMPTY">Boş / Seçilmemiş</option>
+                        </select>
+                    </div>
+                    <div class="col-lg-3">
+                        <label class="form-label">Pazar</label>
+                        <select class="form-select form-select-sm" id="cbMarket">
+                            <option value="-1">Tümü</option>
+                            <option value="YI">Sadece Yurtiçi</option>
+                            <option value="YD">Sadece Yurtdışı</option>
+                        </select>
+                    </div>
+                    <div class="col-lg-3">
+                        <label class="form-label">Şirket İçi Satışlar</label>
+                        <select class="form-select form-select-sm" id="cbCompanyType">
+                            <option value="-1">Dahil Et (Tümü)</option>
+                            <option value="H">Grup Şirketlerini Hariç Tut</option>
+                            <option value="S">Sadece Grup Şirketleri</option>
+                        </select>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="card card-dash">
+        <div class="card-header-dash d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-table me-2 text-primary"></i>Veri Tablosu</h6>
+            <div>
+                <button class="btn btn-sm btn-outline-success fw-bold me-1 px-3 action-export" data-type="excel" disabled>
+                    <i class="fas fa-file-excel me-1"></i>Excel'e Aktar
+                </button>
+                <button class="btn btn-sm btn-outline-danger fw-bold px-3 action-export" data-type="pdf" disabled>
+                    <i class="fas fa-file-pdf me-1"></i>PDF'e Aktar
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div id="loadingOverlay" class="text-center py-5" style="display:none;">
+                <div class="spinner-border text-primary" style="width: 2.5rem; height: 2.5rem;" role="status"></div>
+                <div class="mt-2 text-muted small fw-bold">Veriler Getiriliyor...</div>
+            </div>
+            
+            <div class="table-wrapper" id="tableContainer">
+                <table class="table table-hover table-dash" id="resultsTable">
+                    <thead id="tblHead">
+                        <tr><th class="text-center text-muted py-5" style="background:#fff; border:none;">Raporu görmek için yukarıdaki "Raporu Çalıştır" butonuna basınız.</th></tr>
+                    </thead>
+                    <tbody id="tblBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // ==========================================
+            // KOLON YÖNETİMİ
+            // ==========================================
+            const masterColumns = {
+                "BelgeTipi": "Belge Tipi", "DocEntry": "GizliID", "BelgeNo": "Belge No", "Tarih": "Tarih",
+                "CariKodu": "Cari Kodu", "CariAdi": "Cari Adı", "MusteriGrubu": "Müşteri Grubu",
+                "KalemKodu": "Kalem Kodu", "KalemAdi": "Kalem Adı", "KalemGrubu": "Kalem Grubu", "UrunGrubu": "Ürün Grubu",
+                "Lot": "Lot / Parti", "Depo": "Depo", "SatisTemsilcisi": "Satış Temsilcisi", "IslemTipi": "İşlem Tipi",
+                "Miktar": "Miktar", "ToplamKilo": "Toplam Kilo", "ParaBirimi": "Para Birimi",
+                "BirimFiyatOrj": "B.Fiyat (Orj)", "BirimFiyatTL": "B.Fiyat (TL)", "NetTutarTL": "Net Tutar (TL)",
+                "KDV_TL": "KDV (TL)", "BrutTutarTL": "Brüt Tutar (TL)", "KurUSD": "Kur USD", "BirimFiyatUSD": "B.Fiyat (USD)",
+                "NetTutarUSD": "Net Tutar (USD)", "KurEUR": "Kur EUR", "BirimFiyatEUR": "B.Fiyat (EUR)", "NetTutarEUR": "Net Tutar (EUR)"
+            };
+
+            $('.select2-multiple').select2({ theme: 'bootstrap-5', width: '100%', closeOnSelect: false });
+
+            let colOptions = '';
+            for(let key in masterColumns) {
+                if(key === 'DocEntry') continue;
+                colOptions += `<option value="${key}">${masterColumns[key]}</option>`;
+            }
+            $('#cbColumns').html(colOptions);
+
+            $('#cbReportType').change(function() {
+                const val = $(this).val();
+                let defCols = [];
+                
+                if(val === "DETAY") defCols = Object.keys(masterColumns).filter(k => k !== 'DocEntry');
+                else if(val === "BELGE" || val === "ACIK_SIPARIS" || val === "ACIK_TESLIMAT") defCols = ["BelgeTipi", "BelgeNo", "Tarih", "CariKodu", "CariAdi", "MusteriGrubu", "SatisTemsilcisi", "IslemTipi", "Miktar", "ToplamKilo", "NetTutarTL", "KDV_TL", "BrutTutarTL", "NetTutarUSD", "NetTutarEUR"];
+                else if(val === "OZET_CARI") defCols = ["CariKodu", "CariAdi", "MusteriGrubu", "SatisTemsilcisi", "IslemTipi", "Miktar", "ToplamKilo", "NetTutarTL", "KDV_TL", "BrutTutarTL", "NetTutarUSD", "NetTutarEUR"];
+                else if(val === "OZET_CARI_TEK") defCols = ["CariKodu", "CariAdi", "MusteriGrubu", "IslemTipi", "Miktar", "ToplamKilo", "NetTutarTL", "KDV_TL", "BrutTutarTL", "NetTutarUSD", "NetTutarEUR"];
+                else if(val === "OZET_KALEM") defCols = ["KalemKodu", "KalemAdi", "KalemGrubu", "UrunGrubu", "IslemTipi", "Miktar", "ToplamKilo", "NetTutarTL", "KDV_TL", "BrutTutarTL", "NetTutarUSD", "NetTutarEUR"];
+                else if(val === "OZET_MUSTERI_SATISCI") defCols = ["CariKodu", "CariAdi", "MusteriGrubu", "SatisTemsilcisi", "IslemTipi", "Miktar", "ToplamKilo", "NetTutarTL", "KDV_TL", "BrutTutarTL", "NetTutarUSD", "NetTutarEUR"];
+                else if(val === "OZET_SLP") defCols = ["SatisTemsilcisi", "IslemTipi", "Miktar", "ToplamKilo", "NetTutarTL", "KDV_TL", "BrutTutarTL", "NetTutarUSD", "NetTutarEUR"];
+
+                $('#cbColumns').val(defCols).trigger('change');
+                
+                if(val === "ICMAL") { $('#cbColumns').prop('disabled', true); } 
+                else { $('#cbColumns').prop('disabled', false); }
+            });
+
+            $('#cbReportType').trigger('change');
+            $('#btnClearCols').click(function(e) { e.preventDefault(); $('#cbColumns').val(null).trigger('change'); });
+
+            // ==========================================
+            // HIZLI TARİH SEÇİMLERİ
+            // ==========================================
+            $('.quick-date').click(function(e) {
+                e.preventDefault();
+                const type = $(this).data('type');
+                const today = new Date();
+                let start = new Date();
+                
+                if(type === 'today') { start = today; }
+                else if(type === 'week') { const day = today.getDay() || 7; start.setDate(today.getDate() - day + 1); }
+                else if(type === 'month') { start = new Date(today.getFullYear(), today.getMonth(), 1); }
+
+                // Tarihi local saat diliminde string'e çevirme çözümü
+                $('#txtStartDate').val(new Date(start.getTime() - (start.getTimezoneOffset() * 60000)).toISOString().split('T')[0]);
+                $('#txtEndDate').val(new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0]);
+            });
+
+            $('.quick-date[data-type="month"]').click();
+
+            // ==========================================
+            // TEMİZLE BUTONU
+            // ==========================================
+            $('#btnClearFilters').click(function() {
+                $('.quick-date[data-type="month"]').click();
+                $('#cbReportType').val('DETAY').trigger('change');
+                $('#cbWarehouse, #cbProcessType, #cbMarket, #cbCompanyType').val('-1');
+                $('#chkInvoice, #chkReturn, #chkItem, #chkService').prop('checked', true);
+                $('#chkDraft').prop('checked', false);
+                $('#cbCustomers, #cbItems, #cbItemGroups').val(null).trigger('change');
+                $('#tblHead').html('<tr><th class="text-center text-muted py-5" style="border:none;">Filtreler temizlendi. Raporu yeniden çalıştırın.</th></tr>');
+                $('#tblBody').empty();
+                $('#dashboardWidgets').slideUp();
+                $('.action-export').prop('disabled', true);
+            });
+
+            // ==========================================
+            // RAPOR ÇALIŞTIR
+            // ==========================================
+            $('#btnRunReport').click(function() {
+                const btn = $(this);
+                const isIcmal = $('#cbReportType').val() === 'ICMAL';
+                
+                if(!isIcmal && (!$('#cbColumns').val() || $('#cbColumns').val().length === 0)) {
+                    toastr.warning("Lütfen en az 1 kolon seçiniz."); return;
+                }
+
+                const filterData = {
+                    StartDate: $('#txtStartDate').val(),
+                    EndDate: $('#txtEndDate').val(),
+                    ReportType: $('#cbReportType').val(),
+                    Warehouse: $('#cbWarehouse').val(),
+                    ProcessType: $('#cbProcessType').val(),
+                    Market: $('#cbMarket').val(),
+                    CompanyType: $('#cbCompanyType').val(),
+                    IncInvoice: $('#chkInvoice').is(':checked'),
+                    IncReturn: $('#chkReturn').is(':checked'),
+                    IncItem: $('#chkItem').is(':checked'),
+                    IncService: $('#chkService').is(':checked'),
+                    IncDraft: $('#chkDraft').is(':checked'),
+                    SelectedCustomers: $('#cbCustomers').val() || [],
+                    SelectedItems: $('#cbItems').val() || [],
+                    SelectedItemGroups: $('#cbItemGroups').val() || [],
+                    VisibleColumns: $('#cbColumns').val() || []
+                };
+
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i>Çalışıyor');
+                $('#tableContainer').hide();
+                $('#loadingOverlay').fadeIn();
+                $('.action-export').prop('disabled', true);
+                $('#dashboardWidgets').slideUp();
+
+                $.ajax({
+                    url: '/Rapor96/RunReport',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(filterData),
+                    success: function(res) {
+                        if(res.success) {
+                            renderTable(res.data, isIcmal);
+                            updateWidgets(res.data, isIcmal);
+                            toastr.success("Rapor başarıyla oluşturuldu.");
+                            $('.action-export').prop('disabled', false).data('filter', JSON.stringify(filterData));
+                        } else {
+                            toastr.error("Hata: " + res.message);
+                            $('#tblHead').html('<tr><th class="text-center text-danger py-5" style="border:none;">Rapor çalıştırılamadı.</th></tr>');
+                            $('#tblBody').empty();
+                        }
+                    },
+                    error: function() { toastr.error("Sunucu bağlantısı koptu."); },
+                    complete: function() {
+                        $('#loadingOverlay').hide();
+                        $('#tableContainer').fadeIn();
+                        btn.prop('disabled', false).html('<i class="fas fa-play me-1"></i>Raporu Çalıştır');
+                    }
+                });
+            });
+
+            function renderTable(data, isIcmal) {
+                if(!data || data.length === 0) {
+                    $('#tblHead').html('<tr><th class="text-center text-warning py-5" style="border:none;"><i class="fas fa-exclamation-circle fs-3 mb-2"></i><br>Seçilen kriterlere uygun veri bulunamadı.</th></tr>');
+                    $('#tblBody').empty();
+                    return;
+                }
+
+                const cols = Object.keys(data[0]).filter(k => k !== 'RowOrder' && k !== 'DocEntry');
+                
+                let thHtml = '<tr><th style="width:30px; text-align:center;">#</th>';
+                cols.forEach(c => {
+                    let cName = isIcmal ? c : (masterColumns[c] || c);
+                    if(isIcmal && c === "VergiHaricTutar") cName = "Net Matrah (Y)";
+                    else if(isIcmal && c === "NetTutarY") cName = "Genel Toplam (Y)";
+                    else if(isIcmal && c === "DovizDegeri") cName = "Döviz (EUR)";
+                    
+                    let align = (c.includes('Tutar') || c.includes('Miktar') || c.includes('Kilo') || c.includes('Fiyat') || c.includes('Kur') || c.includes('Degeri') || c.includes('Matrah')) ? 'text-end' : '';
+                    thHtml += `<th class="${align}">${cName}</th>`;
+                });
+                thHtml += '</tr>';
+                $('#tblHead').html(thHtml);
+
+                let tbHtml = '';
+                data.forEach((row, idx) => {
+                    let isGenelToplam = false;
+                    let isAltToplam = false;
+                    
+                    cols.forEach(c => { if(row[c] === 'GENEL TOPLAM') isGenelToplam = true; else if(row[c] === null && !isGenelToplam) isAltToplam = true; });
+
+                    let rowClass = isGenelToplam ? 'row-genel-toplam' : (isAltToplam ? 'row-alt-toplam' : '');
+                    let numStr = (isGenelToplam || isAltToplam) ? '' : (idx + 1);
+                    
+                    tbHtml += `<tr class="${rowClass}"><td class="text-muted text-center">${numStr}</td>`;
+                    
+                    cols.forEach(c => {
+                        let val = row[c];
+                        let align = '';
+                        let text = '';
+
+                        if (val === null) text = '';
+                        else if (typeof val === 'number') {
+                            align = 'text-end';
+                            let fmt = (c.includes('Kur') || c.includes('BirimFiyat')) ? 4 : 2;
+                            text = val.toLocaleString('tr-TR', { minimumFractionDigits: fmt, maximumFractionDigits: fmt });
+                        } else {
+                            text = val;
+                            if(text === 'GENEL TOPLAM') { align = 'text-end text-primary'; text = 'TOPLAM'; }
+                        }
+
+                        tbHtml += `<td class="${align}">${text}</td>`;
+                    });
+                    tbHtml += '</tr>';
+                });
+
+                $('#tblBody').html(tbHtml);
+            }
+
+            function updateWidgets(data, isIcmal) {
+                if(!data || data.length === 0) return;
+                
+                let totTL = 0, totDoviz = 0, totUsd = null, totQty = 0;
+
+                if(isIcmal) {
+                    const lastRow = data[data.length - 1];
+                    totTL = lastRow.NetTutarY || 0;
+                    totDoviz = lastRow.DovizDegeri || 0;
+                } else {
+                    const gtRow = data.find(r => r.RowOrder === 2 || Object.values(r).includes('GENEL TOPLAM'));
+                    if(gtRow) {
+                        totTL = gtRow.NetTutarTL || 0;
+                        // Talep 47: kutu EUR karsiligini gosterir. Onceden USD ve EUR
+                        // karsiliklari TOPLANIYORDU; 20.000 EUR'luk satis ~50.000 cikiyordu.
+                        totDoviz = gtRow.NetTutarEUR || 0;
+                        totUsd = gtRow.NetTutarUSD || 0;
+                        totQty = gtRow.Miktar || 0;
+                    }
+                }
+
+                $('#wgtTotalTL').text(totTL.toLocaleString('tr-TR', {minimumFractionDigits:2}) + ' ₺');
+                $('#wgtTotalDoviz').text(totDoviz.toLocaleString('tr-TR', {minimumFractionDigits:2}) + ' €');
+                $('#wgtTotalUsd').text(totUsd === null ? '' : 'USD karşılığı: ' + totUsd.toLocaleString('tr-TR', {minimumFractionDigits:2}) + ' $');
+                $('#wgtTotalQty').text(totQty.toLocaleString('tr-TR', {minimumFractionDigits:2}));
+                $('#wgtRowCount').text(data.length);
+
+                $('#dashboardWidgets').slideDown();
+            }
+
+            // ==========================================
+            // EXCEL & PDF İNDİRME
+            // ==========================================
+            $('.action-export').click(function() {
+                const type = $(this).data('type');
+                const filterStr = $(this).data('filter');
+                if(!filterStr) return;
+                
+                const btn = $(this);
+                const originalHtml = btn.html();
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> İndiriliyor');
+
+                let url = type === 'excel' ? '/Rapor96/ExportExcel' : '/Rapor96/ExportPdf';
+                let ext = type === 'excel' ? '.xlsx' : '.pdf';
+
+                fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: filterStr
+                })
+                .then(response => {
+                    if(!response.ok) throw new Error("İndirme başarısız oldu.");
+                    return response.blob();
+                })
+                .then(blob => {
+                    const blobUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = blobUrl;
+                    a.download = `SatisAnalizi_${new Date().getTime()}${ext}`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(blobUrl);
+                    toastr.success("Dosya başarıyla indirildi.");
+                })
+                .catch(error => { toastr.error(error.message); })
+                .finally(() => { btn.prop('disabled', false).html(originalHtml); });
+            });
+        });
+    </script>
+}

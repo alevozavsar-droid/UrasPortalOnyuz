@@ -1,0 +1,288 @@
+﻿@model List<WebApplication3.Models.CariKarsilastirmaViewModel>
+@using System.Globalization
+@using Newtonsoft.Json
+@using System.Text
+
+@{
+    ViewData["Title"] = "Hesap Ekstre Mutabakatı";
+    Layout = "~/Views/Shared/_Layout.cshtml"; // Merkezi layout şablonunu kullanır
+
+    // 1. KURAL: URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+
+    var hesapList = ViewBag.CariList as List<WebApplication3.Models.CariViewModel>;
+    var selectedCodes = ViewBag.SelectedBpCodes as List<string>;
+
+    decimal initBorc = Model != null ? Model.Sum(x => x.BorcTL) : 0;
+    decimal initAlacak = Model != null ? Model.Sum(x => x.AlacakTL) : 0;
+    decimal initNet = initBorc - initAlacak;
+
+    string base64Json = "";
+    if (ViewBag.GridDataJson != null) { base64Json = ViewBag.GridDataJson; }
+    else if (Model != null && Model.Any())
+    {
+        var json = JsonConvert.SerializeObject(Model);
+        var bytes = Encoding.UTF8.GetBytes(json);
+        base64Json = Convert.ToBase64String(bytes);
+    }
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    
+    <style>
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 70px);
+            padding: 10px;
+        }
+
+        .filter-section {
+            flex-shrink: 0;
+            margin-bottom: 10px;
+        }
+
+        .table-wrapper {
+            height: calc(100vh - 230px); /* Geri dön butonu için alt alan optimize edildi */
+            overflow: auto;
+            background: white;
+            border: 1px solid #dee2e6;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        thead th {
+            position: sticky;
+            top: 0;
+            background-color: #0d6efd !important;
+            color: white;
+            z-index: 10;
+            white-space: nowrap;
+        }
+
+        tfoot th, tfoot td {
+            position: sticky;
+            bottom: 0;
+            background-color: #343a40 !important;
+            color: white;
+            z-index: 10;
+            font-size: 0.9rem;
+        }
+
+        .table-sm td, .table-sm th {
+            font-size: 0.85rem;
+            vertical-align: middle;
+            padding: 0.3rem 0.5rem;
+        }
+
+        .select2-selection--multiple {
+            min-height: 31px !important;
+            border-color: #dee2e6 !important;
+        }
+    </style>
+}
+
+<div class="main-container">
+    <div class="card shadow-sm filter-section">
+        <div class="card-body py-2">
+            <form asp-controller="Rapor72" asp-action="Index" method="post" enctype="multipart/form-data">
+                
+                @* 2. KURAL: Güvenlik (CSRF) - Yetkisiz istekleri engellemek amacıyla eklendi *@
+                @Html.AntiForgeryToken()
+
+                @* 1. KURAL: Şirket bilgisini form postunda kaybetmemek için gizli input *@
+                <input type="hidden" name="db" value="@currentDb" />
+
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="fw-bold small mb-0">Muhasebe Hesapları (Çoklu Seçim)</label>
+                        <select class="form-select form-select-sm" id="bpCodes" name="bpCodes" multiple="multiple">
+                            @if (hesapList != null)
+                            {
+                                foreach (var hesap in hesapList)
+                                {
+                                    bool isSelected = selectedCodes != null && selectedCodes.Contains(hesap.CardCode);
+                                    if (isSelected)
+                                    {
+                                        <option value="@hesap.CardCode" selected>@hesap.CardName</option>
+                                    }
+                                    else
+                                    {
+                                        <option value="@hesap.CardCode">@hesap.CardName</option>
+                                    }
+                                }
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="fw-bold small mb-0">Başlangıç</label>
+                        <input type="date" class="form-control form-control-sm" name="startDate" value="@ViewBag.StartDate">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="fw-bold small mb-0">Bitiş</label>
+                        <input type="date" class="form-control form-control-sm" name="endDate" value="@ViewBag.EndDate">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="fw-bold small mb-0 text-success">Excel Yükle (1. Sütun Hesap Adı)</label>
+                        <div class="input-group input-group-sm">
+                            <input type="file" name="excelFile" class="form-control" accept=".xlsx, .xls">
+                            @* 1. KURAL: Şablon indirme linkine db parametresi eklendi *@
+                            <a href="@Url.Action("DownloadTemplate", "Rapor72", new { db = currentDb })" class="btn btn-outline-secondary" title="Şablon İndir"><i class="fas fa-download"></i></a>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="form-check mb-1">
+                            <input class="form-check-input" type="checkbox" id="excludeYevmiyeIptal" name="excludeYevmiyeIptal" value="true" @(ViewBag.ExcludeYevmiyeIptal == true ? "checked" : "")>
+                            <label class="form-check-label small" style="font-size: 11px;" for="excludeYevmiyeIptal">İptal Fişleri Gizle</label>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold"><i class="fas fa-search me-1"></i> KIYASLA</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (Model != null && Model.Any())
+    {
+        <div class="d-flex justify-content-between align-items-center mb-2 filter-section">
+            <div class="btn-group filter-btn-group" role="group">
+                <button type="button" class="btn btn-sm btn-outline-dark active" onclick="filterTable('all', this)">Tümü</button>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="filterTable('diff', this)">Farklar</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="filterTable('DB', this)">Sistem</button>
+                <button type="button" class="btn btn-sm btn-outline-warning text-dark" onclick="filterTable('Excel', this)">Excel</button>
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="filterTable('Eşleşti', this)">Eşleşen</button>
+            </div>
+            <form asp-action="ExportResult" asp-controller="Rapor72" method="post" target="_blank" class="d-inline">
+                
+                @* 2. KURAL: Güvenlik Tokenı sonuç indirme formuna eklendi *@
+                @Html.AntiForgeryToken()
+                
+                @* 1. KURAL: Excel indirme post isteğinde db parametresi korundu *@
+                <input type="hidden" name="db" value="@currentDb" />
+                <input type="hidden" name="gridDataJson" value="@base64Json" />
+                <button type="submit" class="btn btn-sm btn-success fw-bold px-3"><i class="fas fa-file-excel me-1"></i> Excel İndir</button>
+            </form>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="table table-bordered table-hover table-sm mb-0 w-100" id="karsilastirmaTable">
+                <thead>
+                    <tr>
+                        <th class="text-center" style="width: 40px;">D</th>
+                        <th style="min-width: 150px;">Hesap Adı</th>
+                        <th style="width: 80px;">İşlem No</th>
+                        <th style="min-width: 85px;">Tarih</th>
+                        <th>İşlem Tipi</th>
+                        <th style="width: 50px;">PB</th>
+                        <th style="min-width: 200px;">Açıklama</th>
+                        <th class="text-end">Borç (TL)</th>
+                        <th class="text-end">Alacak (TL)</th>
+                        <th class="text-end">Borç (YPB)</th>
+                        <th class="text-end">Alacak (YPB)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model)
+                    {
+                        <tr class="@item.SatirRengi" data-source="@item.Kaynak">
+                            <td class="text-center">
+                                @if (item.DurumMesaji == "Tam Eşleşme")
+                                {
+                                    <i class="fas fa-check-circle text-success" title="Tam Eşleşme"></i>
+                                }
+                                else if (item.Kaynak == "DB")
+                                {
+                                    <span class="badge bg-danger" style="font-size: 0.7em;">SYS</span>
+                                }
+                                else if (item.Kaynak == "Excel")
+                                {
+                                    <span class="badge bg-warning text-dark" style="font-size: 0.7em;">XLS</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-dark">HATA</span>
+                                }
+                            </td>
+                            <td class="fw-bold small text-primary text-truncate" style="max-width: 200px;" title="@item.CariAdi">@item.CariAdi</td>
+                            <td class="text-muted small">@item.IslemNo</td>
+                            <td>@(item.Tarih?.ToString("dd.MM.yyyy"))</td>
+                            <td>@item.IslemTipi</td>
+                            <td>@item.ParaBirimi</td>
+                            <td class="text-truncate" style="max-width: 300px;" title="@item.Aciklama">@item.Aciklama</td>
+                            <td class="text-end fw-bold val-borc text-secondary">@item.BorcTL.ToString("N2", new CultureInfo("tr-TR"))</td>
+                            <td class="text-end fw-bold val-alacak text-secondary">@item.AlacakTL.ToString("N2", new CultureInfo("tr-TR"))</td>
+                            <td class="text-end text-muted">@(item.BorcYPB != 0 ? item.BorcYPB.ToString("N2", new CultureInfo("tr-TR")) : "-")</td>
+                            <td class="text-end text-muted">@(item.AlacakYPB != 0 ? item.AlacakYPB.ToString("N2", new CultureInfo("tr-TR")) : "-")</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="7" class="text-end fw-bold">GENEL TOPLAM:</td>
+                        <td class="text-end fw-bold" id="totalBorc">@initBorc.ToString("N2", new CultureInfo("tr-TR"))</td>
+                        <td class="text-end fw-bold" id="totalAlacak">@initAlacak.ToString("N2", new CultureInfo("tr-TR"))</td>
+                        <td colspan="2" class="text-center fw-bold bg-secondary text-white" id="totalNet">Net: @initNet.ToString("N2", new CultureInfo("tr-TR"))</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    }
+
+    @* 4. KURAL: UI/UX Standartlarına uygun şık, db parametreli Ana Sayfa butonu *@
+    <div class="mt-4 mb-2 text-center flex-shrink-0">
+        <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+            <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+        </a>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <script>
+        $(document).ready(function() {
+            $('#bpCodes').select2({
+                theme: "bootstrap-5",
+                placeholder: "Hesapları Seçiniz (Boş = Tümü)",
+                width: '100%',
+                allowClear: true,
+                closeOnSelect: false
+            });
+        });
+
+        // Global Filtre Temizleyici (Layout'tan tetiklenir)
+        window.clearReportFilters = function() {
+            $('#bpCodes').val(null).trigger('change');
+            filterTable('all', $('.filter-btn-group .btn').first());
+        };
+
+        function filterTable(filterType, btn) {
+            $('.filter-btn-group .btn').removeClass('active');
+            $(btn).addClass('active');
+            var rows = $('#karsilastirmaTable tbody tr');
+            if (filterType === 'all') rows.show();
+            else if (filterType === 'diff') rows.each(function() { if ($(this).attr('data-source') === 'Eşleşti') $(this).hide(); else $(this).show(); });
+            else rows.each(function() { if ($(this).attr('data-source') === filterType) $(this).show(); else $(this).hide(); });
+            calculateTotals();
+        }
+
+        function calculateTotals() {
+            var totalBorc = 0, totalAlacak = 0;
+            $('#karsilastirmaTable tbody tr:visible').each(function() {
+                var txtBorc = $(this).find('.val-borc').text().replace(/\./g, '').replace(',', '.');
+                var txtAlacak = $(this).find('.val-alacak').text().replace(/\./g, '').replace(',', '.');
+                totalBorc += parseFloat(txtBorc.trim()) || 0;
+                totalAlacak += parseFloat(txtAlacak.trim()) || 0;
+            });
+            var net = totalBorc - totalAlacak;
+            $('#totalBorc').text(totalBorc.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            $('#totalAlacak').text(totalAlacak.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            var netEl = $('#totalNet');
+            netEl.text("Net: " + net.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            netEl.removeClass('bg-success bg-danger bg-secondary');
+            if(net > 0) netEl.addClass('bg-danger'); else if(net < 0) netEl.addClass('bg-success'); else netEl.addClass('bg-secondary');
+        }
+    </script>
+}

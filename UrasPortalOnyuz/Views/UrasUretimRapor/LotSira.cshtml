@@ -1,0 +1,277 @@
+@{
+    ViewData["Title"] = "Lot Sıra Kontrol";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-list-ol me-2 text-primary"></i> Lot Sıra Kontrol</h2>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-success btn-sm" onclick="excelAktar()"><i class="fas fa-file-excel me-1"></i>Excel</button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="window.print()"><i class="fas fa-print me-1"></i>Yazdır</button>
+    </div>
+</div>
+<p class="text-muted mb-3">Kazan/lot numaralarında atlama, mükerrer, lotsuz tamamlanan emir ve sayaç uyumsuzluğu denetimi.</p>
+
+<div class="card dash-card mb-3">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-2"><label class="form-label small fw-bold">Başlangıç</label><input type="date" id="fBas" class="form-control form-control-sm"></div>
+            <div class="col-6 col-md-2"><label class="form-label small fw-bold">Bitiş</label><input type="date" id="fBit" class="form-control form-control-sm"></div>
+            <div class="col-12 col-md-3"><label class="form-label small fw-bold">Kalem kodu / adı</label><input type="text" id="fItemCode" class="form-control form-control-sm" placeholder="örn. YM02.A1 veya RETARDER"></div>
+            <div class="col-6 col-md-2 d-flex align-items-center">
+                <div class="form-check form-switch mt-3"><input class="form-check-input" type="checkbox" id="fSadeceSorun"><label class="form-check-label small" for="fSadeceSorun">Yalnız sorunlular</label></div>
+            </div>
+            <div class="col-6 col-md-3 d-flex gap-2 align-items-end">
+                <button class="btn btn-outline-secondary btn-sm" onclick="hizli(30)">30g</button>
+                <button class="btn btn-primary btn-sm ms-auto" onclick="yukle()"><i class="fas fa-rotate me-1"></i>Getir</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="yukleniyor" class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm me-2"></span>Lot sırası denetleniyor…</div>
+
+<div id="icerik" style="display:none;">
+    <div class="row g-3 mb-3" id="kpiSatiri"></div>
+
+    <div class="card dash-card mb-3">
+        <div class="card-header bg-white">
+            <span class="fw-bold small text-uppercase text-muted">Kalem Özeti <span id="kalemSayisi" class="badge bg-primary ms-1">0</span></span>
+            <span id="formatBilgi" class="small text-muted ms-2"></span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-custom mb-0">
+                <thead><tr><th>Kalem</th><th class="text-end">Emir</th><th class="text-end">Atlama</th><th class="text-end">Mükerrer</th><th class="text-end">Lotsuz</th><th>Son Verilen Lot</th><th class="text-end">Sayaç</th><th>Durum</th></tr></thead>
+                <tbody id="tbodyKalemler"></tbody>
+            </table>
+            <div id="kalemBos" class="text-center text-muted py-3" style="display:none;"><i class="fas fa-inbox me-1"></i>Kriterlere uyan kalem yok.</div>
+        </div>
+    </div>
+
+    <div id="kalemLotKart" class="card dash-card mb-3" style="display:none;">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <span class="fw-bold small text-uppercase text-muted" id="kalemLotBaslik"></span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="kalemLotKapat()"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-custom mb-0">
+                <thead><tr><th>#</th><th>İş Emri</th><th>Lot</th><th class="text-end">No</th><th>Sorun</th><th>Bitiş</th><th>Operatör</th><th class="text-end">Plan / Üretim</th><th>Stok</th></tr></thead>
+                <tbody id="tbodyKalemLot"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card dash-card mb-3">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span class="fw-bold small text-uppercase text-muted">İş Emri Lot Sırası <span id="satirSayisi" class="badge bg-primary ms-1">0</span></span>
+            <div class="d-flex gap-2">
+                <select id="fKalemFiltre" class="form-select form-select-sm" style="width:auto" onchange="cizSatirlar()"><option value="">Tüm kalemler</option></select>
+                <select id="fSorunFiltre" class="form-select form-select-sm" style="width:auto" onchange="cizSatirlar()">
+                    <option value="">Tüm satırlar</option><option value="X">Yalnız sorunlu</option><option value="ATLAMA">Atlama</option>
+                    <option value="MUKERRER">Mükerrer</option><option value="LOTSUZ">Lotsuz</option><option value="GERI">Sayaç geri</option><option value="FORMAT">Format dışı</option>
+                </select>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-custom mb-0">
+                <thead><tr><th>İş Emri</th><th>Kalem</th><th>Lot</th><th class="text-end">No</th><th>Önceki Lot</th><th>Sorun</th><th>Bitiş</th><th>Operatör</th><th class="text-end">Plan / Üretim</th><th>Stok</th></tr></thead>
+                <tbody id="tbodySatirlar"></tbody>
+            </table>
+            <div id="satirBos" class="text-center text-muted py-3" style="display:none;"><i class="fas fa-circle-check me-1"></i>Seçilen kriterlerde satır yok.</div>
+        </div>
+    </div>
+
+    <div id="loglarKart" class="card dash-card" style="display:none;">
+        <div class="card-header bg-white fw-bold small text-uppercase text-muted">Düzeltme / Sıfırlama Geçmişi <span id="logSayisi" class="badge bg-primary ms-1">0</span></div>
+        <div class="table-responsive">
+            <table class="table table-custom mb-0">
+                <thead><tr><th>Tarih</th><th>Kalem</th><th class="text-end">Önceki Sayaç</th><th>Kullanıcı</th><th>Açıklama</th></tr></thead>
+                <tbody id="tbodyLoglar"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; color: #5a5c69; }
+    .kpi-card { border-radius: 10px; border: 1px solid #e3e6f0; padding: 12px 16px; background: #fff; }
+    .kpi-card .l { font-size: .68rem; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: #858796; }
+    .kpi-card .v { font-size: 1.15rem; font-weight: 700; color: #1e293b; }
+    .kpi-card .s { font-size: .72rem; color: #94a3b8; }
+    .rozet { font-size: .68rem; font-weight: 700; padding: .2em .5em; border-radius: 6px; }
+    .rozet-yesil { background:#e6f7ee; color:#0f9d58; } .rozet-kirmizi { background:#fde8e8; color:#c0392b; }
+    .rozet-sari { background:#fff8e6; color:#b7791f; } .rozet-mavi { background:#eaf2ff; color:#2a5fb0; } .rozet-gri { background:#f1f3f5; color:#495057; }
+    .satir-sorunlu { background: #fdf2f2 !important; } .satir-uyari { background: #fefbf0 !important; }
+    tr.tiklanabilir { cursor: pointer; }
+</style>
+
+<script>
+    let veriSon = null;
+    let kalemLotSon = null;
+
+    function fmt(n, d) { return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+    function say(sorun) { return (veriSon.Satirlar || []).filter(r => (r.Sorun || '').split(',').includes(sorun)).length; }
+    function sayacUyumsuz() { return (veriSon.Kalemler || []).filter(k => k.SayacUyumsuz == 1).length; }
+    function sorunAd(s) { return { ATLAMA: 'Atlama', MUKERRER: 'Mükerrer', LOTSUZ: 'Lotsuz', GERI: 'Sayaç geri', FORMAT: 'Format dışı' }[s] || s; }
+    function sorunSinif(s) { return { ATLAMA: 'rozet-kirmizi', MUKERRER: 'rozet-kirmizi', LOTSUZ: 'rozet-sari', GERI: 'rozet-sari', FORMAT: 'rozet-gri' }[s] || 'rozet-gri'; }
+    function satirRengi(sorun) {
+        if ((sorun || '').includes('ATLAMA') || (sorun || '').includes('MUKERRER')) return 'satir-sorunlu';
+        if (sorun === 'LOTSUZ' || sorun === 'GERI' || sorun === 'FORMAT') return 'satir-uyari';
+        return '';
+    }
+    function durumMetni(status) { return { L: 'Kapalı', R: 'Açık', C: 'İptal' }[status] || 'Planlı'; }
+
+    function hizli(gun) {
+        const bit = new Date(); const bas = new Date(); bas.setDate(bas.getDate() - gun);
+        document.getElementById('fBas').value = bas.toISOString().slice(0, 10);
+        document.getElementById('fBit').value = bit.toISOString().slice(0, 10);
+        yukle();
+    }
+
+    async function yukle() {
+        document.getElementById('yukleniyor').style.display = '';
+        document.getElementById('icerik').style.display = 'none';
+        kalemLotKapat();
+        const qs = new URLSearchParams({
+            bas: document.getElementById('fBas').value, bit: document.getElementById('fBit').value,
+            itemCode: document.getElementById('fItemCode').value, sadeceSorun: document.getElementById('fSadeceSorun').checked
+        });
+        const res = await fetch('/UrasUretimRapor/GetLotSira?' + qs.toString()).then(r => r.json());
+        document.getElementById('yukleniyor').style.display = 'none';
+        if (!res.success) { alert('Rapor alınamadı: ' + res.message); return; }
+        veriSon = res.data;
+        document.getElementById('icerik').style.display = '';
+        ciz();
+    }
+
+    function ciz() {
+        const v = veriSon;
+        document.getElementById('formatBilgi').textContent = `Format: tarih + ${v.Digit} haneli sayaç, devir ${v.MaxNo}`;
+        document.getElementById('kpiSatiri').innerHTML = `
+            <div class="col-6 col-md-2"><div class="kpi-card" style="border-left:3px solid #2a78d6"><div class="l">Denetlenen İş Emri</div><div class="v">${v.Satirlar.length}</div><div class="s">${v.Kalemler.length} kalem</div></div></div>
+            <div class="col-6 col-md-2"><div class="kpi-card" style="border-left:3px solid #e34948"><div class="l">Atlama</div><div class="v">${say('ATLAMA')}</div><div class="s">sayaçta boşluk</div></div></div>
+            <div class="col-6 col-md-2"><div class="kpi-card" style="border-left:3px solid #eb6834"><div class="l">Mükerrer</div><div class="v">${say('MUKERRER')}</div><div class="s">aynı lotu taşıyan</div></div></div>
+            <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #eda100"><div class="l">Lotsuz Tamamlanan</div><div class="v">${say('LOTSUZ')}</div><div class="s">bitiş var, lot yok</div></div></div>
+            <div class="col-6 col-md-3"><div class="kpi-card" style="border-left:3px solid #4a3aa7"><div class="l">Sayaç Uyumsuz</div><div class="v">${sayacUyumsuz()}</div><div class="s">sayaç ≠ son lot</div></div></div>`;
+
+        doldurKalemFiltre();
+        cizKalemler();
+        cizSatirlar();
+        cizLoglar();
+    }
+
+    function doldurKalemFiltre() {
+        const sel = document.getElementById('fKalemFiltre');
+        const secili = sel.value;
+        sel.innerHTML = '<option value="">Tüm kalemler</option>' + veriSon.Kalemler.map(k => `<option value="${k.ItemCode}">${k.ItemCode}</option>`).join('');
+        sel.value = secili;
+    }
+
+    function cizKalemler() {
+        const list = veriSon.Kalemler;
+        document.getElementById('kalemSayisi').textContent = list.length;
+        document.getElementById('kalemBos').style.display = list.length ? 'none' : '';
+        document.getElementById('tbodyKalemler').innerHTML = list.map(k => `
+            <tr class="tiklanabilir ${k.SorunVar == 1 ? 'satir-sorunlu' : ''}" onclick="kalemSec('${k.ItemCode}')">
+                <td><span class="fw-semibold text-primary">${k.ItemName || k.ItemCode} <i class="fas fa-diagram-project small"></i></span><div class="text-muted small">${k.ItemCode}</div></td>
+                <td class="text-end">${k.Adet}</td>
+                <td class="text-end ${k.Atlama > 0 ? 'text-danger fw-bold' : ''}">${k.Atlama}</td>
+                <td class="text-end ${k.Mukerrer > 0 ? 'text-danger fw-bold' : ''}">${k.Mukerrer}</td>
+                <td class="text-end ${k.Lotsuz > 0 ? 'text-warning fw-bold' : ''}">${k.Lotsuz}</td>
+                <td>${k.OworSonLot || '-'}${k.OworSonBitis ? `<div class="text-muted small">${k.OworSonBitis}</div>` : ''}</td>
+                <td class="text-end">${k.SayacNo !== null ? `<span class="${k.SayacUyumsuz == 1 ? 'text-danger fw-bold' : ''}">${k.SayacNo}</span>` : '<span class="text-muted">kayıt yok</span>'}</td>
+                <td>
+                    ${k.SorunVar == 0 ? '<span class="rozet rozet-yesil">Düzgün</span>' : ''}
+                    ${k.Atlama > 0 ? `<span class="rozet rozet-kirmizi me-1">${k.Atlama} atlama</span>` : ''}
+                    ${k.Mukerrer > 0 ? `<span class="rozet rozet-kirmizi me-1">${k.Mukerrer} mükerrer</span>` : ''}
+                    ${k.Lotsuz > 0 ? `<span class="rozet rozet-sari me-1">${k.Lotsuz} lotsuz</span>` : ''}
+                    ${k.SayacUyumsuz == 1 ? '<span class="rozet rozet-kirmizi">Sayaç uyumsuz</span>' : ''}
+                </td>
+            </tr>`).join('');
+    }
+
+    async function kalemSec(itemCode) {
+        document.getElementById('kalemLotKart').style.display = '';
+        document.getElementById('kalemLotBaslik').textContent = itemCode + ' — Tüm Lot Sırası';
+        document.getElementById('tbodyKalemLot').innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-2"></span>Lot geçmişi getiriliyor…</td></tr>';
+        document.getElementById('kalemLotKart').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        const res = await fetch('/UrasUretimRapor/GetKalemLotSira?itemCode=' + encodeURIComponent(itemCode)).then(r => r.json());
+        if (!res.success) { document.getElementById('tbodyKalemLot').innerHTML = `<tr><td colspan="9" class="text-danger">${res.message}</td></tr>`; return; }
+        kalemLotSon = res.data;
+        const rows = kalemLotSon.Satirlar || [];
+        document.getElementById('kalemLotBaslik').textContent = itemCode + ' — Tüm Lot Sırası (' + rows.length + ')';
+        document.getElementById('tbodyKalemLot').innerHTML = rows.map((r, i) => `
+            <tr class="${satirRengi(r.Sorun)}">
+                <td class="text-muted small">${i + 1}</td>
+                <td><span class="fw-bold">#${r.DocNum}</span><div class="text-muted small">${durumMetni(r.Status)} • ${r.Durum}</div></td>
+                <td>${r.Lot || '<span class="text-muted">—</span>'}</td>
+                <td class="text-end fw-bold">${r.No ?? ''}</td>
+                <td>
+                    ${!r.Sorun ? '<span class="rozet rozet-yesil">OK</span>' : (r.Sorun.split(',').map(s => `<span class="rozet ${sorunSinif(s)} me-1">${sorunAd(s)}</span>`).join(''))}
+                    ${r.Atlanan ? `<div class="text-danger small">Atlanan: ${r.Atlanan}</div>` : ''}
+                </td>
+                <td class="text-nowrap small">${r.BitZam || ''}</td>
+                <td class="small">${r.Operator || ''}</td>
+                <td class="text-end small">${fmt(r.Planlanan, 0)} / ${fmt(r.Uretilen, 0)}</td>
+                <td>${r.StokParti == 1 ? '<span class="rozet rozet-mavi">Parti var</span>' : (r.Lot ? '<span class="rozet rozet-gri">Parti yok</span>' : '')}</td>
+            </tr>`).join('') || '<tr><td colspan="9" class="text-center text-muted py-3">Bu kalem için lot verilmiş iş emri yok.</td></tr>';
+    }
+
+    function kalemLotKapat() { document.getElementById('kalemLotKart').style.display = 'none'; kalemLotSon = null; }
+
+    function satirlar() {
+        const kalemF = document.getElementById('fKalemFiltre').value;
+        const sorunF = document.getElementById('fSorunFiltre').value;
+        let list = veriSon.Satirlar.filter(r => !kalemF || r.ItemCode === kalemF);
+        if (sorunF === 'X') list = list.filter(r => (r.Sorun || '').length > 0);
+        else if (sorunF) list = list.filter(r => (r.Sorun || '').split(',').includes(sorunF));
+        return list;
+    }
+
+    function excelAktar() {
+        if (!veriSon) return;
+        raporExcel('Lot_Sira_Kontrol_' + document.getElementById('fBas').value + '_' + document.getElementById('fBit').value, [
+            { ad: 'Kalemler', kolonlar: [{ k: 'ItemCode', b: 'Kalem Kodu' }, { k: 'ItemName', b: 'Kalem' }, { k: 'Adet', b: 'Emir' }, { k: 'Atlama', b: 'Atlama' }, { k: 'Mukerrer', b: 'Mükerrer' }, { k: 'Lotsuz', b: 'Lotsuz' }, { k: 'OworSonLot', b: 'Son Lot' }, { k: 'OworSonNo', b: 'Son No' }, { k: 'SayacNo', b: 'Sayaç' }, { k: r => r.SayacUyumsuz == 1 ? 'Evet' : '', b: 'Sayaç Uyumsuz' }], satirlar: veriSon.Kalemler || [] },
+            { ad: 'İş Emirleri', kolonlar: [{ k: 'DocNum', b: 'İş Emri' }, { k: 'ItemCode', b: 'Kalem Kodu' }, { k: 'ItemName', b: 'Kalem' }, { k: 'Lot', b: 'Lot' }, { k: 'No', b: 'No' }, { k: 'OncekiLot', b: 'Önceki Lot' }, { k: 'OncekiDocNum', b: 'Önceki Emir' }, { k: r => (r.Sorun || '').split(',').filter(Boolean).map(sorunAd).join(', '), b: 'Sorun' }, { k: 'Atlanan', b: 'Atlanan' }, { k: 'BitZam', b: 'Bitiş' }, { k: 'Operator', b: 'Operatör' }, { k: 'Planlanan', b: 'Planlanan' }, { k: 'Uretilen', b: 'Üretilen' }, { k: r => r.StokParti == 1 ? 'Var' : 'Yok', b: 'Stok Partisi' }], satirlar: satirlar() },
+            { ad: 'Geçmiş', kolonlar: [{ k: 'Tarih', b: 'Tarih' }, { k: 'ItemCode', b: 'Kalem' }, { k: 'EskiNo', b: 'Önceki Sayaç' }, { k: 'Kullanici', b: 'Kullanıcı' }, { k: 'Aciklama', b: 'Açıklama' }], satirlar: veriSon.Loglar || [] }
+        ]);
+    }
+
+    function cizSatirlar() {
+        const list = satirlar();
+        document.getElementById('satirSayisi').textContent = list.length;
+        document.getElementById('satirBos').style.display = list.length ? 'none' : '';
+        document.getElementById('tbodySatirlar').innerHTML = list.slice(0, 500).map(r => `
+            <tr class="${satirRengi(r.Sorun)}">
+                <td><span class="fw-bold">#${r.DocNum}</span><div class="text-muted small">${durumMetni(r.Status)} • ${r.Durum}</div></td>
+                <td><span class="fw-semibold">${r.ItemName || r.ItemCode}</span><div class="text-muted small">${r.ItemCode}</div></td>
+                <td>${r.Lot || '<span class="text-muted">—</span>'}</td>
+                <td class="text-end fw-bold">${r.No ?? ''}</td>
+                <td><span class="text-muted">${r.OncekiLot || '-'}</span>${r.OncekiDocNum ? `<div class="text-muted small">#${r.OncekiDocNum}</div>` : ''}</td>
+                <td>
+                    ${!r.Sorun ? '<span class="rozet rozet-yesil">OK</span>' : (r.Sorun.split(',').map(s => `<span class="rozet ${sorunSinif(s)} me-1">${sorunAd(s)}</span>`).join(''))}
+                    ${r.Atlanan ? `<div class="text-danger small">Atlanan: ${r.Atlanan}</div>` : ''}
+                </td>
+                <td class="text-nowrap small">${r.BitZam || ''}</td>
+                <td class="small">${r.Operator || ''}</td>
+                <td class="text-end small">${fmt(r.Planlanan, 0)} / ${fmt(r.Uretilen, 0)}</td>
+                <td>${r.StokParti == 1 ? '<span class="rozet rozet-mavi">Parti var</span>' : (r.Lot ? '<span class="rozet rozet-gri">Parti yok</span>' : '')}</td>
+            </tr>`).join('');
+    }
+
+    function cizLoglar() {
+        const list = veriSon.Loglar || [];
+        document.getElementById('loglarKart').style.display = list.length ? '' : 'none';
+        document.getElementById('logSayisi').textContent = list.length;
+        document.getElementById('tbodyLoglar').innerHTML = list.slice(0, 50).map(l => `
+            <tr><td class="text-nowrap">${l.Tarih}</td><td>${l.ItemCode}</td><td class="text-end">${l.EskiNo ?? ''}</td><td>${l.Kullanici}</td><td class="small">${l.Aciklama || ''}</td></tr>`).join('');
+    }
+
+    (function () {
+        const bit = new Date(); const bas = new Date(); bas.setDate(bas.getDate() - 30);
+        document.getElementById('fBas').value = bas.toISOString().slice(0, 10);
+        document.getElementById('fBit').value = bit.toISOString().slice(0, 10);
+    })();
+    yukle();
+</script>

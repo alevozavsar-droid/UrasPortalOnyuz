@@ -1,0 +1,108 @@
+@*
+    Yeni gider / gelir kodu talebi penceresi (fatura ve yevmiye ekranlarında ortak).
+    Kullanıcı ana grup, alt grup, alt kalem ve türü girer; talep Rapor164/TalepOlustur'a gider,
+    onaylayıcıya (Rapor165) düşer ve bildirim e-postası gönderilir. Sayfada #btnKodTalep düğmesi pencereyi açar.
+    Ana/alt grup önerileri sayfadaki window.GG_KODLAR kataloğundan (yoksa /Rapor164/Kodlar'dan) doldurulur.
+*@
+<div class="modal fade" id="kodTalepModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header" style="background:#fff7ed;">
+                <h5 class="modal-title"><i class="fas fa-lightbulb text-warning me-2"></i>Yeni Gider / Gelir Kodu Talebi</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-light border small mb-3"><i class="fas fa-info-circle me-1 text-primary"></i>Katalogda bulamadığınız kalemi buradan talep edin. Talep onaylayıcıya düşer; onaylanınca kod kataloğa eklenir ve size e-posta gelir. Var olan bir ana grup / alt grup seçerseniz kod o grubun altında açılır.</div>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold mb-1">Tür <span class="text-danger">*</span></label>
+                        <select id="ktTip" class="form-select form-select-sm">
+                            <option value="GIDER">Gider (7'li hesaplar)</option>
+                            <option value="GELIR">Gelir (6'lı hesaplar)</option>
+                            <option value="TIS">Teşvik / İstisna</option>
+                        </select>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label fw-bold mb-1">Ana Grup <span class="text-danger">*</span></label>
+                        <input type="text" id="ktAna" class="form-control form-control-sm" list="ktAnaList" placeholder="Var olan bir ana grup seçin ya da yeni yazın" autocomplete="off">
+                        <datalist id="ktAnaList"></datalist>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold mb-1">Alt Grup <span class="text-danger">*</span></label>
+                        <input type="text" id="ktAlt" class="form-control form-control-sm" list="ktAltList" placeholder="Seçilen ana grubun alt grubu ya da yeni" autocomplete="off">
+                        <datalist id="ktAltList"></datalist>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold mb-1">Alt Kalem (yeni kod adı) <span class="text-danger">*</span></label>
+                        <input type="text" id="ktKalem" class="form-control form-control-sm" placeholder="Örn: Forklift Kiralama Gideri" maxlength="200">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold mb-1">İlgili Hesap (isteğe bağlı)</label>
+                        <input type="text" id="ktHesap" class="form-control form-control-sm" placeholder="Örn: 770.02.001" maxlength="50">
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label fw-bold mb-1">Açıklama / Gerekçe</label>
+                        <input type="text" id="ktAciklama" class="form-control form-control-sm" placeholder="Bu kod hangi giderler için kullanılacak?" maxlength="1000">
+                    </div>
+                    <div class="col-12">
+                        <div class="small text-muted">Önizleme: <span id="ktOnizleme" class="fw-bold text-primary">—</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <span class="text-muted small me-auto"><i class="fas fa-envelope me-1"></i>Talep onaylayıcıya ve bildirim adresine e-posta ile iletilir.</span>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Vazgeç</button>
+                <button type="button" class="btn btn-warning fw-bold" id="btnKodTalepGonder"><i class="fas fa-paper-plane me-1"></i>Onaya Gönder</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    (function () {
+        var EKRAN = '@(ViewContext.RouteData.Values["controller"])';
+        function kodlar() { return window.GG_KODLAR || []; }
+        function doldur() {
+            var tip = $('#ktTip').val(), ana = ($('#ktAna').val() || '').trim();
+            var L = kodlar().filter(function (k) { return k.tip === tip; });
+            var analar = []; L.forEach(function (k) { if (analar.indexOf(k.anaGrup) < 0) analar.push(k.anaGrup); });
+            $('#ktAnaList').html(analar.map(function (a) { return '<option value="' + $('<div>').text(a).html() + '">'; }).join(''));
+            var altlar = []; L.filter(function (k) { return !ana || k.anaGrup.toLocaleLowerCase('tr-TR') === ana.toLocaleLowerCase('tr-TR'); }).forEach(function (k) { if (altlar.indexOf(k.altGrup) < 0) altlar.push(k.altGrup); });
+            $('#ktAltList').html(altlar.map(function (a) { return '<option value="' + $('<div>').text(a).html() + '">'; }).join(''));
+            onizle();
+        }
+        function onizle() {
+            var tip = $('#ktTip').val(), ana = ($('#ktAna').val() || '').trim(), alt = ($('#ktAlt').val() || '').trim(), kalem = ($('#ktKalem').val() || '').trim();
+            var onek = tip === 'GELIR' ? 'GLR' : tip === 'TIS' ? 'TIS' : 'GDR';
+            $('#ktOnizleme').text((ana || '…') + ' › ' + (alt || '…') + ' › ' + (kalem || '…') + '  (' + onek + '.xx.xx.xx)');
+        }
+        $(document).on('click', '#btnKodTalep', function () {
+            if (!kodlar().length && $.getJSON) {
+                $.getJSON('/Rapor164/Kodlar', function (res) { if (res && res.success) { window.GG_KODLAR = res.data || []; doldur(); } });
+            }
+            $('#ktAna, #ktAlt, #ktKalem, #ktHesap, #ktAciklama').val('');
+            // satırdaki hesap 6/7 ise türü ona göre öner
+            var acct = $('#linesBody tr .acct-select, #linesBody tr .select-account').filter(function () { return /^[67]/.test($(this).val() || ''); }).first().val() || '';
+            if (acct) { $('#ktTip').val(acct.charAt(0) === '6' ? 'GELIR' : 'GIDER'); $('#ktHesap').val(acct); }
+            doldur();
+            var m = document.getElementById('kodTalepModal');
+            if (m.parentElement !== document.body) document.body.appendChild(m);   // backdrop-filter'lı kapsayıcıdan çıkar
+            $('#kodTalepModal').modal('show');
+            setTimeout(function () { $('#ktAna').focus(); }, 300);
+        });
+        $(document).on('change', '#ktTip', doldur);
+        $(document).on('input change', '#ktAna', doldur);
+        $(document).on('input', '#ktAlt, #ktKalem', onizle);
+        $(document).on('click', '#btnKodTalepGonder', function () {
+            var req = { tip: $('#ktTip').val(), anaGrup: ($('#ktAna').val() || '').trim(), altGrup: ($('#ktAlt').val() || '').trim(), kalem: ($('#ktKalem').val() || '').trim(), hesapKodu: ($('#ktHesap').val() || '').trim(), aciklama: ($('#ktAciklama').val() || '').trim(), ekran: EKRAN };
+            if (!req.anaGrup || !req.altGrup || !req.kalem) { toastr.warning('Ana grup, alt grup ve alt kalem zorunlu.'); return; }
+            var b = $('#btnKodTalepGonder').prop('disabled', true);
+            $.ajax({ url: '/Rapor164/TalepOlustur', type: 'POST', contentType: 'application/json', data: JSON.stringify(req) })
+                .done(function (res) {
+                    if (res && res.success) { toastr.success(res.message, '', { timeOut: 9000 }); $('#kodTalepModal').modal('hide'); }
+                    else toastr.error((res && res.message) || 'Talep gönderilemedi.', '', { timeOut: 9000 });
+                })
+                .fail(function () { toastr.error('Talep gönderilemedi.'); })
+                .always(function () { b.prop('disabled', false); });
+        });
+    })();
+</script>

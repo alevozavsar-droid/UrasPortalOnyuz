@@ -1,0 +1,458 @@
+@{
+    ViewData["Title"] = "Ürün İzlenebilirlik";
+    string ilkItemCode = (string)(ViewBag.ItemCode ?? "");
+    string ilkParti = (string)(ViewBag.Parti ?? "");
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-diagram-project me-2 text-primary"></i> Ürün İzlenebilirlik <span class="fs-6 fw-normal text-muted">— parti detay raporu</span></h2>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-success btn-sm" onclick="excelAktar()"><i class="fas fa-file-excel me-1"></i>Excel</button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="window.print()"><i class="fas fa-print me-1"></i>Yazdır</button>
+    </div>
+</div>
+<p class="text-muted mb-3">Bir partinin nereden geldiği (üreten iş emri, tüketilen bileşen partileri) ve nereye gittiği (kullanıldığı üretimler, teslimatlar) — tüm hareketler tek ekranda.</p>
+
+<div class="card dash-card mb-3">
+    <div class="card-body">
+        <label class="form-label small fw-bold">Parti no, kalem kodu veya ürün adı</label>
+        <div class="input-group input-group-sm mb-2">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" id="izAra" class="form-control" placeholder="Örn. 260611001, YM02.S0.W20.00, S 20 WHITE…" autocomplete="off">
+        </div>
+        <div id="izSonuclar" class="row g-2"></div>
+        <div id="izAramaBilgi" class="small text-muted mt-1"></div>
+    </div>
+</div>
+
+<div id="yukleniyor" class="text-center text-muted py-5" style="display:none;"><span class="spinner-border spinner-border-sm me-2"></span>Parti izi çıkarılıyor…</div>
+<div id="bulunamadi" class="alert alert-secondary" style="display:none;"><i class="fas fa-magnifying-glass me-1"></i>Kalem/parti bulunamadı.</div>
+
+<div id="icerik" style="display:none;">
+    <!-- Kimlik (hero) -->
+    <div class="card dash-card mb-3">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-12 col-md-4">
+                    <div class="text-muted small fw-bold text-uppercase">Parti / Lot</div>
+                    <div class="fs-3 fw-bold" id="heroParti"></div>
+                    <div class="d-flex flex-wrap gap-2 mt-2" id="heroChips"></div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="text-muted small fw-bold text-uppercase">Ürün</div>
+                    <div class="fs-5 fw-semibold" id="heroUrunAd"></div>
+                    <div class="text-muted small" id="heroUrunKod"></div>
+                    <div class="d-flex flex-wrap gap-2 mt-2" id="heroDepolar"></div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="text-muted small fw-bold text-uppercase">Mevcut Stok</div>
+                    <div class="fs-3 fw-bold" id="heroStok"></div>
+                    <div class="small text-muted" id="heroStokAlt"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Akış şeridi -->
+    <div class="d-flex flex-wrap align-items-stretch gap-2 mb-3" id="akisSeridi"></div>
+
+    <!-- Bağlantı haritası -->
+    <div class="card dash-card mb-3" id="haritaKart">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span class="fw-bold small text-uppercase text-muted">Bağlantı Haritası <span id="haritaSayisi" class="badge bg-primary ms-1">0</span></span>
+            <span class="small text-muted">partiye tıklayınca o partinin izi açılır</span>
+        </div>
+        <div class="card-body" style="overflow-x:auto;">
+            <div id="haritaAlan" style="position:relative; min-height:200px;"></div>
+            <div id="haritaHata" class="small text-danger mt-2" style="display:none;"></div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-12 col-xl-6">
+            <div class="card dash-card h-100">
+                <div class="card-header bg-white fw-bold small text-uppercase text-muted">Nereden Geldi — Üretim</div>
+                <div class="card-body" id="bolumUretim"></div>
+            </div>
+        </div>
+        <div class="col-12 col-xl-6">
+            <div class="card dash-card h-100">
+                <div class="card-header bg-white fw-bold small text-uppercase text-muted">Nereye Gitti — Kullanım</div>
+                <div class="card-body" id="bolumKullanim"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-12 col-xl-7">
+            <div class="card dash-card h-100">
+                <div class="card-header bg-white fw-bold small text-uppercase text-muted">Tüm Stok Hareketleri <span id="hareketSayisi" class="badge bg-primary ms-1">0</span></div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-custom mb-0">
+                        <thead><tr><th>Tarih</th><th>Belge</th><th>Yön</th><th class="text-end">Miktar</th><th>Depo</th><th>Cari</th><th>İş Emri</th></tr></thead>
+                        <tbody id="tbodyHareketler"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-xl-5">
+            <div class="card dash-card h-100">
+                <div class="card-header bg-white fw-bold small text-uppercase text-muted">Silo Hareketleri <span id="siloSayisi" class="badge bg-primary ms-1">0</span></div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-custom mb-0">
+                        <thead><tr><th>Zaman</th><th>Silo</th><th>Tip</th><th class="text-end">Miktar</th></tr></thead>
+                        <tbody id="tbodySilo"></tbody>
+                    </table>
+                    <div id="siloBos" class="text-center text-muted py-3" style="display:none;">Bu parti siloya alınmamış.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card dash-card">
+        <div class="card-header bg-white fw-bold small text-uppercase text-muted">Kalite Kayıtları <span id="kaliteSayisi" class="badge bg-primary ms-1">0</span></div>
+        <div class="card-body" id="kaliteAlan"></div>
+    </div>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; color: #5a5c69; }
+    .rozet { font-size: .68rem; font-weight: 700; padding: .22em .55em; border-radius: 6px; }
+    .rozet-yesil { background:#e6f7ee; color:#0f9d58; } .rozet-sari { background:#fff8e6; color:#b7791f; }
+    .rozet-kirmizi { background:#fde8e8; color:#c0392b; } .rozet-mavi { background:#eaf2ff; color:#2a5fb0; } .rozet-gri { background:#f1f3f5; color:#495057; }
+    .iz-sonuc { border: 1px solid #e3e6f0; border-radius: 10px; padding: 10px 12px; cursor: pointer; height: 100%; }
+    .iz-sonuc:hover { background: #f8f9fc; border-color: #b9c2ce; }
+    .iz-adim { flex: 1 1 140px; border: 1px solid #e3e6f0; border-radius: 12px; padding: 12px 14px; text-decoration: none; color: inherit; background: #fff; min-width: 140px; }
+    .iz-adim:hover { border-color: #2a78d6; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+    .iz-adim.merkez { background: #eef2ff; border-color: #4a3aa7; }
+    .iz-adim .ia-ico { width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: var(--c, #999); color: #fff; margin-bottom: 6px; }
+    .iz-adim .ia-t { font-size: .68rem; font-weight: 800; text-transform: uppercase; color: #858796; letter-spacing: .4px; }
+    .iz-adim .ia-v { font-weight: 700; }
+    .iz-adim .ia-s { font-size: .72rem; color: #94a3b8; }
+    .iz-chip { font-size: .74rem; background: #f1f3f5; border-radius: 20px; padding: 3px 10px; }
+    .harita-dugum { position: absolute; width: 168px; border: 1px solid #d8dee7; border-radius: 8px; background: #fff; padding: 6px 9px; font-size: .72rem; box-shadow: 0 1px 3px rgba(0,0,0,.06); cursor: default; }
+    .harita-dugum.tiklanabilir { cursor: pointer; }
+    .harita-dugum.merkez { border-color: #4a3aa7; background: #eef2ff; box-shadow: 0 0 0 2px rgba(74,58,167,.25); }
+    .harita-dugum .hd-baslik { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .harita-dugum .hd-alt { color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .harita-dugum .hd-detay { color: #94a3b8; font-size: .66rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .iz-kk { border: 1px solid #e3e6f0; border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+    .iz-kk-h { padding: 10px 14px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: #fafbfc; }
+    .iz-kk-h:hover { background: #f1f3f5; }
+    .iz-kk-b { padding: 12px 14px; border-top: 1px solid #eee; }
+</style>
+
+<script>
+    let secili = { itemCode: '@Html.Raw(System.Web.HttpUtility.JavaScriptStringEncode(ilkItemCode))', parti: '@Html.Raw(System.Web.HttpUtility.JavaScriptStringEncode(ilkParti))' };
+    let veriSon = null;
+    function fmt(n, d) { d = d ?? 2; return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+    function tipRozet(kod) { return (kod || '').startsWith('U') ? 'rozet-gri' : ((kod || '').startsWith('Y') ? 'rozet-sari' : 'rozet-yesil'); }
+    function tipAd(kod) { return (kod || '').startsWith('U') ? 'Mamul' : ((kod || '').startsWith('Y') ? 'Yarı Mamul' : 'Hammadde'); }
+    function sonucRozet(s) {
+        s = (s || '').toUpperInvariant ? s : (s || '').toUpperCase();
+        if (s.startsWith('RED') || s === 'R') return 'rozet-kirmizi';
+        if (s.startsWith('ŞART') || s.startsWith('SART')) return 'rozet-sari';
+        if (s.startsWith('UYG') || s.startsWith('KABUL') || s === 'K') return 'rozet-yesil';
+        return 'rozet-gri';
+    }
+
+    function excelAktar() {
+        if (!veriSon || !veriSon.Kimlik) return;
+        const d = veriSon, k = d.Kimlik;
+        const kkOlcumleri = [];
+        (d.KaliteFormlar || []).forEach(f => (f.Satirlar || []).forEach(r => kkOlcumleri.push({ ...r, Form: f.DocEntry })));
+        raporExcel('Izlenebilirlik_' + k.ItemCode + '_' + k.Parti, [
+            { ad: 'Kimlik', kolonlar: [{ k: 'ItemCode', b: 'Kalem' }, { k: 'ItemName', b: 'Ad' }, { k: 'Tip', b: 'Tip' }, { k: 'Parti', b: 'Parti' }, { k: 'GirisTarihi', b: 'İlk Giriş' }, { k: 'Stok', b: 'Stok' }, { k: 'ToplamGiren', b: 'Toplam Giren' }, { k: 'ToplamCikan', b: 'Toplam Çıkan' }, { k: 'Birim', b: 'Birim' }], satirlar: [k] },
+            { ad: 'Üretim', kolonlar: [{ k: 'DocEntry', b: 'İş Emri' }, { k: 'ItemCode', b: 'Ürün Kodu' }, { k: 'ItemName', b: 'Ürün' }, { k: 'Planlanan', b: 'Planlanan' }, { k: 'Uretilen', b: 'Üretilen' }, { k: 'Baslangic', b: 'Başlangıç' }, { k: 'Bitis', b: 'Bitiş' }, { k: 'SureDk', b: 'Süre (dk)' }, { k: 'Operator', b: 'Operatör' }, { k: 'Lot', b: 'Lot' }, { k: 'SiparisNo', b: 'Sipariş' }, { k: 'Musteri', b: 'Müşteri' }], satirlar: d.Uretim || [] },
+            { ad: 'Bileşen Partileri', kolonlar: [{ k: 'OworEntry', b: 'İş Emri' }, { k: 'Tarih', b: 'Tarih' }, { k: 'ItemCode', b: 'Bileşen Kodu' }, { k: 'ItemName', b: 'Bileşen' }, { k: 'Parti', b: 'Parti' }, { k: 'Miktar', b: 'Miktar' }, { k: 'Birim', b: 'Birim' }, { k: 'WhsCode', b: 'Depo' }, { k: 'KaynakAd', b: 'Kaynak' }, { k: 'SiloAd', b: 'Silo' }], satirlar: d.Bilesenler || [] },
+            { ad: 'Kullanım', kolonlar: [{ k: 'DocEntry', b: 'İş Emri' }, { k: 'Tarih', b: 'Tarih' }, { k: 'ItemCode', b: 'Ürün Kodu' }, { k: 'ItemName', b: 'Ürün' }, { k: 'KullanilanMiktar', b: 'Kullanılan' }, { k: 'Uretilen', b: 'Üretilen' }, { k: 'UretilenLot', b: 'Üretilen Lot' }, { k: 'Operator', b: 'Operatör' }], satirlar: d.Kullanim || [] },
+            { ad: 'Hareketler', kolonlar: [{ k: 'Tarih', b: 'Tarih' }, { k: 'BelgeTipi', b: 'Belge Tipi' }, { k: 'BelgeNo', b: 'Belge No' }, { k: 'Yon', b: 'Yön' }, { k: 'Miktar', b: 'Miktar' }, { k: 'WhsCode', b: 'Depo' }, { k: 'CardCode', b: 'Cari Kodu' }, { k: 'CardName', b: 'Cari' }, { k: 'OworEntry', b: 'İş Emri' }], satirlar: d.Hareketler || [] },
+            { ad: 'Silo', kolonlar: [{ k: 'Zaman', b: 'Zaman' }, { k: 'SiloAd', b: 'Silo' }, { k: 'TipAd', b: 'Tip' }, { k: 'Miktar', b: 'Miktar' }, { k: 'Onceki', b: 'Önceki' }, { k: 'Sonraki', b: 'Sonraki' }, { k: 'OworEntry', b: 'İş Emri' }, { k: 'Kullanici', b: 'Kullanıcı' }, { k: 'Aciklama', b: 'Açıklama' }], satirlar: d.Silo || [] },
+            { ad: 'Kalite', kolonlar: [{ k: 'Kaynak', b: 'Kaynak' }, { k: 'FormNo', b: 'Form' }, { k: 'Kod', b: 'Kayıt' }, { k: 'OworEntry', b: 'İş Emri' }, { k: 'Tarih', b: 'Tarih' }, { k: 'Kisi', b: 'Kişi' }, { k: 'Sonuc', b: 'Sonuç' }, { k: 'Aciklama', b: 'Açıklama' }], satirlar: d.Kalite || [] },
+            { ad: 'KK Ölçümleri', kolonlar: [{ k: 'Form', b: 'Form #' }, { k: 'Tarih', b: 'Tarih' }, { k: 'Kazan', b: 'Kazan' }, { k: 'Lot', b: 'Lot' }, { k: 'Gorunus', b: 'Görünüş' }, { k: 'Ph', b: 'pH' }, { k: 'Sicaklik', b: 'Sıcaklık' }, { k: 'ViskOnce', b: 'Visk. Önce' }, { k: 'ViskSonra', b: 'Visk. Sonra' }, { k: 'Visk24', b: 'Visk. 24s' }, { k: 'Yogunluk', b: 'Yoğunluk' }, { k: 'Kati', b: 'Katı' }, { k: 'Tork1', b: 'Tork 1' }, { k: 'Tork2', b: 'Tork 2' }, { k: 'Sonuc', b: 'Sonuç' }, { k: 'Aciklama', b: 'Açıklama' }, { k: 'Sorumlu', b: 'Sorumlu' }], satirlar: kkOlcumleri }
+        ]);
+    }
+
+    let aramaZaman = null;
+    document.getElementById('izAra').addEventListener('input', function () {
+        clearTimeout(aramaZaman);
+        const q = this.value.trim();
+        if (q.length < 2) { document.getElementById('izSonuclar').innerHTML = ''; return; }
+        aramaZaman = setTimeout(() => aramaYap(q), 300);
+    });
+
+    async function aramaYap(q) {
+        document.getElementById('izAramaBilgi').textContent = 'aranıyor…';
+        const res = await fetch('/UrasUretimRapor/LotAra?q=' + encodeURIComponent(q)).then(r => r.json());
+        document.getElementById('izAramaBilgi').textContent = '';
+        if (!res.success) { document.getElementById('izAramaBilgi').textContent = res.message; return; }
+        const list = res.data || [];
+        document.getElementById('izAramaBilgi').textContent = list.length ? '' : 'Eşleşen parti bulunamadı.';
+        document.getElementById('izSonuclar').innerHTML = list.map(s => `
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="iz-sonuc" onclick="sec('${s.ItemCode}','${(s.Parti || '').replace(/'/g, "\\'")}')">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div class="text-truncate"><div class="fw-bold text-truncate">${s.ItemName || s.ItemCode}</div><div class="text-muted small">${s.ItemCode}</div></div>
+                        <span class="rozet ${tipRozet(s.ItemCode)}">${s.Tip}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mt-1">
+                        <span class="fw-bold">${s.Parti}</span>
+                        <span class="small text-muted">giriş ${s.GirisTarihi || ''} • stok <b>${fmt(s.Stok, 2)}</b> ${s.Birim}</span>
+                    </div>
+                </div>
+            </div>`).join('');
+    }
+
+    function sec(itemCode, parti) {
+        secili = { itemCode, parti };
+        document.getElementById('izSonuclar').innerHTML = '';
+        document.getElementById('izAra').value = '';
+        yukle();
+    }
+
+    async function yukle() {
+        if (!secili.itemCode || !secili.parti) return;
+        document.getElementById('yukleniyor').style.display = '';
+        document.getElementById('icerik').style.display = 'none';
+        document.getElementById('bulunamadi').style.display = 'none';
+        const qs = new URLSearchParams({ itemCode: secili.itemCode, parti: secili.parti });
+        const res = await fetch('/UrasUretimRapor/GetLotDetay?' + qs.toString()).then(r => r.json());
+        document.getElementById('yukleniyor').style.display = 'none';
+        if (!res.success) { alert('Rapor alınamadı: ' + res.message); return; }
+        veriSon = res.data;
+        if (!veriSon.Bulundu) { document.getElementById('bulunamadi').style.display = ''; return; }
+        document.getElementById('icerik').style.display = '';
+        ciz();
+    }
+
+    function ciz() {
+        const d = veriSon, k = d.Kimlik;
+        document.getElementById('heroParti').textContent = k.Parti;
+        document.getElementById('heroChips').innerHTML = `
+            <span class="rozet ${tipRozet(k.ItemCode)}">${k.Tip}</span>
+            ${k.GirisTarihi ? `<span class="iz-chip"><i class="fas fa-box-open me-1"></i>ilk giriş ${k.GirisTarihi}</span>` : ''}
+            ${k.SonKullanma ? `<span class="iz-chip"><i class="fas fa-calendar-xmark me-1"></i>SKT ${k.SonKullanma}</span>` : ''}`;
+        document.getElementById('heroUrunAd').textContent = k.ItemName || k.ItemCode;
+        document.getElementById('heroUrunKod').textContent = k.ItemCode;
+        document.getElementById('heroDepolar').innerHTML = (d.DepoStok || []).map(w => `<span class="iz-chip"><i class="fas fa-location-dot me-1"></i>${w.WhsCode} <span class="text-muted">${w.WhsName}</span> <b>${fmt(w.Miktar, 2)}</b></span>`).join('');
+        document.getElementById('heroStok').textContent = fmt(k.Stok, 2) + ' ' + k.Birim;
+        document.getElementById('heroStokAlt').textContent = 'giren ' + fmt(k.ToplamGiren, 2) + ' • çıkan ' + fmt(k.ToplamCikan, 2);
+
+        const teslimatlar = (d.Hareketler || []).filter(h => h.BelgeTipi && (h.BelgeTipi.indexOf('Teslimat') >= 0 || h.BelgeTipi.indexOf('Fatura') >= 0 || h.BelgeTipi.indexOf('İade') >= 0));
+        const toplam = (arr, alan) => (arr || []).reduce((a, x) => a + (Number(x[alan]) || 0), 0);
+        document.getElementById('akisSeridi').innerHTML = `
+            <div class="iz-adim"><div class="ia-ico" style="--c:#eb6834"><i class="fas fa-boxes-stacked"></i></div><div class="ia-t">Bileşen Partileri</div><div class="ia-v">${(d.Bilesenler || []).length}</div></div>
+            <div class="iz-adim"><div class="ia-ico" style="--c:#2a78d6"><i class="fas fa-gears"></i></div><div class="ia-t">Üreten İş Emri</div><div class="ia-v">${(d.Uretim || []).length ? '#' + d.Uretim[0].DocEntry : '—'}</div></div>
+            <div class="iz-adim merkez"><div class="ia-ico" style="--c:#4a3aa7"><i class="fas fa-barcode"></i></div><div class="ia-t">Bu Parti</div><div class="ia-v">${k.Parti}</div><div class="ia-s">${(d.Hareketler || []).length} hareket • ${(d.Silo || []).length} silo</div></div>
+            <div class="iz-adim"><div class="ia-ico" style="--c:#1baf7a"><i class="fas fa-diagram-project"></i></div><div class="ia-t">Kullanıldığı Üretim</div><div class="ia-v">${(d.Kullanim || []).length}</div></div>
+            <div class="iz-adim"><div class="ia-ico" style="--c:#eda100"><i class="fas fa-truck"></i></div><div class="ia-t">Teslimat</div><div class="ia-v">${teslimatlar.length}</div></div>
+            <div class="iz-adim"><div class="ia-ico" style="--c:#008300"><i class="fas fa-clipboard-check"></i></div><div class="ia-t">Kalite</div><div class="ia-v">${(d.Kalite || []).length}</div></div>`;
+
+        cizHarita();
+        cizUretim();
+        cizKullanim();
+        cizHareketler();
+        cizSilo();
+        cizKalite();
+    }
+
+    function cizHarita() {
+        const h = veriSon.Harita || { Dugumler: [], Baglar: [] };
+        document.getElementById('haritaSayisi').textContent = (h.Dugumler || []).length;
+        document.getElementById('haritaHata').style.display = h.Hata ? '' : 'none';
+        document.getElementById('haritaHata').textContent = h.Hata ? ('Harita kısmen oluşturuldu: ' + h.Hata) : '';
+
+        const renkler = { merkez: '#4a3aa7', isemri: '#2a78d6', parti: '#eb6834', partisiz: '#cbd5e1', siparis: '#8b5cf6', tedarikci: '#0f9d58', giris: '#1baf7a', iade: '#c0392b', teslimat: '#eda100', transfer: '#64748b', diger: '#94a3b8', musteri: '#0ea5e9', kalite: '#059669', lot: '#f59e0b' };
+        const katmanlar = {};
+        (h.Dugumler || []).forEach(n => { const kt = n.Katman ?? 0; (katmanlar[kt] = katmanlar[kt] || []).push(n); });
+        const katmanSirali = Object.keys(katmanlar).map(Number).sort((a, b) => a - b);
+        const colW = 200, rowH = 74, pad = 20;
+        const pos = {};
+        katmanSirali.forEach((kt, ci) => {
+            katmanlar[kt].forEach((n, ri) => { pos[n.Id] = { x: pad + ci * colW, y: pad + ri * rowH, n }; });
+        });
+        const genislik = pad * 2 + katmanSirali.length * colW;
+        const yukseklik = pad * 2 + Math.max(1, ...katmanSirali.map(kt => katmanlar[kt].length)) * rowH;
+
+        let svg = `<svg width="${genislik}" height="${yukseklik}" style="position:absolute; top:0; left:0; pointer-events:none;">`;
+        (h.Baglar || []).forEach(b => {
+            const a = pos[b.Kaynak], c = pos[b.Hedef];
+            if (!a || !c) return;
+            const x1 = a.x + 168, y1 = a.y + 20, x2 = c.x, y2 = c.y + 20;
+            const mx = (x1 + x2) / 2;
+            svg += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" stroke="#c9d2dc" stroke-width="1.5" fill="none" />`;
+        });
+        svg += '</svg>';
+
+        let kutular = '';
+        Object.values(pos).forEach(p => {
+            const n = p.n;
+            const renk = renkler[n.Tip] || '#94a3b8';
+            const tiklanabilir = n.Tip === 'parti' || n.Tip === 'partisiz' || n.Tip === 'merkez';
+            kutular += `<div class="harita-dugum ${n.Tip === 'merkez' ? 'merkez' : ''} ${tiklanabilir && n.ItemCode ? 'tiklanabilir' : ''}"
+                style="left:${p.x}px; top:${p.y}px; border-left:3px solid ${renk};"
+                ${tiklanabilir && n.ItemCode && n.Parti ? `onclick="sec('${n.ItemCode}','${(n.Parti || '').replace(/'/g, "\\'")}')"` : ''}
+                title="${(n.Detay || '').replace(/"/g, '&quot;')}">
+                <div class="hd-baslik">${n.Baslik || ''}</div>
+                <div class="hd-alt">${n.Alt || ''}</div>
+                <div class="hd-detay">${n.Detay || ''}</div>
+            </div>`;
+        });
+        document.getElementById('haritaAlan').style.width = genislik + 'px';
+        document.getElementById('haritaAlan').style.height = yukseklik + 'px';
+        document.getElementById('haritaAlan').innerHTML = svg + kutular;
+    }
+
+    function cizUretim() {
+        const d = veriSon;
+        let html = '';
+        if (!(d.Uretim || []).length) {
+            html += `<div class="text-center text-muted py-3"><i class="fas fa-truck me-1"></i>Bu partiyi üreten iş emri yok; parti satınalma/dış girişle stoğa alınmış olabilir.</div>`;
+        } else {
+            d.Uretim.forEach(u => {
+                const durum = u.UvtDurum === 'T' ? 'Tamamlandı' : (u.UvtDurum === 'B' ? 'Bitti/KK bekliyor' : (u.UvtDurum === 'S' ? 'Başlatıldı' : u.Status));
+                html += `<div class="mb-3 pb-3 border-bottom">
+                    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                        <div><div class="fw-bold">İş Emri #${u.DocEntry} <span class="rozet rozet-gri ms-1">${durum}</span></div>
+                            <div class="small text-muted">${u.ItemName || u.ItemCode} • ${u.ItemCode}</div></div>
+                        <div class="text-end"><div class="fw-bold">${fmt(u.Uretilen)} <small class="text-muted">/ ${fmt(u.Planlanan)} planlanan</small></div><div class="small text-muted">lot ${u.Lot}</div></div>
+                    </div>
+                    <div class="row g-2 mt-1 small">
+                        <div class="col-6 col-md-3"><div class="text-muted small">BAŞLANGIÇ</div>${u.Baslangic || '—'}</div>
+                        <div class="col-6 col-md-3"><div class="text-muted small">BİTİŞ</div>${u.Bitis || '—'}</div>
+                        <div class="col-6 col-md-2"><div class="text-muted small">OPERATÖR</div>${u.Operator || '—'}</div>
+                        <div class="col-6 col-md-2"><div class="text-muted small">DEPO</div>${u.Depo || ''}</div>
+                        ${u.SiparisNo ? `<div class="col-12"><div class="text-muted small">SATIŞ SİPARİŞİ</div>#${u.SiparisNo} ${u.Musteri ? '— ' + u.Musteri : ''}</div>` : ''}
+                    </div>
+                </div>`;
+            });
+        }
+        if ((d.Bilesenler || []).length) {
+            html += `<div class="fw-bold small text-uppercase text-muted mb-2"><i class="fas fa-boxes-stacked me-1"></i>Tüketilen bileşen partileri</div>
+                <div class="table-responsive"><table class="table table-sm table-custom mb-0">
+                <thead><tr><th>Bileşen</th><th>Parti</th><th class="text-end">Miktar</th><th>Kaynak</th></tr></thead><tbody>` +
+                d.Bilesenler.map(b => `<tr>
+                    <td><span class="rozet ${tipRozet(b.ItemCode)} me-1">${b.Tip}</span><span class="fw-semibold">${b.ItemName || b.ItemCode}</span><div class="text-muted small">${b.ItemCode} • ${b.WhsCode} • İE #${b.OworEntry} • ${b.Tarih}</div></td>
+                    <td>${b.Parti ? `<a href="javascript:void(0)" onclick="sec('${b.ItemCode}','${(b.Parti || '').replace(/'/g, "\\'")}')">${b.Parti}</a>` : '<span class="text-muted">partisiz</span>'}</td>
+                    <td class="text-end fw-bold">${fmt(b.Miktar, 3)} <span class="text-muted">${b.Birim}</span></td>
+                    <td><span class="rozet rozet-mavi">${b.KaynakAd || '—'}</span>${b.SiloAd ? `<div class="text-muted small">${b.SiloAd}</div>` : ''}</td>
+                </tr>`).join('') + `</tbody></table></div>`;
+        }
+        document.getElementById('bolumUretim').innerHTML = html;
+    }
+
+    function cizKullanim() {
+        const d = veriSon;
+        const teslimatlar = (d.Hareketler || []).filter(h => h.BelgeTipi && (h.BelgeTipi.indexOf('Teslimat') >= 0 || h.BelgeTipi.indexOf('Fatura') >= 0 || h.BelgeTipi.indexOf('İade') >= 0));
+        let html = `<div class="fw-bold small text-uppercase text-muted mb-2"><i class="fas fa-gear me-1"></i>Bileşen olarak kullanıldığı üretimler</div>`;
+        if (!(d.Kullanim || []).length) {
+            html += `<div class="text-center text-muted py-3">Bu parti henüz bir üretimde bileşen olarak tüketilmemiş.</div>`;
+        } else {
+            html += `<div class="table-responsive mb-3"><table class="table table-sm table-custom mb-0">
+                <thead><tr><th>İş Emri</th><th>Üretilen Ürün</th><th class="text-end">Kullanılan</th><th>Üretilen Lot</th></tr></thead><tbody>` +
+                d.Kullanim.map(k => `<tr>
+                    <td class="fw-bold">#${k.DocEntry}<div class="text-muted small">${k.Tarih} ${k.Operator ? '• ' + k.Operator : ''}</div></td>
+                    <td><span class="rozet ${tipRozet(k.ItemCode)} me-1">${tipAd(k.ItemCode)}</span>${k.ItemName || k.ItemCode}<div class="text-muted small">${k.ItemCode} • ${fmt(k.Uretilen)} ${k.Birim} üretildi</div></td>
+                    <td class="text-end fw-bold">${fmt(k.KullanilanMiktar, 3)}</td>
+                    <td>${k.UretilenLot ? `<a href="javascript:void(0)" onclick="sec('${k.ItemCode}','${(k.UretilenLot || '').replace(/'/g, "\\'")}')">${k.UretilenLot}</a>` : ''}</td>
+                </tr>`).join('') + `</tbody></table></div>`;
+        }
+        html += `<div class="fw-bold small text-uppercase text-muted mb-2"><i class="fas fa-truck me-1"></i>Teslimat / satış çıkışları</div>`;
+        if (!teslimatlar.length) {
+            html += `<div class="text-center text-muted py-3">Teslimat/satış hareketi yok.</div>`;
+        } else {
+            html += `<div class="table-responsive"><table class="table table-sm table-custom mb-0">
+                <thead><tr><th>Tarih</th><th>Belge</th><th>Müşteri</th><th class="text-end">Miktar</th><th>Depo</th></tr></thead><tbody>` +
+                teslimatlar.map(h => `<tr><td class="text-nowrap">${h.Tarih}</td><td>${h.BelgeTipi} #${h.BelgeNo}</td><td>${h.CardName || ''}</td>
+                    <td class="text-end fw-bold ${h.Miktar < 0 ? 'text-danger' : 'text-success'}">${fmt(h.Miktar)}</td><td>${h.WhsCode || ''}</td></tr>`).join('') + `</tbody></table></div>`;
+        }
+        document.getElementById('bolumKullanim').innerHTML = html;
+    }
+
+    function cizHareketler() {
+        const list = veriSon.Hareketler || [];
+        document.getElementById('hareketSayisi').textContent = list.length;
+        document.getElementById('tbodyHareketler').innerHTML = list.map(h => `
+            <tr><td class="text-nowrap">${h.Tarih}</td><td>${h.BelgeTipi} #${h.BelgeNo}</td><td><span class="rozet ${h.Miktar < 0 ? 'rozet-kirmizi' : 'rozet-yesil'}">${h.Yon}</span></td>
+                <td class="text-end fw-bold ${h.Miktar < 0 ? 'text-danger' : 'text-success'}">${fmt(h.Miktar, 3)}</td>
+                <td>${h.WhsCode || ''}</td><td>${h.CardName || ''}</td><td>${h.OworEntry ? '#' + h.OworEntry : ''}</td></tr>`).join('')
+            || '<tr><td colspan="7" class="text-center text-muted py-3">Hareket yok.</td></tr>';
+    }
+
+    function cizSilo() {
+        const list = veriSon.Silo || [];
+        document.getElementById('siloSayisi').textContent = list.length;
+        document.getElementById('siloBos').style.display = list.length ? 'none' : '';
+        const rozetTip = { D: 'rozet-yesil', T: 'rozet-mavi', B: 'rozet-kirmizi', Z: 'rozet-sari' };
+        document.getElementById('tbodySilo').innerHTML = list.map(s => `
+            <tr><td class="text-nowrap">${s.Zaman}</td><td class="fw-semibold">${s.SiloAd}</td>
+                <td><span class="rozet ${rozetTip[s.Tip] || 'rozet-gri'}">${s.TipAd}</span></td>
+                <td class="text-end fw-bold">${fmt(s.Miktar)}</td></tr>`).join('');
+    }
+
+    function cizKalite() {
+        const d = veriSon;
+        document.getElementById('kaliteSayisi').textContent = (d.Kalite || []).length;
+        if (!(d.Kalite || []).length) { document.getElementById('kaliteAlan').innerHTML = '<div class="text-center text-muted py-4">Bu parti için kalite kaydı bulunamadı.</div>'; return; }
+
+        let html = '';
+        (d.KaliteFormlar || []).forEach((f, idx) => {
+            const sonuc = sonucOzetForm(f.Satirlar);
+            html += `<div class="iz-kk">
+                <div class="iz-kk-h" onclick="document.getElementById('kkForm${idx}').classList.toggle('d-none')">
+                    <div>
+                        <div class="fw-bold">Ürün Kalite Kontrol Formu <span class="text-muted fw-normal">${f.FormNo || ''} ${f.Rev ? '• Rev ' + f.Rev : ''} • #${f.DocEntry}</span></div>
+                        <div class="small text-muted">${f.Tarih || ''} ${f.Kisi ? '• ' + f.Kisi : ''} ${f.OworEntry ? '• iş emri #' + f.OworEntry : ''} • parti ${f.Parti || ''} • ${f.SatirSayisi} ölçüm satırı</div>
+                    </div>
+                    ${sonuc ? `<span class="rozet ${sonucRozet(sonuc)}">${sonuc}</span>` : ''}
+                </div>
+                <div class="iz-kk-b d-none" id="kkForm${idx}">
+                    ${(f.Satirlar || []).length ? `<div class="table-responsive"><table class="table table-sm table-custom mb-0">
+                        <thead><tr><th>Tarih</th><th>Kazan</th><th>Lot</th><th>Görünüş</th><th class="text-end">pH</th><th class="text-end">Sıcaklık</th><th>Sonuç</th><th>Sorumlu</th></tr></thead>
+                        <tbody>${f.Satirlar.map(r => `<tr><td class="text-nowrap">${r.Tarih || ''}</td><td>${r.Kazan || ''}</td><td>${r.Lot || ''}</td><td>${r.Gorunus || ''}</td>
+                            <td class="text-end">${r.Ph || ''}</td><td class="text-end">${r.Sicaklik || ''}</td>
+                            <td>${r.Sonuc ? `<span class="rozet ${sonucRozet(r.Sonuc)}">${r.Sonuc}</span>` : ''}</td><td class="small">${r.Sorumlu || ''}</td></tr>`).join('')}
+                        </tbody></table></div>` : '<div class="text-muted small py-2">Formda ölçüm satırı yok.</div>'}
+                    ${f.Aciklama ? `<div class="small text-muted mt-2"><i class="fas fa-comment me-1"></i>${f.Aciklama}</div>` : ''}
+                </div>
+            </div>`;
+        });
+        (d.GirisKK || []).forEach((g, idx) => {
+            html += `<div class="iz-kk">
+                <div class="iz-kk-h" onclick="document.getElementById('kkGiris${idx}').classList.toggle('d-none')">
+                    <div>
+                        <div class="fw-bold">Giriş Kalite Kontrol Formu <span class="text-muted fw-normal">URS-F09-01 • #${g.Kod}</span></div>
+                        <div class="small text-muted">${g.Tarih || ''} ${g.Kisi ? '• ' + g.Kisi : ''} ${g.Tedarikci ? '• ' + g.Tedarikci : ''} ${g.Irsaliye ? '• irsaliye ' + g.Irsaliye : ''} ${g.Miktar ? '• ' + fmt(g.Miktar) + ' ' + g.Birim : ''}</div>
+                    </div>
+                    ${g.Sonuc ? `<span class="rozet ${sonucRozet(g.Sonuc)}">${g.Sonuc}</span>` : ''}
+                </div>
+                <div class="iz-kk-b d-none" id="kkGiris${idx}">
+                    <div class="row g-2 small">
+                        ${g.Gorunus ? `<div class="col-6 col-md-3"><div class="text-muted">Görünüş</div><b>${g.Gorunus}</b></div>` : ''}
+                        ${g.Renk ? `<div class="col-6 col-md-3"><div class="text-muted">Renk</div><b>${g.Renk}</b></div>` : ''}
+                        ${g.Viskozite ? `<div class="col-6 col-md-3"><div class="text-muted">Viskozite</div><b>${g.Viskozite}</b></div>` : ''}
+                        ${g.Ph ? `<div class="col-6 col-md-3"><div class="text-muted">pH</div><b>${g.Ph}</b></div>` : ''}
+                        ${g.Yogunluk ? `<div class="col-6 col-md-3"><div class="text-muted">Yoğunluk</div><b>${g.Yogunluk}</b></div>` : ''}
+                        ${g.Kati ? `<div class="col-6 col-md-3"><div class="text-muted">Katı</div><b>${g.Kati}</b></div>` : ''}
+                        ${g.HedefDepo ? `<div class="col-6 col-md-3"><div class="text-muted">Hedef Depo</div><b>${g.HedefDepo}</b></div>` : ''}
+                    </div>
+                    ${g.Aciklama ? `<div class="small text-muted mt-2"><i class="fas fa-comment me-1"></i>${g.Aciklama}</div>` : ''}
+                </div>
+            </div>`;
+        });
+        document.getElementById('kaliteAlan').innerHTML = html;
+    }
+
+    function sonucOzetForm(satirlar) {
+        const sonuclar = (satirlar || []).map(s => (s.Sonuc || '').trim().toUpperCase()).filter(s => s);
+        if (!sonuclar.length) return '';
+        if (sonuclar.some(s => s === 'R' || s.startsWith('RED'))) return 'Red';
+        if (sonuclar.some(s => s === 'ŞK' || s === 'SK' || s.startsWith('ŞART') || s.startsWith('SART'))) return 'Şartlı';
+        if (sonuclar.every(s => s === 'K' || s.startsWith('UYG') || s.startsWith('KABUL'))) return 'Uygun';
+        return 'Karışık';
+    }
+
+    if (secili.itemCode && secili.parti) yukle();
+</script>

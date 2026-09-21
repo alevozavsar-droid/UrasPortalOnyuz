@@ -1,0 +1,1321 @@
+﻿@model List<WebApplication3.Models.PersonelMaliyetViewModel>
+@{
+    // Başlık içeriğe uygun şekilde düzeltildi
+    ViewData["Title"] = "Personel Maaş ve Maliyet Simülasyonu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    @functions {
+    public static string CleanCompanyName(string companyName)
+    {
+        if (string.IsNullOrEmpty(companyName)) return "unknown";
+        
+        string text = companyName.ToLowerInvariant().Trim();
+        text = text.Replace("İ", "i").Replace("ı", "i")
+                   .Replace("ğ", "g").Replace("ü", "u")
+                   .Replace("ş", "s").Replace("ö", "o")
+                   .Replace("ç", "c");
+                   
+        // Boşlukları ve özel karakterleri tire işaretine çevirir veya siler
+        System.Text.RegularExpressions.Regex reg = new System.Text.RegularExpressions.Regex("[^a-zA-Z0-9_-]");
+        text = text.Replace(" ", "-");
+        return reg.Replace(text, "");
+    }
+}
+    // 1. KURAL: URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* --- GENEL TABLO YAPISI --- */
+        .table-container {
+            height: calc(100vh - 180px);
+            overflow: auto;
+            border: 1px solid #dee2e6;
+            background-color: white;
+            font-size: 11px;
+            position: relative;
+            width: 100%;
+        }
+
+        /* --- STICKY (SABİT) KOLON AYARLARI --- */
+        .sticky-top {
+            position: sticky;
+            top: 0;
+            z-index: 1020;
+            box-shadow: 0 2px 2px rgba(0,0,0,0.15);
+        }
+
+        /* 1. Sabit Kolon: Checkbox */
+        .sticky-col-1 {
+            position: sticky;
+            left: 0;
+            z-index: 1060 !important;
+            background-color: #fff !important;
+            border-right: 1px solid #ddd !important;
+            width: 40px;
+            min-width: 40px;
+            padding: 0 !important;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+        }
+
+        /* 2. Sabit Kolon: Sıra No */
+        .sticky-col-2 {
+            position: sticky;
+            left: 40px; /* col-1 width */
+            z-index: 1050 !important;
+            background-color: #fff;
+            border-right: 2px solid #ddd !important;
+            width: 50px;
+            min-width: 50px;
+            text-align: center;
+        }
+
+        .d-flex-center {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            width: 100%;
+            min-height: 30px;
+        }
+
+        th.sticky-col-1 input {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Başlıklar */
+        thead .sticky-col-1, thead .sticky-col-2 {
+            z-index: 1070 !important;
+            background-color: #f8f9fa !important;
+        }
+
+        /* --- HÜCRE STİLLERİ --- */
+        th {
+            text-align: center;
+            vertical-align: middle;
+            padding: 6px 4px !important;
+            border: 1px solid #bbb;
+            white-space: nowrap;
+            color: #2c3e50;
+            font-weight: 700;
+            user-select: none;
+        }
+
+        td {
+            vertical-align: middle;
+            padding: 4px 6px !important;
+            border: 1px solid #e0e0e0;
+            white-space: nowrap;
+        }
+
+        .num {
+            text-align: right;
+            font-family: 'Segoe UI', monospace;
+            font-weight: 600;
+        }
+
+        /* --- DİNAMİK SIRA NO --- */
+        .row-index {
+            font-weight: bold;
+            color: #666;
+            text-align: center;
+        }
+
+        /* --- SIRALAMA & BAŞLIKLAR --- */
+        .th-content {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            width: 100%;
+            height: 100%;
+        }
+
+            .th-content:hover {
+                background-color: #e9ecef;
+            }
+
+        .sort-icon {
+            color: #ccc;
+            font-size: 11px;
+        }
+
+        .sort-asc .sort-icon {
+            content: "\f0de";
+            color: #333;
+        }
+
+        .sort-desc .sort-icon {
+            content: "\f0dd";
+            color: #333;
+        }
+
+        .filter-btn {
+            cursor: pointer;
+            color: #bbb;
+            font-size: 10px;
+        }
+
+            .filter-btn:hover {
+                color: #0d6efd;
+            }
+
+        /* --- FİLTRE DROPDOWN --- */
+        .filter-dropdown {
+            position: absolute;
+            background: white;
+            border: 1px solid #999;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            padding: 10px;
+            z-index: 9999;
+            min-width: 250px;
+            max-height: 400px;
+            border-radius: 4px;
+            font-size: 11px;
+            display: none;
+            flex-direction: column;
+        }
+
+        .filter-search-box {
+            padding: 5px;
+            margin-bottom: 5px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            width: 100%;
+        }
+
+        .filter-actions {
+            display: flex;
+            justify-content: space-between;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+            .filter-actions a {
+                cursor: pointer;
+                text-decoration: none;
+                font-size: 10px;
+            }
+
+                .filter-actions a:hover {
+                    text-decoration: underline;
+                }
+
+        .filter-options-container {
+            overflow-y: auto;
+            max-height: 300px;
+        }
+
+        .filter-option {
+            display: block;
+            margin-bottom: 4px;
+            cursor: pointer;
+        }
+
+        /* --- DÜZENLENEBİLİR HÜCRELER --- */
+        .editable-cell {
+            cursor: cell;
+            background-color: #fffde7;
+            border: 1px solid #fbc02d !important;
+        }
+
+            .editable-cell:focus {
+                background-color: #fff59d;
+                outline: 2px solid #ff6f00;
+                font-weight: bold;
+                color: black;
+            }
+
+        /* --- RENK GRUPLARI --- */
+        .bg-kimlik { background-color: #E3F2FD; }
+        .bg-2025 { background-color: #FCE4EC; }
+        .bg-ekstra { background-color: #FFF8E1; }
+        .bg-ekstra-26 { background-color: #F9FBE7; }
+        .bg-zam { background-color: #FFE0B2; }
+        .bg-2026 { background-color: #E8F5E9; }
+        .bg-not { background-color: #FFFF00; font-weight: bold; }
+        .bg-maas { background-color: #F3E5F5; }
+        .bg-isveren { background-color: #E0F2F1; }
+        .bg-ek { background-color: #FFF3E0; }
+        .bg-sosyal { background-color: #E8F5E9; }
+        .bg-prim { background-color: #FCE4EC; }
+        .bg-yan { background-color: #FFF8E1; }
+        .bg-yasal { background-color: #ECEFF1; }
+        .bg-sonuc { background-color: #FFEBEE; font-weight: bold; }
+        .bg-read { background-color: #f8f9fa; color: #666; font-style: italic; }
+
+        /* --- FOOTER --- */
+        .selection-summary-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: #212529;
+            color: white;
+            padding: 6px 15px;
+            z-index: 2000;
+            display: none;
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.3);
+            font-size: 12px;
+            justify-content: center;
+            gap: 20px;
+            align-items: center;
+            border-top: 3px solid #ffc107;
+        }
+
+        .summary-group {
+            display: flex;
+            gap: 15px;
+            padding: 0 15px;
+            border-right: 1px solid #555;
+            align-items: center;
+        }
+
+            .summary-group:last-child {
+                border-right: none;
+            }
+
+        .summary-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .summary-label {
+            color: #adb5bd;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 1px;
+        }
+
+        .summary-val {
+            font-weight: bold;
+            font-size: 14px;
+            font-family: 'Segoe UI', monospace;
+        }
+
+        .val-25 { color: #f8bbd0; }
+        .val-26 { color: #b9f6ca; }
+        .val-diff { color: #fff; }
+
+        .flash-anim {
+            animation: flashHighlight 1s ease-out;
+        }
+
+        @@keyframes flashHighlight {
+            0% { background-color: #69f0ae; }
+            100% { background-color: transparent; }
+        }
+    </style>
+}
+
+@* 2. KURAL: Güvenlik (CSRF) - Yetkisiz veri işlemlerini ve POST isteklerini engellemek için eklendi *@
+@Html.AntiForgeryToken()
+
+<div class="container-fluid p-2 pb-5"> 
+    <div id="toastContainer" style="position: fixed; top: 20px; right: 20px; z-index: 9999;"></div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-calculator me-2"></i>Personel Maliyet Simülasyonu</h6>
+            <div>
+                <a href="@Url.Action("ExportToExcel", "Rapor57", new { db = currentDb })" class="btn btn-primary btn-sm me-1">
+                    <i class="fas fa-file-export"></i> Excel İndir (Tümü)
+                </a>
+                <button class="btn btn-outline-secondary btn-sm me-1" onclick="location.reload()"><i class="fas fa-sync-alt"></i> Yenile</button>
+                <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#uploadModal"><i class="fas fa-file-excel me-1"></i> Excel Yükle</button>
+            </div>
+        </div>
+
+        <div class="card-body p-0">
+            <ul class="nav nav-tabs px-2 pt-2 bg-light" id="mainTabs" role="tablist">
+                <li class="nav-item"><button class="nav-link active fw-bold" data-bs-toggle="tab" data-bs-target="#content-ozet" onclick="setTimeout(calculateSelection, 100)">ÖZET & ZAM</button></li>
+                <li class="nav-item"><button class="nav-link fw-bold text-primary" data-bs-toggle="tab" data-bs-target="#content-2025" onclick="setTimeout(calculateSelection, 100)">2025 DETAY</button></li>
+                <li class="nav-item"><button class="nav-link fw-bold text-success" data-bs-toggle="tab" data-bs-target="#content-2026" onclick="setTimeout(calculateSelection, 100)">2026 TAHMİN</button></li>
+            </ul>
+
+            <div class="tab-content p-0">
+
+                <div class="tab-pane fade show active" id="content-ozet">
+                    <div class="table-container">
+                        <table class="table table-hover table-bordered mb-0">
+                            <thead class="sticky-top">
+                                <tr>
+                                    <th class="sticky-col-1 border-0" rowspan="2">
+                                        <div class="d-flex-center">
+                                            <input type="checkbox" class="form-check-input select-all-btn" onchange="toggleSelectAll(this)">
+                                        </div>
+                                    </th>
+                                    <th class="bg-kimlik sticky-col-2 border-0 align-middle" rowspan="2">Sıra</th>
+
+                                    <th class="bg-kimlik border-0 align-middle" rowspan="2">Firma (SGK)</th>
+                                    <th class="bg-kimlik align-middle" rowspan="2">Adı Soyadı</th>
+                                    <th class="bg-kimlik align-middle" rowspan="2">Ünvan</th>
+                                    <th class="bg-kimlik align-middle" rowspan="2">Bölüm</th>
+                                    <th class="bg-kimlik align-middle" rowspan="2">Görev</th>
+                                    <th class="bg-kimlik align-middle" rowspan="2">İşe Giriş</th>
+                                    <th class="bg-kimlik align-middle" rowspan="2">Emeklilik</th>
+
+                                    <th colspan="9" class="bg-2025 text-danger text-center">2025 VERİLERİ & MALİYET</th>
+
+                                    <th colspan="2" class="bg-zam text-dark text-center">2025/2026</th>
+
+                                    <th colspan="9" class="bg-2026 text-success text-center">2026 TAHMİNİ VERİLER & MALİYET</th>
+
+                                    <th colspan="2" class="bg-zam text-dark text-center">ANALİZ</th>
+                                    <th class="bg-not border-0 align-middle" rowspan="2">Not</th>
+                                    <th class="bg-white border-0 align-middle" rowspan="2">Detay</th>
+                                </tr>
+                                <tr>
+                                    <th class="bg-2025">X-Net</th>
+                                    <th class="bg-2025">TOPLAM NET</th>
+                                    <th class="bg-2025">R-Net (Baz)</th>
+
+                                    <th class="bg-ekstra">Yemek</th>
+                                    <th class="bg-ekstra">Yol</th>
+                                    <th class="bg-ekstra">Satış (Ay)</th>
+                                    <th class="bg-ekstra">Özel (Ay)</th>
+
+                                    <th class="bg-2025">R-Brüt</th>
+                                    <th class="bg-2025 fw-bold">TOPLAM MALİYET</th>
+
+                                    <th class="bg-zam text-danger">X - ZAM %</th>
+                                    <th class="bg-zam text-danger">R - ZAM %</th>
+
+                                    <th class="bg-2026">X-Net</th>
+                                    <th class="bg-2026">TOPLAM NET</th>
+                                    <th class="bg-2026">R-Net (Baz)</th>
+
+                                    <th class="bg-ekstra-26">Yemek</th>
+                                    <th class="bg-ekstra-26">Yol</th>
+                                    <th class="bg-ekstra-26">Satış (Ay)</th>
+                                    <th class="bg-ekstra-26">Özel (Ay)</th>
+
+                                    <th class="bg-2026">R-Brüt</th>
+                                    <th class="bg-2026 fw-bold">YENİ MALİYET</th>
+
+                                    <th class="bg-zam">NET ARTIŞ %</th>
+                                    <th class="bg-zam">MAL. ARTIŞ %</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model != null)
+                                {
+                                    foreach (var item in Model)
+                                    {
+                                        var c26 = item.Calculated2026 ?? new WebApplication3.Models.Personel2026Data();
+                                        decimal yeniXNet = item.X_NetUcret * (1 + (item.XZamOrani / 100));
+                                        decimal netArtis = item.ToplamNetUcret > 0 ? ((c26.ToplamNetUcret - item.ToplamNetUcret) / item.ToplamNetUcret) * 100 : 0;
+                                        decimal maliyetArtis = item.EskiGenelMaliyet > 0 ? ((c26.ToplamMaliyet - item.EskiGenelMaliyet) / item.EskiGenelMaliyet) * 100 : 0;
+
+                                        decimal rZamCarpan = (1 + (item.ZamOrani / 100));
+                                        decimal yemek26 = item.Yemek * rZamCarpan;
+                                        decimal yol26 = item.Yol * rZamCarpan;
+                                        decimal satis26 = item.SatisPrimi * rZamCarpan;
+                                        decimal ozel26 = item.OzelOdeme * rZamCarpan;
+
+                                        @* ÇÖZÜM: CS0117 hatasını önlemek için fonksiyon yerel adıyla çağrıldı *@
+                                        <tr class="row-company-@CleanCompanyName(item.FirmaSGK)" data-row-id="@item.DocEntry">
+                                            <td class="sticky-col-1 text-center">
+                                                <div class="d-flex-center">
+                                                    <input type="checkbox" class="form-check-input row-select" value="@item.DocEntry">
+                                                </div>
+                                            </td>
+                                            <td class="sticky-col-2 bg-kimlik row-index"></td>
+
+                                            <td>@item.FirmaSGK</td>
+                                            <td class="fw-bold text-dark">@item.AdSoyad</td>
+                                            <td>@item.Unvan</td>
+                                            <td>@item.Bolum</td>
+                                            <td>@item.Gorev</td>
+                                            <td>@(item.IseGiris?.ToString("dd.MM.yyyy"))</td>
+                                            <td>@item.EmeklilikDurumu</td>
+
+                                            <td class="num text-muted calc25-xnet" id="cell-xnet-25-@item.DocEntry">@item.X_NetUcret.ToString("N2")</td>
+                                            <td class="num fw-bold text-dark calc25-topnet" id="cell-topnet-25-@item.DocEntry">@item.ToplamNetUcret.ToString("N2")</td>
+                                            <td class="num text-muted calc25-rnet" id="cell-rnet-25-@item.DocEntry">@item.R_NetUcret.ToString("N2")</td>
+
+                                            <td class="num bg-ekstra text-muted">@item.Yemek.ToString("N2")</td>
+                                            <td class="num bg-ekstra text-muted">@item.Yol.ToString("N2")</td>
+                                            <td class="num bg-ekstra text-muted">@item.SatisPrimi.ToString("N2")</td>
+                                            <td class="num bg-ekstra text-muted">@item.OzelOdeme.ToString("N2")</td>
+
+                                            <td class="num text-muted calc25-brut" id="cell-brut-25-@item.DocEntry">@item.ToplamBrutUcret.ToString("N2")</td>
+                                            <td class="num fw-bold bg-2025 text-danger calc25-maliyet" id="cell-maliyet-25-@item.DocEntry">@item.GenelToplamMaliyet.ToString("N2")</td>
+
+                                            <td class="editable-cell num text-danger fw-bold" contenteditable="true" data-id="@item.DocEntry" data-field="U_XZamOrani" onblur="saveCell(this)">@item.XZamOrani.ToString("N2")</td>
+                                            <td class="editable-cell num text-danger fw-bold" contenteditable="true" data-id="@item.DocEntry" data-field="U_ZamOrani" onblur="saveCell(this)">@item.ZamOrani.ToString("N2")</td>
+
+                                            <td class="num calc26-xnet" id="cell-xnet-26-@item.DocEntry">@yeniXNet.ToString("N2")</td>
+                                            <td class="num fw-bold text-dark calc26-topnet" id="cell-topnet-26-@item.DocEntry">@c26.ToplamNetUcret.ToString("N2")</td>
+                                            <td class="num text-success calc26-rnet" id="cell-rnet-26-@item.DocEntry">@c26.R_NetUcret.ToString("N2")</td>
+
+                                            <td class="num bg-ekstra-26 text-success">@yemek26.ToString("N2")</td>
+                                            <td class="num bg-ekstra-26 text-success">@yol26.ToString("N2")</td>
+                                            <td class="num bg-ekstra-26 text-success">@satis26.ToString("N2")</td>
+                                            <td class="num bg-ekstra-26 text-success">@ozel26.ToString("N2")</td>
+
+                                            <td class="num calc26-brut" id="cell-brut-26-@item.DocEntry">@c26.ToplamBrutUcret.ToString("N2")</td>
+                                            <td class="num fw-bold bg-2026 text-success calc26-maliyet" id="cell-maliyet-26-@item.DocEntry">@c26.ToplamMaliyet.ToString("N2")</td>
+
+                                            <td class="num text-primary bg-zam" id="cell-netartis-@item.DocEntry">@netArtis.ToString("N2")</td>
+                                            <td class="num text-primary bg-zam" id="cell-malartis-@item.DocEntry">@maliyetArtis.ToString("N2")</td>
+                                            <td class="editable-cell bg-not" contenteditable="true" data-id="@item.DocEntry" data-field="U_Not" onblur="saveCell(this)">@item.Not</td>
+                                            <td class="text-center">
+                                                <button class="btn btn-sm btn-outline-dark border-0" onclick="openBordroModal(@item.DocEntry)"><i class="fas fa-search"></i></button>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="content-2025">
+                    <div class="table-container">
+                        <table class="table table-bordered table-sm mb-0">
+                            <thead class="sticky-top">
+                                <tr>
+                                    <th class="sticky-col-1 border-0" rowspan="2">
+                                        <div class="d-flex-center">
+                                            <input type="checkbox" class="form-check-input select-all-btn" onchange="toggleSelectAll(this)">
+                                        </div>
+                                    </th>
+                                    <th class="bg-white sticky-col-2 align-middle" rowspan="2">Sıra</th>
+
+                                    <th class="bg-white align-middle" rowspan="2">Firma</th>
+                                    <th class="bg-white align-middle" rowspan="2">Adı Soyadı</th>
+                                    <th class="bg-white align-middle" rowspan="2">Emeklilik</th>
+
+                                    <th colspan="3" class="bg-maas text-center">ÜCRET (GİRİŞ)</th>
+                                    <th colspan="6" class="bg-maas text-center">KESİNTİLER</th>
+                                    <th colspan="3" class="bg-isveren text-center">İŞVEREN PAYI</th>
+                                    <th colspan="6" class="bg-ek text-center">EK ÇALIŞMALAR</th>
+                                    <th colspan="5" class="bg-sosyal text-center">SOSYAL YARDIMLAR</th>
+                                    <th colspan="3" class="bg-prim text-center">PRİMLER</th>
+                                    <th colspan="6" class="bg-yan text-center">YAN HAKLAR</th>
+                                    <th colspan="7" class="bg-yasal text-center">YASAL ÖDEMELER</th>
+                                    <th class="bg-sonuc text-danger text-center" rowspan="2">GENEL<br>MALİYET</th>
+                                </tr>
+                                <tr>
+                                    <th class="editable-cell text-primary">X-Net</th>
+                                    <th class="editable-cell text-primary">R-Net</th>
+                                    <th class="bg-light">Top.Net</th>
+                                    <th class="editable-cell">Avans</th>
+                                    <th class="editable-cell">İcra</th>
+                                    <th class="bg-read">Damga</th>
+                                    <th class="bg-read">Gelir V.</th>
+                                    <th class="bg-read">İşsizlik</th>
+                                    <th class="bg-read">SGK İşçi</th>
+                                    <th class="bg-read">R-Brüt</th>
+                                    <th class="bg-read">SGK İşv.</th>
+                                    <th class="bg-read">İşz. İşv.</th>
+                                    <th class="editable-cell">FM</th>
+                                    <th class="editable-cell">Bayram</th>
+                                    <th class="editable-cell">Gece</th>
+                                    <th class="editable-cell">Pazar</th>
+                                    <th class="editable-cell">Resmi</th>
+                                    <th class="bg-light">Top.Ek</th>
+                                    <th class="editable-cell">Yemek</th>
+                                    <th class="editable-cell">Yol</th>
+                                    <th class="editable-cell">Servis</th>
+                                    <th class="editable-cell">Eğitim</th>
+                                    <th class="bg-light">Top.Sos</th>
+                                    <th class="editable-cell">Satış</th>
+                                    <th class="editable-cell">Özel</th>
+                                    <th class="bg-light">Top.Prim</th>
+                                    <th class="editable-cell">Sağlık</th>
+                                    <th class="editable-cell">Kıyafet</th>
+                                    <th class="editable-cell">Koruyucu</th>
+                                    <th class="editable-cell">Doğum</th>
+                                    <th class="editable-cell">Evlilik</th>
+                                    <th class="bg-light">Top.Yan</th>
+                                    <th class="editable-cell">Kıdem</th>
+                                    <th class="editable-cell">İhbar</th>
+                                    <th class="editable-cell">İade</th>
+                                    <th class="editable-cell">Yıllık</th>
+                                    <th class="editable-cell">Rapor</th>
+                                    <th class="editable-cell">D.İzni</th>
+                                    <th class="bg-light">Top.Öd.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model != null)
+                                {
+                                    foreach (var item in Model)
+                                    {
+                                        <tr class="row-company-@CleanCompanyName(item.FirmaSGK)" data-id="@item.DocEntry">
+                                            <td class="sticky-col-1 text-center">
+                                                <div class="d-flex-center">
+                                                    <input type="checkbox" class="form-check-input row-select" value="@item.DocEntry">
+                                                </div>
+                                            </td>
+                                            <td class="sticky-col-2 row-index"></td>
+
+                                            <td>@item.FirmaSGK</td>
+                                            <td class="fw-bold text-dark">@item.AdSoyad</td>
+                                            <td>@item.EmeklilikDurumu</td>
+
+                                            <td class="editable-cell num fw-bold calc25-xnet" contenteditable="true" data-field="U_XNetUcret" onblur="saveCell(this)">@item.X_NetUcret.ToString("N2")</td>
+                                            <td class="editable-cell num fw-bold calc25-rnet" contenteditable="true" data-field="U_RNetUcret" onblur="saveCell(this)">@item.R_NetUcret.ToString("N2")</td>
+                                            <td class="num bg-light calc25-topnet">@item.ToplamNetUcret.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_Avans" onblur="saveCell(this)">@item.Avans.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_Icra" onblur="saveCell(this)">@item.Icra.ToString("N2")</td>
+                                            <td class="num bg-read">@item.DamgaVergisi.ToString("N2")</td>
+                                            <td class="num bg-read">@item.GelirVergisi.ToString("N2")</td>
+                                            <td class="num bg-read">@item.IssizlikIsci.ToString("N2")</td>
+                                            <td class="num bg-read">@item.SGKIsci.ToString("N2")</td>
+                                            <td class="num bg-read fw-bold text-primary calc25-brut">@item.ToplamBrutUcret.ToString("N2")</td>
+                                            <td class="num bg-read">@item.SGKIsveren.ToString("N2")</td>
+                                            <td class="num bg-read">@item.IssizlikIsveren.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_FazlaMesai" onblur="saveCell(this)">@item.FazlaMesai.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_Bayram" onblur="saveCell(this)">@item.Bayram.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_GeceFarki" onblur="saveCell(this)">@item.GeceFarki.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_Pazar" onblur="saveCell(this)">@item.Pazar.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_ResmiTatil" onblur="saveCell(this)">@item.ResmiTatil.ToString("N2")</td>
+                                            <td class="num bg-light">@item.ToplamEkCalisma.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_Yemek" onblur="saveCell(this)">@item.Yemek.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_Yol" onblur="saveCell(this)">@item.Yol.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_Servis" onblur="saveCell(this)">@item.Servis.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_Egitim" onblur="saveCell(this)">@item.Egitim.ToString("N2")</td>
+                                            <td class="num bg-light">@item.ToplamSosyalYardim.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_SatisPrimi" onblur="saveCell(this)">@item.SatisPrimi.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_OzelOdeme" onblur="saveCell(this)">@item.OzelOdeme.ToString("N2")</td>
+                                            <td class="num bg-light">@item.ToplamPrim.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_OzelSaglikSigortasi" onblur="saveCell(this)">@item.OzelSaglikSigortasi.ToString("N2")</td>
+                                            @* ÇÖZÜM: Harf uyuşmazlığı nedeniyle oluşan hata Kiyafet olarak düzeltildi *@
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_Kiyafet" onblur="saveCell(this)">@item.Kiyafet.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_KoruyucuEkipman" onblur="saveCell(this)">@item.KoruyucuEkipman.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_DogumYardimi" onblur="saveCell(this)">@item.DogumYardimi.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_EvlilikYardimi" onblur="saveCell(this)">@item.EvlilikYardimi.ToString("N2")</td>
+                                            <td class="num bg-light">@item.ToplamYanHaklar.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_KidemTazminati" onblur="saveCell(this)">@item.KidemTazminati.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_IhbarTazminati" onblur="saveCell(this)">@item.IhbarTazminati.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_IseIade" onblur="saveCell(this)">@item.IseIade.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_YillikIzin" onblur="saveCell(this)">@item.YillikIzin.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_RaporFarki" onblur="saveCell(this)">@item.RaporFarki.ToString("N2")</td>
+                                            <td class="editable-cell num" contenteditable="true" data-field="U_DogumIzni" onblur="saveCell(this)">@item.DogumIzni.ToString("N2")</td>
+                                            <td class="num bg-light">@item.ToplamBrutOdemeler.ToString("N2")</td>
+                                            <td class="num fw-bold bg-sonuc text-danger calc25-maliyet" id="detay-maliyet-25-@item.DocEntry">@item.GenelToplamMaliyet.ToString("N2")</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="content-2026">
+                    <div class="table-container">
+                        <table class="table table-bordered table-sm mb-0 bg-light text-muted">
+                            <thead class="sticky-top">
+                                <tr>
+                                    <th class="sticky-col-1 border-0" rowspan="2">
+                                        <div class="d-flex-center">
+                                            <input type="checkbox" class="form-check-input select-all-btn" onchange="toggleSelectAll(this)">
+                                        </div>
+                                    </th>
+                                    <th class="bg-white sticky-col-2 align-middle" rowspan="2">Sıra</th>
+
+                                    <th class="bg-white align-middle" rowspan="2">Firma</th>
+                                    <th class="bg-white align-middle" rowspan="2">Adı Soyadı</th>
+                                    <th class="bg-white align-middle" rowspan="2">Emeklilik</th>
+
+                                    <th colspan="3" class="bg-maas text-center">ÜCRET (ZAMLI)</th>
+                                    <th colspan="6" class="bg-maas text-center">KESİNTİLER (2026)</th>
+                                    <th colspan="3" class="bg-isveren text-center">İŞVEREN (2026)</th>
+                                    <th colspan="6" class="bg-ek text-center">EK ÇALIŞMA (SABİT)</th>
+                                    <th colspan="5" class="bg-sosyal text-center">SOSYAL (SABİT)</th>
+                                    <th colspan="3" class="bg-prim text-center">PRİM (SABİT)</th>
+                                    <th colspan="6" class="bg-yan text-center">YAN HAKLAR (SABİT)</th>
+                                    <th colspan="7" class="bg-yasal text-center">YASAL (SABİT)</th>
+                                    <th class="bg-sonuc text-success text-center" rowspan="2">2026<br>MALİYET</th>
+                                </tr>
+                                <tr>
+                                    <th class="text-primary">X-Net</th>
+                                    <th class="text-primary">R-Net</th>
+                                    <th>Top.Net</th>
+                                    <th>Avans</th>
+                                    <th>İcra</th>
+                                    <th>Damga</th>
+                                    <th>Gelir V.</th>
+                                    <th>İşsizlik</th>
+                                    <th>SGK İşçi</th>
+                                    <th class="fw-bold calc26-brut">R-Brüt</th>
+                                    <th>SGK İşv.</th>
+                                    <th>İşz. İşv.</th>
+                                    <th>FM</th>
+                                    <th>Bayram</th>
+                                    <th>Gece</th>
+                                    <th>Pazar</th>
+                                    <th>Resmi</th>
+                                    <th>Top.Ek</th>
+                                    <th>Yemek</th>
+                                    <th>Yol</th>
+                                    <th>Servis</th>
+                                    <th>Eğitim</th>
+                                    <th>Top.Sos</th>
+                                    <th>Satış</th>
+                                    <th>Özel</th>
+                                    <th>Top.Prim</th>
+                                    <th>Sağlık</th>
+                                    @* ÇÖZÜM: Harf uyuşmazlığı nedeniyle oluşan hata Kiyafet olarak düzeltildi *@
+                                    <th>Kıyafet</th>
+                                    <th>Koruyucu</th>
+                                    <th>Doğum</th>
+                                    <th>Evlilik</th>
+                                    <th>Top.Yan</th>
+                                    <th>Kıdem</th>
+                                    <th>İhbar</th>
+                                    <th>İade</th>
+                                    <th>Yıllık</th>
+                                    <th>Rapor</th>
+                                    <th>D.İzni</th>
+                                    <th>Top.Öd.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model != null)
+                                {
+                                    foreach (var item in Model)
+                                    {
+                                        var c = item.Calculated2026 ?? new WebApplication3.Models.Personel2026Data();
+                                        decimal yeniXNet = item.X_NetUcret * (1 + (item.XZamOrani / 100));
+                                        <tr data-id="@item.DocEntry">
+                                            <td class="sticky-col-1 text-center">
+                                                <div class="d-flex-center">
+                                                    <input type="checkbox" class="form-check-input row-select" value="@item.DocEntry">
+                                                </div>
+                                            </td>
+                                            <td class="sticky-col-2 row-index"></td>
+
+                                            <td>@item.FirmaSGK</td>
+                                            <td class="fw-bold text-dark">@item.AdSoyad</td>
+                                            <td>@item.EmeklilikDurumu</td>
+
+                                            <td class="num text-primary calc26-xnet">@yeniXNet.ToString("N2")</td>
+                                            <td class="num text-primary fw-bold calc26-rnet">@c.R_NetUcret.ToString("N2")</td>
+                                            <td class="num calc26-topnet">@c.ToplamNetUcret.ToString("N2")</td>
+                                            <td class="num">@c.Avans.ToString("N2")</td>
+                                            <td class="num">@c.Icra.ToString("N2")</td>
+                                            <td class="num">@c.DamgaVergisi.ToString("N2")</td>
+                                            <td class="num">@c.GelirVergisi.ToString("N2")</td>
+                                            <td class="num">@c.IssizlikIsci.ToString("N2")</td>
+                                            <td class="num">@c.SGKIsci.ToString("N2")</td>
+                                            <td class="num fw-bold calc26-brut">@c.ToplamBrutUcret.ToString("N2")</td>
+                                            <td class="num">@c.SGKIsveren.ToString("N2")</td>
+                                            <td class="num">@c.IssizlikIsveren.ToString("N2")</td>
+                                            <td class="num">@item.FazlaMesai.ToString("N2")</td>
+                                            <td class="num">@item.Bayram.ToString("N2")</td>
+                                            <td class="num">@item.GeceFarki.ToString("N2")</td>
+                                            <td class="num">@item.Pazar.ToString("N2")</td>
+                                            <td class="num">@item.ResmiTatil.ToString("N2")</td>
+                                            <td class="num">@item.ToplamEkCalisma.ToString("N2")</td>
+                                            <td class="num">@item.Yemek.ToString("N2")</td>
+                                            <td class="num">@item.Yol.ToString("N2")</td>
+                                            <td class="num">@item.Servis.ToString("N2")</td>
+                                            <td class="num">@item.Egitim.ToString("N2")</td>
+                                            <td class="num">@item.ToplamSosyalYardim.ToString("N2")</td>
+                                            <td class="num">@item.SatisPrimi.ToString("N2")</td>
+                                            <td class="num">@item.OzelOdeme.ToString("N2")</td>
+                                            <td class="num">@item.ToplamPrim.ToString("N2")</td>
+                                            <td class="num">@item.OzelSaglikSigortasi.ToString("N2")</td>
+                                            <td class="num">@item.Kiyafet.ToString("N2")</td>
+                                            <td class="num">@item.KoruyucuEkipman.ToString("N2")</td>
+                                            <td class="num">@item.DogumYardimi.ToString("N2")</td>
+                                            <td class="num">@item.EvlilikYardimi.ToString("N2")</td>
+                                            <td class="num">@item.ToplamYanHaklar.ToString("N2")</td>
+                                            <td class="num">@item.KidemTazminati.ToString("N2")</td>
+                                            <td class="num">@item.IhbarTazminati.ToString("N2")</td>
+                                            <td class="num">@item.IseIade.ToString("N2")</td>
+                                            <td class="num">@item.YillikIzin.ToString("N2")</td>
+                                            <td class="num">@item.RaporFarki.ToString("N2")</td>
+                                            <td class="num">@item.DogumIzni.ToString("N2")</td>
+                                            <td class="num">@item.ToplamBrutOdemeler.ToString("N2")</td>
+                                            <td class="num fw-bold bg-sonuc text-success calc26-maliyet" id="detay-maliyet-26-@item.DocEntry">@c.ToplamMaliyet.ToString("N2")</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+            
+            @* 4. KURAL: UI/UX Standartlarına uygun şık, db parametreli Ana Sayfa Dönüş Butonu *@
+            <div class="mt-4 mb-3 text-center">
+                <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+                    <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+                </a>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div id="selectionSummary" class="selection-summary-bar">
+    <div class="summary-group">
+        <div class="summary-item">
+            <span class="summary-label">Seçilen</span>
+            <span class="summary-val text-white" id="sum-count">0</span>
+        </div>
+    </div>
+    <div class="summary-group">
+        <div class="summary-item">
+            <span class="summary-label">2025 Top. Net</span>
+            <span class="summary-val val-25" id="sum-net-25">0,00</span>
+        </div>
+        <div class="summary-item">
+            <span class="summary-label">2025 Maliyet</span>
+            <span class="summary-val val-25" id="sum-cost-25">0,00</span>
+        </div>
+    </div>
+    <div class="summary-group">
+        <div class="summary-item">
+            <span class="summary-label">2026 Top. Net</span>
+            <span class="summary-val val-26" id="sum-net-26">0,00</span>
+        </div>
+        <div class="summary-item">
+            <span class="summary-label">2026 Maliyet</span>
+            <span class="summary-val val-26" id="sum-cost-26">0,00</span>
+        </div>
+    </div>
+    <div class="summary-group">
+        <div class="summary-item">
+            <span class="summary-label">Maliyet Farkı</span>
+            <span class="summary-val text-warning" id="sum-diff">0,00</span>
+        </div>
+        <div class="summary-item">
+            <span class="summary-label">Artış %</span>
+            <span class="summary-val text-warning" id="sum-perc">%0.00</span>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="uploadModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-file-excel me-2"></i>Excel Veri Yükle</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form asp-controller="Rapor57" asp-action="UploadAndSave" method="post" enctype="multipart/form-data">
+                
+                @* 1. KURAL: Form gönderimlerinde şirket parametresini kaybetmemek için gizli input *@
+                <input type="hidden" name="db" value="@currentDb" />
+                
+                <div class="modal-body">
+                    <div class="d-grid gap-2 mb-3">
+                        <a href="@Url.Action("DownloadTemplate", "Rapor57", new { db = currentDb })" class="btn btn-outline-dark">Şablon İndir</a>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Dosya Seç:</label>
+                        <input class="form-control" type="file" name="file" accept=".xlsx" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-success">Yükle</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="bordroModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">2026 Tahmini Bordro</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <h5 id="mAdSoyad" class="text-center fw-bold"></h5>
+                <hr>
+                <div class="row">
+                    <div class="col-6">
+                        <h6>GELİRLER</h6>
+                        <table class="table table-sm">
+                            <tr><td>Eski R-Net:</td><td id="mEskiRNet" class="num"></td></tr>
+                            <tr><td>Zam:</td><td id="mZam" class="num text-danger"></td></tr>
+                            <tr class="fw-bold"><td>YENİ R-NET:</td><td id="mYeniRNet" class="num"></td></tr>
+                            <tr><td>X-Net:</td><td id="mXNet" class="num"></td></tr>
+                            <tr class="table-primary"><td>TOPLAM NET:</td><td id="mTopNet" class="num fw-bold"></td></tr>
+                        </table>
+                    </div>
+                    <div class="col-6">
+                        <h6>MALİYET</h6>
+                        <table class="table table-sm">
+                            <tr><td>Brüt:</td><td id="mBrut" class="num"></td></tr>
+                            <tr><td>SGK İşçi:</td><td id="mSgkIsci" class="num"></td></tr>
+                            <tr><td>Gelir V.:</td><td id="mGv" class="num"></td></tr>
+                            <tr><td>İşveren SGK:</td><td id="mIsvSgk" class="num"></td></tr>
+                            <tr class="table-danger"><td>TOPLAM MALİYET:</td><td id="mMaliyet" class="num fw-bold"></td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const fmt = (n) => new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+        
+        // 1. KURAL JS DEĞİŞKENİ
+        const activeDbCode = '@currentDb';
+
+        // --- GELİŞTİRİLMİŞ TABLO VE FİLTRELEME SİSTEMİ ---
+
+        document.addEventListener("DOMContentLoaded", function() {
+            // Tabloyu başlat
+            document.querySelectorAll('.table-container table').forEach(table => {
+                initExcelTable(table);
+            });
+
+            // İlk açılışta numaralandır
+            renumberAllTables();
+
+            // Filtre dışına tıklayınca kapat
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('.filter-dropdown') && !e.target.closest('.filter-btn')) {
+                    closeAllDropdowns();
+                }
+            });
+
+            // Enter ile kaydet
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && e.target.classList.contains('editable-cell')) {
+                    e.preventDefault(); e.target.blur();
+                }
+            });
+        });
+
+        // --- HESAPLAMA & SEÇİM ---
+        document.addEventListener('change', function(e) {
+            if (e.target.classList.contains('row-select') || e.target.classList.contains('select-all-btn')) {
+                calculateSelection();
+            }
+        });
+
+        function toggleSelectAll(masterCheckbox) {
+            const table = masterCheckbox.closest('table');
+            const checkboxes = table.querySelectorAll('.row-select');
+            checkboxes.forEach(cb => {
+                if (cb.closest('tr').style.display !== 'none') {
+                    cb.checked = masterCheckbox.checked;
+                }
+            });
+            calculateSelection();
+        }
+
+        function calculateSelection() {
+            const activeTabPane = document.querySelector('.tab-pane.active');
+            if (!activeTabPane) return;
+
+            const checkboxes = activeTabPane.querySelectorAll('.row-select:checked');
+            const summaryBar = document.getElementById('selectionSummary');
+
+            if (checkboxes.length === 0) {
+                summaryBar.style.display = 'none';
+                return;
+            }
+
+            summaryBar.style.display = 'flex';
+
+            let tNet25 = 0, tCost25 = 0;
+            let tNet26 = 0, tCost26 = 0;
+            let count = 0;
+
+            checkboxes.forEach(cb => {
+                const row = cb.closest('tr');
+                if (row.style.display === 'none') return;
+
+                let net25 = 0, cost25 = 0;
+                // Özet tablosunda
+                if(row.querySelector('.calc25-topnet')) {
+                    net25 = parseMoney(row.querySelector('.calc25-topnet').innerText);
+                    cost25 = parseMoney(row.querySelector('.calc25-maliyet').innerText);
+                } else {
+                    // Diğer tablolarda
+                    if(row.querySelector('.calc25-topnet')) net25 = parseMoney(row.querySelector('.calc25-topnet').innerText);
+                    if(row.querySelector('.calc25-maliyet')) cost25 = parseMoney(row.querySelector('.calc25-maliyet').innerText);
+                }
+
+                let net26 = 0, cost26 = 0;
+                if(row.querySelector('.calc26-topnet')) net26 = parseMoney(row.querySelector('.calc26-topnet').innerText);
+                if(row.querySelector('.calc26-maliyet')) cost26 = parseMoney(row.querySelector('.calc26-maliyet').innerText);
+
+                if(net25 > 0 || cost25 > 0 || net26 > 0 || cost26 > 0) {
+                    count++;
+                    tNet25 += net25;
+                    tCost25 += cost25;
+                    tNet26 += net26;
+                    tCost26 += cost26;
+                }
+            });
+
+            let diffCost = tCost26 - tCost25;
+            let percCost = tCost25 > 0 ? (diffCost / tCost25) * 100 : 0;
+
+            document.getElementById('sum-count').innerText = count;
+            document.getElementById('sum-net-25').innerText = fmt(tNet25);
+            document.getElementById('sum-cost-25').innerText = fmt(tCost25);
+            document.getElementById('sum-net-26').innerText = fmt(tNet26);
+            document.getElementById('sum-cost-26').innerText = fmt(tCost26);
+            document.getElementById('sum-diff').innerText = fmt(diffCost);
+            document.getElementById('sum-perc').innerText = "%" + fmt(percCost);
+        }
+
+        function parseMoney(text) {
+            if (!text) return 0;
+            let clean = text.trim();
+            const lastDot = clean.lastIndexOf('.');
+            const lastComma = clean.lastIndexOf(',');
+            if (lastDot > lastComma) {
+                clean = clean.replace(/,/g, '');
+            } else {
+                clean = clean.replace(/\./g, '').replace(',', '.');
+            }
+            return parseFloat(clean.replace(/[^0-9.-]/g, '')) || 0;
+        }
+
+        // --- DİNAMİK SIRA NO ---
+        function renumberAllTables() {
+            document.querySelectorAll('.table-container table').forEach(table => {
+                renumberRows(table);
+            });
+        }
+
+        function renumberRows(table) {
+            const rows = table.querySelectorAll('tbody tr');
+            let counter = 1;
+            rows.forEach(row => {
+                if (row.style.display !== 'none') {
+                    const indexCell = row.querySelector('.row-index');
+                    if (indexCell) {
+                        indexCell.innerText = counter++;
+                    }
+                }
+            });
+        }
+
+        // --- TABLO BAŞLATMA (Excel Benzeri Yapı) ---
+        function initExcelTable(table) {
+            table.activeFilters = {};
+
+            const rows = table.querySelectorAll('thead tr');
+            if (!rows.length) return;   // başlıksız tablo (kabuğun .table-container kabı içindeki yardımcı tablolar) atlanır
+            const matrix = [];
+            for(let r=0; r<rows.length; r++) matrix[r] = [];
+
+            rows.forEach((tr, rowIndex) => {
+                let colCounter = 0;
+                Array.from(tr.children).forEach(th => {
+                    while(matrix[rowIndex][colCounter]) colCounter++;
+                    const rowspan = parseInt(th.getAttribute('rowspan') || 1);
+                    const colspan = parseInt(th.getAttribute('colspan') || 1);
+                    for(let r=0; r<rowspan; r++) {
+                        for(let c=0; c<colspan; c++) {
+                            if (matrix[rowIndex + r]) matrix[rowIndex + r][colCounter + c] = th;
+                        }
+                    }
+                });
+            });
+
+            const colCount = matrix[0].length;
+            const leafHeaders = [];
+            for(let c=0; c<colCount; c++) {
+                for(let r=rows.length-1; r>=0; r--) {
+                    if(matrix[r][c]) {
+                        const existing = leafHeaders.find(x => x.th === matrix[r][c]);
+                        if(!existing) leafHeaders.push({ th: matrix[r][c], colIndex: c });
+                        break;
+                    }
+                }
+            }
+
+            leafHeaders.forEach(item => {
+                const th = item.th;
+                const colIndex = item.colIndex;
+                const originalText = th.innerText.trim();
+
+                if (th.querySelector('input') || originalText === "Sıra" || originalText === "Detay") return;
+
+                if (!th.querySelector('.th-content')) {
+                    th.innerHTML = '';
+                    const container = document.createElement('div');
+                    container.className = 'th-content';
+
+                    const textSpan = document.createElement('span');
+                    textSpan.innerText = originalText;
+                    textSpan.style.flexGrow = "1";
+
+                    const iconDiv = document.createElement('div');
+                    iconDiv.innerHTML = '<i class="fas fa-sort sort-icon"></i>';
+
+                    const filterIcon = document.createElement('i');
+                    filterIcon.className = "fas fa-filter filter-btn ms-2 text-muted";
+                    filterIcon.onclick = (e) => {
+                        e.stopPropagation();
+                        openFilter(filterIcon, colIndex);
+                    };
+
+                    container.appendChild(textSpan);
+                    container.appendChild(iconDiv);
+                    container.appendChild(filterIcon);
+
+                    container.onclick = () => runSort(table, th, colIndex);
+                    th.appendChild(container);
+                }
+            });
+        }
+
+        function runSort(table, th, colIndex) {
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            let asc = !th.classList.contains('sort-asc');
+
+            table.querySelectorAll('thead th').forEach(h => {
+                h.classList.remove('sort-asc', 'sort-desc');
+                const icon = h.querySelector('.sort-icon');
+                if(icon) icon.className = 'fas fa-sort sort-icon';
+            });
+
+            th.classList.add(asc ? 'sort-asc' : 'sort-desc');
+            const currentIcon = th.querySelector('.sort-icon');
+            if(currentIcon) currentIcon.className = asc ? 'fas fa-sort-up sort-icon' : 'fas fa-sort-down sort-icon';
+
+            rows.sort((rowA, rowB) => {
+                const cellA = rowA.children[colIndex] ? rowA.children[colIndex].innerText.trim() : "";
+                const cellB = rowB.children[colIndex] ? rowB.children[colIndex].innerText.trim() : "";
+
+                const numA = parseMoney(cellA);
+                const numB = parseMoney(cellB);
+
+                const isNumA = !isNaN(parseFloat(cellA.replace(/[^0-9,-]/g, ''))) && cellA !== "";
+                const isNumB = !isNaN(parseFloat(cellB.replace(/[^0-9,-]/g, ''))) && cellB !== "";
+
+                if (isNumA && isNumB) {
+                    return asc ? numA - numB : numB - numA;
+                } else {
+                    return asc ? cellA.localeCompare(cellB, 'tr') : cellB.localeCompare(cellA, 'tr');
+                }
+            });
+
+            rows.forEach(row => tbody.appendChild(row));
+            renumberRows(table);
+        }
+
+        // --- KÜMÜLATİF FİLTRELEME ---
+
+        function openFilter(btn, colIndex) {
+            closeAllDropdowns();
+            const th = btn.closest('th');
+            const table = th.closest('table');
+            const rows = Array.from(table.querySelectorAll('tbody tr'));
+
+            const uniqueValues = new Set();
+            rows.forEach(row => {
+                const cell = row.children[colIndex];
+                const val = cell ? cell.innerText.trim() : "";
+                uniqueValues.add(val);
+            });
+            const sortedValues = Array.from(uniqueValues).sort();
+
+            const dropdown = document.createElement('div');
+            dropdown.className = 'filter-dropdown';
+
+            let html = `
+                <input type="text" class="filter-search-box" placeholder="Ara..." onkeyup="filterSearch(this)">
+                <div class="filter-actions">
+                    <a onclick="toggleFilterSelectAll(this, true)">Tümünü Seç</a>
+                    <a onclick="toggleFilterSelectAll(this, false)">Temizle</a>
+                    <a class="text-danger" onclick="closeAllDropdowns()" style="margin-left:auto">Kapat X</a>
+                </div>
+                <div class="filter-options-container">
+            `;
+
+            const currentFilters = table.activeFilters[colIndex];
+
+            sortedValues.forEach(val => {
+                let isChecked = true;
+                if (currentFilters && !currentFilters.includes(val)) {
+                    isChecked = false;
+                }
+
+                let displayVal = val === "" ? "(Boş)" : val;
+                html += `<label class="filter-option">
+                            <input type="checkbox" value="${val}" ${isChecked ? 'checked' : ''} onchange="applyMultiFilter(this, ${colIndex})">
+                            <span>${displayVal}</span>
+                         </label>`;
+            });
+            html += `</div>`;
+
+            dropdown.innerHTML = html;
+            document.body.appendChild(dropdown);
+
+            const rect = btn.getBoundingClientRect();
+            dropdown.style.left = rect.left + 'px';
+            dropdown.style.top = (rect.bottom + 5) + 'px';
+            dropdown.style.display = 'block';
+
+            dropdown.currentTable = table;
+        }
+
+        function applyMultiFilter(checkbox, colIndex) {
+            const dropdown = checkbox.closest('.filter-dropdown');
+            const table = dropdown.currentTable;
+
+            const checkedBoxes = dropdown.querySelectorAll('.filter-options-container input[type="checkbox"]:checked');
+            const allowedValues = Array.from(checkedBoxes).map(cb => cb.value);
+            const allBoxes = dropdown.querySelectorAll('.filter-options-container input[type="checkbox"]');
+
+            if (checkedBoxes.length === allBoxes.length) {
+                delete table.activeFilters[colIndex];
+            } else {
+                table.activeFilters[colIndex] = allowedValues;
+            }
+
+            runTableFiltering(table);
+        }
+
+        function runTableFiltering(table) {
+            const rows = table.querySelectorAll('tbody tr');
+            const filterKeys = Object.keys(table.activeFilters);
+
+            rows.forEach(row => {
+                let isVisible = true;
+
+                for (const colIdx of filterKeys) {
+                    const allowedVals = table.activeFilters[colIdx];
+                    const cellText = row.children[colIdx] ? row.children[colIdx].innerText.trim() : "";
+
+                    if (!allowedVals.includes(cellText)) {
+                        isVisible = false;
+                        break;
+                    }
+                }
+
+                row.style.display = isVisible ? '' : 'none';
+            });
+
+            calculateSelection();
+            renumberRows(table);
+        }
+
+        window.filterSearch = function(input) {
+            const filterText = input.value.toLowerCase();
+            const options = input.parentElement.querySelectorAll('.filter-option');
+            options.forEach(opt => {
+                const txt = opt.querySelector('span').innerText.toLowerCase();
+                opt.style.display = txt.includes(filterText) ? 'block' : 'none';
+            });
+        }
+
+        window.toggleFilterSelectAll = function(btn, selectAll) {
+            const dropdown = btn.closest('.filter-dropdown');
+            const checkboxes = dropdown.querySelectorAll('.filter-options-container input[type="checkbox"]');
+
+            checkboxes.forEach(cb => {
+                if(cb.parentElement.style.display !== 'none') {
+                    cb.checked = selectAll;
+                }
+            });
+
+            if(checkboxes.length > 0) {
+                const onchangeAttr = checkboxes[0].getAttribute('onchange');
+                const match = onchangeAttr.match(/applyMultiFilter\(this, (\d+)\)/);
+                if(match && match[1]) {
+                    applyMultiFilter(checkboxes[0], parseInt(match[1]));
+                }
+            }
+        }
+
+        function closeAllDropdowns() {
+            document.querySelectorAll('.filter-dropdown').forEach(el => el.remove());
+        }
+
+        // --- VERİ KAYIT ---
+        async function saveCell(el) {
+            const docEntry = el.getAttribute('data-id') || el.closest('tr').getAttribute('data-id');
+            const field = el.getAttribute('data-field');
+            const value = el.innerText.trim();
+            el.style.backgroundColor = "#fff9c4";
+
+            let formData = new FormData();
+            formData.append('docEntry', docEntry);
+            formData.append('field', field);
+            formData.append('value', value);
+            formData.append('__RequestVerificationToken', document.querySelector('input[name="__RequestVerificationToken"]').value);
+
+            try {
+                // 1. KURAL: Fetch isteklerine merkezi ?db= parametresi eklendi
+                await fetch('/Rapor57/UpdateCell?db=' + activeDbCode, { method: 'POST', body: formData });
+                el.style.backgroundColor = "#d4edda";
+                setTimeout(() => el.style.backgroundColor = "", 500);
+
+                if (field.includes("Zam") || field.includes("Ucret")) {
+                    await updateRow(docEntry);
+                }
+                calculateSelection();
+            } catch (err) {
+                el.style.backgroundColor = "#f8d7da";
+            }
+        }
+
+        async function updateRow(id) {
+            try {
+                // 1. KURAL: Fetch isteklerine merkezi ?db= parametresi eklendi
+                const r = await fetch('/Rapor57/GetBordroDetay?docEntry=' + id + '&db=' + activeDbCode);
+                const d = await r.json();
+                updateVal('cell-xnet-26-' + id, d.valXNet26);
+                updateVal('cell-topnet-26-' + id, d.valTopNet26);
+                updateVal('cell-rnet-26-' + id, d.valRNet26);
+                updateVal('cell-brut-26-' + id, d.valBrut26);
+                updateVal('cell-maliyet-26-' + id, d.valMaliyet26);
+                updateVal('cell-netartis-' + id, d.valNetArtis);
+                updateVal('cell-malartis-' + id, d.valMalArtis);
+                updateVal('detay-maliyet-26-' + id, d.valMaliyet26);
+            } catch(e) { console.error(e); }
+        }
+
+        function updateVal(elId, val) {
+            const el = document.getElementById(elId);
+            if (el) {
+                el.innerText = fmt(val);
+                el.classList.remove("flash-anim");
+                void el.offsetWidth;
+                el.classList.add("flash-anim");
+            }
+        }
+
+        function openBordroModal(id) {
+            var modal = new bootstrap.Modal(document.getElementById('bordroModal'));
+            modal.show();
+            // 1. KURAL: Fetch isteklerine merkezi ?db= parametresi eklendi
+            fetch('/Rapor57/GetBordroDetay?docEntry=' + id + '&db=' + activeDbCode).then(r=>r.json()).then(d=>{
+                document.getElementById('mAdSoyad').innerText = d.adSoyad;
+                document.getElementById('mEskiRNet').innerText = fmt(d.modalEskiRNet);
+                document.getElementById('mZam').innerText = "%" + fmt(d.modalZam);
+                document.getElementById('mYeniRNet').innerText = fmt(d.valRNet26);
+                document.getElementById('mXNet').innerText = fmt(d.modalXNet);
+                document.getElementById('mTopNet').innerText = fmt(d.valTopNet26);
+                document.getElementById('mBrut').innerText = fmt(d.valBrut26);
+                document.getElementById('mSgkIsci').innerText = fmt(d.modalSgkIsci);
+                document.getElementById('mGv').innerText = fmt(d.modalGv);
+                document.getElementById('mIsvSgk').innerText = fmt(d.modalSgkIsv);
+                document.getElementById('mMaliyet').innerText = fmt(d.valMaliyet26);
+            });
+        }
+    </script>
+}

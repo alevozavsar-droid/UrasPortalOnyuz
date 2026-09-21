@@ -1,0 +1,343 @@
+﻿@model List<WebApplication3.Controllers.PendingNoteViewModel>
+@{
+    ViewData["Title"] = "Bekleyen Cari İşlemler Konsolide Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    int totalCount = Model?.Count ?? 0;
+    int selviCount = Model?.Count(x => x.RoutingGroup == "SELVI") ?? 0;
+    int urasCount = Model?.Count(x => x.RoutingGroup == "URAS") ?? 0;
+    int alvUrsCount = Model?.Count(x => x.RoutingGroup == "ALV_URS") ?? 0;
+    int digerCount = Model?.Count(x => x.RoutingGroup == "DIGER") ?? 0;
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f4f7fc; font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #2b3445; }
+        
+        .dashboard-card { background: #ffffff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 6px rgba(0,0,0,0.03); padding: 20px; height: 100%; transition: all 0.3s ease; position: relative; overflow: hidden; cursor: pointer; }
+        .hover-elevate:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+        .dashboard-card.active-filter { border: 2px solid #3b82f6; background-color: #f8fafc; }
+        
+        .kpi-title { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; z-index: 2; position: relative; }
+        .kpi-value { font-size: 26px; font-weight: 900; color: #0f172a; margin-bottom: 2px; z-index: 2; position: relative; }
+        .kpi-desc { font-size: 11px; color: #94a3b8; z-index: 2; position: relative; }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 5rem; color: #e2e8f0; opacity: 0.4; z-index: 1; transform: rotate(-10deg); }
+        
+        .border-top-primary { border-top: 4px solid #3b82f6 !important; }
+        .border-top-warning { border-top: 4px solid #f59e0b !important; }
+        .border-top-danger { border-top: 4px solid #ef4444 !important; }
+        .border-top-success { border-top: 4px solid #10b981 !important; }
+        .border-top-purple { border-top: 4px solid #8b5cf6 !important; }
+
+        .table > thead { background-color: #f8fafc; font-size: 12px; color: #475569; font-weight: 700; border-bottom: 2px solid #e2e8f0; }
+        .table > thead > tr > th { text-transform: uppercase; letter-spacing: 0.5px; padding: 12px; border-bottom: none; }
+        .table > tbody > tr > td { font-size: 13px; color: #334155; vertical-align: middle; padding: 12px; border-bottom: 1px solid #f1f5f9; }
+        .table-hover tbody tr:hover { background-color: #f8fafc; transform: scale(1.001); transition: all 0.2s; box-shadow: inset 2px 0 0 #3b82f6; }
+        
+        .badge-soft-warning { background-color: #fef3c7; color: #92400e; border-radius: 6px; padding: 5px 10px; font-weight: 700; font-size: 11px;}
+        .badge-soft-primary { background-color: #dbeafe; color: #1e40af; border-radius: 6px; padding: 5px 10px; font-weight: 700; font-size: 11px;}
+        
+        .form-check-input { cursor: pointer; width: 1.2em; height: 1.2em; }
+    </style>
+}
+
+<div class="container-fluid py-4">
+    @Html.AntiForgeryToken()
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;">Bekleyen Cari İşlemler Paneli</h4>
+            <span class="text-muted" style="font-size: 14px;">Tamamlanmamış işlemler konsolide olarak izlenir ve departmanlara otomatik mail atılır.</span>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <button class="btn btn-primary rounded-pill px-4 shadow hover-elevate fw-bold" id="btnComplete" onclick="openProcessModal(getSelectedIds())">
+                <i class="fas fa-tasks me-2"></i> Seçilileri İşlem Yap / Yönlendir / Tamamla
+            </button>
+            <button class="btn btn-warning rounded-pill px-4 shadow hover-elevate fw-bold text-dark" id="btnSendEmails" onclick="sendBulkEmails()">
+                <i class="fas fa-paper-plane me-2"></i> Seçilileri Hatırlat (Mail At)
+            </button>
+        </div>
+    </div>
+
+    <!-- KPI Kartları -->
+    <div class="row mb-4 g-3">
+        <div class="col-md-2">
+            <div class="dashboard-card p-3 border-0 border-top-primary hover-elevate active-filter" onclick="filterTable('ALL', this)">
+                <i class="fas fa-list-ul kpi-icon-bg"></i>
+                <div class="kpi-title">Toplam Bekleyen</div>
+                <div class="kpi-value text-primary">@totalCount</div>
+                <div class="kpi-desc">Tüm Şirketler Toplamı</div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="dashboard-card p-3 border-0 border-top-danger hover-elevate" onclick="filterTable('URAS', this)">
+                <i class="fas fa-building kpi-icon-bg"></i>
+                <div class="kpi-title">Uras Kimya</div>
+                <div class="kpi-value text-danger">@urasCount</div>
+                <div class="kpi-desc">Ayfer Ş., Hakan H.</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card p-3 border-0 border-top-warning hover-elevate" onclick="filterTable('ALV_URS', this)">
+                <i class="fas fa-industry kpi-icon-bg"></i>
+                <div class="kpi-title">ALV Kimya & URS Makine</div>
+                <div class="kpi-value text-warning">@alvUrsCount</div>
+                <div class="kpi-desc">Dilek G., Nevruz S.</div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="dashboard-card p-3 border-0 border-top-success hover-elevate" onclick="filterTable('SELVI', this)">
+                <i class="fas fa-leaf kpi-icon-bg"></i>
+                <div class="kpi-title">Selvi Kimya</div>
+                <div class="kpi-value text-success">@selviCount</div>
+                <div class="kpi-desc">Muhasebe (Ortak)</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="dashboard-card p-3 border-0 border-top-purple hover-elevate position-relative" onclick="filterTable('DIGER', this)">
+                <span class="badge bg-purple position-absolute top-0 end-0 mt-3 me-3 rounded-pill shadow-sm">CC: Ayşegül U.</span>
+                <i class="fas fa-users kpi-icon-bg"></i>
+                <div class="kpi-title">Diğer Şirketler</div>
+                <div class="kpi-value text-purple">@digerCount</div>
+                <div class="kpi-desc">Sedef Y.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- İşlem Listesi Tablosu -->
+    <div class="dashboard-card border-0 hover-elevate" style="cursor: default;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="card-title mb-0"><i class="fas fa-clock text-warning me-2"></i>Bekleyen Kayıtlar Listesi</div>
+            <div class="text-muted" style="font-size: 12px;" id="filterStatusText">Tüm kayıtlar gösteriliyor.</div>
+        </div>
+        <div class="table-responsive" style="max-height: 60vh; overflow-y: auto;">
+            <table class="table table-hover align-middle mb-0" id="notesTable">
+                <thead class="sticky-top shadow-sm">
+                    <tr>
+                        <th style="width: 40px;">
+                            <input class="form-check-input" type="checkbox" id="selectAll">
+                        </th>
+                        <th>Şirket</th>
+                        <th>Cari Kodu</th>
+                        <th>Cari İsim</th>
+                        <th>Not İçeriği / İşlem</th>
+                        <th>Talep Eden Kullanıcı</th>
+                        <th>Kayıt Tarihi</th>
+                        <th class="text-center" style="width: 140px;">İşlem</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model != null && Model.Any())
+                    {
+                        foreach (var item in Model)
+                        {
+                            <tr data-group="@item.RoutingGroup">
+                                <td>
+                                    <input class="form-check-input row-checkbox" type="checkbox" value="@item.Id">
+                                </td>
+                                <td><span class="badge-soft-primary fw-bold">@item.SirketDb</span></td>
+                                <td class="fw-bold text-dark">@item.CardCode</td>
+                                <td class="text-secondary fw-semibold">@(string.IsNullOrEmpty(item.CardName) ? "-" : item.CardName)</td>
+                                <td style="max-width: 300px;" title="@item.NotIcerigi">@item.NotIcerigi</td>
+                                <td><i class="fas fa-user-circle text-muted me-1"></i> @item.Kullanici</td>
+                                <td>@item.KayitTarihi.ToString("dd.MM.yyyy HH:mm")</td>
+                                <td class="text-center">
+                                    <button class="btn btn-sm btn-outline-primary rounded-pill px-3 fw-bold" onclick="openProcessModal([@item.Id])">
+                                        <i class="fas fa-edit me-1"></i> İşlem Yap
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr id="emptyRow">
+                            <td colspan="8" class="text-center py-5">
+                                <div class="text-muted mb-2"><i class="fas fa-check-double fa-3x opacity-25 text-success"></i></div>
+                                <h6 class="fw-bold text-secondary">Harika! Bekleyen hiçbir işlem bulunmuyor.</h6>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        const antiForgeryToken = $('input[name="__RequestVerificationToken"]').val();
+
+        $(document).ready(function() {
+            $('#selectAll').on('change', function() {
+                var isChecked = $(this).is(':checked');
+                $('.row-checkbox').each(function() {
+                    if ($(this).closest('tr').is(':visible')) {
+                        $(this).prop('checked', isChecked);
+                    }
+                });
+            });
+
+            $('.row-checkbox').on('change', function() {
+                var allVisibleChecked = $('.row-checkbox:visible').length === $('.row-checkbox:visible:checked').length;
+                $('#selectAll').prop('checked', allVisibleChecked);
+            });
+        });
+
+        function getSelectedIds() {
+            var selectedIds = [];
+            $('.row-checkbox:checked').each(function() {
+                selectedIds.push(parseInt($(this).val()));
+            });
+            return selectedIds;
+        }
+
+        function filterTable(group, element) {
+            $('.dashboard-card').removeClass('active-filter');
+            $(element).addClass('active-filter');
+            
+            $('#selectAll').prop('checked', false);
+            $('.row-checkbox').prop('checked', false);
+
+            if (group === 'ALL') {
+                $('tbody tr[data-group]').show();
+                $('#filterStatusText').text("Tüm kayıtlar gösteriliyor.");
+            } else {
+                $('tbody tr[data-group]').hide();
+                $('tbody tr[data-group="' + group + '"]').show();
+                $('#filterStatusText').text("Sadece " + group + " grubu kayıtları gösteriliyor.");
+            }
+        }
+
+        // İŞLEM YAP / YÖNLENDİR / TAMAMLA MODALI
+        function openProcessModal(ids) {
+            if (!ids || ids.length === 0) {
+                Swal.fire('Uyarı', 'Lütfen işlem yapılacak en az bir kayıt seçiniz.', 'info');
+                return;
+            }
+
+            Swal.fire({
+                title: 'Cari İşlem Yönetimi',
+                html: `
+                    <div style="text-align: left; font-size: 13px;">
+                        <p class="mb-2"><b>Seçilen Kayıt Sayısı:</b> ${ids.length}</p>
+                        
+                        <label class="fw-bold text-dark mb-1">Muhasebe / İşlem Notunuz:</label>
+                        <textarea id="swalUserNote" class="form-control form-control-sm mb-3" rows="3" placeholder="Örn: Fatura kontrolü için Satınalmaya aktarıldı veya Cari hesaba işlendi..."></textarea>
+
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="actionType" id="typeComplete" value="COMPLETE" checked onclick="$('#forwardEmailDiv').hide();">
+                            <label class="form-check-label fw-bold text-success" for="typeComplete">
+                                <i class="fas fa-check-circle me-1"></i> İşlemi Tamamla (Talep Eden Müşteri/Kullanıcıya Bildir)
+                            </label>
+                        </div>
+
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="actionType" id="typeForward" value="FORWARD" onclick="$('#forwardEmailDiv').show();">
+                            <label class="form-check-label fw-bold text-warning" for="typeForward">
+                                <i class="fas fa-share me-1"></i> Başka Birime / Kişiye Yönlendir (Satınalma, Onay vb.)
+                            </label>
+                        </div>
+
+                        <div id="forwardEmailDiv" class="mt-2" style="display: none;">
+                            <label class="fw-bold text-dark mb-1">Yönlendirilecek Kişinin E-Posta Adresi:</label>
+                            <input type="email" id="swalForwardEmail" class="form-control form-control-sm" placeholder="Örn: kullanici@ornek.local">
+                        </div>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonColor: '#3b82f6',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: '<i class="fas fa-paper-plane me-1"></i> Kaydet ve Gönder',
+                cancelButtonText: 'İptal',
+                preConfirm: () => {
+                    const userNote = $('#swalUserNote').val();
+                    const actionType = $('input[name="actionType"]:checked').val();
+                    const forwardEmail = $('#swalForwardEmail').val();
+
+                    if (actionType === 'FORWARD' && !forwardEmail) {
+                        Swal.showValidationMessage('Lütfen yönlendirilecek e-posta adresini giriniz.');
+                        return false;
+                    }
+
+                    return {
+                        selectedIds: ids,
+                        userNote: userNote,
+                        actionType: actionType,
+                        forwardEmail: forwardEmail
+                    };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({ title: 'İşleniyor...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+                    $.ajax({
+                        url: '/Rapor133/ProcessNotes',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify(result.value),
+                        headers: { 'RequestVerificationToken': antiForgeryToken },
+                        success: function (res) {
+                            if (res.success) {
+                                Swal.fire('Başarılı', res.message, 'success').then(() => {
+                                    location.reload();
+                                });
+                            } else {
+                                Swal.fire('Hata', res.message, 'error');
+                            }
+                        },
+                        error: function () {
+                            Swal.fire('Hata', 'Sunucu ile iletişim kurulurken bir hata oluştu.', 'error');
+                        }
+                    });
+                }
+            });
+        }
+
+        // Hatırlatma Maili Atma
+        function sendBulkEmails() {
+            var selectedIds = getSelectedIds();
+
+            if (selectedIds.length === 0) {
+                Swal.fire('Uyarı', 'Lütfen hatırlatma gönderilecek en az bir kayıt seçiniz.', 'info');
+                return;
+            }
+
+            Swal.fire({
+                title: 'Seçili Kayıtları Hatırlat',
+                text: `${selectedIds.length} adet işlem için hatırlatma maili iletilecektir.`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#f59e0b',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: '<i class="fas fa-paper-plane"></i> Mailleri Gönder',
+                cancelButtonText: 'İptal'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({ title: 'Hatırlatma Mailleri İletiliyor...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+                    $.ajax({
+                        url: '/Rapor133/SendBulkEmails',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify(selectedIds),
+                        headers: { 'RequestVerificationToken': antiForgeryToken },
+                        success: function (res) {
+                            if (res.success) {
+                                Swal.fire('Başarılı', res.message, 'success').then(() => {
+                                    location.reload();
+                                });
+                            } else {
+                                Swal.fire('Hata', res.message, 'error');
+                            }
+                        },
+                        error: function () {
+                            Swal.fire('Hata', 'Sunucu ile iletişim kurulamadı.', 'error');
+                        }
+                    });
+                }
+            });
+        }
+    </script>
+}

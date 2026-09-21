@@ -1,0 +1,324 @@
+@{
+    ViewData["Title"] = "Ürün Dönüşümü";
+}
+
+<style>
+    .uras-card { background: #fff; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 20px rgba(0,0,0,0.03); margin-bottom: 24px; }
+    .uras-card-header { padding: 16px 20px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .uras-card-header h5, .uras-card-header h6 { margin: 0; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+    .uras-card-body { padding: 20px; }
+    .search-box { position: relative; width: 100%; max-width: 260px; }
+    .search-box input { border-radius: 20px; padding-left: 36px; background: #f1f5f9; border: none; }
+    .search-box i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #64748b; }
+    .empty-state { text-align: center; padding: 32px 20px; color: #94a3b8; }
+    .empty-state i { font-size: 2.2rem; margin-bottom: 10px; color: #cbd5e1; display: block; }
+    .uras-label { font-weight: 600; font-size: .85rem; color: #475569; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+    .conversion-flow { position: relative; padding: 16px; border-radius: 16px; background: #f8fafc; border: 1px dashed #cbd5e1; margin-bottom: 20px; }
+    .flow-step { background: #fff; padding: 14px; border-radius: 12px; border: 1px solid #e2e8f0; }
+    .flow-step.source { border-left: 4px solid #ef4444; }
+    .flow-step.target { border-left: 4px solid #10b981; margin-top: 10px; }
+    .flow-arrow { text-align: center; color: #94a3b8; padding: 2px 0; }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; }
+    .status-badge { font-size: .75rem; padding: 4px 10px; border-radius: 8px; font-weight: 600; }
+    .status-badge.closed { background: #dcfce7; color: #166534; }
+    .status-badge.released { background: #dbeafe; color: #1e40af; }
+    .status-badge.planned { background: #fef3c7; color: #92400e; }
+</style>
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-arrows-rotate me-2 text-primary"></i> Ürün Dönüşümü</h2>
+</div>
+
+<!-- Kalem arama modalı (hem tüketilecek hem üretilecek ürün için ortak — kaynaktaki gibi yalnızca ürün ağacı tanımlı kalemler) -->
+<div class="modal fade" id="kalemModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" id="kalemModalBaslik">Kalem Seç</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="text" class="form-control form-control-sm mb-2" id="kalemAramaKutusu" placeholder="Kalem kodu veya adı..." oninput="kalemAramaYap()">
+                <div class="table-responsive" style="max-height:400px;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>Kod</th><th>Ad</th></tr></thead>
+                        <tbody id="tbodyKalemSonuc"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Depo arama modalı -->
+<div class="modal fade" id="depoModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fas fa-building text-primary me-2"></i>Depo Seçin</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="text" class="form-control form-control-sm mb-2" id="depoAramaKutusu" placeholder="Depo ara..." oninput="depoAramaCiz()">
+                <div class="table-responsive" style="max-height:400px;">
+                    <table class="table table-sm table-hover mb-0">
+                        <tbody id="tbodyDepoSonuc"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Onay modalı -->
+<div class="modal fade" id="onayModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0" style="border-radius:16px;">
+            <div class="modal-header bg-light border-0">
+                <h5 class="modal-title fw-bold"><i class="fas fa-shield-check text-primary me-2"></i>Dönüşüm Onayı</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="p-3 rounded-3 mb-3 bg-light border"><table class="table table-sm table-borderless mb-0" id="onayTablo"></table></div>
+                <div class="alert alert-warning border-0 d-flex gap-2 align-items-center mb-0" style="font-size:.85rem;">
+                    <i class="fas fa-circle-info fs-5"></i>
+                    Sipariş oluşturulacak, bileşen çıkışı ve ürün girişi yapılacak, ardından sipariş otomatik olarak kapatılacaktır.
+                </div>
+            </div>
+            <div class="modal-footer border-0 bg-light">
+                <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-primary rounded-pill px-4" id="btnOnayla" onclick="onaylaVeGonder()">
+                    <span id="onaylaMetin"><i class="fas fa-check-double me-1"></i>Onayla</span>
+                    <span id="onaylaYukleniyor" style="display:none"><span class="spinner-border spinner-border-sm me-1"></span>İşleniyor...</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row align-items-stretch">
+
+    <div class="col-xl-4 col-lg-5 mb-4 mb-lg-0">
+        <div class="uras-card h-100">
+            <div class="uras-card-header"><h5><i class="fas fa-arrows-rotate"></i> Yeni Dönüşüm</h5></div>
+            <div class="uras-card-body d-flex flex-column justify-content-between h-100">
+
+                <div class="conversion-flow">
+                    <div class="flow-step source">
+                        <label class="uras-label text-danger"><i class="fas fa-box"></i> Tüketilecek Ürün (Kaynak)</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" id="fDonusturulenAd" readonly placeholder="Tüketilecek ürünü seçin...">
+                            <button class="btn btn-outline-secondary" type="button" onclick="kalemAra('donusturulen')"><i class="fas fa-search"></i></button>
+                            <button class="btn btn-outline-danger" type="button" onclick="donusturulenTemizle()"><i class="fas fa-xmark"></i></button>
+                        </div>
+                    </div>
+                    <div class="flow-arrow"><i class="fas fa-arrow-down"></i></div>
+                    <div class="flow-step target">
+                        <label class="uras-label text-success"><i class="fas fa-box-open"></i> Üretilecek Ürün (Hedef)</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" id="fDonusenAd" readonly placeholder="Üretilecek ürünü seçin...">
+                            <button class="btn btn-outline-secondary" type="button" onclick="kalemAra('donusen')"><i class="fas fa-search"></i></button>
+                            <button class="btn btn-outline-danger" type="button" onclick="donusenTemizle()"><i class="fas fa-xmark"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-sm-5">
+                        <label class="uras-label"><i class="fas fa-hashtag"></i> Miktar</label>
+                        <input type="number" min="0.01" step="0.01" class="form-control" id="fPlannedQty" placeholder="0.00" oninput="butonDurumunuGuncelle()">
+                    </div>
+                    <div class="col-sm-7">
+                        <label class="uras-label"><i class="fas fa-building"></i> Depo Yeri</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="fDepoAd" readonly placeholder="Seçiniz...">
+                            <button class="btn btn-outline-secondary" type="button" onclick="depoAra()"><i class="fas fa-search"></i></button>
+                            <button class="btn btn-outline-danger" type="button" onclick="depoTemizle()"><i class="fas fa-xmark"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary w-100 py-3" id="btnBaslat" onclick="donusumuBaslat()" disabled>
+                    <i class="fas fa-bolt me-2"></i>Dönüşümü Başlat
+                </button>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-8 col-lg-7">
+        <div class="uras-card h-100">
+            <div class="uras-card-header">
+                <h6><i class="fas fa-clock-rotate-left"></i> Geçmiş Dönüşümler <span class="badge bg-light text-secondary border ms-2" id="gecmisSayisi" style="display:none"></span></h6>
+                <div class="search-box"><i class="fas fa-search"></i><input type="text" class="form-control" id="fGecmis" placeholder="Belge no, ürün veya depo ara..." oninput="gecmisCiz()"></div>
+            </div>
+            <div class="uras-card-body p-0">
+                <div class="table-responsive" style="max-height:calc(100vh - 220px); overflow-y:auto;">
+                    <table class="table table-custom mb-0">
+                        <thead class="sticky-top" style="z-index:1">
+                            <tr><th>Belge No</th><th>Akış <span class="text-lowercase text-muted">(Tüketilen → Üretilen)</span></th><th class="text-end">Miktar</th><th>Depo</th><th>Operatör / Parti</th><th>Tarih</th><th class="text-center">Durum</th></tr>
+                        </thead>
+                        <tbody id="gecmisGovde"></tbody>
+                    </table>
+                    <div id="gecmisBos" class="empty-state" style="display:none"><i class="fas fa-inbox"></i>Henüz yapılmış bir ürün dönüşüm işlemi yok.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let oittKalemleri = [], depolar = [];
+    let donusturulenUrun = null, donusenUrun = null, selectedDepo = null;
+    let kalemHedef = 'donusturulen';
+    let donusumList = [];
+
+    function fmt(n, d) { return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+
+    function butonDurumunuGuncelle() {
+        const miktar = Number(document.getElementById('fPlannedQty').value) || 0;
+        document.getElementById('btnBaslat').disabled = !(donusenUrun && donusturulenUrun && selectedDepo && miktar > 0);
+    }
+
+    // ---- Kalem seçimi (kaynaktaki $scope.OITTList ile birebir: yalnızca ürün ağacı tanımlı kalemler) ----
+    async function kalemAra(hedef) {
+        kalemHedef = hedef;
+        document.getElementById('kalemModalBaslik').textContent = hedef === 'donusturulen' ? 'Tüketilecek Ürünü Seçin' : 'Üretilecek Ürünü Seçin';
+        if (!oittKalemleri.length) {
+            const res = await fetch('/UrasUretimUretim/GetOITT').then(r => r.json());
+            oittKalemleri = res.success ? (res.data || []) : [];
+        }
+        document.getElementById('kalemAramaKutusu').value = '';
+        new bootstrap.Modal(document.getElementById('kalemModal')).show();
+        kalemAramaYap();
+    }
+    function kalemAramaYap() {
+        const q = (document.getElementById('kalemAramaKutusu').value || '').toLowerCase();
+        const list = oittKalemleri.filter(k => !q || (k.Code || '').toLowerCase().includes(q) || (k.Name || '').toLowerCase().includes(q));
+        document.getElementById('tbodyKalemSonuc').innerHTML = list.map((k, i) => `
+            <tr style="cursor:pointer" onclick="kalemSecildi(${i})"><td class="fw-bold text-primary">${k.Code}</td><td>${k.Name || ''}</td></tr>`).join('');
+        document.getElementById('tbodyKalemSonuc')._list = list;
+    }
+    function kalemSecildi(i) {
+        const secilen = document.getElementById('tbodyKalemSonuc')._list[i];
+        if (kalemHedef === 'donusturulen') {
+            donusturulenUrun = secilen;
+            document.getElementById('fDonusturulenAd').value = secilen.Code + ' - ' + (secilen.Name || '');
+        } else {
+            donusenUrun = secilen;
+            document.getElementById('fDonusenAd').value = secilen.Code + ' - ' + (secilen.Name || '');
+        }
+        bootstrap.Modal.getInstance(document.getElementById('kalemModal')).hide();
+        butonDurumunuGuncelle();
+    }
+    function donusturulenTemizle() { donusturulenUrun = null; document.getElementById('fDonusturulenAd').value = ''; butonDurumunuGuncelle(); }
+    function donusenTemizle() { donusenUrun = null; document.getElementById('fDonusenAd').value = ''; butonDurumunuGuncelle(); }
+
+    // ---- Depo seçimi ----
+    async function depoAra() {
+        if (!depolar.length) {
+            const res = await fetch('/UrasUretimUretim/GetWarehousesUretim').then(r => r.json());
+            depolar = res.success ? (res.data || []) : [];
+        }
+        document.getElementById('depoAramaKutusu').value = '';
+        new bootstrap.Modal(document.getElementById('depoModal')).show();
+        depoAramaCiz();
+    }
+    function depoAramaCiz() {
+        const q = (document.getElementById('depoAramaKutusu').value || '').toLowerCase();
+        const list = depolar.filter(w => !q || (w.WhsCode || '').toLowerCase().includes(q) || (w.WhsName || '').toLowerCase().includes(q));
+        document.getElementById('tbodyDepoSonuc').innerHTML = list.map((w, i) => `
+            <tr style="cursor:pointer" onclick="depoSecildi(${i})"><td class="fw-bold text-primary" style="width:100px">${w.WhsCode}</td><td>${w.WhsName || ''}</td></tr>`).join('');
+        document.getElementById('tbodyDepoSonuc')._list = list;
+    }
+    function depoSecildi(i) {
+        selectedDepo = document.getElementById('tbodyDepoSonuc')._list[i];
+        document.getElementById('fDepoAd').value = selectedDepo.WhsCode + ' - ' + (selectedDepo.WhsName || '');
+        bootstrap.Modal.getInstance(document.getElementById('depoModal')).hide();
+        butonDurumunuGuncelle();
+    }
+    function depoTemizle() { selectedDepo = null; document.getElementById('fDepoAd').value = ''; butonDurumunuGuncelle(); }
+
+    // ---- Onay + gönderim ----
+    function donusumuBaslat() {
+        const miktar = Number(document.getElementById('fPlannedQty').value) || 0;
+        if (!donusturulenUrun) { alert('Lütfen tüketilecek ürünü seçin.'); return; }
+        if (!donusenUrun) { alert('Lütfen üretilecek ürünü seçin.'); return; }
+        if (!selectedDepo) { alert('Lütfen depo yeri seçin.'); return; }
+        if (!miktar || miktar <= 0) { alert('Lütfen geçerli bir miktar girin.'); return; }
+
+        document.getElementById('onayTablo').innerHTML = `
+            <tr><td class="text-muted fw-bold w-50"><i class="fas fa-arrow-right-from-bracket text-danger me-1"></i> Tüketilecek</td><td class="fw-bold">${donusturulenUrun.Code}</td></tr>
+            <tr><td class="text-muted fw-bold"><i class="fas fa-arrow-right-to-bracket text-success me-1"></i> Üretilecek</td><td class="fw-bold">${donusenUrun.Code}</td></tr>
+            <tr><td class="text-muted fw-bold"><i class="fas fa-hashtag text-primary me-1"></i> Miktar</td><td class="fw-bold">${fmt(miktar, 2)}</td></tr>
+            <tr><td class="text-muted fw-bold"><i class="fas fa-building text-primary me-1"></i> Depo</td><td class="fw-bold">${selectedDepo.WhsCode}</td></tr>`;
+
+        new bootstrap.Modal(document.getElementById('onayModal')).show();
+    }
+
+    async function onaylaVeGonder() {
+        const miktar = Number(document.getElementById('fPlannedQty').value) || 0;
+        document.getElementById('btnOnayla').disabled = true;
+        document.getElementById('onaylaMetin').style.display = 'none';
+        document.getElementById('onaylaYukleniyor').style.display = '';
+
+        // Kaynaktaki $scope.doCreateDonusum ile birebir: tek bileşen, miktarı hedefle aynı (1:1 dönüşüm).
+        const body = {
+            OCode: donusenUrun.Code, PlannedQty: miktar, WhsCode: selectedDepo.WhsCode,
+            PostDate: new Date().toISOString(), StartDate: new Date().toISOString(), DueDate: new Date().toISOString(),
+            Type: 'S',
+            AddWOR1: [{ Code: donusturulenUrun.Code, Quantity: miktar, PlannedQty: miktar, Type: 4 }]
+        };
+
+        let res;
+        try {
+            res = await fetch('/UrasUretimUretim/AddUrunDonusumu', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+        } catch (e) {
+            res = { success: false, message: 'Beklenmeyen hata: ' + e.message };
+        }
+
+        document.getElementById('btnOnayla').disabled = false;
+        document.getElementById('onaylaMetin').style.display = '';
+        document.getElementById('onaylaYukleniyor').style.display = 'none';
+        bootstrap.Modal.getInstance(document.getElementById('onayModal')).hide();
+
+        alert(res.message);
+        if (res.success) {
+            donusturulenTemizle(); donusenTemizle(); depoTemizle();
+            document.getElementById('fPlannedQty').value = '';
+            gecmisiYukle();
+        }
+    }
+
+    // ---- Geçmiş ----
+    async function gecmisiYukle() {
+        const res = await fetch('/UrasUretimUretim/GetUrunDonusumuList').then(r => r.json());
+        donusumList = res.success ? (res.data || []) : [];
+        gecmisCiz();
+    }
+    function durumRozeti(s) {
+        if (s === 'L') return '<span class="status-badge closed"><i class="fas fa-check-circle"></i> Kapalı</span>';
+        if (s === 'R') return '<span class="status-badge released"><i class="fas fa-play-circle"></i> Serbest</span>';
+        if (s === 'P') return '<span class="status-badge planned"><i class="fas fa-clock"></i> Planlandı</span>';
+        return `<span class="status-badge border">${s || ''}</span>`;
+    }
+    function gecmisCiz() {
+        const q = (document.getElementById('fGecmis').value || '').toLowerCase();
+        const list = donusumList.filter(it => !q || String(it.DocEntry).includes(q) || (it.ItemCode || '').toLowerCase().includes(q) || (it.ComponentItemCode || '').toLowerCase().includes(q) || (it.Warehouse || '').toLowerCase().includes(q));
+        const sayiEl = document.getElementById('gecmisSayisi');
+        sayiEl.style.display = donusumList.length ? '' : 'none';
+        sayiEl.textContent = donusumList.length;
+        document.getElementById('gecmisBos').style.display = list.length ? 'none' : '';
+        document.getElementById('gecmisGovde').innerHTML = list.map(it => `
+            <tr>
+                <td class="fw-bold text-primary">#${it.DocEntry}</td>
+                <td><div class="d-flex align-items-center gap-2 font-monospace" style="font-size:.8rem">
+                        <span class="text-danger fw-bold" title="${it.ComponentItemName || ''}">${it.ComponentItemCode || ''}</span>
+                        <i class="fas fa-arrow-right text-muted"></i>
+                        <span class="text-success fw-bold" title="${it.ProdName || ''}">${it.ItemCode}</span>
+                    </div></td>
+                <td class="text-end fw-bold">${fmt(it.PlannedQty, 2)}</td>
+                <td><span class="badge bg-light text-dark border"><i class="fas fa-building me-1"></i>${it.Warehouse || ''}</span></td>
+                <td><div class="d-flex flex-column"><span>${it.U_BE1_OPERATOR || '-'}</span>${it.U_BE1_KAZANLOTNO ? `<small class="text-primary fw-bold">Lot: ${it.U_BE1_KAZANLOTNO}</small>` : ''}</div></td>
+                <td>${(it.PostDate || '').substring(0, 10)}</td>
+                <td class="text-center">${durumRozeti(it.Status)}</td>
+            </tr>`).join('');
+    }
+
+    gecmisiYukle();
+</script>

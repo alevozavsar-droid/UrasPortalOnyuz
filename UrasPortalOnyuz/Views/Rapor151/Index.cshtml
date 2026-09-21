@@ -1,0 +1,407 @@
+﻿@{
+    ViewData["Title"] = "Danışma Giriş-Çıkış Defteri";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string tarih = (string)ViewBag.Tarih;
+    string tarihMetin = (string)ViewBag.TarihMetin;
+    bool bugunMu = ViewBag.BugunMu != null && (bool)ViewBag.BugunMu;
+    string sirketAdi = (string)ViewBag.SirketAdi ?? "";
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/css/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <style>
+        body { background-color: var(--bg-main, #f4f7fe); }
+        .dn-kart { background: var(--bg-card, #fff); border-radius: 12px; border: 1px solid var(--border-color, #e9ecef); box-shadow: 0 2px 10px rgba(0,0,0,.04); }
+        .dn-tarih { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+        .dn-tarih .gun { font-weight: 800; font-size: 1.15rem; letter-spacing: -.3px; }
+        .dn-tarih .bugun { background: #dcfce7; color: #166534; border-radius: 999px; padding: 2px 10px; font-size: .72rem; font-weight: 700; }
+        .kpi { display: flex; gap: 12px; flex-wrap: wrap; }
+        .kpi > div { background: var(--bg-card, #fff); border: 1px solid var(--border-color, #e9ecef); border-radius: 12px; padding: 10px 16px; min-width: 150px; }
+        .kpi .lbl { font-size: .68rem; text-transform: uppercase; color: #6c757d; font-weight: 700; letter-spacing: .04em; }
+        .kpi .val { font-size: 1.5rem; font-weight: 800; line-height: 1.1; }
+        .nav-pills .nav-link { font-weight: 700; color: #475569; border: 1px solid #e2e8f0; margin-right: 6px; border-radius: 10px; background: #fff; }
+        .nav-pills .nav-link.active { background: linear-gradient(135deg,#3b82f6,#6366f1); color: #fff; border-color: transparent; }
+        .form-label { font-size: .7rem; text-transform: uppercase; font-weight: 700; color: #475569; margin-bottom: 2px; letter-spacing: .03em; }
+        .form-control, .form-select { font-size: .85rem; }
+        .dn-form { background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 12px; }
+        .table-dn { width: 100%; margin: 0; }
+        .table-dn th { font-size: .7rem; text-transform: uppercase; color: #6c757d; background: #f8fafc; padding: 8px; white-space: nowrap; border-bottom: 2px solid #e9ecef; }
+        .table-dn td { font-size: .83rem; padding: 7px 8px; vertical-align: middle; border-bottom: 1px solid #f1f3f5; }
+        .table-dn tr.iceride td { background: #fffbeb; }
+        .table-dn tr.disarida td { background: #fef2f2; }
+        .saat { font-variant-numeric: tabular-nums; font-weight: 700; }
+        .saat.yok { color: #94a3b8; font-weight: 400; }
+        .plaka { font-family: Consolas, monospace; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 6px; padding: 1px 6px; font-size: .78rem; font-weight: 700; }
+        .btn-xs { padding: 2px 8px; font-size: .72rem; }
+    </style>
+}
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div>
+            <h4 class="fw-bold mb-0"><i class="fas fa-door-open text-primary me-2"></i>Danışma Giriş-Çıkış Defteri</h4>
+            <span class="text-muted" style="font-size:.8rem;">Şirket: <b>@sirketAdi</b> · Misafir / tedarikçi ve dışarı çıkan çalışanların gün içi hareketleri. SAP'ye yazılmaz.</span>
+        </div>
+        <div class="dn-tarih">
+            <button class="btn btn-sm btn-outline-secondary" onclick="gunDegistir(-1)" title="Önceki gün"><i class="fas fa-chevron-left"></i></button>
+            <input type="date" class="form-control form-control-sm fw-bold" id="tarih" value="@tarih" style="width:160px;" onchange="tarihGit(this.value)">
+            <button class="btn btn-sm btn-outline-secondary" onclick="gunDegistir(1)" title="Sonraki gün"><i class="fas fa-chevron-right"></i></button>
+            <button class="btn btn-sm btn-outline-primary" onclick="tarihGit('')"><i class="fas fa-calendar-day me-1"></i>Bugün</button>
+            <span class="gun">@tarihMetin</span>
+            @if (bugunMu) { <span class="bugun">BUGÜN</span> }
+            <button class="btn btn-sm btn-success fw-bold" onclick="excelAktar()"><i class="fas fa-file-excel me-1"></i>Excel</button>
+        </div>
+    </div>
+
+    <div class="kpi mb-3">
+        <div><div class="lbl">Misafir / Tedarikçi</div><div class="val text-primary" id="kMisafir">0</div></div>
+        <div><div class="lbl">İçeride Olan Misafir</div><div class="val text-warning" id="kIceride">0</div></div>
+        <div><div class="lbl">Dışarı Çıkan Çalışan</div><div class="val text-info" id="kCalisan">0</div></div>
+        <div><div class="lbl">Henüz Dönmeyen</div><div class="val text-danger" id="kDisarida">0</div></div>
+    </div>
+
+    <ul class="nav nav-pills mb-3" role="tablist">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#paneMisafir" type="button"><i class="fas fa-user-tie me-1"></i>Misafir / Tedarikçi <span class="badge bg-light text-dark border ms-1" id="rozetMisafir">0</span></button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#paneCalisan" type="button"><i class="fas fa-id-badge me-1"></i>Çalışan <span class="badge bg-light text-dark border ms-1" id="rozetCalisan">0</span></button></li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- ================= MİSAFİR / TEDARİKÇİ ================= -->
+        <div class="tab-pane fade show active" id="paneMisafir">
+            <div class="dn-kart p-3 mb-3">
+                <div class="dn-form">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-lg-2 col-md-4"><label class="form-label">Ad Soyad *</label><input type="text" class="form-control" id="mAd" placeholder="Ziyaretçi adı"></div>
+                        <div class="col-lg-2 col-md-4"><label class="form-label">Firma</label><input type="text" class="form-control" id="mFirma" placeholder="Tedarikçi / firma" list="firmaListesi"><datalist id="firmaListesi"></datalist></div>
+                        <div class="col-lg-2 col-md-4"><label class="form-label">Ziyaret Edilen</label><input type="text" class="form-control" id="mZiyaret" placeholder="Kimi ziyaret etti" list="calisanListesi"></div>
+                        <div class="col-lg-2 col-md-4"><label class="form-label">Neden</label><input type="text" class="form-control" id="mNeden" placeholder="Toplantı, teslimat..."></div>
+                        <div class="col-lg-1 col-md-3"><label class="form-label">Plaka</label><input type="text" class="form-control text-uppercase" id="mPlaka" placeholder="34ABC123"></div>
+                        <div class="col-lg-1 col-md-3"><label class="form-label">Giriş</label><input type="time" class="form-control" id="mGiris"></div>
+                        <div class="col-lg-1 col-md-3"><label class="form-label">Çıkış</label><input type="time" class="form-control" id="mCikis"></div>
+                        <div class="col-lg-1 col-md-3 d-grid"><button class="btn btn-primary fw-bold" onclick="misafirKaydet()"><i class="fas fa-plus me-1"></i>Ekle</button></div>
+                    </div>
+                    <div class="small text-muted mt-1"><i class="fas fa-info-circle me-1"></i>Giriş boş bırakılırsa şu anki saat yazılır. Çıkış saati sonradan "Çıkış Ver" ile tek tıkla işlenir.</div>
+                </div>
+            </div>
+            <div class="dn-kart">
+                <div class="table-responsive">
+                    <table class="table-dn" id="tblMisafir">
+                        <thead><tr><th>#</th><th>Ad Soyad</th><th>Firma</th><th>Ziyaret Edilen</th><th>Neden</th><th>Plaka</th><th>Giriş</th><th>Çıkış</th><th>Süre</th><th>Kaydeden</th><th>Açıklama</th><th class="text-end">İşlem</th></tr></thead>
+                        <tbody id="tbMisafir"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= ÇALIŞAN ================= -->
+        <div class="tab-pane fade" id="paneCalisan">
+            <div class="dn-kart p-3 mb-3">
+                <div class="dn-form">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-lg-3 col-md-5">
+                            <label class="form-label">Çalışan * <span class="text-muted fw-normal">(yazarak ara)</span></label>
+                            <div class="d-flex gap-1">
+                                <select id="cAd" class="form-select" style="width:100%"></select>
+                                <button class="btn btn-outline-secondary flex-shrink-0" type="button" onclick="calisanEkleAc()" title="Listede olmayan çalışanı ekle"><i class="fas fa-user-plus"></i></button>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-4"><label class="form-label">Neden / Nereye</label><input type="text" class="form-control" id="cNeden" placeholder="Banka, müşteri ziyareti, öğle..."></div>
+                        <div class="col-lg-2 col-md-3"><label class="form-label">Plaka</label><input type="text" class="form-control text-uppercase" id="cPlaka" placeholder="Araçla çıktıysa"></div>
+                        <div class="col-lg-1 col-md-3"><label class="form-label">Çıkış</label><input type="time" class="form-control" id="cCikis"></div>
+                        <div class="col-lg-1 col-md-3"><label class="form-label">Dönüş</label><input type="time" class="form-control" id="cGiris"></div>
+                        <div class="col-lg-2 col-md-3 d-grid"><button class="btn btn-primary fw-bold" onclick="calisanKaydet()"><i class="fas fa-plus me-1"></i>Çıkış Kaydet</button></div>
+                    </div>
+                    <div class="small text-muted mt-1"><i class="fas fa-info-circle me-1"></i>Çıkış boş bırakılırsa şu anki saat yazılır. Döndüğünde "Dönüş Ver" ile saat işlenir. Çalışan listesi SAP'ye değil, portalın kendi listesine kaydedilir.</div>
+                </div>
+            </div>
+            <div class="dn-kart">
+                <div class="table-responsive">
+                    <table class="table-dn" id="tblCalisan">
+                        <thead><tr><th>#</th><th>Çalışan</th><th>Neden / Nereye</th><th>Plaka</th><th>Çıkış</th><th>Dönüş</th><th>Dışarıda</th><th>Kaydeden</th><th>Açıklama</th><th class="text-end">İşlem</th></tr></thead>
+                        <tbody id="tbCalisan"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- DÜZENLEME MODALI -->
+<div class="modal fade" id="duzenleModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:14px;">
+            <div class="modal-header py-2 bg-light"><h6 class="modal-title fw-bold mb-0"><i class="fas fa-pen me-2"></i>Kaydı Düzenle</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="dId"><input type="hidden" id="dTip">
+                <div class="row g-2">
+                    <div class="col-12"><label class="form-label">Ad Soyad</label><input type="text" class="form-control" id="dAd"></div>
+                    <div class="col-6" id="dFirmaKutu"><label class="form-label">Firma</label><input type="text" class="form-control" id="dFirma"></div>
+                    <div class="col-6" id="dZiyaretKutu"><label class="form-label">Ziyaret Edilen</label><input type="text" class="form-control" id="dZiyaret" list="calisanListesi"></div>
+                    <div class="col-8"><label class="form-label">Neden</label><input type="text" class="form-control" id="dNeden"></div>
+                    <div class="col-4"><label class="form-label">Plaka</label><input type="text" class="form-control text-uppercase" id="dPlaka"></div>
+                    <div class="col-6"><label class="form-label" id="dGirisEtiket">Giriş</label><input type="time" class="form-control" id="dGiris"></div>
+                    <div class="col-6"><label class="form-label" id="dCikisEtiket">Çıkış</label><input type="time" class="form-control" id="dCikis"></div>
+                    <div class="col-12"><label class="form-label">Açıklama</label><input type="text" class="form-control" id="dAciklama"></div>
+                </div>
+            </div>
+            <div class="modal-footer py-2"><button class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button><button class="btn btn-primary fw-bold" onclick="duzenleKaydet()"><i class="fas fa-save me-1"></i>Kaydet</button></div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 320px; overflow-y: auto; padding: 2px; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid #dfe3e8; border-radius: 20px; background: #fff; cursor: pointer; font-size: .86rem; line-height: 1.2; user-select: none; transition: all .12s; }
+    .chip:hover { border-color: #0d6efd; background: #eef4ff; color: #0b3d91; }
+    .chip.secili { border-color: #0d6efd; background: #0d6efd; color: #fff; }
+    .chip .bolum { font-size: .7rem; color: #8a94a6; }
+    .chip.secili .bolum { color: #dbe6ff; }
+    .chip .islem { display: none; gap: 4px; margin-left: 2px; }
+    .chips.duzen .chip { cursor: default; }
+    .chips.duzen .chip .islem { display: inline-flex; }
+    .chip .islem i { padding: 2px 4px; border-radius: 4px; cursor: pointer; font-size: .75rem; }
+    .chip .islem i:hover { background: #e9ecef; }
+    .chip .islem .fa-times:hover { background: #f8d7da; color: #b02a37; }
+    .cdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+    .cdot.disarida { background: #fd7e14; box-shadow: 0 0 0 2px #ffe5cc; }
+    .chip-harf { width: 100%; font-size: .72rem; font-weight: 700; color: #9aa3b2; margin-top: 4px; letter-spacing: .5px; }
+    #calisanPanel .select2-container { width: 100% !important; }
+</style>
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        var TARIH = '@tarih';
+        var veri = { misafir: [], calisan: [] };
+        var calisanlar = [];
+
+        function esc(v) { return $('<div>').text(v == null ? '' : String(v)).html(); }
+        function simdi() { var d = new Date(); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+        function sure(bas, bit) {
+            if (!bas || !bit) return '';
+            var a = bas.split(':'), b = bit.split(':');
+            var dk = (parseInt(b[0]) * 60 + parseInt(b[1])) - (parseInt(a[0]) * 60 + parseInt(a[1]));
+            if (dk < 0) dk += 24 * 60;
+            return Math.floor(dk / 60) + ' sa ' + (dk % 60) + ' dk';
+        }
+        function tarihGit(t) { location.href = '/Rapor151' + (t ? '?tarih=' + t : ''); }
+        function gunDegistir(n) { var d = new Date(TARIH); d.setDate(d.getDate() + n); tarihGit(d.toISOString().substr(0, 10)); }
+
+        // ---------------- YÜKLEME ----------------
+        function yukle() {
+            $.getJSON('/Rapor151/Hareketler', { tarih: TARIH }, function (r) {
+                if (!r.success) { toastr.error(r.message); return; }
+                veri = r;
+                $('#kMisafir').text(r.ozet.misafirToplam); $('#kIceride').text(r.ozet.misafirIceride);
+                $('#kCalisan').text(r.ozet.calisanToplam); $('#kDisarida').text(r.ozet.calisanDisarida);
+                $('#rozetMisafir').text(r.ozet.misafirToplam); $('#rozetCalisan').text(r.ozet.calisanToplam);
+                misafirCiz(); calisanCiz(); if (calisanlar.length) chipsCiz();
+            });
+        }
+
+        function misafirCiz() {
+            var h = ''; var firmalar = {};
+            veri.misafir.forEach(function (m, i) {
+                if (m.firma) firmalar[m.firma] = 1;
+                h += '<tr class="' + (m.cikisSaati ? '' : 'iceride') + '">'
+                   + '<td class="text-muted">' + (i + 1) + '</td><td class="fw-bold">' + esc(m.adSoyad) + '</td><td>' + esc(m.firma) + '</td><td>' + esc(m.ziyaretEdilen) + '</td><td>' + esc(m.neden) + '</td>'
+                   + '<td>' + (m.plaka ? '<span class="plaka">' + esc(m.plaka) + '</span>' : '') + '</td>'
+                   + '<td class="saat ' + (m.girisSaati ? '' : 'yok') + '">' + (m.girisSaati || '—') + '</td>'
+                   + '<td class="saat ' + (m.cikisSaati ? '' : 'yok') + '">' + (m.cikisSaati || '<span class="badge bg-warning text-dark">içeride</span>') + '</td>'
+                   + '<td class="small text-muted">' + sure(m.girisSaati, m.cikisSaati) + '</td><td class="small text-muted">' + esc(m.kaydeden) + '</td>'
+                   + '<td class="small text-muted">' + esc(m.aciklama) + '</td>'
+                   + '<td class="text-end text-nowrap">'
+                   + (m.cikisSaati ? '' : '<button class="btn btn-xs btn-success me-1" onclick="saatAta(' + m.id + ',\'CIKIS\')"><i class="fas fa-sign-out-alt me-1"></i>Çıkış Ver</button>')
+                   + '<button class="btn btn-xs btn-outline-secondary me-1" onclick="duzenleAc(' + m.id + ')"><i class="fas fa-pen"></i></button>'
+                   + '<button class="btn btn-xs btn-outline-danger" onclick="sil(' + m.id + ')"><i class="fas fa-trash"></i></button></td></tr>';
+            });
+            $('#tbMisafir').html(h || '<tr><td colspan="12" class="text-center text-muted py-4">Bu güne ait misafir kaydı yok.</td></tr>');
+            $('#firmaListesi').html(Object.keys(firmalar).map(function (f) { return '<option value="' + esc(f) + '">'; }).join(''));
+        }
+
+        function calisanCiz() {
+            var h = '';
+            veri.calisan.forEach(function (c, i) {
+                h += '<tr class="' + (c.girisSaati ? '' : 'disarida') + '">'
+                   + '<td class="text-muted">' + (i + 1) + '</td><td class="fw-bold">' + esc(c.adSoyad) + (c.kisiKodu && c.kisiKodu.indexOf('EK-') !== 0 ? ' <span class="text-muted small">(' + esc(c.kisiKodu) + ')</span>' : '') + '</td>'
+                   + '<td>' + esc(c.neden) + '</td><td>' + (c.plaka ? '<span class="plaka">' + esc(c.plaka) + '</span>' : '') + '</td>'
+                   + '<td class="saat ' + (c.cikisSaati ? '' : 'yok') + '">' + (c.cikisSaati || '—') + '</td>'
+                   + '<td class="saat ' + (c.girisSaati ? '' : 'yok') + '">' + (c.girisSaati || '<span class="badge bg-danger">dışarıda</span>') + '</td>'
+                   + '<td class="small text-muted">' + sure(c.cikisSaati, c.girisSaati) + '</td><td class="small text-muted">' + esc(c.kaydeden) + '</td>'
+                   + '<td class="small text-muted">' + esc(c.aciklama) + '</td>'
+                   + '<td class="text-end text-nowrap">'
+                   + (c.girisSaati ? '' : '<button class="btn btn-xs btn-success me-1" onclick="saatAta(' + c.id + ',\'GIRIS\')"><i class="fas fa-sign-in-alt me-1"></i>Dönüş Ver</button>')
+                   + '<button class="btn btn-xs btn-outline-secondary me-1" onclick="duzenleAc(' + c.id + ')"><i class="fas fa-pen"></i></button>'
+                   + '<button class="btn btn-xs btn-outline-danger" onclick="sil(' + c.id + ')"><i class="fas fa-trash"></i></button></td></tr>';
+            });
+            $('#tbCalisan').html(h || '<tr><td colspan="10" class="text-center text-muted py-4">Bu güne ait çalışan çıkışı yok.</td></tr>');
+        }
+
+        // ---------------- KAYIT ----------------
+        function kaydet(dto, sonra) {
+            $.ajax({
+                url: '/Rapor151/Kaydet', type: 'POST', contentType: 'application/json', data: JSON.stringify(dto),
+                success: function (r) { if (!r.success) { toastr.error(r.message); return; } toastr.success(r.message); if (sonra) sonra(); yukle(); },
+                error: function () { toastr.error('Sunucu ile iletişim kurulamadı.'); }
+            });
+        }
+        function misafirKaydet() {
+            var ad = $('#mAd').val().trim(); if (!ad) { toastr.warning('Ad Soyad girin.'); $('#mAd').focus(); return; }
+            kaydet({ Tarih: TARIH, Tip: 'MISAFIR', AdSoyad: ad, Firma: $('#mFirma').val(), ZiyaretEdilen: $('#mZiyaret').val(), Neden: $('#mNeden').val(), Plaka: $('#mPlaka').val(), GirisSaati: $('#mGiris').val() || simdi(), CikisSaati: $('#mCikis').val() },
+                function () { $('#mAd, #mFirma, #mZiyaret, #mNeden, #mPlaka, #mGiris, #mCikis').val(''); $('#mAd').focus(); });
+        }
+        function calisanKaydet() {
+            var ad = ($('#cAd').val() || '').trim(); if (!ad) { toastr.warning('Çalışan seçin ya da adını yazın.'); $('#cAd').select2('open'); return; }
+            var c = calisanlar.find(function (x) { return x.ad.toLocaleLowerCase('tr-TR') === ad.toLocaleLowerCase('tr-TR'); });
+            kaydet({ Tarih: TARIH, Tip: 'CALISAN', AdSoyad: c ? c.ad : ad, KisiKodu: c ? c.kod : '', Neden: $('#cNeden').val(), Plaka: $('#cPlaka').val(), CikisSaati: $('#cCikis').val() || simdi(), GirisSaati: $('#cGiris').val() },
+                function () { $('#cNeden, #cPlaka, #cCikis, #cGiris').val(''); $('#cAd').val(null).trigger('change'); $('#cAd').select2('open'); });
+        }
+        function saatAta(id, alan) {
+            $.post('/Rapor151/SaatAta', { id: id, alan: alan }, function (r) { if (!r.success) toastr.error(r.message); else { toastr.success((alan === 'GIRIS' ? 'Dönüş' : 'Çıkış') + ' saati: ' + r.saat); yukle(); } });
+        }
+        function sil(id) {
+            Swal.fire({ title: 'Kayıt silinsin mi?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sil', cancelButtonText: 'Vazgeç', confirmButtonColor: '#d33' })
+                .then(function (s) { if (s.isConfirmed) $.post('/Rapor151/Sil', { id: id }, function (r) { if (!r.success) toastr.error(r.message); else yukle(); }); });
+        }
+
+        // ---------------- DÜZENLE ----------------
+        function duzenleAc(id) {
+            var k = veri.misafir.concat(veri.calisan).find(function (x) { return x.id === id; }); if (!k) return;
+            var calisan = k.tip === 'CALISAN';
+            $('#dId').val(k.id); $('#dTip').val(k.tip); $('#dAd').val(k.adSoyad); $('#dFirma').val(k.firma || ''); $('#dZiyaret').val(k.ziyaretEdilen || '');
+            $('#dNeden').val(k.neden || ''); $('#dPlaka').val(k.plaka || ''); $('#dGiris').val(k.girisSaati || ''); $('#dCikis').val(k.cikisSaati || ''); $('#dAciklama').val(k.aciklama || '');
+            $('#dFirmaKutu, #dZiyaretKutu').toggle(!calisan);
+            $('#dGirisEtiket').text(calisan ? 'Dönüş' : 'Giriş'); $('#dCikisEtiket').text(calisan ? 'Çıkış' : 'Çıkış');
+            new bootstrap.Modal(document.getElementById('duzenleModal')).show();
+        }
+        function duzenleKaydet() {
+            var k = veri.misafir.concat(veri.calisan).find(function (x) { return x.id === parseInt($('#dId').val()); });
+            kaydet({ Id: parseInt($('#dId').val()), Tarih: TARIH, Tip: $('#dTip').val(), AdSoyad: $('#dAd').val(), Firma: $('#dFirma').val(), KisiKodu: k ? k.kisiKodu : '', ZiyaretEdilen: $('#dZiyaret').val(), Neden: $('#dNeden').val(), Plaka: $('#dPlaka').val(), GirisSaati: $('#dGiris').val(), CikisSaati: $('#dCikis').val(), Aciklama: $('#dAciklama').val() },
+                function () { bootstrap.Modal.getInstance(document.getElementById('duzenleModal')).hide(); });
+        }
+
+        // ---------------- ÇALIŞAN LİSTESİ ----------------
+        var duzenAcik = false;
+        // Türkçe/aksan duyarsız arama: "seyda" -> "Şeyda", "ozturk" -> "Öztürk"
+        function norm(s) {
+            s = (s || '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLocaleLowerCase('tr-TR');
+            var m = { 'ş': 's', 'ç': 'c', 'ğ': 'g', 'ü': 'u', 'ö': 'o', 'ı': 'i', 'â': 'a', 'î': 'i', 'û': 'u' };
+            return s.replace(/[şçğüöıâîû]/g, function (c) { return m[c] || c; });
+        }
+        function disaridaMi(ad) {
+            return veri.calisan.some(function (c) { return c.adSoyad === ad && c.cikisSaati && !c.girisSaati; });
+        }
+        function calisanlariYukle() {
+            $.getJSON('/Rapor151/Calisanlar', function (r) {
+                if (!r.success) { toastr.error(r.message); return; }
+                calisanlar = r.calisanlar || [];
+                var sec = $('#cAd');
+                var eski = sec.val();
+                sec.html('<option value=""></option>' + calisanlar.map(function (c) { return '<option value="' + esc(c.ad) + '">' + esc(c.ad) + (c.bolum ? ' — ' + esc(c.bolum) : '') + '</option>'; }).join(''));
+                if (!sec.hasClass('select2-hidden-accessible')) {
+                    sec.select2({
+                        theme: 'bootstrap-5', width: '100%', placeholder: 'Çalışan ara / seç', allowClear: true, tags: true,
+                        language: { noResults: function () { return 'Bulunamadı — Enter ile bu adı yeni çalışan olarak kullanabilirsiniz'; } },
+                        matcher: function (params, data) {
+                            if (!params.term || $.trim(params.term) === '') return data;
+                            if (!data.id) return null;
+                            var t = norm(params.term).split(/\s+/), n = norm(data.text);
+                            for (var i = 0; i < t.length; i++) if (n.indexOf(t[i]) < 0) return null;
+                            return data;
+                        }
+                    });
+                    sec.on('change', function () { chipIsaretle($(this).val()); });
+                    sec.on('select2:select', function () { setTimeout(function () { $('#cNeden').focus(); }, 50); });
+                }
+                if (eski) sec.val(eski).trigger('change.select2');
+                chipsCiz();
+            });
+        }
+        function chipsCiz() {
+            if (!document.getElementById('calisanChips')) return; // Liste kaldırıldı: sadece arama (cAd) kullanılıyor.
+            var q = norm($('#calisanAra').val());
+            var terimler = q ? q.split(/\s+/) : [];
+            var secili = $('#cAd').val() || '';
+            var h = '', harf = '', n = 0;
+            calisanlar.forEach(function (c) {
+                var nn = norm(c.ad);
+                for (var i = 0; i < terimler.length; i++) if (nn.indexOf(terimler[i]) < 0) return;
+                n++;
+                var ilk = c.ad.charAt(0).toLocaleUpperCase('tr-TR');
+                if (!terimler.length && ilk !== harf) { harf = ilk; h += '<div class="chip-harf">' + esc(harf) + '</div>'; }
+                h += '<div class="chip' + (c.ad === secili ? ' secili' : '') + '" data-id="' + c.id + '" data-ad="' + esc(c.ad) + '" onclick="chipSec(this)">'
+                   + (disaridaMi(c.ad) ? '<span class="cdot disarida" title="Şu an dışarıda"></span>' : '')
+                   + '<span>' + esc(c.ad) + '</span>' + (c.bolum ? '<span class="bolum">' + esc(c.bolum) + '</span>' : '')
+                   + '<span class="islem"><i class="fas fa-pen text-primary" title="Düzenle" onclick="calisanDuzenle(' + c.id + ', event)"></i><i class="fas fa-times" title="Listeden çıkar" onclick="calisanCikar(' + c.id + ', event)"></i></span>'
+                   + '</div>';
+            });
+            $('#calisanSayi').text(n + (terimler.length ? ' / ' + calisanlar.length : ''));
+            $('#calisanChips').html(h || '<div class="text-muted small py-2">Eşleşen çalışan yok. <a href="#" onclick="calisanEkleAc(); return false;">Yeni çalışan ekle</a></div>');
+        }
+        function chipIsaretle(ad) { $('#calisanChips .chip').each(function () { $(this).toggleClass('secili', $(this).data('ad') === ad); }); }
+        function chipSec(el) {
+            if (duzenAcik) return;
+            var ad = $(el).data('ad');
+            $('#cAd').val(ad).trigger('change');
+            $('#cNeden').focus();
+        }
+        function duzenModu() {
+            duzenAcik = !duzenAcik;
+            $('#calisanChips').toggleClass('duzen', duzenAcik);
+            $('#btnDuzenModu').toggleClass('btn-outline-secondary', !duzenAcik).toggleClass('btn-warning', duzenAcik)
+                .html(duzenAcik ? '<i class="fas fa-check me-1"></i>Düzenlemeyi Bitir' : '<i class="fas fa-pen me-1"></i>Listeyi Düzenle');
+        }
+        function calisanEkleAc() {
+            var yazilan = $('#cAd').val() || '';
+            if (calisanlar.some(function (c) { return c.ad === yazilan; })) yazilan = '';
+            Swal.fire({
+                title: 'Yeni çalışan', html: '<input id="swAd" class="swal2-input" placeholder="Ad Soyad" value="' + esc(yazilan) + '"><input id="swBolum" class="swal2-input" placeholder="Bölüm (isteğe bağlı)">',
+                showCancelButton: true, confirmButtonText: 'Ekle', cancelButtonText: 'Vazgeç',
+                didOpen: function () { $('#swAd').focus(); },
+                preConfirm: function () { var ad = $('#swAd').val().trim(); if (!ad) { Swal.showValidationMessage('Ad Soyad girin'); return false; } return { ad: ad, bolum: $('#swBolum').val() }; }
+            }).then(function (s) {
+                if (!s.isConfirmed) return;
+                $.post('/Rapor151/CalisanEkle', { adSoyad: s.value.ad, bolum: s.value.bolum }, function (r) {
+                    if (!r.success) { toastr.error(r.message); return; }
+                    toastr.success(r.message);
+                    $.getJSON('/Rapor151/Calisanlar', function (rr) { calisanlar = rr.calisanlar || []; calisanlariYukle(); setTimeout(function () { $('#cAd').val(s.value.ad).trigger('change'); }, 300); });
+                });
+            });
+        }
+        function calisanDuzenle(id, ev) {
+            if (ev) ev.stopPropagation();
+            var c = calisanlar.find(function (x) { return x.id === id; }); if (!c) return;
+            Swal.fire({
+                title: 'Çalışanı düzenle', html: '<input id="swAd" class="swal2-input" placeholder="Ad Soyad" value="' + esc(c.ad) + '"><input id="swBolum" class="swal2-input" placeholder="Bölüm" value="' + esc(c.bolum) + '">',
+                showCancelButton: true, confirmButtonText: 'Kaydet', cancelButtonText: 'Vazgeç',
+                preConfirm: function () { var ad = $('#swAd').val().trim(); if (!ad) { Swal.showValidationMessage('Ad Soyad girin'); return false; } return { ad: ad, bolum: $('#swBolum').val() }; }
+            }).then(function (s) {
+                if (!s.isConfirmed) return;
+                $.post('/Rapor151/CalisanGuncelle', { id: id, adSoyad: s.value.ad, bolum: s.value.bolum }, function (r) { if (!r.success) toastr.error(r.message); else { toastr.success(r.message); calisanlariYukle(); } });
+            });
+        }
+        function calisanCikar(id, ev) {
+            if (ev) ev.stopPropagation();
+            var c = calisanlar.find(function (x) { return x.id === id; }); if (!c) return;
+            Swal.fire({ title: c.ad, text: 'Çalışan listesinden çıkarılsın mı? Geçmiş kayıtları silinmez.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Çıkar', cancelButtonText: 'Vazgeç', confirmButtonColor: '#d33' })
+                .then(function (s) { if (s.isConfirmed) $.post('/Rapor151/CalisanSil', { id: id }, function (r) { if (!r.success) toastr.error(r.message); else { toastr.success(r.message); calisanlariYukle(); } }); });
+        }
+        $(document).on('input', '#calisanAra', chipsCiz);
+
+        // ---------------- EXCEL ----------------
+        function excelAktar() {
+            if (typeof XLSX === 'undefined') { toastr.error('Excel kütüphanesi yüklenmedi.'); return; }
+            var wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(veri.misafir.map(function (m) { return { 'Ad Soyad': m.adSoyad, 'Firma': m.firma, 'Ziyaret Edilen': m.ziyaretEdilen, 'Neden': m.neden, 'Plaka': m.plaka, 'Giriş': m.girisSaati, 'Çıkış': m.cikisSaati, 'Süre': sure(m.girisSaati, m.cikisSaati), 'Açıklama': m.aciklama, 'Kaydeden': m.kaydeden }; })), 'Misafir');
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(veri.calisan.map(function (c) { return { 'Çalışan': c.adSoyad, 'Kod': c.kisiKodu, 'Neden': c.neden, 'Plaka': c.plaka, 'Çıkış': c.cikisSaati, 'Dönüş': c.girisSaati, 'Dışarıda': sure(c.cikisSaati, c.girisSaati), 'Açıklama': c.aciklama, 'Kaydeden': c.kaydeden }; })), 'Calisan');
+            XLSX.writeFile(wb, 'Danisma_' + TARIH + '.xlsx');
+        }
+
+        $(function () {
+            yukle(); calisanlariYukle();
+            $('#mAd, #mFirma, #mZiyaret, #mNeden, #mPlaka').on('keydown', function (e) { if (e.key === 'Enter') misafirKaydet(); });
+            $('#cNeden, #cPlaka').on('keydown', function (e) { if (e.key === 'Enter') calisanKaydet(); });
+            if (@(bugunMu ? "true" : "false")) setInterval(yukle, 60000);
+        });
+    </script>
+}

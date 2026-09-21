@@ -1,0 +1,396 @@
+﻿@model IEnumerable<WebApplication3.Controllers.Rapor73Controller.GunlukTahsilatData>
+@{
+    ViewData["Title"] = "Konsolide Tahsilat Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml"; // Merkezi layout şablonunu kullanır
+
+    // 1. KURAL: URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+}
+
+@section Styles {
+    <style>
+        /* Modern Tablo Stilleri */
+        .table-wrapper {
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border: 1px solid #dee2e6;
+        }
+        
+        .table thead th {
+            background-color: #f8f9fa;
+            color: #495057;
+            font-weight: 600;
+            border-bottom: 2px solid #dee2e6;
+            white-space: nowrap;
+        }
+        
+        .filter-row th {
+            background-color: #ffffff;
+            padding: 4px 6px !important;
+        }
+        
+        .filter-select {
+            font-size: 0.8rem;
+            border-radius: 4px;
+            padding: 0.25rem 1.5rem 0.25rem 0.5rem; /* Ok işareti için padding */
+            border: 1px solid #ced4da;
+        }
+        
+        .selected-row td {
+            background-color: #e8f4fd !important;
+            color: #084298;
+        }
+        
+        .checkbox-cell {
+            width: 40px;
+            text-align: center;
+            vertical-align: middle;
+        }
+        
+        .totals-row td {
+            font-size: 1.05rem;
+        }
+    </style>
+}
+
+@* 2. KURAL: Güvenlik (CSRF) - Yetkisiz veri işlemlerini engellemek için eklendi *@
+@Html.AntiForgeryToken()
+
+<div class="container-fluid mt-4 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="h4 text-primary m-0"><i class="fas fa-file-invoice-dollar me-2"></i>Konsolide Günlük Çek ve Nakit Tahsilatları</h2>
+    </div>
+
+    <div class="card shadow-sm mb-4 border-0 bg-light">
+        <div class="card-body">
+            <form method="get" action="/Rapor73/Index">
+                
+                @* 1. KURAL: GET formuna şirket bilgisini ekleyen gizli input *@
+                <input type="hidden" name="db" value="@currentDb" />
+
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label font-weight-bold text-muted small text-uppercase">Başlangıç Tarihi</label>
+                        <input type="date" name="baslangicTarihi" class="form-control" value="@ViewBag.BaslangicTarihi" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label font-weight-bold text-muted small text-uppercase">Bitiş Tarihi</label>
+                        <input type="date" name="bitisTarihi" class="form-control" value="@ViewBag.BitisTarihi" />
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100 shadow-sm">
+                            <i class="fas fa-search me-1"></i> Verileri Getir
+                        </button>
+                    </div>
+                    <div class="col-md-2">
+                        @* 1. KURAL: Rota bağlantılarına db parametresi eklendi *@
+                        <a href="/Rapor73/Index?db=@currentDb" class="btn btn-outline-info w-100 shadow-sm">
+                            <i class="fas fa-calendar-day me-1"></i> Bugün
+                        </a>
+                    </div>
+                    <div class="col-md-2">
+                        @* 1. KURAL: Excel indirme linkine db parametresi eklendi *@
+                        <a href="/Rapor73/ExportExcel?baslangicTarihi=@ViewBag.BaslangicTarihi&bitisTarihi=@ViewBag.BitisTarihi&db=@currentDb" class="btn btn-success w-100 shadow-sm">
+                            <i class="fas fa-file-excel me-1"></i> Excel'e İndir
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (ViewBag.ErrorMessage != null)
+    {
+        <div class="alert alert-danger shadow-sm border-0">
+            <i class="fas fa-exclamation-circle me-2"></i> @ViewBag.ErrorMessage
+        </div>
+    }
+
+    <div class="table-responsive table-wrapper bg-white">
+        <table id="tahsilatTable" class="table table-hover table-sm mb-0" style="font-size: 0.85rem;">
+            <thead class="align-middle">
+                <tr>
+                    <th class="checkbox-cell">
+                        <input class="form-check-input" type="checkbox" id="selectAllRows" title="Tümünü Seç/Kaldır">
+                    </th>
+                    <th>Veritabanı</th>
+                    <th>Müşteri Grubu</th>
+                    <th>Belge Tarihi</th>
+                    <th>Hareket Tipi</th>
+                    <th>Cari Hesap Açıklaması</th>
+                    <th>Çek No</th>
+                    <th>Çek Banka Adı</th>
+                    <th>Çek Vade Tarihi</th>
+                    <th class="text-end">Tutar (TRY)</th>
+                    <th class="text-end">Tutar (Döviz)</th>
+                    <th>Para Birimi</th>
+                    <th>İşlem Tipi</th>
+                    <th>Tahsilat Belge No</th>
+                    <th>Çek Şube</th>
+                </tr>
+                <tr class="filter-row">
+                    <th></th>
+                    <th><select class="form-select form-select-sm filter-select" data-col="1"><option value="">Tümü...</option></select></th>
+                    <th><select class="form-select form-select-sm filter-select" data-col="2"><option value="">Tümü...</option></select></th>
+                    <th><select class="form-select form-select-sm filter-select" data-col="3"><option value="">Tümü...</option></select></th>
+                    <th><select class="form-select form-select-sm filter-select" data-col="4"><option value="">Tümü...</option></select></th>
+                    <th><select class="form-select form-select-sm filter-select" data-col="5"><option value="">Tümü...</option></select></th>
+                    <th><select class="form-select form-select-sm filter-select" data-col="6"><option value="">Tümü...</option></select></th>
+                    <th><select class="form-select form-select-sm filter-select" data-col="7"><option value="">Tümü...</option></select></th>
+                    <th><select class="form-select form-select-sm filter-select" data-col="8"><option value="">Tümü...</option></select></th>
+                    <th></th> 
+                    <th></th> 
+                    <th><select class="form-select form-select-sm filter-select" data-col="11"><option value="">Tümü...</option></select></th>
+                    <th><select class="form-select form-select-sm filter-select" data-col="12"><option value="">Tümü...</option></select></th>
+                    <th><select class="form-select form-select-sm filter-select" data-col="13"><option value="">Tümü...</option></select></th>
+                    <th><select class="form-select form-select-sm filter-select" data-col="14"><option value="">Tümü...</option></select></th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model != null && Model.Any())
+                {
+                    foreach (var item in Model)
+                    {
+                        <tr class="data-row">
+                            <td class="checkbox-cell">
+                                <input class="form-check-input row-select" type="checkbox">
+                            </td>
+                            <td>@item.Veritabani</td>
+                            <td>@item.MusteriGrubu</td>
+                            <td>@(item.BelgeTarihi?.ToString("dd.MM.yyyy"))</td>
+                            <td>@item.HareketTipiAciklamasi</td>
+                            <td>@item.CariHesapAciklamasi</td>
+                            <td>@item.CekNo</td>
+                            <td>@item.CekBankaAdi</td>
+                            <td>@(item.CekVadeTarihi?.ToString("dd.MM.yyyy"))</td>
+                            <td class="text-end fw-bold text-dark">@item.Tutar_TRY.ToString("N2")</td>
+                            <td class="text-end text-muted">
+                                @(item.Tutar_Doviz > 0 ? item.Tutar_Doviz.ToString("N2") : "")
+                            </td>
+                            <td>@item.DokumanParaBirimi</td>
+                            <td>@item.IslemTipi</td>
+                            <td>@item.TahsilatBelgeNumarasi</td>
+                            <td>@item.CekSube</td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr class="no-data">
+                        <td colspan="15" class="text-center text-muted py-5">
+                            <i class="fas fa-folder-open fs-1 mb-3 text-light"></i><br />
+                            Seçilen tarih aralığına ait tahsilat kaydı bulunamadı.
+                        </td>
+                    </tr>
+                }
+            </tbody>
+            @if (Model != null && Model.Any())
+            {
+                <tfoot class="bg-light totals-row">
+                    <tr class="ara-toplam">
+                        <td colspan="9" class="text-end fw-semibold text-dark">ÇEK TOPLAMI: <span class="badge bg-light text-dark border ms-1" id="toplamCekAdet">@(Model.Count(x => (x.HareketTipiAciklamasi ?? "").Contains("Çek")))</span></td>
+                        <td class="text-end fw-semibold text-dark" id="toplamCek">@(Model.Where(x => (x.HareketTipiAciklamasi ?? "").Contains("Çek")).Sum(x => x.Tutar_TRY).ToString("N2"))</td>
+                        <td colspan="5"></td>
+                    </tr>
+                    <tr class="ara-toplam">
+                        <td colspan="9" class="text-end fw-semibold text-dark">SENET TOPLAMI: <span class="badge bg-light text-dark border ms-1" id="toplamSenetAdet">@(Model.Count(x => (x.HareketTipiAciklamasi ?? "").Contains("Senet")))</span></td>
+                        <td class="text-end fw-semibold text-dark" id="toplamSenet">@(Model.Where(x => (x.HareketTipiAciklamasi ?? "").Contains("Senet")).Sum(x => x.Tutar_TRY).ToString("N2"))</td>
+                        <td colspan="5"></td>
+                    </tr>
+                    <tr class="ara-toplam">
+                        <td colspan="9" class="text-end fw-semibold text-dark">NAKİT TOPLAMI: <span class="badge bg-light text-dark border ms-1" id="toplamNakitAdet">@(Model.Count(x => (x.HareketTipiAciklamasi ?? "").Contains("NAKİT")))</span></td>
+                        <td class="text-end fw-semibold text-dark" id="toplamNakit">@(Model.Where(x => (x.HareketTipiAciklamasi ?? "").Contains("NAKİT")).Sum(x => x.Tutar_TRY).ToString("N2"))</td>
+                        <td colspan="5"></td>
+                    </tr>
+                    <tr class="border-top border-2">
+                        <td colspan="9" class="text-end fw-bold text-dark fs-6">GENEL TOPLAM:</td>
+                        <td class="text-end fw-bold text-dark fs-6" id="genelToplamTry">@Model.Sum(x => x.Tutar_TRY).ToString("N2")</td>
+                        <td colspan="5"></td>
+                    </tr>
+                    <tr class="table-info border-info border-opacity-25">
+                        <td colspan="9" class="text-end fw-bold text-primary">SEÇİLİ SATIRLARIN TOPLAMI:</td>
+                        <td class="text-end fw-bold text-primary" id="seciliToplamTry">0.00</td>
+                        <td colspan="5"></td>
+                    </tr>
+                </tfoot>
+            }
+        </table>
+    </div>
+
+    @* 4. KURAL: UI/UX Standartlarına uygun şık, db parametreli Ana Sayfa Dönüş butonu *@
+    <div class="mt-4 text-center">
+        <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+            <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+        </a>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            var trs = $('.data-row');
+
+            // Global Filtre Temizleyici (Layout'tan tetiklenir)
+            window.clearReportFilters = function() {
+                $('.filter-select').val('');
+                trs.show();
+                $('.row-select').prop('checked', false);
+                trs.removeClass('selected-row');
+                calculateTotals();
+            };
+
+            // 1. AÇILIR LİSTELERİ (SELECT) OTOMATİK DOLDURMA
+            $('.filter-select').each(function () {
+                var select = $(this);
+                var colIndex = select.data('col');
+                var uniqueValues = [];
+
+                trs.each(function () {
+                    var cellText = $(this).find('td').eq(colIndex).text().trim();
+                    if (cellText !== "" && $.inArray(cellText, uniqueValues) === -1) {
+                        uniqueValues.push(cellText);
+                    }
+                });
+
+                uniqueValues.sort();
+                $.each(uniqueValues, function (i, val) {
+                    select.append($('<option></option>').val(val).text(val));
+                });
+            });
+
+            // 2. AKILLI SAYI DÖNÜŞTÜRÜCÜ (TOPLAMA HATASINI ÇÖZEN KISIM)
+            function parseUniversalNumber(str) {
+                if (!str) return 0;
+                str = str.trim();
+                
+                var lastDot = str.lastIndexOf('.');
+                var lastComma = str.lastIndexOf(',');
+
+                if (lastComma > lastDot) {
+                    // Türkçe formatı (örn: 1.234.567,89)
+                    str = str.replace(/\./g, '').replace(',', '.');
+                } else if (lastDot > lastComma) {
+                    // İngilizce format (örn: 1,234,567.89)
+                    str = str.replace(/,/g, '');
+                } else if (lastComma !== -1) {
+                    // Sadece virgül var ise (örn: 100,50)
+                    str = str.replace(',', '.');
+                }
+                
+                var val = parseFloat(str);
+                return isNaN(val) ? 0 : val;
+            }
+
+            function formatNumberMatchingServer(num) {
+                return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+
+            // 3. TOPLAM HESAPLAMA VE EKRANA YAZDIRMA
+            function calculateTotals() {
+                var visibleSum = 0;
+                var selectedSum = 0;
+                var totalVisibleRows = 0;
+                var totalSelectedRows = 0;
+                var turToplam = { Cek: 0, Senet: 0, Nakit: 0 }, turAdet = { Cek: 0, Senet: 0, Nakit: 0 };
+
+                trs.filter(':visible').each(function () {
+                    totalVisibleRows++;
+                    var row = $(this);
+                    // 9 numaralı index "Tutar (TRY)" kolonuna denk gelir
+                    var valStr = row.find('td').eq(9).text(); 
+                    var num = parseUniversalNumber(valStr);
+                    
+                    visibleSum += num;
+                    // Hareket tipi (4. sutun): Senet / NAKIT / diger (cek)
+                    var tip = (row.find('td').eq(4).text() || '').toLocaleUpperCase('tr-TR');
+                    var tur = tip.indexOf('SENET') >= 0 ? 'Senet' : (tip.indexOf('NAKİT') >= 0 || tip.indexOf('NAKIT') >= 0 ? 'Nakit' : 'Cek');
+                    turToplam[tur] += num; turAdet[tur]++;
+
+                    if (row.find('.row-select').is(':checked')) {
+                        selectedSum += num;
+                        totalSelectedRows++;
+                    }
+                });
+
+                // Toplamları ekrana yazdır
+                $('#genelToplamTry').text(formatNumberMatchingServer(visibleSum));
+                ['Cek', 'Senet', 'Nakit'].forEach(function (t) { $('#toplam' + t).text(formatNumberMatchingServer(turToplam[t])); $('#toplam' + t + 'Adet').text(turAdet[t]); });
+                $('#seciliToplamTry').text(formatNumberMatchingServer(selectedSum));
+
+                // "Tümünü Seç" kutucuğunun görsel durumunu güncelle
+                if (totalVisibleRows > 0 && totalVisibleRows === totalSelectedRows) {
+                    $('#selectAllRows').prop('checked', true).prop('indeterminate', false);
+                } else if (totalSelectedRows > 0) {
+                    $('#selectAllRows').prop('checked', false).prop('indeterminate', true);
+                } else {
+                    $('#selectAllRows').prop('checked', false).prop('indeterminate', false);
+                }
+            }
+
+            // 4. AÇILIR LİSTE (SELECT) DEĞİŞTİĞİNDE FİLTRELEME İŞLEMİ
+            $('.filter-select').on('change', function () {
+                var filters = {};
+                
+                $('.filter-select').each(function () {
+                    var val = $(this).val();
+                    if (val !== "") {
+                        filters[$(this).data('col')] = val;
+                    }
+                });
+
+                trs.each(function () {
+                    var row = $(this);
+                    var showRow = true;
+
+                    $.each(filters, function (colIndex, filterValue) {
+                        var cellText = row.find('td').eq(colIndex).text().trim();
+                        if (cellText !== filterValue) {
+                            showRow = false;
+                            return false; 
+                        }
+                    });
+
+                    if (showRow) {
+                        row.show();
+                    } else {
+                        row.hide();
+                        row.find('.row-select').prop('checked', false); 
+                        row.removeClass('selected-row');
+                    }
+                });
+
+                calculateTotals();
+            });
+
+            // 5. CHECKBOX SEÇİM İŞLEMLERİ
+            $('#selectAllRows').on('change', function() {
+                var isChecked = $(this).is(':checked');
+                
+                trs.filter(':visible').each(function() {
+                    $(this).find('.row-select').prop('checked', isChecked);
+                    if(isChecked) $(this).addClass('selected-row');
+                    else $(this).removeClass('selected-row');
+                });
+
+                calculateTotals();
+            });
+
+            $('.row-select').on('change', function() {
+                var row = $(this).closest('tr');
+                if($(this).is(':checked')) row.addClass('selected-row');
+                else row.removeClass('selected-row');
+
+                calculateTotals();
+            });
+            
+            // Satırın boş bir yerine tıklanınca seçimi aç/kapat
+            $('.data-row td:not(.checkbox-cell)').on('click', function(e) {
+                if(!$(e.target).is('select, input, button, a')) {
+                    var checkbox = $(this).closest('tr').find('.row-select');
+                    checkbox.prop('checked', !checkbox.prop('checked')).trigger('change');
+                }
+            });
+        });
+    </script>
+}

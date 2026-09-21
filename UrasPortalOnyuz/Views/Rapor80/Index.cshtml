@@ -1,0 +1,582 @@
+﻿@model List<FinansRaporlama.Controllers.ZimmetViewModel>
+@using Microsoft.AspNetCore.Antiforgery
+@using System.Text.Json
+@inject IAntiforgery Xsrf
+
+@{
+    ViewData["Title"] = "Zimmet Takip Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    
+    // 1. KURAL: URL'den veya Cookie'den aktif şirketi okuyan değişken
+    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+    
+    var requestToken = Xsrf.GetAndStoreTokens(Context).RequestToken;
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+
+    <style>
+        :root { --primary-color: #0d6efd; --header-bg: #f8f9fa; --header-text: #333; --border-color: #e0e0e0; --light-bg: #f4f6f9; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: var(--light-bg); font-size: 0.8rem; overflow-y: hidden; }
+        .container-fluid { padding: 10px 15px !important; }
+        
+        .sticky-toolbar {
+            background-color: #ffffff; padding: 10px 15px; border-radius: 8px;
+            display: flex; justify-content: space-between; align-items: center; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05); z-index: 1000; margin-bottom: 10px;
+        }
+
+        .table-container { height: calc(100vh - 220px); overflow: auto; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); background-color: white; width: 100%; }
+        table { width: 100%; table-layout: auto; border-collapse: separate; border-spacing: 0; min-width: 3000px; }
+        th, td { padding: 6px 8px !important; font-size: 11.5px !important; border-right: 1px solid #f0f0f0; border-bottom: 1px solid #f0f0f0; vertical-align: middle; white-space: nowrap; }
+        thead { position: sticky; top: 0; z-index: 100; }
+        
+        .main-header-row th { background-color: var(--header-bg); color: var(--header-text); text-align: center; height: 40px; font-weight: 600; border-bottom: 2px solid #dee2e6 !important; cursor: pointer; user-select: none; }
+        .main-header-row th:hover { background-color: #e9ecef; }
+        .filter-row th { background-color: #ffffff; padding: 4px !important; height: 35px; border-bottom: 1px solid #dee2e6 !important;}
+        
+        /* CHECKBOX HİZALAMASI - NİZAMİ */
+        .chk-col { 
+            width: 40px !important; 
+            min-width: 40px !important; 
+            max-width: 40px !important; 
+            text-align: center !important; 
+            vertical-align: middle !important; 
+            padding: 0 !important; 
+        }
+        .chk-col input[type=checkbox] { 
+            width: 16px; 
+            height: 16px; 
+            cursor: pointer; 
+            margin: 0; 
+            vertical-align: middle; 
+            display: inline-block;
+        }
+
+        .bootstrap-select .dropdown-toggle { padding: 4px 8px; font-size: 11px; border-radius: 4px; }
+        .file-upload-btn { position: relative; overflow: hidden; }
+        .file-upload-btn input[type=file] { position: absolute; top: 0; right: 0; min-width: 100%; min-height: 100%; font-size: 100px; text-align: right; opacity: 0; cursor: pointer; }
+        
+        .modal-content { border-radius: 12px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .modal-header { border-top-left-radius: 12px; border-top-right-radius: 12px; background: linear-gradient(135deg, #0d6efd, #0b5ed7); }
+        .form-control-sm, .form-select-sm { border-radius: 4px; border: 1px solid #ced4da; padding: 4px 6px; font-size: 11px; }
+        
+        .dynamic-row { background: #fdfdfd; border-radius: 6px; padding: 15px 15px 5px 15px; margin-bottom: 15px; border: 1px solid #dee2e6; }
+    </style>
+}
+
+<div class="container-fluid">
+    <div class="sticky-toolbar">
+        <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-sm btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#zimmetModal" onclick="clearModal()">
+                <i class="fas fa-plus-circle me-1"></i> Yeni Zimmet
+            </button>
+            <form id="excelImportForm" asp-action="ExcelIceAktar" asp-controller="Rapor80" method="post" enctype="multipart/form-data" class="m-0">
+                @* 1. KURAL: Excel İçe Aktarım Formu için Şirket Kodunun Korunması *@
+                <input type="hidden" name="db" value="@currentDb" />
+                <span class="btn btn-sm btn-success shadow-sm file-upload-btn">
+                    <i class="fas fa-file-excel me-1"></i> Excel İçe Aktar
+                    <input type="file" name="file" accept=".xlsx, .xls" onchange="document.getElementById('excelImportForm').submit();" />
+                </span>
+            </form>
+            @* 1. KURAL: Excel İndirme Linkine Şirket Kodu Entegre Edildi *@
+            <a href="@Url.Action("ExcelIndir", "Rapor80", new { db = currentDb })" class="btn btn-sm btn-outline-success shadow-sm">
+                <i class="fas fa-download me-1"></i> Excel İndir
+            </a>
+            <button type="button" class="btn btn-sm btn-danger shadow-sm" onclick="submitPdfForm()">
+                <i class="fas fa-file-pdf me-1"></i> Form Yap (PDF)
+            </button>
+        </div>
+        
+        <div class="d-flex align-items-center w-25">
+            <div class="input-group input-group-sm shadow-sm">
+                <span class="input-group-text bg-white border-end-0"><i class="fas fa-search text-muted"></i></span>
+                <input type="text" id="globalSearchInput" class="form-control border-start-0" placeholder="Tüm tabloda hızlı ara...">
+            </div>
+        </div>
+    </div>
+
+    <form id="pdfForm" method="post" asp-action="PdfIndir" asp-controller="Rapor80">
+        @* 1. KURAL: PDF Hazırlama Formu için Şirket Kodunun Korunması *@
+        <input type="hidden" name="db" value="@currentDb" />
+        
+        <div class="table-container">
+            <table class="table table-hover" id="zimmetTable">
+                <thead>
+                    <tr class="main-header-row">
+                        <th class="chk-col cursor-default" style="cursor:default;"><input type="checkbox" id="selectAll" /></th>
+                        <th style="width: 40px; cursor:default;">İşlem</th>
+                        <th class="sortable" data-col="2" data-type="number">Sıra No <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="3" data-type="string">Ekipman Türü <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="4" data-type="string">Ekipman Adı <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="5" data-type="string">Marka <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="6" data-type="string">Model <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="7" data-type="string">Seri No <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="8" data-type="string">Demirbaş No <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="9" data-type="string">Fatura No <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="10" data-type="date">Fatura Tarihi <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="11" data-type="currency">Fatura Tutarı <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="12" data-type="currency">Muhasebe Değeri <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="13" data-type="string">Şirket <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="14" data-type="string">Zimmetli Personel <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="15" data-type="string">Departmanı <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="16" data-type="date">Teslim Tarihi <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="17" data-type="date">İade Tarihi <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="18" data-type="string">Durumu <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="19" data-type="string">Lokasyon <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="20" data-type="string">Teslim Eden <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="21" data-type="string">Onaylayan <i class="fas fa-sort text-muted ms-1"></i></th>
+                        <th class="sortable" data-col="22" data-type="string">Açıklama <i class="fas fa-sort text-muted ms-1"></i></th>
+                    </tr>
+                    
+                    <tr class="filter-row">
+                        <th class="chk-col"></th><th></th>
+                        <th></th>
+                        <th data-column="3"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.EkipmanTuruList != null){foreach(var i in ViewBag.EkipmanTuruList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="4"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.EkipmanAdiList != null){foreach(var i in ViewBag.EkipmanAdiList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="5"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.MarkaList != null){foreach(var i in ViewBag.MarkaList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="6"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.ModelList != null){foreach(var i in ViewBag.ModelList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="7"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.SeriNoList != null){foreach(var i in ViewBag.SeriNoList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="8"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.DemirbasNoList != null){foreach(var i in ViewBag.DemirbasNoList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="9"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.FaturaNoList != null){foreach(var i in ViewBag.FaturaNoList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="10"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.FaturaTarihiList != null){foreach(var i in ViewBag.FaturaTarihiList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="11"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.FaturaTutariList != null){foreach(var i in ViewBag.FaturaTutariList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="12"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.MuhasebeDegeriList != null){foreach(var i in ViewBag.MuhasebeDegeriList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="13"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.SirketList != null){foreach(var i in ViewBag.SirketList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="14"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.PersonelList != null){foreach(var i in ViewBag.PersonelList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="15"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.DepartmanList != null){foreach(var i in ViewBag.DepartmanList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="16"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.TeslimTarihiList != null){foreach(var i in ViewBag.TeslimTarihiList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="17"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.IadeTarihiList != null){foreach(var i in ViewBag.IadeTarihiList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="18"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.DurumuList != null){foreach(var i in ViewBag.DurumuList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="19"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.LokasyonList != null){foreach(var i in ViewBag.LokasyonList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="20"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.TeslimEdenList != null){foreach(var i in ViewBag.TeslimEdenList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="21"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.OnaylayanList != null){foreach(var i in ViewBag.OnaylayanList){<option value="@i">@i</option>}}</select></th>
+                        <th data-column="22"><select class="form-select form-select-sm filter-select-bs" multiple data-live-search="true" title="Seç">@if(ViewBag.AciklamaList != null){foreach(var i in ViewBag.AciklamaList){<option value="@i">@i</option>}}</select></th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    @foreach(var item in Model)
+                    {
+                        <tr>
+                            <td class="chk-col"><input type="checkbox" name="selectedIds" value="@item.DocEntry" class="row-selector"/></td>
+                            <td class="text-center">
+                                <button type="button" class="btn btn-sm btn-light text-primary shadow-sm py-0 px-2" data-item='@JsonSerializer.Serialize(item)' onclick="editRow(this)" title="Düzenle"><i class="fas fa-edit"></i></button>
+                            </td>
+                            <td class="text-center fw-bold text-muted">@item.DocNum</td>
+                            <td>@item.U_EkipmanTuru</td>
+                            <td>@item.U_EkipmanAdi</td>
+                            <td>@item.U_Marka</td>
+                            <td>@item.U_Model</td>
+                            <td>@item.U_SeriNo</td>
+                            <td>@item.U_DemirbasNo</td>
+                            <td>@item.U_FaturaNo</td>
+                            <td>@(item.U_FaturaTarihi?.ToString("dd.MM.yyyy"))</td>
+                            <td>@item.U_FaturaTutari</td>
+                            <td>@item.U_MuhasebeDegeri</td>
+                            <td><span class="fw-bold text-dark">@item.U_Sirket</span></td>
+                            <td>@item.U_PersonelAdSoyad</td>
+                            <td>@item.U_Departman</td>
+                            <td>@(item.U_TeslimTarihi?.ToString("dd.MM.yyyy"))</td>
+                            <td>@(item.U_IadeTarihi?.ToString("dd.MM.yyyy"))</td>
+                            <td><span class="badge rounded-pill @(item.U_Durumu == "Aktif" ? "bg-success" : (item.U_Durumu == "İade Edildi" ? "bg-secondary" : "bg-danger"))">@item.U_Durumu</span></td>
+                            <td>@item.U_Lokasyon</td>
+                            <td>@item.U_TeslimEden</td>
+                            <td>@item.U_Onaylayan</td>
+                            <td>@item.U_Aciklama</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </form>
+
+    @* 4. KURAL: UI/UX Standartlarına uygun şık, db parametreli Ana Sayfaya Dönüş butonu *@
+    <div class="mt-4 mb-4 text-center">
+        <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm">
+            <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
+        </a>
+    </div>
+</div>
+
+<datalist id="sirketListesi">@if(ViewBag.SirketList != null) { foreach(var item in ViewBag.SirketList) { <option value="@item"></option> } }</datalist>
+<datalist id="departmanListesi">@if(ViewBag.DepartmanList != null) { foreach(var item in ViewBag.DepartmanList) { <option value="@item"></option> } }</datalist>
+<datalist id="ekipmanTuruListesi">@if(ViewBag.EkipmanTuruList != null) { foreach(var item in ViewBag.EkipmanTuruList) { <option value="@item"></option> } }</datalist>
+<datalist id="markaListesi">@if(ViewBag.MarkaList != null) { foreach(var item in ViewBag.MarkaList) { <option value="@item"></option> } }</datalist>
+
+<div class="modal fade" id="zimmetModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-white mb-0"><i class="fas fa-clipboard-list me-2"></i> Zimmet Kayıt / Düzenleme</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4 bg-light">
+                <div class="card shadow-sm mb-3">
+                    <div class="card-header bg-white fw-bold text-primary py-2"><i class="fas fa-user-tag me-1"></i> Genel Bilgiler (Ortak)</div>
+                    <div class="card-body py-2">
+                        <div class="row g-2">
+                            <div class="col-md-3">
+                                <label class="small fw-bold text-muted mb-0">Şirket (Üzerine Kayıtlı)</label>
+                                <input type="text" list="sirketListesi" class="form-control form-control-sm" id="masterSirket" required autocomplete="off">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="small fw-bold text-muted mb-0">Zimmetli Personel</label>
+                                <input type="text" class="form-control form-control-sm" id="masterPersonel" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="small fw-bold text-muted mb-0">Departmanı</label>
+                                <input type="text" list="departmanListesi" class="form-control form-control-sm" id="masterDepartman" autocomplete="off">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="small fw-bold text-muted mb-0">Lokasyon</label>
+                                <input type="text" class="form-control form-control-sm" id="masterLokasyon">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="small fw-bold text-muted mb-0">Teslim Tarihi</label>
+                                <input type="date" class="form-control form-control-sm" id="masterTeslimTarihi" required>
+                            </div>
+                            <div class="col-md-3 mt-2">
+                                <label class="small fw-bold text-muted mb-0">Teslim Eden</label>
+                                <input type="text" class="form-control form-control-sm" id="masterTeslimEden">
+                            </div>
+                            <div class="col-md-3 mt-2">
+                                <label class="small fw-bold text-muted mb-0">Onaylayan</label>
+                                <input type="text" class="form-control form-control-sm" id="masterOnaylayan">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="fw-bold text-secondary m-0"><i class="fas fa-boxes me-1"></i> Ekipman Kalemleri</h6>
+                    <button type="button" class="btn btn-sm btn-success shadow-sm" onclick="addKalemRow()"><i class="fas fa-plus me-1"></i> Yeni Kalem Ekle</button>
+                </div>
+                
+                <div id="kalemlerContainer"></div>
+            </div>
+            <div class="modal-footer bg-white py-2">
+                <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-primary btn-sm px-4" onclick="saveZimmet()"><i class="fas fa-save me-1"></i> Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<template id="kalemTemplate">
+    <div class="dynamic-row border-primary border-start border-4 shadow-sm" data-docentry="0">
+        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+            <span class="text-primary fw-bold small"><i class="fas fa-laptop"></i> Cihaz Detayları</span>
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeKalem(this)" title="Bu kalemi ekrandan kaldır">
+                <i class="fas fa-times me-1"></i> Kalemi Sil
+            </button>
+        </div>
+
+        <div class="row g-2">
+            <div class="col-md-2"><label class="small fw-bold text-muted mb-0">Ekipman Türü</label><input type="text" list="ekipmanTuruListesi" class="form-control form-control-sm inp-tur" autocomplete="off"></div>
+            <div class="col-md-3"><label class="small fw-bold text-muted mb-0">Ekipman Adı</label><input type="text" class="form-control form-control-sm inp-adi"></div>
+            <div class="col-md-2"><label class="small fw-bold text-muted mb-0">Marka</label><input type="text" list="markaListesi" class="form-control form-control-sm inp-marka" autocomplete="off"></div>
+            <div class="col-md-2"><label class="small fw-bold text-muted mb-0">Model</label><input type="text" class="form-control form-control-sm inp-model"></div>
+            <div class="col-md-3"><label class="small fw-bold text-muted mb-0">Seri No (ÖNEMLİ)</label><input type="text" class="form-control form-control-sm inp-serino border-primary bg-light"></div>
+            
+            <div class="col-md-2 mt-2"><label class="small fw-bold text-muted mb-0">Demirbaş No</label><input type="text" class="form-control form-control-sm inp-demirbas"></div>
+            <div class="col-md-2 mt-2"><label class="small fw-bold text-muted mb-0">Fatura No</label><input type="text" class="form-control form-control-sm inp-faturano"></div>
+            <div class="col-md-2 mt-2"><label class="small fw-bold text-muted mb-0">Fatura Tarihi</label><input type="date" class="form-control form-control-sm inp-faturatarih"></div>
+            <div class="col-md-2 mt-2"><label class="small fw-bold text-muted mb-0">Fatura Tutarı</label><input type="text" class="form-control form-control-sm inp-faturatutar" placeholder="Örn: 4.500,50 TL"></div>
+            <div class="col-md-2 mt-2"><label class="small fw-bold text-muted mb-0">Muhasebe Değeri</label><input type="text" class="form-control form-control-sm inp-muhasebedeger"></div>
+            <div class="col-md-2 mt-2">
+                <label class="small fw-bold text-muted mb-0">Durumu</label>
+                <select class="form-select form-select-sm inp-durum">
+                    <option value="Aktif">Aktif</option>
+                    <option value="İade Edildi">İade Edildi</option>
+                    <option value="Arızalı">Arızalı</option>
+                </select>
+            </div>
+            
+            <div class="col-md-2 mt-2"><label class="small fw-bold text-muted mb-0">İade Tarihi</label><input type="date" class="form-control form-control-sm inp-iadetarih"></div>
+            <div class="col-md-10 mt-2"><label class="small fw-bold text-muted mb-0">Açıklama</label><input type="text" class="form-control form-control-sm inp-aciklama"></div>
+        </div>
+    </div>
+</template>
+
+@section Scripts {
+
+    <script>
+        // 1. KURAL JS DEĞİŞKENİ: Aktif Şirket kodunu JS tarafında hafızaya alıyoruz
+        const activeDbCode = '@currentDb';
+
+        toastr.options = { "closeButton": true, "positionClass": "toast-bottom-right", "timeOut": "5000" };
+
+        $(document).ready(function () {
+            $('.filter-select-bs').selectpicker({ liveSearch: true, actionsBox: true, noneSelectedText: "Tümü" });
+            $('.filter-select-bs').on('changed.bs.select', filterTable);
+            $('#globalSearchInput').on('keyup', filterTable);
+
+            function filterTable() {
+                const globalSearchText = $('#globalSearchInput').val().toLowerCase();
+                const filters = {};
+                
+                $('.filter-select-bs').each(function () {
+                    const colIdx = $(this).closest('th').data('column');
+                    const vals = $(this).val();
+                    if (vals && vals.length > 0) filters[colIdx] = vals.map(v => v.toLowerCase().trim());
+                });
+
+                $('#tableBody tr').each(function () {
+                    let row = $(this);
+                    let isVisible = true;
+                    
+                    for (const colIdx in filters) {
+                        const cellTxt = row.find(`td:eq(${colIdx})`).text().toLowerCase().trim();
+                        if (!filters[colIdx].some(v => cellTxt.includes(v))) { isVisible = false; break; }
+                    }
+                    
+                    if (isVisible && globalSearchText.length > 0) {
+                        if (row.text().toLowerCase().indexOf(globalSearchText) === -1) { isVisible = false; }
+                    }
+                    row.toggle(isVisible);
+                });
+            }
+
+            $('#selectAll').change(function() {
+                var isChecked = $(this).prop('checked');
+                $('#tableBody tr:visible .row-selector').prop('checked', isChecked);
+            });
+
+            $('th.sortable').click(function(){
+                var table = $(this).closest('table');
+                var tbody = table.find('tbody#tableBody');
+                var rows = tbody.find('tr').get();
+                var colIndex = $(this).data('col');
+                var type = $(this).data('type');
+
+                $('th.sortable').not(this).removeClass('asc desc');
+                $('th.sortable i').not($(this).find('i')).removeClass('fa-sort-up fa-sort-down text-primary').addClass('fa-sort text-muted');
+
+                var isAsc = $(this).hasClass('asc');
+                var direction = isAsc ? -1 : 1;
+
+                $(this).toggleClass('asc', !isAsc).toggleClass('desc', isAsc);
+                var icon = $(this).find('i');
+                icon.removeClass('fa-sort text-muted fa-sort-up fa-sort-down');
+                icon.addClass(!isAsc ? 'fa-sort-up text-primary' : 'fa-sort-down text-primary');
+
+                rows.sort(function(a, b) {
+                    var valA = $(a).children('td').eq(colIndex).text().trim();
+                    var valB = $(b).children('td').eq(colIndex).text().trim();
+
+                    if (type === 'date') {
+                        valA = parseDate(valA); valB = parseDate(valB);
+                        return (valA < valB ? -1 : (valA > valB ? 1 : 0)) * direction;
+                    } else if (type === 'currency' || type === 'number') {
+                        valA = parseNum(valA); valB = parseNum(valB);
+                        return (valA < valB ? -1 : (valA > valB ? 1 : 0)) * direction;
+                    } else {
+                        return valA.localeCompare(valB, 'tr') * direction;
+                    }
+                });
+
+                $.each(rows, function(index, row) { tbody.append(row); });
+            });
+
+            function parseNum(str) {
+                if (!str || str === '-') return 0;
+                str = str.replace(/[^0-9,\.-]/g, ''); 
+                
+                var lastDot = str.lastIndexOf('.');
+                var lastComma = str.lastIndexOf(',');
+                
+                if (lastDot > -1 && lastComma > -1) {
+                    if (lastDot > lastComma) {
+                        str = str.replace(/,/g, ''); 
+                    } else {
+                        str = str.replace(/\./g, '').replace(',', '.'); 
+                    }
+                } 
+                else if (lastComma > -1) {
+                    str = str.replace(',', '.');
+                }
+                return parseFloat(str) || 0;
+            }
+
+            function parseDate(str) {
+                if (!str || str === '-' || str.trim() === '') return 0;
+                var p = str.split('.');
+                if (p.length === 3) return parseInt(p[2] + p[1] + p[0]);
+                p = str.split('-');
+                if (p.length === 3) return parseInt(p[0] + p[1] + p[2]);
+                return 0;
+            }
+
+            @if(TempData["Success"] != null) { <text>toastr.success('@TempData["Success"]');</text> }
+            @if(TempData["Error"] != null) { <text>toastr.error('@TempData["Error"]');</text> }
+        });
+
+        function submitPdfForm() {
+            if ($('.row-selector:checked').length === 0) { toastr.warning('PDF oluşturmak için en az bir zimmet seçin.'); return; }
+            $('#pdfForm').submit();
+        }
+
+        function addKalemRow(data = null) {
+            var temp = document.getElementById('kalemTemplate');
+            var clone = temp.content.cloneNode(true);
+            var row = $(clone).find('.dynamic-row');
+
+            if (data) {
+                row.attr('data-docentry', data.docEntry);
+                row.find('.inp-tur').val(data.u_EkipmanTuru);
+                row.find('.inp-adi').val(data.u_EkipmanAdi);
+                row.find('.inp-marka').val(data.u_Marka);
+                row.find('.inp-model').val(data.u_Model);
+                row.find('.inp-serino').val(data.u_SeriNo);
+                row.find('.inp-demirbas').val(data.u_DemirbasNo);
+                row.find('.inp-faturano').val(data.u_FaturaNo);
+                if(data.u_FaturaTarihi) row.find('.inp-faturatarih').val(data.u_FaturaTarihi.split('T')[0]);
+                row.find('.inp-faturatutar').val(data.u_FaturaTutari);
+                row.find('.inp-muhasebedeger').val(data.u_MuhasebeDegeri);
+                row.find('.inp-durum').val(data.u_Durumu);
+                if(data.u_IadeTarihi) row.find('.inp-iadetarih').val(data.u_IadeTarihi.split('T')[0]);
+                row.find('.inp-aciklama').val(data.u_Aciklama);
+            }
+
+            document.getElementById('kalemlerContainer').appendChild(clone);
+        }
+
+        function removeKalem(btn) {
+            var row = $(btn).closest('.dynamic-row');
+            var docEntry = row.attr('data-docentry');
+            if (docEntry && docEntry !== "0") {
+                toastr.warning("Dikkat: Bu ekipman veritabanında bulunuyor. Zimmeti kaldırmak için lütfen durumunu 'İade Edildi' olarak değiştirin.");
+            } else {
+                row.remove(); 
+            }
+        }
+
+        function clearModal() {
+            $('#masterSirket, #masterPersonel, #masterDepartman, #masterLokasyon, #masterTeslimTarihi, #masterTeslimEden, #masterOnaylayan').val('');
+            $('#kalemlerContainer').empty();
+            addKalemRow(); 
+        }
+
+        function editRow(btnElement) {
+            var data = JSON.parse(btnElement.getAttribute('data-item'));
+            var sirket = data.U_Sirket;
+            var personel = data.U_PersonelAdSoyad;
+
+            if (!personel || personel.trim() === '' || personel.trim() === '-') {
+                $('#masterSirket').val(sirket);
+                $('#masterPersonel').val(personel);
+                $('#masterDepartman').val(data.U_Departman);
+                $('#masterLokasyon').val(data.U_Lokasyon);
+                $('#masterTeslimEden').val(data.U_TeslimEden);
+                $('#masterOnaylayan').val(data.U_Onaylayan);
+                if(data.U_TeslimTarihi) $('#masterTeslimTarihi').val(data.U_TeslimTarihi.split('T')[0]);
+
+                $('#kalemlerContainer').empty();
+                
+                var singleItem = {
+                    docEntry: data.DocEntry,
+                    u_EkipmanTuru: data.U_EkipmanTuru,
+                    u_EkipmanAdi: data.U_EkipmanAdi,
+                    u_Marka: data.U_Marka,
+                    u_Model: data.U_Model,
+                    u_SeriNo: data.U_SeriNo,
+                    u_DemirbasNo: data.U_DemirbasNo,
+                    u_FaturaNo: data.U_FaturaNo,
+                    u_FaturaTarihi: data.U_FaturaTarihi,
+                    u_FaturaTutari: data.U_FaturaTutari,
+                    u_MuhasebeDegeri: data.U_MuhasebeDegeri,
+                    u_Durumu: data.U_Durumu,
+                    u_IadeTarihi: data.U_IadeTarihi,
+                    u_Aciklama: data.U_Aciklama
+                };
+                addKalemRow(singleItem);
+                $('#zimmetModal').modal('show');
+                return;
+            }
+
+            $.ajax({
+                // 1. KURAL: AJAX GET isteğinde şirket parametresi eklendi
+                url: '@Url.Action("GetPersonelZimmetleri", "Rapor80")?db=' + activeDbCode,
+                type: 'GET',
+                data: { sirket: sirket, personel: personel },
+                success: function(res) {
+                    if (res.success && res.data.length > 0) {
+                        var first = res.data[0];
+                        $('#masterSirket').val(first.u_Sirket);
+                        $('#masterPersonel').val(first.u_PersonelAdSoyad);
+                        $('#masterDepartman').val(first.u_Departman);
+                        $('#masterLokasyon').val(first.u_Lokasyon);
+                        $('#masterTeslimEden').val(first.u_TeslimEden);
+                        $('#masterOnaylayan').val(first.u_Onaylayan);
+                        if(first.u_TeslimTarihi) $('#masterTeslimTarihi').val(first.u_TeslimTarihi.split('T')[0]);
+
+                        $('#kalemlerContainer').empty();
+                        res.data.forEach(function(item) { addKalemRow(item); });
+                        $('#zimmetModal').modal('show');
+                    }
+                }
+            });
+        }
+
+        function saveZimmet() {
+            var masterSirket = $('#masterSirket').val();
+
+            var payload = {
+                U_Sirket: masterSirket,
+                U_PersonelAdSoyad: $('#masterPersonel').val(),
+                U_Departman: $('#masterDepartman').val(),
+                U_Lokasyon: $('#masterLokasyon').val(),
+                U_TeslimTarihi: $('#masterTeslimTarihi').val() || null,
+                U_TeslimEden: $('#masterTeslimEden').val(),
+                U_Onaylayan: $('#masterOnaylayan').val(),
+                Kalemler: []
+            };
+
+            var valid = true;
+            $('.dynamic-row').each(function() {
+                var docEntry = parseInt($(this).attr('data-docentry')) || 0;
+                var tur = $(this).find('.inp-tur').val();
+                var serino = $(this).find('.inp-serino').val();
+
+                if(!tur) { toastr.error("Ekipman Türü boş bırakılamaz!"); valid = false; return false; }
+
+                payload.Kalemler.push({
+                    DocEntry: docEntry,
+                    U_EkipmanTuru: tur,
+                    U_EkipmanAdi: $(this).find('.inp-adi').val(),
+                    U_Marka: $(this).find('.inp-marka').val(),
+                    U_Model: $(this).find('.inp-model').val(),
+                    U_SeriNo: serino,
+                    U_DemirbasNo: $(this).find('.inp-demirbas').val(),
+                    U_FaturaNo: $(this).find('.inp-faturano').val(),
+                    U_FaturaTarihi: $(this).find('.inp-faturatarih').val() || null,
+                    U_FaturaTutari: $(this).find('.inp-faturatutar').val(),
+                    U_MuhasebeDegeri: $(this).find('.inp-muhasebedeger').val(),
+                    U_Durumu: $(this).find('.inp-durum').val(),
+                    U_IadeTarihi: $(this).find('.inp-iadetarih').val() || null,
+                    U_Aciklama: $(this).find('.inp-aciklama').val()
+                });
+            });
+
+            if(!valid || payload.Kalemler.length === 0) return;
+
+            $.ajax({
+                // 1. KURAL: AJAX POST isteğinde şirket parametresi eklendi
+                url: '@Url.Action("Kaydet", "Rapor80")?db=' + activeDbCode,
+                type: 'POST',
+                contentType: 'application/json',
+                // 2. KURAL: Güvenlik Token'ı (CSRF) header üzerinden iletiliyor
+                headers: { "RequestVerificationToken": '@requestToken' },
+                data: JSON.stringify(payload),
+                success: function(res) {
+                    if(res.success) { location.reload(); } else { toastr.error(res.message); }
+                },
+                error: function() { toastr.error("Sunucu hatası."); }
+            });
+        }
+    </script>
+}

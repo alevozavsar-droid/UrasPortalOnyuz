@@ -1,0 +1,182 @@
+@{ ViewData["Title"] = "Karantina/Red/İmha Tutanağı"; }
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-triangle-exclamation me-2 text-primary"></i> Karantina/Red/İmha Tutanağı (URS-F10-01)</h2>
+    <button class="btn btn-primary btn-sm" onclick="yeniTutanak()"><i class="fas fa-plus me-1"></i>Yeni Tutanak</button>
+</div>
+
+<div class="card dash-card">
+    <div class="card-header bg-white fw-bold small text-uppercase text-muted">Tutanaklar <span id="listeSayisi" class="badge bg-primary ms-1">0</span></div>
+    <div class="table-responsive">
+        <table class="table table-hover table-custom mb-0">
+            <thead><tr><th>No</th><th>Tarih</th><th>Kalem</th><th>İşlem</th><th class="text-end">Miktar</th><th>Depo</th><th>Durum</th><th></th><th></th></tr></thead>
+            <tbody id="tbodyListe"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="tutanakModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" id="modalBaslik">Yeni Tutanak</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="mCode">
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small">Kalem</label>
+                        <input type="text" id="mKalemAra" class="form-control form-control-sm" placeholder="Kalem ara…" oninput="kalemAra()">
+                        <div id="kalemSonuc" class="list-group position-absolute" style="z-index:10; max-height:200px; overflow-y:auto;"></div>
+                        <input type="hidden" id="mItemCode"><input type="hidden" id="mItemName">
+                    </div>
+                    <div class="col-6"><label class="form-label small">Parti No</label><input id="mPartiNo" class="form-control form-control-sm"></div>
+                    <div class="col-4"><label class="form-label small">Tarih</label><input id="mTarih" type="date" class="form-control form-control-sm"></div>
+                    <div class="col-4"><label class="form-label small">Miktar</label><input id="mMiktar" type="number" step="0.01" class="form-control form-control-sm"></div>
+                    <div class="col-4"><label class="form-label small">Birim</label><input id="mBirim" class="form-control form-control-sm"></div>
+                    <div class="col-4"><label class="form-label small">İşlem Tipi</label>
+                        <select id="mIslemTip" class="form-select form-select-sm"><option value="K">Karantina</option><option value="R">Red</option><option value="I">İmha</option></select>
+                    </div>
+                    <div class="col-4"><label class="form-label small">Kaynak Depo</label><select id="mKaynakDepo" class="form-select form-select-sm"></select></div>
+                    <div class="col-4"><label class="form-label small">Hedef Depo</label><select id="mHedefDepo" class="form-select form-select-sm"></select></div>
+                    <div class="col-12"><label class="form-label small">Neden</label><textarea id="mNeden" class="form-control form-control-sm" rows="2"></textarea></div>
+                    <div class="col-12"><label class="form-label small">Açıklama</label><textarea id="mAciklama" class="form-control form-control-sm" rows="2"></textarea></div>
+                </div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Vazgeç</button><button class="btn btn-primary btn-sm" onclick="tutanakKaydet()">Kaydet</button></div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="onayModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Onay / Red</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="oCode">
+                <p id="oOzet" class="small text-muted"></p>
+                <label class="form-label small">Not</label>
+                <textarea id="oNot" class="form-control form-control-sm" rows="2"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-danger btn-sm" onclick="reddet()">Reddet</button>
+                <button class="btn btn-primary btn-sm" onclick="onayla()">Onayla (Stok Transferi Yap)</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #f8f9fc; text-transform: uppercase; font-size: 11px; color: #858796; border-bottom: 2px solid #e3e6f0; }
+    .table-custom td { vertical-align: middle; font-size: 13px; color: #5a5c69; }
+    .rozet { font-size: .68rem; font-weight: 700; padding: .2em .5em; border-radius: 6px; }
+    .rozet-bekliyor { background:#fff8e6; color:#b7791f; } .rozet-onayli { background:#e6f7ee; color:#0f9d58; } .rozet-red { background:#fde8e8; color:#c0392b; }
+</style>
+
+<script>
+    let depolar = [], tutanaklar = [];
+    function islemAd(t) { return { K: 'Karantina', R: 'Red', I: 'İmha' }[t] || t; }
+    function durumAd(d) { return { B: 'Bekliyor', O: 'Onaylandı', X: 'Reddedildi' }[d] || d; }
+    function durumRozet(d) { return { B: 'rozet-bekliyor', O: 'rozet-onayli', X: 'rozet-red' }[d] || ''; }
+
+    async function depolariYukle() {
+        const res = await fetch('/UrasUretimKalite/GetTutanakDepolar').then(r => r.json());
+        depolar = res.success ? res.data : [];
+        const opts = depolar.map(d => `<option value="${d.WhsCode}">${d.WhsCode} - ${d.WhsName}</option>`).join('');
+        document.getElementById('mKaynakDepo').innerHTML = opts;
+        document.getElementById('mHedefDepo').innerHTML = opts;
+    }
+
+    async function listeYukle() {
+        const res = await fetch('/UrasUretimKalite/GetTutanakList').then(r => r.json());
+        tutanaklar = res.success ? res.data : [];
+        document.getElementById('listeSayisi').textContent = tutanaklar.length;
+        document.getElementById('tbodyListe').innerHTML = tutanaklar.map(t => `
+            <tr><td class="fw-bold">#${t.Code}</td><td class="text-nowrap">${t.Tarih}</td><td>${t.ItemName}<div class="text-muted small">${t.ItemCode} ${t.PartiNo ? '/ ' + t.PartiNo : ''}</div></td>
+                <td>${islemAd(t.IslemTip)}</td><td class="text-end">${t.Miktar} ${t.Birim}</td><td>${t.KaynakDepo} &rarr; ${t.HedefDepo}</td>
+                <td><span class="rozet ${durumRozet(t.Durum)}">${durumAd(t.Durum)}</span></td>
+                <td class="text-nowrap">${t.Durum === 'B' ? `<button class="btn btn-sm btn-outline-secondary me-1" onclick="duzenleAc('${t.Code}')" title="Düzenle"><i class="fas fa-pen"></i></button><button class="btn btn-sm btn-outline-primary" onclick="onayModalAc('${t.Code}')">Onay/Red</button>` : (t.TransferNo ? 'Transfer #' + t.TransferNo : '')}</td>
+                <td><a class="btn btn-sm btn-outline-secondary" title="PDF" href="/UrasUretimKalite/TutanakPdf?code=${encodeURIComponent(t.Code)}" target="_blank"><i class="fas fa-file-pdf"></i></a></td></tr>`).join('')
+            || '<tr><td colspan="9" class="text-center text-muted py-3">Kayıt yok.</td></tr>';
+    }
+
+    function yeniTutanak() {
+        document.getElementById('modalBaslik').textContent = 'Yeni Tutanak';
+        document.getElementById('mCode').value = '';
+        document.getElementById('mKalemAra').value = ''; document.getElementById('mItemCode').value = ''; document.getElementById('mItemName').value = '';
+        document.getElementById('mPartiNo').value = ''; document.getElementById('mTarih').value = new Date().toISOString().slice(0, 10);
+        document.getElementById('mMiktar').value = ''; document.getElementById('mBirim').value = ''; document.getElementById('mIslemTip').value = 'K';
+        document.getElementById('mNeden').value = ''; document.getElementById('mAciklama').value = '';
+        new bootstrap.Modal(document.getElementById('tutanakModal')).show();
+    }
+
+    let kalemAramaZamanlayici = null;
+    function kalemAra() {
+        clearTimeout(kalemAramaZamanlayici);
+        kalemAramaZamanlayici = setTimeout(async () => {
+            const q = document.getElementById('mKalemAra').value;
+            if (q.length < 2) { document.getElementById('kalemSonuc').innerHTML = ''; return; }
+            const res = await fetch('/UrasUretimKalite/GetTutanakKalemler?search=' + encodeURIComponent(q)).then(r => r.json());
+            const list = res.success ? res.data : [];
+            document.getElementById('kalemSonuc').innerHTML = list.map(k => `
+                <button type="button" class="list-group-item list-group-item-action small" onclick='kalemSec(${JSON.stringify(k)})'>${k.ItemName} <span class="text-muted">(${k.ItemCode}) — stok: ${k.Stok} ${k.Birim}</span></button>`).join('');
+        }, 300);
+    }
+    function kalemSec(k) {
+        document.getElementById('mItemCode').value = k.ItemCode; document.getElementById('mItemName').value = k.ItemName;
+        document.getElementById('mKalemAra').value = k.ItemName; document.getElementById('mBirim').value = k.Birim;
+        document.getElementById('kalemSonuc').innerHTML = '';
+    }
+
+    // Yalnızca "Bekliyor" (henüz onaylanmamış) tutanaklar düzenlenebilir (backend UpdateTutanak'ta da aynı kural).
+    function duzenleAc(code) {
+        const t = tutanaklar.find(x => x.Code === code);
+        if (!t) return;
+        document.getElementById('modalBaslik').textContent = 'Tutanağı Düzenle (#' + code + ')';
+        document.getElementById('mCode').value = code;
+        document.getElementById('mKalemAra').value = t.ItemName; document.getElementById('mItemCode').value = t.ItemCode; document.getElementById('mItemName').value = t.ItemName;
+        document.getElementById('mPartiNo').value = t.PartiNo || '';
+        document.getElementById('mTarih').value = t.Tarih ? t.Tarih.split('.').reverse().join('-') : '';
+        document.getElementById('mMiktar').value = t.Miktar; document.getElementById('mBirim').value = t.Birim; document.getElementById('mIslemTip').value = t.IslemTip;
+        document.getElementById('mKaynakDepo').value = t.KaynakDepo; document.getElementById('mHedefDepo').value = t.HedefDepo;
+        document.getElementById('mNeden').value = t.Neden || ''; document.getElementById('mAciklama').value = t.Aciklama || '';
+        new bootstrap.Modal(document.getElementById('tutanakModal')).show();
+    }
+
+    async function tutanakKaydet() {
+        const code = document.getElementById('mCode').value;
+        const body = {
+            Code: code,
+            ItemCode: document.getElementById('mItemCode').value, ItemName: document.getElementById('mItemName').value,
+            PartiNo: document.getElementById('mPartiNo').value, Tarih: document.getElementById('mTarih').value,
+            Miktar: parseFloat(document.getElementById('mMiktar').value), Birim: document.getElementById('mBirim').value,
+            KaynakDepo: document.getElementById('mKaynakDepo').value, HedefDepo: document.getElementById('mHedefDepo').value,
+            IslemTip: document.getElementById('mIslemTip').value, Neden: document.getElementById('mNeden').value, Aciklama: document.getElementById('mAciklama').value,
+        };
+        const res = await fetch('/UrasUretimKalite/' + (code ? 'UpdateTutanak' : 'AddTutanak'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+        alert(res.message);
+        if (res.success) { bootstrap.Modal.getInstance(document.getElementById('tutanakModal')).hide(); listeYukle(); }
+    }
+
+    function onayModalAc(code) {
+        const t = tutanaklar.find(x => x.Code === code);
+        document.getElementById('oCode').value = code;
+        document.getElementById('oOzet').textContent = `#${code} — ${t.ItemName} (${t.ItemCode}), ${t.Miktar} ${t.Birim}, ${islemAd(t.IslemTip)}: ${t.KaynakDepo} → ${t.HedefDepo}`;
+        document.getElementById('oNot').value = '';
+        new bootstrap.Modal(document.getElementById('onayModal')).show();
+    }
+    async function onayla() {
+        const body = { Code: document.getElementById('oCode').value, Not: document.getElementById('oNot').value };
+        const res = await fetch('/UrasUretimKalite/ApproveTutanak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+        alert(res.message);
+        if (res.success) { bootstrap.Modal.getInstance(document.getElementById('onayModal')).hide(); listeYukle(); }
+    }
+    async function reddet() {
+        if (!document.getElementById('oNot').value.trim()) { alert('Red için not zorunludur.'); return; }
+        const body = { Code: document.getElementById('oCode').value, Not: document.getElementById('oNot').value };
+        const res = await fetch('/UrasUretimKalite/RejectTutanak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+        alert(res.message);
+        if (res.success) { bootstrap.Modal.getInstance(document.getElementById('onayModal')).hide(); listeYukle(); }
+    }
+
+    depolariYukle(); listeYukle();
+</script>

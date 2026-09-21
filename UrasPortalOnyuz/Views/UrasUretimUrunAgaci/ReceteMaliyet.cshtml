@@ -1,0 +1,198 @@
+@{
+    ViewData["Title"] = "Reçete Birim Maliyet";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h4 mb-0 text-gray-800 fw-bold"><i class="fas fa-coins me-2 text-primary"></i> Reçete Birim Maliyet</h2>
+    <button class="btn btn-outline-secondary btn-sm" onclick="yenile()"><i class="fas fa-rotate me-1"></i>Yenile</button>
+</div>
+<p class="text-muted mb-3">Reçete satırlarının miktarı ile birlikte birim maliyeti ve tutarı.</p>
+
+<div class="row g-3">
+    <div class="col-12 col-lg-4">
+        <div class="card dash-card p-3 h-100">
+            <label class="form-label small fw-bold">Reçete Ara</label>
+            <div class="input-group input-group-sm mb-2">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text" id="fArama" class="form-control" placeholder="Kalem kodu veya adı..." oninput="aramaDegisti()">
+            </div>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <small class="text-muted" id="receteSayisi">0 reçete</small>
+                <small class="text-muted" id="listeYukleniyor" style="display:none;"><span class="spinner-border spinner-border-sm"></span></small>
+            </div>
+            <div id="receteListe" style="max-height:62vh; overflow-y:auto; border:1px solid #e3e6f0; border-radius:12px;"></div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-8">
+        <div id="secimYok" class="card dash-card p-4 text-center text-muted">
+            <i class="fas fa-arrow-left fs-3 d-block mb-2"></i>
+            Maliyetini görmek istediğiniz reçeteyi soldaki listeden seçin.
+        </div>
+        <div id="satirYukleniyor" class="card dash-card p-4 text-center" style="display:none;"><div class="spinner-border text-primary"></div></div>
+
+        <div id="detay" style="display:none;">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-secondary" id="pbTRY" onclick="pbSec('TRY')">₺ TL</button>
+                    <button type="button" class="btn btn-outline-secondary" id="pbUSD" onclick="pbSec('USD')">$ USD</button>
+                    <button type="button" class="btn btn-outline-secondary" id="pbEUR" onclick="pbSec('EUR')">€ EUR</button>
+                </div>
+                <div class="d-flex gap-2 flex-wrap align-items-center">
+                    <a class="btn btn-outline-success btn-sm" id="btnExcelIndir" href="#" target="_blank"><i class="fas fa-file-excel me-1"></i>Excel</a>
+                    <div id="kurKartlari" class="d-flex gap-2 flex-wrap"></div>
+                </div>
+            </div>
+
+            <div class="row g-2 mb-3" id="ozetKartlari"></div>
+
+            <div id="uyariEksikSatir" class="alert alert-warning py-2" style="display:none;"></div>
+            <div id="uyariKurEksik" class="alert alert-warning py-2" style="display:none;"></div>
+
+            <div class="card dash-card">
+                <div class="table-responsive">
+                    <table class="table table-hover table-custom mb-0">
+                        <thead><tr><th>#</th><th>Kalem</th><th class="text-end">Miktar</th><th class="text-end">Birim Maliyet</th><th class="text-end">Tutar</th><th>Kaynak</th></tr></thead>
+                        <tbody id="tbodySatirlar"></tbody>
+                        <tfoot id="tfootToplam"></tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class="text-muted small mt-2">
+                <i class="fas fa-circle-info me-1"></i>
+                Birim maliyet, kalem kartındaki son alış fiyatından alınır; yoksa en son satınalma faturasındaki fiyat kullanılır.
+                Kendi reçetesi olan kalemlerin maliyeti alt reçetesinden hesaplanır. Dövizli fiyatlar SAP döviz kuru tablosundaki günün kuruyla TL'ye çevrilir.
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dash-card { border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+    .table-custom th { background-color: #1e293b; color: #fff; text-transform: uppercase; font-size: 11px; }
+    .table-custom td { vertical-align: middle; font-size: 13px; }
+    .rl-satir { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
+    .rl-satir:hover { background: #f8fafc; }
+    .rl-satir.secili { background: #eef2ff; border-left: 3px solid #1e293b; }
+    .rl-kod { font-weight: 600; color: #1e293b; font-size: .88rem; }
+    .rl-ad { font-size: .78rem; color: #64748b; }
+    .ozet-kart { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 14px; height: 100%; }
+    .ozet-kart .etiket { font-size: .66rem; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: #64748b; }
+    .ozet-kart .deger { font-size: 1.15rem; font-weight: 700; color: #1e293b; }
+    .ozet-kart.vurgu { background: #1e293b; } .ozet-kart.vurgu .etiket { color: #cbd5e1; } .ozet-kart.vurgu .deger { color: #fff; }
+    .kur-kart { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 6px 10px; cursor: pointer; font-size: .8rem; }
+    .kur-kart.eski { border-color: #f59e0b; background: #fffbeb; } .kur-kart.yok { background: #fef2f2; border-color: #fecaca; }
+    .rozet { font-size: .68rem; font-weight: 700; padding: .2em .5em; border-radius: 20px; }
+    .rozet-yarimamul { background: #eaf1ff; color: #1d4ed8; } .rozet-hammadde { background: #f1f5f9; color: #475569; } .rozet-eksik { background: #fee2e2; color: #991b1b; }
+</style>
+
+<script>
+    let receteler = [], secili = null, satirlar = [], ozet = {}, pb = 'TRY';
+    const simge = { TRY: '₺', USD: '$', EUR: '€' };
+
+    function fmt(n, d) { return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+
+    let aramaZamanlayici = null;
+    function aramaDegisti() { clearTimeout(aramaZamanlayici); aramaZamanlayici = setTimeout(receteleriYukle, 300); }
+
+    async function receteleriYukle() {
+        document.getElementById('listeYukleniyor').style.display = '';
+        const qs = new URLSearchParams({ search: document.getElementById('fArama').value });
+        const res = await fetch('/UrasUretimUrunAgaci/GetReceteMaliyetListe?' + qs.toString()).then(r => r.json());
+        document.getElementById('listeYukleniyor').style.display = 'none';
+        if (!res.success) { alert('Liste alınamadı: ' + res.message); return; }
+        receteler = res.data || [];
+        document.getElementById('receteSayisi').textContent = receteler.length + ' reçete';
+        document.getElementById('receteListe').innerHTML = receteler.map(r => `
+            <div class="rl-satir ${secili && secili.ItemCode === r.ItemCode ? 'secili' : ''}" onclick="receteSec('${r.ItemCode}')">
+                <div class="rl-kod">${r.ItemCode}</div><div class="rl-ad">${r.ItemName}</div>
+                <div class="rl-ad"><i class="fas fa-list-ol me-1"></i>${r.SatirSayisi} satır &nbsp;•&nbsp; Baz: ${fmt(r.BazMiktar, 3)} ${r.Birim}</div>
+            </div>`).join('') || '<div class="p-4 text-center text-muted">Reçete bulunamadı.</div>';
+    }
+
+    function receteSec(itemCode) {
+        secili = receteler.find(r => r.ItemCode === itemCode);
+        receteleriYukle().then(() => {});
+        document.getElementById('btnExcelIndir').href = '/UrasUretimUrunAgaci/ReceteMaliyetExcel?code=' + encodeURIComponent(itemCode);
+        yukle();
+    }
+
+    function yenile() { if (secili) yukle(); else receteleriYukle(); }
+
+    async function yukle() {
+        document.getElementById('secimYok').style.display = 'none';
+        document.getElementById('detay').style.display = 'none';
+        document.getElementById('satirYukleniyor').style.display = '';
+        const res = await fetch('/UrasUretimUrunAgaci/GetReceteMaliyet?code=' + encodeURIComponent(secili.ItemCode)).then(r => r.json());
+        document.getElementById('satirYukleniyor').style.display = 'none';
+        if (!res.success) { alert('Maliyet alınamadı: ' + res.message); return; }
+        satirlar = res.data.satirlar || [];
+        ozet = res.data.ozet || {};
+        document.getElementById('detay').style.display = '';
+        pb = 'TRY';
+        ciz();
+    }
+
+    function pbAktif(p) { return pb === p; }
+    function kurYok(p) { return p === 'USD' ? !(ozet.UsdKur > 0) : (p === 'EUR' ? !(ozet.EurKur > 0) : false); }
+    function pbSec(p) { if (kurYok(p)) return; pb = p; ciz(); }
+    function kurEski(tarihStr) {
+        if (!tarihStr) return false;
+        const [g, a, y] = tarihStr.split('.');
+        const t = new Date(y, a - 1, g);
+        return t.toDateString() !== new Date().toDateString();
+    }
+
+    function birimAlan(s) { return { TRY: 'Birim', USD: 'Birim', EUR: 'Birim' }[pb]; }
+    function satirBirim(s) { return pb === 'TRY' ? s.BirimCevrimTRY : (pb === 'USD' ? s.BirimCevrimUSD : s.BirimCevrimEUR); }
+    function satirTutar(s) { return pb === 'TRY' ? s.TutarCevrimTRY : (pb === 'USD' ? s.TutarCevrimUSD : s.TutarCevrimEUR); }
+    function toplam() { return pb === 'TRY' ? ozet.ToplamCevrimTRY : (pb === 'USD' ? ozet.ToplamCevrimUSD : ozet.ToplamCevrimEUR); }
+    function birimMaliyet() { return pb === 'TRY' ? ozet.BirimCevrimTRY : (pb === 'USD' ? ozet.BirimCevrimUSD : ozet.BirimCevrimEUR); }
+
+    function ciz() {
+        ['TRY', 'USD', 'EUR'].forEach(p => {
+            const btn = document.getElementById('pb' + p);
+            btn.className = 'btn btn-outline-secondary' + (pbAktif(p) ? ' active' : '') + (kurYok(p) ? ' opacity-50' : '');
+        });
+
+        let kurHtml = '';
+        if (ozet.UsdKur > 0) {
+            kurHtml += `<div class="kur-kart ${kurEski(ozet.UsdKurTarihi) ? 'eski' : ''}" onclick="pbSec('USD')"><b>$</b><span>1 $ = ${fmt(ozet.UsdKur, 4)} ₺<br><small class="text-muted">${ozet.UsdKurTarihi}</small></span></div>`;
+        } else {
+            kurHtml += `<div class="kur-kart yok"><b>$</b><span>USD kuru girilmemiş</span></div>`;
+        }
+        if (ozet.EurKur > 0) {
+            kurHtml += `<div class="kur-kart ${kurEski(ozet.EurKurTarihi) ? 'eski' : ''}" onclick="pbSec('EUR')"><b>€</b><span>1 € = ${fmt(ozet.EurKur, 4)} ₺<br><small class="text-muted">${ozet.EurKurTarihi}</small></span></div>`;
+        } else {
+            kurHtml += `<div class="kur-kart yok"><b>€</b><span>EUR kuru girilmemiş</span></div>`;
+        }
+        document.getElementById('kurKartlari').innerHTML = kurHtml;
+
+        document.getElementById('ozetKartlari').innerHTML = `
+            <div class="col-6 col-md-3"><div class="ozet-kart"><div class="etiket">Reçete</div><div class="deger" style="font-size:.95rem">${ozet.ItemName}</div><div class="text-muted small">${ozet.ItemCode}</div></div></div>
+            <div class="col-6 col-md-3"><div class="ozet-kart"><div class="etiket">Baz Miktar</div><div class="deger">${fmt(ozet.BazMiktar, 3)}</div><div class="text-muted small">${ozet.Birim} • ${ozet.SatirSayisi} satır</div></div></div>
+            <div class="col-6 col-md-3"><div class="ozet-kart vurgu"><div class="etiket">Toplam Maliyet</div><div class="deger">${fmt(toplam(), 2)} ${simge[pb]}</div></div></div>
+            <div class="col-6 col-md-3"><div class="ozet-kart"><div class="etiket">Birim Maliyet</div><div class="deger">${fmt(birimMaliyet(), 4)} ${simge[pb]}</div><div class="text-muted small">1 ${ozet.Birim} için</div></div></div>`;
+
+        document.getElementById('uyariEksikSatir').style.display = ozet.EksikSatir > 0 ? '' : 'none';
+        document.getElementById('uyariEksikSatir').innerHTML = `<i class="fas fa-triangle-exclamation me-1"></i><b>${ozet.EksikSatir} satırın</b> maliyeti eksik hesaplandı: ilgili kalemlerin fiyat bilgisi bulunamadı.`;
+        document.getElementById('uyariKurEksik').style.display = ozet.KurEksikSatir > 0 ? '' : 'none';
+        document.getElementById('uyariKurEksik').innerHTML = `<i class="fas fa-money-bill-transfer me-1"></i><b>${ozet.KurEksikSatir} satırın</b> maliyeti dövizli ancak günün kuru bulunamadığı için çevrime katılamadı.`;
+
+        document.getElementById('tbodySatirlar').innerHTML = satirlar.map(s => `
+            <tr><td class="text-muted">${s.Sira}</td>
+                <td><div class="fw-semibold">${s.ItemName}</div><div class="text-muted small">${s.ItemCode}
+                    <span class="rozet ${s.YariMamulMu === 'Y' ? 'rozet-yarimamul' : 'rozet-hammadde'} ms-1">${s.YariMamulMu === 'Y' ? 'Yarı Mamul' : 'Hammadde'}</span>
+                    ${s.FiyatsizBilesen > 0 ? `<span class="rozet rozet-eksik ms-1">${s.FiyatsizBilesen} eksik</span>` : ''}
+                    ${s.KurEksik ? '<span class="rozet rozet-eksik ms-1">kur yok</span>' : ''}</div></td>
+                <td class="text-end">${fmt(s.Miktar, 4)}<div class="text-muted small">${s.Birim}</div></td>
+                <td class="text-end">${fmt(satirBirim(s), 4)} ${simge[pb]}</td>
+                <td class="text-end fw-semibold">${fmt(satirTutar(s), 2)} ${simge[pb]}</td>
+                <td class="text-muted small">${s.Kaynak}</td></tr>`).join('') || '<tr><td colspan="6" class="text-center text-muted py-4">Bu reçetede satır bulunmuyor.</td></tr>';
+
+        document.getElementById('tfootToplam').innerHTML = satirlar.length ? `
+            <tr><td colspan="4" class="text-end fw-bold">TOPLAM</td><td class="text-end fw-bold">${fmt(toplam(), 2)} ${simge[pb]}</td><td></td></tr>` : '';
+    }
+
+    receteleriYukle();
+</script>

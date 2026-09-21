@@ -1,0 +1,1326 @@
+﻿@{
+    ViewData["Title"] = "Yapılan Ödemeler";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var databases = (List<WebApplication3.Controllers.Rapor118Controller.DatabaseConfig>)ViewBag.Databases;
+    var currentDbDisplay = (string)ViewBag.CurrentDbDisplay;
+    var accounts = (List<WebApplication3.Controllers.Rapor118Controller.AccountModel>)ViewBag.Accounts;
+    var currencies = (List<string>)ViewBag.Currencies;
+    var banks = (List<WebApplication3.Controllers.Rapor118Controller.BankModel>)ViewBag.Banks;
+    var creditCards = (List<WebApplication3.Controllers.Rapor118Controller.CreditCardDefModel>)ViewBag.CreditCards;
+    
+    var dovizTipleri = (List<WebApplication3.Controllers.Rapor118Controller.UdfValidValue>)ViewBag.DovizTipleri;
+    var iadeDurumlari = (List<WebApplication3.Controllers.Rapor118Controller.UdfValidValue>)ViewBag.IadeDurumlari;
+    var aktarTipleri = (List<WebApplication3.Controllers.Rapor118Controller.UdfValidValue>)ViewBag.AktarTipleri;
+    var checkTransactionTypes = (List<WebApplication3.Controllers.Rapor118Controller.UdfValidValue>)ViewBag.CheckTransactionTypes;
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <style>
+        :root { --form-bg: #ffffff; --border-soft: #e2e8f0; --primary-soft: #eff6ff; }
+        body { background-color: #f8fafc; }
+        .sap-card { background: var(--form-bg); border: 1px solid var(--border-soft); border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 1.5rem; overflow: hidden; }
+        .sap-card-body { padding: 1.5rem; }
+        
+        .form-label { font-weight: 600; color: #475569; font-size: 0.85rem; margin-bottom: 0.4rem; }
+        .form-select-sm, .form-control-sm { min-height: 36px; font-size: 0.85rem; border-radius: 6px; }
+        .form-control, .form-select { border-color: #cbd5e1; }
+        .form-control:focus, .form-select:focus { border-color: #3b82f6; box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25); }
+        
+        .table-modern { border-collapse: separate; border-spacing: 0; width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-soft); }
+        .table-modern th { background-color: #f1f5f9; color: #334155; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; padding: 12px; border-bottom: 2px solid var(--border-soft); border-right: 1px solid var(--border-soft); }
+        .table-modern td { padding: 8px 10px; vertical-align: middle; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); background-color: #ffffff; }
+        .table-modern tbody tr:hover td { background-color: var(--primary-soft); cursor:pointer; } 
+        
+        .table-input { border: 1px solid transparent; background: transparent; width: 100%; padding: 6px 8px; border-radius: 4px; transition: 0.2s; font-size: 0.85rem; }
+        .table-input:focus, .table-input:hover { border-color: #94a3b8; background: #fff; outline: none; }
+        
+        .select2-container--bootstrap-5 .select2-selection { font-size: 0.85rem; min-height: 36px; border-color: #cbd5e1; border-radius: 6px; }
+        
+        .footer-totals-box { background: #ffffff; border: 2px solid #e2e8f0; border-radius: 10px; padding: 1.25rem; width: 380px; float: right; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        .footer-row { display: flex; justify-content: space-between; margin-bottom: 0.75rem; font-size: 0.9rem; color: #475569; }
+        .footer-row.grand-total { font-weight: 800; font-size: 1.15rem; color: #0f172a; border-top: 2px dashed var(--border-soft); padding-top: 1rem; margin-bottom: 0; }
+        
+        .action-bar { background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-top: 1px solid var(--border-soft); padding: 1rem 1.5rem; position: sticky; bottom: 0; z-index: 100; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -10px 15px -3px rgba(0,0,0,0.05); }
+
+        .udf-panel { border-left: 2px dashed var(--border-soft); padding-left: 1.5rem; }
+        .payment-means-btn { display: flex; align-items: center; justify-content: center; width: 100%; padding: 0.8rem; border: 2px dashed #cbd5e1; border-radius: 10px; background: #f8fafc; color: #475569; font-weight: 600; transition: all 0.3s ease; }
+        .payment-means-btn:hover { border-color: #f59e0b; color: #d97706; background: #fffbeb; transform: translateY(-2px); }
+        .payment-means-btn.active { border-style: solid; border-color: #10b981; color: #047857; background: #ecfdf5; }
+
+        .modal-body-payment { padding: 0; background-color: #f8fafc; }
+        .nav-tabs-payment { border-bottom: 1px solid var(--border-soft); background: #ffffff; padding: 0 1rem; }
+        .nav-tabs-payment .nav-link { color: #64748b; border: none; padding: 1rem 1.5rem; font-weight: 600; border-bottom: 3px solid transparent; border-radius: 0; }
+        .nav-tabs-payment .nav-link.active { color: #2563eb; border-bottom-color: #2563eb; background: #eff6ff; }
+
+        .view-mode .searchable-field, .view-mode textarea, .view-mode input, .view-mode .btn-remove-check, .view-mode #btnAddCheckRow { background-color: #f1f5f9 !important; cursor: not-allowed; pointer-events: none; border-color: transparent;}
+        .view-mode .select2-selection { background-color: #f1f5f9 !important; cursor: not-allowed; pointer-events: none; border-color: transparent;}
+        .find-mode .searchable-field { background-color: #fef9c3 !important; border-color: #facc15 !important; }
+        .find-mode .select2-selection { background-color: #fef9c3 !important; border-color: #facc15 !important; }
+        
+        .top-header-bar { background: #ffffff; padding: 1rem 1.5rem; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); margin-bottom: 1.5rem; border: 1px solid var(--border-soft); }
+        
+        .status-badge-container { display: flex; align-items: center; gap: 10px; }
+        .doc-num-display { font-size: 1.5rem; font-weight: 800; color: #1e293b; background: #f1f5f9; padding: 5px 15px; border-radius: 8px; border: 1px dashed #cbd5e1; }
+    </style>
+}
+
+<div class="container-fluid py-4 pb-5 mb-5" id="mainContainer">
+    <div class="top-header-bar d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div class="d-flex align-items-center flex-wrap gap-3">
+            <h4 class="mb-0 fw-bold text-dark" id="pageTitle">
+                <div class="d-flex align-items-center">
+                    <div class="bg-primary bg-opacity-10 p-2 rounded-3 me-3">
+                        <i class="fas fa-hand-holding-usd text-primary fs-4"></i>
+                    </div>
+                    Yapılan Ödeme İşlemleri
+                </div>
+            </h4>
+            
+            <div class="status-badge-container ms-lg-4" id="documentStatusArea" style="display: none;">
+                <div class="doc-num-display">
+                    <span class="text-muted fs-6 fw-normal me-2">Belge No:</span><span id="headerDocNumVal">-</span>
+                </div>
+                <div id="docStatusBadge"></div>
+            </div>
+            
+            <span class="badge bg-secondary fs-6 px-3 py-2 ms-lg-auto">@currentDbDisplay</span>
+        </div>
+        
+        <div class="btn-group shadow-sm border bg-white rounded" role="group">
+            <button type="button" class="btn btn-light nav-btn hover-bg-light" data-dir="first" title="İlk Kayıt"><i class="fas fa-fast-backward text-secondary"></i></button>
+            <button type="button" class="btn btn-light nav-btn hover-bg-light" data-dir="prev" title="Önceki Kayıt"><i class="fas fa-step-backward text-secondary"></i></button>
+            <button type="button" class="btn btn-light nav-btn hover-bg-light" data-dir="next" title="Sonraki Kayıt"><i class="fas fa-step-forward text-secondary"></i></button>
+            <button type="button" class="btn btn-light nav-btn hover-bg-light" data-dir="last" title="Son Kayıt"><i class="fas fa-fast-forward text-secondary"></i></button>
+            <button type="button" class="btn btn-light" id="btnFindMode" title="Kayıt Bul"><i class="fas fa-search text-info"></i> Bul</button>
+            <button type="button" class="btn btn-primary text-white fw-bold" id="btnNewDoc" title="Yeni Kayıt Ekle"><i class="fas fa-plus me-1"></i> Yeni</button>
+        </div>
+    </div>
+
+    <div id="loadingOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.85); backdrop-filter: blur(4px); z-index:9999; flex-direction:column; justify-content:center; align-items:center;">
+        <div class="spinner-border text-primary" role="status" style="width: 4rem; height: 4rem; border-width: 0.35em;"></div>
+        <h4 class="mt-4 text-primary fw-bold">Lütfen Bekleyin...</h4>
+        <p class="text-muted">İşleminiz gerçekleştiriliyor</p>
+    </div>
+
+    <form id="paymentForm">
+        <div class="sap-card">
+            <div class="sap-card-body">
+                <div class="row g-4">
+                    <div class="col-lg-8">
+                        <div class="row g-3">
+                            <div class="col-md-6" id="divDocNumSearch" style="display: none;">
+                                <label class="form-label text-info fw-bold"><i class="fas fa-search me-1"></i> Belge Numarası ile Ara</label>
+                                <input type="number" id="SearchDocNum" class="form-control form-control-sm border-info bg-info bg-opacity-10" placeholder="Örn: 12345" />
+                            </div>
+
+                            <div class="col-md-6 req-field">
+                                <label class="form-label">Tedarikçi Kodu / Adı <span class="text-danger">*</span></label>
+                                <select id="CardCode" class="form-select searchable-field" required></select>
+                            </div>
+                            <div class="col-md-6 req-field">
+                                <label class="form-label">Fatura Adresi</label>
+                                <select id="PayToCode" class="form-select form-select-sm searchable-field">
+                                    <option value="">- Seçiniz -</option>
+                                </select>
+                            </div>
+                            
+                            <div class="col-md-4 req-field">
+                                <label class="form-label">Kayıt Tarihi <span class="text-danger">*</span></label>
+                                <input type="date" id="DocDate" class="form-control form-control-sm searchable-field" required />
+                            </div>
+                            <div class="col-md-4 req-field">
+                                <label class="form-label">Belge Tarihi <span class="text-danger">*</span></label>
+                                <input type="date" id="TaxDate" class="form-control form-control-sm searchable-field" required />
+                            </div>
+                            <div class="col-md-4 req-field" id="divStaticDocNum">
+                                <label class="form-label">İşlem Numarası</label>
+                                <input type="text" id="DocNum" class="form-control form-control-sm bg-light text-center fw-bold" readonly placeholder="Otomatik" />
+                            </div>
+                            
+                            <div class="col-md-12 mt-4 req-field" id="invoicesSection">
+                                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
+                                    <h6 class="fw-bold text-dark mb-0"><i class="fas fa-file-invoice-dollar me-2 text-primary"></i>Açık Faturalar (Hesaba Mahsuben)</h6>
+                                </div>
+                                <div class="table-responsive" style="max-height: 350px; overflow-y:auto; border-radius: 8px;">
+                                    <table class="table-modern border-0" id="invoicesTable">
+                                        <thead class="sticky-top">
+                                            <tr>
+                                                <th style="width: 50px;" class="text-center"><i class="fas fa-check-square text-primary"></i></th>
+                                                <th>Belge No</th>
+                                                <th>Tarih</th>
+                                                <th>Vade</th>
+                                                <th class="text-end">Toplam Tutar</th>
+                                                <th class="text-end text-danger">Açık Bakiye</th>
+                                                <th class="text-end bg-primary bg-opacity-10 text-primary" style="width: 160px;">Ödenecek Tutar</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="invoicesBody">
+                                            <tr><td colspan="7" class="text-center text-muted py-5"><i class="fas fa-search fs-3 mb-2 d-block text-black-50"></i>Tedarikçi seçildiğinde açık faturalar burada listelenecektir.</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-4 udf-panel req-field" style="max-height: 550px; overflow-y:auto;">
+                        <h6 class="fw-bold text-dark border-bottom pb-2 mb-3"><i class="fas fa-sliders-h me-2 text-primary"></i>Genel Bilgiler (UDF)</h6>
+                        
+                        <div class="mb-3">
+                            <label class="form-label mb-1">Döviz Tipi</label>
+                            <select id="U_BE1_DOVIZTIPI" class="form-select form-select-sm searchable-field bg-light">
+                                <option value="">Seçiniz</option>
+                                @if(dovizTipleri.Any()) {
+                                    foreach(var item in dovizTipleri) { <option value="@item.Code">@item.Description</option> }
+                                } else {
+                                    <option value="A">Alış</option><option value="S">Satış</option><option value="EA">Efektif Alış</option><option value="ES">Efektif Satış</option>
+                                }
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label mb-1">İade mi?</label>
+                            <select id="U_BE1_IADE" class="form-select form-select-sm searchable-field bg-light">
+                                <option value="">Seçiniz</option>
+                                @if(iadeDurumlari.Any()) {
+                                    foreach(var item in iadeDurumlari) { <option value="@item.Code">@item.Description</option> }
+                                } else {
+                                    <option value="N">Hayır</option><option value="E">Evet</option>
+                                }
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label mb-1">İşlem Tipi (Aktar)</label>
+                            <select id="U_BE1_AKTAR" class="form-select form-select-sm searchable-field bg-light">
+                                <option value="">Seçiniz</option>
+                                @if(aktarTipleri.Any()) {
+                                    foreach(var item in aktarTipleri) { <option value="@item.Code">@item.Description</option> }
+                                } else {
+                                    <option value="X">X</option><option value="R">R</option><option value="Y">Y</option>
+                                }
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label mb-1">Grup Firması</label>
+                            <input type="text" id="U_BE1_COMPANY" class="form-control form-control-sm searchable-field bg-light" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label mb-1">Ödeme İçeriği</label>
+                            <input type="text" id="U_BE1_TAHSILAT" class="form-control form-control-sm searchable-field bg-light" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label mb-1">Planlanan Tedarikçi (Not)</label>
+                            <input type="text" id="U_BE1_NOT" class="form-control form-control-sm searchable-field bg-light" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label mb-1">Satış Temsilcisi</label>
+                            <input type="text" id="U_BE1_SLPNAME" class="form-control form-control-sm searchable-field bg-light" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label mb-1">Genel Çek İşlem Türü</label>
+                            <select id="U_BE1_CEKISLEMTUR" class="form-select form-select-sm searchable-field bg-light">
+                                <option value="">Seçiniz</option>
+                                @foreach(var t in checkTransactionTypes) {
+                                    <option value="@t.Code">@t.Description</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label mb-1">Giriş Yapan</label>
+                                <input type="text" id="U_BE1_GRSYAPAN" class="form-control form-control-sm searchable-field bg-light" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label mb-1">Çıkış Yapan</label>
+                                <input type="text" id="U_BE1_CKSYAPAN" class="form-control form-control-sm searchable-field bg-light" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-3 req-field align-items-stretch">
+            <div class="col-md-6 d-flex flex-column">
+                <div class="sap-card h-100 mb-0">
+                    <div class="sap-card-body">
+                        <h6 class="fw-bold text-dark border-bottom pb-2 mb-3"><i class="fas fa-comment-alt me-2 text-primary"></i>Açıklamalar</h6>
+                        <div class="mb-3">
+                            <label class="form-label">Açıklama (İç Yazışma)</label>
+                            <textarea id="Comments" class="form-control bg-light border" rows="2" style="resize:none;"></textarea>
+                        </div>
+                        <div>
+                            <label class="form-label">Yevmiye Açıklamaları</label>
+                            <input type="text" id="JournalRemarks" class="form-control bg-light border" placeholder="Yapılan Ödemeler - Tedarikçi Kodu" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6 d-flex flex-column" id="paymentMeansButtonContainer">
+                <div class="footer-totals-box ms-auto h-100 d-flex flex-column justify-content-center w-100" style="max-width: 450px;">
+                    <div class="mb-4">
+                        <button type="button" class="payment-means-btn py-3" id="btnOpenPaymentMeans">
+                            <div class="d-flex align-items-center">
+                                <div class="bg-white p-3 rounded-circle shadow-sm me-3">
+                                    <i class="fas fa-wallet fs-3 text-primary"></i>
+                                </div>
+                                <div class="text-start">
+                                    <span class="d-block fs-5 fw-bold text-dark">Ödeme Araçları (Tutar Gir)</span>
+                                    <small class="fw-normal mt-1 d-block text-secondary" id="paymentMeansStatusText">Henüz ödeme detayı girilmedi</small>
+                                </div>
+                            </div>
+                        </button>
+                    </div>
+                    <div class="footer-row grand-total bg-primary bg-opacity-10 p-3 rounded-3 align-items-center mt-auto border-0">
+                        <span class="text-primary"><i class="fas fa-calculator me-2"></i>Toplam Tutar</span>
+                        <span id="lblTotalSelectedAmount" class="text-primary fs-3 fw-bolder">0,00</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="action-bar fixed-bottom">
+            <div>
+                <button type="button" class="btn btn-outline-danger px-4 py-2 shadow-sm fw-bold rounded-pill" id="btnCancelDocument" style="display:none;">
+                    <i class="fas fa-ban me-2"></i>Belgeyi İptal Et
+                </button>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-light border px-4 py-2 rounded-pill fw-bold" id="btnCancel">İptal / Temizle</button>
+                <button type="submit" class="btn btn-success px-5 py-2 shadow-lg fw-bold rounded-pill fs-6" id="btnSave">
+                    <i class="fas fa-save me-2"></i>Sisteme Kaydet
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- ARAMA MODALI -->
+<div class="modal fade" id="searchResultsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title fw-bold"><i class="fas fa-list me-2"></i>Arama Sonuçları</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0 bg-light">
+                <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                    <table class="table table-hover table-modern mb-0 border-0">
+                        <thead class="sticky-top shadow-sm">
+                            <tr>
+                                <th class="bg-white">Belge No</th>
+                                <th class="bg-white">Tedarikçi Kodu</th>
+                                <th class="bg-white">Tedarikçi Adı</th>
+                                <th class="bg-white">Kayıt Tarihi</th>
+                                <th class="bg-white text-end">Toplam Tutar</th>
+                            </tr>
+                        </thead>
+                        <tbody id="searchResultsBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-white border-top">
+                <span class="text-muted small me-auto"><i class="fas fa-info-circle me-1 text-info"></i>Detayını görmek istediğiniz satıra tıklayın.</span>
+                <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ÖDEME ARACI MODALI -->
+<div class="modal fade" id="paymentMeansModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-centered" style="max-width: 96%;">
+        <div class="modal-content shadow-lg border-0 rounded-4 overflow-hidden">
+            <div class="modal-header bg-primary text-white py-3">
+                <h5 class="modal-title fw-bold"><i class="fas fa-wallet me-2 text-warning"></i>Ödeme Aracı Seçimi ve Tutar Dağılımı</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body modal-body-payment">
+                <div class="p-3 bg-white border-bottom shadow-sm z-1 position-relative">
+                    <div class="row align-items-center mb-3">
+                        <div class="col-md-4 d-flex align-items-center gap-2">
+                            <div class="bg-light p-2 rounded border">
+                                <label class="fw-bold mb-0 text-dark" style="white-space: nowrap;"><i class="fas fa-coins text-warning me-1"></i> Para Birimi:</label>
+                                <select id="modalCurrency" class="form-select form-select-sm d-inline-block w-auto ms-2 fw-bold text-primary border-primary searchable-field">
+                                    <option value="">Sistem Varsayılanı</option>
+                                    @foreach(var c in currencies) { <option value="@c">@c</option> }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="bg-primary bg-opacity-10 p-3 rounded-3 border border-primary border-opacity-25 d-flex justify-content-between align-items-center h-100">
+                                <div>
+                                    <h6 class="text-primary mb-1 fw-bold">Faturalardan Seçilen (Hesaba Mahsuben)</h6>
+                                    <small class="text-muted">Ödenmesi gereken hedef tutar</small>
+                                </div>
+                                <input type="text" id="modalTotalAmountDisplay" class="form-control border-0 bg-transparent text-end fw-bolder fs-4 text-primary w-50" readonly value="0,00" />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="bg-success bg-opacity-10 p-3 rounded-3 border border-success border-opacity-25 d-flex justify-content-between align-items-center h-100">
+                                <div>
+                                    <h6 class="text-success mb-1 fw-bold">Girilen Toplam Ödeme</h6>
+                                    <small class="text-muted">Çek + Nakit + Havale + Kredi Kartı</small>
+                                </div>
+                                <input type="text" id="modalEnteredAmountDisplay" class="form-control border-0 bg-transparent text-end fw-bolder fs-4 text-success w-50" readonly value="0,00" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <ul class="nav nav-tabs nav-tabs-payment pt-2" id="paymentTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="cek-tab" data-bs-toggle="tab" data-bs-target="#cek" type="button" role="tab"><i class="fas fa-money-check-alt me-2 fs-5"></i>Çekler</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="havale-tab" data-bs-toggle="tab" data-bs-target="#havale" type="button" role="tab"><i class="fas fa-exchange-alt me-2 fs-5"></i>Havale / EFT</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="kredi-tab" data-bs-toggle="tab" data-bs-target="#kredi" type="button" role="tab"><i class="fas fa-credit-card me-2 fs-5"></i>Kredi Kartı</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="nakit-tab" data-bs-toggle="tab" data-bs-target="#nakit" type="button" role="tab"><i class="fas fa-money-bill-wave me-2 fs-5"></i>Nakit Kasa</button>
+                    </li>
+                </ul>
+                
+                <div class="tab-content p-4 bg-white" id="paymentTabsContent" style="min-height: 400px;">
+                    <!-- ÇEK SEKMESİ -->
+                    <div class="tab-pane fade show active" id="cek" role="tabpanel">
+                        <div class="mb-4 bg-light p-3 rounded border">
+                            <label class="form-label text-dark fw-bold mb-1">Defter-i Kebir Hesabı (Genel Çek Hesabı) <span class="text-danger">*</span></label>
+                            <select id="CheckAccount" class="form-select select2-modal w-50">
+                                <option value="">Seçiniz...</option>
+                                @foreach(var acc in accounts) { <option value="@acc.AcctCode">@acc.FormatCode - @acc.AcctName</option> }
+                            </select>
+                        </div>
+                        
+                        <div class="table-responsive rounded border shadow-sm" style="max-height: 400px;">
+                            <table class="table-modern" id="checksTable" style="min-width: 1850px; margin-bottom:0;">
+                                <thead class="sticky-top">
+                                    <tr>
+                                        <th style="width: 40px;" class="text-center bg-dark text-white">#</th>
+                                        <th style="width: 130px;" class="bg-dark text-white">Vade Tarihi *</th>
+                                        <th style="width: 140px;" class="bg-dark text-white text-end">Tutar *</th>
+                                        <th style="width: 180px;" class="bg-dark text-white">Banka *</th>
+                                        <th style="width: 120px;" class="bg-dark text-white">Şube</th>
+                                        <th style="width: 140px;" class="bg-dark text-white">Hesap</th>
+                                        <th style="width: 120px;" class="bg-dark text-white">Çek Numarası *</th>
+                                        <th style="width: 120px;" class="bg-dark text-white">Çek-Senet Serisi</th>
+                                        <th style="width: 130px;" class="bg-dark text-white">Banka Şubesi (UDF)</th>
+                                        <th style="width: 110px;" class="bg-dark text-white">Çek/Senet</th>
+                                        <th style="width: 120px;" class="bg-dark text-white">Portföy No</th>
+                                        <th style="width: 120px;" class="bg-dark text-white">Devir Muhatap</th>
+                                        <th style="width: 120px;" class="bg-dark text-white">Çek Durumu</th>
+                                        <th style="width: 140px;" class="bg-dark text-white">Banka Hesap No</th>
+                                        <th style="width: 160px;" class="bg-dark text-white">Planlanan Tedarikçi</th>
+                                        <th style="width: 100px;" class="bg-dark text-white">KLD</th>
+                                        <th style="width: 50px; position: sticky; right: 0; background: #1f2937;" class="text-center text-white"><i class="fas fa-cog"></i></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="checksBody">
+                                </tbody>
+                            </table>
+                        </div>
+                        <button type="button" class="btn btn-outline-primary mt-3 fw-bold rounded-pill px-4" id="btnAddCheckRow">
+                            <i class="fas fa-plus me-2"></i>Yeni Çek Satırı Ekle
+                        </button>
+                    </div>
+
+                    <!-- HAVALE SEKMESİ -->
+                    <div class="tab-pane fade" id="havale" role="tabpanel">
+                        <div class="row g-4 max-w-700 mx-auto mt-2">
+                            <div class="col-md-12">
+                                <label class="form-label fw-bold text-dark fs-6">Defter-i Kebir Hesabı (Banka) <span class="text-danger">*</span></label>
+                                <select id="TransferAccount" class="form-select form-select-lg select2-modal w-100 shadow-sm">
+                                    <option value="">Hesap Seçiniz...</option>
+                                    @foreach(var acc in accounts) { <option value="@acc.AcctCode">@acc.FormatCode - @acc.AcctName</option> }
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label text-muted">Transfer Tarihi</label>
+                                <input type="date" id="TransferDate" class="form-control form-control-lg bg-light" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label text-muted">Referans (Dekont No)</label>
+                                <input type="text" id="TransferReference" class="form-control form-control-lg bg-light" placeholder="..." />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold text-primary">Havale Tutarı <span class="text-danger">*</span></label>
+                                <input type="number" id="TransferSum" class="form-control form-control-lg text-end fw-bolder text-primary border-primary calc-input" step="0.01" min="0" value="0" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- KREDİ KARTI SEKMESİ -->
+                    <div class="tab-pane fade" id="kredi" role="tabpanel">
+                        <div class="alert alert-info border-info bg-info bg-opacity-10 py-3 mb-4 rounded-3 d-flex align-items-center">
+                            <i class="fas fa-info-circle fs-4 me-3 text-info"></i> 
+                            <div>Bu ekrandan <strong>tek çekim / tek kart</strong> ödemesi tanımlanabilir. POS seçimi ve tutarı dikkatlice giriniz.</div>
+                        </div>
+                        <div class="row g-4 align-items-end mt-2">
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold text-dark">Kredi Kartı Türü <span class="text-danger">*</span></label>
+                                <select id="CreditCardType" class="form-select form-select-lg select2-modal w-100 shadow-sm">
+                                    <option value="">Seçiniz...</option>
+                                    @foreach(var cc in creditCards) { <option value="@cc.CreditCard">@cc.CardName</option> }
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold text-dark">Defter-i Kebir Hesabı <span class="text-danger">*</span></label>
+                                <select id="CreditCardAccount" class="form-select form-select-lg select2-modal w-100 shadow-sm">
+                                    <option value="">Seçiniz...</option>
+                                    @foreach(var acc in accounts) { <option value="@acc.AcctCode">@acc.FormatCode - @acc.AcctName</option> }
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold text-primary">Çekim Tutarı <span class="text-danger">*</span></label>
+                                <input type="number" id="CreditCardSum" class="form-control form-control-lg text-end fw-bolder text-primary border-primary calc-input" step="0.01" min="0" value="0" />
+                            </div>
+                            
+                            <div class="col-md-4 mt-4">
+                                <label class="form-label text-muted">Kart No (Son 4 Hane)</label>
+                                <input type="text" id="CreditCardNum" class="form-control form-control-lg bg-light" maxlength="4" placeholder="****" />
+                            </div>
+                            <div class="col-md-4 mt-4">
+                                <label class="form-label text-muted">Onay/Fiş No</label>
+                                <input type="text" id="CreditCardVoucher" class="form-control form-control-lg bg-light" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- NAKİT SEKMESİ -->
+                    <div class="tab-pane fade" id="nakit" role="tabpanel">
+                        <div class="row g-4 justify-content-center mt-5">
+                            <div class="col-md-6">
+                                <div class="card border-0 shadow-sm rounded-4 bg-light p-4 text-center">
+                                    <i class="fas fa-money-bill-wave text-success mb-3" style="font-size: 3rem;"></i>
+                                    <label class="form-label fw-bold text-dark fs-5 text-start">Defter-i Kebir Hesabı (Kasa) <span class="text-danger">*</span></label>
+                                    <select id="CashAccount" class="form-select form-select-lg select2-modal w-100 mb-4 shadow-sm text-start">
+                                        <option value="">Kasa Hesabı Seçiniz...</option>
+                                        @foreach(var acc in accounts) { <option value="@acc.AcctCode">@acc.FormatCode - @acc.AcctName</option> }
+                                    </select>
+                                    
+                                    <label class="form-label fw-bold text-success fs-5 text-start w-100">Nakit Ödenen Tutar <span class="text-danger">*</span></label>
+                                    <input type="number" id="CashSum" class="form-control form-control-lg text-center fw-bolder text-success border-success calc-input fs-3 py-3" step="0.01" min="0" value="0" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-top p-3">
+                <button type="button" class="btn btn-secondary rounded-pill px-4 fw-bold" data-bs-dismiss="modal">İptal / Kapat</button>
+                <button type="button" class="btn btn-primary rounded-pill px-5 fw-bold shadow" id="btnConfirmPaymentMeans">
+                    <i class="fas fa-check-circle me-2"></i>Tutarları Onayla ve Kapat
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    
+    <script>
+        var sysCheckTranTypes = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(checkTransactionTypes));
+        var sysIsCheckBond = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.IsCheckBond));
+
+        toastr.options = { 
+            positionClass: "toast-top-right", 
+            timeOut: "4000",
+            progressBar: true,
+            preventDuplicates: true
+        };
+
+        let currentMode = 'ADD'; 
+        let isBindingData = false; 
+        let currentDocEntry = 0; 
+        let isModalInitialized = false;
+
+        function formatNumber(num) {
+            return parseFloat(num).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function getSelectedCurrency() {
+            return $('#modalCurrency').val() || '';
+        }
+
+        function calculateSelectedTotal() {
+            let total = 0;
+            $('.invoice-checkbox:checked').each(function() {
+                const tr = $(this).closest('tr');
+                const payAmount = parseFloat(tr.find('.input-pay-amount').val()) || 0;
+                total += payAmount;
+            });
+            
+            let cur = getSelectedCurrency();
+            let curText = cur ? ' ' + cur : '';
+            
+            $('#lblTotalSelectedAmount').text(formatNumber(total) + curText);
+            $('#modalTotalAmountDisplay').val(formatNumber(total) + curText);
+        }
+
+        function calculateEnteredTotal() {
+            let cSum = 0;
+            $('.input-chk-sum').each(function() {
+                cSum += parseFloat($(this).val()) || 0;
+            });
+
+            let tSum = parseFloat($('#TransferSum').val()) || 0;
+            let ccSum = parseFloat($('#CreditCardSum').val()) || 0;
+            let kSum = parseFloat($('#CashSum').val()) || 0;
+            
+            let total = cSum + tSum + ccSum + kSum;
+            let cur = getSelectedCurrency();
+            let curText = cur ? ' ' + cur : '';
+            
+            $('#modalEnteredAmountDisplay').val(formatNumber(total) + curText);
+        }
+
+        $('#modalCurrency').change(function() {
+            calculateSelectedTotal();
+            calculateEnteredTotal();
+        });
+
+        function addCheckRow(data = {}) {
+            let index = $('#checksBody tr').length + 1;
+
+            let isCheckBondOptions = sysIsCheckBond.length > 0 
+                ? sysIsCheckBond.map(x => `<option value="${x.Code}" ${data.u_BE1_ISCHECKBOND == x.Code ? 'selected' : ''}>${x.Description}</option>`).join('')
+                : `<option value="1" ${data.u_BE1_ISCHECKBOND == '1' ? 'selected' : ''}>Çek</option>
+                   <option value="2" ${data.u_BE1_ISCHECKBOND == '2' ? 'selected' : ''}>Senet</option>`;
+
+            let trHtml = `
+            <tr>
+                <td class="text-center align-middle text-muted fw-bold check-index">${index}</td>
+                <td><input type="date" class="table-input input-chk-date searchable-field fw-bold" value="${data.dueDate || ''}"></td>
+                <td><input type="number" class="table-input text-end input-chk-sum calc-input searchable-field fw-bolder text-primary" step="0.01" min="0" value="${data.checkSum || '0.00'}"></td>
+                <td>
+                    <select class="form-select form-select-sm table-input input-chk-bank searchable-field">
+                        <option value="">Banka Seçiniz...</option>
+                        @foreach(var b in banks) { <option value="@b.BankCode" data-country="@b.CountryCode">@b.BankName</option> }
+                    </select>
+                </td>
+                <td><input type="text" class="table-input input-chk-branch searchable-field" value="${data.branch || ''}"></td>
+                <td><input type="text" class="table-input input-chk-acctnum searchable-field" value="${data.accounttNum || ''}"></td>
+                <td><input type="number" class="table-input input-chk-num searchable-field fw-bold" value="${data.checkNumber || ''}"></td>
+                <td><input type="text" class="table-input input-chk-seri searchable-field" value="${data.u_BE1_CHECKNUMBER || ''}"></td>
+                <td><input type="text" class="table-input input-chk-bankbranch searchable-field" value="${data.u_BE1_BANKBRANCH || ''}"></td>
+                <td>
+                    <select class="form-select form-select-sm table-input input-chk-ischeck searchable-field">
+                        ${isCheckBondOptions}
+                    </select>
+                </td>
+                <td><input type="text" class="table-input input-chk-portno searchable-field" value="${data.u_BE1_CHECKPORTNO || ''}"></td>
+                <td><input type="text" class="table-input input-chk-transferbp searchable-field" value="${data.u_BE1_TRANSFERBP || ''}"></td>
+                <td><input type="text" class="table-input input-chk-status searchable-field" value="${data.u_BE1_CHECKSTATUS || ''}"></td>
+                <td><input type="text" class="table-input input-chk-banknum searchable-field" value="${data.u_BE1_BANKNUM || ''}"></td>
+                <td><input type="text" class="table-input input-chk-not searchable-field" value="${data.u_BE1_NOT || ''}"></td>
+                <td><input type="text" class="table-input input-chk-kld searchable-field" value="${data.u_BE1_KLD || ''}"></td>
+                <td class="text-center align-middle" style="position: sticky; right: 0; background: #fff; border-left: 2px solid #e2e8f0; z-index: 1;">
+                    <button type="button" class="btn btn-sm btn-light text-danger btn-remove-check p-2 shadow-sm rounded-circle"><i class="fas fa-trash-alt"></i></button>
+                </td>
+            </tr>`;
+            
+            let $tr = $(trHtml);
+            if(data.bankCode) $tr.find('.input-chk-bank').val(data.bankCode);
+            $('#checksBody').append($tr);
+            updateCheckIndexes();
+            calculateEnteredTotal();
+        }
+
+        function updateCheckIndexes() {
+            $('#checksBody tr').each(function(index) { $(this).find('.check-index').text(index + 1); });
+        }
+
+        function setFormMode(mode) {
+            currentMode = mode;
+            
+            if (mode === 'VIEW') {
+                $('#mainContainer').removeClass('find-mode').addClass('view-mode');
+                $('.searchable-field').prop('disabled', true);
+                $('#Comments, #JournalRemarks').prop('disabled', true);
+                $('.req-field select, .req-field input').prop('required', false);
+
+                $('#DocNum').prop('disabled', true);
+                $('#divDocNumSearch').hide();
+                $('#divStaticDocNum').show();
+                
+                $('#invoicesSection').show();
+                $('#paymentMeansButtonContainer').show();
+                
+                $('#btnSave').hide();
+                
+                $('#btnCancel').text("Yeni Temiz Kayıt Ekle").removeClass('btn-light').addClass('btn-primary text-white').prop('disabled', false).html('<i class="fas fa-plus-circle me-2"></i>Yeni Kayıt');
+                $('#pageTitle').html('<div class="d-flex align-items-center"><div class="bg-primary bg-opacity-10 p-2 rounded-3 me-3"><i class="fas fa-file-invoice text-primary fs-4"></i></div>Yapılan Ödeme Görüntüle</div>');
+                
+                $('#documentStatusArea').css('display', 'flex');
+            } 
+            else if (mode === 'FIND') {
+                $('#mainContainer').removeClass('view-mode').addClass('find-mode');
+                $('.searchable-field').prop('disabled', false).val('');
+                
+                $('#CardCode').empty().trigger('change.select2');
+                $('#PayToCode, #U_BE1_DOVIZTIPI, #U_BE1_IADE, #U_BE1_AKTAR, #U_BE1_CEKISLEMTUR, #modalCurrency').val('').trigger('change.select2');
+                $('#Comments, #JournalRemarks').prop('disabled', true).val('');
+                $('.req-field select, .req-field input').prop('required', false);
+
+                $('#divDocNumSearch').show();
+                $('#divStaticDocNum').hide();
+                
+                $('#invoicesSection').hide();
+                $('#paymentMeansButtonContainer').hide();
+                
+                $('#SearchDocNum').prop('disabled', false).val('').focus();
+
+                $('#btnSave').show().text("Ara").removeClass('btn-success').addClass('btn-info text-white shadow').html('<i class="fas fa-search me-2"></i>Sistemde Ara');
+                $('#btnCancelDocument').hide();
+                $('#btnCancel').text("İptal").removeClass('btn-primary text-white').addClass('btn-light').prop('disabled', false).html('İptal');
+                
+                $('#pageTitle').html('<div class="d-flex align-items-center"><div class="bg-info bg-opacity-10 p-2 rounded-3 me-3"><i class="fas fa-search text-info fs-4"></i></div>Kayıt Bul</div>');
+                
+                $('#documentStatusArea').hide();
+            }
+            else { 
+                $('#mainContainer').removeClass('view-mode find-mode');
+                $('.searchable-field').prop('disabled', false);
+                $('#Comments, #JournalRemarks').prop('disabled', false).val('');
+                
+                $('#DocNum').val('').prop('disabled', true);
+                $('#divDocNumSearch').hide();
+                $('#divStaticDocNum').show();
+                
+                $('#invoicesSection').show();
+                $('#paymentMeansButtonContainer').show();
+
+                $('#btnSave').show().removeClass('btn-info text-white').addClass('btn-success shadow-lg').html('<i class="fas fa-save me-2"></i>Sisteme Kaydet');
+                $('#btnCancelDocument').hide();
+                $('#btnCancel').text("Temizle").removeClass('btn-primary text-white').addClass('btn-light').html('Formu Temizle');
+                
+                $('#pageTitle').html('<div class="d-flex align-items-center"><div class="bg-success bg-opacity-10 p-2 rounded-3 me-3"><i class="fas fa-hand-holding-usd text-success fs-4"></i></div>Yeni Yapılan Ödeme Ekle</div>');
+                
+                $('#documentStatusArea').hide();
+                
+                currentDocEntry = 0;
+                isBindingData = true;
+                
+                $('#paymentForm')[0].reset();
+                $('#CardCode').empty().trigger('change.select2');
+                $('#PayToCode, #U_BE1_DOVIZTIPI, #U_BE1_IADE, #U_BE1_AKTAR, #U_BE1_CEKISLEMTUR').val('').trigger('change.select2');
+                $('#modalCurrency').val('').trigger('change');
+
+                $('#invoicesBody').html('<tr><td colspan="7" class="text-center text-muted py-5"><i class="fas fa-search fs-3 mb-2 d-block text-black-50"></i>Tedarikçi seçildiğinde açık faturalar burada listelenecektir.</td></tr>');
+                $('#lblTotalSelectedAmount').text('0,00');
+                
+                $('#TransferSum, #CreditCardSum, #CashSum').val('0');
+                $('#CheckAccount, #TransferAccount, #CreditCardType, #CreditCardAccount, #CashAccount').val('').trigger('change.select2');
+                
+                $('#paymentMeansStatusText').html('Henüz ödeme detayı girilmedi').removeClass('text-success fw-bold');
+                $('#btnOpenPaymentMeans').removeClass('active border-success text-success').addClass('border-secondary text-secondary');
+                
+                $('#checksBody').empty();
+                addCheckRow();
+                
+                const today = new Date().toISOString().split('T')[0];
+                $('#DocDate, #TaxDate, #TransferDate').val(today);
+                
+                isBindingData = false;
+            }
+        }
+
+        function loadPaymentDetailsFromId(docEntry) {
+            $('#loadingOverlay').css('display', 'flex');
+            $.get('/Rapor118/GetOutgoingPaymentDetails', { docEntry: docEntry }, function(res) {
+                if(res && res.success && res.data) {
+                    bindPaymentToForm(res.data);
+                } else {
+                    toastr.error(res.message || "Ödeme detayları alınamadı.");
+                }
+            }).fail(function() {
+                toastr.error("Kayıt çekilirken hata oluştu.");
+            }).always(function() {
+                $('#loadingOverlay').hide();
+            });
+        }
+
+        function bindPaymentToForm(res) {
+            isBindingData = true; 
+            currentDocEntry = res.docEntry;
+            
+            $('#headerDocNumVal').text(res.docNum);
+            
+            if(res.canceled) {
+                $('#docStatusBadge').html('<span class="badge bg-danger bg-opacity-10 text-danger border border-danger fs-6 px-3 py-2 ms-2 rounded-pill shadow-sm"><i class="fas fa-times-circle me-2"></i>İPTAL EDİLDİ</span>');
+                $('#btnCancelDocument').hide();
+            } else {
+                $('#docStatusBadge').html('<span class="badge bg-success bg-opacity-10 text-success border border-success fs-6 px-3 py-2 ms-2 rounded-pill shadow-sm"><i class="fas fa-check-circle me-2"></i>GEÇERLİ / AÇIK</span>');
+                $('#btnCancelDocument').show();
+            }
+            
+            $('#DocNum').val(res.docNum);
+            
+            var newOption = new Option(res.cardCode + " - " + res.cardName, res.cardCode, true, true);
+            $('#CardCode').append(newOption).trigger('change');
+
+            $('#DocDate').val(res.docDate);
+            $('#TaxDate').val(res.taxDate);
+            $('#Comments').val(res.comments);
+            $('#JournalRemarks').val(res.journalRemarks);
+
+            $('#modalCurrency').val(res.docCurrency || '').trigger('change');
+
+            $('#U_BE1_DOVIZTIPI').val(res.u_BE1_DOVIZTIPI || '').trigger('change');
+            $('#U_BE1_IADE').val(res.u_BE1_IADE || '').trigger('change');
+            $('#U_BE1_AKTAR').val(res.u_BE1_AKTAR || '').trigger('change');
+            $('#U_BE1_NOT').val(res.u_BE1_NOT);
+            $('#U_BE1_SLPNAME').val(res.u_BE1_SLPNAME);
+            $('#U_BE1_COMPANY').val(res.u_BE1_COMPANY);
+            $('#U_BE1_TAHSILAT').val(res.u_BE1_TAHSILAT);
+            $('#U_BE1_GRSYAPAN').val(res.u_BE1_GRSYAPAN);
+            $('#U_BE1_CKSYAPAN').val(res.u_BE1_CKSYAPAN);
+            $('#U_BE1_CEKISLEMTUR').val(res.u_BE1_CEKISLEMTUR || '').trigger('change');
+
+            $('#checksBody').empty();
+            let cSumTotal = 0;
+            if(res.checks && res.checks.length > 0) {
+                $('#CheckAccount').val(res.checks[0].checkAccount).trigger('change.select2'); 
+                res.checks.forEach(chk => {
+                    if(chk.dueDate) chk.dueDate = chk.dueDate.split('T')[0];
+                    cSumTotal += chk.checkSum;
+                    addCheckRow(chk);
+                });
+            }
+
+            let rowsHtml = '';
+            if(res.invoices && res.invoices.length > 0) {
+                res.invoices.forEach(inv => {
+                    rowsHtml += `
+                    <tr>
+                        <td class="text-center align-middle"><i class="fas fa-check-square text-success fs-5"></i></td>
+                        <td class="align-middle fw-bold">Belge Entry: ${inv.docEntry}</td>
+                        <td class="align-middle text-muted">-</td>
+                        <td class="align-middle text-muted">-</td>
+                        <td class="text-end align-middle text-muted">-</td>
+                        <td class="text-end align-middle fw-bold text-danger">-</td>
+                        <td class="text-end align-middle fw-bold text-primary fs-6 bg-primary bg-opacity-10">${formatNumber(inv.appliedAmount)}</td>
+                    </tr>`;
+                });
+            } else {
+                rowsHtml = '<tr><td colspan="7" class="text-center text-muted py-5"><i class="fas fa-info-circle fs-3 mb-2 d-block text-black-50"></i>Fatura eşleştirmesi yok (Tutar hesaba mahsuben alınmış).</td></tr>';
+            }
+            $('#invoicesBody').html(rowsHtml);
+            
+            let curText = getSelectedCurrency() ? ' ' + getSelectedCurrency() : '';
+            $('#lblTotalSelectedAmount').text(formatNumber(res.totalAmount) + curText);
+
+            $('#CashSum').val(res.cashSum);
+            $('#TransferSum').val(res.transferSum);
+            $('#CreditCardSum').val(res.creditSum);
+
+            let payStr = [];
+            if(res.cashSum > 0) payStr.push(`<span class="badge bg-success ms-1 fs-6 px-2"><i class="fas fa-money-bill me-1"></i>Nakit: ${formatNumber(res.cashSum)}${curText}</span>`);
+            if(res.transferSum > 0) payStr.push(`<span class="badge bg-info text-dark ms-1 fs-6 px-2"><i class="fas fa-exchange-alt me-1"></i>Havale: ${formatNumber(res.transferSum)}${curText}</span>`);
+            if(res.creditSum > 0) payStr.push(`<span class="badge bg-warning text-dark ms-1 fs-6 px-2"><i class="fas fa-credit-card me-1"></i>K.Kartı: ${formatNumber(res.creditSum)}${curText}</span>`);
+            if(cSumTotal > 0) payStr.push(`<span class="badge bg-dark text-white ms-1 fs-6 px-2"><i class="fas fa-money-check me-1"></i>Çek: ${formatNumber(cSumTotal)}${curText}</span>`);
+
+            if(payStr.length > 0) {
+                $('#paymentMeansStatusText').html(`<div class="mt-2 d-flex flex-wrap gap-1">${payStr.join('')}</div>`);
+                $('#btnOpenPaymentMeans').addClass('active').css('border-color', '#10b981');
+            } else {
+                $('#paymentMeansStatusText').html('Ödeme bilgisi bulunamadı.');
+                $('#btnOpenPaymentMeans').removeClass('active');
+            }
+
+            setFormMode('VIEW'); 
+            isBindingData = false;
+        }
+
+        function populateSearchResults(list) {
+            let html = '';
+            list.forEach(row => {
+                html += `
+                <tr style="cursor:pointer;" class="align-middle" onclick="loadIncomingPaymentAndCloseModal(${row.docEntry})">
+                    <td class="fw-bold text-primary fs-6"><i class="fas fa-file-invoice me-2 text-secondary"></i>${row.docNum}</td>
+                    <td><span class="badge bg-light text-dark border">${row.cardCode}</span></td>
+                    <td class="text-truncate fw-semibold" style="max-width: 250px;">${row.cardName || ''}</td>
+                    <td>${row.docDate}</td>
+                    <td class="fw-bolder text-success fs-6 text-end">${formatNumber(row.docTotal)} ${row.docCurrency || ''}</td>
+                </tr>`;
+            });
+            $('#searchResultsBody').html(html);
+            $('#searchResultsModal').modal('show');
+        }
+
+        window.loadIncomingPaymentAndCloseModal = function(docEntry) {
+            $('#searchResultsModal').modal('hide');
+            loadPaymentDetailsFromId(docEntry);
+        }
+
+        $(document).ready(function () {
+            
+            $('#CardCode').select2({
+                theme: 'bootstrap-5',
+                placeholder: "🔍 Tedarikçi Kodu veya Adı Ara...",
+                allowClear: true,
+                minimumInputLength: 2,
+                ajax: {
+                    url: '/Rapor118/SearchVendors',
+                    dataType: 'json',
+                    delay: 350,
+                    data: function (params) { return { q: params.term }; },
+                    processResults: function (data) {
+                        return {
+                            results: $.map(data, function (item) {
+                                return { id: item.cardCode, text: item.cardCode + " - " + item.cardName }
+                            })
+                        };
+                    },
+                    cache: true
+                }
+            });
+
+            setFormMode('ADD');
+
+            $('.nav-btn').click(function() {
+                if (isBindingData) return;
+                const dir = $(this).data('dir');
+                $('#loadingOverlay').css('display', 'flex');
+                
+                $.get('/Rapor118/GetOutgoingPaymentNavigation', { currentDocEntry: currentDocEntry, direction: dir }, function(res) {
+                    if(res && res.success && res.data) {
+                        bindPaymentToForm(res.data);
+                    } else {
+                        toastr.info("Bu yönde başka kayıt bulunmuyor.");
+                    }
+                }).fail(function() {
+                    toastr.error("Kayıt çekilirken hata oluştu.");
+                }).always(function() {
+                    $('#loadingOverlay').hide();
+                });
+            });
+
+            $('#btnNewDoc').click(function() { setFormMode('ADD'); });
+            $('#btnFindMode').click(function() { setFormMode('FIND'); });
+
+            $('#btnCancelDocument').click(function() {
+                if (!currentDocEntry) return;
+
+                if (confirm("DİKKAT: Bu belgeyi sistemden iptal etmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz!")) {
+                    $('#loadingOverlay').css('display', 'flex');
+                    
+                    $.ajax({
+                        url: '/Rapor118/CancelOutgoingPayment?docEntry=' + currentDocEntry,
+                        type: 'POST',
+                        success: function (res) {
+                            if (res.success) {
+                                toastr.success(res.message);
+                                loadPaymentDetailsFromId(currentDocEntry);
+                            } else {
+                                toastr.error(res.message);
+                            }
+                        },
+                        error: function (xhr) {
+                            const errMsg = xhr.responseJSON ? xhr.responseJSON.message : "İptal sırasında hata oluştu.";
+                            toastr.error(errMsg);
+                        },
+                        complete: function () { $('#loadingOverlay').hide(); }
+                    });
+                }
+            });
+
+            $('#CardCode').on('change', function() {
+                if(isBindingData || currentMode !== 'ADD') return;
+                const cardCode = $(this).val();
+                if(!cardCode) return;
+
+                $('#invoicesBody').html('<tr><td colspan="7" class="text-center text-primary py-5"><div class="spinner-border spinner-border-md mb-2" role="status"></div><br/>Faturalar sistemden çekiliyor...</td></tr>');
+                $('#JournalRemarks').val("Yapılan Ödemeler - " + cardCode);
+
+                $.get('/Rapor118/GetVendorAddresses', { cardCode: cardCode }, function(res) {
+                    let payHtml = '<option value="">- Seçiniz -</option>';
+                    res.forEach(addr => {
+                        if(addr.addressType === 'B') payHtml += `<option value="${addr.addressName}">${addr.addressName}</option>`;
+                    });
+                    $('#PayToCode').html(payHtml);
+                    if(res.find(a => a.addressType === 'B')) $('#PayToCode').val(res.find(a => a.addressType === 'B').addressName);
+                });
+
+                $.get('/Rapor118/GetOpenInvoices', { cardCode: cardCode }, function(res) {
+                    let rowsHtml = '';
+                    if (res && res.length > 0) {
+                        res.forEach(inv => {
+                            rowsHtml += `
+                            <tr data-docentry="${inv.docEntry}">
+                                <td class="text-center align-middle">
+                                    <input class="form-check-input invoice-checkbox border-secondary" type="checkbox" data-open="${inv.openAmount}" style="transform: scale(1.3); cursor:pointer;">
+                                </td>
+                                <td class="align-middle fw-bold">${inv.docNum}</td>
+                                <td class="align-middle">${inv.docDate}</td>
+                                <td class="align-middle">${inv.docDueDate}</td>
+                                <td class="text-end align-middle">${formatNumber(inv.docTotal)} ${inv.currency}</td>
+                                <td class="text-end align-middle fw-bold text-danger">${formatNumber(inv.openAmount)} ${inv.currency}</td>
+                                <td class="text-end align-middle p-1 bg-primary bg-opacity-10">
+                                    <input type="number" class="form-control text-end fw-bold text-primary input-pay-amount shadow-sm border-0 bg-white" value="0.00" min="0" max="${inv.openAmount}" step="0.01" disabled />
+                                </td>
+                            </tr>`;
+                        });
+                    } else {
+                        rowsHtml = '<tr><td colspan="7" class="text-center text-muted py-5"><i class="fas fa-check-circle fs-3 mb-2 d-block text-success"></i>Bu tedarikçiye ait açık (ödenmemiş) fatura bulunmuyor.</td></tr>';
+                    }
+                    $('#invoicesBody').html(rowsHtml);
+                    calculateSelectedTotal();
+                });
+            });
+
+            $(document).on('change', '.invoice-checkbox', function() {
+                const tr = $(this).closest('tr');
+                const inputPay = tr.find('.input-pay-amount');
+                const openAmount = parseFloat($(this).data('open'));
+
+                if ($(this).is(':checked')) {
+                    inputPay.prop('disabled', false);
+                    inputPay.val(openAmount.toFixed(2));
+                    tr.addClass('bg-primary bg-opacity-10');
+                } else {
+                    inputPay.prop('disabled', true);
+                    inputPay.val('0.00');
+                    tr.removeClass('bg-primary bg-opacity-10');
+                }
+                calculateSelectedTotal();
+            });
+
+            $(document).on('input', '.input-pay-amount', function() {
+                const tr = $(this).closest('tr');
+                const max = parseFloat(tr.find('.invoice-checkbox').data('open'));
+                let val = parseFloat($(this).val()) || 0;
+                
+                if (val > max) {
+                    toastr.warning("Ödenecek tutar açık bakiyeden büyük olamaz.");
+                    $(this).val(max.toFixed(2));
+                }
+                calculateSelectedTotal();
+            });
+
+            $(document).on('input', '.calc-input', function() {
+                calculateEnteredTotal();
+            });
+
+            $('#btnAddCheckRow').click(function() {
+                if (currentMode === 'ADD') addCheckRow();
+            });
+
+            $(document).on('click', '.btn-remove-check', function() {
+                if (currentMode !== 'ADD') return;
+                $(this).closest('tr').remove();
+                updateCheckIndexes();
+                calculateEnteredTotal();
+            });
+
+            $('#btnOpenPaymentMeans').click(function() {
+                calculateSelectedTotal();
+                
+                if(!isModalInitialized) {
+                    $('.select2-modal').select2({ theme: 'bootstrap-5', width: '100%', dropdownParent: $('#paymentMeansModal') });
+                    isModalInitialized = true;
+                }
+                
+                $('#paymentMeansModal').modal('show');
+            });
+
+            $('#paymentMeansModal').on('shown.bs.modal', function () {
+                if(currentMode === 'VIEW') {
+                    $('#btnConfirmPaymentMeans').hide();
+                } else {
+                    $('#btnConfirmPaymentMeans').show();
+                }
+            });
+
+            $('#btnConfirmPaymentMeans').click(function() {
+                calculateEnteredTotal();
+                const expectedTotal = parseFloat($('#modalTotalAmountDisplay').val().replace(/\./g, '').replace(',', '.')) || 0;
+                const enteredTotal = parseFloat($('#modalEnteredAmountDisplay').val().replace(/\./g, '').replace(',', '.')) || 0;
+
+                if(enteredTotal <= 0) {
+                    toastr.warning("Lütfen en az bir sekmeye ödeme tutarı giriniz.");
+                    return;
+                }
+
+                let cSum = 0;
+                let checkError = false;
+                $('#checksBody tr').each(function() {
+                    let rowSum = parseFloat($(this).find('.input-chk-sum').val()) || 0;
+                    if(rowSum > 0) {
+                        cSum += rowSum;
+                        if(!$(this).find('.input-chk-date').val() || !$(this).find('.input-chk-num').val() || !$(this).find('.input-chk-bank').val()) {
+                            checkError = true;
+                        }
+                    }
+                });
+
+                if(cSum > 0 && !$('#CheckAccount').val()) {
+                    toastr.warning("Çek sekmesinde Genel Çek Hesabını (Defter-i Kebir) seçiniz."); return;
+                }
+                if(checkError) {
+                    toastr.warning("Lütfen tutar girdiğiniz çeklerin Vade Tarihi, Banka ve Çek No alanlarını eksiksiz doldurunuz."); return;
+                }
+
+                let tSum = parseFloat($('#TransferSum').val()) || 0;
+                if(tSum > 0 && !$('#TransferAccount').val()) {
+                    toastr.warning("Havale sekmesinde Banka Hesabını seçiniz."); return;
+                }
+
+                let ccSum = parseFloat($('#CreditCardSum').val()) || 0;
+                if(ccSum > 0 && (!$('#CreditCardType').val() || !$('#CreditCardAccount').val())) {
+                    toastr.warning("Kredi Kartı sekmesinde Kart Türü ve Hesap seçiniz."); return;
+                }
+
+                let kSum = parseFloat($('#CashSum').val()) || 0;
+                if(kSum > 0 && !$('#CashAccount').val()) {
+                    toastr.warning("Nakit sekmesinde Kasa Hesabını seçiniz."); return;
+                }
+
+                let curText = getSelectedCurrency() ? ' ' + getSelectedCurrency() : '';
+
+                if (expectedTotal > 0 && enteredTotal !== expectedTotal) {
+                    toastr.info(`Fatura toplamından farklı bir tutar (${formatNumber(enteredTotal)}${curText}) girildi. Fark tutarı Hesaba Mahsuben işlenecektir.`);
+                }
+
+                let payStr = [];
+                if(kSum > 0) payStr.push(`<span class="badge bg-success ms-1 fs-6 px-2"><i class="fas fa-money-bill me-1"></i>Nakit: ${formatNumber(kSum)}${curText}</span>`);
+                if(tSum > 0) payStr.push(`<span class="badge bg-info text-dark ms-1 fs-6 px-2"><i class="fas fa-exchange-alt me-1"></i>Havale: ${formatNumber(tSum)}${curText}</span>`);
+                if(ccSum > 0) payStr.push(`<span class="badge bg-warning text-dark ms-1 fs-6 px-2"><i class="fas fa-credit-card me-1"></i>K.Kartı: ${formatNumber(ccSum)}${curText}</span>`);
+                if(cSum > 0) payStr.push(`<span class="badge bg-dark text-white ms-1 fs-6 px-2"><i class="fas fa-money-check me-1"></i>Çek: ${formatNumber(cSum)}${curText}</span>`);
+
+                $('#paymentMeansStatusText').html(`<div class="mt-2 d-flex flex-wrap gap-1">${payStr.join('')}</div>`);
+                $('#btnOpenPaymentMeans').addClass('active').css('border-color', '#10b981');
+
+                $('#paymentMeansModal').modal('hide');
+            });
+
+            $('#paymentForm').submit(function (e) {
+                e.preventDefault();
+                
+                if(currentMode === 'FIND') {
+                    const searchPayload = {
+                        DocNum: $('#SearchDocNum').val() ? parseInt($('#SearchDocNum').val()) : null,
+                        CardCode: $('#CardCode').val(),
+                        DocDate: $('#DocDate').val() || null
+                    };
+                    
+                    $('#loadingOverlay').css('display', 'flex');
+                    
+                    $.ajax({
+                        url: '/Rapor118/FindOutgoingPayment',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify(searchPayload),
+                        success: function (res) {
+                            if (res.success && res.data && res.data.length > 0) {
+                                if (res.data.length === 1) {
+                                    loadPaymentDetailsFromId(res.data[0].docEntry);
+                                } else {
+                                    populateSearchResults(res.data);
+                                }
+                            } else {
+                                toastr.warning(res.message || "Girilen kriterlere uygun kayıt bulunamadı.");
+                            }
+                        },
+                        error: function () { toastr.error("Arama sırasında hata oluştu."); },
+                        complete: function () { $('#loadingOverlay').hide(); }
+                    });
+                    return;
+                }
+                
+                if(currentMode === 'VIEW') return;
+
+                const cardCode = $('#CardCode').val();
+                if (!cardCode) { toastr.warning("Sisteme kayıt yapabilmek için Tedarikçi seçmelisiniz."); return; }
+
+                if (!$('#btnOpenPaymentMeans').hasClass('active')) {
+                    toastr.error("Ödeme araçları sekmesinden ödeme tutarlarını (Kasa/Banka/Çek vb.) belirlemelisiniz.");
+                    $('#paymentMeansModal').modal('show');
+                    return;
+                }
+
+                let cSum = 0;
+                let activeCheckCount = 0;
+                $('#checksBody tr').each(function() { 
+                    let rowSum = parseFloat($(this).find('.input-chk-sum').val()) || 0; 
+                    if(rowSum > 0) {
+                        cSum += rowSum;
+                        activeCheckCount++;
+                    }
+                });
+
+                let splitChecksChoice = false;
+                if (activeCheckCount > 1) {
+                    splitChecksChoice = confirm("Birden fazla çek girdiniz.\n\nSistemde bu çeklerin her biri için AYRI ödeme belgesi oluşturulsun mu?\n(İptal derseniz TEK BİR ödeme belgesinde toplanacaktır)");
+                }
+
+                let tSum = parseFloat($('#TransferSum').val()) || 0;
+                let ccSum = parseFloat($('#CreditCardSum').val()) || 0;
+                let kSum = parseFloat($('#CashSum').val()) || 0;
+                let totalEntered = cSum + tSum + ccSum + kSum;
+
+                if (totalEntered <= 0) {
+                    toastr.error("Ödeme araçlarına girilen toplam tutar sıfırdan büyük olmalıdır.");
+                    return;
+                }
+
+                const invoices = [];
+                $('.invoice-checkbox:checked').each(function() {
+                    const tr = $(this).closest('tr');
+                    const payAmount = parseFloat(tr.find('.input-pay-amount').val()) || 0;
+                    if (payAmount > 0) {
+                        invoices.push({ DocEntry: parseInt(tr.data('docentry')), AppliedAmount: payAmount });
+                    }
+                });
+
+                const checks = [];
+                $('#checksBody tr').each(function() {
+                    let rowSum = parseFloat($(this).find('.input-chk-sum').val()) || 0;
+                    if (rowSum > 0) {
+                        checks.push({
+                            DueDate: $(this).find('.input-chk-date').val(),
+                            CheckSum: rowSum,
+                            BankCode: $(this).find('.input-chk-bank').val(),
+                            CountryCode: $(this).find('.input-chk-bank option:selected').data('country'), 
+                            CheckNumber: parseInt($(this).find('.input-chk-num').val()) || 0,
+                            CheckAccount: $('#CheckAccount').val(), 
+                            AccounttNum: $(this).find('.input-chk-acctnum').val(),
+                            Branch: $(this).find('.input-chk-branch').val(),
+                            
+                            U_BE1_CHECKNUMBER: $(this).find('.input-chk-seri').val(),
+                            U_BE1_BANKBRANCH: $(this).find('.input-chk-bankbranch').val(),
+                            U_BE1_ISCHECKBOND: $(this).find('.input-chk-ischeck').val(), 
+                            U_BE1_CHECKPORTNO: $(this).find('.input-chk-portno').val(),
+                            U_BE1_TRANSFERBP: $(this).find('.input-chk-transferbp').val(),
+                            U_BE1_CHECKSTATUS: $(this).find('.input-chk-status').val(),
+                            U_BE1_BANKNUM: $(this).find('.input-chk-banknum').val(),
+                            U_BE1_NOT: $(this).find('.input-chk-not').val(),
+                            U_BE1_KLD: $(this).find('.input-chk-kld').val()
+                        });
+                    }
+                });
+
+                const ccs = [];
+                if(ccSum > 0) {
+                    ccs.push({
+                        CreditCard: parseInt($('#CreditCardType').val()),
+                        CreditCardNumber: $('#CreditCardNum').val(),
+                        VoucherNum: $('#CreditCardVoucher').val(),
+                        CreditSum: ccSum,
+                        CreditAcct: $('#CreditCardAccount').val()
+                    });
+                }
+
+                const payload = {
+                    CardCode: cardCode,
+                    DocCurrency: $('#modalCurrency').val() || null,
+                    DocDate: $('#DocDate').val(),
+                    TaxDate: $('#TaxDate').val(),
+                    Comments: $('#Comments').val(),
+                    JournalRemarks: $('#JournalRemarks').val(),
+                    TotalPaymentAmount: totalEntered,
+                    SplitChecks: splitChecksChoice, 
+                    
+                    TransferAccount: $('#TransferAccount').val(),
+                    TransferDate: $('#TransferDate').val() || null,
+                    TransferReference: $('#TransferReference').val(),
+                    TransferSum: tSum,
+                    
+                    CashAccount: $('#CashAccount').val(),
+                    CashSum: kSum,
+
+                    PaymentChecks: checks,
+                    PaymentCreditCards: ccs,
+
+                    U_BE1_AKTAR: $('#U_BE1_AKTAR').val() || null,
+                    U_BE1_DOVIZTIPI: $('#U_BE1_DOVIZTIPI').val() || null,
+                    U_BE1_NOT: $('#U_BE1_NOT').val() || null,
+                    U_BE1_SLPNAME: $('#U_BE1_SLPNAME').val() || null,
+                    U_BE1_COMPANY: $('#U_BE1_COMPANY').val() || null,
+                    U_BE1_TAHSILAT: $('#U_BE1_TAHSILAT').val() || null,
+                    U_BE1_GRSYAPAN: $('#U_BE1_GRSYAPAN').val() || null,
+                    U_BE1_CKSYAPAN: $('#U_BE1_CKSYAPAN').val() || null,
+                    U_BE1_IADE: $('#U_BE1_IADE').val() || null,
+                    U_BE1_CEKISLEMTUR: $('#U_BE1_CEKISLEMTUR').val() || null, 
+
+                    Invoices: invoices
+                };
+
+                $('#loadingOverlay').css('display', 'flex');
+
+                $.ajax({
+                    url: '/Rapor118/CreateOutgoingPayment',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(payload),
+                    success: function (res) {
+                        if (res.success) {
+                            toastr.success(res.message);
+                            
+                            // BAŞARILI İŞLEMLERİN TÜMÜNDE BORDRO/MAKBUZ OLUŞTUR
+                            if (res.docNums && res.docNums.length > 0) {
+                                fetch('/Rapor118/CreateOdemeBordro', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(res.docNums)
+                                })
+                                .then(response => {
+                                    if (response.ok) return response.blob();
+                                    throw new Error("Bordro/Makbuz oluşturulamadı.");
+                                })
+                                .then(blob => {
+                                    var url = window.URL.createObjectURL(blob);
+                                    var a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `Yapilan-Odeme-Makbuzu-${new Date().getTime()}.pdf`;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    a.remove();
+                                    setTimeout(() => { window.location.reload(); }, 1500); 
+                                })
+                                .catch(err => {
+                                    toastr.warning("Ödeme oluşturuldu ancak PDF Makbuzu indirilemedi.");
+                                    setTimeout(() => { window.location.reload(); }, 2000); 
+                                });
+                            } else {
+                                setTimeout(() => { window.location.reload(); }, 2000); 
+                            }
+                        } else {
+                            toastr.error(res.message);
+                            $('#loadingOverlay').hide();
+                        }
+                    },
+                    error: function (xhr) {
+                        const errMsg = xhr.responseJSON ? xhr.responseJSON.message : "Sistem hatası meydana geldi.";
+                        toastr.error(errMsg);
+                        $('#loadingOverlay').hide();
+                    }
+                });
+            });
+            
+            $('#btnCancel').click(function() {
+                if(currentMode === 'VIEW' || currentMode === 'FIND') {
+                    setFormMode('ADD');
+                } else {
+                    if(confirm("Tüm form temizlenecek, emin misiniz?")) {
+                        setFormMode('ADD');
+                    }
+                }
+            });
+        });
+    </script>
+}
