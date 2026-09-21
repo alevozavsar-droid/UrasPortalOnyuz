@@ -88,6 +88,13 @@ tasarımından uyarlandı:
   mükerrer fatura şüphesi, vadesi geçmiş ödenmemiş, grup içi kullanım (fatura şirketi ≠ kullanım şirketi), eşik üstü tutar.
   Üstte dönem özeti (net / KDV / brüt, onay ilerlemesi) ve kategori bazında bütçe gerçekleşmesi; dönem, şirket, satınalmacı, kategori,
   uyarı filtreleri; CSV dışa aktarma. Rol (satınalmacı / direktör / muhasebe / izleyici) demo amaçlı ekrandan seçilir.
+* **Genel Analiz Raporu** (Yönetim › Yönetim Özeti › Özel Analizler › Özel Raporlar; `Controllers/GenelAnalizController.cs`,
+  `Views/GenelAnaliz/Index.cshtml`, yapı ve örnek veri `Data/GenelAnalizOrnek.cs`): "2026 Aylık Analiz Raporu" Excel şablonunun
+  portal karşılığı. Satırlar şablondan: CİRO (URAS / ALV / Avrupa Paper / DAF / URS alt toplamları, GES, TOPLAM CİRO), ALIMLAR,
+  GİDERLER, ARA SONUÇ (Alım + Gider, Faaliyet Kâr / Zararı), AMORTİSMAN, ARA SONUÇ (Dönem Net), KUR FARKI, SONUÇ (Kur Farkı Sonrası).
+  Sütunlar Ocak–Aralık, TOPLAM, AYLIK ORT. (Excel'deki `IF(COUNT()=0,"",SUM/AVERAGE)` mantığı: boş aylar sayılmaz). Yaprak hücreler
+  yazılabilir, alt toplam / sonuç satırları terim listesinden (işaretli toplam) anında hesaplanır; Kaydet bellek içine yazar,
+  `/GenelAnaliz/Csv?yil=` şablonla aynı düzende CSV verir. Kapanmış aylar örnek veriyle dolu gelir.
 * **Menü tanımı** `Data/KurumsalMenu.cs` içindedir (menu-config.js'in C# karşılığı). Rapor adları buradaki ekranlara ada göre
   otomatik eşlenir; yazımı farklı olanlar `TakmaAdlar` tablosundadır. Eşleşmeyen kayıtlar "planlanıyor", ana sahibi başka
   modülde olanlar "kısayol" olarak görünür. Menüde yeri belirlenmemiş mevcut ekranlar

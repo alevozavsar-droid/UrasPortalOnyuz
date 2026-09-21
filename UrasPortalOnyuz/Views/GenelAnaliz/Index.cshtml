@@ -1,90 +1,158 @@
 @{
     ViewData["Title"] = "Genel Analiz Raporu";
     Layout = "~/Views/Shared/_Layout.cshtml";
-    var sirketler = (string[])ViewBag.Sirketler;
     int yil = (int)ViewBag.Yil;
+    string kullanici = (string)ViewBag.Kullanici ?? "";
 }
 @*
-    GENEL ANALİZ RAPORU — Yönetim › Yönetim Özeti › Özel Analizler › Özel Raporlar (Tahsilat Analiz Raporu ile aynı grupta, ayrı ekran).
-    Şirket ve yıl seçilir; aylık satış / alım / brüt kâr / tahsilat / ödeme / net nakit tablosu ve dönem özeti gelir.
-    Veri: /GenelAnaliz/Veri?sirket=&yil=  (örnek; kaynak bağlanınca gerçek değerlerle değişecek).
+    GENEL ANALİZ RAPORU — "2026 Aylık Analiz Raporu" Excel şablonunun portal karşılığı (Yönetim › Yönetim Özeti › Özel Analizler › Özel Raporlar).
+    Satırlar: CİRO (şirket alt toplamları), ALIMLAR, GİDERLER, ARA SONUÇ (Alım + Gider, Faaliyet Kâr / Zararı), AMORTİSMAN,
+    ARA SONUÇ (Dönem Net Kâr / Zarar), KUR FARKI, SONUÇ (Kur Farkı Sonrası Kâr / Zarar). Sütunlar: 12 ay, TOPLAM, AYLIK ORT.
+    Yaprak hücreler yazılabilir; alt toplam / sonuç satırları ve TOPLAM / ORT. anında hesaplanır; Kaydet bellek içine yazar.
+    Veri: /GenelAnaliz/Veri?yil=  Kaydet: /GenelAnaliz/Kaydet  CSV: /GenelAnaliz/Csv?yil=
 *@
 <style>
     .ga-wrap { padding: 0 14px 30px; }
-    .ga-ust { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 14px 0 12px; }
+    .ga-ust { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 14px 0 10px; }
     .ga-ust h1 { font-size: 1.2rem; font-weight: 700; margin: 0; }
-    .ga-ust .sub { width: 100%; color: #64748b; font-size: .82rem; }
-    .ga-filtre { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-left: auto; }
-    .ga-filtre select { border: 1px solid #d7dce5; border-radius: 8px; padding: 6px 10px; font-size: .84rem; background: #fff; }
-    .ga-kpi { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .ga-ust .sub { width: 100%; color: #64748b; font-size: .8rem; }
+    .ga-arac { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-left: auto; }
+    .ga-arac select { border: 1px solid #d7dce5; border-radius: 8px; padding: 6px 10px; font-size: .84rem; background: #fff; }
+    .ga-btn { border: 1px solid #d7dce5; background: #fff; color: #334155; border-radius: 8px; padding: 6px 12px; font-size: .8rem; font-weight: 600; cursor: pointer; text-decoration: none; }
+    .ga-btn.ok { background: #16a34a; border-color: #16a34a; color: #fff; } .ga-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .ga-kpi { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
     @@media (max-width: 1200px) { .ga-kpi { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-    .ga-kpi > div { background: #fff; border: 1px solid #e5e7eb; border-left: 4px solid var(--k, #2563eb); border-radius: 10px; padding: 9px 12px; }
-    .ga-kpi .l { font-size: .64rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #64748b; } .ga-kpi .v { font-size: 1.05rem; font-weight: 800; color: #0f172a; } .ga-kpi .s { font-size: .7rem; color: #64748b; }
-    .ga-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; margin-bottom: 12px; }
-    .ga-card-head { padding: 9px 14px; border-bottom: 1px solid #eef2f7; background: #f8fafc; font-weight: 700; font-size: .84rem; color: #334155; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-    table.ga { width: 100%; border-collapse: collapse; font-size: .8rem; }
-    table.ga th { text-align: left; padding: 7px 10px; }
-    table.ga td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; }
-    table.ga tfoot td { font-weight: 700; background: #f8fafc; border-top: 2px solid #e2e8f0; }
-    table.ga tr.bos td { color: #94a3b8; }
-    .ga-bar { display: grid; grid-template-columns: 70px 1fr 110px; gap: 8px; align-items: center; padding: 4px 14px; font-size: .78rem; }
-    .ga-bar .t { height: 10px; background: #f1f5f9; border-radius: 999px; overflow: hidden; display: flex; }
-    .ga-bar .t i { display: block; height: 100%; } .ga-bar .t .s { background: #2563eb; } .ga-bar .t .a { background: #f59e0b; }
-    .ga-lejant { display: flex; gap: 14px; font-size: .74rem; color: #475569; padding: 6px 14px 10px; }
-    .ga-lejant span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; background: var(--c); }
-    .ga-not { font-size: .74rem; color: #64748b; }
+    .ga-kpi > div { background: #fff; border: 1px solid #e5e7eb; border-left: 4px solid var(--k, #2563eb); border-radius: 10px; padding: 8px 12px; }
+    .ga-kpi .l { font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #64748b; } .ga-kpi .v { font-size: 1rem; font-weight: 800; color: #0f172a; white-space: nowrap; } .ga-kpi .s { font-size: .68rem; color: #64748b; }
+    .ga-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
+    .ga-card-head { padding: 8px 14px; border-bottom: 1px solid #eef2f7; background: #f8fafc; font-weight: 700; font-size: .84rem; color: #334155; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .ga-not { font-size: .72rem; color: #64748b; font-weight: 500; }
+    .ga-scroll { overflow: auto; max-height: calc(100vh - 290px); }
+    table.gm { border-collapse: separate; border-spacing: 0; font-size: .74rem; min-width: 1500px; width: 100%; }
+    table.gm th { position: sticky; top: 0; z-index: 3; background: #1e3a8a !important; color: #fff !important; font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 7px 8px; text-align: right; white-space: nowrap; border-bottom: 2px solid #1e40af; }
+    table.gm th.l { text-align: left; }
+    table.gm th.sb { left: 0; z-index: 4; width: 92px; min-width: 92px; } table.gm th.sa { left: 92px; z-index: 4; width: 250px; min-width: 250px; }
+    table.gm th.top, table.gm th.ort { background: #0f766e !important; }
+    table.gm td { padding: 4px 8px; border-bottom: 1px solid #eef2f7; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; background: #fff; }
+    table.gm td.sb, table.gm td.sa { position: sticky; z-index: 2; text-align: left; }
+    table.gm td.sb { left: 0; width: 92px; min-width: 92px; font-weight: 800; font-size: .66rem; color: #1e3a8a; letter-spacing: .04em; border-right: 1px solid #e2e8f0; }
+    table.gm td.sa { left: 92px; width: 250px; min-width: 250px; border-right: 2px solid #e2e8f0; color: #0f172a; }
+    table.gm tr.leaf td.sa { padding-left: 16px; }
+    table.gm td.top, table.gm td.ort { background: #f0fdfa; font-weight: 700; border-left: 2px solid #ccfbf1; }
+    table.gm tr.sub td { background: #f1f5f9; font-weight: 700; } table.gm tr.sub td.top, table.gm tr.sub td.ort { background: #ccfbf1; }
+    table.gm tr.sonuc td { background: #fef3c7; font-weight: 800; color: #78350f; } table.gm tr.sonuc td.top, table.gm tr.sonuc td.ort { background: #fde68a; }
+    table.gm tr.son td { background: #dcfce7; color: #14532d; font-weight: 800; font-size: .78rem; } table.gm tr.son td.top, table.gm tr.son td.ort { background: #bbf7d0; }
+    table.gm tr.bolum-bas td { border-top: 2px solid #cbd5e1; }
+    table.gm td.neg { color: #b91c1c; }
+    table.gm td.acik { color: #cbd5e1; }
+    table.gm td.giris { padding: 0; }
+    table.gm td.giris input { width: 100%; min-width: 96px; border: 1px solid transparent; background: transparent; text-align: right; font: inherit; padding: 4px 8px; color: inherit; font-variant-numeric: tabular-nums; }
+    table.gm td.giris input:hover { border-color: #cbd5e1; background: #fff; } table.gm td.giris input:focus { outline: none; border-color: #2563eb; background: #eff6ff; }
+    table.gm td.giris input.kirli { background: #fef9c3; }
+    table.gm td.giris input.neg { color: #b91c1c; }
+    .ga-lejant { display: flex; gap: 14px; flex-wrap: wrap; font-size: .72rem; color: #475569; padding: 8px 14px; border-top: 1px solid #eef2f7; }
+    .ga-lejant span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -2px; background: var(--c); border: 1px solid rgba(0,0,0,.08); }
 </style>
 
 <div class="ga-wrap">
     <div class="ga-ust">
-        <h1><i class="fa-solid fa-chart-line"></i> Genel Analiz Raporu</h1>
-        <div class="ga-filtre">
-            <select id="gaSirket"><option value="">Tüm şirketler</option>@foreach (var s in sirketler) { <option>@s</option> }</select>
-            <select id="gaYil">@for (int y = yil; y >= yil - 3; y--) { <option value="@y">@y</option> }</select>
+        <h1><i class="fa-solid fa-chart-line"></i> <span id="gaBaslik">@yil Aylık Analiz Raporu</span></h1>
+        <div class="ga-arac">
+            <select id="gaYil">@for (int y = yil + 1; y >= yil - 3; y--) { <option value="@y" selected="@(y == yil)">@y</option> }</select>
+            <button type="button" class="ga-btn ok" id="gaKaydet" disabled><i class="fa-solid fa-floppy-disk"></i> Kaydet <span id="gaKirli"></span></button>
+            <button type="button" class="ga-btn" id="gaGeriAl" disabled><i class="fa-solid fa-rotate-left"></i> Değişiklikleri geri al</button>
+            <a class="ga-btn" id="gaCsv" href="/GenelAnaliz/Csv?yil=@yil"><i class="fa-solid fa-file-excel"></i> Excel (CSV) indir</a>
+            <button type="button" class="ga-btn" id="gaYazdir"><i class="fa-solid fa-print"></i> Yazdır</button>
         </div>
-        <span class="sub">Şirket bazında aylık satış, alım, brüt kâr, tahsilat ve ödeme seyri ile dönem özeti. Tahsilat ayrıntısı için aynı gruptaki Tahsilat Analiz Raporu kullanılır. <span class="ga-not">Veriler örnektir; kaynak bağlanınca gerçek değerlerle değişecek.</span></span>
+        <span class="sub">Excel'deki "Aylık Analiz Raporu" şablonuyla aynı satır ve sütun düzeni: bölüm, açıklama, Ocak–Aralık, yıl toplamı ve aylık ortalama. Beyaz hücreler yazılabilir; alt toplam, ara sonuç ve sonuç satırları ile TOPLAM / AYLIK ORT. anında hesaplanır. <span class="ga-not" id="gaKayitBilgi">Değerler örnektir; muhasebe kaynağı bağlanınca gerçek değerlerle değişecek.</span></span>
     </div>
 
     <div class="ga-kpi" id="gaKpi"></div>
 
     <div class="ga-card">
-        <div class="ga-card-head"><span><i class="fa-solid fa-table-list"></i> Aylık seyir · <span id="gaBaslik"></span></span><span class="ga-not">tutarlar TL</span></div>
-        <div class="table-responsive"><table class="ga" id="gaTablo"><thead><tr><th>Ay</th><th>Satış</th><th>Alım</th><th>Brüt Kâr</th><th>Kâr Marjı</th><th>Tahsilat</th><th>Ödeme</th><th>Net Nakit</th></tr></thead><tbody></tbody><tfoot><tr id="gaToplam"></tr></tfoot></table></div>
-    </div>
-
-    <div class="ga-card">
-        <div class="ga-card-head"><span><i class="fa-solid fa-chart-bar"></i> Satış / alım karşılaştırması</span></div>
-        <div id="gaBarlar" style="padding-top:6px"></div>
-        <div class="ga-lejant"><span style="--c:#2563eb">Satış</span><span style="--c:#f59e0b">Alım</span></div>
+        <div class="ga-card-head"><span><i class="fa-solid fa-table-cells"></i> Aylık analiz matrisi · <span id="gaDonem"></span></span><span class="ga-not">tutarlar TL · eksi değerler kırmızı · Enter / Tab ile sonraki hücre</span></div>
+        <div class="ga-scroll"><table class="gm" id="gaTablo" data-dinamik="kapali"><thead><tr id="gaBaslikSatiri"></tr></thead><tbody id="gaGovde"></tbody></table></div>
+        <div class="ga-lejant"><span style="--c:#fff">Girilebilir hücre</span><span style="--c:#f1f5f9">Alt toplam</span><span style="--c:#fef3c7">Ara sonuç</span><span style="--c:#dcfce7">Sonuç (kur farkı sonrası)</span><span style="--c:#f0fdfa">Toplam / aylık ortalama</span><span style="--c:#fef9c3">Kaydedilmemiş değişiklik</span></div>
     </div>
 </div>
 
 <script>
 (() => {
-    const $ = s => document.querySelector(s);
-    const AYLAR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
-    const fmt = n => (Number(n) || 0).toLocaleString('tr-TR', { maximumFractionDigits: 0 });
-    const yuzde = (a, b) => b ? '%' + (a / b * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) : '—';
+    const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
+    const esc = s => (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const fmt = n => n == null ? '' : Number(n).toLocaleString('tr-TR', { maximumFractionDigits: 0 });
+    const parse = s => { s = String(s ?? '').trim(); if (!s) return null; const n = parseFloat(s.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '')); return isNaN(n) ? null : n; };
+    const mesaj = (tip, m) => { if (window.toastr) toastr[tip === 'danger' ? 'error' : tip](m); else alert(m); };
+    let D = null, DEG = {}, ORJ = {}, kirli = new Set();
+
     function yukle() {
-        fetch(`/GenelAnaliz/Veri?sirket=${encodeURIComponent($('#gaSirket').value)}&yil=${$('#gaYil').value}`).then(r => r.json()).then(d => {
-            if (!d.success) return;
-            const o = d.ozet;
-            $('#gaBaslik').textContent = `${d.sirket} · ${d.yil}${d.sonAy < 12 ? ` (${d.sonAy} ay)` : ''}`;
-            $('#gaKpi').innerHTML = [
-                ['#2563eb', 'Satış', fmt(o.satis) + ' TL', `${o.aktifMusteri} aktif müşteri`],
-                ['#f59e0b', 'Alım', fmt(o.alim) + ' TL', `${o.aktifTedarikci} aktif tedarikçi`],
-                ['#16a34a', 'Brüt Kâr', fmt(o.brutKar) + ' TL', 'marj ' + yuzde(o.brutKar, o.satis)],
-                ['#0ea5e9', 'Tahsilat', fmt(o.tahsilat) + ' TL', 'tahsilat oranı ' + yuzde(o.tahsilat, o.satis)],
-                ['#dc2626', 'Açık Alacak', fmt(o.acikAlacak) + ' TL', 'satış − tahsilat'],
-                ['#64748b', 'Açık Borç', fmt(o.acikBorc) + ' TL', `${o.acikSiparis} açık sipariş`]
-            ].map(k => `<div style="--k:${k[0]}"><div class="l">${k[1]}</div><div class="v">${k[2]}</div><div class="s">${k[3]}</div></div>`).join('');
-            $('#gaTablo tbody').innerHTML = d.aylar.map(a => a.satis ? `<tr><td>${AYLAR[a.ay - 1]}</td><td>${fmt(a.satis)}</td><td>${fmt(a.alim)}</td><td>${fmt(a.brutKar)}</td><td>${yuzde(a.brutKar, a.satis)}</td><td>${fmt(a.tahsilat)}</td><td>${fmt(a.odeme)}</td><td>${fmt(a.netNakit)}</td></tr>` : `<tr class="bos"><td>${AYLAR[a.ay - 1]}</td><td colspan="7">Dönem henüz kapanmadı</td></tr>`).join('');
-            $('#gaToplam').innerHTML = `<td>Toplam</td><td>${fmt(o.satis)}</td><td>${fmt(o.alim)}</td><td>${fmt(o.brutKar)}</td><td>${yuzde(o.brutKar, o.satis)}</td><td>${fmt(o.tahsilat)}</td><td>${fmt(o.odeme)}</td><td>${fmt(o.tahsilat - o.odeme)}</td>`;
-            const mx = Math.max(1, ...d.aylar.map(a => Math.max(a.satis, a.alim)));
-            $('#gaBarlar').innerHTML = d.aylar.filter(a => a.satis).map(a => `<div class="ga-bar"><span>${AYLAR[a.ay - 1].slice(0, 3)}</span><span class="t" title="Satış ${fmt(a.satis)} · Alım ${fmt(a.alim)}"><i class="s" style="width:${a.satis / mx * 50}%"></i><i class="a" style="width:${a.alim / mx * 50}%"></i></span><span style="text-align:right;font-variant-numeric:tabular-nums">${fmt(a.brutKar)}</span></div>`).join('') || '<div class="ga-not" style="padding:14px">Seçilen yıl için veri yok.</div>';
+        const yil = $('#gaYil').value;
+        fetch('/GenelAnaliz/Veri?yil=' + yil).then(r => r.json()).then(d => {
+            if (!d.success) { mesaj('danger', d.message); return; }
+            D = d; DEG = {}; ORJ = {}; kirli.clear();
+            for (const k in d.degerler) { DEG[k] = d.degerler[k].slice(); ORJ[k] = d.degerler[k].slice(); }
+            $('#gaBaslik').textContent = `${d.yil} Aylık Analiz Raporu`; document.title = `${d.yil} Aylık Analiz Raporu`;
+            $('#gaCsv').href = '/GenelAnaliz/Csv?yil=' + d.yil;
+            $('#gaDonem').textContent = d.kapaliAy ? `${d.aylar[0]} – ${d.aylar[d.kapaliAy - 1]} ${d.yil} dolu (${d.kapaliAy} ay)` : `${d.yil}: henüz kapanan ay yok`;
+            $('#gaKayitBilgi').textContent = d.sonKayit ? `Son kayıt: ${d.sonKayit.kisi} · ${d.sonKayit.tarih}` : 'Değerler örnektir; muhasebe kaynağı bağlanınca gerçek değerlerle değişecek.';
+            cizBaslik(); cizGovde(); hesapla();
+        }).catch(e => mesaj('danger', 'Veri yüklenemedi: ' + e.message));
+    }
+    function cizBaslik() {
+        $('#gaBaslikSatiri').innerHTML = `<th class="l sb">Bölüm</th><th class="l sa">Açıklama</th>` + D.aylar.map(a => `<th>${esc(a)}</th>`).join('') + `<th class="top">Toplam ${D.yil}</th><th class="ort">Aylık Ort.</th>`;
+    }
+    function cizGovde() {
+        let sonBolum = null;
+        $('#gaGovde').innerHTML = D.satirlar.map(s => {
+            const yeniBolum = s.bolum !== sonBolum; sonBolum = s.bolum;
+            const cls = s.tip === 'leaf' ? 'leaf' : s.tip === 'sub' ? 'sub' : (s.k === 'sonuc' ? 'son' : 'sonuc');
+            const hucreler = D.aylar.map((_, ay) => s.tip === 'leaf'
+                ? `<td class="giris"><input data-k="${s.k}" data-ay="${ay}" value="${fmt(DEG[s.k] ? DEG[s.k][ay] : null)}" inputmode="decimal" aria-label="${esc(s.ad)} ${esc(D.aylar[ay])}"></td>`
+                : `<td data-k="${s.k}" data-ay="${ay}"></td>`).join('');
+            return `<tr class="${cls} ${yeniBolum ? 'bolum-bas' : ''}" data-k="${s.k}"><td class="sb">${yeniBolum ? esc(s.bolum) : ''}</td><td class="sa">${esc(s.ad)}</td>${hucreler}<td class="top" data-k="${s.k}" data-c="top"></td><td class="ort" data-k="${s.k}" data-c="ort"></td></tr>`;
+        }).join('');
+        $$('#gaGovde input').forEach(inp => {
+            inp.addEventListener('change', () => { const k = inp.dataset.k, ay = +inp.dataset.ay; const v = parse(inp.value); DEG[k][ay] = v; inp.value = fmt(v); inp.classList.toggle('neg', v != null && v < 0); const id = k + ':' + ay; if ((ORJ[k][ay] ?? null) !== (v ?? null)) kirli.add(id); else kirli.delete(id); inp.classList.toggle('kirli', kirli.has(id)); hesapla(); });
+            inp.addEventListener('focus', () => inp.select());
+            inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const all = $$('#gaGovde input'); const i = all.indexOf(inp); const sonraki = all.find((x, j) => j > i && x.dataset.ay === inp.dataset.ay) || all[i + 1]; if (sonraki) sonraki.focus(); } });
+            if (parse(inp.value) < 0) inp.classList.add('neg');
         });
     }
-    $('#gaSirket').addEventListener('change', yukle); $('#gaYil').addEventListener('change', yukle);
+    // Hesaplanan satırlar: terimlerin işaretli toplamı; boş terimler atlanır, hepsi boşsa hücre boş (Excel: IF(COUNT()=0,""))
+    function hesapla() {
+        const H = {};
+        for (const s of D.satirlar) {
+            if (s.tip === 'leaf') { H[s.k] = DEG[s.k] || new Array(12).fill(null); continue; }
+            H[s.k] = D.aylar.map((_, ay) => { let t = null; for (const tm of s.terimler) { const v = H[tm.k] ? H[tm.k][ay] : null; if (v != null) t = (t ?? 0) + tm.i * v; } return t; });
+            for (let ay = 0; ay < 12; ay++) { const td = document.querySelector(`td[data-k="${s.k}"][data-ay="${ay}"]`); if (td) { td.textContent = fmt(H[s.k][ay]); td.classList.toggle('neg', H[s.k][ay] != null && H[s.k][ay] < 0); } }
+        }
+        for (const s of D.satirlar) {
+            const dolu = H[s.k].filter(v => v != null); const top = dolu.length ? dolu.reduce((a, b) => a + b, 0) : null; const ort = dolu.length ? top / dolu.length : null;
+            const tt = document.querySelector(`td[data-k="${s.k}"][data-c="top"]`), to = document.querySelector(`td[data-k="${s.k}"][data-c="ort"]`);
+            tt.textContent = fmt(top); tt.classList.toggle('neg', top != null && top < 0); to.textContent = fmt(ort); to.classList.toggle('neg', ort != null && ort < 0);
+        }
+        const g = k => { const d = H[k].filter(v => v != null); return d.length ? d.reduce((a, b) => a + b, 0) : 0; };
+        const ciro = g('toplamCiro'), alimGider = g('alimGider'), faaliyet = g('faaliyet'), amor = g('toplamAmor'), donemNet = g('donemNet'), kur = g('toplamKur'), sonuc = g('sonuc');
+        const oran = (a, b) => b ? '%' + (a / b * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) : '—';
+        $('#gaKpi').innerHTML = [
+            ['#1e3a8a', 'Toplam Ciro', fmt(ciro), `${H.toplamCiro.filter(v => v != null).length} ay · ort ${fmt(H.toplamCiro.filter(v => v != null).length ? ciro / H.toplamCiro.filter(v => v != null).length : null)}`],
+            ['#f59e0b', 'Alım + Giderler', fmt(alimGider), 'ciroya oranı ' + oran(alimGider, ciro)],
+            ['#0d9488', 'Faaliyet Kâr / Zararı', fmt(faaliyet), 'marj ' + oran(faaliyet, ciro)],
+            ['#64748b', 'Demirbaş + Amortisman', fmt(amor), 'dönem net ' + fmt(donemNet)],
+            [kur < 0 ? '#dc2626' : '#2563eb', 'Toplam Kur Farkı', fmt(kur), kur < 0 ? 'kur zararı' : 'kur kârı'],
+            [sonuc < 0 ? '#dc2626' : '#16a34a', 'Kur Farkı Sonrası Kâr / Zarar', fmt(sonuc), 'net marj ' + oran(sonuc, ciro)]
+        ].map(k => `<div style="--k:${k[0]}"><div class="l">${k[1]}</div><div class="v ${k[2].startsWith('-') ? 'neg' : ''}" style="${k[2].startsWith('-') ? 'color:#b91c1c' : ''}">${k[2] || '—'} ${k[2] ? 'TL' : ''}</div><div class="s">${k[3]}</div></div>`).join('');
+        $('#gaKaydet').disabled = $('#gaGeriAl').disabled = kirli.size === 0; $('#gaKirli').textContent = kirli.size ? `(${kirli.size})` : '';
+    }
+    $('#gaYil').addEventListener('change', () => { if (kirli.size && !confirm('Kaydedilmemiş değişiklikler var. Yıl değiştirilsin mi?')) { $('#gaYil').value = D.yil; return; } yukle(); });
+    $('#gaGeriAl').addEventListener('click', () => { for (const k in ORJ) DEG[k] = ORJ[k].slice(); kirli.clear(); cizGovde(); hesapla(); });
+    $('#gaKaydet').addEventListener('click', async () => {
+        const degerler = {}; for (const id of kirli) { const k = id.split(':')[0]; degerler[k] = DEG[k]; }
+        const r = await fetch('/GenelAnaliz/Kaydet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ yil: D.yil, degerler }) }); const j = await r.json();
+        mesaj(j.success ? 'success' : 'danger', j.message); if (j.success) { for (const k in degerler) ORJ[k] = DEG[k].slice(); kirli.clear(); $$('#gaGovde input.kirli').forEach(i => i.classList.remove('kirli')); $('#gaKayitBilgi').textContent = `Son kayıt: ${j.kisi} · ${j.tarih}`; hesapla(); }
+    });
+    $('#gaYazdir').addEventListener('click', () => window.print());
+    window.addEventListener('beforeunload', e => { if (kirli.size) { e.preventDefault(); e.returnValue = ''; } });
     yukle();
 })();
 </script>

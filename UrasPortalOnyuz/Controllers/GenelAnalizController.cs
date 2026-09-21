@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WebApplication3.Data;
@@ -8,48 +11,71 @@ namespace WebApplication3.Controllers
 {
     /// <summary>
     /// Genel Analiz Raporu — Yönetim › Yönetim Özeti › Özel Analizler › Özel Raporlar.
-    /// Şirket bazında aylık satış / alım / brüt fark ve dönem özeti (örnek veri; kaynak bağlanınca gerçek değerlerle değişecek).
-    /// Tahsilat Analiz Raporu (Rapor35) ile aynı grupta, ayrı ekran.
+    /// "2026 Aylık Analiz Raporu" Excel şablonunun portal karşılığı: bölüm / satır / 12 ay / TOPLAM / AYLIK ORT. matrisi,
+    /// alt toplam ve sonuç satırları otomatik. Yaprak hücreler ekrandan girilip kaydedilir (bellek içi).
+    /// Yapı ve örnek veri: Data/GenelAnalizOrnek.cs
     /// </summary>
     [Authorize]
     public class GenelAnalizController : Controller
     {
+        private static readonly CultureInfo Tr = new CultureInfo("tr-TR");
+        private string Ben() => OrnekVeri.KullaniciAdi(User?.Identity?.Name ?? "");
+
         public IActionResult Index()
         {
             ViewData["Title"] = "Genel Analiz Raporu";
-            ViewBag.Sirketler = OrnekVeri.Sirketler.Select(s => s.Display).Distinct().ToArray();
             ViewBag.Yil = DateTime.Today.Year;
+            ViewBag.Kullanici = Ben();
             return View();
         }
 
-        /// <summary>Aylık satış, alım, tahsilat ve ödeme serileri (örnek; şirket ve yıla göre tohumlu üretilir).</summary>
+        /// <summary>Satır yapısı + yılın yaprak değerleri (hesaplanan satırlar istemcide de sunucuda da aynı kuralla üretilir).</summary>
         [HttpGet]
-        public IActionResult Veri(string sirket, int yil)
+        public IActionResult Veri(int yil)
         {
             if (yil == 0) yil = DateTime.Today.Year;
-            var rnd = new Random((sirket ?? "").GetHashCode() ^ yil);
-            int sonAy = yil < DateTime.Today.Year ? 12 : yil > DateTime.Today.Year ? 0 : DateTime.Today.Month;
-            decimal olcek = string.IsNullOrEmpty(sirket) ? 3.2m : 1m;
-            var aylar = Enumerable.Range(1, 12).Select(i =>
+            lock (GenelAnalizOrnek.Kilit)
             {
-                bool var = i <= sonAy;
-                decimal satis = var ? Math.Round((18 + rnd.Next(0, 24)) * 1_000_000m * olcek + rnd.Next(0, 999_999), 2) : 0;
-                decimal alim = var ? Math.Round(satis * (0.52m + rnd.Next(0, 18) / 100m), 2) : 0;
-                decimal tahsilat = var ? Math.Round(satis * (0.78m + rnd.Next(0, 20) / 100m), 2) : 0;
-                decimal odeme = var ? Math.Round(alim * (0.80m + rnd.Next(0, 18) / 100m), 2) : 0;
-                return new { ay = i, satis, alim, brutKar = satis - alim, tahsilat, odeme, netNakit = tahsilat - odeme };
-            }).ToList();
-            var dolu = aylar.Where(a => a.satis > 0).ToList();
-            return Json(new
-            {
-                success = true, sirket = string.IsNullOrEmpty(sirket) ? "Tüm Şirketler" : sirket, yil, sonAy, aylar,
-                ozet = new
+                var d = GenelAnalizOrnek.Degerler(yil);
+                var kayit = GenelAnalizOrnek.SonKayit.TryGetValue(yil, out var k) ? new { kisi = k.Kisi, tarih = k.Tarih.ToString("dd.MM.yyyy HH:mm") } : null;
+                return Json(new
                 {
-                    satis = dolu.Sum(a => a.satis), alim = dolu.Sum(a => a.alim), brutKar = dolu.Sum(a => a.brutKar), tahsilat = dolu.Sum(a => a.tahsilat), odeme = dolu.Sum(a => a.odeme),
-                    acikAlacak = Math.Round(dolu.Sum(a => a.satis - a.tahsilat), 2), acikBorc = Math.Round(dolu.Sum(a => a.alim - a.odeme), 2),
-                    aktifMusteri = 480 + rnd.Next(0, 300), aktifTedarikci = 160 + rnd.Next(0, 120), acikSiparis = 20 + rnd.Next(0, 60)
-                }
-            });
+                    success = true, yil, kapaliAy = GenelAnalizOrnek.KapaliAy(yil), aylar = GenelAnalizOrnek.Aylar, sonKayit = kayit,
+                    satirlar = GenelAnalizOrnek.Satirlar.Select(s => new { k = s.K, ad = s.Ad, bolum = s.Bolum, tip = s.Tip, terimler = s.Terimler.Select(t => new { k = t.K, i = t.Isaret }) }),
+                    degerler = d
+                });
+            }
+        }
+
+        /// <summary>Yaprak satır değerlerini kaydeder. Gövde: { yil, degerler: { anahtar: [12 sayı | null] } }</summary>
+        [HttpPost, IgnoreAntiforgeryToken]
+        public IActionResult Kaydet([FromBody] KaydetIstek d)
+        {
+            if (d == null || d.Degerler == null) return Json(new { success = false, message = "Veri yok." });
+            int yil = d.Yil == 0 ? DateTime.Today.Year : d.Yil;
+            string hata = GenelAnalizOrnek.Kaydet(yil, d.Degerler, Ben());
+            return hata != null ? Json(new { success = false, message = hata }) : Json(new { success = true, message = $"{yil} Aylık Analiz Raporu kaydedildi ({d.Degerler.Count} satır).", kisi = Ben(), tarih = DateTime.Now.ToString("dd.MM.yyyy HH:mm") });
+        }
+        public class KaydetIstek { public int Yil { get; set; } public Dictionary<string, decimal?[]> Degerler { get; set; } }
+
+        /// <summary>Excel şablonuyla aynı düzende CSV (noktalı virgül; Excel doğrudan açar).</summary>
+        [HttpGet]
+        public IActionResult Csv(int yil)
+        {
+            if (yil == 0) yil = DateTime.Today.Year;
+            var h = GenelAnalizOrnek.Hesapla(yil);
+            var sb = new StringBuilder();
+            sb.AppendLine($"{yil} AYLIK ANALİZ RAPORU");
+            sb.AppendLine("BÖLÜM;AÇIKLAMA;" + string.Join(";", GenelAnalizOrnek.Aylar.Select(a => a.ToUpper(Tr))) + $";TOPLAM {yil};AYLIK ORT.");
+            string sonBolum = null;
+            foreach (var s in GenelAnalizOrnek.Satirlar)
+            {
+                var v = h[s.K]; var dolu = v.Where(x => x.HasValue).Select(x => x.Value).ToList();
+                string F(decimal? x) => x.HasValue ? x.Value.ToString("N0", Tr) : "";
+                sb.AppendLine($"{(s.Bolum != sonBolum ? s.Bolum : "")};{s.Ad};" + string.Join(";", v.Select(F)) + ";" + (dolu.Count > 0 ? dolu.Sum().ToString("N0", Tr) : "") + ";" + (dolu.Count > 0 ? dolu.Average().ToString("N0", Tr) : ""));
+                sonBolum = s.Bolum;
+            }
+            return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray(), "text/csv; charset=utf-8", $"{yil}_Aylik_Analiz_Raporu.csv");
         }
     }
 }

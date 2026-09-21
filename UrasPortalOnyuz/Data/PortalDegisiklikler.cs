@@ -60,7 +60,7 @@ namespace WebApplication3.Data
             DateTime T(int gun, int ay) => new DateTime(DateTime.Today.Year, ay, gun);
 
             // --- Yeni eklenen rapor / ekranlar ---
-            Yeni(l, T(21, 9), "Genel Analiz Raporu", "Yönetim › Yönetim Özeti › Özel Analizler › Özel Raporlar altında ayrı ekran: şirket ve yıla göre aylık satış / alım / brüt kâr / tahsilat / ödeme seyri ve dönem özeti (örnek veri).");
+            Yeni(l, T(21, 9), "Genel Analiz Raporu", "Yönetim › Özel Raporlar altında, \"2026 Aylık Analiz Raporu\" Excel şablonuyla aynı düzende: Ciro (şirket alt toplamları), Alımlar, Giderler, Ara Sonuç, Amortisman, Kur Farkı ve Sonuç satırları; 12 ay + Toplam + Aylık Ort.; yazılabilir hücreler, otomatik alt toplam, kaydet ve Excel (CSV) çıktısı.");
             Yeni(l, T(21, 9), "Aylık Alım Onay Ekranı", "Muhasebe'nin hazırladığı aylık alım raporu (tedarikçi faturaları, kalem detayı ve fatura görüntüsü); satınalmacı ve Tedarik Zinciri Direktörü ay sonu onayı, uyarılar, ay kapanışı. Tedarik Zinciri ve Muhasebe menülerinde.", "/Modul/tedarik-zinciri?yol=satin-alma/fiyat-alim-analizi/r0", "Tedarik Zinciri › Satın Alma › Fiyat ve Alım Analizi");
             Yeni(l, T(20, 9), "Grup İçi Özel Finansal İşlemler Raporu", "Yansıtma, Mahsup ve Temlik işlemlerinin birleşik listesi; şirket bazında açık tutarlar ve ERP grup içi bakiye tablosu.");
             Yeni(l, T(20, 9), "Temlik İşlemleri", "Alacağın grup şirketine devri: Muhasebe → Hukuk → Finans onayı, sözleşme, borçluya bildirim, tahsilat ve kapanış.", "/Modul/mali-isler?yol=grup-ici-ozel/r2", "Mali İşler › Grup İçi Özel Finansal İşlemler");   // aynı ad Muhasebe'de de var (Rapor121); adres elle
