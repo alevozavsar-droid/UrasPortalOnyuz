@@ -1,0 +1,299 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string ust = (string)ViewBag.Ust ?? "islem";
+    string no = (string)ViewBag.No ?? "";
+}
+@*
+    TEMLİK MODÜLÜ — "URAS HOLDING Temlik Modülü IT Teknik ve İşlevsel Gereksinim Dokümanı v1.0 (21.09.2026)"
+    Çok taraflı temlik zinciri (2-10 taraf, N-1 transfer step), kaynak alacak / fatura satırlarının TEK TEK seçimi ve kısmi temlik, step bazlı
+    muhasebe simülasyonu ve konsolide görünüm, Temlik Belgesi Oluştur (dinamik imza blokları, versiyon, hash), imza akışı, step bazlı ERP,
+    Temlik Raporu ve Temlik Muhasebe Kontrolü (beklenen–gerçekleşen + zincir bütünlüğü). Yerleşim EK A.
+    Veri: /Temlik/Veri, KaynakAlacaklar, Onizleme, Kaydet, OnayaGonder, Onay, GeriCek, BelgeOlustur, ImzayaGonder, Imzala, BelgeYukle, BelgeGecersiz,
+    Bildirim, Muhasebelestir, TersKayit, Iptal, Kontrol, FarkKapat, Parametre. Betik: wwwroot/js/temlik.js · Kurallar: Data/TemlikOrnek.cs
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<style>
+    .na.tl { --na-k: #b45309; }
+    .tl .na-kpi { grid-template-columns: repeat(6, 1fr); }
+    .gi-ust { margin-bottom: 10px; }
+    .gi-ust button { font-size: .74rem; font-weight: 700; color: #475569; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px 11px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+    .gi-ust button:hover { border-color: #cbd5e1; background: #f8fafc; }
+    .gi-ust button.aktif { background: var(--na-k); border-color: var(--na-k); color: #fff; }
+    .gi-ust button .n { font-size: .62rem; background: rgba(255,255,255,.25); border-radius: 999px; padding: 1px 6px; }
+    .gi-ust button:not(.aktif) .n { background: #f1f5f9; color: #475569; }
+    .gi-panel { display: none; } .gi-panel.aktif { display: block; }
+    .tl-rol { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: .7rem; color: #64748b; }
+    .tl-rol select { font-size: .72rem; min-height: 28px; padding: 2px 24px 2px 8px; width: auto; }
+    .tl-aksiyon { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+    .tl-aksiyon .btn { font-size: .7rem; padding: 3px 9px; font-weight: 700; }
+    .tl-aksiyon .ayrac { width: 1px; height: 20px; background: #e2e8f0; margin: 0 3px; }
+    .tl-durum { font-size: .64rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+    .tl-kap { max-height: 360px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+    table.tl-tablo { width: 100%; font-size: .7rem; border-collapse: separate; border-spacing: 0; }
+    table.tl-tablo.genis { min-width: 1500px; }
+    table.tl-tablo th { position: sticky; top: 0; z-index: 2; background: #f8fafc; font-size: .6rem; text-transform: uppercase; letter-spacing: .03em; color: #64748b; padding: 5px 6px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; text-align: left; }
+    table.tl-tablo td { padding: 3px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; white-space: nowrap; }
+    table.tl-tablo th.s, table.tl-tablo td.s { text-align: right; font-variant-numeric: tabular-nums; }
+    table.tl-tablo th.g, table.tl-tablo td.g { background: #fff7ed; } table.tl-tablo th.h, table.tl-tablo td.h { background: #fafafa; }
+    table.tl-tablo tr.secili td { background: #fffbeb; } table.tl-tablo tr.secili td.g { background: #fde68a55; } table.tl-tablo tr.pasif td { color: #94a3b8; }
+    table.tl-tablo tr.belge td { background: #f1f5f9; font-weight: 700; color: #0f172a; }
+    table.tl-tablo input.form-control, table.tl-tablo select.form-select { font-size: .7rem; min-height: 24px; padding: 1px 5px; display: inline-block; }
+    table.tl-tablo input.form-control { width: 110px; text-align: right; } table.tl-tablo input.form-control.t { width: 130px; text-align: left; } table.tl-tablo select.form-select { width: auto; padding-right: 22px; }
+    table.tl-tablo input:disabled, table.tl-tablo select:disabled { background: #f8fafc; }
+    table.tl-tablo tfoot td { font-weight: 800; background: #f8fafc; border-top: 2px solid #e2e8f0; }
+    table.tl-tablo .rol { font-size: .6rem; font-weight: 800; padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
+    .rol.ilk { background: #dbeafe; color: #1d4ed8; } .rol.ara { background: #fef3c7; color: #b45309; } .rol.nihai { background: #dcfce7; color: #15803d; }
+    .tl-tip { font-size: .58rem; font-weight: 700; padding: 1px 5px; border-radius: 4px; background: #f1f5f9; color: #475569; }
+    .tl-arac { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; font-size: .7rem; }
+    .tl-arac .form-control, .tl-arac .form-select { width: auto; font-size: .7rem; min-height: 26px; padding: 1px 6px; } .tl-arac .sayac { margin-left: auto; font-weight: 700; color: #b45309; }
+    .tl-zincir { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: .7rem; font-weight: 700; margin: 4px 0 8px; }
+    .tl-zincir span { background: #fff; border: 1px solid #e2e8f0; border-radius: 999px; padding: 2px 9px; } .tl-zincir span.g { border-color: #fbbf24; background: #fffbeb; } .tl-zincir i { color: #94a3b8; font-size: .6rem; }
+    .tl-sag { position: sticky; top: 8px; }
+    .tl-ozet { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; font-size: .72rem; } .tl-ozet .l { color: #64748b; } .tl-ozet .v { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; } .tl-ozet .buyuk { font-size: .95rem; color: #0f172a; } .tl-ozet .ayrac { grid-column: 1 / -1; border-top: 1px dashed #e2e8f0; margin: 2px 0; }
+    .tl-dogrulama { font-size: .7rem; } .tl-dogrulama li { margin-bottom: 3px; } .tl-dogrulama .h { color: #b91c1c; } .tl-dogrulama .u { color: #b45309; }
+    .tl-akis { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: .68rem; } .tl-akis span { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 2px 8px; font-weight: 700; color: #334155; } .tl-akis i { color: #94a3b8; font-size: .56rem; }
+    .tl-sim { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .tl-sim > div { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+    .tl-sim .b { background: #f8fafc; padding: 5px 9px; font-size: .68rem; font-weight: 800; color: #0f172a; display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; } .tl-sim .b small { color: #64748b; font-weight: 600; }
+    table.tl-fis { width: 100%; font-size: .68rem; border-collapse: collapse; } table.tl-fis th { font-size: .58rem; text-transform: uppercase; color: #64748b; background: #fff; padding: 3px 6px; border-bottom: 1px solid #e2e8f0; text-align: left; white-space: nowrap; }
+    table.tl-fis td { padding: 3px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: top; } table.tl-fis td.s, table.tl-fis th.s { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; } table.tl-fis tr.top td { font-weight: 800; background: #f8fafc; border-top: 2px solid #e2e8f0; }
+    table.tl-fis .k { color: #94a3b8; font-size: .6rem; display: block; } table.tl-fis code { font-size: .64rem; background: #f1f5f9; padding: 0 4px; border-radius: 4px; color: #0f172a; } table.tl-fis tr.dis td { color: #94a3b8; font-style: italic; }
+    .tl-sim-ust { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px 10px; font-size: .68rem; margin-bottom: 8px; } .tl-sim-ust .l { font-size: .56rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; } .tl-sim-ust .v { font-weight: 700; }
+    .tl-konsolide td.neg { color: #b91c1c; } .tl-konsolide td.pos { color: #15803d; }
+    .tl-adimlar { display: flex; gap: 0; align-items: center; flex-wrap: wrap; font-size: .62rem; margin-bottom: 8px; } .tl-adimlar span { padding: 3px 8px; border: 1px solid #e2e8f0; background: #fff; color: #94a3b8; font-weight: 700; margin-right: -1px; }
+    .tl-adimlar span:first-child { border-radius: 999px 0 0 999px; } .tl-adimlar span:last-child { border-radius: 0 999px 999px 0; } .tl-adimlar span.gecti { background: #dcfce7; color: #166534; border-color: #bbf7d0; } .tl-adimlar span.simdi { background: var(--na-k); color: #fff; border-color: var(--na-k); } .tl-adimlar span.hata { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .tl-filtre { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 8px; } .tl-filtre label { font-size: .6rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; letter-spacing: .04em; display: block; margin-bottom: 1px; } .tl-filtre .form-control, .tl-filtre .form-select { font-size: .7rem; min-height: 26px; padding: 1px 6px; } .tl-filtre select[multiple] { height: 58px; font-size: .68rem; }
+    .tl-drawer { position: fixed; top: 0; right: -860px; width: 840px; max-width: 95vw; height: 100vh; background: #fff; box-shadow: -8px 0 24px rgba(15,23,42,.18); z-index: 1060; transition: right .25s; overflow: auto; padding: 12px 14px; } .tl-drawer.acik { right: 0; }
+    .tl-drawer-ust { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: sticky; top: 0; background: #fff; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; z-index: 2; } .tl-perde { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1055; display: none; } .tl-perde.acik { display: block; }
+    .tl-ks { font-size: .62rem; font-weight: 800; padding: 2px 7px; border-radius: 999px; white-space: nowrap; display: inline-block; } .tl-ks.ok { background: #dcfce7; color: #15803d; } .tl-ks.kritik { background: #fee2e2; color: #b91c1c; } .tl-ks.uyari { background: #fef3c7; color: #b45309; } .tl-ks.yok { background: #f1f5f9; color: #64748b; } .tl-ks.bilgi { background: #e0f2fe; color: #0369a1; }
+    .tl-kars td.fark { background: #fff1f2; } .tl-kars td.uyar { background: #fffbeb; }
+    .tl-legend { font-size: .66rem; color: #475569; } .tl-legend li { margin-bottom: 3px; }
+    .tl-imza { display: grid; grid-template-columns: 28px 1.4fr 1fr 1fr auto auto; gap: 4px 8px; align-items: center; font-size: .7rem; padding: 4px 0; border-bottom: 1px dashed #e2e8f0; } .tl-imza .no { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: .64rem; font-weight: 800; background: #f1f5f9; color: #64748b; } .tl-imza.ok .no { background: #dcfce7; color: #166534; } .tl-imza.red .no { background: #fee2e2; color: #991b1b; }
+    .tl-belge-panel { background: #fffbeb; border: 1px solid #fde68a; } .tl-belge-panel .na-kart-b { background: #fef3c7; color: #92400e; }
+    .tl-modal .modal-dialog { max-width: 1240px; } .tl-modal table.na-tablo tr.kilit td { color: #94a3b8; cursor: not-allowed; } .tl-modal table.na-tablo tr.sec td { background: #fffbeb; }
+    /* Temlik Belgesi ön izleme (EK B) */
+    /* TEMLİK SÖZLEŞMESİ (kurumsal, final) şablonu: tek sayfa, lacivert başlık bantları, taraf ve imza sütunları */
+    .tl-doc { font-family: Arial, Helvetica, sans-serif; font-size: .78rem; color: #111; line-height: 1.4; background: #fff; padding: 30px 38px; border: 1px solid #e2e8f0; max-width: 900px; margin: 0 auto; }
+    .tl-doc h2 { font-size: 1.15rem; text-align: center; letter-spacing: .14em; margin: 0 0 12px; color: #1e3a8a; font-weight: 800; }
+    .tl-doc h3 { font-size: .74rem; letter-spacing: .08em; margin: 16px 0 6px; background: #1e3a8a; color: #fff; padding: 4px 8px; font-weight: 800; }
+    .tl-doc table { width: 100%; border-collapse: collapse; font-size: .72rem; margin: 4px 0; } .tl-doc th, .tl-doc td { border: 1px solid #94a3b8; padding: 4px 7px; text-align: left; vertical-align: top; } .tl-doc th { background: #eef2ff; font-weight: 700; } .tl-doc td.s, .tl-doc th.s { text-align: right; }
+    .tl-doc table.bas th { width: 16%; background: #eef2ff; } .tl-doc table.bas td { width: 34%; font-weight: 700; }
+    .tl-doc table tr.toplam td { font-weight: 800; background: #f1f5f9; } .tl-doc table.zincir { margin-top: 8px; }
+    .tl-doc .taraflar { display: grid; gap: 10px; } .tl-doc .taraf { border: 1px solid #94a3b8; padding: 8px 10px; font-size: .7rem; min-height: 84px; }
+    .tl-doc .taraf .rol { font-size: .62rem; font-weight: 800; letter-spacing: .06em; color: #1e3a8a; margin-bottom: 3px; } .tl-doc .unvan { font-weight: 800; font-size: .74rem; margin-bottom: 3px; }
+    .tl-doc .not { font-size: .68rem; color: #334155; margin-bottom: 4px; } .tl-doc .hukum { font-size: .74rem; text-align: justify; line-height: 1.5; }
+    .tl-doc .imzalar { display: grid; gap: 14px; margin-top: 10px; } .tl-doc .imza { border: 1px solid #94a3b8; padding: 8px; min-height: 130px; font-size: .68rem; text-align: center; display: flex; flex-direction: column; }
+    .tl-doc .imza .alan { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 56px; } .tl-doc .imza .cizgi { border-top: 1px solid #333; padding-top: 4px; color: #475569; }
+    .tl-doc .imza.ok { background: #f0fdf4; } .tl-doc .imza .damga { color: #15803d; font-weight: 700; }
+    .tl-doc .alt { margin-top: 14px; font-size: .6rem; color: #64748b; border-top: 1px dashed #94a3b8; padding-top: 4px; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    @@media (max-width: 1200px) { .tl .na-kpi { grid-template-columns: repeat(3, 1fr); } .tl-filtre { grid-template-columns: repeat(3, 1fr); } .tl-sim { grid-template-columns: 1fr; } .tl-sag { position: static; } .tl-sim-ust { grid-template-columns: repeat(3, 1fr); } }
+    @@media print { .gi-ust, .na-sekme, .tl-aksiyon, #naSonuc, .na-kpi, .tl-rol, .tl-arac, .btn, .modal-header, .modal-footer { display: none !important; } .gi-panel, .na-panel { display: block !important; } .tl-kap { max-height: none; overflow: visible; } body.tl-yazdir-belge #tl > * { display: none !important; } body.tl-yazdir-belge #tlBelgeModal { display: block !important; position: static; } body.tl-yazdir-belge .modal-dialog { max-width: 100%; margin: 0; } body.tl-yazdir-belge .modal-backdrop { display: none; } }
+</style>
+}
+
+<div class="container-fluid py-3 na tl" id="tl" data-ust="@ust" data-no="@no">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-file-contract"></i></span>Temlik İşlemleri</h4>
+        <span style="font-size:.68rem;font-weight:700;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px"><i class="fas fa-route me-1"></i>Taslak → Onay → Onaylandı → Belge Üretildi → İmza → Tam İmzalı → ERP (step bazlı) → Kontrol → Tamamlandı</span>
+        <span class="tl-rol"><i class="fas fa-user-shield"></i>Rol (demo):<select class="form-select" id="tlRol"></select><span id="tlBen" class="text-muted"></span></span>
+        <span class="sub w-100">Bir alacağın kaynak belge <b>satırları tek tek seçilerek</b> tamamen ya da kısmen; <b>2–10 taraflı zincirle</b> (A Tedarikçisi → ALV Kimya → URAS Kimya gibi) devri. Her devir ayrı transfer step; step bazlı muhasebe simülasyonu, <b>Temlik Belgesi Oluştur</b> (dinamik imza blokları, versiyon, hash), imza akışı, step bazlı idempotent ERP kaydı ve beklenen–gerçekleşen + zincir bütünlüğü kontrolü.</span>
+    </div>
+    <div class="na-turler gi-ust" id="giUst" data-dinamik="kapali">
+        <button type="button" data-u="islem" class="@(ust == "islem" ? "aktif" : "")"><i class="fas fa-pen-to-square"></i>Temlik İşlem Ekranı</button>
+        <button type="button" data-u="rapor" class="@(ust == "rapor" ? "aktif" : "")"><i class="fas fa-table-list"></i>Temlik Raporu <span class="n" id="tlRaporN">…</span></button>
+        <button type="button" data-u="kontrol" class="@(ust == "kontrol" ? "aktif" : "")"><i class="fas fa-file-invoice"></i>Temlik Muhasebe Kontrolü <span class="n" id="tlKontrolN">…</span></button>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+
+    @* ================= SEKME 1 — TEMLİK İŞLEM EKRANI (§5) ================= *@
+    <div class="gi-panel @(ust == "islem" ? "aktif" : "")" id="giIslem">
+        <div class="na-kpi" id="tlKpi" data-dinamik="kapali"></div>
+        <div class="na-sekme" id="tlSekmeler" data-dinamik="kapali">
+            <button type="button" data-p="yeni"><i class="fas fa-plus me-1"></i>Yeni Temlik</button>
+            <button type="button" data-p="liste">Temlik Listesi <span class="n" id="tlNListe">0</span></button>
+            <button type="button" data-p="detay"><i class="fas fa-file-lines me-1"></i>İşlem Detayı <span class="n" id="tlDetayNo">—</span></button>
+            <button type="button" data-p="onay">Onay Bekleyenler <span class="n" id="tlNOnay">0</span></button>
+            <button type="button" data-p="imza">İmza Bekleyenler <span class="n" id="tlNImza">0</span></button>
+        </div>
+
+        <div class="na-panel" data-p="yeni">
+            <form id="tlForm" autocomplete="off" novalidate>
+                @* ---- Üst sabit alan ---- *@
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas fa-id-card me-1"></i>İşlem Başlığı</span>
+                        <span class="tl-aksiyon">
+                            <span class="tl-durum" id="tlDurumRozet">Yeni · kaydedilmedi</span><span class="ayrac"></span>
+                            <button type="button" class="btn btn-light" id="tlYeni" title="Yeni Temlik ID ve Zincir ID oluşturur"><i class="fas fa-file me-1"></i>Yeni Temlik</button>
+                            <button type="button" class="btn btn-outline-primary" id="tlKaynakSec" title="Uygun açık alacak / fatura kayıtlarını getirir"><i class="fas fa-file-invoice me-1"></i>Kaynak Alacak Seç</button>
+                            <button type="button" class="btn btn-light" id="tlDagilim" title="Kaynak alacak tutarlarını transfer adımlarına dağıtır (her step = önceki adımdan devralınan tutar)"><i class="fas fa-diagram-project me-1"></i>Temlik Dağılımını Oluştur</button>
+                            <button type="button" class="btn btn-light" id="tlSimBtn" title="Tüm taraflar ve stepler için beklenen muhasebe / virman kayıtları"><i class="fas fa-calculator me-1"></i>Muhasebe Kaydı Simülasyonu</button>
+                            <button type="button" class="btn btn-light" id="tlTaslak" title="Muhasebe etkisi oluşturmadan kaydeder ve alacak rezervasyonu yapar"><i class="fas fa-floppy-disk me-1"></i>Taslak Kaydet</button>
+                            <button type="button" class="btn btn-primary" id="tlGonder"><i class="fas fa-paper-plane me-1"></i>Onaya Gönder</button>
+                            <button type="button" class="btn btn-warning" id="tlBelgeBtn" title="Hukuk onaylı şablondan imzaya hazır PDF / DOCX üretir (onaylı işlemde)"><i class="fas fa-file-signature me-1"></i>Temlik Belgesi Oluştur</button>
+                            <span class="ayrac"></span>
+                            <button type="button" class="btn btn-light" id="tlExcel"><i class="fas fa-file-excel me-1"></i>Excel</button>
+                            <button type="button" class="btn btn-light" id="tlPdf"><i class="fas fa-file-pdf me-1"></i>PDF</button>
+                            <button type="button" class="btn btn-outline-danger" id="tlIptalBtn"><i class="fas fa-ban me-1"></i>İptal</button>
+                        </span>
+                    </div>
+                    <div class="na-kart-g">
+                        <div class="row g-2">
+                            <div class="col-md-2"><label class="form-label">Temlik No <i class="fas fa-lock na-kilit"></i></label><input class="form-control" id="tlNo" disabled placeholder="Kayıtta otomatik"></div>
+                            <div class="col-md-2"><label class="form-label">Temlik Zincir No <i class="fas fa-lock na-kilit"></i></label><input class="form-control" id="tlZincirNo" disabled placeholder="Zincir kimliği"></div>
+                            <div class="col-md-2"><label class="form-label">Temlik Tarihi <span class="z">*</span></label><input class="form-control" type="date" id="tlTarih" required></div>
+                            <div class="col-md-2"><label class="form-label">Etkinlik Tarihi <span class="z">*</span></label><input class="form-control" type="date" id="tlEtkinlik" required></div>
+                            <div class="col-md-2"><label class="form-label">Kaynak Şirket <span class="z">*</span></label><select class="form-select" id="tlKaynakSirket" required></select></div>
+                            <div class="col-md-2"><label class="form-label">Asıl Borçlu <span class="z">*</span> <i class="fas fa-lock na-kilit" title="Kaynak alacaktan gelir"></i></label><input class="form-control" id="tlAsilBorclu" readonly placeholder="Kaynak alacaktan"></div>
+                            <div class="col-md-2"><label class="form-label">Temlik Türü <span class="z">*</span></label><select class="form-select" id="tlTur" required></select></div>
+                            <div class="col-md-2"><label class="form-label">Kaynak Belge Türü <span class="z">*</span></label><select class="form-select" id="tlKaynakBelgeTuru"></select></div>
+                            <div class="col-md-1"><label class="form-label">PB <i class="fas fa-lock na-kilit"></i></label><input class="form-control" id="tlParaBirimi" disabled value="TRY"></div>
+                            <div class="col-md-1"><label class="form-label">Kur</label><input class="form-control" type="number" step="0.0001" id="tlKur" value="1" disabled></div>
+                            <div class="col-md-2"><label class="form-label">Kur Tarihi</label><input class="form-control" type="date" id="tlKurTarihi" disabled></div>
+                            <div class="col-md-2"><label class="form-label">Taraf Sayısı (2–10) <span class="z">*</span></label><select class="form-select" id="tlTarafSayisi"></select></div>
+                            <div class="col-md-2"><label class="form-label">Temlik Nedeni (kod) <span class="z">*</span></label><select class="form-select" id="tlNedenKodu"></select></div>
+                            <div class="col-md-3"><label class="form-label">Temlik Nedeni (açıklama) <span class="z">*</span></label><input class="form-control" id="tlNeden" required placeholder="Standart neden + açıklama"></div>
+                            <div class="col-md-2"><label class="form-label">Proje</label><select class="form-select" id="tlProje"></select></div>
+                            <div class="col-md-2"><label class="form-label">Masraf Merkezi</label><select class="form-select" id="tlMasrafMerkezi"></select></div>
+                            <div class="col-md-3"><label class="form-label">Açıklama <span class="z">*</span></label><input class="form-control" id="tlAciklama" maxlength="500" required></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row g-2">
+                    <div class="col-lg-9">
+                        @* ---- Sol üst: KAYNAK ALACAKLAR (§6) — satır bazında seçim ---- *@
+                        <div class="na-kart">
+                            <div class="na-kart-b"><span><i class="fas fa-file-invoice-dollar me-1"></i>Kaynak Alacaklar — fatura / açık kalem satırları</span><span class="not" id="tlKaynakNot">Kaynak Alacak Seç ile belge ekleyin; yalnız işaretli satırlar temlik edilir · bu işlem tutarı temlik edilebilir bakiyeyi aşamaz</span></div>
+                            <div class="na-kart-g">
+                                <div class="tl-arac"><button type="button" class="btn btn-light btn-sm py-0" id="tlTumSatir" style="font-size:.68rem">Tüm satırları seç</button><button type="button" class="btn btn-light btn-sm py-0" id="tlSatirKaldir" style="font-size:.68rem">Seçimi kaldır</button><button type="button" class="btn btn-light btn-sm py-0" id="tlTamTutar" style="font-size:.68rem" title="Seçili satırlara temlik edilebilir bakiyenin tamamını yazar">Bakiyenin tamamı</button><span class="sayac" id="tlKaynakSayac">0 satır seçili</span></div>
+                                <div class="tl-kap"><table class="tl-tablo genis" id="tlKaynaklar" data-dinamik="kapali">
+                                    <thead><tr><th>Seç</th><th>Belge No / Satır</th><th>Kalem</th><th>Kaynak Şirket</th><th>Asıl Borçlu</th><th>Belge Türü</th><th>Belge Tarihi</th><th>Vade</th><th class="s">Orijinal Alacak</th><th class="s">Tahsil / Kapanan</th><th class="s">Önceden Temlik</th><th class="s">Temlik Edilebilir</th><th class="s g">Bu İşlem Temlik Tutarı</th><th class="s h">Temlik Sonrası Kalan</th><th>PB / Kur</th><th>Referans</th><th></th></tr></thead>
+                                    <tbody><tr><td colspan="17" class="na-bos">Kaynak alacak seçilmedi.</td></tr></tbody><tfoot></tfoot>
+                                </table></div>
+                            </div>
+                        </div>
+                        @* ---- Orta üst: TEMLİK ZİNCİRİ (§7.1) ---- *@
+                        <div class="na-kart">
+                            <div class="na-kart-b"><span><i class="fas fa-link me-1"></i>Temlik Zinciri — Taraflar (2–10)</span><span class="d-flex gap-1 align-items-center"><span class="not" id="tlTarafNot"></span><button type="button" class="btn btn-light btn-sm py-0" id="tlTarafEkle" style="font-size:.68rem"><i class="fas fa-plus me-1"></i>Taraf Ekle</button><button type="button" class="btn btn-light btn-sm py-0" id="tlTarafCikar" style="font-size:.68rem"><i class="fas fa-minus me-1"></i>Tarafı Çıkar</button></span></div>
+                            <div class="na-kart-g">
+                                <div class="tl-zincir" id="tlZincir"></div>
+                                <div class="table-responsive"><table class="tl-tablo" id="tlTaraflar" data-dinamik="kapali"><thead><tr><th>Sıra</th><th>Taraf</th><th>Taraf Tipi</th><th>Zincir Rolü</th><th class="s">Aldığı Temlik</th><th class="s">Devrettiği Temlik</th><th class="s">Kalan Hak</th><th>İmza</th><th>Master</th><th>Sıra / Çıkar</th></tr></thead><tbody></tbody></table></div>
+                            </div>
+                        </div>
+                        @* ---- Orta alt: TRANSFER STEPLERİ (§7.2) ---- *@
+                        <div class="na-kart">
+                            <div class="na-kart-b"><span><i class="fas fa-arrow-right-arrow-left me-1"></i>Transfer Adımları (N − 1)</span><span class="not">step tutarı önceki taraftan kullanılabilir hakkı aşamaz · ara taraf kısmi devrederse kalan hak açık gösterilir</span></div>
+                            <div class="na-kart-g"><div class="table-responsive"><table class="tl-tablo" id="tlStepler" data-dinamik="kapali"><thead><tr><th>Step</th><th>Temlik Eden</th><th>Temlik Alan</th><th class="s g">Tutar</th><th>PB</th><th class="s h">TL Karşılığı</th><th>Etkinlik Tarihi</th><th class="s h">Ara Taraf Kalanı</th><th>Durum</th><th>Belge Referansı</th></tr></thead><tbody></tbody></table></div></div>
+                        </div>
+                        @* ---- Alt: MUHASEBE KAYDI SİMÜLASYONU (§8) ---- *@
+                        <div class="na-kart" id="tlSimKart" style="display:none">
+                            <div class="na-kart-b"><span><i class="fas fa-calculator me-1"></i>Muhasebe Kaydı Simülasyonu — şirket / step bazında beklenen kayıtlar</span><span class="not">hesaplar TEMLIK_HESAP_ESLEME tablosundan · ERP dışı taraflar bilgi amaçlı</span></div>
+                            <div class="na-kart-g">
+                                <div class="tl-sim-ust" id="tlSimUst"></div>
+                                <div id="tlSim"></div>
+                                <div class="mt-2"><b style="font-size:.7rem">Konsolide görünüm (N'li virman)</b><div class="table-responsive"><table class="na-tablo tl-konsolide" id="tlKonsolide" data-dinamik="kapali"><thead><tr><th>Sıra</th><th>Taraf</th><th>Rol</th><th class="s">Giren Hak</th><th class="s">Çıkan Hak</th><th class="s">Net Temlik Hakkı</th><th>Muhasebe Kontrolü</th></tr></thead><tbody></tbody></table></div></div>
+                                <div id="tlSimUyari" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-3">
+                        <div class="tl-sag">
+                            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-sigma me-1"></i>Sabit Özet</span></div><div class="na-kart-g tl-ozet" id="tlOzet"></div></div>
+                            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-shield-halved me-1"></i>Validasyon</span><span class="not" id="tlDogrulamaNot"></span></div><div class="na-kart-g"><ul class="mb-0 ps-3 tl-dogrulama" id="tlDogrulama"><li class="text-muted">Kaynak ve taraflar girildikçe kurallar çalışır.</li></ul></div></div>
+                            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-route me-1"></i>Onay Akışı</span><span class="not">parametrik</span></div><div class="na-kart-g"><div class="tl-akis" id="tlAkis"><span class="text-muted">—</span></div><div class="na-mini" id="tlAkisNedeni"></div></div></div>
+                            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-sliders me-1"></i>Parametreler</span></div><div class="na-kart-g" id="tlParam"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="na-panel" data-p="liste">
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Temlik Listesi</span><span class="not">tüm zincirler · satıra tıklayın</span></div>
+                <div class="na-kart-g">
+                    <div class="na-filtre"><input class="form-control" id="tlListeAra" placeholder="Temlik no, taraf, borçlu, belge…"><select class="form-select" id="tlListeDurum"><option value="">Durum: Tümü</option></select><span class="ms-auto na-mini" id="tlListeSayi"></span></div>
+                    <div class="table-responsive"><table class="na-tablo" id="tlListe" data-dinamik="kapali"><thead><tr><th>Temlik No / Zincir</th><th>Tarih</th><th>Zincir</th><th class="s">Taraf</th><th class="s">Step</th><th>Asıl Borçlu</th><th class="s">Kaynak Alacak</th><th class="s">Temlik Tutarı</th><th class="s">Ara Taraf Kalanı</th><th>Durum</th><th>Belge / İmza</th><th>Muhasebe</th><th>Kontrol</th></tr></thead><tbody></tbody></table></div>
+                </div></div>
+        </div>
+        <div class="na-panel" data-p="detay"><div id="tlDetay"><div class="na-bos">Listeden bir temlik seçin.</div></div></div>
+        <div class="na-panel" data-p="onay">
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clipboard-check me-1"></i>Onay Bekleyen Temlikler</span><span class="not">Muhasebe / Hukuk / Direktör / Finans kuyruğu · ret nedeni zorunlu</span></div>
+                <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="tlOnayListe" data-dinamik="kapali"><thead><tr><th>Temlik No</th><th>Zincir</th><th>Asıl Borçlu</th><th class="s">Temlik Tutarı</th><th class="s">Taraf</th><th>Bekleyen Adım</th><th>Onaycı</th><th>Neden</th><th>Hızlı İşlem</th></tr></thead><tbody></tbody></table></div></div></div>
+        </div>
+        <div class="na-panel" data-p="imza">
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-pen-nib me-1"></i>İmza Takibi</span><span class="not">taraf / imzacı bazında bekleyen ve tamamlanan imzalar</span></div>
+                <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="tlImzaListe" data-dinamik="kapali"><thead><tr><th>Temlik No</th><th>Belge</th><th>Sıra</th><th>Taraf</th><th>İmza Rolü</th><th>İmzacı</th><th>Durum</th><th>İmza Tarihi</th><th>Yöntem</th><th>İşlem</th></tr></thead><tbody></tbody></table></div></div></div>
+        </div>
+    </div>
+
+    @* ================= SEKME 2 — TEMLİK RAPORU (§10) ================= *@
+    <div class="gi-panel @(ust == "rapor" ? "aktif" : "")" id="giRapor">
+        <div class="na-kpi" id="tlRaporKpi" data-dinamik="kapali" style="grid-template-columns:repeat(7,1fr)"></div>
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Filtreler</span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="tlRaporBuAy" style="font-size:.66rem">Bu ay</button><button type="button" class="btn btn-light btn-sm py-0" id="tlRaporTemizle" style="font-size:.66rem">Temizle</button><button type="button" class="btn btn-light btn-sm py-0" id="tlRaporExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Rapor Excel</button><button type="button" class="btn btn-light btn-sm py-0" id="tlZincirExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Zincir Detay Excel</button></span></div>
+            <div class="na-kart-g">
+                <div class="tl-filtre">
+                    <div><label>Tarih Türü / Aralık</label><div class="d-flex gap-1"><select class="form-select" id="tlRfTarihTuru" style="max-width:110px"><option value="tarih">Temlik</option><option value="etkinlikTarihi">Etkinlik</option><option value="belge">Belge</option><option value="imza">İmza</option><option value="muhasebe">Muhasebe</option></select><input class="form-control" type="date" id="tlRf1"><input class="form-control" type="date" id="tlRf2"></div></div>
+                    <div><label>Taraf (eden / alan / ara / nihai)</label><input class="form-control" id="tlRfTaraf" placeholder="Taraf adı"></div>
+                    <div><label>Nihai Temlik Alan</label><select class="form-select" id="tlRfNihai" multiple></select></div>
+                    <div><label>Asıl Borçlu</label><input class="form-control" id="tlRfBorclu" placeholder="Borçlu"></div>
+                    <div><label>Kaynak Şirket</label><select class="form-select" id="tlRfKaynakSirket" multiple></select></div>
+                    <div><label>Belge (temlik / zincir / belge / fatura / ERP no)</label><input class="form-control" id="tlRfBelge" placeholder="TML-, TB-, FTR-, JE-…"></div>
+                    <div><label>Temlik Türü</label><select class="form-select" id="tlRfTur" multiple></select></div>
+                    <div><label>Para Birimi · Kısmi/Tam · Taraf Sayısı</label><div class="d-flex gap-1"><select class="form-select" id="tlRfPb"><option value="">PB</option><option>TRY</option><option>USD</option><option>EUR</option></select><select class="form-select" id="tlRfKismi"><option value="">Kısmi/Tam</option><option value="kismi">Kısmi</option><option value="tam">Tam</option></select><select class="form-select" id="tlRfTarafN"><option value="">Taraf</option><option value="2">2</option><option value="3">3</option><option value="4+">4+</option></select></div></div>
+                    <div><label>Durum</label><select class="form-select" id="tlRfDurum" multiple></select></div>
+                    <div><label>Belge / İmza Durumu</label><select class="form-select" id="tlRfBelgeDurum" multiple><option>Belge Yok</option><option>Üretildi</option><option>İmzada</option><option>Kısmi İmzalı</option><option>Tam İmzalı</option><option>Geçersiz</option></select></div>
+                    <div><label>Muhasebe / Kontrol Durumu</label><div class="d-flex gap-1"><select class="form-select" id="tlRfMuh"><option value="">Muhasebe</option><option>Başlamadı</option><option>Kısmi</option><option>Tamamlandı</option><option>Hata</option><option>Ters Kayıt</option></select><select class="form-select" id="tlRfKontrol"><option value="">Kontrol</option></select></div></div>
+                    <div><label>Kullanıcı (oluşturan / onaylayan / belge / muhasebe)</label><input class="form-control" id="tlRfKisi" placeholder="Ad"></div>
+                </div>
+                <div class="na-mini" id="tlRaporSayi"></div>
+                <div class="table-responsive"><table class="na-tablo" id="tlRaporTablo" data-dinamik="kapali"><thead><tr><th>Temlik No / Zincir No</th><th>Tarih</th><th>Kaynak Şirket</th><th>Asıl Borçlu</th><th>İlk Temlik Eden</th><th>Nihai Temlik Alan</th><th class="s">Taraf</th><th class="s">Step</th><th class="s">Kaynak Alacak</th><th class="s">Temlik Tutarı</th><th class="s">Ara Taraf Kalanı</th><th>PB</th><th>Temlik Belge No</th><th>İmza</th><th>Onay</th><th>Muhasebe</th><th>Kontrol</th><th>Oluşturan</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>
+            </div>
+        </div>
+    </div>
+
+    @* ================= SEKME 3 — TEMLİK MUHASEBE KONTROLÜ (§11) ================= *@
+    <div class="gi-panel @(ust == "kontrol" ? "aktif" : "")" id="giKontrol">
+        <div class="na-kpi" id="tlKontrolKpi" data-dinamik="kapali"></div>
+        <div class="row g-2">
+            <div class="col-lg-7">
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas fa-file-invoice me-1"></i>Kontrol Listesi (step bazlı)</span><span class="d-flex gap-1 align-items-center"><span class="not" id="tlKontrolSayi"></span><button type="button" class="btn btn-light btn-sm py-0" id="tlKontrolHepsi" style="font-size:.66rem"><i class="fas fa-rotate me-1"></i>Tümünü kontrol et</button><button type="button" class="btn btn-light btn-sm py-0" id="tlKontrolExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div>
+                    <div class="na-kart-g">
+                        <div class="na-filtre"><input class="form-control" id="tlKontrolAra" placeholder="Temlik no, taraf, ERP ref…"><select class="form-select" id="tlKontrolDurumF"><option value="">Kontrol durumu: Tümü</option><option value="_yok">Henüz kontrol yok</option></select><label class="na-mini d-inline-flex align-items-center gap-1 mb-0"><input type="checkbox" id="tlKontrolOncesi"> ERP'ye gitmemiş işlemleri de göster</label></div>
+                        <div class="table-responsive"><table class="na-tablo" id="tlKontrolTablo" data-dinamik="kapali"><thead><tr><th>Temlik No</th><th>Zincir</th><th>Taraf (step)</th><th class="s">Step</th><th class="s">Tutar</th><th>İmza</th><th>ERP</th><th>Kontrol</th></tr></thead><tbody></tbody></table></div>
+                    </div>
+                </div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Kontrol Durumları (§11.5)</span></div><div class="na-kart-g"><ul class="mb-0 ps-3 tl-legend" id="tlKontrolLegend"></ul></div></div>
+            </div>
+            <div class="col-lg-5">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-code-compare me-1"></i>Beklenen – Gerçekleşen Muhasebe Karşılaştırması (§11.2)</span><span class="not" id="tlKarsNo">listeden işlem seçin</span></div><div class="na-kart-g" id="tlKarsilastirma"><div class="na-bos">Kontrol listesinden bir işlem seçin.</div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-link me-1"></i>Zincir Bütünlüğü Kontrolü (§11.3)</span></div><div class="na-kart-g" id="tlZincirKontrol"><div class="na-bos">—</div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>Otomatik Kontrol Kuralları (§11.4)</span></div><div class="na-kart-g"><ol class="mb-0 ps-3 tl-legend" id="tlKontrolKurallar"></ol></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-table me-1"></i>Hesap Eşleme Tablosu (§12)</span><span class="not">TEMLIK_HESAP_ESLEME · Mali İşler yönetir</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:260px"><table class="na-tablo" id="tlEsleme" data-dinamik="kapali" style="font-size:.64rem"><thead><tr><th>#</th><th>Şirket</th><th>Yön</th><th>Hesap Rolü</th><th>Taraf Tipi</th><th>Hesap</th><th>BP</th><th>Geçerlilik</th><th>Aktif</th></tr></thead><tbody></tbody></table></div></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tl-perde" id="tlPerde"></div>
+    <div class="tl-drawer" id="tlDrawer"><div class="tl-drawer-ust"><b id="tlDrawerBaslik" style="font-size:.85rem">Detay</b><button type="button" class="btn btn-light btn-sm py-0 ms-auto" id="tlDrawerAc" style="font-size:.66rem"><i class="fas fa-up-right-from-square me-1"></i>İşlem ekranında aç</button><button type="button" class="btn btn-light btn-sm py-0" id="tlDrawerKapat" style="font-size:.66rem"><i class="fas fa-xmark"></i></button></div><div id="tlDrawerIc"></div></div>
+
+    @* ---- Kaynak Alacak Seç penceresi (§6.1) ---- *@
+    <div class="modal fade tl-modal" id="tlKaynakModal" tabindex="-1"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header py-2"><h6 class="modal-title" style="font-size:.85rem"><i class="fas fa-file-invoice-dollar me-1"></i>Kaynak Alacak / Belge Seç — <span id="tlKmSirket"></span></h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body na">
+            <div class="na-filtre"><select class="form-select" id="tlKmSirketSec"><option value="">Kaynak şirket: Tümü</option></select><input class="form-control" id="tlKmAra" placeholder="Belge no, alacak sahibi, borçlu, kalem…" style="min-width:300px"><span class="na-mini" id="tlKmSayi"></span><span class="ms-auto d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="tlKmOnce">‹</button><span class="na-mini" id="tlKmSayfa"></span><button type="button" class="btn btn-light btn-sm py-0" id="tlKmSonra">›</button></span></div>
+            <div class="table-responsive"><table class="na-tablo" id="tlKmTablo" data-dinamik="kapali"><thead><tr><th>Ekle</th><th>Kaynak Şirket</th><th>Alacak Sahibi</th><th>Asıl Borçlu</th><th>Belge Türü</th><th>Belge No</th><th>Belge Tarihi</th><th>Vade</th><th class="s">Orijinal Alacak</th><th class="s">Kapanan</th><th class="s">Önceden Temlik</th><th class="s">Temlik Edilebilir</th><th>PB / Kur</th><th>Referans</th></tr></thead><tbody></tbody></table></div>
+            <div class="na-mini">Birden fazla kaynak belge aynı zincire eklenebilir (§6.2); satırlar işlem ekranında tek tek seçilir. Kapalı / tahsil edilmiş / iptal belgeler ve tamamen temlik edilmiş belgeler seçilemez (V21).</div>
+        </div>
+    </div></div></div>
+
+    @* ---- Temlik Belgesi ön izleme (EK B) ---- *@
+    <div class="modal fade" id="tlBelgeModal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header py-2"><h6 class="modal-title" style="font-size:.85rem"><i class="fas fa-file-signature me-1"></i><span id="tlBelgeBaslik">Temlik Belgesi</span></h6><span class="ms-auto d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="tlBelgeYazdir" style="font-size:.66rem"><i class="fas fa-print me-1"></i>PDF / Yazdır</button><button type="button" class="btn-close" data-bs-dismiss="modal"></button></span></div>
+        <div class="modal-body" style="background:#e5e7eb"><div class="tl-doc" id="tlBelgeIc"></div></div>
+    </div></div></div>
+</div>
+
+@section Scripts {
+<script src="/js/temlik.js?v=1"></script>
+}

@@ -1,0 +1,238 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string ust = (string)ViewBag.Ust ?? "islem";
+    string no = (string)ViewBag.No ?? "";
+}
+@*
+    MAHSUP MODÜLÜ — "URAS HOLDING Mahsup Modülü IT Teknik ve İşlevsel Gereksinim Dokümanı v1.0 (21.09.2026)"
+    Açık borç / alacak kalemlerinin belge bazında TEK TEK seçilerek eşleştirilmesi (1-1 / 1-N / N-1 / N-N, kısmi mahsup), otomatik eşleştirme,
+    belge → belge dağılım tablosu, iç mutabakat / yevmiye simülasyonu (yeni fiş EVET / HAYIR), kur ve yuvarlama farkı, onay, step / şirket bazlı
+    idempotent ERP (M06 iki şirket mirror, kısmi entegrasyon), Mahsup Raporu ve Mahsup Muhasebe Kontrolü (beklenen–gerçekleşen, açık kalem
+    kapanma, mirror). Yerleşim EK A. Veri: /Mahsup/Veri, AcikKalemler, Onizleme, Eslestir, Kaydet, OnayaGonder, Onay, GeriCek, Muhasebelestir,
+    TersKayit, Iptal, Kontrol, FarkKapat, Parametre. Betik: wwwroot/js/mahsup.js · Kurallar: Data/MahsupOrnek.cs
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<style>
+    .na.mh { --na-k: #7c3aed; }
+    .mh .na-kpi { grid-template-columns: repeat(6, 1fr); }
+    .gi-ust { margin-bottom: 10px; }
+    .gi-ust button { font-size: .74rem; font-weight: 700; color: #475569; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px 11px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+    .gi-ust button:hover { border-color: #cbd5e1; background: #f8fafc; } .gi-ust button.aktif { background: var(--na-k); border-color: var(--na-k); color: #fff; }
+    .gi-ust button .n { font-size: .62rem; background: rgba(255,255,255,.25); border-radius: 999px; padding: 1px 6px; } .gi-ust button:not(.aktif) .n { background: #f1f5f9; color: #475569; }
+    .gi-panel { display: none; } .gi-panel.aktif { display: block; }
+    .mh-rol { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: .7rem; color: #64748b; } .mh-rol select { font-size: .72rem; min-height: 28px; padding: 2px 24px 2px 8px; width: auto; }
+    .mh-aksiyon { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; } .mh-aksiyon .btn { font-size: .7rem; padding: 3px 9px; font-weight: 700; } .mh-aksiyon .ayrac { width: 1px; height: 20px; background: #e2e8f0; margin: 0 3px; }
+    .mh-durum { font-size: .64rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+    .mh-kap { max-height: 340px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+    table.mh-tablo { width: 100%; font-size: .68rem; border-collapse: separate; border-spacing: 0; min-width: 1180px; }
+    table.mh-tablo th { position: sticky; top: 0; z-index: 2; background: #f8fafc; font-size: .58rem; text-transform: uppercase; letter-spacing: .03em; color: #64748b; padding: 5px 6px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; text-align: left; }
+    table.mh-tablo td { padding: 3px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; white-space: nowrap; }
+    table.mh-tablo th.s, table.mh-tablo td.s { text-align: right; font-variant-numeric: tabular-nums; }
+    table.mh-tablo th.g, table.mh-tablo td.g { background: #f5f3ff; } table.mh-tablo th.h, table.mh-tablo td.h { background: #fafafa; }
+    table.mh-tablo tr.secili td { background: #f5f3ff; } table.mh-tablo tr.secili td.g { background: #ddd6fe; } table.mh-tablo tr.pasif td { color: #94a3b8; }
+    table.mh-tablo input.form-control { font-size: .68rem; min-height: 24px; padding: 1px 5px; width: 108px; text-align: right; display: inline-block; } table.mh-tablo input:disabled { background: #f8fafc; }
+    table.mh-tablo tfoot td { font-weight: 800; background: #f8fafc; border-top: 2px solid #e2e8f0; }
+    .mh-panel-b { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; font-weight: 800; font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; border-radius: 10px 10px 0 0; }
+    .mh-panel-b.borc { color: #b91c1c; } .mh-panel-b.alacak { color: #15803d; }
+    .mh-alt { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-size: .68rem; padding: 6px 10px; border-top: 1px solid #e2e8f0; background: #fff; } .mh-alt .l { font-size: .56rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; } .mh-alt .v { font-weight: 800; color: #0f172a; }
+    .mh-arac { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 6px 0; font-size: .7rem; } .mh-arac .form-control, .mh-arac .form-select { width: auto; font-size: .7rem; min-height: 26px; padding: 1px 6px; }
+    .mh-esit { font-size: .66rem; font-weight: 800; padding: 3px 10px; border-radius: 999px; } .mh-esit.ok { background: #dcfce7; color: #15803d; } .mh-esit.fark { background: #fee2e2; color: #b91c1c; }
+    .mh-sag { position: sticky; top: 8px; }
+    .mh-ozet { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; font-size: .72rem; } .mh-ozet .l { color: #64748b; } .mh-ozet .v { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; } .mh-ozet .buyuk { font-size: .95rem; color: #0f172a; } .mh-ozet .ayrac { grid-column: 1 / -1; border-top: 1px dashed #e2e8f0; margin: 2px 0; }
+    .mh-dogrulama { font-size: .7rem; } .mh-dogrulama li { margin-bottom: 3px; } .mh-dogrulama .h { color: #b91c1c; } .mh-dogrulama .u { color: #b45309; }
+    .mh-akis { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: .68rem; } .mh-akis span { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 2px 8px; font-weight: 700; color: #334155; } .mh-akis i { color: #94a3b8; font-size: .56rem; }
+    .mh-sim-ust { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px 10px; font-size: .68rem; margin-bottom: 8px; } .mh-sim-ust .l { font-size: .56rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; } .mh-sim-ust .v { font-weight: 700; }
+    .mh-evet { font-size: .8rem; font-weight: 900; padding: 4px 12px; border-radius: 8px; display: inline-block; } .mh-evet.e { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; } .mh-evet.h { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .mh-sim { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .mh-sim > div { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+    .mh-sim .b { background: #f8fafc; padding: 5px 9px; font-size: .68rem; font-weight: 800; color: #0f172a; display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; } .mh-sim .b small { color: #64748b; font-weight: 600; }
+    table.mh-fis { width: 100%; font-size: .68rem; border-collapse: collapse; } table.mh-fis th { font-size: .58rem; text-transform: uppercase; color: #64748b; background: #fff; padding: 3px 6px; border-bottom: 1px solid #e2e8f0; text-align: left; white-space: nowrap; }
+    table.mh-fis td { padding: 3px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: top; } table.mh-fis td.s, table.mh-fis th.s { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; } table.mh-fis tr.top td { font-weight: 800; background: #f8fafc; border-top: 2px solid #e2e8f0; }
+    table.mh-fis .k { color: #94a3b8; font-size: .6rem; display: block; } table.mh-fis code { font-size: .64rem; background: #f1f5f9; padding: 0 4px; border-radius: 4px; color: #0f172a; } table.mh-fis tr.fx td { background: #fffbeb; } table.mh-fis tr.mut td { color: #475569; }
+    .mh-adimlar { display: flex; gap: 0; align-items: center; flex-wrap: wrap; font-size: .62rem; margin-bottom: 8px; } .mh-adimlar span { padding: 3px 8px; border: 1px solid #e2e8f0; background: #fff; color: #94a3b8; font-weight: 700; margin-right: -1px; }
+    .mh-adimlar span:first-child { border-radius: 999px 0 0 999px; } .mh-adimlar span:last-child { border-radius: 0 999px 999px 0; } .mh-adimlar span.gecti { background: #dcfce7; color: #166534; border-color: #bbf7d0; } .mh-adimlar span.simdi { background: var(--na-k); color: #fff; border-color: var(--na-k); } .mh-adimlar span.hata { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .mh-filtre { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 8px; } .mh-filtre label { font-size: .6rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; letter-spacing: .04em; display: block; margin-bottom: 1px; } .mh-filtre .form-control, .mh-filtre .form-select { font-size: .7rem; min-height: 26px; padding: 1px 6px; } .mh-filtre select[multiple] { height: 58px; font-size: .68rem; }
+    .mh-drawer { position: fixed; top: 0; right: -860px; width: 840px; max-width: 95vw; height: 100vh; background: #fff; box-shadow: -8px 0 24px rgba(15,23,42,.18); z-index: 1060; transition: right .25s; overflow: auto; padding: 12px 14px; } .mh-drawer.acik { right: 0; }
+    .mh-drawer-ust { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: sticky; top: 0; background: #fff; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; z-index: 2; } .mh-perde { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1055; display: none; } .mh-perde.acik { display: block; }
+    .mh-ks { font-size: .62rem; font-weight: 800; padding: 2px 7px; border-radius: 999px; white-space: nowrap; display: inline-block; } .mh-ks.ok { background: #dcfce7; color: #15803d; } .mh-ks.kritik { background: #fee2e2; color: #b91c1c; } .mh-ks.uyari { background: #fef3c7; color: #b45309; } .mh-ks.yok { background: #f1f5f9; color: #64748b; } .mh-ks.bilgi { background: #e0f2fe; color: #0369a1; }
+    .mh-kars td.fark { background: #fff1f2; } .mh-kars td.uyar { background: #fffbeb; }
+    .mh-legend { font-size: .66rem; color: #475569; } .mh-legend li { margin-bottom: 3px; }
+    .mh-tip { font-size: .58rem; font-weight: 700; padding: 1px 5px; border-radius: 4px; background: #f1f5f9; color: #475569; } .mh-tip.borc { background: #fee2e2; color: #b91c1c; } .mh-tip.alacak { background: #dcfce7; color: #15803d; }
+    @@media (max-width: 1200px) { .mh .na-kpi { grid-template-columns: repeat(3, 1fr); } .mh-filtre { grid-template-columns: repeat(3, 1fr); } .mh-sim { grid-template-columns: 1fr; } .mh-sag { position: static; } .mh-sim-ust { grid-template-columns: repeat(3, 1fr); } }
+    @@media print { .gi-ust, .na-sekme, .mh-aksiyon, #naSonuc, .na-kpi, .mh-rol, .mh-arac, .btn { display: none !important; } .gi-panel, .na-panel { display: block !important; } .mh-kap { max-height: none; overflow: visible; } }
+</style>
+}
+
+<div class="container-fluid py-3 na mh" id="mh" data-ust="@ust" data-no="@no">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-scale-balanced"></i></span>Mahsup İşlemleri</h4>
+        <span style="font-size:.68rem;font-weight:700;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px"><i class="fas fa-route me-1"></i>Açık Kalemleri Getir → Borç / Alacak Seç → Tutar → Dağılım → Eşitlik → Simülasyon → Onay → ERP → Kontrol</span>
+        <span class="mh-rol"><i class="fas fa-user-shield"></i>Rol (demo):<select class="form-select" id="mhRol"></select><span id="mhBen" class="text-muted"></span></span>
+        <span class="sub w-100">Açık borç ve alacak kalemlerinin belge bazında <b>tek tek seçilerek</b> kısmen ya da tamamen kapatılması (1-1 / 1-N / N-1 / N-N dağılım). Mahsup KDV doğurmaz; yalnız açık kalem kapama, cari aktarımı ve gerekiyorsa kur / yuvarlama farkı kaydı oluşur. Simülasyon "Yeni fiş oluşacak mı?" sorusuna EVET / HAYIR yanıtı verir; grup şirketleri arası mahsupta iki şirkette mirror kayıt ve kontrol yapılır.</span>
+    </div>
+    <div class="na-turler gi-ust" id="giUst" data-dinamik="kapali">
+        <button type="button" data-u="islem" class="@(ust == "islem" ? "aktif" : "")"><i class="fas fa-pen-to-square"></i>Mahsup İşlem Ekranı</button>
+        <button type="button" data-u="rapor" class="@(ust == "rapor" ? "aktif" : "")"><i class="fas fa-table-list"></i>Mahsup Raporu <span class="n" id="mhRaporN">…</span></button>
+        <button type="button" data-u="kontrol" class="@(ust == "kontrol" ? "aktif" : "")"><i class="fas fa-file-invoice"></i>Mahsup Muhasebe Kontrolü <span class="n" id="mhKontrolN">…</span></button>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+
+    @* ================= SEKME 1 — MAHSUP İŞLEM EKRANI (§4) ================= *@
+    <div class="gi-panel @(ust == "islem" ? "aktif" : "")" id="giIslem">
+        <div class="na-kpi" id="mhKpi" data-dinamik="kapali"></div>
+        <div class="na-sekme" id="mhSekmeler" data-dinamik="kapali">
+            <button type="button" data-p="yeni"><i class="fas fa-plus me-1"></i>Yeni Mahsup</button>
+            <button type="button" data-p="liste">Mahsup Listesi <span class="n" id="mhNListe">0</span></button>
+            <button type="button" data-p="detay"><i class="fas fa-file-lines me-1"></i>İşlem Detayı <span class="n" id="mhDetayNo">—</span></button>
+            <button type="button" data-p="onay">Onay Bekleyenler <span class="n" id="mhNOnay">0</span></button>
+        </div>
+
+        <div class="na-panel" data-p="yeni">
+            <form id="mhForm" autocomplete="off" novalidate>
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas fa-id-card me-1"></i>İşlem Başlığı</span>
+                        <span class="mh-aksiyon">
+                            <span class="mh-durum" id="mhDurumRozet">Yeni · kaydedilmedi</span><span class="ayrac"></span>
+                            <button type="button" class="btn btn-light" id="mhYeni"><i class="fas fa-file me-1"></i>Yeni Mahsup</button>
+                            <button type="button" class="btn btn-outline-primary" id="mhGetir" title="Seçilen şirket / cari / mahsup türüne göre uygun açık belgeleri yükler"><i class="fas fa-download me-1"></i>Açık Kalemleri Getir</button>
+                            <button type="button" class="btn btn-light" id="mhSimBtn"><i class="fas fa-calculator me-1"></i>Muhasebe Kaydı Simülasyonu</button>
+                            <button type="button" class="btn btn-light" id="mhTaslak"><i class="fas fa-floppy-disk me-1"></i>Taslak Kaydet</button>
+                            <button type="button" class="btn btn-primary" id="mhGonder"><i class="fas fa-paper-plane me-1"></i>Onaya Gönder</button>
+                            <span class="ayrac"></span>
+                            <button type="button" class="btn btn-light" id="mhExcel"><i class="fas fa-file-excel me-1"></i>Excel</button>
+                            <button type="button" class="btn btn-light" id="mhPdf"><i class="fas fa-file-pdf me-1"></i>PDF</button>
+                            <button type="button" class="btn btn-outline-danger" id="mhIptalBtn"><i class="fas fa-ban me-1"></i>İptal</button>
+                        </span>
+                    </div>
+                    <div class="na-kart-g">
+                        <div class="row g-2">
+                            <div class="col-md-2"><label class="form-label">Mahsup No <i class="fas fa-lock na-kilit"></i></label><input class="form-control" id="mhNo" disabled placeholder="Kayıtta otomatik"></div>
+                            <div class="col-md-2"><label class="form-label">Mahsup Tarihi <span class="z">*</span></label><input class="form-control" type="date" id="mhTarih" required></div>
+                            <div class="col-md-2"><label class="form-label">Kayıt Tarihi <span class="z">*</span> <span class="form-text d-inline">(dönem kontrolü)</span></label><input class="form-control" type="date" id="mhKayitTarihi" required></div>
+                            <div class="col-md-2"><label class="form-label">Şirket <span class="z">*</span></label><select class="form-select" id="mhSirket" required></select></div>
+                            <div class="col-md-2"><label class="form-label">Mahsup Kapsamı <span class="z">*</span></label><select class="form-select" id="mhKapsam"></select></div>
+                            <div class="col-md-2"><label class="form-label">Karşı Şirket <span class="form-text d-inline">(grup içi)</span></label><select class="form-select" id="mhKarsiSirket" disabled></select></div>
+                            <div class="col-md-3"><label class="form-label">Mahsup Türü <span class="z">*</span></label><select class="form-select" id="mhTur" required></select><div class="na-mini" id="mhTurBilgi"></div></div>
+                            <div class="col-md-3"><label class="form-label">Cari (borç / alacak filtresi)</label><select class="form-select" id="mhCari"><option value="">Tüm cariler</option></select></div>
+                            <div class="col-md-1"><label class="form-label">PB <i class="fas fa-lock na-kilit"></i></label><input class="form-control" id="mhParaBirimi" disabled value="TRY"></div>
+                            <div class="col-md-1"><label class="form-label">Kur</label><input class="form-control" type="number" step="0.0001" id="mhKur" value="1" disabled></div>
+                            <div class="col-md-2"><label class="form-label">Kur Tarihi</label><input class="form-control" type="date" id="mhKurTarihi" disabled></div>
+                            <div class="col-md-2"><label class="form-label">Masraf Merkezi</label><select class="form-select" id="mhMasrafMerkezi"></select></div>
+                            <div class="col-md-2"><label class="form-label">Proje</label><select class="form-select" id="mhProje"></select></div>
+                            <div class="col-md-2"><label class="form-label">Departman</label><input class="form-control" id="mhDepartman"></div>
+                            <div class="col-md-2"><label class="form-label">Mahsup Nedeni (kod) <span class="z">*</span></label><select class="form-select" id="mhNedenKodu"></select></div>
+                            <div class="col-md-3"><label class="form-label">Mahsup Nedeni (açıklama) <span class="z">*</span></label><input class="form-control" id="mhNeden" required></div>
+                            <div class="col-md-3"><label class="form-label">Açıklama <span class="z">*</span></label><input class="form-control" id="mhAciklama" maxlength="500" required></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row g-2">
+                    <div class="col-lg-9">
+                        @* ---- BORÇ ve ALACAK AÇIK KALEMLERİ (§4.3 / §4.4) ---- *@
+                        <div class="row g-2">
+                            <div class="col-xl-6"><div class="na-kart"><div class="mh-panel-b borc"><span><i class="fas fa-arrow-down me-1"></i>Borç Açık Kalemleri</span><span class="d-flex gap-1 align-items-center"><input class="form-control" id="mhBorcAra" placeholder="Filtre" style="font-size:.66rem;min-height:24px;padding:1px 6px;width:120px"><label class="na-mini d-inline-flex align-items-center gap-1 mb-0" style="text-transform:none;letter-spacing:0"><input type="checkbox" id="mhBorcKapali"> Kapalılar</label></span></div>
+                                <div class="mh-kap"><table class="mh-tablo" id="mhBorc" data-dinamik="kapali"><thead><tr><th><input type="checkbox" data-hepsi="Borç"></th><th>Cari / Hesap</th><th>Belge Türü</th><th>Belge No</th><th>Belge Tarihi</th><th>Vade</th><th class="s">Orijinal Tutar</th><th class="s">Daha Önce Kapatılan</th><th class="s">Açık Tutar</th><th class="s g">Mahsup Tutarı</th><th class="s h">Mahsup Sonrası Kalan</th><th>PB / Kur</th><th class="s">TL Karşılığı</th><th>Proje / MM</th><th>Referans</th></tr></thead><tbody><tr><td colspan="15" class="na-bos">Açık Kalemleri Getir ile yükleyin.</td></tr></tbody></table></div>
+                                <div class="mh-alt" id="mhBorcAlt"></div></div></div>
+                            <div class="col-xl-6"><div class="na-kart"><div class="mh-panel-b alacak"><span><i class="fas fa-arrow-up me-1"></i>Alacak Açık Kalemleri</span><span class="d-flex gap-1 align-items-center"><input class="form-control" id="mhAlacakAra" placeholder="Filtre" style="font-size:.66rem;min-height:24px;padding:1px 6px;width:120px"><label class="na-mini d-inline-flex align-items-center gap-1 mb-0" style="text-transform:none;letter-spacing:0"><input type="checkbox" id="mhAlacakKapali"> Kapalılar</label></span></div>
+                                <div class="mh-kap"><table class="mh-tablo" id="mhAlacak" data-dinamik="kapali"><thead><tr><th><input type="checkbox" data-hepsi="Alacak"></th><th>Cari / Hesap</th><th>Belge Türü</th><th>Belge No</th><th>Belge Tarihi</th><th>Vade</th><th class="s">Orijinal Tutar</th><th class="s">Daha Önce Kapatılan</th><th class="s">Açık Tutar</th><th class="s g">Mahsup Tutarı</th><th class="s h">Mahsup Sonrası Kalan</th><th>PB / Kur</th><th class="s">TL Karşılığı</th><th>Proje / MM</th><th>Referans</th></tr></thead><tbody><tr><td colspan="15" class="na-bos">Açık Kalemleri Getir ile yükleyin.</td></tr></tbody></table></div>
+                                <div class="mh-alt" id="mhAlacakAlt"></div></div></div>
+                        </div>
+                        @* ---- DAĞILIM PANELİ (§4.5 / §4.6) ---- *@
+                        <div class="na-kart">
+                            <div class="na-kart-b"><span><i class="fas fa-diagram-project me-1"></i>Mahsup Eşleştirme / Dağılım Tablosu</span><span class="not">hangi borç belgesi hangi alacak belgesine ne kadar · N-N dağılımda belge çiftleri saklanır</span></div>
+                            <div class="na-kart-g">
+                                <div class="mh-arac"><label class="mb-0">Otomatik eşleştirme</label><select class="form-select" id="mhYontem"></select><button type="button" class="btn btn-light btn-sm py-0" id="mhOtoEslestir" style="font-size:.68rem"><i class="fas fa-wand-magic-sparkles me-1"></i>Otomatik Eşleştir</button><button type="button" class="btn btn-light btn-sm py-0" id="mhSeciliMahsup" style="font-size:.68rem" title="Seçili borç / alacak kalemleri için tutarlardan dağılım oluşturur"><i class="fas fa-link me-1"></i>Seçili Kalemleri Mahsup Et</button><button type="button" class="btn btn-light btn-sm py-0" id="mhEslestirmeTemizle" style="font-size:.68rem"><i class="fas fa-eraser me-1"></i>Eşleştirmeyi Temizle</button><span class="ms-auto" id="mhEsitlik"></span></div>
+                                <div class="table-responsive"><table class="mh-tablo" id="mhDagilim" data-dinamik="kapali" style="min-width:0"><thead><tr><th>Dağılım ID</th><th>Borç Belgesi</th><th>Alacak Belgesi</th><th class="s g">Mahsup Tutarı</th><th>PB</th><th class="s h">TL</th><th class="s h">Kur Farkı</th><th>Durum</th></tr></thead><tbody><tr><td colspan="8" class="na-bos">Kalem seçip tutar girince dağılım otomatik kurulur; N-N için tutarları burada düzenleyebilirsiniz.</td></tr></tbody><tfoot></tfoot></table></div>
+                            </div>
+                        </div>
+                        @* ---- ALT: SİMÜLASYON (§5) ---- *@
+                        <div class="na-kart" id="mhSimKart" style="display:none">
+                            <div class="na-kart-b"><span><i class="fas fa-calculator me-1"></i>Muhasebe Kaydı / İç Mutabakat Simülasyonu</span><span class="not">hesaplar MAHSUP_HESAP_ESLEME tablosundan · KDV satırı üretilmez</span></div>
+                            <div class="na-kart-g">
+                                <div class="d-flex align-items-center gap-3 mb-2 flex-wrap"><span style="font-size:.74rem;font-weight:700">Yeni Muhasebe Fişi Oluşacak mı?</span><span id="mhEvet"></span><span class="na-mini" id="mhSimTipi"></span></div>
+                                <div class="mh-sim-ust" id="mhSimUst"></div>
+                                <div id="mhSim"></div>
+                                <div id="mhSimUyari" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-3">
+                        <div class="mh-sag">
+                            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-sigma me-1"></i>Mahsup Özeti</span></div><div class="na-kart-g mh-ozet" id="mhOzet"></div></div>
+                            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-shield-halved me-1"></i>Validasyon</span><span class="not" id="mhDogrulamaNot"></span></div><div class="na-kart-g"><ul class="mb-0 ps-3 mh-dogrulama" id="mhDogrulama"><li class="text-muted">Kalemler seçildikçe kurallar çalışır.</li></ul></div></div>
+                            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-route me-1"></i>Onay Akışı</span><span class="not">parametrik</span></div><div class="na-kart-g"><div class="mh-akis" id="mhAkis"><span class="text-muted">—</span></div><div class="na-mini" id="mhAkisNedeni"></div></div></div>
+                            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-sliders me-1"></i>Parametreler</span></div><div class="na-kart-g" id="mhParam"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="na-panel" data-p="liste">
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Mahsup Listesi</span><span class="not">tüm işlemler · satıra tıklayın</span></div>
+                <div class="na-kart-g">
+                    <div class="na-filtre"><input class="form-control" id="mhListeAra" placeholder="Mahsup no, cari, belge…"><select class="form-select" id="mhListeDurum"><option value="">Durum: Tümü</option></select><select class="form-select" id="mhListeTur"><option value="">Tür: Tümü</option></select><span class="ms-auto na-mini" id="mhListeSayi"></span></div>
+                    <div class="table-responsive"><table class="na-tablo" id="mhListe" data-dinamik="kapali"><thead><tr><th>Mahsup No</th><th>Tarih</th><th>Şirket / Karşı</th><th>Tür</th><th>Borç Cari</th><th>Alacak Cari</th><th class="s">Mahsup Tutarı</th><th class="s">Kur Farkı</th><th class="s">Belge</th><th>Kapama</th><th>Durum</th><th>Muhasebe</th><th>Kontrol</th></tr></thead><tbody></tbody></table></div>
+                </div></div>
+        </div>
+        <div class="na-panel" data-p="detay"><div id="mhDetay"><div class="na-bos">Listeden bir mahsup seçin.</div></div></div>
+        <div class="na-panel" data-p="onay">
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clipboard-check me-1"></i>Onay Bekleyen Mahsuplar</span><span class="not">Muhasebe / Direktör / Finans · ret nedeni zorunlu</span></div>
+                <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="mhOnayListe" data-dinamik="kapali"><thead><tr><th>Mahsup No</th><th>Şirket</th><th>Tür</th><th>Borç → Alacak</th><th class="s">Mahsup Tutarı</th><th>Bekleyen Adım</th><th>Onaycı</th><th>Neden</th><th>Hızlı İşlem</th></tr></thead><tbody></tbody></table></div></div></div>
+        </div>
+    </div>
+
+    @* ================= SEKME 2 — MAHSUP RAPORU (§6) ================= *@
+    <div class="gi-panel @(ust == "rapor" ? "aktif" : "")" id="giRapor">
+        <div class="na-kpi" id="mhRaporKpi" data-dinamik="kapali" style="grid-template-columns:repeat(7,1fr)"></div>
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Filtreler</span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="mhRaporBuAy" style="font-size:.66rem">Bu ay</button><button type="button" class="btn btn-light btn-sm py-0" id="mhRaporTemizle" style="font-size:.66rem">Temizle</button><button type="button" class="btn btn-light btn-sm py-0" id="mhRaporExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Rapor Excel</button><button type="button" class="btn btn-light btn-sm py-0" id="mhDetayExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Detay Excel</button></span></div>
+            <div class="na-kart-g">
+                <div class="mh-filtre">
+                    <div><label>Tarih Türü / Aralık</label><div class="d-flex gap-1"><select class="form-select" id="mhRfTarihTuru" style="max-width:110px"><option value="tarih">Mahsup</option><option value="kayitTarihi">Kayıt</option><option value="olusturma">Oluşturma</option><option value="onay">Onay</option><option value="muhasebe">Muhasebe</option></select><input class="form-control" type="date" id="mhRf1"><input class="form-control" type="date" id="mhRf2"></div></div>
+                    <div><label>Şirket / Karşı Şirket</label><select class="form-select" id="mhRfSirket" multiple></select></div>
+                    <div><label>Cari / Hesap (kod, unvan, hesap)</label><input class="form-control" id="mhRfCari" placeholder="Borç / alacak cari"></div>
+                    <div><label>Belge (tür, no, referans)</label><input class="form-control" id="mhRfBelge" placeholder="SF-, AF-, AV-, referans"></div>
+                    <div><label>Mahsup No / Neden / PB</label><div class="d-flex gap-1"><input class="form-control" id="mhRfNo" placeholder="MHS-"><select class="form-select" id="mhRfPb"><option value="">PB</option><option>TRY</option><option>USD</option><option>EUR</option></select></div></div>
+                    <div><label>Mahsup Türü</label><select class="form-select" id="mhRfTur" multiple></select></div>
+                    <div><label>Durum</label><select class="form-select" id="mhRfDurum" multiple></select></div>
+                    <div><label>Muhasebe / Kontrol Durumu</label><div class="d-flex gap-1"><select class="form-select" id="mhRfMuh"><option value="">Muhasebe</option><option>Başlamadı</option><option>Mutabakat Oluştu</option><option>Muhasebeleşti</option><option>Kısmi</option><option>Hata</option><option>Ters Kayıt</option></select><select class="form-select" id="mhRfKontrol"><option value="">Kontrol</option></select></div></div>
+                    <div><label>Kullanıcı (oluşturan / onaylayan / muhasebeleştiren)</label><input class="form-control" id="mhRfKisi" placeholder="Ad"></div>
+                </div>
+                <div class="na-mini" id="mhRaporSayi"></div>
+                <div class="table-responsive"><table class="na-tablo" id="mhRaporTablo" data-dinamik="kapali"><thead><tr><th>Mahsup No</th><th>Tarih</th><th>Şirket / Karşı</th><th>Tür</th><th>Borç Cari</th><th>Alacak Cari</th><th class="s">Borç Seçilen</th><th class="s">Alacak Seçilen</th><th class="s">Mahsup Tutarı</th><th class="s">Kur Farkı</th><th class="s">Yuvarlama</th><th class="s">Belge</th><th>Tam/Kısmi</th><th class="s">Sonrası Açık</th><th>PB</th><th>Onay</th><th>Muhasebe</th><th>Kontrol</th><th>ERP Ref</th><th>Oluşturan</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>
+            </div>
+        </div>
+    </div>
+
+    @* ================= SEKME 3 — MAHSUP MUHASEBE KONTROLÜ (§7) ================= *@
+    <div class="gi-panel @(ust == "kontrol" ? "aktif" : "")" id="giKontrol">
+        <div class="na-kpi" id="mhKontrolKpi" data-dinamik="kapali"></div>
+        <div class="row g-2">
+            <div class="col-lg-7">
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas fa-file-invoice me-1"></i>Muhasebe Kontrol Listesi (§7.1)</span><span class="d-flex gap-1 align-items-center"><span class="not" id="mhKontrolSayi"></span><button type="button" class="btn btn-light btn-sm py-0" id="mhKontrolHepsi" style="font-size:.66rem"><i class="fas fa-rotate me-1"></i>Tümünü kontrol et</button><button type="button" class="btn btn-light btn-sm py-0" id="mhKontrolExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div>
+                    <div class="na-kart-g">
+                        <div class="na-filtre"><input class="form-control" id="mhKontrolAra" placeholder="Mahsup no, şirket, ERP ref…"><select class="form-select" id="mhKontrolDurumF"><option value="">Kontrol durumu: Tümü</option><option value="_yok">Henüz kontrol yok</option></select><label class="na-mini d-inline-flex align-items-center gap-1 mb-0"><input type="checkbox" id="mhKontrolOncesi"> ERP'ye gitmemiş işlemleri de göster</label></div>
+                        <div class="table-responsive"><table class="na-tablo" id="mhKontrolTablo" data-dinamik="kapali"><thead><tr><th>Mahsup No</th><th>Tip</th><th>Şirket</th><th class="s">Tutar</th><th>Simülasyon</th><th>ERP Kaydı</th><th>İç Mutabakat</th><th>Kontrol</th></tr></thead><tbody></tbody></table></div>
+                    </div>
+                </div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>Açık Kalem Kapanma Kontrolü (§7.3)</span><span class="not" id="mhAkkNo"></span></div><div class="na-kart-g" id="mhAcikKalemKontrol"><div class="na-bos">Listeden işlem seçin.</div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Kontrol Durumları (§7.5)</span></div><div class="na-kart-g"><ul class="mb-0 ps-3 mh-legend" id="mhKontrolLegend"></ul></div></div>
+            </div>
+            <div class="col-lg-5">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-code-compare me-1"></i>Beklenen – Gerçekleşen Muhasebe Kaydı (§7.2)</span><span class="not" id="mhKarsNo">listeden işlem seçin</span></div><div class="na-kart-g" id="mhKarsilastirma"><div class="na-bos">Kontrol listesinden bir işlem seçin.</div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-building me-1"></i>Grup Şirketleri Arası Mirror Kontrolü (§7.6)</span></div><div class="na-kart-g" id="mhMirror"><div class="na-bos">—</div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>Otomatik Kontrol Kuralları (§7.4)</span></div><div class="na-kart-g"><ol class="mb-0 ps-3 mh-legend" id="mhKontrolKurallar"></ol></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-table me-1"></i>Hesap Eşleme Tablosu (§8)</span><span class="not">MAHSUP_HESAP_ESLEME · Mali İşler yönetir</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:260px"><table class="na-tablo" id="mhEsleme" data-dinamik="kapali" style="font-size:.64rem"><thead><tr><th>#</th><th>Şirket</th><th>Tür</th><th>Hesap Rolü</th><th>PB</th><th>Hesap</th><th>BP</th><th>Geçerlilik</th><th>Aktif</th></tr></thead><tbody></tbody></table></div></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mh-perde" id="mhPerde"></div>
+    <div class="mh-drawer" id="mhDrawer"><div class="mh-drawer-ust"><b id="mhDrawerBaslik" style="font-size:.85rem">Detay</b><button type="button" class="btn btn-light btn-sm py-0 ms-auto" id="mhDrawerAc" style="font-size:.66rem"><i class="fas fa-up-right-from-square me-1"></i>İşlem ekranında aç</button><button type="button" class="btn btn-light btn-sm py-0" id="mhDrawerKapat" style="font-size:.66rem"><i class="fas fa-xmark"></i></button></div><div id="mhDrawerIc"></div></div>
+</div>
+
+@section Scripts {
+<script src="/js/mahsup.js?v=1"></script>
+}

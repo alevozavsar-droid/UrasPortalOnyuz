@@ -68,7 +68,8 @@ namespace WebApplication3.Controllers
         [AllowAnonymous, Route("Home/Error")]
         public IActionResult Error() => View("~/Views/Shared/Error.cshtml");
 
-        // ---- Dashboard verileri (örnek) ----
+        // ---- Dashboard verileri (örnek)//
+        // ----
         [HttpGet]
         public IActionResult GetDashboardData()
         {

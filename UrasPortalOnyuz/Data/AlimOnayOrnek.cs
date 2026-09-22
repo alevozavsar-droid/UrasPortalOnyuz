@@ -227,6 +227,16 @@ namespace WebApplication3.Data
             // Geçen ayın öncesi (kapatılmış örnek ay): 6 fatura, tamamı onaylı
             var ikiAyOnce = gecenAy.AddMonths(-1);
             foreach (var (gun, idx, sa) in new[] { (3, 0, SK), (7, 3, ET), (10, 9, SK), (14, 7, BA), (20, 12, ET), (26, 1, SK) }) Onayli(Yap(ikiAyOnce.AddDays(gun - 1), idx, sa, 0.97m), 40);
+            // Yansıtma Modülü şartname örneği (§4.7 / §18): Hammadde A, 1.000 KG × 500 TL, KDV %20 — Uras Kimya alış faturası (Data/YansitmaOrnek.cs tohumları bunu kullanır)
+            var ha = new AlimFatura
+            {
+                Id = ++id, Tarih = G(6), Tedarikci = "Aksa Akrilik Kimya San. A.Ş.", TedarikciVkn = "0330031310", Kategori = "Hammadde", Satinalmaci = SK, FaturaSirketi = "Uras Kimya", KullanimSirketi = "Uras Kimya",
+                TalepEden = "Mehmet Arslan", TalepEdenBirim = "Üretim", MasrafMerkezi = "CC40 - Üretim", FaturaTuru = "e-Fatura", Vade = G(6).AddDays(60), MuhasebeFisNo = "AF-" + (fisNo++), OdemeDurumu = "Ödendi",
+                FaturaNo = "URS2026100099001", SiparisNo = $"SAS-{G(6):yyyy}-09901", IrsaliyeNo = $"IRS-{G(6):yyyyMM}-0991", Aciklama = "Hammadde A dönem alımı; grup şirketlerine kısmi devir planlı (yansıtma örnek senaryosu)."
+            };
+            ha.Ettn = $"033{ha.Id:D5}-{ha.Tarih:MMdd}-4a1b-8c2d-{ha.Tarih:yyyyMMdd}{ha.Id:D4}";
+            ha.Kalemler.Add(new AlimKalem { Sira = 1, Kod = "HM-A-001", Aciklama = "Hammadde A", Miktar = 1000, Birim = "KG", BirimFiyat = 500, KdvOrani = 20, OncekiBirimFiyat = 500 });
+            l.Add(ha); Onayli(ha, 8);
             KapatilanAylar.Add(ikiAyOnce.ToString("yyyy-MM"));
             KapanisKayitlari.Add((ikiAyOnce.ToString("yyyy-MM"), Direktor.Ad, gecenAy.AddDays(4), "Ay sonu alım onayı tamamlandı; rapor yönetime sunuldu."));
             return l;

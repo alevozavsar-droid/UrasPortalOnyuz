@@ -21,9 +21,38 @@ namespace WebApplication3.Controllers
         /// Sekme 1 "İşlem Ekranı" (varsayılan), Sekme 2 "Raporu", Sekme 3 "Muhasebe Kontrolü". Rapor ve kontrol ayrı menü değildir;
         /// ?ust=islem|rapor|kontrol ile açılır (wwwroot/js/grup-ici-sekmeler.js).
         /// </summary>
-        public IActionResult Yansitma(string sekme, string no, string ust) => Sayfa("YANSITMA", sekme, no, ust);
-        public IActionResult Mahsup(string sekme, string no, string ust) => Sayfa("MAHSUP", sekme, no, ust);
-        public IActionResult Temlik(string sekme, string no, string ust) => Sayfa("TEMLIK", sekme, no, ust);
+        /// <summary>
+        /// Yansıtma İşlemleri: "URAS HOLDING Yansıtma Modülü IT Gereksinim Dokümanı v1.0" ile ayrı modüle dönüştü (Data/YansitmaOrnek.cs,
+        /// Controllers/YansitmaController.cs, Views/GrupIci/Yansitma.cshtml, wwwroot/js/yansitma.js). Aynı üç sekme: İşlem Ekranı / Raporu / Muhasebe Kontrolü.
+        /// ?ust=islem|rapor|kontrol, ?no=YNS-000125 detay açar.
+        /// </summary>
+        public IActionResult Yansitma(string sekme, string no, string ust)
+        {
+            ViewData["Title"] = "Yansıtma İşlemleri";
+            ViewBag.Ust = ust == "rapor" || ust == "kontrol" ? ust : "islem"; ViewBag.No = no ?? "";
+            ViewBag.Sirketler = YansitmaOrnek.Sirketler;
+            return View("~/Views/GrupIci/Yansitma.cshtml");
+        }
+        /// <summary>
+        /// Mahsup İşlemleri: "URAS HOLDING Mahsup Modülü IT Gereksinim Dokümanı v1.0" ile ayrı modüle dönüştü (Data/MahsupOrnek.cs,
+        /// Controllers/MahsupController.cs, Views/GrupIci/Mahsup.cshtml, wwwroot/js/mahsup.js). Üç sekme: İşlem Ekranı / Raporu / Muhasebe Kontrolü.
+        /// </summary>
+        public IActionResult Mahsup(string sekme, string no, string ust)
+        {
+            ViewData["Title"] = "Mahsup İşlemleri";
+            ViewBag.Ust = ust == "rapor" || ust == "kontrol" ? ust : "islem"; ViewBag.No = no ?? "";
+            return View("~/Views/GrupIci/Mahsup.cshtml");
+        }
+        /// <summary>
+        /// Temlik İşlemleri: "URAS HOLDING Temlik Modülü IT Gereksinim Dokümanı v1.0" ile ayrı modüle dönüştü (Data/TemlikOrnek.cs,
+        /// Controllers/TemlikController.cs, Views/GrupIci/Temlik.cshtml, wwwroot/js/temlik.js). Üç sekme: İşlem Ekranı / Raporu / Muhasebe Kontrolü.
+        /// </summary>
+        public IActionResult Temlik(string sekme, string no, string ust)
+        {
+            ViewData["Title"] = "Temlik İşlemleri";
+            ViewBag.Ust = ust == "rapor" || ust == "kontrol" ? ust : "islem"; ViewBag.No = no ?? "";
+            return View("~/Views/GrupIci/Temlik.cshtml");
+        }
 
         private IActionResult Sayfa(string kod, string sekme, string no, string ust)
         {

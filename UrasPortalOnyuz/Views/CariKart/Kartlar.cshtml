@@ -1,0 +1,59 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string tip = (string)ViewBag.Tip ?? "Müşteri";
+    bool musteri = tip == "Müşteri";
+    // Satın alma / tedarik ekranlarında "Satış Temsilcisi" yerine "Satınalma Temsilcisi" yazılır (aynı CARİ_FAALİYET alanı)
+    string temsilci = musteri ? "Satış Temsilcisi" : "Satınalma Temsilcisi";
+    string temsilciler = musteri ? "Satış Temsilcileri" : "Satınalma Temsilcisi";
+    string temsilciK = musteri ? "satış temsilcisi" : "satınalma temsilcisi";
+}
+@*
+    CARİ KARTLARI (Müşteri / Tedarikçi) — "Cari Kart ve Faaliyet Eşleştirme Yapısı — IT Uygulama Raporu v6"
+    CARİ_MASTER listesi (§3 alanları; tip / bölge / ülke / sınıf / ilişki / rol / eş cari / faaliyet / temsilci filtreleri) ve detay drawer'ında
+    CARİ_FAALİYET_EŞLEŞTİRME satırları (§9: faaliyet grubu bazında satış temsilcisi, ana faaliyet, ürün hiyerarşisi). Veri: /CariKart/Veri.
+    Talep formu: /CariKart/MusteriTalep · /CariKart/TedarikciTalep. Betik: wwwroot/js/cari-kart.js · Kurallar: Data/CariKartOrnek.cs
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<link rel="stylesheet" href="/css/cari-kart.css?v=1" />
+}
+<div class="container-fluid py-3 na ck" id="ck" data-sayfa="kartlar" data-tip="@tip">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas @(musteri ? "fa-users" : "fa-truck-field")"></i></span>@tip Cari Kartları</h4>
+        <span style="font-size:.68rem;font-weight:700;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px"><i class="fas fa-database me-1"></i>CARİ_MASTER + CARİ_FAALİYET_EŞLEŞTİRME</span>
+        <span class="ck-rol"><i class="fas fa-user-shield"></i>Rol (demo):<select class="form-select" id="ckRol"></select><span id="ckBen" class="text-muted"></span></span>
+        <span class="sub w-100">@tip carilerinin kimlik, vergi, bölge / ülke / şehir, sınıf (kart tipi + bölge matrisi), ilişki durumu (Grup İçi / İlişkili / Grup Dışı), rol (çift rolde eş cari kodu) ve <b>faaliyet grubu bazında @temsilciK</b> bilgileri. Yeni kart, <b>@tip Talep Formu</b> ile Muhasebe onayından geçerek açılır.</span>
+    </div>
+    <div class="na-kpi" id="ckKpi" data-dinamik="kapali"></div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+    <div class="na-kart">
+        <div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Filtreler</span><span class="d-flex gap-1"><a class="btn btn-primary btn-sm py-0" href="/CariKart/@(musteri ? "MusteriTalep" : "TedarikciTalep")" style="font-size:.68rem"><i class="fas fa-plus me-1"></i>Yeni @tip Talebi</a><button type="button" class="btn btn-light btn-sm py-0" id="ckTemizle" style="font-size:.66rem">Temizle</button><button type="button" class="btn btn-light btn-sm py-0" id="ckExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button><button type="button" class="btn btn-light btn-sm py-0" id="ckFaaliyetExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Faaliyet Excel</button></span></div>
+        <div class="na-kart-g">
+            <div class="ck-filtre">
+                <div><label>Ara</label><input class="form-control" id="ckAra" placeholder="Kod, ünvan, VKN, yetkili, e-posta…"></div>
+                <div><label>Cari Kart Tipi</label><select class="form-select" id="ckFTip"></select></div>
+                <div><label>Cari Bölge</label><select class="form-select" id="ckFBolge"><option value="">Tümü</option></select></div>
+                <div><label>Ülke</label><select class="form-select" id="ckFUlke"><option value="">Tümü</option></select></div>
+                <div><label>Cari Sınıfı</label><select class="form-select" id="ckFSinif"><option value="">Tümü</option></select></div>
+                <div><label>İlişki Durumu</label><select class="form-select" id="ckFIliski"><option value="">Tümü</option></select></div>
+                <div><label>Cari Rolü</label><select class="form-select" id="ckFRol"><option value="">Tümü</option></select></div>
+                <div><label>Durum</label><select class="form-select" id="ckFDurum"><option value="">Tümü</option><option>Aktif</option><option>Pasif</option></select></div>
+                <div><label>Faaliyet Ana Grubu</label><select class="form-select" id="ckFAna"><option value="">Tümü</option></select></div>
+                <div><label>Faaliyet Grubu</label><select class="form-select" id="ckFGrup"><option value="">Tümü</option></select></div>
+                <div><label>@temsilci</label><select class="form-select" id="ckFTemsilci"><option value="">Tümü</option></select></div>
+                <div><label>Şirket (ERP)</label><select class="form-select" id="ckFSirket"><option value="">Tümü</option></select></div>
+            </div>
+            <div class="na-mini" id="ckSayi"></div>
+            <div class="table-responsive"><table class="na-tablo" id="ckTablo" data-dinamik="kapali"><thead><tr><th>Cari Kodu</th><th>Kısa Ad / Resmi Ünvan</th><th>VKN / Vergi Dairesi</th><th>Tip</th><th>Bölge · Ülke · Şehir</th><th>Cari Sınıfı</th><th>İlişki</th><th>Rol · Eş Cari</th><th>Ana Faaliyet</th><th class="s">Faaliyet</th><th>@temsilciler</th><th>Vade</th><th>Durum</th></tr></thead><tbody></tbody></table></div>
+        </div>
+    </div>
+    <div class="row g-2">
+        <div class="col-lg-6"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-user-tie me-1"></i>Faaliyet Bazlı @temsilci Dağılımı (§12)</span><span class="not">filtreye göre · temsilci × faaliyet grubu</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:280px"><table class="na-tablo" id="ckTemsilciTablo" data-dinamik="kapali"><thead><tr><th>@temsilci</th><th>Faaliyet Grupları</th><th class="s">Cari</th><th class="s">Ana Faaliyet</th></tr></thead><tbody></tbody></table></div></div></div></div>
+        <div class="col-lg-6"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-table-cells me-1"></i>Cari Kart Tipi / Bölge / Sınıf Matrisi (§5)</span><span class="not">seçim listeleri §14</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:280px"><table class="na-tablo" id="ckMatris" data-dinamik="kapali"><thead><tr><th>Cari Kart Tipi</th><th>Cari Bölge</th><th>Ülke</th><th>Cari Sınıfı Seçenekleri</th></tr></thead><tbody></tbody></table></div></div></div></div>
+    </div>
+    <div class="ck-perde" id="ckPerde"></div>
+    <div class="ck-drawer" id="ckDrawer"><div class="ck-drawer-ust"><b id="ckDrawerBaslik" style="font-size:.85rem">Cari Kart</b><span class="ms-auto d-flex gap-1" id="ckDrawerAksiyon"></span><button type="button" class="btn btn-light btn-sm py-0" id="ckDrawerKapat" style="font-size:.66rem"><i class="fas fa-xmark"></i></button></div><div id="ckDrawerIc"></div></div>
+</div>
+@section Scripts {
+<script src="/js/cari-kart.js?v=1"></script>
+}

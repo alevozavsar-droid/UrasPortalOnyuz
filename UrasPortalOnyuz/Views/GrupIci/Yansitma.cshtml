@@ -1,0 +1,324 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string ust = (string)ViewBag.Ust ?? "islem";
+    string no = (string)ViewBag.No ?? "";
+}
+@*
+    YANSITMA MODÜLÜ — "URAS HOLDING Yansıtma Modülü IT Teknik ve İşlevsel Gereksinim Dokümanı v1.0 (21.09.2026)"
+    Üç sekme aynı veri setini kullanır (§2): İşlem Ekranı kayıt oluşturur (kaynak fatura seç, kalemleri TEK TEK işaretle, miktar / kâr / fiyat,
+    simülasyon, onay), Raporu izler, Muhasebe Kontrolü beklenen (snapshot) ile gerçekleşen fişi karşılaştırır.
+    Yerleşim EK A: üst bant (no, tarih, şirketler, durum, aksiyonlar) · kaynak fatura özeti · orta alan kalemler · sağ sabit özet paneli · alt panel simülasyon.
+    Veri: /Yansitma/Veri, /Yansitma/KaynakFaturalar, /Yansitma/Onizleme, Kaydet, OnayaGonder, Onay, GeriCek, FaturaOlustur, Iptal, FisAl, Kontrol, Parametre.
+    Betik: wwwroot/js/yansitma.js · Kurallar: Data/YansitmaOrnek.cs
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<style>
+    .na.yn { --na-k: #0d9488; }
+    .yn .na-kpi { grid-template-columns: repeat(6, 1fr); }
+    .gi-ust { margin-bottom: 10px; }
+    .gi-ust button { font-size: .74rem; font-weight: 700; color: #475569; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px 11px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+    .gi-ust button:hover { border-color: #cbd5e1; background: #f8fafc; }
+    .gi-ust button.aktif { background: var(--na-k); border-color: var(--na-k); color: #fff; }
+    .gi-ust button .n { font-size: .62rem; background: rgba(255,255,255,.25); border-radius: 999px; padding: 1px 6px; }
+    .gi-ust button:not(.aktif) .n { background: #f1f5f9; color: #475569; }
+    .gi-panel { display: none; } .gi-panel.aktif { display: block; }
+    .yn-rol { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: .7rem; color: #64748b; }
+    .yn-rol select { font-size: .72rem; min-height: 28px; padding: 2px 24px 2px 8px; width: auto; }
+    /* üst aksiyon bandı */
+    .yn-aksiyon { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+    .yn-aksiyon .btn { font-size: .7rem; padding: 3px 9px; font-weight: 700; }
+    .yn-aksiyon .ayrac { width: 1px; height: 20px; background: #e2e8f0; margin: 0 3px; }
+    .yn-durum { font-size: .66rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+    /* kalemler tablosu: sabit başlık, yatay kaydırma */
+    .yn-kalem-kap { max-height: 420px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+    table.yn-kalem { width: 100%; font-size: .7rem; border-collapse: separate; border-spacing: 0; min-width: 1560px; }
+    table.yn-kalem th { position: sticky; top: 0; z-index: 2; background: #f8fafc; font-size: .6rem; text-transform: uppercase; letter-spacing: .03em; color: #64748b; padding: 5px 6px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; text-align: left; }
+    table.yn-kalem td { padding: 3px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; white-space: nowrap; }
+    table.yn-kalem th.s, table.yn-kalem td.s { text-align: right; font-variant-numeric: tabular-nums; }
+    table.yn-kalem th.g, table.yn-kalem td.g { background: #f0fdfa; }              /* kullanıcı giriş alanları */
+    table.yn-kalem th.h, table.yn-kalem td.h { background: #fafafa; color: #334155; } /* sistem hesabı */
+    table.yn-kalem tr.secili td { background: #ecfeff; } table.yn-kalem tr.secili td.g { background: #ccfbf1; }
+    table.yn-kalem tr.pasif td { color: #94a3b8; }
+    table.yn-kalem input.form-control { font-size: .7rem; min-height: 24px; padding: 1px 5px; width: 84px; text-align: right; display: inline-block; }
+    table.yn-kalem input.form-control.k { width: 62px; } table.yn-kalem input.form-control.mm { width: 130px; text-align: left; }
+    table.yn-kalem input.form-control.manuel { border-color: #f59e0b; background: #fffbeb; }
+    table.yn-kalem input:disabled { background: #f8fafc; }
+    table.yn-kalem .kilit { color: #94a3b8; font-size: .58rem; margin-left: 3px; }
+    table.yn-kalem .dagit { font-size: .62rem; padding: 1px 6px; }
+    table.yn-kalem .dag { display: block; font-size: .62rem; color: #0f766e; }
+    table.yn-kalem tfoot td { font-weight: 800; background: #f8fafc; border-top: 2px solid #e2e8f0; }
+    .yn-kalem-arac { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; font-size: .7rem; }
+    .yn-kalem-arac .form-control, .yn-kalem-arac .form-select { width: auto; font-size: .7rem; min-height: 26px; padding: 1px 6px; }
+    .yn-kalem-arac .sayac { margin-left: auto; font-weight: 700; color: #0f766e; }
+    /* sağ sabit özet paneli */
+    .yn-sag { position: sticky; top: 8px; }
+    .yn-ozet { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; font-size: .72rem; }
+    .yn-ozet .l { color: #64748b; } .yn-ozet .v { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+    .yn-ozet .buyuk { font-size: .95rem; color: #0f172a; } .yn-ozet .ayrac { grid-column: 1 / -1; border-top: 1px dashed #e2e8f0; margin: 2px 0; }
+    .yn-ozet .kar { color: #15803d; } .yn-ozet .kar.eksi { color: #b91c1c; }
+    .yn-dogrulama { font-size: .7rem; } .yn-dogrulama li { margin-bottom: 3px; } .yn-dogrulama .h { color: #b91c1c; } .yn-dogrulama .u { color: #b45309; }
+    .yn-akis { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: .68rem; }
+    .yn-akis span { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 2px 8px; font-weight: 700; color: #334155; } .yn-akis i { color: #94a3b8; font-size: .56rem; }
+    /* kaynak fatura özeti */
+    .yn-fatura { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px 12px; font-size: .7rem; }
+    .yn-fatura .l { font-size: .58rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; letter-spacing: .04em; } .yn-fatura .v { font-weight: 700; color: #0f172a; }
+    /* simülasyon */
+    .yn-sim { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .yn-sim > div { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+    .yn-sim .b { background: #f8fafc; padding: 5px 9px; font-size: .68rem; font-weight: 800; color: #0f172a; display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; }
+    .yn-sim .b small { color: #64748b; font-weight: 600; }
+    table.yn-fis { width: 100%; font-size: .68rem; border-collapse: collapse; }
+    table.yn-fis th { font-size: .58rem; text-transform: uppercase; color: #64748b; background: #fff; padding: 3px 6px; border-bottom: 1px solid #e2e8f0; text-align: left; white-space: nowrap; }
+    table.yn-fis td { padding: 3px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    table.yn-fis td.s, table.yn-fis th.s { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    table.yn-fis tr.top td { font-weight: 800; background: #f8fafc; border-top: 2px solid #e2e8f0; }
+    table.yn-fis .k { color: #94a3b8; font-size: .6rem; display: block; }
+    table.yn-fis code { font-size: .64rem; background: #f1f5f9; padding: 0 4px; border-radius: 4px; color: #0f172a; }
+    .yn-sim-ust { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px 10px; font-size: .68rem; margin-bottom: 8px; }
+    .yn-sim-ust .l { font-size: .56rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; } .yn-sim-ust .v { font-weight: 700; }
+    /* durum adımları */
+    .yn-adimlar { display: flex; gap: 0; align-items: center; flex-wrap: wrap; font-size: .64rem; margin-bottom: 8px; }
+    .yn-adimlar span { padding: 3px 10px; border: 1px solid #e2e8f0; background: #fff; color: #94a3b8; font-weight: 700; margin-right: -1px; }
+    .yn-adimlar span:first-child { border-radius: 999px 0 0 999px; } .yn-adimlar span:last-child { border-radius: 0 999px 999px 0; }
+    .yn-adimlar span.gecti { background: #dcfce7; color: #166534; border-color: #bbf7d0; } .yn-adimlar span.simdi { background: var(--na-k); color: #fff; border-color: var(--na-k); }
+    .yn-adimlar span.hata { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    /* rapor / kontrol */
+    .yn-filtre { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 8px; }
+    .yn-filtre label { font-size: .6rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; letter-spacing: .04em; display: block; margin-bottom: 1px; }
+    .yn-filtre .form-control, .yn-filtre .form-select { font-size: .7rem; min-height: 26px; padding: 1px 6px; }
+    .yn-filtre select[multiple] { height: 58px; font-size: .68rem; }
+    .yn-drawer { position: fixed; top: 0; right: -820px; width: 800px; max-width: 95vw; height: 100vh; background: #fff; box-shadow: -8px 0 24px rgba(15,23,42,.18); z-index: 1060; transition: right .25s; overflow: auto; padding: 12px 14px; }
+    .yn-drawer.acik { right: 0; }
+    .yn-drawer-ust { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: sticky; top: 0; background: #fff; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; z-index: 2; }
+    .yn-perde { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1055; display: none; } .yn-perde.acik { display: block; }
+    .yn-ks { font-size: .62rem; font-weight: 800; padding: 2px 7px; border-radius: 999px; white-space: nowrap; display: inline-block; letter-spacing: .02em; }
+    .yn-ks.ok { background: #dcfce7; color: #15803d; } .yn-ks.kritik { background: #fee2e2; color: #b91c1c; } .yn-ks.uyari { background: #fef3c7; color: #b45309; } .yn-ks.yok { background: #f1f5f9; color: #64748b; } .yn-ks.bilgi { background: #e0f2fe; color: #0369a1; }
+    .yn-kars td.fark { background: #fff1f2; } .yn-kars td.uyar { background: #fffbeb; }
+    .yn-mutabakat { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 3px 8px; font-size: .68rem; align-items: center; }
+    .yn-mutabakat .h { font-size: .56rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; }
+    .yn-legend { font-size: .66rem; color: #475569; } .yn-legend li { margin-bottom: 3px; }
+    .yn-esleme td, .yn-esleme th { font-size: .64rem; }
+    .yn-audit code { font-size: .62rem; }
+    .yn-yetki { font-size: .64rem; color: #94a3b8; }
+    /* modal listesi */
+    .yn-modal .modal-dialog { max-width: 1180px; } .yn-modal table.na-tablo tr.kilit td { color: #94a3b8; cursor: not-allowed; }
+    .yn-modal table.na-tablo tr.sec td { background: #ecfeff; }
+    .yn-dag-satir { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr 1fr auto; gap: 6px; align-items: center; margin-bottom: 5px; font-size: .7rem; }
+    .yn-dag-satir .form-control, .yn-dag-satir .form-select { font-size: .7rem; min-height: 26px; padding: 1px 6px; }
+    @@media (max-width: 1200px) { .yn .na-kpi { grid-template-columns: repeat(3, 1fr); } .yn-filtre { grid-template-columns: repeat(3, 1fr); } .yn-sim { grid-template-columns: 1fr; } .yn-fatura { grid-template-columns: repeat(3, 1fr); } .yn-sag { position: static; } }
+    @@media print { .gi-ust, .na-sekme, .yn-aksiyon, #naSonuc, .na-kpi, .yn-rol, .yn-kalem-arac, .btn { display: none !important; } .gi-panel, .na-panel { display: block !important; } .yn-kalem-kap { max-height: none; overflow: visible; } }
+</style>
+}
+
+<div class="container-fluid py-3 na yn" id="yn" data-ust="@ust" data-no="@no">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-right-left"></i></span>Yansıtma İşlemleri</h4>
+        <span style="font-size:.68rem;font-weight:700;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px"><i class="fas fa-route me-1"></i>Taslak → Onay Bekliyor → Onaylandı → Fatura Oluştu → Muhasebeleşti → Uyumlu</span>
+        <span class="yn-rol"><i class="fas fa-user-shield"></i>Rol (demo):<select class="form-select" id="ynRol"></select><span id="ynBen" class="text-muted"></span></span>
+        <span class="sub w-100">Grup şirketleri arasında bir kaynak faturanın tamamının ya da <b>tek tek seçilen satırlarının / kısmi miktarlarının</b> hedef şirkete kâr oranı eklenerek veya eklenmeden yansıtılması. Satır bazında izlenebilirlik, mükerrer yansıtma engeli, muhasebe kaydı oluşmadan önce simülasyon; gerçek fiş sonrası beklenen–gerçekleşen kontrolü.</span>
+    </div>
+    <div class="na-turler gi-ust" id="giUst" data-dinamik="kapali">
+        <button type="button" data-u="islem" class="@(ust == "islem" ? "aktif" : "")"><i class="fas fa-pen-to-square"></i>Yansıtma İşlem Ekranı</button>
+        <button type="button" data-u="rapor" class="@(ust == "rapor" ? "aktif" : "")"><i class="fas fa-table-list"></i>Yansıtma Raporu <span class="n" id="ynRaporN">…</span></button>
+        <button type="button" data-u="kontrol" class="@(ust == "kontrol" ? "aktif" : "")"><i class="fas fa-file-invoice"></i>Yansıtma Muhasebe Kontrolü <span class="n" id="ynKontrolN">…</span></button>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+
+    @* ================= SEKME 1 — YANSITMA İŞLEM EKRANI (§4) ================= *@
+    <div class="gi-panel @(ust == "islem" ? "aktif" : "")" id="giIslem">
+        <div class="na-kpi" id="ynKpi" data-dinamik="kapali"></div>
+        <div class="na-sekme" id="ynSekmeler" data-dinamik="kapali">
+            <button type="button" data-p="yeni"><i class="fas fa-plus me-1"></i>Yeni Yansıtma</button>
+            <button type="button" data-p="liste">Yansıtma Listesi <span class="n" id="ynNListe">0</span></button>
+            <button type="button" data-p="detay"><i class="fas fa-file-lines me-1"></i>İşlem Detayı <span class="n" id="ynDetayNo">—</span></button>
+            <button type="button" data-p="onay">Onay Bekleyenler <span class="n" id="ynNOnay">0</span></button>
+        </div>
+
+        @* ---- Yeni / düzenlenen yansıtma (EK A yerleşimi) ---- *@
+        <div class="na-panel" data-p="yeni">
+            <form id="ynForm" autocomplete="off" novalidate>
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas fa-id-card me-1"></i>İşlem Başlığı</span>
+                        <span class="yn-aksiyon">
+                            <span class="yn-durum" id="ynDurumRozet">Yeni · kaydedilmedi</span><span class="ayrac"></span>
+                            <button type="button" class="btn btn-light" id="ynYeni" title="Yeni boş işlem açar; Yansıtma No kayıtta otomatik üretilir"><i class="fas fa-file me-1"></i>Yeni Yansıtma</button>
+                            <button type="button" class="btn btn-outline-primary" id="ynFaturaSec" title="Yansıtan şirkete ait seçilebilir faturaları açar"><i class="fas fa-file-invoice me-1"></i>Kaynak Fatura Seç</button>
+                            <button type="button" class="btn btn-light" id="ynTaslak" title="Eksik zorunlu alanlara izin verir; fatura oluşturmaz"><i class="fas fa-floppy-disk me-1"></i>Taslak Kaydet</button>
+                            <button type="button" class="btn btn-light" id="ynSimBtn" title="Beklenen yevmiye kayıtlarını hesaplar ve alt panelde gösterir"><i class="fas fa-calculator me-1"></i>Muhasebe Kaydı Simülasyonu</button>
+                            <button type="button" class="btn btn-primary" id="ynGonder" title="Zorunlu validasyonları çalıştırır ve onay akışını başlatır"><i class="fas fa-paper-plane me-1"></i>Onaya Gönder</button>
+                            <span class="ayrac"></span>
+                            <button type="button" class="btn btn-light" id="ynBelge" title="Kaynak belgeyi görüntüle"><i class="fas fa-eye me-1"></i>Belge</button>
+                            <button type="button" class="btn btn-light" id="ynExcel"><i class="fas fa-file-excel me-1"></i>Excel</button>
+                            <button type="button" class="btn btn-light" id="ynPdf"><i class="fas fa-file-pdf me-1"></i>PDF</button>
+                            <button type="button" class="btn btn-outline-danger" id="ynIptalBtn"><i class="fas fa-ban me-1"></i>İptal</button>
+                        </span>
+                    </div>
+                    <div class="na-kart-g">
+                        <div class="row g-2">
+                            <div class="col-md-2"><label class="form-label">Yansıtma No <i class="fas fa-lock na-kilit"></i></label><input class="form-control" id="ynNo" disabled placeholder="Kayıtta otomatik"></div>
+                            <div class="col-md-2"><label class="form-label">Yansıtma Tarihi <span class="z">*</span></label><input class="form-control" type="date" id="ynTarih" required></div>
+                            <div class="col-md-2"><label class="form-label">Yansıtan Şirket <span class="z">*</span></label><select class="form-select" id="ynYansitan" required></select></div>
+                            <div class="col-md-2"><label class="form-label">Yansıtılan Şirket <span class="z">*</span></label><select class="form-select" id="ynYansitilan" required></select></div>
+                            <div class="col-md-2"><label class="form-label">Yansıtma Türü <span class="z">*</span></label><select class="form-select" id="ynTur" required></select></div>
+                            <div class="col-md-2"><label class="form-label">Kaynak Belge Türü <span class="z">*</span></label><select class="form-select" id="ynKaynakBelgeTuru"></select></div>
+                            <div class="col-md-1"><label class="form-label">Para Birimi <i class="fas fa-lock na-kilit" title="Kaynak belgeye bağlı"></i></label><input class="form-control" id="ynParaBirimi" disabled value="TRY"></div>
+                            <div class="col-md-1"><label class="form-label">Kur</label><input class="form-control" type="number" step="0.0001" id="ynKur" value="1" disabled></div>
+                            <div class="col-md-2"><label class="form-label">Masraf Merkezi <span class="form-text d-inline">(kurala göre zorunlu)</span></label><select class="form-select" id="ynMasrafMerkezi"></select></div>
+                            <div class="col-md-2"><label class="form-label">Proje</label><select class="form-select" id="ynProje"></select></div>
+                            <div class="col-md-2"><label class="form-label">Departman</label><input class="form-control" id="ynDepartman" placeholder="Raporlama için"></div>
+                            <div class="col-md-4"><label class="form-label">Açıklama <span class="z">*</span></label><input class="form-control" id="ynAciklama" maxlength="500" required placeholder="İşlem açıklaması (500 karakter)"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row g-2">
+                    <div class="col-lg-9">
+                        <div class="na-kart">
+                            <div class="na-kart-b"><span><i class="fas fa-file-invoice me-1"></i>Kaynak Fatura</span><span class="not" id="ynFaturaNot">Kaynak Fatura Seç ile yansıtan şirketin faturalarından birini seçin</span></div>
+                            <div class="na-kart-g" id="ynFaturaOzet"><div class="na-bos">Kaynak belge seçilmedi.</div></div>
+                        </div>
+                        <div class="na-kart">
+                            <div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>Fatura Kalemleri — Kaynak, Miktar, Fiyat, Kâr ve Vergi</span><span class="not">yalnız işaretli satırlar yansıtılır · miktar kalanı aşamaz · toplam yansıtma tutarı elle girilmez</span></div>
+                            <div class="na-kart-g">
+                                <div class="yn-kalem-arac">
+                                    <label class="mb-0">Toplu Kâr Oranı (%)</label><input class="form-control" type="number" step="0.01" id="ynTopluKar" value="10" style="width:80px;text-align:right">
+                                    <button type="button" class="btn btn-light btn-sm py-0" id="ynTopluKarUygula" style="font-size:.68rem"><i class="fas fa-percent me-1"></i>Seçili Kalemlere Uygula</button>
+                                    <span class="ayrac" style="width:1px;height:18px;background:#e2e8f0"></span>
+                                    <button type="button" class="btn btn-light btn-sm py-0" id="ynTumunuSec" style="font-size:.68rem">Tümünü seç</button>
+                                    <button type="button" class="btn btn-light btn-sm py-0" id="ynTumunuKaldir" style="font-size:.68rem">Seçimi kaldır</button>
+                                    <button type="button" class="btn btn-light btn-sm py-0" id="ynKalanDoldur" style="font-size:.68rem" title="Seçili satırlara kalan miktarın tamamını yazar">Kalanı yansıt</button>
+                                    <input class="form-control" id="ynKalemAra" placeholder="Hızlı filtre: kalem, kod…" style="width:170px">
+                                    <span class="sayac" id="ynSeciliSayac">0 satır seçili</span>
+                                </div>
+                                <div class="yn-kalem-kap"><table class="yn-kalem" id="ynKalemler" data-dinamik="kapali">
+                                    <thead><tr>
+                                        <th><input type="checkbox" id="ynHepsi" title="Tümünü seç"></th><th>Satır</th><th>Fatura Kalemi</th><th>Malz./Hizmet Kodu</th>
+                                        <th class="s">Fatura Miktarı</th><th class="s">Önceden Yansıtılan</th><th class="s">Kalan</th><th class="s g">Yansıtılacak Miktar</th><th>Birim</th>
+                                        <th class="s">Birim Maliyet</th><th class="s h">Toplam Maliyet</th><th class="s g">Kâr %</th><th class="s h">Birim Kâr</th><th class="s g">Birim Yansıtma</th><th class="s h">Toplam Yansıtma</th>
+                                        <th class="s g">KDV %</th><th class="s h">KDV Tutarı</th><th class="s h">KDV Dahil</th><th class="g">Masraf Merkezi</th><th>Dağıtım</th>
+                                    </tr></thead>
+                                    <tbody><tr><td colspan="20" class="na-bos">Kaynak fatura seçildiğinde satırlar burada listelenir.</td></tr></tbody>
+                                    <tfoot></tfoot>
+                                </table></div>
+                                <div class="na-mini"><i class="fas fa-circle-info me-1"></i>Yeşil sütunlar kullanıcı girişi, gri sütunlar sistem hesabıdır. Birim Yansıtma Tutarı yalnız yetkili rollerde elle değiştirilebilir; değiştirilirse Kâr % geriye doğru hesaplanır. Negatif kâr / iskonto özel yetki ve gerekçe ister.</div>
+                            </div>
+                        </div>
+                        @* ---- Alt panel: Muhasebe Kaydı Simülasyonu (§5) — ayrı sekme değildir ---- *@
+                        <div class="na-kart" id="ynSimKart" style="display:none">
+                            <div class="na-kart-b"><span><i class="fas fa-calculator me-1"></i>Muhasebe Kaydı Simülasyonu — Beklenen Yevmiye Kayıtları</span><span class="not" id="ynSimNot">gerçek fiş oluşmadan önce; hesap kodları eşleme tablosundan</span></div>
+                            <div class="na-kart-g">
+                                <div class="yn-sim-ust" id="ynSimUst"></div>
+                                <div class="yn-sim" id="ynSim"></div>
+                                <div id="ynSimUyari" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-3">
+                        <div class="yn-sag">
+                            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-sigma me-1"></i>Yansıtma Özeti</span><span class="not">seçili satırlar</span></div><div class="na-kart-g yn-ozet" id="ynOzet"></div></div>
+                            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-shield-halved me-1"></i>Validasyon</span><span class="not" id="ynDogrulamaNot"></span></div><div class="na-kart-g"><ul class="mb-0 ps-3 yn-dogrulama" id="ynDogrulama"><li class="text-muted">Kalem seçildikçe kurallar çalışır.</li></ul></div></div>
+                            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-route me-1"></i>Onay Akışı</span><span class="not">parametrik</span></div><div class="na-kart-g"><div class="yn-akis" id="ynAkis"><span class="text-muted">—</span></div><div class="na-mini" id="ynAkisNedeni"></div></div></div>
+                            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-sliders me-1"></i>Parametreler</span></div><div class="na-kart-g" id="ynParam"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="na-panel" data-p="liste">
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Yansıtma Listesi</span><span class="not">tüm işlemler · satıra tıklayın</span></div>
+                <div class="na-kart-g">
+                    <div class="na-filtre"><input class="form-control" id="ynListeAra" placeholder="Yansıtma no, şirket, fatura…"><select class="form-select" id="ynListeDurum"><option value="">Durum: Tümü</option></select><select class="form-select" id="ynListeBenim"><option value="">Kayıtlar: Tümü</option><option value="benim">Oluşturduklarım</option></select><span class="ms-auto na-mini" id="ynListeSayi"></span></div>
+                    <div class="table-responsive"><table class="na-tablo" id="ynListe" data-dinamik="kapali"><thead><tr><th>Yansıtma No</th><th>Tarih</th><th>Yansıtan → Yansıtılan</th><th>Tür</th><th>Kaynak Fatura</th><th class="s">Kalem</th><th class="s">Net Yansıtma</th><th class="s">Kâr %</th><th class="s">Genel Toplam</th><th>Durum</th><th>ERP Belge</th><th>Kontrol</th><th>Oluşturan</th></tr></thead><tbody></tbody></table></div>
+                </div></div>
+        </div>
+        <div class="na-panel" data-p="detay"><div id="ynDetay"><div class="na-bos">Listeden bir yansıtma seçin.</div></div></div>
+        <div class="na-panel" data-p="onay">
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clipboard-check me-1"></i>Onay Bekleyen Yansıtmalar</span><span class="not">Muhasebe / Direktör / Finans kuyruğu · ret nedeni zorunlu</span></div>
+                <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="ynOnayListe" data-dinamik="kapali"><thead><tr><th>Yansıtma No</th><th>Yansıtan → Yansıtılan</th><th>Tür</th><th>Kaynak Fatura</th><th class="s">Net</th><th class="s">Kâr %</th><th class="s">Genel Toplam</th><th>Bekleyen Adım</th><th>Onaycı</th><th>Neden</th><th>Hızlı İşlem</th></tr></thead><tbody></tbody></table></div></div></div>
+        </div>
+    </div>
+
+    @* ================= SEKME 2 — YANSITMA RAPORU (§6) ================= *@
+    <div class="gi-panel @(ust == "rapor" ? "aktif" : "")" id="giRapor">
+        <div class="na-kpi" id="ynRaporKpi" data-dinamik="kapali" style="grid-template-columns:repeat(8,1fr)"></div>
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Filtreler</span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="ynRaporBuAy" style="font-size:.66rem">Bu ay</button><button type="button" class="btn btn-light btn-sm py-0" id="ynRaporTemizle" style="font-size:.66rem">Temizle</button><button type="button" class="btn btn-light btn-sm py-0" id="ynRaporExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div>
+            <div class="na-kart-g">
+                <div class="yn-filtre">
+                    <div><label>Tarih Aralığı</label><div class="d-flex gap-1"><input class="form-control" type="date" id="ynRf1"><input class="form-control" type="date" id="ynRf2"></div></div>
+                    <div><label>Yansıtan Şirket</label><select class="form-select" id="ynRfYansitan" multiple></select></div>
+                    <div><label>Yansıtılan Şirket</label><select class="form-select" id="ynRfYansitilan" multiple></select></div>
+                    <div><label>Yansıtma Türü</label><select class="form-select" id="ynRfTur" multiple></select></div>
+                    <div><label>Durum</label><select class="form-select" id="ynRfDurum" multiple></select></div>
+                    <div><label>Muhasebe Kontrol Durumu</label><select class="form-select" id="ynRfKontrol" multiple></select></div>
+                    <div><label>Kaynak Fatura No</label><input class="form-control" id="ynRfKaynak" placeholder="Tam / parça"></div>
+                    <div><label>Yansıtma Fatura No (ERP)</label><input class="form-control" id="ynRfErp" placeholder="ERP belge no"></div>
+                    <div><label>Tedarikçi</label><input class="form-control" id="ynRfTedarikci" placeholder="Kaynak carisi"></div>
+                    <div><label>Malzeme / Hizmet</label><input class="form-control" id="ynRfKalem" placeholder="Kod ya da açıklama"></div>
+                    <div><label>Masraf Merkezi / Proje</label><input class="form-control" id="ynRfMm" placeholder="Kod / açıklama"></div>
+                    <div><label>Oluşturan / Onaylayan</label><input class="form-control" id="ynRfKisi" placeholder="Ad"></div>
+                </div>
+                <div class="na-mini" id="ynRaporSayi"></div>
+                <div class="table-responsive"><table class="na-tablo" id="ynRaporTablo" data-dinamik="kapali"><thead><tr><th>Yansıtma No</th><th>Tarih</th><th>Yansıtan</th><th>Yansıtılan</th><th>Kaynak Fatura</th><th>Yansıtma Faturası</th><th class="s">Toplam Maliyet</th><th class="s">Toplam Kâr</th><th class="s">Kâr %</th><th class="s">Toplam Yansıtma</th><th class="s">KDV</th><th class="s">Genel Toplam</th><th>Durum</th><th>Muhasebe Durumu</th><th>Kontrol Durumu</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>
+            </div>
+        </div>
+    </div>
+
+    @* ================= SEKME 3 — YANSITMA MUHASEBE KONTROLÜ (§7) ================= *@
+    <div class="gi-panel @(ust == "kontrol" ? "aktif" : "")" id="giKontrol">
+        <div class="na-kpi" id="ynKontrolKpi" data-dinamik="kapali"></div>
+        <div class="row g-2">
+            <div class="col-lg-7">
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas fa-file-invoice me-1"></i>Kontrol Listesi</span><span class="d-flex gap-1 align-items-center"><span class="not" id="ynKontrolSayi"></span><button type="button" class="btn btn-light btn-sm py-0" id="ynKontrolHepsi" style="font-size:.66rem" title="Fiş okunmuş tüm işlemlerde kontrolü yeniden çalıştırır"><i class="fas fa-rotate me-1"></i>Tümünü kontrol et</button><button type="button" class="btn btn-light btn-sm py-0" id="ynKontrolExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div>
+                    <div class="na-kart-g">
+                        <div class="na-filtre"><input class="form-control" id="ynKontrolAra" placeholder="Yansıtma no, şirket, fiş no…"><select class="form-select" id="ynKontrolDurumF"><option value="">Kontrol durumu: Tümü</option></select><label class="na-mini d-inline-flex align-items-center gap-1 mb-0"><input type="checkbox" id="ynKontrolOncesi"> Fatura oluşmamış işlemleri de göster</label></div>
+                        <div class="table-responsive"><table class="na-tablo" id="ynKontrolTablo" data-dinamik="kapali"><thead><tr><th>Yansıtma No</th><th>Yansıtan → Yansıtılan</th><th class="s">Net</th><th class="s">KDV</th><th class="s">Genel</th><th>ERP Faturası</th><th>Gerçek Fiş</th><th>Kontrol</th><th>Son Kontrol</th></tr></thead><tbody></tbody></table></div>
+                    </div>
+                </div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Kontrol Durumları (§7.4)</span></div><div class="na-kart-g"><ul class="mb-0 ps-3 yn-legend" id="ynKontrolLegend"></ul></div></div>
+            </div>
+            <div class="col-lg-5">
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas fa-code-compare me-1"></i>Beklenen ve Gerçekleşen Kayıt Karşılaştırması</span><span class="not" id="ynKarsNo">listeden işlem seçin</span></div>
+                    <div class="na-kart-g" id="ynKarsilastirma"><div class="na-bos">Kontrol listesinden bir işlem seçin.</div></div>
+                </div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-scale-balanced me-1"></i>Şirketler Arası Cari Mutabakat (§7.5)</span></div><div class="na-kart-g" id="ynMutabakat"><div class="na-bos">—</div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>Otomatik Kontrol Kuralları (§7.3)</span></div><div class="na-kart-g"><ol class="mb-0 ps-3 yn-legend" id="ynKontrolKurallar"></ol></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-table me-1"></i>Hesap Eşleme Tablosu (§8)</span><span class="not">Mali İşler yönetir · sabit kod yok</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:260px"><table class="na-tablo yn-esleme" id="ynEsleme" data-dinamik="kapali"><thead><tr><th>#</th><th>Şirket</th><th>Tür</th><th>Kalem Türü</th><th>Borç (yansıtılan)</th><th>Alacak (yansıtan)</th><th>KDV</th><th>MM</th><th>Prj</th><th>Geçerlilik</th><th>Aktif</th></tr></thead><tbody></tbody></table></div></div></div>
+            </div>
+        </div>
+    </div>
+
+    @* ---- Rapor detay drawer (§6.3) ---- *@
+    <div class="yn-perde" id="ynPerde"></div>
+    <div class="yn-drawer" id="ynDrawer"><div class="yn-drawer-ust"><b id="ynDrawerBaslik" style="font-size:.85rem">Detay</b><button type="button" class="btn btn-light btn-sm py-0 ms-auto" id="ynDrawerAc" style="font-size:.66rem"><i class="fas fa-up-right-from-square me-1"></i>İşlem ekranında aç</button><button type="button" class="btn btn-light btn-sm py-0" id="ynDrawerKapat" style="font-size:.66rem"><i class="fas fa-xmark"></i></button></div><div id="ynDrawerIc"></div></div>
+
+    @* ---- Kaynak Fatura Seç penceresi (§4.3) ---- *@
+    <div class="modal fade yn-modal" id="ynFaturaModal" tabindex="-1"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header py-2"><h6 class="modal-title" style="font-size:.85rem"><i class="fas fa-file-invoice me-1"></i>Kaynak Fatura Seç — <span id="ynFmSirket"></span></h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body na">
+            <div class="na-filtre"><input class="form-control" id="ynFmAra" placeholder="Fatura no, tedarikçi, kalem, açıklama… (sunucu tarafı arama)" style="min-width:320px"><span class="na-mini" id="ynFmSayi"></span><span class="ms-auto d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="ynFmOnce">‹</button><span class="na-mini" id="ynFmSayfa"></span><button type="button" class="btn btn-light btn-sm py-0" id="ynFmSonra">›</button></span></div>
+            <div class="table-responsive"><table class="na-tablo" id="ynFmTablo" data-dinamik="kapali"><thead><tr><th>Seç</th><th>Fatura No</th><th>Fatura Tarihi</th><th>Tedarikçi</th><th>Açıklama</th><th>Kategori</th><th class="s">Net Tutar</th><th class="s">KDV</th><th class="s">Genel Toplam</th><th>PB</th><th class="s">Yansıtılan Tutar</th><th class="s">Kalan Yansıtılabilir</th><th>Kullanıcı Firma</th></tr></thead><tbody></tbody></table></div>
+            <div class="na-mini">İptal edilmiş / reddedilmiş, tamamen yansıtılmış belgeler seçilemez. İlk fazda tek kaynak fatura (öneri §4.3).</div>
+        </div>
+    </div></div></div>
+
+    @* ---- Şirketlere Dağıt penceresi (§4.8) ---- *@
+    <div class="modal fade" id="ynDagitModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
+        <div class="modal-header py-2"><h6 class="modal-title" style="font-size:.85rem"><i class="fas fa-diagram-project me-1"></i>Şirketlere Dağıt — <span id="ynDgKalem"></span></h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body na">
+            <div class="na-mini mb-2" id="ynDgBilgi"></div>
+            <div class="yn-dag-satir" style="font-size:.6rem;font-weight:800;text-transform:uppercase;color:#94a3b8"><span>Hedef Şirket</span><span>Miktar</span><span>Kâr %</span><span>Birim Yansıtma</span><span>Toplam Yansıtma</span><span></span></div>
+            <div id="ynDgSatirlar"></div>
+            <button type="button" class="btn btn-light btn-sm py-0" id="ynDgEkle" style="font-size:.68rem"><i class="fas fa-plus me-1"></i>Hedef şirket ekle</button>
+            <div class="na-uyari" id="ynDgUyari"></div>
+        </div>
+        <div class="modal-footer py-1"><button type="button" class="btn btn-light btn-sm" id="ynDgTemizle">Dağıtımı kaldır</button><button type="button" class="btn btn-primary btn-sm" id="ynDgKaydet">Uygula</button></div>
+    </div></div></div>
+</div>
+
+@section Scripts {
+<script src="/js/yansitma.js?v=1"></script>
+}

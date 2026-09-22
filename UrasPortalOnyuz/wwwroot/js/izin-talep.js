@@ -177,9 +177,9 @@
   ['#izTakipAra', '#izTakipTur', '#izTakipDurum', '#izTakipKullanim'].forEach(s => $(s).addEventListener('input', () => { takipOzel = null; cizTakip(); }));
   function takipFiltreleri() {
     const uniq = f => V.talepler.map(f).filter((v, i, a) => a.indexOf(v) === i);
-    $('#izTakipTur').innerHTML = '<option value="">Tür: tümü</option>' + V.turler.map(t => `<option value="${t.kod}">${esc(t.ad)}</option>`).join('');
-    $('#izTakipDurum').innerHTML = '<option value="">Talep durumu: tümü</option>' + uniq(t => t.talepDurumu).map(x => `<option>${esc(x)}</option>`).join('');
-    $('#izTakipKullanim').innerHTML = '<option value="">Kullanım: tümü</option>' + uniq(t => t.kullanimDurumu).map(x => `<option>${esc(x)}</option>`).join('');
+    $('#izTakipTur').innerHTML = '<option value="">Tür: Tümü</option>' + V.turler.map(t => `<option value="${t.kod}">${esc(t.ad)}</option>`).join('');
+    $('#izTakipDurum').innerHTML = '<option value="">Talep durumu: Tümü</option>' + uniq(t => t.talepDurumu).map(x => `<option>${esc(x)}</option>`).join('');
+    $('#izTakipKullanim').innerHTML = '<option value="">Kullanım: Tümü</option>' + uniq(t => t.kullanimDurumu).map(x => `<option>${esc(x)}</option>`).join('');
   }
 
   // ---- ekip takvimi ----

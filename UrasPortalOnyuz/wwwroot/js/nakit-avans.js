@@ -181,8 +181,8 @@
   ['#naTakipAra', '#naTakipKapatma', '#naTakipOdeme', '#naTakipGecikmis'].forEach(s => $(s).addEventListener('input', () => { takipOzel = null; cizTakip(); }));
   function takipFiltreleri() {
     const uniq = f => V.talepler.map(f).filter((v, i, a) => a.indexOf(v) === i);
-    $('#naTakipKapatma').innerHTML = '<option value="">Kapatma: tümü</option>' + uniq(t => t.kapatmaDurumu).map(x => `<option>${esc(x)}</option>`).join('');
-    $('#naTakipOdeme').innerHTML = '<option value="">Ödeme: tümü</option>' + uniq(t => t.odemeDurumu).map(x => `<option>${esc(x)}</option>`).join('');
+    $('#naTakipKapatma').innerHTML = '<option value="">Kapatma: Tümü</option>' + uniq(t => t.kapatmaDurumu).map(x => `<option>${esc(x)}</option>`).join('');
+    $('#naTakipOdeme').innerHTML = '<option value="">Ödeme: Tümü</option>' + uniq(t => t.odemeDurumu).map(x => `<option>${esc(x)}</option>`).join('');
   }
 
   // ---- §3 talep detayı ----

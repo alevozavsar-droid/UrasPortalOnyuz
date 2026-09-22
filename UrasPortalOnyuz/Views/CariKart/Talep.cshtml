@@ -1,0 +1,118 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string tip = (string)ViewBag.Tip ?? "Müşteri";
+    string no = (string)ViewBag.No ?? "";
+    bool musteri = tip == "Müşteri";
+    // Satın alma / tedarik ekranlarında "Satış Temsilcisi" yerine "Satınalma Temsilcisi" yazılır (aynı CARİ_FAALİYET alanı)
+    string temsilci = musteri ? "Satış Temsilcisi" : "Satınalma Temsilcisi";
+    string temsilciK = musteri ? "satış temsilcisi" : "satınalma temsilcisi";
+}
+@*
+    CARİ KART TALEP FORMU (Müşteri / Tedarikçi) — "Cari Kart ve Faaliyet Eşleştirme Yapısı — IT Uygulama Raporu v6"
+    CARİ_MASTER alanları (§3) bağımlı seçimlerle: Kart Tipi → Bölge → Ülke (yurtiçi = Türkiye) → Şehir; Kart Tipi + Bölge → Cari Sınıfı (§5 matrisi);
+    İlişki Durumu (§6); Cari Rolü ve çift rolde zorunlu Eş Cari Kodu (§7). CARİ_FAALİYET_EŞLEŞTİRME satırları (§9): Faaliyet Ana Grubu → Faaliyet
+    Grubu → Satış Temsilcisi (grup bazında), Ana Faaliyet mi (tek Evet), ürün hiyerarşisi (sınıf > grup > seri > ad; §11). Validasyon §13.
+    Onaylanan talep CARİ_MASTER'a kart açar. Veri: /CariKart/Veri, Dogrula, Kaydet, OnayaGonder, Onay, Iptal. Betik: wwwroot/js/cari-kart.js
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<link rel="stylesheet" href="/css/cari-kart.css?v=1" />
+}
+<div class="container-fluid py-3 na ck" id="ck" data-sayfa="talep" data-tip="@tip" data-no="@no">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas @(musteri ? "fa-user-plus" : "fa-truck-ramp-box")"></i></span>@tip Talep Formu <small class="text-muted" style="font-size:.7rem;font-weight:600">· cari kart açılış talebi</small></h4>
+        <span style="font-size:.68rem;font-weight:700;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px"><i class="fas fa-route me-1"></i>Taslak → Onaya Gönder → Muhasebe (Cari Açılış) → (Direktör) → Kart Açılır</span>
+        <span class="ck-rol"><i class="fas fa-user-shield"></i>Rol (demo):<select class="form-select" id="ckRol"></select><span id="ckBen" class="text-muted"></span></span>
+        <span class="sub w-100">Önce <b>CARİ_MASTER</b> alanları doldurulur (kart tipi → bölge → ülke → sınıf bağımlı seçilir; ilişki durumu ve rol ayrı alanlardır; çift rolde eş cari kodu zorunludur), sonra carinin çalıştığı her faaliyet <b>ayrı satır</b> olarak eklenir (faaliyet ana grubu → faaliyet grubu → @temsilciK; ana faaliyet tek satırda Evet). Onaylanan talep için cari kodu otomatik üretilir ve kart @tip Cari Kartları'nda görünür.</span>
+    </div>
+    <div class="na-kpi" id="ckKpi" data-dinamik="kapali"></div>
+    <div class="na-sekme" id="ckSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="yeni"><i class="fas fa-plus me-1"></i>Yeni Talep</button>
+        <button type="button" data-p="liste">Talepler <span class="n" id="ckNListe">0</span></button>
+        <button type="button" data-p="detay"><i class="fas fa-file-lines me-1"></i>Talep Detayı <span class="n" id="ckDetayNo">—</span></button>
+        <button type="button" data-p="onay">Onay Bekleyenler <span class="n" id="ckNOnay">0</span></button>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+
+    <div class="na-panel" data-p="yeni">
+        <form id="ckForm" autocomplete="off" novalidate>
+            <div class="na-kart">
+                <div class="na-kart-b"><span><i class="fas fa-id-card me-1"></i>Talep Bilgileri</span>
+                    <span class="ck-aksiyon"><span class="ck-durum" id="ckDurumRozet">Yeni · kaydedilmedi</span><span class="ayrac"></span>
+                        <button type="button" class="btn btn-light" id="ckYeni"><i class="fas fa-file me-1"></i>Yeni Talep</button>
+                        <button type="button" class="btn btn-light" id="ckTaslak"><i class="fas fa-floppy-disk me-1"></i>Taslak Kaydet</button>
+                        <button type="button" class="btn btn-primary" id="ckGonder"><i class="fas fa-paper-plane me-1"></i>Onaya Gönder</button>
+                        <button type="button" class="btn btn-light" id="ckPdf"><i class="fas fa-file-pdf me-1"></i>PDF</button>
+                        <button type="button" class="btn btn-outline-danger" id="ckIptalBtn"><i class="fas fa-ban me-1"></i>İptal</button></span></div>
+                <div class="na-kart-g"><div class="row g-2">
+                    <div class="col-md-2"><label class="form-label">Talep No <i class="fas fa-lock na-kilit"></i></label><input class="form-control" id="ckNo" disabled placeholder="Kayıtta otomatik"></div>
+                    <div class="col-md-2"><label class="form-label">Talep Tarihi</label><input class="form-control" id="ckTarih" disabled></div>
+                    <div class="col-md-3"><label class="form-label">Talep Eden / Departman</label><input class="form-control" id="ckTalepEden" disabled></div>
+                    <div class="col-md-2"><label class="form-label">Şirket (ERP) <span class="z">*</span></label><select class="form-select" id="ckSirket" required></select></div>
+                    <div class="col-md-3"><label class="form-label">Talep Türü</label><select class="form-select" id="ckTalepTuru"><option>Yeni Kart</option><option>Güncelleme</option><option>Pasife Alma</option></select></div>
+                    <div class="col-12"><label class="form-label">Gerekçe / Açıklama <span class="z">*</span></label><input class="form-control" id="ckGerekce" required placeholder="Neden bu cari açılıyor? (ilk sipariş, sözleşme, numune onayı…)"></div>
+                </div></div>
+            </div>
+            <div class="row g-2">
+                <div class="col-lg-9">
+                    @* ---- CARİ_MASTER (§3) ---- *@
+                    <div class="na-kart">
+                        <div class="na-kart-b"><span><i class="fas fa-address-card me-1"></i>CARİ_MASTER — Kimlik, Vergi, Bölge ve Sınıflandırma</span><span class="not">* zorunlu · bağımlı seçimler: tip → bölge → ülke → şehir · tip + bölge → sınıf</span></div>
+                        <div class="na-kart-g"><div class="row g-2">
+                            <div class="col-md-2"><label class="form-label">1. Cari Kodu <i class="fas fa-lock na-kilit" title="Sistem onayda üretir"></i></label><input class="form-control" id="ckKod" disabled placeholder="Onayda otomatik"></div>
+                            <div class="col-md-3"><label class="form-label">2. Cari Kısa Adı <span class="z">*</span></label><input class="form-control" id="ckKisaAd" required maxlength="60" placeholder="Ekranlarda görünecek kısa isim"></div>
+                            <div class="col-md-3"><label class="form-label">3. Cari Kısaltmalı Ünvan</label><input class="form-control" id="ckKisaltmaliUnvan" maxlength="80" placeholder="Kısaltılmış ticari ünvan"></div>
+                            <div class="col-md-4"><label class="form-label">4. Cari Resmi Ünvan <span class="z">*</span></label><input class="form-control" id="ckResmiUnvan" required maxlength="200" placeholder="Fatura / sözleşmede kullanılacak tam ünvan"></div>
+                            <div class="col-md-2"><label class="form-label">5. Vergi No / TCKN <span class="z">*</span></label><input class="form-control" id="ckVergiNo" maxlength="20"></div>
+                            <div class="col-md-2"><label class="form-label">6. Vergi Dairesi</label><input class="form-control" id="ckVergiDairesi" maxlength="60"></div>
+                            <div class="col-md-2"><label class="form-label">7. Cari Kart Tipi <span class="z">*</span></label><select class="form-select" id="ckKartTipi" required></select></div>
+                            <div class="col-md-2"><label class="form-label">8. Cari Bölge <span class="z">*</span></label><select class="form-select" id="ckBolge"></select></div>
+                            <div class="col-md-2"><label class="form-label">9. Ülke <span class="z">*</span></label><select class="form-select" id="ckUlke"></select></div>
+                            <div class="col-md-2"><label class="form-label">10. Şehir</label><input class="form-control" id="ckSehir" list="ckSehirListe" placeholder="Ülkeye bağlı"><datalist id="ckSehirListe"></datalist></div>
+                            <div class="col-md-3"><label class="form-label">11. Cari Sınıfı <span class="z">*</span> <span class="form-text d-inline" id="ckSinifNot"></span></label><select class="form-select" id="ckSinif"></select></div>
+                            <div class="col-md-3"><label class="form-label">12. İlişki Durumu <span class="z">*</span></label><select class="form-select" id="ckIliski"></select><div class="na-mini" id="ckIliskiNot"></div></div>
+                            <div class="col-md-2"><label class="form-label">13. Cari Rolü <span class="z">*</span></label><select class="form-select" id="ckCariRolu"></select></div>
+                            <div class="col-md-2"><label class="form-label">14. Eş Cari Kodu <span class="form-text d-inline">(çift rol)</span></label><input class="form-control" id="ckEsCari" list="ckEsCariListe" disabled placeholder="Karşı kart kodu"><datalist id="ckEsCariListe"></datalist><div class="na-mini" id="ckEsCariNot"></div></div>
+                            <div class="col-md-2"><label class="form-label">15. Yetkili Kişi</label><input class="form-control" id="ckYetkili" maxlength="80"></div>
+                            <div class="col-md-2"><label class="form-label">16. Telefon</label><input class="form-control" id="ckTelefon" maxlength="30"></div>
+                            <div class="col-md-3"><label class="form-label">17. E-posta</label><input class="form-control" type="email" id="ckEposta" maxlength="80"></div>
+                            <div class="col-md-2"><label class="form-label">18. Vade / Ödeme Şartı <span class="z">*</span></label><select class="form-select" id="ckVade"></select></div>
+                            <div class="col-md-1"><label class="form-label">19. Durum</label><select class="form-select" id="ckKartDurum"></select></div>
+                            <div class="col-md-4"><label class="form-label">20. Not</label><input class="form-control" id="ckNot" maxlength="300"></div>
+                        </div></div>
+                    </div>
+                    @* ---- CARİ_FAALİYET_EŞLEŞTİRME (§9) ---- *@
+                    <div class="na-kart">
+                        <div class="na-kart-b"><span><i class="fas fa-diagram-project me-1"></i>CARİ_FAALİYET_EŞLEŞTİRME — Faaliyet / Ürün Grupları ve @temsilci</span><span class="d-flex gap-1 align-items-center"><span class="not">her faaliyet ayrı satır · temsilci faaliyet grubu bazında · ana faaliyet tek satırda Evet</span><button type="button" class="btn btn-light btn-sm py-0" id="ckFaaliyetEkle" style="font-size:.68rem"><i class="fas fa-plus me-1"></i>Faaliyet Satırı Ekle</button></span></div>
+                        <div class="na-kart-g">
+                            <div class="table-responsive"><table class="ck-faaliyet" id="ckFaaliyetler" data-dinamik="kapali"><thead><tr><th>#</th><th>3. Faaliyet Ana Grubu</th><th>4. Faaliyet Grubu</th><th>5. @temsilci</th><th>6. Ana Faaliyet mi?</th><th>7. Ürün Sınıfı</th><th>8. Ürün Grubu</th><th>9. Ürün Serisi</th><th>10. Ürün Adı</th><th>11. Durum</th><th>12. Başlangıç</th><th>13. Not</th><th></th></tr></thead><tbody></tbody></table></div>
+                            <div class="na-mini mt-1"><i class="fas fa-circle-info me-1"></i>Ürün alanları zorunlu değildir; ürün seviyesinde takip gerekiyorsa sırayla doldurulur: <b>Faaliyet Ana Grubu › Faaliyet Grubu › Ürün Sınıfı › Ürün Grubu › Ürün Serisi › Ürün Adı</b> (ör. Boya Grubu › Emprime › Su Bazlı › Hybrid › Clear Bases › S 10 CLEAR).</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-3">
+                    <div class="ck-sag">
+                        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-shield-halved me-1"></i>Validasyon (§13)</span><span class="not" id="ckDogrulamaNot"></span></div><div class="na-kart-g"><ul class="mb-0 ps-3 ck-dogrulama" id="ckDogrulama"><li class="text-muted">Alanlar dolduruldukça kurallar çalışır.</li></ul></div></div>
+                        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-sigma me-1"></i>Kart Özeti</span></div><div class="na-kart-g ck-ozet" id="ckOzet"></div></div>
+                        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-route me-1"></i>Onay Akışı</span></div><div class="na-kart-g"><div class="ck-akis" id="ckAkis"><span class="text-muted">—</span></div><div class="na-mini">Grup içi, ilişkili cari ve özel takip kartlarında Mali İşler Direktörü onayı eklenir.</div></div></div>
+                        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-book me-1"></i>Kural Rehberi</span></div><div class="na-kart-g ck-rehber" id="ckRehber"></div></div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="na-panel" data-p="liste">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Cari Kart Talepleri</span><span class="not">satıra tıklayın</span></div>
+            <div class="na-kart-g"><div class="na-filtre"><input class="form-control" id="ckListeAra" placeholder="Talep no, ünvan, VKN…"><select class="form-select" id="ckListeDurum"><option value="">Durum: Tümü</option></select><select class="form-select" id="ckListeTip"><option value="">Kart tipi: Tümü</option></select><select class="form-select" id="ckListeBenim"><option value="">Kayıtlar: Tümü</option><option value="benim">Taleplerim</option></select><span class="ms-auto na-mini" id="ckListeSayi"></span></div>
+                <div class="table-responsive"><table class="na-tablo" id="ckListe" data-dinamik="kapali"><thead><tr><th>Talep No</th><th>Tarih</th><th>Talep Eden</th><th>Tip</th><th>Kısa Ad / Ünvan</th><th>Bölge · Ülke</th><th>Sınıf</th><th>İlişki</th><th>Rol</th><th class="s">Faaliyet</th><th>Durum</th><th>Cari Kodu</th></tr></thead><tbody></tbody></table></div></div></div>
+    </div>
+    <div class="na-panel" data-p="detay"><div id="ckDetay"><div class="na-bos">Listeden bir talep seçin.</div></div></div>
+    <div class="na-panel" data-p="onay">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clipboard-check me-1"></i>Onay Bekleyen Talepler</span><span class="not">Muhasebe cari açılış onayı · ret nedeni zorunlu</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="ckOnayListe" data-dinamik="kapali"><thead><tr><th>Talep No</th><th>Talep Eden</th><th>Tip</th><th>Kısa Ad / Ünvan</th><th>Sınıf · İlişki · Rol</th><th>Bekleyen Adım</th><th>Onaycı</th><th>Hızlı İşlem</th></tr></thead><tbody></tbody></table></div></div></div>
+    </div>
+</div>
+@section Scripts {
+<script src="/js/cari-kart.js?v=1"></script>
+}

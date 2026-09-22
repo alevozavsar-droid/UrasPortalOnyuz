@@ -134,7 +134,7 @@
     $$('#tmTakip tr.tik').forEach(r => r.addEventListener('click', () => detayAc(r.dataset.no)));
   }
   ['#tmTakipAra', '#tmTakipTur', '#tmTakipDurum', '#tmTakipD2'].forEach(s => $(s).addEventListener('input', () => { takipOzel = null; cizTakip(); }));
-  function takipFiltreleri() { const uniq = f => V.talepler.map(f).filter((v, i, a) => a.indexOf(v) === i); $('#tmTakipTur').innerHTML = '<option value="">Tür: tümü</option>' + M.turler.map(t => `<option value="${t.kod}">${esc(t.ad)}</option>`).join(''); $('#tmTakipDurum').innerHTML = '<option value="">Talep durumu: tümü</option>' + uniq(t => t.talepDurumu).map(x => `<option>${esc(x)}</option>`).join(''); $('#tmTakipD2').innerHTML = `<option value="">${esc(M.durum2Ad.replace(/\s*\(.*\)/, ''))}: tümü</option>` + uniq(t => t.durum2).map(x => `<option>${esc(x)}</option>`).join(''); }
+  function takipFiltreleri() { const uniq = f => V.talepler.map(f).filter((v, i, a) => a.indexOf(v) === i); $('#tmTakipTur').innerHTML = '<option value="">Tür: Tümü</option>' + M.turler.map(t => `<option value="${t.kod}">${esc(t.ad)}</option>`).join(''); $('#tmTakipDurum').innerHTML = '<option value="">Talep durumu: Tümü</option>' + uniq(t => t.talepDurumu).map(x => `<option>${esc(x)}</option>`).join(''); $('#tmTakipD2').innerHTML = `<option value="">${esc(M.durum2Ad.replace(/\s*\(.*\)/, ''))}: Tümü</option>` + uniq(t => t.durum2).map(x => `<option>${esc(x)}</option>`).join(''); }
 
   // ---- takvim ----
   let takvimAy = new Date(new Date().getFullYear(), new Date().getMonth(), 1);

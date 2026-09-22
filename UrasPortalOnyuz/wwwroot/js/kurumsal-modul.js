@@ -21,8 +21,10 @@
   const durum = r => r.url ? 'hazir' : r.kisayol ? 'kisayol' : 'plan';
   const sekmeli = url => url + (url.indexOf('?') >= 0 ? '&' : '?') + '_sekme=1';
   // Son eklenen raporlar (Yapi.js › yeni: true; kaynak Data/PortalDegisiklikler.cs): şemada, sol menüde ve listede "(yeni)" rozeti
-  const yeniRozet = r => r.yeni ? '<span class="yeni" title="Yeni eklendi">(yeni)</span>' : '';
+  // "(Yeni)" son 30 günde eklenen, "(Düzenlendi)" son 30 günde güncellenen / taşınan rapor (Yapi.js › yeni / duzenlendi)
+  const yeniRozet = r => r.yeni ? '<span class="yeni" title="Son 30 günde eklendi">(Yeni)</span>' : r.duzenlendi ? '<span class="yeni duzenlendi" title="Son 30 günde düzenlendi">(Düzenlendi)</span>' : '';
   const yeniSayisi = n => n.raporlar ? n.raporlar.filter(r => r.yeni).length : (n.alt || []).reduce((t, a) => t + yeniSayisi(a), 0);
+  const duzenlenenSayisi = n => n.raporlar ? n.raporlar.filter(r => r.duzenlendi).length : (n.alt || []).reduce((t, a) => t + duzenlenenSayisi(a), 0);
 
   // ?yol=… ile gelen derin bağlantı (kabuk sekmesi "#" taşıyamadığı için sorgu olarak gelir)
   if (root.dataset.yol && !location.hash.slice(1)) history.replaceState(null, '', '#' + root.dataset.yol);
@@ -87,10 +89,10 @@
   // ---- Organizasyon şeması: modül → 1. alt menü → 2. alt menü (süreç grubu) → rapor / ekran ----
   // Gösterge paneli (KPI, trend, bekleyen işler) kaldırıldı; modüle tıklayınca kırılım şeması çıkar.
   // Kutulara tıklayınca ilgili bölüm / rapor açılır. Seçili düğüm vurgulanır.
-  const ozet = n => `${raporSayisi(n)} rapor / ekran${hazirSayisi(n) ? ` · ${hazirSayisi(n)} hazır` : ''}${yeniSayisi(n) ? ` · ${yeniSayisi(n)} yeni` : ''}`;
+  const ozet = n => `${raporSayisi(n)} rapor / ekran${hazirSayisi(n) ? ` · ${hazirSayisi(n)} hazır` : ''}${yeniSayisi(n) ? ` · ${yeniSayisi(n)} yeni` : ''}${duzenlenenSayisi(n) ? ` · ${duzenlenenSayisi(n)} düzenlendi` : ''}`;
   const dugum = (n, yol, cls, alt) => `<a class="org-node ${cls}" href="#${yol}" title="${esc(n.ad)}"><span class="ad">${esc(n.ad)}</span><span class="s">${esc(alt)}</span></a>`;
   const raporKutu = (grup, yol) => `<div class="org-box">${grup.raporlar.length
-    ? grup.raporlar.map((r, i) => `<a class="org-rap ${durum(r)}" href="#${yol}/r${i}" title="${esc(r.ad)}${r.kisayol ? ' · kısayol: ' + esc(sahip(r.kisayol)) : r.url ? ' · hazır ekran' : ' · planlanıyor'}${r.yeni ? ' · yeni eklendi' : ''}"><span class="dot"></span><span class="ad">${esc(r.ad)}</span>${yeniRozet(r)}</a>`).join('')
+    ? grup.raporlar.map((r, i) => `<a class="org-rap ${durum(r)}" href="#${yol}/r${i}" title="${esc(r.ad)}${r.kisayol ? ' · kısayol: ' + esc(sahip(r.kisayol)) : r.url ? ' · hazır ekran' : ' · planlanıyor'}${r.yeni ? ' · yeni eklendi' : r.duzenlendi ? ' · düzenlendi' : ''}"><span class="dot"></span><span class="ad">${esc(r.ad)}</span>${yeniRozet(r)}</a>`).join('')
     : '<div class="org-bos">Rapor kaydı yok, ekran planlanıyor</div>'}</div>`;
   // Kolon: başlık düğümü + altında 2. alt menü kutuları ya da (kırılımsızsa) doğrudan rapor kutusu
   function kolon(n, yol, secili) {
@@ -101,7 +103,7 @@
   }
   function semaHtml(kok, kokYol, kokAlt, kolonlar, secili) {
     return `<div class="org-wrap"><div class="org"><div class="org-root">${dugum(kok, kokYol, 'root', kokAlt)}</div><div class="org-l1s">${kolonlar.map(k => kolon(k.n, k.yol, secili)).join('')}</div></div></div>
-      <div class="org-legend"><span class="h">Hazır ekran</span><span class="k">Kısayol (ana sahibi başka bölümde)</span><span>Planlanıyor</span><span class="y"><em class="yeni">(yeni)</em> son 30 günde eklendi</span><span class="i">Kutulara tıklayınca ilgili bölüm ya da rapor açılır.</span></div>`;
+      <div class="org-legend"><span class="h">Hazır ekran</span><span class="k">Kısayol (ana sahibi başka bölümde)</span><span>Planlanıyor</span><span class="y"><em class="yeni">(Yeni)</em> son 30 günde eklendi</span><span class="y"><em class="yeni duzenlendi">(Düzenlendi)</em> son 30 günde güncellendi</span><span class="i">Kutulara tıklayınca ilgili bölüm ya da rapor açılır.</span></div>`;
   }
   const modulSemasi = secili => semaHtml(modul, '', `${modul.alt.length} alt menü · ${ozet(modul)}`, modul.alt.map(a => ({ n: a, yol: a.key })), secili);
   const l1Semasi = (l1, secili) => l1.alt

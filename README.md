@@ -77,6 +77,72 @@ tasarımından uyarlandı:
   dağılımı, takip sütunlarıyla liste) ve *Muhasebe Kontrolü* (fiş / fatura / sözleşme / mutabakat / kapanış kontrolü, işlem başına kontrol
   sonucu, kaynak sistem olay kaydı, kontrol adımları). Rapor ve kontrol ayrı menü değildir; `?ust=rapor|kontrol` ile doğrudan açılır.
   Betik `wwwroot/js/grup-ici-sekmeler.js`; kontrol kuralları modül başına `KONTROL` tablosundadır. Ekranlar arası geçiş sol menüden yapılır.
+* **Yansıtma Modülü** (Yansıtma İşlemleri; `Controllers/GrupIciController.Yansitma` → `Views/GrupIci/Yansitma.cshtml`, betik
+  `wwwroot/js/yansitma.js`, veri uçları `Controllers/YansitmaController.cs`, kurallar ve örnek kayıtlar `Data/YansitmaOrnek.cs`):
+  "URAS HOLDING Yansıtma Modülü — IT Teknik ve İşlevsel Gereksinim Dokümanı v1.0 (21.09.2026)" uyarlaması; talep motorundan ayrıldı
+  (Mahsup ve Temlik talep motorunda kaldı; birleşik Grup İçi raporu eski YANSITMA tanımını kullanmaya devam eder). Üç sekme:
+  *İşlem Ekranı* — Kaynak Fatura Seç penceresi (yansıtan şirkete göre filtreli, sunucu tarafı arama / sayfalama; kaynak faturalar Aylık
+  Alım Onay ekranındaki tedarikçi faturaları), **fatura kalemleri tek tek işaretlenir**, satır bazında kalan miktar (aynı belge id + satır
+  no'dan daha önce yansıtılan düşülür, mükerrer engeli V04/V15), kısmi miktar, toplu ve satır bazında kâr %, yetkiliyse manuel birim
+  yansıtma (kâr % geriye hesaplanır), KDV, masraf merkezi, satırı birden fazla hedef şirkete dağıtma; sağ sabit panelde özet (ağırlıklı
+  kâr %), validasyon (V01–V15) ve parametrik onay akışı (Muhasebe → (Direktör: tutar eşiği / kâr üst sınırı / negatif kâr / hizmet) →
+  Finans); alt panelde iki şirketin beklenen yevmiye kaydı (hesap kodları `YansitmaOrnek.Esleme` eşleme tablosundan, 120/320 cari, 191/391
+  KDV; onaya gönderme anında snapshot). Taslak kaydet, onaya gönder, onayla / reddet (ret nedeni zorunlu), geri çek, idempotent ERP fatura
+  oluşturma, iptal (ERP belgesi varsa ters kayıt), audit log (eski / yeni değer), Excel (CSV) / PDF (yazdır). Rol demo amaçlı ekrandan
+  seçilir (§10 yetki matrisi). *Raporu* — §6.1 filtreleri (çoklu seçim), §6.4 KPI'lar, §6.2 grid, satırda detay drawer, Excel.
+  *Muhasebe Kontrolü* — "Gerçek fişi ERP'den oku" olayı (demo senaryolar: uyumlu, hesap, KDV, tutar, cari, masraf merkezi, referans,
+  mükerrer, kur, fiş yok) beklenen snapshot ile gerçek satırları alan alan karşılaştırır (borç = alacak, net, KDV, hesap, cari, masraf
+  merkezi, proje, para birimi, kur, belge referansı, mükerrer, şirketler arası karşı kayıt); §7.4 durumları öncelik sırasıyla verilir,
+  UYUMLU olunca işlem "Uyumlu" olur. Onaylı yansıtma ERP belgesi alınca kaynak alım faturasının "Yansıtıldı" rozeti bu no'yu gösterir.
+  `?ust=rapor|kontrol` ve `?no=YNS-000125` ile doğrudan açılır.
+* **Temlik Modülü** (Temlik İşlemleri; `Controllers/GrupIciController.Temlik` → `Views/GrupIci/Temlik.cshtml`, betik `wwwroot/js/temlik.js`,
+  veri uçları `Controllers/TemlikController.cs`, kurallar ve örnek kayıtlar `Data/TemlikOrnek.cs`): "URAS HOLDING Temlik Modülü — IT Teknik ve
+  İşlevsel Gereksinim Dokümanı v1.0 (21.09.2026)" (çok taraflı temlik zinciri + 2–10 taraf + N'li virman + Temlik Belgesi) uyarlaması; talep
+  motorundan ayrıldı (Mahsup talep motorunda kaldı). *İşlem Ekranı* — Kaynak Alacak Seç penceresi (satış faturası / cari açık kalem / sözleşme;
+  `TemlikOrnek.KaynakAlacaklar`, kaynak şirkete göre filtre, sunucu tarafı arama / sayfalama, birden fazla belge aynı zincire), **belge satırları
+  tek tek işaretlenir**, satır bazında temlik edilebilir bakiye (nominal − kapanan − aktif / rezerve temlik; taslak ve onay süreci de rezervasyon)
+  ve kısmi "bu işlem tutarı"; Taraf Sayısı (2–10) seçimi, + Taraf Ekle / Tarafı Çıkar / sıra değiştirme, taraf tipi (grup şirketi / tedarikçi /
+  müşteri / diğer, master `TemlikOrnek.Taraflar`), zincir rolü, aldığı / devrettiği / kalan hak; N−1 transfer step (step tutarı önceki adımı
+  aşamaz, ara taraf kısmi devrederse kalan hak açık gösterilir), Temlik Dağılımını Oluştur; sağ sabit özet, V01–V23 validasyonu, parametrik onay
+  akışı (Muhasebe → Hukuk → (Direktör: tutar / taraf sayısı / teminat) → Finans); step bazlı muhasebe simülasyonu (ASSIGN_OUT / ASSIGN_IN,
+  hesaplar `TemlikOrnek.Esleme` TEMLIK_HESAP_ESLEME tablosundan, ERP dışı taraflar bilgi satırı, konsolide giren / çıkan / net görünüm, versiyon +
+  hash snapshot). **Temlik Belgesi Oluştur**: hukuk şablonu sürümüyle belge no / versiyon / hash, zincirdeki her taraf için dinamik imza bloğu;
+  belge "TEMLİK SÖZLEŞMESİ (kurumsal, final)" şablonu formatında ekrandaki verilerden otomatik doldurulur (başlık tablosu: Temlik No / Tarih /
+  Tür (fatura-cari-sözleşme bazlı) / PB-Tutar; TARAFLAR: rol, büyük harf unvan, VKN, yetkili; TEMLİK DETAYI: kaynak belge / cari no, tarih,
+  açıklama, açık tutar, temlik tutarı, toplam, 3+ tarafta adım tablosu; TEMLİK HÜKMÜ zincire göre yazılır; KAŞE VE İMZA taraf sayısı kadar sütun,
+  imzalananlar damgalı) ve yazdırılır;
+  İmzaya Gönder, taraf bazında imzala / reddet, İmzalı Belge Yükle (dosya hash), Temlik Bildirimi, Belgeyi Geçersiz Kıl, yeni versiyon. Tam
+  imzalı işlemde Temliği Muhasebeleştir: step bazlı idempotent ERP kaydı (demo senaryolar: uyumlu, step 2 hatası → Kısmi Muhasebeleşti ve
+  sonraki step bloke, yalnız başarısız stepi tekrar dene, hesap / tutar / ara taraf / nihai hak / mükerrer / referans / kur sapmaları), iptal
+  (rezervasyon serbest) ve ters kayıt (son stepten ilk stepe), audit log. Kuyruklar: onay bekleyenler, imza takibi. *Raporu* — §10.1 filtre
+  grupları (tarih türü, taraf, nihai alan, borçlu, şirket, belge no'ları, tür / PB / kısmi-tam / taraf sayısı, durum / belge / muhasebe / kontrol,
+  kullanıcı), §10.4 KPI'lar, §10.2 grid, zincir detay drawer, rapor ve zincir detay Excel'i. *Muhasebe Kontrolü* — step bazlı kontrol listesi,
+  beklenen–gerçekleşen karşılaştırması (CompanyCode, step, hesap rolü / kodu, borç / alacak, karşı taraf, kaynak ref, PB / kur, Temlik / Zincir /
+  Step ID), zincir bütünlüğü (step sayısı, step k çıkan = k+1 giren, ara taraf net hakkı, nihai temlik alan ve tutarı, kaynak aktif temlik
+  sınırı, imzalar, ERP tamamlanma, grup içi mirror cari), §11.5 durumları öncelik sırasıyla, fark kapatma, kurallar ve eşleme tablosu.
+  Örnek kayıtlar §23 senaryolarını içerir (TML-00045 A Tedarikçisi → ALV → URAS 1.000.000 uyumlu; TML-00046 ALV → URAS 700.000 ile ara tarafta
+  300.000 kalan ve step 2 ERP hatası; TML-00047 4 taraflı; 5 taraflı zincir; ters kayıt; EUR temlik). Rol demo amaçlı ekrandan seçilir (§14).
+* **Mahsup Modülü** (Mahsup İşlemleri; `Controllers/GrupIciController.Mahsup` → `Views/GrupIci/Mahsup.cshtml`, betik `wwwroot/js/mahsup.js`,
+  veri uçları `Controllers/MahsupController.cs`, kurallar ve örnek kayıtlar `Data/MahsupOrnek.cs`): "URAS HOLDING Mahsup Modülü — IT Teknik ve
+  İşlevsel Gereksinim Dokümanı v1.0 (21.09.2026)" uyarlaması; talep motorundan ayrıldı (Grup İçi birleşik raporu eski tanımları kullanmaya devam
+  eder). *İşlem Ekranı* — Açık Kalemleri Getir (şirket, kapsam / karşı şirket, cari ve mahsup türüne göre ERP açık kalemleri
+  `MahsupOrnek.AcikKalemler`; kapalı belgeler opsiyonla; sunucu tarafı filtre), yan yana **Borç ve Alacak açık kalem panelleri** (kalemler tek tek
+  işaretlenir; orijinal, kapanan, rezerve, açık tutar, mahsup tutarı ≤ açık, sonrası kalan, PB / kur, TL, proje / MM, referans; panel altında
+  seçilen tutar / belge sayısı / kalan), belge → belge dağılım tablosu (otomatik FIFO ya da N-N manuel; Otomatik Eşleştir: en eski vade / en eski
+  belge / aynı tutar / referans bazlı ön izleme, Seçili Kalemleri Mahsup Et, Eşleştirmeyi Temizle), borç = alacak eşitlik rozeti, sağ sabit
+  özet (borç / alacak toplam, fark, mahsup tutarı, kur ve yuvarlama farkı, tam / kısmi kapanan, sonrası açık), V01–V15 validasyonu, parametrik
+  onay (Muhasebe → (Direktör: tutar / M06 / M07 / kur farkı üst sınırı) → Finans); simülasyon "Yeni fiş oluşacak mı? EVET / HAYIR": aynı cari
+  ve aynı hesapta yalnız iç mutabakat, aksi hâlde hesap eşleme tablosundan (`MahsupOrnek.Esleme`, MAHSUP_HESAP_ESLEME) yevmiye + mutabakat
+  (M03 320 Borç / 159 Alacak, M04 340 / 120, M02 320 / 120), belge kuru farklarından kur farkı (646 / 656) ya da tolerans içi yuvarlama
+  satırı, M06'da karşı şirkette Grup Mahsup ID'li mirror kayıt; KDV satırı üretilmez. ERP: şirket bazlı idempotent muhasebeleştirme / iç
+  mutabakat (demo senaryolar: uyumlu, karşı şirket hatası → Kısmi Entegrasyon ve yalnız başarısız tarafı tekrar, hesap, tutar, kur, açık kalem
+  kalanı, mutabakat yok, mükerrer, referans, proje / MM), iptal (rezervasyon serbest), ters kayıt / unreconcile (kayıt silinmez), audit log.
+  *Raporu* — §6.1 filtre grupları, §6.4 KPI'lar, §6.2 kolonları, detay drawer, rapor ve detay Excel'i. *Muhasebe Kontrolü* — §7.1 liste
+  (simülasyon / ERP kaydı / iç mutabakat / kontrol), §7.2 beklenen–gerçekleşen (hesap / BP rolü, borç, alacak, kur, proje, MM, referans),
+  §7.3 açık kalem kapanma (önceki açık, beklenen mahsup, beklenen kalan, ERP kalan), §7.6 mirror kontrolü, §7.5 durumları öncelik sırasıyla,
+  fark kapatma, kurallar ve eşleme tablosu. Örnek kayıtlar §19 senaryolarını içerir (MHS-000125 aynı cari 1-N iç mutabakat 75.000, fiş yok;
+  MHS-000126 tedarikçi avans-fatura 60.000, faturada 40.000 açık; MHS-000127 URAS ⇄ ALV 50.000 kısmi entegrasyon; M04, M02, EUR kur farkı,
+  ters kayıt, hesap hatası, açık kalem farkı örnekleri).
 * **Aylık Alım Onay Ekranı** (Tedarik Zinciri › Satın Alma › Fiyat ve Alım Analizi ve Mali İşler › Muhasebe › Alış ve Satış Muhasebesi;
   Onaylarım'da kısayol; `Controllers/AlimOnayController.cs`, `Views/AlimOnay/Index.cshtml`, veri ve kurallar `Data/AlimOnayOrnek.cs`):
   Muhasebe'nin yönetim için hazırladığı aylık alım raporu. Gider Onay Ekranı kalıbında: solda dönemin tedarikçi faturaları
@@ -95,6 +161,35 @@ tasarımından uyarlandı:
   Sütunlar Ocak–Aralık, TOPLAM, AYLIK ORT. (Excel'deki `IF(COUNT()=0,"",SUM/AVERAGE)` mantığı: boş aylar sayılmaz). Yaprak hücreler
   yazılabilir, alt toplam / sonuç satırları terim listesinden (işaretli toplam) anında hesaplanır; Kaydet bellek içine yazar,
   `/GenelAnaliz/Csv?yil=` şablonla aynı düzende CSV verir. Kapanmış aylar örnek veriyle dolu gelir.
+* **Cari Kart ve Faaliyet Eşleştirme** (Müşteri / Tedarikçi Cari Kartları ve Müşteri / Tedarikçi Talep Formu; `Controllers/CariKartController.cs`,
+  `Views/CariKart/Kartlar.cshtml` + `Talep.cshtml`, betik `wwwroot/js/cari-kart.js`, stil `wwwroot/css/cari-kart.css`, kurallar ve örnek veri
+  `Data/CariKartOrnek.cs`): "Cari Kart ve Faaliyet Eşleştirme Yapısı — IT Uygulama Raporu v6 (13.08.2026)" uyarlaması. **CARİ_MASTER** (§3'teki 20
+  alan: kod, kısa ad, kısaltmalı / resmi ünvan, VKN, vergi dairesi, kart tipi, bölge, ülke, şehir, sınıf, ilişki durumu, rol, eş cari kodu, yetkili,
+  telefon, e-posta, vade, durum, not) ve **CARİ_FAALİYET_EŞLEŞTİRME** (§9: faaliyet ana grubu → faaliyet grubu, faaliyet grubu bazında satış
+  temsilcisi, ana faaliyet mi, ürün sınıfı › grubu › serisi › adı, durum, başlangıç, not) ayrı yapıdadır. Tedarikçi ekranlarında aynı alan
+  "Satınalma Temsilcisi" etiketiyle gösterilir (kart tipine göre `temsilci` değişkeni / `temsilciAdi(tip)`). Seçim listeleri §14'ten gelir
+  (`CariKartOrnek.SinifMatrisi`, `FaaliyetHiyerarsisi`, `UrunHiyerarsisi`, `SatisTemsilcileri`). *Kartlar* ekranı (`/CariKart/Musteri`,
+  `/CariKart/Tedarikci`): filtreler (tip, bölge, ülke, sınıf, ilişki, rol, durum, faaliyet ana grubu / grubu, temsilci, şirket), KPI, liste,
+  detay drawer'ında master + faaliyet satırları, eş kart bağlantısı, aktif / pasif, güncelleme talebi; temsilci × faaliyet grubu dağılımı ve
+  §5 matrisi; Excel (kart + faaliyet). *Talep formu* (`/CariKart/MusteriTalep`, `/CariKart/TedarikciTalep`): bağımlı seçimler — kart tipi →
+  bölge (yurtiçi = Türkiye kilitli, yurtdışı = ülke zorunlu) → şehir (il listesi / ülke bazlı), kart tipi + bölge → cari sınıfı (finansal ve
+  resmi kurumlarda Özel Takip yok), ilişki durumu açıklamalı, rol → çift rolde eş cari kodu (karşı tip kartlardan) zorunlu; faaliyet satırları
+  (ana grup seçilmeden grup, grup seçilmeden temsilci seçilemez; aynı grup mükerrer olamaz; ana faaliyet tek satırda Evet; ürün hiyerarşisi
+  bağımlı); canlı validasyon (§13), olası cari kodu, onay akışı (Muhasebe cari açılış onayı; grup içi / ilişkili / özel takipte Direktör);
+  taslak, onaya gönder, onayla / reddet, iptal; onaylanınca kart CARİ_MASTER'a otomatik açılır (120.xxx / 320.xxx …) ve çift rolde eş kart
+  karşılıklı bağlanır. Örnek veri §8 senaryolarını (ABC Tekstil'in 5 faaliyet satırı, çift rol eş kartlar, grup içi, ilişkili, yurtdışı şube /
+  bayi / distribütör, özel takip, finansal / resmi / personel carileri) ve her durumdan talepleri içerir.
+* **Yapılan Ödemeler** (Yönetim › Özel Analizler › Özel Raporlar; `Controllers/YapilanOdemelerController.cs`, `Views/YapilanOdemeler/Index.cshtml`,
+  betik `wwwroot/js/yapilan-odemeler.js`, veri `Data/YapilanOdemelerOrnek.cs`): tüm grup şirketlerinin yaptığı ödemelerin konsolide listesi —
+  **Banka (Havale / EFT)**, **Çek** (verilen vadeli çekler: vadesi gelen "Ödendi", gelmeyen "Vade Bekliyor"), **Nakit (Kasa)** çıkış fişleri
+  ("İptal" olanlar listelenir, toplama girmez) ve **Nakit Avans** teslimleri. Kaynaklar: Nakit Avans modülünün canlı verisi
+  (`NakitAvansOrnek.Talepler › Odemeler`), Aylık Alım Onay'daki "Ödendi" tedarikçi faturaları (`AlimOnayOrnek.Faturalar`; beşte ikisi çek, kalanı
+  banka) ve deterministik ERP kasa / banka / çek bordrosu örnekleri (maaş, vergi / SGK, kira, kredi taksiti, enerji ve hizmet, küçük kasa
+  giderleri, grup içi ödemeler). Döviz ödemeleri işlem kuruyla TL'ye çevrilir. Ekran: dönem (Bu Ay / Geçen Ay / Son 30–90 Gün / Bu Yıl / Özel),
+  şirket, ödeme türü, kategori, alıcı tipi, para birimi, durum ve kaynak filtreleri; KPI kutuları (tıklayınca filtre); Şirket × Ödeme Türü ve
+  Ay × Ödeme Türü matrisleri; kategori dağılımı; en büyük 10 alıcı; satır detay drawer'ı (aynı alıcıya yapılan ödemeler, avans talebine /
+  Aylık Alım Onay ekranına geçiş); Excel (liste + şirket özeti). Finans › Ödeme Yönetimi altındaki "Yapılan Ödemeler" (Rapor118) tek şirketlik
+  ödeme giriş ekranıdır; bu rapor ondan bağımsızdır.
 * **Menü tanımı** `Data/KurumsalMenu.cs` içindedir (menu-config.js'in C# karşılığı). Rapor adları buradaki ekranlara ada göre
   otomatik eşlenir; yazımı farklı olanlar `TakmaAdlar` tablosundadır. Eşleşmeyen kayıtlar "planlanıyor", ana sahibi başka
   modülde olanlar "kısayol" olarak görünür. Menüde yeri belirlenmemiş mevcut ekranlar
@@ -108,7 +203,11 @@ tasarımından uyarlandı:
   `/Home/Degisiklikler`, menüde Ayarlar › Sistem › Değişiklik Günlüğü): portala yeni rapor / ekran eklendiğinde `Yeni(...)`,
   ekran taşındığında `Tasima(...)`, güncellendiğinde `Guncelleme(...)`, kaldırıldığında `Kaldirma(...)` satırı eklenir. Ekran adı
   `KurumsalMenu`'daki rapor adıyla aynıysa bağlantı ve menü yolu otomatik bulunur; menüde olmayanlar için `href` / yol elle verilir.
-  Üst çubuktaki `/Home/SonGuncellemeler` ucu da aynı listeden beslenir.
+  Üst çubuktaki `/Home/SonGuncellemeler` ucu da aynı listeden beslenir. **Rozetler:** son 30 gün içindeki `Yeni(...)` kayıtları
+  modül şemasında, sol menüde ve listede **(Yeni)**, `Guncelleme(...)` / `Tasima(...)` kayıtları **(Düzenlendi)** rozeti üretir
+  (`ModulController.Yapi` → `yeni` / `duzenlendi`, `wwwroot/js/kurumsal-modul.js`). Eşleme kayıttaki adrese göredir: modül derin bağlantısı
+  (`/Modul/x?yol=.../rN`) ya da ekranın kendi adresi (`/CariKart/Tedarikci`); ana sayfaya giden kısayollar eşlenmez. Yeni rapor eklerken
+  ya da mevcut raporu düzenlerken bu günlüğe satır eklemeyi unutmayın.
 * **Rapor tabloları** (`wwwroot/js/rapor-tablo-dinamik.js`, kabuktan tüm sayfalara yüklenir): her tabloda başlığa tıklayınca
   sıralama (sayı / tarih / metin otomatik), başlık altında sütun filtreleri (≤40 farklı değerde "Tümü" listesi, aksi halde arama).
   Kendi filtre satırı (`tr.filter-row`) ya da sıralama simgesi (`.sort-icon`) olan raporlara dokunmaz; gruplu başlık, detay satırı,

@@ -95,8 +95,7 @@ namespace WebApplication3.Data
             ["Satınalma Talebi"] = "Rapor159",                                           // "Satınalma Talebi Oluştur"
             ["Parti Yaşlandırma"] = "Rapor172",                                          // "Parti Yaşlandırma (Stok Yaşı)"
             // Grup ERP'de cari.html'e giden kartlar → buradaki Cari Bilgileri ekranı
-            ["Müşteri Cari Kartları"] = "Rapor120",
-            ["Tedarikçi Cari Kartları"] = "Rapor120",
+            // ("Müşteri Cari Kartları" ve "Tedarikçi Cari Kartları" artık CariKart modülüne bağlı; Data/CariKartOrnek.cs)
             ["Yurtdışı Müşteri Kartları"] = "Rapor120",
             ["Yurtdışı Tedarikçiler"] = "Rapor120",
             ["Personel Carileri"] = "Rapor120",
@@ -173,7 +172,9 @@ namespace WebApplication3.Data
                   Kpi("Yeni Talepler", "Taleplerim", "Bekleyen Talepler", "Sonuçlanan Talepler"),
                   U("yeni-talep", "Yeni Talep",
                     G("satin-alma", "Satın Alma", R("Satınalma Talebi")),
-                    G("tedarikci", "Tedarikçi", R("Tedarikçi Talep Formu"))),
+                    // Cari kart açılış talepleri (Cari Kart ve Faaliyet Eşleştirme şartnamesi; Controllers/CariKartController.cs)
+                    G("tedarikci", "Tedarikçi", R("Tedarikçi Talep Formu", "CariKart", "TedarikciTalep")),
+                    G("musteri", "Müşteri", R("Müşteri Talep Formu", "CariKart", "MusteriTalep"))),
                   // İK ve İdari İşler departmanına giden talepler (Controllers/IkTalepController.cs).
                   // Anahtar bilerek modül anahtarından ("ik-idari-isler") farklı: kurumsal-modul.js modül anahtarıyla başlayan hash'i o modüle yönlendirir.
                   // Sol menüde kırılım yok (Dogrudan): tıklayınca İzin Talebi açılır, diğer türler ekranın üstündeki sekmelerden seçilir.
@@ -228,7 +229,9 @@ namespace WebApplication3.Data
                   "Müşteri ilişkisinden satışa, sipariş hazırlığından sevkiyat ve satış sonrası teknik desteğe kadar uçtan uca ticari süreç.",
                   Kpi("Açık Sipariş", "Bekleyen Sevkiyat", "Aylık Satış", "Açık Teknik Talep"),
                   U("musteri-crm", "Müşteri ve CRM Yönetimi",
-                    G("musteri-portfoyu", "Müşteri Portföyü", R("Müşteri Cari Kartları")),
+                    // Müşteri Portföyü: cari kartlar + müşteri talep formu (Talep › Yeni Talep › Müşteri'nin kısayolu; tedarikçi kalıbıyla aynı)
+                    // Müşteri Talep Formu iki menüde de doğrudan aynı ekranı açar (Talep › Yeni Talep › Müşteri ve burada); kısayol / yönlendirme yok
+                    G("musteri-portfoyu", "Müşteri Portföyü", R("Müşteri Cari Kartları", "CariKart", "Musteri"), R("Müşteri Talep Formu", "CariKart", "MusteriTalep")),
                     G("fiyat-musteri-kosullari", "Fiyat ve Müşteri Koşulları", R("Muhattaplar İçn Özel Fiyatlar"))),
                   U("yurtici-satis", "Yurtiçi Satış",
                     G("satis-islemleri", "Satış İşlemleri", R("Satış Siparişi"), R("Taslak Faturalar"), R("Satış Faturası"), R("Müşteri İade Faturası"), R("Bedelsiz Satış Raporu"), R("Grup İçi Satış (Uras > Selvi > Müşteri)")),
@@ -254,7 +257,8 @@ namespace WebApplication3.Data
                   "Tedarikçi yönetimi, satın alma, ithalat ve malzeme/stok süreçleri aynı sayfada süreç sırasıyla yönetilir.",
                   Kpi("Açık Satın Alma", "Bekleyen Mal Kabul", "Açık İthalat Dosyası", "Kritik Stok"),
                   U("tedarikci-yonetimi", "Tedarikçi Yönetimi",
-                    G("tedarikci-kartlari", "Tedarikçi Kartları / Değerlendirme", R("Tedarikçi Cari Kartları"), K("Tedarikçi Talep Formu", "#talep/yeni-talep/tedarikci"))),
+                    // Tedarikçi Talep Formu iki menüde de doğrudan aynı ekranı açar (Talep › Yeni Talep › Tedarikçi ve burada); kısayol / yönlendirme yok
+                    G("tedarikci-kartlari", "Tedarikçi Kartları / Değerlendirme", R("Tedarikçi Cari Kartları", "CariKart", "Tedarikci"), R("Tedarikçi Talep Formu", "CariKart", "TedarikciTalep"))),
                   U("satin-alma", "Satın Alma",
                     G("talep-siparis", "Talep ve Sipariş Yönetimi", R("Direkt Satınalma Açık Talep ve Sipariş Raporu"), R("Satınalma Siparişi"), R("Toptan Alış Siparişleri Kontrol Listesi"), K("Satınalma Talebi", "#talep/yeni-talep/satin-alma"), K("Satınalma Talebi Onay Ekranı", "#onaylarim/satin-alma-onaylari/talep-onaylari")),
                     // Aylık Alım Onay Ekranı: Muhasebe'nin hazırladığı aylık alım raporunu satınalmacılar ve Tedarik Zinciri Direktörü ay sonunda onaylar (AlimOnayController). Muhasebe'de de aynı ekran.
@@ -354,7 +358,7 @@ namespace WebApplication3.Data
                   U("yonetim-ozeti", "Yönetim Özeti",
                     G("sirket-grup-performansi", "Şirket ve Grup Performansı", R("Şirket Ciro Raporu"), R("Al Sat Şirketleri Satış Analizi"), R("Üretim Şirketleri Kar Analizi"), R("Konsolide Gider Raporu"), K("Hukuk Yönetici Takip Raporu", "#hukuk/genel/02"))),
                   U("ozel-analizler", "Özel Analizler",
-                    G("ozel-raporlar", "Özel Raporlar", R("Tahsilat Analiz Raporu", "Rapor35"), R("Genel Analiz Raporu", "GenelAnaliz", "Index"), R("Çalan İşlem Raporu")))),
+                    G("ozel-raporlar", "Özel Raporlar", R("Tahsilat Analiz Raporu", "Rapor35"), R("Genel Analiz Raporu", "GenelAnaliz", "Index"), R("Çalan İşlem Raporu"), R("Yapılan Ödemeler", "YapilanOdemeler", "Index")))),   // Yapılan Ödemeler: tüm şirketlerin banka / çek / kasa / nakit avans ödemeleri konsolide (Finans'taki Rapor118 giriş ekranından ayrıdır)
 
                 M("takvim", "Takvim", "takvim",
                   "Şirket ve departman takvimleri, toplantılar, görevler ve hatırlatmalar. Ekranlar yeni geliştirilecek.",
