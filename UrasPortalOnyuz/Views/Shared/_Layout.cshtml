@@ -363,6 +363,11 @@
         .breadcrumb-modern li { display: flex; align-items: center; gap: 8px; }
         .breadcrumb-modern li.active { color: var(--text-primary); font-weight: 600; }
         .breadcrumb-modern i { font-size: 0.6rem; opacity: 0.5; }
+        /* Tıklanabilir kırıntı adımları: Ana Sayfa (ana sayfaya döner), modül / kırılım (ilgili yeri açar) */
+        .breadcrumb-modern a { color: inherit; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; padding: 2px 6px; margin: -2px -6px; border-radius: 6px; cursor: pointer; }
+        .breadcrumb-modern a:hover { color: var(--primary, #1d4ed8); background: rgba(29, 78, 216, .08); text-decoration: none; }
+        .breadcrumb-modern a.km-kirinti-ana i { font-size: .7rem; opacity: .8; }
+        .breadcrumb-modern:empty { display: none; }
 
         .icon-btn {
             width: 40px; height: 40px; border-radius: 6px; border: none;
@@ -1428,13 +1433,37 @@
                     @* Grup ERP Portalı üst çubuğu: selam + bugünün tarihi (tarih kurumsal-menu.js ile yazılır) *@
                     <div class="km-hi">Merhaba @((displayName ?? "").Split(' ')[0])!</div>
                     <div class="km-date"><span class="on">Bugün</span> <span id="kmTarih"></span></div>
+                    @* Ekmek kırıntısı (dinamik): Ana Sayfa › modül › alt menü › rapor. Kabuk sayfası için sunucuda KurumsalMenu.Kirinti ile,
+                       açık sekmeler için sekme kabuğu betiğiyle (çerçevedeki modül sayfasının "kirinti" bildirimi ya da adres eşlemesi) doldurulur.
+                       "Ana Sayfa" ana sayfaya döner; ara adımlar ilgili modül / kırılımı açar. *@
+                    @{
+                        var kirinti = anaSayfada ? new List<(string Ad, string Href)>() : WebApplication3.Data.KurumsalMenu.Kirinti(ViewContext.RouteData.Values["Controller"]?.ToString(), ViewContext.RouteData.Values["Action"]?.ToString());
+                    }
+                    <ul class="breadcrumb-modern" id="kmKirinti" data-baslik="@ViewData["Title"]">
                     @if (!anaSayfada)
                     {
-                        <ul class="breadcrumb-modern">
-                            <li><span class="text-muted">Ana Sayfa</span></li>
-                            <li><i class="fas fa-chevron-right"></i> <span class="active">@ViewData["Title"]</span></li>
-                        </ul>
+                        <li><a href="/" class="km-kirinti-ana" title="Ana Sayfaya dön"><i class="fas fa-home"></i> Ana Sayfa</a></li>
+                        if (kirinti.Count > 0)
+                        {
+                            for (int i = 0; i < kirinti.Count; i++)
+                            {
+                                var k = kirinti[i];
+                                if (i == kirinti.Count - 1)
+                                {
+                                    <li class="active"><i class="fas fa-chevron-right"></i> <span>@k.Ad</span></li>
+                                }
+                                else
+                                {
+                                    <li><i class="fas fa-chevron-right"></i> <a href="@k.Href" class="km-kirinti-bag" title="@k.Ad">@k.Ad</a></li>
+                                }
+                            }
+                        }
+                        else
+                        {
+                            <li class="active"><i class="fas fa-chevron-right"></i> <span>@ViewData["Title"]</span></li>
+                        }
                     }
+                    </ul>
                 </div>
             </div>
 
@@ -3425,8 +3454,94 @@
                 if (f) f.style.display = (aktifId === t.id && !t.kucuk) ? 'block' : 'none';
             });
 
+            kirintiCiz();
             yukseklikAyarla();
         }
+
+        // ---- EKMEK KIRINTISI (üst çubuk: Ana Sayfa › modül › kırılım › rapor) ---------
+        //
+        // Sekme 0 (kabuk sayfası) için sunucunun ürettiği kırıntı korunur. Açık sekmeler için
+        // çerçevedeki modül sayfası kendi yolunu "kirinti" iletisiyle bildirir; bildirim yoksa sekme
+        // adresi menü yapısında (MENU_YAPISI) aranır; o da yoksa "Ana Sayfa › sekme adı" gösterilir.
+        var kirintiEl = document.getElementById('kmKirinti');
+        if (kirintiEl && !kirintiEl.textContent.trim()) kirintiEl.innerHTML = '';   // ana sayfada boş kalsın (:empty ile gizli)
+        var kirintiVarsayilan = kirintiEl ? kirintiEl.innerHTML : '';
+        var kirintiler = {};   // sekme id → [{ ad, url, hash }]
+
+        function kirintiHtml(yol) {
+            var h = '<li><a href="/" class="km-kirinti-ana" title="Ana Sayfaya dön"><i class="fas fa-home"></i> Ana Sayfa</a></li>';
+            yol.forEach(function (k, i) {
+                var son = i === yol.length - 1;
+                h += '<li' + (son ? ' class="active"' : '') + '><i class="fas fa-chevron-right"></i> '
+                   + (son ? '<span>' + kacir(k.ad) + '</span>'
+                          : '<a href="' + kacir(k.url || '#') + '" class="km-kirinti-bag" data-hash="' + kacir(k.hash || '') + '" title="' + kacir(k.ad) + '">' + kacir(k.ad) + '</a>')
+                   + '</li>';
+            });
+            return h;
+        }
+
+        function kirintiCiz() {
+            if (!kirintiEl) return;
+            if (aktifId === 0) { kirintiEl.innerHTML = kirintiVarsayilan; return; }
+            var t = sekmeler.filter(function (x) { return x.id === aktifId; })[0];
+            if (!t) return;
+            var yol = kirintiler[aktifId] || kirintiUrlden(t.url) || [{ ad: t.ad, url: t.url }];
+            kirintiEl.innerHTML = kirintiHtml(yol);
+        }
+
+        // Sekme adresi menüde bir rapora ya da modül sayfasına karşılık geliyorsa yolunu üretir.
+        function kirintiUrlden(url) {
+            var M = window.MENU_YAPISI;
+            if (!M || !url) return null;
+            var mod = /^\/modul\/([^\/?#]+)/i.exec(url);
+            if (mod) {
+                var m0 = M.filter(function (m) { return m.key.toLowerCase() === mod[1].toLowerCase(); })[0];
+                return m0 ? [{ ad: m0.ad, url: '/Modul/' + m0.key, hash: '' }] : null;
+            }
+            var yolu = url.split('#')[0].split('?')[0].replace(/\/+$/, '').toLowerCase();
+            var bulunan = null;
+            M.filter(function (m) { return m.alt; }).some(function (m) {
+                function gez(g, yol, zincir) {
+                    var z = zincir.concat([{ ad: g.ad, url: '/Modul/' + m.key + '?yol=' + yol, hash: yol }]);
+                    if (g.alt) return g.alt.some(function (b) { return gez(b, yol + '/' + b.key, z); });
+                    return (g.raporlar || []).some(function (r, i) {
+                        if (!r.url || r.url.split('?')[0].replace(/\/+$/, '').toLowerCase() !== yolu) return false;
+                        bulunan = z.concat([{ ad: r.ad, url: r.url, hash: yol + '/r' + i }]);
+                        return true;
+                    });
+                }
+                return m.alt.some(function (a) { return gez(a, a.key, [{ ad: m.ad, url: '/Modul/' + m.key, hash: '' }]); });
+            });
+            return bulunan;
+        }
+
+        if (kirintiEl) kirintiEl.addEventListener('click', function (e) {
+            var a = e.target.closest('a');
+            if (!a) return;
+            if (a.classList.contains('km-kirinti-ana')) {
+                // Ana Sayfa: kabuk normal gezinir; önceki aktif sekme değil ANA SAYFA gösterilsin.
+                try { sessionStorage.setItem('portalAnaSayfaIstek', '1'); } catch (x) { }
+                return;
+            }
+            if (!a.classList.contains('km-kirinti-bag')) return;
+            e.preventDefault();
+            var url = a.getAttribute('href'), ad = a.textContent.trim();
+            // Aktif sekme aynı modülün sayfasıysa yeni sekme açılmaz, aynı çerçevede o kırılıma gidilir.
+            var t = sekmeler.filter(function (x) { return x.id === aktifId; })[0];
+            var f = t ? document.getElementById('cerceve_' + t.id) : null;
+            var hedef = /^\/modul\/([^\/?#]+)/i.exec(url);
+            if (f && hedef && t && t.url.toLowerCase().indexOf('/modul/' + hedef[1].toLowerCase()) === 0) {
+                try { f.contentWindow.location.hash = a.dataset.hash || ''; return; } catch (x) { /* erişilemezse sekmede aç */ }
+            }
+            ac(ad, url, false, true);
+        });
+
+        // Kabuk sayfasının kendisi bir modül sayfasıysa (sekme 0) modül betiği kırıntıyı bu olayla bildirir.
+        window.addEventListener('portalKirinti', function (olay) {
+            if (!kirintiEl || !olay.detail) return;
+            kirintiVarsayilan = kirintiHtml(olay.detail);
+            if (aktifId === 0) kirintiEl.innerHTML = kirintiVarsayilan;
+        });
 
         // ---- SEKME MESGULIYETI ----------------------------------------
         //
@@ -3463,6 +3578,13 @@
 
             if (v.tip === 'mesgul') {
                 mesgulIsaretle(id, !!v.durum);
+                return;
+            }
+
+            if (v.tip === 'kirinti') {
+                // Çerçevedeki modül sayfası bulunduğu kırılımı bildirdi: üst çubuktaki kırıntı güncellenir.
+                kirintiler[id] = Array.isArray(v.yol) ? v.yol : null;
+                if (id === aktifId) kirintiCiz();
                 return;
             }
 

@@ -159,6 +159,42 @@ namespace WebApplication3.Data
         private static readonly Lazy<List<KmModul>> _moduller = new Lazy<List<KmModul>>(Olustur);
         public static List<KmModul> Moduller => _moduller.Value;
 
+        // ---------- Ekmek kırıntısı ----------
+        /// <summary>
+        /// Denetleyici / eylemle açılan ekranın menüdeki yolu: modül › 1. alt menü › (2. alt menü) › rapor.
+        /// Her adım (Ad, Href): modül → /Modul/key, alt menüler → /Modul/key?yol=…, rapor → /Modul/key?yol=…/rN (ModulController derin bağlantısı).
+        /// Aynı ekran birden çok yerde varsa menü sırasındaki ilk yer döner; menüde yoksa boş liste (kabuk "Ana Sayfa › Başlık" gösterir).
+        /// </summary>
+        public static List<(string Ad, string Href)> Kirinti(string controller, string action)
+        {
+            var sonuc = new List<(string Ad, string Href)>();
+            if (string.IsNullOrEmpty(controller)) return sonuc;
+            action = string.IsNullOrEmpty(action) ? "Index" : action;
+            foreach (var m in Moduller.Where(x => x.ModulMu))
+                foreach (var a in m.Alt)
+                    if (KirintiAra(m, a, a.Key, new List<(string Ad, string Href)> { (m.Ad, "/Modul/" + m.Key) }, controller, action, sonuc)) return sonuc;
+            return sonuc;
+        }
+
+        private static bool KirintiAra(KmModul m, KmGrup g, string yol, List<(string Ad, string Href)> zincir, string controller, string action, List<(string Ad, string Href)> sonuc)
+        {
+            var z = new List<(string Ad, string Href)>(zincir) { (g.Ad, $"/Modul/{m.Key}?yol={yol}") };
+            if (g.Alt != null)
+            {
+                foreach (var b in g.Alt) if (KirintiAra(m, b, yol + "/" + b.Key, z, controller, action, sonuc)) return true;
+                return false;
+            }
+            if (g.Raporlar == null) return false;
+            for (int i = 0; i < g.Raporlar.Count; i++)
+            {
+                var r = g.Raporlar[i];
+                if (!r.Hazir || !string.Equals(r.Controller, controller, StringComparison.OrdinalIgnoreCase) || !string.Equals(r.Action ?? "Index", action, StringComparison.OrdinalIgnoreCase)) continue;
+                sonuc.AddRange(z); sonuc.Add((r.Ad, $"/Modul/{m.Key}?yol={yol}/r{i}"));
+                return true;
+            }
+            return false;
+        }
+
         public static KmModul Bul(string key) => Moduller.FirstOrDefault(m => string.Equals(m.Key, key, StringComparison.OrdinalIgnoreCase));
 
         private static List<KmModul> Olustur()
@@ -309,7 +345,7 @@ namespace WebApplication3.Data
                     G("personel-organizasyon", "Personel ve Organizasyon", R("Personel Carileri")),
                     G("izin-devamlilik", "İzin ve Devamlılık", R("Yaklaşan İzinler", "Home", "Index"), R("Ekip İzin Takvimi"), R("İzin Takip Raporu")),   // tabloda: index.html#yaklasanIzin (ana sayfa kartı)
                     G("performans-is-takibi", "Performans ve İş Takibi", R("Mesai Takip Raporu")),
-                    G("personel-maliyet-bordro", "Personel Maliyet ve Bordro", R("Personel Maliyet Tablosu"))),
+                    G("personel-maliyet-bordro", "Personel Maliyet ve Bordro", R("Personel Maliyet Raporu", "PersonelMaliyet", "Index"), R("Personel Maliyet Tablosu"))),   // Personel Maliyet Raporu: "PERSONEL 19.06 GÜNCEL" tablosu + Personel Cari Kartı (Yönetim › Özel Raporlar'da da aynı ekran)
                   U("idari-isler", "İdari İşler",
                     G("danisma-giris-cikis", "Danışma ve Giriş-Çıkış", R("Danışma Giriş-Çıkış Defteri")),
                     G("arac-seyahat", "Araç ve Seyahat", R("Araç Takvimi (Filo)"), R("Seyahat Takvimi")))),
@@ -358,7 +394,7 @@ namespace WebApplication3.Data
                   U("yonetim-ozeti", "Yönetim Özeti",
                     G("sirket-grup-performansi", "Şirket ve Grup Performansı", R("Şirket Ciro Raporu"), R("Al Sat Şirketleri Satış Analizi"), R("Üretim Şirketleri Kar Analizi"), R("Konsolide Gider Raporu"), K("Hukuk Yönetici Takip Raporu", "#hukuk/genel/02"))),
                   U("ozel-analizler", "Özel Analizler",
-                    G("ozel-raporlar", "Özel Raporlar", R("Tahsilat Analiz Raporu", "Rapor35"), R("Genel Analiz Raporu", "GenelAnaliz", "Index"), R("Çalan İşlem Raporu"), R("Yapılan Ödemeler", "YapilanOdemeler", "Index")))),   // Yapılan Ödemeler: tüm şirketlerin banka / çek / kasa / nakit avans ödemeleri konsolide (Finans'taki Rapor118 giriş ekranından ayrıdır)
+                    G("ozel-raporlar", "Özel Raporlar", R("Tahsilat Analiz Raporu", "Rapor35"), R("Genel Analiz Raporu", "GenelAnaliz", "Index"), R("Çalan İşlem Raporu"), R("Yapılan Ödemeler", "YapilanOdemeler", "Index"), R("Personel Maliyet Raporu", "PersonelMaliyet", "Index")))),   // Yapılan Ödemeler: tüm şirketlerin banka / çek / kasa / nakit avans ödemeleri konsolide (Finans'taki Rapor118 giriş ekranından ayrıdır) · Personel Maliyet Raporu: "PERSONEL 19.06 GÜNCEL" tablosu
 
                 M("takvim", "Takvim", "takvim",
                   "Şirket ve departman takvimleri, toplantılar, görevler ve hatırlatmalar. Ekranlar yeni geliştirilecek.",

@@ -189,7 +189,41 @@ tasarımından uyarlandı:
   şirket, ödeme türü, kategori, alıcı tipi, para birimi, durum ve kaynak filtreleri; KPI kutuları (tıklayınca filtre); Şirket × Ödeme Türü ve
   Ay × Ödeme Türü matrisleri; kategori dağılımı; en büyük 10 alıcı; satır detay drawer'ı (aynı alıcıya yapılan ödemeler, avans talebine /
   Aylık Alım Onay ekranına geçiş); Excel (liste + şirket özeti). Finans › Ödeme Yönetimi altındaki "Yapılan Ödemeler" (Rapor118) tek şirketlik
-  ödeme giriş ekranıdır; bu rapor ondan bağımsızdır.
+  ödeme giriş ekranıdır; bu rapor ondan bağımsızdır. Ekran üç sekmelidir: **Ödeme Listesi** (yukarıdaki), **Şirket Bazlı Ödeme Raporu**
+  ("2026 Şirket Bazlı Ödeme Raporu" Excel şablonu: her şirket için Banka / Çek / Nakit ödemeleri X ve R satırlarıyla + Toplam Ödeme; 12 ay,
+  Toplam, Aylık Ort. = Toplam / veri olan ay sayısı; banka satırları yalnız tanımlı şirketlerde — `YapilanOdemelerOrnek.BankaSirketleri`) ve
+  **Konsolide Ödeme Raporu** ("2026 Konsolide Ödeme Raporu" şablonu: Banka / Çek / Nakit × X / R, Toplam X, Toplam R, Genel Toplam; şirket
+  konsolidesi). Şirket listesi ve sırası şablondan gelir (10 şirket; diğer modüllerden gelen şablon dışı şirketler ek satır olarak görünür,
+  `SirketAdi` eşlemesi ile "URS Makina" → "URS Makine" gibi adlar birleştirilir). Nakit = kasa çıkışları + nakit avans teslimleri; X / R = ERP
+  aktarım tipi (`AktarimTipi`). Sekme sırası: Şirket Bazlı Ödeme Raporu (açılışta bu gelir) → Konsolide Ödeme Raporu → Ödeme Listesi; derin
+  bağlantı `/YapilanOdemeler?sekme=konsolide | liste`; yıl seçimi ve Excel (CSV) her iki şablon sekmesinde.
+* **Personel Maliyet Raporu** (Yönetim › Özel Analizler › Özel Raporlar ve İK ve İdari İşler › İnsan Kaynakları › Personel Maliyet ve Bordro — aynı
+  ekran; `Controllers/PersonelMaliyetController.cs`, `Views/PersonelMaliyet/Index.cshtml`,
+  betik `wwwroot/js/personel-maliyet.js`, veri `Data/PersonelMaliyetOrnek.cs`): "PERSONEL 19.06 GÜNCEL" Google E-Tablosunun portal karşılığı, sütun
+  düzeni tabloyla aynı — **Personel Kimlik Bilgileri** (sıra, SGK işvereni, fiili görev yeri, ad soyad, ünvan, bölüm, görev, işe giriş, kıdem, çatı
+  departman, özel durumu), **Brüt Ücret** (X-Net, R-Net, Top. Net, brüt ücret masrafları, toplam brüt ücret), **İşveren Payları**, **Ek Çalışmalar**,
+  **Sosyal Yardımlar** (yemek, yol, servis, kira desteği, eğitim, toplam), **Prim** (satış primi, özel ödeme, toplam), **Yan Haklar**, **Yasal
+  Ödemeler**, **Maliyet** (genel maliyet) ve **Not**. Toplam sütunları formülle hesaplanır (Genel Maliyet = Toplam Brüt Ücret + İşveren Payı + Ek
+  Çalışma + Sosyal Yrd. + Prim + Yan Haklar + Yasal Öd.); tablodaki boş hücreler 0 alınır. Filtreler (SGK işvereni, görev yeri, çatı departman,
+  bölüm, ünvan, özel durum, durum Aktif / İşten Ayrıldı / Tümü, arama) ve KPI kutuları iki sekme için ortaktır. **Personel Maliyet Tablosu**
+  sekmesi: tam tablo, dip toplam; **Düzenle → Kaydet** ile kimlik bilgileri (SGK işvereni, görev yeri, ad soyad, ünvan, bölüm, görev, işe giriş,
+  çatı departman, özel durum — mevcut değerler `datalist` ile listeden seçilir ya da yeni değer yazılır) ve tüm tutarlar satır bazında toplu
+  değiştirilir (bellek içi, son kayıt bilgisi gösterilir); her satırdaki **Kart** düğmesi **Personel Cari Kartı** çekmecesini açar (335.xxx cari
+  kodu, durum ve ayrılış tarihi, TC kimlik, telefon, e-posta, tüm ücret ve maliyet kalemleri canlı toplamla, not; Kaydet / Sil / Personel Carileri
+  bağlantısı; `?kod=335.012` derin bağlantısı kartı açar); **Personel Ekle** yeni kart açar (`/PersonelMaliyet/Ekle`), hatalı satır **Sil** ile
+  kaldırılır (`/PersonelMaliyet/Sil`), işten ayrılan personel silinmez, kartında Durum = İşten Ayrıldı yapılır. Sunucu doğrulaması
+  (`PersonelMaliyetOrnek.Dogrula`): zorunlu kimlik alanları, tarih biçimi, TC kimlik 11 hane, e-posta, negatif tutar, ayrılış tarihi; Excel (CSV).
+  **Özet Raporu** sekmesi (`/PersonelMaliyet?sekme=ozet`): seçilebilir kırılım (çatı departman, SGK işvereni, fiili görev yeri, bölüm, ünvan,
+  görev, özel durum, kıdem aralığı) × tüm maliyet kalemleri + ortalama + pay %, SGK işvereni × çatı departman matrisi (personel sayısı ve
+  genel maliyet), maliyet kalemi dağılımı (genel maliyet içindeki pay), ünvan / özel durum / kıdem dağılımları, en yüksek maliyetli 10 personel
+  ve tüm bölümleri tek dosyada veren Özet Excel. Özet, filtre kapsamındaki personel üzerinden ve düzenleme modundaki kaydedilmemiş
+  değişiklikler dahil hesaplanır.
+* **Üst çubuk ekmek kırıntısı** (`Views/Shared/_Layout.cshtml` › `#kmKirinti`): "Ana Sayfa › Modül › Alt Menü › Süreç Grubu › Rapor" yolu
+  tıklanabilir. Kabuk sayfası için yol sunucuda `KurumsalMenu.Kirinti(controller, action)` ile menü yapısından bulunur; açık sekmeler için sekme
+  kabuğu betiği aktif sekmeye göre çizer — çerçevedeki modül sayfası (`wwwroot/js/kurumsal-modul.js`) bulunduğu kırılımı `postMessage`
+  (`tip: "kirinti"`) ile bildirir, bildirim yoksa sekme adresi `MENU_YAPISI` içinde aranır, o da yoksa "Ana Sayfa › sekme adı" gösterilir.
+  "Ana Sayfa" kabuğu ana sayfaya döndürür (önceki aktif sekme değil ana sayfa gösterilir); modül / kırılım adımları aynı modülün sekmesi
+  açıksa yeni sekme açmadan çerçevenin hash'ini değiştirir, değilse ilgili modül sayfasını sekmede açar.
 * **Menü tanımı** `Data/KurumsalMenu.cs` içindedir (menu-config.js'in C# karşılığı). Rapor adları buradaki ekranlara ada göre
   otomatik eşlenir; yazımı farklı olanlar `TakmaAdlar` tablosundadır. Eşleşmeyen kayıtlar "planlanıyor", ana sahibi başka
   modülde olanlar "kısayol" olarak görünür. Menüde yeri belirlenmemiş mevcut ekranlar

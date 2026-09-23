@@ -1,13 +1,17 @@
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     var sirketler = (string[])ViewBag.Sirketler;
+    int yil = (int)ViewBag.Yil;
+    string sekme = (string)ViewBag.Sekme ?? "liste";
     string q = Context.Request.Query.ContainsKey("_sekme") ? "?_sekme=1" : "";
 }
 @*
-    YAPILAN ÖDEMELER — Yönetim › Özel Analizler › Özel Raporlar
-    Tüm grup şirketlerinin yaptığı ödemelerin konsolide listesi: Banka (Havale / EFT), Çek, Nakit (Kasa), Nakit Avans.
-    Veri: /YapilanOdemeler/Veri (Data/YapilanOdemelerOrnek.cs — Nakit Avans modülü + Aylık Alım Onay + ERP kasa / banka / çek örnekleri).
-    Betik: wwwroot/js/yapilan-odemeler.js · Ortak stil: wwwroot/css/nakit-avans.css
+    YAPILAN ÖDEMELER — Yönetim › Özel Analizler › Özel Raporlar. Üç sekme:
+      Ödeme Listesi             : tüm grup şirketlerinin ödemeleri (Banka (Havale / EFT), Çek, Nakit (Kasa), Nakit Avans) — filtreler, KPI, matrisler, detay drawer
+      Şirket Bazlı Ödeme Raporu : "2026 Şirket Bazlı Ödeme Raporu" şablonu (BANKA X/R • ÇEK X/R • NAKİT X/R • aylık şirket detayı)
+      Konsolide Ödeme Raporu    : "2026 Konsolide Ödeme Raporu" şablonu (ödeme türü konsolidesi • şirket konsolidesi)
+    Veri: /YapilanOdemeler/Veri (Data/YapilanOdemelerOrnek.cs). Betik: wwwroot/js/yapilan-odemeler.js · Ortak stil: wwwroot/css/nakit-avans.css
+    Sekme sırası ve varsayılan: Şirket Bazlı Ödeme Raporu (açılış) → Konsolide Ödeme Raporu → Ödeme Listesi. Derin bağlantı: /YapilanOdemeler?sekme=konsolide | liste
 *@
 @section Styles {
 <link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
@@ -21,6 +25,7 @@
     @@media (max-width: 1200px) { .yo-filtre { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
     .yo-tur { display: inline-block; font-size: .62rem; font-weight: 700; color: #fff; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
     .yo-tur.Banka { background: #1d4ed8; } .yo-tur.Cek { background: #b45309; } .yo-tur.Kasa { background: #0f766e; } .yo-tur.Avans { background: #7c3aed; }
+    .yo-xr { display: inline-block; font-size: .58rem; font-weight: 800; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0 4px; margin-left: 4px; color: #334155; background: #f8fafc; vertical-align: middle; }
     #yoTablo tbody tr.tik { cursor: pointer; } #yoTablo tbody tr.tik:hover td { background: #eff6ff; }
     #yoTablo tfoot td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; }
     #yoTablo td small, #yoMatris td small { color: #64748b; display: block; font-size: .62rem; }
@@ -34,56 +39,105 @@
     .yo-perde { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1055; display: none; } .yo-perde.acik { display: block; }
     .yo-master { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; font-size: .72rem; }
     .yo-master .l { font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; } .yo-master .v { font-weight: 600; color: #0f172a; word-break: break-word; }
+    /* --- Excel şablonu görünümü (Şirket Bazlı / Konsolide Ödeme Raporu) --- */
+    .yo-rapor-ust { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: linear-gradient(90deg, #1e3a8a, #1d4ed8); color: #fff; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+    .yo-rapor-ust h5 { margin: 0; font-weight: 800; letter-spacing: .05em; font-size: .95rem; text-transform: uppercase; }
+    .yo-rapor-ust .alt { font-size: .64rem; letter-spacing: .14em; opacity: .85; text-transform: uppercase; }
+    .yo-rapor-ust .ayar { margin-left: auto; display: flex; gap: 6px; align-items: center; } .yo-rapor-ust .ayar select { font-size: .72rem; padding: 2px 6px; height: 26px; width: auto; } .yo-rapor-ust .ayar .btn { font-size: .66rem; }
+    .yo-excel { font-size: .68rem; border-collapse: separate; border-spacing: 0; } .yo-excel th, .yo-excel td { white-space: nowrap; padding: 3px 7px; border-bottom: 1px solid #e2e8f0; }
+    .yo-excel thead th { position: sticky; top: 0; background: #1e293b; color: #fff; text-transform: uppercase; font-size: .6rem; letter-spacing: .04em; text-align: right; z-index: 3; }
+    .yo-excel thead th.ad { text-align: left; } .yo-excel td.s { text-align: right; font-variant-numeric: tabular-nums; }
+    .yo-excel th.ad, .yo-excel td.ad { position: sticky; left: 0; background: #fff; min-width: 270px; z-index: 2; text-transform: uppercase; font-weight: 600; box-shadow: 1px 0 0 #e2e8f0; }
+    .yo-excel thead th.ad { z-index: 4; background: #1e293b; }
+    .yo-excel tr.grp td { background: #cbd5e1; color: #0f172a; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
+    .yo-excel tr.r td { color: #64748b; } .yo-excel tr.r td.ad { font-weight: 500; }
+    .yo-excel tr.top td { font-weight: 700; background: #f1f5f9; border-top: 1px solid #94a3b8; } .yo-excel tr.top td.ad { background: #f1f5f9; }
+    .yo-excel tr.genel td { font-weight: 800; background: #dbeafe; border-top: 2px solid #1d4ed8; } .yo-excel tr.genel td.ad { background: #dbeafe; }
+    .yo-excel td.top { font-weight: 700; } .yo-excel td.ort { font-style: italic; color: #475569; background: #fafafa; }
+    .yo-excel tr.ara td { height: 6px; padding: 0; background: #fff; border: 0; }
+    .yo-not { font-size: .66rem; color: #475569; margin-top: 6px; }
 </style>
 }
 
-<div class="container-fluid py-3 na yo" id="yo" data-sekme="@(q != "" ? "1" : "")">
+<div class="container-fluid py-3 na yo" id="yo" data-sekme="@(q != "" ? "1" : "")" data-baslangic="@sekme" data-yil="@yil">
     <div class="na-ust">
         <h4><span class="rt-ikon"><i class="fas fa-money-bill-transfer"></i></span>Yapılan Ödemeler</h4>
         <span class="yo-pill"><i class="fas fa-building me-1"></i>Konsolide · @sirketler.Length Şirket</span>
-        <span class="yo-pill"><i class="fas fa-layer-group me-1"></i>Banka · Çek · Nakit (Kasa) · Nakit Avans</span>
-        <span class="sub w-100">Grup şirketlerinin yaptığı <b>tüm ödemeler</b> tek listede: <b>Banka (Havale / EFT)</b>, <b>Çek</b> (verilen vadeli çekler), <b>Nakit (Kasa)</b> çıkışları ve <b>Nakit Avans</b> teslimleri. Kaynaklar: ERP banka ve kasa hareketleri, çek bordrosu, Nakit Avans modülü ve Aylık Alım Onay'daki ödenmiş tedarikçi faturaları. Döviz ödemeleri işlem günü kuruyla TL'ye çevrilir; satıra tıklayınca ödeme detayı ve kaynak belge açılır.</span>
+        <span class="yo-pill"><i class="fas fa-layer-group me-1"></i>Banka · Çek · Nakit (Kasa) · Nakit Avans · X / R</span>
+        <span class="sub w-100">Grup şirketlerinin yaptığı <b>tüm ödemeler</b> tek listede: <b>Banka (Havale / EFT)</b>, <b>Çek</b> (verilen vadeli çekler), <b>Nakit (Kasa)</b> çıkışları ve <b>Nakit Avans</b> teslimleri; ERP aktarım tipi <b>X / R</b> ayrımıyla. Kaynaklar: ERP banka ve kasa hareketleri, çek bordrosu, Nakit Avans modülü ve Aylık Alım Onay'daki ödenmiş tedarikçi faturaları. Döviz ödemeleri işlem günü kuruyla TL'ye çevrilir. <b>Şirket Bazlı</b> ve <b>Konsolide</b> sekmeleri yıllık Excel şablonlarının (12 ay + Toplam + Aylık Ort.) portal karşılığıdır.</span>
     </div>
-    <div class="na-kpi" id="yoKpi" data-dinamik="kapali"></div>
     <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+    @* Sekme sırası: Şirket Bazlı (varsayılan açılış) → Konsolide → Ödeme Listesi *@
+    <div class="na-sekme" id="yoSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="sirket"><i class="fas fa-building me-1"></i>Şirket Bazlı Ödeme Raporu</button>
+        <button type="button" data-p="konsolide"><i class="fas fa-layer-group me-1"></i>Konsolide Ödeme Raporu</button>
+        <button type="button" data-p="liste"><i class="fas fa-list me-1"></i>Ödeme Listesi <span class="n" id="yoNListe">0</span></button>
+    </div>
 
-    <div class="na-kart">
-        <div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Filtreler</span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="yoTemizle" style="font-size:.66rem">Temizle</button><button type="button" class="btn btn-light btn-sm py-0" id="yoExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button><button type="button" class="btn btn-light btn-sm py-0" id="yoMatrisExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Şirket Özeti Excel</button></span></div>
-        <div class="na-kart-g">
-            <div class="yo-filtre">
-                <div class="ara"><label>Ara</label><input class="form-control" id="yoAra" placeholder="Ödeme no, alıcı, belge, açıklama, hesap…"></div>
-                <div><label>Dönem</label><select class="form-select" id="yoDonem"><option value="buay">Bu Ay</option><option value="gecenay">Geçen Ay</option><option value="30">Son 30 Gün</option><option value="90" selected>Son 90 Gün</option><option value="yil">Bu Yıl</option><option value="">Tümü</option><option value="ozel">Özel Aralık</option></select></div>
-                <div><label>Başlangıç</label><input class="form-control" type="date" id="yoBas"></div>
-                <div><label>Bitiş</label><input class="form-control" type="date" id="yoBit"></div>
-                <div><label>Şirket</label><select class="form-select" id="yoSirket"><option value="">Tümü</option>@foreach (var s in sirketler) { <option>@s</option> }</select></div>
-                <div><label>Ödeme Türü</label><select class="form-select" id="yoTur"><option value="">Tümü</option></select></div>
-                <div><label>Kategori</label><select class="form-select" id="yoKategori"><option value="">Tümü</option></select></div>
-                <div><label>Alıcı Tipi</label><select class="form-select" id="yoAliciTipi"><option value="">Tümü</option></select></div>
-                <div><label>Para Birimi</label><select class="form-select" id="yoPb"><option value="">Tümü</option></select></div>
-                <div><label>Durum</label><select class="form-select" id="yoDurum"><option value="">Tümü</option></select></div>
-                <div><label>Kaynak</label><select class="form-select" id="yoKaynak"><option value="">Tümü</option></select></div>
+    @* ============================ SEKME 1: ÖDEME LİSTESİ ============================ *@
+    <div class="na-panel" data-p="liste">
+        <div class="na-kpi" id="yoKpi" data-dinamik="kapali"></div>
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Filtreler</span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="yoTemizle" style="font-size:.66rem">Temizle</button><button type="button" class="btn btn-light btn-sm py-0" id="yoExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button><button type="button" class="btn btn-light btn-sm py-0" id="yoMatrisExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Şirket Özeti Excel</button></span></div>
+            <div class="na-kart-g">
+                <div class="yo-filtre">
+                    <div class="ara"><label>Ara</label><input class="form-control" id="yoAra" placeholder="Ödeme no, alıcı, belge, açıklama, hesap…"></div>
+                    <div><label>Dönem</label><select class="form-select" id="yoDonem"><option value="buay">Bu Ay</option><option value="gecenay">Geçen Ay</option><option value="30">Son 30 Gün</option><option value="90" selected>Son 90 Gün</option><option value="yil">Bu Yıl</option><option value="">Tümü</option><option value="ozel">Özel Aralık</option></select></div>
+                    <div><label>Başlangıç</label><input class="form-control" type="date" id="yoBas"></div>
+                    <div><label>Bitiş</label><input class="form-control" type="date" id="yoBit"></div>
+                    <div><label>Şirket</label><select class="form-select" id="yoSirket"><option value="">Tümü</option>@foreach (var s in sirketler) { <option>@s</option> }</select></div>
+                    <div><label>Ödeme Türü</label><select class="form-select" id="yoTur"><option value="">Tümü</option></select></div>
+                    <div><label>X / R</label><select class="form-select" id="yoXr"><option value="">Tümü</option></select></div>
+                    <div><label>Kategori</label><select class="form-select" id="yoKategori"><option value="">Tümü</option></select></div>
+                    <div><label>Alıcı Tipi</label><select class="form-select" id="yoAliciTipi"><option value="">Tümü</option></select></div>
+                    <div><label>Para Birimi</label><select class="form-select" id="yoPb"><option value="">Tümü</option></select></div>
+                    <div><label>Durum</label><select class="form-select" id="yoDurum"><option value="">Tümü</option></select></div>
+                    <div><label>Kaynak</label><select class="form-select" id="yoKaynak"><option value="">Tümü</option></select></div>
+                </div>
+                <div class="na-mini" id="yoSayi"></div>
+                <div class="table-responsive" style="max-height:560px">
+                    <table class="na-tablo" id="yoTablo" data-dinamik="kapali">
+                        <thead><tr><th>Tarih</th><th>Ödeme No · X / R</th><th>Şirket</th><th>Ödeme Türü</th><th>Kaynak Hesap</th><th>Alıcı</th><th>Kategori</th><th>Belge</th><th class="s">Tutar</th><th>PB</th><th class="s">Tutar (TL)</th><th>Vade</th><th>Durum</th><th>Kaynak</th></tr></thead>
+                        <tbody></tbody>
+                        <tfoot><tr><td colspan="8">Toplam (filtre)</td><td class="s" id="yoTopSayi"></td><td></td><td class="s" id="yoTopTl"></td><td colspan="3"></td></tr></tfoot>
+                    </table>
+                </div>
             </div>
-            <div class="na-mini" id="yoSayi"></div>
-            <div class="table-responsive" style="max-height:560px">
-                <table class="na-tablo" id="yoTablo" data-dinamik="kapali">
-                    <thead><tr><th>Tarih</th><th>Ödeme No</th><th>Şirket</th><th>Ödeme Türü</th><th>Kaynak Hesap</th><th>Alıcı</th><th>Kategori</th><th>Belge</th><th class="s">Tutar</th><th>PB</th><th class="s">Tutar (TL)</th><th>Vade</th><th>Durum</th><th>Kaynak</th></tr></thead>
-                    <tbody></tbody>
-                    <tfoot><tr><td colspan="8">Toplam (filtre)</td><td class="s" id="yoTopSayi"></td><td></td><td class="s" id="yoTopTl"></td><td colspan="3"></td></tr></tfoot>
-                </table>
+        </div>
+        <div class="row g-2">
+            <div class="col-lg-7">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-table-cells me-1"></i>Şirket × Ödeme Türü (TL)</span><span class="not">Filtreye göre · konsolide toplam son satırda</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo yo-matris" id="yoMatris" data-dinamik="kapali"><thead><tr><th>Şirket</th><th class="s">Banka (Havale / EFT)</th><th class="s">Çek</th><th class="s">Nakit (Kasa)</th><th class="s">Nakit Avans</th><th class="s">Toplam</th><th class="s">İşlem</th></tr></thead><tbody></tbody></table></div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-days me-1"></i>Aylık Ödeme Toplamı (TL)</span><span class="not">Filtreye göre · ay bazında</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo yo-matris" id="yoAylik" data-dinamik="kapali"><thead><tr><th>Ay</th><th class="s">Banka (Havale / EFT)</th><th class="s">Çek</th><th class="s">Nakit (Kasa)</th><th class="s">Nakit Avans</th><th class="s">Toplam</th><th class="s">İşlem</th></tr></thead><tbody></tbody></table></div></div></div>
+            </div>
+            <div class="col-lg-5">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-chart-bar me-1"></i>Kategori Dağılımı</span><span class="not">Filtreye göre · TL</span></div><div class="na-kart-g" id="yoKategoriler"></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-ranking-star me-1"></i>En Büyük 10 Alıcı</span><span class="not">Filtreye göre · TL</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="yoAlicilar" data-dinamik="kapali"><thead><tr><th>#</th><th>Alıcı</th><th>Tip</th><th class="s">İşlem</th><th class="s">Toplam (TL)</th></tr></thead><tbody></tbody></table></div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Kaynaklar ve Kurallar</span></div><div class="na-kart-g" style="font-size:.7rem;color:#475569"><ul class="mb-0 ps-3"><li><b>Banka (Havale / EFT):</b> ERP banka hareketleri — maaş, vergi / SGK, kira, kredi taksiti, enerji ve hizmet, tedarikçi, ithalat (USD / EUR) ve grup içi ödemeler. Şablon gereği banka ödemesi yalnız tanımlı şirketlerde izlenir; diğer şirketler çek ve nakit ile öder.</li><li><b>Çek:</b> Çek bordrosu — tedarikçilere verilen vadeli çekler; vadesi gelen çek "Ödendi", gelmeyen "Vade Bekliyor" (verildiği ayın ödemesi sayılır).</li><li><b>Nakit (Kasa):</b> ERP kasa çıkış fişleri; iptal edilen fişler "İptal" olarak listelenir, toplama girmez.</li><li><b>Nakit Avans:</b> Nakit Avans modülündeki teslimler; şablon raporlarında "Nakit" satırlarına dahildir.</li><li><b>X / R:</b> ERP aktarım tipi; şablon raporları her ödeme türünü X ve R olarak ayrı satırlarda gösterir.</li><li><b>Tedarikçi faturaları:</b> Aylık Alım Onay ekranında "Ödendi" olan faturalar banka ya da çek ödemesi olarak yer alır.</li></ul></div></div>
             </div>
         </div>
     </div>
 
-    <div class="row g-2">
-        <div class="col-lg-7">
-            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-table-cells me-1"></i>Şirket × Ödeme Türü (TL)</span><span class="not">Filtreye göre · konsolide toplam son satırda</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo yo-matris" id="yoMatris" data-dinamik="kapali"><thead><tr><th>Şirket</th><th class="s">Banka (Havale / EFT)</th><th class="s">Çek</th><th class="s">Nakit (Kasa)</th><th class="s">Nakit Avans</th><th class="s">Toplam</th><th class="s">İşlem</th></tr></thead><tbody></tbody></table></div></div></div>
-            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-days me-1"></i>Aylık Ödeme Toplamı (TL)</span><span class="not">Filtreye göre · ay bazında</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo yo-matris" id="yoAylik" data-dinamik="kapali"><thead><tr><th>Ay</th><th class="s">Banka (Havale / EFT)</th><th class="s">Çek</th><th class="s">Nakit (Kasa)</th><th class="s">Nakit Avans</th><th class="s">Toplam</th><th class="s">İşlem</th></tr></thead><tbody></tbody></table></div></div></div>
+    @* ============================ SEKME 2: ŞİRKET BAZLI ÖDEME RAPORU ============================ *@
+    <div class="na-panel" data-p="sirket">
+        <div class="yo-rapor-ust">
+            <div><h5><span id="yoSirketYilBaslik">@yil</span> Şirket Bazlı Ödeme Raporu</h5><div class="alt">Banka X/R • Çek X/R • Nakit X/R • Aylık Şirket Detayı</div></div>
+            <div class="ayar"><label class="me-1" style="font-size:.66rem;font-weight:700">Yıl</label><select class="form-select" id="yoRYil"></select><label class="ms-2 me-1" style="font-size:.66rem;font-weight:700">Şirket</label><select class="form-select" id="yoRSirket"><option value="">Tümü</option></select><button type="button" class="btn btn-light btn-sm py-0" id="yoRExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
         </div>
-        <div class="col-lg-5">
-            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-chart-bar me-1"></i>Kategori Dağılımı</span><span class="not">Filtreye göre · TL</span></div><div class="na-kart-g" id="yoKategoriler"></div></div>
-            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-ranking-star me-1"></i>En Büyük 10 Alıcı</span><span class="not">Filtreye göre · TL</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="yoAlicilar" data-dinamik="kapali"><thead><tr><th>#</th><th>Alıcı</th><th>Tip</th><th class="s">İşlem</th><th class="s">Toplam (TL)</th></tr></thead><tbody></tbody></table></div></div></div>
-            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Kaynaklar</span></div><div class="na-kart-g" style="font-size:.7rem;color:#475569"><ul class="mb-0 ps-3"><li><b>Banka (Havale / EFT):</b> ERP banka hareketleri — maaş, vergi / SGK, kira, kredi taksiti, enerji ve hizmet, tedarikçi ve grup içi ödemeler.</li><li><b>Çek:</b> Çek bordrosu — tedarikçilere verilen vadeli çekler; vadesi gelen çek "Ödendi", gelmeyen "Vade Bekliyor".</li><li><b>Nakit (Kasa):</b> ERP kasa çıkış fişleri (küçük giderler); iptal edilen fişler "İptal" olarak listelenir, toplama girmez.</li><li><b>Nakit Avans:</b> Nakit Avans modülündeki teslimler (kasa ya da havale); satırdan avans talebine gidilir.</li><li><b>Tedarikçi faturaları:</b> Aylık Alım Onay ekranında "Ödendi" olan faturalar banka ya da çek ödemesi olarak yer alır.</li></ul></div></div>
+        <div class="na-kart"><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:72vh"><table class="na-tablo yo-excel" id="yoSirketTablo" data-dinamik="kapali"><thead><tr><th class="ad">Açıklama</th><th>Ocak</th><th>Şubat</th><th>Mart</th><th>Nisan</th><th>Mayıs</th><th>Haziran</th><th>Temmuz</th><th>Ağustos</th><th>Eylül</th><th>Ekim</th><th>Kasım</th><th>Aralık</th><th class="yil">Toplam @yil</th><th>Aylık Ort.</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="yo-not" id="yoSirketNot"></div>
+        <div class="yo-not">Şirket bazında ödeme kanalı ve X / R ayrımı aylık olarak izlenir. Banka satırları yalnızca tanımlı şirketlerde gösterilir (<span id="yoBankaSirketleri"></span>). Nakit satırları kasa çıkışları ile nakit avans teslimlerini kapsar; iptal edilen fişler dahil değildir. Tutarlar TL, döviz ödemeleri işlem günü kuruyla çevrilmiştir.</div>
+    </div>
+
+    @* ============================ SEKME 3: KONSOLİDE ÖDEME RAPORU ============================ *@
+    <div class="na-panel" data-p="konsolide">
+        <div class="yo-rapor-ust">
+            <div><h5><span id="yoKonsYilBaslik">@yil</span> Konsolide Ödeme Raporu</h5><div class="alt">Ödeme Türü Konsolidesi • Şirket Konsolidesi</div></div>
+            <div class="ayar"><label class="me-1" style="font-size:.66rem;font-weight:700">Yıl</label><select class="form-select" id="yoKYil"></select><button type="button" class="btn btn-light btn-sm py-0" id="yoKExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
         </div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-layer-group me-1"></i>Ödeme Türü Konsolidesi</span><span class="not">Banka / Çek / Nakit × X / R · tüm şirketler</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo yo-excel" id="yoTurKons" data-dinamik="kapali"><thead><tr><th class="ad">Açıklama</th><th>Ocak</th><th>Şubat</th><th>Mart</th><th>Nisan</th><th>Mayıs</th><th>Haziran</th><th>Temmuz</th><th>Ağustos</th><th>Eylül</th><th>Ekim</th><th>Kasım</th><th>Aralık</th><th class="yil">Toplam @yil</th><th>Aylık Ort.</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-building me-1"></i>Şirket Konsolidesi</span><span class="not">Şirketlerin toplam ödemeleri · aylık</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo yo-excel" id="yoSirketKons" data-dinamik="kapali"><thead><tr><th class="ad">Açıklama</th><th>Ocak</th><th>Şubat</th><th>Mart</th><th>Nisan</th><th>Mayıs</th><th>Haziran</th><th>Temmuz</th><th>Ağustos</th><th>Eylül</th><th>Ekim</th><th>Kasım</th><th>Aralık</th><th class="yil">Toplam @yil</th><th>Aylık Ort.</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="yo-not" id="yoKonsNot"></div>
+        <div class="yo-not">Üst tablo ödeme türlerini X / R bazında, alt tablo şirketlerin toplam ödemelerini aylık konsolide olarak gösterir. Nakit = kasa çıkışları + nakit avans teslimleri; iptal edilen fişler dahil değildir.</div>
     </div>
 
     <div class="yo-perde" id="yoPerde"></div>
@@ -94,5 +148,5 @@
 </div>
 
 @section Scripts {
-<script src="/js/yapilan-odemeler.js?v=1"></script>
+<script src="/js/yapilan-odemeler.js?v=2"></script>
 }

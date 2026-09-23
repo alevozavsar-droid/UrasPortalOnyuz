@@ -148,6 +148,16 @@
     document.title = `${(rapor || grup || l1 || modul).ad} · ${modul.ad}`;
     const yol = grupYolu(l1, l2);
     menuCiz(c);
+    // Üst çubuk ekmek kırıntısı: modül › 1. alt menü › 2. alt menü › rapor. Sekme çerçevesindeysek kabuğa iletilir,
+    // kabuk sayfasının kendisiysek (sekme 0) aynı pencereye olay olarak bildirilir (_Layout › kirintiCiz).
+    try {
+      const y = [{ ad: modul.ad, url: '/Modul/' + modul.key, hash: '' }];
+      if (l1) y.push({ ad: l1.ad, url: '/Modul/' + modul.key + '?yol=' + l1.key, hash: l1.key });
+      if (l2) y.push({ ad: l2.ad, url: '/Modul/' + modul.key + '?yol=' + yol, hash: yol });
+      if (rapor) y.push({ ad: rapor.ad, url: rapor.url || '', hash: yol + '/r' + c.rIdx });
+      if (window.parent && window.parent !== window) window.parent.postMessage({ kaynak: 'portal', tip: 'kirinti', yol: y }, location.origin);
+      else window.dispatchEvent(new CustomEvent('portalKirinti', { detail: y }));
+    } catch (e) { /* kabuk yoksa yoksay */ }
     const el = $('#kmIcerik');
     const sahipYolu = [modul.ad, l1 && l1.ad, l2 && l2.ad].filter(Boolean).join(' › ');
     const ic = I[modul.ic] || '';

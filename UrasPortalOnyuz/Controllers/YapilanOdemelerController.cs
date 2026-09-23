@@ -8,8 +8,10 @@ using WebApplication3.Data;
 namespace WebApplication3.Controllers
 {
     /// <summary>
-    /// Yapılan Ödemeler — Yönetim › Özel Analizler › Özel Raporlar.
-    /// Tüm grup şirketlerinin yaptığı ödemelerin konsolide listesi: Banka (Havale / EFT), Çek, Nakit (Kasa) ve Nakit Avans.
+    /// Yapılan Ödemeler — Yönetim › Özel Analizler › Özel Raporlar. Üç sekme:
+    ///   Ödeme Listesi            : tüm grup şirketlerinin ödemeleri (Banka / Çek / Nakit Kasa / Nakit Avans) filtre, KPI, matris ve detay ile
+    ///   Şirket Bazlı Ödeme Raporu: "2026 Şirket Bazlı Ödeme Raporu" şablonu — şirket × (Banka / Çek / Nakit) × (X / R) × 12 ay + Toplam + Aylık Ort.
+    ///   Konsolide Ödeme Raporu   : "2026 Konsolide Ödeme Raporu" şablonu — ödeme türü konsolidesi (X / R) ve şirket konsolidesi
     /// Veri kaynakları ve örnek kayıtlar: Data/YapilanOdemelerOrnek.cs. Filtreleme / özetler istemcide (wwwroot/js/yapilan-odemeler.js).
     /// </summary>
     [Authorize]
@@ -17,14 +19,17 @@ namespace WebApplication3.Controllers
     {
         private static readonly CultureInfo Tr = new CultureInfo("tr-TR");
 
-        public IActionResult Index()
+        /// <param name="sekme">sirket (varsayılan) | konsolide | liste (derin bağlantı)</param>
+        public IActionResult Index(string sekme)
         {
             ViewData["Title"] = "Yapılan Ödemeler";
             ViewBag.Sirketler = YapilanOdemelerOrnek.Sirketler;
+            ViewBag.Yil = DateTime.Today.Year;
+            ViewBag.Sekme = sekme == "konsolide" || sekme == "liste" ? sekme : "sirket";
             return View();
         }
 
-        /// <summary>Konsolide ödeme listesi + seçim listeleri. Tarih filtreleri istemcide uygulanır (veri hacmi küçüktür).</summary>
+        /// <summary>Konsolide ödeme listesi + seçim listeleri. Tarih / yıl filtreleri istemcide uygulanır (veri hacmi küçüktür).</summary>
         [HttpGet]
         public IActionResult Veri()
         {
@@ -35,8 +40,11 @@ namespace WebApplication3.Controllers
                 {
                     success = true,
                     bugun = DateTime.Today.ToString("yyyy-MM-dd"),
+                    yil = DateTime.Today.Year,
                     sirketler = YapilanOdemelerOrnek.Sirketler,
+                    bankaSirketleri = YapilanOdemelerOrnek.BankaSirketleri,
                     turler = YapilanOdemelerOrnek.Turler.Select(t => new { kanal = t.Kanal, ad = t.Ad }),
+                    aktarimTipleri = YapilanOdemelerOrnek.AktarimTipleri,
                     kategoriler = YapilanOdemelerOrnek.Kategoriler,
                     aliciTipleri = YapilanOdemelerOrnek.AliciTipleri,
                     durumlar = YapilanOdemelerOrnek.Durumlar,
@@ -45,7 +53,7 @@ namespace WebApplication3.Controllers
                     kurlar = YapilanOdemelerOrnek.Kurlar,
                     odemeler = liste.Select(o => new
                     {
-                        o.Id, o.No, tarih = o.Tarih.ToString("yyyy-MM-dd"), tarihTr = o.Tarih.ToString("dd.MM.yyyy"), o.Sirket, o.Tur, o.Kanal, o.KaynakHesap, o.Banka,
+                        o.Id, o.No, tarih = o.Tarih.ToString("yyyy-MM-dd"), tarihTr = o.Tarih.ToString("dd.MM.yyyy"), o.Sirket, o.Tur, o.Kanal, o.AktarimTipi, o.KaynakHesap, o.Banka,
                         o.Alici, o.AliciTipi, o.Kategori, o.Tutar, o.ParaBirimi, o.Kur, o.TutarTl, o.Belge,
                         vade = o.Vade?.ToString("yyyy-MM-dd"), vadeTr = o.Vade?.ToString("dd.MM.yyyy"), o.Durum, o.Aciklama, o.Kaynak, o.Onaylayan, o.IslemiYapan, o.Link
                     })

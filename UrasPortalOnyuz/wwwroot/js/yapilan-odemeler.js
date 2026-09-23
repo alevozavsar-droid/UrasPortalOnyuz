@@ -1,9 +1,13 @@
 // ============================================================
 // YAPILAN ÖDEMELER — ekran betiği (Views/YapilanOdemeler/Index.cshtml; veri /YapilanOdemeler/Veri; kaynaklar Data/YapilanOdemelerOrnek.cs)
-// Tüm grup şirketlerinin ödemeleri (Banka / Çek / Nakit Kasa / Nakit Avans) tek listede: dönem + şirket + tür + kategori + alıcı tipi +
-// para birimi + durum + kaynak filtreleri, KPI kutuları (tıklayınca tür filtresi), Şirket × Tür ve Ay × Tür konsolide matrisleri,
-// kategori dağılımı, en büyük 10 alıcı, satır detay drawer'ı (kaynak belgeye bağlantı), Excel (CSV) çıktıları.
-// Yazım kuralı: liste değerleri ve etiketler Title Case ("Tümü", "Vade Bekliyor").
+// Sekme sırası: Şirket Bazlı Ödeme Raporu (varsayılan açılış) → Konsolide Ödeme Raporu → Ödeme Listesi
+// Ödeme Listesi         : tüm grup şirketlerinin ödemeleri (Banka / Çek / Nakit Kasa / Nakit Avans, X / R) — dönem + şirket + tür + X/R + kategori +
+//                         alıcı tipi + para birimi + durum + kaynak filtreleri, KPI kutuları (tıklayınca filtre), Şirket × Tür ve Ay × Tür matrisleri,
+//                         kategori dağılımı, en büyük 10 alıcı, satır detay drawer'ı (kaynak belgeye bağlantı), Excel (CSV)
+// Şirket Bazlı          : "2026 Şirket Bazlı Ödeme Raporu" şablonu — her şirket için (Banka) / Çek / Nakit × X / R satırları + Toplam Ödeme; 12 ay + Toplam + Aylık Ort.
+// Konsolide             : "2026 Konsolide Ödeme Raporu" şablonu — Banka / Çek / Nakit × X / R + Toplam X / R + Genel Toplam; şirket konsolidesi
+// Kural: Nakit = Kasa + Nakit Avans; iptal edilen fişler toplama girmez; vadeli çek verildiği ayın ödemesidir. Aylık Ort. = Toplam / veri olan ay sayısı.
+// Yazım kuralı: liste değerleri ve etiketler Title Case ("Tümü", "Vade Bekliyor"); şablon başlıkları CSS ile büyük harf gösterilir.
 // ============================================================
 (() => {
   'use strict';
@@ -20,10 +24,22 @@
   const bos = v => v === undefined || v === null || v === '' ? '<span class="text-muted">—</span>' : esc(v);
   const sekmeli = kok.dataset.sekme === '1';
   const KANALLAR = ['Banka', 'Cek', 'Kasa', 'Avans'];
+  const AYLAR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
   let V = null, L = [];
   function mesaj(tip, m) { const s = $('#naSonuc'); s.className = 'alert py-2 px-3 mb-2 alert-' + tip; s.innerHTML = m; s.style.display = 'block'; clearTimeout(mesaj.z); mesaj.z = setTimeout(() => s.style.display = 'none', 8000); }
   const csvIndir = (ad, basliklar, satirlar) => { const t = [basliklar, ...satirlar].map(r => r.map(x => `"${String(x ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n'); const b = new Blob(['﻿' + t], { type: 'text/csv;charset=utf-8' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = ad + '_' + iso(new Date()) + '.csv'; a.click(); };
-  const sayi = v => (Number(v) || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/\./g, '').replace(',', ',');
+  const sayi = v => (Number(v) || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/\./g, '');
+  const gecerli = o => o.durum !== 'İptal';
+  const topla = l => l.filter(gecerli).reduce((s, o) => s + Number(o.tutarTl), 0);
+  const sablonTur = o => o.kanal === 'Banka' ? 'Banka' : o.kanal === 'Cek' ? 'Çek' : 'Nakit';   // Nakit = Kasa + Avans
+
+  // ---- sekmeler
+  function sekme(p) {
+    $$('#yoSekmeler button').forEach(b => b.classList.toggle('aktif', b.dataset.p === p));
+    $$('#yo > .na-panel').forEach(x => x.classList.toggle('aktif', x.dataset.p === p));
+    if (V) { if (p === 'sirket') cizSirket(); if (p === 'konsolide') cizKonsolide(); }
+    try { const u = new URL(location.href); if (p === 'sirket') u.searchParams.delete('sekme'); else u.searchParams.set('sekme', p); history.replaceState(null, '', u); } catch (e) { /* çerçeve içinde yoksay */ }   // varsayılan sekme: Şirket Bazlı
+  }
 
   // ---- dönem
   function aralik() {
@@ -41,14 +57,12 @@
   // ---- filtre
   function liste() {
     const ara = ($('#yoAra').value || '').toLocaleLowerCase('tr-TR'), v = id => $(id).value, [bas, bit] = aralik();
-    return V.odemeler.filter(o => (!bas || o.tarih >= bas) && (!bit || o.tarih <= bit) && (!v('#yoSirket') || o.sirket === v('#yoSirket')) && (!v('#yoTur') || o.kanal === v('#yoTur')) && (!v('#yoKategori') || o.kategori === v('#yoKategori'))
+    return V.odemeler.filter(o => (!bas || o.tarih >= bas) && (!bit || o.tarih <= bit) && (!v('#yoSirket') || o.sirket === v('#yoSirket')) && (!v('#yoTur') || o.kanal === v('#yoTur')) && (!v('#yoXr') || o.aktarimTipi === v('#yoXr')) && (!v('#yoKategori') || o.kategori === v('#yoKategori'))
       && (!v('#yoAliciTipi') || o.aliciTipi === v('#yoAliciTipi')) && (!v('#yoPb') || o.paraBirimi === v('#yoPb')) && (!v('#yoDurum') || o.durum === v('#yoDurum')) && (!v('#yoKaynak') || o.kaynak === v('#yoKaynak'))
       && (!ara || [o.no, o.alici, o.belge, o.aciklama, o.kaynakHesap, o.banka, o.sirket, o.kategori].join(' ').toLocaleLowerCase('tr-TR').includes(ara)));
   }
-  const gecerli = o => o.durum !== 'İptal';
-  const topla = l => l.filter(gecerli).reduce((s, o) => s + Number(o.tutarTl), 0);
 
-  // ---- çizim
+  // ---- sekme 1 çizim
   function ciz() {
     L = liste();
     const g = L.filter(gecerli), kanal = k => g.filter(o => o.kanal === k);
@@ -62,19 +76,20 @@
     $('#yoKpi').innerHTML = kpi.map(k => `<div style="--k:${k[0]}" data-k="${k[4]}" title="Tıklayınca filtre uygular"><div class="l">${k[1]}</div><div class="v">${k[2]}</div><div class="s">${esc(bh(k[3]))}</div></div>`).join('');
     $$('#yoKpi > div').forEach(d => d.addEventListener('click', () => { const k = d.dataset.k; if (k === 'vade') { $('#yoTur').value = 'Cek'; $('#yoDurum').value = 'Vade Bekliyor'; } else { $('#yoTur').value = k; if (k) $('#yoDurum').value = ''; } ciz(); }));
     // tablo
-    $('#yoTablo tbody').innerHTML = L.map(o => `<tr class="tik" data-id="${o.id}"><td>${esc(o.tarihTr)}</td><td><b>${esc(o.no)}</b></td><td>${esc(o.sirket)}</td><td>${turRozet(o)}</td><td>${esc(o.kaynakHesap)}${o.banka && !o.kaynakHesap.includes(o.banka) ? `<small>${esc(o.banka)}</small>` : ''}</td><td><b>${esc(o.alici)}</b><small>${esc(o.aliciTipi)}</small></td><td>${esc(o.kategori)}</td><td>${bos(o.belge)}</td><td class="s">${tl(o.tutar)}</td><td>${esc(o.paraBirimi)}</td><td class="s"><b>${tl(o.tutarTl)}</b>${o.paraBirimi !== 'TL' ? `<small>kur ${tl(o.kur)}</small>` : ''}</td><td>${bos(o.vadeTr)}</td><td>${durumRozet(o.durum)}</td><td><small>${esc(o.kaynak)}</small></td></tr>`).join('') || '<tr><td colspan="14" class="na-bos">Filtreye uyan ödeme yok.</td></tr>';
+    $('#yoTablo tbody').innerHTML = L.map(o => `<tr class="tik" data-id="${o.id}"><td>${esc(o.tarihTr)}</td><td><b>${esc(o.no)}</b><span class="yo-xr" title="ERP aktarım tipi">${esc(o.aktarimTipi)}</span></td><td>${esc(o.sirket)}</td><td>${turRozet(o)}</td><td>${esc(o.kaynakHesap)}${o.banka && !o.kaynakHesap.includes(o.banka) ? `<small>${esc(o.banka)}</small>` : ''}</td><td><b>${esc(o.alici)}</b><small>${esc(o.aliciTipi)}</small></td><td>${esc(o.kategori)}</td><td>${bos(o.belge)}</td><td class="s">${tl(o.tutar)}</td><td>${esc(o.paraBirimi)}</td><td class="s"><b>${tl(o.tutarTl)}</b>${o.paraBirimi !== 'TL' ? `<small>kur ${tl(o.kur)}</small>` : ''}</td><td>${bos(o.vadeTr)}</td><td>${durumRozet(o.durum)}</td><td><small>${esc(o.kaynak)}</small></td></tr>`).join('') || '<tr><td colspan="14" class="na-bos">Filtreye uyan ödeme yok.</td></tr>';
     $('#yoTopSayi').textContent = g.length + ' İşlem'; $('#yoTopTl').textContent = tl(topla(g)) + ' TL';
     $('#yoSayi').textContent = `${L.length} / ${V.odemeler.length} ödeme · ${L.length - g.length} iptal (toplama girmez) · satıra tıklayınca ödeme detayı ve kaynak belge açılır`;
+    $('#yoNListe').textContent = L.length;
     $$('#yoTablo tr.tik').forEach(r => r.addEventListener('click', () => drawerAc(+r.dataset.id)));
     // şirket × tür
     const matris = (anahtar, sirala) => { const m = {}; g.forEach(o => { const k = anahtar(o); const p = m[k] || (m[k] = { n: 0, top: 0, Banka: 0, Cek: 0, Kasa: 0, Avans: 0 }); p[o.kanal] += Number(o.tutarTl); p.top += Number(o.tutarTl); p.n++; }); return Object.keys(m).sort(sirala(m)).map(k => [k, m[k]]); };
-    const satir = ([k, p], kalın) => `<tr class="${kalın ? 'toplam' : ''}"><td>${esc(k)}</td>${KANALLAR.map(c => `<td class="s">${p[c] ? tl(p[c]) : '<span class="text-muted">—</span>'}</td>`).join('')}<td class="s"><b>${tl(p.top)}</b></td><td class="s">${p.n}</td></tr>`;
+    const satir = ([k, p], kalin) => `<tr class="${kalin ? 'toplam' : ''}"><td>${esc(k)}</td>${KANALLAR.map(c => `<td class="s">${p[c] ? tl(p[c]) : '<span class="text-muted">—</span>'}</td>`).join('')}<td class="s"><b>${tl(p.top)}</b></td><td class="s">${p.n}</td></tr>`;
     const toplamSatir = rows => { const t = { n: 0, top: 0, Banka: 0, Cek: 0, Kasa: 0, Avans: 0 }; rows.forEach(([, p]) => { KANALLAR.forEach(c => t[c] += p[c]); t.top += p.top; t.n += p.n; }); return t; };
     const s1 = matris(o => o.sirket, m => (a, b) => m[b].top - m[a].top);
     $('#yoMatris tbody').innerHTML = s1.length ? s1.map(r => satir(r)).join('') + satir(['Konsolide Toplam', toplamSatir(s1)], true) : '<tr><td colspan="7" class="na-bos">Kayıt yok.</td></tr>';
     const s2 = matris(o => o.tarih.slice(0, 7), () => (a, b) => b.localeCompare(a));
-    const ayAdi = k => new Date(k + '-01T00:00:00').toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
-    $('#yoAylik tbody').innerHTML = s2.length ? s2.map(([k, p]) => satir([bh(ayAdi(k)), p])).join('') + satir(['Toplam', toplamSatir(s2)], true) : '<tr><td colspan="7" class="na-bos">Kayıt yok.</td></tr>';
+    const ayAdi = k => AYLAR[+k.slice(5, 7) - 1] + ' ' + k.slice(0, 4);
+    $('#yoAylik tbody').innerHTML = s2.length ? s2.map(([k, p]) => satir([ayAdi(k), p])).join('') + satir(['Toplam', toplamSatir(s2)], true) : '<tr><td colspan="7" class="na-bos">Kayıt yok.</td></tr>';
     // kategori
     const kat = {}; g.forEach(o => { kat[o.kategori] = kat[o.kategori] || { top: 0, n: 0 }; kat[o.kategori].top += Number(o.tutarTl); kat[o.kategori].n++; });
     const kl = Object.keys(kat).sort((a, b) => kat[b].top - kat[a].top), maks = kl.length ? kat[kl[0]].top : 1, genel = topla(g) || 1;
@@ -84,13 +99,62 @@
     $('#yoAlicilar tbody').innerHTML = Object.keys(al).sort((a, b) => al[b].top - al[a].top).slice(0, 10).map((a, i) => `<tr><td>${i + 1}</td><td><b>${esc(a)}</b></td><td>${esc(al[a].tip)}</td><td class="s">${al[a].n}</td><td class="s">${tl(al[a].top)}</td></tr>`).join('') || '<tr><td colspan="5" class="na-bos">Kayıt yok.</td></tr>';
   }
 
+  // ---- şablon raporları (sekme 2 ve 3) ortak yardımcıları
+  const yilVerisi = yil => V.odemeler.filter(o => gecerli(o) && o.tarih.slice(0, 4) === String(yil));
+  const veriAyi = l => new Set(l.map(o => o.tarih.slice(5, 7))).size;                    // veri olan ay sayısı (Aylık Ort. paydası)
+  const aylik = l => { const a = new Array(12).fill(0); l.forEach(o => a[+o.tarih.slice(5, 7) - 1] += Number(o.tutarTl)); return a; };
+  const sirketListesi = l => { const ek = [...new Set(l.map(o => o.sirket))].filter(s => !V.sirketler.includes(s)).sort(); return [...V.sirketler, ...ek]; };
+  const hucre = v => v ? kisa(v) : '<span class="text-muted">—</span>';
+  function satirHtml(ad, a, ayN, cls, ipucu) { const top = a.reduce((s, v) => s + v, 0); return `<tr class="${cls || ''}"><td class="ad" title="${esc(ipucu || ad)}">${esc(ad)}</td>${a.map(v => `<td class="s">${hucre(v)}</td>`).join('')}<td class="s top">${hucre(top)}</td><td class="s ort">${ayN && top ? kisa(top / ayN) : '<span class="text-muted">—</span>'}</td></tr>`; }
+  const grupHtml = (ad, not) => `<tr class="grp"><td class="ad">${esc(ad)}</td><td colspan="14">${not ? `<small>${esc(not)}</small>` : ''}</td></tr>`;
+  function yilSecenekleri(sel) {
+    const yillar = [...new Set(V.odemeler.map(o => o.tarih.slice(0, 4)))].sort().reverse(); if (!yillar.includes(String(V.yil))) yillar.unshift(String(V.yil));
+    sel.innerHTML = yillar.map(y => `<option value="${y}">${y}</option>`).join(''); sel.value = String(V.yil);
+  }
+  function tabloCsv(tabloId, ad, yil) {
+    const bas = ['Açıklama', ...AYLAR, 'Toplam ' + yil, 'Aylık Ort.'];
+    const rows = $$('#' + tabloId + ' tbody tr').map(tr => { const td = $$('td', tr); if (tr.classList.contains('grp')) return [td[0].textContent.trim()]; return td.map(x => x.textContent.trim().replace('—', '')); });
+    csvIndir(ad + '_' + yil, bas, rows);
+  }
+
+  // ---- sekme 2: şirket bazlı ödeme raporu
+  function cizSirket() {
+    const yil = $('#yoRYil').value, sf = $('#yoRSirket').value, l = yilVerisi(yil), ayN = veriAyi(l);
+    $('#yoSirketYilBaslik').textContent = yil; $('#yoSirketTablo thead .yil').textContent = 'Toplam ' + yil;
+    const rows = [];
+    sirketListesi(l).filter(s => !sf || s === sf).forEach(s => {
+      const ls = l.filter(o => o.sirket === s), bankali = V.bankaSirketleri.includes(s) || ls.some(o => o.kanal === 'Banka');
+      rows.push(grupHtml(s, V.sirketler.includes(s) ? '' : 'Şablon dışı şirket · diğer modüllerden gelen ödemeler'));
+      (bankali ? ['Banka', 'Çek', 'Nakit'] : ['Çek', 'Nakit']).forEach(t => ['X', 'R'].forEach(xr => rows.push(satirHtml(`${s} ${t} Ödemeleri - ${xr}`, aylik(ls.filter(o => sablonTur(o) === t && o.aktarimTipi === xr)), ayN, xr === 'R' ? 'r' : '', `${t} · ${xr} aktarım tipi`))));
+      rows.push(satirHtml(`${s} Toplam Ödeme`, aylik(ls), ayN, 'top'));
+      rows.push('<tr class="ara"><td colspan="15"></td></tr>');
+    });
+    if (!sf) rows.push(satirHtml('Tüm Şirketler Toplam Ödeme', aylik(l), ayN, 'genel'));
+    $('#yoSirketTablo tbody').innerHTML = rows.join('') || '<tr><td colspan="15" class="na-bos">Bu yıl için ödeme kaydı yok.</td></tr>';
+    $('#yoSirketNot').textContent = `${yil} · ${l.length} ödeme · veri olan ay sayısı ${ayN} · Aylık Ort. = Toplam / ${ayN || '—'} · tutarlar TL`;
+    $('#yoBankaSirketleri').textContent = V.bankaSirketleri.join(', ');
+  }
+
+  // ---- sekme 3: konsolide ödeme raporu
+  function cizKonsolide() {
+    const yil = $('#yoKYil').value, l = yilVerisi(yil), ayN = veriAyi(l);
+    $('#yoKonsYilBaslik').textContent = yil; $$('#yoTurKons thead .yil, #yoSirketKons thead .yil').forEach(th => th.textContent = 'Toplam ' + yil);
+    const r1 = [];
+    ['Banka', 'Çek', 'Nakit'].forEach(t => { const lt = l.filter(o => sablonTur(o) === t); ['X', 'R'].forEach(xr => r1.push(satirHtml(`${t} - ${xr}`, aylik(lt.filter(o => o.aktarimTipi === xr)), ayN, xr === 'R' ? 'r' : ''))); r1.push(satirHtml(`Toplam ${t}`, aylik(lt), ayN, 'top')); });
+    r1.push(satirHtml('Toplam X', aylik(l.filter(o => o.aktarimTipi === 'X')), ayN, 'top')); r1.push(satirHtml('Toplam R', aylik(l.filter(o => o.aktarimTipi === 'R')), ayN, 'top r')); r1.push(satirHtml('Genel Toplam Ödeme', aylik(l), ayN, 'genel'));
+    $('#yoTurKons tbody').innerHTML = r1.join('');
+    const r2 = sirketListesi(l).map(s => satirHtml(s, aylik(l.filter(o => o.sirket === s)), ayN, '', V.sirketler.includes(s) ? s : s + ' (şablon dışı şirket)')); r2.push(satirHtml('Konsolide Toplam', aylik(l), ayN, 'genel'));
+    $('#yoSirketKons tbody').innerHTML = r2.join('');
+    $('#yoKonsNot').textContent = `${yil} · ${l.length} ödeme · ${new Set(l.map(o => o.sirket)).size} şirket · veri olan ay sayısı ${ayN} · Aylık Ort. = Toplam / ${ayN || '—'} · tutarlar TL`;
+  }
+
   // ---- detay drawer
   function ac(url, baslik) { if (window.top && window.top !== window && typeof window.top.portalSekmeAc === 'function') window.top.portalSekmeAc(baslik, url); else window.open(url + (sekmeli ? (url.includes('?') ? '&' : '?') + '_sekme=1' : ''), '_blank'); }
   function drawerAc(id) {
     const o = V.odemeler.find(x => x.id === id); if (!o) return;
     $('#yoDrawerBaslik').innerHTML = `<i class="fas fa-money-bill-transfer me-1"></i>${esc(o.no)} · ${esc(o.sirket)} ${durumRozet(o.durum)}`;
     $('#yoDrawerAksiyon').innerHTML = o.link ? `<button type="button" class="btn btn-light btn-sm py-0" id="yoKaynakAc" style="font-size:.66rem"><i class="fas fa-arrow-up-right-from-square me-1"></i>${o.kanal === 'Avans' ? 'Avans Talebini Aç' : 'Kaynak Ekranı Aç'}</button>` : '';
-    const a = [['Ödeme No', o.no], ['Tarih', o.tarihTr], ['Şirket', o.sirket], ['Ödeme Türü', o.tur], ['Kaynak Hesap', o.kaynakHesap], ['Banka', o.banka], ['Alıcı', o.alici], ['Alıcı Tipi', o.aliciTipi], ['Kategori', o.kategori],
+    const a = [['Ödeme No', o.no], ['Tarih', o.tarihTr], ['Şirket', o.sirket], ['Ödeme Türü', o.tur], ['X / R (Aktarım Tipi)', o.aktarimTipi], ['Kaynak Hesap', o.kaynakHesap], ['Banka', o.banka], ['Alıcı', o.alici], ['Alıcı Tipi', o.aliciTipi], ['Kategori', o.kategori],
       ['Tutar', tl(o.tutar) + ' ' + o.paraBirimi], ['Kur', o.paraBirimi === 'TL' ? '1,00' : tl(o.kur)], ['Tutar (TL)', tl(o.tutarTl) + ' TL'], ['Belge', o.belge], ['Vade', o.vadeTr], ['Durum', o.durum], ['Kaynak Sistem', o.kaynak], ['Onaylayan', o.onaylayan], ['İşlemi Yapan', o.islemiYapan]];
     $('#yoDrawerIc').innerHTML = `<div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-receipt me-1"></i>Ödeme Bilgileri</span><span class="not">${esc(o.kaynak)}</span></div><div class="na-kart-g"><div class="yo-master">${a.map(([l, v]) => `<div><div class="l">${l}</div><div class="v">${bos(v)}</div></div>`).join('')}<div style="grid-column:1/-1"><div class="l">Açıklama</div><div class="v" style="font-weight:500">${bos(o.aciklama)}</div></div></div></div></div>
       <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-building me-1"></i>${esc(o.sirket)} · Aynı Alıcıya Yapılan Ödemeler</span><span class="not">Tüm dönem</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:260px"><table class="na-tablo" data-dinamik="kapali"><thead><tr><th>Tarih</th><th>Ödeme No</th><th>Tür</th><th>Belge</th><th class="s">Tutar (TL)</th><th>Durum</th></tr></thead><tbody>${V.odemeler.filter(x => x.alici === o.alici && x.sirket === o.sirket).map(x => `<tr class="${x.id === o.id ? 'table-active' : ''}"><td>${esc(x.tarihTr)}</td><td>${esc(x.no)}</td><td>${turRozet(x)}</td><td>${bos(x.belge)}</td><td class="s">${tl(x.tutarTl)}</td><td>${durumRozet(x.durum)}</td></tr>`).join('')}</tbody></table></div></div></div>`;
@@ -99,10 +163,10 @@
   }
   function drawerKapat() { $('#yoDrawer').classList.remove('acik'); $('#yoPerde').classList.remove('acik'); }
 
-  // ---- excel
+  // ---- excel (sekme 1)
   function excel() {
-    csvIndir('yapilan_odemeler', ['Tarih', 'Ödeme No', 'Şirket', 'Ödeme Türü', 'Kaynak Hesap', 'Banka', 'Alıcı', 'Alıcı Tipi', 'Kategori', 'Belge', 'Tutar', 'Para Birimi', 'Kur', 'Tutar (TL)', 'Vade', 'Durum', 'Kaynak', 'Onaylayan', 'İşlemi Yapan', 'Açıklama'],
-      L.map(o => [o.tarihTr, o.no, o.sirket, o.tur, o.kaynakHesap, o.banka, o.alici, o.aliciTipi, o.kategori, o.belge, sayi(o.tutar), o.paraBirimi, sayi(o.kur), sayi(o.tutarTl), o.vadeTr || '', o.durum, o.kaynak, o.onaylayan, o.islemiYapan, o.aciklama]));
+    csvIndir('yapilan_odemeler', ['Tarih', 'Ödeme No', 'X / R', 'Şirket', 'Ödeme Türü', 'Kaynak Hesap', 'Banka', 'Alıcı', 'Alıcı Tipi', 'Kategori', 'Belge', 'Tutar', 'Para Birimi', 'Kur', 'Tutar (TL)', 'Vade', 'Durum', 'Kaynak', 'Onaylayan', 'İşlemi Yapan', 'Açıklama'],
+      L.map(o => [o.tarihTr, o.no, o.aktarimTipi, o.sirket, o.tur, o.kaynakHesap, o.banka, o.alici, o.aliciTipi, o.kategori, o.belge, sayi(o.tutar), o.paraBirimi, sayi(o.kur), sayi(o.tutarTl), o.vadeTr || '', o.durum, o.kaynak, o.onaylayan, o.islemiYapan, o.aciklama]));
   }
   function matrisExcel() {
     const rows = $$('#yoMatris tbody tr').map(tr => $$('td', tr).map(td => td.textContent.trim().replace('—', '')));
@@ -113,12 +177,17 @@
   fetch('/YapilanOdemeler/Veri').then(r => r.json()).then(v => {
     V = v;
     const doldur = (id, l, deger) => { $(id).innerHTML = '<option value="">Tümü</option>' + l.map(x => `<option value="${esc(deger ? deger(x) : x)}">${esc(deger ? x.ad : x)}</option>`).join(''); };
-    doldur('#yoTur', V.turler, t => t.kanal); doldur('#yoKategori', V.kategoriler); doldur('#yoAliciTipi', V.aliciTipleri); doldur('#yoPb', V.paraBirimleri); doldur('#yoDurum', V.durumlar); doldur('#yoKaynak', V.kaynaklar);
-    ['#yoAra', '#yoBas', '#yoBit', '#yoSirket', '#yoTur', '#yoKategori', '#yoAliciTipi', '#yoPb', '#yoDurum', '#yoKaynak'].forEach(s => { $(s).addEventListener('input', ciz); $(s).addEventListener('change', ciz); });
+    const tumSirketler = sirketListesi(V.odemeler);
+    doldur('#yoSirket', tumSirketler); doldur('#yoRSirket', tumSirketler); doldur('#yoTur', V.turler, t => t.kanal); doldur('#yoXr', V.aktarimTipleri); doldur('#yoKategori', V.kategoriler); doldur('#yoAliciTipi', V.aliciTipleri); doldur('#yoPb', V.paraBirimleri); doldur('#yoDurum', V.durumlar); doldur('#yoKaynak', V.kaynaklar);
+    yilSecenekleri($('#yoRYil')); yilSecenekleri($('#yoKYil'));
+    ['#yoAra', '#yoBas', '#yoBit', '#yoSirket', '#yoTur', '#yoXr', '#yoKategori', '#yoAliciTipi', '#yoPb', '#yoDurum', '#yoKaynak'].forEach(s => { $(s).addEventListener('input', ciz); $(s).addEventListener('change', ciz); });
     $('#yoDonem').addEventListener('change', donemDegisti);
-    $('#yoTemizle').addEventListener('click', () => { $('#yoAra').value = ''; ['#yoSirket', '#yoTur', '#yoKategori', '#yoAliciTipi', '#yoPb', '#yoDurum', '#yoKaynak'].forEach(s => $(s).value = ''); $('#yoDonem').value = '90'; donemDegisti(); });
+    $('#yoTemizle').addEventListener('click', () => { $('#yoAra').value = ''; ['#yoSirket', '#yoTur', '#yoXr', '#yoKategori', '#yoAliciTipi', '#yoPb', '#yoDurum', '#yoKaynak'].forEach(s => $(s).value = ''); $('#yoDonem').value = '90'; donemDegisti(); });
     $('#yoExcel').addEventListener('click', excel); $('#yoMatrisExcel').addEventListener('click', matrisExcel);
+    $('#yoRYil').addEventListener('change', cizSirket); $('#yoRSirket').addEventListener('change', cizSirket); $('#yoRExcel').addEventListener('click', () => tabloCsv('yoSirketTablo', 'sirket_bazli_odeme_raporu', $('#yoRYil').value));
+    $('#yoKYil').addEventListener('change', cizKonsolide); $('#yoKExcel').addEventListener('click', () => { tabloCsv('yoTurKons', 'konsolide_odeme_raporu_odeme_turu', $('#yoKYil').value); setTimeout(() => tabloCsv('yoSirketKons', 'konsolide_odeme_raporu_sirket', $('#yoKYil').value), 300); });
+    $$('#yoSekmeler button').forEach(b => b.addEventListener('click', () => sekme(b.dataset.p)));
     $('#yoDrawerKapat').addEventListener('click', drawerKapat); $('#yoPerde').addEventListener('click', drawerKapat);
-    donemDegisti(); window.NA_HAZIR = true;
+    donemDegisti(); sekme(kok.dataset.baslangic || 'sirket'); window.NA_HAZIR = true;
   }).catch(e => mesaj('danger', 'Veri yüklenemedi: ' + esc(e.message)));
 })();
