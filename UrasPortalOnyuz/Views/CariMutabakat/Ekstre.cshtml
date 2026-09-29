@@ -1,0 +1,59 @@
+@model WebApplication3.Data.MtCari
+@{
+    Layout = null;
+    var k = Model.Kart; string pb = (string)ViewBag.Pb; DateTime olusturma = (DateTime)ViewBag.OlusturmaZamani;
+    var d = Model.Dovizler.FirstOrDefault(x => x.ParaBirimi == pb);
+    var hareketler = Model.Hareketler.Where(h => h.ParaBirimi == pb).OrderBy(h => h.Tarih).ThenBy(h => h.Id).ToList();
+    string p(decimal v) => v.ToString("N2", new System.Globalization.CultureInfo("tr-TR"));
+}
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <title>Cari Ekstre · @Model.CariKodu · @pb</title>
+    @* Yazdırılabilir ekstre (§7): şirket, cari kodu / ünvanı, dönem, para birimi, borç / alacak toplamları, net bakiye, "Ekstre Oluşturma Tarihi/Saati" ve "Bakiye Tarihi" *@
+    <style>
+        body { font-family: Inter, Segoe UI, Arial, sans-serif; font-size: 11px; color: #0f172a; margin: 18px 22px; }
+        h2 { font-size: 15px; margin: 0 0 2px; letter-spacing: .04em; } .alt { color: #475569; font-size: 10px; }
+        .ust { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0e7490; padding-bottom: 8px; margin-bottom: 10px; }
+        .kutu { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 14px; margin-bottom: 10px; } .kutu .l { font-size: 8.5px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: .04em; } .kutu .v { font-weight: 700; }
+        table { width: 100%; border-collapse: collapse; } th, td { border: 1px solid #cbd5e1; padding: 3px 5px; text-align: center; } th { background: #f1f5f9; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; } td.s, th.s { text-align: right; font-variant-numeric: tabular-nums; }
+        tr.top td { font-weight: 800; background: #ecfeff; }
+        .not { margin-top: 8px; font-size: 9.5px; color: #475569; } .imza { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 26px; } .imza div { border-top: 1px solid #94a3b8; padding-top: 4px; text-align: center; font-size: 10px; }
+        .btn { position: fixed; top: 10px; right: 12px; display: flex; gap: 6px; } .btn button { font-size: 12px; padding: 5px 12px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; cursor: pointer; }
+        @@media print { .btn { display: none; } body { margin: 8mm; } }
+    </style>
+</head>
+<body>
+    <div class="btn"><button onclick="window.print()">PDF / Yazdır</button><button onclick="excel()">Excel'e Aktar</button><button onclick="window.close()">Kapat</button></div>
+    <div class="ust">
+        <div><h2>CARİ HESAP EKSTRESİ · @pb</h2><div class="alt">@(k?.Sirket ?? "Uras Kimya") · Cari Mutabakat Yönetimi</div></div>
+        <div style="text-align:right" class="alt">Ekstre Oluşturma Tarihi / Saati: <b>@olusturma.ToString("dd.MM.yyyy HH:mm")</b><br />Bakiye Tarihi: <b>@(Model.BakiyeZamani?.ToString("dd.MM.yyyy HH:mm"))</b> · Kur Tarihi: @WebApplication3.Data.MutabakatOrnek.KurTarihi.ToString("dd.MM.yyyy")</div>
+    </div>
+    <div class="kutu">
+        <div><div class="l">Şirket</div><div class="v">@(k?.Sirket ?? "—")</div></div>
+        <div><div class="l">Cari Kodu</div><div class="v">@Model.CariKodu</div></div>
+        <div><div class="l">Cari Ünvanı</div><div class="v">@(k?.ResmiUnvan ?? "—")</div></div>
+        <div><div class="l">Dönem</div><div class="v">@(hareketler.Any() ? hareketler.First().Tarih.ToString("dd.MM.yyyy") + " – " + hareketler.Last().Tarih.ToString("dd.MM.yyyy") : "—")</div></div>
+        <div><div class="l">Para Birimi</div><div class="v">@pb</div></div>
+        <div><div class="l">Borç Toplamı</div><div class="v">@p(d?.Borc ?? 0) @pb</div></div>
+        <div><div class="l">Alacak Toplamı</div><div class="v">@p(d?.Alacak ?? 0) @pb</div></div>
+        <div><div class="l">Net Bakiye</div><div class="v">@p(Math.Abs(d?.Net ?? 0)) @pb @((d?.Net ?? 0) > 0 ? "(Borç)" : (d?.Net ?? 0) < 0 ? "(Alacak)" : "")@(pb != "TL" ? $" · TL karşılığı {p(d?.TlKarsiligi ?? 0)} (kur {p(d?.Kur ?? 1)})" : "")</div></div>
+    </div>
+    <table id="t">
+        <thead><tr><th>Tarih</th><th>Belge Tipi</th><th>Belge No</th><th>Açıklama</th><th class="s">Borç</th><th class="s">Alacak</th><th class="s">Bakiye</th><th>Vade</th><th>Kapama Durumu</th></tr></thead>
+        <tbody>
+        @foreach (var h in hareketler)
+        {
+            <tr><td>@h.Tarih.ToString("dd.MM.yyyy")</td><td>@h.BelgeTipi</td><td>@h.BelgeNo</td><td style="text-align:left">@h.Aciklama</td><td class="s">@(h.Borc == 0 ? "" : p(h.Borc))</td><td class="s">@(h.Alacak == 0 ? "" : p(h.Alacak))</td><td class="s">@p(h.Bakiye)</td><td>@(h.Vade?.ToString("dd.MM.yyyy") ?? "")</td><td>@h.KapamaDurumu@(h.BelgeTipi == "Fatura" && h.Kalan > 0.005m ? $" · kalan {p(h.Kalan)}" : "")</td></tr>
+        }
+        </tbody>
+        <tfoot><tr class="top"><td colspan="4">Toplam</td><td class="s">@p(d?.Borc ?? 0)</td><td class="s">@p(d?.Alacak ?? 0)</td><td class="s">@p(d?.Net ?? 0)</td><td colspan="2">Açık fatura: @(d?.AcikFaturaAdet ?? 0) adet · @p(d?.AcikFaturaTutar ?? 0) @pb@(d?.EnEskiAcikFatura != null ? $" · en eski {d.EnEskiAcikFatura:dd.MM.yyyy} ({d.BakiyeYasi} gün)" : "")</td></tr></tfoot>
+    </table>
+    <div class="not">Bu ekstre @olusturma.ToString("dd.MM.yyyy HH:mm") itibarıyla muhasebe kayıtlarından otomatik üretilmiştir. Bakiye yönü: pozitif = cari borçlu (alacağımız), negatif = cari alacaklı (borcumuz). @(d != null && d.DegerlemeRiski ? "DİKKAT: Eski yabancı para bakiyesi — değerleme riski." : d != null && d.EskiBakiyeUyari ? "DİKKAT: Eşikten eski açık bakiye." : "")</div>
+    <div class="imza"><div>@(k?.Sirket ?? "Uras Kimya") · Muhasebe</div><div>@(k?.KisaAd ?? "") · Kaşe / İmza</div></div>
+    <script>
+        function excel() { const rows = [...document.querySelectorAll('#t tr')].map(tr => [...tr.cells].map(c => '"' + c.textContent.trim().replace(/"/g, '""') + '"').join(';')); const b = new Blob(['﻿' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'ekstre_@(Model.CariKodu)_@(pb).csv'; a.click(); }
+    </script>
+</body>
+</html>

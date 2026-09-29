@@ -3,12 +3,14 @@
 // İki katmanlı fiyatlandırma:
 //   1) ÜRETİCİ → YETKİLİ SATICI : Uras Kimya (üretici) ürünleri yetkili satıcılarına (Selvi Kimya, Alv Kimya, Uras Kimya GmbH) kaç % kârla satar.
 //      Oran kalem kalem (ürün bazında) ya da toplu (genel / ürün grubu bazında) tanımlanır. En özel tanım kazanır: Ürün > Grup > Genel.
-//      Satıcı Alış Fiyatı = Üretim Maliyeti × (1 + oran / 100).
+//      ANA PARA BİRİMİ USD: üretim maliyetleri USD üzerinden tutulur; Satıcı Alış Fiyatı ($) = Üretim Maliyeti ($) × (1 + oran / 100).
 //   2) YETKİLİ SATICI → MÜŞTERİ : yetkili satıcı (ör. Selvi Kimya) her müşteri carisine ürün ürün kaç % kârla satar. Aynı kademe kuralı.
-//      Müşteri Satış Fiyatı = Satıcı Alış Fiyatı × (1 + oran / 100). Uçtan uca marj = Müşteri Fiyatı / Üretim Maliyeti − 1.
+//      Müşteri Satış Fiyatı ($) = Satıcı Alış Fiyatı ($) × (1 + oran / 100). Uçtan uca marj = Müşteri Fiyatı / Üretim Maliyeti − 1.
+//      Müşteride USD fiyatın EUR ve TL karşılığı "fiyatlandırma kuru" ile gösterilir: piyasa kuru (TCMB döviz satış) + döviz kâr marjı (%),
+//      yani kur hareketinden zarar edilmemesi için piyasanın üstünde kur alınır (FyKur: UsdTl, EurTl, Marj; TlKarsiligi / EurKarsiligi).
 // Ürünler CariKartOrnek.UrunHiyerarsisi'ndeki Uras Kimya ürün ailelerinden (Boya, Yardımcı Kimyasallar, Tekstil Binderleri) türetilir; üretim
-// maliyeti ve liste fiyatı örnektir. Müşteriler CARİ_MASTER müşteri kartlarıdır (Data/CariKartOrnek.cs). Kayıtlar bellek içindedir; her
-// değişiklik audit günlüğüne (kim, ne zaman, eski → yeni) yazılır. Yalnız Yönetici yetkisi (OrnekVeri.Kullanicilar Yetki = "A") kaydedebilir.
+// maliyeti (USD) örnektir. Ayrı bir "liste fiyatı" kavramı yoktur; fiyatlar yalnız maliyet + kâr oranından türer. Müşteriler CARİ_MASTER müşteri kartlarıdır (Data/CariKartOrnek.cs). Kayıtlar bellek içindedir; her
+// değişiklik (oran ve kur) audit günlüğüne (kim, ne zaman, eski → yeni) yazılır. Yalnız Yönetici yetkisi (OrnekVeri.Kullanicilar Yetki = "A") kaydedebilir.
 // Ekran: Controllers/FiyatYonetimiController.cs + Views/FiyatYonetimi/Index.cshtml + wwwroot/js/fiyat-yonetimi.js
 // Yazım kuralı: liste değerleri ve etiketler Title Case ("Genel Oran", "Ürün Grubu", "Kalem").
 // ============================================================
@@ -29,11 +31,28 @@ namespace WebApplication3.Data
         public string UrunGrubu { get; set; }
         public string Seri { get; set; }
         public string Birim { get; set; } = "kg";
-        public decimal Maliyet { get; set; }        // üretim maliyeti TL / birim
-        public decimal ListeFiyati { get; set; }    // üreticinin liste (tavsiye) fiyatı TL / birim
+        public string ParaBirimi { get; set; } = "USD";   // ana para birimi: maliyet ve fiyatlar USD
+        public decimal Maliyet { get; set; }        // üretim maliyeti USD / birim (fiyatlar yalnız maliyet + kâr oranından türer; ayrı liste fiyatı kavramı yoktur)
         public string Durum { get; set; } = "Aktif";
         public string GrupAnahtari => AnaGrup + "|" + Grup;
     }
+
+    /// <summary>Kur parametreleri: piyasa kuru + döviz kâr marjı → fiyatlandırma kuru. USD fiyatın müşteri için EUR / TL karşılığı bununla hesaplanır.</summary>
+    public class FyKur
+    {
+        public decimal UsdTl { get; set; }          // piyasa USD/TL (TCMB döviz satış)
+        public decimal EurTl { get; set; }          // piyasa EUR/TL
+        public decimal Marj { get; set; }           // döviz kâr marjı % — fiyatlandırma kuru piyasanın bu kadar üstünde alınır
+        public DateTime Tarih { get; set; }
+        public string Kaynak { get; set; } = "TCMB Döviz Satış Kuru";
+        public string Guncelleyen { get; set; }
+        public decimal FiyatUsdTl => Math.Round(UsdTl * (1 + Marj / 100m), 4);          // TL karşılığı için kullanılan kur
+        public decimal Parite => UsdTl > 0 ? Math.Round(EurTl / UsdTl, 4) : 0;          // piyasa EUR/USD paritesi (1 EUR = x USD)
+        public decimal FiyatParite => Math.Round(Parite / (1 + Marj / 100m), 4);        // EUR karşılığı için kullanılan parite (marj kadar düşük → EUR fiyat yüksek)
+        public decimal TlKarsiligi(decimal usd) => Math.Round(usd * FiyatUsdTl, 2);
+        public decimal EurKarsiligi(decimal usd) => FiyatParite > 0 ? Math.Round(usd / FiyatParite, 2) : 0;
+    }
+    public class FyKurGiris { public decimal? UsdTl { get; set; } public decimal? EurTl { get; set; } public decimal? Marj { get; set; } }
 
     /// <summary>Tek bir kâr oranı tanımı. Kapsam: Genel (anahtar boş) | Grup (anahtar "AnaGrup|Grup") | Urun (anahtar ürün kodu).</summary>
     public class FyOran
@@ -93,11 +112,13 @@ namespace WebApplication3.Data
         private static readonly Lazy<List<FyUrun>> _urunler = new Lazy<List<FyUrun>>(UrunleriUret);
         public static List<FyUrun> Urunler => _urunler.Value;
         public static FyUrun UrunBul(string kod) => Urunler.FirstOrDefault(u => string.Equals(u.Kod, kod, StringComparison.OrdinalIgnoreCase));
-        /// <summary>Üreticinin ürettiği ürün aileleri ("AnaGrup|Grup") ve kod ön ekleri, maliyet aralığı (TL / kg).</summary>
-        private static readonly (string Anahtar, string OnEk, int MaliyetMin, int MaliyetMax)[] Aileler =
+        /// <summary>Üreticinin ürettiği ürün aileleri ("AnaGrup|Grup") ve kod ön ekleri, üretim maliyeti aralığı (USD / kg).</summary>
+        private static readonly (string Anahtar, string OnEk, decimal MaliyetMin, decimal MaliyetMax)[] Aileler =
         {
-            ("Boya Grubu|Emprime", "BOY-EMP", 120, 260), ("Boya Grubu|Dijital", "BOY-DIJ", 220, 480), ("Yardımcı Kimyasallar|Tekstil Yardımcı Kimyasalları", "YRD-TKS", 45, 110), ("Binder Grubu|Tekstil Binderleri", "BND-TKS", 70, 125)
+            ("Boya Grubu|Emprime", "BOY-EMP", 2.90m, 6.30m), ("Boya Grubu|Dijital", "BOY-DIJ", 5.30m, 11.60m), ("Yardımcı Kimyasallar|Tekstil Yardımcı Kimyasalları", "YRD-TKS", 1.10m, 2.70m), ("Binder Grubu|Tekstil Binderleri", "BND-TKS", 1.70m, 3.00m)
         };
+        /// <summary>Kur parametreleri (bellek içi; yönetici değiştirir). Başlangıç: Yapılan Ödemeler'deki örnek kurlar + %3 döviz kâr marjı.</summary>
+        public static readonly FyKur Kur = new FyKur { UsdTl = YapilanOdemelerOrnek.Kurlar["USD"], EurTl = YapilanOdemelerOrnek.Kurlar["EUR"], Marj = 3m, Tarih = DateTime.Today, Guncelleyen = "Ali Veli" };
         public static IEnumerable<(string Anahtar, string Ad)> Gruplar => Aileler.Select(a => (a.Anahtar, a.Anahtar.Replace("|", " / ")));
         private static List<FyUrun> UrunleriUret()
         {
@@ -108,8 +129,8 @@ namespace WebApplication3.Data
                 if (!CariKartOrnek.UrunHiyerarsisi.TryGetValue(a.Anahtar, out var siniflar)) continue;
                 foreach (var s in siniflar) foreach (var g in s.Value) foreach (var se in g.Value) foreach (var ad in se.Value)
                 {
-                    decimal maliyet = rnd.Next(a.MaliyetMin, a.MaliyetMax + 1) + rnd.Next(0, 100) / 100m;
-                    l.Add(new FyUrun { Kod = $"{a.OnEk}-{++n:000}", Ad = ad, AnaGrup = p[0], Grup = p[1], UrunSinifi = s.Key, UrunGrubu = g.Key, Seri = se.Key, Maliyet = maliyet, ListeFiyati = Math.Round(maliyet * (1.55m + rnd.Next(0, 30) / 100m), 2) });
+                    decimal maliyet = Math.Round(a.MaliyetMin + (decimal)rnd.NextDouble() * (a.MaliyetMax - a.MaliyetMin), 2);   // USD / kg
+                    l.Add(new FyUrun { Kod = $"{a.OnEk}-{++n:000}", Ad = ad, AnaGrup = p[0], Grup = p[1], UrunSinifi = s.Key, UrunGrubu = g.Key, Seri = se.Key, Maliyet = maliyet });
                 }
             }
             return l;
@@ -168,24 +189,25 @@ namespace WebApplication3.Data
         /// <summary>Oran listesini istekle eşitler; farkları audit'e yazar. Hata metni döner (null = başarılı).</summary>
         private static string OranlariUygula(List<FyOran> oranlar, FyKayit g, string katman, string hedef, string kullanici, out int degisen)
         {
-            degisen = 0; int sayac = 0; var z = DateTime.Now;   // out parametresi yerel işlev içinde kullanılamaz; sayaç ayrı tutulur
-            void Ayarla(string kapsam, string anahtar, decimal? oran, string alan)
+            degisen = 0; var z = DateTime.Now;
+            // 1) ÖNCE tüm doğrulama — hiçbir oran değişmeden. Aksi halde ilk alanlar uygulanıp günlüğe yazıldıktan sonra hata dönüyor,
+            //    ekran "kaydedilmedi" sanıp eski veriyle kalıyordu (atomik olmayan kayıt).
+            string Kontrol(decimal? oran, string alan) => oran.HasValue && (oran < -50 || oran > 500) ? $"{alan}: oran −50 ile 500 arasında olmalıdır." : null;
+            var plan = new List<(string Kapsam, string Anahtar, decimal? Oran, string Alan)> { ("Genel", "", g.Genel, "Genel Oran") };
+            foreach (var x in g.Gruplar ?? new List<FyOranGiris>()) { if (!Aileler.Any(a => a.Anahtar == x.Anahtar)) return $"Bilinmeyen ürün grubu: {x.Anahtar}"; plan.Add(("Grup", x.Anahtar, x.Oran, "Grup " + x.Anahtar.Replace("|", " / "))); }
+            foreach (var x in g.Urunler ?? new List<FyOranGiris>()) { var u = UrunBul(x.Anahtar); if (u == null) return $"Bilinmeyen ürün: {x.Anahtar}"; plan.Add(("Urun", u.Kod, x.Oran, "Kalem " + u.Kod + " " + u.Ad)); }
+            foreach (var p in plan) { var h = Kontrol(p.Oran, p.Alan); if (h != null) return h; }
+            // 2) Uygulama — doğrulama geçtiği için artık hata dönmez; her fark günlüğe yazılır
+            int sayac = 0;   // out parametresi yerel değişkende sayılır (yerel işlev içinde out kullanılamaz)
+            foreach (var p in plan)
             {
-                if (oran.HasValue && (oran < -50 || oran > 500)) throw new ArgumentException($"{alan}: oran −50 ile 500 arasında olmalıdır.");
-                var mevcut = oranlar.FirstOrDefault(x => x.Kapsam == kapsam && string.Equals(x.Anahtar, anahtar ?? "", StringComparison.OrdinalIgnoreCase));
-                string eski = OranMetni(mevcut), yeni = oran.HasValue ? "%" + oran.Value.ToString("0.##") : "";
-                if (eski == yeni) return;
+                var mevcut = oranlar.FirstOrDefault(x => x.Kapsam == p.Kapsam && string.Equals(x.Anahtar, p.Anahtar ?? "", StringComparison.OrdinalIgnoreCase));
+                string eski = OranMetni(mevcut), yeni = p.Oran.HasValue ? "%" + p.Oran.Value.ToString("0.##") : "";
+                if (eski == yeni) continue;
                 if (mevcut != null) oranlar.Remove(mevcut);
-                if (oran.HasValue) oranlar.Add(new FyOran { Kapsam = kapsam, Anahtar = anahtar ?? "", Oran = Math.Round(oran.Value, 2), Zaman = z, Kullanici = kullanici });
-                Audit.Insert(0, new FyAudit { Zaman = z, Kullanici = kullanici, Katman = katman, Hedef = hedef, Alan = alan, Eski = eski, Yeni = yeni }); sayac++;
+                if (p.Oran.HasValue) oranlar.Add(new FyOran { Kapsam = p.Kapsam, Anahtar = p.Anahtar ?? "", Oran = Math.Round(p.Oran.Value, 2), Zaman = z, Kullanici = kullanici });
+                Audit.Insert(0, new FyAudit { Zaman = z, Kullanici = kullanici, Katman = katman, Hedef = hedef, Alan = p.Alan, Eski = eski, Yeni = yeni }); sayac++;
             }
-            try
-            {
-                Ayarla("Genel", "", g.Genel, "Genel Oran");
-                foreach (var x in g.Gruplar ?? new List<FyOranGiris>()) { if (!Aileler.Any(a => a.Anahtar == x.Anahtar)) return $"Bilinmeyen ürün grubu: {x.Anahtar}"; Ayarla("Grup", x.Anahtar, x.Oran, "Grup " + x.Anahtar.Replace("|", " / ")); }
-                foreach (var x in g.Urunler ?? new List<FyOranGiris>()) { var u = UrunBul(x.Anahtar); if (u == null) return $"Bilinmeyen ürün: {x.Anahtar}"; Ayarla("Urun", u.Kod, x.Oran, "Kalem " + u.Kod + " " + u.Ad); }
-            }
-            catch (ArgumentException e) { degisen = sayac; return e.Message; }
             degisen = sayac; return null;
         }
         public static string SaticiKaydet(FyKayit g, string kullaniciKodu, out int degisen)
@@ -194,6 +216,32 @@ namespace WebApplication3.Data
             if (!Yonetici(kullaniciKodu)) return "Fiyat ve kâr oranlarını yalnız Yönetici yetkisi değiştirebilir.";
             var s = SaticiBul(g?.Satici ?? ""); if (s == null) return "Yetkili satıcı bulunamadı.";
             lock (Kilit) return OranlariUygula(s.Oranlar, g, "Satıcı", s.Ad, OrnekVeri.KullaniciAdi(kullaniciKodu), out degisen);
+        }
+        /// <summary>Kur parametrelerini günceller (yalnız Yönetici); her alan değişimi audit'e yazılır.</summary>
+        public static string KurKaydet(FyKurGiris g, string kullaniciKodu, out int degisen)
+        {
+            degisen = 0;
+            if (!Yonetici(kullaniciKodu)) return "Kur parametrelerini yalnız Yönetici yetkisi değiştirebilir.";
+            if (g == null) return "Geçersiz istek.";
+            if (g.UsdTl.HasValue && g.UsdTl <= 0 || g.EurTl.HasValue && g.EurTl <= 0) return "Kur sıfırdan büyük olmalıdır.";
+            if (g.Marj.HasValue && (g.Marj < 0 || g.Marj > 50)) return "Döviz kâr marjı 0 ile 50 arasında olmalıdır.";
+            string k = OrnekVeri.KullaniciAdi(kullaniciKodu); var z = DateTime.Now; int sayac = 0;
+            lock (Kilit)
+            {
+                // hane: kurlar 4, marj 2 ondalık — karşılaştırma, saklama ve günlük metni aynı hassasiyette (aksi halde günlükte "3 → 3" görünüyordu)
+                void Ayarla(string alan, decimal eski, decimal? yeni, Action<decimal> ata, int hane)
+                {
+                    if (!yeni.HasValue) return; var y = Math.Round(yeni.Value, hane); if (y == eski) return;
+                    string bicim = hane == 4 ? "0.0000" : "0.##";
+                    Audit.Insert(0, new FyAudit { Zaman = z, Kullanici = k, Katman = "Kur", Hedef = "Fiyatlandırma Kuru", Alan = alan, Eski = eski.ToString(bicim), Yeni = y.ToString(bicim) });
+                    ata(y); sayac++;
+                }
+                Ayarla("USD/TL Piyasa Kuru", Kur.UsdTl, g.UsdTl, v => Kur.UsdTl = v, 4);
+                Ayarla("EUR/TL Piyasa Kuru", Kur.EurTl, g.EurTl, v => Kur.EurTl = v, 4);
+                Ayarla("Döviz Kâr Marjı %", Kur.Marj, g.Marj, v => Kur.Marj = v, 2);
+                if (sayac > 0) { Kur.Tarih = DateTime.Today; Kur.Guncelleyen = k; }
+            }
+            degisen = sayac; return null;
         }
         public static string MusteriKaydet(FyKayit g, string kullaniciKodu, out int degisen)
         {

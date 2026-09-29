@@ -249,12 +249,14 @@ namespace WebApplication3.Data
                     G("fatura-belge", "Fatura ve Belge Yönetimi", R("E-Belge"), R("Fatura İnceleme"), R("Fatura Mutabakat Raporu - QNB"), R("İrsaliye Mutabakat Raporu - QNB"), R("Taslak Satıcı Faturaları Raporu"), R("Yansıtma Faturası")),
                     G("gider-gelir", "Gider ve Gelir Yönetimi", R("Gider / Gelir Seçim Ekranı"), R("Gider / Gelir Kod Yönetimi"), R("Gider / Gelir Analizi"), R("Gider Seçim Raporu"), R("Genel Gider Raporu Muavin"), R("Aylık Gider Raporu")),
                     G("stok-maliyet", "Stok ve Maliyet Muhasebesi", R("Stok Maliyeti"), R("Denge Malzeme Raporu")),
-                    G("grup-ici", "Grup İçi İşlemler", R("Grup İçi Analiz Raporu"))),
+                    G("grup-ici", "Grup İçi İşlemler", R("Grup İçi Analiz Raporu")),
+                    // Cari Mutabakat Yönetimi: aktif / pasif cariler, iç kontrol (iletişim + bakiye), eski bakiye / değerleme riski, otomatik mutabakat gönderimi (Data/MutabakatOrnek.cs); Cari İşler › Mutabakat ve Kapama'da da aynı ekran
+                    G("cari-mutabakat", "Cari Mutabakat", R("Cari Mutabakat Yönetimi", "CariMutabakat", "Index"))),
                   U("cari-isler", "Cari İşler",
                     G("cari-hesap", "Cari Hesap Yönetimi", R("Cari Bilgileri"), R("Muhattap Ana Verileri"), R("Muhatap (Cari) Ana Verileri"), R("Cari Ekstre Raporu"), R("Cari Bakiye Raporu"), R("Adat Hesaplama")),
                     G("alacak-tahsilat", "Alacak ve Tahsilat Takibi", R("Tahsilat"), R("Fatura ve Tahsilat Takip Raporu"), R("Konsolide Tahsilat Takip Raporu"), R("Bekleyen Cari İşlemler Raporu")),
                     G("tedarikci-borc", "Tedarikçi ve Borç Takibi", R("Tedarikçi Fatura ve Ödeme Takip Raporu"), R("Tedarikçi Konsolide Ödeme Takip Raporu")),
-                    G("mutabakat-kapama", "Mutabakat ve Kapama", R("Mutabakat"), R("E-Mutabakat"), R("Otomatik Kapama"), R("Cari & Hesap Ekstre Karşılaştırma")),
+                    G("mutabakat-kapama", "Mutabakat ve Kapama", R("Cari Mutabakat Yönetimi", "CariMutabakat", "Index"), R("Mutabakat"), R("E-Mutabakat"), R("Otomatik Kapama"), R("Cari & Hesap Ekstre Karşılaştırma")),
                     G("temlik-ozel", "Temlik ve Özel İşlemler", R("Temlik İşlemleri"), R("Hukuki Süreçteki Cariler"))),
                   // Grup şirketleri arası yansıtma, mahsup ve temlik işlemleri (Controllers/GrupIciController.cs; talep motoru)
                   G("grup-ici-ozel", "Grup İçi Özel Finansal İşlemler",

@@ -78,7 +78,7 @@ namespace WebApplication3.Controllers
         {
             k.Kod, k.KisaAd, k.KisaltmaliUnvan, k.ResmiUnvan, k.VergiNo, k.VergiDairesi, k.KartTipi, k.Bolge, k.Ulke, k.Sehir, k.Sinif, k.IliskiDurumu, k.Rol, k.EsCariKodu,
             esKartAd = string.IsNullOrEmpty(k.EsCariKodu) ? "" : (CariKartOrnek.KartBul(k.EsCariKodu)?.KisaAd ?? ""),
-            k.Yetkili, k.Telefon, k.Eposta, k.VadeSarti, k.Durum, k.Not, k.Sirket, olusturmaTarihi = Trh(k.OlusturmaTarihi), k.Olusturan, k.KaynakTalepNo, anaFaaliyet = k.AnaFaaliyet,
+            k.Yetkili, k.Telefon, k.Eposta, k.VadeSarti, k.Durum, durumKaynagi = k.DurumKaynagi, sonHareketTr = Trh(CariKartOrnek.SonHareket(k).Tarih), k.Not, k.Sirket, olusturmaTarihi = Trh(k.OlusturmaTarihi), k.Olusturan, k.KaynakTalepNo, anaFaaliyet = k.AnaFaaliyet,
             faaliyetler = k.Faaliyetler.Select(f => new { f.Sira, f.AnaGrup, f.Grup, f.SatisTemsilcisi, f.AnaFaaliyet, f.UrunSinifi, f.UrunGrubu, f.UrunSerisi, f.UrunAdi, f.Durum, baslangicTr = Trh(f.BaslangicTarihi), f.Not }),
             temsilciler = string.Join(", ", k.Faaliyetler.Select(f => f.SatisTemsilcisi).Where(x => !string.IsNullOrEmpty(x)).Distinct()),
             anaGruplar = string.Join(", ", k.Faaliyetler.Select(f => f.AnaGrup).Distinct())

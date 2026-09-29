@@ -1,0 +1,54 @@
+@model WebApplication3.Data.MtCari
+@{
+    Layout = null;
+    var k = Model.Kart; DateTime olusturma = (DateTime)ViewBag.OlusturmaZamani;
+    var ana = Model.Kisiler.FirstOrDefault(x => x.AnaYetkili) ?? Model.Kisiler.FirstOrDefault();
+    var son = Model.Gonderimler.OrderByDescending(g => g.Id).FirstOrDefault();
+    string p(decimal v) => v.ToString("N2", new System.Globalization.CultureInfo("tr-TR"));
+    bool musteri = k?.KartTipi == "Müşteri";
+}
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <title>Mutabakat Mektubu · @Model.CariKodu</title>
+    @* Mutabakat mektubu / PDF önizleme (§10): döviz bazında bakiyeler, bakiye tarihi, ekstre oluşturma zamanı, yanıt bölümü *@
+    <style>
+        body { font-family: Inter, Segoe UI, Arial, sans-serif; font-size: 12px; color: #0f172a; margin: 24px 30px; max-width: 900px; }
+        h2 { font-size: 16px; letter-spacing: .05em; margin: 0; } .alt { color: #475569; font-size: 10.5px; }
+        .ust { display: flex; justify-content: space-between; border-bottom: 2px solid #0e7490; padding-bottom: 8px; margin-bottom: 14px; }
+        .kutu { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 16px; margin: 10px 0 14px; } .kutu .l { font-size: 9px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: .04em; } .kutu .v { font-weight: 700; }
+        table { width: 100%; border-collapse: collapse; margin: 8px 0; } th, td { border: 1px solid #cbd5e1; padding: 4px 6px; text-align: center; } th { background: #f1f5f9; font-size: 10px; text-transform: uppercase; } td.s, th.s { text-align: right; font-variant-numeric: tabular-nums; }
+        p { line-height: 1.5; } .yanit { border: 1px dashed #94a3b8; border-radius: 8px; padding: 10px 14px; margin-top: 16px; }
+        .yanit label { display: inline-block; margin-right: 24px; } .imza { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 30px; } .imza div { border-top: 1px solid #94a3b8; padding-top: 4px; text-align: center; font-size: 10.5px; }
+        .btn { position: fixed; top: 10px; right: 12px; display: flex; gap: 6px; } .btn button { font-size: 12px; padding: 5px 12px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; cursor: pointer; }
+        @@media print { .btn { display: none; } body { margin: 10mm; } }
+    </style>
+</head>
+<body>
+    <div class="btn"><button onclick="window.print()">PDF / Yazdır</button><button onclick="window.close()">Kapat</button></div>
+    <div class="ust">
+        <div><h2>CARİ HESAP MUTABAKAT MEKTUBU</h2><div class="alt">@(k?.Sirket ?? "Uras Kimya") · Muhasebe Müdürlüğü</div></div>
+        <div style="text-align:right" class="alt">Belge No: <b>@(son?.BelgeNo ?? "(önizleme)")</b><br />Oluşturma Tarihi / Saati: <b>@olusturma.ToString("dd.MM.yyyy HH:mm")</b><br />Bakiye Tarihi: <b>@(Model.BakiyeZamani?.ToString("dd.MM.yyyy HH:mm"))</b></div>
+    </div>
+    <div class="kutu">
+        <div><div class="l">Sayın</div><div class="v">@(k?.ResmiUnvan ?? "—")</div></div>
+        <div><div class="l">Cari Kodu · Vergi No</div><div class="v">@Model.CariKodu · @(k?.VergiNo ?? "—")</div></div>
+        <div><div class="l">Muhatap</div><div class="v">@(ana == null ? "—" : $"{ana.AdSoyad} · {ana.Unvan} · {ana.Eposta}")</div></div>
+    </div>
+    <p>Şirketimiz kayıtlarında <b>@(Model.BakiyeZamani?.ToString("dd.MM.yyyy"))</b> tarihi itibarıyla cari hesabınızın bakiyesi aşağıdaki gibidir. Bakiyenin kayıtlarınızla mutabık olup olmadığını, mutabık değilseniz farkı ve dayanağını <b>7 iş günü</b> içinde bildirmenizi rica ederiz. Bu süre içinde yanıt alınamadığı takdirde bakiyenin kabul edildiği varsayılacaktır.</p>
+    <table>
+        <thead><tr><th>Para Birimi</th><th class="s">Borç Toplamı</th><th class="s">Alacak Toplamı</th><th class="s">Net Bakiye</th><th>Bakiye Yönü</th><th class="s">TL Karşılığı</th><th class="s">Açık Fatura</th></tr></thead>
+        <tbody>
+        @foreach (var d in Model.Dovizler)
+        {
+            <tr><td><b>@d.ParaBirimi</b></td><td class="s">@p(d.Borc)</td><td class="s">@p(d.Alacak)</td><td class="s"><b>@p(Math.Abs(d.Net))</b></td><td>@(d.Net > 0 ? (musteri ? "Borçlusunuz" : "Alacaklısınız") : d.Net < 0 ? (musteri ? "Alacaklısınız" : "Borçlusunuz") : "Sıfır")</td><td class="s">@p(d.TlKarsiligi)@(d.ParaBirimi != "TL" ? $" (kur {p(d.Kur)})" : "")</td><td class="s">@d.AcikFaturaAdet adet · @p(d.AcikFaturaTutar)</td></tr>
+        }
+        </tbody>
+        <tfoot><tr><td colspan="5" style="text-align:left;font-weight:800">Toplam TL Karşılığı (@WebApplication3.Data.MutabakatOrnek.KurTarihi.ToString("dd.MM.yyyy") TCMB kurları)</td><td class="s" style="font-weight:800">@p(Model.BakiyeTl)</td><td></td></tr></tfoot>
+    </table>
+    <p class="alt">Bakiye yönü şirketimiz kayıtlarına göre yazılmıştır. Döviz bazında ekstre detayı talep halinde gönderilir. Bu belge @olusturma.ToString("dd.MM.yyyy HH:mm") itibarıyla otomatik üretilmiştir.</p>
+    <div class="yanit"><b>CARİ YANITI</b><br /><label>☐ Bakiye ile MUTABIKIZ</label><label>☐ Bakiye ile MUTABIK DEĞİLİZ · Fark: ______________ · Açıklama: ____________________________________</label><br /><span class="alt">Kaşe / imza ile e-posta yanıtı yeterlidir.</span></div>
+    <div class="imza"><div>@(k?.Sirket ?? "Uras Kimya") · Muhasebe<br />@(son?.Gonderen ?? "")</div><div>@(k?.KisaAd ?? "") · Yetkili Kaşe / İmza</div></div>
+</body>
+</html>

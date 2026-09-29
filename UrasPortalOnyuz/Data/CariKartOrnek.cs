@@ -24,7 +24,12 @@ namespace WebApplication3.Data
     {
         public string Kod { get; set; } public string KisaAd { get; set; } public string KisaltmaliUnvan { get; set; } public string ResmiUnvan { get; set; } public string VergiNo { get; set; } public string VergiDairesi { get; set; }
         public string KartTipi { get; set; } public string Bolge { get; set; } public string Ulke { get; set; } public string Sehir { get; set; } public string Sinif { get; set; } public string IliskiDurumu { get; set; } public string Rol { get; set; } public string EsCariKodu { get; set; } = "";
-        public string Yetkili { get; set; } public string Telefon { get; set; } public string Eposta { get; set; } public string VadeSarti { get; set; } public string Durum { get; set; } = "Aktif"; public string Not { get; set; } = "";
+        public string Yetkili { get; set; } public string Telefon { get; set; } public string Eposta { get; set; } public string VadeSarti { get; set; } public string Not { get; set; } = "";
+        /// <summary>Elle pasife alma ("Pasif" | null). Otomatik kuralı ezer; kaldırılınca otomatik kural yeniden geçerli olur.</summary>
+        public string ElleDurum { get; set; } public string ElleDurumKim { get; set; } public DateTime? ElleDurumZaman { get; set; }
+        /// <summary>DURUM OTOMATİK: son 1 yıl (365 gün) içinde cari hareketi varsa Aktif, yoksa Pasif (kart açılışı hareket sayılır; kaynaklar CariKartOrnek.SonHareket). Elle pasife alınmışsa Pasif.</summary>
+        public string Durum => ElleDurum == "Pasif" ? "Pasif" : (CariKartOrnek.SonHareket(this).Tarih >= DateTime.Today.AddDays(-365) ? "Aktif" : "Pasif");
+        public string DurumKaynagi => ElleDurum == "Pasif" ? $"Elle pasif · {ElleDurumKim} {ElleDurumZaman:dd.MM.yyyy}" : (Durum == "Aktif" ? "Otomatik · son 1 yılda hareket var" : "Otomatik · 1 yıldır hareket yok");
         public string Sirket { get; set; } public DateTime OlusturmaTarihi { get; set; } public string Olusturan { get; set; } public string KaynakTalepNo { get; set; } = "";
         public List<CariFaaliyet> Faaliyetler { get; set; } = new List<CariFaaliyet>();
         public string AnaFaaliyet => Faaliyetler.FirstOrDefault(f => f.AnaFaaliyet)?.Grup ?? "";
@@ -167,7 +172,7 @@ namespace WebApplication3.Data
         }
         public static CariKart KartKur(CariTalepGiris g)
         {
-            var k = new CariKart { KisaAd = (g.KisaAd ?? "").Trim(), KisaltmaliUnvan = (g.KisaltmaliUnvan ?? "").Trim(), ResmiUnvan = (g.ResmiUnvan ?? "").Trim(), VergiNo = (g.VergiNo ?? "").Trim(), VergiDairesi = (g.VergiDairesi ?? "").Trim(), KartTipi = g.KartTipi, Bolge = (g.KartTipi == "Müşteri" || g.KartTipi == "Tedarikçi") ? g.Bolge : (string.IsNullOrEmpty(g.Bolge) ? "Yurtiçi" : g.Bolge), Ulke = g.Ulke, Sehir = (g.Sehir ?? "").Trim(), Sinif = g.Sinif, IliskiDurumu = g.IliskiDurumu, Rol = g.CariRolu, EsCariKodu = g.CariRolu == "Çift Rol" ? (g.EsCariKodu ?? "").Trim() : "", Yetkili = (g.Yetkili ?? "").Trim(), Telefon = (g.Telefon ?? "").Trim(), Eposta = (g.Eposta ?? "").Trim(), VadeSarti = g.VadeSarti, Durum = string.IsNullOrEmpty(g.Durum) ? "Aktif" : g.Durum, Not = (g.Not ?? "").Trim(), Sirket = g.Sirket };
+            var k = new CariKart { KisaAd = (g.KisaAd ?? "").Trim(), KisaltmaliUnvan = (g.KisaltmaliUnvan ?? "").Trim(), ResmiUnvan = (g.ResmiUnvan ?? "").Trim(), VergiNo = (g.VergiNo ?? "").Trim(), VergiDairesi = (g.VergiDairesi ?? "").Trim(), KartTipi = g.KartTipi, Bolge = (g.KartTipi == "Müşteri" || g.KartTipi == "Tedarikçi") ? g.Bolge : (string.IsNullOrEmpty(g.Bolge) ? "Yurtiçi" : g.Bolge), Ulke = g.Ulke, Sehir = (g.Sehir ?? "").Trim(), Sinif = g.Sinif, IliskiDurumu = g.IliskiDurumu, Rol = g.CariRolu, EsCariKodu = g.CariRolu == "Çift Rol" ? (g.EsCariKodu ?? "").Trim() : "", Yetkili = (g.Yetkili ?? "").Trim(), Telefon = (g.Telefon ?? "").Trim(), Eposta = (g.Eposta ?? "").Trim(), VadeSarti = g.VadeSarti, ElleDurum = g.Durum == "Pasif" ? "Pasif" : null, Not = (g.Not ?? "").Trim(), Sirket = g.Sirket };   // durum otomatik; formda Pasif seçildiyse elle pasif
             if (string.IsNullOrEmpty(k.KisaltmaliUnvan)) k.KisaltmaliUnvan = k.KisaAd;
             int n = 0; k.Faaliyetler = (g.Faaliyetler ?? new List<CariFaaliyetGiris>()).Where(f => !string.IsNullOrEmpty(f.AnaGrup) || !string.IsNullOrEmpty(f.Grup)).Select(f => new CariFaaliyet { Sira = ++n, AnaGrup = f.AnaGrup, Grup = f.Grup, SatisTemsilcisi = f.SatisTemsilcisi ?? "", AnaFaaliyet = f.AnaFaaliyet, UrunSinifi = f.UrunSinifi ?? "", UrunGrubu = f.UrunGrubu ?? "", UrunSerisi = f.UrunSerisi ?? "", UrunAdi = f.UrunAdi ?? "", Durum = string.IsNullOrEmpty(f.Durum) ? "Aktif" : f.Durum, BaslangicTarihi = DateTime.TryParseExact(f.BaslangicTarihi ?? "", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : (DateTime?)null, Not = f.Not ?? "" }).ToList();
             return k;
@@ -220,7 +225,73 @@ namespace WebApplication3.Data
             t.Durum = "Onaylandı"; t.OlusanKod = k.Kod; Log(t, z, kullanici, "STATUS", "Onay Bekliyor", "Onaylandı", "Workflow"); Log(t, z, kullanici, "CARI_MASTER", "", $"{k.Kod} {k.KisaAd} açıldı · {k.Faaliyetler.Count} faaliyet satırı", "ERP");
         }
         public static string Iptal(CariTalep t, string neden, string kullanici, DateTime? simdi = null) { lock (Kilit) { var z = simdi ?? DateTime.Now; if (string.IsNullOrWhiteSpace(neden)) return "İptal nedeni zorunludur."; if (t.Durum == "Onaylandı") return "Kartı açılmış talep iptal edilemez; kart pasife alınmalıdır."; Log(t, z, kullanici, "STATUS", t.Durum, "İptal", "Ekran", neden); t.Durum = "İptal"; t.RedNedeni = neden; t.GuncellemeZamani = z; return null; } }
-        public static string KartDurum(CariKart k, string durum, string kullanici) { lock (Kilit) { if (durum != "Aktif" && durum != "Pasif") return "Durum Aktif / Pasif olmalı."; k.Durum = durum; k.Not = (k.Not + $" [{DateTime.Now:dd.MM.yyyy} {kullanici}: {durum}]").Trim(); return null; } }
+        /// <summary>Durum otomatik hesaplanır; buradan yalnız "elle pasif" konur ("Pasif") ya da kaldırılır ("Aktif" → otomatik kural yeniden geçerli).</summary>
+        public static string KartDurum(CariKart k, string durum, string kullanici)
+        {
+            lock (Kilit)
+            {
+                if (durum == "Pasif") { k.ElleDurum = "Pasif"; k.ElleDurumKim = kullanici; k.ElleDurumZaman = DateTime.Now; k.Not = (k.Not + $" [{DateTime.Now:dd.MM.yyyy} {kullanici}: elle pasif]").Trim(); return null; }
+                if (durum == "Aktif") { if (k.ElleDurum != "Pasif") return $"Kart elle pasife alınmamış; durum otomatik hesaplanıyor ({k.DurumKaynagi})."; k.ElleDurum = null; k.ElleDurumKim = null; k.ElleDurumZaman = null; k.Not = (k.Not + $" [{DateTime.Now:dd.MM.yyyy} {kullanici}: elle pasif kaldırıldı]").Trim(); return null; }
+                return "Durum Aktif / Pasif olmalı.";
+            }
+        }
+
+        // =====================================================================
+        // SON HAREKET → OTOMATİK DURUM (1 yıl kuralı)
+        // Kaynaklar: kart açılışı; müşteri kodu ile teklif / sipariş (TeklifOrnek), numune (NumuneOrnek), ihracat belge / tahsilat (IhracatBelgeOrnek);
+        // ad eşleşmesiyle alım faturaları (AlimOnayOrnek) ve ödemeler (YapilanOdemelerOrnek); personel carilerinde nakit avans (NakitAvansOrnek).
+        // Ad eşleşmesi: yasal ek ve noktalama temizlenir, iki ardışık sözcük ortaksa ("Vergi Dairesi", "Ziraat Bankası") ya da tek sözcüklü ad diğerinde geçiyorsa ("Petkim") eşleşir.
+        // =====================================================================
+        private static readonly HashSet<string> AdDurak = new HashSet<string> { "aş", "as", "ltd", "şti", "sti", "san", "tic", "ve", "hiz", "co", "inc", "gmbh", "sa", "spa", "srl", "sarl", "pvt", "tc", "sae", "ag", "se" };
+        private static string[] AdTokenleri(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return new string[0];
+            var t = s.ToLower(Tr).Replace("(t)", " ").Replace("(avans)", " ");
+            var sb = new System.Text.StringBuilder(t.Length); foreach (var ch in t) sb.Append(char.IsLetterOrDigit(ch) ? ch : ' ');
+            return sb.ToString().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Where(x => x.Length > 1 && !AdDurak.Contains(x)).ToArray();
+        }
+        /// <summary>Serbest metin alıcı / tedarikçi adı bu cari karta ait mi?</summary>
+        public static bool AdEsle(string ad, CariKart k)
+        {
+            var a = AdTokenleri(ad); if (a.Length == 0) return false;
+            foreach (var hedef in new[] { k.ResmiUnvan, k.KisaAd, k.KisaltmaliUnvan })
+            {
+                var b = AdTokenleri(hedef); if (b.Length == 0) continue;
+                if (a.Length == 1 || b.Length == 1) { var tek = a.Length == 1 ? a[0] : b[0]; var cok = a.Length == 1 ? b : a; if (tek.Length >= 5 && cok.Contains(tek)) return true; if (a.Length == 1 && b.Length == 1 && a[0] == b[0]) return true; continue; }
+                for (int i = 0; i + 1 < a.Length; i++) for (int j = 0; j + 1 < b.Length; j++) if (a[i] == b[j] && a[i + 1] == b[j + 1]) return true;
+            }
+            return false;
+        }
+        private static List<(string Ad, DateTime Tarih, string Kaynak)> _adHareketleri; private static DateTime _adHareketZaman;
+        /// <summary>Ad üzerinden eşlenen hareketler (alım faturaları + ödemeler); 10 sn önbellek.</summary>
+        private static List<(string Ad, DateTime Tarih, string Kaynak)> AdHareketleri()
+        {
+            lock (Kilit)
+            {
+                if (_adHareketleri != null && (DateTime.Now - _adHareketZaman).TotalSeconds < 10) return _adHareketleri;
+                var l = new List<(string, DateTime, string)>();
+                foreach (var f in AlimOnayOrnek.Faturalar) l.Add((f.Tedarikci, f.Tarih, "Alım Faturası " + f.FaturaNo));
+                foreach (var o in YapilanOdemelerOrnek.Liste()) if (o.Durum != "İptal") l.Add((o.Alici, o.Tarih, "Ödeme " + o.No));
+                _adHareketleri = l; _adHareketZaman = DateTime.Now; return l;
+            }
+        }
+        /// <summary>Carinin son hareket tarihi ve kaynağı (bugünden ileri tarihler sayılmaz; kart açılışı taban; taslak kartta bugün).</summary>
+        public static (DateTime Tarih, string Kaynak) SonHareket(CariKart k)
+        {
+            var bugun = DateTime.Today;
+            var en = (Tarih: k.OlusturmaTarihi == default ? bugun : k.OlusturmaTarihi.Date, Kaynak: k.OlusturmaTarihi == default ? "Taslak Kart" : "Kart Açılışı");
+            void G(DateTime? t, string kaynak) { if (t.HasValue && t.Value.Date > en.Tarih && t.Value.Date <= bugun) en = (t.Value.Date, kaynak); }
+            if (!string.IsNullOrEmpty(k.Kod) && k.KartTipi == "Müşteri")
+            {
+                foreach (var t in TeklifOrnek.Liste) if (t.CariKodu == k.Kod && t.Durum != "İptal") { G(t.Tarih, "Teklif " + t.No); G(t.SiparisTarihi, "Sipariş " + t.SiparisNo); }
+                foreach (var n in NumuneOrnek.Liste) if (n.CariKodu == k.Kod && n.Durum != "İptal") { G(n.Tarih, "Numune " + n.No); G(n.TeslimTarihi, "Numune Teslimi " + n.No); }
+                foreach (var b in IhracatBelgeOrnek.Liste) if (b.CariKodu == k.Kod && b.Durum != "İptal") { G(b.YuklemeTarihi, "İhracat " + b.DosyaNo); G(b.Tarih, "Belge Gönderimi " + b.No); G(b.OdemeTarihi, "Tahsilat " + b.FaturaNo); }
+            }
+            foreach (var h in AdHareketleri()) if (h.Tarih.Date > en.Tarih && AdEsle(h.Ad, k)) G(h.Tarih, h.Kaynak);
+            if (k.KartTipi == "Personel Carileri" && !string.IsNullOrEmpty(k.Yetkili))
+                lock (NakitAvansOrnek.Kilit) { foreach (var a in NakitAvansOrnek.Talepler) if (a.Kullanan != null && a.Kullanan.AdSoyad == k.Yetkili) { G(a.Tarih, "Avans " + a.No); foreach (var o in a.Odemeler) G(o.Tarih, "Avans Teslimi " + o.FisNo); } }
+            return en;
+        }
 
         // =====================================================================
         // ÖRNEK KAYITLAR (§8 senaryoları)

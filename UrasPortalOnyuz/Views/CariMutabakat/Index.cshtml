@@ -1,0 +1,180 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string sekme = (string)ViewBag.Sekme ?? "aktif";
+    string kod = (string)ViewBag.Kod ?? "";
+    string ben = (string)ViewBag.Ben; string rol = (string)ViewBag.Rol;
+    string q = Context.Request.Query.ContainsKey("_sekme") ? "?_sekme=1" : "";
+}
+@*
+    CARİ MUTABAKAT YÖNETİMİ — Mali İşler › Muhasebe › Cari Mutabakat ve Mali İşler › Cari İşler › Mutabakat ve Kapama (aynı ekran).
+    "Cari Mutabakat Yönetimi — IT Geliştirme Çalışması v1.0 (29.09.2026)" uyarlaması. Sekmeler:
+      Aktif Cariler / Pasif Cariler : 1. ekran Kontrol Merkezi (§3, 16 kolon; son N ay hareket kuralı otomatik, parametrik) — filtreler, KPI, tekil / toplu Temsilciye Gönder ve Mutabakat Gönder
+      Kontrol Bekleyen Carilerim    : temsilci ekranı (§5 A. İletişim Bilgileri Kontrolü, §6 B. Bakiye Kontrolü, §7 döviz detayı / ekstre / PDF, fark bildirimi)
+      Kapanış Kontrolü              : §8 eski bakiye / değerleme riski listesi ve muhasebe kapanış kararı; temsilci fark bildirimleri
+      Gönderimler ve Yanıtlar       : §10 gönderim geçmişi, PDF önizleme, tekrar gönder, cari yanıtı (Mutabık / İtirazlı), itiraz çözümü
+      Günlük ve Parametreler        : §11 log (kim, ne zaman, önceki / yeni, durum geçişi); §2 aktif-pasif süresi ve §8 eşikleri
+    Veri: /CariMutabakat/Veri, hareketler /CariMutabakat/Hareketler, yazdırılabilir /CariMutabakat/Ekstre ve /CariMutabakat/Mektup (Data/MutabakatOrnek.cs). Betik: wwwroot/js/cari-mutabakat.js
+    Rol demo amaçlı ekrandan seçilir (§11). Derin bağlantı: ?sekme=pasif|temsilci|kapanis|gonderim|gunluk, ?kod=120.001 (detay)
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<link rel="stylesheet" href="/css/cari-kart.css?v=1" />
+<style>
+    .na.cm { --na-k: #0e7490; }
+    .cm-pill { font-size: .68rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; }
+    .cm-rol { display: flex; gap: 6px; align-items: center; margin-left: auto; font-size: .7rem; }
+    .cm-rol select { font-size: .7rem; height: 26px; padding: 2px 6px; width: auto; }
+    .cm-filtre { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px 8px; margin-bottom: 8px; }
+    .cm-filtre label { display: block; font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; }
+    .cm-filtre .form-control, .cm-filtre .form-select { font-size: .72rem; padding: 3px 7px; height: 28px; }
+    .cm-filtre .ara { grid-column: span 2; }
+    @@media (max-width: 1200px) { .cm-filtre { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .cm-arac { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+    .cm-arac .btn { font-size: .68rem; } .cm-arac .n { font-size: .68rem; color: #64748b; margin-left: auto; }
+    #cmTablo td, #cmTablo th, #cmTemsilciListe td, #cmKapanisTablo td, #cmGonderimTablo td, #cmAudit td { white-space: nowrap; }
+    #cmTablo td small, #cmTemsilciListe td small, #cmKapanisTablo td small, #cmGonderimTablo td small, .cm-doviz td small { color: #64748b; display: block; font-size: .62rem; }
+    #cmTablo tbody tr.tik { cursor: pointer; } #cmTablo tbody tr.tik:hover td { background: #ecfeff; } #cmTablo tbody tr.secili td { background: #cffafe; }
+    #cmTablo tfoot td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; }
+    .cm-durum { display: inline-block; font-size: .62rem; font-weight: 800; border-radius: 999px; padding: 2px 8px; white-space: nowrap; border: 1px solid transparent; }
+    .cm-durum.baslanmadi { background: #f1f5f9; color: #475569; border-color: #e2e8f0; } .cm-durum.kontrolde { background: #fef3c7; color: #92400e; border-color: #fde68a; } .cm-durum.kapanis { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .cm-durum.hazir { background: #dcfce7; color: #166534; border-color: #bbf7d0; } .cm-durum.gonderildi { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; } .cm-durum.mutabik { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+    .cm-durum.itirazli { background: #fce7f3; color: #9d174d; border-color: #fbcfe8; } .cm-durum.yeniden { background: #ffedd5; color: #9a3412; border-color: #fed7aa; }
+    .cm-risk { display: inline-block; font-size: .6rem; font-weight: 800; border-radius: 4px; padding: 1px 5px; margin-left: 3px; } .cm-risk.eski { background: #fef3c7; color: #92400e; } .cm-risk.deger { background: #fee2e2; color: #991b1b; }
+    .cm-islem .btn { font-size: .62rem; padding: 1px 7px; margin: 1px; }
+    .cm-adim { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: .7rem; margin-bottom: 8px; }
+    .cm-adim span { background: #fff; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; font-weight: 700; color: #475569; } .cm-adim span.ok { background: #dcfce7; color: #166534; border-color: #bbf7d0; } .cm-adim span.aktif { background: #cffafe; color: #155e75; border-color: #a5f3fc; } .cm-adim i.fa-arrow-right { color: #94a3b8; font-size: .6rem; }
+    .cm-ozet { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 12px; font-size: .72rem; }
+    .cm-ozet .l { font-size: .58rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; letter-spacing: .04em; } .cm-ozet .v { font-weight: 700; color: #0f172a; }
+    .cm-soru { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 14px; font-size: .74rem; } .cm-soru label { display: flex; gap: 8px; align-items: center; padding: 4px 8px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; cursor: pointer; } .cm-soru input { width: 16px; height: 16px; }
+    .cm-kisi td input, .cm-kisi td select { font-size: .7rem; padding: 2px 5px; height: 26px; min-width: 90px; } .cm-kisi td input[type=checkbox], .cm-kisi td input[type=radio] { width: 16px; height: 16px; min-width: 0; }
+    .cm-uyari { font-size: .72rem; border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; } .cm-uyari.sari { background: #fef9c3; border: 1px solid #fde047; color: #713f12; } .cm-uyari.kirmizi { background: #fee2e2; border: 1px solid #fca5a5; color: #7f1d1d; } .cm-uyari.yesil { background: #dcfce7; border: 1px solid #86efac; color: #14532d; } .cm-uyari.mavi { background: #e0f2fe; border: 1px solid #7dd3fc; color: #0c4a6e; }
+    .cm-kilit { opacity: .55; pointer-events: none; }
+    .cm-blokaj { list-style: none; margin: 0; padding: 0; font-size: .7rem; } .cm-blokaj li { display: flex; gap: 6px; align-items: center; padding: 2px 0; } .cm-blokaj i { width: 14px; }
+    .cm-drawer { position: fixed; top: 0; right: -960px; width: 920px; max-width: 96vw; height: 100vh; background: #fff; box-shadow: -8px 0 24px rgba(15,23,42,.18); z-index: 1060; transition: right .25s; overflow: auto; padding: 12px 14px; } .cm-drawer.acik { right: 0; }
+    .cm-drawer-ust { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: sticky; top: 0; background: #fff; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; z-index: 2; flex-wrap: wrap; }
+    .cm-perde { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1055; display: none; } .cm-perde.acik { display: block; }
+    .cm .ck-master { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .cm-param { display: grid; grid-template-columns: repeat(4, auto); gap: 8px 16px; align-items: end; font-size: .72rem; } .cm-param label { display: block; font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; } .cm-param input { width: 100px; font-size: .74rem; height: 28px; text-align: center; }
+    .cm-liste-satir { cursor: pointer; } .cm-liste-satir.secili td { background: #cffafe; }
+    .cm-anlik { font-size: .68rem; color: #0c4a6e; background: #e0f2fe; border: 1px solid #7dd3fc; border-radius: 8px; padding: 4px 10px; display: inline-block; }
+</style>
+}
+
+<div class="container-fluid py-3 na cm" id="cm" data-sekme="@(q != "" ? "1" : "")" data-baslangic="@sekme" data-kod="@kod" data-rol="@rol">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-scale-balanced"></i></span>Cari Mutabakat Yönetimi</h4>
+        @* Rozetler tıklanabilir (rapor-tema.js) *@
+        <span class="cm-pill" data-git="aktif|#cmDurumF" title="Kontrol Merkezi › Mutabakat Durumu filtresi"><i class="fas fa-robot me-1"></i>Otomatik Mutabakat Durumu</span>
+        <span class="cm-pill" data-git="gunluk|#cmPAy" title="Parametreler › aktif / pasif süresi"><i class="fas fa-toggle-on me-1"></i>Aktif / Pasif · <span id="cmAyRozet">12</span> Ay Kuralı</span>
+        <span class="cm-pill" data-git="kapanis|#cmKapanisTablo" title="Kapanış Kontrolü sekmesi"><i class="fas fa-triangle-exclamation me-1"></i>Eski Bakiye · Değerleme Riski</span>
+        <span class="cm-rol"><label>Rol</label><select class="form-select" id="cmRol"></select><label>Temsilci</label><select class="form-select" id="cmTemsilciSec"></select><span class="cm-pill" id="cmBen"><i class="fas fa-user me-1"></i>@ben</span></span>
+        <span class="sub w-100">Muhasebe için merkezi cari mutabakat ve ön kontrol ekranı: müşteri, tedarikçi ve çift rollü tüm cariler tek yapıda. <b>Süreç:</b> Muhasebe cariyi seçer → sistem şirket içi yetkiliyi otomatik atar ve <b>Temsilciye Gönder</b>ir → temsilci <b>iletişim bilgilerini</b> ve <b>bakiyeyi</b> kontrol eder → sistem cariyi <b>Gönderime Hazır</b> yapar → muhasebe tekil / toplu <b>otomatik mutabakat gönderir</b> → yanıt Mutabık / İtirazlı. Mutabakat Durumu elle seçilmez; kontrollere göre otomatik ilerler. İletişim, bakiye veya eski bakiye kapanış kontrolü çözülmemiş hiçbir cari gönderime hazır olamaz.</span>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+    <div class="na-sekme" id="cmSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="aktif"><i class="fas fa-circle-check me-1"></i>Aktif Cariler <span class="n" id="cmNAktif">0</span></button>
+        <button type="button" data-p="pasif"><i class="fas fa-circle-pause me-1"></i>Pasif Cariler <span class="n" id="cmNPasif">0</span></button>
+        <button type="button" data-p="temsilci"><i class="fas fa-user-check me-1"></i>Kontrol Bekleyen Carilerim <span class="n" id="cmNTemsilci">0</span></button>
+        <button type="button" data-p="kapanis"><i class="fas fa-triangle-exclamation me-1"></i>Kapanış Kontrolü <span class="n" id="cmNKapanis">0</span></button>
+        <button type="button" data-p="gonderim"><i class="fas fa-paper-plane me-1"></i>Gönderimler ve Yanıtlar <span class="n" id="cmNGonderim">0</span></button>
+        <button type="button" data-p="gunluk"><i class="fas fa-clock-rotate-left me-1"></i>Günlük ve Parametreler</button>
+    </div>
+
+    @* ============================ KONTROL MERKEZİ (Aktif / Pasif) ============================ *@
+    <div class="na-panel" data-p="merkez">
+        <div class="cm-adim"><span class="aktif">1 · Muhasebe cariyi seçer</span><i class="fas fa-arrow-right"></i><span>2 · Temsilci iletişimi kontrol eder</span><i class="fas fa-arrow-right"></i><span>3 · Temsilci bakiyeyi kontrol eder</span><i class="fas fa-arrow-right"></i><span>4 · Sistem gönderime hazır yapar</span><i class="fas fa-arrow-right"></i><span>5 · Muhasebe otomatik mutabakat gönderir</span><span class="ms-auto cm-anlik" id="cmAnlik"></span></div>
+        <div class="na-kpi" id="cmKpi" data-dinamik="kapali" style="grid-template-columns:repeat(10,1fr)"></div>
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Filtreler · <span id="cmModBaslik">Aktif Cariler</span></span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="cmTemizle" style="font-size:.66rem">Temizle</button><button type="button" class="btn btn-light btn-sm py-0" id="cmExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div>
+            <div class="na-kart-g">
+                <div class="cm-filtre">
+                    <div class="ara"><label>Ara</label><input class="form-control" id="cmAra" placeholder="Cari kodu, ünvan, temsilci, yetkili, e-posta…"></div>
+                    <div><label>Şirket</label><select class="form-select" id="cmSirket"><option value="">Tümü</option></select></div>
+                    <div><label>Cari Kart Tipi</label><select class="form-select" id="cmTip"><option value="">Tümü</option></select></div>
+                    <div><label>Cari Sınıfı</label><select class="form-select" id="cmSinif"><option value="">Tümü</option></select></div>
+                    <div><label>Cari Rolü</label><select class="form-select" id="cmRolF"><option value="">Tümü</option></select></div>
+                    <div><label>İlişki Durumu</label><select class="form-select" id="cmIliski"><option value="">Tümü</option></select></div>
+                    <div><label>Temsilci</label><select class="form-select" id="cmTemsilciF"><option value="">Tümü</option></select></div>
+                    <div><label>İletişim Bilgileri Durumu</label><select class="form-select" id="cmIletisimF"><option value="">Tümü</option></select></div>
+                    <div><label>Birden Fazla Döviz</label><select class="form-select" id="cmDovizF"><option value="">Tümü</option><option value="var">Var</option><option value="yok">Yok</option></select></div>
+                    <div><label>Mutabakat Durumu</label><select class="form-select" id="cmDurumF"><option value="">Tümü</option></select></div>
+                    <div><label>Son Mutabakat Tarihi</label><select class="form-select" id="cmSonMutF"><option value="">Tümü</option><option value="yok">Mutabakat Yok</option><option value="3">Son 3 Ay</option><option value="6">3–6 Ay</option><option value="12">6–12 Ay</option><option value="eski">12 Aydan Eski</option></select></div>
+                    <div><label>Son Mutabakat Sonrası İşlem</label><select class="form-select" id="cmSonrasiF"><option value="">Tümü</option><option value="var">Var</option><option value="yok">Yok</option></select></div>
+                    <div><label>Bakiye Yaşlandırması</label><select class="form-select" id="cmYasF"><option value="">Tümü</option><option value="eski">Eşikten Eski Açık Bakiye</option><option value="deger">Değerleme Riski</option><option value="acik">Açık Kalemi Olan</option><option value="yok">Açık Kalemi Olmayan</option></select></div>
+                </div>
+                <div class="cm-arac">
+                    <label style="font-size:.7rem;font-weight:700"><input type="checkbox" id="cmHepsi" class="me-1">Listeyi Seç</label>
+                    <button type="button" class="btn btn-primary btn-sm" id="cmTopluTemsilci"><i class="fas fa-user-check me-1"></i>Seçilenleri Temsilciye Gönder</button>
+                    <button type="button" class="btn btn-success btn-sm" id="cmTopluMutabakat"><i class="fas fa-paper-plane me-1"></i>Seçilenlere Mutabakat Gönder</button>
+                    <span class="n" id="cmSayi"></span>
+                </div>
+                <div class="table-responsive" style="max-height:60vh">
+                    @* §3 Kontrol merkezi kolonları *@
+                    <table class="na-tablo" id="cmTablo" data-dinamik="kapali">
+                        <thead><tr><th></th><th>Şirket</th><th>Cari Kodu</th><th>Cari Kısa Adı / Resmi Ünvan</th><th>Cari Kart Tipi</th><th>Cari Sınıfı</th><th>Cari Rolü</th><th>İlişki Durumu</th><th>Temsilcisi</th><th>İletişim Bilgileri Durumu</th><th class="s">Güncel Bakiye · TL Karşılığı</th><th>Birden Fazla Döviz</th><th>Bakiye Yaşlandırması</th><th>Son Mutabakat Tarihi</th><th>Son Mutabakat Sonrası İşlem</th><th>Mutabakat Durumu</th><th>İşlem</th></tr></thead>
+                        <tbody></tbody>
+                        <tfoot><tr><td colspan="10">Toplam (filtre)</td><td class="s" id="cmTopBakiye"></td><td colspan="6" id="cmTopOzet"></td></tr></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ============================ TEMSİLCİ EKRANI ============================ *@
+    <div class="na-panel" data-p="temsilci">
+        <div class="row g-2">
+            <div class="col-lg-4">
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas fa-user-check me-1"></i>Kontrol Bekleyen Carilerim</span><span class="not" id="cmTemsilciNot"></span></div>
+                    <div class="na-kart-g">
+                        <div class="cm-uyari mavi" style="font-size:.68rem">Yalnız <b id="cmTemsilciAd"></b> adına atanmış, süreci açık cariler listelenir. Sıra: önce <b>A. İletişim Bilgileri Kontrolü</b>, sonra <b>B. Bakiye Kontrolü</b>. Tüm kontroller uygunsa "Kontrolü Tamamla ve Onayla" ile cari otomatik <b>Gönderime Hazır</b> olur.</div>
+                        <div class="table-responsive" style="max-height:60vh"><table class="na-tablo" id="cmTemsilciListe" data-dinamik="kapali"><thead><tr><th>Cari</th><th>Şirket</th><th>Adım</th><th>Mutabakat Durumu</th></tr></thead><tbody></tbody></table></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-8" id="cmKontrolPanel">
+                <div class="na-kart"><div class="na-kart-g na-bos">Soldaki listeden kontrol edilecek cariyi seçin.</div></div>
+            </div>
+        </div>
+    </div>
+
+    @* ============================ KAPANIŞ KONTROLÜ ============================ *@
+    <div class="na-panel" data-p="kapanis">
+        <div class="cm-uyari sari">Yıllardır açık kalan ve her dönem değerlemeye giren bakiyeler mutabakat öncesinde yakalanır. <b>Bakiye yaşlandırması</b> = açık bakiyeyi oluşturan en eski açık faturanın tarihi; eşikten (<b><span id="cmEskiEsik">180</span> gün</b>) eski açık bakiye <b>Eski Bakiye Uyarısı</b>, yabancı para bakiyesi <b><span id="cmDegerEsik">365</span> günden</b> eskiyse <b>Değerleme Riski</b> verir. Kapanış kontrolü çözülmeden cari <b>Gönderime Hazır</b> olamaz.</div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-triangle-exclamation me-1"></i>Eski Bakiye / Değerleme Riski Olan Cariler</span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="cmKapanisExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="cmKapanisTablo" data-dinamik="kapali"><thead><tr><th>Cari</th><th>Aktif / Pasif</th><th>Döviz</th><th class="s">Açık Bakiye</th><th class="s">Açık Fatura</th><th>En Eski Açık Fatura</th><th class="s">Bakiye Yaşı (Gün)</th><th>Risk</th><th>Mutabakat Durumu</th><th>Kapanış Kontrolü</th><th>İşlem</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-flag me-1"></i>Temsilci Fark / Düzeltme Bildirimleri</span><span class="not">Fark çözülmeden cari Gönderime Hazır olamaz</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="cmFarkTablo" data-dinamik="kapali"><thead><tr><th>Cari</th><th>Bildiren</th><th>Zaman</th><th>Fark / Düzeltme</th><th>Durum</th><th>İşlem</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="na-kart" id="cmKapanisFormKart" style="display:none"><div class="na-kart-b"><span><i class="fas fa-pen-to-square me-1"></i>Kapanış Kontrolü · <span id="cmKapanisFormBaslik"></span></span><button type="button" class="btn btn-light btn-sm py-0" id="cmKapanisKapat" style="font-size:.66rem"><i class="fas fa-xmark"></i></button></div><div class="na-kart-g"><div class="row g-2"><div class="col-md-3"><label class="form-label">Kapanış Seçimi <span class="z">*</span></label><select class="form-select" id="cmKapanisSecim"></select></div><div class="col-md-7"><label class="form-label">Kapanış Açıklaması <span class="z">*</span></label><input class="form-control" id="cmKapanisAciklama" placeholder="Muhasebe tarafından zorunlu açıklama (bakiyenin gerçekten açık olup olmadığı, eksik kapama…)"></div><div class="col-md-2 d-flex align-items-end"><button type="button" class="btn btn-primary btn-sm w-100" id="cmKapanisSonuclandir" style="font-size:.72rem">Sonuçlandır</button></div></div><div id="cmKapanisDetay" class="mt-2"></div></div></div>
+    </div>
+
+    @* ============================ GÖNDERİMLER VE YANITLAR ============================ *@
+    <div class="na-panel" data-p="gonderim">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-paper-plane me-1"></i>Mutabakat Gönderimleri</span><span class="d-flex gap-2 align-items-center"><select class="form-select" id="cmGonderimF" style="font-size:.7rem;height:24px;width:170px;padding:2px 6px"><option value="">Tüm Sonuçlar</option><option>Bekliyor</option><option>Mutabık</option><option>İtirazlı</option></select><button type="button" class="btn btn-light btn-sm py-0" id="cmGonderimExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:60vh"><table class="na-tablo" id="cmGonderimTablo" data-dinamik="kapali"><thead><tr><th>Belge No</th><th>Gönderim</th><th>Cari</th><th>Kime</th><th>Kanal</th><th>Bakiye Özeti</th><th class="s">TL Karşılığı</th><th>Sonuç</th><th>Yanıt</th><th>Gönderen</th><th>İşlem</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="na-kart" id="cmYanitKart" style="display:none"><div class="na-kart-b"><span><i class="fas fa-reply me-1"></i>Cari Yanıtını İşle · <span id="cmYanitBaslik"></span></span><button type="button" class="btn btn-light btn-sm py-0" id="cmYanitKapat" style="font-size:.66rem"><i class="fas fa-xmark"></i></button></div><div class="na-kart-g"><div class="row g-2"><div class="col-md-2"><label class="form-label">Sonuç</label><select class="form-select" id="cmYanitSonuc"><option>Mutabık</option><option>İtirazlı</option></select></div><div class="col-md-8"><label class="form-label">Açıklama <small class="text-muted">(itirazda fark detayı zorunlu)</small></label><input class="form-control" id="cmYanitAciklama" placeholder="Cari yanıtı / fark detayı"></div><div class="col-md-2 d-flex align-items-end"><button type="button" class="btn btn-primary btn-sm w-100" id="cmYanitKaydet" style="font-size:.72rem">Kaydet</button></div></div></div></div>
+    </div>
+
+    @* ============================ GÜNLÜK VE PARAMETRELER ============================ *@
+    <div class="na-panel" data-p="gunluk">
+        <div class="row g-2">
+            <div class="col-lg-4">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-sliders me-1"></i>Parametreler</span><span class="not">Muhasebe / Yönetici</span></div><div class="na-kart-g">
+                    <div class="cm-param"><div><label>Aktif / Pasif (Ay)</label><input type="number" class="form-control" id="cmPAy" min="1" max="60"></div><div><label>Eski Bakiye Eşiği (Gün)</label><input type="number" class="form-control" id="cmPEski" min="30" max="3650"></div><div><label>Değerleme Riski (Gün)</label><input type="number" class="form-control" id="cmPDeger" min="30" max="3650"></div><div><button type="button" class="btn btn-primary btn-sm" id="cmPKaydet" style="font-size:.7rem"><i class="fas fa-floppy-disk me-1"></i>Kaydet</button></div></div>
+                    <div class="na-mini">Aktif / Pasif sekmesi son N ay içindeki cari hareketine göre otomatik ayrılır; cari kartın ana statüsünü değiştirmez. Eşikler bakiye yaşlandırması uyarılarını belirler.</div>
+                </div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-shield-halved me-1"></i>Yetki Matrisi (§11)</span></div><div class="na-kart-g" style="font-size:.7rem;color:#475569"><ul class="mb-0 ps-3"><li><b>Muhasebe:</b> tüm carileri görür, temsilciye gönderir, gönderime hazır mutabakatları yollar, kapanış kontrolünü ve farkları sonuçlandırır, cari yanıtını işler.</li><li><b>Satış Temsilcisi:</b> kendisine atanan müşteri carilerinin iletişim ve bakiye kontrolü.</li><li><b>Satın Alma Sorumlusu:</b> kendisine atanan tedarikçi carilerinin iletişim ve bakiye kontrolü.</li><li><b>Yönetici:</b> raporlama, istisna ve işlem geçmişi; gerektiğinde onay / yetki devri (tüm yetkiler).</li></ul></div></div>
+            </div>
+            <div class="col-lg-8">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Günlük · İzlenebilirlik</span><span class="not">Tüm kontrol, değişiklik, gönderim ve durum geçişleri · eski kayıt silinmez</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:78vh"><table class="na-tablo" id="cmAudit" data-dinamik="kapali"><thead><tr><th>Tarih-Saat</th><th>İşlemi Yapan</th><th>Cari · İşlem</th><th>Önceki Değer</th><th>Yeni Değer</th><th>Açıklama</th><th>Durum Geçişi</th></tr></thead><tbody></tbody></table></div></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="cm-perde" id="cmPerde"></div>
+    <div class="cm-drawer" id="cmDrawer">
+        <div class="cm-drawer-ust"><b id="cmDrawerBaslik" style="font-size:.9rem"></b><span class="ms-auto d-flex gap-1 flex-wrap" id="cmDrawerAksiyon"></span><button type="button" class="btn btn-light btn-sm py-0" id="cmDrawerKapat" style="font-size:.66rem"><i class="fas fa-xmark"></i></button></div>
+        <div id="cmDrawerIc"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="/js/cari-mutabakat.js?v=1"></script>
+}

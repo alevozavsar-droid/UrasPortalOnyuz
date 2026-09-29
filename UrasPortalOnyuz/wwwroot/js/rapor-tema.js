@@ -2,8 +2,9 @@
 // RAPOR TEMASI (davranış) — bütün rapor sayfalarında (body.rapor-sayfasi):
 //  * Sayfa başlığına konuya uygun renkli ikon karosu (başlıkta zaten ikon varsa dokunmaz).
 //  * Tablo hücrelerindeki durum sözcükleri (Onaylandı, Hatalı, Beklemede, Aktif, Kapalı…) renkli rozete çevrilir.
-//  * Sayısal hücreler sağa yaslanır; eksi tutarlar kırmızı vurgulanır. Sayısal sütunların başlığı ve toplam hücresi de
-//    sağa yaslanır (başlık solda, rakam sağda kalınca sütunlar kaymış görünüyordu).
+//  * Sayısal hücreler işaretlenir (rt-sayi: tabular rakam; eksi tutarlar kırmızı). Hizalama tema CSS'inde: tüm rapor tablolarında
+//    hücre ve başlıklar yatay / dikey ORTALI (ana ERP raporlarındaki text-center düzeni; sola / sağa yaslı sütunlar yan yana gelince
+//    değerler komşu sütuna kaymış görünüyordu). rt-sayi artık hizayı değiştirmez, yalnız rakam biçimini verir.
 //  Sonradan (AJAX ile) dolan tablolar için gözlemci ile tekrar uygulanır; hücreler bir kez işaretlenir.
 // ============================================================
 (function () {
@@ -42,8 +43,30 @@
     h.insertBefore(sp, h.firstChild);
   }
 
+  // ---- Tıklanabilir başlık rozetleri / akış kutuları (tüm raporlar) ----
+  //   data-git="sekme|#odak" → aynı sayfadaki .na-sekme düğmesini (data-p=sekme) açar, ardından #odak alanına kaydırıp odaklar ve kısa süre vurgular
+  //   data-url="/Ekran?kod=…" (+ data-baslik) → ekranı portal sekmesinde açar (kabuk yoksa yeni pencere)
+  //   Gerçek bağlantı / düğme / alan içeren tıklamalara dokunmaz.
+  function portalAc(url, baslik) {
+    const sekmeli = new URLSearchParams(location.search).has('_sekme');
+    if (window.top && window.top !== window && typeof window.top.portalSekmeAc === 'function') window.top.portalSekmeAc(baslik, url);
+    else window.open(url + (sekmeli ? (url.includes('?') ? '&' : '?') + '_sekme=1' : ''), '_blank');
+  }
+  document.addEventListener('click', function (e) {
+    const el = e.target.closest('[data-git], [data-url]'); if (!el || el.closest(KAPSAM_DISI)) return;
+    if (e.target.closest('a, button, input, select, textarea, label')) return;
+    if (el.dataset.url) { portalAc(el.dataset.url, el.dataset.baslik || el.textContent.trim().slice(0, 40)); return; }
+    const par = (el.dataset.git || '').split('|'); const sekme = par[0], odak = par[1];
+    if (sekme) { const b = document.querySelector('.na-sekme button[data-p="' + sekme + '"]'); if (b && !b.classList.contains('aktif')) b.click(); }
+    if (odak) setTimeout(function () {
+      const o = document.querySelector(odak); if (!o) return;
+      o.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (typeof o.focus === 'function') o.focus({ preventScroll: true });
+      o.classList.add('rt-vurgu'); setTimeout(function () { o.classList.remove('rt-vurgu'); }, 1800);
+    }, 80);
+  });
+
   // ---- Hücreler ----
-  const SAYI = /^[-+]?[\d.]+(,\d+)?\s?(₺|TL|\$|€|%)?$|^[-+]?[\d,]+(\.\d+)?\s?(₺|TL|\$|€|%)?$/;
+  const SAYI =/^[-+]?[\d.]+(,\d+)?\s?(₺|TL|\$|€|%)?$|^[-+]?[\d,]+(\.\d+)?\s?(₺|TL|\$|€|%)?$/;
   let islenen = 0;
   function hucreler(kok) {
     const tablolar = Array.from((kok || document).querySelectorAll('table')).filter(t => !t.closest(KAPSAM_DISI) && t.tBodies.length && t.tHead && t.tHead.rows.length && t.tHead.rows[0].cells.length >= 3);

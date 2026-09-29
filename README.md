@@ -178,7 +178,16 @@ tasarımından uyarlandı:
   bağımlı); canlı validasyon (§13), olası cari kodu, onay akışı (Muhasebe cari açılış onayı; grup içi / ilişkili / özel takipte Direktör);
   taslak, onaya gönder, onayla / reddet, iptal; onaylanınca kart CARİ_MASTER'a otomatik açılır (120.xxx / 320.xxx …) ve çift rolde eş kart
   karşılıklı bağlanır. Örnek veri §8 senaryolarını (ABC Tekstil'in 5 faaliyet satırı, çift rol eş kartlar, grup içi, ilişkili, yurtdışı şube /
-  bayi / distribütör, özel takip, finansal / resmi / personel carileri) ve her durumdan talepleri içerir.
+  bayi / distribütör, özel takip, finansal / resmi / personel carileri) ve her durumdan talepleri içerir. **Durum otomatiktir** (`CariKart.Durum`
+  hesaplanır): son 1 yıl (365 gün) içinde cari hareketi varsa Aktif, yoksa Pasif. Hareket kaynakları `CariKartOrnek.SonHareket`: kart açılışı; cari
+  koduyla teklif / sipariş (`TeklifOrnek`), numune (`NumuneOrnek`), ihracat yükleme / belge / tahsilat (`IhracatBelgeOrnek`); ad eşleşmesiyle
+  (`AdEsle`: yasal ekler temizlenir, iki ardışık sözcük ya da tek sözcüklü ad) alım faturaları (`AlimOnayOrnek`) ve ödemeler (`YapilanOdemelerOrnek`);
+  personel carilerinde nakit avans. "Elle Pasife Al" (`ElleDurum`) otomatik kuralı ezer, "Elle Pasifi Kaldır" kuralı geri getirir. Liste ve detayda
+  son hareket tarihi ve durum kaynağı (otomatik / elle) gösterilir; diğer ekranların cari kart DTO'ları `durumKaynagi` / `sonHareketTr` taşır.
+* **Tıklanabilir rapor rozetleri** (`wwwroot/js/rapor-tema.js`, `rapor-tema.css`): rapor başlığındaki ikonlu rozet / akış kutusu `data-git="sekme|#odak"`
+  taşıyorsa tıklanınca `.na-sekme` içindeki o sekme açılır, `#odak` alanına kaydırılıp odaklanır ve kısa süre vurgulanır; `data-url` (+ `data-baslik`)
+  taşıyorsa ekran portal sekmesinde açılır. Müşteri Teklifleri, Numune Gönderim, İhracat Belge, Fiyat / Kâr (satıcı ve müşteri kutuları seçime göre cari
+  kartı açar) ve Yapılan Ödemeler başlıklarında kullanılır.
 * **Yapılan Ödemeler** (Yönetim › Özel Analizler › Özel Raporlar; `Controllers/YapilanOdemelerController.cs`, `Views/YapilanOdemeler/Index.cshtml`,
   betik `wwwroot/js/yapilan-odemeler.js`, veri `Data/YapilanOdemelerOrnek.cs`): tüm grup şirketlerinin yaptığı ödemelerin konsolide listesi —
   **Banka (Havale / EFT)**, **Çek** (verilen vadeli çekler: vadesi gelen "Ödendi", gelmeyen "Vade Bekliyor"), **Nakit (Kasa)** çıkış fişleri
@@ -233,13 +242,42 @@ tasarımından uyarlandı:
   Şirket × Bölge ve Ay matrisleri; kargo dağılımı; en çok numune gönderilen 10 müşteri; detayda gönderim bilgileri, kalemler ve bedel, kargo ve masraf
   kutuları, hareket zaman çizelgesi, sonuç, cari kart, müşterinin numune geçmişi; "Kargo Takip", "Teklif …" ve "Cari Kartı Aç" bağlantıları; Excel (liste,
   kalem, şirket özeti). Derin bağlantı: `/NumuneGonderim?sekme=musteri | liste`, `?no=NMN-2026-00042`, `?kod=120.001`.
+* **Cari Mutabakat Yönetimi** (Mali İşler › Muhasebe › Cari Mutabakat ve Mali İşler › Cari İşler › Mutabakat ve Kapama — aynı ekran;
+  `Controllers/CariMutabakatController.cs`, `Views/CariMutabakat/Index.cshtml` + yazdırılabilir `Ekstre.cshtml` / `Mektup.cshtml`, betik
+  `wwwroot/js/cari-mutabakat.js`, veri ve süreç `Data/MutabakatOrnek.cs`): "Cari Mutabakat Yönetimi — Otomatik Mutabakat, İç Kontrol ve Eski Bakiye
+  Risk Yönetimi — IT Geliştirme Çalışması v1.0 (29.09.2026)" uyarlaması. Müşteri / tedarikçi / çift rollü tüm cariler (CARİ_MASTER) tek yapıda; cari
+  hareketleri (`MtHareket`: fatura, tahsilat / ödeme, çek, kur farkı; FIFO kapama, açık kalemler) cari koduna göre deterministik üretilir ve
+  `CariKartOrnek.SonHareket` ile tutarlıdır. **Aktif / Pasif sekmeleri** son `AktifPasifAy` (12, parametrik) ay hareket kuralıyla otomatik ayrılır; cari
+  kartın ana statüsünü değiştirmez. **Kontrol Merkezi** (§3): 16 kolon (şirket, kod, ünvan, kart tipi, sınıf, rol, ilişki, temsilci, iletişim bilgileri
+  durumu Eksik / Kontrol Bekliyor / Tamamlandı, güncel bakiye TL karşılığı, birden fazla döviz, bakiye yaşlandırması = en eski açık fatura + yaş, son
+  mutabakat, son mutabakat sonrası işlem, mutabakat durumu, işlem), 12 filtre, KPI'lar, seçimli toplu işlemler. **İç yetkili** otomatik
+  (`MutabakatOrnek.Temsilciler`: Müşteri → ana faaliyet satış temsilcisi, Tedarikçi → `AlimOnayOrnek.Satinalmacilar` şirkete göre, Çift Rol → ikisi;
+  ikili onay). **Temsilci ekranı** ("Kontrol Bekleyen Carilerim"): A. İletişim Bilgileri Kontrolü (`MtKisi`: birden fazla kişi; ünvan, departman, e-posta,
+  telefon, cep, mutabakat yetkilisi, tek ana yetkili, e-posta gönder, bilgiler doğru mu, not; "İletişim Bilgileri Tamamlandı" ana yetkili + e-posta + doğru
+  zorunlu) ve B. Bakiye Kontrolü (bakiye / kur tarihi, borç, alacak, net ve yönü, döviz detayı satır satır: Ekstreyi Gör / PDF Ekstre / Excel, açık fatura,
+  açık çek / senet, bekleyen ödeme / tahsilat, mahsup / virman, son hareket, yaşlandırma, son mutabakat; zorunlu kontrol soruları; "Fark / Düzeltme Bildir";
+  "Kontrolü Tamamla ve Onayla" iletişim tamamlanmadan verilemez). **Kapanış Kontrolü** (§8): `MtDoviz.EskiBakiyeUyari` (yaş > `EskiBakiyeGun`) ve
+  `DegerlemeRiski` (yabancı para, yaş > `DegerlemeRiskiGun`) otomatik; muhasebe kapanış seçimi (mahsup / tahsilat / ödeme / virman / ters kayıt /
+  inceleme) + zorunlu açıklama ile çözer; temsilci fark bildirimleri de burada çözülür. **Otomatik durum** (`DurumHesapla`, §9): Henüz Başlanmadı → İç
+  Kontrolde → Kapanış Kontrolü Gerekli / Gönderime Hazır → Gönderildi → Mutabık / İtirazlı → Yeniden Mutabakat Gerekli (son mutabakat sonrası yeni
+  hareket). **Gönderim** (§10): blokaj kontrolleri (`MtCari.Blokajlar`), ana yetkilinin e-postasına tekil / toplu, PDF önizleme (mutabakat mektubu),
+  tekrar gönder, cari yanıtı Mutabık / İtirazlı (fark detayı zorunlu), itiraz çözümü yeni iç kontrol turu açar. **Günlük** (§11): cari ve genel log
+  (kim, ne zaman, önceki / yeni değer, açıklama, durum geçişi); parametreler (aktif / pasif ay, eski bakiye ve değerleme riski eşikleri). Rol demo amaçlı
+  ekrandan seçilir; temsilci rollerinde temsilci adı seçilir. Örnek senaryolar: 120.001 İç Kontrolde, 120.002 Gönderime Hazır, 120.004 Gönderildi, 120.007
+  Mutabık / Yeniden Mutabakat Gerekli, 320.001 İtirazlı, 120.008 eski EUR kalem (değerleme riski, Kapanış Kontrolü Gerekli), 320.009 pasif 2023 EUR açık
+  kalem. Derin bağlantı: `/CariMutabakat?sekme=pasif|temsilci|kapanis|gonderim|gunluk`, `?kod=120.001`.
 * **Müşteri Fiyat ve Kâr Oranları** (YALNIZ Yönetim › Yönetim Özeti › Fiyat ve Kâr Yönetimi; `Controllers/FiyatYonetimiController.cs`,
   `Views/FiyatYonetimi/Index.cshtml`, betik `wwwroot/js/fiyat-yonetimi.js`, veri ve kurallar `Data/FiyatOrnek.cs`): iki katmanlı fiyatlandırma.
-  **1. katman (Üretici → Yetkili Satıcı):** Uras Kimya ürünleri (`FiyatOrnek.Urunler`: Boya Emprime / Dijital, Tekstil Yardımcı Kimyasalları, Tekstil
-  Binderleri; kod, hiyerarşi, üretim maliyeti, liste fiyatı) yetkili satıcılara (`FiyatOrnek.Saticilar`: Selvi Kimya 120.006, Alv Kimya 120.005, Uras Kimya
-  GmbH 120.009) kaç % kârla satılır — Genel (toplu) / Ürün Grubu / Kalem (ürün) oranı; en özel tanım kazanır (`OranCoz`: Kalem > Grup > Genel); satıcı alış
-  fiyatı = maliyet × (1 + oran). **2. katman (Satıcı → Müşteri):** yetkili satıcı her müşteri carisine (CARİ_MASTER müşteri kartları) ürün ürün kaç % kârla
-  satar; müşteri satış fiyatı = satıcı alış fiyatı × (1 + oran); liste fiyatına göre fark ve uçtan uca marj. Ekran: satıcı / müşteri seçimi, cari kart özeti,
+  **Ana para birimi USD:** üretim maliyetleri ve fiyatlar USD tutulur. **1. katman (Üretici → Yetkili Satıcı):** Uras Kimya ürünleri (`FiyatOrnek.Urunler`:
+  Boya Emprime / Dijital, Tekstil Yardımcı Kimyasalları, Tekstil Binderleri; kod, hiyerarşi, üretim maliyeti $, liste fiyatı $) yetkili satıcılara
+  (`FiyatOrnek.Saticilar`: Selvi Kimya 120.006, Alv Kimya 120.005, Uras Kimya GmbH 120.009) kaç % kârla satılır — Genel (toplu) / Ürün Grubu / Kalem (ürün)
+  oranı; en özel tanım kazanır (`OranCoz`: Kalem > Grup > Genel); satıcı alış fiyatı ($) = maliyet × (1 + oran). **2. katman (Satıcı → Müşteri):** yetkili
+  satıcı her müşteri carisine (CARİ_MASTER müşteri kartları) ürün ürün kaç % kârla satar; müşteri satış fiyatı ($) = satıcı alış fiyatı × (1 + oran); yanında
+  **EUR ve TL karşılığı** (`FyKur`: piyasa USD/TL ve EUR/TL + döviz kâr marjı % → fiyatlandırma kuru = piyasa × (1 + marj), fiyatlandırma paritesi = parite ÷
+  (1 + marj); kur hareketinden zarar edilmemesi için piyasanın üstünde kur alınır; `/FiyatYonetimi/KurKaydet`, yalnız Yönetici), liste fiyatına göre fark ve
+  uçtan uca marj. Sütun adları: "Satıcı Alış Fiyatı" ($ ve ₺; Uras Kimya → satıcı), "Müşteriye Satış Fiyatı" ($ / € / ₺; satıcı → müşteri);
+  ayrı bir liste fiyatı kavramı yoktur (fiyatlar yalnız maliyet + kâr oranından türer); tabloların üst başlık satırı (`tr.fy-grp`) sütun gruplarını
+  kimden kime olduğuyla yazar. Ekran: kur kartı (Müşteri Fiyatları sekmesinde), satıcı / müşteri seçimi, cari kart özeti,
   genel oran ve grup oranı kutuları, ürün tablosunda kalem oranı girişi (değişenler sarı işaretlenir), anlık hesaplanan fiyatlar, Kaydet (yalnız değişen
   tanımlar gönderilir; boş oran = tanım silme), Vazgeç, Excel fiyat listeleri; Özet sekmesinde satıcı × grup ve müşteri × grup matrisleri ve değişiklik
   günlüğü (kim, ne zaman, eski → yeni). Kaydetme yalnız Yönetici yetkisiyle (`OrnekVeri.Kullanicilar` Yetki = "A", ör. `it02`); diğer roller salt okunur.

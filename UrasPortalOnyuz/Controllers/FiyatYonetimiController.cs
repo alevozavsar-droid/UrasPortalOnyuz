@@ -37,8 +37,11 @@ namespace WebApplication3.Controllers
                     success = true,
                     ben = new { ad = OrnekVeri.KullaniciAdi(Kod()), kod = Kod(), yonetici = FiyatOrnek.Yonetici(Kod()) },
                     uretici = FiyatOrnek.Uretici,
+                    paraBirimi = "USD",
+                    // Kur parametreleri: piyasa kuru + döviz kâr marjı → fiyatlandırma kuru (TL karşılığı) ve fiyatlandırma paritesi (EUR karşılığı)
+                    kur = new { FiyatOrnek.Kur.UsdTl, FiyatOrnek.Kur.EurTl, FiyatOrnek.Kur.Marj, tarih = FiyatOrnek.Kur.Tarih.ToString("dd.MM.yyyy"), FiyatOrnek.Kur.Kaynak, FiyatOrnek.Kur.Guncelleyen, FiyatOrnek.Kur.FiyatUsdTl, FiyatOrnek.Kur.Parite, FiyatOrnek.Kur.FiyatParite },
                     gruplar = FiyatOrnek.Gruplar.Select(g => new { anahtar = g.Anahtar, ad = g.Ad }),
-                    urunler = FiyatOrnek.Urunler.Select(u => new { u.Kod, u.Ad, u.AnaGrup, u.Grup, grupAnahtari = u.GrupAnahtari, u.UrunSinifi, u.UrunGrubu, u.Seri, hiyerarsi = string.Join(" › ", new[] { u.UrunSinifi, u.UrunGrubu, u.Seri }.Where(x => !string.IsNullOrEmpty(x))), u.Birim, u.Maliyet, u.ListeFiyati, u.Durum }),
+                    urunler = FiyatOrnek.Urunler.Select(u => new { u.Kod, u.Ad, u.AnaGrup, u.Grup, grupAnahtari = u.GrupAnahtari, u.UrunSinifi, u.UrunGrubu, u.Seri, hiyerarsi = string.Join(" › ", new[] { u.UrunSinifi, u.UrunGrubu, u.Seri }.Where(x => !string.IsNullOrEmpty(x))), u.Birim, u.ParaBirimi, u.Maliyet, u.Durum }),
                     saticilar = FiyatOrnek.Saticilar.Select(s => new { s.Ad, s.Sirket, s.CariKodu, s.Bolge, s.Not, cari = CariDto(CariKartOrnek.KartBul(s.CariKodu)), oranlar = s.Oranlar.Select(OranDto), musteriSayisi = FiyatOrnek.MusteriTanimlari.Count(m => m.Satici == s.Ad) }),
                     musteriler = FiyatOrnek.Musteriler().Select(CariDto),
                     musteriTanimlari = FiyatOrnek.MusteriTanimlari.Select(m => new { m.Satici, m.CariKodu, oranlar = m.Oranlar.Select(OranDto), zaman = m.Zaman.ToString("dd.MM.yyyy HH:mm"), m.Kullanici }),
@@ -55,6 +58,13 @@ namespace WebApplication3.Controllers
         }
 
         [HttpPost]
+        public IActionResult KurKaydet([FromBody] FyKurGiris g)
+        {
+            var h = FiyatOrnek.KurKaydet(g, Kod(), out var n);
+            return Json(new { success = h == null, message = h ?? (n == 0 ? "Değişiklik yok." : $"Kur parametreleri kaydedildi ({n} alan). Fiyatlandırma kuru USD/TL {FiyatOrnek.Kur.FiyatUsdTl:0.0000}, EUR paritesi {FiyatOrnek.Kur.FiyatParite:0.0000}."), degisen = n });
+        }
+
+        [HttpPost]
         public IActionResult MusteriKaydet([FromBody] FyKayit g)
         {
             var h = FiyatOrnek.MusteriKaydet(g, Kod(), out var n);
@@ -66,7 +76,7 @@ namespace WebApplication3.Controllers
         /// <summary>CARİ_MASTER özet alanları (Müşteri Cari Kartları ekranıyla aynı adlar).</summary>
         private static object CariDto(CariKart k) => k == null ? null : new
         {
-            k.Kod, k.KisaAd, k.KisaltmaliUnvan, k.ResmiUnvan, k.VergiNo, k.VergiDairesi, k.KartTipi, k.Bolge, k.Ulke, k.Sehir, k.Sinif, k.IliskiDurumu, k.Rol, k.EsCariKodu, k.Yetkili, k.Telefon, k.Eposta, k.VadeSarti, k.Durum, k.Sirket, k.Not, anaFaaliyet = k.AnaFaaliyet,
+            k.Kod, k.KisaAd, k.KisaltmaliUnvan, k.ResmiUnvan, k.VergiNo, k.VergiDairesi, k.KartTipi, k.Bolge, k.Ulke, k.Sehir, k.Sinif, k.IliskiDurumu, k.Rol, k.EsCariKodu, k.Yetkili, k.Telefon, k.Eposta, k.VadeSarti, k.Durum, durumKaynagi = k.DurumKaynagi, k.Sirket, k.Not, anaFaaliyet = k.AnaFaaliyet,
             temsilciler = string.Join(", ", k.Faaliyetler.Select(f => f.SatisTemsilcisi).Where(x => !string.IsNullOrEmpty(x)).Distinct()),
             faaliyetGruplari = k.Faaliyetler.Select(f => f.AnaGrup + "|" + f.Grup).Distinct()
         };
