@@ -188,6 +188,13 @@ tasarımından uyarlandı:
   taşıyorsa tıklanınca `.na-sekme` içindeki o sekme açılır, `#odak` alanına kaydırılıp odaklanır ve kısa süre vurgulanır; `data-url` (+ `data-baslik`)
   taşıyorsa ekran portal sekmesinde açılır. Müşteri Teklifleri, Numune Gönderim, İhracat Belge, Fiyat / Kâr (satıcı ve müşteri kutuları seçime göre cari
   kartı açar) ve Yapılan Ödemeler başlıklarında kullanılır.
+* **Daraltılabilir yan panel** (`rapor-tema.js` / `rapor-tema.css`): yan liste / özet / parametre sütunu ile ana çalışma alanından oluşan ekranlarda
+  yerleşim kabı `.rt-yan-yerlesim` (bootstrap `.row` ya da CSS grid; yan sütun sağdaysa `.rt-yan-sag`), yan sütun `.rt-yan` (`data-etiket` şerit
+  yazısı), ana sütun `.rt-ana` ile işaretlenir. Betik yan sütunun ilk başlığına (`.na-kart-b`, `.card-header`, `h1–h6` …) ok düğmesi ekler
+  (başlık yoksa küçük başlık çubuğu oluşturur); ok, sütunu 52px dikey şeride indirir (`.rt-dar`), ana sütun kalan genişliği alır, şerit tıklanınca
+  geri açılır; tercih `localStorage` "rtDar:<sayfa>#<kimlik>". Uygulanan ekranlar: Cari Mutabakat (temsilci, günlük), Grup İçi Mahsup / Temlik /
+  Yansıtma / Rapor, İK Nakit Avans / İzin / talep modülü (3 sekme), Cari Kart Talebi, Fiyat / Kâr (müşteri listesi), Yetki Yönetimi (kişi listesi),
+  Rapor100, 101, 106, 117, 118, 119, 134, 149, 162 (grid), 173 (grid). Uras Üretim modülü ayrı yerleşim kullandığından kapsam dışıdır.
 * **Açıklama kutuları gizlenebilir** (`Views/Shared/_Layout.cshtml` üst çubuk `#aciklamaToggleBtn`, `rapor-tema.js` / `rapor-tema.css`): bilgi (i)
   düğmesi `html.rt-aciklama-gizli` sınıfını verir; tercih `localStorage` "aciklamaGizli" anahtarında tutulur, sayfa çizilmeden uygulanır ve açık
   sekmelerdeki (iframe) raporlara anında yansır (`storage` olayı). rapor-tema.js otomatik işaretler: başlık altı açıklama (`.na-ust .sub`), ekranların

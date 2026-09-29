@@ -176,7 +176,52 @@
   aciklamaDurumu();
   window.addEventListener('storage', e => { if (e.key === 'aciklamaGizli') aciklamaDurumu(); });
 
-  function uygula() { try { baslikIkonu(); hucreler(); kpiKartlari(); aciklamalar(); } catch (e) { /* sessiz */ } }
+  // ---- Daraltılabilir yan panel (tüm raporlar): kap .rt-yan-yerlesim (bootstrap .row ya da CSS grid) > yan sütun .rt-yan + ana sütun .rt-ana;
+  //   kapta .rt-yan-sag varsa yan sütun sağdadır. Yan sütunun ilk başlığına (na-kart-b, card-header, h1–h6 …) ok düğmesi eklenir; başlık yoksa
+  //   küçük bir başlık çubuğu oluşturulur. Ok, sütunu 52px dikey şeride indirir (etiket: data-etiket ya da başlık metni); şerit tıklanınca geri açılır.
+  //   Tercih tarayıcıda saklanır (rtDar:<sayfa>#<kimlik>). Cari Mutabakat, Grup İçi, İK talepleri, Cari Kart Talebi, Fiyat / Kâr, Yetki Yönetimi
+  //   ve yan panelli eski raporlar (Rapor100, 101, 106, 117, 118, 119, 134, 149, 162, 173) bu sınıflarla işaretlidir.
+  const BASLIK_SECICI = '.na-kart-b, .card-header, .card-header-custom, .sap-card-header, .panel-heading, .kt-kart-bas, .mh-list-head, h1, h2, h3, h4, h5, h6';
+  const yanAnahtar = y => 'rtDar:' + location.pathname + '#' + (y.id || Array.from(document.querySelectorAll('.rt-yan-yerlesim')).indexOf(y));
+  function yanUygula(y, dar) { y.classList.toggle('rt-dar', dar); try { localStorage.setItem(yanAnahtar(y), dar ? '1' : '0'); } catch (e) { /* depolama kapalı */ } }
+  const kacis = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  function yanPaneller() {
+    document.querySelectorAll('.rt-yan-yerlesim').forEach(y => {
+      const yan = y.querySelector(':scope > .rt-yan'); if (!yan) return;
+      // Sayfa betiği yan sütunun içini yeniden çizerse (innerHTML) eklenen şerit / düğme kaybolur → her turda eksik olan yeniden eklenir
+      const seritVar = !!yan.querySelector(':scope > .rt-serit'), dugmeVar = !!yan.querySelector('.rt-daralt');
+      if (seritVar && dugmeVar) return;
+      const sagda = y.classList.contains('rt-yan-sag');
+      const bas = Array.from(yan.querySelectorAll(BASLIK_SECICI)).find(h => !h.closest('.rt-serit, .rt-yan-bas'));
+      let etiket = yan.dataset.etiket;
+      if (!etiket && bas) { const ilk = bas.firstElementChild; etiket = (ilk && ilk.textContent.trim() ? ilk : bas).textContent.replace(/\s+/g, ' ').trim(); }
+      etiket = (etiket || 'Yan Panel').slice(0, 48);
+      if (!dugmeVar) {
+        const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'rt-daralt';
+        btn.title = sagda ? 'Paneli daralt — soldaki alan genişler' : 'Paneli daralt — sağdaki alan genişler';
+        btn.innerHTML = '<i class="fas ' + (sagda ? 'fa-chevron-right' : 'fa-chevron-left') + '"></i>';
+        btn.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); yanUygula(y, true); });
+        if (bas) {
+          if (/flex/.test(getComputedStyle(bas).display)) {
+            const son = bas.lastElementChild;
+            if (bas.children.length > 1 && son) { const w = document.createElement('span'); w.className = 'd-flex align-items-center gap-2'; son.replaceWith(w); w.append(son, btn); }
+            else { btn.style.marginLeft = 'auto'; bas.appendChild(btn); }
+          } else { btn.classList.add('rt-sagda'); bas.appendChild(btn); }
+        } else { const b = document.createElement('div'); b.className = 'rt-yan-bas'; b.innerHTML = '<span>' + kacis(etiket) + '</span>'; b.appendChild(btn); yan.insertBefore(b, yan.firstChild); }
+      }
+      if (!seritVar) {
+        const serit = document.createElement('div'); serit.className = 'rt-serit'; serit.title = 'Paneli genişlet';
+        serit.innerHTML = '<i class="fas ' + (sagda ? 'fa-chevron-left' : 'fa-chevron-right') + '"></i><span class="dik">' + kacis(etiket) + '</span>';
+        serit.addEventListener('click', () => yanUygula(y, false));
+        yan.insertBefore(serit, yan.firstChild);
+      }
+      let dar = false; try { dar = localStorage.getItem(yanAnahtar(y)) === '1'; } catch (e) { /* depolama kapalı */ }
+      y.classList.toggle('rt-dar', dar);
+    });
+  }
+
+  // Her adım kendi başına korunur: bir raporun DOM'unda bir adım hata verse de diğerleri (ör. yan panel) çalışır
+  function uygula() { [baslikIkonu, hucreler, kpiKartlari, aciklamalar, yanPaneller].forEach(f => { try { f(); } catch (e) { /* sessiz */ } }); }
   let z = null;
   function basla() {
     uygula();
