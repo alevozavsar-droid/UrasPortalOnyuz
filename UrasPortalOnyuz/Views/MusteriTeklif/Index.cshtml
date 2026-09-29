@@ -1,0 +1,197 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var sirketler = (string[])ViewBag.Sirketler;
+    int yil = (int)ViewBag.Yil;
+    string sekme = (string)ViewBag.Sekme ?? "ozet";
+    string q = Context.Request.Query.ContainsKey("_sekme") ? "?_sekme=1" : "";
+}
+@*
+    MÜŞTERİ TEKLİFLERİ — Satış ve Operasyon › Müşteri ve CRM Yönetimi › Teklif Yönetimi (Yönetim › Özel Raporlar'da aynı ekran). Üç sekme:
+      Aylık Teklif Özeti : ay ay verilen teklif (adet / tutar) ve satışa dönen (adet / tutar), dönüşüm oranı, açık / kaybedilen; 12 ay + Toplam + Aylık Ort.;
+                           şirket bazlı ve satış temsilcisi bazlı kırılım
+      Müşteri Bazlı      : cari kart bilgileri (CARİ_MASTER) ile müşteri başına teklif / satışa dönüşüm özeti; satırdan cari kart + teklif geçmişi drawer'ı
+      Teklif Listesi     : tüm grup şirketlerinin teklifleri — filtreler, KPI, Şirket × Durum ve Ay × Dönüşüm matrisleri, kaybetme nedenleri, en büyük 10 müşteri, detay drawer
+    Veri: /MusteriTeklif/Veri (Data/TeklifOrnek.cs; müşteri kartları Data/CariKartOrnek.cs). Betik: wwwroot/js/musteri-teklif.js · Ortak stil: wwwroot/css/nakit-avans.css
+    Sekme sırası ve varsayılan: Aylık Teklif Özeti (açılış) → Müşteri Bazlı → Teklif Listesi. Derin bağlantı: /MusteriTeklif?sekme=musteri | liste, /MusteriTeklif?no=TKL-2026-00042, ?kod=120.001
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<link rel="stylesheet" href="/css/cari-kart.css?v=1" />
+<style>
+    .na.mt { --na-k: #0f766e; }
+    .mt-pill { font-size: .68rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; }
+    .mt-filtre { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px 8px; margin-bottom: 8px; }
+    .mt-filtre label { display: block; font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; }
+    .mt-filtre .form-control, .mt-filtre .form-select { font-size: .72rem; padding: 3px 7px; height: 28px; }
+    .mt-filtre .ara { grid-column: span 2; }
+    @@media (max-width: 1200px) { .mt-filtre { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .mt-rev { display: inline-block; font-size: .58rem; font-weight: 800; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0 4px; margin-left: 4px; color: #334155; background: #f8fafc; vertical-align: middle; }
+    .mt-oran { display: inline-block; min-width: 46px; text-align: right; font-weight: 700; }
+    .mt-oran.iyi { color: #166534; } .mt-oran.orta { color: #92400e; } .mt-oran.dusuk { color: #991b1b; }
+    #mtTablo td:nth-child(-n+4), #mtTablo td:nth-child(13), #mtMusteriTablo td:first-child { white-space: nowrap; }
+    .mt .ck-master { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    #mtTablo tbody tr.tik, #mtMusteriTablo tbody tr.tik { cursor: pointer; } #mtTablo tbody tr.tik:hover td, #mtMusteriTablo tbody tr.tik:hover td { background: #f0fdfa; }
+    #mtTablo tfoot td, #mtMusteriTablo tfoot td, #mtTemsilci tfoot td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; }
+    #mtTablo td small, #mtMusteriTablo td small, .mt-matris td small { color: #64748b; display: block; font-size: .62rem; }
+    .mt-matris td.s, .mt-matris th.s { text-align: right; white-space: nowrap; }
+    .mt-matris tr.toplam td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; }
+    .mt-bar { display: grid; grid-template-columns: 170px 1fr 110px; gap: 8px; align-items: center; font-size: .7rem; padding: 3px 0; border-bottom: 1px dashed #e2e8f0; }
+    .mt-bar .b { height: 10px; background: #e2e8f0; border-radius: 999px; overflow: hidden; } .mt-bar .b i { display: block; height: 100%; background: #b91c1c; }
+    .mt-bar .v { text-align: right; font-weight: 700; color: #0f172a; } .mt-bar .v small { color: #64748b; font-weight: 500; }
+    .mt-drawer { position: fixed; top: 0; right: -800px; width: 760px; max-width: 95vw; height: 100vh; background: #fff; box-shadow: -8px 0 24px rgba(15,23,42,.18); z-index: 1060; transition: right .25s; overflow: auto; padding: 12px 14px; } .mt-drawer.acik { right: 0; }
+    .mt-drawer-ust { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: sticky; top: 0; background: #fff; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; z-index: 2; }
+    .mt-perde { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1055; display: none; } .mt-perde.acik { display: block; }
+    .mt-master { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; font-size: .72rem; }
+    .mt-master .l { font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; } .mt-master .v { font-weight: 600; color: #0f172a; word-break: break-word; }
+    /* --- Excel şablonu görünümü (Aylık Teklif Özeti) --- */
+    .mt-rapor-ust { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: linear-gradient(90deg, #134e4a, #0f766e); color: #fff; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+    .mt-rapor-ust h5 { margin: 0; font-weight: 800; letter-spacing: .05em; font-size: .95rem; text-transform: uppercase; }
+    .mt-rapor-ust .alt { font-size: .64rem; letter-spacing: .14em; opacity: .85; text-transform: uppercase; }
+    .mt-rapor-ust .ayar { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; } .mt-rapor-ust .ayar select { font-size: .72rem; padding: 2px 6px; height: 26px; width: auto; } .mt-rapor-ust .ayar .btn { font-size: .66rem; } .mt-rapor-ust .ayar label { font-size: .66rem; font-weight: 700; }
+    .mt-excel { font-size: .68rem; border-collapse: separate; border-spacing: 0; } .mt-excel th, .mt-excel td { white-space: nowrap; padding: 3px 7px; border-bottom: 1px solid #e2e8f0; }
+    .mt-excel thead th { position: sticky; top: 0; background: #1e293b; color: #fff; text-transform: uppercase; font-size: .6rem; letter-spacing: .04em; text-align: right; z-index: 3; }
+    .mt-excel thead th.ad { text-align: left; } .mt-excel td.s { text-align: right; font-variant-numeric: tabular-nums; }
+    .mt-excel th.ad, .mt-excel td.ad { position: sticky; left: 0; background: #fff; min-width: 250px; z-index: 2; text-transform: uppercase; font-weight: 600; box-shadow: 1px 0 0 #e2e8f0; }
+    .mt-excel thead th.ad { z-index: 4; background: #1e293b; }
+    .mt-excel tr.grp td { background: #cbd5e1; color: #0f172a; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
+    .mt-excel tr.r td { color: #64748b; } .mt-excel tr.r td.ad { font-weight: 500; }
+    .mt-excel tr.top td { font-weight: 700; background: #f1f5f9; border-top: 1px solid #94a3b8; } .mt-excel tr.top td.ad { background: #f1f5f9; }
+    .mt-excel tr.genel td { font-weight: 800; background: #ccfbf1; border-top: 2px solid #0f766e; } .mt-excel tr.genel td.ad { background: #ccfbf1; }
+    .mt-excel tr.oran td { font-style: italic; color: #134e4a; background: #f0fdfa; } .mt-excel tr.oran td.ad { background: #f0fdfa; }
+    .mt-excel td.top { font-weight: 700; } .mt-excel td.ort { font-style: italic; color: #475569; background: #fafafa; }
+    .mt-excel tr.ara td { height: 6px; padding: 0; background: #fff; border: 0; }
+    .mt-not { font-size: .66rem; color: #475569; margin-top: 6px; }
+    .mt-kalem td.s { font-variant-numeric: tabular-nums; }
+</style>
+}
+
+<div class="container-fluid py-3 na mt" id="mt" data-sekme="@(q != "" ? "1" : "")" data-baslangic="@sekme" data-yil="@yil">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-file-signature"></i></span>Müşteri Teklifleri</h4>
+        <span class="mt-pill"><i class="fas fa-building me-1"></i>Konsolide · @sirketler.Length Şirket</span>
+        <span class="mt-pill"><i class="fas fa-address-card me-1"></i>Cari Kart Bilgileriyle</span>
+        <span class="sub w-100">Grup şirketlerinin müşterilere verdiği <b>tüm teklifler</b> tek listede: teklif tarihi, şirket, <b>cari kart bilgileri</b> (kod, ünvan, sınıf, bölge, ilişki durumu, satış temsilcisi, vade şartı), teklif kalemleri, tutar ve durum (<b>Gönderildi · Revize Edildi · Satışa Döndü · Reddedildi · Süresi Doldu</b>). <b>Aylık Teklif Özeti</b> ay ay ne kadar teklif verildiğini ve ne kadarının satışa döndüğünü (adet, tutar ve dönüşüm oranı) 12 ay + Toplam + Aylık Ort. düzeninde, şirket ve temsilci kırılımıyla gösterir. Döviz teklifleri teklif günü kuruyla TL'ye çevrilir.</span>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+    @* Sekme sırası: Aylık Teklif Özeti (varsayılan açılış) → Müşteri Bazlı → Teklif Listesi *@
+    <div class="na-sekme" id="mtSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="ozet"><i class="fas fa-calendar-days me-1"></i>Aylık Teklif Özeti</button>
+        <button type="button" data-p="musteri"><i class="fas fa-address-card me-1"></i>Müşteri Bazlı <span class="n" id="mtNMusteri">0</span></button>
+        <button type="button" data-p="liste"><i class="fas fa-list me-1"></i>Teklif Listesi <span class="n" id="mtNListe">0</span></button>
+    </div>
+
+    @* ============================ SEKME 1: AYLIK TEKLİF ÖZETİ ============================ *@
+    <div class="na-panel" data-p="ozet">
+        <div class="mt-rapor-ust">
+            <div><h5><span id="mtOYilBaslik">@yil</span> Aylık Teklif ve Satış Dönüşüm Özeti</h5><div class="alt">Verilen Teklif • Satışa Dönen • Dönüşüm Oranı • Şirket ve Temsilci Kırılımı</div></div>
+            <div class="ayar"><label class="me-1">Yıl</label><select class="form-select" id="mtOYil"></select><label class="ms-2 me-1">Şirket</label><select class="form-select" id="mtOSirket"><option value="">Tümü</option>@foreach (var s in sirketler) { <option>@s</option> }</select><label class="ms-2 me-1">Temsilci</label><select class="form-select" id="mtOTemsilci"><option value="">Tümü</option></select><button type="button" class="btn btn-light btn-sm py-0" id="mtOExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+        </div>
+        <div class="na-kpi" id="mtOKpi" data-dinamik="kapali"></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-days me-1"></i>Aylık Teklif ve Satışa Dönüşüm</span><span class="not">Teklif ayına göre · tutarlar TL (KDV hariç) · iptal teklifler dahil değil</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:60vh"><table class="na-tablo mt-excel" id="mtAylik" data-dinamik="kapali"><thead><tr><th class="ad">Açıklama</th><th>Ocak</th><th>Şubat</th><th>Mart</th><th>Nisan</th><th>Mayıs</th><th>Haziran</th><th>Temmuz</th><th>Ağustos</th><th>Eylül</th><th>Ekim</th><th>Kasım</th><th>Aralık</th><th class="yil">Toplam @yil</th><th>Aylık Ort.</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-building me-1"></i>Şirket Bazlı Teklif ve Satışa Dönüşüm</span><span class="not">Her şirket için verilen teklif, satışa dönen tutar ve dönüşüm oranı · aylık</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:70vh"><table class="na-tablo mt-excel" id="mtSirketTablo" data-dinamik="kapali"><thead><tr><th class="ad">Açıklama</th><th>Ocak</th><th>Şubat</th><th>Mart</th><th>Nisan</th><th>Mayıs</th><th>Haziran</th><th>Temmuz</th><th>Ağustos</th><th>Eylül</th><th>Ekim</th><th>Kasım</th><th>Aralık</th><th class="yil">Toplam @yil</th><th>Aylık Ort.</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="row g-2">
+            <div class="col-lg-7">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-user-tie me-1"></i>Satış Temsilcisi Bazlı</span><span class="not">Yıl ve şirket filtresine göre · TL</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo mt-matris" id="mtTemsilci" data-dinamik="kapali"><thead><tr><th>Temsilci</th><th class="s">Teklif</th><th class="s">Teklif Tutarı</th><th class="s">Satışa Dönen</th><th class="s">Satış Tutarı</th><th class="s">Dönüşüm (Tutar)</th><th class="s">Açık Teklif</th><th class="s">Müşteri</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            </div>
+            <div class="col-lg-5">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-layer-group me-1"></i>Faaliyet Ana Grubu Bazlı</span><span class="not">Teklif tutarı ve dönüşüm · TL</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo mt-matris" id="mtGrup" data-dinamik="kapali"><thead><tr><th>Ana Grup</th><th class="s">Teklif</th><th class="s">Teklif Tutarı</th><th class="s">Satış Tutarı</th><th class="s">Dönüşüm</th></tr></thead><tbody></tbody></table></div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Hesaplama Kuralları</span></div><div class="na-kart-g" style="font-size:.7rem;color:#475569"><ul class="mb-0 ps-3"><li><b>Verilen Teklif:</b> teklif tarihi o aya düşen, iptal edilmemiş tüm teklifler (taslak dahil).</li><li><b>Satışa Dönen:</b> durumu "Satışa Döndü" olan teklifler; sipariş tarihi sonraki aya sarksa da <b>teklifin verildiği aya</b> yazılır (dönem dönüşüm oranı bu yüzden tutarlıdır). Tutar = sipariş tutarı (kısmi siparişte teklifin tamamı değil, sipariş edilen kısım).</li><li><b>Dönüşüm Oranı:</b> Satışa Dönen Tutar / Verilen Teklif Tutarı; adet oranı ayrıca verilir.</li><li><b>Açık Teklif:</b> Gönderildi ve Revize Edildi; <b>Kaybedilen:</b> Reddedildi ve Süresi Doldu.</li><li><b>Aylık Ort.:</b> Toplam / veri olan ay sayısı. Döviz teklifleri teklif günü kuruyla TL'ye çevrilir; tutarlar KDV hariçtir.</li></ul></div></div>
+            </div>
+        </div>
+        <div class="mt-not" id="mtONot"></div>
+    </div>
+
+    @* ============================ SEKME 2: MÜŞTERİ BAZLI ============================ *@
+    <div class="na-panel" data-p="musteri">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-address-card me-1"></i>Müşteri Bazlı Teklif Özeti · Cari Kart Bilgileriyle</span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="mtMExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div>
+            <div class="na-kart-g">
+                <div class="mt-filtre">
+                    @* Filtre etiketleri Müşteri Cari Kartları ekranıyla aynı (Views/CariKart/Kartlar.cshtml); ek olarak Yıl, Teklif Veren Şirket ve Sıralama *@
+                    <div class="ara"><label>Ara</label><input class="form-control" id="mtMAra" placeholder="Kod, ünvan, VKN, yetkili, e-posta…"></div>
+                    <div><label>Yıl</label><select class="form-select" id="mtMYil"></select></div>
+                    <div><label>Teklif Veren Şirket</label><select class="form-select" id="mtMSirket"><option value="">Tümü</option>@foreach (var s in sirketler) { <option>@s</option> }</select></div>
+                    <div><label>Cari Kart Tipi</label><select class="form-select" id="mtMTip" disabled><option>Müşteri</option></select></div>
+                    <div><label>Cari Bölge</label><select class="form-select" id="mtMBolge"><option value="">Tümü</option></select></div>
+                    <div><label>Ülke</label><select class="form-select" id="mtMUlke"><option value="">Tümü</option></select></div>
+                    <div><label>Cari Sınıfı</label><select class="form-select" id="mtMSinif"><option value="">Tümü</option></select></div>
+                    <div><label>İlişki Durumu</label><select class="form-select" id="mtMIliski"><option value="">Tümü</option></select></div>
+                    <div><label>Cari Rolü</label><select class="form-select" id="mtMRol"><option value="">Tümü</option></select></div>
+                    <div><label>Durum</label><select class="form-select" id="mtMDurum"><option value="">Tümü</option><option>Aktif</option><option>Pasif</option></select></div>
+                    <div><label>Faaliyet Ana Grubu</label><select class="form-select" id="mtMAna"><option value="">Tümü</option></select></div>
+                    <div><label>Faaliyet Grubu</label><select class="form-select" id="mtMGrup"><option value="">Tümü</option></select></div>
+                    <div><label>Satış Temsilcisi</label><select class="form-select" id="mtMTemsilci"><option value="">Tümü</option></select></div>
+                    <div><label>Şirket (ERP)</label><select class="form-select" id="mtMErp"><option value="">Tümü</option></select></div>
+                    <div><label>Sıralama</label><select class="form-select" id="mtMSira"><option value="kod">Cari Kodu</option><option value="teklif">Teklif Tutarı</option><option value="satis">Satış Tutarı</option><option value="oran">Dönüşüm Oranı</option><option value="acik">Açık Teklif</option></select></div>
+                </div>
+                <div class="na-mini" id="mtMSayi"></div>
+                <div class="table-responsive" style="max-height:64vh">
+                    @* Sütunlar Müşteri Cari Kartları listesiyle aynı sırada; sağına teklif sütunları eklenir *@
+                    <table class="na-tablo" id="mtMusteriTablo" data-dinamik="kapali">
+                        <thead><tr><th>Cari Kodu</th><th>Kısa Ad / Resmi Ünvan</th><th>VKN / Vergi Dairesi</th><th>Tip</th><th>Bölge · Ülke · Şehir</th><th>Cari Sınıfı</th><th>İlişki</th><th>Rol · Eş Cari</th><th>Ana Faaliyet</th><th class="s">Faaliyet</th><th>Satış Temsilcileri</th><th>Vade</th><th>Durum</th><th>Şirket (ERP)</th><th class="s">Teklif</th><th class="s">Teklif Tutarı (TL)</th><th class="s">Satışa Dönen</th><th class="s">Satış Tutarı (TL)</th><th class="s">Dönüşüm</th><th class="s">Açık Teklif (TL)</th><th>Son Teklif</th></tr></thead>
+                        <tbody></tbody>
+                        <tfoot><tr><td colspan="14">Toplam (filtre)</td><td class="s" id="mtMTopTeklif"></td><td class="s" id="mtMTopTeklifTl"></td><td class="s" id="mtMTopSatis"></td><td class="s" id="mtMTopSatisTl"></td><td class="s" id="mtMTopOran"></td><td class="s" id="mtMTopAcik"></td><td></td></tr></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="mt-not">Cari kart sütunları CARİ_MASTER'dan (Müşteri Cari Kartları ekranıyla aynı alanlar) gelir; satıra tıklayınca cari kartın tamamı, faaliyet satırları ve müşterinin teklif geçmişi açılır. Teklif sütunları seçilen yıl ve şirket filtresine göre hesaplanır; iptal teklifler sayılmaz.</div>
+    </div>
+
+    @* ============================ SEKME 3: TEKLİF LİSTESİ ============================ *@
+    <div class="na-panel" data-p="liste">
+        <div class="na-kpi" id="mtKpi" data-dinamik="kapali"></div>
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Filtreler</span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="mtTemizle" style="font-size:.66rem">Temizle</button><button type="button" class="btn btn-light btn-sm py-0" id="mtExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button><button type="button" class="btn btn-light btn-sm py-0" id="mtMatrisExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Şirket Özeti Excel</button></span></div>
+            <div class="na-kart-g">
+                <div class="mt-filtre">
+                    <div class="ara"><label>Ara</label><input class="form-control" id="mtAra" placeholder="Teklif no, müşteri, cari kodu, konu, ürün, sipariş no…"></div>
+                    <div><label>Dönem</label><select class="form-select" id="mtDonem"><option value="buay">Bu Ay</option><option value="gecenay">Geçen Ay</option><option value="30">Son 30 Gün</option><option value="90">Son 90 Gün</option><option value="yil" selected>Bu Yıl</option><option value="">Tümü</option><option value="ozel">Özel Aralık</option></select></div>
+                    <div><label>Başlangıç</label><input class="form-control" type="date" id="mtBas"></div>
+                    <div><label>Bitiş</label><input class="form-control" type="date" id="mtBit"></div>
+                    <div><label>Teklif Veren Şirket</label><select class="form-select" id="mtSirket"><option value="">Tümü</option>@foreach (var s in sirketler) { <option>@s</option> }</select></div>
+                    <div><label>Teklif Durumu</label><select class="form-select" id="mtDurum"><option value="">Tümü</option></select></div>
+                    <div><label>Para Birimi</label><select class="form-select" id="mtPb"><option value="">Tümü</option></select></div>
+                    @* Cari kart filtreleri: etiketler Müşteri Cari Kartları ekranıyla aynı *@
+                    <div><label>Cari Bölge</label><select class="form-select" id="mtBolge"><option value="">Tümü</option></select></div>
+                    <div><label>Ülke</label><select class="form-select" id="mtUlke"><option value="">Tümü</option></select></div>
+                    <div><label>Cari Sınıfı</label><select class="form-select" id="mtSinif"><option value="">Tümü</option></select></div>
+                    <div><label>İlişki Durumu</label><select class="form-select" id="mtIliski"><option value="">Tümü</option></select></div>
+                    <div><label>Cari Rolü</label><select class="form-select" id="mtRol"><option value="">Tümü</option></select></div>
+                    <div><label>Faaliyet Ana Grubu</label><select class="form-select" id="mtAnaGrup"><option value="">Tümü</option></select></div>
+                    <div><label>Faaliyet Grubu</label><select class="form-select" id="mtGrupF"><option value="">Tümü</option></select></div>
+                    <div><label>Satış Temsilcisi</label><select class="form-select" id="mtTemsilciF"><option value="">Tümü</option></select></div>
+                </div>
+                <div class="na-mini" id="mtSayi"></div>
+                <div class="table-responsive" style="max-height:560px">
+                    <table class="na-tablo" id="mtTablo" data-dinamik="kapali">
+                        <thead><tr><th>Tarih</th><th>Teklif No</th><th>Teklif Veren Şirket</th><th>Cari Kodu</th><th>Kısa Ad / Resmi Ünvan</th><th>Cari Sınıfı · İlişki</th><th>Satış Temsilcisi</th><th>Faaliyet Ana Grubu / Grubu</th><th>Konu</th><th class="s">Tutar</th><th>PB</th><th class="s">Tutar (TL)</th><th>Geçerlilik</th><th>Durum</th><th>Sipariş</th><th class="s">Satış (TL)</th></tr></thead>
+                        <tbody></tbody>
+                        <tfoot><tr><td colspan="9">Toplam (filtre)</td><td class="s" id="mtTopSayi"></td><td></td><td class="s" id="mtTopTl"></td><td colspan="3" id="mtTopOran"></td><td class="s" id="mtTopSatis"></td></tr></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="row g-2">
+            <div class="col-lg-7">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-table-cells me-1"></i>Şirket × Durum (TL)</span><span class="not">Filtreye göre · konsolide toplam son satırda</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo mt-matris" id="mtMatris" data-dinamik="kapali"><thead><tr><th>Şirket</th><th class="s">Açık (Gönderildi / Revize)</th><th class="s">Satışa Döndü</th><th class="s">Reddedildi</th><th class="s">Süresi Doldu</th><th class="s">Taslak</th><th class="s">Toplam Teklif</th><th class="s">Dönüşüm</th><th class="s">Adet</th></tr></thead><tbody></tbody></table></div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-days me-1"></i>Ay × Teklif / Satışa Dönüşüm (TL)</span><span class="not">Filtreye göre · teklif ayına göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo mt-matris" id="mtAyMatris" data-dinamik="kapali"><thead><tr><th>Ay</th><th class="s">Teklif</th><th class="s">Teklif Tutarı</th><th class="s">Satışa Dönen</th><th class="s">Satış Tutarı</th><th class="s">Dönüşüm (Tutar)</th><th class="s">Dönüşüm (Adet)</th><th class="s">Açık</th></tr></thead><tbody></tbody></table></div></div></div>
+            </div>
+            <div class="col-lg-5">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-chart-bar me-1"></i>Kaybetme Nedenleri</span><span class="not">Reddedilen ve süresi dolan teklifler · TL</span></div><div class="na-kart-g" id="mtNedenler"></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-ranking-star me-1"></i>En Büyük 10 Müşteri</span><span class="not">Filtreye göre · teklif tutarı TL</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="mtMusteriler" data-dinamik="kapali"><thead><tr><th>#</th><th>Cari Kodu · Kısa Ad</th><th>Cari Sınıfı</th><th class="s">Teklif</th><th class="s">Teklif (TL)</th><th class="s">Satış (TL)</th><th class="s">Dönüşüm</th></tr></thead><tbody></tbody></table></div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Kaynaklar ve Kurallar</span></div><div class="na-kart-g" style="font-size:.7rem;color:#475569"><ul class="mb-0 ps-3"><li><b>Kaynak:</b> ERP Teklif Modülü — her şirketin teklifleri tek listede; teklif numarası grup genelinde tektir (TKL-yıl-sıra).</li><li><b>Cari kart:</b> her teklif bir CARİ_MASTER müşteri kartına bağlıdır; müşteri sütunları ve detaydaki cari kart bilgileri Müşteri Cari Kartları ekranından gelir, temsilci teklif verilen faaliyet grubunun satış temsilcisidir.</li><li><b>Durumlar:</b> Taslak → Gönderildi → (Revize Edildi) → Satışa Döndü / Reddedildi / Süresi Doldu. İptal edilen teklifler listelenir, toplama girmez.</li><li><b>Satış (TL):</b> satışa dönen teklifin sipariş tutarı; kısmi siparişte sipariş edilen kısım. Fatura kesildiyse detayda fatura no gösterilir.</li><li><b>Döviz:</b> yurtdışı müşterilere EUR / USD teklif verilir; TL karşılığı teklif günü kuruyla hesaplanır. Tutarlar KDV hariçtir.</li></ul></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-perde" id="mtPerde"></div>
+    <div class="mt-drawer" id="mtDrawer">
+        <div class="mt-drawer-ust"><b id="mtDrawerBaslik" style="font-size:.9rem"></b><span class="ms-auto d-flex gap-1" id="mtDrawerAksiyon"></span><button type="button" class="btn btn-light btn-sm py-0" id="mtDrawerKapat" style="font-size:.66rem"><i class="fas fa-xmark"></i></button></div>
+        <div id="mtDrawerIc"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="/js/musteri-teklif.js?v=1"></script>
+}

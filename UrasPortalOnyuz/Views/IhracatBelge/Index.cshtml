@@ -1,0 +1,199 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var sirketler = (string[])ViewBag.Sirketler;
+    int yil = (int)ViewBag.Yil;
+    string sekme = (string)ViewBag.Sekme ?? "ozet";
+    string q = Context.Request.Query.ContainsKey("_sekme") ? "?_sekme=1" : "";
+}
+@*
+    İHRACAT BELGE GÖNDERİM TAKİBİ — Satış ve Operasyon › Yurtdışı Satış › İhracat Operasyon Takibi (Yönetim › Özel Raporlar'da aynı ekran). Üç sekme:
+      Aylık Özet       : ay ay belge gönderimi (adet; akreditif ibrazı / vesaik / müşteri), belge adedi, masraf, teslim, ibraz süresi uyumu, rezerv, tahsil; 12 ay + Toplam + Aylık Ort.;
+                         operasyon uzmanı ve kargo firması tabloları, alıcı tipi dağılımı (sade)
+      Müşteri Bazlı    : cari kart sütunları (CARİ_MASTER) ile müşteri başına gönderim / masraf / akreditif sonucu; satırdan cari kart + gönderim geçmişi
+      Gönderim Listesi : filtreler, KPI, Şirket × Amaç ve Ay matrisleri, kargo dağılımı, ibraz riski listesi, detay drawer (belge seti, akreditif / ibraz, kargo, hareketler, cari kart)
+    Veri: /IhracatBelge/Veri (Data/IhracatBelgeOrnek.cs; müşteri kartları Data/CariKartOrnek.cs). Betik: wwwroot/js/ihracat-belge.js · Ortak stil: nakit-avans.css + cari-kart.css
+    Derin bağlantı: /IhracatBelge?sekme=musteri | liste, ?no=İBG-2026-00042, ?kod=120.012
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<link rel="stylesheet" href="/css/cari-kart.css?v=1" />
+<style>
+    .na.ib { --na-k: #1e40af; }
+    .ib-pill { font-size: .68rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; }
+    .ib-filtre { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px 8px; margin-bottom: 8px; }
+    .ib-filtre label { display: block; font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; }
+    .ib-filtre .form-control, .ib-filtre .form-select { font-size: .72rem; padding: 3px 7px; height: 28px; }
+    .ib-filtre .ara { grid-column: span 2; }
+    @@media (max-width: 1200px) { .ib-filtre { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .ib-kargo { display: inline-block; font-size: .62rem; font-weight: 700; border-radius: 999px; padding: 2px 8px; white-space: nowrap; background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; }
+    .ib-kargo.dhl { background: #fde047; color: #7f1d1d; border-color: #facc15; } .ib-kargo.ups { background: #78350f; color: #fde68a; } .ib-kargo.fedex { background: #4d148c; color: #fff; } .ib-kargo.tnt { background: #ff6600; color: #fff; } .ib-kargo.kurye { background: #e2e8f0; color: #0f172a; }
+    .ib-odeme { display: inline-block; font-size: .6rem; font-weight: 800; border-radius: 4px; padding: 1px 5px; color: #fff; background: #64748b; } .ib-odeme.lc { background: #1e40af; } .ib-odeme.vesaik { background: #0f766e; }
+    .ib-takip { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .68rem; }
+    .ib-risk { display: inline-block; font-size: .62rem; font-weight: 800; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+    .ib-risk.ok { background: #dcfce7; color: #166534; } .ib-risk.kritik { background: #fef3c7; color: #92400e; } .ib-risk.gec { background: #fee2e2; color: #991b1b; }
+    #ibTablo td:nth-child(-n+3), #ibTablo td:nth-child(14), #ibMusteriTablo td:first-child { white-space: nowrap; }
+    #ibTablo tbody tr.tik, #ibMusteriTablo tbody tr.tik, #ibRisk tbody tr.tik { cursor: pointer; } #ibTablo tbody tr.tik:hover td, #ibMusteriTablo tbody tr.tik:hover td, #ibRisk tbody tr.tik:hover td { background: #eff6ff; }
+    #ibTablo tfoot td, #ibMusteriTablo tfoot td, #ibGonderen tfoot td, #ibKargo tfoot td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; }
+    #ibTablo td small, #ibMusteriTablo td small, .ib-matris td small, #ibRisk td small { color: #64748b; display: block; font-size: .62rem; }
+    .ib-matris td.s, .ib-matris th.s { text-align: right; white-space: nowrap; }
+    .ib-matris tr.toplam td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; }
+    .ib-bar { display: grid; grid-template-columns: 190px 1fr 110px; gap: 8px; align-items: center; font-size: .7rem; padding: 3px 0; border-bottom: 1px dashed #e2e8f0; }
+    .ib-bar .b { height: 10px; background: #e2e8f0; border-radius: 999px; overflow: hidden; } .ib-bar .b i { display: block; height: 100%; background: var(--na-k); }
+    .ib-bar .v { text-align: right; font-weight: 700; color: #0f172a; } .ib-bar .v small { color: #64748b; font-weight: 500; }
+    .ib-drawer { position: fixed; top: 0; right: -800px; width: 760px; max-width: 95vw; height: 100vh; background: #fff; box-shadow: -8px 0 24px rgba(15,23,42,.18); z-index: 1060; transition: right .25s; overflow: auto; padding: 12px 14px; } .ib-drawer.acik { right: 0; }
+    .ib-drawer-ust { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: sticky; top: 0; background: #fff; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; z-index: 2; }
+    .ib-perde { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1055; display: none; } .ib-perde.acik { display: block; }
+    .ib-master { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; font-size: .72rem; }
+    .ib-master .l { font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; } .ib-master .v { font-weight: 600; color: #0f172a; word-break: break-word; }
+    .ib .ck-master { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .ib-ibraz { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px; }
+    .ib-ibraz > div { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px; text-align: center; }
+    .ib-ibraz .l { font-size: .6rem; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: .04em; } .ib-ibraz .v { font-size: .9rem; font-weight: 800; }
+    .ib-ibraz .gec { border-color: #fca5a5; background: #fee2e2; } .ib-ibraz .kritik { border-color: #fde68a; background: #fef3c7; } .ib-ibraz .ok { border-color: #86efac; background: #f0fdf4; }
+    .ib-rapor-ust { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: linear-gradient(90deg, #1e3a8a, #1e40af); color: #fff; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+    .ib-rapor-ust h5 { margin: 0; font-weight: 800; letter-spacing: .05em; font-size: .95rem; text-transform: uppercase; }
+    .ib-rapor-ust .alt { font-size: .64rem; letter-spacing: .14em; opacity: .85; text-transform: uppercase; }
+    .ib-rapor-ust .ayar { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; } .ib-rapor-ust .ayar select { font-size: .72rem; padding: 2px 6px; height: 26px; width: auto; } .ib-rapor-ust .ayar .btn { font-size: .66rem; } .ib-rapor-ust .ayar label { font-size: .66rem; font-weight: 700; }
+    .ib-excel { font-size: .68rem; border-collapse: separate; border-spacing: 0; } .ib-excel th, .ib-excel td { white-space: nowrap; padding: 3px 7px; border-bottom: 1px solid #e2e8f0; }
+    .ib-excel thead th { position: sticky; top: 0; background: #1e293b; color: #fff; text-transform: uppercase; font-size: .6rem; letter-spacing: .04em; text-align: right; z-index: 3; }
+    .ib-excel thead th.ad { text-align: left; } .ib-excel td.s { text-align: right; font-variant-numeric: tabular-nums; }
+    .ib-excel th.ad, .ib-excel td.ad { position: sticky; left: 0; background: #fff; min-width: 260px; z-index: 2; text-transform: uppercase; font-weight: 600; box-shadow: 1px 0 0 #e2e8f0; }
+    .ib-excel thead th.ad { z-index: 4; background: #1e293b; }
+    .ib-excel tr.r td { color: #64748b; } .ib-excel tr.r td.ad { font-weight: 500; }
+    .ib-excel tr.top td { font-weight: 700; background: #f1f5f9; border-top: 1px solid #94a3b8; } .ib-excel tr.top td.ad { background: #f1f5f9; }
+    .ib-excel tr.genel td { font-weight: 800; background: #dbeafe; border-top: 2px solid #1e40af; } .ib-excel tr.genel td.ad { background: #dbeafe; }
+    .ib-excel tr.oran td { font-style: italic; color: #1e3a8a; background: #eff6ff; } .ib-excel tr.oran td.ad { background: #eff6ff; }
+    .ib-excel td.top { font-weight: 700; } .ib-excel td.ort { font-style: italic; color: #475569; background: #fafafa; }
+    .ib-not { font-size: .66rem; color: #475569; margin-top: 6px; }
+</style>
+}
+
+<div class="container-fluid py-3 na ib" id="ib" data-sekme="@(q != "" ? "1" : "")" data-baslangic="@sekme" data-yil="@yil">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-file-shield"></i></span>İhracat Belge Gönderim Takibi</h4>
+        <span class="ib-pill"><i class="fas fa-building me-1"></i>Konsolide · @sirketler.Length Şirket</span>
+        <span class="ib-pill"><i class="fas fa-landmark me-1"></i>Akreditif İbrazı · Vesaik · Orijinal Evrak</span>
+        <span class="ib-pill"><i class="fas fa-truck-fast me-1"></i>DHL Express · UPS · FedEx · TNT · Kurye</span>
+        <span class="sub w-100">İhracat operasyonunun kargo firmalarıyla gönderdiği <b>tüm ihracat belgeleri</b> tek listede: ihracat dosyası ve fatura, ödeme şekli, <b>akreditif no ve ibraz son tarihi</b>, alıcı (amir banka, muhabir / tahsil bankası, müşteri, forwarder, gümrük müşaviri, konsolosluk, ticaret odası), <b>belge seti</b> (orijinal konşimento, fatura, çeki listesi, menşe, A.TR / EUR.1, sigorta poliçesi, poliçe, analiz sertifikası …), <b>kargo firması</b>, <b>gönderim (takip) numarası</b>, masraf, <b>gönderen operasyon uzmanı</b>, kargo hareketleri, teslim, <b>banka sonucu</b> (uygun / rezerv / ödendi) ve <b>ibraz riski</b>. Aylık Özet ay ay gönderim, belge, masraf, ibraz uyumu ve tahsilatı verir.</span>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+    <div class="na-sekme" id="ibSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="ozet"><i class="fas fa-calendar-days me-1"></i>Aylık Özet</button>
+        <button type="button" data-p="musteri"><i class="fas fa-address-card me-1"></i>Müşteri Bazlı <span class="n" id="ibNMusteri">0</span></button>
+        <button type="button" data-p="liste"><i class="fas fa-list me-1"></i>Gönderim Listesi <span class="n" id="ibNListe">0</span></button>
+    </div>
+
+    @* ============================ SEKME 1: AYLIK ÖZET ============================ *@
+    <div class="na-panel" data-p="ozet">
+        <div class="ib-rapor-ust">
+            <div><h5><span id="ibOYilBaslik">@yil</span> Aylık İhracat Belge Gönderim Özeti</h5><div class="alt">Gönderim • Belge • Masraf • İbraz Süresi • Banka Sonucu • Operasyon Uzmanı</div></div>
+            <div class="ayar"><label class="me-1">Yıl</label><select class="form-select" id="ibOYil"></select><label class="ms-2 me-1">İhracatçı Şirket</label><select class="form-select" id="ibOSirket"><option value="">Tümü</option>@foreach (var s in sirketler) { <option>@s</option> }</select><label class="ms-2 me-1">Ödeme Şekli</label><select class="form-select" id="ibOOdeme"><option value="">Tümü</option></select><label class="ms-2 me-1">Gönderen</label><select class="form-select" id="ibOGonderen"><option value="">Tümü</option></select><button type="button" class="btn btn-light btn-sm py-0" id="ibOExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+        </div>
+        <div class="na-kpi" id="ibOKpi" data-dinamik="kapali"></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-days me-1"></i>Aylık Belge Gönderimi</span><span class="not">Kargoya veriliş ayına göre · tutarlar TL · iptal gönderimler dahil değil</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:64vh"><table class="na-tablo ib-excel" id="ibAylik" data-dinamik="kapali"><thead><tr><th class="ad">Açıklama</th><th>Ocak</th><th>Şubat</th><th>Mart</th><th>Nisan</th><th>Mayıs</th><th>Haziran</th><th>Temmuz</th><th>Ağustos</th><th>Eylül</th><th>Ekim</th><th>Kasım</th><th>Aralık</th><th class="yil">Toplam @yil</th><th>Aylık Ort.</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="row g-2">
+            <div class="col-lg-7">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-user-tie me-1"></i>Operasyon Uzmanı Bazlı</span><span class="not">Gönderen kişiye göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ib-matris" id="ibGonderen" data-dinamik="kapali"><thead><tr><th>Gönderen</th><th class="s">Gönderim</th><th class="s">Akreditif İbrazı</th><th class="s">Belge</th><th class="s">Masraf (TL)</th><th class="s">Süresinde İbraz</th><th class="s">Geç İbraz</th><th class="s">Rezerv</th><th class="s">Ort. Teslim (Gün)</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-truck-fast me-1"></i>Kargo Firması Bazlı</span><span class="not">Adet, masraf, ortalama masraf ve teslim süresi</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ib-matris" id="ibKargo" data-dinamik="kapali"><thead><tr><th>Kargo Firması</th><th>Gönderim Türü</th><th class="s">Gönderim</th><th class="s">Masraf (TL)</th><th class="s">Ort. Masraf</th><th class="s">Ort. Teslim (Gün)</th><th class="s">Teslim Edildi</th><th class="s">Sorunlu</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            </div>
+            <div class="col-lg-5">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-chart-pie me-1"></i>Alıcı Tipi Dağılımı</span><span class="not">Gönderim adedi</span></div><div class="na-kart-g" id="ibOAlici"></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Hesaplama Kuralları</span></div><div class="na-kart-g" style="font-size:.7rem;color:#475569"><ul class="mb-0 ps-3"><li><b>Gönderim:</b> kargoya veriliş tarihi o aya düşen, iptal edilmemiş belge gönderileri.</li><li><b>İbraz Son Tarihi:</b> akreditifte konşimento tarihi + 21 gün (akreditif vadesini aşamaz). Teslim bu tarihten sonraysa <b>Geç İbraz</b>; teslim yok ve 3 gün veya daha az kaldıysa <b>Kritik</b>.</li><li><b>Banka Sonucu:</b> amir bankanın incelemesi — Uygun Bulundu / Rezerv Bildirildi / Rezerv Kaldırıldı / Ödendi; vesaikte ödeme ile belgeler serbest bırakılır.</li><li><b>Masraf:</b> kargo faturası; yurtdışına döviz, fatura günü kuruyla TL.</li><li><b>Aylık Ort.:</b> Toplam / veri olan ay sayısı.</li></ul></div></div>
+            </div>
+        </div>
+        <div class="ib-not" id="ibONot"></div>
+    </div>
+
+    @* ============================ SEKME 2: MÜŞTERİ BAZLI ============================ *@
+    <div class="na-panel" data-p="musteri">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-address-card me-1"></i>Müşteri Bazlı Belge Gönderim Özeti · Cari Kart Bilgileriyle</span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="ibMExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div>
+            <div class="na-kart-g">
+                <div class="ib-filtre">
+                    <div class="ara"><label>Ara</label><input class="form-control" id="ibMAra" placeholder="Kod, ünvan, VKN, yetkili, e-posta…"></div>
+                    <div><label>Yıl</label><select class="form-select" id="ibMYil"></select></div>
+                    <div><label>İhracatçı Şirket</label><select class="form-select" id="ibMSirket"><option value="">Tümü</option>@foreach (var s in sirketler) { <option>@s</option> }</select></div>
+                    <div><label>Cari Kart Tipi</label><select class="form-select" id="ibMTip" disabled><option>Müşteri</option></select></div>
+                    <div><label>Cari Bölge</label><select class="form-select" id="ibMBolge" disabled><option>Yurtdışı</option></select></div>
+                    <div><label>Ülke</label><select class="form-select" id="ibMUlke"><option value="">Tümü</option></select></div>
+                    <div><label>Cari Sınıfı</label><select class="form-select" id="ibMSinif"><option value="">Tümü</option></select></div>
+                    <div><label>İlişki Durumu</label><select class="form-select" id="ibMIliski"><option value="">Tümü</option></select></div>
+                    <div><label>Cari Rolü</label><select class="form-select" id="ibMRol"><option value="">Tümü</option></select></div>
+                    <div><label>Durum</label><select class="form-select" id="ibMDurum"><option value="">Tümü</option><option>Aktif</option><option>Pasif</option></select></div>
+                    <div><label>Vade / Ödeme Şartı</label><select class="form-select" id="ibMVade"><option value="">Tümü</option></select></div>
+                    <div><label>Satış Temsilcisi</label><select class="form-select" id="ibMTemsilci"><option value="">Tümü</option></select></div>
+                    <div><label>Şirket (ERP)</label><select class="form-select" id="ibMErp"><option value="">Tümü</option></select></div>
+                    <div><label>Sıralama</label><select class="form-select" id="ibMSira"><option value="kod">Cari Kodu</option><option value="adet">Gönderim Adedi</option><option value="masraf">Masraf</option><option value="fatura">Fatura Tutarı</option></select></div>
+                </div>
+                <div class="na-mini" id="ibMSayi"></div>
+                <div class="table-responsive" style="max-height:64vh">
+                    <table class="na-tablo" id="ibMusteriTablo" data-dinamik="kapali">
+                        <thead><tr><th>Cari Kodu</th><th>Kısa Ad / Resmi Ünvan</th><th>VKN / Vergi Dairesi</th><th>Tip</th><th>Bölge · Ülke · Şehir</th><th>Cari Sınıfı</th><th>İlişki</th><th>Rol · Eş Cari</th><th>Ana Faaliyet</th><th class="s">Faaliyet</th><th>Satış Temsilcileri</th><th>Vade</th><th>Durum</th><th>Şirket (ERP)</th><th class="s">Gönderim</th><th class="s">Akreditif İbrazı</th><th class="s">Belge</th><th class="s">Masraf (TL)</th><th class="s">Fatura Tutarı (TL)</th><th class="s">Geç İbraz</th><th class="s">Rezerv</th><th class="s">Ödendi</th><th>Son Gönderim</th></tr></thead>
+                        <tbody></tbody>
+                        <tfoot><tr><td colspan="14">Toplam (filtre)</td><td class="s" id="ibMTopAdet"></td><td class="s" id="ibMTopLc"></td><td class="s" id="ibMTopBelge"></td><td class="s" id="ibMTopMasraf"></td><td class="s" id="ibMTopFatura"></td><td class="s" id="ibMTopGec"></td><td class="s" id="ibMTopRezerv"></td><td class="s" id="ibMTopOdendi"></td><td></td></tr></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="ib-not">Cari kart sütunları CARİ_MASTER'dan (Müşteri Cari Kartları ekranıyla aynı alanlar) gelir; satıra tıklayınca cari kartın tamamı, faaliyet satırları ve müşterinin belge gönderim geçmişi açılır. Fatura tutarı, gönderim yapılan ihracat dosyalarının fatura toplamıdır (aynı dosyaya birden fazla gönderim varsa bir kez sayılır).</div>
+    </div>
+
+    @* ============================ SEKME 3: GÖNDERİM LİSTESİ ============================ *@
+    <div class="na-panel" data-p="liste">
+        <div class="na-kpi" id="ibKpi" data-dinamik="kapali"></div>
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Filtreler</span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="ibTemizle" style="font-size:.66rem">Temizle</button><button type="button" class="btn btn-light btn-sm py-0" id="ibExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button><button type="button" class="btn btn-light btn-sm py-0" id="ibBelgeExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Belge Excel</button></span></div>
+            <div class="na-kart-g">
+                <div class="ib-filtre">
+                    <div class="ara"><label>Ara</label><input class="form-control" id="ibAra" placeholder="Gönderim / takip no, dosya, fatura, akreditif no, konşimento, müşteri, banka…"></div>
+                    <div><label>Dönem</label><select class="form-select" id="ibDonem"><option value="buay">Bu Ay</option><option value="gecenay">Geçen Ay</option><option value="30">Son 30 Gün</option><option value="90">Son 90 Gün</option><option value="yil" selected>Bu Yıl</option><option value="">Tümü</option><option value="ozel">Özel Aralık</option></select></div>
+                    <div><label>Başlangıç</label><input class="form-control" type="date" id="ibBas"></div>
+                    <div><label>Bitiş</label><input class="form-control" type="date" id="ibBit"></div>
+                    <div><label>İhracatçı Şirket</label><select class="form-select" id="ibSirket"><option value="">Tümü</option>@foreach (var s in sirketler) { <option>@s</option> }</select></div>
+                    <div><label>Ödeme Şekli</label><select class="form-select" id="ibOdeme"><option value="">Tümü</option></select></div>
+                    <div><label>Amaç</label><select class="form-select" id="ibAmacF"><option value="">Tümü</option></select></div>
+                    <div><label>Alıcı Tipi</label><select class="form-select" id="ibAliciTipi"><option value="">Tümü</option></select></div>
+                    <div><label>Kargo Firması</label><select class="form-select" id="ibKargoF"><option value="">Tümü</option></select></div>
+                    <div><label>Gönderim Durumu</label><select class="form-select" id="ibDurum"><option value="">Tümü</option></select></div>
+                    <div><label>Banka Sonucu</label><select class="form-select" id="ibBanka"><option value="">Tümü</option></select></div>
+                    <div><label>İbraz Riski</label><select class="form-select" id="ibRiskF"><option value="">Tümü</option></select></div>
+                    <div><label>Belge Türü</label><select class="form-select" id="ibBelgeTur"><option value="">Tümü</option></select></div>
+                    <div><label>Gönderen</label><select class="form-select" id="ibGonderenF"><option value="">Tümü</option></select></div>
+                    <div><label>Ülke</label><select class="form-select" id="ibUlke"><option value="">Tümü</option></select></div>
+                    <div><label>Cari Sınıfı</label><select class="form-select" id="ibSinif"><option value="">Tümü</option></select></div>
+                    <div><label>İlişki Durumu</label><select class="form-select" id="ibIliski"><option value="">Tümü</option></select></div>
+                </div>
+                <div class="na-mini" id="ibSayi"></div>
+                <div class="table-responsive" style="max-height:560px">
+                    <table class="na-tablo" id="ibTablo" data-dinamik="kapali">
+                        <thead><tr><th>Tarih</th><th>Gönderim No</th><th>İhracatçı Şirket</th><th>Dosya / Fatura</th><th>Cari Kodu</th><th>Kısa Ad / Resmi Ünvan</th><th>Ödeme Şekli</th><th>Alıcı</th><th>Amaç</th><th>Belge Seti</th><th>Akreditif · İbraz Son</th><th>İbraz Riski</th><th>Kargo Firması</th><th>Gönderim No</th><th class="s">Masraf (TL)</th><th>Durum</th><th>Teslim</th><th>Banka Sonucu</th><th>Gönderen</th></tr></thead>
+                        <tbody></tbody>
+                        <tfoot><tr><td colspan="9">Toplam (filtre)</td><td class="s" id="ibTopBelge"></td><td colspan="4" id="ibTopSayi"></td><td class="s" id="ibTopMasraf"></td><td colspan="4" id="ibTopSonuc"></td></tr></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="row g-2">
+            <div class="col-lg-7">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-triangle-exclamation me-1"></i>İbraz Riski Listesi</span><span class="not">Teslim edilmemiş akreditif ibrazları · kalan güne göre · geç ibraz edilenler</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:300px"><table class="na-tablo" id="ibRisk" data-dinamik="kapali"><thead><tr><th>Gönderim No</th><th>Müşteri</th><th>Akreditif No</th><th>Amir Banka</th><th>İbraz Son</th><th class="s">Kalan Gün</th><th>Risk</th><th>Kargo · Takip No</th><th>Durum</th></tr></thead><tbody></tbody></table></div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-table-cells me-1"></i>Şirket × Amaç</span><span class="not">Filtreye göre · gönderim adedi ve masraf (TL)</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ib-matris" id="ibMatris" data-dinamik="kapali"><thead><tr><th>İhracatçı Şirket</th><th class="s">Akreditif İbrazı</th><th class="s">Vesaik Tahsili</th><th class="s">Müşteri / Forwarder</th><th class="s">Tasdik / Onay</th><th class="s">Toplam</th><th class="s">Belge</th><th class="s">Masraf</th><th class="s">Geç İbraz</th></tr></thead><tbody></tbody></table></div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-days me-1"></i>Ay × Gönderim</span><span class="not">Filtreye göre · kargoya veriliş ayına göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ib-matris" id="ibAyMatris" data-dinamik="kapali"><thead><tr><th>Ay</th><th class="s">Gönderim</th><th class="s">Akreditif İbrazı</th><th class="s">Belge</th><th class="s">Masraf</th><th class="s">Teslim Edildi</th><th class="s">Süresinde İbraz</th><th class="s">Geç İbraz</th><th class="s">Ort. Teslim (Gün)</th></tr></thead><tbody></tbody></table></div></div></div>
+            </div>
+            <div class="col-lg-5">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-truck-fast me-1"></i>Kargo Firması Dağılımı</span><span class="not">Gönderim adedi ve masraf · TL</span></div><div class="na-kart-g" id="ibKargoDagilim"></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-file-lines me-1"></i>Belge Türü Dağılımı</span><span class="not">Gönderilen belge adedi</span></div><div class="na-kart-g" id="ibBelgeDagilim"></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Kaynaklar ve Kurallar</span></div><div class="na-kart-g" style="font-size:.7rem;color:#475569"><ul class="mb-0 ps-3"><li><b>Kaynak:</b> ERP İhracat Modülü — ihracat dosyası, fatura, konşimento ve akreditif bilgileri; kargo hareketleri kargo firmalarının takip servislerinden.</li><li><b>Akreditif ibrazı:</b> belgeler amir bankaya (ya da ihbar bankası üzerinden) DHL Express ile gönderilir; ibraz son tarihi konşimento tarihi + 21 gün, akreditif vadesini aşamaz. Banka incelemesi Uygun / Rezerv ile sonuçlanır; rezerv kaldırılınca veya uygun bulununca bedel tahsil edilir.</li><li><b>Vesaik tahsili:</b> belgeler tahsil bankasına gönderilir; alıcı bedeli ödeyince serbest bırakılır.</li><li><b>Müşteriye orijinal evrak:</b> mal mukabili / peşin satışlarda orijinal konşimento ve dolaşım belgeleri (A.TR / menşe) doğrudan müşteriye ya da forwarder'a gider.</li><li><b>Konsolosluk / Ticaret Odası:</b> tasdik için yurtiçi adrese motorlu kurye ya da kargo ile gönderilir; tasdikli belgeler asıl gönderiye eklenir.</li><li><b>Gönderim No:</b> kargo firmasının takip numarası; detaydan takip sayfası açılır. İptal gönderimler listelenir, toplama girmez.</li></ul></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ib-perde" id="ibPerde"></div>
+    <div class="ib-drawer" id="ibDrawer">
+        <div class="ib-drawer-ust"><b id="ibDrawerBaslik" style="font-size:.9rem"></b><span class="ms-auto d-flex gap-1" id="ibDrawerAksiyon"></span><button type="button" class="btn btn-light btn-sm py-0" id="ibDrawerKapat" style="font-size:.66rem"><i class="fas fa-xmark"></i></button></div>
+        <div id="ibDrawerIc"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="/js/ihracat-belge.js?v=1"></script>
+}

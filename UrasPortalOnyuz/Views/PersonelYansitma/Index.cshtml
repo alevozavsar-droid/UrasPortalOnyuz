@@ -1,0 +1,140 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string sekme = (string)ViewBag.Sekme ?? "hazirlik";
+    string donem = (string)ViewBag.Donem;
+}
+@*
+    PERSONEL MALİYET YANSITMASI — İK ve İdari İşler › İnsan Kaynakları › Personel Maliyet ve Bordro
+    Kural: SGK İşvereni ≠ Fiili Görev Yeri olan personelin aylık maliyeti, Gider Kataloğu 13 Personel ve İşçilik Giderleri kalemleriyle
+    (GDR.13.AA.KK ↔ YNS.13.AA.KK) SGK işvereni şirketten fiili görev yeri şirkete yansıtılır; kayıt İKİ şirkete birden atılır.
+    Sekmeler: Yansıtma Hazırlığı (dönem seçilince otomatik tespit + toplu kayıt) · Yansıtma Kayıtları (iki taraflı fişler, fatura, iptal) · Kalem Eşleme
+    Veri: /PersonelYansitma/Veri?donem= · Olustur · FaturaOlustur · Iptal · EslemeKaydet · DagilimKaydet · KdvKaydet. Betik: wwwroot/js/personel-yansitma.js
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<style>
+    .na.py { --na-k: #b45309; }
+    .py-pill { font-size: .68rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; }
+    .py-filtre { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px 8px; margin-bottom: 8px; }
+    .py-filtre label { display: block; font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; }
+    .py-filtre .form-control, .py-filtre .form-select { font-size: .72rem; padding: 3px 7px; height: 28px; }
+    @@media (max-width: 1200px) { .py-filtre { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .py-akis { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: .68rem; font-weight: 700; color: #334155; }
+    .py-akis span { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; } .py-akis i { color: #94a3b8; font-size: .6rem; }
+    .py-yon { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; } .py-yon b { color: #0f172a; } .py-yon .ok { color: #b45309; font-weight: 800; }
+    .py-pay { font-size: .6rem; color: #64748b; }
+    #pyTablo tbody tr.ana { cursor: pointer; } #pyTablo tbody tr.ana:hover td { background: #fff7ed; } #pyTablo tbody tr.detay td { background: #fffbeb; padding: 6px 10px; }
+    #pyTablo tbody tr.ana.kaydedildi td.ad { color: #16a34a; }
+    .py-kalem { font-size: .66rem; } .py-kalem th, .py-kalem td { padding: 2px 6px; white-space: nowrap; } .py-kalem td.s, .py-kalem th.s { text-align: right; }
+    .py-kalem .kod { font-family: ui-monospace, monospace; font-size: .62rem; color: #475569; }
+    .py-dagilim { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: .66rem; } .py-dagilim input { width: 64px; font-size: .66rem; padding: 1px 4px; height: 22px; text-align: right; }
+    .py-dagilim .form-select { width: auto; font-size: .66rem; padding: 1px 4px; height: 22px; }
+    .py-matris td.s, .py-matris th.s { text-align: right; white-space: nowrap; } .py-matris tr.toplam td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; }
+    #pyKayitTablo tbody tr.tik { cursor: pointer; } #pyKayitTablo tbody tr.tik:hover td { background: #fff7ed; }
+    .py-fis { font-size: .66rem; } .py-fis th, .py-fis td { padding: 2px 6px; white-space: nowrap; } .py-fis td.s, .py-fis th.s { text-align: right; } .py-fis tr.top td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; }
+    .py-fis .kod { font-family: ui-monospace, monospace; font-size: .62rem; color: #475569; }
+    .py-fis-bas { display: flex; align-items: center; gap: 8px; font-size: .7rem; font-weight: 800; padding: 6px 8px; border-radius: 8px 8px 0 0; color: #fff; } .py-fis-bas.k { background: #b45309; } .py-fis-bas.h { background: #0f766e; } .py-fis-bas small { font-weight: 500; opacity: .85; margin-left: auto; }
+    .py-drawer { position: fixed; top: 0; right: -900px; width: 860px; max-width: 96vw; height: 100vh; background: #fff; box-shadow: -8px 0 24px rgba(15,23,42,.18); z-index: 1060; transition: right .25s; overflow: auto; padding: 12px 14px; } .py-drawer.acik { right: 0; }
+    .py-drawer-ust { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: sticky; top: 0; background: #fff; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; z-index: 2; flex-wrap: wrap; } .py-drawer-ust .btn { font-size: .66rem; }
+    .py-perde { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1055; display: none; } .py-perde.acik { display: block; }
+    .py-master { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 12px; font-size: .72rem; } .py-master .l { font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; } .py-master .v { font-weight: 600; color: #0f172a; }
+    .py-esleme td .form-select { font-size: .7rem; padding: 2px 6px; height: 26px; }
+    .py-not { font-size: .66rem; color: #475569; margin-top: 6px; }
+    .py-gecmis { font-size: .66rem; color: #475569; } .py-gecmis li { margin-bottom: 2px; }
+</style>
+}
+
+<div class="container-fluid py-3 na py" id="py" data-baslangic="@sekme" data-donem="@donem">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-people-arrows"></i></span>Personel Maliyet Yansıtması</h4>
+        <span class="py-pill"><i class="fas fa-building me-1"></i>SGK İşvereni → Fiili Görev Yeri</span>
+        <span class="py-pill"><i class="fas fa-code-compare me-1"></i>GDR.13 ↔ YNS.13</span>
+        <span class="py-pill"><i class="fas fa-file-invoice me-1"></i>İki Şirkete Otomatik Kayıt</span>
+        <span class="sub w-100">Personel cari kartında <b>SGK İşvereni</b> ile <b>Fiili Görev Yeri</b> farklı olan çalışanların aylık maliyeti, SGK işvereni şirketten fiili görev yeri şirkete <b>yansıtma faturasıyla</b> aktarılır. Bordro dönemi seçildiğinde yansıtma gereken personel ve tutarlar Personel Maliyet Raporu'ndan <b>otomatik</b> bulunur; kalemler Gider Kataloğu <b>13 Personel ve İşçilik Giderleri</b> (GDR.13.AA.KK) ile bire bir yansıtma gelir kalemine (YNS.13.AA.KK) eşlenir. <b>Seçilenleri Yansıt</b> tek adımda iki şirkete birden kayıt atar: SGK işvereni şirkette yansıtma geliri + hedef şirket cari alacağı, fiili görev yeri şirkette personel gideri + kaynak şirket cari borcu.</span>
+    </div>
+    <div class="na-kpi" id="pyKpi" data-dinamik="kapali"></div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+    <div class="na-sekme" id="pySekmeler" data-dinamik="kapali">
+        <button type="button" data-p="hazirlik"><i class="fas fa-wand-magic-sparkles me-1"></i>Yansıtma Hazırlığı <span class="n" id="pyNAday">0</span></button>
+        <button type="button" data-p="kayitlar"><i class="fas fa-file-invoice-dollar me-1"></i>Yansıtma Kayıtları <span class="n" id="pyNKayit">0</span></button>
+        <button type="button" data-p="esleme"><i class="fas fa-code-compare me-1"></i>Kalem Eşleme</button>
+    </div>
+
+    @* ============================ SEKME 1: YANSITMA HAZIRLIĞI ============================ *@
+    <div class="na-panel" data-p="hazirlik">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Bordro Dönemi ve Filtreler</span><span class="d-flex gap-1 align-items-center"><span class="py-akis"><span>1 · Dönem Seç</span><i class="fas fa-chevron-right"></i><span>2 · Otomatik Tespit</span><i class="fas fa-chevron-right"></i><span>3 · Seçilenleri Yansıt</span><i class="fas fa-chevron-right"></i><span>4 · İki Şirkete Kayıt</span></span></span></div>
+            <div class="na-kart-g">
+                <div class="py-filtre">
+                    <div><label for="pyDonem">Bordro Dönemi</label><input class="form-control" type="month" id="pyDonem" value="@donem"></div>
+                    <div><label for="pyAra">Ara</label><input class="form-control" id="pyAra" placeholder="Ad soyad, görev, cari kodu…"></div>
+                    <div><label for="pyKaynak">SGK İşvereni (Kaynak)</label><select class="form-select" id="pyKaynak"><option value="">Tümü</option></select></div>
+                    <div><label for="pyHedef">Fiili Görev Yeri (Hedef)</label><select class="form-select" id="pyHedef"><option value="">Tümü</option></select></div>
+                    <div><label for="pyCati">Çatı Departman</label><select class="form-select" id="pyCati"><option value="">Tümü</option></select></div>
+                    <div><label for="pyDurum">Kayıt Durumu</label><select class="form-select" id="pyDurum"><option value="">Tümü</option><option value="Hazır">Hazır (Kayıt Yok)</option><option value="Kısmen Kaydedildi">Kısmen Kaydedildi</option><option value="Kaydedildi">Kaydedildi</option></select></div>
+                </div>
+                <div class="d-flex gap-2 align-items-center flex-wrap">
+                    <button type="button" class="btn btn-warning btn-sm py-0" id="pyYansit" style="font-size:.7rem;font-weight:700"><i class="fas fa-bolt me-1"></i>Seçilenleri Yansıt (İki Şirkete Otomatik Kayıt)</button>
+                    <button type="button" class="btn btn-light btn-sm py-0" id="pyTumunuSec" style="font-size:.66rem">Kayıtsızları Seç</button>
+                    <button type="button" class="btn btn-light btn-sm py-0" id="pySecimTemizle" style="font-size:.66rem">Seçimi Temizle</button>
+                    <button type="button" class="btn btn-light btn-sm py-0" id="pyExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button>
+                    <span class="na-mini" id="pySayi"></span>
+                </div>
+            </div>
+        </div>
+        <div class="na-kart"><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:62vh">
+            <table class="na-tablo" id="pyTablo" data-dinamik="kapali">
+                <thead><tr><th style="width:28px"><input type="checkbox" id="pyHepsi" title="Tümünü seç"></th><th>Personel</th><th>Ünvan / Görev</th><th>Çatı Departman</th><th>SGK İşvereni</th><th>Fiili Görev Yeri</th><th>Yansıtma Yönü</th><th class="s">Aylık Maliyet</th><th class="s">Yansıtılan Pay</th><th class="s">Yansıtılacak (TL)</th><th class="s">Kalem</th><th>Durum</th></tr></thead>
+                <tbody></tbody>
+                <tfoot><tr><td colspan="7">Toplam (filtre)</td><td class="s" id="pyTopMaliyet"></td><td></td><td class="s" id="pyTopYansitma"></td><td colspan="2" id="pyTopKisi"></td></tr></tfoot>
+            </table>
+        </div></div></div>
+        <div class="py-not">Satıra tıklayınca kalem detayı ve görev yeri dağılımı açılır. "+" ile birden fazla şirkette çalışan personelde maliyet şirketlere eşit paylaştırılır; pay yüzdeleri satır içinden değiştirilip kaydedilebilir (SGK işvereninin kendi payı yansıtılmaz). Aynı personel + hedef şirket + dönem için ikinci kayıt açılmaz.</div>
+    </div>
+
+    @* ============================ SEKME 2: YANSITMA KAYITLARI ============================ *@
+    <div class="na-panel" data-p="kayitlar">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Filtreler</span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="pyKayitExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button><button type="button" class="btn btn-light btn-sm py-0" id="pyFisExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Fiş Satırları Excel</button></span></div>
+            <div class="na-kart-g">
+                <div class="py-filtre">
+                    <div><label for="pyKDonem">Dönem</label><select class="form-select" id="pyKDonem"><option value="">Tümü</option></select></div>
+                    <div><label for="pyKAra">Ara</label><input class="form-control" id="pyKAra" placeholder="Yansıtma no, personel, fiş, fatura…"></div>
+                    <div><label for="pyKKaynak">Kaynak (SGK İşvereni)</label><select class="form-select" id="pyKKaynak"><option value="">Tümü</option></select></div>
+                    <div><label for="pyKHedef">Hedef (Fiili Görev Yeri)</label><select class="form-select" id="pyKHedef"><option value="">Tümü</option></select></div>
+                    <div><label for="pyKDurum">Durum</label><select class="form-select" id="pyKDurum"><option value="">Tümü</option><option>Kaydedildi</option><option>Faturalandı</option><option>İptal</option></select></div>
+                </div>
+                <div class="na-mini" id="pyKSayi"></div>
+                <div class="table-responsive" style="max-height:48vh"><table class="na-tablo" id="pyKayitTablo" data-dinamik="kapali"><thead><tr><th>Yansıtma No</th><th>Dönem</th><th>Personel</th><th>Kaynak → Hedef</th><th class="s">Pay</th><th class="s">Net</th><th class="s">KDV</th><th class="s">Toplam</th><th>Kaynak Fişi</th><th>Hedef Fişi</th><th>Fatura</th><th>Durum</th><th>Oluşturan</th></tr></thead><tbody></tbody></table></div>
+            </div>
+        </div>
+        <div class="row g-2">
+            <div class="col-lg-7"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-table-cells me-1"></i>Şirket Çiftleri (Kaynak → Hedef)</span><span class="not">Filtreye göre · iptal hariç · TL</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo py-matris" id="pyMatris" data-dinamik="kapali"><thead></thead><tbody></tbody></table></div></div></div></div>
+            <div class="col-lg-5"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Kayıt Kuralları</span></div><div class="na-kart-g" style="font-size:.7rem;color:#475569"><ul class="mb-0 ps-3"><li><b>Kaynak (SGK işvereni) fişi:</b> 120 hedef şirket carisi borç · 649 yansıtma gelirleri (YNS.13.AA.KK) alacak · varsa 391 hesaplanan KDV.</li><li><b>Hedef (fiili görev yeri) fişi:</b> 770 personel giderleri (GDR.13.AA.KK) borç · varsa 191 indirilecek KDV · 320 kaynak şirket carisi alacak.</li><li>Her kayıt <b>personel + hedef şirket + dönem</b> bazında tekildir; iki fiş aynı anda atılır, iptalde ikisi de ters kayıtla kapanır.</li><li><b>Fatura Oluştur</b> yansıtma e-faturasını üretir (idempotent); KDV oranı Kalem Eşleme sekmesindeki parametreden gelir.</li></ul></div></div></div>
+        </div>
+    </div>
+
+    @* ============================ SEKME 3: KALEM EŞLEME ============================ *@
+    <div class="na-panel" data-p="esleme">
+        <div class="row g-2">
+            <div class="col-lg-7"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-code-compare me-1"></i>Maliyet Alanı → Gider Kalemi ↔ Yansıtma Gelir Kalemi</span><span class="not">Gider / Gelir Kataloğu · 13 Personel ve İşçilik Giderleri</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo py-esleme" id="pyEslemeTablo" data-dinamik="kapali"><thead><tr><th>Personel Maliyet Alanı</th><th>X / R</th><th>Gider Kodu (GDR.13)</th><th>Gider Kalemi</th><th>Yansıtma Kodu</th><th>Yansıtma Gelir Kalemi</th></tr></thead><tbody></tbody></table></div></div></div>
+                <div class="py-not">Eşleme değişikliği yeni kayıtlarda geçerlidir; mevcut kayıtların kalemleri oluşturuldukları andaki eşlemeyle saklanır. Yansıtma kodu gider kodundan otomatik türetilir (GDR.13.AA.KK → YNS.13.AA.KK).</div>
+            </div>
+            <div class="col-lg-5">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-sliders me-1"></i>Parametreler</span></div><div class="na-kart-g"><div class="na-param mb-1"><span>Yansıtma Faturası KDV %:</span><input class="form-control" id="pyKdv" type="number" min="0" max="50" step="1" style="width:90px"></div><button type="button" class="btn btn-light btn-sm py-0 mt-1" id="pyKdvKaydet" style="font-size:.66rem">Kaydet</button><div class="py-not">Personel maliyet yansıtmasında varsayılan %0; Mali İşler kararına göre değiştirilir, yeni kayıtlarda geçerlidir.</div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-book me-1"></i>Katalog · 13 Personel ve İşçilik Giderleri</span><span class="not" id="pyKatalogSayi"></span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:52vh"><table class="na-tablo py-kalem" id="pyKatalog" data-dinamik="kapali"><thead><tr><th>Gider Kodu</th><th>Alt Grup</th><th>Kalem</th><th>Yansıtma Kodu</th><th>Yansıtma Kalemi</th></tr></thead><tbody></tbody></table></div></div></div>
+            </div>
+        </div>
+    </div>
+
+    @* ============================ KAYIT DETAYI (çekmece) ============================ *@
+    <div class="py-perde" id="pyPerde"></div>
+    <div class="py-drawer" id="pyDrawer">
+        <div class="py-drawer-ust"><b id="pyDrawerBaslik" style="font-size:.9rem"></b><span class="ms-auto d-flex gap-1 flex-wrap" id="pyDrawerAksiyon"></span><button type="button" class="btn btn-light btn-sm py-0" id="pyDrawerKapat" aria-label="Kapat" title="Kapat"><i class="fas fa-xmark"></i></button></div>
+        <div id="pyDrawerIc"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="/js/personel-yansitma.js?v=1"></script>
+}

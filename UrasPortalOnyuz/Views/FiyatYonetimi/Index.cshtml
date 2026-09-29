@@ -1,0 +1,169 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string sekme = (string)ViewBag.Sekme ?? "satici";
+    bool yonetici = (bool)ViewBag.Yonetici;
+    string ben = (string)ViewBag.Ben;
+    string q = Context.Request.Query.ContainsKey("_sekme") ? "?_sekme=1" : "";
+}
+@*
+    MÜŞTERİ FİYAT VE KÂR ORANLARI — YALNIZ Yönetim › Yönetim Özeti › Fiyat ve Kâr Yönetimi. Üç sekme:
+      Yetkili Satıcı Fiyatları : Uras Kimya (üretici) → yetkili satıcı (Selvi Kimya, Alv Kimya, Uras Kimya GmbH) kâr oranı — Genel (toplu) / Ürün Grubu / Kalem (ürün) bazında;
+                                 en özel tanım kazanır; satıcı alış fiyatı = üretim maliyeti × (1 + oran)
+      Müşteri Fiyatları        : yetkili satıcı → müşteri carisi kâr oranı; aynı kademe; müşteri satış fiyatı = satıcı alış fiyatı × (1 + oran); uçtan uca marj
+      Özet ve Günlük           : satıcı × grup / müşteri × grup oran matrisleri; değişiklik günlüğü (kim, ne zaman, eski → yeni)
+    Veri: /FiyatYonetimi/Veri, kayıt: /FiyatYonetimi/SaticiKaydet, /FiyatYonetimi/MusteriKaydet (Data/FiyatOrnek.cs). Betik: wwwroot/js/fiyat-yonetimi.js
+    Yalnız Yönetici yetkisi kaydedebilir; diğer roller salt okunur. Derin bağlantı: /FiyatYonetimi?sekme=musteri | ozet, ?satici=Selvi Kimya, ?kod=120.001
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<link rel="stylesheet" href="/css/cari-kart.css?v=1" />
+<style>
+    .na.fy { --na-k: #7c2d12; }
+    .fy-pill { font-size: .68rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; }
+    .fy-pill.yetki { background: #dcfce7; color: #166534; border-color: #bbf7d0; } .fy-pill.salt { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .fy-akis { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .74rem; margin-bottom: 8px; }
+    .fy-akis .k { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 12px; font-weight: 700; } .fy-akis .k small { display: block; font-weight: 500; color: #64748b; font-size: .62rem; }
+    .fy-akis .k.sec { border-color: var(--na-k); background: #fff7ed; } .fy-akis i.fa-arrow-right { color: #94a3b8; }
+    .fy-sec { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px 8px; margin-bottom: 8px; }
+    .fy-sec label { display: block; font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; }
+    .fy-sec .form-control, .fy-sec .form-select { font-size: .72rem; padding: 3px 7px; height: 28px; }
+    .fy-sec .ara { grid-column: span 2; }
+    @@media (max-width: 1200px) { .fy-sec { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .fy-oran { width: 84px; text-align: right; font-size: .74rem; padding: 2px 6px; height: 26px; font-variant-numeric: tabular-nums; }
+    .fy-oran.degisti { border-color: #f59e0b; background: #fffbeb; }
+    .fy-oran:disabled { background: #f8fafc; color: #64748b; }
+    .fy-grup { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+    .fy-grup > div { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; display: flex; align-items: center; gap: 8px; font-size: .72rem; }
+    .fy-grup > div b { flex: 1; } .fy-grup > div small { display: block; color: #64748b; font-size: .62rem; font-weight: 500; }
+    .fy-genel { background: #fff7ed; border: 1px solid #fdba74; border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; gap: 12px; font-size: .74rem; margin-bottom: 8px; flex-wrap: wrap; }
+    .fy-genel b { font-size: .8rem; } .fy-genel .not { color: #9a3412; font-size: .66rem; }
+    .fy-kaynak { display: inline-block; font-size: .58rem; font-weight: 800; border-radius: 4px; padding: 0 5px; text-transform: uppercase; letter-spacing: .03em; }
+    .fy-kaynak.Kalem { background: #fef3c7; color: #92400e; } .fy-kaynak.Grup { background: #dbeafe; color: #1e40af; } .fy-kaynak.Genel { background: #e2e8f0; color: #334155; } .fy-kaynak.Tanımsız { background: #fee2e2; color: #991b1b; }
+    #fyUrunTablo td.s, #fyMUrunTablo td.s, .fy-matris td.s, .fy-matris th.s { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    #fyUrunTablo td small, #fyMUrunTablo td small { color: #64748b; display: block; font-size: .62rem; }
+    #fyUrunTablo tfoot td, #fyMUrunTablo tfoot td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; }
+    .fy-fark.pozitif { color: #166534; } .fy-fark.negatif { color: #991b1b; font-weight: 700; }
+    .fy-cari { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px 12px; font-size: .7rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; }
+    .fy-cari .l { font-size: .58rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; letter-spacing: .04em; } .fy-cari .v { font-weight: 700; color: #0f172a; }
+    #fyMusteriListe tbody tr.tik { cursor: pointer; } #fyMusteriListe tbody tr.tik:hover td { background: #fff7ed; } #fyMusteriListe tbody tr.secili td { background: #ffedd5; }
+    .fy-matris tr.toplam td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; }
+    .fy-kaydet { position: sticky; bottom: 0; background: #fff; border-top: 1px solid #e2e8f0; padding: 8px 0 2px; display: flex; gap: 6px; align-items: center; z-index: 2; }
+    .fy-kaydet .n { margin-left: auto; font-size: .68rem; color: #64748b; }
+</style>
+}
+
+<div class="container-fluid py-3 na fy" id="fy" data-sekme="@(q != "" ? "1" : "")" data-baslangic="@sekme" data-yonetici="@(yonetici ? "1" : "")">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-tags"></i></span>Müşteri Fiyat ve Kâr Oranları</h4>
+        <span class="fy-pill"><i class="fas fa-industry me-1"></i>Üretici: Uras Kimya</span>
+        <span class="fy-pill"><i class="fas fa-store me-1"></i>Yetkili Satıcı → Müşteri</span>
+        <span class="fy-pill @(yonetici ? "yetki" : "salt")"><i class="fas @(yonetici ? "fa-user-shield" : "fa-lock") me-1"></i>@(yonetici ? "Yönetici · Düzenleme Yetkili" : "Salt Okunur") · @ben</span>
+        <span class="sub w-100">Yalnız yönetimin gördüğü fiyatlandırma ekranı. <b>1. katman:</b> üretici Uras Kimya ürünlerini yetkili satıcılarına (Selvi Kimya, Alv Kimya, Uras Kimya GmbH) kaç % kârla satar — <b>toplu (genel)</b>, <b>ürün grubu</b> ya da <b>kalem kalem</b>; en özel tanım geçerlidir. <b>2. katman:</b> yetkili satıcı her müşteri carisine ürün ürün kaç % kârla satar. Satıcı alış fiyatı = üretim maliyeti × (1 + oran); müşteri satış fiyatı = satıcı alış fiyatı × (1 + oran). Her değişiklik günlüğe yazılır.</span>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+    <div class="na-sekme" id="fySekmeler" data-dinamik="kapali">
+        <button type="button" data-p="satici"><i class="fas fa-industry me-1"></i>Yetkili Satıcı Fiyatları <small class="text-muted">(Üretici → Satıcı)</small></button>
+        <button type="button" data-p="musteri"><i class="fas fa-store me-1"></i>Müşteri Fiyatları <small class="text-muted">(Satıcı → Müşteri)</small> <span class="n" id="fyNMusteri">0</span></button>
+        <button type="button" data-p="ozet"><i class="fas fa-table-cells me-1"></i>Özet ve Günlük</button>
+    </div>
+
+    @* ============================ SEKME 1: YETKİLİ SATICI FİYATLARI ============================ *@
+    <div class="na-panel" data-p="satici">
+        <div class="fy-akis"><span class="k"><i class="fas fa-industry me-1"></i>Uras Kimya<small>Üretici · üretim maliyeti</small></span><i class="fas fa-arrow-right"></i><span class="k sec" id="fySaticiKutu">Yetkili Satıcı<small>Alış fiyatı = maliyet × (1 + oran)</small></span><i class="fas fa-arrow-right"></i><span class="k">Müşteri<small>2. katman (Müşteri Fiyatları sekmesi)</small></span></div>
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-store me-1"></i>Yetkili Satıcı ve Toplu Oranlar</span><span class="not" id="fySaticiNot"></span></div>
+            <div class="na-kart-g">
+                <div class="fy-sec">
+                    <div><label>Yetkili Satıcı</label><select class="form-select" id="fySatici"></select></div>
+                    <div class="ara"><label>Ürün Ara</label><input class="form-control" id="fyAra" placeholder="Kod, ürün adı, seri…"></div>
+                    <div><label>Ürün Grubu</label><select class="form-select" id="fyGrupF"><option value="">Tümü</option></select></div>
+                    <div><label>Oran Kaynağı</label><select class="form-select" id="fyKaynakF"><option value="">Tümü</option><option>Kalem</option><option>Grup</option><option>Genel</option><option>Tanımsız</option></select></div>
+                    <div><label>&nbsp;</label><button type="button" class="btn btn-light btn-sm w-100" id="fyExcel" style="font-size:.68rem;height:28px"><i class="fas fa-file-excel me-1"></i>Fiyat Listesi Excel</button></div>
+                </div>
+                <div class="fy-cari" id="fySaticiCari"></div>
+                <div class="fy-genel"><i class="fas fa-layer-group"></i><b>Toplu Oran (Tüm Ürünler)</b><span>%</span><input type="number" step="0.01" class="form-control fy-oran" id="fyGenel" data-k="genel" placeholder="—"><span class="not">Grup ya da kalem oranı tanımlı olmayan tüm ürünlere uygulanır. Boş bırakılırsa tanımsız ürünler maliyetine (kârsız) fiyatlanır ve uyarı verilir.</span></div>
+                <div class="fy-grup" id="fyGruplar"></div>
+            </div>
+        </div>
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-list-ol me-1"></i>Ürün Bazında Kâr Oranı ve Satıcı Alış Fiyatı</span><span class="not">Kalem oranı girilen ürünlerde grup / genel oran yok sayılır · fiyatlar TL, KDV hariç</span></div>
+            <div class="na-kart-g p-0">
+                <div class="table-responsive" style="max-height:60vh">
+                    <table class="na-tablo" id="fyUrunTablo" data-dinamik="kapali">
+                        <thead><tr><th>Kod</th><th>Ürün</th><th>Ürün Grubu</th><th>Birim</th><th class="s">Üretim Maliyeti</th><th class="s">Kalem Oranı %</th><th class="s">Uygulanan Oran</th><th>Kaynak</th><th class="s">Satıcı Alış Fiyatı</th><th class="s">Kâr (TL)</th><th class="s">Liste Fiyatı</th><th class="s">Listeye Göre</th></tr></thead>
+                        <tbody></tbody>
+                        <tfoot><tr><td colspan="4">Toplam / Ortalama</td><td class="s" id="fyTopMaliyet"></td><td></td><td class="s" id="fyOrtOran"></td><td></td><td class="s" id="fyTopFiyat"></td><td class="s" id="fyTopKar"></td><td class="s" id="fyTopListe"></td><td></td></tr></tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class="na-kart-g fy-kaydet"><button type="button" class="btn btn-primary btn-sm" id="fyKaydet" style="font-size:.72rem"><i class="fas fa-floppy-disk me-1"></i>Kaydet</button><button type="button" class="btn btn-light btn-sm" id="fyVazgec" style="font-size:.72rem">Vazgeç</button><span class="n" id="fyDegisiklik"></span></div>
+        </div>
+    </div>
+
+    @* ============================ SEKME 2: MÜŞTERİ FİYATLARI ============================ *@
+    <div class="na-panel" data-p="musteri">
+        <div class="fy-akis"><span class="k"><i class="fas fa-industry me-1"></i>Uras Kimya<small>Üretici</small></span><i class="fas fa-arrow-right"></i><span class="k" id="fyMSaticiKutu">Yetkili Satıcı<small>Alış fiyatı (1. katman)</small></span><i class="fas fa-arrow-right"></i><span class="k sec" id="fyMMusteriKutu">Müşteri<small>Satış fiyatı = alış × (1 + oran)</small></span></div>
+        <div class="row g-2">
+            <div class="col-lg-4">
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas fa-users me-1"></i>Müşteriler</span><span class="not" id="fyMListeNot"></span></div>
+                    <div class="na-kart-g">
+                        <div class="fy-sec" style="grid-template-columns:1fr 1fr">
+                            <div><label>Yetkili Satıcı</label><select class="form-select" id="fyMSatici"></select></div>
+                            <div><label>Müşteri Ara</label><input class="form-control" id="fyMAra" placeholder="Kod, ünvan, sınıf…"></div>
+                            <div><label>Cari Sınıfı</label><select class="form-select" id="fyMSinif"><option value="">Tümü</option></select></div>
+                            <div><label>Tanım</label><select class="form-select" id="fyMTanim"><option value="">Tümü</option><option value="var">Oran Tanımlı</option><option value="yok">Tanımsız</option></select></div>
+                        </div>
+                        <div class="table-responsive" style="max-height:62vh">
+                            <table class="na-tablo" id="fyMusteriListe" data-dinamik="kapali">
+                                <thead><tr><th>Cari Kodu</th><th>Müşteri</th><th>Cari Sınıfı</th><th class="s">Genel %</th><th class="s">Grup / Kalem</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-8">
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas fa-address-card me-1"></i>Seçili Müşteri · Cari Kart Bilgileri</span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="fyMKartAc" style="font-size:.66rem"><i class="fas fa-address-card me-1"></i>Cari Kartı Aç</button><button type="button" class="btn btn-light btn-sm py-0" id="fyMExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Müşteri Fiyat Listesi Excel</button></span></div>
+                    <div class="na-kart-g">
+                        <div class="fy-cari" id="fyMCari"></div>
+                        <div class="fy-genel"><i class="fas fa-layer-group"></i><b>Müşteri Genel Oranı (Tüm Ürünler)</b><span>%</span><input type="number" step="0.01" class="form-control fy-oran" id="fyMGenel" placeholder="—"><span class="not">Satıcı alış fiyatının üzerine uygulanır; grup ya da kalem oranı tanımlı ürünlerde o oran geçerlidir.</span></div>
+                        <div class="fy-grup" id="fyMGruplar"></div>
+                    </div>
+                </div>
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas fa-list-ol me-1"></i>Ürün Bazında Müşteri Satış Fiyatı</span><span class="d-flex gap-2 align-items-center"><input class="form-control" id="fyMUrunAra" placeholder="Ürün ara…" style="font-size:.7rem;height:24px;width:160px;padding:2px 6px"><select class="form-select" id="fyMGrupF" style="font-size:.7rem;height:24px;width:200px;padding:2px 6px"><option value="">Tüm Gruplar</option></select></span></div>
+                    <div class="na-kart-g p-0">
+                        <div class="table-responsive" style="max-height:52vh">
+                            <table class="na-tablo" id="fyMUrunTablo" data-dinamik="kapali">
+                                <thead><tr><th>Kod</th><th>Ürün</th><th>Ürün Grubu</th><th class="s">Satıcı Alış Fiyatı</th><th class="s">Kalem Oranı %</th><th class="s">Uygulanan Oran</th><th>Kaynak</th><th class="s">Müşteri Satış Fiyatı</th><th class="s">Satıcı Kârı (TL)</th><th class="s">Liste Fiyatı</th><th class="s">Listeye Göre</th><th class="s">Uçtan Uca Marj</th></tr></thead>
+                                <tbody></tbody>
+                                <tfoot><tr><td colspan="3">Toplam / Ortalama</td><td class="s" id="fyMTopAlis"></td><td></td><td class="s" id="fyMOrtOran"></td><td></td><td class="s" id="fyMTopSatis"></td><td class="s" id="fyMTopKar"></td><td class="s" id="fyMTopListe"></td><td></td><td class="s" id="fyMOrtMarj"></td></tr></tfoot>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="na-kart-g fy-kaydet"><button type="button" class="btn btn-primary btn-sm" id="fyMKaydet" style="font-size:.72rem"><i class="fas fa-floppy-disk me-1"></i>Kaydet</button><button type="button" class="btn btn-light btn-sm" id="fyMVazgec" style="font-size:.72rem">Vazgeç</button><span class="n" id="fyMDegisiklik"></span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ============================ SEKME 3: ÖZET VE GÜNLÜK ============================ *@
+    <div class="na-panel" data-p="ozet">
+        <div class="row g-2">
+            <div class="col-lg-6">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-industry me-1"></i>Yetkili Satıcı × Ürün Grubu Kâr Oranı</span><span class="not">Üretici → satıcı · uygulanan oran (genel / grup) · kalem tanımı sayısı</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo fy-matris" id="fySaticiMatris" data-dinamik="kapali"><thead></thead><tbody></tbody></table></div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-store me-1"></i>Müşteri × Ürün Grubu Kâr Oranı</span><span class="d-flex gap-2 align-items-center"><select class="form-select" id="fyOSatici" style="font-size:.7rem;height:24px;width:180px;padding:2px 6px"></select></span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:50vh"><table class="na-tablo fy-matris" id="fyMusteriMatris" data-dinamik="kapali"><thead></thead><tbody></tbody></table></div></div></div>
+            </div>
+            <div class="col-lg-6">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Değişiklik Günlüğü</span><span class="not">Kim, ne zaman, eski → yeni · son 200 kayıt</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:80vh"><table class="na-tablo" id="fyAudit" data-dinamik="kapali"><thead><tr><th>Zaman</th><th>Kullanıcı</th><th>Katman</th><th>Hedef</th><th>Alan</th><th class="s">Eski</th><th class="s">Yeni</th></tr></thead><tbody></tbody></table></div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Kurallar</span></div><div class="na-kart-g" style="font-size:.7rem;color:#475569"><ul class="mb-0 ps-3"><li><b>Kademe:</b> Kalem (ürün) oranı &gt; Ürün Grubu oranı &gt; Genel (toplu) oran. Bir ürün için kalem oranı girildiyse grup ve genel oran yok sayılır.</li><li><b>1. katman:</b> Satıcı Alış Fiyatı = Üretim Maliyeti × (1 + oran / 100). Satıcının kendi cari kartı (grup içi) üzerinden faturalanır.</li><li><b>2. katman:</b> Müşteri Satış Fiyatı = Satıcı Alış Fiyatı × (1 + müşteri oranı / 100). Uçtan uca marj = Müşteri Fiyatı / Üretim Maliyeti − 1.</li><li><b>Liste fiyatı:</b> üreticinin tavsiye liste fiyatı; "Listeye Göre" sütunu liste fiyatına göre iskonto (−) ya da üstü (+) gösterir.</li><li><b>Yetki:</b> yalnız Yönetici (Yetki = A) kaydedebilir; diğer roller salt okunur. Her kayıt günlüğe yazılır; oranı boşaltmak tanımı siler.</li></ul></div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="/js/fiyat-yonetimi.js?v=1"></script>
+}

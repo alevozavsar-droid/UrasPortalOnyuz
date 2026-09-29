@@ -268,12 +268,17 @@ namespace WebApplication3.Data
                     // Müşteri Portföyü: cari kartlar + müşteri talep formu (Talep › Yeni Talep › Müşteri'nin kısayolu; tedarikçi kalıbıyla aynı)
                     // Müşteri Talep Formu iki menüde de doğrudan aynı ekranı açar (Talep › Yeni Talep › Müşteri ve burada); kısayol / yönlendirme yok
                     G("musteri-portfoyu", "Müşteri Portföyü", R("Müşteri Cari Kartları", "CariKart", "Musteri"), R("Müşteri Talep Formu", "CariKart", "MusteriTalep")),
+                    // Müşteri Teklifleri: tüm grup şirketlerinin müşterilere verdiği teklifler konsolide + aylık satışa dönüşüm özeti + cari kart bilgileri (Data/TeklifOrnek.cs; Yönetim › Özel Raporlar'da da aynı ekran)
+                    G("teklif-yonetimi", "Teklif Yönetimi", R("Müşteri Teklifleri", "MusteriTeklif", "Index")),
+                    // Numune Gönderim Takip Raporu: yurtiçi / yurtdışı numune gönderimleri — gerçek bedel, kargo firması, takip no, masraflar, temsilci, sonuç (Data/NumuneOrnek.cs)
+                    G("numune-yonetimi", "Numune Yönetimi", R("Numune Gönderim Takip Raporu", "NumuneGonderim", "Index")),
                     G("fiyat-musteri-kosullari", "Fiyat ve Müşteri Koşulları", R("Muhattaplar İçn Özel Fiyatlar"))),
                   U("yurtici-satis", "Yurtiçi Satış",
                     G("satis-islemleri", "Satış İşlemleri", R("Satış Siparişi"), R("Taslak Faturalar"), R("Satış Faturası"), R("Müşteri İade Faturası"), R("Bedelsiz Satış Raporu"), R("Grup İçi Satış (Uras > Selvi > Müşteri)")),
                     G("satis-analizleri", "Satış Analizleri ve Performans", R("Satış Raporu"), R("Satış Ekstre Raporu"), R("Satış Analiz Raporu"), R("Satış Analiz Dashboard"), R("Satışçı Analiz Raporu"), R("Konsolide Prim Raporu"), R("Tahsilat Prim Tablosu"))),
                   U("yurtdisi-satis", "Yurtdışı Satış",
-                    G("ihracat-operasyon", "İhracat Operasyon Takibi", R("İhracat Dosya Raporu"), K("İhracat Tahsilat Raporu", "#mali-isler/finans/doviz-dis-ticaret"), K("İBKB Beyanname Takibi", "#mali-isler/finans/doviz-dis-ticaret"), R("Yurtdışı Müşteri Kartları"))),
+                    // İhracat Belge Gönderim Takibi: akreditif ibrazı / vesaik / orijinal evrak gönderileri — kargo firması, takip no, ibraz son tarihi, banka sonucu (Data/IhracatBelgeOrnek.cs)
+                    G("ihracat-operasyon", "İhracat Operasyon Takibi", R("İhracat Dosya Raporu"), R("İhracat Belge Gönderim Takibi", "IhracatBelge", "Index"), K("İhracat Tahsilat Raporu", "#mali-isler/finans/doviz-dis-ticaret"), K("İBKB Beyanname Takibi", "#mali-isler/finans/doviz-dis-ticaret"), R("Yurtdışı Müşteri Kartları"))),
                   U("depo-siparis", "Depo ve Sipariş Yönetimi",
                     G("siparis-hazirlama", "Sipariş Hazırlama / Depo Süreçleri")),
                   U("sevkiyat-lojistik", "Sevkiyat ve Lojistik",
@@ -345,7 +350,7 @@ namespace WebApplication3.Data
                     G("personel-organizasyon", "Personel ve Organizasyon", R("Personel Carileri")),
                     G("izin-devamlilik", "İzin ve Devamlılık", R("Yaklaşan İzinler", "Home", "Index"), R("Ekip İzin Takvimi"), R("İzin Takip Raporu")),   // tabloda: index.html#yaklasanIzin (ana sayfa kartı)
                     G("performans-is-takibi", "Performans ve İş Takibi", R("Mesai Takip Raporu")),
-                    G("personel-maliyet-bordro", "Personel Maliyet ve Bordro", R("Personel Maliyet Raporu", "PersonelMaliyet", "Index"), R("Personel Maliyet Tablosu"))),   // Personel Maliyet Raporu: "PERSONEL 19.06 GÜNCEL" tablosu + Personel Cari Kartı (Yönetim › Özel Raporlar'da da aynı ekran)
+                    G("personel-maliyet-bordro", "Personel Maliyet ve Bordro", R("Personel Maliyet Raporu", "PersonelMaliyet", "Index"), R("Personel Maliyet Yansıtması", "PersonelYansitma", "Index"), R("Personel Maliyet Tablosu"))),   // Yansıtma: SGK işvereni ≠ fiili görev yeri olan personelin maliyeti GDR.13 ↔ YNS.13 ile iki şirkete kaydedilir   // Personel Maliyet Raporu: "PERSONEL 19.06 GÜNCEL" tablosu + Personel Cari Kartı (Yönetim › Özel Raporlar'da da aynı ekran)
                   U("idari-isler", "İdari İşler",
                     G("danisma-giris-cikis", "Danışma ve Giriş-Çıkış", R("Danışma Giriş-Çıkış Defteri")),
                     G("arac-seyahat", "Araç ve Seyahat", R("Araç Takvimi (Filo)"), R("Seyahat Takvimi")))),
@@ -392,9 +397,11 @@ namespace WebApplication3.Data
                   "Konsolide şirket görünümü ve üst yönetim analizleri. Operasyonel raporların kopyası değil, özet/kısayol mantığıyla çalışır.",
                   Kpi("Ciro", "Karlılık", "Gider", "Kritik Aksiyon"),
                   U("yonetim-ozeti", "Yönetim Özeti",
-                    G("sirket-grup-performansi", "Şirket ve Grup Performansı", R("Şirket Ciro Raporu"), R("Al Sat Şirketleri Satış Analizi"), R("Üretim Şirketleri Kar Analizi"), R("Konsolide Gider Raporu"), K("Hukuk Yönetici Takip Raporu", "#hukuk/genel/02"))),
+                    G("sirket-grup-performansi", "Şirket ve Grup Performansı", R("Şirket Ciro Raporu"), R("Al Sat Şirketleri Satış Analizi"), R("Üretim Şirketleri Kar Analizi"), R("Konsolide Gider Raporu"), K("Hukuk Yönetici Takip Raporu", "#hukuk/genel/02")),
+                    // Müşteri Fiyat ve Kâr Oranları: üretici → yetkili satıcı ve satıcı → müşteri kâr oranları (Data/FiyatOrnek.cs); YALNIZ Yönetim'de, kaydetme yalnız Yönetici yetkisiyle
+                    G("fiyat-kar-yonetimi", "Fiyat ve Kâr Yönetimi", R("Müşteri Fiyat ve Kâr Oranları", "FiyatYonetimi", "Index"))),
                   U("ozel-analizler", "Özel Analizler",
-                    G("ozel-raporlar", "Özel Raporlar", R("Tahsilat Analiz Raporu", "Rapor35"), R("Genel Analiz Raporu", "GenelAnaliz", "Index"), R("Çalan İşlem Raporu"), R("Yapılan Ödemeler", "YapilanOdemeler", "Index"), R("Personel Maliyet Raporu", "PersonelMaliyet", "Index")))),   // Yapılan Ödemeler: tüm şirketlerin banka / çek / kasa / nakit avans ödemeleri konsolide (Finans'taki Rapor118 giriş ekranından ayrıdır) · Personel Maliyet Raporu: "PERSONEL 19.06 GÜNCEL" tablosu
+                    G("ozel-raporlar", "Özel Raporlar", R("Tahsilat Analiz Raporu", "Rapor35"), R("Genel Analiz Raporu", "GenelAnaliz", "Index"), R("Çalan İşlem Raporu"), R("Yapılan Ödemeler", "YapilanOdemeler", "Index"), R("Personel Maliyet Raporu", "PersonelMaliyet", "Index"), R("Müşteri Teklifleri", "MusteriTeklif", "Index"), R("Numune Gönderim Takip Raporu", "NumuneGonderim", "Index"), R("İhracat Belge Gönderim Takibi", "IhracatBelge", "Index")))),   // İhracat Belge Gönderim Takibi: akreditif / vesaik / orijinal evrak kargo takibi (Satış ve Operasyon › İhracat Operasyon Takibi ile aynı ekran) · Numune Gönderim Takip Raporu: konsolide numune gönderimleri + aylık özet (Satış ve Operasyon › Numune Yönetimi ile aynı ekran) · Müşteri Teklifleri: konsolide teklif listesi + aylık satışa dönüşüm özeti (Satış ve Operasyon › Teklif Yönetimi ile aynı ekran) · Yapılan Ödemeler: tüm şirketlerin banka / çek / kasa / nakit avans ödemeleri konsolide (Finans'taki Rapor118 giriş ekranından ayrıdır) · Personel Maliyet Raporu: "PERSONEL 19.06 GÜNCEL" tablosu
 
                 M("takvim", "Takvim", "takvim",
                   "Şirket ve departman takvimleri, toplantılar, görevler ve hatırlatmalar. Ekranlar yeni geliştirilecek.",

@@ -1,0 +1,208 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var sirketler = (string[])ViewBag.Sirketler;
+    int yil = (int)ViewBag.Yil;
+    string sekme = (string)ViewBag.Sekme ?? "ozet";
+    string q = Context.Request.Query.ContainsKey("_sekme") ? "?_sekme=1" : "";
+}
+@*
+    NUMUNE GÖNDERİM TAKİP RAPORU — Satış ve Operasyon › Müşteri ve CRM Yönetimi › Numune Yönetimi (Yönetim › Özel Raporlar'da aynı ekran). Üç sekme:
+      Aylık Numune Özeti : ay ay gönderilen numune (adet; yurtiçi / yurtdışı), numune bedeli, gönderim masrafı (kargo + gümrük + sigorta), teslim edilen,
+                           teklife / siparişe dönen ve dönüşüm; 12 ay + Toplam + Aylık Ort.; şirket, kargo firması, temsilci, amaç kırılımı
+      Müşteri Bazlı      : cari kart bilgileri (CARİ_MASTER sütunları) ile müşteri başına numune / bedel / masraf / sonuç; satırdan cari kart + numune geçmişi drawer'ı
+      Numune Listesi     : tüm gönderimler — filtreler, KPI, Şirket × Bölge, Kargo Firması, Ay matrisleri, sonuç dağılımı, en çok numune gönderilen 10 müşteri, detay drawer
+    Veri: /NumuneGonderim/Veri (Data/NumuneOrnek.cs; müşteri kartları Data/CariKartOrnek.cs; teklif bağlantısı Data/TeklifOrnek.cs). Betik: wwwroot/js/numune-gonderim.js · Ortak stil: nakit-avans.css + cari-kart.css
+    Sekme sırası ve varsayılan: Aylık Numune Özeti (açılış) → Müşteri Bazlı → Numune Listesi. Derin bağlantı: /NumuneGonderim?sekme=musteri | liste, ?no=NMN-2026-00042, ?kod=120.001
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<link rel="stylesheet" href="/css/cari-kart.css?v=1" />
+<style>
+    .na.ng { --na-k: #b45309; }
+    .ng-pill { font-size: .68rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; }
+    .ng-filtre { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px 8px; margin-bottom: 8px; }
+    .ng-filtre label { display: block; font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; }
+    .ng-filtre .form-control, .ng-filtre .form-select { font-size: .72rem; padding: 3px 7px; height: 28px; }
+    .ng-filtre .ara { grid-column: span 2; }
+    @@media (max-width: 1200px) { .ng-filtre { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .ng-bolge { display: inline-block; font-size: .6rem; font-weight: 800; border-radius: 4px; padding: 1px 5px; color: #fff; }
+    .ng-bolge.ici { background: #0f766e; } .ng-bolge.disi { background: #1d4ed8; }
+    .ng-kargo { display: inline-block; font-size: .62rem; font-weight: 700; border-radius: 999px; padding: 2px 8px; white-space: nowrap; background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; }
+    .ng-kargo.dhl { background: #fde047; color: #7f1d1d; border-color: #facc15; } .ng-kargo.ups { background: #78350f; color: #fde68a; } .ng-kargo.fedex { background: #4d148c; color: #fff; } .ng-kargo.tnt { background: #ff6600; color: #fff; } .ng-kargo.thy { background: #c8102e; color: #fff; } .ng-kargo.arac { background: #e2e8f0; color: #0f172a; }
+    .ng-takip { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .68rem; }
+    .ng-oran { display: inline-block; min-width: 46px; text-align: right; font-weight: 700; }
+    .ng-oran.iyi { color: #166534; } .ng-oran.orta { color: #92400e; } .ng-oran.dusuk { color: #991b1b; }
+    #ngTablo td:nth-child(-n+4), #ngTablo td:nth-child(13), #ngMusteriTablo td:first-child { white-space: nowrap; }
+    #ngTablo tbody tr.tik, #ngMusteriTablo tbody tr.tik { cursor: pointer; } #ngTablo tbody tr.tik:hover td, #ngMusteriTablo tbody tr.tik:hover td { background: #fffbeb; }
+    #ngTablo tfoot td, #ngMusteriTablo tfoot td, #ngTemsilci tfoot td, #ngKargo tfoot td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; }
+    #ngTablo td small, #ngMusteriTablo td small, .ng-matris td small { color: #64748b; display: block; font-size: .62rem; }
+    .ng-matris td.s, .ng-matris th.s { text-align: right; white-space: nowrap; }
+    .ng-matris tr.toplam td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; }
+    .ng-bar { display: grid; grid-template-columns: 170px 1fr 110px; gap: 8px; align-items: center; font-size: .7rem; padding: 3px 0; border-bottom: 1px dashed #e2e8f0; }
+    .ng-bar .b { height: 10px; background: #e2e8f0; border-radius: 999px; overflow: hidden; } .ng-bar .b i { display: block; height: 100%; background: var(--na-k); }
+    .ng-bar .v { text-align: right; font-weight: 700; color: #0f172a; } .ng-bar .v small { color: #64748b; font-weight: 500; }
+    .ng-drawer { position: fixed; top: 0; right: -800px; width: 760px; max-width: 95vw; height: 100vh; background: #fff; box-shadow: -8px 0 24px rgba(15,23,42,.18); z-index: 1060; transition: right .25s; overflow: auto; padding: 12px 14px; } .ng-drawer.acik { right: 0; }
+    .ng-drawer-ust { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: sticky; top: 0; background: #fff; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; z-index: 2; }
+    .ng-perde { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1055; display: none; } .ng-perde.acik { display: block; }
+    .ng-master { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; font-size: .72rem; }
+    .ng-master .l { font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; } .ng-master .v { font-weight: 600; color: #0f172a; word-break: break-word; }
+    .ng .ck-master { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .ng-masraf { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .ng-masraf > div { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px; text-align: center; }
+    .ng-masraf .l { font-size: .6rem; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: .04em; } .ng-masraf .v { font-size: .9rem; font-weight: 800; }
+    .ng-masraf .top { border-color: #fcd34d; background: #fffbeb; }
+    /* --- Excel şablonu görünümü --- */
+    .ng-rapor-ust { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: linear-gradient(90deg, #78350f, #b45309); color: #fff; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+    .ng-rapor-ust h5 { margin: 0; font-weight: 800; letter-spacing: .05em; font-size: .95rem; text-transform: uppercase; }
+    .ng-rapor-ust .alt { font-size: .64rem; letter-spacing: .14em; opacity: .85; text-transform: uppercase; }
+    .ng-rapor-ust .ayar { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; } .ng-rapor-ust .ayar select { font-size: .72rem; padding: 2px 6px; height: 26px; width: auto; } .ng-rapor-ust .ayar .btn { font-size: .66rem; } .ng-rapor-ust .ayar label { font-size: .66rem; font-weight: 700; }
+    .ng-excel { font-size: .68rem; border-collapse: separate; border-spacing: 0; } .ng-excel th, .ng-excel td { white-space: nowrap; padding: 3px 7px; border-bottom: 1px solid #e2e8f0; }
+    .ng-excel thead th { position: sticky; top: 0; background: #1e293b; color: #fff; text-transform: uppercase; font-size: .6rem; letter-spacing: .04em; text-align: right; z-index: 3; }
+    .ng-excel thead th.ad { text-align: left; } .ng-excel td.s { text-align: right; font-variant-numeric: tabular-nums; }
+    .ng-excel th.ad, .ng-excel td.ad { position: sticky; left: 0; background: #fff; min-width: 260px; z-index: 2; text-transform: uppercase; font-weight: 600; box-shadow: 1px 0 0 #e2e8f0; }
+    .ng-excel thead th.ad { z-index: 4; background: #1e293b; }
+    .ng-excel tr.grp td { background: #cbd5e1; color: #0f172a; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
+    .ng-excel tr.r td { color: #64748b; } .ng-excel tr.r td.ad { font-weight: 500; }
+    .ng-excel tr.top td { font-weight: 700; background: #f1f5f9; border-top: 1px solid #94a3b8; } .ng-excel tr.top td.ad { background: #f1f5f9; }
+    .ng-excel tr.genel td { font-weight: 800; background: #fef3c7; border-top: 2px solid #b45309; } .ng-excel tr.genel td.ad { background: #fef3c7; }
+    .ng-excel tr.oran td { font-style: italic; color: #78350f; background: #fffbeb; } .ng-excel tr.oran td.ad { background: #fffbeb; }
+    .ng-excel td.top { font-weight: 700; } .ng-excel td.ort { font-style: italic; color: #475569; background: #fafafa; }
+    .ng-excel tr.ara td { height: 6px; padding: 0; background: #fff; border: 0; }
+    .ng-not { font-size: .66rem; color: #475569; margin-top: 6px; }
+</style>
+}
+
+<div class="container-fluid py-3 na ng" id="ng" data-sekme="@(q != "" ? "1" : "")" data-baslangic="@sekme" data-yil="@yil">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-box-open"></i></span>Numune Gönderim Takip Raporu</h4>
+        <span class="ng-pill"><i class="fas fa-building me-1"></i>Konsolide · @sirketler.Length Şirket</span>
+        <span class="ng-pill"><i class="fas fa-globe me-1"></i>Yurtiçi · Yurtdışı</span>
+        <span class="ng-pill"><i class="fas fa-truck-fast me-1"></i>DHL · UPS · FedEx · TNT · Yurtiçi Kargolar · Şirket Aracı</span>
+        <span class="sub w-100">Grup şirketlerinin müşterilere gönderdiği <b>tüm numuneler</b> tek listede: gönderim tarihi, gönderen şirket, <b>cari kart bilgileri</b>, alıcı, <b>gönderen satış temsilcisi</b>, amaç, numune kalemleri ve <b>gerçek bedeli</b>, <b>kargo firması</b>, <b>gönderim (takip) numarası</b>, ağırlık / desi, <b>gönderim masrafları</b> (kargo + gümrük / ihracat beyanı + sigorta), kargo hareketleri, teslim ve <b>sonuç</b> (geri bildirim → teklif → sipariş). <b>Aylık Numune Özeti</b> ay ay adet, bedel, masraf ve siparişe dönüşümü 12 ay + Toplam + Aylık Ort. düzeninde verir.</span>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+    <div class="na-sekme" id="ngSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="ozet"><i class="fas fa-calendar-days me-1"></i>Aylık Numune Özeti</button>
+        <button type="button" data-p="musteri"><i class="fas fa-address-card me-1"></i>Müşteri Bazlı <span class="n" id="ngNMusteri">0</span></button>
+        <button type="button" data-p="liste"><i class="fas fa-list me-1"></i>Numune Listesi <span class="n" id="ngNListe">0</span></button>
+    </div>
+
+    @* ============================ SEKME 1: AYLIK NUMUNE ÖZETİ ============================ *@
+    <div class="na-panel" data-p="ozet">
+        <div class="ng-rapor-ust">
+            <div><h5><span id="ngOYilBaslik">@yil</span> Aylık Numune Gönderim Özeti</h5><div class="alt">Gönderilen Numune • Numune Bedeli • Gönderim Masrafı • Siparişe Dönüşüm • Satış Temsilcisi</div></div>
+            <div class="ayar"><label class="me-1">Yıl</label><select class="form-select" id="ngOYil"></select><label class="ms-2 me-1">Gönderen Şirket</label><select class="form-select" id="ngOSirket"><option value="">Tümü</option>@foreach (var s in sirketler) { <option>@s</option> }</select><label class="ms-2 me-1">Cari Bölge</label><select class="form-select" id="ngOBolge"><option value="">Tümü</option><option>Yurtiçi</option><option>Yurtdışı</option></select><label class="ms-2 me-1">Satış Temsilcisi</label><select class="form-select" id="ngOTemsilci"><option value="">Tümü</option></select><button type="button" class="btn btn-light btn-sm py-0" id="ngOExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+        </div>
+        <div class="na-kpi" id="ngOKpi" data-dinamik="kapali"></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-days me-1"></i>Aylık Numune Gönderimi ve Sonuç</span><span class="not">Gönderim ayına göre · tutarlar TL (KDV hariç) · iptal gönderimler dahil değil</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:64vh"><table class="na-tablo ng-excel" id="ngAylik" data-dinamik="kapali"><thead><tr><th class="ad">Açıklama</th><th>Ocak</th><th>Şubat</th><th>Mart</th><th>Nisan</th><th>Mayıs</th><th>Haziran</th><th>Temmuz</th><th>Ağustos</th><th>Eylül</th><th>Ekim</th><th>Kasım</th><th>Aralık</th><th class="yil">Toplam @yil</th><th>Aylık Ort.</th></tr></thead><tbody></tbody></table></div></div></div>
+        @* Özet sade tutulur: aylık tablo + satış temsilcisi + kargo firması. Şirket bazlı kırılım yoktur (temsilciden anlaşılır); şirket ayrımı Numune Listesi sekmesindedir. *@
+        <div class="row g-2">
+            <div class="col-lg-7">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-user-tie me-1"></i>Satış Temsilcisi Bazlı</span><span class="not">Gönderen temsilciye göre · TL</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ng-matris" id="ngTemsilci" data-dinamik="kapali"><thead><tr><th>Satış Temsilcisi</th><th class="s">Gönderim</th><th class="s">Numune Bedeli</th><th class="s">Gönderim Masrafı</th><th class="s">Teklife Dönen</th><th class="s">Siparişe Dönen</th><th class="s">Dönüşüm</th><th class="s">Sipariş Tutarı</th><th class="s">Müşteri</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-truck-fast me-1"></i>Kargo Firması Bazlı</span><span class="not">Adet, masraf, ortalama masraf ve teslim süresi</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ng-matris" id="ngKargo" data-dinamik="kapali"><thead><tr><th>Kargo Firması</th><th>Gönderim Türü</th><th class="s">Gönderim</th><th class="s">Yurtiçi / Yurtdışı</th><th class="s">Kargo Masrafı</th><th class="s">Gümrük + Sigorta</th><th class="s">Ort. Masraf</th><th class="s">Ort. Teslim (Gün)</th><th class="s">Teslim Edildi</th><th class="s">Sorunlu</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            </div>
+            <div class="col-lg-5">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-chart-pie me-1"></i>Sonuç Dağılımı</span><span class="not">Gönderim adedi · yıl ve filtreye göre</span></div><div class="na-kart-g" id="ngOSonuc"></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Hesaplama Kuralları</span></div><div class="na-kart-g" style="font-size:.7rem;color:#475569"><ul class="mb-0 ps-3"><li><b>Gönderilen Numune:</b> kargoya veriliş tarihi o aya düşen, iptal edilmemiş gönderimler.</li><li><b>Numune Bedeli:</b> kalemlerin KDV hariç liste fiyatıyla gerçek bedeli; yurtdışında proforma döviz tutarı kurla TL'ye çevrilir.</li><li><b>Gönderim Masrafı:</b> kargo faturası + gümrük / ihracat beyannamesi + sigorta (kırılımı Numune Listesi'nde ve detayda).</li><li><b>Siparişe Dönen:</b> numune tesliminden sonraki 45 gün içinde aynı müşteriye aynı faaliyet grubunda verilen teklif satışa döndüyse; gönderim ayına yazılır.</li><li><b>Aylık Ort.:</b> Toplam / veri olan ay sayısı.</li></ul></div></div>
+            </div>
+        </div>
+        <div class="ng-not" id="ngONot"></div>
+    </div>
+
+    @* ============================ SEKME 2: MÜŞTERİ BAZLI ============================ *@
+    <div class="na-panel" data-p="musteri">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-address-card me-1"></i>Müşteri Bazlı Numune Özeti · Cari Kart Bilgileriyle</span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="ngMExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div>
+            <div class="na-kart-g">
+                <div class="ng-filtre">
+                    @* Filtre etiketleri Müşteri Cari Kartları ekranıyla aynı; ek olarak Yıl, Gönderen Şirket ve Sıralama *@
+                    <div class="ara"><label>Ara</label><input class="form-control" id="ngMAra" placeholder="Kod, ünvan, VKN, yetkili, e-posta…"></div>
+                    <div><label>Yıl</label><select class="form-select" id="ngMYil"></select></div>
+                    <div><label>Gönderen Şirket</label><select class="form-select" id="ngMSirket"><option value="">Tümü</option>@foreach (var s in sirketler) { <option>@s</option> }</select></div>
+                    <div><label>Cari Kart Tipi</label><select class="form-select" id="ngMTip" disabled><option>Müşteri</option></select></div>
+                    <div><label>Cari Bölge</label><select class="form-select" id="ngMBolge"><option value="">Tümü</option></select></div>
+                    <div><label>Ülke</label><select class="form-select" id="ngMUlke"><option value="">Tümü</option></select></div>
+                    <div><label>Cari Sınıfı</label><select class="form-select" id="ngMSinif"><option value="">Tümü</option></select></div>
+                    <div><label>İlişki Durumu</label><select class="form-select" id="ngMIliski"><option value="">Tümü</option></select></div>
+                    <div><label>Cari Rolü</label><select class="form-select" id="ngMRol"><option value="">Tümü</option></select></div>
+                    <div><label>Durum</label><select class="form-select" id="ngMDurum"><option value="">Tümü</option><option>Aktif</option><option>Pasif</option></select></div>
+                    <div><label>Faaliyet Ana Grubu</label><select class="form-select" id="ngMAna"><option value="">Tümü</option></select></div>
+                    <div><label>Faaliyet Grubu</label><select class="form-select" id="ngMGrup"><option value="">Tümü</option></select></div>
+                    <div><label>Satış Temsilcisi</label><select class="form-select" id="ngMTemsilci"><option value="">Tümü</option></select></div>
+                    <div><label>Şirket (ERP)</label><select class="form-select" id="ngMErp"><option value="">Tümü</option></select></div>
+                    <div><label>Sıralama</label><select class="form-select" id="ngMSira"><option value="kod">Cari Kodu</option><option value="adet">Gönderim Adedi</option><option value="bedel">Numune Bedeli</option><option value="masraf">Gönderim Masrafı</option><option value="oran">Siparişe Dönüşüm</option></select></div>
+                </div>
+                <div class="na-mini" id="ngMSayi"></div>
+                <div class="table-responsive" style="max-height:64vh">
+                    <table class="na-tablo" id="ngMusteriTablo" data-dinamik="kapali">
+                        <thead><tr><th>Cari Kodu</th><th>Kısa Ad / Resmi Ünvan</th><th>VKN / Vergi Dairesi</th><th>Tip</th><th>Bölge · Ülke · Şehir</th><th>Cari Sınıfı</th><th>İlişki</th><th>Rol · Eş Cari</th><th>Ana Faaliyet</th><th class="s">Faaliyet</th><th>Satış Temsilcileri</th><th>Vade</th><th>Durum</th><th>Şirket (ERP)</th><th class="s">Gönderim</th><th class="s">Numune Bedeli (TL)</th><th class="s">Gönderim Masrafı (TL)</th><th class="s">Teslim</th><th class="s">Teklife Dönen</th><th class="s">Siparişe Dönen</th><th class="s">Dönüşüm</th><th class="s">Sipariş Tutarı (TL)</th><th>Son Gönderim</th></tr></thead>
+                        <tbody></tbody>
+                        <tfoot><tr><td colspan="14">Toplam (filtre)</td><td class="s" id="ngMTopAdet"></td><td class="s" id="ngMTopBedel"></td><td class="s" id="ngMTopMasraf"></td><td class="s" id="ngMTopTeslim"></td><td class="s" id="ngMTopTeklif"></td><td class="s" id="ngMTopSiparis"></td><td class="s" id="ngMTopOran"></td><td class="s" id="ngMTopSatis"></td><td></td></tr></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="ng-not">Cari kart sütunları CARİ_MASTER'dan (Müşteri Cari Kartları ekranıyla aynı alanlar) gelir; satıra tıklayınca cari kartın tamamı, faaliyet satırları ve müşteriye gönderilen numuneler açılır. Numune sütunları seçilen yıl ve şirket filtresine göre hesaplanır; iptal gönderimler sayılmaz.</div>
+    </div>
+
+    @* ============================ SEKME 3: NUMUNE LİSTESİ ============================ *@
+    <div class="na-panel" data-p="liste">
+        <div class="na-kpi" id="ngKpi" data-dinamik="kapali"></div>
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Filtreler</span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="ngTemizle" style="font-size:.66rem">Temizle</button><button type="button" class="btn btn-light btn-sm py-0" id="ngExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button><button type="button" class="btn btn-light btn-sm py-0" id="ngKalemExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Kalem Excel</button><button type="button" class="btn btn-light btn-sm py-0" id="ngMatrisExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Şirket Özeti Excel</button></span></div>
+            <div class="na-kart-g">
+                <div class="ng-filtre">
+                    <div class="ara"><label>Ara</label><input class="form-control" id="ngAra" placeholder="Numune no, gönderim / takip no, müşteri, cari kodu, ürün, parti, irsaliye, teklif no…"></div>
+                    <div><label>Dönem</label><select class="form-select" id="ngDonem"><option value="buay">Bu Ay</option><option value="gecenay">Geçen Ay</option><option value="30">Son 30 Gün</option><option value="90">Son 90 Gün</option><option value="yil" selected>Bu Yıl</option><option value="">Tümü</option><option value="ozel">Özel Aralık</option></select></div>
+                    <div><label>Başlangıç</label><input class="form-control" type="date" id="ngBas"></div>
+                    <div><label>Bitiş</label><input class="form-control" type="date" id="ngBit"></div>
+                    <div><label>Gönderen Şirket</label><select class="form-select" id="ngSirket"><option value="">Tümü</option>@foreach (var s in sirketler) { <option>@s</option> }</select></div>
+                    <div><label>Gönderim Durumu</label><select class="form-select" id="ngDurum"><option value="">Tümü</option></select></div>
+                    <div><label>Sonuç</label><select class="form-select" id="ngSonuc"><option value="">Tümü</option></select></div>
+                    <div><label>Kargo Firması</label><select class="form-select" id="ngKargoF"><option value="">Tümü</option></select></div>
+                    <div><label>Gönderim Türü</label><select class="form-select" id="ngTur"><option value="">Tümü</option></select></div>
+                    <div><label>Amaç</label><select class="form-select" id="ngAmacF"><option value="">Tümü</option></select></div>
+                    <div><label>Masraf Kime</label><select class="form-select" id="ngMasrafKime"><option value="">Tümü</option></select></div>
+                    @* Cari kart filtreleri: etiketler Müşteri Cari Kartları ekranıyla aynı *@
+                    <div><label>Cari Bölge</label><select class="form-select" id="ngBolge"><option value="">Tümü</option></select></div>
+                    <div><label>Ülke</label><select class="form-select" id="ngUlke"><option value="">Tümü</option></select></div>
+                    <div><label>Cari Sınıfı</label><select class="form-select" id="ngSinif"><option value="">Tümü</option></select></div>
+                    <div><label>İlişki Durumu</label><select class="form-select" id="ngIliski"><option value="">Tümü</option></select></div>
+                    <div><label>Cari Rolü</label><select class="form-select" id="ngRol"><option value="">Tümü</option></select></div>
+                    <div><label>Faaliyet Ana Grubu</label><select class="form-select" id="ngAnaGrup"><option value="">Tümü</option></select></div>
+                    <div><label>Faaliyet Grubu</label><select class="form-select" id="ngGrupF"><option value="">Tümü</option></select></div>
+                    <div><label>Satış Temsilcisi</label><select class="form-select" id="ngTemsilciF"><option value="">Tümü</option></select></div>
+                </div>
+                <div class="na-mini" id="ngSayi"></div>
+                <div class="table-responsive" style="max-height:560px">
+                    <table class="na-tablo" id="ngTablo" data-dinamik="kapali">
+                        <thead><tr><th>Tarih</th><th>Numune No</th><th>Gönderen Şirket</th><th>Cari Kodu</th><th>Kısa Ad / Resmi Ünvan</th><th>Cari Sınıfı · İlişki</th><th>Bölge · Ülke · Şehir</th><th>Satış Temsilcisi</th><th>Amaç</th><th>İçerik</th><th class="s">Numune Bedeli (TL)</th><th>Kargo Firması</th><th>Gönderim No</th><th class="s">Gönderim Masrafı (TL)</th><th>Durum</th><th>Teslim</th><th>Sonuç</th></tr></thead>
+                        <tbody></tbody>
+                        <tfoot><tr><td colspan="10">Toplam (filtre)</td><td class="s" id="ngTopBedel"></td><td colspan="2" id="ngTopSayi"></td><td class="s" id="ngTopMasraf"></td><td colspan="3" id="ngTopSonuc"></td></tr></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="row g-2">
+            <div class="col-lg-7">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-table-cells me-1"></i>Şirket × Bölge</span><span class="not">Filtreye göre · adet, numune bedeli ve gönderim masrafı (TL)</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ng-matris" id="ngMatris" data-dinamik="kapali"><thead><tr><th>Gönderen Şirket</th><th class="s">Yurtiçi</th><th class="s">Yurtdışı</th><th class="s">Toplam Gönderim</th><th class="s">Numune Bedeli</th><th class="s">Kargo Masrafı</th><th class="s">Gümrük + Sigorta</th><th class="s">Toplam Masraf</th><th class="s">Siparişe Dönen</th><th class="s">Dönüşüm</th></tr></thead><tbody></tbody></table></div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-days me-1"></i>Ay × Gönderim / Masraf / Sonuç</span><span class="not">Filtreye göre · gönderim ayına göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ng-matris" id="ngAyMatris" data-dinamik="kapali"><thead><tr><th>Ay</th><th class="s">Gönderim</th><th class="s">Yurtiçi / Yurtdışı</th><th class="s">Numune Bedeli</th><th class="s">Gönderim Masrafı</th><th class="s">Teslim Edildi</th><th class="s">Siparişe Dönen</th><th class="s">Dönüşüm</th><th class="s">Ort. Teslim (Gün)</th></tr></thead><tbody></tbody></table></div></div></div>
+            </div>
+            <div class="col-lg-5">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-truck-fast me-1"></i>Kargo Firması Dağılımı</span><span class="not">Gönderim adedi ve masraf · TL</span></div><div class="na-kart-g" id="ngKargoDagilim"></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-ranking-star me-1"></i>En Çok Numune Gönderilen 10 Müşteri</span><span class="not">Filtreye göre · adet ve bedel</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="ngMusteriler" data-dinamik="kapali"><thead><tr><th>#</th><th>Cari Kodu · Kısa Ad</th><th>Cari Sınıfı</th><th class="s">Gönderim</th><th class="s">Bedel (TL)</th><th class="s">Masraf (TL)</th><th class="s">Siparişe Dönen</th></tr></thead><tbody></tbody></table></div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-circle-info me-1"></i>Kaynaklar ve Kurallar</span></div><div class="na-kart-g" style="font-size:.7rem;color:#475569"><ul class="mb-0 ps-3"><li><b>Kaynak:</b> ERP Numune Modülü — bedelsiz numune irsaliyesi (NİR…), yurtdışında proforma fatura (PRF…) ve ihracat beyannamesi; kargo hareketleri kargo firmalarının takip servislerinden.</li><li><b>Cari kart:</b> her gönderim bir CARİ_MASTER müşteri kartına bağlıdır; müşteri sütunları ve detaydaki cari kart bilgileri Müşteri Cari Kartları ekranından gelir, temsilci gönderilen faaliyet grubunun satış temsilcisidir.</li><li><b>Gönderim No:</b> kargo firmasının takip numarası; detaydan firmanın takip sayfası açılır. Şirket aracıyla elden teslimde araç plakası ve sevk günü yazılır.</li><li><b>Masraf:</b> kargo faturası (yurtdışında döviz, kur ile TL) + gümrük müşavirliği / ihracat beyannamesi + sigorta. "Masraf Kime = Alıcı" ise kargo bedeli alıcıdan tahsil edilir.</li><li><b>Durumlar:</b> Hazırlanıyor → Kargoya Verildi → Yolda → (Gümrükte) → Teslim Edildi / Teslim Edilemedi. İptal gönderimler listelenir, toplama girmez.</li><li><b>Sonuç:</b> Geri Bildirim Bekleniyor → Değerlendiriliyor → Onaylandı / Reddedildi → Teklif Verildi → Siparişe Döndü; teklif ve sipariş bağlantısı Müşteri Teklifleri ekranından gelir.</li></ul></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ng-perde" id="ngPerde"></div>
+    <div class="ng-drawer" id="ngDrawer">
+        <div class="ng-drawer-ust"><b id="ngDrawerBaslik" style="font-size:.9rem"></b><span class="ms-auto d-flex gap-1" id="ngDrawerAksiyon"></span><button type="button" class="btn btn-light btn-sm py-0" id="ngDrawerKapat" style="font-size:.66rem"><i class="fas fa-xmark"></i></button></div>
+        <div id="ngDrawerIc"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="/js/numune-gonderim.js?v=1"></script>
+}
