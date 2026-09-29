@@ -334,8 +334,11 @@ namespace WebApplication3.Data
             // önceki tamamlanmış mutabakat (aktif carilerin bir kısmında; yakın tarihli olanlar Mutabık, sonrasında hareket olanlar Yeniden Mutabakat Gerekli)
             if (aktif && rnd.Next(10) < 4)
             {
-                var t = bugun.AddDays(-rnd.Next(8, 240)); var ana = c.Kisiler.FirstOrDefault(x => x.AnaYetkili) ?? c.Kisiler.FirstOrDefault();
-                c.Gonderimler.Add(new MtGonderim { Id = ++_gonderimSayac, SurecNo = 0, Tarih = t, BakiyeTarihi = t, Kime = ana == null ? "—" : $"{ana.AdSoyad} · {ana.Eposta}", Ozet = "Önceki dönem mutabakatı", TlKarsiligi = 0, Sonuc = "Mutabık", YanitTarihi = t.AddDays(rnd.Next(2, 9)), Gonderen = "Nazlı Erdem", BelgeNo = $"MTB-{t:yyyy}-{_gonderimSayac:000000}" });
+                var t = bugun.AddDays(-rnd.Next(8, 240)).AddHours(rnd.Next(9, 17)).AddMinutes(rnd.Next(0, 60)); var ana = c.Kisiler.FirstOrDefault(x => x.AnaYetkili) ?? c.Kisiler.FirstOrDefault();
+                // o tarihteki bakiye: gönderim tarihine kadarki hareketlerden döviz bazında hesaplanır
+                var oTarih = c.Hareketler.Where(h => h.Tarih <= t).GroupBy(h => h.ParaBirimi).Select(g => (Pb: g.Key, Net: Math.Round(g.Sum(h => h.Borc - h.Alacak), 2))).ToList();
+                decimal tlK = Math.Round(oTarih.Sum(x => x.Net * (Kurlar.TryGetValue(x.Pb, out var kr) ? kr : 1m)), 2);
+                c.Gonderimler.Add(new MtGonderim { Id = ++_gonderimSayac, SurecNo = 0, Tarih = t, BakiyeTarihi = t, Kime = ana == null ? "—" : $"{ana.AdSoyad} · {ana.Eposta}", Ozet = oTarih.Any() ? string.Join(" · ", oTarih.Select(x => $"{x.Pb} {x.Net.ToString("N2", CariKartOrnek.Tr)}")) : "Önceki dönem mutabakatı", TlKarsiligi = tlK, Sonuc = "Mutabık", YanitTarihi = t.AddDays(rnd.Next(2, 9)), Gonderen = "Nazlı Erdem", BelgeNo = $"MTB-{t:yyyy}-{_gonderimSayac:000000}" });
             }
             return c;
         }
@@ -370,7 +373,7 @@ namespace WebApplication3.Data
             void Gonder(MtCari c, int gunOnce, string sonuc, string aciklama)
             {
                 var ana = c.Kisiler.FirstOrDefault(k => k.AnaYetkili); var t = bugun.AddDays(-gunOnce).AddHours(14);
-                var g = new MtGonderim { Id = ++_gonderimSayac, SurecNo = c.SurecNo, Tarih = t, BakiyeTarihi = t, Kime = ana == null ? "—" : $"{ana.AdSoyad} · {ana.Eposta}", Ozet = string.Join(" · ", c.Dovizler.Select(d => $"{d.ParaBirimi} {d.Net:N2}")), TlKarsiligi = c.BakiyeTl, Sonuc = sonuc, Gonderen = muh, BelgeNo = $"MTB-{t:yyyy}-{_gonderimSayac:000000}" };
+                var g = new MtGonderim { Id = ++_gonderimSayac, SurecNo = c.SurecNo, Tarih = t, BakiyeTarihi = t, Kime = ana == null ? "—" : $"{ana.AdSoyad} · {ana.Eposta}", Ozet = string.Join(" · ", c.Dovizler.Select(d => $"{d.ParaBirimi} {d.Net.ToString("N2", CariKartOrnek.Tr)}")), TlKarsiligi = c.BakiyeTl, Sonuc = sonuc, Gonderen = muh, BelgeNo = $"MTB-{t:yyyy}-{_gonderimSayac:000000}" };
                 if (sonuc != "Bekliyor") { g.YanitTarihi = t.AddDays(2); g.YanitAciklama = aciklama; }
                 c.Gonderimler.Add(g); L(c, new MtLog { Zaman = t, Kullanici = muh, Islem = "Mutabakat Gönder", Onceki = "Gönderime Hazır", Yeni = "Gönderildi", Aciklama = $"{g.BelgeNo} → {g.Kime}", DurumGecisi = "Gönderime Hazır → Gönderildi" });
                 if (sonuc == "Mutabık") { c.SurecAcik = false; L(c, new MtLog { Zaman = g.YanitTarihi.Value, Kullanici = muh, Islem = "Cari Yanıtı: Mutabık", Onceki = "Gönderildi", Yeni = "Mutabık", Aciklama = aciklama, DurumGecisi = "Gönderildi → Mutabık" }); }
@@ -517,7 +520,7 @@ namespace WebApplication3.Data
                     if (tekrar) { var sonG = c.Gonderimler.OrderByDescending(x => x.Id).FirstOrDefault(); if (sonG == null || sonG.Sonuc != "Bekliyor") { h.Add($"{kod}: tekrar gönderilecek bekleyen mutabakat yok."); continue; } sonG.Tekrar++; sonG.Tarih = DateTime.Now; Log(c, Kim(kullanici), "Tekrar Gönder", "", sonG.BelgeNo, $"{sonG.Tekrar}. tekrar → {sonG.Kime}", d); n++; continue; }
                     if (d != "Gönderime Hazır") { var b = c.Blokajlar.Where(x => !x.Izin).Select(x => x.Kontrol); h.Add($"{kod} {c.Kart?.KisaAd}: {d}" + (b.Any() ? " (eksik: " + string.Join("; ", b) + ")" : d == "Yeniden Mutabakat Gerekli" || d == "Henüz Başlanmadı" || d == "Mutabık" ? " (önce Temsilciye Gönder)" : "")); continue; }
                     var ana = c.Kisiler.First(k => k.AnaYetkili); var t = DateTime.Now; c.BakiyeZamani = t;
-                    var g = new MtGonderim { Id = ++_gonderimSayac, SurecNo = c.SurecNo, Tarih = t, BakiyeTarihi = t, Kime = $"{ana.AdSoyad} · {ana.Eposta}", Kanal = ana.EpostaGonder ? "E-posta (PDF)" : "Elden / Kargo (PDF)", Ozet = string.Join(" · ", c.Dovizler.Select(x => $"{x.ParaBirimi} {x.Net:N2}")), TlKarsiligi = c.BakiyeTl, Sonuc = "Bekliyor", Gonderen = Kim(kullanici), BelgeNo = $"MTB-{t:yyyy}-{_gonderimSayac:000000}" };
+                    var g = new MtGonderim { Id = ++_gonderimSayac, SurecNo = c.SurecNo, Tarih = t, BakiyeTarihi = t, Kime = $"{ana.AdSoyad} · {ana.Eposta}", Kanal = ana.EpostaGonder ? "E-posta (PDF)" : "Elden / Kargo (PDF)", Ozet = string.Join(" · ", c.Dovizler.Select(x => $"{x.ParaBirimi} {x.Net.ToString("N2", CariKartOrnek.Tr)}")), TlKarsiligi = c.BakiyeTl, Sonuc = "Bekliyor", Gonderen = Kim(kullanici), BelgeNo = $"MTB-{t:yyyy}-{_gonderimSayac:000000}" };
                     c.Gonderimler.Add(g); Log(c, Kim(kullanici), "Mutabakat Gönder", d, c.Durum, $"{g.BelgeNo} → {g.Kime} · {g.Ozet}", d); n++;
                 }
             return (n, h);
