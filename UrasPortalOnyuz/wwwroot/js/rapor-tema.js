@@ -159,7 +159,24 @@
     });
   }
 
-  function uygula() { try { baslikIkonu(); hucreler(); kpiKartlari(); } catch (e) { /* sessiz */ } }
+  // ---- Açıklama kutuları (tüm raporlar): kabuğun üst çubuğundaki bilgi düğmesi (Açıklamaları Gizle / Göster) html.rt-aciklama-gizli sınıfını
+  //   verir; tercih localStorage "aciklamaGizli" anahtarında tutulur ve açık sekmelerdeki raporlara storage olayıyla anında yansır.
+  //   Otomatik işaretlenenler: başlık altı açıklama (.na-ust .sub), ekranların sabit not paragrafları (*-not, kimliksiz), mavi bilgi kutuları
+  //   (.cm-uyari.mavi) ve sayfa açılışında var olan .alert-info kutuları (eski raporların dipnotları). Ekranlar kendi kutularını rt-aciklama
+  //   sınıfıyla işaretleyebilir; data-aciklama="kal" verilen kutu hiç gizlenmez. Veri taşıyan notlar (.na-mini, sayaçlar, uyarılar) gizlenmez.
+  const ACIKLAMA_SECICI = '.na-ust .sub, [class*="-ust"] > .sub, .ng-not:not([id]), .mt-not:not([id]), .ib-not:not([id]), .yo-not:not([id]), .pm-not:not([id]), .py-not:not([id]), .cm-uyari.mavi';
+  let aciklamaIlkTur = true;
+  function aciklamalar() {
+    const kap = document.querySelector('.main-content') || document.body;
+    const l = Array.from(kap.querySelectorAll(ACIKLAMA_SECICI));
+    if (aciklamaIlkTur) { l.push(...kap.querySelectorAll('.alert.alert-info')); aciklamaIlkTur = false; }
+    l.forEach(el => { if (!el.closest(KAPSAM_DISI) && el.getAttribute('data-aciklama') !== 'kal') el.classList.add('rt-aciklama'); });
+  }
+  function aciklamaDurumu() { let g = false; try { g = localStorage.getItem('aciklamaGizli') === '1'; } catch (e) { /* depolama kapalı */ } document.documentElement.classList.toggle('rt-aciklama-gizli', g); }
+  aciklamaDurumu();
+  window.addEventListener('storage', e => { if (e.key === 'aciklamaGizli') aciklamaDurumu(); });
+
+  function uygula() { try { baslikIkonu(); hucreler(); kpiKartlari(); aciklamalar(); } catch (e) { /* sessiz */ } }
   let z = null;
   function basla() {
     uygula();

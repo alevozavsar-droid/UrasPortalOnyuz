@@ -188,6 +188,11 @@ tasarımından uyarlandı:
   taşıyorsa tıklanınca `.na-sekme` içindeki o sekme açılır, `#odak` alanına kaydırılıp odaklanır ve kısa süre vurgulanır; `data-url` (+ `data-baslik`)
   taşıyorsa ekran portal sekmesinde açılır. Müşteri Teklifleri, Numune Gönderim, İhracat Belge, Fiyat / Kâr (satıcı ve müşteri kutuları seçime göre cari
   kartı açar) ve Yapılan Ödemeler başlıklarında kullanılır.
+* **Açıklama kutuları gizlenebilir** (`Views/Shared/_Layout.cshtml` üst çubuk `#aciklamaToggleBtn`, `rapor-tema.js` / `rapor-tema.css`): bilgi (i)
+  düğmesi `html.rt-aciklama-gizli` sınıfını verir; tercih `localStorage` "aciklamaGizli" anahtarında tutulur, sayfa çizilmeden uygulanır ve açık
+  sekmelerdeki (iframe) raporlara anında yansır (`storage` olayı). rapor-tema.js otomatik işaretler: başlık altı açıklama (`.na-ust .sub`), ekranların
+  sabit not paragrafları (`*-not`, kimliksiz), mavi bilgi kutuları (`.cm-uyari.mavi`) ve sayfa açılışındaki `.alert-info` kutuları; ekranlar kendi
+  kutularına `rt-aciklama` sınıfı verebilir, `data-aciklama="kal"` verilen kutu hiç gizlenmez. Veri taşıyan notlar (`.na-mini` sayaçlar, uyarılar) gizlenmez.
 * **Yapılan Ödemeler** (Yönetim › Özel Analizler › Özel Raporlar; `Controllers/YapilanOdemelerController.cs`, `Views/YapilanOdemeler/Index.cshtml`,
   betik `wwwroot/js/yapilan-odemeler.js`, veri `Data/YapilanOdemelerOrnek.cs`): tüm grup şirketlerinin yaptığı ödemelerin konsolide listesi —
   **Banka (Havale / EFT)**, **Çek** (verilen vadeli çekler: vadesi gelen "Ödendi", gelmeyen "Vade Bekliyor"), **Nakit (Kasa)** çıkış fişleri
