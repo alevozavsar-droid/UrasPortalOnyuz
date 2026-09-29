@@ -1,0 +1,145 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var sirketler = (string[])ViewBag.Sirketler;
+    int yil = (int)ViewBag.Yil;
+    string sekme = (string)ViewBag.Sekme ?? "ozet";
+    string kalem = (string)ViewBag.Kalem ?? "";
+    string kapanisAy = (string)ViewBag.KapanisAy; string geciciAy = (string)ViewBag.GeciciAy;
+    string q = Context.Request.Query.ContainsKey("_sekme") ? "?_sekme=1" : "";
+}
+@*
+    BÜTÇE RAPORU — Mali İşler › Finans › Bütçe ve Planlama. Sekmeler:
+      Bütçe Özeti                : üç gider grubunun aylık bütçe / gerçekleşen / sapma tablosu (12 ay + yıllık / YTD + kullanım), KPI'lar, şirket bazlı özet,
+                                   en yüksek sapmalar, bütçe revizyon günlüğü
+      Sabit Giderler             : personel, kira, sigorta, amortisman, lisans, finansman, vergi-aidat (alt grup ara toplamlı kalem tablosu)
+      Tedarik Zinciri · Hammadde : hammadde, ticari mal, ambalaj, lojistik, ithalat, sarf
+      Genel Giderler             : enerji, bakım, danışmanlık, hukuk, seyahat, pazarlama, ofis, iletişim, hizmet, eğitim, banka, temsil, bağış
+    Ortak filtre: şirket, yıl, seçili ay, sapma durumu, arama. Satırdan detay: aylık kırılım, şirket kırılımı, açık aylara gerekçeli bütçe revizyonu.
+    Veri: /Butce/Veri, revizyon POST /Butce/Revize (Data/ButceOrnek.cs). Betik: wwwroot/js/butce.js · Ortak stil: nakit-avans.css
+    Derin bağlantı: /Butce?sekme=sabit|tedarik|genel, ?kalem=GG-01 (detay)
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<style>
+    .na.bt { --na-k: #0f766e; }
+    .bt-pill { font-size: .68rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; }
+    .bt-filtre { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px 8px; align-items: end; }
+    .bt-filtre label { display: block; font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; }
+    .bt-filtre .form-control, .bt-filtre .form-select { font-size: .72rem; padding: 3px 7px; height: 28px; }
+    .bt-filtre .ara { grid-column: span 2; }
+    @@media (max-width: 1200px) { .bt-filtre { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .bt-kapanis { font-size: .66rem; color: #0f766e; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 4px 10px; white-space: nowrap; }
+    .bt-tablo td, .bt-tablo th, #btSirketTablo td, #btSapmaTablo td, #btRevizyonTablo td { white-space: nowrap; }
+    .bt-tablo td small, #btSapmaTablo td small, #btSirketTablo td small { color: #64748b; display: block; font-size: .62rem; }
+    .bt-tablo tr.grp td { background: #e2e8f0; color: #0f172a; font-weight: 800; text-transform: uppercase; font-size: .62rem; letter-spacing: .03em; border-top: 2px solid #cbd5e1; }
+    .bt-tablo tr.tik { cursor: pointer; } .bt-tablo tr.tik:hover td, #btSapmaTablo tr.tik:hover td, #btSirketTablo tr.tik:hover td { background: #ecfdf5; }
+    .bt-tablo tfoot td, #btSirketTablo tfoot td { font-weight: 800; background: #f8fafc; border-top: 2px solid #94a3b8; }
+    .bt-sapma.pozitif { color: #b91c1c; font-weight: 700; } .bt-sapma.negatif { color: #15803d; font-weight: 700; } .bt-sapma.notr { color: #64748b; }
+    .bt-bar { display: inline-block; width: 64px; height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; vertical-align: middle; margin-right: 5px; }
+    .bt-bar i { display: block; height: 100%; background: #0f766e; } .bt-bar i.asim { background: #dc2626; } .bt-bar i.riskli { background: #d97706; }
+    .bt-grup { display: inline-block; font-size: .6rem; font-weight: 800; border-radius: 4px; padding: 1px 6px; color: #fff; white-space: nowrap; }
+    .bt-grup.sabit { background: #1d4ed8; } .bt-grup.tedarik { background: #b45309; } .bt-grup.genel { background: #0f766e; }
+    .bt-ay-gecici { color: #b45309; font-size: .58rem; display: block; font-weight: 600; text-transform: none; letter-spacing: 0; }
+    /* --- Excel şablonu görünümü (aylık özet) --- */
+    .bt-rapor-ust { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: linear-gradient(90deg, #134e4a, #0f766e); color: #fff; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+    .bt-rapor-ust h5 { margin: 0; font-weight: 800; letter-spacing: .05em; font-size: .95rem; text-transform: uppercase; }
+    .bt-rapor-ust .alt { font-size: .64rem; letter-spacing: .14em; opacity: .85; text-transform: uppercase; }
+    .bt-rapor-ust .ayar { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; } .bt-rapor-ust .ayar .btn { font-size: .66rem; }
+    .bt-excel { font-size: .68rem; border-collapse: separate; border-spacing: 0; } .bt-excel th, .bt-excel td { white-space: nowrap; padding: 3px 7px; border-bottom: 1px solid #e2e8f0; }
+    .bt-excel thead th { position: sticky; top: 0; background: #1e293b; color: #fff; text-transform: uppercase; font-size: .6rem; letter-spacing: .04em; z-index: 3; }
+    .bt-excel td.s { font-variant-numeric: tabular-nums; }
+    .bt-excel th.ad, .bt-excel td.ad { position: sticky; left: 0; background: #fff; min-width: 210px; z-index: 2; text-transform: uppercase; font-weight: 600; box-shadow: 1px 0 0 #e2e8f0; }
+    .bt-excel thead th.ad { z-index: 4; background: #1e293b; }
+    .bt-excel tr.grp td { background: #cbd5e1; color: #0f172a; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
+    .bt-excel tr.r td { color: #64748b; } .bt-excel tr.r td.ad { font-weight: 500; }
+    .bt-excel tr.genel td { font-weight: 800; background: #ecfdf5; border-top: 2px solid #0f766e; } .bt-excel tr.genel td.ad { background: #ecfdf5; }
+    .bt-excel tr.oran td { font-style: italic; color: #134e4a; background: #f0fdfa; } .bt-excel tr.oran td.ad { background: #f0fdfa; }
+    .bt-excel td.yil { font-weight: 700; background: #f8fafc; }
+    .bt-excel tr.ara td { height: 6px; padding: 0; background: #fff; border: 0; }
+    .bt-ozet { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 12px; font-size: .72rem; }
+    .bt-ozet .l { font-size: .58rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; letter-spacing: .04em; } .bt-ozet .v { font-weight: 700; color: #0f172a; }
+    .bt-drawer { position: fixed; top: 0; right: -900px; width: 860px; max-width: 96vw; height: 100vh; background: #fff; box-shadow: -8px 0 24px rgba(15,23,42,.18); z-index: 1060; transition: right .25s; overflow: auto; padding: 12px 14px; } .bt-drawer.acik { right: 0; }
+    .bt-drawer-ust { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: sticky; top: 0; background: #fff; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; z-index: 2; flex-wrap: wrap; }
+    .bt-perde { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1055; display: none; } .bt-perde.acik { display: block; }
+    .bt-rev-form { display: grid; grid-template-columns: 1.2fr 1fr 1.2fr 2.4fr auto; gap: 6px 8px; align-items: end; } .bt-rev-form label { display: block; font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; }
+    .bt-rev-form .form-control, .bt-rev-form .form-select { font-size: .72rem; padding: 3px 7px; height: 28px; }
+    .bt-uyari { font-size: .7rem; border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; } .bt-uyari.mavi { background: #e0f2fe; border: 1px solid #7dd3fc; color: #0c4a6e; } .bt-uyari.sari { background: #fef9c3; border: 1px solid #fde047; color: #713f12; }
+</style>
+}
+
+<div class="container-fluid py-3 na bt" id="bt" data-sekme="@(q != "" ? "1" : "")" data-baslangic="@sekme" data-kalem="@kalem" data-yil="@yil">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-calculator"></i></span>Bütçe Raporu</h4>
+        @* Rozetler tıklanabilir (rapor-tema.js): ilgili sekmeye / alana gider *@
+        <span class="bt-pill" data-git="sabit|#btTablo-sabit" title="Sabit Giderler sekmesi"><i class="fas fa-building-lock me-1"></i>Sabit Giderler</span>
+        <span class="bt-pill" data-git="tedarik|#btTablo-tedarik" title="Tedarik Zinciri · Hammadde sekmesi"><i class="fas fa-truck-ramp-box me-1"></i>Tedarik Zinciri · Hammadde</span>
+        <span class="bt-pill" data-git="genel|#btTablo-genel" title="Genel Giderler sekmesi"><i class="fas fa-bolt me-1"></i>Genel Giderler</span>
+        <span class="bt-pill" data-git="ozet|#btAylik" title="Bütçe Özeti › aylık tablo"><i class="fas fa-scale-unbalanced me-1"></i>Bütçe · Gerçekleşen · Sapma</span>
+        <span class="bt-pill" data-git="ozet|#btAy" title="Seçili ay filtresi"><i class="fas fa-calendar-check me-1"></i>Kapanış: @kapanisAy @yil · @geciciAy Geçici</span>
+        <span class="sub w-100">Grup şirketlerinin gider bütçesi üç ayrı grupta izlenir: <b>Sabit Giderler</b> (personel, kira, sigorta, amortisman, lisans, finansman, vergi-aidat), <b>Tedarik Zinciri · Hammadde</b> (hammadde, ticari mal, ambalaj, lojistik, ithalat, sarf) ve <b>Genel Giderler</b> (enerji, bakım, danışmanlık, hukuk, seyahat, pazarlama, ofis, iletişim, hizmet, eğitim, banka, temsil, bağış). Her kalemde <b>bütçe – gerçekleşen – sapma</b> seçili ay ve yıl başından bugüne (YTD) karşılaştırılır; kapanmış aylar kesin, içinde bulunulan ay <b>geçici</b> gerçekleşenle gelir. Sapma = Gerçekleşen − Bütçe; pozitif sapma bütçe aşımıdır (%5 üstü <b>Aşım</b>, %5 altı <b>Tasarruf</b>). Satıra tıklayınca aylık ve şirket kırılımı açılır; açık aylara gerekçeli <b>bütçe revizyonu</b> yapılabilir ve günlüğe yazılır. Tutarlar TL, KDV hariç.</span>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+
+    @* Ortak filtreler: tüm sekmelerde geçerli *@
+    <div class="na-kart">
+        <div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Filtreler</span><span class="d-flex gap-2 align-items-center"><span class="bt-kapanis" id="btKapanisNot"></span><button type="button" class="btn btn-light btn-sm py-0" id="btTemizle" style="font-size:.66rem">Temizle</button><button type="button" class="btn btn-light btn-sm py-0" id="btExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div>
+        <div class="na-kart-g">
+            <div class="bt-filtre">
+                <div><label>Şirket</label><select class="form-select" id="btSirket"><option value="">Tümü (Konsolide)</option>@foreach (var s in sirketler) { <option>@s</option> }</select></div>
+                <div><label>Bütçe Yılı</label><select class="form-select" id="btYil"></select></div>
+                <div><label>Seçili Ay</label><select class="form-select" id="btAy"></select></div>
+                <div><label>Sapma Durumu (YTD)</label><select class="form-select" id="btDurum"><option value="">Tümü</option><option>Aşım</option><option>Hedefte</option><option>Tasarruf</option></select></div>
+                <div><label>Alt Grup</label><select class="form-select" id="btAltGrup"><option value="">Tümü</option></select></div>
+                <div class="ara"><label>Ara</label><input class="form-control" id="btAra" placeholder="Kalem adı, hesap kodu, sorumlu…"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="na-sekme" id="btSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="ozet"><i class="fas fa-chart-pie me-1"></i>Bütçe Özeti</button>
+        <button type="button" data-p="sabit"><i class="fas fa-building-lock me-1"></i>Sabit Giderler <span class="n" id="btN-sabit">0</span></button>
+        <button type="button" data-p="tedarik"><i class="fas fa-truck-ramp-box me-1"></i>Tedarik Zinciri · Hammadde <span class="n" id="btN-tedarik">0</span></button>
+        <button type="button" data-p="genel"><i class="fas fa-bolt me-1"></i>Genel Giderler <span class="n" id="btN-genel">0</span></button>
+    </div>
+
+    @* ============================ SEKME 1: BÜTÇE ÖZETİ ============================ *@
+    <div class="na-panel" data-p="ozet">
+        <div class="na-kpi" id="btKpi" data-dinamik="kapali" style="grid-template-columns:repeat(9,1fr)"></div>
+        <div class="bt-rapor-ust">
+            <div><h5><span id="btOBaslik">@yil</span> Bütçe – Gerçekleşen Özeti</h5><div class="alt">Sabit Giderler • Tedarik Zinciri · Hammadde • Genel Giderler • Sapma • Kullanım</div></div>
+            <div class="ayar"><span class="bt-pill" id="btOKapsam" style="background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3)"></span><button type="button" class="btn btn-light btn-sm py-0" id="btOExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+        </div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-days me-1"></i>Aylık Bütçe – Gerçekleşen – Sapma</span><span class="not">gider grubu bazında · tutarlar TL · gerçekleşen yalnız kapanmış aylar (içinde bulunulan ay geçici)</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:62vh"><table class="na-tablo bt-excel" id="btAylik" data-dinamik="kapali"><thead></thead><tbody></tbody></table></div></div></div>
+        <div class="row g-2">
+            <div class="col-lg-6">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-building me-1"></i>Şirket Bazlı Bütçe Durumu</span><span class="not">satıra tıklayınca şirket filtresi uygulanır</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="btSirketTablo" data-dinamik="kapali"><thead><tr><th>Şirket</th><th class="s">Yıllık Bütçe</th><th class="s">YTD Bütçe</th><th class="s">YTD Gerçekleşen</th><th class="s">Sapma</th><th class="s">Sapma %</th><th>Kullanım</th><th class="s">Aşım Kalem</th><th>En Yüksek Sapma</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            </div>
+            <div class="col-lg-6">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-triangle-exclamation me-1"></i>En Yüksek Sapmalar (YTD)</span><span class="not">bütçeyi en çok aşan 10 kalem · satırdan detay</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo" id="btSapmaTablo" data-dinamik="kapali"><thead><tr><th>Kalem</th><th>Grup</th><th>Sorumlu</th><th class="s">YTD Bütçe</th><th class="s">YTD Gerçekleşen</th><th class="s">Sapma</th><th class="s">Sapma %</th><th>Durum</th></tr></thead><tbody></tbody></table></div></div></div>
+            </div>
+        </div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Bütçe Revizyon Günlüğü</span><span class="not">açık aylara yapılan gerekçeli bütçe değişiklikleri · şirket ve yıl filtresine göre</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:40vh"><table class="na-tablo" id="btRevizyonTablo" data-dinamik="kapali"><thead><tr><th>Tarih-Saat</th><th>Kullanıcı</th><th>Şirket</th><th>Kalem</th><th>Ay</th><th class="s">Önceki Bütçe</th><th class="s">Yeni Bütçe</th><th class="s">Fark</th><th>Gerekçe</th></tr></thead><tbody></tbody></table></div></div></div>
+    </div>
+
+    @* ============================ SEKME 2–4: GİDER GRUPLARI ============================ *@
+    @foreach (var g in new[] { ("sabit", "Sabit Giderler", "fa-building-lock", "personel, kira, sigorta, amortisman, lisans, finansman, vergi-aidat"), ("tedarik", "Tedarik Zinciri · Hammadde", "fa-truck-ramp-box", "hammadde, ticari mal, ambalaj, lojistik, ithalat, sarf"), ("genel", "Genel Giderler", "fa-bolt", "enerji, bakım, danışmanlık, hukuk, seyahat, pazarlama, ofis, iletişim, hizmet, eğitim, banka, temsil, bağış") })
+    {
+    <div class="na-panel" data-p="@g.Item1">
+        <div class="na-kpi" id="btKpi-@g.Item1" data-dinamik="kapali" style="grid-template-columns:repeat(6,1fr)"></div>
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas @g.Item3 me-1"></i>@g.Item2 · Kalem Bazında Bütçe – Gerçekleşen</span><span class="not" id="btNot-@g.Item1">@g.Item4 · alt grup ara toplamlı · satırdan aylık kırılım ve revizyon</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:68vh"><table class="na-tablo bt-tablo" id="btTablo-@g.Item1" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+        </div>
+    </div>
+    }
+
+    <div class="bt-perde" id="btPerde"></div>
+    <div class="bt-drawer" id="btDrawer">
+        <div class="bt-drawer-ust"><b id="btDrawerBaslik" style="font-size:.9rem"></b><span class="ms-auto d-flex gap-1 flex-wrap" id="btDrawerAksiyon"></span><button type="button" class="btn btn-light btn-sm py-0" id="btDrawerKapat" style="font-size:.66rem"><i class="fas fa-xmark"></i></button></div>
+        <div id="btDrawerIc"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="/js/butce.js?v=1"></script>
+}

@@ -254,6 +254,20 @@ tasarımından uyarlandı:
   Şirket × Bölge ve Ay matrisleri; kargo dağılımı; en çok numune gönderilen 10 müşteri; detayda gönderim bilgileri, kalemler ve bedel, kargo ve masraf
   kutuları, hareket zaman çizelgesi, sonuç, cari kart, müşterinin numune geçmişi; "Kargo Takip", "Teklif …" ve "Cari Kartı Aç" bağlantıları; Excel (liste,
   kalem, şirket özeti). Derin bağlantı: `/NumuneGonderim?sekme=musteri | liste`, `?no=NMN-2026-00042`, `?kod=120.001`.
+* **Bütçe Raporu** (Mali İşler › Finans › Bütçe ve Planlama; `Controllers/ButceController.cs`, `Views/Butce/Index.cshtml`, betik
+  `wwwroot/js/butce.js`, veri `Data/ButceOrnek.cs`): üç gider grubu ayrı izlenir — **Sabit Giderler** (personel, kira, sigorta, amortisman, lisans,
+  finansman, vergi-aidat), **Tedarik Zinciri · Hammadde** (hammadde, ticari mal, ambalaj, lojistik, ithalat, sarf) ve **Genel Giderler** (enerji,
+  bakım, danışmanlık, hukuk, seyahat, pazarlama, ofis, iletişim, hizmet, eğitim, banka, temsil, bağış). `BtKalem` (kod, grup, alt grup, hesap kodu,
+  bütçe sahibi, uygulanan şirketler, Uras Kimya ölçeğinde aylık taban, mevsimsellik, gerçekleşen eğilimi, varsayım notu); `BtSatir` şirket × yıl ×
+  kalem için 12 aylık bütçe, ilk bütçe ve gerçekleşen (kapanmamış ay null). Bütçe = taban × şirket ölçeği × yıl çarpanı × mevsim; gerçekleşen =
+  bütçe × eğilim × deterministik ±%6; içinde bulunulan ay **geçici** (kısmi). Ortak filtre: şirket (Tümü = konsolide), yıl, seçili ay, YTD sapma
+  durumu, alt grup, arama. **Bütçe Özeti**: KPI'lar (yıllık / YTD bütçe, YTD gerçekleşen, sapma, kullanım, aşımdaki kalem, üç grup kartı),
+  Excel düzeninde aylık bütçe / gerçekleşen / sapma / sapma % tablosu (grup blokları + toplam), şirket bazlı durum (satır → şirket filtresi), en
+  yüksek 10 sapma, revizyon günlüğü. **Grup sekmeleri**: alt grup ara toplamlı kalem tablosu (seçili ay ve YTD bütçe / gerçekleşen / sapma / %,
+  yıllık bütçe, kullanım çubuğu, durum Aşım > %5 / Tasarruf < −%5 / Hedefte / Veri Yok). Satır → drawer: kalem bilgileri ve varsayım, aylık kırılım
+  (kümülatif, kapalı / geçici / açık, revize edilen aylarda ilk bütçe), şirket kırılımı, **bütçe revizyonu** (`POST /Butce/Revize`: yalnız açık ay,
+  şirket + tutar + en az 10 karakter gerekçe zorunlu; `ButceOrnek.Revizyonlar` günlüğü). Derin bağlantı: `/Butce?sekme=sabit|tedarik|genel`,
+  `?kalem=GG-01`.
 * **Cari Mutabakat Yönetimi** (Mali İşler › Muhasebe › Cari Mutabakat ve Mali İşler › Cari İşler › Mutabakat ve Kapama — aynı ekran;
   `Controllers/CariMutabakatController.cs`, `Views/CariMutabakat/Index.cshtml` + yazdırılabilir `Ekstre.cshtml` / `Mektup.cshtml`, betik
   `wwwroot/js/cari-mutabakat.js`, veri ve süreç `Data/MutabakatOrnek.cs`): "Cari Mutabakat Yönetimi — Otomatik Mutabakat, İç Kontrol ve Eski Bakiye

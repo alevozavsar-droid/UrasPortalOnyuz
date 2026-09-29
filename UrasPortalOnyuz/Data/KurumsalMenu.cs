@@ -240,7 +240,9 @@ namespace WebApplication3.Data
                     G("nakit-akisi-likidite", "Nakit Akışı ve Likidite", R("Kasa Nakit Akışı"), R("Kasa Nakit Akışı Görünüm"), R("Konsolide Günlük Finansal Hareketler"), R("Nakit Akışı (Ödeme Bekleyenler)"), R("Nakit Akışı (Ödenenler)")),
                     G("odeme-yonetimi", "Ödeme Yönetimi", R("Planlı Ödemeler"), R("Yapılan Ödemeler"), R("İthalat Ödeme Raporu"), R("Nakit Avans — Bekleyen Ödemeler"), R("Nakit Avans Takip Raporu")),
                     G("finansal-araclar", "Finansal Araçlar", R("Çek Akıbeti Raporu"), R("Çek Akıbeti Kontrol Raporu"), R("Çek Konsolide Raporu"), R("Çek Konsolide Kontrol Raporu"), R("Çek Ekstre Raporu"), R("Günlük Çek Nakit Tahsilat"), R("İbraz (Çek Depositi)"), R("Vadeli Çek İbrazı"), R("Tahsilat İbraz Çek Bordrosu"), R("Grup İçi Çek Devirleri"), R("Muhasebe Çek Akıbeti Raporu"), R("Muhasebe Çek İbraz Kontrolü")),
-                    G("doviz-dis-ticaret", "Döviz ve Dış Ticaret Finansmanı", R("Kur Farkı"), R("İBKB Beyanname Takibi"), R("İhracat Tahsilat Raporu"))),
+                    G("doviz-dis-ticaret", "Döviz ve Dış Ticaret Finansmanı", R("Kur Farkı"), R("İBKB Beyanname Takibi"), R("İhracat Tahsilat Raporu")),
+                    // Bütçe Raporu: sabit giderler (personel, kira …), tedarik zinciri / hammadde ve genel giderler ayrı; bütçe – gerçekleşen – sapma (Data/ButceOrnek.cs)
+                    G("butce-planlama", "Bütçe ve Planlama", R("Bütçe Raporu", "Butce", "Index"))),
                     "Çek ve ibraz ekranları \"Finansal Araçlar\" çatısında toplanmıştır."),
                   U("muhasebe", "Muhasebe",
                     G("genel-muhasebe", "Genel Muhasebe", R("Mizan"), R("Mizan Karşılaştırma"), R("Hesap Ekstre Raporu"), R("Yevmiye Kaydı"), R("Açılış Kapanış Kayıt"), R("Virman İşlemleri"), R("Toplu Mahsup Oluştur")),
