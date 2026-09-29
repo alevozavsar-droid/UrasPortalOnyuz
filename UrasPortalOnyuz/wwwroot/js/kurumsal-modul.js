@@ -61,7 +61,9 @@
     const raporListesi = (grup, yol) => grup.raporlar.length
       ? grup.raporlar.map((r, i) => `<a class="rap ${durum(r)} ${grup === (l2 || l1) && i === rIdx ? 'active' : ''}" href="#${yol}/r${i}" title="${esc(r.ad)}"><span class="dot"></span><span class="ad">${esc(r.ad)}</span>${yeniRozet(r)}</a>`).join('')
       : '<div class="rap-bos">Rapor kaydı yok, ekran planlanıyor</div>';
-    $('#kmSide').innerHTML = `<h4>${esc(modul.ad)}</h4>` +
+    // Başlık sağındaki sol ok menüyü daraltır (km-dar: 52px dikey şerit, içerik genişler); şeritteki sağ ok geri açar
+    $('#kmSide').innerHTML = `<h4><span class="ad">${esc(modul.ad)}</span><button type="button" class="km-daralt" title="Modül menüsünü daralt — içerik genişler"><i class="fas fa-chevron-left"></i></button></h4>` +
+      `<div class="km-serit" title="Modül menüsünü genişlet"><i class="fas fa-chevron-right"></i><span class="dik">${esc(modul.ad)}</span></div>` +
       modul.alt.map(a => {
         const yol1 = a.key;
         // Doğrudan açılan grup: kırılım yok, başlık ilk ekrana bağlantı (tür seçimi ekranın içinde)
@@ -78,6 +80,19 @@
       acik.add(yol); g.classList.add('open');
       if (suanki !== yol) location.hash = yol;
     }));
+    $('#kmSide .km-daralt').addEventListener('click', () => darUygula(true));
+    $('#kmSide .km-serit').addEventListener('click', () => darUygula(false));
+    root.classList.toggle('km-dar', darMi());
+  }
+
+  // ---- Modül menüsünü daraltma: başlıktaki sol ok menüyü dikey şeride indirir (içerik tam genişlik), şeritteki sağ ok geri açar.
+  //      Tercih tüm modüllerde ortaktır (localStorage kmMenuDar); kabuğun "Menüleri gizle" (km-genis) görünümünden bağımsızdır. ----
+  const DAR_ANAHTAR = 'kmMenuDar';
+  const darMi = () => { try { return localStorage.getItem(DAR_ANAHTAR) === '1'; } catch (e) { return false; } };
+  function darUygula(dar) {
+    root.classList.toggle('km-dar', dar);
+    try { localStorage.setItem(DAR_ANAHTAR, dar ? '1' : '0'); } catch (e) { }
+    try { window.dispatchEvent(new Event('resize')); } catch (e) { }
   }
 
   function sahip(kisayol) {

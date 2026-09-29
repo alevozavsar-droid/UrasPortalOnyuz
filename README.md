@@ -29,7 +29,9 @@ tasarımından uyarlandı:
   solda 1. alt menü → 2. alt menü → rapor / ekran akordeonu; sağda **organizasyon şeması** (modül → 1. alt menü kolonları →
   2. alt menü kutuları → rapor satırları; hazır / kısayol / planlanıyor renkli nokta). Gösterge panelleri (KPI, trend, bekleyen işler)
   kaldırıldı. 1. alt menü seçilince o kırılımın şeması, süreç grubu seçilince şema + filtrelenebilir rapor listesi gelir.
-  Hazır ekranlar sayfa içinde çerçevede açılır; "Sekmede aç" kabuğun sekmesine taşır.
+  Hazır ekranlar sayfa içinde çerçevede açılır; "Sekmede aç" kabuğun sekmesine taşır. Sol modül menüsü başlığındaki sol ok menüyü
+  52px dikey şeride indirir (`.km-modul.km-dar`, içerik tam genişlik), şeritteki sağ ok geri açar; tercih tüm modüllerde ortak
+  (`localStorage` "kmMenuDar") ve kabuğun "Menüleri gizle" görünümünden bağımsızdır.
   Derin bağlantı: `/Modul/mali-isler#finans/finansal-araclar/r0` ya da `/Modul/mali-isler?yol=finans/finansal-araclar/r0`.
 * **İK ve İdari İşler talepleri** (Talep › İK ve İdari İşler): İzin, Mesai, Avans, Belge, Seyahat ve Araç talep formları
   `Controllers/IkTalepController.cs` + `Views/IkTalep/Form.cshtml` (tek görünüm, alan tanımına göre çizilir). Sol menüde kırılım yoktur
