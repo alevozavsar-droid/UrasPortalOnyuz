@@ -260,6 +260,7 @@
     $('#cmTemsilciAd').textContent = temsilciRolu() ? TEMSILCI : ROL + (TEMSILCI ? ' · ' + TEMSILCI : '');
     const l = C.filter(c => kontrolde(c) && benimCarim(c));
     $('#cmTemsilciNot').textContent = `${l.length} cari · ${l.filter(c => c.iletisimDurumu !== 'Tamamlandı').length} iletişim · ${l.filter(c => c.iletisimDurumu === 'Tamamlandı').length} bakiye`;
+    $('#cmTemsilciSeritN').textContent = l.length;
     const adim = c => c.iletisimDurumu !== 'Tamamlandı' ? rozet('A · İletişim', 'bekle') : c.kontrol.onaylar.some(o => o.temsilci === TEMSILCI) ? rozet('Onaylandı', 'ok') : rozet('B · Bakiye', 'bilgi');
     $('#cmTemsilciListe tbody').innerHTML = l.length ? l.map(c => `<tr class="cm-liste-satir ${acikKontrol === c.kod ? 'secili' : ''}" data-kod="${esc(c.kod)}"><td class="ad"><b>${esc(c.kod)}</b> ${esc(c.kisaAd)}<small>${tipRozet(c.kartTipi)} ${c.temsilciler.join(' + ')}</small></td><td>${esc(c.sirket)}</td><td>${adim(c)}</td><td>${durumRozet(c.durum)}</td></tr>`).join('') : '<tr><td colspan="4" class="na-bos">Kontrol bekleyen cari yok. Muhasebe "Temsilciye Gönder" yaptığında burada listelenir.</td></tr>';
     $$('#cmTemsilciListe tr.cm-liste-satir').forEach(r => r.addEventListener('click', () => kontrolPanel(r.dataset.kod)));
@@ -385,6 +386,12 @@
     else if (act === 'itirazKapat') { acikItiraz = null; cizGonderim(); }
     else if (act === 'itirazKaydet') { const a = ($('#cmItirazAciklama') || {}).value?.trim(); if (!a) { mesaj('warning', 'Çözüm açıklaması zorunludur.'); return; } islem('ItirazCoz', { kod, aciklama: a }, () => { acikItiraz = null; }); }
   });
+  // ---- yan panel daraltma (sol liste ↔ sağ kontrol alanı): başlıktaki sol ok daraltır, şeritteki sağ ok genişletir; tercih tarayıcıda (cmDar:<yerleşim>)
+  function darUygula(id, dar) { const y = document.getElementById(id); if (!y) return; y.classList.toggle('dar', dar); try { localStorage.setItem('cmDar:' + id, dar ? '1' : '0'); } catch (e) { /* depolama kapalı */ } }
+  $$('[data-daralt]').forEach(b => b.addEventListener('click', () => darUygula(b.dataset.daralt, true)));
+  $$('[data-genislet]').forEach(b => b.addEventListener('click', () => darUygula(b.dataset.genislet, false)));
+  $$('.cm-yerlesim').forEach(y => { let d = false; try { d = localStorage.getItem('cmDar:' + y.id) === '1'; } catch (e) { /* depolama kapalı */ } y.classList.toggle('dar', d); });
+
   // ---- başlangıç
   (async () => {
     await yukle(true);
