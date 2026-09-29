@@ -7,6 +7,8 @@
 //   YTD                 : yıl başından gerçekleşeni olan son aya kadar (kapanmış aylar + geçici ay)
 //   Sapma               : Gerçekleşen − Bütçe (pozitif = bütçe aşımı, kırmızı; negatif = tasarruf, yeşil); Sapma % = Sapma / Bütçe
 //   Durum               : YTD sapma > %5 → Aşım · < −%5 → Tasarruf · arası → Hedefte · gerçekleşen yoksa Veri Yok; Kullanım = YTD gerçekleşen / yıllık bütçe
+//   Vadeli çek           : vade ayına göre müşteri çekleri; Kullanılabilir = Portföyde + Tahsilde + Tahsil Edildi (ciro edilen ve karşılıksız / riskli hariç);
+//                          Bütçe Karşılama = kullanılabilir / o ayın toplam gider bütçesi; Gider Sonrası Kalan = kullanılabilir − gerçekleşen (açık ayda bütçe)
 // Yazım kuralı: liste değerleri ve etiketler Title Case ("Tümü", "Hedefte", "Aşım").
 // ============================================================
 (() => {
@@ -27,6 +29,7 @@
   const grupAnahtar = g => Object.keys(GRUP).find(k => GRUP[k] === g) || 'genel';
   const grupRozet = g => `<span class="bt-grup ${grupAnahtar(g)}">${esc(g)}</span>`;
   const sapmaHtml = (v, b) => v === null || v === undefined ? bos : `<span class="bt-sapma ${v > 0.005 ? 'pozitif' : v < -0.005 ? 'negatif' : 'notr'}">${v > 0 ? '+' : ''}${kisa(v)}</span>`;
+  const kalanHtml = v => v === null || v === undefined ? bos : `<span class="bt-sapma ${v > 0.005 ? 'negatif' : v < -0.005 ? 'pozitif' : 'notr'}">${v > 0 ? '+' : ''}${kisa(v)}</span>`;   // kalan: artı yeşil, eksi kırmızı
   const sapmaPctHtml = (g, b) => g === null || g === undefined || !b ? bos : (() => { const o = (g - b) / b; return `<span class="bt-sapma ${o > 0.005 ? 'pozitif' : o < -0.005 ? 'negatif' : 'notr'}">${o > 0 ? '+' : ''}${pct(o)}</span>`; })();
   const barHtml = (oran, durum) => `<span class="bt-bar" title="${pct(oran)}"><i class="${durum === 'Aşım' ? 'asim' : oran >= 0.9 ? 'riskli' : ''}" style="width:${Math.min(100, Math.round((oran || 0) * 100))}%"></i></span>${pct(oran)}`;
   const sekmeli = kok.dataset.sekme === '1';
@@ -56,6 +59,14 @@
     return o;
   }
   const durumRozet = d => rozet(d, d === 'Aşım' ? 'hata' : d === 'Tasarruf' ? 'ok' : d === 'Hedefte' ? 'bilgi' : 'notr');
+  // ---- vadeli müşteri çekleri (vade ayına göre): kullanılabilir = Portföyde + Tahsilde + Tahsil Edildi
+  const cekRozet = d => rozet(d, d === 'Tahsil Edildi' ? 'ok' : d === 'Karşılıksız' || d === 'Riskli' ? 'hata' : d === 'Ciro Edildi' ? 'notr' : d === 'Tahsilde' ? 'bilgi' : 'bekle');
+  const cekListe = (yil, ay) => V.cekler.filter(c => c.yil === yil && (!ay || c.ay === ay) && (!F.sirket || c.sirket === F.sirket));
+  function cekAy(yil, ay) {
+    const l = cekListe(yil, ay), t = { adet: l.length, vadeli: 0, ciro: 0, riskli: 0, kullanilabilir: 0, tahsil: 0, portfoy: 0 };
+    l.forEach(c => { t.vadeli += c.tutar; if (c.durum === 'Ciro Edildi') t.ciro += c.tutar; else if (c.durum === 'Karşılıksız' || c.durum === 'Riskli') t.riskli += c.tutar; if (c.kullanilabilir) t.kullanilabilir += c.tutar; if (c.durum === 'Tahsil Edildi') t.tahsil += c.tutar; if (c.durum === 'Portföyde' || c.durum === 'Tahsilde') t.portfoy += c.tutar; });
+    return t;
+  }
   function kalemler(grup) {
     const ara = F.ara.trim().toLocaleLowerCase('tr-TR');
     return V.kalemler.filter(k => (!grup || k.grup === grup) && (!F.sirket || uygulanir(k, F.sirket)) && (!F.altGrup || k.altGrup === F.altGrup))
@@ -98,6 +109,9 @@
     $('#btOExcel').addEventListener('click', ozetCsv);
     $('#btKpi').addEventListener('click', e => { const k = e.target.closest('[data-durum]'); if (!k) return; F.durum = F.durum === k.dataset.durum ? '' : k.dataset.durum; $('#btDurum').value = F.durum; hepsiniCiz(); });
     $('#btDrawerKapat').addEventListener('click', drawerKapat); $('#btPerde').addEventListener('click', drawerKapat);
+    const cd = $('#btCekDurum'); cd.innerHTML = '<option value="">Tüm Durumlar</option>' + V.cekDurumlari.map(d => `<option>${esc(d)}</option>`).join('');
+    cd.addEventListener('change', cizCek);
+    $('#btCekExcel').addEventListener('click', () => { const l = cekListe(F.yil, F.ay).filter(c => !cd.value || c.durum === cd.value); csvIndir('vadeli_cek_' + F.yil + '_' + F.ay, ['Çek No', 'Şirket', 'Müşteri Kodu', 'Müşteri', 'Banka', 'Vade', 'Tutar', 'Durum', 'Kullanılabilir'], l.map(c => [c.no, c.sirket, c.musteriKod, c.musteri, c.banka, c.vade, sayi(c.tutar), c.durum, c.kullanilabilir ? 'Evet' : 'Hayır'])); });
     altGrupDoldur();
   }
   function ayDoldur() { const s = $('#btAy'); s.innerHTML = AY().map((a, i) => `<option value="${i + 1}">${ayEtiket(F.yil, i + 1)}</option>`).join(''); s.value = String(F.ay); }
@@ -125,6 +139,7 @@
     const T = { butce: new Array(12).fill(0), gercek: new Array(12).fill(null) };
     G.forEach(g => { for (let i = 0; i < 12; i++) { T.butce[i] += g.t.butce[i]; if (g.t.gercek[i] !== null) T.gercek[i] = (T.gercek[i] || 0) + g.t.gercek[i]; } });
     const TO = ozet(T, y, F.ay), asim = G.reduce((s, g) => s + g.asim, 0), tasarruf = G.reduce((s, g) => s + g.tasarruf, 0);
+    const CA = cekAy(y, F.ay), ayButce = T.butce[F.ay - 1];
     const kpi = [
       { l: 'Yıllık Bütçe', v: kisa(TO.yillik), s: `${y} · ${G.reduce((s, g) => s + g.n, 0)} kalem`, k: '#0f172a' },
       { l: `YTD Bütçe (${n} Ay)`, v: kisa(TO.ytdB), s: n ? 'Ocak – ' + AY()[n - 1] : 'gerçekleşen yok', k: '#475569' },
@@ -132,9 +147,10 @@
       { l: 'YTD Sapma', v: (TO.ytdS > 0 ? '+' : '') + kisa(TO.ytdS), s: 'Gerçekleşen − Bütçe · ' + pct(TO.ytdO), k: TO.ytdS > 0 ? '#dc2626' : '#15803d' },
       { l: 'Kullanım', v: pct(TO.kullanim), s: 'YTD gerçekleşen / yıllık bütçe', k: '#2563eb' },
       { l: 'Aşımdaki Kalem', v: asim, s: `${tasarruf} kalem tasarrufta · tıkla: filtre`, k: '#dc2626', d: 'Aşım' },
-      ...G.map(g => ({ l: g.ad, v: kisa(g.o.ytdG), s: `bütçe ${kisa(g.o.ytdB)} · sapma ${pct(g.o.ytdO)} · ${g.asim} aşım`, k: g.k === 'sabit' ? '#1d4ed8' : g.k === 'tedarik' ? '#b45309' : '#0f766e', git: g.k }))
+      ...G.map(g => ({ l: g.ad, v: kisa(g.o.ytdG), s: `bütçe ${kisa(g.o.ytdB)} · sapma ${pct(g.o.ytdO)} · ${g.asim} aşım`, k: g.k === 'sabit' ? '#1d4ed8' : g.k === 'tedarik' ? '#b45309' : '#0f766e', git: g.k })),
+      { l: `Kullanılabilir Çek · ${AY()[F.ay - 1]}`, v: kisa(CA.kullanilabilir), s: `${CA.adet} çek · bütçe karşılama ${pct(ayButce ? CA.kullanilabilir / ayButce : 0)}`, k: '#7c3aed', git: 'ozet', odak: '#btCekTablo' }
     ];
-    $('#btKpi').innerHTML = kpi.map(k => `<div style="--k:${k.k};${k.d && F.durum === k.d ? 'background:#ecfdf5' : ''}" ${k.d ? `data-durum="${k.d}" title="Sapma durumu filtresi"` : ''} ${k.git ? `data-git="${k.git}|#btTablo-${k.git}" title="${esc(k.l)} sekmesi"` : ''}><div class="l">${esc(k.l)}</div><div class="v">${k.v}</div><div class="s">${esc(k.s)}</div></div>`).join('');
+    $('#btKpi').innerHTML = kpi.map(k => `<div style="--k:${k.k};${k.d && F.durum === k.d ? 'background:#ecfdf5' : ''}" ${k.d ? `data-durum="${k.d}" title="Sapma durumu filtresi"` : ''} ${k.git ? `data-git="${k.git}|${k.odak || '#btTablo-' + k.git}" title="${esc(k.l)}"` : ''}><div class="l">${esc(k.l)}</div><div class="v">${k.v}</div><div class="s">${esc(k.s)}</div></div>`).join('');
     // aylık Excel tablosu
     $('#btAylik thead').innerHTML = `<tr><th class="ad">Açıklama</th>${AY().map((a, i) => `<th class="s">${a}${i + 1 === gc && y === V.yil ? '<span class="bt-ay-gecici">geçici</span>' : i + 1 > n ? '<span class="bt-ay-gecici" style="color:#94a3b8">açık</span>' : ''}</th>`).join('')}<th class="s">Yıllık / YTD</th><th class="s">Kullanım</th></tr>`;
     const blok = (ad, t, o, cls) => {
@@ -146,7 +162,19 @@
         <tr class="oran"><td class="ad">Sapma %</td>${t.gercek.map((v, i) => `<td class="s">${v === null ? bos : sapmaPctHtml(v, t.butce[i])}</td>`).join('')}<td class="s yil">${o.ytdVar ? sapmaPctHtml(o.ytdG, o.ytdB) : '—'}</td><td class="s"></td></tr>
         <tr class="ara"><td colspan="15"></td></tr>`;
     };
-    $('#btAylik tbody').innerHTML = G.map(g => blok(g.ad, g.t, g.o)).join('') + blok('TOPLAM GİDER', T, TO, 'genel');
+    // vadeli çek bloğu: her ay vadesi gelen müşteri çekleri ↔ o ayın gider bütçesi
+    const C = AY().map((a, i) => cekAy(y, i + 1)), CT = C.reduce((s, c) => ({ adet: s.adet + c.adet, vadeli: s.vadeli + c.vadeli, ciro: s.ciro + c.ciro, riskli: s.riskli + c.riskli, kullanilabilir: s.kullanilabilir + c.kullanilabilir }), { adet: 0, vadeli: 0, ciro: 0, riskli: 0, kullanilabilir: 0 });
+    const kalan = i => C[i].kullanilabilir - (T.gercek[i] !== null ? T.gercek[i] : T.butce[i]);
+    const ytdKalan = C.slice(0, n).reduce((s, c, i) => s + kalan(i), 0);
+    const cekBlok = `<tr class="grp"><td class="ad">Vadeli Çek · Kullanılabilir</td><td colspan="12" style="text-transform:none;font-weight:600">vadesi o aya düşen müşteri çekleri · bütçeyle karşılaştırma</td><td class="s">${CT.adet} çek</td><td class="s"></td></tr>
+      <tr class="r"><td class="ad">Vadesi Gelen Müşteri Çeki</td>${C.map(c => `<td class="s">${c.adet ? kisa(c.vadeli) : bos}<small>${c.adet ? c.adet + ' çek' : ''}</small></td>`).join('')}<td class="s yil">${kisa(CT.vadeli)}</td><td class="s"></td></tr>
+      <tr class="r"><td class="ad">Ciro Edilen (Tedarikçiye)</td>${C.map(c => `<td class="s">${c.ciro ? '−' + kisa(c.ciro) : bos}</td>`).join('')}<td class="s yil">−${kisa(CT.ciro)}</td><td class="s"></td></tr>
+      <tr class="r"><td class="ad">Karşılıksız / Riskli</td>${C.map(c => `<td class="s">${c.riskli ? '<span class="bt-sapma pozitif">−' + kisa(c.riskli) + '</span>' : bos}</td>`).join('')}<td class="s yil">−${kisa(CT.riskli)}</td><td class="s"></td></tr>
+      <tr class="genel"><td class="ad">Kullanılabilir Çek</td>${C.map(c => `<td class="s">${c.adet ? kisa(c.kullanilabilir) : bos}</td>`).join('')}<td class="s yil">${kisa(CT.kullanilabilir)}</td><td class="s"></td></tr>
+      <tr class="oran"><td class="ad">Bütçe Karşılama %</td>${C.map((c, i) => `<td class="s">${T.butce[i] ? pct(c.kullanilabilir / T.butce[i]) : bos}</td>`).join('')}<td class="s yil">${pct(TO.yillik ? CT.kullanilabilir / TO.yillik : 0)}</td><td class="s"></td></tr>
+      <tr><td class="ad">Gider Sonrası Kalan</td>${C.map((c, i) => `<td class="s">${c.adet ? kalanHtml(kalan(i)) : bos}</td>`).join('')}<td class="s yil" title="YTD: kullanılabilir çek − gerçekleşen">${kalanHtml(ytdKalan)}</td><td class="s"></td></tr>`;
+    $('#btAylik tbody').innerHTML = G.map(g => blok(g.ad, g.t, g.o)).join('') + blok('TOPLAM GİDER', T, TO, 'genel') + cekBlok;
+    cizCek();
     // şirket bazlı
     const sirketler = F.sirket ? [F.sirket] : V.sirketler;
     const SR = sirketler.map(s => { const l = V.kalemler.filter(k => uygulanir(k, s)).map(k => ({ k, t: topla(k.kod, s, y) })).map(x => ({ ...x, o: ozet(x.t, y, F.ay) })); const t = { butce: new Array(12).fill(0), gercek: new Array(12).fill(null) }; l.forEach(x => { for (let i = 0; i < 12; i++) { t.butce[i] += x.t.butce[i]; if (x.t.gercek[i] !== null) t.gercek[i] = (t.gercek[i] || 0) + x.t.gercek[i]; } }); const enY = l.filter(x => x.o.ytdS !== null).sort((a, b) => b.o.ytdS - a.o.ytdS)[0]; return { s, o: ozet(t, y, F.ay), asim: l.filter(x => x.o.durum === 'Aşım').length, enY }; });
@@ -161,6 +189,22 @@
     // revizyon günlüğü
     const R = V.revizyonlar.filter(r => r.yil === y && (!F.sirket || r.sirket === F.sirket));
     $('#btRevizyonTablo tbody').innerHTML = R.length ? R.map(r => `<tr><td>${esc(r.zaman)}</td><td>${esc(r.kullanici)}</td><td>${esc(r.sirket)}</td><td class="ad"><b>${esc(r.kalemAd)}</b><small>${esc(r.kalemKod)}</small></td><td>${esc(r.ayAd)} ${r.yil}</td><td class="s">${kisa(r.onceki)}</td><td class="s">${kisa(r.yeni)}</td><td class="s">${sapmaHtml(r.fark)}</td><td class="ad"><small style="display:inline">${esc(r.gerekce)}</small></td></tr>`).join('') : '<tr><td colspan="9" class="na-bos">Revizyon yok.</td></tr>';
+  }
+  // seçili ayın çek listesi + özet kartları
+  function cizCek() {
+    const y = F.yil, ay = F.ay, d = $('#btCekDurum').value, CA = cekAy(y, ay);
+    const T = Object.keys(GRUP).map(k => grupToplam(GRUP[k]).t).reduce((a, t) => { for (let i = 0; i < 12; i++) { a.butce[i] += t.butce[i]; if (t.gercek[i] !== null) a.gercek[i] = (a.gercek[i] || 0) + t.gercek[i]; } return a; }, { butce: new Array(12).fill(0), gercek: new Array(12).fill(null) });
+    const ayButce = T.butce[ay - 1], ayGider = T.gercek[ay - 1] !== null ? T.gercek[ay - 1] : ayButce, kalan = CA.kullanilabilir - ayGider;
+    $('#btCekBaslik').textContent = `${AY()[ay - 1]} ${y} · ${F.sirket || 'tüm şirketler'}`;
+    $('#btCekKpi').innerHTML = [
+      { l: 'Vadesi Gelen Çek', v: kisa(CA.vadeli), s: `${CA.adet} çek`, k: '#475569' }, { l: 'Ciro Edilen', v: '−' + kisa(CA.ciro), s: 'tedarikçiye verildi', k: '#94a3b8' }, { l: 'Karşılıksız / Riskli', v: '−' + kisa(CA.riskli), s: 'tahsil edilemez', k: '#dc2626' },
+      { l: 'Kullanılabilir Çek', v: kisa(CA.kullanilabilir), s: `portföy ${kisa(CA.portfoy)} · tahsil ${kisa(CA.tahsil)}`, k: '#7c3aed' }, { l: 'Bütçe Karşılama', v: pct(ayButce ? CA.kullanilabilir / ayButce : 0), s: `ay gider bütçesi ${kisa(ayButce)}`, k: '#0f766e' },
+      { l: 'Gider Sonrası Kalan', v: (kalan > 0 ? '+' : '') + kisa(kalan), s: T.gercek[ay - 1] !== null ? 'gerçekleşen gidere göre' : 'bütçeye göre (ay açık)', k: kalan >= 0 ? '#15803d' : '#dc2626' }
+    ].map(k => `<div style="--k:${k.k}"><div class="l">${esc(k.l)}</div><div class="v">${k.v}</div><div class="s">${esc(k.s)}</div></div>`).join('');
+    const l = cekListe(y, ay).filter(c => !d || c.durum === d);
+    $('#btCekTablo tbody').innerHTML = l.length ? l.map(c => `<tr><td><b>${esc(c.no)}</b></td><td>${esc(c.sirket)}</td><td class="ad"><b>${esc(c.musteri)}</b><small>${esc(c.musteriKod)}</small></td><td>${esc(c.banka)}</td><td>${esc(c.vade)}</td><td class="s">${kisa(c.tutar)}</td><td>${cekRozet(c.durum)}</td><td>${c.kullanilabilir ? rozet('Evet', 'ok') : rozet('Hayır', 'hata')}</td></tr>`).join('') : '<tr><td colspan="8" class="na-bos">Seçili ayda vadeli çek yok.</td></tr>';
+    const kt = l.filter(c => c.kullanilabilir).reduce((s, c) => s + c.tutar, 0);
+    $('#btCekTablo tfoot').innerHTML = l.length ? `<tr><td colspan="5" class="ad" style="font-weight:800">Toplam · ${l.length} çek</td><td class="s" style="font-weight:800">${kisa(l.reduce((s, c) => s + c.tutar, 0))}</td><td></td><td style="font-weight:800">${kisa(kt)} kullanılabilir</td></tr>` : '';
   }
   function ozetCsv() {
     const rows = $$('#btAylik tbody tr').filter(tr => !tr.classList.contains('ara')).map(tr => [...tr.cells].map(c => c.textContent.trim()));

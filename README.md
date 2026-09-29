@@ -266,8 +266,12 @@ tasarımından uyarlandı:
   yüksek 10 sapma, revizyon günlüğü. **Grup sekmeleri**: alt grup ara toplamlı kalem tablosu (seçili ay ve YTD bütçe / gerçekleşen / sapma / %,
   yıllık bütçe, kullanım çubuğu, durum Aşım > %5 / Tasarruf < −%5 / Hedefte / Veri Yok). Satır → drawer: kalem bilgileri ve varsayım, aylık kırılım
   (kümülatif, kapalı / geçici / açık, revize edilen aylarda ilk bütçe), şirket kırılımı, **bütçe revizyonu** (`POST /Butce/Revize`: yalnız açık ay,
-  şirket + tutar + en az 10 karakter gerekçe zorunlu; `ButceOrnek.Revizyonlar` günlüğü). Derin bağlantı: `/Butce?sekme=sabit|tedarik|genel`,
-  `?kalem=GG-01`.
+  şirket + tutar + en az 10 karakter gerekçe zorunlu; `ButceOrnek.Revizyonlar` günlüğü). **Vadeli çek** (`BtCek`, `ButceOrnek.Cekler`): şirket ×
+  ay için vadesi o aya düşen müşteri çekleri (çek no, müşteri kartı, banka, vade, tutar; durum Portföyde / Tahsilde / Tahsil Edildi / Ciro Edildi /
+  Karşılıksız / Riskli — kapanmış ayda tahsil / ciro / karşılıksız, açık ayda portföy / ciro / riskli). Aylık özet tablosunda "Vadeli Çek ·
+  Kullanılabilir" bloğu: vadesi gelen, ciro edilen, karşılıksız / riskli, **Kullanılabilir Çek** (= Portföyde + Tahsilde + Tahsil Edildi), bütçe
+  karşılama % (kullanılabilir / o ayın gider bütçesi) ve gider sonrası kalan (kullanılabilir − gerçekleşen, açık ayda bütçe); KPI kartı ve seçili
+  ayın çek listesi (durum filtresi, Excel). Derin bağlantı: `/Butce?sekme=sabit|tedarik|genel`, `?kalem=GG-01`.
 * **Cari Mutabakat Yönetimi** (Mali İşler › Muhasebe › Cari Mutabakat ve Mali İşler › Cari İşler › Mutabakat ve Kapama — aynı ekran;
   `Controllers/CariMutabakatController.cs`, `Views/CariMutabakat/Index.cshtml` + yazdırılabilir `Ekstre.cshtml` / `Mektup.cshtml`, betik
   `wwwroot/js/cari-mutabakat.js`, veri ve süreç `Data/MutabakatOrnek.cs`): "Cari Mutabakat Yönetimi — Otomatik Mutabakat, İç Kontrol ve Eski Bakiye

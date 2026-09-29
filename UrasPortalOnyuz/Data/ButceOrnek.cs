@@ -48,6 +48,18 @@ namespace WebApplication3.Data
 
     public class BtIstek { public string Sirket { get; set; } public int Yil { get; set; } public string KalemKod { get; set; } public int Ay { get; set; } public decimal? Tutar { get; set; } public string Gerekce { get; set; } }
 
+    /// <summary>
+    /// Vadeli müşteri çeki (portföy): vadesi o aya düşen çek; bütçede "Kullanılabilir Çek" = Portföyde + Tahsilde + Tahsil Edildi
+    /// (ciro edilen tedarikçiye verildiği, karşılıksız / riskli olan tahsil edilemeyeceği için kullanılabilir sayılmaz).
+    /// </summary>
+    public class BtCek
+    {
+        public string Sirket { get; set; } public string No { get; set; } public string MusteriKod { get; set; } public string Musteri { get; set; }
+        public string Banka { get; set; } public DateTime Vade { get; set; } public decimal Tutar { get; set; }
+        public string Durum { get; set; }   // Portföyde | Tahsilde | Tahsil Edildi | Ciro Edildi | Karşılıksız | Riskli
+        public bool Kullanilabilir => Durum == "Portföyde" || Durum == "Tahsilde" || Durum == "Tahsil Edildi";
+    }
+
     public static class ButceOrnek
     {
         public static readonly object Kilit = new object();
@@ -152,8 +164,41 @@ namespace WebApplication3.Data
             {
                 if (_tohumlandi) return; _tohumlandi = true;
                 foreach (var yil in Yillar) foreach (var sirket in Sirketler) foreach (var k in Kalemler.Where(x => Uygulanir(x, sirket))) _satirlar.Add(Uret(k, sirket, yil));
+                foreach (var yil in Yillar) foreach (var sirket in Sirketler) for (int ay = 1; ay <= 12; ay++) _cekler.AddRange(CekUret(sirket, yil, ay));
                 Senaryolar();
             }
+        }
+
+        // ---------- Vadeli çek portföyü (şirket × yıl × ay; vade o aya düşen müşteri çekleri) ----------
+        private static readonly List<BtCek> _cekler = new List<BtCek>();
+        public static List<BtCek> Cekler { get { Tohumla(); lock (Kilit) return _cekler.ToList(); } }
+        public static readonly string[] CekDurumlari = { "Portföyde", "Tahsilde", "Tahsil Edildi", "Ciro Edildi", "Karşılıksız", "Riskli" };
+        static readonly string[] Bankalar = { "Ziraat Bankası", "İş Bankası", "Garanti BBVA", "Yapı Kredi", "Akbank", "QNB", "Halkbank", "VakıfBank", "DenizBank", "TEB" };
+        static readonly double[] CEK_MEVSIM = { 0.8, 0.85, 1.05, 1.1, 1.05, 1.0, 0.95, 0.8, 1.1, 1.2, 1.1, 1.0 };
+        const decimal CekTaban = 32_000_000m;   // Uras Kimya ölçeğinde aylık vadesi gelen müşteri çeki (2026, TL)
+        /// <summary>Aylık toplam = taban × şirket ölçeği × yıl çarpanı × mevsim; adet ölçekle orantılı; durumlar aya (kapanmış / geçici / açık) göre.</summary>
+        private static IEnumerable<BtCek> CekUret(string sirket, int yil, int ay)
+        {
+            var rnd = new Random(Seed("cek|" + sirket + "|" + yil + "|" + ay));
+            decimal olcek = Olcek.TryGetValue(sirket, out var o) ? o : 0.3m, yilC = YilCarpani.TryGetValue(yil, out var y) ? y : 1m;
+            decimal toplam = CekTaban * olcek * yilC * (decimal)CEK_MEVSIM[ay - 1];
+            int n = Math.Max(3, (int)Math.Round(28 * (double)olcek * CEK_MEVSIM[ay - 1]));
+            var musteriler = CariKartOrnek.Kartlar.Where(k => k.KartTipi == "Müşteri" && k.Sirket == sirket).ToList();
+            if (musteriler.Count == 0) musteriler = CariKartOrnek.Kartlar.Where(k => k.KartTipi == "Müşteri").ToList();
+            var bugun = DateTime.Today; int gunSayisi = DateTime.DaysInMonth(yil, ay);
+            var agirlik = Enumerable.Range(0, n).Select(_ => 0.4 + rnd.NextDouble() * 1.4).ToArray(); double agirlikTop = agirlik.Sum();
+            var liste = new List<BtCek>();
+            for (int i = 0; i < n; i++)
+            {
+                var vade = new DateTime(yil, ay, 1 + rnd.Next(gunSayisi)); var m = musteriler[rnd.Next(musteriler.Count)];
+                decimal tutar = Math.Round(toplam * (decimal)(agirlik[i] / agirlikTop) / 1000m) * 1000m;
+                double z = rnd.NextDouble(); string durum;
+                if (vade < bugun) durum = z < 0.79 ? "Tahsil Edildi" : z < 0.95 ? "Ciro Edildi" : z < 0.985 ? "Karşılıksız" : "Tahsil Edildi";
+                else if (vade <= bugun.AddDays(7)) durum = z < 0.55 ? "Tahsilde" : z < 0.9 ? "Portföyde" : "Ciro Edildi";
+                else durum = z < 0.74 ? "Portföyde" : z < 0.92 ? "Ciro Edildi" : "Riskli";
+                liste.Add(new BtCek { Sirket = sirket, No = $"ÇK-{yil % 100:00}{ay:00}-{rnd.Next(100000, 999999)}", MusteriKod = m.Kod, Musteri = m.KisaAd, Banka = Bankalar[rnd.Next(Bankalar.Length)], Vade = vade, Tutar = tutar, Durum = durum });
+            }
+            return liste.OrderBy(c => c.Vade).ThenBy(c => c.No);
         }
 
         /// <summary>Bütçe: taban × şirket ölçeği × yıl çarpanı × mevsim (1.000 TL'ye yuvarlı). Gerçekleşen: kapanmış aylar için bütçe × eğilim × ±%6; geçici ay kısmi.</summary>

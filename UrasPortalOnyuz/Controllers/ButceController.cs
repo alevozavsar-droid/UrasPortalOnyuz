@@ -14,7 +14,8 @@ namespace WebApplication3.Controllers
     ///   Tedarik Zinciri · Hammadde: hammadde, ticari mal, ambalaj, lojistik, ithalat, sarf kalemleri
     ///   Genel Giderler            : enerji, bakım, danışmanlık, hukuk, seyahat, pazarlama, ofis, iletişim, hizmet, eğitim, banka, temsil, bağış
     /// Her kalem satırı: seçili ay ve yıl başından bugüne (YTD) bütçe / gerçekleşen / sapma, yıllık bütçe, kullanım ve durum; satırdan detay (aylık kırılım,
-    /// şirket kırılımı, açık aylara bütçe revizyonu). Veri ve kurallar: Data/ButceOrnek.cs; hesaplar istemcide (wwwroot/js/butce.js).
+    /// şirket kırılımı, açık aylara bütçe revizyonu). Vadeli müşteri çekleri ay bazında bütçeyle karşılaştırılır: vadesi gelen, ciro edilen, karşılıksız /
+    /// riskli ve KULLANILABİLİR ÇEK (bütçe karşılama %, gider sonrası kalan); seçili ayın çek listesi. Veri ve kurallar: Data/ButceOrnek.cs; hesaplar istemcide (wwwroot/js/butce.js).
     /// </summary>
     [Authorize]
     public class ButceController : Controller
@@ -47,7 +48,10 @@ namespace WebApplication3.Controllers
                     geciciAy = ButceOrnek.Yillar.ToDictionary(y => y.ToString(), y => ButceOrnek.GeciciAy(y)),
                     kalemler = ButceOrnek.Kalemler.Select(k => new { k.Kod, k.Grup, k.AltGrup, k.Ad, k.HesapKodu, k.Sorumlu, sirketler = k.Sirketler, not = k.Not ?? "", k.Egilim }),
                     satirlar = ButceOrnek.Satirlar.Select(s => new { s.Sirket, s.Yil, s.KalemKod, s.Butce, s.IlkButce, s.Gercek }),
-                    revizyonlar = ButceOrnek.Revizyonlar.Select(RevDto)
+                    revizyonlar = ButceOrnek.Revizyonlar.Select(RevDto),
+                    cekDurumlari = ButceOrnek.CekDurumlari,
+                    // vadeli müşteri çekleri: vade ayına göre; bütçede "Kullanılabilir Çek" (Portföyde + Tahsilde + Tahsil Edildi)
+                    cekler = ButceOrnek.Cekler.Select(c => new { c.Sirket, c.No, c.MusteriKod, c.Musteri, c.Banka, vade = c.Vade.ToString("dd.MM.yyyy"), yil = c.Vade.Year, ay = c.Vade.Month, c.Tutar, c.Durum, kullanilabilir = c.Kullanilabilir })
                 });
             }
         }
