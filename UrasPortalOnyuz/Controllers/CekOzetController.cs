@@ -21,7 +21,7 @@ namespace WebApplication3.Controllers
         /// <param name="sekme">verilen (varsayılan) | tahsil | nakit</param>
         public IActionResult Index(string sekme, string cari)
         {
-            ViewData["Title"] = "Vade Tarihine Göre Çek Özeti";
+            ViewData["Title"] = "Vade Tarihine Göre Çek ve Senet Özeti";
             ViewBag.Sekme = sekme == "tahsil" || sekme == "nakit" ? sekme : "verilen";
             ViewBag.Cari = cari ?? "";
             ViewBag.Yil = DateTime.Today.Year;
@@ -39,10 +39,10 @@ namespace WebApplication3.Controllers
                     success = true,
                     bugun = DateTime.Today.ToString("yyyy-MM-dd"), yil = DateTime.Today.Year, ay = DateTime.Today.Month,
                     yillar = CekOrnek.Yillar, sirketler = CekOrnek.Sirketler, turler = CekOrnek.Turler, durumlar = CekOrnek.Durumlar, aylar = ButceOrnek.Aylar,
-                    alinanDurumlari = ButceOrnek.CekDurumlari, tahsilBankalari = ButceOrnek.TahsilBankalari,
-                    verilen = CekOrnek.Verilen.Select(c => new { c.Sirket, c.No, c.CariKod, c.Cari, c.Tur, c.Banka, keside = c.Keside.ToString("dd.MM.yyyy"), vade = c.Vade.ToString("dd.MM.yyyy"), yil = c.Vade.Year, ay = c.Vade.Month, c.Tutar, c.Durum, c.Aciklama }),
-                    // alınan müşteri çekleri; tahsile gönderilenler yalnız Ziraat Bankası ya da Halk Bankası'na ibraz edilir (tahsilBankasi)
-                    alinan = ButceOrnek.Cekler.Select(c => new { c.Sirket, c.No, c.MusteriKod, c.Musteri, c.Banka, vade = c.Vade.ToString("dd.MM.yyyy"), yil = c.Vade.Year, ay = c.Vade.Month, c.Tutar, c.Durum, tahsile = c.TahsileGonderildi, tahsilBankasi = c.TahsilBankasi })
+                    alinanDurumlari = ButceOrnek.CekDurumlari, tahsilBankalari = ButceOrnek.TahsilBankalari, belgeler = new[] { "Çek", "Senet" },
+                    // verilen çek ve senetler (belge alanı); alınan müşteri çek ve senetleri — tahsile gönderilenler yalnız Ziraat Bankası ya da Halk Bankası'na ibraz edilir (tahsilBankasi)
+                    verilen = CekOrnek.Verilen.Select(c => new { c.Sirket, c.No, c.CariKod, c.Cari, c.Tur, c.Banka, keside = c.Keside.ToString("dd.MM.yyyy"), vade = c.Vade.ToString("dd.MM.yyyy"), yil = c.Vade.Year, ay = c.Vade.Month, c.Tutar, c.Durum, c.Aciklama, c.Belge }),
+                    alinan = ButceOrnek.Cekler.Concat(ButceOrnek.Senetler).Select(c => new { c.Sirket, c.No, c.MusteriKod, c.Musteri, c.Banka, vade = c.Vade.ToString("dd.MM.yyyy"), yil = c.Vade.Year, ay = c.Vade.Month, c.Tutar, c.Durum, tahsile = c.TahsileGonderildi, tahsilBankasi = c.TahsilBankasi, c.Belge })
                 });
             }
         }

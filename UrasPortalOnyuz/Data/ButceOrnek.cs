@@ -58,6 +58,7 @@ namespace WebApplication3.Data
         public string Banka { get; set; } public DateTime Vade { get; set; } public decimal Tutar { get; set; }
         public string Durum { get; set; }   // Portföyde | Tahsilde | Tahsil Edildi | Ciro Edildi | Karşılıksız | Riskli
         public string TahsilBankasi { get; set; } = "";   // tahsile gönderilen çekler yalnız Ziraat Bankası ya da Halk Bankası'na ibraz edilir; gönderilmemişse boş
+        public string Belge { get; set; } = "Çek";        // Çek | Senet (müşteri senetleri aynı yapıda; Senetler listesi)
         public bool Kullanilabilir => Durum == "Portföyde" || Durum == "Tahsilde" || Durum == "Tahsil Edildi";
         public bool TahsileGonderildi => Durum == "Tahsilde" || Durum == "Tahsil Edildi" || Durum == "Karşılıksız";
     }
@@ -166,27 +167,31 @@ namespace WebApplication3.Data
             {
                 if (_tohumlandi) return; _tohumlandi = true;
                 foreach (var yil in Yillar) foreach (var sirket in Sirketler) foreach (var k in Kalemler.Where(x => Uygulanir(x, sirket))) _satirlar.Add(Uret(k, sirket, yil));
-                foreach (var yil in Yillar) foreach (var sirket in Sirketler) for (int ay = 1; ay <= 12; ay++) _cekler.AddRange(CekUret(sirket, yil, ay));
+                foreach (var yil in Yillar) foreach (var sirket in Sirketler) for (int ay = 1; ay <= 12; ay++) { _cekler.AddRange(BelgeUret(sirket, yil, ay, "Çek")); _senetler.AddRange(BelgeUret(sirket, yil, ay, "Senet")); }
                 Senaryolar();
             }
         }
 
         // ---------- Vadeli çek portföyü (şirket × yıl × ay; vade o aya düşen müşteri çekleri) ----------
         private static readonly List<BtCek> _cekler = new List<BtCek>();
+        private static readonly List<BtCek> _senetler = new List<BtCek>();
         public static List<BtCek> Cekler { get { Tohumla(); lock (Kilit) return _cekler.ToList(); } }
+        /// <summary>Müşteri senetleri (vade ayına göre; çeklerle aynı durum ve tahsil bankası kuralları; hacim çekin yaklaşık %28'i).</summary>
+        public static List<BtCek> Senetler { get { Tohumla(); lock (Kilit) return _senetler.ToList(); } }
         public static readonly string[] CekDurumlari = { "Portföyde", "Tahsilde", "Tahsil Edildi", "Ciro Edildi", "Karşılıksız", "Riskli" };
         /// <summary>Müşteri çekleri tahsil için yalnız bu iki bankaya gönderilir (şirket tahsil hesapları).</summary>
         public static readonly string[] TahsilBankalari = { "Ziraat Bankası", "Halk Bankası" };
         static readonly string[] Bankalar = { "Ziraat Bankası", "İş Bankası", "Garanti BBVA", "Yapı Kredi", "Akbank", "QNB", "Halkbank", "VakıfBank", "DenizBank", "TEB" };
         static readonly double[] CEK_MEVSIM = { 0.8, 0.85, 1.05, 1.1, 1.05, 1.0, 0.95, 0.8, 1.1, 1.2, 1.1, 1.0 };
         const decimal CekTaban = 32_000_000m;   // Uras Kimya ölçeğinde aylık vadesi gelen müşteri çeki (2026, TL)
-        /// <summary>Aylık toplam = taban × şirket ölçeği × yıl çarpanı × mevsim; adet ölçekle orantılı; durumlar aya (kapanmış / geçici / açık) göre.</summary>
-        private static IEnumerable<BtCek> CekUret(string sirket, int yil, int ay)
+        /// <summary>Aylık toplam = taban × şirket ölçeği × yıl çarpanı × mevsim; adet ölçekle orantılı; durumlar aya (kapanmış / geçici / açık) göre. Senet: hacim %28, adet üçte bir.</summary>
+        private static IEnumerable<BtCek> BelgeUret(string sirket, int yil, int ay, string belge)
         {
-            var rnd = new Random(Seed("cek|" + sirket + "|" + yil + "|" + ay));
+            bool senet = belge == "Senet";
+            var rnd = new Random(Seed((senet ? "senet" : "cek") + "|" + sirket + "|" + yil + "|" + ay));
             decimal olcek = Olcek.TryGetValue(sirket, out var o) ? o : 0.3m, yilC = YilCarpani.TryGetValue(yil, out var y) ? y : 1m;
-            decimal toplam = CekTaban * olcek * yilC * (decimal)CEK_MEVSIM[ay - 1];
-            int n = Math.Max(3, (int)Math.Round(28 * (double)olcek * CEK_MEVSIM[ay - 1]));
+            decimal toplam = CekTaban * (senet ? 0.28m : 1m) * olcek * yilC * (decimal)CEK_MEVSIM[ay - 1];
+            int n = senet ? Math.Max(1, (int)Math.Round(9 * (double)olcek * CEK_MEVSIM[ay - 1])) : Math.Max(3, (int)Math.Round(28 * (double)olcek * CEK_MEVSIM[ay - 1]));
             var musteriler = CariKartOrnek.Kartlar.Where(k => k.KartTipi == "Müşteri" && k.Sirket == sirket).ToList();
             if (musteriler.Count == 0) musteriler = CariKartOrnek.Kartlar.Where(k => k.KartTipi == "Müşteri").ToList();
             var bugun = DateTime.Today; int gunSayisi = DateTime.DaysInMonth(yil, ay);
@@ -202,7 +207,7 @@ namespace WebApplication3.Data
                 else durum = z < 0.74 ? "Portföyde" : z < 0.92 ? "Ciro Edildi" : "Riskli";
                 // tahsil bankası: üretici şirketler ağırlıklı Ziraat, satış şirketleri ağırlıklı Halkbank
                 string tahsilBankasi = durum == "Tahsilde" || durum == "Tahsil Edildi" || durum == "Karşılıksız" ? (rnd.NextDouble() < (sirket == "Uras Kimya" || sirket == "Daf Kimya" || sirket == "URS Makine" ? 0.7 : 0.3) ? "Ziraat Bankası" : "Halk Bankası") : "";
-                liste.Add(new BtCek { Sirket = sirket, No = $"ÇK-{yil % 100:00}{ay:00}-{rnd.Next(100000, 999999)}", MusteriKod = m.Kod, Musteri = m.KisaAd, Banka = Bankalar[rnd.Next(Bankalar.Length)], Vade = vade, Tutar = tutar, Durum = durum, TahsilBankasi = tahsilBankasi });
+                liste.Add(new BtCek { Sirket = sirket, No = $"{(senet ? "SN" : "ÇK")}-{yil % 100:00}{ay:00}-{rnd.Next(100000, 999999)}", MusteriKod = m.Kod, Musteri = m.KisaAd, Banka = Bankalar[rnd.Next(Bankalar.Length)], Vade = vade, Tutar = tutar, Durum = durum, TahsilBankasi = tahsilBankasi, Belge = belge });
             }
             return liste.OrderBy(c => c.Vade).ThenBy(c => c.No);
         }

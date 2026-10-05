@@ -256,9 +256,11 @@ tasarımından uyarlandı:
   Şirket × Bölge ve Ay matrisleri; kargo dağılımı; en çok numune gönderilen 10 müşteri; detayda gönderim bilgileri, kalemler ve bedel, kargo ve masraf
   kutuları, hareket zaman çizelgesi, sonuç, cari kart, müşterinin numune geçmişi; "Kargo Takip", "Teklif …" ve "Cari Kartı Aç" bağlantıları; Excel (liste,
   kalem, şirket özeti). Derin bağlantı: `/NumuneGonderim?sekme=musteri | liste`, `?no=NMN-2026-00042`, `?kod=120.001`.
-* **Vade Tarihine Göre Çek Özeti** (Mali İşler › Finans › Finansal Araçlar; Yönetim › Özel Raporlar'da aynı ekran; `Controllers/CekOzetController.cs`,
+* **Vade Tarihine Göre Çek ve Senet Özeti** (Mali İşler › Finans › Finansal Araçlar; Yönetim › Özel Raporlar'da aynı ekran; `Controllers/CekOzetController.cs`,
   `Views/CekOzet/Index.cshtml`, betik `wwwroot/js/cek-ozet.js`, veri `Data/CekOrnek.cs`): "2026 Vade Tarihine Göre Tedarikçi Aylık Çek Özeti"
-  tablosunun uyarlaması. `VcCek`: şirketin verdiği çek (çek no, cari kodu / adı, tür Tedarikçi / Maaş / Kira — sigorta, OSB aidatı vb. tedarikçi
+  tablosunun uyarlaması. **Belge Türü** filtresi (Çek / Senet / Çek + Senet) aynı raporu senetler için de çalıştırır: verilen senetler
+  (`VcCek.Belge`; tedarikçilerin yaklaşık üçte birine çek hacminin %30'u, ayda bir senet, "SN-" numaralı) ve müşteri senetleri
+  (`ButceOrnek.Senetler`, `BtCek.Belge`; çek hacminin %28'i, aynı durum ve tahsil bankası kuralları); etiketler seçime göre değişir (.co-belge-*). `VcCek`: şirketin verdiği çek (çek no, cari kodu / adı, tür Tedarikçi / Maaş / Kira — sigorta, OSB aidatı vb. tedarikçi
   sayılır —, keşide bankası, keşide ve vade tarihi, tutar, durum Ödenecek / Ödendi / İade Alındı). Üretim: alıcı havuzu (yıllık taban × şirket ölçeği ×
   yıl çarpanı, aktif aylara ağırlıklı dağıtım, ayda 1–3 çek) + şirketin kartlı tedarikçileri; maaş çeki bütçedeki brüt maaş kaleminin %30'u (her ayın
   5'i), kira çeki bütçedeki ofis kirası kalemi (`ButceOrnek.Bul`). **Verilen Çekler**: cari bazında Ocak–Aralık, 12 aylık toplam, aylık ortalama

@@ -24,6 +24,7 @@ namespace WebApplication3.Data
         public decimal Tutar { get; set; }
         public string Durum { get; set; }        // Ödenecek | Ödendi | İade Alındı
         public string Aciklama { get; set; }
+        public string Belge { get; set; } = "Çek";   // Çek | Senet (verilen senetler: tedarikçi alıcılarının bir kısmına, çek hacminin ~%30'u)
     }
 
     public static class CekOrnek
@@ -83,11 +84,11 @@ namespace WebApplication3.Data
             var liste = new List<VcCek>();
             int bankaBas = Array.IndexOf(Sirketler, sirket) % Bankalar.Length;
             string Banka(int i) => Bankalar[(bankaBas + i) % Bankalar.Length];
-            string No(int bi) => $"{BankaKisa[(bankaBas + bi) % Bankalar.Length]}-{rnd.Next(1000000, 9999999)}";
-            void Ekle(string cariKod, string cari, string tur, DateTime vade, decimal tutar, string aciklama)
+            string No(int bi, string belge) => belge == "Senet" ? $"SN-{rnd.Next(100000, 999999)}" : $"{BankaKisa[(bankaBas + bi) % Bankalar.Length]}-{rnd.Next(1000000, 9999999)}";
+            void Ekle(string cariKod, string cari, string tur, DateTime vade, decimal tutar, string aciklama, string belge = "Çek")
             {
                 int bi = rnd.Next(3); var keside = vade.AddDays(-rnd.Next(45, 121));
-                liste.Add(new VcCek { Sirket = sirket, No = No(bi), CariKod = cariKod, Cari = cari, Tur = tur, Banka = Banka(bi), Keside = keside, Vade = vade, Tutar = tutar, Durum = Durum(vade, rnd, bugun), Aciklama = aciklama });
+                liste.Add(new VcCek { Sirket = sirket, No = No(bi, belge), CariKod = cariKod, Cari = cari, Tur = tur, Banka = belge == "Senet" ? "—" : Banka(bi), Keside = keside, Vade = vade, Tutar = tutar, Durum = Durum(vade, rnd, bugun), Aciklama = aciklama, Belge = belge });
             }
             // 1) Tedarikçi / sigorta alıcıları: havuz (Uras Kimya tamamı, diğer şirketler deterministik alt küme) + şirketin kartlı tedarikçileri
             var alicilar = new List<(string Kod, string Ad, string Tur, decimal Yillik, int AyAdedi)>();
@@ -95,23 +96,30 @@ namespace WebApplication3.Data
             for (int i = 0; i < Havuz.Length; i++) if (sirket == "Uras Kimya" || (i + Array.IndexOf(Sirketler, sirket)) % adim == 0) alicilar.Add(("", Havuz[i].Ad, Havuz[i].Tur, Havuz[i].Yillik, Havuz[i].AyAdedi));
             foreach (var k in CariKartOrnek.Kartlar.Where(x => x.KartTipi == "Tedarikçi" && x.Sirket == sirket))
                 alicilar.Add((k.Kod, k.KisaAd, "Tedarikçi", k.Sinif == "Hammadde" ? 6_500_000m : k.Sinif == "Hizmetler" || k.Sinif == "Danışmanlık" ? 900_000m : 2_200_000m, k.Sinif == "Hammadde" ? 10 : 6));
-            foreach (var a in alicilar)
+            // alıcıya ait çek (ya da senet) dağıtımı: yıllık tutar aktif aylara ağırlıklı dağıtılır, ayda 1–3 belge
+            void AliciBelgeleri((string Kod, string Ad, string Tur, decimal Yillik, int AyAdedi) a, string belge, decimal carpan, int ayAdedi)
             {
-                decimal yillik = Math.Round(a.Yillik * olcek * yilC * (decimal)(0.85 + rnd.NextDouble() * 0.3) / 1000m) * 1000m;
-                var aylar = Enumerable.Range(1, 12).OrderBy(_ => rnd.Next()).Take(Math.Min(12, a.AyAdedi)).OrderBy(x => x).ToList();
+                decimal yillik = Math.Round(a.Yillik * carpan * olcek * yilC * (decimal)(0.85 + rnd.NextDouble() * 0.3) / 1000m) * 1000m;
+                var aylar = Enumerable.Range(1, 12).OrderBy(_ => rnd.Next()).Take(Math.Min(12, ayAdedi)).OrderBy(x => x).ToList();
                 var agirlik = aylar.Select(_ => 0.5 + rnd.NextDouble()).ToArray(); double top = agirlik.Sum();
                 for (int i = 0; i < aylar.Count; i++)
                 {
                     decimal ayTutar = Math.Round(yillik * (decimal)(agirlik[i] / top) / 1000m) * 1000m; if (ayTutar <= 0) continue;
-                    int n = ayTutar > 1_500_000m ? rnd.Next(2, 4) : rnd.Next(1, 3);
+                    int n = belge == "Senet" ? 1 : ayTutar > 1_500_000m ? rnd.Next(2, 4) : rnd.Next(1, 3);
                     var par = Enumerable.Range(0, n).Select(_ => 0.6 + rnd.NextDouble()).ToArray(); double parTop = par.Sum(); decimal kalan = ayTutar;
                     for (int j = 0; j < n; j++)
                     {
                         decimal t = j == n - 1 ? kalan : Math.Round(ayTutar * (decimal)(par[j] / parTop) / 1000m) * 1000m; kalan -= t; if (t <= 0) continue;
                         var vade = new DateTime(yil, aylar[i], 1 + rnd.Next(DateTime.DaysInMonth(yil, aylar[i])));
-                        Ekle(a.Kod, a.Ad, a.Tur, vade, t, "Fatura ödemesi");
+                        Ekle(a.Kod, a.Ad, a.Tur, vade, t, belge == "Senet" ? "Senetle ödeme" : "Fatura ödemesi", belge);
                     }
                 }
+            }
+            for (int ai = 0; ai < alicilar.Count; ai++)
+            {
+                AliciBelgeleri(alicilar[ai], "Çek", 1m, alicilar[ai].AyAdedi);
+                // tedarikçilerin yaklaşık üçte birine senet de verilir (çek hacminin %30'u, en çok 6 ayda)
+                if (alicilar[ai].Tur == "Tedarikçi" && ai % 3 == 0) AliciBelgeleri(alicilar[ai], "Senet", 0.3m, Math.Min(alicilar[ai].AyAdedi, 6));
             }
             // 2) Maaş: her ay brüt maaş bütçesinin %30'u çekle (bütçe satırı yoksa taban)
             for (int ay = 1; ay <= 12; ay++)
