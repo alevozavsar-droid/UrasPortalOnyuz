@@ -6,10 +6,10 @@ namespace WebApplication3.Data
 {
     /// <summary>
     /// VADE TARİHİNE GÖRE ÇEK ÖZETİ örnek verisi — Mali İşler › Finans › Finansal Araçlar (Yönetim › Özel Raporlar'da aynı ekran).
-    /// "2026 Vade Tarihine Göre Tedarikçi Aylık Çek Özeti" tablosunun uyarlaması: şirketin VERDİĞİ çekler (tedarikçi, maaş, kira, sigorta ve diğer)
+    /// "2026 Vade Tarihine Göre Tedarikçi Aylık Çek Özeti" tablosunun uyarlaması: şirketin VERDİĞİ çekler (tedarikçi — sigorta, OSB aidatı vb. dahil —, maaş, kira)
     /// vade ayına göre cari bazında; müşteriden ALINAN ve tahsile gönderilen çekler Data/ButceOrnek.cs › Cekler listesinden (Bütçe Raporu ile aynı kaynak).
     /// Verilen çek tutarları: cari için yıllık taban (Uras Kimya ölçeği) × şirket ölçeği × yıl çarpanı, aktif aylara ağırlıklı dağıtım, ayda 1–3 çek;
-    /// maaş çeki bütçedeki brüt maaş kaleminin %30'u, kira çekleri bütçedeki kira kalemleri (Data/ButceOrnek.cs). Durum vadeye göre: Ödendi / Ödenecek / İade Alındı.
+    /// maaş çeki bütçedeki brüt maaş kaleminin %30'u, kira çeki bütçedeki ofis kirası kalemi (Data/ButceOrnek.cs). Durum vadeye göre: Ödendi / Ödenecek / İade Alındı.
     /// </summary>
     public class VcCek
     {
@@ -17,7 +17,7 @@ namespace WebApplication3.Data
         public string No { get; set; }           // GAR-1234567 (keşideci banka kısaltması)
         public string CariKod { get; set; }      // cari kart kodu (320.xxx) ya da boş (kartı olmayan alıcı)
         public string Cari { get; set; }
-        public string Tur { get; set; }          // Tedarikçi | Maaş | Kira | Sigorta ve Diğer
+        public string Tur { get; set; }          // Tedarikçi | Maaş | Kira
         public string Banka { get; set; }        // çekin keşide edildiği banka (şirket hesabı)
         public DateTime Keside { get; set; }
         public DateTime Vade { get; set; }
@@ -29,7 +29,7 @@ namespace WebApplication3.Data
     public static class CekOrnek
     {
         public static readonly object Kilit = new object();
-        public static readonly string[] Turler = { "Tedarikçi", "Maaş", "Kira", "Sigorta ve Diğer" };
+        public static readonly string[] Turler = { "Tedarikçi", "Maaş", "Kira" };   // sigorta, OSB aidatı vb. alıcılar tedarikçi listesindedir
         public static readonly string[] Durumlar = { "Ödenecek", "Ödendi", "İade Alındı" };
         public static string[] Sirketler => TeklifOrnek.Sirketler;
         public static int[] Yillar => ButceOrnek.Yillar;
@@ -52,11 +52,11 @@ namespace WebApplication3.Data
             ("Türkmen Lojistik", "Tedarikçi", 372_000m, 1), ("Cargo Partner", "Tedarikçi", 330_000m, 1), ("Meka Nakliyat", "Tedarikçi", 325_000m, 2), ("Fix Antrepo", "Tedarikçi", 315_000m, 2),
             ("Kimpaz", "Tedarikçi", 240_000m, 1), ("Likit Kimya", "Tedarikçi", 236_000m, 1), ("Logist Kargo", "Tedarikçi", 253_000m, 2), ("HGL Gümrük", "Tedarikçi", 205_000m, 2),
             ("Hakel Ambalaj", "Tedarikçi", 202_000m, 1), ("Koray Kimya", "Tedarikçi", 180_000m, 2), ("Çelik Ambalaj", "Tedarikçi", 166_000m, 3), ("General Kargo", "Tedarikçi", 31_000m, 1),
-            ("Değişim Sigorta", "Sigorta ve Diğer", 7_500_000m, 11), ("Omya Sigorta", "Sigorta ve Diğer", 250_000m, 1), ("Deri OSB", "Sigorta ve Diğer", 760_000m, 1), ("Veli Meşe OSB", "Sigorta ve Diğer", 249_000m, 1),
-            ("Qural Denetim", "Sigorta ve Diğer", 130_000m, 1), ("Elite Mühendislik", "Sigorta ve Diğer", 350_000m, 2), ("Tarkan Reklam", "Sigorta ve Diğer", 180_000m, 2), ("Section Turizm", "Sigorta ve Diğer", 174_000m, 2)
+            ("Değişim Sigorta", "Tedarikçi", 7_500_000m, 11), ("Omya Sigorta", "Tedarikçi", 250_000m, 1), ("Deri OSB", "Tedarikçi", 760_000m, 1), ("Veli Meşe OSB", "Tedarikçi", 249_000m, 1),
+            ("Qural Denetim", "Tedarikçi", 130_000m, 1), ("Elite Mühendislik", "Tedarikçi", 350_000m, 2), ("Tarkan Reklam", "Tedarikçi", 180_000m, 2), ("Section Turizm", "Tedarikçi", 174_000m, 2)
         };
-        /// <summary>Kira alıcıları: fabrika / depo kirası (bütçe SG-06) ve ofis kirası (SG-07) çekleri her ay.</summary>
-        static readonly (string Ad, string ButceKalemi)[] Kiralar = { ("Bizim Emlak", "SG-06"), ("Erdal Özcan", "SG-07") };
+        /// <summary>Kira alıcıları: ofis kirası (bütçe SG-07) çeki her ay.</summary>
+        static readonly (string Ad, string ButceKalemi)[] Kiralar = { ("Erdal Özcan", "SG-07") };
 
         private static readonly List<VcCek> _verilen = new List<VcCek>();
         private static bool _tohumlandi;
@@ -109,7 +109,7 @@ namespace WebApplication3.Data
                     {
                         decimal t = j == n - 1 ? kalan : Math.Round(ayTutar * (decimal)(par[j] / parTop) / 1000m) * 1000m; kalan -= t; if (t <= 0) continue;
                         var vade = new DateTime(yil, aylar[i], 1 + rnd.Next(DateTime.DaysInMonth(yil, aylar[i])));
-                        Ekle(a.Kod, a.Ad, a.Tur, vade, t, a.Tur == "Tedarikçi" ? "Fatura ödemesi" : a.Tur == "Sigorta ve Diğer" ? "Poliçe / aidat / hizmet" : "");
+                        Ekle(a.Kod, a.Ad, a.Tur, vade, t, "Fatura ödemesi");
                     }
                 }
             }
@@ -119,12 +119,12 @@ namespace WebApplication3.Data
                 var sg1 = ButceOrnek.Bul(sirket, yil, "SG-01"); decimal maas = Math.Round((sg1 != null ? sg1.Butce[ay - 1] : 9_500_000m * olcek * yilC) * 0.30m / 1000m) * 1000m;
                 Ekle("", "Personel Maaş Ödemesi", "Maaş", new DateTime(yil, ay, 5), maas, $"{ButceOrnek.Aylar[ay - 1]} maaşları · çekle ödenen kısım (%30)");
             }
-            // 3) Kira: fabrika / depo (SG-06, tanımlıysa) ve ofis (SG-07) kira çekleri her ayın başında
+            // 3) Kira: ofis kirası (SG-07) çeki her ayın başında
             foreach (var k in Kiralar)
                 for (int ay = 1; ay <= 12; ay++)
                 {
                     var s = ButceOrnek.Bul(sirket, yil, k.ButceKalemi); if (s == null) continue;
-                    Ekle("", k.Ad, "Kira", new DateTime(yil, ay, 1 + rnd.Next(3)), s.Butce[ay - 1], (k.ButceKalemi == "SG-06" ? "Fabrika ve depo kirası" : "Ofis kirası") + " · " + ButceOrnek.Aylar[ay - 1]);
+                    Ekle("", k.Ad, "Kira", new DateTime(yil, ay, 1 + rnd.Next(3)), s.Butce[ay - 1], "Ofis kirası · " + ButceOrnek.Aylar[ay - 1]);
                 }
             return liste;
         }

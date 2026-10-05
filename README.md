@@ -258,12 +258,13 @@ tasarımından uyarlandı:
   kalem, şirket özeti). Derin bağlantı: `/NumuneGonderim?sekme=musteri | liste`, `?no=NMN-2026-00042`, `?kod=120.001`.
 * **Vade Tarihine Göre Çek Özeti** (Mali İşler › Finans › Finansal Araçlar; Yönetim › Özel Raporlar'da aynı ekran; `Controllers/CekOzetController.cs`,
   `Views/CekOzet/Index.cshtml`, betik `wwwroot/js/cek-ozet.js`, veri `Data/CekOrnek.cs`): "2026 Vade Tarihine Göre Tedarikçi Aylık Çek Özeti"
-  tablosunun uyarlaması. `VcCek`: şirketin verdiği çek (çek no, cari kodu / adı, tür Tedarikçi / Maaş / Kira / Sigorta ve Diğer, keşide bankası, keşide
-  ve vade tarihi, tutar, durum Ödenecek / Ödendi / İade Alındı). Üretim: alıcı havuzu (yıllık taban × şirket ölçeği × yıl çarpanı, aktif aylara ağırlıklı
-  dağıtım, ayda 1–3 çek) + şirketin kartlı tedarikçileri; maaş çeki bütçedeki brüt maaş kaleminin %30'u (her ayın 5'i), kira çekleri bütçedeki kira
-  kalemleri (`ButceOrnek.Bul`). **Verilen Çekler**: cari bazında Ocak–Aralık, 12 aylık toplam, aylık ortalama (toplam / 12), % pay; tür ara toplamları;
-  altta AYLIK TOPLAM TUTAR ve AYLIK ÇEK ADEDİ; bu ay vurgulu; KPI'lar (yıllık, ödendi, ödenecek, iade, bu ay vadesi gelen, en yüksek ay, maaş / kira /
-  tedarikçi). **Tahsile Gönderilen Çekler**: `ButceOrnek.Cekler` (Bütçe Raporu ile aynı müşteri çekleri) içinden bankaya ibraz edilenler (Tahsilde +
+  tablosunun uyarlaması. `VcCek`: şirketin verdiği çek (çek no, cari kodu / adı, tür Tedarikçi / Maaş / Kira — sigorta, OSB aidatı vb. tedarikçi
+  sayılır —, keşide bankası, keşide ve vade tarihi, tutar, durum Ödenecek / Ödendi / İade Alındı). Üretim: alıcı havuzu (yıllık taban × şirket ölçeği ×
+  yıl çarpanı, aktif aylara ağırlıklı dağıtım, ayda 1–3 çek) + şirketin kartlı tedarikçileri; maaş çeki bütçedeki brüt maaş kaleminin %30'u (her ayın
+  5'i), kira çeki bütçedeki ofis kirası kalemi (`ButceOrnek.Bul`). **Verilen Çekler**: cari bazında Ocak–Aralık, 12 aylık toplam, aylık ortalama
+  (toplam / 12), % pay (sağa sabit sütunlar); tür ara toplamları; VERİLEN ÇEK TOPLAMI ve ÇEK ADEDİ; aynı tabloda **Tahsile Gönderilen Çekler** bloğu
+  (bankaya ibraz edilen müşteri çekleri müşteri bazında, toplam, adet) ve **NET** (tahsile gönderilen − verilen); bu ay vurgulu; KPI'lar (yıllık, ödendi,
+  ödenecek, iade, bu ay vadesi gelen, en yüksek ay, tedarikçi / maaş / kira, tahsile gönderilen ve net). **Tahsile Gönderilen Çekler**: `ButceOrnek.Cekler` (Bütçe Raporu ile aynı müşteri çekleri) içinden bankaya ibraz edilenler (Tahsilde +
   Tahsil Edildi + Karşılıksız) müşteri bazında aynı düzende; durum filtresiyle portföyde / ciro / riskli de görülür. **Aylık Nakit Görünümü**: ay ay
   verilen (tür bazında), tahsile gönderilen (durum bazında), portföy, ciro, net (tahsile gönderilen − verilen) ve kümülatif. Satır / hücre → carinin
   çek listesi (ay vurgulu, cari kart bağlantısı, Excel). Filtreler: şirket, vade yılı, tür, durum, arama. Derin bağlantı: `/CekOzet?sekme=tahsil|nakit`,
