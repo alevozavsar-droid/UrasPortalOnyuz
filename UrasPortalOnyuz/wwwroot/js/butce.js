@@ -111,7 +111,7 @@
     $('#btDrawerKapat').addEventListener('click', drawerKapat); $('#btPerde').addEventListener('click', drawerKapat);
     const cd = $('#btCekDurum'); cd.innerHTML = '<option value="">Tüm Durumlar</option>' + V.cekDurumlari.map(d => `<option>${esc(d)}</option>`).join('');
     cd.addEventListener('change', cizCek);
-    $('#btCekExcel').addEventListener('click', () => { const l = cekListe(F.yil, F.ay).filter(c => !cd.value || c.durum === cd.value); csvIndir('vadeli_cek_' + F.yil + '_' + F.ay, ['Çek No', 'Şirket', 'Müşteri Kodu', 'Müşteri', 'Banka', 'Vade', 'Tutar', 'Durum', 'Kullanılabilir'], l.map(c => [c.no, c.sirket, c.musteriKod, c.musteri, c.banka, c.vade, sayi(c.tutar), c.durum, c.kullanilabilir ? 'Evet' : 'Hayır'])); });
+    $('#btCekExcel').addEventListener('click', () => { const l = cekListe(F.yil, F.ay).filter(c => !cd.value || c.durum === cd.value); csvIndir('vadeli_cek_' + F.yil + '_' + F.ay, ['Çek No', 'Şirket', 'Müşteri Kodu', 'Müşteri', 'Keşideci Banka', 'Vade', 'Tutar', 'Durum', 'Tahsil Bankası', 'Kullanılabilir'], l.map(c => [c.no, c.sirket, c.musteriKod, c.musteri, c.banka, c.vade, sayi(c.tutar), c.durum, c.tahsilBankasi || '', c.kullanilabilir ? 'Evet' : 'Hayır'])); });
     altGrupDoldur();
   }
   function ayDoldur() { const s = $('#btAy'); s.innerHTML = AY().map((a, i) => `<option value="${i + 1}">${ayEtiket(F.yil, i + 1)}</option>`).join(''); s.value = String(F.ay); }
@@ -202,9 +202,9 @@
       { l: 'Gider Sonrası Kalan', v: (kalan > 0 ? '+' : '') + kisa(kalan), s: T.gercek[ay - 1] !== null ? 'gerçekleşen gidere göre' : 'bütçeye göre (ay açık)', k: kalan >= 0 ? '#15803d' : '#dc2626' }
     ].map(k => `<div style="--k:${k.k}"><div class="l">${esc(k.l)}</div><div class="v">${k.v}</div><div class="s">${esc(k.s)}</div></div>`).join('');
     const l = cekListe(y, ay).filter(c => !d || c.durum === d);
-    $('#btCekTablo tbody').innerHTML = l.length ? l.map(c => `<tr><td><b>${esc(c.no)}</b></td><td>${esc(c.sirket)}</td><td class="ad"><b>${esc(c.musteri)}</b><small>${esc(c.musteriKod)}</small></td><td>${esc(c.banka)}</td><td>${esc(c.vade)}</td><td class="s">${kisa(c.tutar)}</td><td>${cekRozet(c.durum)}</td><td>${c.kullanilabilir ? rozet('Evet', 'ok') : rozet('Hayır', 'hata')}</td></tr>`).join('') : '<tr><td colspan="8" class="na-bos">Seçili ayda vadeli çek yok.</td></tr>';
+    $('#btCekTablo tbody').innerHTML = l.length ? l.map(c => `<tr><td><b>${esc(c.no)}</b></td><td>${esc(c.sirket)}</td><td class="ad"><b>${esc(c.musteri)}</b><small>${esc(c.musteriKod)}</small></td><td>${esc(c.banka)}</td><td>${esc(c.vade)}</td><td class="s">${kisa(c.tutar)}</td><td>${cekRozet(c.durum)}</td><td>${c.tahsilBankasi ? esc(c.tahsilBankasi) : '<span class="text-muted">—</span>'}</td><td>${c.kullanilabilir ? rozet('Evet', 'ok') : rozet('Hayır', 'hata')}</td></tr>`).join('') : '<tr><td colspan="9" class="na-bos">Seçili ayda vadeli çek yok.</td></tr>';
     const kt = l.filter(c => c.kullanilabilir).reduce((s, c) => s + c.tutar, 0);
-    $('#btCekTablo tfoot').innerHTML = l.length ? `<tr><td colspan="5" class="ad" style="font-weight:800">Toplam · ${l.length} çek</td><td class="s" style="font-weight:800">${kisa(l.reduce((s, c) => s + c.tutar, 0))}</td><td></td><td style="font-weight:800">${kisa(kt)} kullanılabilir</td></tr>` : '';
+    $('#btCekTablo tfoot').innerHTML = l.length ? `<tr><td colspan="5" class="ad" style="font-weight:800">Toplam · ${l.length} çek</td><td class="s" style="font-weight:800">${kisa(l.reduce((s, c) => s + c.tutar, 0))}</td><td colspan="2"></td><td style="font-weight:800">${kisa(kt)} kullanılabilir</td></tr>` : '';
   }
   function ozetCsv() {
     const rows = $$('#btAylik tbody tr').filter(tr => !tr.classList.contains('ara')).map(tr => [...tr.cells].map(c => c.textContent.trim()));

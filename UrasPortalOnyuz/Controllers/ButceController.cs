@@ -51,7 +51,7 @@ namespace WebApplication3.Controllers
                     revizyonlar = ButceOrnek.Revizyonlar.Select(RevDto),
                     cekDurumlari = ButceOrnek.CekDurumlari,
                     // vadeli müşteri çekleri: vade ayına göre; bütçede "Kullanılabilir Çek" (Portföyde + Tahsilde + Tahsil Edildi)
-                    cekler = ButceOrnek.Cekler.Select(c => new { c.Sirket, c.No, c.MusteriKod, c.Musteri, c.Banka, vade = c.Vade.ToString("dd.MM.yyyy"), yil = c.Vade.Year, ay = c.Vade.Month, c.Tutar, c.Durum, kullanilabilir = c.Kullanilabilir })
+                    cekler = ButceOrnek.Cekler.Select(c => new { c.Sirket, c.No, c.MusteriKod, c.Musteri, c.Banka, vade = c.Vade.ToString("dd.MM.yyyy"), yil = c.Vade.Year, ay = c.Vade.Month, c.Tutar, c.Durum, kullanilabilir = c.Kullanilabilir, tahsilBankasi = c.TahsilBankasi })
                 });
             }
         }

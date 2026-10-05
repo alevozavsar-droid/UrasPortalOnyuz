@@ -265,7 +265,10 @@ tasarımından uyarlandı:
   (toplam / 12), % pay (sağa sabit sütunlar); tür ara toplamları; VERİLEN ÇEK TOPLAMI ve ÇEK ADEDİ; aynı tabloda **Tahsile Gönderilen Çekler** bloğu
   (bankaya ibraz edilen müşteri çekleri müşteri bazında, toplam, adet) ve **NET** (tahsile gönderilen − verilen); bu ay vurgulu; KPI'lar (yıllık, ödendi,
   ödenecek, iade, bu ay vadesi gelen, en yüksek ay, tedarikçi / maaş / kira, tahsile gönderilen ve net). **Tahsile Gönderilen Çekler**: `ButceOrnek.Cekler` (Bütçe Raporu ile aynı müşteri çekleri) içinden bankaya ibraz edilenler (Tahsilde +
-  Tahsil Edildi + Karşılıksız) müşteri bazında aynı düzende; durum filtresiyle portföyde / ciro / riskli de görülür. **Aylık Nakit Görünümü**: ay ay
+  Tahsil Edildi + Karşılıksız) müşteri bazında aynı düzende; durum filtresiyle portföyde / ciro / riskli de görülür. Çekler tahsile yalnız
+  **Halkbank** ve **Ziraat Bankası**'na gönderilir (`BtCek.TahsilBankasi`, `ButceOrnek.TahsilBankalari`; üretici şirketler ağırlıklı Ziraat, satış
+  şirketleri ağırlıklı Halkbank): banka bazında ara toplam satırları, KPI kartları ve Tahsil Bankası filtresi; çek listelerinde Tahsil Bankası sütunu
+  (Bütçe Raporu'nun seçili ay çek listesinde de). **Aylık Nakit Görünümü**: ay ay
   verilen (tür bazında), tahsile gönderilen (durum bazında), portföy, ciro, net (tahsile gönderilen − verilen) ve kümülatif. Satır / hücre → carinin
   çek listesi (ay vurgulu, cari kart bağlantısı, Excel). Filtreler: şirket, vade yılı, tür, durum, arama. Derin bağlantı: `/CekOzet?sekme=tahsil|nakit`,
   `?cari=Öztürk Plastik`.
