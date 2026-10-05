@@ -263,10 +263,15 @@ tasarımından uyarlandı:
   tedarikçilerin yaklaşık üçte birine çek hacminin %30'u, ayda bir senet, "SN-" numaralı) ve müşteri senetleri (`ButceOrnek.Senetler`, `BtCek.Belge`;
   çek hacminin %28'i, aynı durum ve tahsil bankası kuralları). 12 ay tek ekranda: cari sütunu 170px (üç nokta, tam ad ipucunda), .6rem hücreler,
   özet sütunları sağa sabit (100 / 90 / 54px). `VcCek`: şirketin verdiği çek (çek no, cari kodu / adı, tür Tedarikçi / Maaş / Kira — sigorta, OSB aidatı vb. tedarikçi
-  sayılır —, keşide bankası, keşide ve vade tarihi, tutar, durum Ödenecek / Ödendi / İade Alındı). Üretim: alıcı havuzu (yıllık taban × şirket ölçeği ×
-  yıl çarpanı, aktif aylara ağırlıklı dağıtım, ayda 1–3 çek) + şirketin kartlı tedarikçileri; maaş çeki bütçedeki brüt maaş kaleminin %30'u (her ayın
-  5'i), kira çeki bütçedeki ofis kirası kalemi (`ButceOrnek.Bul`). **Verilen Çekler**: cari bazında Ocak–Aralık, 12 aylık toplam, aylık ortalama
-  (toplam / 12), % pay (sağa sabit sütunlar); tür ara toplamları; VERİLEN ÇEK TOPLAMI ve ÇEK ADEDİ; aynı tabloda **Tahsile Gönderilen Çekler** bloğu
+  sayılır —, keşide bankası, keşide ve vade tarihi, tutar, durum Ödenecek / Ödendi / İade Alındı). Uras Kimya 2026 tedarikçi çekleri
+  `CekOrnek.Gercek2026` tablosundan BİREBİR ("2026 Bütçe Analizi" › Vade Tarihine Göre Tedarikçi Aylık Çek Özeti: 140 satır / 122 çekli cari, kuruşlu;
+  aylık toplamlar 7.617.764,71 … 3.254.151,13, yıllık 116.506.525,87 TL; her ayın çek adedi tablodaki AYLIK ÇEK ADEDİ satırına — 32 … 18, toplam 557 —
+  eşit olacak şekilde dolu hücreler çeke bölünür, fazladan çekler tutar / çek oranı en yüksek hücrelere gider; kuruş son çekte). Diğer şirket ve yıllar
+  aynı tablodan türetilen havuzla üretilir (yıllık toplam × şirket ölçeği × yıl çarpanı, aktif aylara ağırlıklı dağıtım, ayda 1–3 çek) + şirketin kartlı
+  tedarikçileri; maaş çeki bütçedeki brüt maaş kaleminin %30'u (her ayın 5'i), kira çeki bütçedeki ofis kirası kalemi (`ButceOrnek.Bul`; alıcı "Ofis
+  Kirası · Mal Sahibi"). Açılışta Şirket filtresi kullanıcının şirketi (`CekOrnek.VarsayilanSirket`, `#co[data-sirket]`); Temizle o şirkete döner.
+  **Verilen Çekler**: cari bazında Ocak–Aralık, 12 aylık toplam, aylık ortalama (toplam / 12), % pay — cari satırında ödeme türü içi, tür satırında
+  genel — (sağa sabit sütunlar); tür satırlarında aylık toplam + çek adedi; matris kuruşsuz, hücre ipucunda ve Excel'de kuruşlu tam tutar; tür ara toplamları; VERİLEN ÇEK TOPLAMI ve ÇEK ADEDİ; aynı tabloda **Tahsile Gönderilen Çekler** bloğu
   (bankaya ibraz edilen müşteri çekleri yalnız banka satırlarıyla: Ziraat Bankası, Halk Bankası; toplam, adet) ve **NET** (tahsile gönderilen −
   verilen); bu ay vurgulu; KPI'lar (yıllık, ödendi, ödenecek, iade, bu ay vadesi gelen, en yüksek ay, tedarikçi / maaş / kira, tahsile gönderilen ve net).
   **Tahsile Gönderilen Çekler**: `ButceOrnek.Cekler` (Bütçe Raporu ile aynı müşteri çekleri) içinden bankaya ibraz edilenler (Tahsilde + Tahsil Edildi +

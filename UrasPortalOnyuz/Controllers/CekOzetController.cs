@@ -25,6 +25,7 @@ namespace WebApplication3.Controllers
             ViewBag.Cari = cari ?? "";
             ViewBag.Yil = DateTime.Today.Year;
             ViewBag.Sirketler = CekOrnek.Sirketler;
+            ViewBag.VarsayilanSirket = CekOrnek.VarsayilanSirket;   // açılışta seçili şirket (kullanıcının şirketi; 2026 verilen çekleri bütçe analizi tablosuyla birebir)
             return View();
         }
 
