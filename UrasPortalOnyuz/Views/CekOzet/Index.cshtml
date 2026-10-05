@@ -2,64 +2,72 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
     var sirketler = (string[])ViewBag.Sirketler;
     int yil = (int)ViewBag.Yil;
-    string sekme = (string)ViewBag.Sekme ?? "verilen";
+    string sekme = (string)ViewBag.Sekme ?? "vc";
     string cari = (string)ViewBag.Cari ?? "";
     string q = Context.Request.Query.ContainsKey("_sekme") ? "?_sekme=1" : "";
+    var verilenPaneller = new[] { ("vc", "Çek", "Çekler", "fa-file-invoice-dollar"), ("vs", "Senet", "Senetler", "fa-file-signature") };
+    var tahsilPaneller = new[] { ("tc", "Çek", "Çekleri", "fa-building-columns"), ("ts", "Senet", "Senetleri", "fa-landmark") };
 }
 @*
-    VADE TARİHİNE GÖRE ÇEK ÖZETİ — Mali İşler › Finans › Finansal Araçlar (Yönetim › Özel Raporlar'da aynı ekran).
+    VADE TARİHİNE GÖRE ÇEK VE SENET ÖZETİ — Mali İşler › Finans › Finansal Araçlar (Yönetim › Özel Raporlar'da aynı ekran).
     "2026 Vade Tarihine Göre Tedarikçi Aylık Çek Özeti" tablosunun uyarlaması. Sekmeler:
-      Verilen Çekler            : verilen tüm çekler vade ayına göre cari bazında — Ocak…Aralık, 12 Aylık Toplam, Aylık Ortalama, % pay; tür ara toplamları
-                                  (Tedarikçi, Maaş, Kira, Sigorta ve Diğer), AYLIK TOPLAM TUTAR ve AYLIK ÇEK ADEDİ satırları; hücreye tıklayınca o carinin çekleri
-      Tahsile Gönderilen Çekler : müşteriden alınan ve bankaya tahsile gönderilen çekler vade ayına göre müşteri bazında; portföyde bekleyen / ciro edilen ayrıca
-      Aylık Nakit Görünümü      : ay ay verilen (tür bazında) ↔ tahsile gönderilen, net ve kümülatif
-    Veri: /CekOzet/Veri (Data/CekOrnek.cs + Data/ButceOrnek.cs › Cekler). Betik: wwwroot/js/cek-ozet.js · Ortak stil: nakit-avans.css
-    Derin bağlantı: /CekOzet?sekme=tahsil|nakit, ?cari=Öztürk Plastik (detay)
+      Verilen Çekler / Verilen Senetler           : verilen belgeler vade ayına göre cari bazında — Ocak…Aralık, 12 Aylık Toplam, Aylık Ortalama, % pay; ödeme türü ara
+                                                    toplamları (Tedarikçi, Maaş, Kira), verilen toplam ve adet; altında tahsile gönderilen (Ziraat Bankası / Halk Bankası) ve NET
+      Tahsile Gönderilen Çekler / Senetler        : bankaya ibraz edilen müşteri belgeleri banka bazında (tahsil edildi / tahsilde / karşılıksız); durum ve banka filtresi, KPI
+      Aylık Nakit Görünümü                        : çek ve senet ORTAK — ay ay verilen (çek / senet, tür bazında) ↔ tahsile gönderilen (çek / senet, banka bazında), net, kümülatif
+    12 ay tek ekranda: dar cari sütunu (üç nokta ile kısaltma, tam ad ipucunda), sıkı hücreler; özet sütunları sağa sabit.
+    Veri: /CekOzet/Veri (Data/CekOrnek.cs + Data/ButceOrnek.cs › Cekler / Senetler). Betik: wwwroot/js/cek-ozet.js · Ortak stil: nakit-avans.css
+    Derin bağlantı: /CekOzet?sekme=vc|vs|tc|ts|nakit, ?cari=Öztürk Plastik (detay)
 *@
 @section Styles {
 <link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
 <style>
     .na.co { --na-k: #0369a1; }
     .co-pill { font-size: .68rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; }
-    .co-filtre { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px 8px; align-items: end; }
+    .co-filtre { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px 8px; align-items: end; }
     .co-filtre label { display: block; font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; }
     .co-filtre .form-control, .co-filtre .form-select { font-size: .72rem; padding: 3px 7px; height: 28px; }
     .co-filtre .ara { grid-column: span 2; }
     @@media (max-width: 1200px) { .co-filtre { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
     .co-tur { display: inline-block; font-size: .6rem; font-weight: 800; border-radius: 4px; padding: 1px 6px; color: #fff; white-space: nowrap; }
     .co-tur.tedarikci { background: #1d4ed8; } .co-tur.maas { background: #0f766e; } .co-tur.kira { background: #b45309; } .co-tur.diger { background: #6b7280; }
-    /* --- Excel şablonu görünümü (vade matrisi) --- */
-    .co-rapor-ust { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: linear-gradient(90deg, #0c4a6e, #0369a1); color: #fff; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
-    .co-rapor-ust h5 { margin: 0; font-weight: 800; letter-spacing: .05em; font-size: .95rem; text-transform: uppercase; }
-    .co-rapor-ust .alt { font-size: .64rem; letter-spacing: .14em; opacity: .85; text-transform: uppercase; }
+    /* --- Excel şablonu görünümü (vade matrisi): 12 ay tek ekranda — sıkı hücre, dar cari sütunu --- */
+    .co-rapor-ust { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: linear-gradient(90deg, #0c4a6e, #0369a1); color: #fff; border-radius: 10px; padding: 8px 14px; margin-bottom: 8px; }
+    .co-rapor-ust h5 { margin: 0; font-weight: 800; letter-spacing: .05em; font-size: .9rem; text-transform: uppercase; }
+    .co-rapor-ust .alt { font-size: .62rem; letter-spacing: .14em; opacity: .85; text-transform: uppercase; }
     .co-rapor-ust .ayar { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; } .co-rapor-ust .ayar .btn { font-size: .66rem; }
-    .co-excel { font-size: .68rem; border-collapse: separate; border-spacing: 0; } .co-excel th, .co-excel td { white-space: nowrap; padding: 3px 7px; border-bottom: 1px solid #e2e8f0; }
-    .co-excel thead th { position: sticky; top: 0; background: #1e293b; color: #fff; text-transform: uppercase; font-size: .6rem; letter-spacing: .04em; z-index: 3; }
-    .co-excel td.s { font-variant-numeric: tabular-nums; }
-    .co-excel th.ad, .co-excel td.ad { position: sticky; left: 0; background: #fff; min-width: 230px; z-index: 2; font-weight: 600; box-shadow: 1px 0 0 #e2e8f0; }
-    .co-excel thead th.ad { z-index: 4; background: #1e293b; }
-    .co-excel tr.grp td { background: #cbd5e1; color: #0f172a; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
-    .co-excel tr.tik { cursor: pointer; } .co-excel tr.tik:hover td { background: #f0f9ff; } .co-excel tr.tik:hover td.ad { background: #f0f9ff; }
-    .co-excel td.hucre { cursor: pointer; } .co-excel td.hucre:hover { outline: 2px solid #38bdf8; outline-offset: -2px; }
-    .co-excel td.bugun-ay, .co-excel th.bugun-ay { background: #fffbeb !important; }
-    .co-excel tr.toplam td { font-weight: 800; background: #e0f2fe; border-top: 2px solid #0369a1; } .co-excel tr.toplam td.ad { background: #e0f2fe; }
-    .co-excel tr.adet td { font-style: italic; color: #475569; background: #f8fafc; } .co-excel tr.adet td.ad { background: #f8fafc; }
-    .co-excel tr.banka td { background: #f0f9ff; font-weight: 600; color: #0c4a6e; } .co-excel tr.banka td.ad { background: #f0f9ff; padding-left: 20px; }
-    .co-excel td.yil { font-weight: 700; background: #f8fafc; } .co-excel td.ort { color: #475569; }
-    /* Özet sütunları (12 Aylık Toplam · Aylık Ortalama · %) sağ kenara sabit: aylar kaydırılırken cari sütunuyla birlikte hep görünür */
-    .co-excel th.sag, .co-excel td.sag { position: sticky; background: #f8fafc; z-index: 2; box-shadow: -1px 0 0 #e2e8f0; box-sizing: border-box; }
-    .co-excel thead th.sag { z-index: 4; background: #1e293b; }
-    .co-excel .sag1 { right: 0; width: 70px; min-width: 70px; } .co-excel .sag2 { right: 70px; width: 130px; min-width: 130px; } .co-excel .sag3 { right: 200px; width: 140px; min-width: 140px; }
-    .co-excel .sag1.genis { width: 130px; min-width: 130px; }
-    .co-excel tr.tik:hover td.sag { background: #f0f9ff; }
-    .co-excel td small { color: #64748b; display: block; font-size: .58rem; }
-    .co-excel tr.ara td { height: 6px; padding: 0; background: #fff; border: 0; }
+    /* #co öneki: nakit-avans.css (table.na-tablo td: .72rem, 5px 7px) ve rapor-tema.css (thead th: .68rem) kurallarını kesin olarak ezer — aksi hâlde 12 ay sığmaz */
+    #co .co-excel { font-size: .6rem; border-collapse: separate; border-spacing: 0; width: 100%; }
+    #co .co-excel th, #co .co-excel td { white-space: nowrap; padding: 2px 4px; border-bottom: 1px solid #e2e8f0; line-height: 1.25; }
+    #co .co-excel thead th { position: sticky; top: 0; background: #1e293b; color: #fff; text-transform: uppercase; font-size: .54rem; letter-spacing: .02em; z-index: 3; padding: 4px 4px; }
+    #co .co-excel td.s { font-variant-numeric: tabular-nums; }
+    #co .co-excel th.ad, #co .co-excel td.ad { position: sticky; left: 0; background: #fff; width: 170px; min-width: 170px; max-width: 170px; overflow: hidden; text-overflow: ellipsis; z-index: 2; font-weight: 600; font-size: .62rem; box-shadow: 1px 0 0 #e2e8f0; }
+    #co .co-excel td.ad b, #co .co-excel td.ad small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #co .co-excel thead th.ad { z-index: 4; background: #1e293b; }
+    #co .co-excel tr.grp td { background: #cbd5e1; color: #0f172a; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; }
+    #co .co-excel tr.tik { cursor: pointer; } #co .co-excel tr.tik:hover td { background: #f0f9ff; } #co .co-excel tr.tik:hover td.ad { background: #f0f9ff; }
+    #co .co-excel td.hucre { cursor: pointer; } #co .co-excel td.hucre:hover { outline: 2px solid #38bdf8; outline-offset: -2px; }
+    #co .co-excel td.bugun-ay, #co .co-excel th.bugun-ay { background: #fffbeb !important; }
+    #co .co-excel tr.toplam td { font-weight: 800; background: #e0f2fe; border-top: 2px solid #0369a1; } #co .co-excel tr.toplam td.ad { background: #e0f2fe; }
+    #co .co-excel tr.genel td { font-weight: 800; background: #dbeafe; border-top: 2px solid #1e40af; } #co .co-excel tr.genel td.ad { background: #dbeafe; }
+    #co .co-excel tr.adet td { font-style: italic; color: #475569; background: #f8fafc; } #co .co-excel tr.adet td.ad { background: #f8fafc; }
+    #co .co-excel tr.banka td { background: #f0f9ff; font-weight: 600; color: #0c4a6e; } #co .co-excel tr.banka td.ad { background: #f0f9ff; padding-left: 14px; }
+    #co .co-excel td.yil { font-weight: 700; background: #f8fafc; } #co .co-excel td.ort { color: #475569; }
+    #co .co-excel td small { color: #64748b; display: block; font-size: .52rem; line-height: 1.1; }
+    #co .co-excel tr.ara td { height: 6px; padding: 0; background: #fff; border: 0; }
+    /* Özet sütunları (12 Aylık Toplam · Aylık Ortalama · %) sağ kenara sabit */
+    #co .co-excel th.sag, #co .co-excel td.sag { position: sticky; background: #f8fafc; z-index: 2; box-shadow: -1px 0 0 #e2e8f0; box-sizing: border-box; }
+    #co .co-excel thead th.sag { z-index: 4; background: #1e293b; }
+    #co .co-excel .sag1 { right: 0; width: 50px; min-width: 50px; } #co .co-excel .sag2 { right: 50px; width: 80px; min-width: 80px; } #co .co-excel .sag3 { right: 130px; width: 92px; min-width: 92px; }
+    #co .co-excel .sag1.genis { width: 96px; min-width: 96px; }
+    #co .co-excel tr.tik:hover td.sag { background: #f0f9ff; }
     .co-drawer { position: fixed; top: 0; right: -860px; width: 820px; max-width: 96vw; height: 100vh; background: #fff; box-shadow: -8px 0 24px rgba(15,23,42,.18); z-index: 1060; transition: right .25s; overflow: auto; padding: 12px 14px; } .co-drawer.acik { right: 0; }
     .co-drawer-ust { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: sticky; top: 0; background: #fff; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; z-index: 2; flex-wrap: wrap; }
     .co-perde { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1055; display: none; } .co-perde.acik { display: block; }
     .co-ozet { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 12px; font-size: .72rem; }
     .co-ozet .l { font-size: .58rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; letter-spacing: .04em; } .co-ozet .v { font-weight: 700; color: #0f172a; }
     #coDCekler td, #coDCekler th { white-space: nowrap; } #coDCekler tr.vurgu td { background: #fffbeb; }
+    #co .co-drawer .co-excel th.ad, #co .co-drawer .co-excel td.ad { position: static; width: auto; min-width: 0; max-width: none; }
     .co-net.pozitif { color: #15803d; font-weight: 800; } .co-net.negatif { color: #b91c1c; font-weight: 800; }
 </style>
 }
@@ -68,12 +76,12 @@
     <div class="na-ust">
         <h4><span class="rt-ikon"><i class="fas fa-money-check-dollar"></i></span>Vade Tarihine Göre Çek ve Senet Özeti</h4>
         @* Rozetler tıklanabilir (rapor-tema.js) *@
-        <span class="co-pill" data-git="verilen|#coBelge" title="Belge Türü filtresi: aynı rapor çek, senet ya da ikisi için"><i class="fas fa-file-signature me-1"></i>Çek · Senet · Çek + Senet</span>
-        <span class="co-pill" data-git="verilen|#coTur" title="Verilen Çekler › ödeme türü filtresi"><i class="fas fa-file-invoice-dollar me-1"></i>Tedarikçi · Maaş · Kira</span>
-        <span class="co-pill" data-git="tahsil|#coTahsilTablo" title="Tahsile Gönderilen Çekler sekmesi"><i class="fas fa-building-columns me-1"></i>Tahsile Gönderilen</span>
-        <span class="co-pill" data-git="nakit|#coNakitTablo" title="Aylık Nakit Görünümü sekmesi"><i class="fas fa-scale-balanced me-1"></i>Verilen ↔ Tahsil · Net</span>
-        <span class="co-pill" data-git="verilen|#coYil" title="Yıl filtresi"><i class="fas fa-calendar-days me-1"></i>Vade Ayına Göre · @yil</span>
-        <span class="sub w-100"><b>Belge Türü</b> seçimiyle aynı rapor çekler, senetler ya da ikisi birlikte için çalışır (verilen senetler ve müşteriden alınıp tahsile gönderilen senetler aynı kurallarla). Şirketin <b>verdiği tüm çekler</b> vade tarihinin düştüğü aya göre <b>cari bazında</b> izlenir: tedarikçi ödemeleri (sigorta, OSB aidatı vb. dahil), <b>maaş</b> çekleri ve <b>kira</b> çekleri. Her satırda Ocak–Aralık tutarları, 12 aylık toplam, aylık ortalama ve toplam içindeki pay; altta verilen çek toplamı ve adedi. Aynı tabloda <b>tahsile gönderilen çekler</b> bloğu, bankaya nakit dönüşü için ibraz edilen müşteri çeklerini banka bazında (<b>Ziraat Bankası</b>, <b>Halk Bankası</b>) ve aylık toplamla gösterir; banka satırına tıklayınca o bankaya gönderilen çeklerin listesi (müşteri, vade, tutar, durum) açılır. <b>NET</b> satırı tahsile gönderilen ile verilen arasındaki farktır. Ayrıntı sekmeleri: Tahsile Gönderilen Çekler (durum bazında) ve Aylık Nakit Görünümü. Hücreye tıklayınca o carinin çek listesi (çek no, banka, keşide, vade, tutar, durum) açılır. Tutarlar TL.</span>
+        <span class="co-pill" data-git="vc|#coTur" title="Verilen Çekler › ödeme türü filtresi"><i class="fas fa-file-invoice-dollar me-1"></i>Tedarikçi · Maaş · Kira</span>
+        <span class="co-pill" data-git="vs|#coVerilenTablo-vs" title="Verilen Senetler sekmesi"><i class="fas fa-file-signature me-1"></i>Senetler</span>
+        <span class="co-pill" data-git="tc|#coTahsilTablo-tc" title="Tahsile Gönderilen Çekler sekmesi"><i class="fas fa-building-columns me-1"></i>Tahsile Gönderilen · Ziraat · Halk Bankası</span>
+        <span class="co-pill" data-git="nakit|#coNakitTablo" title="Aylık Nakit Görünümü (çek + senet)"><i class="fas fa-scale-balanced me-1"></i>Verilen ↔ Tahsil · Net</span>
+        <span class="co-pill" data-git="vc|#coYil" title="Yıl filtresi"><i class="fas fa-calendar-days me-1"></i>Vade Ayına Göre · @yil</span>
+        <span class="sub w-100">Şirketin <b>verdiği çekler</b> ve <b>verdiği senetler</b> ayrı sekmelerde, vade tarihinin düştüğü aya göre <b>cari bazında</b> izlenir: tedarikçi ödemeleri, <b>maaş</b> ve <b>kira</b>. Her satırda Ocak–Aralık tutarları, 12 aylık toplam, aylık ortalama ve pay; altta verilen toplam ve adet, ardından aynı tabloda bankaya nakit dönüşü için <b>tahsile gönderilen</b> belgeler (yalnız <b>Ziraat Bankası</b> ve <b>Halk Bankası</b>) ve <b>NET</b>. Tahsile gönderilen çekler ve senetler ayrı sekmelerde banka bazında, durum filtresiyle; <b>Aylık Nakit Görünümü</b> çek ve senetleri birlikte ay ay karşılaştırır. Satır ya da hücreye tıklayınca belge listesi (no, banka, keşide, vade, tutar, durum) açılır. Tutarlar TL.</span>
     </div>
     <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
 
@@ -83,49 +91,56 @@
             <div class="co-filtre">
                 <div><label>Şirket</label><select class="form-select" id="coSirket"><option value="">Tümü (Konsolide)</option>@foreach (var s in sirketler) { <option>@s</option> }</select></div>
                 <div><label>Vade Yılı</label><select class="form-select" id="coYil"></select></div>
-                <div><label>Belge Türü</label><select class="form-select" id="coBelge"><option>Çek</option><option>Senet</option><option>Çek + Senet</option></select></div>
                 <div><label>Ödeme Türü</label><select class="form-select" id="coTur"><option value="">Tümü</option></select></div>
                 <div><label>Durum</label><select class="form-select" id="coDurum"><option value="">Tümü</option></select></div>
                 <div><label>Tahsil Bankası</label><select class="form-select" id="coBanka"><option value="">Tümü</option></select></div>
-                <div class="ara"><label>Ara</label><input class="form-control" id="coAra" placeholder="Cari adı, cari kodu, çek no, banka…"></div>
+                <div class="ara"><label>Ara</label><input class="form-control" id="coAra" placeholder="Cari adı, cari kodu, belge no, banka…"></div>
             </div>
         </div>
     </div>
 
     <div class="na-sekme" id="coSekmeler" data-dinamik="kapali">
-        <button type="button" data-p="verilen"><i class="fas fa-file-invoice-dollar me-1"></i>Verilen <span class="co-belge-cogul">Çekler</span> <span class="n" id="coNVerilen">0</span></button>
-        <button type="button" data-p="tahsil"><i class="fas fa-building-columns me-1"></i>Tahsile Gönderilen <span class="co-belge-cogul">Çekler</span> <span class="n" id="coNTahsil">0</span></button>
-        <button type="button" data-p="nakit"><i class="fas fa-scale-balanced me-1"></i>Aylık Nakit Görünümü</button>
+        <button type="button" data-p="vc"><i class="fas fa-file-invoice-dollar me-1"></i>Verilen Çekler <span class="n" id="coN-vc">0</span></button>
+        <button type="button" data-p="vs"><i class="fas fa-file-signature me-1"></i>Verilen Senetler <span class="n" id="coN-vs">0</span></button>
+        <button type="button" data-p="tc"><i class="fas fa-building-columns me-1"></i>Tahsile Gönderilen Çekler <span class="n" id="coN-tc">0</span></button>
+        <button type="button" data-p="ts"><i class="fas fa-landmark me-1"></i>Tahsile Gönderilen Senetler <span class="n" id="coN-ts">0</span></button>
+        <button type="button" data-p="nakit"><i class="fas fa-scale-balanced me-1"></i>Aylık Nakit Görünümü · Çek + Senet</button>
     </div>
 
-    @* ============================ SEKME 1: VERİLEN ÇEKLER ============================ *@
-    <div class="na-panel" data-p="verilen">
-        <div class="na-kpi" id="coKpi" data-dinamik="kapali" style="grid-template-columns:repeat(8,1fr)"></div>
+    @* ============================ VERİLEN ÇEKLER / VERİLEN SENETLER ============================ *@
+    @foreach (var p in verilenPaneller)
+    {
+    <div class="na-panel" data-p="@p.Item1">
+        <div class="na-kpi" id="coKpi-@p.Item1" data-dinamik="kapali" style="grid-template-columns:repeat(8,1fr)"></div>
         <div class="co-rapor-ust">
-            <div><h5><span id="coVBaslik">@yil</span> Vade Tarihine Göre Verilen <span class="co-belge-tekil">Çek</span> Özeti</h5><div class="alt">Tedarikçi • Maaş • Kira • Verilen Toplam • Tahsile Gönderilen • Net</div></div>
-            <div class="ayar"><span class="co-pill" id="coVKapsam" style="background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3)"></span><button type="button" class="btn btn-light btn-sm py-0" id="coVExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+            <div><h5><span class="co-yil">@yil</span> Vade Tarihine Göre Verilen @p.Item2 Özeti</h5><div class="alt">Tedarikçi • Maaş • Kira • Verilen Toplam • Tahsile Gönderilen (Ziraat · Halk Bankası) • Net</div></div>
+            <div class="ayar"><span class="co-pill co-kapsam" style="background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3)"></span><button type="button" class="btn btn-light btn-sm py-0" id="coVExcel-@p.Item1"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
         </div>
-        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-table me-1"></i>Cari Bazında Aylık Verilen <span class="co-belge-tekil">Çek</span> · Tahsile Gönderilen <span class="co-belge-tekil">Çek</span></span><span class="not" id="coVNot">vade ayına göre · tutarlar TL · satır ya da hücreye tıklayınca çek listesi</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:70vh"><table class="na-tablo co-excel" id="coVerilenTablo" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas @p.Item4 me-1"></i>Cari Bazında Aylık Verilen @p.Item2 · Tahsile Gönderilen @p.Item2</span><span class="not" id="coVNot-@p.Item1">vade ayına göre · tutarlar TL · satır ya da hücreye tıklayınca belge listesi</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:72vh"><table class="na-tablo co-excel" id="coVerilenTablo-@p.Item1" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
     </div>
+    }
 
-    @* ============================ SEKME 2: TAHSİLE GÖNDERİLEN ÇEKLER ============================ *@
-    <div class="na-panel" data-p="tahsil">
-        <div class="na-kpi" id="coTKpi" data-dinamik="kapali" style="grid-template-columns:repeat(9,1fr)"></div>
+    @* ============================ TAHSİLE GÖNDERİLEN ÇEKLER / SENETLER ============================ *@
+    @foreach (var p in tahsilPaneller)
+    {
+    <div class="na-panel" data-p="@p.Item1">
+        <div class="na-kpi" id="coTKpi-@p.Item1" data-dinamik="kapali" style="grid-template-columns:repeat(9,1fr)"></div>
         <div class="co-rapor-ust">
-            <div><h5><span id="coTBaslik">@yil</span> Tahsile Gönderilen Müşteri <span class="co-belge-iyelik">Çekleri</span></h5><div class="alt">Vade Ayına Göre • Ziraat Bankası • Halk Bankası • Tahsil Edildi • Tahsilde • Karşılıksız</div></div>
-            <div class="ayar"><span class="co-pill" id="coTKapsam" style="background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3)"></span><button type="button" class="btn btn-light btn-sm py-0" id="coTExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+            <div><h5><span class="co-yil">@yil</span> Tahsile Gönderilen Müşteri @p.Item3</h5><div class="alt">Vade Ayına Göre • Ziraat Bankası • Halk Bankası • Tahsil Edildi • Tahsilde • Karşılıksız</div></div>
+            <div class="ayar"><span class="co-pill co-kapsam" style="background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3)"></span><button type="button" class="btn btn-light btn-sm py-0" id="coTExcel-@p.Item1"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
         </div>
-        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-table me-1"></i>Banka Bazında Aylık Tahsile Gönderilen <span class="co-belge-tekil">Çek</span></span><span class="not" id="coTNot">bankaya ibraz edilen çekler (tahsil edildi + tahsilde + karşılıksız) · portföyde bekleyen ve ciro edilenler sayılmaz</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:70vh"><table class="na-tablo co-excel" id="coTahsilTablo" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas @p.Item4 me-1"></i>Banka Bazında Aylık Tahsile Gönderilen @p.Item2</span><span class="not" id="coTNot-@p.Item1">bankaya ibraz edilen belgeler (tahsil edildi + tahsilde + karşılıksız) · portföyde bekleyen ve ciro edilenler sayılmaz</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:72vh"><table class="na-tablo co-excel" id="coTahsilTablo-@p.Item1" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
     </div>
+    }
 
-    @* ============================ SEKME 3: AYLIK NAKİT GÖRÜNÜMÜ ============================ *@
+    @* ============================ AYLIK NAKİT GÖRÜNÜMÜ (ÇEK + SENET ORTAK) ============================ *@
     <div class="na-panel" data-p="nakit">
         <div class="co-rapor-ust">
-            <div><h5><span id="coNBaslik">@yil</span> Aylık Nakit Görünümü · Verilen ↔ Tahsile Gönderilen</h5><div class="alt">Verilen Çek (Tür Bazında) • Tahsile Gönderilen • Portföy • Net • Kümülatif</div></div>
-            <div class="ayar"><span class="co-pill" id="coNKapsam" style="background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3)"></span><button type="button" class="btn btn-light btn-sm py-0" id="coNExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+            <div><h5><span class="co-yil">@yil</span> Aylık Nakit Görünümü · Çek ve Senet Ortak</h5><div class="alt">Verilen Çek • Verilen Senet • Tahsile Gönderilen Çek • Tahsile Gönderilen Senet • Portföy • Net • Kümülatif</div></div>
+            <div class="ayar"><span class="co-pill co-kapsam" style="background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3)"></span><button type="button" class="btn btn-light btn-sm py-0" id="coNExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
         </div>
-        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-scale-balanced me-1"></i>Ay Ay Verilen ve Tahsile Gönderilen <span class="co-belge-tekil">Çek</span></span><span class="not">net = tahsile gönderilen − verilen · kümülatif yıl başından · tutarlar TL</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo co-excel" id="coNakitTablo" data-dinamik="kapali"><thead></thead><tbody></tbody></table></div></div></div>
-        <div class="na-mini rt-aciklama">Verilen çekler vade ayına göre ödenecek tutarı, tahsile gönderilen çekler ise aynı ayda bankadan beklenen girişi gösterir. Portföyde bekleyen (henüz bankaya verilmemiş) ve ciro edilen müşteri çekleri bilgi amaçlı ayrı satırlardadır. Karşılıksız çekler tahsile gönderilmiş sayılır ancak giriş sağlamaz.</div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-scale-balanced me-1"></i>Ay Ay Verilen ve Tahsile Gönderilen · Çek + Senet</span><span class="not">net = tahsile gönderilen − verilen · kümülatif yıl başından · tutarlar TL</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo co-excel" id="coNakitTablo" data-dinamik="kapali"><thead></thead><tbody></tbody></table></div></div></div>
+        <div class="na-mini rt-aciklama">Verilen çek ve senetler vade ayına göre ödenecek tutarı, tahsile gönderilen çek ve senetler aynı ayda bankadan (Ziraat Bankası, Halk Bankası) beklenen girişi gösterir. Portföyde bekleyen (henüz bankaya verilmemiş) ve ciro edilen müşteri belgeleri bilgi amaçlı ayrı satırlardadır. Karşılıksız belgeler tahsile gönderilmiş sayılır ancak giriş sağlamaz.</div>
     </div>
 
     <div class="co-perde" id="coPerde"></div>
@@ -136,5 +151,5 @@
 </div>
 
 @section Scripts {
-<script src="/js/cek-ozet.js?v=6"></script>
+<script src="/js/cek-ozet.js?v=7"></script>
 }

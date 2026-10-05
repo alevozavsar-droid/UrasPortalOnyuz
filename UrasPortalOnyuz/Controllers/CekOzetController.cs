@@ -8,21 +8,20 @@ namespace WebApplication3.Controllers
 {
     /// <summary>
     /// Vade Tarihine Göre Çek Özeti — Mali İşler › Finans › Finansal Araçlar (Yönetim › Özel Raporlar'da aynı ekran). Sekmeler:
-    ///   Verilen Çekler          : şirketin verdiği tüm çekler vade ayına göre cari bazında (tedarikçi, maaş, kira, sigorta ve diğer); 12 ay + yıllık toplam +
-    ///                             aylık ortalama + pay %, tür ara toplamları, aylık toplam ve çek adedi satırları; hücreden çek listesi
-    ///   Tahsile Gönderilen Çekler: müşteriden alınıp bankaya tahsile gönderilen çekler vade ayına göre müşteri bazında (tahsil edildi / tahsilde / karşılıksız);
-    ///                             portföyde bekleyen ve ciro edilenler ayrıca
-    ///   Aylık Nakit Görünümü    : ay ay verilen (tür bazında) ↔ tahsile gönderilen, net ve kümülatif
+    ///   Verilen Çekler / Verilen Senetler    : verilen belgeler vade ayına göre cari bazında (tedarikçi, maaş, kira); 12 ay + yıllık toplam + aylık ortalama + pay %,
+    ///                                          tür ara toplamları, verilen toplam ve adet; altında tahsile gönderilen (Ziraat Bankası / Halk Bankası) ve NET; hücreden belge listesi
+    ///   Tahsile Gönderilen Çekler / Senetler : bankaya ibraz edilen müşteri belgeleri banka bazında (tahsil edildi / tahsilde / karşılıksız); durum ve banka filtresi
+    ///   Aylık Nakit Görünümü                 : çek ve senet ortak — ay ay verilen (çek / senet, tür bazında) ↔ tahsile gönderilen (çek / senet, banka bazında), net, kümülatif
     /// Veri: Data/CekOrnek.cs (verilen çekler) + Data/ButceOrnek.cs › Cekler (alınan müşteri çekleri; Bütçe Raporu ile aynı kaynak). Hesaplar istemcide (wwwroot/js/cek-ozet.js).
     /// </summary>
     [Authorize]
     public class CekOzetController : Controller
     {
-        /// <param name="sekme">verilen (varsayılan) | tahsil | nakit</param>
+        /// <param name="sekme">vc (Verilen Çekler, varsayılan) | vs (Verilen Senetler) | tc (Tahsile Gönderilen Çekler) | ts (Tahsile Gönderilen Senetler) | nakit (çek + senet ortak)</param>
         public IActionResult Index(string sekme, string cari)
         {
             ViewData["Title"] = "Vade Tarihine Göre Çek ve Senet Özeti";
-            ViewBag.Sekme = sekme == "tahsil" || sekme == "nakit" ? sekme : "verilen";
+            ViewBag.Sekme = new[] { "vs", "tc", "ts", "nakit" }.Contains(sekme) ? sekme : sekme == "tahsil" ? "tc" : "vc";
             ViewBag.Cari = cari ?? "";
             ViewBag.Yil = DateTime.Today.Year;
             ViewBag.Sirketler = CekOrnek.Sirketler;
