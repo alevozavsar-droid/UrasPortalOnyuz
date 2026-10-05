@@ -57,7 +57,7 @@ namespace WebApplication3.Data
         public string Sirket { get; set; } public string No { get; set; } public string MusteriKod { get; set; } public string Musteri { get; set; }
         public string Banka { get; set; } public DateTime Vade { get; set; } public decimal Tutar { get; set; }
         public string Durum { get; set; }   // Portföyde | Tahsilde | Tahsil Edildi | Ciro Edildi | Karşılıksız | Riskli
-        public string TahsilBankasi { get; set; } = "";   // tahsile gönderilen çekler yalnız Halkbank ya da Ziraat Bankası'na ibraz edilir; gönderilmemişse boş
+        public string TahsilBankasi { get; set; } = "";   // tahsile gönderilen çekler yalnız Ziraat Bankası ya da Halk Bankası'na ibraz edilir; gönderilmemişse boş
         public bool Kullanilabilir => Durum == "Portföyde" || Durum == "Tahsilde" || Durum == "Tahsil Edildi";
         public bool TahsileGonderildi => Durum == "Tahsilde" || Durum == "Tahsil Edildi" || Durum == "Karşılıksız";
     }
@@ -176,7 +176,7 @@ namespace WebApplication3.Data
         public static List<BtCek> Cekler { get { Tohumla(); lock (Kilit) return _cekler.ToList(); } }
         public static readonly string[] CekDurumlari = { "Portföyde", "Tahsilde", "Tahsil Edildi", "Ciro Edildi", "Karşılıksız", "Riskli" };
         /// <summary>Müşteri çekleri tahsil için yalnız bu iki bankaya gönderilir (şirket tahsil hesapları).</summary>
-        public static readonly string[] TahsilBankalari = { "Halkbank", "Ziraat Bankası" };
+        public static readonly string[] TahsilBankalari = { "Ziraat Bankası", "Halk Bankası" };
         static readonly string[] Bankalar = { "Ziraat Bankası", "İş Bankası", "Garanti BBVA", "Yapı Kredi", "Akbank", "QNB", "Halkbank", "VakıfBank", "DenizBank", "TEB" };
         static readonly double[] CEK_MEVSIM = { 0.8, 0.85, 1.05, 1.1, 1.05, 1.0, 0.95, 0.8, 1.1, 1.2, 1.1, 1.0 };
         const decimal CekTaban = 32_000_000m;   // Uras Kimya ölçeğinde aylık vadesi gelen müşteri çeki (2026, TL)
@@ -201,7 +201,7 @@ namespace WebApplication3.Data
                 else if (vade <= bugun.AddDays(7)) durum = z < 0.55 ? "Tahsilde" : z < 0.9 ? "Portföyde" : "Ciro Edildi";
                 else durum = z < 0.74 ? "Portföyde" : z < 0.92 ? "Ciro Edildi" : "Riskli";
                 // tahsil bankası: üretici şirketler ağırlıklı Ziraat, satış şirketleri ağırlıklı Halkbank
-                string tahsilBankasi = durum == "Tahsilde" || durum == "Tahsil Edildi" || durum == "Karşılıksız" ? (rnd.NextDouble() < (sirket == "Uras Kimya" || sirket == "Daf Kimya" || sirket == "URS Makine" ? 0.7 : 0.3) ? "Ziraat Bankası" : "Halkbank") : "";
+                string tahsilBankasi = durum == "Tahsilde" || durum == "Tahsil Edildi" || durum == "Karşılıksız" ? (rnd.NextDouble() < (sirket == "Uras Kimya" || sirket == "Daf Kimya" || sirket == "URS Makine" ? 0.7 : 0.3) ? "Ziraat Bankası" : "Halk Bankası") : "";
                 liste.Add(new BtCek { Sirket = sirket, No = $"ÇK-{yil % 100:00}{ay:00}-{rnd.Next(100000, 999999)}", MusteriKod = m.Kod, Musteri = m.KisaAd, Banka = Bankalar[rnd.Next(Bankalar.Length)], Vade = vade, Tutar = tutar, Durum = durum, TahsilBankasi = tahsilBankasi });
             }
             return liste.OrderBy(c => c.Vade).ThenBy(c => c.No);

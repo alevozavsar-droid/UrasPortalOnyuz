@@ -263,12 +263,13 @@ tasarımından uyarlandı:
   yıl çarpanı, aktif aylara ağırlıklı dağıtım, ayda 1–3 çek) + şirketin kartlı tedarikçileri; maaş çeki bütçedeki brüt maaş kaleminin %30'u (her ayın
   5'i), kira çeki bütçedeki ofis kirası kalemi (`ButceOrnek.Bul`). **Verilen Çekler**: cari bazında Ocak–Aralık, 12 aylık toplam, aylık ortalama
   (toplam / 12), % pay (sağa sabit sütunlar); tür ara toplamları; VERİLEN ÇEK TOPLAMI ve ÇEK ADEDİ; aynı tabloda **Tahsile Gönderilen Çekler** bloğu
-  (bankaya ibraz edilen müşteri çekleri müşteri bazında, toplam, adet) ve **NET** (tahsile gönderilen − verilen); bu ay vurgulu; KPI'lar (yıllık, ödendi,
-  ödenecek, iade, bu ay vadesi gelen, en yüksek ay, tedarikçi / maaş / kira, tahsile gönderilen ve net). **Tahsile Gönderilen Çekler**: `ButceOrnek.Cekler` (Bütçe Raporu ile aynı müşteri çekleri) içinden bankaya ibraz edilenler (Tahsilde +
-  Tahsil Edildi + Karşılıksız) müşteri bazında aynı düzende; durum filtresiyle portföyde / ciro / riskli de görülür. Çekler tahsile yalnız
-  **Halkbank** ve **Ziraat Bankası**'na gönderilir (`BtCek.TahsilBankasi`, `ButceOrnek.TahsilBankalari`; üretici şirketler ağırlıklı Ziraat, satış
-  şirketleri ağırlıklı Halkbank): banka bazında ara toplam satırları, KPI kartları ve Tahsil Bankası filtresi; çek listelerinde Tahsil Bankası sütunu
-  (Bütçe Raporu'nun seçili ay çek listesinde de). **Aylık Nakit Görünümü**: ay ay
+  (bankaya ibraz edilen müşteri çekleri yalnız banka satırlarıyla: Ziraat Bankası, Halk Bankası; toplam, adet) ve **NET** (tahsile gönderilen −
+  verilen); bu ay vurgulu; KPI'lar (yıllık, ödendi, ödenecek, iade, bu ay vadesi gelen, en yüksek ay, tedarikçi / maaş / kira, tahsile gönderilen ve net).
+  **Tahsile Gönderilen Çekler**: `ButceOrnek.Cekler` (Bütçe Raporu ile aynı müşteri çekleri) içinden bankaya ibraz edilenler (Tahsilde + Tahsil Edildi +
+  Karşılıksız) banka bazında aynı düzende; durum filtresiyle portföyde / ciro / riskli de görülür ("Henüz Tahsile Gönderilmedi" satırı). Çekler tahsile
+  yalnız **Ziraat Bankası** ve **Halk Bankası**'na gönderilir (`BtCek.TahsilBankasi`, `ButceOrnek.TahsilBankalari`; üretici şirketler ağırlıklı
+  Ziraat, satış şirketleri ağırlıklı Halk Bankası): KPI kartları ve Tahsil Bankası filtresi; banka satırına tıklayınca o bankaya gönderilen çeklerin
+  listesi (müşteri, keşideci banka, vade, tutar, durum, Excel); Bütçe Raporu'nun seçili ay çek listesinde Tahsil Bankası sütunu. **Aylık Nakit Görünümü**: ay ay
   verilen (tür bazında), tahsile gönderilen (durum bazında), portföy, ciro, net (tahsile gönderilen − verilen) ve kümülatif. Satır / hücre → carinin
   çek listesi (ay vurgulu, cari kart bağlantısı, Excel). Filtreler: şirket, vade yılı, tür, durum, arama. Derin bağlantı: `/CekOzet?sekme=tahsil|nakit`,
   `?cari=Öztürk Plastik`.

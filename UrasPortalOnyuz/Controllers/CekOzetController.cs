@@ -41,7 +41,7 @@ namespace WebApplication3.Controllers
                     yillar = CekOrnek.Yillar, sirketler = CekOrnek.Sirketler, turler = CekOrnek.Turler, durumlar = CekOrnek.Durumlar, aylar = ButceOrnek.Aylar,
                     alinanDurumlari = ButceOrnek.CekDurumlari, tahsilBankalari = ButceOrnek.TahsilBankalari,
                     verilen = CekOrnek.Verilen.Select(c => new { c.Sirket, c.No, c.CariKod, c.Cari, c.Tur, c.Banka, keside = c.Keside.ToString("dd.MM.yyyy"), vade = c.Vade.ToString("dd.MM.yyyy"), yil = c.Vade.Year, ay = c.Vade.Month, c.Tutar, c.Durum, c.Aciklama }),
-                    // alınan müşteri çekleri; tahsile gönderilenler yalnız Halkbank ya da Ziraat Bankası'na ibraz edilir (tahsilBankasi)
+                    // alınan müşteri çekleri; tahsile gönderilenler yalnız Ziraat Bankası ya da Halk Bankası'na ibraz edilir (tahsilBankasi)
                     alinan = ButceOrnek.Cekler.Select(c => new { c.Sirket, c.No, c.MusteriKod, c.Musteri, c.Banka, vade = c.Vade.ToString("dd.MM.yyyy"), yil = c.Vade.Year, ay = c.Vade.Month, c.Tutar, c.Durum, tahsile = c.TahsileGonderildi, tahsilBankasi = c.TahsilBankasi })
                 });
             }
