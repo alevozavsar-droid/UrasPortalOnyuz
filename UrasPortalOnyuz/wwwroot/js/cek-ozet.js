@@ -87,6 +87,9 @@
     $('#coVBaslik').textContent = F.yil; $('#coTBaslik').textContent = F.yil; $('#coNBaslik').textContent = F.yil;
   }
   const basliklar = (ilk, ekstra) => `<tr><th class="ad">${ilk}</th>${AY().map((a, i) => `<th class="s ${i + 1 === bugunAy(F.yil) ? 'bugun-ay' : ''}">${a}</th>`).join('')}${ekstra}</tr>`;
+  // Özet sütunları (sağa sabit): 12 Aylık Toplam = ayların toplamı · Aylık Ortalama = toplam / 12 (şablondaki gibi) · % = satır toplamı / genel toplam
+  const OZET_BASLIK = '<th class="s sag sag3">12 Aylık Toplam</th><th class="s sag sag2">Aylık Ortalama</th><th class="s sag sag1">%</th>';
+  const ozetHucreler = (toplam, genel) => `<td class="s yil sag sag3">${kisa(toplam)}</td><td class="s ort sag sag2">${kisa(toplam / 12)}</td><td class="s sag sag1">${pct(genel ? toplam / genel : 0)}</td>`;
 
   // ---- VERİLEN ÇEKLER
   function cizVerilen() {
@@ -105,13 +108,13 @@
       { l: 'Maaş Çekleri', v: kisa(turT('Maaş')), s: `kira ${kisa(turT('Kira'))}`, k: '#0f766e' }, { l: 'Tedarikçi Çekleri', v: kisa(turT('Tedarikçi')), s: `sigorta ve diğer ${kisa(turT('Sigorta ve Diğer'))}`, k: '#1d4ed8' }
     ].map(k => `<div style="--k:${k.k};${k.d && F.durum === k.d ? 'background:#f0f9ff' : ''}" ${k.d ? `data-durum="${k.d}" title="Durum filtresi"` : ''}><div class="l">${esc(k.l)}</div><div class="v">${k.v}</div><div class="s">${esc(k.s)}</div></div>`).join('');
     const t = $('#coVerilenTablo');
-    t.tHead.innerHTML = basliklar('Verilen · Cari', '<th class="s">12 Aylık Toplam</th><th class="s">Aylık Ortalama</th><th class="s">%</th>');
-    const satir = r => `<tr class="tik" data-cari="${esc(r.ad)}" data-tur="${esc(r.tur)}"><td class="ad"><b>${esc(r.ad)}</b>${r.kod ? `<small>${esc(r.kod)}${F.sirket ? '' : ' · ' + esc([...r.sirketler].join(', '))}</small>` : F.sirket ? '' : `<small>${esc([...r.sirketler].join(', '))}</small>`}</td>${r.aylar.map((v, i) => `<td class="s hucre ${i + 1 === bA ? 'bugun-ay' : ''}" data-ay="${i + 1}">${v ? kisa(v) + `<small>${r.adet[i]} çek</small>` : bos}</td>`).join('')}<td class="s yil">${kisa(r.toplam)}</td><td class="s ort">${kisa(r.toplam / 12)}</td><td class="s">${pct(genel ? r.toplam / genel : 0)}</td></tr>`;
-    const grup = (ad, l) => { const a = new Array(12).fill(0); let top = 0; l.forEach(r => { for (let i = 0; i < 12; i++) a[i] += r.aylar[i]; top += r.toplam; }); return `<tr class="grp"><td class="ad">${esc(ad)} <small style="display:inline;text-transform:none;font-weight:600">· ${l.length} cari</small></td>${a.map((v, i) => `<td class="s ${i + 1 === bA ? 'bugun-ay' : ''}">${v ? kisa(v) : ''}</td>`).join('')}<td class="s">${kisa(top)}</td><td class="s">${kisa(top / 12)}</td><td class="s">${pct(genel ? top / genel : 0)}</td></tr>`; };
+    t.tHead.innerHTML = basliklar('Verilen · Cari', OZET_BASLIK);
+    const satir = r => `<tr class="tik" data-cari="${esc(r.ad)}" data-tur="${esc(r.tur)}"><td class="ad"><b>${esc(r.ad)}</b>${r.kod ? `<small>${esc(r.kod)}${F.sirket ? '' : ' · ' + esc([...r.sirketler].join(', '))}</small>` : F.sirket ? '' : `<small>${esc([...r.sirketler].join(', '))}</small>`}</td>${r.aylar.map((v, i) => `<td class="s hucre ${i + 1 === bA ? 'bugun-ay' : ''}" data-ay="${i + 1}">${v ? kisa(v) + `<small>${r.adet[i]} çek</small>` : bos}</td>`).join('')}${ozetHucreler(r.toplam, genel)}</tr>`;
+    const grup = (ad, l) => { const a = new Array(12).fill(0); let top = 0; l.forEach(r => { for (let i = 0; i < 12; i++) a[i] += r.aylar[i]; top += r.toplam; }); return `<tr class="grp"><td class="ad">${esc(ad)} <small style="display:inline;text-transform:none;font-weight:600">· ${l.length} cari</small></td>${a.map((v, i) => `<td class="s ${i + 1 === bA ? 'bugun-ay' : ''}">${v ? kisa(v) : ''}</td>`).join('')}${ozetHucreler(top, genel)}</tr>`; };
     const turler = V.turler.filter(x => M.some(r => r.tur === x));
     t.tBodies[0].innerHTML = M.length ? turler.map(x => { const l = M.filter(r => r.tur === x); return grup(x, l) + l.map(satir).join(''); }).join('') : '<tr><td colspan="16" class="na-bos">Filtreye uyan çek yok.</td></tr>';
-    t.tFoot.innerHTML = M.length ? `<tr class="toplam"><td class="ad">AYLIK TOPLAM TUTAR</td>${ayTop.map((v, i) => `<td class="s ${i + 1 === bA ? 'bugun-ay' : ''}">${v ? kisa(v) : '—'}</td>`).join('')}<td class="s">${kisa(genel)}</td><td class="s">${kisa(genel / 12)}</td><td class="s">100%</td></tr>
-      <tr class="adet"><td class="ad">AYLIK ÇEK ADEDİ</td>${ayAdet.map((v, i) => `<td class="s ${i + 1 === bA ? 'bugun-ay' : ''}">${v || '—'}</td>`).join('')}<td class="s">${ayAdet.reduce((s, v) => s + v, 0)}</td><td class="s">${(ayAdet.reduce((s, v) => s + v, 0) / 12).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}</td><td></td></tr>` : '';
+    t.tFoot.innerHTML = M.length ? `<tr class="toplam"><td class="ad">AYLIK TOPLAM TUTAR</td>${ayTop.map((v, i) => `<td class="s ${i + 1 === bA ? 'bugun-ay' : ''}">${v ? kisa(v) : '—'}</td>`).join('')}${ozetHucreler(genel, genel)}</tr>
+      <tr class="adet"><td class="ad">AYLIK ÇEK ADEDİ</td>${ayAdet.map((v, i) => `<td class="s ${i + 1 === bA ? 'bugun-ay' : ''}">${v || '—'}</td>`).join('')}<td class="s sag sag3">${ayAdet.reduce((s, v) => s + v, 0)}</td><td class="s sag sag2">${(ayAdet.reduce((s, v) => s + v, 0) / 12).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}</td><td class="sag sag1"></td></tr>` : '';
     $$('tr.tik', t).forEach(r => r.addEventListener('click', e => { const h = e.target.closest('td.hucre'); drawerAc(r.dataset.cari, 'verilen', h ? +h.dataset.ay : null); }));
     $('#coVNot').textContent = `${F.sirket || 'konsolide'} · ${F.yil} · ${M.length} cari · ${L.length} çek · ${kisa(genel)} TL`;
   }
@@ -135,10 +138,10 @@
     const genel = M.reduce((s, r) => s + r.toplam, 0), ayTop = new Array(12).fill(0), ayAdet = new Array(12).fill(0), bA = bugunAy(F.yil);
     M.forEach(r => { for (let i = 0; i < 12; i++) { ayTop[i] += r.aylar[i]; ayAdet[i] += r.adet[i]; } });
     const t = $('#coTahsilTablo');
-    t.tHead.innerHTML = basliklar('Müşteri', '<th class="s">12 Aylık Toplam</th><th class="s">Aylık Ortalama</th><th class="s">%</th>');
-    t.tBodies[0].innerHTML = M.length ? M.map(r => `<tr class="tik" data-cari="${esc(r.ad)}"><td class="ad"><b>${esc(r.ad)}</b><small>${esc(r.kod)}${F.sirket ? '' : ' · ' + esc([...r.sirketler].join(', '))}</small></td>${r.aylar.map((v, i) => `<td class="s hucre ${i + 1 === bA ? 'bugun-ay' : ''}" data-ay="${i + 1}">${v ? kisa(v) + `<small>${r.adet[i]} çek</small>` : bos}</td>`).join('')}<td class="s yil">${kisa(r.toplam)}</td><td class="s ort">${kisa(r.toplam / 12)}</td><td class="s">${pct(genel ? r.toplam / genel : 0)}</td></tr>`).join('') : '<tr><td colspan="16" class="na-bos">Filtreye uyan çek yok.</td></tr>';
-    t.tFoot.innerHTML = M.length ? `<tr class="toplam"><td class="ad">AYLIK TOPLAM TUTAR</td>${ayTop.map((v, i) => `<td class="s ${i + 1 === bA ? 'bugun-ay' : ''}">${v ? kisa(v) : '—'}</td>`).join('')}<td class="s">${kisa(genel)}</td><td class="s">${kisa(genel / 12)}</td><td class="s">100%</td></tr>
-      <tr class="adet"><td class="ad">AYLIK ÇEK ADEDİ</td>${ayAdet.map((v, i) => `<td class="s ${i + 1 === bA ? 'bugun-ay' : ''}">${v || '—'}</td>`).join('')}<td class="s">${ayAdet.reduce((s, v) => s + v, 0)}</td><td colspan="2"></td></tr>` : '';
+    t.tHead.innerHTML = basliklar('Müşteri', OZET_BASLIK);
+    t.tBodies[0].innerHTML = M.length ? M.map(r => `<tr class="tik" data-cari="${esc(r.ad)}"><td class="ad"><b>${esc(r.ad)}</b><small>${esc(r.kod)}${F.sirket ? '' : ' · ' + esc([...r.sirketler].join(', '))}</small></td>${r.aylar.map((v, i) => `<td class="s hucre ${i + 1 === bA ? 'bugun-ay' : ''}" data-ay="${i + 1}">${v ? kisa(v) + `<small>${r.adet[i]} çek</small>` : bos}</td>`).join('')}${ozetHucreler(r.toplam, genel)}</tr>`).join('') : '<tr><td colspan="16" class="na-bos">Filtreye uyan çek yok.</td></tr>';
+    t.tFoot.innerHTML = M.length ? `<tr class="toplam"><td class="ad">AYLIK TOPLAM TUTAR</td>${ayTop.map((v, i) => `<td class="s ${i + 1 === bA ? 'bugun-ay' : ''}">${v ? kisa(v) : '—'}</td>`).join('')}${ozetHucreler(genel, genel)}</tr>
+      <tr class="adet"><td class="ad">AYLIK ÇEK ADEDİ</td>${ayAdet.map((v, i) => `<td class="s ${i + 1 === bA ? 'bugun-ay' : ''}">${v || '—'}</td>`).join('')}<td class="s sag sag3">${ayAdet.reduce((s, v) => s + v, 0)}</td><td class="s sag sag2">${(ayAdet.reduce((s, v) => s + v, 0) / 12).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}</td><td class="sag sag1"></td></tr>` : '';
     $$('tr.tik', t).forEach(r => r.addEventListener('click', e => { const h = e.target.closest('td.hucre'); drawerAc(r.dataset.cari, 'alinan', h ? +h.dataset.ay : null); }));
     $('#coTNot').textContent = `${F.sirket || 'konsolide'} · ${F.yil} · ${F.durum || 'tahsile gönderilen (tahsil edildi + tahsilde + karşılıksız)'} · ${M.length} müşteri · ${L.length} çek · ${kisa(genel)} TL`;
   }
@@ -165,8 +168,8 @@
   }
   function cizNakit() {
     const R = nakitSatirlari(), bA = bugunAy(F.yil), t = $('#coNakitTablo');
-    t.tHead.innerHTML = basliklar('Kalem', '<th class="s">Yıl Toplamı</th>');
-    t.tBodies[0].innerHTML = R.map(r => `<tr class="${r.cls}"><td class="ad">${esc(r.ad)}</td>${r.a.map((v, i) => `<td class="s ${i + 1 === bA ? 'bugun-ay' : ''}">${r.net ? netHtml(v) : v ? kisa(v) + (r.adet ? `<small>${r.adet[i]} çek</small>` : '') : '—'}</td>`).join('')}<td class="s yil">${r.net ? netHtml(r.ad.startsWith('Küm') ? r.a[11] : r.a.reduce((s, v) => s + v, 0)) : kisa(r.a.reduce((s, v) => s + v, 0))}</td></tr>`).join('');
+    t.tHead.innerHTML = basliklar('Kalem', '<th class="s sag sag1 genis">Yıl Toplamı</th>');
+    t.tBodies[0].innerHTML = R.map(r => `<tr class="${r.cls}"><td class="ad">${esc(r.ad)}</td>${r.a.map((v, i) => `<td class="s ${i + 1 === bA ? 'bugun-ay' : ''}">${r.net ? netHtml(v) : v ? kisa(v) + (r.adet ? `<small>${r.adet[i]} çek</small>` : '') : '—'}</td>`).join('')}<td class="s yil sag sag1 genis">${r.net ? netHtml(r.ad.startsWith('Küm') ? r.a[11] : r.a.reduce((s, v) => s + v, 0)) : kisa(r.a.reduce((s, v) => s + v, 0))}</td></tr>`).join('');
   }
   function nakitCsv() { csvIndir('aylik_nakit_gorunumu_' + F.yil, ['Kalem', ...AY(), 'Yıl Toplamı'], nakitSatirlari().map(r => [r.ad, ...r.a.map(v => sayi(v)), sayi(r.ad.startsWith('Küm') ? r.a[11] : r.a.reduce((s, v) => s + v, 0))])); }
 
