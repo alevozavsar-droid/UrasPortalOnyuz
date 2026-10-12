@@ -85,6 +85,10 @@ namespace FinansRaporlama.Controllers
         public string U_MahsupFisNo { get; set; } = ""; public string U_KarsiBelge { get; set; } = "";                                               // Mahsup
         public string U_TemlikNo { get; set; } = ""; public string U_TemlikEden { get; set; } = "";                                                   // Temlik
         public string U_YansitmaNo { get; set; } = "";                                                                                                  // Yansıtma (grup içi yansıtma faturası)
+        public string U_FaturaSahibi { get; set; } = "";     // faturanın sahibi şirket (borcun ait olduğu şirket); boş = satırın şirketi
+        public string U_OdeyenSirket { get; set; } = "";     // ödemeyi fiilen yapan şirket (banka / kasa / çek portföyü); fatura sahibinden farklı olabilir (grup içi çek dolaşımı)
+        public string U_AvansNo { get; set; } = "";          // Nakit Avans modülü talep no (NA-2026-000146): onaylanan avans otomatik satır olur, ödenince avans teslim edilmiş sayılır
+        public string U_TalimatNo { get; set; } = "";        // Ödeme talimatı no (TLM-2026-0001; Data/TalimatOrnek.cs)
     }
 
     /// <summary>Kasa Nakit Akışı satırına seçilen çek / senet (Data/CekAkibetOrnek.cs kaydının anlık görünümü): akıbet ve plan ↔ ibraz kontrolü ile.</summary>

@@ -269,7 +269,18 @@ tasarımından uyarlandı:
     yöntem alanları, tip dönüşümü), çekmece (`SatirKaydet` / `SatirEkle` / `SilJson` / `DekontEkle`), Çek / Senet belge seçimi (`SecilebilirBelgeler` → `BelgePlanla`),
     Mahsup / Temlik / Yansıtma kayıt bağlama (`GrupIciKayitlar` → `GrupIciBagla` / `GrupIciKaldir`; `NakitAkisOrnek.GrupIciBilgi` kaydın güncel durumunu Mahsup / Temlik /
     Yansıtma modüllerinden okuma anında getirir; tohumda satırlar gerçek modül kayıtlarına bağlanır), Bakiye · Projeksiyon ve Günlük sekmeleri, CSV.
-    `?sekme=tumu|nakit|cek|senet|havale|kredi|mahsup|temlik|yansitma|diger|bakiye|gunluk`. Yansıtma ödeme yöntemi (`U_YansitmaNo`).
+    `?sekme=tumu|nakit|cek|senet|havale|kredi|mahsup|temlik|yansitma|diger|talimat|bakiye|gunluk`. Yansıtma ödeme yöntemi (`U_YansitmaNo`).
+    Her satırda `U_FaturaSahibi` / `U_OdeyenSirket` (fatura sahibi ve ödeyen şirket farklı olabilir). **Ödeme talimatı** (`Data/TalimatOrnek.cs`): seçili satırlardan
+    ödeyen şirket + yöntem bazında `OdemeTalimati` (satırlar, belgeler, dolaşım özeti; durum akışı Hazırlandı → Onaylandı → Bankaya İletildi / Teslim Edildi →
+    Gerçekleşti | İptal; `TalimatOlustur` / `TalimatDurum` / `TalimatVeri`, yazdırılabilir `Views/Rapor79/Talimat.cshtml` = ana projedeki PaymentInstruction /
+    SupplierPayment / QuickTransfer belgelerinin HTML karşılığı, `TalimatOrnek.SirketBilgisi` unvan / adres / komiser heyeti). Gerçekleşti → `NakitAkisOrnek.OdendiIsaretle`
+    (satır ÖDENDİ, çekler dolaşım planına göre `DolasimAdimGerceklestir` ya da tedarikçiye ciro, avans `AvansOdemesiIsle`). **Grup içi dolaşım senaryosu**
+    (`CekKaydi.Dolasim`, `CekAkibetOrnek.GrupBakiyeleri` A|B → A'nın B'ye borcu, `DolasimSimule` uygunluk simülasyonu: her adımda min(tutar, borç) kapanır, kalan yeni
+    bakiye = uyarı; `DolasimOner` borç ilişkileri üzerinden BFS; `DolasimKaydet`; `DolasimAdimGerceklestir` → `CekHareket` + bakiye güncelleme + belge alan şirketin
+    portföyüne geçer, son adım ciro / ibraz; tohumda Alv Kimya faturası · Selvi çeki · Selvi → Uras Kimya → URS Makine → Uras Holding → Alv Kimya, 2 adım gerçekleşmiş).
+    Rapor123 › Çek: `CekAkibetOrnek.Hareketler` (gerçekleşen adımlar) + planlı adımlar (OnayDurumu boş, "PLAN"). **Nakit avans senkronu**
+    (`NakitAkisOrnek.AvanslariSenkronla`, her okumada): onaylı avanslar Nakit satırı (`U_AvansNo`), modülde teslim → satır ÖDENDİ; satır ÖDENDİ → `NakitAvansOrnek.Olay`
+    CashPaymentCreated (Bekleyen Ödemeler'den düşer). Portföy seçimi: `SecilebilirBelgeler?sirket=&hepsi=` (başka şirket portföyü, planlılar işaretli).
   - **Kasa Nakit Akışı — eski görünüm** (`/Rapor79/Eski`, `Views/Rapor79/Eski.cshtml` + `wwwroot/js/rapor79.js` + `rapor79-yontem.js`): ana projedeki 23 sütunlu
     liste; ödeme yöntemi SEKMELERİ (Tümü = `.ana-liste`; yöntem panelleri `.yontem-panel[data-method]`), Çek / Senet satırında "Belge Seç" → `#belgeSecModal` →
     `/Rapor79/BelgePlanla`, `/Rapor79/BelgePlanKaldir`, `/Rapor79/YontemAlanKaydet`; ana projedeki `#btnSatirCekOnayla` akışı da `BelgePlanla` çağırır.

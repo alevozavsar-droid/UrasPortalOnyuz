@@ -89,9 +89,28 @@ namespace WebApplication3.Controllers
                 var h = Temel(s, "BANKA", 95000 + i + Seed(s.DbName) % 1000, t, rnd.NextDouble() < 0.75 ? "X" : "R"); int b = rnd.Next(2); h.KasaKodu = "102.01.00" + (b + 1); h.KasaAdi = b == 0 ? "Ziraat Bankası" : "Halk Bankası"; h.KarsiHesapKodu = mu.Kod; h.KarsiHesapAdi = mu.KisaAd; h.Borc = rnd.Next(20, 900) * 1000m; h.IslemYonu = "Giriş"; h.Aciklama = "Müşteri havalesi · " + mu.KisaAd + " fatura ödemesi"; if (rnd.NextDouble() < 0.12) { h.OnayDurumu = ""; h.OnaylayanKullaniciAdi = null; h.OnayTarihi = null; } yield return h;
             }
         }
-        /// <summary>Çek: portföye giriş (giriş) ve ibraz / ciro (çıkış) hareketleri; her satırda plan ↔ ibraz kontrolü. Planı, girişi ya da çıkışı aralıkta olan belgeler listelenir.</summary>
+        /// <summary>Çek: portföye giriş (giriş) ve ibraz / ciro (çıkış) hareketleri; her satırda plan ↔ ibraz kontrolü. Planı, girişi ya da çıkışı aralıkta olan belgeler listelenir.
+        /// Grup içi dolaşım (Kasa Nakit Akışı › Dolaşım Planı): gerçekleşen her adım eden şirkette çıkış, alan şirkette giriş satırı; planlı (gerçekleşmemiş) adımlar onay bekleyen "PLAN" satırı.</summary>
         static IEnumerable<R123_HareketViewModel> Cek((string Ad, string DbName, string DbKey) s, DateTime bas, DateTime bit)
         {
+            foreach (var h in CekAkibetOrnek.Hareketler.Where(h => (h.Eden == s.Ad || h.Alan == s.Ad) && h.Tarih.Date >= bas && h.Tarih.Date <= bit))
+            {
+                var k = CekAkibetOrnek.Bul(h.CekDocEntry); if (k == null) continue; bool cikis = h.Eden == s.Ad;
+                var r = Temel(s, "CEK", h.CekDocEntry * 10 + 3 + h.AdimSira, h.Tarih.Date, "X"); Doldur(r, k);
+                r.KasaKodu = k.Belge == "Senet" ? "121.01.001" : "101.01.001"; r.KasaAdi = k.Belge == "Senet" ? "Alınan Senetler" : "Alınan Çekler"; r.KarsiHesapKodu = h.Tur == "Grup İçi Ciro" ? "131/331" : h.Tur == "Bankaya İbraz" ? "102.01" : "320"; r.KarsiHesapAdi = cikis ? h.Alan : h.Eden;
+                if (cikis) r.Alacak = h.Tutar; else r.Borc = h.Tutar; r.IslemYonu = cikis ? "Çıkış" : "Giriş"; r.ParaBirimi = "TRY";
+                r.Aciklama = $"{h.Tur} · {h.Eden} → {h.Alan} · {h.BelgeNo} · dolaşım adımı {h.AdimSira}/{h.AdimToplam}" + (k.Dolasim.Count > 0 ? $" · plan: {k.DolasimOzeti}" : ""); r.IbrazYeri = h.Alan; r.IbrazTuru = h.Tur; r.IbrazTarihi = h.Tarih; r.IbrazBelgeNo = h.BelgeNo; r.PlanKontrol = "Uyumlu"; r.OnaylayanKullaniciAdi = h.Kullanici;
+                yield return r;
+            }
+            foreach (var k in CekAkibetOrnek.Kayitlar.Where(k => k.Dolasim.Count > 0))
+                foreach (var a in k.Dolasim.Where(a => a.Durum == "Planlandı" && (a.Eden == s.Ad || a.Alan == s.Ad) && a.PlanTarih >= bas && a.PlanTarih <= bit))
+                {
+                    bool cikis = a.Eden == s.Ad; var r = Temel(s, "CEK", k.DocEntry * 10 + 5 + a.Sira, a.PlanTarih, "X"); Doldur(r, k);
+                    r.KasaKodu = k.Belge == "Senet" ? "121.01.001" : "101.01.001"; r.KasaAdi = k.Belge == "Senet" ? "Alınan Senetler" : "Alınan Çekler"; r.KarsiHesapKodu = a.Tur == "Grup İçi Ciro" ? "131/331" : a.Tur == "Bankaya İbraz" ? "102.01" : "320"; r.KarsiHesapAdi = cikis ? a.Alan : a.Eden;
+                    if (cikis) r.Alacak = k.Tutar; else r.Borc = k.Tutar; r.IslemYonu = cikis ? "Çıkış" : "Giriş"; r.ParaBirimi = "TRY"; r.OnayDurumu = ""; r.OnaylayanKullaniciAdi = null; r.OnayTarihi = null;
+                    r.Aciklama = $"PLAN · {a.Tur} · {a.Eden} → {a.Alan} · adım {a.Sira}/{k.Dolasim.Count} · {a.Not}"; r.PlanKontrol = "İbraz Bekliyor"; r.IbrazYeri = ""; r.IbrazTuru = ""; r.IbrazBelgeNo = "";
+                    yield return r;
+                }
             foreach (var k in CekAkibetOrnek.Kayitlar.Where(k => k.Sirket == s.Ad))
             {
                 bool girisAralikta = k.PortfoyGiris >= bas && k.PortfoyGiris <= bit, planAralikta = k.PlanlamaTarihi != null && k.PlanlamaTarihi.Value.Date >= bas && k.PlanlamaTarihi.Value.Date <= bit, ibrazAralikta = k.IbrazTarihi != null && k.IbrazTarihi.Value.Date >= bas && k.IbrazTarihi.Value.Date <= bit;

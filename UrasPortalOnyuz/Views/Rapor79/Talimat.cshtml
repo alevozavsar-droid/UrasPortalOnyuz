@@ -1,0 +1,109 @@
+@model WebApplication3.Data.OdemeTalimati
+@using System.Globalization
+@{
+    Layout = null;
+    var tr = CultureInfo.GetCultureInfo("tr-TR");
+    var bilgi = WebApplication3.Data.TalimatOrnek.SirketBilgisi.TryGetValue(Model.DbName ?? "", out var b) ? b : (Unvan: "ŞİRKET ADI", Adres: "Şirket adresi", Web: "www.website.com", Komiserler: new[] { "Komiser 1", "Komiser 2" });
+    string pbAd = Model.PB == "TRY" ? "TL" : Model.PB;
+    bool banka = Model.Yontem == "Havale / EFT" || Model.Yontem == "Kredi Kartı / Banka Kartı", cek = Model.Yontem == "Çek" || Model.Yontem == "Senet", nakit = Model.Yontem == "Nakit";
+    string hesapNo = string.IsNullOrEmpty(Model.BankaHesabi) ? "-" : Model.BankaHesabi.Contains(" · ") ? Model.BankaHesabi.Split(" · ")[1] : Model.BankaHesabi;
+    string bankaAdi = string.IsNullOrEmpty(Model.BankaHesabi) ? "-" : Model.BankaHesabi.Split(" · ")[0];
+}
+@*
+    ÖDEME TALİMATI — yazdırılabilir belge (Kasa Nakit Akışı › Talimatlar). Ana projedeki PaymentInstructionDocument / SupplierPaymentDocument / QuickTransferDocument (QuestPDF)
+    belgelerinin HTML karşılığı: şirket başlığı, "Şubeniz nezdinde bulunan … hesabımızdan aşağıda bulunan işlemlerin yapılmasını rica ederiz", tedarikçi / nakit / çek tabloları,
+    "Saygılarımızla" ve konkordato komiser heyeti imza bloğu. Çek talimatında seçili belgeler ve grup içi dolaşım planı da yazılır. Tarayıcıdan yazdır / PDF kaydet.
+*@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <title>@ViewData["Title"]</title>
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 0; background: #f1f5f9; }
+        .sayfa { width: 210mm; min-height: 297mm; margin: 12px auto; background: #fff; padding: 16mm 14mm; box-sizing: border-box; box-shadow: 0 2px 12px rgba(0,0,0,.12); font-size: 10.5pt; }
+        .ust { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1.5px solid #111; padding-bottom: 8px; }
+        .logo { font-size: 20pt; font-weight: 800; letter-spacing: .08em; color: #0f766e; }
+        .logo small { display: block; font-size: 8pt; letter-spacing: .2em; color: #64748b; font-weight: 600; }
+        .unvan { text-align: right; font-size: 9pt; }
+        .unvan b { font-size: 11pt; display: block; margin-bottom: 2px; }
+        .baslik { margin-top: 18px; display: flex; justify-content: space-between; }
+        .baslik .sol b { display: block; font-size: 11pt; }
+        .metin { margin-top: 14px; line-height: 1.5; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 9pt; }
+        th, td { border: 1px solid #111; padding: 4px 6px; text-align: left; vertical-align: top; }
+        th { background: #f1f5f9; font-weight: 700; }
+        td.s, th.s { text-align: right; white-space: nowrap; }
+        tfoot td { font-weight: 700; background: #f8fafc; }
+        h4 { margin: 18px 0 0; font-size: 10.5pt; }
+        .dolasim { margin-top: 6px; font-size: 9pt; border: 1px dashed #94a3b8; padding: 6px 8px; background: #f8fafc; }
+        .dolasim ol { margin: 4px 0 0 18px; padding: 0; }
+        .imza { margin-top: 42px; text-align: center; font-weight: 700; }
+        .komiser { margin-top: 36px; text-align: center; }
+        .komiser .k { display: flex; justify-content: space-around; margin-top: 28px; font-size: 9.5pt; }
+        .komiser .k span { border-top: 1px solid #111; padding-top: 4px; min-width: 150px; }
+        .alt { margin-top: 26px; font-size: 8pt; color: #64748b; display: flex; justify-content: space-between; }
+        .arac { width: 210mm; margin: 10px auto 0; display: flex; gap: 8px; }
+        .arac button, .arac a { font: inherit; font-size: 10pt; padding: 6px 12px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; cursor: pointer; text-decoration: none; color: #0f172a; }
+        .durum { display: inline-block; font-size: 8.5pt; padding: 2px 8px; border-radius: 999px; background: #e0f2fe; color: #0c4a6e; font-weight: 700; margin-left: 8px; }
+        @@media print { body { background: #fff; } .sayfa { box-shadow: none; margin: 0; width: auto; min-height: 0; } .arac { display: none; } }
+    </style>
+</head>
+<body>
+    <div class="arac"><button type="button" onclick="window.print()">Yazdır / PDF</button><a href="/Rapor79?sekme=talimat">Kasa Nakit Akışı › Talimatlar</a><span style="font-size:9pt;color:#64748b;align-self:center">Ön yüz örneği: belge bellek içi kayıttan üretilir.</span></div>
+    <div class="sayfa">
+        <div class="ust">
+            <div class="logo">URAS<small>HOLDING</small></div>
+            <div class="unvan"><b>@bilgi.Unvan</b>@bilgi.Adres<br />@bilgi.Web</div>
+        </div>
+        <div class="baslik">
+            <div class="sol">
+                @if (banka) { <b>@bankaAdi</b><span>Merkez Şubesi Müdürlüğüne</span> }
+                else if (nakit) { <b>@(string.IsNullOrEmpty(Model.Kasa) ? "Kasa" : Model.Kasa)</b><span>Kasa Sorumlusuna</span> }
+                else if (cek) { <b>Finans Müdürlüğü</b><span>Çek / Senet Teslim ve Ciro Talimatı</span> }
+                else { <b>Finans Müdürlüğü</b><span>@Model.Baslik</span> }
+            </div>
+            <div class="sag" style="text-align:right;font-size:9pt">Talimat No: <b>@Model.No</b><span class="durum">@Model.Durum</span><br />Talimat Tarihi: @Model.Tarih.ToString("dd.MM.yyyy", tr)<br />Hazırlayan: @Model.Hazirlayan@(string.IsNullOrEmpty(Model.Onaylayan) ? "" : " · Onaylayan: " + Model.Onaylayan)</div>
+        </div>
+        <div class="metin">
+            @if (banka) { <text>Şubeniz nezdinde bulunan <b>@hesapNo</b> nolu <b>@pbAd</b> hesabımızdan aşağıda bulunan işlemlerin @(Model.PB == "TRY" ? "" : "aynı gün valörlü olarak ")yapılmasını rica ederiz.</text> }
+            else if (nakit) { <text><b>@(string.IsNullOrEmpty(Model.Kasa) ? "Kasa" : Model.Kasa)</b> mevcudundan aşağıdaki ödemelerin yapılarak makbuz karşılığı teslim edilmesini rica ederiz.</text> }
+            else if (cek) { <text>Portföyümüzde bulunan aşağıdaki @(Model.Yontem.ToLower(tr))lerin belirtilen tedarikçilere teslim / ciro edilmesini; grup içi dolaşım planı olan belgelerin planda yazılı sırayla ciro edilerek grup içi bakiyelerin kapatılmasını rica ederiz.</text> }
+            else { <text>Aşağıdaki @Model.Yontem işlemlerinin ilgili modül kayıtlarına göre yapılmasını rica ederiz.</text> }
+        </div>
+
+        @if (Model.Satirlar.Count > 0)
+        {
+            <table>
+                <thead>
+                    <tr><th>Fatura Sahibi</th><th>@(cek ? "Teslim Edilecek Tedarikçi" : banka ? "Tedarikçi Adı" : "Alıcı")</th>@if (banka) { <th>IBAN</th> }<th class="s">Ödeme Tutarı (@pbAd)</th><th>Açıklama</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in Model.Satirlar)
+                    {
+                        <tr><td>@s.FaturaSahibi@(s.FaturaSahibi != s.OdeyenSirket ? " (ödeyen " + s.OdeyenSirket + ")" : "")</td><td>@s.Kurum</td>@if (banka) { <td>@(string.IsNullOrEmpty(s.AliciIban) ? "-" : s.AliciIban)</td> }<td class="s">@s.Tutar.ToString("N2", tr)@(s.PB != Model.PB ? " " + s.PB : "")</td><td>@s.Aciklama@(string.IsNullOrEmpty(s.AvansNo) ? "" : " · Nakit avans " + s.AvansNo)@(string.IsNullOrEmpty(s.GrupIciNo) ? "" : " · " + s.GrupIciNo)</td></tr>
+                    }
+                </tbody>
+                <tfoot><tr><td colspan="@(banka ? 3 : 2)" class="s">TOPLAM</td><td class="s">@Model.Toplam.ToString("N2", tr)</td><td></td></tr></tfoot>
+            </table>
+        }
+
+        @if (cek && Model.Satirlar.Any(s => s.Belgeler.Count > 0))
+        {
+            <h4>Teslim / Ciro Edilecek @(Model.Yontem)ler</h4>
+            <table>
+                <thead><tr><th>@Model.Yontem No</th><th>Banka Adı</th><th>Ciro Eden</th><th>Asıl Borçlu</th><th class="s">Tutar</th><th>P. Birimi</th><th>Vade Tarihi</th><th>Portföy Sahibi</th><th>Teslim Edilecek</th></tr></thead>
+                <tbody>
+                    @foreach (var s in Model.Satirlar) { foreach (var b2 in s.Belgeler) { <tr><td>@b2.No</td><td>@b2.Banka</td><td>@b2.CiroEden</td><td>@b2.AsilBorclu</td><td class="s">@b2.Tutar.ToString("N2", tr)</td><td>@(b2.PB == "TRY" ? "TL" : b2.PB)</td><td>@b2.Vade.ToString("dd.MM.yyyy", tr)</td><td>@b2.Sahip</td><td>@s.Kurum</td></tr> } }
+                </tbody>
+                <tfoot><tr><td colspan="4" class="s">TOPLAM</td><td class="s">@Model.Satirlar.SelectMany(s => s.Belgeler).Sum(x => x.Tutar).ToString("N2", tr)</td><td colspan="4"></td></tr></tfoot>
+            </table>
+            @foreach (var s in Model.Satirlar) { foreach (var b2 in s.Belgeler.Where(x => !string.IsNullOrEmpty(x.Dolasim))) { <div class="dolasim"><b>@b2.No grup içi dolaşım planı</b> (@b2.DolasimAdim / @b2.DolasimToplam adım gerçekleşti): @b2.Dolasim → <b>@s.Kurum</b><br /><span style="color:#64748b">Her adımda ciro eden şirketin alan şirkete olan grup içi borcu kapanır; son adımda fatura sahibi @s.FaturaSahibi belgeyi tedarikçiye ciro eder. Gerçekleşen adımlar Konsolide Finansal Takip Paneli › Çek sekmesinde izlenir.</span></div> } }
+        }
+
+        <div class="imza">Saygılarımızla;</div>
+        <div class="komiser">KONKORDATO KOMİSER HEYETİ<div class="k">@foreach (var k in bilgi.Komiserler) { <span>@k</span> }</div></div>
+        <div class="alt"><span>@Model.No · @Model.Baslik · @Model.Yontem</span><span>Kasa Nakit Akışı (Rapor79) · Grup ERP Portalı</span></div>
+    </div>
+</body>
+</html>

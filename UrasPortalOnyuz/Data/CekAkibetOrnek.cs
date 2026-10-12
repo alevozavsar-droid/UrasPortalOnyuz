@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -43,6 +43,13 @@ namespace WebApplication3.Data
         public DateTime? IbrazTarihi { get; set; }
         public string IbrazBelgeNo { get; set; } = "";
         public string TahsilatBelgeNo { get; set; } = "";
+        // --- grup içi dolaşım senaryosu (Kasa Nakit Akışı › Çek / Senet › Dolaşım Planı): belge grup şirketleri arasında ciro edilerek grup içi bakiyeleri kapatır, sonunda tedarikçiye ciro ya da bankaya ibraz
+        public string KaynakSirket { get; set; } = "";       // belgenin ilk portföy şirketi (dolaşımda Sirket = güncel sahip)
+        public List<CekDolasimAdim> Dolasim { get; set; } = new List<CekDolasimAdim>();
+        public int? DolasimDocEntry { get; set; }            // planı yapan Kasa Nakit Akışı satırı
+        public string DolasimOzeti => Dolasim.Count == 0 ? "" : string.Join(" → ", new[] { Dolasim[0].Eden }.Concat(Dolasim.Select(a => a.Alan)));
+        public int GerceklesenAdim => Dolasim.Count(a => a.Durum == "Gerçekleşti");
+        public CekDolasimAdim SonrakiAdim => Dolasim.FirstOrDefault(a => a.Durum == "Planlandı");
 
         public bool Portfoyde => IslemTuru == "Portföyde" || IslemTuru == "Planlandı";
         public bool Secilebilir => IslemTuru == "Portföyde" && KullanimDurumu == "Kullanılabilir";
@@ -64,16 +71,34 @@ namespace WebApplication3.Data
 
     /// <summary>Çek akıbeti günlüğü (kim, ne zaman, hangi belge, ne yaptı).</summary>
     public class CekAkibetGunluk { public DateTime Tarih { get; set; } public string Kullanici { get; set; } public string Sirket { get; set; } public string No { get; set; } public string Islem { get; set; } public string Aciklama { get; set; } }
+    /// <summary>Dolaşım planı adımı: Eden → Alan; Tur = Grup İçi Ciro | Tedarikçiye Ciro | Bankaya İbraz.</summary>
+    public class CekDolasimAdim { public int Sira { get; set; } public string Eden { get; set; } public string Alan { get; set; } public string Tur { get; set; } public DateTime PlanTarih { get; set; } public string Durum { get; set; } = "Planlandı"; public DateTime? GercekTarih { get; set; } public string BelgeNo { get; set; } = ""; public decimal KapananBakiye { get; set; } public decimal YeniBorc { get; set; } public string Not { get; set; } = ""; }
+    /// <summary>Gerçekleşen çek hareketi (Konsolide Finansal Takip Paneli › Çek): Eden → Alan ciro / ibraz.</summary>
+    public class CekHareket { public DateTime Tarih { get; set; } public int CekDocEntry { get; set; } public string No { get; set; } public string Belge { get; set; } public string Eden { get; set; } public string Alan { get; set; } public string Tur { get; set; } public string BelgeNo { get; set; } public decimal Tutar { get; set; } public int AdimSira { get; set; } public int AdimToplam { get; set; } public bool PlanaUygun { get; set; } = true; public string Kullanici { get; set; } = ""; }
+    public class DolasimAdimSonuc { public int Sira { get; set; } public string Eden { get; set; } public string Alan { get; set; } public string Tur { get; set; } public decimal Bakiye { get; set; } public decimal Kapanan { get; set; } public decimal YeniBorc { get; set; } public string Sonuc { get; set; } public string Not { get; set; } public string Durum { get; set; } = "Öneri"; }
+    public class DolasimSonuc { public List<DolasimAdimSonuc> Adimlar { get; set; } = new List<DolasimAdimSonuc>(); public bool Uygun { get; set; } public string Derece { get; set; } = "Uygun"; public decimal ToplamKapanan { get; set; } public decimal ToplamYeniBorc { get; set; } public List<string> Uyarilar { get; set; } = new List<string>(); public string SonSahip { get; set; } public string Ozet { get; set; } public decimal Tutar { get; set; } }
 
     public static class CekAkibetOrnek
     {
         public static readonly object Kilit = new object();
+        static readonly System.Globalization.CultureInfo Tr = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
         /// <summary>Şirket adı ↔ Kasa Nakit Akışı DbName ↔ bağlantı anahtarı.</summary>
         public static readonly (string Ad, string DbName, string DbKey)[] Sirketler =
         {
             ("Uras Kimya", "URASKIMYA", "DefaultConnection"), ("Selvi", "SELVI", "DefaultConnection5"), ("Avrupa Paper", "AVRUPA_PAPER", "DefaultConnection2"),
-            ("Alv Kimya", "ALV_KIMYA", "DefaultConnection3"), ("Daf Kimya", "DAF_KIMYA", "DefaultConnection4"), ("URS Makine", "URSMAKINE", "DefaultConnection1")
+            ("Alv Kimya", "ALV_KIMYA", "DefaultConnection3"), ("Daf Kimya", "DAF_KIMYA", "DefaultConnection4"), ("URS Makine", "URSMAKINE", "DefaultConnection1"), ("Uras Holding", "URAS_HOLDING", "DefaultConnection10")
         };
+        public static string[] GrupSirketleri => Sirketler.Select(s => s.Ad).ToArray();
+        /// <summary>Grup içi cari bakiyeler (A|B → A'nın B'ye borcu, TL; Data/TalepModulleri.cs ile aynı değerler + dolaşım örneği için zincir). Dolaşım adımı gerçekleşince güncellenir.</summary>
+        public static readonly Dictionary<string, decimal> GrupBakiyeleri = new Dictionary<string, decimal>
+        {
+            // örnek senaryo zinciri (Selvi → Uras Kimya → URS Makine → Uras Holding → Alv Kimya) boyunca borçlar çek tutarını (≈1,75 Mn) karşılar; tohumda ilk iki adım gerçekleştiğinde Selvi ve Uras Kimya borçları o kadar azalır
+            ["Uras Kimya|Uras Holding"] = 1_850_000m, ["Uras Holding|Uras Kimya"] = 420_000m, ["Selvi|Uras Kimya"] = 2_450_000m, ["Uras Kimya|Selvi"] = 310_000m,
+            ["Avrupa Paper|Uras Holding"] = 275_000m, ["Uras Holding|Avrupa Paper"] = 640_000m, ["Alv Kimya|Uras Kimya"] = 128_000m, ["Uras Kimya|Alv Kimya"] = 512_000m,
+            ["Daf Kimya|Uras Holding"] = 89_000m, ["Uras Holding|Daf Kimya"] = 233_000m,
+            ["Uras Kimya|URS Makine"] = 2_180_000m, ["URS Makine|Uras Holding"] = 1_960_000m, ["Uras Holding|Alv Kimya"] = 1_840_000m, ["Selvi|Alv Kimya"] = 35_000m, ["Daf Kimya|Uras Kimya"] = 210_000m, ["URS Makine|Daf Kimya"] = 95_000m, ["Selvi|Daf Kimya"] = 640_000m, ["Daf Kimya|Alv Kimya"] = 420_000m
+        };
+        public static decimal GrupBakiye(string a, string b) { lock (Kilit) return GrupBakiyeleri.TryGetValue(a + "|" + b, out var v) ? v : 0; }
         public static string DbName(string sirket) => Sirketler.FirstOrDefault(s => s.Ad == sirket).DbName ?? sirket;
         public static string SirketAdi(string dbNameOrKey) { var s = Sirketler.FirstOrDefault(x => x.DbName == dbNameOrKey || x.DbKey == dbNameOrKey || x.Ad == dbNameOrKey); return s.Ad ?? dbNameOrKey; }
         /// <summary>Çek Akıbeti Raporu işlem türleri (kod, açıklama) — ana projedeki sıra.</summary>
@@ -91,6 +116,8 @@ namespace WebApplication3.Data
 
         private static readonly List<CekKaydi> _kayitlar = new List<CekKaydi>();
         private static readonly List<CekAkibetGunluk> _gunluk = new List<CekAkibetGunluk>();
+        private static readonly List<CekHareket> _hareketler = new List<CekHareket>();
+        public static List<CekHareket> Hareketler { get { Tohumla(); lock (Kilit) return _hareketler.ToList(); } }
         private static bool _tohumlandi;
         private static int Seed(string s) => s.Aggregate(23, (a, ch) => unchecked(a * 31 + ch));
 
@@ -98,8 +125,8 @@ namespace WebApplication3.Data
         public static List<CekAkibetGunluk> Gunluk { get { Tohumla(); lock (Kilit) return _gunluk.OrderByDescending(g => g.Tarih).ToList(); } }
         public static CekKaydi Bul(int docEntry) { Tohumla(); lock (Kilit) return _kayitlar.FirstOrDefault(k => k.DocEntry == docEntry); }
         public static CekKaydi Bul(string sirket, string no) { Tohumla(); lock (Kilit) return _kayitlar.FirstOrDefault(k => k.No == no && (string.IsNullOrEmpty(sirket) || k.Sirket == sirket || k.DbName == sirket || k.DbKey == sirket)); }
-        /// <summary>Kasa Nakit Akışı çek / senet seçimi için: şirketin portföyündeki, planlanmamış, kullanılabilir belgeler (vade sırasıyla).</summary>
-        public static List<CekKaydi> Secilebilirler(string sirket, string belge) { Tohumla(); lock (Kilit) return _kayitlar.Where(k => k.Secilebilir && k.Belge == belge && (string.IsNullOrEmpty(sirket) || k.Sirket == sirket || k.DbName == sirket || k.DbKey == sirket)).OrderBy(k => k.Vade).ThenBy(k => k.No).ToList(); }
+        /// <summary>Kasa Nakit Akışı çek / senet seçimi için: şirketin portföyündeki, planlanmamış, kullanılabilir belgeler (vade sırasıyla). hepsi = planlı ve kullanılamaz olanlar da (portföy görünümü).</summary>
+        public static List<CekKaydi> Secilebilirler(string sirket, string belge, bool hepsi = false) { Tohumla(); lock (Kilit) return _kayitlar.Where(k => (hepsi ? k.Portfoyde : k.Secilebilir) && k.Belge == belge && (string.IsNullOrEmpty(sirket) || k.Sirket == sirket || k.DbName == sirket || k.DbKey == sirket)).OrderBy(k => k.Vade).ThenBy(k => k.No).ToList(); }
         /// <summary>Ad karşılaştırması: büyük / küçük harf, noktalama ve "A.Ş. / Ltd." ekleri yok sayılır.</summary>
         public static bool AyniMi(string a, string b)
         {
@@ -122,7 +149,7 @@ namespace WebApplication3.Data
                     var s = Sirketler.FirstOrDefault(x => x.Ad == c.Sirket);
                     var k = new CekKaydi
                     {
-                        DocEntry = docEntry++, Sirket = c.Sirket, DbName = s.DbName ?? c.Sirket, DbKey = s.DbKey ?? "DefaultConnection", No = c.No, Belge = c.Belge, Musteri = c.Musteri, MusteriKod = c.MusteriKod,
+                        DocEntry = docEntry++, Sirket = c.Sirket, KaynakSirket = c.Sirket, DbName = s.DbName ?? c.Sirket, DbKey = s.DbKey ?? "DefaultConnection", No = c.No, Belge = c.Belge, Musteri = c.Musteri, MusteriKod = c.MusteriKod,
                         AsilBorclu = rnd.NextDouble() < 0.8 ? c.Musteri : UcuncuTaraf[rnd.Next(UcuncuTaraf.Length)], Banka = c.Banka, Sube = Subeler[rnd.Next(Subeler.Length)],
                         Vade = c.Vade, Tutar = c.Tutar, PB = "TRY", PortfoyGiris = c.Vade.AddDays(-rnd.Next(20, 90)),
                         KullanimDurumu = c.Durum == "Riskli" ? "Riskli" : rnd.Next(40) == 0 ? "Teminat" : "Kullanılabilir"
@@ -232,6 +259,94 @@ namespace WebApplication3.Data
                 if (k.PlanlananTedarikci != "") { k.PlanlamaTarihi ??= DateTime.Now; if (string.IsNullOrEmpty(k.Planlayan)) k.Planlayan = kullanici ?? ""; }
                 _gunluk.Add(new CekAkibetGunluk { Tarih = DateTime.Now, Kullanici = kullanici ?? "", Sirket = k.Sirket, No = k.No, Islem = "Planlanan Tedarikçi", Aciklama = $"{(eski == "" ? "—" : eski)} → {(k.PlanlananTedarikci == "" ? "—" : k.PlanlananTedarikci)}" });
                 return (true, "Planlanan tedarikçi güncellendi.");
+            }
+        }
+        // ---------- grup içi dolaşım senaryosu ----------
+        /// <summary>Uygunluk simülasyonu: belge zincir boyunca ciro edilirken her adımda eden şirketin alan şirkete borcu kapanır; borç yoksa / yetmezse yeni grup içi bakiye oluşur (bakiye şişer → uyarı).</summary>
+        public static DolasimSonuc DolasimSimule(int cekDocEntry, List<string> zincir, string sonAdim, string tedarikci, string faturaSahibi)
+        {
+            var k = Bul(cekDocEntry); var s = new DolasimSonuc(); if (k == null) { s.Uyarilar.Add("Belge bulunamadı."); return s; }
+            zincir = (zincir ?? new List<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); s.Tutar = k.Tutar; decimal t = k.Tutar; string sahip = k.Sirket; int sira = 0; bool uygun = true;
+            foreach (var alan in zincir)
+            {
+                if (alan == sahip) { s.Uyarilar.Add($"{alan}: belge zaten bu şirkette; adım atlanmalı."); continue; }
+                decimal bakiye = GrupBakiye(sahip, alan), kapanan = Math.Min(t, bakiye), yeni = t - kapanan;
+                var a = new DolasimAdimSonuc { Sira = ++sira, Eden = sahip, Alan = alan, Tur = "Grup İçi Ciro", Bakiye = bakiye, Kapanan = kapanan, YeniBorc = yeni, Sonuc = bakiye <= 0 ? "Uyarı" : yeni > 0 ? "Kısmi" : "Uygun" };
+                a.Not = bakiye <= 0 ? $"{sahip}'nin {alan}'ya borcu yok: ciro {alan}'nın {sahip}'ya {(yeni).ToString("N0", Tr)} TL yeni borcu olur (bakiye şişer)" : yeni > 0 ? $"{sahip}'nin {alan}'ya borcu {(bakiye).ToString("N0", Tr)} TL kapanır; {(yeni).ToString("N0", Tr)} TL yeni bakiye {alan} → {sahip}" : $"{sahip}'nin {alan}'ya {(bakiye).ToString("N0", Tr)} TL borcundan {(kapanan).ToString("N0", Tr)} TL kapanır; kalan borç {(bakiye - kapanan).ToString("N0", Tr)} TL";
+                if (a.Sonuc == "Uyarı") uygun = false; s.Adimlar.Add(a); s.ToplamKapanan += kapanan; s.ToplamYeniBorc += yeni; sahip = alan;
+            }
+            if (sonAdim == "Bankaya İbraz") s.Adimlar.Add(new DolasimAdimSonuc { Sira = ++sira, Eden = sahip, Alan = "Banka (tahsil)", Tur = "Bankaya İbraz", Sonuc = "Uygun", Not = $"{sahip} belgeyi tahsil için bankaya verir; nakit {sahip} hesabına girer" });
+            else { string ted = string.IsNullOrWhiteSpace(tedarikci) ? k.PlanlananTedarikci : tedarikci; s.Adimlar.Add(new DolasimAdimSonuc { Sira = ++sira, Eden = sahip, Alan = string.IsNullOrEmpty(ted) ? "Tedarikçi" : ted, Tur = "Tedarikçiye Ciro", Sonuc = string.IsNullOrEmpty(faturaSahibi) || faturaSahibi == sahip ? "Uygun" : "Uyarı", Not = string.IsNullOrEmpty(faturaSahibi) || faturaSahibi == sahip ? $"{sahip} faturasını {ted} tedarikçisine çekle öder" : $"Faturanın sahibi {faturaSahibi}; belge {sahip} şirketinde kalıyor — zincir {faturaSahibi} ile bitmeli" }); if (!string.IsNullOrEmpty(faturaSahibi) && faturaSahibi != sahip) { uygun = false; s.Uyarilar.Add($"Zincirin son şirketi {sahip}, fatura sahibi {faturaSahibi}: belge fatura sahibine ulaşmıyor."); } }
+            s.Uygun = uygun && !s.Adimlar.Any(a => a.Sonuc == "Uyarı"); s.SonSahip = sahip;
+            // derece: Uygun = her adımda borç tamamen kapanıyor; Kısmi = borç var ama belge tutarından küçük (fark yeni bakiye); Uyarı = borç ilişkisi olmayan adım (bakiye şişer)
+            s.Derece = !s.Uygun ? "Uyarı" : s.ToplamYeniBorc > 0 ? "Kısmi" : "Uygun";
+            if (s.ToplamYeniBorc > 0) s.Uyarilar.Add($"Toplam {(s.ToplamYeniBorc).ToString("N0", Tr)} TL yeni grup içi bakiye oluşur" + (s.Derece == "Kısmi" ? " (belge tutarı mevcut borçlardan büyük; daha küçük belge ya da farklı zincir değerlendirin)." : "."));
+            if (zincir.Count == 0 && sonAdim != "Bankaya İbraz" && !string.IsNullOrEmpty(faturaSahibi) && faturaSahibi != k.Sirket) { s.Uyarilar.Add($"Belge {k.Sirket} portföyünde, fatura sahibi {faturaSahibi}: zincir kurulmadan doğrudan tedarikçiye ciro edilirse {k.Sirket}'nin {faturaSahibi} adına ödemesi grup içi bakiyeye yazılır."); if (s.Derece == "Uygun") s.Derece = "Kısmi"; }
+            s.Ozet = $"{k.No} · {(k.Tutar).ToString("N0", Tr)} TL · {string.Join(" → ", new[] { k.Sirket }.Concat(zincir))}{(sonAdim == "Bankaya İbraz" ? " → banka" : " → " + (string.IsNullOrWhiteSpace(tedarikci) ? k.PlanlananTedarikci : tedarikci))} · kapanan grup içi borç {(s.ToplamKapanan).ToString("N0", Tr)} TL" + (s.Derece == "Uygun" ? " · UYGUN" : s.Derece == "Kısmi" ? " · KISMİ UYGUN" : " · UYARI");
+            return s;
+        }
+        /// <summary>Öneri: sahipten hedef şirkete, mevcut borç ilişkileri (A → B: A'nın B'ye borcu) üzerinden en uygun zincir: oluşacak yeni grup içi bakiye (Σ max(0, tutar − borç)) en az; eşitlikte daha az adım, sonra daha çok kapanan borç. Grup 7 şirket olduğundan tüm basit yollar taranır.</summary>
+        public static List<string> DolasimOner(int cekDocEntry, string hedef)
+        {
+            var k = Bul(cekDocEntry); if (k == null || string.IsNullOrEmpty(hedef) || hedef == k.Sirket) return new List<string>();
+            var sirketler = GrupSirketleri; List<string> enIyi = null; decimal enIyiYeni = decimal.MaxValue, enIyiKapanan = -1;
+            void Tara(string u, List<string> yol, decimal yeni, decimal kapanan)
+            {
+                if (yeni > enIyiYeni) return;
+                if (u == hedef) { if (yeni < enIyiYeni || (yeni == enIyiYeni && (yol.Count < enIyi.Count || (yol.Count == enIyi.Count && kapanan > enIyiKapanan)))) { enIyi = new List<string>(yol); enIyiYeni = yeni; enIyiKapanan = kapanan; } return; }
+                if (yol.Count >= sirketler.Count()) return;
+                foreach (var v in sirketler) { if (v == u || v == k.Sirket || yol.Contains(v)) continue; var b = GrupBakiye(u, v); if (b <= 0) continue; yol.Add(v); Tara(v, yol, yeni + Math.Max(0, k.Tutar - b), kapanan + Math.Min(b, k.Tutar)); yol.RemoveAt(yol.Count - 1); }
+            }
+            Tara(k.Sirket, new List<string>(), 0, 0);
+            return enIyi ?? new List<string> { hedef };
+        }
+        /// <summary>Planı belgeye yazar (adımlar Planlandı; plan tarihleri 2'şer gün arayla).</summary>
+        public static (bool ok, string mesaj, CekKaydi kayit) DolasimKaydet(int cekDocEntry, List<string> zincir, string sonAdim, string tedarikci, int? planDocEntry, string kullanici)
+        {
+            Tohumla();
+            lock (Kilit)
+            {
+                var k = _kayitlar.FirstOrDefault(x => x.DocEntry == cekDocEntry); if (k == null) return (false, "Belge bulunamadı.", null);
+                if (!k.Portfoyde) return (false, $"{k.No} portföyde değil ({k.IslemTuru}); dolaşım planlanamaz.", k);
+                var sim = DolasimSimule(cekDocEntry, zincir, sonAdim, tedarikci, null);
+                k.Dolasim = sim.Adimlar.Select((a, i) => new CekDolasimAdim { Sira = a.Sira, Eden = a.Eden, Alan = a.Alan, Tur = a.Tur, PlanTarih = DateTime.Today.AddDays(2 * (i + 1)), KapananBakiye = a.Kapanan, YeniBorc = a.YeniBorc, Not = a.Not }).ToList();
+                k.DolasimDocEntry = planDocEntry ?? k.PlanDocEntry; if (!string.IsNullOrWhiteSpace(tedarikci)) k.PlanlananTedarikci = tedarikci; if (k.IslemTuru == "Portföyde") k.IslemTuru = "Planlandı"; k.PlanlamaTarihi ??= DateTime.Now; if (string.IsNullOrEmpty(k.Planlayan)) k.Planlayan = kullanici ?? "";
+                _gunluk.Add(new CekAkibetGunluk { Tarih = DateTime.Now, Kullanici = kullanici ?? "", Sirket = k.Sirket, No = k.No, Islem = "Dolaşım Planı", Aciklama = sim.Ozet });
+                return (true, $"{k.No} dolaşım planı kaydedildi: {k.DolasimOzeti} ({k.Dolasim.Count} adım)" + (sim.Uygun ? "" : " · simülasyon uyarı veriyor"), k);
+            }
+        }
+        /// <summary>Sıradaki planlı adımı gerçekleştirir: grup içi ciro → belge alan şirketin portföyüne geçer, bakiyeler güncellenir; tedarikçiye ciro / bankaya ibraz → akıbet kapanır.</summary>
+        public static (bool ok, string mesaj, CekKaydi kayit) DolasimAdimGerceklestir(int cekDocEntry, int sira, string kullanici, DateTime? zaman = null)
+        {
+            Tohumla();
+            lock (Kilit)
+            {
+                var k = _kayitlar.FirstOrDefault(x => x.DocEntry == cekDocEntry); if (k == null) return (false, "Belge bulunamadı.", null);
+                var adim = k.SonrakiAdim; if (adim == null) return (false, "Gerçekleştirilecek planlı adım yok.", k); if (sira > 0 && adim.Sira != sira) return (false, $"Önce {adim.Sira}. adım gerçekleşmeli ({adim.Eden} → {adim.Alan}).", k);
+                var simdi = zaman ?? DateTime.Now; adim.Durum = "Gerçekleşti"; adim.GercekTarih = simdi; adim.BelgeNo = (adim.Tur == "Bankaya İbraz" ? "İBZ" : "CRO") + $"-{simdi:yyMM}-{k.DocEntry % 9000 + 1000 + adim.Sira}";
+                if (adim.Tur == "Grup İçi Ciro")
+                {
+                    string key = adim.Eden + "|" + adim.Alan, ters = adim.Alan + "|" + adim.Eden; decimal bakiye = GrupBakiyeleri.TryGetValue(key, out var b) ? b : 0, kapanan = Math.Min(k.Tutar, bakiye), yeni = k.Tutar - kapanan;
+                    GrupBakiyeleri[key] = bakiye - kapanan; if (yeni > 0) GrupBakiyeleri[ters] = (GrupBakiyeleri.TryGetValue(ters, out var tb) ? tb : 0) + yeni; adim.KapananBakiye = kapanan; adim.YeniBorc = yeni;
+                    var s = Sirketler.FirstOrDefault(x => x.Ad == adim.Alan); k.Sirket = adim.Alan; k.DbName = s.DbName ?? adim.Alan; k.DbKey = s.DbKey ?? k.DbKey; k.IbrazYeri = ""; k.IbrazTuru = ""; k.IbrazTarihi = null; k.IbrazBelgeNo = "";
+                    _hareketler.Add(new CekHareket { Tarih = simdi, CekDocEntry = k.DocEntry, No = k.No, Belge = k.Belge, Eden = adim.Eden, Alan = adim.Alan, Tur = "Grup İçi Ciro", BelgeNo = adim.BelgeNo, Tutar = k.Tutar, AdimSira = adim.Sira, AdimToplam = k.Dolasim.Count, Kullanici = kullanici ?? "" });
+                    _gunluk.Add(new CekAkibetGunluk { Tarih = simdi, Kullanici = kullanici ?? "", Sirket = adim.Eden, No = k.No, Islem = "Grup İçi Ciro", Aciklama = $"{adim.Eden} → {adim.Alan} · {adim.BelgeNo} · kapanan {(kapanan).ToString("N0", Tr)} TL" + (yeni > 0 ? $" · yeni bakiye {(yeni).ToString("N0", Tr)} TL" : "") + $" · adım {adim.Sira}/{k.Dolasim.Count}" });
+                    return (true, $"{k.No}: {adim.Eden} → {adim.Alan} ciro edildi ({adim.BelgeNo}); belge artık {adim.Alan} portföyünde. Kapanan grup içi borç {(kapanan).ToString("N0", Tr)} TL." + (yeni > 0 ? $" Yeni bakiye {(yeni).ToString("N0", Tr)} TL." : ""), k);
+                }
+                _hareketler.Add(new CekHareket { Tarih = simdi, CekDocEntry = k.DocEntry, No = k.No, Belge = k.Belge, Eden = adim.Eden, Alan = adim.Alan, Tur = adim.Tur, BelgeNo = adim.BelgeNo, Tutar = k.Tutar, AdimSira = adim.Sira, AdimToplam = k.Dolasim.Count, Kullanici = kullanici ?? "" });
+                string ad = adim.Tur == "Bankaya İbraz" ? "Bankaya Tahsile Verildi" : "Ciro Edildi"; string eski = k.IslemTuru; k.IslemTuru = ad; k.IbrazTuru = adim.Tur == "Bankaya İbraz" ? "Bankaya İbraz" : "Ciro"; k.IbrazYeri = adim.Tur == "Bankaya İbraz" ? ButceOrnek.TahsilBankalari[k.DocEntry % 2] : adim.Alan; k.IbrazTarihi = simdi; k.IbrazBelgeNo = adim.BelgeNo;
+                _gunluk.Add(new CekAkibetGunluk { Tarih = simdi, Kullanici = kullanici ?? "", Sirket = k.Sirket, No = k.No, Islem = ad, Aciklama = $"{adim.Tur}: {k.IbrazYeri} · {adim.BelgeNo} · dolaşım tamamlandı ({k.DolasimOzeti})" + (k.Kontrol == "Farklı" ? $" · DİKKAT: plan {k.PlanlananTedarikci}" : "") });
+                return (true, $"{k.No}: {adim.Tur} gerçekleşti → {k.IbrazYeri} ({adim.BelgeNo}). Dolaşım tamamlandı; akıbet {ad}.", k);
+            }
+        }
+        public static (bool ok, string mesaj) DolasimIptal(int cekDocEntry, string kullanici)
+        {
+            Tohumla();
+            lock (Kilit)
+            {
+                var k = _kayitlar.FirstOrDefault(x => x.DocEntry == cekDocEntry); if (k == null) return (false, "Belge bulunamadı.");
+                if (k.GerceklesenAdim > 0) return (false, "Gerçekleşmiş adımı olan plan iptal edilemez; kalan adımlar planlı kalır.");
+                k.Dolasim.Clear(); k.DolasimDocEntry = null; _gunluk.Add(new CekAkibetGunluk { Tarih = DateTime.Now, Kullanici = kullanici ?? "", Sirket = k.Sirket, No = k.No, Islem = "Dolaşım Planı İptal", Aciklama = "plan silindi" }); return (true, "Dolaşım planı iptal edildi.");
             }
         }
         public static (bool ok, string mesaj) KullanimDurumuDegistir(int cekDocEntry, string durum, string kullanici)

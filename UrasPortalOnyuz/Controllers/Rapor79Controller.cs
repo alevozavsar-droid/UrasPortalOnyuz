@@ -29,7 +29,7 @@ namespace WebApplication3.Controllers
         {
             ViewData["Title"] = "Kasa Nakit Akışı";
             ViewBag.Sirketler = NakitAkisOrnek.Sirketler.Select(s => new KeyValuePair<string, string>(s.DbName, s.Ad)).ToList();
-            ViewBag.VarsayilanSirket = NakitAkisOrnek.Sirketler.Any(s => s.DbName == sirket) ? sirket : sirket == "" ? "" : "URASKIMYA";
+            ViewBag.VarsayilanSirket = NakitAkisOrnek.Sirketler.Any(s => s.DbName == sirket) ? sirket : sirket == "" || sirket == "tumu" || sirket == "konsolide" ? "" : "URASKIMYA";
             ViewBag.Bas = (startDate ?? (DateTime.TryParse(bas, CultureInfo.InvariantCulture, DateTimeStyles.None, out var b1) ? b1 : DateTime.Today.AddDays(-30))).ToString("yyyy-MM-dd");
             ViewBag.Bit = (endDate ?? (DateTime.TryParse(bit, CultureInfo.InvariantCulture, DateTimeStyles.None, out var b2) ? b2 : DateTime.Today.AddDays(60))).ToString("yyyy-MM-dd");
             ViewBag.Sekme = sekme ?? "tumu";
@@ -64,14 +64,77 @@ namespace WebApplication3.Controllers
             var odemeler = dbler.SelectMany(db => NakitAkisOrnek.Odemeler(db)).Where(m => m.U_PlanlananTarih == null || (m.U_PlanlananTarih.Value.Date >= b1 && m.U_PlanlananTarih.Value.Date <= b2)).OrderBy(m => m.U_PlanlananTarih).ThenBy(m => m.DocEntry).Select(SatirJson).ToList();
             var bakiyeler = dbler.SelectMany(db => NakitAkisOrnek.Bakiyeler(db).Select(b => new { dbName = db, sirket = NakitAkisOrnek.SirketAdi(db), bankaKasa = b.BankaKasa, detay = b.Detay, pb = b.PB, tutar = b.Tutar, tutarTL = b.TutarTL, tarih = b.GuncellenmeTarihi?.ToString("yyyy-MM-dd") })).ToList();
             var gunluk = NakitAkisOrnek.Gunluk(string.IsNullOrEmpty(sirket) ? null : sirket).Take(300).Select(g => new { tarih = g.IslemTarihi.ToString("yyyy-MM-dd HH:mm"), kullanici = g.Kullanici, dbName = g.DbName, sirket = NakitAkisOrnek.SirketAdi(g.DbName), docEntry = g.DocEntry, tip = g.IslemTipi, aciklama = g.Aciklama }).ToList();
+            var avanslar = NakitAvansOrnek.Talepler.Where(a => a.Onaylandi && a.OdemeBekleyen > 0).ToList();
             return Json(new
             {
                 success = true, bugun = DateTime.Today.ToString("yyyy-MM-dd"), bas = b1.ToString("yyyy-MM-dd"), bit = b2.ToString("yyyy-MM-dd"),
-                sirketler = NakitAkisOrnek.Sirketler.Select(s => new { ad = s.Ad, dbName = s.DbName, dbKey = s.DbKey }), yontemler = NakitAkisOrnek.OdemeYontemleri, durumlar = NakitAkisOrnek.Durumlar, satinalmacilar = NakitAkisOrnek.Satinalmacilar,
+                sirketler = NakitAkisOrnek.Sirketler.Select(s => new { ad = s.Ad, dbName = s.DbName, dbKey = s.DbKey }), grupSirketleri = CekAkibetOrnek.GrupSirketleri, yontemler = NakitAkisOrnek.OdemeYontemleri, durumlar = NakitAkisOrnek.Durumlar, satinalmacilar = NakitAkisOrnek.Satinalmacilar,
                 bankaHesaplari = NakitAkisOrnek.BankaHesaplari, kasalar = NakitAkisOrnek.Kasalar, kartlar = NakitAkisOrnek.Kartlar, taksitler = NakitAkisOrnek.TaksitSecenekleri, kurlar = NakitAkisOrnek.Kurlar, tedarikciler = Tedarikciler(Db(sirket)),
-                odemeler, bakiyeler, gunluk, grupIci = NakitAkisOrnek.GrupIciOzet(sirket)
+                odemeler, bakiyeler, gunluk, grupIci = NakitAkisOrnek.GrupIciOzet(sirket),
+                grupBakiyeleri = CekAkibetOrnek.GrupBakiyeleri.Where(x => x.Value > 0).Select(x => new { borclu = x.Key.Split('|')[0], alacakli = x.Key.Split('|')[1], tutar = x.Value }).OrderBy(x => x.borclu).ThenBy(x => x.alacakli).ToList(),
+                talimatlar = TalimatOrnek.Listele(sirket).Select(TalimatJson).ToList(),
+                avans = new { bekleyen = avanslar.Count, bekleyenTutar = avanslar.Sum(a => NakitAvansOrnek.TlKarsiligi(a.OdemeBekleyen, a.ParaBirimi)), link = "/IkTalep/AvansBekleyenOdemeler" }
             });
         }
+
+        // ---------- ÖDEME TALİMATI ----------
+        public class TalimatIstek { public string DbName { get; set; } public List<int> DocEntryler { get; set; } public string BankaHesabi { get; set; } public string Kasa { get; set; } public string No { get; set; } public string Durum { get; set; } public string Not { get; set; } }
+        /// <summary>Seçilen satırlardan talimat: ödeyen şirket + yöntem bazında; çek satırlarında seçili belgeler ve dolaşım planı talimata girer.</summary>
+        [HttpPost("TalimatOlustur")]
+        public IActionResult TalimatOlustur([FromBody] TalimatIstek istek)
+        {
+            if (istek == null || istek.DocEntryler == null || istek.DocEntryler.Count == 0) return Json(new { success = false, message = "Talimat için satır seçin." });
+            var r = TalimatOrnek.Olustur(Db(istek.DbName), istek.DocEntryler, Kullanici, istek.BankaHesabi, istek.Kasa);
+            return Json(new { success = r.talimatlar.Count > 0, message = r.talimatlar.Count > 0 ? $"{r.talimatlar.Count} talimat hazırlandı: {string.Join(", ", r.talimatlar.Select(t => t.No + " (" + t.Baslik + ", " + t.Satirlar.Count + " satır)"))}" + (r.atlananlar.Count > 0 ? " · atlanan: " + string.Join("; ", r.atlananlar) : "") : "Talimat oluşturulamadı: " + string.Join("; ", r.atlananlar), talimatlar = r.talimatlar.Select(TalimatJson).ToList(), atlananlar = r.atlananlar });
+        }
+        [HttpPost("TalimatDurum")]
+        public IActionResult TalimatDurum([FromBody] TalimatIstek istek)
+        {
+            if (istek == null) return Json(new { success = false, message = "Veri yok." });
+            var r = TalimatOrnek.DurumDegistir(istek.No, istek.Durum, istek.Not, Kullanici); var t = TalimatOrnek.Bul(istek.No);
+            return Json(new { success = r.ok, message = r.mesaj, talimat = t == null ? null : TalimatJson(t) });
+        }
+        [HttpGet("TalimatVeri")] public IActionResult TalimatVeri(string no) { var t = TalimatOrnek.Bul(no); return Json(t == null ? new { success = false, message = "Talimat bulunamadı." } : (object)new { success = true, talimat = TalimatJson(t) }); }
+        /// <summary>Yazdırılabilir talimat (ana projedeki PDF belgelerinin HTML karşılığı; tarayıcıdan yazdırılır / PDF kaydedilir).</summary>
+        [HttpGet("Talimat")]
+        public IActionResult Talimat(string no) { var t = TalimatOrnek.Bul(no); if (t == null) return Content("Talimat bulunamadı: " + no, "text/plain; charset=utf-8"); ViewData["Title"] = t.Baslik + " · " + t.No; return View("Talimat", t); }
+        static object TalimatJson(OdemeTalimati t) => new
+        {
+            no = t.No, tarih = t.Tarih.ToString("yyyy-MM-dd HH:mm"), dbName = t.DbName, sirket = t.Sirket, yontem = t.Yontem, baslik = t.Baslik, bankaHesabi = t.BankaHesabi, kasa = t.Kasa, durum = t.Durum, sonrakiDurum = t.SonrakiDurum, kapandi = t.Kapandi,
+            hazirlayan = t.Hazirlayan, onaylayan = t.Onaylayan, onayTarihi = t.OnayTarihi?.ToString("yyyy-MM-dd HH:mm"), iletimTarihi = t.IletimTarihi?.ToString("yyyy-MM-dd HH:mm"), gerceklesmeTarihi = t.GerceklesmeTarihi?.ToString("yyyy-MM-dd HH:mm"), iptalNedeni = t.IptalNedeni,
+            satirSayisi = t.Satirlar.Count, toplamTL = t.ToplamTL, toplam = t.Toplam, pb = t.PB, link = "/Rapor79/Talimat?no=" + Uri.EscapeDataString(t.No),
+            satirlar = t.Satirlar.Select(s => new { s.DocEntry, dbName = s.DbName, faturaSahibi = s.FaturaSahibi, odeyenSirket = s.OdeyenSirket, kurum = s.Kurum, faturaNo = s.FaturaNo, aciklama = s.Aciklama, tutar = s.Tutar, pb = s.PB, tutarTL = s.TutarTL, aliciIban = s.AliciIban, grupIciNo = s.GrupIciNo, avansNo = s.AvansNo, belgeler = s.Belgeler.Select(b => new { b.CekDocEntry, b.No, b.Belge, b.Banka, b.CiroEden, b.AsilBorclu, b.Tutar, b.PB, vade = b.Vade.ToString("yyyy-MM-dd"), b.Sahip, b.Dolasim, b.DolasimAdim, b.DolasimToplam }) }),
+            gunluk = t.Gunluk.Select(g => new { tarih = g.Tarih.ToString("yyyy-MM-dd HH:mm"), g.Kullanici, g.Islem, g.Aciklama })
+        };
+
+        // ---------- ÇEK DOLAŞIM SENARYOSU (grup içi zincir + uygunluk simülasyonu) ----------
+        public class DolasimIstek { public int CekDocEntry { get; set; } public List<string> Zincir { get; set; } public string SonAdim { get; set; } public string Tedarikci { get; set; } public string FaturaSahibi { get; set; } public int? PlanDocEntry { get; set; } public int Sira { get; set; } public string Hedef { get; set; } }
+        [HttpPost("DolasimSimule")]
+        public IActionResult DolasimSimule([FromBody] DolasimIstek istek) { if (istek == null) return Json(new { success = false }); var s = CekAkibetOrnek.DolasimSimule(istek.CekDocEntry, istek.Zincir, istek.SonAdim ?? "Tedarikçiye Ciro", istek.Tedarikci, istek.FaturaSahibi); return Json(new { success = true, sonuc = s }); }
+        [HttpGet("DolasimOner")] public IActionResult DolasimOner(int cekDocEntry, string hedef) => Json(new { success = true, zincir = CekAkibetOrnek.DolasimOner(cekDocEntry, hedef) });
+        [HttpPost("DolasimKaydet")]
+        public IActionResult DolasimKaydet([FromBody] DolasimIstek istek)
+        {
+            if (istek == null) return Json(new { success = false, message = "Veri yok." });
+            var r = CekAkibetOrnek.DolasimKaydet(istek.CekDocEntry, istek.Zincir, istek.SonAdim ?? "Tedarikçiye Ciro", istek.Tedarikci, istek.PlanDocEntry, Kullanici);
+            return Json(new { success = r.ok, message = r.mesaj, belge = r.kayit == null ? null : BelgeJson(r.kayit), row = SatirByCek(r.kayit) });
+        }
+        /// <summary>Sıradaki dolaşım adımını gerçekleştirir (ciro / ibraz); son adımda satır ÖDENDİ olur.</summary>
+        [HttpPost("DolasimAdim")]
+        public IActionResult DolasimAdim([FromBody] DolasimIstek istek)
+        {
+            if (istek == null) return Json(new { success = false, message = "Veri yok." });
+            var r = CekAkibetOrnek.DolasimAdimGerceklestir(istek.CekDocEntry, istek.Sira, Kullanici);
+            if (r.ok && r.kayit != null && r.kayit.SonrakiAdim == null && r.kayit.DolasimDocEntry != null) { var m = NakitAkisOrnek.Bul(r.kayit.DolasimDocEntry.Value); if (m != null) NakitAkisOrnek.OdendiIsaretle(m.U_KaynakFirma, m.DocEntry, "dolaşım tamamlandı", Kullanici); }
+            return Json(new { success = r.ok, message = r.mesaj, belge = r.kayit == null ? null : BelgeJson(r.kayit), row = SatirByCek(r.kayit) });
+        }
+        [HttpPost("DolasimIptal")] public IActionResult DolasimIptal([FromBody] DolasimIstek istek) { var r = CekAkibetOrnek.DolasimIptal(istek?.CekDocEntry ?? 0, Kullanici); var k = CekAkibetOrnek.Bul(istek?.CekDocEntry ?? 0); return Json(new { success = r.ok, message = r.mesaj, belge = k == null ? null : BelgeJson(k), row = SatirByCek(k) }); }
+        static object SatirByCek(CekKaydi k) { if (k == null) return null; var doc = k.DolasimDocEntry ?? k.PlanDocEntry; if (doc == null) return null; var m = NakitAkisOrnek.Bul(doc.Value); if (m == null) return null; NakitAkisOrnek.BelgeleriDoldur(m); return SatirJson(m); }
+        static object BelgeJson(CekKaydi k) => new
+        {
+            cekDocEntry = k.DocEntry, no = k.No, belge = k.Belge, banka = k.Banka, asilBorclu = k.AsilBorclu, kimdenGeldi = k.Musteri, vade = k.Vade.ToString("yyyy-MM-dd"), tutar = k.Tutar, pb = k.PB, akibet = k.IslemTuru, ibrazYeri = k.IbrazYeri, kontrol = k.Kontrol, planlananTedarikci = k.PlanlananTedarikci,
+            sahip = k.Sirket, kaynakSirket = k.KaynakSirket, dolasim = k.DolasimOzeti, gerceklesen = k.GerceklesenAdim, adimToplam = k.Dolasim.Count, adimlar = k.Dolasim.Select(a => new { a.Sira, a.Eden, a.Alan, a.Tur, planTarih = a.PlanTarih.ToString("yyyy-MM-dd"), a.Durum, gercekTarih = a.GercekTarih?.ToString("yyyy-MM-dd"), a.BelgeNo, a.KapananBakiye, a.YeniBorc, a.Not })
+        };
         public class AlanIstek { public string DbName { get; set; } public int DocEntry { get; set; } public string Alan { get; set; } public string Deger { get; set; } }
         /// <summary>Satır içi düzenleme: ana alan (durum, tarih, tutar, kurum …) ya da yöntem alanı.</summary>
         [HttpPost("AlanKaydet")]
@@ -157,11 +220,13 @@ namespace WebApplication3.Controllers
 
         // ---------- ÇEK / SENET: belge seçimi (yöntem sekmesi) ----------
         /// <summary>Seçilebilir belgeler: şirket portföyünde, planlanmamış, kullanılabilir çek ya da senetler.</summary>
+        /// <summary>Portföy belgeleri: sirket = portföy şirketi (varsayılan satırın şirketi; başka grup şirketinin portföyünden de seçilebilir → dolaşım planı); hepsi = planlı / kullanılamaz olanlar da gelir (seçilemez işaretli).</summary>
         [HttpGet("SecilebilirBelgeler")]
-        public IActionResult SecilebilirBelgeler(string dbName, string belge)
+        public IActionResult SecilebilirBelgeler(string dbName, string belge, string sirket, bool hepsi = false)
         {
-            var l = NakitAkisOrnek.SecilebilirBelgeler(Db(dbName), belge);
-            return Json(new { success = true, data = l.Select(k => new { docEntry = k.DocEntry, no = k.No, belge = k.Belge, banka = k.Banka, sube = k.Sube, asilBorclu = k.AsilBorclu, kimdenGeldi = k.Musteri, musteriKod = k.MusteriKod, vade = k.Vade.ToString("yyyy-MM-dd"), vadeDurumu = k.VadeDurumu, tutar = k.Tutar, pb = k.PB, portfoyGiris = k.PortfoyGiris.ToString("yyyy-MM-dd"), kullanim = k.KullanimDurumu }) });
+            string portfoy = string.IsNullOrEmpty(sirket) ? Db(dbName) : sirket;
+            var l = CekAkibetOrnek.Secilebilirler(portfoy, string.IsNullOrEmpty(belge) ? "Çek" : belge, hepsi);
+            return Json(new { success = true, sirket = CekAkibetOrnek.SirketAdi(portfoy), data = l.Select(k => new { docEntry = k.DocEntry, no = k.No, belge = k.Belge, banka = k.Banka, sube = k.Sube, asilBorclu = k.AsilBorclu, kimdenGeldi = k.Musteri, musteriKod = k.MusteriKod, vade = k.Vade.ToString("yyyy-MM-dd"), vadeDurumu = k.VadeDurumu, tutar = k.Tutar, pb = k.PB, portfoyGiris = k.PortfoyGiris.ToString("yyyy-MM-dd"), kullanim = k.KullanimDurumu, secilebilir = k.Secilebilir, akibet = k.IslemTuru, planlananTedarikci = k.PlanlananTedarikci, planDocEntry = k.PlanDocEntry, sahip = k.Sirket }) });
         }
         public class BelgePlanIstek { public string DbName { get; set; } public int DocEntry { get; set; } public List<int> CekDocEntryler { get; set; } public int CekDocEntry { get; set; } }
         /// <summary>Belgeleri satıra bağlar; Çek Akıbeti kaydında "Planlandı" (planlanan tedarikçi = kurum).</summary>
@@ -197,11 +262,13 @@ namespace WebApplication3.Controllers
         static object SatirJson(NakitAkisViewModel m) => new
         {
             docEntry = m.DocEntry, dbName = m.U_KaynakFirma, sirket = NakitAkisOrnek.SirketAdi(m.U_KaynakFirma), sira = m.U_Sira, planlanan = m.U_PlanlananTarih?.ToString("yyyy-MM-dd"), planlananTarih = m.U_PlanlananTarih?.ToString("yyyy-MM-dd"), belgeTarihi = m.BelgeTarihi?.ToString("yyyy-MM-dd"),
+            faturaSahibi = string.IsNullOrEmpty(m.U_FaturaSahibi) ? NakitAkisOrnek.SirketAdi(m.U_KaynakFirma) : m.U_FaturaSahibi, odeyenSirket = string.IsNullOrEmpty(m.U_OdeyenSirket) ? NakitAkisOrnek.SirketAdi(m.U_KaynakFirma) : m.U_OdeyenSirket, avansNo = m.U_AvansNo, talimatNo = m.U_TalimatNo, avans = NakitAkisOrnek.AvansBilgi(m),
+            talimat = string.IsNullOrEmpty(m.U_TalimatNo) ? null : (TalimatOrnek.Bul(m.U_TalimatNo) is OdemeTalimati tt ? new { no = tt.No, durum = tt.Durum, baslik = tt.Baslik, link = "/Rapor79/Talimat?no=" + Uri.EscapeDataString(tt.No) } : null),
             kurum = m.U_Kurum, urun = m.U_UrunHizmet, pb = m.U_ParaBirimi, kur = m.U_Kur ?? 1, tutar = m.U_Tutar ?? 0, tutarTL = m.U_TutarTL ?? 0, yontem = m.U_OdemeYontemi, odemeYontemi = m.U_OdemeYontemi, odenme = m.U_OdenmeTarihi?.ToString("yyyy-MM-dd"), odenen = m.U_OdenenTutar ?? 0, odenenPB = m.U_OdenenTutarPB, durum = m.U_Durum, notlar = m.U_Notlar,
             belgeTipi = m.U_BagliBelgeTipi, bagliDocEntry = m.U_BagliDocEntry, faturaNo = m.U_FaturaSiparisNo, islemTipi = m.U_IslemTipi, kayitTipi = m.U_KayitTipi, mutabakat = m.U_MutabakatDurumu, mutabakatTarihi = m.SonMutabakatTarihi?.ToString("yyyy-MM-dd"), satinalmaci = m.U_Satinalmaci, muafiyet = m.MuafiyetSebebi,
             dekontlar = m.DekontListesi.Select(d => new { id = d.Id, ad = d.DosyaAdi, yol = d.DosyaYolu, tarih = d.Tarih.ToString("yyyy-MM-dd HH:mm"), yukleyen = d.Yukleyen, aciklama = d.Aciklama }),
             cekNolar = m.U_CekNolar, cekDocEntryler = m.U_CekDocEntryler,
-            belgeler = m.Belgeler.Select(b => new { cekDocEntry = b.CekDocEntry, no = b.No, belge = b.Belge, banka = b.Banka, asilBorclu = b.AsilBorclu, kimdenGeldi = b.KimdenGeldi, vade = b.Vade.ToString("yyyy-MM-dd"), tutar = b.Tutar, pb = b.PB, akibet = b.Akibet, ibrazYeri = b.IbrazYeri, kontrol = b.Kontrol, planlananTedarikci = b.PlanlananTedarikci }),
+            belgeler = m.Belgeler.Select(b => { var k = CekAkibetOrnek.Bul(b.CekDocEntry); return k != null ? BelgeJson(k) : new { cekDocEntry = b.CekDocEntry, no = b.No, belge = b.Belge, banka = b.Banka, asilBorclu = b.AsilBorclu, kimdenGeldi = b.KimdenGeldi, vade = b.Vade.ToString("yyyy-MM-dd"), tutar = b.Tutar, pb = b.PB, akibet = b.Akibet, ibrazYeri = b.IbrazYeri, kontrol = b.Kontrol, planlananTedarikci = b.PlanlananTedarikci, sahip = "", kaynakSirket = "", dolasim = "", gerceklesen = 0, adimToplam = 0, adimlar = Enumerable.Empty<object>() }; }),
             alanlar = new { bankaHesabi = m.U_BankaHesabi, aliciIban = m.U_AliciIban, dekontNo = m.U_DekontNo, kasa = m.U_Kasa, makbuzNo = m.U_MakbuzNo, teslimAlan = m.U_TeslimAlan, kart = m.U_Kart, taksit = m.U_Taksit, ekstreDonemi = m.U_EkstreDonemi, mahsupFisNo = m.U_MahsupFisNo, karsiBelge = m.U_KarsiBelge, temlikNo = m.U_TemlikNo, temlikEden = m.U_TemlikEden, yansitmaNo = m.U_YansitmaNo },
             grupIci = NakitAkisOrnek.GrupIciBilgi(m)
         };

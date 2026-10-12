@@ -25,10 +25,11 @@ namespace WebApplication3.Controllers
         [HttpGet(""), HttpGet("Index"), HttpGet("Index2")]
         public IActionResult Index2(string yil = null)
         {
-            string sirket = Sirket(); var hepsi = CekAkibetOrnek.Kayitlar.Where(k => k.Sirket == sirket).ToList();
+            // şirketin portföyündeki belgeler + grup içi dolaşımla bu şirketten geçip ciro edilmiş belgeler (şirket açısından "Ciro Edildi")
+            string sirket = Sirket(); var hepsi = CekAkibetOrnek.Kayitlar.Where(k => k.Sirket == sirket || k.Dolasim.Any(a => a.Durum == "Gerçekleşti" && a.Eden == sirket)).ToList();
             var yillar = hepsi.Select(k => k.Vade.Year).Distinct().OrderByDescending(y => y).Select(y => y.ToString()).ToList();
             string secilen = !string.IsNullOrEmpty(yil) && yil != "all" ? yil : DateTime.Today.Year.ToString();
-            var liste = hepsi.Where(k => yil == "all" || k.Vade.Year.ToString() == secilen).OrderBy(k => k.Vade).ThenBy(k => k.No).Select(Satir).ToList();
+            var liste = hepsi.Where(k => yil == "all" || k.Vade.Year.ToString() == secilen).OrderBy(k => k.Vade).ThenBy(k => k.No).Select(k => k.Sirket == sirket ? Satir(k) : GecisSatiri(k, sirket)).ToList();
             ViewBag.CheckTransactionTypes = new[] { new CheckTransactionType { Code = "0", Description = "Seçiniz" } }.Concat(CekAkibetOrnek.IslemTurleri.Select(t => new CheckTransactionType { Code = t.Kod, Description = t.Ad })).ToList();
             ViewBag.MevcutYillar = yillar; ViewBag.SecilenYil = secilen; ViewData["CurrentDbDisplay"] = sirket;
             OrnekDoldurucu.Hazirla(this);
@@ -41,15 +42,25 @@ namespace WebApplication3.Controllers
             bool portfoyde = k.Portfoyde; string hareket = portfoyde ? "Portföyde" : k.IslemTuru == "İade Edildi" ? "İade Edildi" : "İşlem Yapıldı";
             string aciklama = k.IslemTuru == "Planlandı" ? $"Kasa Nakit Akışı #{k.PlanDocEntry} · {k.PlanlananTedarikci} için planlandı" + (k.PlanlamaTarihi != null ? $" ({k.PlanlamaTarihi:dd.MM.yyyy}, {k.Planlayan})" : "")
                 : k.IbrazYeri != "" ? $"{k.IbrazTuru}: {k.IbrazYeri}" + (k.Kontrol == "Farklı" ? $" · DİKKAT: plan {k.PlanlananTedarikci} (farklı)" : k.Kontrol == "Uyumlu" ? " · plana uygun" : k.Kontrol == "Plansız İbraz" ? " · plansız" : "") : k.KullanimDurumu != "Kullanılabilir" ? k.KullanimDurumu : "";
+            if (k.Dolasim.Count > 0) aciklama = $"Grup içi dolaşım {k.GerceklesenAdim}/{k.Dolasim.Count}: {k.DolasimOzeti}" + (k.Sirket != k.KaynakSirket ? $" · şu an {k.Sirket} portföyünde" : "") + " · " + aciklama;
             return new Rapor2ViewModel
             {
-                DocEntry = k.DocEntry, CekNumarasi = k.No, BankaAdi = k.Banka, Sube = k.Sube, HareketDurumu = hareket, IslemTuru = k.IslemTuru, KonumDurumu = k.KonumDurumu, VadeDurumu = k.VadeDurumu, Aciklama = aciklama,
+                DocEntry = k.DocEntry, CekNumarasi = k.No, BankaAdi = k.Banka, Sube = k.Sube, HareketDurumu = hareket, IslemTuru = k.IslemTuru, KonumDurumu = k.KonumDurumu + (k.Portfoyde && !string.IsNullOrEmpty(k.KaynakSirket) && k.Sirket != k.KaynakSirket ? " · " + k.Sirket : ""), VadeDurumu = k.VadeDurumu, Aciklama = aciklama,
                 UygunlukDurumu = k.KullanimDurumu == "Kullanılabilir" ? "Uygun" : "Uygun Değil", CekKimdenGeldi = k.Musteri, AsilBorclu = k.AsilBorclu, Tutar = k.Tutar, ParaBirimi = k.PB, VadeTarihi = k.Vade,
                 VadeAyiVeYili = ButceOrnek.Aylar[k.Vade.Month - 1] + " " + k.Vade.Year, VadeliCekIbrazi = k.IbrazTuru == "Bankaya İbraz" ? "Evet" : "", PortfoyVadeAyiYili = ButceOrnek.Aylar[k.PortfoyGiris.Month - 1] + " " + k.PortfoyGiris.Year,
                 PortfoyeGirisTarihi = k.PortfoyGiris, IbrazTarihi = k.IbrazTarihi, TahsilatBelgeNo = k.TahsilatBelgeNo, IbrazBelgeNo = k.IbrazBelgeNo, PlanlananTedarikci = k.PlanlananTedarikci, BelgeTipi = k.Belge,
                 CekIslemTuru = CekAkibetOrnek.IslemKodu(k.IslemTuru), IslemTipiAdi = k.IslemTuru, CekKimeVerildi = k.IbrazTuru == "Ciro" ? k.IbrazYeri : "", TlKarsiligi = k.Tutar, KullanımDurumu = k.KullanimDurumu,
                 CekinBankasi = k.Banka, GelmeNedeni = "Tahsilat", SirketAdi = k.Sirket, SirlamaTarihi = k.Vade, CekBankaAdi = k.Banka
             };
+        }
+
+        /// <summary>Dolaşım zincirinde bu şirketten geçmiş belge: şirket açısından grup içi ciro ile çıkmıştır (alan şirket, ciro belge no, tarih); belge şu an başka şirketin portföyündedir.</summary>
+        static Rapor2ViewModel GecisSatiri(CekKaydi k, string sirket)
+        {
+            var s = Satir(k); var adim = k.Dolasim.Last(a => a.Durum == "Gerçekleşti" && a.Eden == sirket);
+            s.HareketDurumu = "İşlem Yapıldı"; s.IslemTuru = "Ciro Edildi"; s.IslemTipiAdi = "Ciro Edildi"; s.CekIslemTuru = CekAkibetOrnek.IslemKodu("Ciro Edildi"); s.KonumDurumu = "Grup İçi Ciro · " + adim.Alan; s.CekKimeVerildi = adim.Alan; s.IbrazTarihi = adim.GercekTarih; s.IbrazBelgeNo = adim.BelgeNo ?? ""; s.SirketAdi = sirket;
+            s.Aciklama = $"Grup içi dolaşım {k.GerceklesenAdim}/{k.Dolasim.Count}: {k.DolasimOzeti} · {sirket} → {adim.Alan} ciro edildi ({adim.BelgeNo}, {adim.GercekTarih:dd.MM.yyyy}, adım {adim.Sira}) · şu an {k.Sirket} portföyünde · plana uygun";
+            return s;
         }
 
         static string Html(string s) => System.Net.WebUtility.HtmlEncode(s ?? "");
