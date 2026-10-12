@@ -256,6 +256,23 @@ tasarımından uyarlandı:
   Şirket × Bölge ve Ay matrisleri; kargo dağılımı; en çok numune gönderilen 10 müşteri; detayda gönderim bilgileri, kalemler ve bedel, kargo ve masraf
   kutuları, hareket zaman çizelgesi, sonuç, cari kart, müşterinin numune geçmişi; "Kargo Takip", "Teklif …" ve "Cari Kartı Aç" bağlantıları; Excel (liste,
   kalem, şirket özeti). Derin bağlantı: `/NumuneGonderim?sekme=musteri | liste`, `?no=NMN-2026-00042`, `?kod=120.001`.
+* **Kasa Nakit Akışı · Çek Akıbeti Raporu · Konsolide Finansal Takip Paneli — ortak çek kaydı** (`Data/CekAkibetOrnek.cs`: müşteri çek / senet portföyü
+  (`ButceOrnek.Cekler` + `Senetler` ile aynı belgeler) + Kasa Nakit Akışı planı (planlanan tedarikçi, plan kaydı, tarih, planlayan) + gerçek çıkış (ibraz / ciro: yer,
+  tür, tarih, belge no) + `Kontrol` = Uyumlu / Farklı / İbraz Bekliyor / Plansız İbraz; `Data/NakitAkisOrnek.cs`: şirket bazlı ödeme planı satırları
+  (`NakitAkisViewModel`, yönteme özel alanlar `U_BankaHesabi … U_TemlikEden`, `U_CekDocEntryler` belge bağı) ve kasa / banka / portföy bakiyeleri; tohum senaryoları:
+  planlı belgeler için Çek / Senet satırları — plana uygun çıkanlar ÖDENDİ, farklı yere çıkanlar Planlandı / Gecikti —, belge seçilmemiş Çek / Senet satırları, diğer
+  yöntemler). Üç ekranın üretilmiş denetleyicileri `Uretilen/Controllers/*.cs` içinde `#if URETILEN_KAPALI` ile kapatıldı (model sınıfları orada kalır); elle yazılmış
+  sürümler `Controllers/Rapor79Controller.cs`, `Rapor2Controller.cs` (`/CekAkibeti`), `Rapor123Controller.cs`. Görünümler ana projeden, küçük eklemelerle:
+  - **Kasa Nakit Akışı** (`Views/Rapor79/Index.cshtml` + `wwwroot/js/rapor79.js` + yeni `rapor79-yontem.js`): ödeme yöntemi SEKMELERİ (Tümü = ana 23 sütunlu
+    liste `.ana-liste`; Nakit / Çek / Senet / Havale / EFT / Kredi Kartı / Mahsup / Temlik / Diğer = `.yontem-panel[data-method]` yönteme özel sütunlarla; düğmeler
+    ana projedeki `.odeme-filter-btn` süzgeciyle aynı sınıf). Çek / Senet satırında "Belge Seç" → `#belgeSecModal` (`/Rapor79/SecilebilirBelgeler`) → `/Rapor79/BelgePlanla`:
+    belge Çek Akıbeti'nde Planlandı, satır tutarı belge toplamı, belge hücreleri satırın `data-belgeler` verisinden çizilir, ana listedeki satır eşitlenir;
+    `/Rapor79/BelgePlanKaldir`, `/Rapor79/YontemAlanKaydet` (yöntem alanı), ana projedeki `#btnSatirCekOnayla` akışı da `BelgePlanla` çağırır.
+  - **Çek Akıbeti Raporu** (`Views/Rapor2/Index2.cshtml`): "Planlananlar (Kasa Nakit Akışı)" kartı, Planlanan Tedarikçi + Açıklama varsayılan görünür
+    (`DUZEN_SURUMU` sade-v3), belge numarasız çeklerde `/CekAkibeti/UpdateCheckTransactionTypeByDocEntry`; ibraz / tahsilat detayı plan ↔ ibraz kontrolüyle.
+  - **Konsolide Finansal Takip Paneli** (`Views/Rapor123/Index.cshtml`): ÇEK sekmesinde Planlanan Tedarikçi, İbraz / Ciro Bilgisi ve KONTROL sütunları
+    (`R123_HareketViewModel` yeni alanlar), "Çek Plan ↔ İbraz Kontrolü" kutusu (`data-kontrol` + DataTables arama kancası `r123KontrolSuz`), plana aykırı çıkışlar
+    Eksik olarak işaretli; KASA / BANKA hareketleri ödeme planından, ÇEK hareketleri çek kaydından.
 * **Vade Tarihine Göre Çek ve Senet Özeti** (Mali İşler › Finans › Finansal Araçlar; Yönetim › Özel Raporlar'da aynı ekran; `Controllers/CekOzetController.cs`,
   `Views/CekOzet/Index.cshtml`, betik `wwwroot/js/cek-ozet.js`, veri `Data/CekOrnek.cs`): "2026 Vade Tarihine Göre Tedarikçi Aylık Çek Özeti"
   tablosunun uyarlaması. Beş sekme: **Verilen Çekler**, **Verilen Senetler**, **Tahsile Gönderilen Çekler**, **Tahsile Gönderilen Senetler** ve

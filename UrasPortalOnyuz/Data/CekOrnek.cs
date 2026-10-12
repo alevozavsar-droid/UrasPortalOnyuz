@@ -180,6 +180,8 @@ namespace WebApplication3.Data
         };
         /// <summary>Tablonun AYLIK ÇEK ADEDİ satırı (toplam 557): her ay dolu hücreler bu adede ulaşacak şekilde çeke bölünür.</summary>
         static readonly int[] GercekAdet2026 = { 32, 39, 31, 42, 53, 45, 66, 70, 70, 61, 30, 18 };
+        /// <summary>Çek verilen tedarikçi adları (birebir tablodan; çeksiz cariler hariç) — Kasa Nakit Akışı ödeme planı ve çek ciro / planlama örnekleri bu havuzdan.</summary>
+        public static string[] TedarikciAdlari => Gercek2026.Where(r => r.Aylar.Any(x => x > 0)).Select(r => r.Ad).ToArray();
 
         /// <summary>Alıcı havuzu (diğer şirket / yıllar için): birebir tablodan türetilir — ad, tür, Uras Kimya ölçeğinde yıllık çek tutarı, çek verilen ay sayısı. Kartı olan tedarikçiler cari koduyla eklenir.</summary>
         static readonly (string Ad, string Tur, decimal Yillik, int AyAdedi)[] Havuz = Gercek2026.Select(r => (r.Ad, "Tedarikçi", r.Aylar.Sum(), r.Aylar.Count(x => x > 0))).ToArray();

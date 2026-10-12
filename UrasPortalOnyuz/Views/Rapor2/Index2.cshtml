@@ -312,7 +312,7 @@
 
                 <div class="summary-cards-wrapper">
                     <div class="row g-3">
-                        <div class="col-xl-3 col-md-6">
+                        <div class="col-xl col-md-6">
                             <div class="card quick-filter-card h-100" data-column="HareketDurumu" data-value="Portföyde">
                                 <div class="card-body p-2 d-flex align-items-center">
                                     <div class="icon-box icon-box-info me-3"><i class="fas fa-wallet"></i></div>
@@ -320,7 +320,16 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-xl-3 col-md-6">
+                        <div class="col-xl col-md-6">
+                            <!-- Kasa Nakit Akışı'nda ödeme satırına seçilen belgeler (işlem türü 2 = Planlandı); planlanan tedarikçi sütununda kurum -->
+                            <div class="card quick-filter-card h-100" data-column="CekIslemTuru" data-value="2" title="Kasa Nakit Akışı › Çek / Senet sekmesinde seçilen belgeler">
+                                <div class="card-body p-2 d-flex align-items-center">
+                                    <div class="icon-box icon-box-warning me-3"><i class="fas fa-calendar-check"></i></div>
+                                    <div><div class="stat-title">Planlananlar (Kasa Nakit Akışı)</div><div class="stat-amount" id="statPlanTutar">0,00 TL</div><div class="stat-count" id="statPlanAdet">0 Adet</div></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xl col-md-6">
                             <!-- İşlem Türü (Manuel) dropdown ID'lerine göre filtreleniyor (Tahsil Edilenler: 6,7) -->
                             <div class="card quick-filter-card h-100" data-column="CekIslemTuru" data-value="6,7">
                                 <div class="card-body p-2 d-flex align-items-center">
@@ -329,7 +338,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-xl-3 col-md-6">
+                        <div class="col-xl col-md-6">
                             <div class="card quick-filter-card h-100" data-column="HareketDurumu" data-value="İşlem Yapıldı">
                                 <div class="card-body p-2 d-flex align-items-center">
                                     <div class="icon-box icon-box-secondary me-3"><i class="fas fa-sign-out-alt"></i></div>
@@ -337,7 +346,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-xl-3 col-md-6">
+                        <div class="col-xl col-md-6">
                             <!-- İşlem Türü (Manuel) dropdown ID'lerine göre filtreleniyor (Riskli/Karşılıksız vb: 10,11,12,13,14) -->
                             <div class="card quick-filter-card h-100" data-column="CekIslemTuru" data-value="10,11,12,13,14">
                                 <div class="card-body p-2 d-flex align-items-center">
@@ -636,6 +645,7 @@
                 let tahsilAdet = 0, tahsilTutar = 0;
                 let cikisAdet = 0, cikisTutar = 0;
                 let riskliAdet = 0, riskliTutar = 0;
+                let planAdet = 0, planTutar = 0;   // Kasa Nakit Akışı'nda planlanan belgeler
 
                 let dataToCalculate = allReportData;
                 if (activeYearFilter !== 'all') {
@@ -655,7 +665,11 @@
                     else if (durum === 'İşlem Yapıldı' && (islem !== 'Bankadan Tahsil Edildi' && islem !== 'Elden Tahsil Edildi' && !islem.includes('Karşılıksız') && !islem.includes('Protesto') && !islem.includes('Konkordato'))) { cikisAdet++; cikisTutar += tutar; }
                     
                     if (islem.includes('Karşılıksız') || islem.includes('Protesto') || islem.includes('Konkordato')) { riskliAdet++; riskliTutar += tutar; }
+                    if (islem === 'Planlandı' || item.CekIslemTuru === '2') { planAdet++; planTutar += tutar; }
                 });
+                const statPlanTutar = document.getElementById('statPlanTutar'), statPlanAdet = document.getElementById('statPlanAdet');
+                if (statPlanTutar) statPlanTutar.textContent = planTutar.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL';
+                if (statPlanAdet) statPlanAdet.textContent = planAdet + ' Adet';
 
                 document.getElementById('statPortfoyTutar').textContent = portfoyTutar.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL';
                 document.getElementById('statPortfoyAdet').textContent = portfoyAdet + ' Adet';
@@ -950,12 +964,13 @@
 
                                 if (ibrazNo && ibrazNo !== 'null' && ibrazNo !== '') isSuccess = await updateCheckTransactionTypeByIbrazBelge(ibrazNo, newType);
                                 else if (tahsilatNo && tahsilatNo !== 'null' && tahsilatNo !== '') isSuccess = await updateCheckTransactionTypeByTahsilat(tahsilatNo, newType);
-                                else { toastr.warning("Güncellenecek belge numarası bulunamadı."); this.value = this.dataset.previousValue; return; }
+                                else isSuccess = await updateCheckTransactionTypeByDocEntry(this.dataset.docentry, newType);   // portföydeki (belge numarasız) çek: kayıtla güncelle
 
                                 if (isSuccess) {
                                     this.dataset.previousValue = newType;
+                                    if (item) item.CekIslemTuru = newType;
                                     toastr.success("İşlem başarıyla güncellendi. Yeni hesaplamaların yansıması için sayfayı yenileyiniz.");
-                                }
+                                } else { this.value = this.dataset.previousValue; }
                             });
                             cell.appendChild(select);
                         } 
@@ -1500,6 +1515,18 @@
                 } catch (error) { return false; }
             }
 
+            // Portföydeki (ibraz / tahsilat belgesi olmayan) çekler: işlem türü kayıt numarasıyla güncellenir (Data/CekAkibetOrnek.cs; Kasa Nakit Akışı planıyla ortak kayıt)
+            async function updateCheckTransactionTypeByDocEntry(docEntry, newType) {
+                try {
+                    const token = $('input[name="__RequestVerificationToken"]').val();
+                    const response = await fetch(`/CekAkibeti/UpdateCheckTransactionTypeByDocEntry${dbQueryString}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'RequestVerificationToken': token }, body: JSON.stringify({ DocEntry: parseInt(docEntry), NewCheckTransactionType: newType }) });
+                    if (!response.ok) { toastr.error(`HTTP Hata: ${response.status}`); return false; }
+                    const data = await response.json();
+                    if (data.success) { if (data.message && data.message.indexOf('DİKKAT') >= 0) toastr.warning(data.message); return true; }
+                    toastr.error(data.message || 'Güncellenemedi.'); return false;
+                } catch (error) { return false; }
+            }
+
             async function updatePlannedSupplier(docEntry, newSupplier) {
                 try {
                     const token = $('input[name="__RequestVerificationToken"]').val();
@@ -1697,15 +1724,18 @@
                     'VadeDurumu',       // Vade Durumu
                     'HareketDurumu',    // Hareket Durumu
                     'CekIslemTuru',     // İşlem Türü
+                    'PlanlananTedarikci', // Planlanan Tedarikçi (Kasa Nakit Akışı'ndan)
+                    'Aciklama',         // Açıklama: plan / ibraz bilgisi ve plan ↔ ibraz kontrolü
                     'IslemTipiAdi',     // İşlem Tipi
                     'KonumDurumu',      // Konum Durumu
                     'CekKimeVerildi'    // Kime Verildi
                 ];
 
                 // Kalan bütün alanlar çek numarasına tıklanınca açılan detayda görünür.
+                // Planlanan Tedarikçi ve Açıklama (Kasa Nakit Akışı planı / ibraz bilgisi) varsayılan görünür.
                 const DEFAULT_HIDDEN_COLUMNS = [
-                    'Aciklama', 'KullanimDurumu', 'PortfoyeGirisTarihi', 'PortfoyVadeAyiYili',
-                    'IbrazTarihi', 'PlanlananTedarikci', 'VadeliCekIbrazi', 'BankaAdi',
+                    'KullanimDurumu', 'PortfoyeGirisTarihi', 'PortfoyVadeAyiYili',
+                    'IbrazTarihi', 'VadeliCekIbrazi', 'BankaAdi',
                     'Sube', 'IbrazBelgeNo', 'TahsilatBelgeNo'
                 ];
 
@@ -1742,7 +1772,7 @@
                 }
 
                 // Sade görünüme geçiş: kayıtlı eski sütun düzenleri bir kereliğine yok sayılır.
-                const DUZEN_SURUMU = 'sade-v2';
+                const DUZEN_SURUMU = 'sade-v3';   // v3: Planlanan Tedarikçi ve Açıklama görünür (Kasa Nakit Akışı bağlantısı)
                 if (localStorage.getItem('cekAkibetiDuzenSurumu') !== DUZEN_SURUMU) {
                     localStorage.removeItem(storageKey);
                     localStorage.setItem('cekAkibetiDuzenSurumu', DUZEN_SURUMU);

@@ -39,10 +39,44 @@
     string gizliKolonCss = string.Join("\n", gizliKolonlar.Select(k =>
         $".main-payment-table thead tr:nth-child(2) > th:nth-child({k}), " +
         $".main-payment-table tbody > tr:not(:has(> td[colspan])) > td:nth-child({k}) {{ display: none !important; }}"));
+
+    // --- ÖDEME YÖNTEMİ SEKMELERİ ---
+    // "Tümü": ana ödeme listesi (23 sütun, ana projedeki tablo). Yöntem sekmeleri: yalnız o yöntemin kayıtları, yönteme özel sütunlarla
+    // (Çek / Senet: portföyden belge seçimi → belge Çek Akıbeti Raporu'nda "Planlandı"; Havale / EFT: banka hesabı, alıcı IBAN, dekont no; Nakit: kasa, makbuz,
+    // teslim alan; Kredi Kartı: kart, taksit, ekstre dönemi; Mahsup: fiş no, karşı belge; Temlik: temlik no, temlik eden). Betik: wwwroot/js/rapor79-yontem.js
+    var tr = new System.Globalization.CultureInfo("tr-TR");
+    var yontemSekmeleri = new[] { "Tümü", "Nakit", "Çek", "Senet", "Havale / EFT", "Kredi Kartı / Banka Kartı", "Mahsup", "Temlik", "Diğer" };
+    var yontemOzelSutunlar = new Dictionary<string, string[]>
+    {
+        ["Havale / EFT"] = new[] { "BANKA HESABI (BİZİM)|U_BankaHesabi", "ALICI IBAN|U_AliciIban", "DEKONT NO|U_DekontNo" },
+        ["Nakit"] = new[] { "KASA|U_Kasa", "MAKBUZ NO|U_MakbuzNo", "TESLİM ALAN|U_TeslimAlan" },
+        ["Kredi Kartı / Banka Kartı"] = new[] { "KART|U_Kart", "TAKSİT|U_Taksit", "EKSTRE DÖNEMİ|U_EkstreDonemi" },
+        ["Mahsup"] = new[] { "MAHSUP FİŞ NO|U_MahsupFisNo", "KARŞI BELGE|U_KarsiBelge" },
+        ["Temlik"] = new[] { "TEMLİK NO|U_TemlikNo", "TEMLİK EDEN|U_TemlikEden" }
+    };
+    string YontemAlan(FinansRaporlama.Controllers.NakitAkisViewModel l, string alan) => (string)(typeof(FinansRaporlama.Controllers.NakitAkisViewModel).GetProperty(alan)?.GetValue(l) ?? "");
+    string SatirRengi(FinansRaporlama.Controllers.NakitAkisViewModel l) => l.U_Durum == "ÖDENDİ" ? "#d4edda" : l.U_Durum == "Gecikti" ? "#f8d7da" : l.U_Durum == "Özel Onay" ? "#e2d9f3" : l.U_Durum == "Planlandı" ? (l.U_MutabakatDurumu == "Mutabık" || !string.IsNullOrEmpty(l.MuafiyetSebebi) ? "#fff3cd" : "#cff4fc") : "transparent";
 }
 @section Styles {
     @* Kisiye ozel gizli sutunlar; JS ayni elemani gunceller. *@
     <style id="r79KolonStil">@Html.Raw(gizliKolonCss)</style>
+    <style>
+        /* Ödeme yöntemi sekmeleri ve yöntem panelleri (wwwroot/js/rapor79-yontem.js) */
+        .yontem-sekmeler { border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; }
+        .yontem-sekmeler .odeme-filter-btn.aktif { box-shadow: 0 2px 0 0 #0d6efd; }
+        .yontem-panel .yontem-tablo th { white-space: nowrap; }
+        .yontem-panel .yontem-tablo td { vertical-align: top; }
+        .yontem-panel .yp-b { height: 22px; line-height: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+        .yontem-panel .yp-b .badge { vertical-align: middle; }
+        .yontem-panel .yontem-alan { width: 100%; min-width: 140px; font-size: 12px; border: 1px solid #dee2e6; border-radius: 4px; padding: 2px 5px; background: #fff; }
+        .yontem-panel .yontem-alan.is-valid { border-color: #198754; background: #f0fff4; }
+        .yontem-panel .yp-kontrol-farkli { background: #dc3545; color: #fff; }
+        .yontem-panel .yp-kontrol-uyumlu { background: #198754; color: #fff; }
+        .yontem-panel .yp-kontrol-bekliyor { background: #ffc107; color: #212529; }
+        .yontem-panel .yp-kontrol-plansiz { background: #0dcaf0; color: #212529; }
+        .yontem-panel .yp-toplam td { font-weight: 700; background: #f8f9fa; }
+        .yontem-panel .yp-bos td { color: #6c757d; padding: 18px; }
+    </style>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet" />
@@ -335,20 +369,14 @@
                         <i class="fas fa-file-upload"></i> Seçililere Toplu Dekont Yükle
                     </button>
                     
-                    @* Ödeme yöntemi: şirket seçici gibi yan yana düğmeler.
-                       Önceden açılır menüydü; hangi yöntemin seçili olduğu ve
-                       hangisinde kaç kayıt bulunduğu görünmüyordu. *@
-                    <div class="odeme-yontem-grubu d-flex flex-wrap align-items-center gap-1 ms-1" data-dbname="@comp.DbName">
-                        <span class="odeme-yontem-etiket"><i class="fas fa-filter"></i> ÖDEME YÖNTEMİ</span>
-                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn aktif" data-dbname="@comp.DbName" data-method="Tümü">Tümü<span class="sayi"></span></button>
-                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn" data-dbname="@comp.DbName" data-method="Nakit">Nakit<span class="sayi"></span></button>
-                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn" data-dbname="@comp.DbName" data-method="Çek">Çek<span class="sayi"></span></button>
-                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn" data-dbname="@comp.DbName" data-method="Senet">Senet<span class="sayi"></span></button>
-                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn" data-dbname="@comp.DbName" data-method="Havale / EFT">Havale / EFT<span class="sayi"></span></button>
-                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn" data-dbname="@comp.DbName" data-method="Kredi Kartı / Banka Kartı">Kredi / Banka Kartı<span class="sayi"></span></button>
-                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn" data-dbname="@comp.DbName" data-method="Mahsup">Mahsup<span class="sayi"></span></button>
-                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn" data-dbname="@comp.DbName" data-method="Temlik">Temlik<span class="sayi"></span></button>
-                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn" data-dbname="@comp.DbName" data-method="Diğer">Diğer<span class="sayi"></span></button>
+                    @* Ödeme yöntemi SEKMELERİ: "Tümü" ana ödeme listesi (23 sütun); yöntem sekmeleri yönteme özel sütunlu paneller (aşağıda .yontem-panel).
+                       Düğme sınıfı ana projedeki süzgeçle aynı (.odeme-filter-btn): ana listeyi de süzer, sayılar otomatik dolar. Sekme geçişi: wwwroot/js/rapor79-yontem.js *@
+                    <div class="odeme-yontem-grubu yontem-sekmeler d-flex flex-wrap align-items-center gap-1 ms-1" data-dbname="@comp.DbName">
+                        <span class="odeme-yontem-etiket"><i class="fas fa-layer-group"></i> ÖDEME YÖNTEMİ</span>
+                        @foreach (var yontem in yontemSekmeleri)
+                        {
+                            <button type="button" class="btn btn-sm rounded-pill odeme-filter-btn @(yontem == "Tümü" ? "aktif" : "")" data-dbname="@comp.DbName" data-method="@yontem" title="@(yontem == "Tümü" ? "Tüm ödemeler (ana liste)" : yontem == "Çek" || yontem == "Senet" ? yontem + " ödemeleri · portföyden belge seçimi" : yontem + " ödemeleri · yönteme özel sütunlar")">@(yontem == "Kredi Kartı / Banka Kartı" ? "Kredi / Banka Kartı" : yontem)<span class="sayi"></span></button>
+                        }
                     </div>
                 </div>
 
@@ -366,7 +394,7 @@
                 </div>
             </div>
 
-            <div class="excel-layout shadow-sm">
+            <div class="excel-layout shadow-sm ana-liste">
                 <div class="excel-sidebar">
                     <span>@comp.DisplayName</span>
                 </div>
@@ -856,11 +884,123 @@
 
                 </div>
             </div>
+
+            @* ===== ÖDEME YÖNTEMİ PANELLERİ: yönteme özel sütunlar; Çek / Senet satırlarına portföyden belge seçilir (belge Çek Akıbeti'nde "Planlandı" olur).
+                 Belge hücreleri satırın data-belgeler verisinden betikle çizilir (rapor79-yontem.js); Tümü sekmesindeki ana satırla tutar / vade / not eşitlenir. ===== *@
+            @foreach (var yontem in yontemSekmeleri.Where(y => y != "Tümü"))
+            {
+                var satirlar = comp.OdemeListesi.Where(l => (l.U_OdemeYontemi ?? "") == yontem).ToList();
+                bool belgeli = yontem == "Çek" || yontem == "Senet";
+                var ozel = yontemOzelSutunlar.TryGetValue(yontem, out var oz) ? oz : new string[0];
+                int sutunSayisi = 9 + (belgeli ? 8 : ozel.Length) + 4;
+                <div class="excel-layout shadow-sm yontem-panel" data-dbname="@comp.DbName" data-method="@yontem" style="display:none">
+                    <div class="excel-sidebar"><span>@comp.DisplayName</span></div>
+                    <div class="excel-content">
+                        <table class="excel-table yontem-tablo" data-dbname="@comp.DbName" data-method="@yontem">
+                            <thead>
+                                <tr><th colspan="@sutunSayisi" class="title-row">@yontem.ToUpper(tr) ÖDEMELERİ · <span class="yp-panel-sayi">@satirlar.Count</span> kayıt · <span class="yp-panel-toplam">@satirlar.Sum(x => x.U_TutarTL ?? 0).ToString("N2", tr)</span> ₺@(belgeli ? " · belgeler Çek Akıbeti Raporu'nda \"Planlandı\" olur; plana aykırı çıkışlar Konsolide Finansal Takip Paneli › Çek'te" : "")</th></tr>
+                                <tr>
+                                    <th style="min-width:36px">#</th>
+                                    <th style="min-width:95px">PLANLANAN ÖDEME</th>
+                                    <th style="min-width:180px">KURUM</th>
+                                    <th style="min-width:110px">BELGE NO</th>
+                                    <th style="min-width:150px">ÜRÜN / HİZMET</th>
+                                    <th style="min-width:100px">TUTAR</th>
+                                    <th style="min-width:44px">PB</th>
+                                    <th style="min-width:110px">TUTAR (₺)</th>
+                                    <th style="min-width:90px">DURUM</th>
+                                    @if (belgeli)
+                                    {
+                                        <th style="min-width:150px">@yontem.ToUpper(tr) NO</th>
+                                        <th style="min-width:120px">@(yontem == "Çek" ? "ÇEKİN BANKASI" : "SENET BANKASI")</th>
+                                        <th style="min-width:150px">KEŞİDECİ (ASIL BORÇLU)</th>
+                                        <th style="min-width:150px">KİMDEN GELDİ</th>
+                                        <th style="min-width:90px">BELGE VADESİ</th>
+                                        <th style="min-width:110px">BELGE TUTARI</th>
+                                        <th style="min-width:200px">AKIBET · PLAN KONTROLÜ</th>
+                                        <th style="min-width:120px">BELGE İŞLEMİ</th>
+                                    }
+                                    else
+                                    {
+                                        foreach (var s in ozel) { <th style="min-width:150px">@s.Split('|')[0]</th> }
+                                    }
+                                    <th style="min-width:95px">ÖDENME TARİHİ</th>
+                                    <th style="min-width:100px">ÖDENEN</th>
+                                    <th style="min-width:200px">NOT</th>
+                                    <th style="min-width:80px">İŞLEM</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (!satirlar.Any())
+                                {
+                                    <tr class="yp-bos"><td colspan="@sutunSayisi" class="text-center">Bu yöntemde kayıt yok. Yeni Ödeme Ekle'den "@yontem" yöntemiyle kayıt açabilirsiniz.</td></tr>
+                                }
+                                @foreach (var line in satirlar)
+                                {
+                                    var belgeJson = System.Text.Json.JsonSerializer.Serialize(line.Belgeler.Select(b => new { cekDocEntry = b.CekDocEntry, no = b.No, belge = b.Belge, banka = b.Banka, asilBorclu = b.AsilBorclu, kimdenGeldi = b.KimdenGeldi, vade = b.Vade.ToString("yyyy-MM-dd"), tutar = b.Tutar, pb = b.PB, akibet = b.Akibet, ibrazYeri = b.IbrazYeri, kontrol = b.Kontrol, planlananTedarikci = b.PlanlananTedarikci }));
+                                    <tr class="yontem-satir" data-docentry="@line.DocEntry" data-dbname="@comp.DbName" data-belgeler="@belgeJson" style="background-color: @SatirRengi(line);">
+                                        <td>@line.U_Sira</td>
+                                        <td class="yp-plan">@(line.U_PlanlananTarih?.ToString("dd.MM.yyyy"))</td>
+                                        <td class="text-start fw-bold yp-kurum">@line.U_Kurum</td>
+                                        <td>@line.U_FaturaSiparisNo</td>
+                                        <td class="text-start">@line.U_UrunHizmet</td>
+                                        <td class="num-input yp-tutar">@((line.U_Tutar ?? 0).ToString("N2", tr))</td>
+                                        <td class="yp-pb">@(line.U_ParaBirimi == "TRY" ? "TL" : line.U_ParaBirimi)</td>
+                                        <td class="num-input yp-tutartl">@((line.U_TutarTL ?? 0).ToString("N2", tr))</td>
+                                        <td class="yp-durum fw-bold">@line.U_Durum</td>
+                                        @if (belgeli)
+                                        {
+                                            <td class="text-start yp-no"></td><td class="text-start yp-banka"></td><td class="text-start yp-kesideci"></td><td class="text-start yp-kimden"></td><td class="yp-vade"></td><td class="num-input yp-btutar"></td><td class="text-start yp-akibet"></td><td class="text-start yp-islem-belge"></td>
+                                        }
+                                        else
+                                        {
+                                            foreach (var s in ozel) { var alan = s.Split('|')[1]; <td><input type="text" class="yontem-alan" data-alan="@alan" value="@YontemAlan(line, alan)" placeholder="@s.Split('|')[0].ToLower(tr)" /></td> }
+                                        }
+                                        <td>@(line.U_OdenmeTarihi?.ToString("dd.MM.yyyy"))</td>
+                                        <td class="num-input">@(line.U_OdenenTutar.HasValue && line.U_OdenenTutar > 0 ? line.U_OdenenTutar.Value.ToString("N2", tr) + " " + (line.U_OdenenTutarPB == "TRY" ? "TL" : line.U_OdenenTutarPB) : "")</td>
+                                        <td class="text-start yp-not" style="white-space:normal;max-width:260px">@line.U_Notlar</td>
+                                        <td><button type="button" class="btn btn-light btn-sm py-0 border yp-duzenle" title="Düzenle (ana listedeki kayıt)"><i class="fas fa-pen"></i></button></td>
+                                    </tr>
+                                }
+                                @if (satirlar.Any())
+                                {
+                                    <tr class="yp-toplam"><td colspan="7" class="text-end">TOPLAM (₺):</td><td class="num-input"><span class="yp-panel-toplam">@satirlar.Sum(x => x.U_TutarTL ?? 0).ToString("N2", tr)</span></td><td colspan="@(sutunSayisi - 8)" class="text-start">ödenen: @satirlar.Sum(x => x.U_OdenenTutar ?? 0).ToString("N2", tr) · kalan: @((satirlar.Sum(x => x.U_TutarTL ?? 0) - satirlar.Where(x => x.U_Durum == "ÖDENDİ").Sum(x => x.U_TutarTL ?? 0)).ToString("N2", tr))</td></tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
         </div>
     }
 </div>
 
 <!-- === MODALLAR BAŞLANGIÇ === -->
+<!-- Çek / Senet seçimi (yöntem sekmesi): portföydeki planlanmamış, kullanılabilir belgeler; onaylanınca /Rapor79/BelgePlanla → Çek Akıbeti'nde Planlandı -->
+<div class="modal fade" id="belgeSecModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2 bg-primary text-white"><h6 class="modal-title mb-0"><i class="fas fa-money-check-alt me-2"></i><span id="bsBaslik">Belge Seç</span></h6><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Kapat"></button></div>
+            <div class="modal-body">
+                <div class="d-flex gap-2 align-items-center mb-2 flex-wrap">
+                    <span class="badge bg-dark" id="bsKurum"></span><span class="text-muted small" id="bsBilgi"></span>
+                    <input type="text" id="bsAra" class="form-control form-control-sm ms-auto" style="max-width:260px" placeholder="Belge no, keşideci, banka ara…" />
+                </div>
+                <div class="table-responsive" style="max-height:55vh">
+                    <table class="table table-sm table-hover align-middle mb-0" id="bsTablo">
+                        <thead class="table-light"><tr><th style="width:30px"><input type="checkbox" id="bsHepsi" class="form-check-input" /></th><th>Belge No</th><th>Banka / Şube</th><th>Keşideci (Asıl Borçlu)</th><th>Kimden Geldi</th><th>Vade</th><th>Vade Durumu</th><th class="text-end">Tutar</th><th>Portföy Giriş</th></tr></thead>
+                        <tbody id="bsGovde"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <span class="me-auto small"><b id="bsSayi">0</b> belge · <b id="bsToplam">0,00</b> ₺ <span class="text-muted" id="bsFark"></span></span>
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Vazgeç</button>
+                <button type="button" class="btn btn-primary btn-sm" id="bsOnayla"><i class="fas fa-check me-1"></i>Seçilenleri Planla</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- MÜKERRER KARŞILAŞTIRMA MODALI (IT #66) -->
 <div class="modal fade" id="mukerrerModal" tabindex="-1" aria-hidden="true">
@@ -1636,7 +1776,7 @@
         // sayfadaki .table-container kuralı oraya da uyduğu için oluşan
         // stacking context modali backdrop'un altında bırakıyordu.
         (function modalleriBodyeTasi() {
-            var idler = ['topluDekontUploadModal', 'odenenlerModal', 'detayModal', 'satirCekSecimModal', 'portfoyCekEkleModal', 'ekleModal', 'duzenleModal', 'pdfPreviewModal', 'logModal', 'sistemLoglariModal', 'dekontListeModal', 'dekontUploadModal', 'mukerrerModal'];
+            var idler = ['topluDekontUploadModal', 'odenenlerModal', 'detayModal', 'satirCekSecimModal', 'portfoyCekEkleModal', 'ekleModal', 'duzenleModal', 'pdfPreviewModal', 'logModal', 'sistemLoglariModal', 'dekontListeModal', 'dekontUploadModal', 'mukerrerModal', 'belgeSecModal'];
             idler.forEach(function (id) {
                 var el = document.getElementById(id);
                 if (el && el.parentElement !== document.body) {
@@ -1680,6 +1820,8 @@
     }
 
     <script src="~/js/rapor79.js" asp-append-version="true"></script>
+    @* Ödeme yöntemi sekmeleri, Çek / Senet belge seçimi (Çek Akıbeti bağlantısı), yönteme özel alan kaydı *@
+    <script src="~/js/rapor79-yontem.js" asp-append-version="true"></script>
 
 <script>
     // Sabit arac cubugu sarabildigi icin yuksekligi degisken. Govde ust

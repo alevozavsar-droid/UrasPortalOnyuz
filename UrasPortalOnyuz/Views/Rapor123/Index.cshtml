@@ -351,12 +351,37 @@
     @if (currentHesapTipi == "CEK" && ViewBag.CekOzet != null)
     {
         var ozet = (WebApplication3.Controllers.R123_CekOzetModel)ViewBag.CekOzet;
+        // Plan ↔ ibraz kontrolü: Kasa Nakit Akışı'nda planlanan tedarikçi ile çekin gerçek çıkış yeri (ciro / bankaya ibraz) karşılaştırılır (Data/CekAkibetOrnek.cs › Kontrol)
+        var cekKontrol = hareketler.Where(x => !string.IsNullOrEmpty(x.CekNumarasi)).GroupBy(x => x.Sirket + "|" + x.CekNumarasi).Select(g => g.First().PlanKontrol ?? "—").ToList();
+        int kUyumlu = cekKontrol.Count(k => k == "Uyumlu"), kFarkli = cekKontrol.Count(k => k == "Farklı"), kBekleyen = cekKontrol.Count(k => k == "İbraz Bekliyor"), kPlansiz = cekKontrol.Count(k => k == "Plansız İbraz");
         <div class="row g-3 mb-4">
             <div class="col"><div class="stat-card stat-card-blue"><span class="stat-title">Portföye Giren</span><div class="stat-val">@ozet.GirenTutar.ToString("N2") ₺</div><div class="stat-desc">@ozet.GirenAdet Adet İşlem</div></div></div>
             <div class="col"><div class="stat-card stat-card-red"><span class="stat-title">Toplam Çıkan</span><div class="stat-val">@ozet.CikanTutar.ToString("N2") ₺</div><div class="stat-desc">@ozet.CikanAdet Adet İşlem</div></div></div>
             <div class="col"><div class="stat-card stat-card-orange"><span class="stat-title">Tedarikçiye Çıkan</span><div class="stat-val">@ozet.TedarikciyeTutar.ToString("N2") ₺</div><div class="stat-desc">@ozet.TedarikciyeAdet Adet İşlem</div></div></div>
             <div class="col"><div class="stat-card stat-card-purple"><span class="stat-title">Bankaya Verilen</span><div class="stat-val">@ozet.BankayaVerilenTutar.ToString("N2") ₺</div><div class="stat-desc">@ozet.BankayaVerilenAdet Adet İşlem</div></div></div>
             <div class="col"><div class="stat-card stat-card-teal"><span class="stat-title">Bankadan Tahsil</span><div class="stat-val">@ozet.TahsilEdilenTutar.ToString("N2") ₺</div><div class="stat-desc">@ozet.TahsilEdilenAdet Adet İşlem</div></div></div>
+        </div>
+        <!-- ÇEK PLAN ↔ İBRAZ KONTROLÜ: Kasa Nakit Akışı'nda planlanan tedarikçi ile gerçek çıkış (ciro / bankaya ibraz) aynı mı? Kartlar tabloyu süzer (data-kontrol). -->
+        <div class="dash-card mb-4" id="cekKontrolKart">
+            <div class="dash-header flex-wrap gap-2">
+                <h6 class="dash-header-title"><i class="fas fa-clipboard-check me-2 text-primary"></i>Çek Plan ↔ İbraz Kontrolü <small class="text-muted fw-normal ms-2" style="font-size:.72rem">Kasa Nakit Akışı'nda planlanan tedarikçi ile çekin gerçek çıkış yeri karşılaştırılır; farklı yere çıkan çekler burada görünür</small></h6>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="text-muted" style="font-size:.72rem">Göster:</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary r123-kontrol active" data-kontrol="" onclick="r123KontrolSuz(this)">Tümü</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger r123-kontrol" data-kontrol="Farklı" onclick="r123KontrolSuz(this)"><i class="fas fa-triangle-exclamation me-1"></i>Farklı (@kFarkli)</button>
+                    <button type="button" class="btn btn-sm btn-outline-success r123-kontrol" data-kontrol="Uyumlu" onclick="r123KontrolSuz(this)"><i class="fas fa-check me-1"></i>Uyumlu (@kUyumlu)</button>
+                    <button type="button" class="btn btn-sm btn-outline-warning r123-kontrol" data-kontrol="İbraz Bekliyor" onclick="r123KontrolSuz(this)"><i class="fas fa-hourglass-half me-1"></i>İbraz Bekliyor (@kBekleyen)</button>
+                    <button type="button" class="btn btn-sm btn-outline-info r123-kontrol" data-kontrol="Plansız İbraz" onclick="r123KontrolSuz(this)"><i class="fas fa-question me-1"></i>Plansız İbraz (@kPlansiz)</button>
+                    <a href="/Rapor79" class="btn btn-sm btn-light border" title="Kasa Nakit Akışı › Çek / Senet sekmesi: planlama burada yapılır"><i class="fas fa-money-bill-wave me-1"></i>Kasa Nakit Akışı</a>
+                    <a href="/CekAkibeti/Index2" class="btn btn-sm btn-light border" title="Çek Akıbeti Raporu: işlem türü ve planlanan tedarikçi"><i class="fas fa-money-check-alt me-1"></i>Çek Akıbeti</a>
+                </div>
+            </div>
+            <div class="row g-3 p-3 pt-2">
+                <div class="col"><div class="stat-card stat-card-red" style="cursor:pointer" onclick="r123KontrolSuz(document.querySelector('.r123-kontrol[data-kontrol=\'Farklı\']'))"><span class="stat-title">Farklı Yere Çıkan</span><div class="stat-val">@kFarkli</div><div class="stat-desc">plan ≠ ibraz / ciro yeri · finans kontrolü</div></div></div>
+                <div class="col"><div class="stat-card stat-card-green" style="cursor:pointer" onclick="r123KontrolSuz(document.querySelector('.r123-kontrol[data-kontrol=\'Uyumlu\']'))"><span class="stat-title">Plana Uygun</span><div class="stat-val">@kUyumlu</div><div class="stat-desc">planlanan tedarikçiye çıktı</div></div></div>
+                <div class="col"><div class="stat-card stat-card-orange" style="cursor:pointer" onclick="r123KontrolSuz(document.querySelector('.r123-kontrol[data-kontrol=\'İbraz Bekliyor\']'))"><span class="stat-title">İbraz Bekleyen</span><div class="stat-val">@kBekleyen</div><div class="stat-desc">planlandı, henüz çıkmadı</div></div></div>
+                <div class="col"><div class="stat-card stat-card-blue" style="cursor:pointer" onclick="r123KontrolSuz(document.querySelector('.r123-kontrol[data-kontrol=\'Plansız İbraz\']'))"><span class="stat-title">Plansız Çıkan</span><div class="stat-val">@kPlansiz</div><div class="stat-desc">Kasa Nakit Akışı planı yoktu</div></div></div>
+            </div>
         </div>
     }
     @if (currentHesapTipi == "KASA" && ViewBag.KasaOzet != null)
@@ -665,7 +690,7 @@
                             <th width="7%">İŞLEM NO</th>
                             <th width="7%">TARİH</th>
                             <th width="6%">YÖN</th>
-                            @if (currentHesapTipi == "CEK") { <th width="10%">ÇEK DETAYI</th> }
+                            @if (currentHesapTipi == "CEK") { <th width="9%">ÇEK DETAYI</th> <th width="10%">PLANLANAN TEDARİKÇİ</th> <th width="11%">İBRAZ / CİRO BİLGİSİ</th> <th width="7%" class="text-center">KONTROL</th> }
                             <th width="14%">HESAP KODU / ADI</th>
                             <th width="14%">KARŞI HESAP / CARİ</th>
                             <th>AÇIKLAMA & TİP</th>
@@ -683,7 +708,7 @@
                                 bool isEksik = item.OnayDurumu == "EKSİK";
                                 
                                 // Bootstrap standart renk sınıflarını burada atıyoruz
-                                <tr class="@(isEksik ? "table-danger" : (isManuel ? "table-warning" : ""))" data-banka="@item.KasaKodu" data-sirket="@item.Sirket">
+                                <tr class="@(isEksik ? "table-danger" : (isManuel ? "table-warning" : ""))" data-banka="@item.KasaKodu" data-sirket="@item.Sirket" data-kontrol="@(item.PlanKontrol ?? "")">
                                     <td>
                                         @if (!isManuel) {
                                             <button type="button" class="btn btn-light border btn-sm" style="border-radius:6px; color:#ef4444;" onclick="downloadPDF('@item.DbKey', @item.IslemNo, '@item.IslemTipi')" title="PDF İndir"><i class="fas fa-file-pdf"></i></button>
@@ -701,8 +726,28 @@
 
                                     @if (currentHesapTipi == "CEK") {
                                         <td>
-                                            @if(!string.IsNullOrEmpty(item.CekNumarasi)) { <span style="font-size:0.8rem; color:#1e293b; font-weight:700;">@item.CekNumarasi</span><br/> }
+                                            @if(!string.IsNullOrEmpty(item.CekNumarasi)) { <span style="font-size:0.8rem; color:#1e293b; font-weight:700;">@item.CekNumarasi</span> @if (item.CekBelge == "Senet") { <span class="badge bg-light text-dark border" style="font-size:.6rem">Senet</span> } <br/> }
                                             @if(item.CekVadeTarihi.HasValue) { <span style="font-size:0.75rem; color:#ef4444; font-weight:600;">Vade: @item.CekVadeTarihi.Value.ToString("dd.MM.yyyy")</span> }
+                                        </td>
+                                        @* Kasa Nakit Akışı planı: kime ödenmesi planlandı (Data/CekAkibetOrnek.cs › PlanlananTedarikci) *@
+                                        <td>
+                                            @if (!string.IsNullOrEmpty(item.PlanlananTedarikci)) { <span style="font-size:0.8rem; color:#1e293b; font-weight:600;">@item.PlanlananTedarikci</span><br /><span style="font-size:0.68rem; color:#64748b;">@item.PlanKaynak@(item.PlanlamaTarihi.HasValue ? " · " + item.PlanlamaTarihi.Value.ToString("dd.MM.yyyy") : "")</span> }
+                                            else { <span class="text-muted" style="font-size:.75rem">Plan yok</span> }
+                                        </td>
+                                        @* gerçek çıkış: ciro edilen tedarikçi ya da tahsile verilen banka + belge *@
+                                        <td>
+                                            @if (!string.IsNullOrEmpty(item.IbrazYeri)) { <span style="font-size:0.8rem; color:#1e293b; font-weight:600;">@item.IbrazYeri</span><br /><span style="font-size:0.68rem; color:#64748b;">@item.IbrazTuru@(item.IbrazTarihi.HasValue ? " · " + item.IbrazTarihi.Value.ToString("dd.MM.yyyy") : "")@(string.IsNullOrEmpty(item.IbrazBelgeNo) ? "" : " · " + item.IbrazBelgeNo)</span> }
+                                            else { <span class="text-muted" style="font-size:.75rem">Portföyde · ibraz yok</span> }
+                                        </td>
+                                        <td class="text-center">
+                                            @switch (item.PlanKontrol)
+                                            {
+                                                case "Uyumlu": <span class="badge bg-success badge-status" title="Planlanan tedarikçi ile çıkış yeri aynı"><i class="fas fa-check me-1"></i>Uyumlu</span> break;
+                                                case "Farklı": <span class="badge bg-danger badge-status" title="DİKKAT: Kasa Nakit Akışı planı @item.PlanlananTedarikci, çıkış @item.IbrazYeri"><i class="fas fa-triangle-exclamation me-1"></i>Farklı</span> break;
+                                                case "İbraz Bekliyor": <span class="badge bg-warning text-dark badge-status" title="Planlandı, henüz çıkış yok"><i class="fas fa-hourglass-half me-1"></i>İbraz Bekliyor</span> break;
+                                                case "Plansız İbraz": <span class="badge bg-info text-dark badge-status" title="Kasa Nakit Akışı planı olmadan çıkış yapıldı"><i class="fas fa-question me-1"></i>Plansız</span> break;
+                                                default: <span class="text-muted">—</span> break;
+                                            }
                                         </td>
                                     }
 
@@ -2288,5 +2333,22 @@
                 }
             });
         });
+    </script>
+    <script>
+        // Çek Plan ↔ İbraz Kontrolü süzgeci: kartlar / düğmeler ana hareket tablosunu satırların data-kontrol değerine göre süzer (DataTables arama kancası)
+        (function () {
+            window.r123Kontrol = '';
+            if ($.fn.dataTable) $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+                if (settings.nTable.id !== 'anaHareketTablosu' || !window.r123Kontrol) return true;
+                var tr = settings.aoData[dataIndex] && settings.aoData[dataIndex].nTr;
+                return !!tr && (tr.getAttribute('data-kontrol') || '') === window.r123Kontrol;
+            });
+            window.r123KontrolSuz = function (btn) {
+                if (!btn) return;
+                window.r123Kontrol = btn.getAttribute('data-kontrol') || '';
+                document.querySelectorAll('.r123-kontrol').forEach(function (b) { b.classList.toggle('active', b === btn); });
+                var t = $('#anaHareketTablosu'); if (t.length && $.fn.dataTable.isDataTable(t)) t.DataTable().draw();
+            };
+        })();
     </script>
 }

@@ -24,6 +24,7 @@ using System.Net;
 using WebApplication3.Services;
 namespace WebApplication3.Controllers
 {
+#if URETILEN_KAPALI   // üretilmiş denetleyici devre dışı: elle yazılmış sürüm Controllers/Rapor123Controller.cs (Data/CekAkibetOrnek.cs + NakitAkisOrnek.cs verisiyle); model sınıfları aşağıda kullanılmaya devam eder
     [Authorize]
     [Route("[controller]")]
     public class Rapor123Controller : Controller
@@ -308,9 +309,7 @@ return default;
 }
 
     }
-
-
-
+#endif
 
     public class R123_FinekraCompanyConfig
     {
@@ -516,6 +515,17 @@ return default;
 
         public DateTime? CekVadeTarihi { get; set; }
         public string CekNumarasi { get; set; }
+        // --- çek plan ↔ ibraz kontrolü (Data/CekAkibetOrnek.cs; elle yazılmış Rapor123Controller doldurur): Kasa Nakit Akışı'nda planlanan tedarikçi, gerçek ibraz / ciro bilgisi ve karşılaştırma
+        public int? CekDocEntry { get; set; }
+        public string CekBelge { get; set; }             // Çek | Senet
+        public string PlanlananTedarikci { get; set; }
+        public DateTime? PlanlamaTarihi { get; set; }
+        public string PlanKaynak { get; set; }           // "Kasa Nakit Akışı #1234" / planlayan
+        public string IbrazYeri { get; set; }
+        public string IbrazTuru { get; set; }            // Ciro | Bankaya İbraz | Teminat
+        public DateTime? IbrazTarihi { get; set; }
+        public string IbrazBelgeNo { get; set; }
+        public string PlanKontrol { get; set; }          // Uyumlu | Farklı | İbraz Bekliyor | Plansız İbraz | —
 
         public string OnayDurumu { get; set; }
         public string NotBasligi { get; set; }

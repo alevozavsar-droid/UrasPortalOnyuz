@@ -19,6 +19,7 @@ using WebApplication3.Models;
 
 namespace WebApplication3.Controllers
 {
+#if URETILEN_KAPALI   // üretilmiş denetleyici devre dışı: elle yazılmış sürüm Controllers/Rapor2Controller.cs (Data/CekAkibetOrnek.cs verisiyle)
     [Authorize]
     [Route("CekAkibeti")]
     public class Rapor2Controller : Controller
@@ -229,4 +230,5 @@ return View("Index2", WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Model
  {return Json(new { success = true, message = "Kayıt başarıyla eşitlendi." });
 }
     }
+#endif
 }

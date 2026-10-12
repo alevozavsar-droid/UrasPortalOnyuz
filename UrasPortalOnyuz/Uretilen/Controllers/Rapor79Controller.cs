@@ -74,6 +74,23 @@ namespace FinansRaporlama.Controllers
 
 
         public List<DekontKaydi> DekontListesi { get; set; } = new List<DekontKaydi>();
+
+        // --- ödeme yöntemine özel alanlar (Kasa Nakit Akışı yöntem sekmeleri; elle yazılmış Controllers/Rapor79Controller.cs + Data/NakitAkisOrnek.cs) ---
+        public string U_CekDocEntryler { get; set; } = "";      // seçilen çek / senet kayıtları: Data/CekAkibetOrnek.cs DocEntry'leri, virgülle
+        public string U_CekNolar { get; set; } = "";            // seçilen belge numaraları (görünüm / not)
+        public List<NakitAkisBelge> Belgeler { get; set; } = new List<NakitAkisBelge>();   // seçilen belgelerin güncel akıbeti (okuma anında Çek Akıbeti kaydından doldurulur)
+        public string U_BankaHesabi { get; set; } = ""; public string U_AliciIban { get; set; } = ""; public string U_DekontNo { get; set; } = "";   // Havale / EFT
+        public string U_Kasa { get; set; } = ""; public string U_MakbuzNo { get; set; } = ""; public string U_TeslimAlan { get; set; } = "";        // Nakit
+        public string U_Kart { get; set; } = ""; public string U_Taksit { get; set; } = ""; public string U_EkstreDonemi { get; set; } = "";        // Kredi Kartı / Banka Kartı
+        public string U_MahsupFisNo { get; set; } = ""; public string U_KarsiBelge { get; set; } = "";                                               // Mahsup
+        public string U_TemlikNo { get; set; } = ""; public string U_TemlikEden { get; set; } = "";                                                   // Temlik
+    }
+
+    /// <summary>Kasa Nakit Akışı satırına seçilen çek / senet (Data/CekAkibetOrnek.cs kaydının anlık görünümü): akıbet ve plan ↔ ibraz kontrolü ile.</summary>
+    public class NakitAkisBelge
+    {
+        public int CekDocEntry { get; set; } public string No { get; set; } public string Belge { get; set; } public string Banka { get; set; } public string AsilBorclu { get; set; } public string KimdenGeldi { get; set; }
+        public DateTime Vade { get; set; } public decimal Tutar { get; set; } public string PB { get; set; } public string Akibet { get; set; } public string IbrazYeri { get; set; } public string Kontrol { get; set; } public string PlanlananTedarikci { get; set; }
     }
 
     public class KasaBakiyeViewModel
@@ -239,6 +256,7 @@ namespace FinansRaporlama.Controllers
 
 
 
+#if URETILEN_KAPALI   // üretilmiş denetleyici devre dışı: elle yazılmış sürüm Controllers/Rapor79Controller.cs (Data/NakitAkisOrnek.cs + CekAkibetOrnek.cs verisiyle); model sınıfları yukarıda kullanılmaya devam eder
     [Authorize]
     [Route("[controller]")]
     public class Rapor79Controller : Controller
@@ -530,4 +548,5 @@ return View("Index", WebApplication3.OrnekDoldurucu.Yeni<FinansRaporlama.Control
  {return default;
 }
     }
+#endif
 }

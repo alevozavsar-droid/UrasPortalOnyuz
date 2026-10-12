@@ -398,10 +398,22 @@ $(document).ready(function () {
         actualRow.find('.kur-display').val(formatRateStr(calcKur));
 
         $('#satirCekSecimModal').modal('hide');
-        
+
         enqueueSave(actualRow);
         calculateAllTotals();
         toastr.success('Seçilen belge bilgileri satıra başarıyla uygulandı.');
+
+        // Çek Akıbeti bağlantısı: seçilen belgeler kayıtta "Planlandı" olur (planlanan tedarikçi = satırın kurumu; Data/CekAkibetOrnek.cs);
+        // yöntem sekmesindeki satır da güncellenir (rapor79-yontem.js).
+        const secilenBelgeler = checked.map(function () { return parseInt($(this).val()); }).get();
+        fetch('/Rapor79/BelgePlanla', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
+            body: JSON.stringify({ DbName: dbName, DocEntry: parseInt(docEntry), CekDocEntryler: secilenBelgeler })
+        }).then(r => r.json()).then(d => {
+            if (d.success) { toastr.info(d.message); if (window.r79YontemSatirGuncelle) window.r79YontemSatirGuncelle(dbName, parseInt(docEntry), d.row); }
+            else if (d.message) toastr.warning(d.message);
+        }).catch(function () { });
     });
 
 
