@@ -281,6 +281,18 @@ tasarımından uyarlandı:
     Rapor123 › Çek: `CekAkibetOrnek.Hareketler` (gerçekleşen adımlar) + planlı adımlar (OnayDurumu boş, "PLAN"). **Nakit avans senkronu**
     (`NakitAkisOrnek.AvanslariSenkronla`, her okumada): onaylı avanslar Nakit satırı (`U_AvansNo`), modülde teslim → satır ÖDENDİ; satır ÖDENDİ → `NakitAvansOrnek.Olay`
     CashPaymentCreated (Bekleyen Ödemeler'den düşer). Portföy seçimi: `SecilebilirBelgeler?sirket=&hepsi=` (başka şirket portföyü, planlılar işaretli).
+    **Onay · makbuz · muhasebe · belge kontrolü:** satırda `U_SonOdemeTarihi`, `U_FaturaTutari` (belge tutarı; satır tutarı belgeye göre oran), `U_UstDocEntry` (taksit
+    kardeşleri), `U_OnayDurumu / U_Onaylayan / U_OnayTarihi`, `U_CikisTalebi…` (plansız çek çıkış talebi), `U_YevmiyeNo`. Nakit onaycıları `NakitAkisOrnek.NakitOnaycilari`
+    (Alev Özavşar, Neslihan Uludağ, Özge İsen), GMY çek çıkış onaycısı `CekCikisOnaycilari` (Alev Özavşar). `NakitOnayla / NakitReddet`; `CekCikisKontrollu` (Rapor2
+    Update* uçları buradan geçer: çıkış türü + plansız belge → `CekCikisTalebi` satırı "Özel Onay / Onay Bekliyor", belge Planlandı; `CekCikisOnayla` → `IslemTuruDegistir`
+    + ÖDENDİ, `CekCikisReddet` → PlanKaldir + satır silinir); `Taksitlendir` (oran + tarih parçaları); `BelgeOzeti` (plan, kalan, mükerrer uyarıları: aynı belge aynı tutar /
+    belge tutarı aşımı), `MukerrerAdaylar` (kayıt öncesi; `MukerrerKontrolEdildi = 1` ile zorla), `BelgeDetay`, `CariBelgeler` (açık fatura / sipariş + cari bakiye).
+    `Data/MakbuzOrnek.cs`: `KasaMakbuzu` (KTM-2026-0001, tutar yazıyla), `Olustur` (Nakit + Onaylandı şart) → `NakitAkisOrnek.MakbuzIsle` → `OdendiIsaretle`; yazdırılabilir
+    `Views/Rapor79/Makbuz.cshtml`. `Data/MuhasebeOrnek.cs`: `YevmiyeFisi` (YEV-2026-000001), `OdemeFisi` (320 / 332 / 196 borç; 100 / 102 / 300 / 101 / 121 / 120 alacak;
+    fatura sahibi ≠ ödeyen → 132), `CiroFisi` (grup içi ciro: eden 332/101, alan 101/132; tedarikçi 320/101; banka 102/101) — `OdendiIsaretle`, `AlanKaydet`, `Guncelle`
+    ve `CekAkibetOrnek.DolasimAdimGerceklestir` çağırır. Rapor79 uçları: `NakitOnay`, `CekCikisOnay`, `MakbuzOlustur`, `Makbuz`, `MakbuzVeri`, `Yevmiye`, `Taksitlendir`,
+    `BelgeDetay`, `CariBelgeler`; `SatirEkle / SatirKaydet` mükerrerde `{ success:false, mukerrer:true }` döner. Ekran: üst kartlar filtre (`F.kpi`), tüm sekmelerde Son Ödeme
+    Tarihi, Belge No (→ belge detayı modalı), Fatura Sahibi ve Ödeyen Şirket ayrı; Nakit sekmesinde onay sütunu ve Makbuz Kes; çekmecede işlem çubuğu + Belge Seç.
   - **Kasa Nakit Akışı — eski görünüm** (`/Rapor79/Eski`, `Views/Rapor79/Eski.cshtml` + `wwwroot/js/rapor79.js` + `rapor79-yontem.js`): ana projedeki 23 sütunlu
     liste; ödeme yöntemi SEKMELERİ (Tümü = `.ana-liste`; yöntem panelleri `.yontem-panel[data-method]`), Çek / Senet satırında "Belge Seç" → `#belgeSecModal` →
     `/Rapor79/BelgePlanla`, `/Rapor79/BelgePlanKaldir`, `/Rapor79/YontemAlanKaydet`; ana projedeki `#btnSatirCekOnayla` akışı da `BelgePlanla` çağırır.

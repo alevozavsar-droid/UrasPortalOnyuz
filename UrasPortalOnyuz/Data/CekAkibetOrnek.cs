@@ -109,6 +109,8 @@ namespace WebApplication3.Data
             ("13", "Konkordato - Bankada"), ("14", "Konkordato - Tedarikçide"), ("15", "İade Edildi"), ("16", "İptal Edildi")
         };
         public static string IslemKodu(string ad) => IslemTurleri.FirstOrDefault(t => t.Ad == ad).Kod ?? "1";
+        /// <summary>Belgenin şirketten çıktığı işlem türleri: Kasa Nakit Akışı'nda planlanmamış belge için bu türlere geçiş GMY onayına düşer (NakitAkisOrnek.CekCikisKontrollu).</summary>
+        public static bool CikisTuruMu(string ad) => ad == "Ciro Edildi" || ad == "Bankaya Tahsile Verildi" || ad == "Teminata Verildi" || ad == "Konkordato - Tedarikçide" || ad == "Konkordato - Bankada" || ad == "Erteleme Yapıldı - Bankada";
         public static string IslemAdi(string kod) => IslemTurleri.FirstOrDefault(t => t.Kod == kod).Ad ?? kod;
         public static readonly string[] KullanimDurumlari = { "Kullanılabilir", "Riskli", "Teminat", "Bloke" };
         static readonly string[] Subeler = { "Merkez", "Gebze", "Çorlu", "İkitelli", "Bursa OSB", "Kadıköy", "Bornova", "Çerkezköy", "Kartal", "Ümraniye" };
@@ -331,12 +333,14 @@ namespace WebApplication3.Data
                     var s = Sirketler.FirstOrDefault(x => x.Ad == adim.Alan); k.Sirket = adim.Alan; k.DbName = s.DbName ?? adim.Alan; k.DbKey = s.DbKey ?? k.DbKey; k.IbrazYeri = ""; k.IbrazTuru = ""; k.IbrazTarihi = null; k.IbrazBelgeNo = "";
                     _hareketler.Add(new CekHareket { Tarih = simdi, CekDocEntry = k.DocEntry, No = k.No, Belge = k.Belge, Eden = adim.Eden, Alan = adim.Alan, Tur = "Grup İçi Ciro", BelgeNo = adim.BelgeNo, Tutar = k.Tutar, AdimSira = adim.Sira, AdimToplam = k.Dolasim.Count, Kullanici = kullanici ?? "" });
                     _gunluk.Add(new CekAkibetGunluk { Tarih = simdi, Kullanici = kullanici ?? "", Sirket = adim.Eden, No = k.No, Islem = "Grup İçi Ciro", Aciklama = $"{adim.Eden} → {adim.Alan} · {adim.BelgeNo} · kapanan {(kapanan).ToString("N0", Tr)} TL" + (yeni > 0 ? $" · yeni bakiye {(yeni).ToString("N0", Tr)} TL" : "") + $" · adım {adim.Sira}/{k.Dolasim.Count}" });
-                    return (true, $"{k.No}: {adim.Eden} → {adim.Alan} ciro edildi ({adim.BelgeNo}); belge artık {adim.Alan} portföyünde. Kapanan grup içi borç {(kapanan).ToString("N0", Tr)} TL." + (yeni > 0 ? $" Yeni bakiye {(yeni).ToString("N0", Tr)} TL." : ""), k);
+                    var fisler = MuhasebeOrnek.CiroFisi(DbName(adim.Eden), s.DbName, adim.Eden, adim.Alan, "Grup İçi Ciro", adim.BelgeNo, k.No, k.Tutar, kullanici); foreach (var f in fisler) f.Tarih = simdi;
+                    return (true, $"{k.No}: {adim.Eden} → {adim.Alan} ciro edildi ({adim.BelgeNo}); belge artık {adim.Alan} portföyünde. Kapanan grup içi borç {(kapanan).ToString("N0", Tr)} TL." + (yeni > 0 ? $" Yeni bakiye {(yeni).ToString("N0", Tr)} TL." : "") + $" Muhasebe fişleri: {string.Join(", ", fisler.Select(f => f.No))}.", k);
                 }
                 _hareketler.Add(new CekHareket { Tarih = simdi, CekDocEntry = k.DocEntry, No = k.No, Belge = k.Belge, Eden = adim.Eden, Alan = adim.Alan, Tur = adim.Tur, BelgeNo = adim.BelgeNo, Tutar = k.Tutar, AdimSira = adim.Sira, AdimToplam = k.Dolasim.Count, Kullanici = kullanici ?? "" });
                 string ad = adim.Tur == "Bankaya İbraz" ? "Bankaya Tahsile Verildi" : "Ciro Edildi"; string eski = k.IslemTuru; k.IslemTuru = ad; k.IbrazTuru = adim.Tur == "Bankaya İbraz" ? "Bankaya İbraz" : "Ciro"; k.IbrazYeri = adim.Tur == "Bankaya İbraz" ? ButceOrnek.TahsilBankalari[k.DocEntry % 2] : adim.Alan; k.IbrazTarihi = simdi; k.IbrazBelgeNo = adim.BelgeNo;
                 _gunluk.Add(new CekAkibetGunluk { Tarih = simdi, Kullanici = kullanici ?? "", Sirket = k.Sirket, No = k.No, Islem = ad, Aciklama = $"{adim.Tur}: {k.IbrazYeri} · {adim.BelgeNo} · dolaşım tamamlandı ({k.DolasimOzeti})" + (k.Kontrol == "Farklı" ? $" · DİKKAT: plan {k.PlanlananTedarikci}" : "") });
-                return (true, $"{k.No}: {adim.Tur} gerçekleşti → {k.IbrazYeri} ({adim.BelgeNo}). Dolaşım tamamlandı; akıbet {ad}.", k);
+                var sonFis = MuhasebeOrnek.CiroFisi(k.DbName, null, k.Sirket, k.IbrazYeri, adim.Tur, adim.BelgeNo, k.No, k.Tutar, kullanici); foreach (var f in sonFis) f.Tarih = simdi;
+                return (true, $"{k.No}: {adim.Tur} gerçekleşti → {k.IbrazYeri} ({adim.BelgeNo}). Dolaşım tamamlandı; akıbet {ad}. Muhasebe fişi {string.Join(", ", sonFis.Select(f => f.No))}.", k);
             }
         }
         public static (bool ok, string mesaj) DolasimIptal(int cekDocEntry, string kullanici)

@@ -1428,7 +1428,7 @@
                         this.dataset.previousValue = newType;
                         item.CekIslemTuru = newType;
                         toastr.success("İşlem başarıyla güncellendi. Yeni hesaplamaların yansıması için sayfayı yenileyiniz.");
-                    }
+                    } else { this.value = this.dataset.previousValue; }
                 });
 
                 // --- Planlanan tedarikçi ---
@@ -1501,7 +1501,8 @@
                     const response = await fetch(`/CekAkibeti/UpdateCheckTransactionTypeByTahsilat${dbQueryString}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'RequestVerificationToken': token }, body: JSON.stringify({ TahsilatBelgeNo: parseInt(tahsilatBelgeNo), NewCheckTransactionType: newType }) });
                     if (!response.ok) { toastr.error(`HTTP Hata: ${response.status}`); return false; }
                     const data = await response.json();
-                    if (data.success) return true; else return false;
+                    if (data.onayaDustu) { toastr.warning(data.message, 'GMY onayı', { timeOut: 12000 }); return false; }   // plansız çıkış: işlenmedi, Kasa Nakit Akışı'na onaya düştü
+                    if (data.success) return true; else { if (data.message) toastr.error(data.message); return false; }
                 } catch (error) { return false; }
             }
 
@@ -1511,7 +1512,8 @@
                     const response = await fetch(`/CekAkibeti/UpdateCheckTransactionTypeByIbrazBelge${dbQueryString}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'RequestVerificationToken': token }, body: JSON.stringify({ IbrazBelgeNo: ibrazBelgeNo, NewCheckTransactionType: newType }) });
                     if (!response.ok) { toastr.error(`HTTP Hata: ${response.status}`); return false; }
                     const data = await response.json();
-                    if (data.success) return true; else return false;
+                    if (data.onayaDustu) { toastr.warning(data.message, 'GMY onayı', { timeOut: 12000 }); return false; }
+                    if (data.success) return true; else { if (data.message) toastr.error(data.message); return false; }
                 } catch (error) { return false; }
             }
 
@@ -1522,6 +1524,8 @@
                     const response = await fetch(`/CekAkibeti/UpdateCheckTransactionTypeByDocEntry${dbQueryString}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'RequestVerificationToken': token }, body: JSON.stringify({ DocEntry: parseInt(docEntry), NewCheckTransactionType: newType }) });
                     if (!response.ok) { toastr.error(`HTTP Hata: ${response.status}`); return false; }
                     const data = await response.json();
+                    // Kasa Nakit Akışı'nda planlanmamış çek: çıkış işlenmez, GMY onayına düşer (seçim eski değerine döner)
+                    if (data.onayaDustu) { toastr.warning(data.message, 'GMY onayı', { timeOut: 12000 }); return false; }
                     if (data.success) { if (data.message && data.message.indexOf('DİKKAT') >= 0) toastr.warning(data.message); return true; }
                     toastr.error(data.message || 'Güncellenemedi.'); return false;
                 } catch (error) { return false; }

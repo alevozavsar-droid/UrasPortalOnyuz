@@ -69,7 +69,11 @@ namespace WebApplication3.Data
                 var cikmis = m.Belgeler.Where(b => b.Akibet != "Planlandı" && b.Akibet != "Portföyde").ToList();
                 if (cikmis.Count > 0) { atlanan.Add($"#{m.DocEntry} {m.U_Kurum}: {string.Join(", ", cikmis.Select(b => $"{b.No} {b.Akibet}{(string.IsNullOrEmpty(b.IbrazYeri) ? "" : " → " + b.IbrazYeri)}"))} (belge plan dışı çıkmış; Takip Paneli'nde kontrol edin)"); uygun.Remove(m); continue; }
                 // çek / senet talimatı belgesiz olmaz: önce portföyden belge seçilip planlanmalı
-                if ((m.U_OdemeYontemi == "Çek" || m.U_OdemeYontemi == "Senet") && m.Belgeler.Count == 0) { atlanan.Add($"#{m.DocEntry} {m.U_Kurum}: {m.U_OdemeYontemi.ToLower(Tr)} seçilmemiş (önce Portföyden Seç)"); uygun.Remove(m); }
+                if ((m.U_OdemeYontemi == "Çek" || m.U_OdemeYontemi == "Senet") && m.Belgeler.Count == 0) { atlanan.Add($"#{m.DocEntry} {m.U_Kurum}: {m.U_OdemeYontemi.ToLower(Tr)} seçilmemiş (önce Portföyden Seç)"); uygun.Remove(m); continue; }
+                // plansız çek çıkış talebi GMY onayıyla işlenir, talimata girmez
+                if (!string.IsNullOrEmpty(m.U_CikisTalebi)) { atlanan.Add($"#{m.DocEntry} {m.U_Kurum}: çek çıkış talebi (GMY onayı ile işlenir)"); uygun.Remove(m); continue; }
+                // nakit ödeme onaylanmadan talimata alınmaz
+                if (m.U_OdemeYontemi == "Nakit" && m.U_OnayDurumu != "Onaylandı") { atlanan.Add($"#{m.DocEntry} {m.U_Kurum}: nakit ödeme onayı yok ({(m.U_OnayDurumu == "" ? "onay bekliyor" : m.U_OnayDurumu.ToLower(Tr))}; onaycılar {string.Join(" / ", NakitAkisOrnek.NakitOnaycilari)})"); uygun.Remove(m); }
             }
             lock (Kilit)
             {
@@ -116,9 +120,16 @@ namespace WebApplication3.Data
                 if (yeniDurum == "Onaylandı") { t.Onaylayan = kullanici ?? ""; t.OnayTarihi = z; } else if (yeniDurum == "Bankaya İletildi" || yeniDurum == "Teslim Edildi") t.IletimTarihi = z; else if (yeniDurum == "Gerçekleşti") t.GerceklesmeTarihi = z;
                 t.Gunluk.Add(new TalimatGunluk { Tarih = z, Kullanici = kullanici ?? "", Islem = yeniDurum, Aciklama = not ?? "" });
             }
-            if (yeniDurum == "Gerçekleşti") foreach (var s in t.Satirlar) NakitAkisOrnek.OdendiIsaretle(s.DbName, s.DocEntry, t.No, kullanici);
+            var makbuzlar = new List<string>();
+            if (yeniDurum == "Gerçekleşti")
+                foreach (var s in t.Satirlar)
+                {
+                    // kasa talimatı gerçekleşince her satır için kasa tediye makbuzu kesilir (makbuz satırı ÖDENDİ yapar, fiş atar); diğer yöntemlerde satır doğrudan ödenir
+                    if (t.Yontem == "Nakit") { var mk = MakbuzOrnek.Olustur(s.DbName, s.DocEntry, null, t.Kasa, kullanici, t.No); if (mk.ok && mk.makbuz != null) makbuzlar.Add(mk.makbuz.No); else NakitAkisOrnek.Gunluge(s.DbName, s.DocEntry, "Makbuz", "Makbuz kesilemedi: " + mk.mesaj, kullanici); }
+                    else NakitAkisOrnek.OdendiIsaretle(s.DbName, s.DocEntry, t.No, kullanici);
+                }
             else foreach (var s in t.Satirlar) NakitAkisOrnek.Gunluge(s.DbName, s.DocEntry, "Talimat", $"{t.No} → {yeniDurum}", kullanici);
-            return (true, yeniDurum == "Gerçekleşti" ? $"{t.No} gerçekleşti: {t.Satirlar.Count} satır ÖDENDİ" + (t.Satirlar.Any(s => s.Belgeler.Count > 0) ? "; belgeler dolaşım planına göre ciro / ibraz edildi (Çek Akıbeti ve Takip Paneli güncellendi)" : "") + (t.Satirlar.Any(s => s.AvansNo != "") ? "; avanslar teslim edildi" : "") + "." : $"{t.No} → {yeniDurum}.");
+            return (true, yeniDurum == "Gerçekleşti" ? $"{t.No} gerçekleşti: {t.Satirlar.Count} satır ÖDENDİ" + (t.Satirlar.Any(s => s.Belgeler.Count > 0) ? "; belgeler dolaşım planına göre ciro / ibraz edildi (Çek Akıbeti ve Takip Paneli güncellendi)" : "") + (makbuzlar.Count > 0 ? "; kasa tediye makbuzları kesildi: " + string.Join(", ", makbuzlar) : "") + (t.Satirlar.Any(s => s.AvansNo != "") ? "; avanslar teslim edildi" : "") + "; muhasebe fişleri atıldı." : $"{t.No} → {yeniDurum}.");
         }
     }
 }

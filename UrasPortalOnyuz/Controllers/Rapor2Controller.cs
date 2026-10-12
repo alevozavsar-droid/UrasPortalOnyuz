@@ -91,19 +91,19 @@ namespace WebApplication3.Controllers
         public IActionResult UpdateCheckTransactionTypeByIbrazBelge([FromBody] IbrazBelgeIstek model)
         {
             var k = CekAkibetOrnek.Kayitlar.FirstOrDefault(x => x.IbrazBelgeNo == model?.IbrazBelgeNo); if (k == null) return Json(new { success = false, message = "İbraz belgesi bulunamadı." });
-            var r = CekAkibetOrnek.IslemTuruDegistir(k.DocEntry, model.NewCheckTransactionType, null, null, Kullanici); return Json(new { success = r.ok, message = r.mesaj });
+            var r = NakitAkisOrnek.CekCikisKontrollu(k.DocEntry, model.NewCheckTransactionType, null, null, Kullanici); return Json(new { success = r.ok, message = r.mesaj, onayaDustu = r.onayaDustu, nakitAkisDocEntry = r.docEntry });
         }
         public class TahsilatIstek { public string TahsilatBelgeNo { get; set; } public string NewCheckTransactionType { get; set; } }
         [HttpPost("UpdateCheckTransactionTypeByTahsilat")]
         public IActionResult UpdateCheckTransactionTypeByTahsilat([FromBody] TahsilatIstek model)
         {
             var k = CekAkibetOrnek.Kayitlar.FirstOrDefault(x => x.TahsilatBelgeNo == model?.TahsilatBelgeNo); if (k == null) return Json(new { success = false, message = "Tahsilat belgesi bulunamadı." });
-            var r = CekAkibetOrnek.IslemTuruDegistir(k.DocEntry, model.NewCheckTransactionType, null, null, Kullanici); return Json(new { success = r.ok, message = r.mesaj });
+            var r = NakitAkisOrnek.CekCikisKontrollu(k.DocEntry, model.NewCheckTransactionType, null, null, Kullanici); return Json(new { success = r.ok, message = r.mesaj, onayaDustu = r.onayaDustu, nakitAkisDocEntry = r.docEntry });
         }
         public class DocEntryIslemIstek { public int DocEntry { get; set; } public string NewCheckTransactionType { get; set; } public string IbrazYeri { get; set; } public string IbrazBelgeNo { get; set; } }
-        /// <summary>Belge numarası olmayan (portföydeki) çekler için kayıtla işlem türü güncelleme (görünüme eklenen yedek yol).</summary>
+        /// <summary>Belge numarası olmayan (portföydeki) çekler için kayıtla işlem türü güncelleme. Kasa Nakit Akışı'nda planlanmamış belge için çıkış türleri uygulanmaz; GMY onayına düşer (NakitAkisOrnek.CekCikisKontrollu).</summary>
         [HttpPost("UpdateCheckTransactionTypeByDocEntry")]
-        public IActionResult UpdateCheckTransactionTypeByDocEntry([FromBody] DocEntryIslemIstek model) { var r = CekAkibetOrnek.IslemTuruDegistir(model?.DocEntry ?? 0, model?.NewCheckTransactionType, model?.IbrazYeri, model?.IbrazBelgeNo, Kullanici); return Json(new { success = r.ok, message = r.mesaj }); }
+        public IActionResult UpdateCheckTransactionTypeByDocEntry([FromBody] DocEntryIslemIstek model) { var r = NakitAkisOrnek.CekCikisKontrollu(model?.DocEntry ?? 0, model?.NewCheckTransactionType, model?.IbrazYeri, model?.IbrazBelgeNo, Kullanici); return Json(new { success = r.ok, message = r.mesaj, onayaDustu = r.onayaDustu, nakitAkisDocEntry = r.docEntry }); }
         public class PlanlananTedarikciIstek { public int DocEntry { get; set; } public string NewPlannedSupplier { get; set; } }
         [HttpPost("UpdatePlannedSupplier")]
         public IActionResult UpdatePlannedSupplier([FromBody] PlanlananTedarikciIstek model) { var r = CekAkibetOrnek.PlanlananTedarikciDegistir(model?.DocEntry ?? 0, model?.NewPlannedSupplier, Kullanici); return Json(new { success = r.ok, message = r.mesaj }); }

@@ -1,0 +1,72 @@
+@model WebApplication3.Data.KasaMakbuzu
+@using System.Globalization
+@{
+    Layout = null;
+    var tr = CultureInfo.GetCultureInfo("tr-TR");
+    var bilgi = WebApplication3.Data.TalimatOrnek.SirketBilgisi.TryGetValue(Model.DbName ?? "", out var b) ? b : (Unvan: Model.Sirket, Adres: "", Web: "", Komiserler: new string[0]);
+    var fis = ViewBag.Yevmiye as WebApplication3.Data.YevmiyeFisi;
+    string pbAd = Model.PB == "TRY" ? "TL" : Model.PB;
+}
+@*
+    KASA TEDİYE MAKBUZU — yazdırılabilir (Kasa Nakit Akışı › Nakit › Makbuz Kes / kasa talimatı gerçekleşince otomatik). Onaylı nakit ödeme; makbuz kesilince satır ÖDENDİ olur,
+    muhasebe fişi (Data/MuhasebeOrnek.cs) otomatik atılır ve altta yazılır; nakit avansta avans modülünde teslim olayı işlenir. Tarayıcıdan yazdır / PDF kaydet.
+*@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <title>@ViewData["Title"]</title>
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 0; background: #f1f5f9; }
+        .sayfa { width: 210mm; min-height: 148mm; margin: 12px auto; background: #fff; padding: 14mm 14mm; box-sizing: border-box; box-shadow: 0 2px 12px rgba(0,0,0,.12); font-size: 10.5pt; }
+        .ust { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1.5px solid #111; padding-bottom: 8px; }
+        .logo { font-size: 20pt; font-weight: 800; letter-spacing: .08em; color: #0f766e; } .logo small { display: block; font-size: 8pt; letter-spacing: .2em; color: #64748b; font-weight: 600; }
+        .unvan { text-align: right; font-size: 9pt; } .unvan b { font-size: 11pt; display: block; margin-bottom: 2px; }
+        h2 { text-align: center; font-size: 15pt; letter-spacing: .12em; margin: 16px 0 4px; } .altbaslik { text-align: center; font-size: 9pt; color: #64748b; }
+        .kutu { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; margin-top: 14px; font-size: 10pt; } .kutu div b { display: inline-block; min-width: 130px; color: #475569; font-weight: 600; }
+        .tutar { margin-top: 14px; border: 1.5px solid #111; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; } .tutar .r { font-size: 16pt; font-weight: 800; } .yazi { margin-top: 6px; font-style: italic; font-size: 9.5pt; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 9pt; } th, td { border: 1px solid #111; padding: 4px 6px; text-align: left; } th { background: #f1f5f9; } td.s, th.s { text-align: right; white-space: nowrap; } tfoot td { font-weight: 700; background: #f8fafc; }
+        .imza { display: flex; justify-content: space-around; margin-top: 34px; text-align: center; font-size: 9.5pt; } .imza span { border-top: 1px solid #111; padding-top: 4px; min-width: 150px; display: inline-block; }
+        .alt { margin-top: 18px; font-size: 8pt; color: #64748b; display: flex; justify-content: space-between; }
+        .arac { width: 210mm; margin: 10px auto 0; display: flex; gap: 8px; } .arac button, .arac a { font: inherit; font-size: 10pt; padding: 6px 12px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; cursor: pointer; text-decoration: none; color: #0f172a; }
+        .durum { display: inline-block; font-size: 8.5pt; padding: 2px 8px; border-radius: 999px; background: #dcfce7; color: #166534; font-weight: 700; margin-left: 8px; }
+        @@media print { body { background: #fff; } .sayfa { box-shadow: none; margin: 0; width: auto; min-height: 0; } .arac { display: none; } }
+    </style>
+</head>
+<body>
+    <div class="arac"><button type="button" onclick="window.print()">Yazdır / PDF</button><a href="/Rapor79?sekme=nakit">Kasa Nakit Akışı › Nakit</a><span style="font-size:9pt;color:#64748b;align-self:center">Ön yüz örneği: makbuz bellek içi kayıttan üretilir; muhasebe fişi otomatik atılmıştır.</span></div>
+    <div class="sayfa">
+        <div class="ust">
+            <div class="logo">URAS<small>HOLDING</small></div>
+            <div class="unvan"><b>@bilgi.Unvan</b>@bilgi.Adres<br />@bilgi.Web</div>
+        </div>
+        <h2>KASA TEDİYE MAKBUZU</h2>
+        <div class="altbaslik">Makbuz No: <b>@Model.No</b> · Tarih: @Model.Tarih.ToString("dd.MM.yyyy HH:mm", tr) · Kasa: <b>@Model.Kasa</b><span class="durum">@Model.Durum</span></div>
+        <div class="kutu">
+            <div><b>Ödenen (Alıcı)</b>@Model.Kurum</div>
+            <div><b>Teslim Alan</b>@Model.TeslimAlan</div>
+            <div><b>Fatura Sahibi</b>@Model.FaturaSahibi</div>
+            <div><b>Ödeyen Şirket</b>@Model.Sirket</div>
+            <div><b>Belge</b>@(string.IsNullOrEmpty(Model.BelgeNo) ? Model.BelgeTipi : Model.BelgeTipi + " " + Model.BelgeNo)@(string.IsNullOrEmpty(Model.AvansNo) ? "" : " · Nakit avans " + Model.AvansNo)</div>
+            <div><b>Talimat</b>@(string.IsNullOrEmpty(Model.TalimatNo) ? "—" : Model.TalimatNo)</div>
+            <div><b>Açıklama</b>@Model.Aciklama</div>
+            <div><b>Onay</b>@(string.IsNullOrEmpty(Model.Onaylayan) ? "—" : Model.Onaylayan + (Model.OnayTarihi != null ? " · " + Model.OnayTarihi.Value.ToString("dd.MM.yyyy HH:mm", tr) : ""))</div>
+        </div>
+        <div class="tutar"><span>ÖDENEN TUTAR</span><span class="r">@Model.Tutar.ToString("N2", tr) @pbAd</span></div>
+        <div class="yazi">@Model.TutarYazi@(Model.PB != "TRY" ? " (TL karşılığı " + Model.TutarTL.ToString("N2", tr) + " TL)" : "")</div>
+
+        @if (fis != null)
+        {
+            <table>
+                <thead><tr><th colspan="2">Muhasebe Fişi @fis.No · @fis.Tarih.ToString("dd.MM.yyyy", tr) · @fis.Kaynak</th><th class="s">Borç (TL)</th><th class="s">Alacak (TL)</th></tr></thead>
+                <tbody>
+                    @foreach (var s in fis.Satirlar) { <tr><td style="width:60px">@s.HesapKodu</td><td>@s.HesapAdi<br /><span style="color:#64748b;font-size:8pt">@s.Aciklama</span></td><td class="s">@(s.Borc > 0 ? s.Borc.ToString("N2", tr) : "")</td><td class="s">@(s.Alacak > 0 ? s.Alacak.ToString("N2", tr) : "")</td></tr> }
+                </tbody>
+                <tfoot><tr><td colspan="2" class="s">TOPLAM</td><td class="s">@fis.ToplamBorc.ToString("N2", tr)</td><td class="s">@fis.ToplamAlacak.ToString("N2", tr)</td></tr></tfoot>
+            </table>
+        }
+        <div class="imza"><span>Teslim Eden (Kasa)<br />@Model.Kasiyer</span><span>Teslim Alan<br />@Model.TeslimAlan</span><span>Onaylayan<br />@Model.Onaylayan</span></div>
+        <div class="alt"><span>@Model.No · Kasa Tediye Makbuzu · Kasa Nakit Akışı #@Model.DocEntry</span><span>Grup ERP Portalı</span></div>
+    </div>
+</body>
+</html>
