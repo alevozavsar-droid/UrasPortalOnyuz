@@ -84,6 +84,7 @@ namespace FinansRaporlama.Controllers
         public string U_Kart { get; set; } = ""; public string U_Taksit { get; set; } = ""; public string U_EkstreDonemi { get; set; } = "";        // Kredi Kartı / Banka Kartı
         public string U_MahsupFisNo { get; set; } = ""; public string U_KarsiBelge { get; set; } = "";                                               // Mahsup
         public string U_TemlikNo { get; set; } = ""; public string U_TemlikEden { get; set; } = "";                                                   // Temlik
+        public string U_YansitmaNo { get; set; } = "";                                                                                                  // Yansıtma (grup içi yansıtma faturası)
     }
 
     /// <summary>Kasa Nakit Akışı satırına seçilen çek / senet (Data/CekAkibetOrnek.cs kaydının anlık görünümü): akıbet ve plan ↔ ibraz kontrolü ile.</summary>

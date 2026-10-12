@@ -263,11 +263,16 @@ tasarımından uyarlandı:
   planlı belgeler için Çek / Senet satırları — plana uygun çıkanlar ÖDENDİ, farklı yere çıkanlar Planlandı / Gecikti —, belge seçilmemiş Çek / Senet satırları, diğer
   yöntemler). Üç ekranın üretilmiş denetleyicileri `Uretilen/Controllers/*.cs` içinde `#if URETILEN_KAPALI` ile kapatıldı (model sınıfları orada kalır); elle yazılmış
   sürümler `Controllers/Rapor79Controller.cs`, `Rapor2Controller.cs` (`/CekAkibeti`), `Rapor123Controller.cs`. Görünümler ana projeden, küçük eklemelerle:
-  - **Kasa Nakit Akışı** (`Views/Rapor79/Index.cshtml` + `wwwroot/js/rapor79.js` + yeni `rapor79-yontem.js`): ödeme yöntemi SEKMELERİ (Tümü = ana 23 sütunlu
-    liste `.ana-liste`; Nakit / Çek / Senet / Havale / EFT / Kredi Kartı / Mahsup / Temlik / Diğer = `.yontem-panel[data-method]` yönteme özel sütunlarla; düğmeler
-    ana projedeki `.odeme-filter-btn` süzgeciyle aynı sınıf). Çek / Senet satırında "Belge Seç" → `#belgeSecModal` (`/Rapor79/SecilebilirBelgeler`) → `/Rapor79/BelgePlanla`:
-    belge Çek Akıbeti'nde Planlandı, satır tutarı belge toplamı, belge hücreleri satırın `data-belgeler` verisinden çizilir, ana listedeki satır eşitlenir;
-    `/Rapor79/BelgePlanKaldir`, `/Rapor79/YontemAlanKaydet` (yöntem alanı), ana projedeki `#btnSatirCekOnayla` akışı da `BelgePlanla` çağırır.
+  - **Kasa Nakit Akışı — modern ekran** (`Views/Rapor79/Index.cshtml` + `wwwroot/js/kasa-nakit.js`, na-* tasarım dili): veri `/Rapor79/Veri?sirket=&bas=&bit=`
+    (satırlar `SatirJson` + bakiyeler + günlük + `GrupIciOzet`); filtreler (şirket, tarih aralığı, durum, satınalmacı, arama, hızlı dönem), 8 KPI, yöntem sekmeleri
+    (`KOL` sütun tanımları: her sekmede yalnız o yöntemin sütunları), satır içi düzenleme `.kn-alan` → `/Rapor79/AlanKaydet` (`NakitAkisOrnek.AlanKaydet`: ana alanlar +
+    yöntem alanları, tip dönüşümü), çekmece (`SatirKaydet` / `SatirEkle` / `SilJson` / `DekontEkle`), Çek / Senet belge seçimi (`SecilebilirBelgeler` → `BelgePlanla`),
+    Mahsup / Temlik / Yansıtma kayıt bağlama (`GrupIciKayitlar` → `GrupIciBagla` / `GrupIciKaldir`; `NakitAkisOrnek.GrupIciBilgi` kaydın güncel durumunu Mahsup / Temlik /
+    Yansıtma modüllerinden okuma anında getirir; tohumda satırlar gerçek modül kayıtlarına bağlanır), Bakiye · Projeksiyon ve Günlük sekmeleri, CSV.
+    `?sekme=tumu|nakit|cek|senet|havale|kredi|mahsup|temlik|yansitma|diger|bakiye|gunluk`. Yansıtma ödeme yöntemi (`U_YansitmaNo`).
+  - **Kasa Nakit Akışı — eski görünüm** (`/Rapor79/Eski`, `Views/Rapor79/Eski.cshtml` + `wwwroot/js/rapor79.js` + `rapor79-yontem.js`): ana projedeki 23 sütunlu
+    liste; ödeme yöntemi SEKMELERİ (Tümü = `.ana-liste`; yöntem panelleri `.yontem-panel[data-method]`), Çek / Senet satırında "Belge Seç" → `#belgeSecModal` →
+    `/Rapor79/BelgePlanla`, `/Rapor79/BelgePlanKaldir`, `/Rapor79/YontemAlanKaydet`; ana projedeki `#btnSatirCekOnayla` akışı da `BelgePlanla` çağırır.
   - **Çek Akıbeti Raporu** (`Views/Rapor2/Index2.cshtml`): "Planlananlar (Kasa Nakit Akışı)" kartı, Planlanan Tedarikçi + Açıklama varsayılan görünür
     (`DUZEN_SURUMU` sade-v3), belge numarasız çeklerde `/CekAkibeti/UpdateCheckTransactionTypeByDocEntry`; ibraz / tahsilat detayı plan ↔ ibraz kontrolüyle.
   - **Konsolide Finansal Takip Paneli** (`Views/Rapor123/Index.cshtml`): ÇEK sekmesinde Planlanan Tedarikçi, İbraz / Ciro Bilgisi ve KONTROL sütunları

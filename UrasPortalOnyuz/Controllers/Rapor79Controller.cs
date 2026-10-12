@@ -23,8 +23,22 @@ namespace WebApplication3.Controllers
         static string Db(string dbName) => string.IsNullOrWhiteSpace(dbName) ? "URASKIMYA" : dbName;
         static readonly CultureInfo Tr = CultureInfo.GetCultureInfo("tr-TR");
 
+        /// <summary>Modern ekran (Views/Rapor79/Index.cshtml + wwwroot/js/kasa-nakit.js): veri /Rapor79/Veri ile gelir. ?sirket=URASKIMYA&bas=&bit=&sekme=tumu|nakit|cek|senet|havale|kredi|mahsup|temlik|yansitma|diger|bakiye|gunluk</summary>
         [HttpGet(""), HttpGet("Index")]
-        public IActionResult Index(DateTime? startDate, DateTime? endDate, string viewRole)
+        public IActionResult Index(string sirket, string bas, string bit, string sekme, DateTime? startDate, DateTime? endDate)
+        {
+            ViewData["Title"] = "Kasa Nakit Akışı";
+            ViewBag.Sirketler = NakitAkisOrnek.Sirketler.Select(s => new KeyValuePair<string, string>(s.DbName, s.Ad)).ToList();
+            ViewBag.VarsayilanSirket = NakitAkisOrnek.Sirketler.Any(s => s.DbName == sirket) ? sirket : sirket == "" ? "" : "URASKIMYA";
+            ViewBag.Bas = (startDate ?? (DateTime.TryParse(bas, CultureInfo.InvariantCulture, DateTimeStyles.None, out var b1) ? b1 : DateTime.Today.AddDays(-30))).ToString("yyyy-MM-dd");
+            ViewBag.Bit = (endDate ?? (DateTime.TryParse(bit, CultureInfo.InvariantCulture, DateTimeStyles.None, out var b2) ? b2 : DateTime.Today.AddDays(60))).ToString("yyyy-MM-dd");
+            ViewBag.Sekme = sekme ?? "tumu";
+            OrnekDoldurucu.Hazirla(this);
+            return View("Index");
+        }
+        /// <summary>Ana projedeki eski görünüm (Views/Rapor79/Eski.cshtml; 23 sütunlu tablo, rapor79.js) — karşılaştırma için.</summary>
+        [HttpGet("Eski")]
+        public IActionResult Eski(DateTime? startDate, DateTime? endDate, string viewRole)
         {
             var bas = (startDate ?? DateTime.Today.AddDays(-30)).Date; var bit = (endDate ?? DateTime.Today.AddDays(60)).Date;
             var model = new KonsolideDashboardViewModel { StartDate = bas, EndDate = bit };
@@ -37,8 +51,78 @@ namespace WebApplication3.Controllers
                 });
             ViewBag.GizliKolonlar = ""; ViewBag.ViewRole = viewRole ?? "all";
             OrnekDoldurucu.Hazirla(this);
-            return View("Index", model);
+            return View("Eski", model);
         }
+
+        // ---------- modern ekran veri ve kayıt uçları ----------
+        [HttpGet("Veri")]
+        public IActionResult Veri(string sirket, string bas, string bit)
+        {
+            var b1 = DateTime.TryParse(bas, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d1) ? d1.Date : DateTime.Today.AddDays(-30);
+            var b2 = DateTime.TryParse(bit, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d2) ? d2.Date : DateTime.Today.AddDays(60);
+            var dbler = string.IsNullOrEmpty(sirket) ? NakitAkisOrnek.Sirketler.Select(s => s.DbName).ToList() : new List<string> { sirket };
+            var odemeler = dbler.SelectMany(db => NakitAkisOrnek.Odemeler(db)).Where(m => m.U_PlanlananTarih == null || (m.U_PlanlananTarih.Value.Date >= b1 && m.U_PlanlananTarih.Value.Date <= b2)).OrderBy(m => m.U_PlanlananTarih).ThenBy(m => m.DocEntry).Select(SatirJson).ToList();
+            var bakiyeler = dbler.SelectMany(db => NakitAkisOrnek.Bakiyeler(db).Select(b => new { dbName = db, sirket = NakitAkisOrnek.SirketAdi(db), bankaKasa = b.BankaKasa, detay = b.Detay, pb = b.PB, tutar = b.Tutar, tutarTL = b.TutarTL, tarih = b.GuncellenmeTarihi?.ToString("yyyy-MM-dd") })).ToList();
+            var gunluk = NakitAkisOrnek.Gunluk(string.IsNullOrEmpty(sirket) ? null : sirket).Take(300).Select(g => new { tarih = g.IslemTarihi.ToString("yyyy-MM-dd HH:mm"), kullanici = g.Kullanici, dbName = g.DbName, sirket = NakitAkisOrnek.SirketAdi(g.DbName), docEntry = g.DocEntry, tip = g.IslemTipi, aciklama = g.Aciklama }).ToList();
+            return Json(new
+            {
+                success = true, bugun = DateTime.Today.ToString("yyyy-MM-dd"), bas = b1.ToString("yyyy-MM-dd"), bit = b2.ToString("yyyy-MM-dd"),
+                sirketler = NakitAkisOrnek.Sirketler.Select(s => new { ad = s.Ad, dbName = s.DbName, dbKey = s.DbKey }), yontemler = NakitAkisOrnek.OdemeYontemleri, durumlar = NakitAkisOrnek.Durumlar, satinalmacilar = NakitAkisOrnek.Satinalmacilar,
+                bankaHesaplari = NakitAkisOrnek.BankaHesaplari, kasalar = NakitAkisOrnek.Kasalar, kartlar = NakitAkisOrnek.Kartlar, taksitler = NakitAkisOrnek.TaksitSecenekleri, kurlar = NakitAkisOrnek.Kurlar, tedarikciler = Tedarikciler(Db(sirket)),
+                odemeler, bakiyeler, gunluk, grupIci = NakitAkisOrnek.GrupIciOzet(sirket)
+            });
+        }
+        public class AlanIstek { public string DbName { get; set; } public int DocEntry { get; set; } public string Alan { get; set; } public string Deger { get; set; } }
+        /// <summary>Satır içi düzenleme: ana alan (durum, tarih, tutar, kurum …) ya da yöntem alanı.</summary>
+        [HttpPost("AlanKaydet")]
+        public IActionResult AlanKaydet([FromBody] AlanIstek istek)
+        {
+            if (istek == null) return Json(new { success = false, message = "Veri yok." });
+            var r = NakitAkisOrnek.AlanKaydet(Db(istek.DbName), istek.DocEntry, istek.Alan, istek.Deger, Kullanici); var m = NakitAkisOrnek.Bul(Db(istek.DbName), istek.DocEntry); if (m != null) NakitAkisOrnek.BelgeleriDoldur(m);
+            return Json(new { success = r.ok, message = r.mesaj, row = m == null ? null : SatirJson(m) });
+        }
+        /// <summary>Çekmece: satırın tüm alanları (JSON gövde NakitAkisViewModel; dbName sorgu).</summary>
+        [HttpPost("SatirKaydet")]
+        public IActionResult SatirKaydet([FromBody] NakitAkisViewModel model, [FromQuery] string dbName)
+        {
+            if (model == null) return Json(new { success = false, message = "Veri yok." });
+            bool ok = NakitAkisOrnek.Guncelle(Db(dbName), model, Kullanici); var m = NakitAkisOrnek.Bul(Db(dbName), model.DocEntry); if (m != null) NakitAkisOrnek.BelgeleriDoldur(m);
+            return Json(new { success = ok, message = ok ? "Kaydedildi." : "Satır bulunamadı.", row = m == null ? null : SatirJson(m) });
+        }
+        [HttpPost("SatirEkle")]
+        public IActionResult SatirEkle([FromBody] NakitAkisViewModel model, [FromQuery] string dbName)
+        {
+            if (model == null) return Json(new { success = false, message = "Veri yok." });
+            var m = NakitAkisOrnek.Ekle(Db(dbName), model, Kullanici); NakitAkisOrnek.BelgeleriDoldur(m);
+            return Json(new { success = true, message = $"Ödeme kaydı eklendi (#{m.DocEntry}).", row = SatirJson(m) });
+        }
+        /// <summary>Grup içi modül kayıtları (Mahsup / Temlik / Yansıtma) — seçim için, modülden canlı.</summary>
+        [HttpGet("GrupIciKayitlar")] public IActionResult GrupIciKayitlar(string dbName, string tur) => Json(new { success = true, data = NakitAkisOrnek.GrupIciKayitlar(Db(dbName), tur ?? "Mahsup") });
+        public class GrupIciIstek { public string DbName { get; set; } public int DocEntry { get; set; } public string Tur { get; set; } public string No { get; set; } }
+        [HttpPost("GrupIciBagla")]
+        public IActionResult GrupIciBagla([FromBody] GrupIciIstek istek)
+        {
+            if (istek == null) return Json(new { success = false, message = "Veri yok." });
+            var r = NakitAkisOrnek.GrupIciBagla(Db(istek.DbName), istek.DocEntry, istek.Tur, istek.No, Kullanici); if (r.satir != null) NakitAkisOrnek.BelgeleriDoldur(r.satir);
+            return Json(new { success = r.ok, message = r.mesaj, row = r.satir == null ? null : SatirJson(r.satir) });
+        }
+        [HttpPost("GrupIciKaldir")]
+        public IActionResult GrupIciKaldir([FromBody] GrupIciIstek istek)
+        {
+            if (istek == null) return Json(new { success = false, message = "Veri yok." });
+            var r = NakitAkisOrnek.GrupIciKaldir(Db(istek.DbName), istek.DocEntry, Kullanici); if (r.satir != null) NakitAkisOrnek.BelgeleriDoldur(r.satir);
+            return Json(new { success = r.ok, message = r.mesaj, row = r.satir == null ? null : SatirJson(r.satir) });
+        }
+        public class DekontIstek { public string DbName { get; set; } public int DocEntry { get; set; } public string Ad { get; set; } public string Aciklama { get; set; } }
+        [HttpPost("DekontEkle")]
+        public IActionResult DekontEkle([FromBody] DekontIstek istek)
+        {
+            if (istek == null) return Json(new { success = false, message = "Veri yok." });
+            var r = NakitAkisOrnek.DekontEkle(Db(istek.DbName), istek.DocEntry, istek.Ad, istek.Aciklama, Kullanici); if (r.satir != null) NakitAkisOrnek.BelgeleriDoldur(r.satir);
+            return Json(new { success = r.ok, message = r.mesaj, row = r.satir == null ? null : SatirJson(r.satir) });
+        }
+        [HttpPost("SilJson")]
+        public IActionResult SilJson([FromBody] GrupIciIstek istek) => Json(new { success = istek != null && NakitAkisOrnek.Sil(Db(istek.DbName), istek.DocEntry, Kullanici) });
 
         [HttpGet("ExportExcel")] public IActionResult ExportExcel(DateTime? startDate, DateTime? endDate, string viewRole) => Content("Ön yüz örneğinde Excel üretimi yok.", "text/plain; charset=utf-8");
 
@@ -109,10 +193,17 @@ namespace WebApplication3.Controllers
             if (istek == null) return Json(new { success = false, message = "Veri yok." });
             var r = NakitAkisOrnek.YontemAlanKaydet(Db(istek.DbName), istek.DocEntry, istek.Alan, istek.Deger, Kullanici); return Json(new { success = r.ok, message = r.mesaj });
         }
+        /// <summary>Satır JSON'u (modern ekran ve eski yöntem paneli ortak; planlananTarih / odemeYontemi eski betik için, planlanan / yontem yeni betik için).</summary>
         static object SatirJson(NakitAkisViewModel m) => new
         {
-            docEntry = m.DocEntry, kurum = m.U_Kurum, tutar = m.U_Tutar ?? 0, tutarTL = m.U_TutarTL ?? 0, pb = m.U_ParaBirimi, kur = m.U_Kur ?? 1, planlananTarih = m.U_PlanlananTarih?.ToString("yyyy-MM-dd"), durum = m.U_Durum, notlar = m.U_Notlar, odemeYontemi = m.U_OdemeYontemi, cekNolar = m.U_CekNolar, cekDocEntryler = m.U_CekDocEntryler,
-            belgeler = m.Belgeler.Select(b => new { cekDocEntry = b.CekDocEntry, no = b.No, belge = b.Belge, banka = b.Banka, asilBorclu = b.AsilBorclu, kimdenGeldi = b.KimdenGeldi, vade = b.Vade.ToString("yyyy-MM-dd"), tutar = b.Tutar, pb = b.PB, akibet = b.Akibet, ibrazYeri = b.IbrazYeri, kontrol = b.Kontrol, planlananTedarikci = b.PlanlananTedarikci })
+            docEntry = m.DocEntry, dbName = m.U_KaynakFirma, sirket = NakitAkisOrnek.SirketAdi(m.U_KaynakFirma), sira = m.U_Sira, planlanan = m.U_PlanlananTarih?.ToString("yyyy-MM-dd"), planlananTarih = m.U_PlanlananTarih?.ToString("yyyy-MM-dd"), belgeTarihi = m.BelgeTarihi?.ToString("yyyy-MM-dd"),
+            kurum = m.U_Kurum, urun = m.U_UrunHizmet, pb = m.U_ParaBirimi, kur = m.U_Kur ?? 1, tutar = m.U_Tutar ?? 0, tutarTL = m.U_TutarTL ?? 0, yontem = m.U_OdemeYontemi, odemeYontemi = m.U_OdemeYontemi, odenme = m.U_OdenmeTarihi?.ToString("yyyy-MM-dd"), odenen = m.U_OdenenTutar ?? 0, odenenPB = m.U_OdenenTutarPB, durum = m.U_Durum, notlar = m.U_Notlar,
+            belgeTipi = m.U_BagliBelgeTipi, bagliDocEntry = m.U_BagliDocEntry, faturaNo = m.U_FaturaSiparisNo, islemTipi = m.U_IslemTipi, kayitTipi = m.U_KayitTipi, mutabakat = m.U_MutabakatDurumu, mutabakatTarihi = m.SonMutabakatTarihi?.ToString("yyyy-MM-dd"), satinalmaci = m.U_Satinalmaci, muafiyet = m.MuafiyetSebebi,
+            dekontlar = m.DekontListesi.Select(d => new { id = d.Id, ad = d.DosyaAdi, yol = d.DosyaYolu, tarih = d.Tarih.ToString("yyyy-MM-dd HH:mm"), yukleyen = d.Yukleyen, aciklama = d.Aciklama }),
+            cekNolar = m.U_CekNolar, cekDocEntryler = m.U_CekDocEntryler,
+            belgeler = m.Belgeler.Select(b => new { cekDocEntry = b.CekDocEntry, no = b.No, belge = b.Belge, banka = b.Banka, asilBorclu = b.AsilBorclu, kimdenGeldi = b.KimdenGeldi, vade = b.Vade.ToString("yyyy-MM-dd"), tutar = b.Tutar, pb = b.PB, akibet = b.Akibet, ibrazYeri = b.IbrazYeri, kontrol = b.Kontrol, planlananTedarikci = b.PlanlananTedarikci }),
+            alanlar = new { bankaHesabi = m.U_BankaHesabi, aliciIban = m.U_AliciIban, dekontNo = m.U_DekontNo, kasa = m.U_Kasa, makbuzNo = m.U_MakbuzNo, teslimAlan = m.U_TeslimAlan, kart = m.U_Kart, taksit = m.U_Taksit, ekstreDonemi = m.U_EkstreDonemi, mahsupFisNo = m.U_MahsupFisNo, karsiBelge = m.U_KarsiBelge, temlikNo = m.U_TemlikNo, temlikEden = m.U_TemlikEden, yansitmaNo = m.U_YansitmaNo },
+            grupIci = NakitAkisOrnek.GrupIciBilgi(m)
         };
 
         // ---------- portföy çekleri (ana projedeki uçlar) ----------
