@@ -82,7 +82,8 @@ namespace WebApplication3.Data
                         m = new NakitAkisViewModel
                         {
                             DocEntry = ++_sonDocEntry, DocNum = _sonDocEntry, U_KaynakFirma = db, U_FaturaSahibi = AvansSirketi(a) == a.Kullanan.Sirket ? sirket : (a.Kullanan.Sirket == "URS Makina" ? "URS Makine" : a.Kullanan.Sirket), U_OdeyenSirket = sirket,
-                            U_AvansNo = a.No, U_Kurum = sahsi ? "Personel Avansı (Şahsi) · " + a.Kullanan.Departman : a.Kullanan.AdSoyad + " · " + a.Kullanan.Departman, U_UrunHizmet = sahsi ? "Şahsi avans · ayrıntı gizli (İK)" : "Nakit avans · " + a.Konu, U_OdemeYontemi = "Nakit", U_Kasa = Kasalar[0], U_TeslimAlan = a.Kullanan.AdSoyad,
+                            // tabloda personel adı yazılmaz (şirket masrafı avansının ayrıntısı çekmecede; şahsi avansta hiçbir yerde)
+                            U_AvansNo = a.No, U_Kurum = sahsi ? "Personel Avansı (Şahsi) · " + a.Kullanan.Departman : "Nakit Avans · " + a.Kullanan.Departman, U_UrunHizmet = sahsi ? "Şahsi avans · ayrıntı gizli (İK)" : a.Konu, U_OdemeYontemi = "Nakit", U_Kasa = Kasalar[0], U_TeslimAlan = a.Kullanan.AdSoyad,
                             U_TalepEden = sahsi ? "Personel (gizli)" : (a.Olusturan?.AdSoyad ?? a.Kullanan.AdSoyad),
                             U_ParaBirimi = pb, U_Kur = kur, U_Tutar = a.OnaylananTutar, U_TutarTL = Math.Round(a.OnaylananTutar * kur, 2), U_OdenenTutarPB = pb, U_PlanlananTarih = plan, BelgeTarihi = a.Tarih.Date,
                             U_BagliBelgeTipi = "Avans", U_KayitTipi = "Avans", U_FaturaSiparisNo = a.No, U_IslemTipi = "X", U_Satinalmaci = "", U_Durum = "Planlandı", U_EskiDurum = "Planlandı",
@@ -292,8 +293,11 @@ namespace WebApplication3.Data
                         new KasaBakiyeViewModel { GuncellenmeTarihi = bugun, BankaKasa = "BANKA", Detay = "İş Bankası · USD Hesabı", PB = "USD", Tutar = Math.Round(420_000m * olcek / 100m) * 100m },
                         new KasaBakiyeViewModel { GuncellenmeTarihi = bugun, BankaKasa = "BANKA", Detay = "Garanti BBVA · EUR Hesabı", PB = "EUR", Tutar = Math.Round(180_000m * olcek / 100m) * 100m },
                         new KasaBakiyeViewModel { GuncellenmeTarihi = bugun, BankaKasa = "KASA", Detay = "Merkez Kasa · Nakit", PB = "TRY", Tutar = Math.Round(850_000m * olcek / 1000m) * 1000m },
-                        new KasaBakiyeViewModel { GuncellenmeTarihi = bugun, BankaKasa = "ÇEK PORTFÖYÜ", Detay = "MÜŞTERİ ÇEKLERİ (Portföyde + Planlandı)", PB = "TRY", Tutar = cekler.Where(k => k.Belge == "Çek").Sum(k => k.Tutar) },
-                        new KasaBakiyeViewModel { GuncellenmeTarihi = bugun, BankaKasa = "SENET PORTFÖYÜ", Detay = "MÜŞTERİ SENETLERİ (Portföyde + Planlandı)", PB = "TRY", Tutar = cekler.Where(k => k.Belge == "Senet").Sum(k => k.Tutar) }
+                        // portföy X / R işlem tipine göre ayrı izlenir
+                        new KasaBakiyeViewModel { GuncellenmeTarihi = bugun, BankaKasa = "ÇEK PORTFÖYÜ (X)", Detay = "MÜŞTERİ ÇEKLERİ · X (Portföyde + Planlandı)", PB = "TRY", Tutar = cekler.Where(k => k.Belge == "Çek" && k.IslemTipi == "X").Sum(k => k.Tutar) },
+                        new KasaBakiyeViewModel { GuncellenmeTarihi = bugun, BankaKasa = "ÇEK PORTFÖYÜ (R)", Detay = "MÜŞTERİ ÇEKLERİ · R (Portföyde + Planlandı)", PB = "TRY", Tutar = cekler.Where(k => k.Belge == "Çek" && k.IslemTipi == "R").Sum(k => k.Tutar) },
+                        new KasaBakiyeViewModel { GuncellenmeTarihi = bugun, BankaKasa = "SENET PORTFÖYÜ (X)", Detay = "MÜŞTERİ SENETLERİ · X (Portföyde + Planlandı)", PB = "TRY", Tutar = cekler.Where(k => k.Belge == "Senet" && k.IslemTipi == "X").Sum(k => k.Tutar) },
+                        new KasaBakiyeViewModel { GuncellenmeTarihi = bugun, BankaKasa = "SENET PORTFÖYÜ (R)", Detay = "MÜŞTERİ SENETLERİ · R (Portföyde + Planlandı)", PB = "TRY", Tutar = cekler.Where(k => k.Belge == "Senet" && k.IslemTipi == "R").Sum(k => k.Tutar) }
                     };
                     foreach (var b in bak) b.TutarTL = Math.Round(b.Tutar * (Kurlar.TryGetValue(b.PB, out var kk) ? kk : 1m), 2);
                     _bakiyeler[s.DbName] = bak;
@@ -342,6 +346,7 @@ namespace WebApplication3.Data
                 var m = _odemeler.TryGetValue(dbName, out var l) ? l.FirstOrDefault(x => x.DocEntry == gelen.DocEntry) : null; if (m == null) return false;
                 string eskiDurum = m.U_Durum; var t = typeof(NakitAkisViewModel);
                 if (gelen.U_Durum == "ÖDENDİ" && eskiDurum != "ÖDENDİ" && (NakitOnaysiz(m) || !string.IsNullOrEmpty(m.U_CikisTalebi))) gelen.U_Durum = eskiDurum;   // onaysız nakit / çek çıkış talebi elle ödendi yapılamaz
+                if (!string.IsNullOrEmpty(m.U_AvansNo) && ((gelen.U_TeslimAlan ?? "").StartsWith("Personel (") || (gelen.U_TeslimAlan ?? "").StartsWith("Avans sahibi"))) gelen.U_TeslimAlan = null;   // avans satırında maskelenmiş teslim alan gerçek adın üzerine yazılmaz (makbuz için)
                 foreach (var ad in KopyalananAlanlar) { var p = t.GetProperty(ad); var v = p.GetValue(gelen); if (v == null && p.PropertyType == typeof(string)) continue; if (p.PropertyType == typeof(string) && (string)v == "" && (ad == "U_Kurum" || ad == "U_OdemeYontemi")) continue; p.SetValue(m, v); }
                 if (m.U_BagliBelgeTipi == "Cari Bakiye") { m.U_KayitTipi = "Bakiye"; m.U_FaturaSiparisNo = ""; }
                 if (m.U_OdemeYontemi == "Nakit" && string.IsNullOrEmpty(m.U_OnayDurumu)) m.U_OnayDurumu = "Onay Bekliyor";
@@ -443,7 +448,7 @@ namespace WebApplication3.Data
             // bankaya ibraz türlerinde yer belirtilmemişse Çek Akıbeti'nin kullanacağı tahsil bankası (plan ↔ çıkış kontrolü "Uyumlu" kalsın diye)
             bool bankaya = islemTuru == "Bankaya Tahsile Verildi" || islemTuru == "Erteleme Yapıldı - Bankada" || islemTuru == "Konkordato - Bankada";
             if (string.IsNullOrEmpty(ibrazYeri) && bankaya) ibrazYeri = ButceOrnek.TahsilBankalari[k.DocEntry % 2];
-            string db = k.DbName; string kurum = !string.IsNullOrEmpty(ibrazYeri) ? ibrazYeri : islemTuru == "Teminata Verildi" ? "Teminat" : "Tedarikçi (belirtilmedi)";
+            string db = k.DbName; string kurum = !string.IsNullOrEmpty(ibrazYeri) ? (bankaya && !ibrazYeri.Contains("(Tahsil)") ? ibrazYeri + " (Tahsil)" : ibrazYeri) : islemTuru == "Teminata Verildi" ? "Teminat" : "Tedarikçi (belirtilmedi)";
             lock (Kilit)
             {
                 if (!_odemeler.ContainsKey(db)) _odemeler[db] = new List<NakitAkisViewModel>();
@@ -587,6 +592,31 @@ namespace WebApplication3.Data
                 pb = m.U_ParaBirimi, kur = m.U_Kur, belgeTutari = belgeTutar, net, kdv = Math.Round(belgeTutar - net, 2), belgeTutariTL = Math.Round(belgeTutar * (m.U_Kur ?? 1), 2), kalemler, acikKalemler, cariBakiye, ozet = BelgeOzeti(m),
                 link = tip == "Mahsup" ? "/GrupIci/Mahsup?no=" + Uri.EscapeDataString(m.U_MahsupFisNo ?? "") : tip == "Temlik" ? "/GrupIci/Temlik?no=" + Uri.EscapeDataString(m.U_TemlikNo ?? "") : tip == "Yansıtma" ? "/GrupIci/Yansitma?no=" + Uri.EscapeDataString(m.U_YansitmaNo ?? "") : tip == "Avans" ? "/IkTalep/Avans?no=" + Uri.EscapeDataString(m.U_AvansNo ?? "") : ""
             };
+        }
+        /// <summary>
+        /// Yeni Ödeme › Ödenmemiş Faturalar / Cari Bakiyeleri: şirketin carileri Cari Mutabakat ekstresinden (Data/MutabakatOrnek.cs) — açık faturalar (kalan, vade, gecikme),
+        /// vadesi geçmiş / gelecek toplamları (TL), döviz özeti, cari ekstre bağlantıları (Cari Ekstre Raporu /Rapor20?bpCode=…, yazdırılabilir /CariMutabakat/Ekstre?kod=…).
+        /// </summary>
+        public static object CariAcikFaturalar(string dbName)
+        {
+            Tohumla(); string sirket = SirketAdi(dbName); var bugun = DateTime.Today;
+            List<NakitAkisViewModel> mevcut; lock (Kilit) mevcut = _odemeler.Values.SelectMany(l => l).Where(m => m.U_Durum != "ÖDENDİ").ToList();
+            decimal Tl(decimal v, string pb) => Math.Round(v * (Kurlar.TryGetValue(pb, out var kk) ? kk : 1m), 2);
+            var cariler = MutabakatOrnek.Cariler.Where(c => c.Kart != null && c.Kart.Sirket == sirket && c.Kart.KartTipi != "Müşteri").Select(c =>
+            {
+                var acik = c.Hareketler.Where(h => h.BelgeTipi == "Fatura" && h.Kalan > 0 && h.KapamaDurumu != "Kapalı").OrderBy(h => h.Vade ?? h.Tarih).ToList();
+                var faturalar = acik.Select(h => { string pb = h.ParaBirimi == "TL" || string.IsNullOrEmpty(h.ParaBirimi) ? "TRY" : h.ParaBirimi; var vade = h.Vade ?? h.Tarih.AddDays(30); return new { belgeNo = h.BelgeNo, tarih = h.Tarih.ToString("yyyy-MM-dd"), vade = vade.ToString("yyyy-MM-dd"), tutar = h.Borc > 0 ? h.Borc : h.Alacak, kalan = h.Kalan, pb, kalanTL = Tl(h.Kalan, pb), aciklama = h.Aciklama, gecikme = (bugun - vade).Days, kapama = h.KapamaDurumu, planlandi = mevcut.Any(m => string.Equals(m.U_FaturaSiparisNo, h.BelgeNo, StringComparison.OrdinalIgnoreCase)) }; }).ToList();
+                decimal toplam = faturalar.Sum(f => f.kalanTL), gecmis = faturalar.Where(f => f.gecikme > 0).Sum(f => f.kalanTL);
+                return new
+                {
+                    kod = c.CariKodu, ad = c.Kart.KisaAd, unvan = c.Kart.ResmiUnvan, kartTipi = c.Kart.KartTipi, sinif = c.Kart.Sinif, adet = faturalar.Count, toplam, gecmis, gelecek = toplam - gecmis,
+                    gecmisAdet = faturalar.Count(f => f.gecikme > 0), enEskiVade = faturalar.Where(f => f.gecikme > 0).Select(f => f.vade).DefaultIfEmpty("").Min(), ilkVade = faturalar.Where(f => f.gecikme <= 0).Select(f => f.vade).DefaultIfEmpty("").Min(), enUzunGecikme = faturalar.Select(f => f.gecikme).DefaultIfEmpty(0).Max(),
+                    dovizler = c.Dovizler.Select(d => new { pb = d.ParaBirimi, acikAdet = d.AcikFaturaAdet, acikTutar = d.AcikFaturaTutar, enEski = d.EnEskiAcikFatura?.ToString("yyyy-MM-dd") }), bakiyeZamani = c.BakiyeZamani?.ToString("yyyy-MM-dd HH:mm"),
+                    planlanan = mevcut.Where(m => string.Equals(m.U_Kurum, c.Kart.KisaAd, StringComparison.OrdinalIgnoreCase)).Sum(m => m.U_TutarTL ?? 0),
+                    ekstre = "/Rapor20/Index?bpCode=" + Uri.EscapeDataString(c.CariKodu), ekstreYazdir = "/CariMutabakat/Ekstre?kod=" + Uri.EscapeDataString(c.CariKodu), faturalar
+                };
+            }).OrderByDescending(x => x.toplam).ThenBy(x => x.ad).ToList();
+            return new { sirket, cariler, toplam = cariler.Sum(x => x.toplam), gecmis = cariler.Sum(x => x.gecmis), gelecek = cariler.Sum(x => x.gelecek), adet = cariler.Sum(x => x.adet) };
         }
         /// <summary>Çekmecede "Belge Seç": carinin açık faturaları / siparişleri (deterministik örnek; Kasa Nakit Akışı'ndaki satırlarla eşleşen belgeler "planlanan" ile gelir) ya da cari bakiyesi.</summary>
         public static object CariBelgeler(string dbName, string kurum, string tip)

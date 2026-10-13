@@ -277,13 +277,16 @@ namespace WebApplication3.Controllers
 
         private NaKisi Ben() => NakitAvansOrnek.KisiBul(User?.Identity?.Name) ?? NakitAvansOrnek.Personel[0];
 
-        private static object Kisi(NaKisi k) => k == null ? null : new { k.PersonelNo, k.AdSoyad, k.Sirket, k.Departman, k.Unvan, k.MasrafMerkezi, k.Aktif, k.KullaniciId, k.Rol };
+        /// <summary>Şahsi (maaş) avansında gizlilik: kişi adı, kullanıcı ve konu maskelenir (NakitAvansOrnek.SahsiMi); şirket masrafı avansında ayrıntı açıktır.</summary>
+        private static object Kisi(NaKisi k) => Kisi(k, false);
+        private static object Kisi(NaKisi k, bool gizli) => k == null ? null : gizli ? new { PersonelNo = "", AdSoyad = "Personel (gizli · şahsi avans)", k.Sirket, k.Departman, Unvan = "", k.MasrafMerkezi, k.Aktif, KullaniciId = "", k.Rol } : new { k.PersonelNo, k.AdSoyad, k.Sirket, k.Departman, k.Unvan, k.MasrafMerkezi, k.Aktif, k.KullaniciId, k.Rol };
 
-        private static object Dto(NakitAvans a) => new
+        private static object Dto(NakitAvans a) => DtoIc(a, NakitAvansOrnek.SahsiMi(a));
+        private static object DtoIc(NakitAvans a, bool gizli) => new
         {
             a.Id, a.No, Tarih = a.Tarih.ToString("dd.MM.yyyy", Tr), Saat = a.Tarih.ToString("HH:mm"), TarihIso = a.Tarih.ToString("s"),
-            a.Sirket, a.Departman, a.MasrafMerkezi, Olusturan = Kisi(a.Olusturan), Kullanan = Kisi(a.Kullanan),
-            a.TalepTuru, a.Konu, a.Aciklama, a.Tutar, a.ParaBirimi, TutarTl = NakitAvansOrnek.TlKarsiligi(a.Tutar, a.ParaBirimi),
+            a.Sirket, a.Departman, a.MasrafMerkezi, Olusturan = Kisi(a.Olusturan, gizli), Kullanan = Kisi(a.Kullanan, gizli), Sahsi = gizli,
+            a.TalepTuru, Konu = gizli ? "Şahsi avans · ayrıntı gizli (İK)" : a.Konu, Aciklama = gizli ? "" : a.Aciklama, a.Tutar, a.ParaBirimi, TutarTl = NakitAvansOrnek.TlKarsiligi(a.Tutar, a.ParaBirimi),
             KullanimTarihi = a.KullanimTarihi.ToString("dd.MM.yyyy", Tr), KapatmaTarihi = a.KapatmaTarihi.ToString("dd.MM.yyyy", Tr),
             KullanimIso = a.KullanimTarihi.ToString("yyyy-MM-dd"), KapatmaIso = a.KapatmaTarihi.ToString("yyyy-MM-dd"),
             a.FaturaDurumu, a.BelgeTurleri, a.HarcamaKategorisi, a.Oncelik, a.Revizyon,
@@ -293,10 +296,10 @@ namespace WebApplication3.Controllers
             SonIslem = a.SonIslem?.ToString("dd.MM.yyyy HH:mm", Tr), FiiliKapatma = a.FiiliKapatma?.ToString("dd.MM.yyyy", Tr), OnayTarihi = a.OnayTarihi?.ToString("dd.MM.yyyy", Tr),
             a.Yonetici, a.UstOnay, a.FinansOnayi, a.MuhasebeFisNo, a.EntegrasyonDurumu, SonSenkron = a.SonSenkron?.ToString("dd.MM.yyyy HH:mm", Tr),
             Onaylar = a.Onaylar.Select(o => new { o.Sira, o.Adim, o.Kisi, o.Durum, Tarih = o.Tarih?.ToString("dd.MM.yyyy HH:mm", Tr), o.Not }),
-            Odemeler = a.Odemeler.Select(o => new { o.IslemId, Tarih = o.Tarih.ToString("dd.MM.yyyy HH:mm", Tr), o.Tutar, o.ParaBirimi, o.Kasa, o.FisNo, o.TeslimEden, o.TeslimAlan, o.TeslimSekli, o.Durum, o.TeslimAlanOnayi, TeslimOnayTarihi = o.TeslimOnayTarihi?.ToString("dd.MM.yyyy HH:mm", Tr) }),
+            Odemeler = a.Odemeler.Select(o => new { o.IslemId, Tarih = o.Tarih.ToString("dd.MM.yyyy HH:mm", Tr), o.Tutar, o.ParaBirimi, o.Kasa, o.FisNo, o.TeslimEden, TeslimAlan = gizli ? "Personel (gizli)" : o.TeslimAlan, o.TeslimSekli, o.Durum, o.TeslimAlanOnayi, TeslimOnayTarihi = o.TeslimOnayTarihi?.ToString("dd.MM.yyyy HH:mm", Tr) }),
             Harcamalar = a.Harcamalar.Select(h => new { h.BelgeId, Tarih = h.Tarih.ToString("dd.MM.yyyy", Tr), h.BelgeNo, h.Tedarikci, h.BelgeTuru, h.Tutar, h.MahsupDurumu, h.MuhasebeFisNo, h.YevmiyeNo, h.HesapKodu }),
             Iadeler = a.Iadeler.Select(i => new { i.IslemId, Tarih = i.Tarih.ToString("dd.MM.yyyy HH:mm", Tr), i.Tutar, i.Kasa, i.FisNo, i.IadeyiAlan }),
-            Yansitma = a.Yansitma == null ? null : new { a.Yansitma.IslemTipi, a.Yansitma.OdeyenSirket, a.Yansitma.MasrafSirketi, a.Yansitma.Tutar, a.Yansitma.BelgeNo, a.Yansitma.Durum, Kullanan = a.Kullanan.AdSoyad, a.MasrafMerkezi },
+            Yansitma = a.Yansitma == null ? null : new { a.Yansitma.IslemTipi, a.Yansitma.OdeyenSirket, a.Yansitma.MasrafSirketi, a.Yansitma.Tutar, a.Yansitma.BelgeNo, a.Yansitma.Durum, Kullanan = gizli ? "Personel (gizli)" : a.Kullanan.AdSoyad, a.MasrafMerkezi },
             Zaman = a.Zaman.OrderBy(z => z.Tarih).Select(z => new { Tarih = z.Tarih.ToString("dd.MM.yyyy HH:mm", Tr), z.Hareket, z.Kaynak }),
             Audit = a.Audit.OrderByDescending(x => x.Tarih).Select(x => new { Tarih = x.Tarih.ToString("dd.MM.yyyy", Tr), Saat = x.Tarih.ToString("HH:mm:ss"), x.Tablo, x.Alan, x.Eski, x.Yeni, x.Kullanici, x.IslemTipi, x.KaynakSistem })
         };

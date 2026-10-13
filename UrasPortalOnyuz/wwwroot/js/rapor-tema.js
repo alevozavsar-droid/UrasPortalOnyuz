@@ -172,7 +172,7 @@
     if (aciklamaIlkTur) { l.push(...kap.querySelectorAll('.alert.alert-info')); aciklamaIlkTur = false; }
     l.forEach(el => { if (!el.closest(KAPSAM_DISI) && el.getAttribute('data-aciklama') !== 'kal') el.classList.add('rt-aciklama'); });
   }
-  function aciklamaDurumu() { let g = false; try { g = localStorage.getItem('aciklamaGizli') === '1'; } catch (e) { /* depolama kapalı */ } document.documentElement.classList.toggle('rt-aciklama-gizli', g); }
+  function aciklamaDurumu() { let g = true; try { g = localStorage.getItem('aciklamaGizli') !== '0'; } catch (e) { /* depolama kapalı */ } document.documentElement.classList.toggle('rt-aciklama-gizli', g); }   // varsayılan gizli
   aciklamaDurumu();
   window.addEventListener('storage', e => { if (e.key === 'aciklamaGizli') aciklamaDurumu(); });
 

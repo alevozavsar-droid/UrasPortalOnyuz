@@ -300,6 +300,11 @@ tasarımından uyarlandı:
     tahsile gönderilenler banka bazında. `U_TalepEden` (satınalmacı / kaydı açan / avans kullanan / çıkış talebi) fatura sahibinin altında; şahsi avans
     (`NakitAvansOrnek.SahsiMi`, `TalepTuru` "Şahsi Avans (Maaş)") Kasa Nakit Akışı'nda ad / konu gizli (`AvansSahsiMi`); sekme çubuğu tek satır, sekme içi sıra numarası,
     Mutabakat durumu Ödeme Durumu altında; çekmecede çek kartı: Belge Ekle / Çıkış Planı / Değiştir / Kaldır.
+    **Yeni Ödeme çekmecesi**: Elle Giriş · Ödenmemiş Faturalar · Cari Bakiyeleri (`/Rapor79/CariAcikFaturalar?dbName=` → `NakitAkisOrnek.CariAcikFaturalar`:
+    `MutabakatOrnek.Cariler` (şirket + tedarikçi / çift rol) açık faturaları, vadesi geçmiş / gelecek TL toplamları, döviz özeti, `/Rapor20/Index?bpCode=` ve
+    `/CariMutabakat/Ekstre?kod=` bağlantıları); "Seç" formu doldurur. Çek portföyü `CekKaydi.IslemTipi` (X / R, belge numarasından deterministik) ile ayrı
+    bakiye satırları (`ÇEK PORTFÖYÜ (X)` …). Rapor açıklama kutuları (`rt-aciklama`) portal genelinde varsayılan gizli (`aciklamaGizli` ≠ '0'). Nakit Avans
+    modülü JSON'unda şahsi avans maskelenir (`IkTalepController.Kisi(k, gizli)`).
   - **Kasa Nakit Akışı — eski görünüm** (`/Rapor79/Eski`, `Views/Rapor79/Eski.cshtml` + `wwwroot/js/rapor79.js` + `rapor79-yontem.js`): ana projedeki 23 sütunlu
     liste; ödeme yöntemi SEKMELERİ (Tümü = `.ana-liste`; yöntem panelleri `.yontem-panel[data-method]`), Çek / Senet satırında "Belge Seç" → `#belgeSecModal` →
     `/Rapor79/BelgePlanla`, `/Rapor79/BelgePlanKaldir`, `/Rapor79/YontemAlanKaydet`; ana projedeki `#btnSatirCekOnayla` akışı da `BelgePlanla` çağırır.

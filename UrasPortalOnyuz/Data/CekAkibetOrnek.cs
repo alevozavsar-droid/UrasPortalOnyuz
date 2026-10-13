@@ -20,6 +20,7 @@ namespace WebApplication3.Data
         public string DbKey { get; set; }            // DefaultConnection … (OrnekVeri.Sirketler)
         public string No { get; set; }               // ÇK-2610-123456 | SN-2610-123456
         public string Belge { get; set; }            // Çek | Senet
+        public string IslemTipi { get; set; } = "X"; // X | R — belgenin işlem tipi (portföy X / R ayrı izlenir; Kasa Nakit Akışı İşlem Tipi ile aynı kodlama)
         public string Musteri { get; set; }          // çekin geldiği müşteri (ciro eden / kimden geldi)
         public string MusteriKod { get; set; }
         public string AsilBorclu { get; set; }       // keşideci
@@ -109,6 +110,8 @@ namespace WebApplication3.Data
             ("13", "Konkordato - Bankada"), ("14", "Konkordato - Tedarikçide"), ("15", "İade Edildi"), ("16", "İptal Edildi")
         };
         public static string IslemKodu(string ad) => IslemTurleri.FirstOrDefault(t => t.Ad == ad).Kod ?? "1";
+        /// <summary>Belgenin işlem tipi (X / R): belge numarasının rakamlarından deterministik, yaklaşık %78 X.</summary>
+        public static string IslemTipiHesapla(string no) { var d = new string((no ?? "").Where(char.IsDigit).ToArray()); if (d.Length == 0) return "X"; long n = long.Parse(d.Length > 9 ? d.Substring(d.Length - 9) : d); return n % 100 < 78 ? "X" : "R"; }
         /// <summary>Belgenin şirketten çıktığı işlem türleri: Kasa Nakit Akışı'nda planlanmamış belge için bu türlere geçiş GMY onayına düşer (NakitAkisOrnek.CekCikisKontrollu).</summary>
         public static bool CikisTuruMu(string ad) => ad == "Ciro Edildi" || ad == "Bankaya Tahsile Verildi" || ad == "Teminata Verildi" || ad == "Konkordato - Tedarikçide" || ad == "Konkordato - Bankada" || ad == "Erteleme Yapıldı - Bankada";
         public static string IslemAdi(string kod) => IslemTurleri.FirstOrDefault(t => t.Kod == kod).Ad ?? kod;
@@ -151,7 +154,7 @@ namespace WebApplication3.Data
                     var s = Sirketler.FirstOrDefault(x => x.Ad == c.Sirket);
                     var k = new CekKaydi
                     {
-                        DocEntry = docEntry++, Sirket = c.Sirket, KaynakSirket = c.Sirket, DbName = s.DbName ?? c.Sirket, DbKey = s.DbKey ?? "DefaultConnection", No = c.No, Belge = c.Belge, Musteri = c.Musteri, MusteriKod = c.MusteriKod,
+                        DocEntry = docEntry++, Sirket = c.Sirket, KaynakSirket = c.Sirket, DbName = s.DbName ?? c.Sirket, DbKey = s.DbKey ?? "DefaultConnection", No = c.No, Belge = c.Belge, IslemTipi = IslemTipiHesapla(c.No), Musteri = c.Musteri, MusteriKod = c.MusteriKod,
                         AsilBorclu = rnd.NextDouble() < 0.8 ? c.Musteri : UcuncuTaraf[rnd.Next(UcuncuTaraf.Length)], Banka = c.Banka, Sube = Subeler[rnd.Next(Subeler.Length)],
                         Vade = c.Vade, Tutar = c.Tutar, PB = "TRY", PortfoyGiris = c.Vade.AddDays(-rnd.Next(20, 90)),
                         KullanimDurumu = c.Durum == "Riskli" ? "Riskli" : rnd.Next(40) == 0 ? "Teminat" : "Kullanılabilir"
@@ -277,7 +280,7 @@ namespace WebApplication3.Data
                 a.Not = bakiye <= 0 ? $"{sahip}'nin {alan}'ya borcu yok: ciro {alan}'nın {sahip}'ya {(yeni).ToString("N0", Tr)} TL yeni borcu olur (bakiye şişer)" : yeni > 0 ? $"{sahip}'nin {alan}'ya borcu {(bakiye).ToString("N0", Tr)} TL kapanır; {(yeni).ToString("N0", Tr)} TL yeni bakiye {alan} → {sahip}" : $"{sahip}'nin {alan}'ya {(bakiye).ToString("N0", Tr)} TL borcundan {(kapanan).ToString("N0", Tr)} TL kapanır; kalan borç {(bakiye - kapanan).ToString("N0", Tr)} TL";
                 if (a.Sonuc == "Uyarı") uygun = false; s.Adimlar.Add(a); s.ToplamKapanan += kapanan; s.ToplamYeniBorc += yeni; sahip = alan;
             }
-            if (sonAdim == "Bankaya İbraz") s.Adimlar.Add(new DolasimAdimSonuc { Sira = ++sira, Eden = sahip, Alan = "Banka (tahsil)", Tur = "Bankaya İbraz", Sonuc = "Uygun", Not = $"{sahip} belgeyi tahsil için bankaya verir; nakit {sahip} hesabına girer" });
+            if (sonAdim == "Bankaya İbraz") s.Adimlar.Add(new DolasimAdimSonuc { Sira = ++sira, Eden = sahip, Alan = ButceOrnek.TahsilBankalari[k.DocEntry % 2] + " (Tahsil)", Tur = "Bankaya İbraz", Sonuc = "Uygun", Not = $"{sahip} belgeyi tahsil için bankaya verir; nakit {sahip} hesabına girer" });
             else { string ted = string.IsNullOrWhiteSpace(tedarikci) ? k.PlanlananTedarikci : tedarikci; s.Adimlar.Add(new DolasimAdimSonuc { Sira = ++sira, Eden = sahip, Alan = string.IsNullOrEmpty(ted) ? "Tedarikçi" : ted, Tur = "Tedarikçiye Ciro", Sonuc = string.IsNullOrEmpty(faturaSahibi) || faturaSahibi == sahip ? "Uygun" : "Uyarı", Not = string.IsNullOrEmpty(faturaSahibi) || faturaSahibi == sahip ? $"{sahip} faturasını {ted} tedarikçisine çekle öder" : $"Faturanın sahibi {faturaSahibi}; belge {sahip} şirketinde kalıyor — zincir {faturaSahibi} ile bitmeli" }); if (!string.IsNullOrEmpty(faturaSahibi) && faturaSahibi != sahip) { uygun = false; s.Uyarilar.Add($"Zincirin son şirketi {sahip}, fatura sahibi {faturaSahibi}: belge fatura sahibine ulaşmıyor."); } }
             s.Uygun = uygun && !s.Adimlar.Any(a => a.Sonuc == "Uyarı"); s.SonSahip = sahip;
             // derece: Uygun = her adımda borç tamamen kapanıyor; Kısmi = borç var ama belge tutarından küçük (fark yeni bakiye); Uyarı = borç ilişkisi olmayan adım (bakiye şişer)
