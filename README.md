@@ -307,6 +307,18 @@ tasarımından uyarlandı:
     modülü JSON'unda şahsi avans maskelenir (`IkTalepController.Kisi(k, gizli)`). **Departman Talepleri** (`Data/OdemeTalepOrnek.cs`: `OdemeTalebi` —
     fatura / sipariş / vergi / SGK / gümrük / kira; `Listele`, `NakitAkisaAl` → `NakitAkisOrnek.Ekle`, talep "Nakit Akışa Alındı"; `/Rapor79/OdemeTalebiEkle`),
     `CariAcikFaturalar` cevabında `talepler`, `temsilciler` (`MutabakatOrnek.Temsilciler`) — Yeni Ödeme sekmelerinde Temsilci / Talep Eden süzgeci.
+    **Ödeme adımı:** çek / senet satırında "Çeki Ver / İbraz Et" (`/Rapor79/CekIbraz` → `NakitAkisOrnek.CekIbrazEt`: planlı belgeler `IslemTuruDegistir` Ciro Edildi /
+    Bankaya Tahsile Verildi, dolaşımlı belgede kalan adımlar; `U_IbrazBelgeNo`, `U_IbrazTarihi`; satır ÖDENDİ + fişler). Havale: `U_AliciBanka`, `U_AliciIban`, `U_AliciHesapAdi`
+    (`NakitAkisOrnek.TedarikciBanka` cari adından deterministik, `CariBilgi` → vade şartı günü + banka; `TalimatOrnek.Olustur` boş IBAN'ı doldurur; `Talimat.cshtml` alıcı banka /
+    hesap adı sütunları). Ekler: `DekontKaydi.Tur / Veri / IcerikTipi / Boyut` (`EkTurleri`: Dekont, İmzalı Makbuz, İmzalı Talimat, Ciro Bordrosu, Çek Fotokopisi), `/Rapor79/EkYukle`
+    (IFormFile, satır ya da `talimatNo`), `/Rapor79/Ek`, `/Rapor79/TalimatEk`; `OdemeTalimati.Ekler`. **Kur** (`Data/KurOrnek.cs`: TCMB örnek serisi, hafta sonu önceki iş günü,
+    ileri tarih tahmini; `/Rapor79/Kur?pb=&tarih=`): satırda `U_KurKaynagi` (TCMB Döviz Alış / Satış / Efektif Alış / Anlaşmalı Kur / Fatura Kuru / Çek Tahsil Günü Kuru),
+    `U_KurTarihi`, `U_KurNotu`, `U_KurFarkiFaturasi`; `NakitAkisOrnek.KurTamamla` (TCMB kaynaklarında kur seriden; çekte en erken belge vadesi); dövizli fatura TL çekle ödenince
+    `BelgePlanla` satır tutarını vade günü kuruyla döviz karşılığı yapar, kur farkı faturası "Kesilecek". **Grup içi belge** (`Data/GrupIciBelgeOrnek.cs`): fatura sahibi ≠ ödeyen olan
+    her satırda otomatik `GrupIciBelge` (GİM-/GİT-, `U_GrupIciTur` Mahsup | Temlik, `U_GrupIciNo`; `Senkron` kayıt / güncelleme / iptal, `Muhasebelestir` ödeme gerçekleşince
+    fatura sahibi fişi 320 ↔ 132 / 332 + `CekAkibetOrnek.GrupBakiyeEkle`; ödeyen fişi `MuhasebeOrnek.OdemeFisi` 132 ya da — karşılıklı mahsupta — 332); `/Rapor79/GrupIciTur`,
+    `GrupIciBelgeVeri`, yazdırılabilir `Views/Rapor79/GrupIciBelge.cshtml`; Mahsup / Temlik sekmelerinde "Otomatik Grup İçi … Belgeleri" tablosu (`cizGib`). Departman taleplerinde
+    mahsup sütunu kaldırıldı; Yeni Ödeme › Cari Bakiyeleri'nde Vade Şartı sütunu (`vadeSarti`, `sonOdemeOnerisi`, banka), çek seçiminde "Son Ödeme Tarihine Yakın Vade" sıralaması.
   - **Kasa Nakit Akışı — eski görünüm** (`/Rapor79/Eski`, `Views/Rapor79/Eski.cshtml` + `wwwroot/js/rapor79.js` + `rapor79-yontem.js`): ana projedeki 23 sütunlu
     liste; ödeme yöntemi SEKMELERİ (Tümü = `.ana-liste`; yöntem panelleri `.yontem-panel[data-method]`), Çek / Senet satırında "Belge Seç" → `#belgeSecModal` →
     `/Rapor79/BelgePlanla`, `/Rapor79/BelgePlanKaldir`, `/Rapor79/YontemAlanKaydet`; ana projedeki `#btnSatirCekOnayla` akışı da `BelgePlanla` çağırır.

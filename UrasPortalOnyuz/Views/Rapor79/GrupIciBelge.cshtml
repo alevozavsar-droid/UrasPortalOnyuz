@@ -1,0 +1,93 @@
+@model WebApplication3.Data.GrupIciBelge
+@using System.Globalization
+@{
+    Layout = null;
+    var tr = CultureInfo.GetCultureInfo("tr-TR");
+    var fsBilgi = WebApplication3.Data.TalimatOrnek.SirketBilgisi.TryGetValue(Model.FaturaSahibiDb ?? "", out var b1) ? b1 : (Unvan: Model.FaturaSahibi, Adres: "", Web: "", Komiserler: new string[0]);
+    var odBilgi = WebApplication3.Data.TalimatOrnek.SirketBilgisi.TryGetValue(Model.OdeyenDb ?? "", out var b2) ? b2 : (Unvan: Model.Odeyen, Adres: "", Web: "", Komiserler: new string[0]);
+    var fsFis = ViewBag.FaturaSahibiFisi as WebApplication3.Data.YevmiyeFisi; var odFis = ViewBag.OdeyenFisi as WebApplication3.Data.YevmiyeFisi;
+    string pbAd = Model.PB == "TRY" ? "TL" : Model.PB; bool temlik = Model.Tur == "Temlik";
+}
+@*
+    GRUP İÇİ MAHSUP / TEMLİK BELGESİ — yazdırılabilir (Kasa Nakit Akışı: fatura sahibi ≠ ödeyen şirket olan ödemelerde otomatik; Data/GrupIciBelgeOrnek.cs).
+    Ödeme gerçekleşince iki şirkette fiş atılır: ödeyen (132 ya da 332 borç / ödeme aracı alacak) ve fatura sahibi (320 borç / 132 ya da 332 alacak); grup içi bakiye güncellenir.
+*@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <title>@ViewData["Title"]</title>
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 0; background: #f1f5f9; }
+        .sayfa { width: 210mm; min-height: 200mm; margin: 12px auto; background: #fff; padding: 14mm 14mm; box-sizing: border-box; box-shadow: 0 2px 12px rgba(0,0,0,.12); font-size: 10.5pt; }
+        .ust { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1.5px solid #111; padding-bottom: 8px; }
+        .logo { font-size: 20pt; font-weight: 800; letter-spacing: .08em; color: #0f766e; } .logo small { display: block; font-size: 8pt; letter-spacing: .2em; color: #64748b; font-weight: 600; }
+        .unvan { text-align: right; font-size: 9pt; } .unvan b { font-size: 11pt; display: block; margin-bottom: 2px; }
+        h2 { text-align: center; font-size: 15pt; letter-spacing: .12em; margin: 16px 0 4px; } .altbaslik { text-align: center; font-size: 9pt; color: #64748b; }
+        .kutu { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; margin-top: 14px; font-size: 10pt; } .kutu div b { display: inline-block; min-width: 150px; color: #475569; font-weight: 600; }
+        .metin { margin-top: 12px; line-height: 1.5; border: 1px dashed #94a3b8; padding: 8px 10px; background: #f8fafc; font-size: 9.5pt; }
+        .tutar { margin-top: 14px; border: 1.5px solid #111; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; } .tutar .r { font-size: 16pt; font-weight: 800; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 9pt; } th, td { border: 1px solid #111; padding: 4px 6px; text-align: left; } th { background: #f1f5f9; } td.s, th.s { text-align: right; white-space: nowrap; } tfoot td { font-weight: 700; background: #f8fafc; }
+        .imza { display: flex; justify-content: space-around; margin-top: 34px; text-align: center; font-size: 9.5pt; } .imza span { border-top: 1px solid #111; padding-top: 4px; min-width: 170px; display: inline-block; }
+        .alt { margin-top: 18px; font-size: 8pt; color: #64748b; display: flex; justify-content: space-between; }
+        .arac { width: 210mm; margin: 10px auto 0; display: flex; gap: 8px; } .arac button, .arac a { font: inherit; font-size: 10pt; padding: 6px 12px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; cursor: pointer; text-decoration: none; color: #0f172a; }
+        .durum { display: inline-block; font-size: 8.5pt; padding: 2px 8px; border-radius: 999px; background: #dcfce7; color: #166534; font-weight: 700; margin-left: 8px; } .durum.hazir { background: #fef3c7; color: #92400e; }
+        @@media print { body { background: #fff; } .sayfa { box-shadow: none; margin: 0; width: auto; min-height: 0; } .arac { display: none; } }
+    </style>
+</head>
+<body>
+    <div class="arac"><button type="button" onclick="window.print()">Yazdır / PDF</button><a href="/Rapor79?sekme=@(temlik ? "temlik" : "mahsup")">Kasa Nakit Akışı › @Model.Tur</a><span style="font-size:9pt;color:#64748b;align-self:center">Ön yüz örneği: belge bellek içi kayıttan üretilir; fişler ödeme gerçekleşince otomatik atılır.</span></div>
+    <div class="sayfa">
+        <div class="ust">
+            <div class="logo">URAS<small>HOLDING</small></div>
+            <div class="unvan"><b>@fsBilgi.Unvan</b>@fsBilgi.Adres<br />@fsBilgi.Web</div>
+        </div>
+        <h2>@Model.Baslik.ToUpper(tr)</h2>
+        <div class="altbaslik">Belge No: <b>@Model.No</b> · Tarih: @Model.Tarih.ToString("dd.MM.yyyy", tr)<span class="durum @(Model.Durum == "Muhasebeleşti" ? "" : "hazir")">@Model.Durum</span></div>
+        <div class="kutu">
+            <div><b>Fatura Sahibi (Borçlu)</b>@fsBilgi.Unvan</div>
+            <div><b>Ödeyen Grup Şirketi</b>@odBilgi.Unvan</div>
+            <div><b>Ödenecek Cari (Tedarikçi)</b>@Model.Kurum</div>
+            <div><b>Belge</b>@(string.IsNullOrEmpty(Model.BelgeNo) ? Model.BelgeTipi : Model.BelgeTipi + " " + Model.BelgeNo)</div>
+            <div><b>Ödeme Yöntemi</b>@Model.Yontem</div>
+            <div><b>Kaynak Kayıt</b>Kasa Nakit Akışı #@Model.KaynakDocEntry</div>
+            <div><b>Açıklama</b>@Model.Aciklama</div>
+            <div><b>İşlem Şekli</b>@(string.IsNullOrEmpty(Model.MahsupSekli) ? (temlik ? "Temlik" : "Mahsup") : Model.MahsupSekli)</div>
+        </div>
+        <div class="tutar"><span>@(temlik ? "TEMLİK TUTARI" : "MAHSUP TUTARI")</span><span class="r">@Model.Tutar.ToString("N2", tr) @pbAd@(Model.PB != "TRY" ? " = " + Model.TutarTL.ToString("N2", tr) + " TL (kur " + Model.Kur.ToString("N4", tr) + ")" : "")</span></div>
+        <div class="metin">
+            @if (temlik)
+            {
+                <text><b>@odBilgi.Unvan</b>, <b>@fsBilgi.Unvan</b>'nin <b>@Model.Kurum</b>'a olan @(string.IsNullOrEmpty(Model.BelgeNo) ? "" : Model.BelgeNo + " nolu ")borcunu @Model.Yontem ile öder; bu tutar kadar alacak hakkı temlik yoluyla @odBilgi.Unvan'ye geçer ve @fsBilgi.Unvan defterinde 332 İştiraklere Borçlar hesabında @odBilgi.Unvan'ye borç olarak izlenir. Grup içi bakiye otomatik güncellenir.</text>
+            }
+            else
+            {
+                <text><b>@odBilgi.Unvan</b>, <b>@fsBilgi.Unvan</b> adına <b>@Model.Kurum</b>'a @(string.IsNullOrEmpty(Model.BelgeNo) ? "" : Model.BelgeNo + " nolu belge için ")@Model.Yontem ile ödeme yapar; tutar iki şirket arasındaki grup içi cari bakiyeden mahsup edilir (ödeyenin fatura sahibine borcu varsa o borçtan düşülür, yoksa fatura sahibi ödeyene borçlanır). Grup içi bakiye otomatik güncellenir.</text>
+            }
+        </div>
+
+        @if (fsFis != null)
+        {
+            <table>
+                <thead><tr><th colspan="2">@Model.FaturaSahibi defteri · Fiş @fsFis.No · @fsFis.Tarih.ToString("dd.MM.yyyy", tr)</th><th class="s">Borç (TL)</th><th class="s">Alacak (TL)</th></tr></thead>
+                <tbody>@foreach (var s in fsFis.Satirlar) { <tr><td style="width:60px">@s.HesapKodu</td><td>@s.HesapAdi<br /><span style="color:#64748b;font-size:8pt">@s.Aciklama</span></td><td class="s">@(s.Borc > 0 ? s.Borc.ToString("N2", tr) : "")</td><td class="s">@(s.Alacak > 0 ? s.Alacak.ToString("N2", tr) : "")</td></tr> }</tbody>
+                <tfoot><tr><td colspan="2" class="s">TOPLAM</td><td class="s">@fsFis.ToplamBorc.ToString("N2", tr)</td><td class="s">@fsFis.ToplamAlacak.ToString("N2", tr)</td></tr></tfoot>
+            </table>
+        }
+        @if (odFis != null)
+        {
+            <table>
+                <thead><tr><th colspan="2">@Model.Odeyen defteri · Ödeme fişi @odFis.No · @odFis.Tarih.ToString("dd.MM.yyyy", tr)</th><th class="s">Borç (TL)</th><th class="s">Alacak (TL)</th></tr></thead>
+                <tbody>@foreach (var s in odFis.Satirlar) { <tr><td style="width:60px">@s.HesapKodu</td><td>@s.HesapAdi<br /><span style="color:#64748b;font-size:8pt">@s.Aciklama</span></td><td class="s">@(s.Borc > 0 ? s.Borc.ToString("N2", tr) : "")</td><td class="s">@(s.Alacak > 0 ? s.Alacak.ToString("N2", tr) : "")</td></tr> }</tbody>
+                <tfoot><tr><td colspan="2" class="s">TOPLAM</td><td class="s">@odFis.ToplamBorc.ToString("N2", tr)</td><td class="s">@odFis.ToplamAlacak.ToString("N2", tr)</td></tr></tfoot>
+            </table>
+        }
+        @if (fsFis == null && odFis == null)
+        {
+            <div class="metin" style="margin-top:14px">Muhasebe fişleri ödeme gerçekleşince (makbuz, talimat, çek ibrazı ya da satır ÖDENDİ) iki şirkette otomatik atılır ve bu belgeye eklenir.</div>
+        }
+        <div class="imza"><span>@Model.FaturaSahibi<br />Yetkili İmza</span><span>@Model.Odeyen<br />Yetkili İmza</span></div>
+        <div class="alt"><span>@Model.No · @Model.Baslik · Kasa Nakit Akışı #@Model.KaynakDocEntry · hazırlayan @Model.Olusturan</span><span>Grup ERP Portalı</span></div>
+    </div>
+</body>
+</html>

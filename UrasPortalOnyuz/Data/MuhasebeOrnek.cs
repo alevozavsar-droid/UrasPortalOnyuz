@@ -51,14 +51,19 @@ namespace WebApplication3.Data
         {
             if (m == null) return null; decimal tl = m.U_TutarTL ?? Math.Round((m.U_Tutar ?? 0) * (m.U_Kur ?? 1), 2); if (tl <= 0) return null;
             string y = m.U_OdemeYontemi ?? "", belge = string.IsNullOrEmpty(m.U_FaturaSiparisNo) ? (m.U_BagliBelgeTipi ?? "") : m.U_FaturaSiparisNo;
-            string doviz = m.U_ParaBirimi == "TRY" || string.IsNullOrEmpty(m.U_ParaBirimi) ? "" : $" ({(m.U_Tutar ?? 0).ToString("N2", Tr)} {m.U_ParaBirimi} × {(m.U_Kur ?? 1).ToString("N4", Tr)})";
+            string doviz = m.U_ParaBirimi == "TRY" || string.IsNullOrEmpty(m.U_ParaBirimi) ? "" : $" ({(m.U_Tutar ?? 0).ToString("N2", Tr)} {m.U_ParaBirimi} × {(m.U_Kur ?? 1).ToString("N4", Tr)}{(string.IsNullOrEmpty(m.U_KurKaynagi) ? "" : " " + m.U_KurKaynagi + (m.U_KurTarihi != null ? " " + m.U_KurTarihi.Value.ToString("dd.MM.yyyy") : ""))})";
             bool grupIci = CekAkibetOrnek.GrupSirketleri.Contains(m.U_Kurum ?? "");
             string borcHesap = !string.IsNullOrEmpty(m.U_AvansNo) ? "196" : grupIci ? "332" : "320";
             string alacakHesap = y == "Nakit" ? "100" : y == "Havale / EFT" ? "102" : y == "Kredi Kartı / Banka Kartı" ? "300" : y == "Çek" ? "101" : y == "Senet" ? "121" : y == "Mahsup" || y == "Temlik" || y == "Yansıtma" ? "120" : "102";
             string aciklama = $"{m.U_Kurum} · {belge} · {y}{doviz}" + (string.IsNullOrEmpty(m.U_FaturaSahibi) || m.U_FaturaSahibi == m.U_OdeyenSirket ? "" : $" · {m.U_FaturaSahibi} adına");
             var satirlar = new List<YevmiyeSatiri> { S(borcHesap, tl, 0, (borcHesap == "196" ? "Nakit avans " + m.U_AvansNo + " · " : "") + m.U_Kurum), S(alacakHesap, 0, tl, y == "Nakit" ? (m.U_Kasa ?? "Kasa") + (string.IsNullOrEmpty(m.U_MakbuzNo) ? "" : " · " + m.U_MakbuzNo) : y == "Havale / EFT" ? (m.U_BankaHesabi ?? "Banka") : y == "Çek" || y == "Senet" ? "Ciro: " + m.U_CekNolar : y == "Kredi Kartı / Banka Kartı" ? (m.U_Kart ?? "Kart") : y) };
-            // fatura sahibi ödeyenden farklıysa (grup içi ödeme): ödeyen şirkette borç tarafı grup şirketinden alacak olur
-            if (!string.IsNullOrEmpty(m.U_FaturaSahibi) && !string.IsNullOrEmpty(m.U_OdeyenSirket) && m.U_FaturaSahibi != m.U_OdeyenSirket && string.IsNullOrEmpty(m.U_AvansNo)) satirlar[0] = S("132", tl, 0, $"{m.U_FaturaSahibi} adına ödeme · {m.U_Kurum}");
+            // fatura sahibi ödeyenden farklıysa (grup içi ödeme): ödeyen şirkette borç tarafı grup şirketinden alacak (132) olur; mahsup belgesinde ödeyenin fatura sahibine borcu varsa o borçtan düşülür (332)
+            if (!string.IsNullOrEmpty(m.U_FaturaSahibi) && !string.IsNullOrEmpty(m.U_OdeyenSirket) && m.U_FaturaSahibi != m.U_OdeyenSirket && string.IsNullOrEmpty(m.U_AvansNo))
+            {
+                bool mahsup = m.U_GrupIciTur == "Mahsup" && CekAkibetOrnek.GrupBakiye(m.U_OdeyenSirket, m.U_FaturaSahibi) >= tl;
+                string gib = string.IsNullOrEmpty(m.U_GrupIciNo) ? "" : " · " + m.U_GrupIciNo;
+                satirlar[0] = mahsup ? S("332", tl, 0, $"{m.U_FaturaSahibi} şirketine olan grup içi borçtan mahsup · {m.U_Kurum}{gib}") : S("132", tl, 0, $"{m.U_FaturaSahibi} adına ödeme ({(m.U_GrupIciTur == "Temlik" ? "temlik" : "grup içi alacak")}) · {m.U_Kurum}{gib}");
+            }
             return Olustur(m.U_KaynakFirma, kaynak, aciklama, satirlar, kullanici);
         }
         /// <summary>Çek ciro / ibraz adımı fişi. Grup içi ciro: eden şirkette 332 borç / 101 alacak, alan şirkette 101 borç / 132 alacak. Tedarikçiye ciro: 320 / 101. Bankaya ibraz: 102 / 101.</summary>

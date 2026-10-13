@@ -100,6 +100,17 @@ namespace WebApplication3.Data
             ["Uras Kimya|URS Makine"] = 2_180_000m, ["URS Makine|Uras Holding"] = 1_960_000m, ["Uras Holding|Alv Kimya"] = 1_840_000m, ["Selvi|Alv Kimya"] = 35_000m, ["Daf Kimya|Uras Kimya"] = 210_000m, ["URS Makine|Daf Kimya"] = 95_000m, ["Selvi|Daf Kimya"] = 640_000m, ["Daf Kimya|Alv Kimya"] = 420_000m
         };
         public static decimal GrupBakiye(string a, string b) { lock (Kilit) return GrupBakiyeleri.TryGetValue(a + "|" + b, out var v) ? v : 0; }
+        /// <summary>Grup içi bakiye değişikliği (borçlu → alacaklı): + borç artar, − borç kapanır (sıfırın altına inmez; fazlası ters yönde yeni bakiye olur). Grup içi mahsup / temlik belgeleri (Data/GrupIciBelgeOrnek.cs) kullanır.</summary>
+        public static void GrupBakiyeEkle(string borclu, string alacakli, decimal tutar)
+        {
+            if (string.IsNullOrEmpty(borclu) || string.IsNullOrEmpty(alacakli) || borclu == alacakli || tutar == 0) return;
+            lock (Kilit)
+            {
+                string key = borclu + "|" + alacakli, ters = alacakli + "|" + borclu; decimal mevcut = GrupBakiyeleri.TryGetValue(key, out var v) ? v : 0;
+                if (tutar < 0 && -tutar > mevcut) { GrupBakiyeleri[key] = 0; GrupBakiyeleri[ters] = (GrupBakiyeleri.TryGetValue(ters, out var t) ? t : 0) + (-tutar - mevcut); }
+                else GrupBakiyeleri[key] = mevcut + tutar;
+            }
+        }
         public static string DbName(string sirket) => Sirketler.FirstOrDefault(s => s.Ad == sirket).DbName ?? sirket;
         public static string SirketAdi(string dbNameOrKey) { var s = Sirketler.FirstOrDefault(x => x.DbName == dbNameOrKey || x.DbKey == dbNameOrKey || x.Ad == dbNameOrKey); return s.Ad ?? dbNameOrKey; }
         /// <summary>Çek Akıbeti Raporu işlem türleri (kod, açıklama) — ana projedeki sıra.</summary>

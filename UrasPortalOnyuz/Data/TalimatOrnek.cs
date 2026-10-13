@@ -10,7 +10,8 @@ namespace WebApplication3.Data
     public class TalimatSatiri
     {
         public int DocEntry { get; set; } public string DbName { get; set; } public string FaturaSahibi { get; set; } public string OdeyenSirket { get; set; } public string Kurum { get; set; } public string FaturaNo { get; set; } public string Aciklama { get; set; }
-        public decimal Tutar { get; set; } public string PB { get; set; } public decimal TutarTL { get; set; } public string AliciIban { get; set; } = ""; public string AliciBanka { get; set; } = ""; public string GrupIciNo { get; set; } = ""; public string AvansNo { get; set; } = "";
+        public decimal Tutar { get; set; } public string PB { get; set; } public decimal TutarTL { get; set; } public string AliciIban { get; set; } = ""; public string AliciBanka { get; set; } = ""; public string AliciHesapAdi { get; set; } = ""; public string GrupIciNo { get; set; } = ""; public string AvansNo { get; set; } = "";
+        public string KurBilgisi { get; set; } = "";   // dövizli satırda baz alınan kur (kaynak · tarih · kur)
         public List<TalimatBelge> Belgeler { get; set; } = new List<TalimatBelge>();
     }
     public class TalimatBelge { public int CekDocEntry { get; set; } public string No { get; set; } public string Belge { get; set; } public string Banka { get; set; } public string CiroEden { get; set; } public string AsilBorclu { get; set; } public decimal Tutar { get; set; } public string PB { get; set; } public DateTime Vade { get; set; } public string Sahip { get; set; } public string Dolasim { get; set; } = ""; public int DolasimAdim { get; set; } public int DolasimToplam { get; set; } }
@@ -26,6 +27,8 @@ namespace WebApplication3.Data
         public int Id { get; set; } public string No { get; set; } public DateTime Tarih { get; set; } public string DbName { get; set; } public string Sirket { get; set; } public string Yontem { get; set; }
         public string BankaHesabi { get; set; } = ""; public string Kasa { get; set; } = ""; public string Durum { get; set; } = "Hazırlandı"; public string Hazirlayan { get; set; } public string Onaylayan { get; set; } = ""; public DateTime? OnayTarihi { get; set; } public DateTime? IletimTarihi { get; set; } public DateTime? GerceklesmeTarihi { get; set; } public string IptalNedeni { get; set; } = "";
         public List<TalimatSatiri> Satirlar { get; set; } = new List<TalimatSatiri>(); public List<TalimatGunluk> Gunluk { get; set; } = new List<TalimatGunluk>();
+        public List<DekontKaydi> Ekler { get; set; } = new List<DekontKaydi>();   // imzalı talimat / banka dekontu (bellek içi dosya)
+        public bool ImzaliYuklendi => Ekler.Any(e => e.Tur == "İmzalı Talimat");
         public decimal ToplamTL => Satirlar.Sum(s => s.TutarTL); public decimal Toplam => Satirlar.Sum(s => s.Tutar); public string PB => Satirlar.Select(s => s.PB).Distinct().Count() == 1 ? Satirlar[0].PB : "TRY";
         public string Baslik => Yontem == "Havale / EFT" ? "Banka Ödeme Talimatı" : Yontem == "Çek" ? "Çek Teslim / Ciro Talimatı" : Yontem == "Senet" ? "Senet Teslim / Ciro Talimatı" : Yontem == "Nakit" ? "Kasa Ödeme Talimatı" : Yontem == "Kredi Kartı / Banka Kartı" ? "Kart Ödeme Talimatı" : Yontem == "Mahsup" ? "Mahsup Talimatı" : Yontem == "Temlik" ? "Temlik Talimatı" : Yontem == "Yansıtma" ? "Grup İçi Yansıtma Ödeme Talimatı" : "Ödeme Talimatı";
         public string SonrakiDurum => Durum == "Hazırlandı" ? "Onaylandı" : Durum == "Onaylandı" ? (Yontem == "Havale / EFT" || Yontem == "Kredi Kartı / Banka Kartı" ? "Bankaya İletildi" : "Teslim Edildi") : Durum == "Bankaya İletildi" || Durum == "Teslim Edildi" ? "Gerçekleşti" : null;
@@ -86,7 +89,9 @@ namespace WebApplication3.Data
                     foreach (var m in g)
                     {
                         NakitAkisOrnek.BelgeleriDoldur(m);
-                        var s = new TalimatSatiri { DocEntry = m.DocEntry, DbName = m.U_KaynakFirma, FaturaSahibi = string.IsNullOrEmpty(m.U_FaturaSahibi) ? NakitAkisOrnek.SirketAdi(m.U_KaynakFirma) : m.U_FaturaSahibi, OdeyenSirket = g.Key.Odeyen, Kurum = m.U_Kurum, FaturaNo = m.U_FaturaSiparisNo ?? "", Aciklama = AciklamaUret(m), Tutar = m.U_Tutar ?? 0, PB = m.U_ParaBirimi ?? "TRY", TutarTL = m.U_TutarTL ?? 0, AliciIban = m.U_AliciIban ?? "", GrupIciNo = m.U_MahsupFisNo + m.U_TemlikNo + m.U_YansitmaNo, AvansNo = m.U_AvansNo ?? "" };
+                        // banka talimatında alıcı banka bilgisi zorunlu: satırda yoksa cari karttan / son ödemeden otomatik alınır ve satıra yazılır
+                        if (g.Key.Yontem == "Havale / EFT" && string.IsNullOrEmpty(m.U_AliciIban)) { var tb = NakitAkisOrnek.TedarikciBanka(m.U_Kurum); m.U_AliciBanka = tb.banka; m.U_AliciIban = tb.iban; m.U_AliciHesapAdi = tb.hesapAdi; NakitAkisOrnek.Gunluge(m.U_KaynakFirma, m.DocEntry, "Banka Bilgisi", $"Talimat için alıcı banka bilgisi cari karttan alındı: {tb.banka} · {tb.iban}", kullanici); }
+                        var s = new TalimatSatiri { DocEntry = m.DocEntry, DbName = m.U_KaynakFirma, FaturaSahibi = string.IsNullOrEmpty(m.U_FaturaSahibi) ? NakitAkisOrnek.SirketAdi(m.U_KaynakFirma) : m.U_FaturaSahibi, OdeyenSirket = g.Key.Odeyen, Kurum = m.U_Kurum, FaturaNo = m.U_FaturaSiparisNo ?? "", Aciklama = AciklamaUret(m), Tutar = m.U_Tutar ?? 0, PB = m.U_ParaBirimi ?? "TRY", TutarTL = m.U_TutarTL ?? 0, AliciIban = m.U_AliciIban ?? "", AliciBanka = m.U_AliciBanka ?? "", AliciHesapAdi = m.U_AliciHesapAdi ?? "", GrupIciNo = m.U_MahsupFisNo + m.U_TemlikNo + m.U_YansitmaNo + (string.IsNullOrEmpty(m.U_GrupIciNo) ? "" : m.U_GrupIciNo), AvansNo = m.U_AvansNo ?? "", KurBilgisi = KurOrnek.Ozet(m.U_ParaBirimi, m.U_KurTarihi, m.U_KurKaynagi, m.U_Kur) };
                         foreach (var b in m.Belgeler) { var k = CekAkibetOrnek.Bul(b.CekDocEntry); s.Belgeler.Add(new TalimatBelge { CekDocEntry = b.CekDocEntry, No = b.No, Belge = b.Belge, Banka = b.Banka, CiroEden = b.KimdenGeldi, AsilBorclu = b.AsilBorclu, Tutar = b.Tutar, PB = b.PB, Vade = b.Vade, Sahip = k?.Sirket ?? "", Dolasim = k?.DolasimOzeti ?? "", DolasimAdim = k?.GerceklesenAdim ?? 0, DolasimToplam = k?.Dolasim.Count ?? 0 }); }
                         t.Satirlar.Add(s); m.U_TalimatNo = t.No; if (m.U_Durum == "Bekliyor") { m.U_Durum = "Planlandı"; m.U_EskiDurum = "Planlandı"; }
                         NakitAkisOrnek.Gunluge(m.U_KaynakFirma, m.DocEntry, "Talimat", $"{t.No} ({t.Baslik}) hazırlandı · ödeyen {t.Sirket}", kullanici);
@@ -97,6 +102,22 @@ namespace WebApplication3.Data
             }
             return (sonuc, atlanan);
         }
+        /// <summary>Talimata ek (imzalı talimat, banka dekontu): bellek içi dosya.</summary>
+        public static (bool ok, string mesaj, OdemeTalimati talimat) EkEkle(string no, string ad, string tur, string aciklama, string icerikTipi, byte[] veri, string kullanici)
+        {
+            var t = Bul(no); if (t == null) return (false, "Talimat bulunamadı.", null);
+            if (veri != null && veri.LongLength > 8_000_000) return (false, "Dosya 8 MB'ı aşamaz.", t);
+            tur = tur == "Dekont" ? "Dekont" : tur == "Diğer" ? "Diğer" : "İmzalı Talimat";
+            lock (Kilit)
+            {
+                var e = new DekontKaydi { Id = (t.Ekler.Count > 0 ? t.Ekler.Max(x => x.Id) : 0) + 1, SirketDb = t.DbName, DocEntry = 0, DosyaAdi = string.IsNullOrWhiteSpace(ad) ? $"{t.No}_imzali.pdf" : ad.Trim(), Aciklama = aciklama ?? "", Yukleyen = kullanici ?? "", Tarih = DateTime.Now, Tur = tur, IcerikTipi = icerikTipi ?? "", Veri = veri, Boyut = veri?.LongLength ?? 0 };
+                e.DosyaYolu = $"/Rapor79/TalimatEk?no={Uri.EscapeDataString(t.No)}&id={e.Id}"; t.Ekler.Add(e);
+                t.Gunluk.Add(new TalimatGunluk { Tarih = DateTime.Now, Kullanici = kullanici ?? "", Islem = "Ek", Aciklama = $"{tur}: {e.DosyaAdi}" + (string.IsNullOrEmpty(aciklama) ? "" : " · " + aciklama) });
+            }
+            foreach (var s in t.Satirlar) NakitAkisOrnek.Gunluge(s.DbName, s.DocEntry, "Ek", $"{t.No} {tur.ToLower(Tr)} yüklendi: {ad}", kullanici);
+            return (true, $"{t.No}: {tur} yüklendi ({ad}).", t);
+        }
+        public static DekontKaydi EkBul(string no, int id) { var t = Bul(no); lock (Kilit) return t?.Ekler.FirstOrDefault(e => e.Id == id); }
         static string AciklamaUret(NakitAkisViewModel m)
         {
             string belge = !string.IsNullOrEmpty(m.U_FaturaSiparisNo) ? $"{m.U_FaturaSiparisNo} NOLU {(m.U_BagliBelgeTipi == "Sipariş" ? "SİPARİŞ" : m.U_BagliBelgeTipi == "Avans" ? "AVANS" : m.U_BagliBelgeTipi == "Mahsup" || m.U_BagliBelgeTipi == "Temlik" || m.U_BagliBelgeTipi == "Yansıtma" ? m.U_BagliBelgeTipi.ToUpper(CultureInfo.GetCultureInfo("tr-TR")) : "FATURA")} ÖDEMESİ" : $"{(m.U_UrunHizmet ?? "ÖDEME").ToUpper(CultureInfo.GetCultureInfo("tr-TR"))}";

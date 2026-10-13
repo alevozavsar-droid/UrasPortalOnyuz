@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -75,7 +76,9 @@ namespace WebApplication3.Controllers
                 talimatlar = TalimatOrnek.Listele(sirket).Select(TalimatJson).ToList(),
                 avans = new { bekleyen = avanslar.Count, bekleyenTutar = avanslar.Sum(a => NakitAvansOrnek.TlKarsiligi(a.OdemeBekleyen, a.ParaBirimi)), link = "/IkTalep/AvansBekleyenOdemeler" },
                 onaycilar = new { nakit = NakitAkisOrnek.NakitOnaycilari, cekCikis = NakitAkisOrnek.CekCikisOnaycilari }, kullanici = Kullanici, belgeTipleri = NakitAkisOrnek.BelgeTipleri,
-                makbuzlar = MakbuzOrnek.Listele(string.IsNullOrEmpty(sirket) ? null : sirket).Take(100).Select(MakbuzOrnek.Json).ToList()
+                makbuzlar = MakbuzOrnek.Listele(string.IsNullOrEmpty(sirket) ? null : sirket).Take(100).Select(MakbuzOrnek.Json).ToList(),
+                kurKaynaklari = KurOrnek.Kaynaklar, kurFarkiSecenekleri = KurOrnek.KurFarkiSecenekleri, aliciBankalar = NakitAkisOrnek.AliciBankalari, ekTurleri = NakitAkisOrnek.EkTurleri, tahsilBankalari = ButceOrnek.TahsilBankalari,
+                grupIciBelgeler = GrupIciBelgeOrnek.Listele(string.IsNullOrEmpty(sirket) ? null : sirket).Select(GrupIciBelgeOrnek.Json).ToList()
             });
         }
 
@@ -122,8 +125,9 @@ namespace WebApplication3.Controllers
         {
             no = t.No, tarih = t.Tarih.ToString("yyyy-MM-dd HH:mm"), dbName = t.DbName, sirket = t.Sirket, yontem = t.Yontem, baslik = t.Baslik, bankaHesabi = t.BankaHesabi, kasa = t.Kasa, durum = t.Durum, sonrakiDurum = t.SonrakiDurum, kapandi = t.Kapandi,
             hazirlayan = t.Hazirlayan, onaylayan = t.Onaylayan, onayTarihi = t.OnayTarihi?.ToString("yyyy-MM-dd HH:mm"), iletimTarihi = t.IletimTarihi?.ToString("yyyy-MM-dd HH:mm"), gerceklesmeTarihi = t.GerceklesmeTarihi?.ToString("yyyy-MM-dd HH:mm"), iptalNedeni = t.IptalNedeni,
-            satirSayisi = t.Satirlar.Count, toplamTL = t.ToplamTL, toplam = t.Toplam, pb = t.PB, link = "/Rapor79/Talimat?no=" + Uri.EscapeDataString(t.No),
-            satirlar = t.Satirlar.Select(s => { var m = NakitAkisOrnek.Bul(s.DbName, s.DocEntry); return new { s.DocEntry, dbName = s.DbName, faturaSahibi = s.FaturaSahibi, odeyenSirket = s.OdeyenSirket, kurum = s.Kurum, faturaNo = s.FaturaNo, aciklama = s.Aciklama, tutar = s.Tutar, pb = s.PB, tutarTL = s.TutarTL, aliciIban = s.AliciIban, grupIciNo = s.GrupIciNo, avansNo = s.AvansNo, makbuzNo = m?.U_MakbuzNo ?? "", yevmiyeNo = m?.U_YevmiyeNo ?? "", durum = m?.U_Durum ?? "", belgeler = s.Belgeler.Select(b => new { b.CekDocEntry, b.No, b.Belge, b.Banka, b.CiroEden, b.AsilBorclu, b.Tutar, b.PB, vade = b.Vade.ToString("yyyy-MM-dd"), b.Sahip, b.Dolasim, b.DolasimAdim, b.DolasimToplam }) }; }),
+            satirSayisi = t.Satirlar.Count, toplamTL = t.ToplamTL, toplam = t.Toplam, pb = t.PB, link = "/Rapor79/Talimat?no=" + Uri.EscapeDataString(t.No), imzali = t.ImzaliYuklendi,
+            ekler = t.Ekler.Select(e => new { id = e.Id, ad = e.DosyaAdi, tur = e.Tur, yol = e.DosyaYolu, tarih = e.Tarih.ToString("yyyy-MM-dd HH:mm"), yukleyen = e.Yukleyen, aciklama = e.Aciklama, dosyaVar = e.Veri != null, boyut = e.Boyut }),
+            satirlar = t.Satirlar.Select(s => { var m = NakitAkisOrnek.Bul(s.DbName, s.DocEntry); return new { s.DocEntry, dbName = s.DbName, faturaSahibi = s.FaturaSahibi, odeyenSirket = s.OdeyenSirket, kurum = s.Kurum, faturaNo = s.FaturaNo, aciklama = s.Aciklama, tutar = s.Tutar, pb = s.PB, tutarTL = s.TutarTL, aliciIban = s.AliciIban, aliciBanka = s.AliciBanka, aliciHesapAdi = s.AliciHesapAdi, kurBilgisi = s.KurBilgisi, grupIciNo = s.GrupIciNo, avansNo = s.AvansNo, makbuzNo = m?.U_MakbuzNo ?? "", yevmiyeNo = m?.U_YevmiyeNo ?? "", durum = m?.U_Durum ?? "", belgeler = s.Belgeler.Select(b => new { b.CekDocEntry, b.No, b.Belge, b.Banka, b.CiroEden, b.AsilBorclu, b.Tutar, b.PB, vade = b.Vade.ToString("yyyy-MM-dd"), b.Sahip, b.Dolasim, b.DolasimAdim, b.DolasimToplam }) }; }),
             gunluk = t.Gunluk.Select(g => new { tarih = g.Tarih.ToString("yyyy-MM-dd HH:mm"), g.Kullanici, g.Islem, g.Aciklama })
         };
 
@@ -266,13 +270,69 @@ namespace WebApplication3.Controllers
             var r = NakitAkisOrnek.GrupIciKaldir(Db(istek.DbName), istek.DocEntry, Kullanici); if (r.satir != null) NakitAkisOrnek.BelgeleriDoldur(r.satir);
             return Json(new { success = r.ok, message = r.mesaj, row = r.satir == null ? null : SatirJson(r.satir) });
         }
-        public class DekontIstek { public string DbName { get; set; } public int DocEntry { get; set; } public string Ad { get; set; } public string Aciklama { get; set; } }
+        public class DekontIstek { public string DbName { get; set; } public int DocEntry { get; set; } public string Ad { get; set; } public string Aciklama { get; set; } public string Tur { get; set; } }
         [HttpPost("DekontEkle")]
         public IActionResult DekontEkle([FromBody] DekontIstek istek)
         {
             if (istek == null) return Json(new { success = false, message = "Veri yok." });
-            var r = NakitAkisOrnek.DekontEkle(Db(istek.DbName), istek.DocEntry, istek.Ad, istek.Aciklama, Kullanici); if (r.satir != null) NakitAkisOrnek.BelgeleriDoldur(r.satir);
+            var r = NakitAkisOrnek.EkEkle(Db(istek.DbName), istek.DocEntry, istek.Ad, istek.Tur ?? "Dekont", istek.Aciklama, null, null, Kullanici); if (r.satir != null) NakitAkisOrnek.BelgeleriDoldur(r.satir);
             return Json(new { success = r.ok, message = r.mesaj, row = r.satir == null ? null : SatirJson(r.satir) });
+        }
+        /// <summary>Ek yükleme (çekmece / Talimatlar sekmesi): dekont, imzalı makbuz, imzalı talimat, ciro bordrosu, çek fotokopisi — dosya bellek içinde tutulur, Ek / TalimatEk ile açılır.</summary>
+        [HttpPost("EkYukle")]
+        public IActionResult EkYukle(IFormFile dosya, string dbName, int docEntry, string tur, string aciklama, string talimatNo)
+        {
+            byte[] veri = null; string ad = dosya?.FileName;
+            if (dosya != null && dosya.Length > 0) { if (dosya.Length > 8_000_000) return Json(new { success = false, message = "Dosya 8 MB'ı aşamaz." }); using (var ms = new MemoryStream()) { dosya.CopyTo(ms); veri = ms.ToArray(); } }
+            if (!string.IsNullOrEmpty(talimatNo)) { var rt = TalimatOrnek.EkEkle(talimatNo, ad, tur, aciklama, dosya?.ContentType, veri, Kullanici); return Json(new { success = rt.ok, message = rt.mesaj, talimat = rt.talimat == null ? null : TalimatJson(rt.talimat) }); }
+            var r = NakitAkisOrnek.EkEkle(Db(dbName), docEntry, ad, tur, aciklama, dosya?.ContentType, veri, Kullanici); if (r.satir != null) NakitAkisOrnek.BelgeleriDoldur(r.satir);
+            return Json(new { success = r.ok, message = r.mesaj, row = r.satir == null ? null : SatirJson(r.satir) });
+        }
+        [HttpGet("Ek")]
+        public IActionResult Ek(string dbName, int docEntry, int id)
+        {
+            var e = NakitAkisOrnek.EkBul(Db(dbName), docEntry, id); if (e == null) return NotFound("Ek bulunamadı.");
+            if (e.Veri == null) return Content($"{e.Tur} · {e.DosyaAdi}: ön yüz örneğinde dosya içeriği yok (tohum kaydı). Çekmeceden gerçek dosya yüklenebilir.", "text/plain; charset=utf-8");
+            return File(e.Veri, string.IsNullOrEmpty(e.IcerikTipi) ? "application/octet-stream" : e.IcerikTipi, e.DosyaAdi);
+        }
+        [HttpGet("TalimatEk")]
+        public IActionResult TalimatEk(string no, int id)
+        {
+            var e = TalimatOrnek.EkBul(no, id); if (e == null) return NotFound("Ek bulunamadı.");
+            if (e.Veri == null) return Content($"{e.Tur} · {e.DosyaAdi}: dosya içeriği yok.", "text/plain; charset=utf-8");
+            return File(e.Veri, string.IsNullOrEmpty(e.IcerikTipi) ? "application/octet-stream" : e.IcerikTipi, e.DosyaAdi);
+        }
+        /// <summary>TCMB kuru (Data/KurOrnek.cs): dövizli ödemede kur günü seçilince alış / satış / efektif alış; ileri tarih tahmini.</summary>
+        [HttpGet("Kur")] public IActionResult Kur(string pb, string tarih) => Json(new { success = true, kur = KurOrnek.Json(pb ?? "TRY", DateTime.TryParse(tarih, CultureInfo.InvariantCulture, DateTimeStyles.None, out var t) ? t : DateTime.Today) });
+        /// <summary>Cari bilgisi: vade şartı → önerilen son ödeme tarihi, alıcı banka / IBAN / hesap adı (cari kart ya da son ödeme).</summary>
+        [HttpGet("CariBilgi")] public IActionResult CariBilgi(string dbName, string kurum) => Json(new { success = true, cari = NakitAkisOrnek.CariBilgi(Db(dbName), kurum ?? "") });
+        public class IbrazIstek { public string DbName { get; set; } public int DocEntry { get; set; } public string Tur { get; set; } public string IbrazYeri { get; set; } public string Tarih { get; set; } public string TeslimAlan { get; set; } public string BelgeNo { get; set; } public string Not { get; set; } }
+        /// <summary>Çek / senet satırında "Çeki Ver / İbraz Et": belgeler tedarikçiye ciro ya da bankaya tahsile, satır ÖDENDİ, fişler otomatik.</summary>
+        [HttpPost("CekIbraz")]
+        public IActionResult CekIbraz([FromBody] IbrazIstek istek)
+        {
+            if (istek == null) return Json(new { success = false, message = "Veri yok." });
+            var r = NakitAkisOrnek.CekIbrazEt(Db(istek.DbName), istek.DocEntry, istek.Tur, istek.IbrazYeri, DateTime.TryParse(istek.Tarih, CultureInfo.InvariantCulture, DateTimeStyles.None, out var t) ? t : (DateTime?)null, istek.TeslimAlan, istek.BelgeNo, istek.Not, Kullanici);
+            var m = NakitAkisOrnek.Bul(Db(istek.DbName), istek.DocEntry); if (m != null) NakitAkisOrnek.BelgeleriDoldur(m);
+            return Json(new { success = r.ok, message = r.mesaj, row = m == null ? null : SatirJson(m) });
+        }
+        public class GrupIciTurIstek { public string DbName { get; set; } public int DocEntry { get; set; } public string Tur { get; set; } }
+        /// <summary>Fatura sahibi ≠ ödeyen satırında otomatik grup içi belgenin türü (Mahsup / Temlik).</summary>
+        [HttpPost("GrupIciTur")]
+        public IActionResult GrupIciTur([FromBody] GrupIciTurIstek istek)
+        {
+            if (istek == null) return Json(new { success = false, message = "Veri yok." });
+            var r = NakitAkisOrnek.GrupIciTurDegistir(Db(istek.DbName), istek.DocEntry, istek.Tur, Kullanici); var m = NakitAkisOrnek.Bul(Db(istek.DbName), istek.DocEntry); if (m != null) NakitAkisOrnek.BelgeleriDoldur(m);
+            return Json(new { success = r.ok, message = r.mesaj, row = m == null ? null : SatirJson(m), belgeler = GrupIciBelgeOrnek.Listele(null).Select(GrupIciBelgeOrnek.Json).ToList() });
+        }
+        [HttpGet("GrupIciBelgeVeri")] public IActionResult GrupIciBelgeVeri(string no) { var b = GrupIciBelgeOrnek.Bul(no); return Json(b == null ? new { success = false, message = "Belge bulunamadı." } : (object)new { success = true, belge = GrupIciBelgeOrnek.Json(b), faturaSahibiFisi = MuhasebeOrnek.Json(MuhasebeOrnek.Bul(b.FaturaSahibiFisNo)), odeyenFisi = MuhasebeOrnek.Json(MuhasebeOrnek.Bul(b.OdeyenFisNo)) }); }
+        /// <summary>Yazdırılabilir grup içi mahsup / temlik belgesi (iki şirketin fişleriyle).</summary>
+        [HttpGet("GrupIciBelge")]
+        public IActionResult GrupIciBelge(string no)
+        {
+            var b = GrupIciBelgeOrnek.Bul(no); if (b == null) return Content("Belge bulunamadı: " + no, "text/plain; charset=utf-8");
+            ViewData["Title"] = b.Baslik + " · " + b.No; ViewBag.FaturaSahibiFisi = MuhasebeOrnek.Bul(b.FaturaSahibiFisNo); ViewBag.OdeyenFisi = MuhasebeOrnek.Bul(b.OdeyenFisNo); ViewBag.Satir = NakitAkisOrnek.Bul(b.KaynakDb, b.KaynakDocEntry);
+            return View("GrupIciBelge", b);
         }
         [HttpPost("SilJson")]
         public IActionResult SilJson([FromBody] GrupIciIstek istek) => Json(new { success = istek != null && NakitAkisOrnek.Sil(Db(istek.DbName), istek.DocEntry, Kullanici) });
@@ -357,14 +417,17 @@ namespace WebApplication3.Controllers
             onay = string.IsNullOrEmpty(m.U_OnayDurumu) ? null : new { durum = m.U_OnayDurumu, onaylayan = m.U_Onaylayan, tarih = m.U_OnayTarihi?.ToString("yyyy-MM-dd HH:mm"), not = m.U_OnayNotu, tip = string.IsNullOrEmpty(m.U_CikisTalebi) ? "nakit" : "cekCikis" },
             cikis = string.IsNullOrEmpty(m.U_CikisTalebi) ? null : new { islem = m.U_CikisTalebi, ibrazYeri = m.U_CikisIbrazYeri, belgeNo = m.U_CikisBelgeNo, talepEden = m.U_CikisTalepEden },
             yevmiye = string.IsNullOrEmpty(m.U_YevmiyeNo) ? null : MuhasebeOrnek.Json(MuhasebeOrnek.Bul(m.U_YevmiyeNo)), yevmiyeNo = m.U_YevmiyeNo,
+            kurBilgi = m.U_ParaBirimi == "TRY" || string.IsNullOrEmpty(m.U_ParaBirimi) ? null : new { kaynak = m.U_KurKaynagi, tarih = m.U_KurTarihi?.ToString("yyyy-MM-dd"), not = m.U_KurNotu, kurFarki = m.U_KurFarkiFaturasi, tcmb = KurOrnek.TcmbKaynagi(m.U_KurKaynagi), ozet = KurOrnek.Ozet(m.U_ParaBirimi, m.U_KurTarihi, m.U_KurKaynagi, m.U_Kur) },
+            grupIciTur = m.U_GrupIciTur, grupIciGerekli = GrupIciBelgeOrnek.Gerekli(m), grupIciBelge = GrupIciBelgeOrnek.Json(GrupIciBelgeOrnek.BulSatir(m.DocEntry)),
+            ibraz = string.IsNullOrEmpty(m.U_IbrazBelgeNo) ? null : new { belgeNo = m.U_IbrazBelgeNo, tarih = m.U_IbrazTarihi?.ToString("yyyy-MM-dd") },
             makbuz = string.IsNullOrEmpty(m.U_MakbuzNo) ? null : new { no = m.U_MakbuzNo, link = MakbuzOrnek.Bul(m.U_MakbuzNo) != null ? "/Rapor79/Makbuz?no=" + Uri.EscapeDataString(m.U_MakbuzNo) : (string)null },
             talimat = string.IsNullOrEmpty(m.U_TalimatNo) ? null : (TalimatOrnek.Bul(m.U_TalimatNo) is OdemeTalimati tt ? new { no = tt.No, durum = tt.Durum, baslik = tt.Baslik, link = "/Rapor79/Talimat?no=" + Uri.EscapeDataString(tt.No) } : null),
             kurum = m.U_Kurum, urun = m.U_UrunHizmet, pb = m.U_ParaBirimi, kur = m.U_Kur ?? 1, tutar = m.U_Tutar ?? 0, tutarTL = m.U_TutarTL ?? 0, yontem = m.U_OdemeYontemi, odemeYontemi = m.U_OdemeYontemi, odenme = m.U_OdenmeTarihi?.ToString("yyyy-MM-dd"), odenen = m.U_OdenenTutar ?? 0, odenenPB = m.U_OdenenTutarPB, durum = m.U_Durum, notlar = m.U_Notlar,
             belgeTipi = m.U_BagliBelgeTipi, bagliDocEntry = m.U_BagliDocEntry, faturaNo = m.U_FaturaSiparisNo, islemTipi = m.U_IslemTipi, kayitTipi = m.U_KayitTipi, mutabakat = m.U_MutabakatDurumu, mutabakatTarihi = m.SonMutabakatTarihi?.ToString("yyyy-MM-dd"), satinalmaci = m.U_Satinalmaci, muafiyet = m.MuafiyetSebebi,
-            dekontlar = m.DekontListesi.Select(d => new { id = d.Id, ad = d.DosyaAdi, yol = d.DosyaYolu, tarih = d.Tarih.ToString("yyyy-MM-dd HH:mm"), yukleyen = d.Yukleyen, aciklama = d.Aciklama }),
+            dekontlar = m.DekontListesi.Select(d => new { id = d.Id, ad = d.DosyaAdi, yol = d.DosyaYolu, tarih = d.Tarih.ToString("yyyy-MM-dd HH:mm"), yukleyen = d.Yukleyen, aciklama = d.Aciklama, tur = d.Tur ?? "Dekont", dosyaVar = d.Veri != null, boyut = d.Boyut }),
             cekNolar = m.U_CekNolar, cekDocEntryler = m.U_CekDocEntryler,
             belgeler = m.Belgeler.Select(b => { var k = CekAkibetOrnek.Bul(b.CekDocEntry); return k != null ? BelgeJson(k) : new { cekDocEntry = b.CekDocEntry, no = b.No, belge = b.Belge, banka = b.Banka, asilBorclu = b.AsilBorclu, kimdenGeldi = b.KimdenGeldi, vade = b.Vade.ToString("yyyy-MM-dd"), tutar = b.Tutar, pb = b.PB, akibet = b.Akibet, ibrazYeri = b.IbrazYeri, kontrol = b.Kontrol, planlananTedarikci = b.PlanlananTedarikci, sahip = "", kaynakSirket = "", dolasim = "", gerceklesen = 0, adimToplam = 0, adimlar = Enumerable.Empty<object>() }; }),
-            alanlar = new { bankaHesabi = m.U_BankaHesabi, aliciIban = m.U_AliciIban, dekontNo = m.U_DekontNo, kasa = m.U_Kasa, makbuzNo = m.U_MakbuzNo, teslimAlan = NakitAkisOrnek.AvansSahsiMi(m) ? "Personel (gizli)" : !string.IsNullOrEmpty(m.U_AvansNo) ? "Avans sahibi (çekmecede)" : m.U_TeslimAlan, kart = m.U_Kart, taksit = m.U_Taksit, ekstreDonemi = m.U_EkstreDonemi, mahsupFisNo = m.U_MahsupFisNo, karsiBelge = m.U_KarsiBelge, temlikNo = m.U_TemlikNo, temlikEden = m.U_TemlikEden, yansitmaNo = m.U_YansitmaNo },
+            alanlar = new { bankaHesabi = m.U_BankaHesabi, aliciIban = m.U_AliciIban, aliciBanka = m.U_AliciBanka, aliciHesapAdi = m.U_AliciHesapAdi, dekontNo = m.U_DekontNo, kasa = m.U_Kasa, makbuzNo = m.U_MakbuzNo, teslimAlan = NakitAkisOrnek.AvansSahsiMi(m) ? "Personel (gizli)" : !string.IsNullOrEmpty(m.U_AvansNo) ? "Avans sahibi (çekmecede)" : m.U_TeslimAlan, kart = m.U_Kart, taksit = m.U_Taksit, ekstreDonemi = m.U_EkstreDonemi, mahsupFisNo = m.U_MahsupFisNo, karsiBelge = m.U_KarsiBelge, temlikNo = m.U_TemlikNo, temlikEden = m.U_TemlikEden, yansitmaNo = m.U_YansitmaNo },
             grupIci = NakitAkisOrnek.GrupIciBilgi(m)
         };
 
@@ -399,7 +462,7 @@ namespace WebApplication3.Controllers
         [HttpGet("GetCariSirketleri")] public IActionResult GetCariSirketleri(string cardName) => Json(NakitAkisOrnek.Sirketler.Select(s => new Dictionary<string, object> { ["1"] = s.DbName }).ToList());
         [HttpGet("GetSatinalmacilar")] public IActionResult GetSatinalmacilar(string dbName) => Json(NakitAkisOrnek.Satinalmacilar.ToList());
         [HttpGet("GetSuppliers")] public IActionResult GetSuppliers(string dbName) => Json(Tedarikciler(Db(dbName)).Select((t, i) => new { CardCode = "320." + (i + 1).ToString("000"), CardName = t }).ToList());
-        [HttpGet("GetSupplierBankInfo")] public IActionResult GetSupplierBankInfo(string dbName, string cardCode) => Json(new[] { new { Iban = "TR" + Math.Abs((cardCode ?? "").GetHashCode() % 90 + 10) + " 0006 2000 1230 0006 " + Math.Abs((cardCode ?? "x").GetHashCode() % 9000 + 1000) + " 00", BankName = "Garanti BBVA" } });
+        [HttpGet("GetSupplierBankInfo")] public IActionResult GetSupplierBankInfo(string dbName, string cardCode, string cardName) { var tb = NakitAkisOrnek.TedarikciBanka(string.IsNullOrEmpty(cardName) ? cardCode : cardName); return Json(new[] { new { Iban = tb.iban, BankName = tb.banka, AccountName = tb.hesapAdi } }); }
         [HttpGet("GetCompanyBankAccounts")] public IActionResult GetCompanyBankAccounts(string dbName) => Json(NakitAkisOrnek.BankaHesaplari.Select(h => { var p = h.Split(" · "); return new { BankName = p[0], Iban = p.Length > 1 ? p[1] : "", ParaBirimi = "TRY", BranchName = "Merkez", AccountNumber = p.Length > 1 ? p[1].Replace(" ", "").Substring(10) : "" }; }).ToList());
         [HttpGet("GetBelgelerForCari")]
         public IActionResult GetBelgelerForCari(string dbName, string cardName, string belgeTipi) => Json(Belgeler(Db(dbName), cardName, belgeTipi));
@@ -447,10 +510,11 @@ namespace WebApplication3.Controllers
         [HttpPost("UploadDekont")]
         public IActionResult UploadDekont(IFormFile dekontDosya, string dbName, int docEntry, string secilenMail, string dekontAciklama = null)
         {
-            var m = NakitAkisOrnek.Bul(Db(dbName), docEntry); if (m == null) return Json(new { success = false, message = "Satır bulunamadı." });
-            string ad = dekontDosya?.FileName ?? $"dekont_{docEntry}.pdf"; string yol = "/Dekontlar/" + ad;
-            lock (NakitAkisOrnek.Kilit) m.DekontListesi.Add(new DekontKaydi { Id = (m.DekontListesi.Count > 0 ? m.DekontListesi.Max(d => d.Id) : 0) + 1, SirketDb = Db(dbName), DocEntry = docEntry, DosyaAdi = ad, DosyaYolu = yol, Aciklama = dekontAciklama ?? "", Yukleyen = Kullanici, Tarih = DateTime.Now });
-            return Json(new { success = true, message = "Dekont kaydedildi (ön yüz örneği: dosya saklanmaz)." + (string.IsNullOrEmpty(secilenMail) ? "" : $" E-posta: {secilenMail}"), filePath = yol });
+            byte[] veri = null; if (dekontDosya != null && dekontDosya.Length > 0 && dekontDosya.Length <= 8_000_000) { using (var ms = new MemoryStream()) { dekontDosya.CopyTo(ms); veri = ms.ToArray(); } }
+            var r = NakitAkisOrnek.EkEkle(Db(dbName), docEntry, dekontDosya?.FileName ?? $"dekont_{docEntry}.pdf", "Dekont", dekontAciklama, dekontDosya?.ContentType, veri, Kullanici);
+            if (!r.ok) return Json(new { success = false, message = r.mesaj });
+            var e = r.satir.DekontListesi.Last();
+            return Json(new { success = true, message = r.mesaj + (string.IsNullOrEmpty(secilenMail) ? "" : $" E-posta: {secilenMail}"), filePath = e.DosyaYolu });
         }
         [HttpPost("UploadTopluDekont")]
         public IActionResult UploadTopluDekont(IFormFile dekontDosya, string dbName, string docEntries, string secilenMail)

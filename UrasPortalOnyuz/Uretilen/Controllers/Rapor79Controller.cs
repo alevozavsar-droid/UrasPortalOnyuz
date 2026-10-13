@@ -98,6 +98,14 @@ namespace FinansRaporlama.Controllers
         public string U_CikisIbrazYeri { get; set; } = ""; public string U_CikisBelgeNo { get; set; } = ""; public string U_CikisTalepEden { get; set; } = "";
         public string U_YevmiyeNo { get; set; } = "";        // ödemenin muhasebe fişi (Data/MuhasebeOrnek.cs; makbuz / talimat gerçekleşince otomatik)
         public string U_TalepEden { get; set; } = "";        // ödemeyi talep eden (satınalmacı / kaydı açan / avans kullanan — şahsi avansta ad gizlenir / çek çıkış talebini yapan); fatura sahibinin altında gösterilir
+        public string U_AliciBanka { get; set; } = ""; public string U_AliciHesapAdi { get; set; } = "";   // Havale / EFT: alıcı banka ve hesap adı (IBAN ile birlikte banka talimatına yazılır; Data/NakitAkisOrnek.cs TedarikciBanka)
+        public string U_KurKaynagi { get; set; } = "";       // dövizli ödemede baz alınan kur: TCMB Döviz Alış / Satış / Efektif Alış (o günün kuru otomatik, Data/KurOrnek.cs) | Anlaşmalı Kur | Fatura Kuru | Çek Tahsil Günü Kuru
+        public DateTime? U_KurTarihi { get; set; }           // kurun günü (planlanan / ödeme günü; çekte tahsil = vade günü)
+        public string U_KurNotu { get; set; } = "";          // kur anlaşması / açıklama ("tedarikçiyle sabit kur 41,00 — 05.10.2026 e-posta")
+        public string U_KurFarkiFaturasi { get; set; } = ""; // Kesilecek | Kesilmeyecek | Belirsiz — bu cariye kur farkı faturası kesilip kesilmeyeceği
+        public string U_GrupIciTur { get; set; } = "";       // fatura sahibi ≠ ödeyen şirket: otomatik grup içi belge türü (Mahsup | Temlik; Data/GrupIciBelgeOrnek.cs)
+        public string U_GrupIciNo { get; set; } = "";        // otomatik oluşan grup içi belge no (GİM-2026-0001 / GİT-2026-0001)
+        public string U_IbrazBelgeNo { get; set; } = ""; public DateTime? U_IbrazTarihi { get; set; }   // çek / senet ibrazı (ciro bordrosu / bankaya ibraz) — ekrandan "Çeki Ver / İbraz Et"
     }
 
     /// <summary>Kasa Nakit Akışı satırına seçilen çek / senet (Data/CekAkibetOrnek.cs kaydının anlık görünümü): akıbet ve plan ↔ ibraz kontrolü ile.</summary>
@@ -176,6 +184,10 @@ namespace FinansRaporlama.Controllers
         public string Aciklama { get; set; }
         public string Yukleyen { get; set; }
         public DateTime Tarih { get; set; }
+        public string Tur { get; set; } = "Dekont";          // Dekont | İmzalı Makbuz | İmzalı Talimat | Ciro Bordrosu | Çek Fotokopisi | Diğer (Kasa Nakit Akışı ekleri)
+        public string IcerikTipi { get; set; } = "";         // yüklenen dosyanın MIME tipi; Veri bellek içi (uygulama yeniden başlayınca silinir)
+        public byte[] Veri { get; set; }
+        public long Boyut { get; set; }
     }
 
     public class KonsolideDashboardViewModel

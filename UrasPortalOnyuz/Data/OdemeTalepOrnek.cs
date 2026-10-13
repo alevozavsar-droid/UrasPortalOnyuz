@@ -14,7 +14,7 @@ namespace WebApplication3.Data
         public string BelgeNo { get; set; } = ""; public string Aciklama { get; set; } = ""; public decimal Tutar { get; set; } public string PB { get; set; } = "TRY"; public DateTime SonOdeme { get; set; }
         public string Oncelik { get; set; } = "Normal"; public string YontemOnerisi { get; set; } = "Havale / EFT"; public string Durum { get; set; } = "Onay Bekliyor";   // Onay Bekliyor | Onaylandı | Nakit Akışa Alındı | Reddedildi
         public string Onaylayan { get; set; } = ""; public DateTime? OnayTarihi { get; set; } public int? NakitAkisDocEntry { get; set; } public DateTime? AlinmaZamani { get; set; } public string Alan { get; set; } = "";
-        public decimal MahsupTutari { get; set; }     // ödemeden düşülecek mahsup (iade faturası, alacak dekontu, karşılıklı borç) — ayrı sütun
+        public decimal MahsupTutari { get; set; }     // ödemeden düşülecek tutar (kullanılmıyor: departman taleplerinde mahsup sütunu kaldırıldı; grup içi mahsup Data/GrupIciBelgeOrnek.cs)
         public string MahsupAciklama { get; set; } = "";
         public string Mutabakat { get; set; } = "Mutabakat Yok";   // ödeme öncesi cari mutabakat durumu: Mutabık | Mutabık Değil | Bekliyor | Mutabakat Yok | Gerekmez (resmi kurum)
         public DateTime? MutabakatTarihi { get; set; }
@@ -49,16 +49,16 @@ namespace WebApplication3.Data
                 T("URASKIMYA", "Muhasebe", "Nazlı Erdem", "Vergi Dairesi · Yenibosna", "Vergi", "KDV-2026-10", "Ekim 2026 KDV beyannamesi (1 no.lu KDV)", 1_284_500m, "TRY", 13, "Acil", "Havale / EFT", "Onaylandı", "Neslihan Uludağ", 3);
                 T("URASKIMYA", "Muhasebe", "Nazlı Erdem", "SGK Gebze", "SGK", "SGK-2026-10", "Ekim 2026 SGK prim ve işsizlik primi (aylık bildirge)", 2_150_000m, "TRY", 18, "Normal", "Havale / EFT", "Onay Bekliyor", "", 2);
                 T("URASKIMYA", "Muhasebe", "Onur Bal", "Vergi Dairesi · Yenibosna", "Vergi", "MUH-2026-10", "Ekim 2026 muhtasar ve prim hizmet beyannamesi", 486_300m, "TRY", 13, "Normal", "Havale / EFT", "Onaylandı", "Neslihan Uludağ", 2);
-                T("URASKIMYA", "Satınalma", "Selin Kara", "Brenntag", "Sipariş", "SP-2026-4471", "Sodyum hidroksit %50 · 2 tanker · peşin ödeme indirimi için", 418_600m, "TRY", 5, "Acil", "Havale / EFT", "Onaylandı", "Özge İsen", 1, "Mutabık", 38_600m, "İade faturası İF-2026-118 (hasarlı tanker) mahsup");
+                T("URASKIMYA", "Satınalma", "Selin Kara", "Brenntag", "Sipariş", "SP-2026-4471", "Sodyum hidroksit %50 · 2 tanker · peşin ödeme indirimi için", 418_600m, "TRY", 5, "Acil", "Havale / EFT", "Onaylandı", "Özge İsen", 1, "Mutabık");
                 T("URASKIMYA", "Satınalma", "Selin Kara", "BASF SE", "Sipariş", "SP-2026-4480", "Katalizör ön ödemesi (%30 avans)", 24_600m, "EUR", 9, "Normal", "Havale / EFT", "Onay Bekliyor", "", 1, "Mutabık Değil");
                 T("URASKIMYA", "İdari İşler", "Canan Su", "Ofis Kirası · Mal Sahibi", "Kira", "KR-2026-11", "Kasım 2026 ofis kirası (stopaj dahil)", 185_000m, "TRY", 19, "Normal", "Havale / EFT", "Onaylandı", "Alev Özavşar", 4, "Gerekmez");
                 T("URASKIMYA", "Lojistik", "Tolga Yaman", "TF Gümrük", "Gümrük", "GB-2026-77412", "İthalat gümrük vergisi + KKDF (beyanname 77412)", 312_900m, "TRY", 2, "Çok Acil", "Havale / EFT", "Onaylandı", "Neslihan Uludağ", 0);
                 T("URASKIMYA", "Üretim", "Mert Doğan", "Onur Kompresör", "Fatura", "FT-2026-70915", "Kompresör acil bakım ve yedek parça", 73_500m, "TRY", 7, "Acil", "Nakit", "Onay Bekliyor", "", 0, "Bekliyor");
                 T("URASKIMYA", "Bilgi Teknolojileri", "Ali Veli", "Microsoft İrlanda", "Fatura", "INV-MS-884120", "Microsoft 365 yıllık lisans yenileme", 14_200m, "USD", 11, "Normal", "Kredi Kartı / Banka Kartı", "Onaylandı", "Özge İsen", 5, "Mutabık");
-                T("URASKIMYA", "İnsan Kaynakları", "Hülya Er", "Anadolu Sigorta", "Fatura", "PL-2026-55817", "Tamamlayıcı sağlık sigortası Kasım taksidi", 96_800m, "TRY", 15, "Normal", "Havale / EFT", "Onaylandı", "Alev Özavşar", 6, "Mutabık", 4_800m, "Ayrılan personel iptal iadesi mahsup");
+                T("URASKIMYA", "İnsan Kaynakları", "Hülya Er", "Anadolu Sigorta", "Fatura", "PL-2026-55817", "Tamamlayıcı sağlık sigortası Kasım taksidi", 96_800m, "TRY", 15, "Normal", "Havale / EFT", "Onaylandı", "Alev Özavşar", 6, "Mutabık");
                 // Selvi
                 T("SELVI", "Muhasebe", "Nazlı Erdem", "Vergi Dairesi · Gebze", "Vergi", "KDV-2026-10", "Ekim 2026 KDV beyannamesi", 212_400m, "TRY", 13, "Acil", "Havale / EFT", "Onaylandı", "Neslihan Uludağ", 3);
-                T("SELVI", "Satınalma", "Emre Taş", "Korozo Ambalaj", "Sipariş", "SP-2026-1190", "Ambalaj film siparişi ön ödeme", 148_000m, "TRY", 6, "Normal", "Çek", "Onay Bekliyor", "", 1, "Mutabık", 12_000m, "Alacak dekontu AD-2026-31 (fiyat farkı) mahsup");
+                T("SELVI", "Satınalma", "Emre Taş", "Korozo Ambalaj", "Sipariş", "SP-2026-1190", "Ambalaj film siparişi ön ödeme", 148_000m, "TRY", 6, "Normal", "Çek", "Onay Bekliyor", "", 1, "Mutabık");
                 T("SELVI", "Muhasebe", "Onur Bal", "SGK Gebze", "SGK", "SGK-2026-10", "Ekim 2026 SGK prim", 364_000m, "TRY", 18, "Normal", "Havale / EFT", "Onaylandı", "Neslihan Uludağ", 2);
                 // Avrupa Paper · Alv Kimya · Daf Kimya · URS Makine · Uras Holding
                 T("AVRUPA_PAPER", "Satınalma", "Burcu Aydın", "Mondi Group", "Sipariş", "SP-2026-2207", "Kağıt bobin siparişi · akreditif dışı peşin kısım", 38_500m, "EUR", 8, "Normal", "Havale / EFT", "Onaylandı", "Özge İsen", 2, "Mutabık");

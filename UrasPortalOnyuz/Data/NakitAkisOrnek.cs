@@ -22,11 +22,11 @@ namespace WebApplication3.Data
         /// <summary>Yönteme özel alanlar (yöntem sekmesi sütunları; YontemAlanKaydet yalnız bunları yazar).</summary>
         public static readonly Dictionary<string, string[]> YontemAlanlari = new Dictionary<string, string[]>
         {
-            ["Havale / EFT"] = new[] { "U_BankaHesabi", "U_AliciIban", "U_DekontNo" }, ["Nakit"] = new[] { "U_Kasa", "U_MakbuzNo", "U_TeslimAlan" },
+            ["Havale / EFT"] = new[] { "U_BankaHesabi", "U_AliciIban", "U_DekontNo", "U_AliciBanka", "U_AliciHesapAdi" }, ["Nakit"] = new[] { "U_Kasa", "U_MakbuzNo", "U_TeslimAlan" },
             ["Kredi Kartı / Banka Kartı"] = new[] { "U_Kart", "U_Taksit", "U_EkstreDonemi" }, ["Mahsup"] = new[] { "U_MahsupFisNo", "U_KarsiBelge" }, ["Temlik"] = new[] { "U_TemlikNo", "U_TemlikEden" }, ["Yansıtma"] = new[] { "U_YansitmaNo" }
         };
         /// <summary>Modern ekranın satır içi / çekmece düzenlemesinde yazılabilen ana alanlar (AlanKaydet).</summary>
-        public static readonly string[] AnaAlanlar = { "U_Durum", "U_PlanlananTarih", "U_Kurum", "U_UrunHizmet", "U_Tutar", "U_ParaBirimi", "U_Kur", "U_OdemeYontemi", "U_OdenmeTarihi", "U_OdenenTutar", "U_OdenenTutarPB", "U_Notlar", "U_Satinalmaci", "U_MutabakatDurumu", "U_FaturaSiparisNo", "U_IslemTipi", "U_BagliBelgeTipi", "MuafiyetSebebi", "U_FaturaSahibi", "U_OdeyenSirket", "U_SonOdemeTarihi", "U_FaturaTutari", "U_TeslimAlan", "U_TalepEden" };
+        public static readonly string[] AnaAlanlar = { "U_Durum", "U_PlanlananTarih", "U_Kurum", "U_UrunHizmet", "U_Tutar", "U_ParaBirimi", "U_Kur", "U_OdemeYontemi", "U_OdenmeTarihi", "U_OdenenTutar", "U_OdenenTutarPB", "U_Notlar", "U_Satinalmaci", "U_MutabakatDurumu", "U_FaturaSiparisNo", "U_IslemTipi", "U_BagliBelgeTipi", "MuafiyetSebebi", "U_FaturaSahibi", "U_OdeyenSirket", "U_SonOdemeTarihi", "U_FaturaTutari", "U_TeslimAlan", "U_TalepEden", "U_KurKaynagi", "U_KurTarihi", "U_KurNotu", "U_KurFarkiFaturasi", "U_GrupIciTur" };
         /// <summary>Nakit ödeme onaycıları: nakit, ancak bu kişilerden biri onaylarsa verilebilir (talep → onay → makbuz).</summary>
         public static readonly string[] NakitOnaycilari = { "Alev Özavşar", "Neslihan Uludağ", "Özge İsen" };
         /// <summary>Plansız çek çıkışı onaycısı (GMY): Kasa Nakit Akışı'nda planlanmamış hiçbir çek, onaylanmadan şirketten çıkmaz.</summary>
@@ -35,6 +35,36 @@ namespace WebApplication3.Data
         public static readonly string[] Satinalmacilar = { "Tolga Yaman", "Gizem Tan", "Canan Su", "Mert Doğan" };
         public static readonly string[] BankaHesaplari = { "Ziraat Bankası · TR33 0001 0001 2345 6789 0123 45", "Halk Bankası · TR12 0001 2009 4560 0010 2600 01", "İş Bankası · TR64 0006 4000 0011 2340 5678 90", "Garanti BBVA · TR22 0006 2000 1230 0006 2971 50" };
         public static readonly string[] Kasalar = { "Merkez Kasa", "Fabrika Kasa" };
+        public static readonly string[] AliciBankalari = { "Garanti BBVA", "İş Bankası", "Yapı Kredi", "Akbank", "Ziraat Bankası", "QNB", "Halk Bankası", "Vakıfbank", "Denizbank" };
+        /// <summary>Satır ekleri (çekmece: dosya yüklenir, bellek içinde tutulur): dekont, imzalı makbuz / talimat, ciro bordrosu, çek fotokopisi.</summary>
+        public static readonly string[] EkTurleri = { "Dekont", "İmzalı Makbuz", "İmzalı Talimat", "Ciro Bordrosu", "Çek Fotokopisi", "Diğer" };
+        /// <summary>Tedarikçi banka bilgisi (cari kart / son ödemeden; ön yüz örneğinde cari adından deterministik): banka, IBAN, hesap adı — banka talimatına yazılır.</summary>
+        public static (string banka, string iban, string hesapAdi) TedarikciBanka(string kurum)
+        {
+            if (string.IsNullOrWhiteSpace(kurum)) return ("", "", "");
+            var r = new Random(Seed("banka|" + kurum.Trim().ToUpper(Tr)));
+            var kart = CariKartOrnek.Kartlar.FirstOrDefault(k => string.Equals(k.KisaAd, kurum.Trim(), StringComparison.OrdinalIgnoreCase));
+            string banka = AliciBankalari[r.Next(AliciBankalari.Length)];
+            string iban = $"TR{r.Next(10, 99)} {r.Next(1000, 9999)} {r.Next(1000, 9999)} {r.Next(1000, 9999)} {r.Next(1000, 9999)} {r.Next(1000, 9999)} {r.Next(10, 99)}";
+            return (banka, iban, kart?.ResmiUnvan ?? kurum.Trim());
+        }
+        /// <summary>Cari kart vade şartından gün ("Vade 60 Gün" → 60; yoksa 30).</summary>
+        public static int VadeGunu(string vadeSarti) { var d = new string((vadeSarti ?? "").Where(char.IsDigit).ToArray()); return int.TryParse(d, out var n) && n > 0 && n <= 365 ? n : 30; }
+        /// <summary>Cari bilgisi (Yeni Ödeme / çekmece: cari girilince vade şartı → son ödeme tarihi ve banka bilgisi otomatik gelir; çek talebinde doğru vadeli çek seçilsin).</summary>
+        public static object CariBilgi(string dbName, string kurum)
+        {
+            Tohumla(); string sirket = SirketAdi(dbName);
+            var kart = CariKartOrnek.Kartlar.Where(k => string.Equals(k.KisaAd, (kurum ?? "").Trim(), StringComparison.OrdinalIgnoreCase)).OrderByDescending(k => k.Sirket == sirket).FirstOrDefault();
+            var tb = TedarikciBanka(kurum); int vadeGun = VadeGunu(kart?.VadeSarti);
+            List<NakitAkisViewModel> son; lock (Kilit) son = _odemeler.Values.SelectMany(l => l).Where(m => string.Equals(m.U_Kurum, (kurum ?? "").Trim(), StringComparison.OrdinalIgnoreCase)).OrderByDescending(m => m.U_OdenmeTarihi ?? m.U_PlanlananTarih ?? DateTime.MinValue).ToList();
+            var sonHavale = son.FirstOrDefault(m => !string.IsNullOrEmpty(m.U_AliciIban));
+            return new
+            {
+                kurum = (kurum ?? "").Trim(), kod = kart?.Kod, unvan = kart?.ResmiUnvan ?? (kurum ?? "").Trim(), kartTipi = kart?.KartTipi, vadeSarti = kart?.VadeSarti ?? $"Vade {vadeGun} Gün (varsayılan)", vadeGun, sonOdeme = DateTime.Today.AddDays(vadeGun).ToString("yyyy-MM-dd"),
+                banka = sonHavale?.U_AliciBanka ?? tb.banka, iban = sonHavale?.U_AliciIban ?? tb.iban, hesapAdi = sonHavale?.U_AliciHesapAdi ?? tb.hesapAdi, bankaKaynagi = sonHavale != null ? $"son ödeme kaydı #{sonHavale.DocEntry}" : kart != null ? "cari kart" : "örnek",
+                sonOdemeTarihi = son.FirstOrDefault(m => m.U_Durum == "ÖDENDİ")?.U_OdenmeTarihi?.ToString("yyyy-MM-dd"), acikSatir = son.Count(m => m.U_Durum != "ÖDENDİ"), acikTutarTL = son.Where(m => m.U_Durum != "ÖDENDİ").Sum(m => m.U_TutarTL ?? 0)
+            };
+        }
         static readonly string[] Urunler = { "Hammadde alımı", "Ambalaj malzemesi", "Nakliye hizmeti", "Bakım onarım", "Danışmanlık", "Sigorta primi", "Elektrik faturası", "Doğalgaz faturası", "Yemek hizmeti", "Gümrük müşavirliği", "Reklam ve tanıtım", "Laboratuvar sarf", "Makine yedek parça", "Personel servis", "Yazılım lisansı", "Katalizör alımı" };
         public static readonly string[] Kartlar = { "Garanti Bonus **** 4512", "İş Bankası Maximum **** 8821", "Ziraat Bankkart **** 1907" };
         public static readonly string[] Taksitler = { "Tek Çekim", "Tek Çekim", "3 Taksit", "6 Taksit" };
@@ -90,6 +120,7 @@ namespace WebApplication3.Data
                             U_SonOdemeTarihi = a.KullanimTarihi.Date, U_FaturaTutari = a.OnaylananTutar, U_OnayDurumu = "Onaylandı", U_Onaylayan = "Neslihan Uludağ", U_OnayTarihi = a.Tarih, U_OnayNotu = "Nakit Avans modülünde onaylandı (" + a.No + ")",
                             U_Notlar = $"{a.Oncelik} · {a.HarcamaKategorisi}" + (a.GrupIci ? " · grup içi avans (masraf " + a.Kullanan.Sirket + ")" : ""), U_Sira = _odemeler[db].Count + 1
                         };
+                        if (pb != "TRY") { m.U_KurKaynagi = "TCMB Döviz Alış"; m.U_KurTarihi = plan; m.U_Kur = KurOrnek.Kur(pb, plan, m.U_KurKaynagi); m.U_TutarTL = Math.Round(a.OnaylananTutar * m.U_Kur.Value, 2); m.U_KurFarkiFaturasi = "Kesilmeyecek"; }
                         _odemeler[db].Add(m); Log(db, m.DocEntry, "Avans", $"{a.No} onaylı avans nakit akışa alındı · {(sahsi ? "Personel (gizli · şahsi avans)" : a.Kullanan.AdSoyad)} · {(a.OnaylananTutar).ToString("N0", Tr)} {a.ParaBirimi}", "Sistem");
                     }
                     if (a.OdemeBekleyen <= 0 && a.TeslimEdilen > 0)
@@ -103,7 +134,7 @@ namespace WebApplication3.Data
                         }
                     }
                     else if (m.U_Durum == "ÖDENDİ" && a.OdemeBekleyen > 0) { m.U_Durum = "Planlandı"; m.U_EskiDurum = "Planlandı"; m.U_OdenmeTarihi = null; m.U_OdenenTutar = null; Log(db, m.DocEntry, "Avans", $"{a.No} ödeme ters kaydı; satır yeniden Planlandı", "Sistem"); }
-                    if (m.U_Durum != "ÖDENDİ") { m.U_Tutar = a.OnaylananTutar; m.U_TutarTL = Math.Round(a.OnaylananTutar * kur, 2); m.U_OdenenTutar = a.TeslimEdilen > 0 ? a.TeslimEdilen : (decimal?)null; m.U_OdenenTutarPB = pb; }
+                    if (m.U_Durum != "ÖDENDİ") { m.U_Tutar = a.OnaylananTutar; m.U_TutarTL = Math.Round(a.OnaylananTutar * (m.U_Kur ?? kur), 2); m.U_OdenenTutar = a.TeslimEdilen > 0 ? a.TeslimEdilen : (decimal?)null; m.U_OdenenTutarPB = pb; }
                 }
             }
         }
@@ -179,10 +210,12 @@ namespace WebApplication3.Data
                     void YontemAlanlariDoldur(NakitAkisViewModel m)
                     {
                         bool odendi = m.U_Durum == "ÖDENDİ"; string y = m.U_OdemeYontemi;
-                        if (y == "Havale / EFT") { m.U_BankaHesabi = BankaHesaplari[rnd.Next(BankaHesaplari.Length)]; m.U_AliciIban = $"TR{rnd.Next(10, 99)} {rnd.Next(1000, 9999)} {rnd.Next(1000, 9999)} {rnd.Next(1000, 9999)} {rnd.Next(1000, 9999)} {rnd.Next(1000, 9999)} {rnd.Next(10, 99)}"; m.U_DekontNo = odendi ? $"DK-{m.U_OdenmeTarihi:yyMMdd}-{rnd.Next(100, 999)}" : ""; }
+                        if (y == "Havale / EFT") { m.U_BankaHesabi = BankaHesaplari[rnd.Next(BankaHesaplari.Length)]; var tb = TedarikciBanka(m.U_Kurum); m.U_AliciBanka = tb.banka; m.U_AliciIban = tb.iban; m.U_AliciHesapAdi = tb.hesapAdi; m.U_DekontNo = odendi ? $"DK-{m.U_OdenmeTarihi:yyMMdd}-{rnd.Next(100, 999)}" : ""; }
                         else if (y == "Nakit")
                         {
                             m.U_Kasa = Kasalar[rnd.Next(Kasalar.Length)]; m.U_MakbuzNo = odendi ? $"MK-{rnd.Next(10000, 99999)}" : ""; m.U_TeslimAlan = odendi ? TeslimAlanlar[rnd.Next(TeslimAlanlar.Length)] : "";
+                            // ödenmiş nakitlerin bir kısmında imzalı makbuz kopyası rapor sayfasına eklenmiş (ön yüz örneği: dosya içeriği yok)
+                            if (odendi && rnd.NextDouble() < 0.5) m.DekontListesi.Add(new DekontKaydi { Id = ++_sonDekontId, SirketDb = m.U_KaynakFirma, DocEntry = m.DocEntry, Tur = "İmzalı Makbuz", DosyaAdi = $"imzali_{m.U_MakbuzNo}.pdf", DosyaYolu = $"/Dekontlar/imzali_{m.U_MakbuzNo}.pdf", Aciklama = "Teslim alan imzalı makbuz (tarama)", Yukleyen = "Kerem Aksoy", Tarih = m.U_OdenmeTarihi.Value.AddHours(15) });
                             // nakit talep / onay: ödenmişler onaylı; bekleyenlerin bir kısmı onay bekliyor (Alev Özavşar / Neslihan Uludağ / Özge İsen onaylar)
                             bool onayli = odendi || rnd.NextDouble() < 0.55; m.U_OnayDurumu = onayli ? "Onaylandı" : "Onay Bekliyor";
                             if (onayli) { m.U_Onaylayan = NakitOnaycilari[rnd.Next(NakitOnaycilari.Length)]; m.U_OnayTarihi = (odendi ? m.U_OdenmeTarihi.Value : (m.U_PlanlananTarih ?? bugun)).AddDays(-rnd.Next(1, 6)).AddHours(10 + rnd.Next(7)); m.U_OnayNotu = odendi ? "" : "Nakit ödeme talebi onaylandı"; }
@@ -280,6 +313,24 @@ namespace WebApplication3.Data
                             kopya.U_Durum = "Bekliyor"; kopya.U_EskiDurum = "Bekliyor"; kopya.U_Notlar = "Satınalma tarafından ikinci kez girildi"; YontemAlanlariDoldur(kopya); liste.Add(kopya);
                         }
                     }
+                    // 6b) grup içi ödeme senaryosu (yalnız Uras Kimya): fatura sahibi başka grup şirketi, ödeyen Uras Kimya → otomatik Mahsup / Temlik belgesi (biri ödenmiş = muhasebeleşmiş)
+                    if (s.DbName == "URASKIMYA")
+                    {
+                        var adaylar = liste.Where(x => x.U_OdemeYontemi == "Havale / EFT" && x.U_UstDocEntry == null && x.U_BagliBelgeTipi == "Fatura" && x.U_ParaBirimi == "TRY").OrderBy(x => x.DocEntry).ToList();
+                        var sahipler = new[] { ("Alv Kimya", "Mahsup"), ("Selvi", "Mahsup"), ("Daf Kimya", "Temlik") }; int gi = 0;
+                        foreach (var m in new[] { adaylar.FirstOrDefault(x => x.U_Durum == "ÖDENDİ"), adaylar.FirstOrDefault(x => x.U_Durum == "Planlandı"), adaylar.LastOrDefault(x => x.U_Durum == "Bekliyor") }.Where(x => x != null).Distinct())
+                        { var (fs, tur) = sahipler[gi++]; m.U_FaturaSahibi = fs; m.U_GrupIciTur = tur; m.U_Notlar = $"{fs} adına ödeme (grup içi · otomatik {tur.ToLower(Tr)} belgesi)"; }
+                    }
+                    // 6c) dövizli satırlarda kur bilgisi: kaynak (TCMB alış / satış, anlaşmalı), kur günü (ödenme ya da planlanan tarih; çekte tahsil = vade), kur serisinden kur, kur farkı faturası
+                    foreach (var m in liste.Where(x => x.U_ParaBirimi != "TRY" && string.IsNullOrEmpty(x.U_KurKaynagi)))
+                    {
+                        double z = rnd.NextDouble(); m.U_KurTarihi = (m.U_Durum == "ÖDENDİ" ? m.U_OdenmeTarihi : m.U_PlanlananTarih) ?? bugun;
+                        m.U_KurKaynagi = m.U_OdemeYontemi == "Çek" || m.U_OdemeYontemi == "Senet" ? "Çek Tahsil Günü Kuru" : z < 0.65 ? "TCMB Döviz Alış" : z < 0.85 ? "TCMB Döviz Satış" : "Anlaşmalı Kur";
+                        if (m.U_KurKaynagi == "Anlaşmalı Kur") { m.U_Kur = Math.Round(KurOrnek.Kur(m.U_ParaBirimi, m.U_KurTarihi, "TCMB Döviz Alış") * 0.985m, 2); m.U_KurNotu = $"Tedarikçiyle sabit kur anlaşması {m.U_Kur.Value.ToString("N2", Tr)} ({m.U_KurTarihi.Value.AddDays(-rnd.Next(3, 20)):dd.MM.yyyy} e-posta)"; }
+                        else m.U_Kur = KurOrnek.Kur(m.U_ParaBirimi, m.U_KurTarihi, m.U_KurKaynagi);
+                        m.U_TutarTL = Math.Round((m.U_Tutar ?? 0) * (m.U_Kur ?? 1), 2);
+                        m.U_KurFarkiFaturasi = m.U_Durum == "ÖDENDİ" ? (rnd.NextDouble() < 0.3 ? "Kesilecek" : "Kesilmeyecek") : "Belirsiz";
+                    }
                     liste = liste.OrderBy(m => m.U_PlanlananTarih).ThenBy(m => m.DocEntry).ToList(); for (int i = 0; i < liste.Count; i++) liste[i].U_Sira = i + 1;
                     _odemeler[s.DbName] = liste;
                     foreach (var m in liste.Where(x => x.U_Durum == "ÖDENDİ")) Log(s.DbName, m.DocEntry, "Ödeme", $"{m.U_Kurum} · {m.U_OdemeYontemi} · {(m.U_OdenenTutar ?? 0).ToString("N2", Tr)} {m.U_OdenenTutarPB} ödendi", "Kerem Aksoy");
@@ -305,6 +356,8 @@ namespace WebApplication3.Data
                 ZincirSenaryosu(bugun);
                 // 7) ödenmiş satırların muhasebe fişleri (tohum): yönteme göre 320 / 332 / 196 borç, 100 / 102 / 101 … alacak
                 foreach (var l in _odemeler.Values) foreach (var m in l.Where(x => x.U_Durum == "ÖDENDİ" && string.IsNullOrEmpty(x.U_YevmiyeNo))) { var f = MuhasebeOrnek.OdemeFisi(m, m.U_OdemeYontemi == "Nakit" && !string.IsNullOrEmpty(m.U_MakbuzNo) ? "Kasa Tediye " + m.U_MakbuzNo : "Ödeme", "Nazlı Erdem"); if (f != null) { f.Tarih = (m.U_OdenmeTarihi ?? bugun).AddHours(16); m.U_YevmiyeNo = f.No; } }
+                // 8) fatura sahibi ≠ ödeyen satırların otomatik grup içi Mahsup / Temlik belgeleri (ödenmişlerde fatura sahibi fişi de atılır, grup içi bakiye güncellenir)
+                foreach (var l in _odemeler.Values) foreach (var m in l.Where(GrupIciBelgeOrnek.Gerekli).ToList()) GrupIciBelgeOrnek.Senkron(m, "Sistem");
             }
         }
         /// <summary>
@@ -332,7 +385,7 @@ namespace WebApplication3.Data
         }
 
         // ---------- işlemler ----------
-        static readonly string[] KopyalananAlanlar = { "U_Sira", "U_Renk", "U_KayitTipi", "U_FaturaSiparisNo", "U_PlanlananTarih", "U_Kurum", "U_Satinalmaci", "U_UrunHizmet", "U_ParaBirimi", "U_Kur", "U_Tutar", "U_TutarTL", "U_OdemeYontemi", "U_OdenmeTarihi", "U_OdenenTutar", "U_OdenenTutarPB", "U_Durum", "U_Notlar", "U_BagliBelgeTipi", "U_BagliDocEntry", "U_IslemTipi", "U_MutabakatDurumu", "U_FaturaSahibi", "U_OdeyenSirket", "MuafiyetSebebi", "U_SonOdemeTarihi", "U_FaturaTutari", "U_UstDocEntry", "U_TeslimAlan", "U_Kasa", "U_TalepEden" };
+        static readonly string[] KopyalananAlanlar = { "U_Sira", "U_Renk", "U_KayitTipi", "U_FaturaSiparisNo", "U_PlanlananTarih", "U_Kurum", "U_Satinalmaci", "U_UrunHizmet", "U_ParaBirimi", "U_Kur", "U_Tutar", "U_TutarTL", "U_OdemeYontemi", "U_OdenmeTarihi", "U_OdenenTutar", "U_OdenenTutarPB", "U_Durum", "U_Notlar", "U_BagliBelgeTipi", "U_BagliDocEntry", "U_IslemTipi", "U_MutabakatDurumu", "U_FaturaSahibi", "U_OdeyenSirket", "MuafiyetSebebi", "U_SonOdemeTarihi", "U_FaturaTutari", "U_UstDocEntry", "U_TeslimAlan", "U_Kasa", "U_TalepEden", "U_KurKaynagi", "U_KurTarihi", "U_KurNotu", "U_KurFarkiFaturasi", "U_GrupIciTur", "U_AliciBanka", "U_AliciIban", "U_AliciHesapAdi" };
         /// <summary>Şahsi avans satırı (gizlilik: personel adı ekranda gösterilmez).</summary>
         public static bool AvansSahsiMi(NakitAkisViewModel m) => m != null && !string.IsNullOrEmpty(m.U_AvansNo) && NakitAvansOrnek.SahsiMi(NakitAvansOrnek.Talepler.FirstOrDefault(x => x.No == m.U_AvansNo));
         static bool NakitOnaysiz(NakitAkisViewModel m) => m.U_OdemeYontemi == "Nakit" && m.U_OnayDurumu != "Onaylandı";
@@ -355,11 +408,26 @@ namespace WebApplication3.Data
                 if (m.U_Durum == "ÖDENDİ" && m.U_OdenmeTarihi == null) m.U_OdenmeTarihi = DateTime.Today;
                 if (m.U_Durum == "ÖDENDİ" && (m.U_OdenenTutar ?? 0) == 0) m.U_OdenenTutar = m.U_Tutar;
                 if (string.IsNullOrEmpty(m.U_FaturaSahibi)) m.U_FaturaSahibi = SirketAdi(dbName); if (string.IsNullOrEmpty(m.U_OdeyenSirket)) m.U_OdeyenSirket = SirketAdi(dbName);
+                KurTamamla(m); if (GrupIciBelgeOrnek.Gerekli(m) && string.IsNullOrEmpty(m.U_GrupIciTur)) m.U_GrupIciTur = "Mahsup";
                 m.U_EskiDurum = m.U_Durum;
                 Log(dbName, m.DocEntry, eskiDurum != m.U_Durum ? "Durum" : "Güncelleme", eskiDurum != m.U_Durum ? $"{eskiDurum} → {m.U_Durum}" : "Satır güncellendi", kullanici);
                 if (eskiDurum != "ÖDENDİ" && m.U_Durum == "ÖDENDİ") { AvansOdemesiIsle(m, kullanici); FisAt(m, "Ödeme (elle)", kullanici); }
+                var gib = GrupIciBelgeOrnek.Senkron(m, kullanici); if (gib != null && gib.Durum == "Hazırlandı" && gib.Gunluk.Count == 1) Log(dbName, m.DocEntry, "Grup İçi Belge", $"{gib.No} ({gib.Baslik}) hazırlandı: {gib.Odeyen}, {gib.FaturaSahibi} adına ödüyor", kullanici);
                 return true;
             }
+        }
+        /// <summary>Dövizli satırda kur bilgisi: kaynak boşsa TCMB Döviz Alış (çek / senette Çek Tahsil Günü Kuru = en erken belge vadesi), kur günü boşsa ödenme / planlanan tarih; TCMB kaynaklarında kur seriden (Data/KurOrnek.cs) okunur, anlaşmalı / fatura kurunda elle yazılan kalır. TL'de kur alanları temizlenir.</summary>
+        static void KurTamamla(NakitAkisViewModel m)
+        {
+            string pb = m.U_ParaBirimi == "EURO" ? "EUR" : string.IsNullOrEmpty(m.U_ParaBirimi) || m.U_ParaBirimi == "TL" ? "TRY" : m.U_ParaBirimi; m.U_ParaBirimi = pb;
+            if (pb == "TRY") { m.U_Kur = 1; m.U_KurKaynagi = ""; m.U_KurTarihi = null; m.U_KurFarkiFaturasi = ""; m.U_TutarTL = Math.Round(m.U_Tutar ?? 0, 2); return; }
+            bool cek = m.U_OdemeYontemi == "Çek" || m.U_OdemeYontemi == "Senet";
+            if (string.IsNullOrEmpty(m.U_KurKaynagi) || !KurOrnek.Kaynaklar.Contains(m.U_KurKaynagi)) m.U_KurKaynagi = cek ? "Çek Tahsil Günü Kuru" : "TCMB Döviz Alış";
+            if (m.U_KurKaynagi == "Çek Tahsil Günü Kuru") { var vade = m.Belgeler.Count > 0 ? m.Belgeler.Min(b => b.Vade) : (DateTime?)null; m.U_KurTarihi = vade ?? m.U_KurTarihi ?? m.U_PlanlananTarih ?? DateTime.Today; }
+            else if (m.U_KurTarihi == null) m.U_KurTarihi = (m.U_Durum == "ÖDENDİ" ? m.U_OdenmeTarihi : null) ?? m.U_PlanlananTarih ?? DateTime.Today;
+            if (KurOrnek.TcmbKaynagi(m.U_KurKaynagi) || (m.U_Kur ?? 0) <= 0) m.U_Kur = KurOrnek.Kur(pb, m.U_KurTarihi, m.U_KurKaynagi);
+            if (string.IsNullOrEmpty(m.U_KurFarkiFaturasi) || !KurOrnek.KurFarkiSecenekleri.Contains(m.U_KurFarkiFaturasi)) m.U_KurFarkiFaturasi = "Belirsiz";
+            m.U_TutarTL = Math.Round((m.U_Tutar ?? 0) * (m.U_Kur ?? 1), 2);
         }
         /// <summary>Ödeme muhasebe fişi (bir kez): dolaşım planlı çek satırlarında fişler adım adım Çek Akıbeti tarafından atılır.</summary>
         static void FisAt(NakitAkisViewModel m, string kaynak, string kullanici)
@@ -376,7 +444,7 @@ namespace WebApplication3.Data
             lock (Kilit)
             {
                 var m = _odemeler.TryGetValue(dbName, out var l) ? l.FirstOrDefault(x => x.DocEntry == docEntry) : null; if (m == null) return;
-                if (m.U_Durum != "ÖDENDİ") { m.U_Durum = "ÖDENDİ"; m.U_EskiDurum = "ÖDENDİ"; m.U_OdenmeTarihi = DateTime.Today; m.U_OdenenTutar = m.U_Tutar; m.U_OdenenTutarPB = m.U_ParaBirimi; Log(dbName, docEntry, "Ödeme", $"{kaynak} ile ödendi · {m.U_Kurum} · {(m.U_Tutar ?? 0).ToString("N2", Tr)} {m.U_ParaBirimi}", kullanici); }
+                if (m.U_Durum != "ÖDENDİ") { m.U_Durum = "ÖDENDİ"; m.U_EskiDurum = "ÖDENDİ"; m.U_OdenmeTarihi = m.U_IbrazTarihi ?? DateTime.Today; m.U_OdenenTutar = m.U_Tutar; m.U_OdenenTutarPB = m.U_ParaBirimi; Log(dbName, docEntry, "Ödeme", $"{kaynak} ile ödendi · {m.U_Kurum} · {(m.U_Tutar ?? 0).ToString("N2", Tr)} {m.U_ParaBirimi}", kullanici); }
                 foreach (var id in (m.U_CekDocEntryler ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(x => int.TryParse(x, out var n) ? n : 0).Where(n => n > 0))
                 {
                     var k = CekAkibetOrnek.Bul(id); if (k == null) continue;
@@ -384,8 +452,68 @@ namespace WebApplication3.Data
                     else if (k.IslemTuru == "Planlandı" || k.IslemTuru == "Portföyde") CekAkibetOrnek.IslemTuruDegistir(id, "Ciro Edildi", m.U_Kurum, $"CRO-{DateTime.Today:yyMM}-{docEntry % 9000 + 1000}", kullanici);
                 }
                 AvansOdemesiIsle(m, kullanici); FisAt(m, kaynak, kullanici);
+                var gib = GrupIciBelgeOrnek.Senkron(m, kullanici); if (gib != null && gib.Durum == "Muhasebeleşti" && !string.IsNullOrEmpty(gib.FaturaSahibiFisNo)) Log(dbName, docEntry, "Grup İçi Belge", $"{gib.No} muhasebeleşti: {gib.FaturaSahibi} fişi {gib.FaturaSahibiFisNo} · {gib.MahsupSekli}", kullanici);
             }
         }
+        /// <summary>
+        /// Ekrandan çek / senet ibrazı ("Çeki Ver / İbraz Et"): satırdaki planlı belgeler tedarikçiye ciro edilir (ciro bordrosu) ya da bankaya tahsile verilir; dolaşım planı olan belgede kalan adımlar
+        /// gerçekleştirilir; satır ÖDENDİ olur, muhasebe fişleri atılır. Satır Kasa Nakit Akışı'nda planlı olduğundan GMY onayı gerekmez (plansız çıkış kuralı Çek Akıbeti tarafındadır).
+        /// </summary>
+        public static (bool ok, string mesaj) CekIbrazEt(string dbName, int docEntry, string tur, string ibrazYeri, DateTime? tarih, string teslimAlan, string belgeNo, string not, string kullanici)
+        {
+            Tohumla();
+            lock (Kilit)
+            {
+                var m = _odemeler.TryGetValue(dbName, out var l) ? l.FirstOrDefault(x => x.DocEntry == docEntry) : null; if (m == null) return (false, "Ödeme satırı bulunamadı.");
+                if (m.U_OdemeYontemi != "Çek" && m.U_OdemeYontemi != "Senet") return (false, "İbraz yalnız çek / senet satırında yapılır.");
+                if (m.U_Durum == "ÖDENDİ") return (false, "Satır zaten ödenmiş.");
+                if (!string.IsNullOrEmpty(m.U_CikisTalebi) && m.U_OnayDurumu != "Onaylandı") return (false, "Çek çıkış talebi GMY onayı bekliyor; onaylanmadan ibraz yapılamaz.");
+                BelgeleriDoldur(m); if (m.Belgeler.Count == 0) return (false, "Önce portföyden belge seçin.");
+                var kayitlar = m.Belgeler.Select(b => CekAkibetOrnek.Bul(b.CekDocEntry)).Where(k => k != null).ToList();
+                if (!kayitlar.Any(k => k.IslemTuru == "Planlandı" || k.IslemTuru == "Portföyde" || k.SonrakiAdim != null)) return (false, "Satırdaki belgeler zaten çıkmış: " + string.Join(", ", kayitlar.Select(k => k.No + " " + k.IslemTuru)) + ".");
+                bool bankaya = tur == "Bankaya Tahsile Ver"; string yer = !string.IsNullOrWhiteSpace(ibrazYeri) ? ibrazYeri.Trim() : bankaya ? ButceOrnek.TahsilBankalari[docEntry % 2] : m.U_Kurum;
+                string no = !string.IsNullOrWhiteSpace(belgeNo) ? belgeNo.Trim() : bankaya ? $"İBZ-{DateTime.Today:yyMM}-{docEntry % 9000 + 1000}" : $"CRO-{DateTime.Today:yyMM}-{docEntry % 9000 + 1000}";
+                var zaman = (tarih ?? DateTime.Today).Date.AddHours(11); var sonuclar = new List<string>();
+                foreach (var k in kayitlar)
+                {
+                    if (k.Dolasim.Count > 0) { int g = 0; bool tamam = true; while (k.SonrakiAdim != null && g++ < 20) { var r = CekAkibetOrnek.DolasimAdimGerceklestir(k.DocEntry, 0, kullanici, zaman); if (!r.ok) { sonuclar.Add(r.mesaj); tamam = false; break; } } if (tamam) sonuclar.Add($"{k.No} dolaşım planı tamamlandı ({k.DolasimOzeti})"); }
+                    else if (k.IslemTuru == "Planlandı" || k.IslemTuru == "Portföyde") { var r = CekAkibetOrnek.IslemTuruDegistir(k.DocEntry, bankaya ? "Bankaya Tahsile Verildi" : "Ciro Edildi", yer, no, kullanici); sonuclar.Add(r.mesaj); }
+                    else sonuclar.Add($"{k.No} zaten {k.IslemTuru}.");
+                }
+                m.U_IbrazBelgeNo = no; m.U_IbrazTarihi = zaman.Date; if (!string.IsNullOrWhiteSpace(teslimAlan)) m.U_TeslimAlan = teslimAlan.Trim();
+                if (!string.IsNullOrWhiteSpace(not)) m.U_Notlar = string.IsNullOrEmpty(m.U_Notlar) ? not.Trim() : m.U_Notlar + " | " + not.Trim();
+                Log(dbName, docEntry, "Çek İbrazı", $"{(bankaya ? "Bankaya tahsile verildi" : "Tedarikçiye ciro edildi")} → {yer} · {no} · {m.U_CekNolar}" + (string.IsNullOrWhiteSpace(teslimAlan) ? "" : " · teslim alan " + teslimAlan.Trim()) + $" · {zaman:dd.MM.yyyy}", kullanici);
+                OdendiIsaretle(dbName, docEntry, (bankaya ? "Bankaya ibraz " : "Çek cirosu ") + no, kullanici);
+                return (true, $"{m.U_CekNolar} {(bankaya ? "bankaya tahsile verildi" : "tedarikçiye ciro edildi")} → {yer} · {no}; satır ÖDENDİ" + (string.IsNullOrEmpty(m.U_YevmiyeNo) ? "" : $" · fiş {m.U_YevmiyeNo}") + ". " + string.Join(" ", sonuclar));
+            }
+        }
+        /// <summary>Fatura sahibi ≠ ödeyen satırında otomatik grup içi belgenin türü (Mahsup ↔ Temlik).</summary>
+        public static (bool ok, string mesaj) GrupIciTurDegistir(string dbName, int docEntry, string tur, string kullanici)
+        {
+            Tohumla();
+            lock (Kilit)
+            {
+                var m = _odemeler.TryGetValue(dbName, out var l) ? l.FirstOrDefault(x => x.DocEntry == docEntry) : null; if (m == null) return (false, "Ödeme satırı bulunamadı.");
+                var r = GrupIciBelgeOrnek.TurDegistir(m, tur, kullanici); if (r.ok) Log(dbName, docEntry, "Grup İçi Belge", r.mesaj, kullanici); return r;
+            }
+        }
+        /// <summary>Satıra ek (dekont, imzalı makbuz / talimat, ciro bordrosu, çek fotokopisi): dosya bellek içinde tutulur, /Rapor79/Ek ile indirilir.</summary>
+        public static (bool ok, string mesaj, NakitAkisViewModel satir) EkEkle(string dbName, int docEntry, string ad, string tur, string aciklama, string icerikTipi, byte[] veri, string kullanici)
+        {
+            Tohumla();
+            if (veri != null && veri.LongLength > 8_000_000) return (false, "Dosya 8 MB'ı aşamaz.", null);
+            lock (Kilit)
+            {
+                var m = _odemeler.TryGetValue(dbName, out var l) ? l.FirstOrDefault(x => x.DocEntry == docEntry) : null; if (m == null) return (false, "Ödeme satırı bulunamadı.", null);
+                tur = EkTurleri.Contains(tur ?? "") ? tur : "Dekont";
+                string dosya = string.IsNullOrWhiteSpace(ad) ? $"{tur.ToLower(Tr).Replace(' ', '_')}_{docEntry}_{m.DekontListesi.Count + 1}.pdf" : ad.Trim();
+                var e = new DekontKaydi { Id = ++_sonDekontId, SirketDb = dbName, DocEntry = docEntry, DosyaAdi = dosya, Aciklama = aciklama ?? "", Yukleyen = kullanici ?? "", Tarih = DateTime.Now, Tur = tur, IcerikTipi = icerikTipi ?? "", Veri = veri, Boyut = veri?.LongLength ?? 0 };
+                e.DosyaYolu = veri != null ? $"/Rapor79/Ek?dbName={Uri.EscapeDataString(dbName)}&docEntry={docEntry}&id={e.Id}" : "/Dekontlar/" + dosya;
+                m.DekontListesi.Add(e); Log(dbName, docEntry, tur == "Dekont" ? "Dekont" : "Ek", $"{tur}: {dosya}" + (veri != null ? $" ({Math.Max(1, e.Boyut / 1024)} KB)" : "") + (string.IsNullOrEmpty(aciklama) ? "" : " · " + aciklama), kullanici);
+                return (true, $"{tur} eklendi: {dosya}" + (veri == null ? " (ön yüz örneği: dosya içeriği yok)" : $" ({Math.Max(1, e.Boyut / 1024)} KB; rapor sayfasından açılır)") + ".", m);
+            }
+        }
+        public static DekontKaydi EkBul(string dbName, int docEntry, int id) { var m = Bul(dbName, docEntry); lock (Kilit) return m?.DekontListesi.FirstOrDefault(d => d.Id == id); }
         /// <summary>Makbuz kesilince (Data/MakbuzOrnek.cs): satıra makbuz no / kasa / teslim alan yazılır, satır ÖDENDİ olur (fiş + avans olayı).</summary>
         public static void MakbuzIsle(string dbName, int docEntry, string makbuzNo, string kasa, string teslimAlan, string kullanici)
         {
@@ -522,12 +650,13 @@ namespace WebApplication3.Data
                     else
                     {
                         h = new NakitAkisViewModel { DocEntry = ++_sonDocEntry, U_KaynakFirma = dbName, U_UstDocEntry = m.U_UstDocEntry ?? m.DocEntry, U_Durum = "Bekliyor", U_EskiDurum = "Bekliyor", BelgeTarihi = m.BelgeTarihi, U_Sira = l.Count + 1, U_OdenenTutarPB = m.U_ParaBirimi, U_Notlar = "" };
-                        var t = typeof(NakitAkisViewModel); foreach (var ad in new[] { "U_Kurum", "U_UrunHizmet", "U_ParaBirimi", "U_Kur", "U_OdemeYontemi", "U_BagliBelgeTipi", "U_BagliDocEntry", "U_KayitTipi", "U_FaturaSiparisNo", "U_IslemTipi", "U_Satinalmaci", "U_FaturaSahibi", "U_OdeyenSirket", "U_SonOdemeTarihi", "U_FaturaTutari", "U_BankaHesabi", "U_AliciIban", "U_Kasa", "U_Kart", "U_TalepEden" }) { var p = t.GetProperty(ad); p.SetValue(h, p.GetValue(m)); }
+                        var t = typeof(NakitAkisViewModel); foreach (var ad in new[] { "U_Kurum", "U_UrunHizmet", "U_ParaBirimi", "U_Kur", "U_OdemeYontemi", "U_BagliBelgeTipi", "U_BagliDocEntry", "U_KayitTipi", "U_FaturaSiparisNo", "U_IslemTipi", "U_Satinalmaci", "U_FaturaSahibi", "U_OdeyenSirket", "U_SonOdemeTarihi", "U_FaturaTutari", "U_BankaHesabi", "U_AliciIban", "U_AliciBanka", "U_AliciHesapAdi", "U_Kasa", "U_Kart", "U_TalepEden", "U_KurKaynagi", "U_KurNotu", "U_KurFarkiFaturasi", "U_GrupIciTur" }) { var p = t.GetProperty(ad); p.SetValue(h, p.GetValue(m)); }
                         h.DocNum = h.DocEntry; if (h.U_OdemeYontemi == "Nakit") h.U_OnayDurumu = "Onay Bekliyor"; l.Add(h);
                     }
                     h.U_Tutar = tutar; h.U_TutarTL = Math.Round(tutar * (h.U_Kur ?? 1), 2); h.U_PlanlananTarih = parcalar[i].plan.Date; if (h.U_SonOdemeTarihi != null && h.U_PlanlananTarih > h.U_SonOdemeTarihi && i > 0) h.U_SonOdemeTarihi = h.U_PlanlananTarih;
                     decimal oranBelge = (m.U_FaturaTutari ?? toplam) > 0 ? Math.Round(tutar / (m.U_FaturaTutari ?? toplam) * 100m, 1) : parcalar[i].oran;
                     h.U_Notlar = $"Taksit {i + 1}/{n} · %{oranBelge.ToString("N1", Tr)} (belge {(m.U_FaturaTutari ?? toplam).ToString("N2", Tr)} {m.U_ParaBirimi})" + (i == 0 && eskiNot != "" && !eskiNot.StartsWith("Taksit") && !eskiNot.StartsWith("Kısmi") ? " · " + eskiNot : "");
+                    if (i > 0) { h.U_KurTarihi = h.U_PlanlananTarih; KurTamamla(h); GrupIciBelgeOrnek.Senkron(h, kullanici); }
                     if (i > 0) sonuc.Add(h);
                 }
                 Log(dbName, m.DocEntry, "Taksit", $"{n} parçaya bölündü: {string.Join(" + ", sonuc.Select(x => (x.U_Tutar ?? 0).ToString("N2", Tr) + " " + x.U_ParaBirimi + " (" + (x.U_PlanlananTarih ?? DateTime.Today).ToString("dd.MM.yyyy") + ")"))}", kullanici);
@@ -607,9 +736,11 @@ namespace WebApplication3.Data
                 var acik = c.Hareketler.Where(h => h.BelgeTipi == "Fatura" && h.Kalan > 0 && h.KapamaDurumu != "Kapalı").OrderBy(h => h.Vade ?? h.Tarih).ToList();
                 var faturalar = acik.Select(h => { string pb = h.ParaBirimi == "TL" || string.IsNullOrEmpty(h.ParaBirimi) ? "TRY" : h.ParaBirimi; var vade = h.Vade ?? h.Tarih.AddDays(30); return new { belgeNo = h.BelgeNo, tarih = h.Tarih.ToString("yyyy-MM-dd"), vade = vade.ToString("yyyy-MM-dd"), tutar = h.Borc > 0 ? h.Borc : h.Alacak, kalan = h.Kalan, pb, kalanTL = Tl(h.Kalan, pb), aciklama = h.Aciklama, gecikme = (bugun - vade).Days, kapama = h.KapamaDurumu, planlandi = mevcut.Any(m => string.Equals(m.U_FaturaSiparisNo, h.BelgeNo, StringComparison.OrdinalIgnoreCase)) }; }).ToList();
                 decimal toplam = faturalar.Sum(f => f.kalanTL), gecmis = faturalar.Where(f => f.gecikme > 0).Sum(f => f.kalanTL);
+                var tb = TedarikciBanka(c.Kart.KisaAd); int vadeGun = VadeGunu(c.Kart.VadeSarti);
                 return new
                 {
                     kod = c.CariKodu, ad = c.Kart.KisaAd, unvan = c.Kart.ResmiUnvan, kartTipi = c.Kart.KartTipi, sinif = c.Kart.Sinif, temsilciler = MutabakatOrnek.Temsilciler(c.Kart), adet = faturalar.Count, toplam, gecmis, gelecek = toplam - gecmis,
+                    vadeSarti = c.Kart.VadeSarti ?? $"Vade {vadeGun} Gün", vadeGun, sonOdemeOnerisi = bugun.AddDays(vadeGun).ToString("yyyy-MM-dd"), banka = tb.banka, iban = tb.iban, hesapAdi = tb.hesapAdi,
                     gecmisAdet = faturalar.Count(f => f.gecikme > 0), enEskiVade = faturalar.Where(f => f.gecikme > 0).Select(f => f.vade).DefaultIfEmpty("").Min(), ilkVade = faturalar.Where(f => f.gecikme <= 0).Select(f => f.vade).DefaultIfEmpty("").Min(), enUzunGecikme = faturalar.Select(f => f.gecikme).DefaultIfEmpty(0).Max(),
                     dovizler = c.Dovizler.Select(d => new { pb = d.ParaBirimi, acikAdet = d.AcikFaturaAdet, acikTutar = d.AcikFaturaTutar, enEski = d.EnEskiAcikFatura?.ToString("yyyy-MM-dd") }), bakiyeZamani = c.BakiyeZamani?.ToString("yyyy-MM-dd HH:mm"),
                     planlanan = mevcut.Where(m => string.Equals(m.U_Kurum, c.Kart.KisaAd, StringComparison.OrdinalIgnoreCase)).Sum(m => m.U_TutarTL ?? 0),
@@ -658,8 +789,12 @@ namespace WebApplication3.Data
                 if (string.IsNullOrEmpty(m.U_TalepEden)) m.U_TalepEden = kullanici ?? "";
                 // nakit ödeme = talep: onaycılardan biri onaylamadan ödenmez
                 if (m.U_OdemeYontemi == "Nakit") { m.U_OnayDurumu = "Onay Bekliyor"; m.U_Kasa = string.IsNullOrEmpty(m.U_Kasa) ? Kasalar[0] : m.U_Kasa; }
+                // havale: alıcı banka bilgisi boşsa cari karttan / son ödemeden; dövizli: kur kaynağı ve günü; fatura sahibi ≠ ödeyen: otomatik grup içi belge
+                if (m.U_OdemeYontemi == "Havale / EFT" && string.IsNullOrEmpty(m.U_AliciIban)) { var tb = TedarikciBanka(m.U_Kurum); m.U_AliciBanka = tb.banka; m.U_AliciIban = tb.iban; m.U_AliciHesapAdi = tb.hesapAdi; }
+                KurTamamla(m); if (GrupIciBelgeOrnek.Gerekli(m) && string.IsNullOrEmpty(m.U_GrupIciTur)) m.U_GrupIciTur = "Mahsup";
                 m.U_Sira = _odemeler[dbName].Count + 1;
-                _odemeler[dbName].Add(m); Log(dbName, m.DocEntry, m.U_OdemeYontemi == "Nakit" ? "Nakit Talebi" : "Ekleme", $"{m.U_Kurum} · {m.U_OdemeYontemi} · {(m.U_Tutar ?? 0).ToString("N2", Tr)} {m.U_ParaBirimi}" + (m.U_OdemeYontemi == "Nakit" ? $" · onay bekliyor ({string.Join(" / ", NakitOnaycilari)})" : ""), kullanici);
+                _odemeler[dbName].Add(m); Log(dbName, m.DocEntry, m.U_OdemeYontemi == "Nakit" ? "Nakit Talebi" : "Ekleme", $"{m.U_Kurum} · {m.U_OdemeYontemi} · {(m.U_Tutar ?? 0).ToString("N2", Tr)} {m.U_ParaBirimi}" + (m.U_OdemeYontemi == "Nakit" ? $" · onay bekliyor ({string.Join(" / ", NakitOnaycilari)})" : "") + (m.U_ParaBirimi != "TRY" ? $" · kur {(m.U_Kur ?? 1).ToString("N4", Tr)} ({m.U_KurKaynagi} {m.U_KurTarihi:dd.MM.yyyy})" : ""), kullanici);
+                var gib = GrupIciBelgeOrnek.Senkron(m, kullanici); if (gib != null) Log(dbName, m.DocEntry, "Grup İçi Belge", $"{gib.No} ({gib.Baslik}) hazırlandı: {gib.Odeyen}, {gib.FaturaSahibi} adına ödüyor; ödeme gerçekleşince iki şirkette fiş atılır", kullanici);
                 return m;
             }
         }
@@ -670,6 +805,7 @@ namespace WebApplication3.Data
             {
                 var m = _odemeler.TryGetValue(dbName, out var l) ? l.FirstOrDefault(x => x.DocEntry == docEntry) : null; if (m == null) return false;
                 foreach (var id in (m.U_CekDocEntryler ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)) if (int.TryParse(id, out var n)) CekAkibetOrnek.PlanKaldir(n, kullanici);
+                GrupIciBelgeOrnek.Iptal(docEntry, kullanici);
                 l.Remove(m); Log(dbName, docEntry, "Silme", $"{m.U_Kurum} · {(m.U_Tutar ?? 0).ToString("N2", Tr)} {m.U_ParaBirimi} silindi", kullanici); return true;
             }
         }
@@ -694,12 +830,21 @@ namespace WebApplication3.Data
                     var belge = m.Belgeler[0].Belge; if (m.U_OdemeYontemi != "Çek" && m.U_OdemeYontemi != "Senet") m.U_OdemeYontemi = belge;
                     // belge başka grup şirketinin portföyündense ödeyen şirket o şirkettir (fatura sahibi değişmez → dolaşım planı gerekir)
                     var ilk = CekAkibetOrnek.Bul(mevcut[0]); if (ilk != null && !string.IsNullOrEmpty(ilk.Sirket) && ilk.Sirket != m.U_OdeyenSirket) { m.U_OdeyenSirket = ilk.Sirket; if (string.IsNullOrEmpty(m.U_FaturaSahibi)) m.U_FaturaSahibi = SirketAdi(dbName); }
-                    m.U_Tutar = m.Belgeler.Sum(b => b.Tutar); m.U_ParaBirimi = "TRY"; m.U_Kur = 1; m.U_TutarTL = m.U_Tutar; m.U_OdenenTutarPB = "TRY";
+                    // dövizli fatura TL çekle ödeniyorsa: belge toplamı TL, satır tutarı çekin tahsil (vade) günü TCMB kuruyla döviz karşılığı; kur farkı faturası bu cariye kesilir
+                    if (!string.IsNullOrEmpty(m.U_ParaBirimi) && m.U_ParaBirimi != "TRY")
+                    {
+                        m.U_KurKaynagi = "Çek Tahsil Günü Kuru"; m.U_KurTarihi = m.Belgeler.Min(b => b.Vade); m.U_Kur = KurOrnek.Kur(m.U_ParaBirimi, m.U_KurTarihi, m.U_KurKaynagi);
+                        m.U_TutarTL = m.Belgeler.Sum(b => b.Tutar); m.U_Tutar = Math.Round(m.U_TutarTL.Value / m.U_Kur.Value, 2); m.U_OdenenTutarPB = m.U_ParaBirimi;
+                        if (string.IsNullOrEmpty(m.U_KurFarkiFaturasi) || m.U_KurFarkiFaturasi == "Belirsiz") m.U_KurFarkiFaturasi = "Kesilecek";
+                        if (string.IsNullOrEmpty(m.U_KurNotu)) m.U_KurNotu = $"Dövizli fatura TL çekle ödeniyor: çekin tahsil günü ({m.U_KurTarihi:dd.MM.yyyy}) TCMB kuru baz; fark için cariye kur farkı faturası";
+                    }
+                    else { m.U_Tutar = m.Belgeler.Sum(b => b.Tutar); m.U_ParaBirimi = "TRY"; m.U_Kur = 1; m.U_TutarTL = m.U_Tutar; m.U_OdenenTutarPB = "TRY"; }
                     if (m.U_PlanlananTarih == null || m.U_PlanlananTarih > m.Belgeler.Min(b => b.Vade)) m.U_PlanlananTarih = m.Belgeler.Min(b => b.Vade);
                     if (m.U_Durum == "Bekliyor") { m.U_Durum = "Planlandı"; m.U_EskiDurum = "Planlandı"; }
                     string not = "Belge(ler): " + string.Join(", ", m.Belgeler.Select(b => b.No)); var parcalar = (m.U_Notlar ?? "").Split(" | ", StringSplitOptions.RemoveEmptyEntries).Where(p => !p.StartsWith("Belge(ler):") && p != "Belge seçilecek").ToList(); parcalar.Insert(0, not); m.U_Notlar = string.Join(" | ", parcalar);
                 }
-                if (eklenen.Count > 0) Log(dbName, m.DocEntry, "Belge Planlandı", $"{m.U_Kurum} için {string.Join(", ", eklenen)} seçildi → Çek Akıbeti: Planlandı", kullanici);
+                if (eklenen.Count > 0) Log(dbName, m.DocEntry, "Belge Planlandı", $"{m.U_Kurum} için {string.Join(", ", eklenen)} seçildi → Çek Akıbeti: Planlandı" + (m.U_ParaBirimi != "TRY" ? $" · kur {(m.U_Kur ?? 1).ToString("N4", Tr)} (çek tahsil günü {m.U_KurTarihi:dd.MM.yyyy})" : ""), kullanici);
+                GrupIciBelgeOrnek.Senkron(m, kullanici);
                 string mesaj = (eklenen.Count > 0 ? $"{string.Join(", ", eklenen)} planlandı → {m.U_Kurum}. Çek Akıbeti Raporu'nda işlem türü \"Planlandı\" oldu." : "") + (hatalar.Count > 0 ? " " + string.Join(" ", hatalar) : "");
                 return (eklenen.Count > 0, mesaj.Trim(), m);
             }
@@ -755,11 +900,20 @@ namespace WebApplication3.Data
                 object eski = p.GetValue(m); p.SetValue(m, v);
                 if (alan == "U_OdemeYontemi" && (string)v == "Nakit" && string.IsNullOrEmpty(m.U_OnayDurumu)) m.U_OnayDurumu = "Onay Bekliyor";
                 if (alan == "U_BagliBelgeTipi" && (string)v == "Cari Bakiye") { m.U_KayitTipi = "Bakiye"; m.U_FaturaSiparisNo = ""; }
-                if (alan == "U_Tutar" || alan == "U_Kur" || alan == "U_ParaBirimi") { if (alan == "U_ParaBirimi") m.U_Kur = Kurlar.TryGetValue(m.U_ParaBirimi ?? "TRY", out var kk) ? kk : m.U_Kur; m.U_TutarTL = Math.Round((m.U_Tutar ?? 0) * (m.U_Kur ?? 1), 2); }
+                if (alan == "U_Tutar" || alan == "U_Kur" || alan == "U_ParaBirimi" || alan == "U_KurKaynagi" || alan == "U_KurTarihi" || alan == "U_PlanlananTarih" || alan == "U_OdemeYontemi")
+                {
+                    if (alan == "U_ParaBirimi") { m.U_KurKaynagi = ""; m.U_KurTarihi = null; }   // para birimi değişince kur kaynağı / günü yeniden kurulur
+                    if (alan == "U_PlanlananTarih" && m.U_KurKaynagi != "Çek Tahsil Günü Kuru" && m.U_Durum != "ÖDENDİ") m.U_KurTarihi = m.U_PlanlananTarih;
+                    if (alan == "U_Kur" && KurOrnek.TcmbKaynagi(m.U_KurKaynagi)) m.U_KurKaynagi = "Anlaşmalı Kur";   // elle kur yazıldıysa artık TCMB değil
+                    KurTamamla(m);
+                }
                 if (alan == "U_Durum") { if (m.U_Durum == "ÖDENDİ") { m.U_OdenmeTarihi ??= DateTime.Today; if ((m.U_OdenenTutar ?? 0) == 0) m.U_OdenenTutar = m.U_Tutar; } m.U_EskiDurum = m.U_Durum; }
+                if (GrupIciBelgeOrnek.Gerekli(m) && string.IsNullOrEmpty(m.U_GrupIciTur)) m.U_GrupIciTur = "Mahsup";
                 Log(dbName, docEntry, alan == "U_Durum" ? "Durum" : "Güncelleme", $"{alan}: {(eski is DateTime ed ? ed.ToString("dd.MM.yyyy") : eski)} → {(v is DateTime vd ? vd.ToString("dd.MM.yyyy") : v)}", kullanici);
                 string ek = "";
                 if (alan == "U_Durum" && (string)eski != "ÖDENDİ" && m.U_Durum == "ÖDENDİ") { var h = AvansOdemesiIsle(m, kullanici); if (!string.IsNullOrEmpty(m.U_AvansNo)) ek = h == null ? $" Avans {m.U_AvansNo} teslim edildi; Bekleyen Ödemeler listesinden düştü." : " Avans olayı: " + h; FisAt(m, "Ödeme (satır içi)", kullanici); if (!string.IsNullOrEmpty(m.U_YevmiyeNo)) ek += $" Muhasebe fişi {m.U_YevmiyeNo}."; }
+                var gib = GrupIciBelgeOrnek.Senkron(m, kullanici); if (gib != null && alan == "U_Durum" && gib.Durum == "Muhasebeleşti" && !string.IsNullOrEmpty(gib.FaturaSahibiFisNo)) ek += $" {gib.No}: {gib.FaturaSahibi} fişi {gib.FaturaSahibiFisNo} ({gib.MahsupSekli}).";
+                if (alan == "U_ParaBirimi" || alan == "U_KurKaynagi" || alan == "U_KurTarihi") ek += m.U_ParaBirimi == "TRY" ? "" : $" Kur {(m.U_Kur ?? 1).ToString("N4", Tr)} ({m.U_KurKaynagi} · {m.U_KurTarihi:dd.MM.yyyy}).";
                 return (true, "Kaydedildi." + ek);
             }
         }
@@ -818,18 +972,8 @@ namespace WebApplication3.Data
                 Log(dbName, docEntry, "Grup İçi Bağ Kaldırıldı", eski, kullanici); return (true, "Kayıt bağı kaldırıldı.", m);
             }
         }
-        /// <summary>Çekmece: dekont ekleme simülasyonu (dosya saklanmaz).</summary>
-        public static (bool ok, string mesaj, NakitAkisViewModel satir) DekontEkle(string dbName, int docEntry, string ad, string aciklama, string kullanici)
-        {
-            Tohumla();
-            lock (Kilit)
-            {
-                var m = _odemeler.TryGetValue(dbName, out var l) ? l.FirstOrDefault(x => x.DocEntry == docEntry) : null; if (m == null) return (false, "Ödeme satırı bulunamadı.", null);
-                string dosya = string.IsNullOrWhiteSpace(ad) ? $"dekont_{docEntry}_{m.DekontListesi.Count + 1}.pdf" : ad.Trim();
-                m.DekontListesi.Add(new DekontKaydi { Id = ++_sonDekontId, SirketDb = dbName, DocEntry = docEntry, DosyaAdi = dosya, DosyaYolu = "/Dekontlar/" + dosya, Aciklama = aciklama ?? "", Yukleyen = kullanici ?? "", Tarih = DateTime.Now });
-                Log(dbName, docEntry, "Dekont", dosya + (string.IsNullOrEmpty(aciklama) ? "" : " · " + aciklama), kullanici); return (true, "Dekont eklendi (ön yüz örneği: dosya saklanmaz).", m);
-            }
-        }
+        /// <summary>Çekmece: yalnız adla dekont kaydı (dosyasız); dosyalı ekleme EkEkle.</summary>
+        public static (bool ok, string mesaj, NakitAkisViewModel satir) DekontEkle(string dbName, int docEntry, string ad, string aciklama, string kullanici) => EkEkle(dbName, docEntry, ad, "Dekont", aciklama, null, null, kullanici);
         /// <summary>Grup içi özet (Mahsup / Temlik / Yansıtma modüllerinden canlı): açık ve onay bekleyen işlem sayısı / tutarı.</summary>
         public static object GrupIciOzet(string dbName)
         {
