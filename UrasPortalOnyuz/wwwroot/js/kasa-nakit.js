@@ -62,7 +62,7 @@
     if (!sessiz) $('#knKapsam').textContent = 'yükleniyor…';
     let r; try { r = await getJ(`/Rapor79/Veri?sirket=${encodeURIComponent(F.sirket)}&bas=${F.bas}&bit=${F.bit}`); } catch (e) { mesaj('danger', 'Veri yüklenemedi.'); return; }
     if (!r.success) { mesaj('danger', 'Veri yüklenemedi.'); return; }
-    V = r;
+    V = r; A.veri = null;
     const d = $('#knDurum'), mevcutD = d.value; d.innerHTML = '<option value="">Tümü</option>' + V.durumlar.map(x => `<option>${esc(x)}</option>`).join(''); d.value = mevcutD;
     const s = $('#knSatinalmaci'), mevcutS = s.value; s.innerHTML = '<option value="">Tümü</option>' + V.satinalmacilar.map(x => `<option>${esc(x)}</option>`).join(''); s.value = mevcutS;
     ciz();
@@ -73,10 +73,10 @@
     $('#knKapsam').textContent = `${F.sirket ? sirketAdi(F.sirket) : 'Tüm Şirketler (Konsolide)'} · ${tarih(F.bas)} – ${tarih(F.bit)} · ${L.length} kayıt${F.kpi ? ' · kart filtresi açık' : ''}`;
     kpi(); sayaclar(L);
     const p = aktifSekme();
-    if (p === 'bakiye') cizBakiye(); else if (p === 'gunluk') cizGunluk(); else if (p === 'talimat') cizTalimatlar(); else cizTablo(p, L);
+    if (p === 'bakiye') cizBakiye(); else if (p === 'gunluk') cizGunluk(); else if (p === 'talimat') cizTalimatlar(); else if (p === 'aylik') cizAylik(); else cizTablo(p, L);
     if (p === 'mahsup' || p === 'temlik' || p === 'yansitma') cizGrupOzet(p);
   }
-  function sayaclar(L) { Object.keys(SEKME).forEach(k => { const n = $('#knN-' + k); if (n) n.textContent = k === 'tumu' ? L.length : L.filter(r => r.yontem === SEKME[k]).length; }); $('#knN-bakiye').textContent = V.bakiyeler.length; $('#knN-gunluk').textContent = V.gunluk.length; $('#knN-talimat').textContent = (V.talimatlar || []).filter(t => !t.kapandi).length + '/' + (V.talimatlar || []).length; }
+  function sayaclar(L) { Object.keys(SEKME).forEach(k => { const n = $('#knN-' + k); if (n) n.textContent = k === 'tumu' ? L.length : L.filter(r => r.yontem === SEKME[k]).length; }); $('#knN-bakiye').textContent = V.bakiyeler.length; $('#knN-gunluk').textContent = V.gunluk.length; $('#knN-talimat').textContent = (V.talimatlar || []).filter(t => !t.kapandi).length + '/' + (V.talimatlar || []).length; const na = $('#knN-aylik'); if (na) na.textContent = A.yil; }
   // üst kartlar: temel filtreler (durum / satınalmacı / arama) uygulanmış küme üzerinden; tıklanan kart ek filtre olur
   function kpi() {
     const T = V.odemeler.filter(r => (!F.durum || r.durum === F.durum) && (!F.satinalmaci || r.satinalmaci === F.satinalmaci) && aramaUyar(r));
@@ -637,6 +637,96 @@
   $('#knDKapat').addEventListener('click', drawerKapat); $('#knPerde').addEventListener('click', drawerKapat);
   $('#knYeni').addEventListener('click', () => { const ad = sirketAdi(F.sirket || V.sirketler[0].dbName); const p = aktifSekme(); drawerAc({ docEntry: 0, dbName: F.sirket, sirket: '', kurum: '', faturaSahibi: ad, odeyenSirket: ad, yontem: p in SEKME && SEKME[p] ? SEKME[p] : 'Havale / EFT', durum: 'Bekliyor', planlanan: bugun(), sonOdeme: '', belgeTipi: 'Fatura', pb: 'TRY', kur: 1, tutar: '', tutarTL: '', notlar: '', alanlar: {}, belgeler: [], dekontlar: [] }); });
   kok.addEventListener('click', e => { const b = e.target.closest('.kn-ac'); if (!b) return; e.stopPropagation(); const r = satirdan(b); if (r) drawerAc(r); });
+
+  // ---------- AYLIK ÖDEME · ÇEK VADE: ay ay yönteme göre ödemeler (o ay çıkan çekler vadesi ne olursa olsun) → o ayın çeklerinin vade dağılımı; çıkış ayı × vade ayı matrisi
+  const AYLAR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+  const YONTEMLER = [['Çek', 'Çek'], ['Senet', 'Senet'], ['Havale / EFT', 'Banka (Havale / EFT)'], ['Nakit', 'Nakit'], ['Kredi Kartı / Banka Kartı', 'Kart'], ['Mahsup', 'Mahsup'], ['Temlik', 'Temlik'], ['Yansıtma', 'Yansıtma'], ['Diğer', 'Diğer']];
+  let A = { g: 'aylik', yil: new Date().getFullYear(), mod: 'gercek', veri: null, anahtar: '', secAy: null, secYontem: null, cikisAy: '', cekDurum: '', vadeSec: null };
+  const ayNo = s => s ? +String(s).slice(5, 7) : 0, yilNo = s => s ? +String(s).slice(0, 4) : 0;
+  async function aylikYukle() {
+    const key = (F.sirket || '') + '|' + A.yil; if (A.veri && A.anahtar === key) return A.veri;
+    $('#kaKapsam').textContent = 'yükleniyor…';
+    const d = await getJ(`/Rapor79/AylikOzet?sirket=${encodeURIComponent(F.sirket)}&yil=${A.yil}`).catch(() => null); if (!d || !d.success) { $('#kaKapsam').textContent = 'veri alınamadı'; return null; }
+    A.veri = d; A.anahtar = key; A.secAy = null; A.secYontem = null; A.vadeSec = null;
+    $('#kaYil').innerHTML = d.yillar.map(y => `<option ${y === A.yil ? 'selected' : ''}>${y}</option>`).join('');
+    return d;
+  }
+  const aylikSatirlar = () => (A.veri?.odemeler || []).filter(r => yilNo(r.tarih) === A.yil && (A.mod === 'tumu' || (A.mod === 'gercek' ? r.gerceklesen : !r.gerceklesen)));
+  async function cizAylik() {
+    const d = await aylikYukle(); if (!d) return;
+    $$('#kaSekme button').forEach(b => { b.classList.toggle('btn-primary', b.dataset.g === A.g); b.classList.toggle('btn-outline-primary', b.dataset.g !== A.g); });
+    $$('#kaMod button').forEach(b => { b.classList.toggle('btn-primary', b.dataset.m === A.mod); b.classList.toggle('btn-outline-primary', b.dataset.m !== A.mod); });
+    $('#kaAylik').style.display = A.g === 'aylik' ? '' : 'none'; $('#kaVade').style.display = A.g === 'vade' ? '' : 'none'; $('#kaModKap').style.display = A.g === 'aylik' ? '' : 'none'; $('#kaVadeFiltreKap').classList.toggle('d-none', A.g !== 'vade'); $('#kaVadeFiltreKap').style.display = '';
+    if (A.g === 'aylik') cizAylikTablo(); else cizVade();
+  }
+  function cizAylikTablo() {
+    const L = aylikSatirlar(), t = $('#kaTablo'), buAy = yilNo(bugun()) === A.yil ? ayNo(bugun()) : 0;
+    const hucre = (ay, y) => L.filter(r => ayNo(r.tarih) === ay && (!y || r.yontem === y));
+    const toplamlar = {}; let enBuyuk = 0; for (let ay = 1; ay <= 12; ay++) { const tl = hucre(ay).reduce((s, r) => s + r.tutarTL, 0); toplamlar[ay] = tl; enBuyuk = Math.max(enBuyuk, tl); }
+    t.tHead.innerHTML = '<tr><th>Ay</th><th class="s">Adet</th>' + YONTEMLER.map(([y, ad]) => `<th class="s" title="${esc(y)}">${esc(ad)}</th>`).join('') + '<th class="s">Toplam (₺)</th><th style="min-width:90px">Pay</th></tr>';
+    t.tBodies[0].innerHTML = Array.from({ length: 12 }, (_, i) => i + 1).map(ay => { const satir = hucre(ay); const tl = toplamlar[ay]; return `<tr class="${ay === buAy ? 'buAy' : ''} ${buAy && ay > buAy && A.mod === 'gercek' ? 'gelecek' : ''}"><td class="sol fw-bold">${AYLAR[ay - 1]} ${A.yil}</td><td class="para">${satir.length || '—'}</td>${YONTEMLER.map(([y]) => { const h = hucre(ay, y), v = h.reduce((s, r) => s + r.tutarTL, 0); return `<td class="para hucre ${v ? '' : 'sifir'} ${A.secAy === ay && A.secYontem === y ? 'secili' : ''}" data-ay="${ay}" data-y="${esc(y)}" title="${AYLAR[ay - 1]} · ${esc(y)} · ${h.length} ödeme · tıkla: detay">${v ? para(v) : '—'}${y === 'Çek' || y === 'Senet' ? `<small>${h.length ? h.length + ' satır · ' + (A.veri.cekler.filter(c => h.some(r => r.docEntry === c.docEntry) && c.belge === y).length) + ' belge' : ''}</small>` : ''}</td>`; }).join('')}<td class="para hucre fw-bold ${A.secAy === ay && !A.secYontem ? 'secili' : ''}" data-ay="${ay}" data-y="" title="${AYLAR[ay - 1]} toplam · tıkla: o ayın tüm ödemeleri">${tl ? para(tl) : '—'}</td><td><span class="ka-bar" style="width:${enBuyuk ? Math.round(tl / enBuyuk * 100) : 0}%"></span><small>${enBuyuk ? Math.round(tl / enBuyuk * 100) + '%' : ''}</small></td></tr>`; }).join('');
+    const yilToplam = L.reduce((s, r) => s + r.tutarTL, 0);
+    t.tFoot.innerHTML = `<tr class="toplam"><td class="text-end">${A.yil} TOPLAM</td><td class="para">${L.length}</td>${YONTEMLER.map(([y]) => `<td class="para">${para(L.filter(r => r.yontem === y).reduce((s, r) => s + r.tutarTL, 0))}</td>`).join('')}<td class="para">${para(yilToplam)}</td><td></td></tr>`;
+    const modAd = A.mod === 'gercek' ? 'gerçekleşen (ödenme tarihi)' : A.mod === 'plan' ? 'planlanan (planlanan ödeme tarihi)' : 'gerçekleşen + planlanan';
+    $('#kaKapsam').textContent = `${F.sirket ? sirketAdi(F.sirket) : 'Tüm Şirketler (Konsolide)'} · ${A.yil} · ${modAd} · ${L.length} ödeme · ${para(yilToplam)} ₺`;
+    $('#kaNot').textContent = 'hücreye tıklayınca o ayın ödemeleri; Çek / Senet hücresinde o ay çıkan belgeler (vadesi ne olursa olsun) ve vade dağılımına geçiş';
+    if (A.secAy) aylikDetay(A.secAy, A.secYontem); else { $('#kaDetayKart').style.display = 'none'; }
+  }
+  function aylikDetay(ay, y) {
+    A.secAy = ay; A.secYontem = y || null; $$('#kaTablo td.hucre').forEach(td => td.classList.toggle('secili', +td.dataset.ay === ay && (td.dataset.y || null) === (y || null)));
+    const L = aylikSatirlar().filter(r => ayNo(r.tarih) === ay && (!y || r.yontem === y)).sort((a, b) => (a.tarih || '').localeCompare(b.tarih || '')); const kart = $('#kaDetayKart'); kart.style.display = ''; const t = $('#kaDetay');
+    const cekMi = y === 'Çek' || y === 'Senet';
+    $('#kaDetayBaslik').textContent = `${AYLAR[ay - 1]} ${A.yil} · ${y ? (YONTEMLER.find(x => x[0] === y) || [y, y])[1] : 'Tüm Yöntemler'}`;
+    if (cekMi) {
+      const belgeler = A.veri.cekler.filter(c => c.belge === y && L.some(r => r.docEntry === c.docEntry)).sort((a, b) => a.vade.localeCompare(b.vade));
+      t.tHead.innerHTML = '<tr><th>Çıkış / Plan Tarihi</th><th>Belge No</th><th>Banka</th><th>Keşideci</th><th>Kimden Geldi</th><th>Vade</th><th>Vade Ayı</th><th>Şirket</th><th>Verilen Cari</th><th class="s">Tutar (₺)</th><th>Akıbet</th><th>Kontrol</th></tr>';
+      t.tBodies[0].innerHTML = belgeler.length ? belgeler.map(c => `<tr class="tik" data-doc="${c.docEntry}" data-db="${esc(c.dbName)}"><td>${tarih(c.cikisTarihi)}${c.cikti ? '' : '<small>planlı</small>'}</td><td class="fw-bold">${esc(c.no)}</td><td class="sol">${esc(c.banka)}</td><td class="sol">${esc(c.kesideci)}</td><td class="sol">${esc(c.kimden)}</td><td class="${c.vade < bugun() && !c.cikti ? 'gec' : ''}">${tarih(c.vade)}</td><td>${AYLAR[ayNo(c.vade) - 1]} ${yilNo(c.vade)}</td><td>${esc(c.sirket)}</td><td class="sol fw-bold">${esc(c.kurum)}</td><td class="para">${para(c.tutar)}</td><td>${akibetRozet(c.akibet)}</td><td>${kontrolRozet(c.kontrol, c)}</td></tr>`).join('') : '<tr><td colspan="12" class="na-bos">Bu ayda belge yok.</td></tr>';
+      const toplam = belgeler.reduce((s, c) => s + c.tutar, 0); t.tFoot.innerHTML = belgeler.length ? `<tr class="toplam"><td colspan="9" class="text-end">${belgeler.length} belge · vade dağılımı: ${Object.entries(belgeler.reduce((o, c) => { const k = AYLAR[ayNo(c.vade) - 1] + ' ' + yilNo(c.vade); o[k] = (o[k] || 0) + c.tutar; return o; }, {})).map(([k, v]) => k + ' ' + kisa(v)).join(' · ')}</td><td class="para">${para(toplam)}</td><td colspan="2"></td></tr>` : '';
+      $('#kaDetayNot').textContent = `${L.length} ödeme satırı · ${belgeler.length} belge · o ay çıkan (ya da planlanan) belgeler, vadesi ne olursa olsun`;
+      const g = $('#kaVadeyeGit'); g.style.display = ''; g.dataset.ay = ay; g.dataset.belge = y;
+    } else {
+      t.tHead.innerHTML = '<tr><th>Tarih</th><th>Şirket</th><th>Ödenecek Cari</th><th>Belge No</th><th>Fatura Sahibi</th><th>Ödeyen</th><th>Yöntem</th><th class="s">Tutar (₺)</th><th>Durum</th><th>Hesap / Kasa · Belge</th></tr>';
+      t.tBodies[0].innerHTML = L.length ? L.map(r => `<tr class="tik" data-doc="${r.docEntry}" data-db="${esc(r.dbName)}"><td>${tarih(r.tarih)}${r.gerceklesen ? '' : '<small>planlanan</small>'}</td><td>${esc(r.sirket)}</td><td class="sol fw-bold">${esc(r.kurum)}</td><td class="sol">${esc(r.faturaNo || r.belgeTipi || '')}</td><td>${esc(r.faturaSahibi)}</td><td>${esc(r.odeyenSirket)}</td><td>${yontemRozet(r.yontem)}</td><td class="para">${para(r.tutarTL)}${r.pb !== 'TRY' ? `<small>${para(r.tutar)} ${esc(r.pb)}</small>` : ''}</td><td>${durumRozet(r.durum)}</td><td class="sol">${esc(r.yontem === 'Nakit' ? [r.kasa, r.makbuzNo].filter(Boolean).join(' · ') : r.yontem === 'Havale / EFT' ? (r.bankaHesabi || '').split(' · ')[0] : r.cekNolar || '')}${r.talimatNo ? `<small>${esc(r.talimatNo)}</small>` : ''}</td></tr>`).join('') : '<tr><td colspan="10" class="na-bos">Bu ayda ödeme yok.</td></tr>';
+      t.tFoot.innerHTML = L.length ? `<tr class="toplam"><td colspan="7" class="text-end">${L.length} ödeme</td><td class="para">${para(L.reduce((s, r) => s + r.tutarTL, 0))}</td><td colspan="2"></td></tr>` : '';
+      $('#kaDetayNot').textContent = 'satıra tıklayınca ödeme kaydı (çekmece)'; $('#kaVadeyeGit').style.display = 'none';
+    }
+  }
+  function vadeBelgeleri() { return (A.veri?.cekler || []).filter(c => (yilNo(c.vade) === A.yil || yilNo(c.cikisTarihi) === A.yil) && (!A.cikisAy || (ayNo(c.cikisTarihi) === +A.cikisAy && yilNo(c.cikisTarihi) === A.yil)) && (!A.cekDurum || (A.cekDurum === 'cikti' ? c.cikti : !c.cikti))); }
+  function cizVade() {
+    const sel = $('#kaCikisAy'); if (!sel.options.length) sel.innerHTML = '<option value="">Tümü</option>' + AYLAR.map((a, i) => `<option value="${i + 1}">${a}</option>`).join(''); sel.value = A.cikisAy; $('#kaCekDurum').value = A.cekDurum;
+    const B = vadeBelgeleri(), t = $('#kaVadeTablo');
+    const grup = ay => B.filter(c => yilNo(c.vade) === A.yil && ayNo(c.vade) === ay), sonraki = B.filter(c => yilNo(c.vade) > A.yil), onceki = B.filter(c => yilNo(c.vade) < A.yil);
+    const satir = (ad, l, key) => { const cek = l.filter(c => c.belge === 'Çek'), sen = l.filter(c => c.belge === 'Senet'); const top = l.reduce((s, c) => s + c.tutar, 0); return `<tr class="${l.length ? 'tik' : ''} ${A.vadeSec === key ? 'secili' : ''}" data-vade="${key}" title="${l.length ? 'tıkla: belgeler' : ''}"><td class="sol fw-bold">${esc(ad)}</td><td class="para">${cek.length || '—'}</td><td class="para">${cek.length ? para(cek.reduce((s, c) => s + c.tutar, 0)) : '—'}</td><td class="para">${sen.length || '—'}</td><td class="para">${sen.length ? para(sen.reduce((s, c) => s + c.tutar, 0)) : '—'}</td><td class="para fw-bold">${top ? para(top) : '—'}</td><td class="para">${para(l.filter(c => c.cikti).reduce((s, c) => s + c.tutar, 0))}</td><td class="para">${para(l.filter(c => !c.cikti).reduce((s, c) => s + c.tutar, 0))}</td></tr>`; };
+    t.tBodies[0].innerHTML = (onceki.length ? satir('Önceki Yıllar', onceki, 'onceki') : '') + AYLAR.map((a, i) => satir(`${a} ${A.yil}`, grup(i + 1), String(i + 1))).join('') + (sonraki.length ? satir('Sonraki Yıllar', sonraki, 'sonraki') : '');
+    t.tFoot.innerHTML = `<tr class="toplam"><td class="text-end">TOPLAM</td><td class="para">${B.filter(c => c.belge === 'Çek').length}</td><td class="para">${para(B.filter(c => c.belge === 'Çek').reduce((s, c) => s + c.tutar, 0))}</td><td class="para">${B.filter(c => c.belge === 'Senet').length}</td><td class="para">${para(B.filter(c => c.belge === 'Senet').reduce((s, c) => s + c.tutar, 0))}</td><td class="para">${para(B.reduce((s, c) => s + c.tutar, 0))}</td><td class="para">${para(B.filter(c => c.cikti).reduce((s, c) => s + c.tutar, 0))}</td><td class="para">${para(B.filter(c => !c.cikti).reduce((s, c) => s + c.tutar, 0))}</td></tr>`;
+    $('#kaVadeNot').textContent = `${B.length} belge · ${A.cikisAy ? AYLAR[A.cikisAy - 1] + ' ayında çıkan / planlanan' : 'tüm çıkışlar'} · ${A.cekDurum === 'cikti' ? 'çıkmış' : A.cekDurum === 'planli' ? 'planlı' : 'çıkmış + planlı'}`;
+    // çıkış ayı × vade ayı matrisi (çıkış ayı filtresinden bağımsız: tüm yıl; seçili çıkış ayı vurgulu)
+    const M = (A.veri?.cekler || []).filter(c => yilNo(c.cikisTarihi) === A.yil && (!A.cekDurum || (A.cekDurum === 'cikti' ? c.cikti : !c.cikti))), m = $('#kaMatris');
+    const vadeKol = c => yilNo(c.vade) > A.yil ? 13 : yilNo(c.vade) < A.yil ? 0 : ayNo(c.vade);
+    m.tHead.innerHTML = '<tr><th>Çıkış Ayı ↓ · Vade Ayı →</th>' + AYLAR.map(a => `<th class="s">${a.slice(0, 3)}</th>`).join('') + '<th class="s">Sonraki Yıl</th><th class="s">Toplam</th></tr>';
+    m.tBodies[0].innerHTML = AYLAR.map((a, i) => { const ay = i + 1, l = M.filter(c => ayNo(c.cikisTarihi) === ay); return `<tr class="${+A.cikisAy === ay ? 'vurgu' : ''}"><td class="sol fw-bold">${a} ${A.yil}</td>${Array.from({ length: 13 }, (_, j) => j + 1).map(k => { const h = l.filter(c => vadeKol(c) === k), v = h.reduce((s, c) => s + c.tutar, 0); return `<td class="para hucre ${v ? '' : 'sifir'} ${A.vadeSec === 'm' + ay + '-' + k ? 'secili' : ''}" data-cikis="${ay}" data-vade="${k}" title="çıkış ${a} · vade ${k === 13 ? 'sonraki yıl' : AYLAR[k - 1]} · ${h.length} belge">${v ? kisa(v) : '·'}</td>`; }).join('')}<td class="para fw-bold">${l.length ? kisa(l.reduce((s, c) => s + c.tutar, 0)) : '—'}</td></tr>`; }).join('');
+    m.tFoot.innerHTML = '<tr class="toplam"><td class="text-end">TOPLAM</td>' + Array.from({ length: 13 }, (_, j) => j + 1).map(k => `<td class="para">${kisa(M.filter(c => vadeKol(c) === k).reduce((s, c) => s + c.tutar, 0)) || '·'}</td>`).join('') + `<td class="para">${kisa(M.reduce((s, c) => s + c.tutar, 0))}</td></tr>`;
+    $('#kaKapsam').textContent = `${F.sirket ? sirketAdi(F.sirket) : 'Tüm Şirketler (Konsolide)'} · ${A.yil} · çek / senet vade dağılımı · ${B.length} belge · ${para(B.reduce((s, c) => s + c.tutar, 0))} ₺`;
+    if (A.vadeSec) { const [tip, a, b] = A.vadeSec.startsWith('m') ? ['m', ...A.vadeSec.slice(1).split('-').map(Number)] : ['v', A.vadeSec]; if (tip === 'm') vadeDetay(M.filter(c => ayNo(c.cikisTarihi) === a && vadeKol(c) === b), `Çıkış ${AYLAR[a - 1]} → vade ${b === 13 ? 'sonraki yıl' : AYLAR[b - 1]}`); else vadeDetay(a === 'onceki' ? onceki : a === 'sonraki' ? sonraki : grup(+a), a === 'onceki' ? 'Önceki yıllar vadeli' : a === 'sonraki' ? 'Sonraki yıllar vadeli' : `Vade ${AYLAR[a - 1]} ${A.yil}`); }
+    else vadeDetay(B, 'Tüm belgeler');
+  }
+  function vadeDetay(l, baslik) {
+    const t = $('#kaVadeDetay'); l = l.slice().sort((a, b) => a.vade.localeCompare(b.vade));
+    $('#kaVadeDetayBaslik').textContent = baslik; $('#kaVadeDetayNot').textContent = `${l.length} belge · ${para(l.reduce((s, c) => s + c.tutar, 0))} ₺ · satıra tıklayınca ödeme kaydı`;
+    t.tBodies[0].innerHTML = l.length ? l.map(c => `<tr class="tik" data-doc="${c.docEntry}" data-db="${esc(c.dbName)}"><td class="fw-bold">${esc(c.no)}</td><td>${esc(c.belge)}</td><td class="sol">${esc(c.banka)}</td><td class="sol">${esc(c.kesideci)}</td><td class="sol">${esc(c.kimden)}</td><td class="${c.vade < bugun() && !c.cikti ? 'gec' : ''}">${tarih(c.vade)}</td><td>${tarih(c.cikisTarihi)}${c.cikti ? '' : '<small>planlı</small>'}</td><td>${esc(c.sirket)}</td><td class="sol fw-bold">${esc(c.kurum)}</td><td class="para">${para(c.tutar)}</td><td>${akibetRozet(c.akibet)}</td><td>${kontrolRozet(c.kontrol, c)}</td></tr>`).join('') : '<tr><td colspan="12" class="na-bos">Belge yok.</td></tr>';
+    t.tFoot.innerHTML = l.length ? `<tr class="toplam"><td colspan="9" class="text-end">${l.length} belge</td><td class="para">${para(l.reduce((s, c) => s + c.tutar, 0))}</td><td colspan="2"></td></tr>` : '';
+  }
+  $('#kaSekme').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; A.g = b.dataset.g; cizAylik(); });
+  $('#kaMod').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; A.mod = b.dataset.m; A.secAy = null; A.secYontem = null; cizAylik(); });
+  $('#kaYil').addEventListener('change', () => { A.yil = +$('#kaYil').value; A.veri = null; A.cikisAy = ''; A.vadeSec = null; cizAylik(); });
+  $('#kaCikisAy').addEventListener('change', () => { A.cikisAy = $('#kaCikisAy').value; A.vadeSec = null; cizVade(); }); $('#kaCekDurum').addEventListener('change', () => { A.cekDurum = $('#kaCekDurum').value; A.vadeSec = null; cizVade(); });
+  $('#kaTablo').addEventListener('click', e => { const td = e.target.closest('td.hucre'); if (!td) return; aylikDetay(+td.dataset.ay, td.dataset.y || null); });
+  $('#kaVadeyeGit').addEventListener('click', () => { const g = $('#kaVadeyeGit'); A.g = 'vade'; A.cikisAy = g.dataset.ay; A.cekDurum = ''; A.vadeSec = null; cizAylik(); });
+  $('#kaVadeTablo').addEventListener('click', e => { const tr = e.target.closest('tr.tik'); if (!tr) return; A.vadeSec = A.vadeSec === tr.dataset.vade ? null : tr.dataset.vade; cizVade(); });
+  $('#kaMatris').addEventListener('click', e => { const td = e.target.closest('td.hucre'); if (!td) return; const key = 'm' + td.dataset.cikis + '-' + td.dataset.vade; A.vadeSec = A.vadeSec === key ? null : key; cizVade(); });
+  // detay satırı → çekmece (satır dönem dışındaysa sunucudan getirilir)
+  async function satirGetirAc(doc, db) { let r = satirBul(doc); if (!r) { const d = await getJ(`/Rapor79/SatirBelgeleri?dbName=${encodeURIComponent(db)}&docEntry=${doc}`).catch(() => null); if (d && d.success) r = d.row; } if (r) drawerAc(r); }
+  ['#kaDetay', '#kaVadeDetay'].forEach(s => $(s).addEventListener('click', e => { const tr = e.target.closest('tr.tik'); if (!tr) return; e.stopPropagation(); satirGetirAc(+tr.dataset.doc, tr.dataset.db); }));
 
   // ---------- başlangıç
   (async () => { await yukle(); if (V) sekme(kok.dataset.sekme || 'tumu'); })();

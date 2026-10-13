@@ -79,6 +79,24 @@ namespace WebApplication3.Controllers
             });
         }
 
+        /// <summary>
+        /// Aylık Ödeme · Çek Vade sekmesi: yılın ödeme satırları (gerçekleşen = ödenme tarihi, planlanan = planlanan tarih) ve çek / senet satırlarındaki belgeler
+        /// (çıkış ayı × vade ayı dağılımı için: çıkış tarihi = satırın ödenme ya da planlanan tarihi, vade = belgenin vadesi). Toplamlar istemcide (kasa-nakit.js › cizAylik).
+        /// </summary>
+        [HttpGet("AylikOzet")]
+        public IActionResult AylikOzet(string sirket, int? yil)
+        {
+            int y = yil ?? DateTime.Today.Year;
+            var dbler = string.IsNullOrEmpty(sirket) ? NakitAkisOrnek.Sirketler.Select(s => s.DbName).ToList() : new List<string> { sirket };
+            var hepsi = dbler.SelectMany(db => NakitAkisOrnek.Odemeler(db)).ToList();
+            DateTime? Tarih(NakitAkisViewModel m) => m.U_Durum == "ÖDENDİ" ? (m.U_OdenmeTarihi ?? m.U_PlanlananTarih) : m.U_PlanlananTarih;
+            var yillar = hepsi.SelectMany(m => new[] { Tarih(m)?.Year }.Concat(m.Belgeler.Select(b => (int?)b.Vade.Year))).Where(x => x != null).Select(x => x.Value).Distinct().OrderByDescending(x => x).ToList(); if (!yillar.Contains(y)) yillar.Add(y);
+            var rows = hepsi.Where(m => Tarih(m)?.Year == y || m.Belgeler.Any(b => b.Vade.Year == y)).ToList();
+            var odemeler = rows.Select(m => new { docEntry = m.DocEntry, dbName = m.U_KaynakFirma, sirket = NakitAkisOrnek.SirketAdi(m.U_KaynakFirma), kurum = m.U_Kurum, faturaNo = m.U_FaturaSiparisNo, belgeTipi = m.U_BagliBelgeTipi, yontem = m.U_OdemeYontemi, tutar = m.U_Tutar ?? 0, pb = m.U_ParaBirimi, tutarTL = m.U_TutarTL ?? 0, durum = m.U_Durum, gerceklesen = m.U_Durum == "ÖDENDİ", tarih = Tarih(m)?.ToString("yyyy-MM-dd"), odenme = m.U_OdenmeTarihi?.ToString("yyyy-MM-dd"), planlanan = m.U_PlanlananTarih?.ToString("yyyy-MM-dd"), faturaSahibi = m.U_FaturaSahibi, odeyenSirket = m.U_OdeyenSirket, cekNolar = m.U_CekNolar, cikisTalebi = m.U_CikisTalebi, bankaHesabi = m.U_BankaHesabi, kasa = m.U_Kasa, makbuzNo = m.U_MakbuzNo, talimatNo = m.U_TalimatNo }).ToList();
+            var cekler = rows.Where(m => m.U_OdemeYontemi == "Çek" || m.U_OdemeYontemi == "Senet").SelectMany(m => m.Belgeler.Select(b => new { docEntry = m.DocEntry, dbName = m.U_KaynakFirma, sirket = NakitAkisOrnek.SirketAdi(m.U_KaynakFirma), kurum = m.U_Kurum, no = b.No, belge = b.Belge, banka = b.Banka, kesideci = b.AsilBorclu, kimden = b.KimdenGeldi, vade = b.Vade.ToString("yyyy-MM-dd"), tutar = b.Tutar, akibet = b.Akibet, kontrol = b.Kontrol, ibrazYeri = b.IbrazYeri, cikisTarihi = Tarih(m)?.ToString("yyyy-MM-dd"), cikti = m.U_Durum == "ÖDENDİ" || (b.Akibet != "Planlandı" && b.Akibet != "Portföyde"), durum = m.U_Durum, cikisTalebi = m.U_CikisTalebi })).ToList();
+            return Json(new { success = true, yil = y, yillar, odemeler, cekler });
+        }
+
         // ---------- ÖDEME TALİMATI ----------
         public class TalimatIstek { public string DbName { get; set; } public List<int> DocEntryler { get; set; } public string BankaHesabi { get; set; } public string Kasa { get; set; } public string No { get; set; } public string Durum { get; set; } public string Not { get; set; } }
         /// <summary>Seçilen satırlardan talimat: ödeyen şirket + yöntem bazında; çek satırlarında seçili belgeler ve dolaşım planı talimata girer.</summary>
