@@ -72,6 +72,16 @@
     const s = $('#knSatinalmaci'), mevcutS = s.value; s.innerHTML = '<option value="">Tümü</option>' + kisiler.map(x => `<option>${esc(x)}</option>`).join(''); s.value = mevcutS;
     ciz();
   }
+  // sabit başlıklar için üst boşluk: sayfanın üstünde sabit duran çubukların (top-header, sabit araç çubuğu) alt kenarı + kart başlığı yüksekliği
+  function sabitUstOlc() {
+    // kabuğun rapor kutusu (.table-container, overflow:auto) yapışkan başlığı kendi içinde tutar; pencereye göre çalışsın diye açılır
+    const tk = kok.closest('.table-container'); if (tk) tk.style.setProperty('overflow', 'visible', 'important');
+    let ust = 0; const band = 220;
+    for (const e of document.querySelectorAll('.top-header, .toolbar-container, .rt-cubuk, [class*="sticky"]')) { if (kok.contains(e)) continue; const cs = getComputedStyle(e); if (cs.position !== 'sticky' && cs.position !== 'fixed') continue; const r = e.getBoundingClientRect(); if (r.width < 300 || r.top < -5 || r.top > band || r.height === 0) continue; ust = Math.max(ust, r.bottom); }
+    kok.style.setProperty('--kn-sabit-ust', Math.round(ust) + 'px');
+    const kb = $('.na-panel.aktif > .na-kart > .na-kart-b'); if (kb) kok.style.setProperty('--kn-kartb', kb.offsetHeight + 'px');
+  }
+  window.addEventListener('resize', sabitUstOlc);
   function ciz() {
     if (!V) return;
     const L = satirlar();
@@ -81,6 +91,7 @@
     if (p === 'bakiye') cizBakiye(); else if (p === 'gunluk') cizGunluk(); else if (p === 'talimat') cizTalimatlar(); else if (p === 'aylik') cizAylik(); else cizTablo(p, L);
     if (p === 'mahsup' || p === 'temlik' || p === 'yansitma') cizGrupOzet(p);
     if (p === 'mahsup' || p === 'temlik') cizGib(p);
+    if (window.scrollY < 5) sabitUstOlc(); else { const kb = $('.na-panel.aktif > .na-kart > .na-kart-b'); if (kb) kok.style.setProperty('--kn-kartb', kb.offsetHeight + 'px'); }
   }
   function sayaclar(L) { Object.keys(SEKME).forEach(k => { const n = $('#knN-' + k); if (n) n.textContent = k === 'tumu' ? L.length : L.filter(r => r.yontem === SEKME[k]).length; }); $('#knN-bakiye').textContent = V.bakiyeler.length; $('#knN-gunluk').textContent = V.gunluk.length; $('#knN-talimat').textContent = (V.talimatlar || []).filter(t => !t.kapandi).length + '/' + (V.talimatlar || []).length; const na = $('#knN-aylik'); if (na) na.textContent = A.yil; }
   // üst kartlar: temel filtreler (durum / satınalmacı / arama) uygulanmış küme üzerinden; tıklanan kart ek filtre olur
@@ -147,7 +158,9 @@
     const oranKucuk = r.pb && r.pb !== 'TRY' ? `<small>${para(r.tutar)} ${esc(r.pb)}${oranYazi ? ' · ' + oranYazi : ''}${kf}</small>` : (oranYazi && (pl.oran ?? 100) !== 100 ? `<small>${oranYazi}</small>` : '');
     const tl = `<td class="para" title="${esc(para(r.tutar) + ' ' + (r.pb || ''))}${r.pb !== 'TRY' ? ' · kur ' + esc(String(r.kur)) + (r.kurBilgi ? ' (' + esc(r.kurBilgi.kaynak || '') + (r.kurBilgi.tarih ? ' ' + tarih(r.kurBilgi.tarih) : '') + ')' + (r.kurBilgi.kurFarki ? ' · kur farkı faturası: ' + esc(r.kurBilgi.kurFarki) : '') + (r.kurBilgi.not ? ' · ' + esc(r.kurBilgi.not) : '') : '') : ''}${pl.faturaTutari ? ' · belge ' + para(pl.faturaTutari) + ' ' + esc(r.pb) + ' · bu satır %' + (pl.oran ?? 100) + (pl.kalan != null ? ' · kalan ' + para(pl.kalan) : '') : ''}">${para(r.tutarTL)} ₺${oranKucuk}</td>`;
     const durum = `<td><select class="kn-alan kn-durum" data-alan="U_Durum">${V.durumlar.map(d => `<option ${d === r.durum ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select><span class="kn-mutabakat ${r.mutabakat === 'Mutabık' ? 'ok' : r.mutabakat ? 'hata' : 'yok'}" title="Mutabakat durumu${r.mutabakatTarihi ? ' · ' + tarih(r.mutabakatTarihi) : ''}">${esc(r.mutabakat || 'Mutabakat Yok')}</span></td>`;
-    const odenme = `<td>${tarih(r.odenme)}</td>`, odenen = `<td class="para">${r.odenen ? para(r.odenen) + (r.odenenPB && r.odenenPB !== 'TRY' ? `<small>${esc(r.odenenPB)}</small>` : '') : '—'}</td>`;
+    // ödenen tutar: TL karşılığı üstte (ödemede baz alınan kurla: TCMB ya da anlaşılan kur), dövizli ödemede altta döviz tutarı + kur; TL ödemede yalnız TL
+    const odenenDoviz = r.odenen && r.odenenPB && r.odenenPB !== 'TRY';
+    const odenme = `<td>${tarih(r.odenme)}</td>`, odenen = `<td class="para" title="${odenenDoviz ? esc(`${para(r.odenen)} ${r.odenenPB} × ${r.kur} (${r.kurBilgi?.kaynak || 'kur'}${r.kurBilgi?.tarih ? ' ' + tarih(r.kurBilgi.tarih) : ''}) = ${para(r.odenenTL ?? r.odenen * r.kur)} ₺`) : ''}">${r.odenen ? `${para(r.odenenTL ?? r.odenen)} ₺${odenenDoviz ? `<small>${para(r.odenen)} ${esc(r.odenenPB)} · ${esc(String(r.kur))}${r.kurBilgi?.kaynak ? ' ' + esc(r.kurBilgi.kaynak.replace('TCMB ', 'TCMB ').replace('Döviz ', '')) : ''}</small>` : ''}` : '—'}</td>`;
     const talimat = `<td>${r.talimat ? talimatRozet(r.talimat) : bos}</td>`;
     const not = `<td class="sol not" title="${esc(r.notlar || '')}">${esc(r.notlar || '')}</td>`, islem = `<td><button type="button" class="btn btn-light btn-sm py-0 px-1 border kn-ac" title="Detay / düzenle / işlemler"><i class="fas fa-pen"></i></button></td>`;
     if (p === 'tumu') return [sec, sira, plan, son, belge, kurum, fs, od, `<td>${yontemRozet(r.yontem)}${o ? '<small>' + onayRozet(o) + '</small>' : ''}</td>`, tl, durum, odenme, odenen, talimat, not, islem];
@@ -180,7 +193,9 @@
   }
   function cizTablo(p, L) {
     const t = $('#knTablo-' + p); if (!t) return;
-    const R = p === 'tumu' ? L : L.filter(r => r.yontem === SEKME[p]);
+    // ödenmemişler planlanan tarihe göre üstte; ödenenler ödenme tarihine göre en altta
+    const R0 = p === 'tumu' ? L : L.filter(r => r.yontem === SEKME[p]);
+    const R = [...R0.filter(r => r.durum !== 'ÖDENDİ'), ...R0.filter(r => r.durum === 'ÖDENDİ').sort((a, b) => (a.odenme || '').localeCompare(b.odenme || '') || a.docEntry - b.docEntry)];
     const kol = KOL[p], topW = kol.reduce((s, k) => s + k.w, 0);
     let cg = t.querySelector('colgroup'); if (!cg) { cg = document.createElement('colgroup'); t.insertBefore(cg, t.tHead); }
     cg.innerHTML = kol.map(k => `<col style="width:${(k.w / topW * 100).toFixed(2)}%">`).join('');

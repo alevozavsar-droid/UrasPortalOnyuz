@@ -325,7 +325,9 @@ tasarımından uyarlandı:
     çıkış adımları, fiş taslakları (`MuhasebeOrnek.FisTaslagi`; `OdemeFisiTaslak`, `CiroFisiTaslak`, `GrupIciBelgeOrnek.FisTaslagi` — kayıt eden sürümler bunları `Kaydet` eder),
     grup içi bakiye etkileri; grup içi işlemde (dolaşım zincirinde grup içi ciro ya da fatura sahibi ≠ ödeyen) onay kutusu şart, sunucu `SimOnay` olmadan reddeder, günlüğe
     "Simülasyon Onayı" yazılır. Üstteki "Çek · Senet → Çek Akıbeti" bağlantısı `/CekAkibeti`; Çek Akıbeti Raporu `UygunlukDurumu` portföy dışı belgede "Uygun Değil", bankaya
-    tahsilde Kime Verildi "Banka (Tahsil)", `/CekAkibeti/Versiyon` ile sekmeye dönülünce kendini tazeler.
+    tahsilde Kime Verildi "Banka (Tahsil)", `/CekAkibeti/Versiyon` ile sekmeye dönülünce kendini tazeler. Ödenen Tutar hücresi: TL karşılığı (`odenenTL` = ödenen × satırın
+    kuru) üstte, dövizli ödemede altta döviz tutarı + kur kaynağı; ödenen satırlar ödenme tarihine göre tablonun altında (`cizTablo`); kart başlığı ve `thead th` yapışkan
+    (`--kn-sabit-ust` = top-header + sabit araç çubuğu, `sabitUstOlc`; kabuğun `.table-container` overflow'u açılır).
   - **Kasa Nakit Akışı — eski görünüm** (`/Rapor79/Eski`, `Views/Rapor79/Eski.cshtml` + `wwwroot/js/rapor79.js` + `rapor79-yontem.js`): ana projedeki 23 sütunlu
     liste; ödeme yöntemi SEKMELERİ (Tümü = `.ana-liste`; yöntem panelleri `.yontem-panel[data-method]`), Çek / Senet satırında "Belge Seç" → `#belgeSecModal` →
     `/Rapor79/BelgePlanla`, `/Rapor79/BelgePlanKaldir`, `/Rapor79/YontemAlanKaydet`; ana projedeki `#btnSatirCekOnayla` akışı da `BelgePlanla` çağırır.
