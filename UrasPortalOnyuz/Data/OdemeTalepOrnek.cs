@@ -14,7 +14,13 @@ namespace WebApplication3.Data
         public string BelgeNo { get; set; } = ""; public string Aciklama { get; set; } = ""; public decimal Tutar { get; set; } public string PB { get; set; } = "TRY"; public DateTime SonOdeme { get; set; }
         public string Oncelik { get; set; } = "Normal"; public string YontemOnerisi { get; set; } = "Havale / EFT"; public string Durum { get; set; } = "Onay Bekliyor";   // Onay Bekliyor | Onaylandı | Nakit Akışa Alındı | Reddedildi
         public string Onaylayan { get; set; } = ""; public DateTime? OnayTarihi { get; set; } public int? NakitAkisDocEntry { get; set; } public DateTime? AlinmaZamani { get; set; } public string Alan { get; set; } = "";
+        public decimal MahsupTutari { get; set; }     // ödemeden düşülecek mahsup (iade faturası, alacak dekontu, karşılıklı borç) — ayrı sütun
+        public string MahsupAciklama { get; set; } = "";
+        public string Mutabakat { get; set; } = "Mutabakat Yok";   // ödeme öncesi cari mutabakat durumu: Mutabık | Mutabık Değil | Bekliyor | Mutabakat Yok | Gerekmez (resmi kurum)
+        public DateTime? MutabakatTarihi { get; set; }
+        public decimal Net => Math.Max(0, Tutar - MahsupTutari);
         public decimal TutarTL => Math.Round(Tutar * (NakitAkisOrnek.Kurlar.TryGetValue(PB, out var k) ? k : 1m), 2);
+        public decimal NetTL => Math.Round(Net * (NakitAkisOrnek.Kurlar.TryGetValue(PB, out var k) ? k : 1m), 2);
         /// <summary>Kasa Nakit Akışı belge tipi karşılığı (Vergi / SGK / Gümrük → Resmi Ödeme, Kira → Diğer).</summary>
         public string NakitAkisBelgeTipi => BelgeTipi == "Fatura" || BelgeTipi == "Sipariş" ? BelgeTipi : BelgeTipi == "Vergi" || BelgeTipi == "SGK" || BelgeTipi == "Gümrük" ? "Resmi Ödeme" : "Diğer";
     }
@@ -33,34 +39,35 @@ namespace WebApplication3.Data
             lock (Kilit)
             {
                 if (_tohumlandi) return; _tohumlandi = true; var bugun = DateTime.Today;
-                OdemeTalebi T(string db, string departman, string talepEden, string kurum, string belgeTipi, string belgeNo, string aciklama, decimal tutar, string pb, int sonOdemeGun, string oncelik, string yontem, string durum, string onaylayan, int gunOnce)
+                OdemeTalebi T(string db, string departman, string talepEden, string kurum, string belgeTipi, string belgeNo, string aciklama, decimal tutar, string pb, int sonOdemeGun, string oncelik, string yontem, string durum, string onaylayan, int gunOnce, string mutabakat = "Mutabakat Yok", decimal mahsup = 0, string mahsupAciklama = "")
                 {
-                    var t = new OdemeTalebi { Id = ++_sonId, No = $"ÖT-{bugun.Year}-{_sonId:0000}", Tarih = bugun.AddDays(-gunOnce).AddHours(9 + _sonId % 7), DbName = db, Sirket = NakitAkisOrnek.SirketAdi(db), Departman = departman, TalepEden = talepEden, Kurum = kurum, BelgeTipi = belgeTipi, BelgeNo = belgeNo, Aciklama = aciklama, Tutar = tutar, PB = pb, SonOdeme = bugun.AddDays(sonOdemeGun), Oncelik = oncelik, YontemOnerisi = yontem, Durum = durum, Onaylayan = onaylayan, OnayTarihi = durum == "Onaylandı" ? bugun.AddDays(-gunOnce + 1).AddHours(14) : (DateTime?)null };
+                    bool resmi = belgeTipi == "Vergi" || belgeTipi == "SGK" || belgeTipi == "Gümrük";
+                    var t = new OdemeTalebi { Id = ++_sonId, No = $"ÖT-{bugun.Year}-{_sonId:0000}", Tarih = bugun.AddDays(-gunOnce).AddHours(9 + _sonId % 7), DbName = db, Sirket = NakitAkisOrnek.SirketAdi(db), Departman = departman, TalepEden = talepEden, Kurum = kurum, BelgeTipi = belgeTipi, BelgeNo = belgeNo, Aciklama = aciklama, Tutar = tutar, PB = pb, SonOdeme = bugun.AddDays(sonOdemeGun), Oncelik = oncelik, YontemOnerisi = yontem, Durum = durum, Onaylayan = onaylayan, OnayTarihi = durum == "Onaylandı" ? bugun.AddDays(-gunOnce + 1).AddHours(14) : (DateTime?)null, Mutabakat = resmi ? "Gerekmez" : mutabakat, MutabakatTarihi = mutabakat == "Mutabık" || mutabakat == "Mutabık Değil" ? bugun.AddDays(-gunOnce - 2).AddHours(16) : (DateTime?)null, MahsupTutari = mahsup, MahsupAciklama = mahsupAciklama };
                     _talepler.Add(t); return t;
                 }
                 // Uras Kimya
                 T("URASKIMYA", "Muhasebe", "Nazlı Erdem", "Vergi Dairesi · Yenibosna", "Vergi", "KDV-2026-10", "Ekim 2026 KDV beyannamesi (1 no.lu KDV)", 1_284_500m, "TRY", 13, "Acil", "Havale / EFT", "Onaylandı", "Neslihan Uludağ", 3);
                 T("URASKIMYA", "Muhasebe", "Nazlı Erdem", "SGK Gebze", "SGK", "SGK-2026-10", "Ekim 2026 SGK prim ve işsizlik primi (aylık bildirge)", 2_150_000m, "TRY", 18, "Normal", "Havale / EFT", "Onay Bekliyor", "", 2);
                 T("URASKIMYA", "Muhasebe", "Onur Bal", "Vergi Dairesi · Yenibosna", "Vergi", "MUH-2026-10", "Ekim 2026 muhtasar ve prim hizmet beyannamesi", 486_300m, "TRY", 13, "Normal", "Havale / EFT", "Onaylandı", "Neslihan Uludağ", 2);
-                T("URASKIMYA", "Satınalma", "Selin Kara", "Brenntag", "Sipariş", "SP-2026-4471", "Sodyum hidroksit %50 · 2 tanker · peşin ödeme indirimi için", 418_600m, "TRY", 5, "Acil", "Havale / EFT", "Onaylandı", "Özge İsen", 1);
-                T("URASKIMYA", "Satınalma", "Selin Kara", "BASF SE", "Sipariş", "SP-2026-4480", "Katalizör ön ödemesi (%30 avans)", 24_600m, "EUR", 9, "Normal", "Havale / EFT", "Onay Bekliyor", "", 1);
-                T("URASKIMYA", "İdari İşler", "Canan Su", "Ofis Kirası · Mal Sahibi", "Kira", "KR-2026-11", "Kasım 2026 ofis kirası (stopaj dahil)", 185_000m, "TRY", 19, "Normal", "Havale / EFT", "Onaylandı", "Alev Özavşar", 4);
+                T("URASKIMYA", "Satınalma", "Selin Kara", "Brenntag", "Sipariş", "SP-2026-4471", "Sodyum hidroksit %50 · 2 tanker · peşin ödeme indirimi için", 418_600m, "TRY", 5, "Acil", "Havale / EFT", "Onaylandı", "Özge İsen", 1, "Mutabık", 38_600m, "İade faturası İF-2026-118 (hasarlı tanker) mahsup");
+                T("URASKIMYA", "Satınalma", "Selin Kara", "BASF SE", "Sipariş", "SP-2026-4480", "Katalizör ön ödemesi (%30 avans)", 24_600m, "EUR", 9, "Normal", "Havale / EFT", "Onay Bekliyor", "", 1, "Mutabık Değil");
+                T("URASKIMYA", "İdari İşler", "Canan Su", "Ofis Kirası · Mal Sahibi", "Kira", "KR-2026-11", "Kasım 2026 ofis kirası (stopaj dahil)", 185_000m, "TRY", 19, "Normal", "Havale / EFT", "Onaylandı", "Alev Özavşar", 4, "Gerekmez");
                 T("URASKIMYA", "Lojistik", "Tolga Yaman", "TF Gümrük", "Gümrük", "GB-2026-77412", "İthalat gümrük vergisi + KKDF (beyanname 77412)", 312_900m, "TRY", 2, "Çok Acil", "Havale / EFT", "Onaylandı", "Neslihan Uludağ", 0);
-                T("URASKIMYA", "Üretim", "Mert Doğan", "Onur Kompresör", "Fatura", "FT-2026-70915", "Kompresör acil bakım ve yedek parça", 73_500m, "TRY", 7, "Acil", "Nakit", "Onay Bekliyor", "", 0);
-                T("URASKIMYA", "Bilgi Teknolojileri", "Ali Veli", "Microsoft İrlanda", "Fatura", "INV-MS-884120", "Microsoft 365 yıllık lisans yenileme", 14_200m, "USD", 11, "Normal", "Kredi Kartı / Banka Kartı", "Onaylandı", "Özge İsen", 5);
-                T("URASKIMYA", "İnsan Kaynakları", "Hülya Er", "Anadolu Sigorta", "Fatura", "PL-2026-55817", "Tamamlayıcı sağlık sigortası Kasım taksidi", 96_800m, "TRY", 15, "Normal", "Havale / EFT", "Onaylandı", "Alev Özavşar", 6);
+                T("URASKIMYA", "Üretim", "Mert Doğan", "Onur Kompresör", "Fatura", "FT-2026-70915", "Kompresör acil bakım ve yedek parça", 73_500m, "TRY", 7, "Acil", "Nakit", "Onay Bekliyor", "", 0, "Bekliyor");
+                T("URASKIMYA", "Bilgi Teknolojileri", "Ali Veli", "Microsoft İrlanda", "Fatura", "INV-MS-884120", "Microsoft 365 yıllık lisans yenileme", 14_200m, "USD", 11, "Normal", "Kredi Kartı / Banka Kartı", "Onaylandı", "Özge İsen", 5, "Mutabık");
+                T("URASKIMYA", "İnsan Kaynakları", "Hülya Er", "Anadolu Sigorta", "Fatura", "PL-2026-55817", "Tamamlayıcı sağlık sigortası Kasım taksidi", 96_800m, "TRY", 15, "Normal", "Havale / EFT", "Onaylandı", "Alev Özavşar", 6, "Mutabık", 4_800m, "Ayrılan personel iptal iadesi mahsup");
                 // Selvi
                 T("SELVI", "Muhasebe", "Nazlı Erdem", "Vergi Dairesi · Gebze", "Vergi", "KDV-2026-10", "Ekim 2026 KDV beyannamesi", 212_400m, "TRY", 13, "Acil", "Havale / EFT", "Onaylandı", "Neslihan Uludağ", 3);
-                T("SELVI", "Satınalma", "Emre Taş", "Korozo Ambalaj", "Sipariş", "SP-2026-1190", "Ambalaj film siparişi ön ödeme", 148_000m, "TRY", 6, "Normal", "Çek", "Onay Bekliyor", "", 1);
+                T("SELVI", "Satınalma", "Emre Taş", "Korozo Ambalaj", "Sipariş", "SP-2026-1190", "Ambalaj film siparişi ön ödeme", 148_000m, "TRY", 6, "Normal", "Çek", "Onay Bekliyor", "", 1, "Mutabık", 12_000m, "Alacak dekontu AD-2026-31 (fiyat farkı) mahsup");
                 T("SELVI", "Muhasebe", "Onur Bal", "SGK Gebze", "SGK", "SGK-2026-10", "Ekim 2026 SGK prim", 364_000m, "TRY", 18, "Normal", "Havale / EFT", "Onaylandı", "Neslihan Uludağ", 2);
                 // Avrupa Paper · Alv Kimya · Daf Kimya · URS Makine · Uras Holding
-                T("AVRUPA_PAPER", "Satınalma", "Burcu Aydın", "Mondi Group", "Sipariş", "SP-2026-2207", "Kağıt bobin siparişi · akreditif dışı peşin kısım", 38_500m, "EUR", 8, "Normal", "Havale / EFT", "Onaylandı", "Özge İsen", 2);
+                T("AVRUPA_PAPER", "Satınalma", "Burcu Aydın", "Mondi Group", "Sipariş", "SP-2026-2207", "Kağıt bobin siparişi · akreditif dışı peşin kısım", 38_500m, "EUR", 8, "Normal", "Havale / EFT", "Onaylandı", "Özge İsen", 2, "Mutabık");
                 T("AVRUPA_PAPER", "Muhasebe", "Nazlı Erdem", "Vergi Dairesi · Avcılar", "Vergi", "KDV-2026-10", "Ekim 2026 KDV beyannamesi", 97_300m, "TRY", 13, "Acil", "Havale / EFT", "Onay Bekliyor", "", 1);
                 T("ALV_KIMYA", "Muhasebe", "Nazlı Erdem", "SGK İstanbul", "SGK", "SGK-2026-10", "Ekim 2026 SGK prim", 128_600m, "TRY", 18, "Normal", "Havale / EFT", "Onaylandı", "Neslihan Uludağ", 2);
-                T("ALV_KIMYA", "İdari İşler", "Canan Su", "Depo Kirası · Mal Sahibi", "Kira", "KR-2026-11", "Kasım 2026 depo kirası", 64_000m, "TRY", 19, "Normal", "Havale / EFT", "Onay Bekliyor", "", 3);
-                T("DAF_KIMYA", "Satınalma", "Selin Kara", "Dalgakıran", "Fatura", "FT-2026-83130", "Hava kompresörü bakım sözleşmesi", 52_900m, "TRY", 10, "Normal", "Havale / EFT", "Onaylandı", "Özge İsen", 4);
+                T("ALV_KIMYA", "İdari İşler", "Canan Su", "Depo Kirası · Mal Sahibi", "Kira", "KR-2026-11", "Kasım 2026 depo kirası", 64_000m, "TRY", 19, "Normal", "Havale / EFT", "Onay Bekliyor", "", 3, "Gerekmez");
+                T("DAF_KIMYA", "Satınalma", "Selin Kara", "Dalgakıran", "Fatura", "FT-2026-83130", "Hava kompresörü bakım sözleşmesi", 52_900m, "TRY", 10, "Normal", "Havale / EFT", "Onaylandı", "Özge İsen", 4, "Bekliyor");
                 T("URSMAKINE", "Muhasebe", "Onur Bal", "Vergi Dairesi · Gebze", "Vergi", "MUH-2026-10", "Ekim 2026 muhtasar beyannamesi", 58_700m, "TRY", 13, "Normal", "Havale / EFT", "Onaylandı", "Neslihan Uludağ", 2);
-                T("URAS_HOLDING", "İdari İşler", "Sevgi Ay", "Yönetim Binası Kirası · Mal Sahibi", "Kira", "KR-2026-11", "Kasım 2026 yönetim binası kirası", 240_000m, "TRY", 19, "Normal", "Havale / EFT", "Onaylandı", "Alev Özavşar", 5);
+                T("URAS_HOLDING", "İdari İşler", "Sevgi Ay", "Yönetim Binası Kirası · Mal Sahibi", "Kira", "KR-2026-11", "Kasım 2026 yönetim binası kirası", 240_000m, "TRY", 19, "Normal", "Havale / EFT", "Onaylandı", "Alev Özavşar", 5, "Gerekmez");
             }
         }
 
@@ -77,16 +84,17 @@ namespace WebApplication3.Data
             var m = new NakitAkisViewModel
             {
                 U_Kurum = t.Kurum, U_UrunHizmet = t.Aciklama, U_OdemeYontemi = t.YontemOnerisi, U_BagliBelgeTipi = t.NakitAkisBelgeTipi, U_KayitTipi = t.NakitAkisBelgeTipi, U_FaturaSiparisNo = t.BelgeNo, BelgeTarihi = t.Tarih.Date,
-                U_SonOdemeTarihi = t.SonOdeme, U_PlanlananTarih = t.SonOdeme < bugun ? bugun : t.SonOdeme, U_Tutar = t.Tutar, U_ParaBirimi = t.PB, U_Kur = NakitAkisOrnek.Kurlar.TryGetValue(t.PB, out var k) ? k : 1m, U_TutarTL = t.TutarTL, U_FaturaTutari = t.Tutar,
+                U_SonOdemeTarihi = t.SonOdeme, U_PlanlananTarih = t.SonOdeme < bugun ? bugun : t.SonOdeme, U_Tutar = t.Net, U_ParaBirimi = t.PB, U_Kur = NakitAkisOrnek.Kurlar.TryGetValue(t.PB, out var k) ? k : 1m, U_TutarTL = t.NetTL, U_FaturaTutari = t.Tutar,
                 U_TalepEden = t.TalepEden, U_IslemTipi = "X", U_Satinalmaci = t.Departman == "Satınalma" ? t.TalepEden : "", U_Durum = t.Durum == "Onaylandı" ? "Planlandı" : "Bekliyor",
-                U_Notlar = $"Departman talebi {t.No} · {t.Departman} · {t.BelgeTipi}" + (t.Oncelik != "Normal" ? " · " + t.Oncelik : "") + (t.Durum == "Onaylandı" ? $" · onay {t.Onaylayan}" : " · departman onayı bekliyor")
+                U_MutabakatDurumu = t.Mutabakat == "Mutabık" || t.Mutabakat == "Mutabık Değil" ? t.Mutabakat : "", SonMutabakatTarihi = t.MutabakatTarihi,
+                U_Notlar = $"Departman talebi {t.No} · {t.Departman} · {t.BelgeTipi}" + (t.Oncelik != "Normal" ? " · " + t.Oncelik : "") + (t.Durum == "Onaylandı" ? $" · onay {t.Onaylayan}" : " · departman onayı bekliyor") + (t.MahsupTutari > 0 ? $" · mahsup {t.MahsupTutari.ToString("N2", Tr)} {t.PB} düşüldü ({t.MahsupAciklama})" : "") + (t.Mutabakat != "Mutabakat Yok" ? " · mutabakat: " + t.Mutabakat : "")
             };
             var satir = NakitAkisOrnek.Ekle(t.DbName, m, kullanici);
             lock (Kilit) { t.Durum = "Nakit Akışa Alındı"; t.NakitAkisDocEntry = satir.DocEntry; t.AlinmaZamani = DateTime.Now; t.Alan = kullanici ?? ""; }
             NakitAkisOrnek.Gunluge(t.DbName, satir.DocEntry, "Departman Talebi", $"{t.No} ({t.Departman} · {t.TalepEden}) nakit akışa alındı · {t.BelgeTipi} {t.BelgeNo} · {t.Tutar.ToString("N2", Tr)} {t.PB}", kullanici);
-            return (true, $"{t.No} nakit akışa alındı (#{satir.DocEntry}): {t.Kurum} · {t.Tutar.ToString("N2", Tr)} {t.PB} · {t.YontemOnerisi}" + (t.YontemOnerisi == "Nakit" ? " · nakit onayı bekliyor" : "") + ".", satir);
+            return (true, $"{t.No} nakit akışa alındı (#{satir.DocEntry}): {t.Kurum} · {t.Net.ToString("N2", Tr)} {t.PB}" + (t.MahsupTutari > 0 ? $" (mahsup {t.MahsupTutari.ToString("N2", Tr)} düşüldü)" : "") + $" · {t.YontemOnerisi}" + (t.YontemOnerisi == "Nakit" ? " · nakit onayı bekliyor" : "") + ".", satir);
         }
 
-        public static object Json(OdemeTalebi t) => new { no = t.No, tarih = t.Tarih.ToString("yyyy-MM-dd"), dbName = t.DbName, sirket = t.Sirket, departman = t.Departman, talepEden = t.TalepEden, kurum = t.Kurum, belgeTipi = t.BelgeTipi, nakitAkisBelgeTipi = t.NakitAkisBelgeTipi, belgeNo = t.BelgeNo, aciklama = t.Aciklama, tutar = t.Tutar, pb = t.PB, tutarTL = t.TutarTL, sonOdeme = t.SonOdeme.ToString("yyyy-MM-dd"), gecikme = (DateTime.Today - t.SonOdeme).Days, oncelik = t.Oncelik, yontem = t.YontemOnerisi, durum = t.Durum, onaylayan = t.Onaylayan, onayTarihi = t.OnayTarihi?.ToString("yyyy-MM-dd"), nakitAkisDocEntry = t.NakitAkisDocEntry };
+        public static object Json(OdemeTalebi t) => new { no = t.No, tarih = t.Tarih.ToString("yyyy-MM-dd"), dbName = t.DbName, sirket = t.Sirket, departman = t.Departman, talepEden = t.TalepEden, kurum = t.Kurum, belgeTipi = t.BelgeTipi, nakitAkisBelgeTipi = t.NakitAkisBelgeTipi, belgeNo = t.BelgeNo, aciklama = t.Aciklama, tutar = t.Tutar, pb = t.PB, tutarTL = t.TutarTL, mahsup = t.MahsupTutari, mahsupAciklama = t.MahsupAciklama, net = t.Net, netTL = t.NetTL, mutabakat = t.Mutabakat, mutabakatTarihi = t.MutabakatTarihi?.ToString("yyyy-MM-dd"), sonOdeme = t.SonOdeme.ToString("yyyy-MM-dd"), gecikme = (DateTime.Today - t.SonOdeme).Days, oncelik = t.Oncelik, yontem = t.YontemOnerisi, durum = t.Durum, onaylayan = t.Onaylayan, onayTarihi = t.OnayTarihi?.ToString("yyyy-MM-dd"), nakitAkisDocEntry = t.NakitAkisDocEntry };
     }
 }
