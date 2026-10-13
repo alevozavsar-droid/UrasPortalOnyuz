@@ -97,6 +97,7 @@ namespace FinansRaporlama.Controllers
         public string U_CikisTalebi { get; set; } = "";      // Çek Akıbeti'nden Kasa Nakit Akışı'nda planlanmadan yapılmak istenen çıkış (Ciro Edildi / Bankaya Tahsile Verildi …): onaylanmadan çek çıkmaz
         public string U_CikisIbrazYeri { get; set; } = ""; public string U_CikisBelgeNo { get; set; } = ""; public string U_CikisTalepEden { get; set; } = "";
         public string U_YevmiyeNo { get; set; } = "";        // ödemenin muhasebe fişi (Data/MuhasebeOrnek.cs; makbuz / talimat gerçekleşince otomatik)
+        public string U_TalepEden { get; set; } = "";        // ödemeyi talep eden (satınalmacı / kaydı açan / avans kullanan — şahsi avansta ad gizlenir / çek çıkış talebini yapan); fatura sahibinin altında gösterilir
     }
 
     /// <summary>Kasa Nakit Akışı satırına seçilen çek / senet (Data/CekAkibetOrnek.cs kaydının anlık görünümü): akıbet ve plan ↔ ibraz kontrolü ile.</summary>

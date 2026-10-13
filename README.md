@@ -296,6 +296,10 @@ tasarımından uyarlandı:
     **Aylık Ödeme · Çek Vade sekmesi** (`?sekme=aylik`, `/Rapor79/AylikOzet?sirket=&yil=` → yılın ödeme satırları + çek / senet belgeleri; toplamlar istemcide
     `cizAylik`): ay × yöntem tablosu (gerçekleşen / planlanan / tümü), hücre → detay listesi (Çek / Senet: o ay çıkan belgeler ve vade dağılımı → "Vade Tarihine Göre
     Gör"), vade ayına göre verilen çek / senet tablosu (çıkmış / planlı), çıkış ayı × vade ayı matrisi, belge listesi → çekmece (`SatirBelgeleri` ile dönem dışı satır).
+    Her iki görünümde "Cari Bazında" tablo (`cizCari` / `cizVadeCari`): cari × ay, yıl toplamı, bu aya kadar, aylık ortalama (÷ ay sayısı), yöntem dağılımı;
+    tahsile gönderilenler banka bazında. `U_TalepEden` (satınalmacı / kaydı açan / avans kullanan / çıkış talebi) fatura sahibinin altında; şahsi avans
+    (`NakitAvansOrnek.SahsiMi`, `TalepTuru` "Şahsi Avans (Maaş)") Kasa Nakit Akışı'nda ad / konu gizli (`AvansSahsiMi`); sekme çubuğu tek satır, sekme içi sıra numarası,
+    Mutabakat durumu Ödeme Durumu altında; çekmecede çek kartı: Belge Ekle / Çıkış Planı / Değiştir / Kaldır.
   - **Kasa Nakit Akışı — eski görünüm** (`/Rapor79/Eski`, `Views/Rapor79/Eski.cshtml` + `wwwroot/js/rapor79.js` + `rapor79-yontem.js`): ana projedeki 23 sütunlu
     liste; ödeme yöntemi SEKMELERİ (Tümü = `.ana-liste`; yöntem panelleri `.yontem-panel[data-method]`), Çek / Senet satırında "Belge Seç" → `#belgeSecModal` →
     `/Rapor79/BelgePlanla`, `/Rapor79/BelgePlanKaldir`, `/Rapor79/YontemAlanKaydet`; ana projedeki `#btnSatirCekOnayla` akışı da `BelgePlanla` çağırır.

@@ -267,6 +267,8 @@ namespace WebApplication3.Data
         public static NaKisi Yonetici(NaKisi k) => Personel.FirstOrDefault(p => p.Rol == "Yönetici" && p.Departman == k.Departman && p.Sirket == k.Sirket) ?? Personel.FirstOrDefault(p => p.Rol == "Yönetici" && p.Departman == k.Departman) ?? Personel.First(p => p.Rol == "Yönetici");
         public static NaKisi UstYonetim(NaKisi k) => Personel.FirstOrDefault(p => p.Rol == "Üst Yönetim" && p.Unvan == "CFO") ?? Personel.First(p => p.Rol == "Üst Yönetim");
         public static NaKisi Finans() => Personel.First(p => p.Rol == "Finans" && p.Unvan.Contains("Müdür"));
+        /// <summary>Şahsi (maaş / kişisel ihtiyaç) avansı: şirket masrafı değildir; Kasa Nakit Akışı gibi ortak ekranlarda personel adı gizlenir (gizlilik).</summary>
+        public static bool SahsiMi(NakitAvans a) => a != null && ((a.TalepTuru ?? "").Contains("Şahsi") || (a.TalepTuru ?? "").Contains("Maaş") || (a.TalepTuru ?? "").Contains("Kişisel"));
 
         // ---------- Onay matrisi (§8) ----------
         public static bool UstOnayGerekli(decimal tutarTl)
@@ -611,6 +613,11 @@ namespace WebApplication3.Data
             var a12 = T("Ertan Yavuz", "Ertan Yavuz", 20000, "TL", "Müşteri sahasında acil onarım malzemesi", "Kompresör revizyonu için parça.", "03 - Bakım / Onarım", "Faturalı", new[] { "Fatura" }, "Acil", 2, 0, 14, "Uras Holding");
             OnaylaHepsi(a12, 2, 3);
             Odeme(a12, 12000, 1);
+
+            // 13) Şahsi avans (maaş avansı): şirket masrafı değil — onaylı, ödeme bekliyor; Kasa Nakit Akışı'nda personel adı gizlenir
+            var a13 = T("Pınar Ak", "Pınar Ak", 15000, "TL", "Maaş avansı (şahsi ihtiyaç)", "Kişisel ihtiyaç; maaştan mahsup edilecek.", "13 - Diğer", "Faturasız", new[] { "Makbuz" }, "Normal", 2, 1, 30);
+            a13.TalepTuru = "Şahsi Avans (Maaş)";
+            OnaylaHepsi(a13, 3, 2);
         }
     }
 }
