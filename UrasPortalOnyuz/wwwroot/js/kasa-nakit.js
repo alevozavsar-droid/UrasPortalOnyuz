@@ -101,7 +101,7 @@
 
   // ---------- sütunlar (sekmeye göre): [başlık, genişlik ağırlığı]; sabit tablo düzeni → tek ekrana sığar
   const K = (ad, w) => ({ ad, w });
-  const C_SEC = K('', 22), C_SIRA = K('Sıra', 26), C_PLAN = K('Planlanan Ödeme Tarihi', 90), C_SON = K('Son Ödeme Tarihi', 80), C_BELGE = K('Belge No · Belge Tipi', 96), C_KURUM = K('Ödenecek Cari · Ürün / Hizmet', 144), C_FS = K('Fatura Sahibi', 84), C_OD = K('Ödeyen Şirket', 84), C_TL = K('Tutar (₺) · Belge Oranı', 104), C_DURUM = K('Ödeme Durumu', 94), C_ODENME = K('Ödenme Tarihi', 72), C_ODENEN = K('Ödenen Tutar', 84), C_NOT = K('Not', 90), C_TALIMAT = K('Talimat', 76), C_ISLEM = K('', 26);
+  const C_SEC = K('', 22), C_SIRA = K('Sıra', 26), C_PLAN = K('Planlanan Ödeme Tarihi', 90), C_SON = K('Son Ödeme Tarihi', 80), C_BELGE = K('Belge No · Belge Tipi', 96), C_KURUM = K('Ödenecek Cari · Ürün / Hizmet', 136), C_FS = K('Fatura Sahibi', 84), C_OD = K('Ödeyen Şirket', 84), C_TL = K('Tutar (₺) · Belge Oranı', 114), C_DURUM = K('Ödeme Durumu', 94), C_ODENME = K('Ödenme Tarihi', 72), C_ODENEN = K('Ödenen Tutar', 84), C_NOT = K('Not', 90), C_TALIMAT = K('Talimat', 76), C_ISLEM = K('', 26);
   const KOL = {
     tumu: [C_SEC, C_SIRA, C_PLAN, C_SON, C_BELGE, C_KURUM, C_FS, C_OD, K('Ödeme Yöntemi', 78), C_TL, C_DURUM, C_ODENME, C_ODENEN, C_TALIMAT, C_NOT, C_ISLEM],
     nakit: [C_SEC, C_SIRA, C_PLAN, C_SON, C_BELGE, C_KURUM, C_FS, C_OD, C_TL, K('Kasa', 92), K('Makbuz No · Muhasebe Fişi', 98), K('Nakit Onayı', 104), C_DURUM, C_ODENME, C_TALIMAT, C_ISLEM],
