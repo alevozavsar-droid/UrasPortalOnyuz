@@ -31,7 +31,7 @@ namespace WebApplication3.Data
         public static readonly string[] NakitOnaycilari = { "Alev Özavşar", "Neslihan Uludağ", "Özge İsen" };
         /// <summary>Plansız çek çıkışı onaycısı (GMY): Kasa Nakit Akışı'nda planlanmamış hiçbir çek, onaylanmadan şirketten çıkmaz.</summary>
         public static readonly string[] CekCikisOnaycilari = { "Alev Özavşar" };
-        public static readonly string[] BelgeTipleri = { "Fatura", "Sipariş", "Cari Bakiye", "Avans", "Mahsup", "Temlik", "Yansıtma" };
+        public static readonly string[] BelgeTipleri = { "Fatura", "Sipariş", "Cari Bakiye", "Resmi Ödeme", "Avans", "Mahsup", "Temlik", "Yansıtma", "Diğer" };   // Resmi Ödeme: vergi, SGK, gümrük, harç (muhasebeden gelen); Diğer: kira vb.
         public static readonly string[] Satinalmacilar = { "Tolga Yaman", "Gizem Tan", "Canan Su", "Mert Doğan" };
         public static readonly string[] BankaHesaplari = { "Ziraat Bankası · TR33 0001 0001 2345 6789 0123 45", "Halk Bankası · TR12 0001 2009 4560 0010 2600 01", "İş Bankası · TR64 0006 4000 0011 2340 5678 90", "Garanti BBVA · TR22 0006 2000 1230 0006 2971 50" };
         public static readonly string[] Kasalar = { "Merkez Kasa", "Fabrika Kasa" };
@@ -609,14 +609,16 @@ namespace WebApplication3.Data
                 decimal toplam = faturalar.Sum(f => f.kalanTL), gecmis = faturalar.Where(f => f.gecikme > 0).Sum(f => f.kalanTL);
                 return new
                 {
-                    kod = c.CariKodu, ad = c.Kart.KisaAd, unvan = c.Kart.ResmiUnvan, kartTipi = c.Kart.KartTipi, sinif = c.Kart.Sinif, adet = faturalar.Count, toplam, gecmis, gelecek = toplam - gecmis,
+                    kod = c.CariKodu, ad = c.Kart.KisaAd, unvan = c.Kart.ResmiUnvan, kartTipi = c.Kart.KartTipi, sinif = c.Kart.Sinif, temsilciler = MutabakatOrnek.Temsilciler(c.Kart), adet = faturalar.Count, toplam, gecmis, gelecek = toplam - gecmis,
                     gecmisAdet = faturalar.Count(f => f.gecikme > 0), enEskiVade = faturalar.Where(f => f.gecikme > 0).Select(f => f.vade).DefaultIfEmpty("").Min(), ilkVade = faturalar.Where(f => f.gecikme <= 0).Select(f => f.vade).DefaultIfEmpty("").Min(), enUzunGecikme = faturalar.Select(f => f.gecikme).DefaultIfEmpty(0).Max(),
                     dovizler = c.Dovizler.Select(d => new { pb = d.ParaBirimi, acikAdet = d.AcikFaturaAdet, acikTutar = d.AcikFaturaTutar, enEski = d.EnEskiAcikFatura?.ToString("yyyy-MM-dd") }), bakiyeZamani = c.BakiyeZamani?.ToString("yyyy-MM-dd HH:mm"),
                     planlanan = mevcut.Where(m => string.Equals(m.U_Kurum, c.Kart.KisaAd, StringComparison.OrdinalIgnoreCase)).Sum(m => m.U_TutarTL ?? 0),
                     ekstre = "/Rapor20/Index?bpCode=" + Uri.EscapeDataString(c.CariKodu), ekstreYazdir = "/CariMutabakat/Ekstre?kod=" + Uri.EscapeDataString(c.CariKodu), faturalar
                 };
             }).OrderByDescending(x => x.toplam).ThenBy(x => x.ad).ToList();
-            return new { sirket, cariler, toplam = cariler.Sum(x => x.toplam), gecmis = cariler.Sum(x => x.gecmis), gelecek = cariler.Sum(x => x.gelecek), adet = cariler.Sum(x => x.adet) };
+            var talepler = OdemeTalepOrnek.Listele(dbName).Select(OdemeTalepOrnek.Json).ToList();
+            var temsilciler = cariler.SelectMany(x => x.temsilciler).Concat(OdemeTalepOrnek.Listele(dbName).Select(t => t.TalepEden)).Distinct().OrderBy(x => x, StringComparer.Create(Tr, false)).ToList();
+            return new { sirket, cariler, toplam = cariler.Sum(x => x.toplam), gecmis = cariler.Sum(x => x.gecmis), gelecek = cariler.Sum(x => x.gelecek), adet = cariler.Sum(x => x.adet), talepler, temsilciler, departmanlar = OdemeTalepOrnek.Departmanlar };
         }
         /// <summary>Çekmecede "Belge Seç": carinin açık faturaları / siparişleri (deterministik örnek; Kasa Nakit Akışı'ndaki satırlarla eşleşen belgeler "planlanan" ile gelir) ya da cari bakiyesi.</summary>
         public static object CariBelgeler(string dbName, string kurum, string tip)

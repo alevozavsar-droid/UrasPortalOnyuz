@@ -241,6 +241,14 @@ namespace WebApplication3.Controllers
         [HttpGet("CariBelgeler")] public IActionResult CariBelgeler(string dbName, string kurum, string tip) => Json(new { success = true, veri = NakitAkisOrnek.CariBelgeler(Db(dbName), kurum ?? "", tip ?? "") });
         /// <summary>Yeni Ödeme › Ödenmemiş Faturalar / Cari Bakiyeleri: şirketin carileri ve açık faturaları (Cari Mutabakat ekstresinden), cari ekstre bağlantılarıyla.</summary>
         [HttpGet("CariAcikFaturalar")] public IActionResult CariAcikFaturalar(string dbName) => Json(new { success = true, veri = NakitAkisOrnek.CariAcikFaturalar(Db(dbName)) });
+        public class TalepEkleIstek { public string No { get; set; } }
+        /// <summary>Departman ödeme talebini doğrudan nakit akış satırı yapar (Data/OdemeTalepOrnek.cs).</summary>
+        [HttpPost("OdemeTalebiEkle")]
+        public IActionResult OdemeTalebiEkle([FromBody] TalepEkleIstek istek)
+        {
+            var r = OdemeTalepOrnek.NakitAkisaAl(istek?.No, Kullanici); if (r.satir != null) NakitAkisOrnek.BelgeleriDoldur(r.satir);
+            return Json(new { success = r.ok, message = r.mesaj, row = r.satir == null ? null : SatirJson(r.satir), talep = OdemeTalepOrnek.Json(OdemeTalepOrnek.Bul(istek?.No)) });
+        }
         /// <summary>Grup içi modül kayıtları (Mahsup / Temlik / Yansıtma) — seçim için, modülden canlı.</summary>
         [HttpGet("GrupIciKayitlar")] public IActionResult GrupIciKayitlar(string dbName, string tur) => Json(new { success = true, data = NakitAkisOrnek.GrupIciKayitlar(Db(dbName), tur ?? "Mahsup") });
         public class GrupIciIstek { public string DbName { get; set; } public int DocEntry { get; set; } public string Tur { get; set; } public string No { get; set; } }
