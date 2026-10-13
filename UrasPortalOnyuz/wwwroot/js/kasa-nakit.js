@@ -190,6 +190,7 @@
     const tlIdx = kol.findIndex(k => k.ad.startsWith('Tutar (₺)'));
     t.tFoot.innerHTML = R.length ? `<tr class="toplam"><td colspan="${tlIdx}" class="text-end">TOPLAM (₺)</td><td class="para">${para(toplam)}</td><td colspan="${kol.length - tlIdx - 1}" class="sol">ödenen ${para(odenen)} · kalan ${para(toplam - odenen)} · ${R.length} kayıt</td></tr>` : '';
     $('#knNot-' + p).textContent = '';   // kart başlığındaki bilgi satırı istenmedi (toplamlar tablo altında)
+    secimSayaci(t);
   }
   function cizGrupOzet(p) {
     const g = V.grupIci?.[p]; const kap = $('#knGrup-' + p); if (!g || !kap) return;
@@ -244,16 +245,47 @@
     if (!d.success) { mesaj('danger', d.message); return; } mesaj(durum === 'Gerçekleşti' ? 'success' : 'info', esc(d.message)); await yukle(true); sekme('talimat');
   });
   kok.addEventListener('click', e => { const b = e.target.closest('.kn-talimat-ac'); if (!b) return; e.stopPropagation(); sekme('talimat'); const tr = $(`tr.tl-satir[data-no="${b.dataset.no}"]`); if (tr) { tr.scrollIntoView({ block: 'center' }); const d = $(`tr.tl-detay[data-no="${b.dataset.no}"]`); if (d) d.style.display = ''; } });
-  kok.addEventListener('change', e => { const h = e.target.closest('.kn-sec-hepsi'); if (h) { $$('.kn-sec:not(:disabled)', h.closest('table')).forEach(c => { c.checked = h.checked; c.closest('tr').classList.toggle('secili', h.checked); }); return; } const c = e.target.closest('.kn-sec'); if (c) c.closest('tr').classList.toggle('secili', c.checked); });
-  async function talimatOlustur(ids) {
-    const secilen = ids.map(satirBul).filter(Boolean); if (!secilen.length) { mesaj('warning', 'Önce tablodan satır seçin (ilk sütundaki kutular).'); return; }
+  // talimat seçimi: kutucuk ya da ilk hücre tıklanır; "Seçilenlerden Talimat Oluştur" düğmesi seçili sayısını gösterir
+  const secimSayaci = t => { if (!t) return; const n = $$('.kn-sec:checked', t).length, p = t.id.replace('knTablo-', ''), b = $(`.kn-talimat-olustur[data-p="${p}"]`); if (b) { b.innerHTML = `<i class="fas fa-file-contract me-1"></i>Seçilenlerden Talimat Oluştur${n ? ` (${n})` : ''}`; b.classList.toggle('btn-success', n > 0); b.classList.toggle('btn-primary', n === 0); } };
+  kok.addEventListener('change', e => { const h = e.target.closest('.kn-sec-hepsi'); if (h) { $$('.kn-sec:not(:disabled)', h.closest('table')).forEach(c => { c.checked = h.checked; c.closest('tr').classList.toggle('secili', h.checked); }); secimSayaci(h.closest('table')); return; } const c = e.target.closest('.kn-sec'); if (c) { c.closest('tr').classList.toggle('secili', c.checked); secimSayaci(c.closest('table')); } });
+  kok.addEventListener('click', e => { const td = e.target.closest('td'); if (!td || e.target.closest('input') || td !== td.parentElement.firstElementChild) return; const c = td.querySelector('.kn-sec'); if (!c) return; e.stopPropagation(); if (c.disabled) { mesaj('info', 'Bu satır talimata alınamaz: ' + esc(c.title || 'kapalı')); return; } c.checked = !c.checked; c.dispatchEvent(new Event('change', { bubbles: true })); }, true);
+  // ---------- TALİMAT HAZIRLAMA PENCERESİ: seçili satırlar, dövizli satırlarda baz kur (TCMB / fatura üstü / anlaşmalı), banka hesabı / kasa
+  let TLM = { satirlar: [], db: '' };
+  function talimatOlustur(ids) {
+    const secilen = ids.map(satirBul).filter(Boolean); if (!secilen.length) { mesaj('warning', 'Önce tablodan satır seçin (ilk sütundaki kutular ya da ilk hücre).'); return; }
+    TLM = { satirlar: secilen, db: F.sirket || secilen[0].dbName };
     const ozet = {}; secilen.forEach(r => { const k = (r.odeyenSirket || r.sirket) + ' · ' + r.yontem; ozet[k] = (ozet[k] || 0) + 1; });
-    if (!confirm(`${secilen.length} satırdan talimat hazırlansın mı?\n` + Object.entries(ozet).map(([k, n]) => `• ${k}: ${n} satır`).join('\n') + '\n(ödeyen şirket + yöntem bazında ayrı talimat; banka talimatı para birimine göre ayrılır; çek satırlarında seçili belgeler ve dolaşım planı talimata girer)')) return;
-    const d = await post('/Rapor79/TalimatOlustur', { DbName: F.sirket || secilen[0].dbName, DocEntryler: secilen.map(r => r.docEntry) }).catch(() => ({ success: false, message: 'Ağ hatası.' }));
-    if (!d.success) { mesaj('danger', esc(d.message)); return; }
-    mesaj('success', '<i class="fas fa-file-contract me-1"></i>' + esc(d.message) + (d.talimatlar || []).map(t => ` <a href="${esc(t.link)}" target="_blank" class="ms-1"><i class="fas fa-print"></i> ${esc(t.no)} yazdır</a>`).join(''));
-    await yukle(true); sekme('talimat');
+    $('#tlOzet').innerHTML = Object.entries(ozet).map(([k, n]) => `<span class="kn-pill">${esc(k)}: ${n} satır</span>`).join(' ');
+    const dovizli = secilen.filter(r => r.pb && r.pb !== 'TRY');
+    $('#tlGovde').innerHTML = secilen.map((r, i) => `<tr data-i="${i}"><td class="sol"><b>${esc(r.kurum)}</b><br><small class="text-muted">${esc(r.belgeTipi || '')} ${esc(r.faturaNo || '')} · ${esc(r.faturaSahibi)} → ${esc(r.odeyenSirket)}</small></td><td>${yontemRozet(r.yontem)}</td><td class="text-end fw-bold">${para(r.tutar)} ${esc(pbAd(r.pb))}</td>${r.pb && r.pb !== 'TRY'
+      ? `<td><select class="form-select form-select-sm tl-kaynak" style="font-size:.68rem">${(V.kurKaynaklari || []).map(k => `<option ${k === (r.kurBilgi?.kaynak || 'TCMB Döviz Alış') ? 'selected' : ''}>${esc(k)}</option>`).join('')}</select></td><td><input type="date" class="form-control form-control-sm tl-tarih" value="${r.kurBilgi?.tarih || bugun()}" style="font-size:.68rem"></td><td><input type="number" step="0.0001" class="form-control form-control-sm tl-kur" value="${r.kur}" style="font-size:.68rem;width:96px"></td><td><input class="form-control form-control-sm tl-not" value="${esc(r.kurBilgi?.not || '')}" placeholder="fatura üstü / anlaşılan kur notu" style="font-size:.68rem"></td><td class="text-end tl-tl">${para(r.tutarTL)}</td>`
+      : `<td colspan="4" class="text-muted">TL</td><td class="text-end">${para(r.tutarTL)}</td>`}</tr>`).join('');
+    $('#tlDovizNot').innerHTML = dovizli.length ? `<i class="fas fa-landmark me-1"></i>${dovizli.length} dövizli satır: baz alınan kur satıra ve talimata yazılır (TCMB kurları otomatik, fatura üstü / anlaşılan kur elle)` : '';
+    const hv = secilen.some(r => r.yontem === 'Havale / EFT' || r.yontem === 'Kredi Kartı / Banka Kartı'), nk = secilen.some(r => r.yontem === 'Nakit');
+    $('#tlBankaKap').style.display = hv ? '' : 'none'; $('#tlKasaKap').style.display = nk ? '' : 'none';
+    $('#tlBanka').innerHTML = (V.bankaHesaplari || []).map(h => `<option ${h === (secilen.find(r => r.alanlar?.bankaHesabi)?.alanlar.bankaHesabi) ? 'selected' : ''}>${esc(h)}</option>`).join(''); $('#tlKasa').innerHTML = (V.kasalar || []).map(k => `<option>${esc(k)}</option>`).join('');
+    modalAc($('#knTalimatModal')); tlKurlariGetir();
   }
+  const tlTl = (tr, r) => { const k = +tr.querySelector('.tl-kur').value || 1; tr.querySelector('.tl-tl').textContent = para(r.tutar * k); };
+  async function tlKurlariGetir() {
+    for (const tr of $$('#tlGovde tr')) {
+      const r = TLM.satirlar[+tr.dataset.i]; if (!r || !r.pb || r.pb === 'TRY') continue;
+      const kay = tr.querySelector('.tl-kaynak').value, t = tr.querySelector('.tl-tarih').value || bugun(), tcmb = /TCMB|Çek Tahsil/.test(kay), inp = tr.querySelector('.tl-kur'); inp.readOnly = tcmb;
+      if (!tcmb) { inp.title = 'fatura üstündeki / anlaşılan kur elle yazılır'; tlTl(tr, r); continue; }
+      const d = await getJ(`/Rapor79/Kur?pb=${encodeURIComponent(r.pb)}&tarih=${t}`).catch(() => null);
+      if (d && d.success) { const k = d.kur; inp.value = kay === 'TCMB Döviz Satış' ? k.satis : kay === 'TCMB Efektif Alış' ? k.efektifAlis : k.alis; inp.title = k.aciklama; }
+      tlTl(tr, r);
+    }
+  }
+  $('#tlGovde').addEventListener('change', e => { const tr = e.target.closest('tr'); if (!tr) return; if (e.target.classList.contains('tl-kaynak') || e.target.classList.contains('tl-tarih')) tlKurlariGetir(); });
+  $('#tlGovde').addEventListener('input', e => { const tr = e.target.closest('tr'); if (tr && e.target.classList.contains('tl-kur')) tlTl(tr, TLM.satirlar[+tr.dataset.i]); });
+  $('#tlHazirla').addEventListener('click', async () => {
+    const kurlar = $$('#tlGovde tr').map(tr => { const r = TLM.satirlar[+tr.dataset.i]; if (!r || !r.pb || r.pb === 'TRY') return null; return { DocEntry: r.docEntry, DbName: r.dbName, Kaynak: tr.querySelector('.tl-kaynak').value, Kur: +tr.querySelector('.tl-kur').value || null, Tarih: tr.querySelector('.tl-tarih').value, Not: tr.querySelector('.tl-not').value }; }).filter(Boolean);
+    const d = await post('/Rapor79/TalimatOlustur', { DbName: TLM.db, DocEntryler: TLM.satirlar.map(r => r.docEntry), BankaHesabi: $('#tlBankaKap').style.display === 'none' ? null : $('#tlBanka').value, Kasa: $('#tlKasaKap').style.display === 'none' ? null : $('#tlKasa').value, Kurlar: kurlar }).catch(() => ({ success: false, message: 'Ağ hatası.' }));
+    if (!d.success) { mesaj('danger', esc(d.message)); return; }
+    modalKapat($('#knTalimatModal')); mesaj('success', '<i class="fas fa-file-contract me-1"></i>' + esc(d.message) + (d.talimatlar || []).map(t => ` <a href="${esc(t.link)}" target="_blank" class="ms-1"><i class="fas fa-print"></i> ${esc(t.no)} yazdır</a>`).join(''));
+    await yukle(true); sekme('talimat');
+  });
   kok.addEventListener('click', e => { const b = e.target.closest('.kn-talimat-olustur'); if (!b) return; const t = $('#knTablo-' + b.dataset.p); talimatOlustur($$('.kn-sec:checked', t).map(c => +c.closest('tr').dataset.doc)); });
 
   // ---------- sekmeler / filtreler / üst kartlar
@@ -262,7 +294,7 @@
     $$('#knSekmeler button').forEach(b => b.classList.toggle('aktif', b.dataset.p === p));
     $$('#kn > .na-panel').forEach(x => x.classList.toggle('aktif', x.dataset.p === p));
     ciz();
-    try { const u = new URL(location.href); if (p === 'tumu') u.searchParams.delete('sekme'); else u.searchParams.set('sekme', p); if (F.sirket) u.searchParams.set('sirket', F.sirket); else u.searchParams.delete('sirket'); history.replaceState(null, '', u); } catch (e) { }
+    try { const u = new URL(location.href); if (p === 'tumu') u.searchParams.delete('sekme'); else u.searchParams.set('sekme', p); u.searchParams.set('sirket', F.sirket || 'tumu'); history.replaceState(null, '', u); } catch (e) { }   // sirket=tumu: yeniden yüklenince konsolide kalır
   }
   $$('#knSekmeler button').forEach(b => b.addEventListener('click', () => sekme(b.dataset.p)));
   $('#knSirket').addEventListener('change', () => { F.sirket = $('#knSirket').value; yukle(); });
@@ -412,7 +444,7 @@
     const ids = $$('.kb-chk:checked').map(c => +c.value); if (!ids.length) { mesaj('warning', 'En az bir belge seçin.'); return; }
     const d = await post('/Rapor79/BelgePlanla', { DbName: secim.r.dbName, DocEntry: secim.r.docEntry, CekDocEntryler: ids }).catch(() => ({ success: false, message: 'Ağ hatası.' }));
     if (!d.success) { mesaj('danger', d.message || 'Planlanamadı.'); return; }
-    modalKapat($('#knBelgeModal')); satirYerlestir(d.row); mesaj('success', '<i class="fas fa-check me-1"></i>' + esc(d.message)); ciz(); if (acik && acik.docEntry === d.row.docEntry) drawerAc(d.row);
+    modalKapat($('#knBelgeModal')); satirYerlestir(d.row); mesaj('success', '<i class="fas fa-check me-1"></i>' + esc(d.message) + ' <a href="/CekAkibeti" target="_blank" class="ms-1"><i class="fas fa-arrow-up-right-from-square"></i> Çek Akıbeti Raporu\'nda gör</a>'); ciz(); if (acik && acik.docEntry === d.row.docEntry) drawerAc(d.row);
     const r = d.row, secilenler = (r.belgeler || []).filter(x => ids.includes(x.cekDocEntry));
     // dolaşım: istenirse tüm seçilen belgeler sırayla; istenmezse yalnız başka şirket portföyünden gelen (fatura sahibine ulaşması gereken) belge
     const kuyruk = dolasimla ? secilenler : secilenler.filter(x => x.sahip && x.sahip !== r.faturaSahibi && !x.adimToplam);
@@ -506,16 +538,29 @@
     $('#kiBelgeler').innerHTML = b.length ? b.map(x => `<div class="satir"><b>${esc(x.no)}</b><span>${esc(x.asilBorclu)}</span><span>vade ${tarih(x.vade)}</span><span class="fw-bold">${para(x.tutar)} ₺</span>${akibetRozet(x.akibet)}${x.dolasim ? `<span class="kn-dolasim">${esc(x.dolasim)} (${x.gerceklesen}/${x.adimToplam}) · kalan adımlar gerçekleştirilir</span>` : `<span class="text-muted">${esc(x.sahip || r.odeyenSirket)} portföyünden çıkar</span>`}</div>`).join('') : '<div class="na-bos">Çıkacak belge yok.</div>';
     const bankaya = /\(Tahsil\)/.test(r.kurum || ''); $('#kiTur').value = bankaya ? 'Bankaya Tahsile Ver' : 'Tedarikçiye Ciro';
     $('#kiBanka').innerHTML = (V.tahsilBankalari || ['Ziraat Bankası', 'Halk Bankası']).map(x => `<option>${esc(x)}</option>`).join(''); $('#kiYer').value = (r.kurum || '').replace(/ \(Tahsil\)$/, ''); $('#kiTarih').value = bugun(); $('#kiTeslimAlan').value = r.alanlar?.teslimAlan || ''; $('#kiBelgeNo').value = ''; $('#kiNot').value = '';
-    kiTurGoster(); modalAc($('#knIbrazModal'));
+    IB.sim = null; $('#kiSimOnay').checked = false; kiTurGoster(); modalAc($('#knIbrazModal')); kiSimule();
   }
   function kiTurGoster() { const bankaya = $('#kiTur').value === 'Bankaya Tahsile Ver'; $('#kiBankaKap').style.display = bankaya ? '' : 'none'; $('#kiYerKap').style.display = bankaya ? 'none' : ''; $('#kiTeslimKap').style.display = bankaya ? 'none' : ''; $('#kiBelgeNo').placeholder = bankaya ? 'ibraz bordro no (boşsa otomatik İBZ-…)' : 'ciro bordro no (boşsa otomatik CRO-…)'; }
-  $('#kiTur').addEventListener('change', kiTurGoster);
+  // muhasebe simülasyonu: çıkış adımları, fişler (kaydedilmez), grup içi bakiye etkisi; grup içi işlemde onay kutusu işaretlenmeden kayıt atılmaz
+  const kiOnayDurumu = () => { const s = IB.sim; const b = $('#kiGonder'); if (!s) { b.disabled = true; return; } b.disabled = s.grupIci && !$('#kiSimOnay').checked; b.innerHTML = `<i class="fas fa-check me-1"></i>${s.grupIci ? 'Onayla, Çıkışı İşle ve Kaydet' : 'Çıkışı İşle ve Kaydet'}`; };
+  async function kiSimule() {
+    const r = IB.r; if (!r) return; const bankaya = $('#kiTur').value === 'Bankaya Tahsile Ver'; $('#kiSimNot').textContent = 'hesaplanıyor…'; IB.sim = null; kiOnayDurumu();
+    const d = await post('/Rapor79/CekIbrazSimule', { DbName: r.dbName, DocEntry: r.docEntry, Tur: $('#kiTur').value, IbrazYeri: bankaya ? $('#kiBanka').value : $('#kiYer').value }).catch(() => null);
+    if (!d || !d.success) { $('#kiSimNot').textContent = 'simülasyon alınamadı'; return; } const s = d.sim; IB.sim = s;
+    $('#kiSimNot').textContent = s.ozet;
+    $('#kiSimAdimlar').innerHTML = (s.adimlar || []).map(a => `<div class="satir"><span class="text-muted">${a.sira}.</span><b>${esc(a.belge)}</b><span>${esc(a.eden)} → ${esc(a.alan)}</span><span class="kn-oran">${esc(a.tur)}</span><span class="fw-bold">${para(a.tutar)} ₺</span>${a.tur === 'Grup İçi Ciro' ? `<span class="text-muted">mevcut borç ${para(a.mevcutBorc)} · kapanan ${para(a.kapanan)}${a.yeniBorc > 0 ? ` · <b class="text-danger">yeni bakiye ${para(a.yeniBorc)}</b>` : ''}</span>` : ''}<span class="ms-auto text-muted">${esc(a.belgeNo)}</span></div>`).join('') || '<div class="na-bos">Çıkış adımı yok.</div>';
+    $('#kiSimFisler').innerHTML = (s.fisler || []).map(f => `<table class="na-tablo kn-kalem mb-1"><thead><tr><th colspan="2">${esc(f.sirket)} · ${esc(f.kaynak)} <small class="text-muted">${esc(f.aciklama)}</small></th><th class="s">Borç (₺)</th><th class="s">Alacak (₺)</th></tr></thead><tbody>${(f.satirlar || []).map(x => `<tr><td style="width:48px">${esc(x.hesapKodu)}</td><td class="sol">${esc(x.hesapAdi)}<small>${esc(x.aciklama)}</small></td><td class="para">${x.borc ? para(x.borc) : ''}</td><td class="para">${x.alacak ? para(x.alacak) : ''}</td></tr>`).join('')}</tbody></table>`).join('') || '<div class="na-mini">Yeni fiş yok (fişler daha önce atılmış).</div>';
+    $('#kiSimBakiye').innerHTML = [(s.grupIciBelge ? `<div><i class="fas fa-file-signature me-1"></i><b>${esc(s.grupIciBelge.tur)} belgesi ${esc(s.grupIciBelge.no)}</b>: ${esc(s.grupIciBelge.faturaSahibi)} adına ${esc(s.grupIciBelge.odeyen)} ödüyor · ${esc(s.grupIciBelge.sekil)} · ${esc(s.grupIciBelge.etki)}</div>` : ''), ...(s.bakiyeler || []).map(b => `<div><i class="fas fa-scale-balanced me-1"></i>${esc(b.borclu)} → ${esc(b.alacakli)} grup içi borcu: ${para(b.mevcut)} → <b>${para(b.sonra)}</b> ₺ (${b.degisim > 0 ? '+' : ''}${para(b.degisim)})</div>`), ...(s.uyarilar || []).map(u => `<div class="text-danger"><i class="fas fa-triangle-exclamation me-1"></i>${esc(u)}</div>`)].join('');
+    $('#kiSimOnayKap').style.display = s.grupIci ? '' : 'none'; kiOnayDurumu();
+  }
+  $('#kiTur').addEventListener('change', () => { kiTurGoster(); kiSimule(); }); $('#kiYer').addEventListener('change', kiSimule); $('#kiBanka').addEventListener('change', kiSimule); $('#kiSimule').addEventListener('click', kiSimule); $('#kiSimOnay').addEventListener('change', kiOnayDurumu);
   $('#kiGonder').addEventListener('click', async () => {
-    const r = IB.r; if (!r) return; const bankaya = $('#kiTur').value === 'Bankaya Tahsile Ver';
-    if (!confirm(`${r.cekNolar} ${bankaya ? $('#kiBanka').value + ' bankasına tahsile verilsin' : ($('#kiYer').value || r.kurum) + ' tedarikçisine ciro edilsin'} mi? Belge çıkar, satır ÖDENDİ olur, muhasebe fişleri atılır.`)) return;
-    const d = await post('/Rapor79/CekIbraz', { DbName: r.dbName, DocEntry: r.docEntry, Tur: $('#kiTur').value, IbrazYeri: bankaya ? $('#kiBanka').value : $('#kiYer').value, Tarih: $('#kiTarih').value, TeslimAlan: $('#kiTeslimAlan').value, BelgeNo: $('#kiBelgeNo').value, Not: $('#kiNot').value }).catch(() => ({ success: false, message: 'Ağ hatası.' }));
+    const r = IB.r; if (!r || !IB.sim) return; const bankaya = $('#kiTur').value === 'Bankaya Tahsile Ver';
+    if (IB.sim.grupIci && !$('#kiSimOnay').checked) { mesaj('warning', 'Grup içi işlem: simülasyondaki muhasebe kayıtlarını onaylayın.'); return; }
+    if (!confirm(`${r.cekNolar} ${bankaya ? $('#kiBanka').value + ' bankasına tahsile verilsin' : ($('#kiYer').value || r.kurum) + ' tedarikçisine ciro edilsin'} mi? Belge çıkar, satır ÖDENDİ olur, simülasyondaki ${(IB.sim.fisler || []).length} fiş atılır.`)) return;
+    const d = await post('/Rapor79/CekIbraz', { DbName: r.dbName, DocEntry: r.docEntry, Tur: $('#kiTur').value, IbrazYeri: bankaya ? $('#kiBanka').value : $('#kiYer').value, Tarih: $('#kiTarih').value, TeslimAlan: $('#kiTeslimAlan').value, BelgeNo: $('#kiBelgeNo').value, Not: $('#kiNot').value, SimOnay: true }).catch(() => ({ success: false, message: 'Ağ hatası.' }));
     if (!d.success) { mesaj('danger', esc(d.message)); return; }
-    modalKapat($('#knIbrazModal')); if (d.row) satirYerlestir(d.row); mesaj('success', '<i class="fas fa-money-check-dollar me-1"></i>' + esc(d.message)); await yukle(true); if (acik && acik.docEntry === r.docEntry) drawerAc(satirBul(r.docEntry) || d.row);
+    modalKapat($('#knIbrazModal')); if (d.row) satirYerlestir(d.row); mesaj('success', '<i class="fas fa-money-check-dollar me-1"></i>' + esc(d.message) + ' <a href="/CekAkibeti" target="_blank" class="ms-1"><i class="fas fa-arrow-up-right-from-square"></i> Çek Akıbeti Raporu</a>'); await yukle(true); if (acik && acik.docEntry === r.docEntry) drawerAc(satirBul(r.docEntry) || d.row);
   });
   kok.addEventListener('click', e => { const b = e.target.closest('.kn-ibraz-ac'); if (!b) return; e.stopPropagation(); const r = satirdan(b) || acik; if (r) ibrazAc(r); });
 

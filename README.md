@@ -319,6 +319,13 @@ tasarımından uyarlandı:
     fatura sahibi fişi 320 ↔ 132 / 332 + `CekAkibetOrnek.GrupBakiyeEkle`; ödeyen fişi `MuhasebeOrnek.OdemeFisi` 132 ya da — karşılıklı mahsupta — 332); `/Rapor79/GrupIciTur`,
     `GrupIciBelgeVeri`, yazdırılabilir `Views/Rapor79/GrupIciBelge.cshtml`; Mahsup / Temlik sekmelerinde "Otomatik Grup İçi … Belgeleri" tablosu (`cizGib`). Departman taleplerinde
     mahsup sütunu kaldırıldı; Yeni Ödeme › Cari Bakiyeleri'nde Vade Şartı sütunu (`vadeSarti`, `sonOdemeOnerisi`, banka), çek seçiminde "Son Ödeme Tarihine Yakın Vade" sıralaması.
+    **Talimat penceresi** (`knTalimatModal`, `talimatOlustur`): seçili satırlar, dövizli satırda baz kur (kaynak / gün / kur / not; TCMB türlerinde `/Rapor79/Kur` ile otomatik,
+    fatura üstü / anlaşılan kur elle) → `TalimatIstek.Kurlar` → `NakitAkisOrnek.KurGuncelle` satıra yazar, `TalimatSatiri.KurBilgisi` talimatta "Baz Kur" sütunu; banka hesabı / kasa.
+    Seçim: ilk hücre tıklanınca kutucuk işaretlenir, düğme seçili sayısını gösterir. **İbraz simülasyonu** (`/Rapor79/CekIbrazSimule` → `NakitAkisOrnek.CekIbrazSimule`):
+    çıkış adımları, fiş taslakları (`MuhasebeOrnek.FisTaslagi`; `OdemeFisiTaslak`, `CiroFisiTaslak`, `GrupIciBelgeOrnek.FisTaslagi` — kayıt eden sürümler bunları `Kaydet` eder),
+    grup içi bakiye etkileri; grup içi işlemde (dolaşım zincirinde grup içi ciro ya da fatura sahibi ≠ ödeyen) onay kutusu şart, sunucu `SimOnay` olmadan reddeder, günlüğe
+    "Simülasyon Onayı" yazılır. Üstteki "Çek · Senet → Çek Akıbeti" bağlantısı `/CekAkibeti`; Çek Akıbeti Raporu `UygunlukDurumu` portföy dışı belgede "Uygun Değil", bankaya
+    tahsilde Kime Verildi "Banka (Tahsil)", `/CekAkibeti/Versiyon` ile sekmeye dönülünce kendini tazeler.
   - **Kasa Nakit Akışı — eski görünüm** (`/Rapor79/Eski`, `Views/Rapor79/Eski.cshtml` + `wwwroot/js/rapor79.js` + `rapor79-yontem.js`): ana projedeki 23 sütunlu
     liste; ödeme yöntemi SEKMELERİ (Tümü = `.ana-liste`; yöntem panelleri `.yontem-panel[data-method]`), Çek / Senet satırında "Belge Seç" → `#belgeSecModal` →
     `/Rapor79/BelgePlanla`, `/Rapor79/BelgePlanKaldir`, `/Rapor79/YontemAlanKaydet`; ana projedeki `#btnSatirCekOnayla` akışı da `BelgePlanla` çağırır.

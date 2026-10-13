@@ -46,10 +46,11 @@ namespace WebApplication3.Controllers
             return new Rapor2ViewModel
             {
                 DocEntry = k.DocEntry, CekNumarasi = k.No, BankaAdi = k.Banka, Sube = k.Sube, HareketDurumu = hareket, IslemTuru = k.IslemTuru, KonumDurumu = k.KonumDurumu + (k.Portfoyde && !string.IsNullOrEmpty(k.KaynakSirket) && k.Sirket != k.KaynakSirket ? " · " + k.Sirket : ""), VadeDurumu = k.VadeDurumu, Aciklama = aciklama,
-                UygunlukDurumu = k.KullanimDurumu == "Kullanılabilir" ? "Uygun" : "Uygun Değil", CekKimdenGeldi = k.Musteri, AsilBorclu = k.AsilBorclu, Tutar = k.Tutar, ParaBirimi = k.PB, VadeTarihi = k.Vade,
+                // uygunluk: portföyde (ya da Kasa Nakit Akışı'nda planlı) ve kullanılabilir belge "Uygun"; ciro / ibraz / teminat ile çıkan belge "Uygun Değil"
+                UygunlukDurumu = k.Portfoyde && k.KullanimDurumu == "Kullanılabilir" ? "Uygun" : "Uygun Değil", CekKimdenGeldi = k.Musteri, AsilBorclu = k.AsilBorclu, Tutar = k.Tutar, ParaBirimi = k.PB, VadeTarihi = k.Vade,
                 VadeAyiVeYili = ButceOrnek.Aylar[k.Vade.Month - 1] + " " + k.Vade.Year, VadeliCekIbrazi = k.IbrazTuru == "Bankaya İbraz" ? "Evet" : "", PortfoyVadeAyiYili = ButceOrnek.Aylar[k.PortfoyGiris.Month - 1] + " " + k.PortfoyGiris.Year,
                 PortfoyeGirisTarihi = k.PortfoyGiris, IbrazTarihi = k.IbrazTarihi, TahsilatBelgeNo = k.TahsilatBelgeNo, IbrazBelgeNo = k.IbrazBelgeNo, PlanlananTedarikci = k.PlanlananTedarikci, BelgeTipi = k.Belge,
-                CekIslemTuru = CekAkibetOrnek.IslemKodu(k.IslemTuru), IslemTipiAdi = k.IslemTuru, CekKimeVerildi = k.IbrazTuru == "Ciro" ? k.IbrazYeri : "", TlKarsiligi = k.Tutar, KullanımDurumu = k.KullanimDurumu,
+                CekIslemTuru = CekAkibetOrnek.IslemKodu(k.IslemTuru), IslemTipiAdi = k.IslemTuru, CekKimeVerildi = k.IbrazTuru == "Ciro" ? k.IbrazYeri : k.IbrazTuru == "Bankaya İbraz" ? k.IbrazYeri + " (Tahsil)" : k.IbrazTuru == "Teminat" ? k.IbrazYeri : "", TlKarsiligi = k.Tutar, KullanımDurumu = k.KullanimDurumu,
                 CekinBankasi = k.Banka, GelmeNedeni = "Tahsilat", SirketAdi = k.Sirket, SirlamaTarihi = k.Vade, CekBankaAdi = k.Banka
             };
         }
@@ -77,6 +78,8 @@ namespace WebApplication3.Controllers
 <tr><th class='text-muted'>Plan ↔ İbraz Kontrolü</th><td>{kontrolRozet}</td></tr></tbody></table>
 <div class='small text-muted'>Kaynak: Kasa Nakit Akışı (Rapor79) › Çek / Senet sekmesi · Konsolide Finansal Takip Paneli › Çek: plana aykırı çıkışlar.</div></div>";
         }
+        /// <summary>Çek kaydı değişim sayacı: Kasa Nakit Akışı'nda plan / ibraz yapılıp bu sekmeye dönülünce sayfa kendini tazeler (Index2.cshtml visibilitychange).</summary>
+        [HttpGet("Versiyon")] public IActionResult Versiyon() => Json(new { v = CekAkibetOrnek.Gunluk.Count + CekAkibetOrnek.Hareketler.Count });
         [HttpGet("GetIbrazDetay")]
         public IActionResult GetIbrazDetay(string no) { var k = CekAkibetOrnek.Kayitlar.FirstOrDefault(x => x.IbrazBelgeNo == no) ?? CekAkibetOrnek.Kayitlar.FirstOrDefault(x => x.No == no); return Content(k == null ? "<div class='p-3 text-muted'>İbraz belgesi bulunamadı.</div>" : DetayHtml(k, "İbraz Detayı"), "text/html; charset=utf-8"); }
         [HttpGet("GetTahsilatDetay")]

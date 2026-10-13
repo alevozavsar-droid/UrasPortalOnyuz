@@ -46,8 +46,18 @@ namespace WebApplication3.Data
                 _fisler.Add(f); return f;
             }
         }
+        /// <summary>Fiş taslağı (simülasyon): kaydedilmeden gösterilir, onaylanınca Kaydet ile atılır (çek ibrazı penceresi).</summary>
+        public class FisTaslagi
+        {
+            public string DbName { get; set; } public string Sirket => CekAkibetOrnek.SirketAdi(DbName); public string Kaynak { get; set; } = ""; public string Aciklama { get; set; } = "";
+            public List<YevmiyeSatiri> Satirlar { get; set; } = new List<YevmiyeSatiri>(); public decimal ToplamBorc => Satirlar.Sum(s => s.Borc); public decimal ToplamAlacak => Satirlar.Sum(s => s.Alacak);
+        }
+        public static YevmiyeFisi Kaydet(FisTaslagi t, string kullanici, DateTime? tarih = null) => t == null ? null : Olustur(t.DbName, t.Kaynak, t.Aciklama, t.Satirlar, kullanici, tarih);
+        public static object Json(FisTaslagi t) => t == null ? null : new { dbName = t.DbName, sirket = t.Sirket, kaynak = t.Kaynak, aciklama = t.Aciklama, toplamBorc = t.ToplamBorc, toplamAlacak = t.ToplamAlacak, satirlar = t.Satirlar.Select(s => new { hesapKodu = s.HesapKodu, hesapAdi = s.HesapAdi, borc = s.Borc, alacak = s.Alacak, aciklama = s.Aciklama }) };
         /// <summary>Ödeme satırının fişi: borç tarafı karşı taraf (satıcı / grup şirketi / personel avansı), alacak tarafı ödeme aracı.</summary>
-        public static YevmiyeFisi OdemeFisi(NakitAkisViewModel m, string kaynak, string kullanici)
+        public static YevmiyeFisi OdemeFisi(NakitAkisViewModel m, string kaynak, string kullanici) => Kaydet(OdemeFisiTaslak(m, kaynak), kullanici);
+        /// <summary>Ödeme fişi taslağı (kaydedilmez): ödeyen şirketin defterinde (fatura sahibi ≠ ödeyen ise ödeyenin defteri).</summary>
+        public static FisTaslagi OdemeFisiTaslak(NakitAkisViewModel m, string kaynak)
         {
             if (m == null) return null; decimal tl = m.U_TutarTL ?? Math.Round((m.U_Tutar ?? 0) * (m.U_Kur ?? 1), 2); if (tl <= 0) return null;
             string y = m.U_OdemeYontemi ?? "", belge = string.IsNullOrEmpty(m.U_FaturaSiparisNo) ? (m.U_BagliBelgeTipi ?? "") : m.U_FaturaSiparisNo;
@@ -64,19 +74,23 @@ namespace WebApplication3.Data
                 string gib = string.IsNullOrEmpty(m.U_GrupIciNo) ? "" : " · " + m.U_GrupIciNo;
                 satirlar[0] = mahsup ? S("332", tl, 0, $"{m.U_FaturaSahibi} şirketine olan grup içi borçtan mahsup · {m.U_Kurum}{gib}") : S("132", tl, 0, $"{m.U_FaturaSahibi} adına ödeme ({(m.U_GrupIciTur == "Temlik" ? "temlik" : "grup içi alacak")}) · {m.U_Kurum}{gib}");
             }
-            return Olustur(m.U_KaynakFirma, kaynak, aciklama, satirlar, kullanici);
+            string db = !string.IsNullOrEmpty(m.U_OdeyenSirket) && CekAkibetOrnek.GrupSirketleri.Contains(m.U_OdeyenSirket) ? CekAkibetOrnek.DbName(m.U_OdeyenSirket) : m.U_KaynakFirma;
+            return new FisTaslagi { DbName = db, Kaynak = kaynak ?? "", Aciklama = aciklama, Satirlar = satirlar };
         }
         /// <summary>Çek ciro / ibraz adımı fişi. Grup içi ciro: eden şirkette 332 borç / 101 alacak, alan şirkette 101 borç / 132 alacak. Tedarikçiye ciro: 320 / 101. Bankaya ibraz: 102 / 101.</summary>
-        public static List<YevmiyeFisi> CiroFisi(string edenDb, string alanDb, string eden, string alan, string tur, string belgeNo, string cekNo, decimal tutar, string kullanici)
+        public static List<YevmiyeFisi> CiroFisi(string edenDb, string alanDb, string eden, string alan, string tur, string belgeNo, string cekNo, decimal tutar, string kullanici) => CiroFisiTaslak(edenDb, alanDb, eden, alan, tur, belgeNo, cekNo, tutar).Select(t => Kaydet(t, kullanici)).ToList();
+        /// <summary>Ciro / ibraz fiş taslakları (simülasyon; kaydedilmez).</summary>
+        public static List<FisTaslagi> CiroFisiTaslak(string edenDb, string alanDb, string eden, string alan, string tur, string belgeNo, string cekNo, decimal tutar)
         {
-            var l = new List<YevmiyeFisi>(); string a = $"{cekNo} · {belgeNo} · {eden} → {alan}";
+            var l = new List<FisTaslagi>(); string a = $"{cekNo} · {belgeNo} · {eden} → {alan}";
+            FisTaslagi T(string db, string kaynak, params YevmiyeSatiri[] s) => new FisTaslagi { DbName = db, Kaynak = kaynak, Aciklama = a, Satirlar = s.ToList() };
             if (tur == "Grup İçi Ciro")
             {
-                l.Add(Olustur(edenDb, "Çek Ciro " + belgeNo, a, new[] { S("332", tutar, 0, "Grup içi borç kapama: " + alan), S("101", 0, tutar, cekNo + " ciro") }, kullanici));
-                if (!string.IsNullOrEmpty(alanDb)) l.Add(Olustur(alanDb, "Çek Giriş " + belgeNo, a, new[] { S("101", tutar, 0, cekNo + " portföye giriş"), S("132", 0, tutar, "Grup içi alacak kapama: " + eden) }, kullanici));
+                l.Add(T(edenDb, "Çek Ciro " + belgeNo, S("332", tutar, 0, "Grup içi borç kapama: " + alan), S("101", 0, tutar, cekNo + " ciro")));
+                if (!string.IsNullOrEmpty(alanDb)) l.Add(T(alanDb, "Çek Giriş " + belgeNo, S("101", tutar, 0, cekNo + " portföye giriş"), S("132", 0, tutar, "Grup içi alacak kapama: " + eden)));
             }
-            else if (tur == "Bankaya İbraz") l.Add(Olustur(edenDb, "Çek İbraz " + belgeNo, a, new[] { S("102", tutar, 0, "Tahsil: " + alan), S("101", 0, tutar, cekNo + " bankaya ibraz") }, kullanici));
-            else l.Add(Olustur(edenDb, "Çek Ciro " + belgeNo, a, new[] { S("320", tutar, 0, "Tedarikçi: " + alan), S("101", 0, tutar, cekNo + " ciro") }, kullanici));
+            else if (tur == "Bankaya İbraz") l.Add(T(edenDb, "Çek İbraz " + belgeNo, S("102", tutar, 0, "Tahsil: " + alan), S("101", 0, tutar, cekNo + " bankaya ibraz")));
+            else l.Add(T(edenDb, "Çek Ciro " + belgeNo, S("320", tutar, 0, "Tedarikçi: " + alan), S("101", 0, tutar, cekNo + " ciro")));
             return l;
         }
         public static object Json(YevmiyeFisi f) => f == null ? null : new { no = f.No, tarih = f.Tarih.ToString("yyyy-MM-dd HH:mm"), sirket = f.Sirket, kaynak = f.Kaynak, aciklama = f.Aciklama, kullanici = f.Kullanici, durum = f.Durum, toplamBorc = f.ToplamBorc, toplamAlacak = f.ToplamAlacak, satirlar = f.Satirlar.Select(s => new { hesapKodu = s.HesapKodu, hesapAdi = s.HesapAdi, borc = s.Borc, alacak = s.Alacak, aciklama = s.Aciklama }) };

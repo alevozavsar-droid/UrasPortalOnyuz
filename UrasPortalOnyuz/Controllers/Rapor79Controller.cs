@@ -101,12 +101,14 @@ namespace WebApplication3.Controllers
         }
 
         // ---------- ÖDEME TALİMATI ----------
-        public class TalimatIstek { public string DbName { get; set; } public List<int> DocEntryler { get; set; } public string BankaHesabi { get; set; } public string Kasa { get; set; } public string No { get; set; } public string Durum { get; set; } public string Not { get; set; } }
-        /// <summary>Seçilen satırlardan talimat: ödeyen şirket + yöntem bazında; çek satırlarında seçili belgeler ve dolaşım planı talimata girer.</summary>
+        public class KurGiris { public int DocEntry { get; set; } public string DbName { get; set; } public string Kaynak { get; set; } public decimal? Kur { get; set; } public string Tarih { get; set; } public string Not { get; set; } }
+        public class TalimatIstek { public string DbName { get; set; } public List<int> DocEntryler { get; set; } public string BankaHesabi { get; set; } public string Kasa { get; set; } public string No { get; set; } public string Durum { get; set; } public string Not { get; set; } public List<KurGiris> Kurlar { get; set; } }
+        /// <summary>Seçilen satırlardan talimat: ödeyen şirket + yöntem bazında; çek satırlarında seçili belgeler ve dolaşım planı talimata girer. Dövizli satırlarda baz kur (TCMB / fatura üstü / anlaşmalı) önce satıra yazılır.</summary>
         [HttpPost("TalimatOlustur")]
         public IActionResult TalimatOlustur([FromBody] TalimatIstek istek)
         {
             if (istek == null || istek.DocEntryler == null || istek.DocEntryler.Count == 0) return Json(new { success = false, message = "Talimat için satır seçin." });
+            foreach (var k in istek.Kurlar ?? new List<KurGiris>()) NakitAkisOrnek.KurGuncelle(Db(string.IsNullOrEmpty(k.DbName) ? istek.DbName : k.DbName), k.DocEntry, k.Kaynak, k.Kur, DateTime.TryParse(k.Tarih, CultureInfo.InvariantCulture, DateTimeStyles.None, out var kt) ? kt : (DateTime?)null, k.Not, Kullanici);
             var r = TalimatOrnek.Olustur(Db(istek.DbName), istek.DocEntryler, Kullanici, istek.BankaHesabi, istek.Kasa);
             return Json(new { success = r.talimatlar.Count > 0, message = r.talimatlar.Count > 0 ? $"{r.talimatlar.Count} talimat hazırlandı: {string.Join(", ", r.talimatlar.Select(t => t.No + " (" + t.Baslik + ", " + t.Satirlar.Count + " satır)"))}" + (r.atlananlar.Count > 0 ? " · atlanan: " + string.Join("; ", r.atlananlar) : "") : "Talimat oluşturulamadı: " + string.Join("; ", r.atlananlar), talimatlar = r.talimatlar.Select(TalimatJson).ToList(), atlananlar = r.atlananlar });
         }
@@ -306,13 +308,16 @@ namespace WebApplication3.Controllers
         [HttpGet("Kur")] public IActionResult Kur(string pb, string tarih) => Json(new { success = true, kur = KurOrnek.Json(pb ?? "TRY", DateTime.TryParse(tarih, CultureInfo.InvariantCulture, DateTimeStyles.None, out var t) ? t : DateTime.Today) });
         /// <summary>Cari bilgisi: vade şartı → önerilen son ödeme tarihi, alıcı banka / IBAN / hesap adı (cari kart ya da son ödeme).</summary>
         [HttpGet("CariBilgi")] public IActionResult CariBilgi(string dbName, string kurum) => Json(new { success = true, cari = NakitAkisOrnek.CariBilgi(Db(dbName), kurum ?? "") });
-        public class IbrazIstek { public string DbName { get; set; } public int DocEntry { get; set; } public string Tur { get; set; } public string IbrazYeri { get; set; } public string Tarih { get; set; } public string TeslimAlan { get; set; } public string BelgeNo { get; set; } public string Not { get; set; } }
-        /// <summary>Çek / senet satırında "Çeki Ver / İbraz Et": belgeler tedarikçiye ciro ya da bankaya tahsile, satır ÖDENDİ, fişler otomatik.</summary>
+        public class IbrazIstek { public string DbName { get; set; } public int DocEntry { get; set; } public string Tur { get; set; } public string IbrazYeri { get; set; } public string Tarih { get; set; } public string TeslimAlan { get; set; } public string BelgeNo { get; set; } public string Not { get; set; } public bool SimOnay { get; set; } }
+        /// <summary>İbraz öncesi muhasebe simülasyonu (kaydedilmez): çıkış adımları, fişler, grup içi bakiye etkisi; grup içi işlemde onay gerekir.</summary>
+        [HttpPost("CekIbrazSimule")]
+        public IActionResult CekIbrazSimule([FromBody] IbrazIstek istek) { var s = istek == null ? null : NakitAkisOrnek.CekIbrazSimule(Db(istek.DbName), istek.DocEntry, istek.Tur, istek.IbrazYeri); return Json(s == null ? new { success = false, message = "Satır bulunamadı." } : (object)new { success = true, sim = s }); }
+        /// <summary>Çek / senet satırında "Çeki Ver / İbraz Et": belgeler tedarikçiye ciro ya da bankaya tahsile, satır ÖDENDİ, fişler otomatik (grup içi işlemde simülasyon onayı şart).</summary>
         [HttpPost("CekIbraz")]
         public IActionResult CekIbraz([FromBody] IbrazIstek istek)
         {
             if (istek == null) return Json(new { success = false, message = "Veri yok." });
-            var r = NakitAkisOrnek.CekIbrazEt(Db(istek.DbName), istek.DocEntry, istek.Tur, istek.IbrazYeri, DateTime.TryParse(istek.Tarih, CultureInfo.InvariantCulture, DateTimeStyles.None, out var t) ? t : (DateTime?)null, istek.TeslimAlan, istek.BelgeNo, istek.Not, Kullanici);
+            var r = NakitAkisOrnek.CekIbrazEt(Db(istek.DbName), istek.DocEntry, istek.Tur, istek.IbrazYeri, DateTime.TryParse(istek.Tarih, CultureInfo.InvariantCulture, DateTimeStyles.None, out var t) ? t : (DateTime?)null, istek.TeslimAlan, istek.BelgeNo, istek.Not, Kullanici, istek.SimOnay);
             var m = NakitAkisOrnek.Bul(Db(istek.DbName), istek.DocEntry); if (m != null) NakitAkisOrnek.BelgeleriDoldur(m);
             return Json(new { success = r.ok, message = r.mesaj, row = m == null ? null : SatirJson(m) });
         }
