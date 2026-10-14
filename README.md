@@ -347,7 +347,13 @@ tasarımından uyarlandı:
     — büyük bırakır), `Cariler`, `HareketOnaylari` (Kasa / Banka / Çek satırı onay / eksik işareti, `HareketOnay`), `GunlukEkle`.
     Uçlar: `Veri` (`&gun=` gün sonu günü), `HareketOnay`, `FinekraOnayla`, `FinekraNakitAkisaGonder`, `FinekraEslestir`, `FinekraEslesmeKaldir`, `FinekraAdaylar`, `FinekraVeri`,
     `GunIciOnayla`, `GunIciGeriAl`, `GunSonuSayim`, `GunSonuBildirimCoz`, `GunSonuPortfoy`.
-    Ekran: Finekra tablosunda cari / hesap (ya da öneri), nakit akış eşleşmesi (#kayıt bağlantısı, fark), onay, fiş; her satırda Kasa Nakit Akışı'na gönder düğmesi (eşleşmiş satırı
+    Döviz: `BankaHareketi.Tutar` TL karşılığıdır; dövizli hesapta (USD / EUR, `NakitAkisOrnek.Bakiyeler` PB'si) ya da dövizli ödemede `PB`, `DovizTutar`, `Kur`, `KurKaynagi`,
+    `KurTarihi` dolar (tohum: dövizli ödenmiş havaleler satırın kuruyla, müşteri havalelerinin bir kısmı USD / EUR hesaba TCMB alış kuruyla); eşleşme, fiş (102 satırı
+    açıklamasında döviz × kur) ve toplamlar TL üzerinden; "Nakit Akışa Gönder" döviz satırı açar (U_ParaBirimi, U_Kur, U_TutarTL). JSON: `dovizTutar`, `kur`, `kurOzet`, `sap`
+    (fiş var = SAP'ye işlenmiş). Banka sekmesi yok: banka hareketleri yalnız Finekra'da (üretilmiş BANKA satırları eski görünümde; Veri `hareketler` BANKA içermez, gün sonu
+    gün içi sayımı da BANKA'yı dışarıda bırakır).
+    Ekran: Finekra tablosunda cari / hesap (ya da öneri), nakit akış eşleşmesi (#kayıt bağlantısı, fark), onay, SAP (Var / Yok; süzgeç: SAP'ye İşlenmemiş / İşlenmiş; üst kart
+    "Banka Çıkış (Finekra)" işlenmemişleri süzer), fiş; Giriş / Çıkış hücresinde TL karşılığı üstte, dövizli harekette altta döviz tutarı · kur · kaynak; her satırda Kasa Nakit Akışı'na gönder düğmesi (eşleşmiş satırı
     açar, çıkış / virmanı gönderir, tahsilatta pasif); onay penceresinde cari listesi (datalist), hesap, fiş önizleme, senkron notu; toplu onay (eşleşmiş bekleyenler önerilen cari /
     hesapla); Nakit Akış Eşleşme sekmesi (havale satırı ↔ banka hareketi, fark, banka hareketi olmayan ödenmişler). Eski bağlantılar (`?hesapTipi=CEK`, `?tab=FINEKRA`, `dbFilter`) sekmeye çevrilir.
     **Bakiyeler sekmesi (ayrıntılı)** (`Veri` › `bakiyeler.detay`: şirket bazında nakit kasa, banka toplamı, çek / senet portföyü X · R adet · tutar · kullanılabilir · planlı —
