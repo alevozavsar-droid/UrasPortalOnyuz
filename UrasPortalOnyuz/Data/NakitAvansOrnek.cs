@@ -258,7 +258,8 @@ namespace WebApplication3.Data
             K("P1016", "Berk Berberoğlu", "Uras Holding", "Finans", "Finans Müdürü", "CC20 - Finans", "bbb", "Finans"),
             K("P1017", "Selin Kara", "Uras Kimya", "Satın Alma", "Satın Alma Uzmanı", "CC31 - Satın Alma", "skr", "Talep Sahibi", false),
             K("P1018", "Derya Şen", "Uras Holding", "İnsan Kaynakları", "İK Uzmanı", "CC02 - İnsan Kaynakları", "dsn", "İK"),
-            K("P1019", "Selçuk Arı", "Uras Holding", "Hukuk", "Hukuk Müşaviri", "CC03 - Hukuk", "sar", "Hukuk")
+            K("P1019", "Selçuk Arı", "Uras Holding", "Hukuk", "Hukuk Müşaviri", "CC03 - Hukuk", "sar", "Hukuk"),
+            K("P1020", "Ahmet Özkan", "Uras Holding", "Finans", "Finans Sorumlusu", "CC20 - Finans", "aoz", "Finans") // gün sonu mutabakatı: gün içi işlemleri onaylar (Data/GunSonuOrnek.cs)
         };
         private static NaKisi K(string no, string ad, string sirket, string dep, string unvan, string mm, string kul, string rol, bool aktif = true)
             => new NaKisi { PersonelNo = no, AdSoyad = ad, Sirket = sirket, Departman = dep, Unvan = unvan, MasrafMerkezi = mm, KullaniciId = kul, Rol = rol, Aktif = aktif };

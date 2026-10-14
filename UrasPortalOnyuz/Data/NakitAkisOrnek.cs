@@ -438,7 +438,7 @@ namespace WebApplication3.Data
             var f = MuhasebeOrnek.OdemeFisi(m, kaynak, kullanici); if (f != null) { m.U_YevmiyeNo = f.No; Log(m.U_KaynakFirma, m.DocEntry, "Muhasebe Fişi", $"{f.No} · {string.Join(" / ", f.Satirlar.Select(s => s.HesapKodu + " " + s.HesapAdi + (s.Borc > 0 ? " B " + s.Borc.ToString("N2", Tr) : " A " + s.Alacak.ToString("N2", Tr))))}", kullanici); }
         }
         /// <summary>Talimat gerçekleşince: satır ÖDENDİ, avans olayı; çek / senet belgeleri dolaşım planı varsa kalan adımlar, yoksa tedarikçiye ciro.</summary>
-        public static void OdendiIsaretle(string dbName, int docEntry, string kaynak, string kullanici)
+        public static void OdendiIsaretle(string dbName, int docEntry, string kaynak, string kullanici, bool fisAt = true)
         {
             Tohumla();
             lock (Kilit)
@@ -451,7 +451,7 @@ namespace WebApplication3.Data
                     if (k.Dolasim.Count > 0) { int guvenlik = 0; while (k.SonrakiAdim != null && guvenlik++ < 20) { var r = CekAkibetOrnek.DolasimAdimGerceklestir(id, 0, kullanici); if (!r.ok) break; } }
                     else if (k.IslemTuru == "Planlandı" || k.IslemTuru == "Portföyde") CekAkibetOrnek.IslemTuruDegistir(id, "Ciro Edildi", m.U_Kurum, $"CRO-{DateTime.Today:yyMM}-{docEntry % 9000 + 1000}", kullanici);
                 }
-                AvansOdemesiIsle(m, kullanici); FisAt(m, kaynak, kullanici);
+                AvansOdemesiIsle(m, kullanici); if (fisAt) FisAt(m, kaynak, kullanici); // fisAt=false: fiş Takip Paneli onayında seçilen hesaba atılır (FisBagla ile satıra yazılır)
                 var gib = GrupIciBelgeOrnek.Senkron(m, kullanici); if (gib != null && gib.Durum == "Muhasebeleşti" && !string.IsNullOrEmpty(gib.FaturaSahibiFisNo)) Log(dbName, docEntry, "Grup İçi Belge", $"{gib.No} muhasebeleşti: {gib.FaturaSahibi} fişi {gib.FaturaSahibiFisNo} · {gib.MahsupSekli}", kullanici);
             }
         }
@@ -868,6 +868,30 @@ namespace WebApplication3.Data
                 _odemeler[dbName].Add(m); Log(dbName, m.DocEntry, m.U_OdemeYontemi == "Nakit" ? "Nakit Talebi" : "Ekleme", $"{m.U_Kurum} · {m.U_OdemeYontemi} · {(m.U_Tutar ?? 0).ToString("N2", Tr)} {m.U_ParaBirimi}" + (m.U_OdemeYontemi == "Nakit" ? $" · onay bekliyor ({string.Join(" / ", NakitOnaycilari)})" : "") + (m.U_ParaBirimi != "TRY" ? $" · kur {(m.U_Kur ?? 1).ToString("N4", Tr)} ({m.U_KurKaynagi} {m.U_KurTarihi:dd.MM.yyyy})" : ""), kullanici);
                 var gib = GrupIciBelgeOrnek.Senkron(m, kullanici); if (gib != null) Log(dbName, m.DocEntry, "Grup İçi Belge", $"{gib.No} ({gib.Baslik}) hazırlandı: {gib.Odeyen}, {gib.FaturaSahibi} adına ödüyor; ödeme gerçekleşince iki şirkette fiş atılır", kullanici);
                 return m;
+            }
+        }
+        /// <summary>Finekra banka hareketinden nakit akış satırı (Takip Paneli › Nakit Akışa Gönder): satır ÖDENDİ olarak açılır; fiş zaten atıldıysa numarası yazılır, yoksa atılır.</summary>
+        public static NakitAkisViewModel BankaHareketindenEkle(string dbName, NakitAkisViewModel gelen, DateTime odenmeTarihi, string yevmiyeNo, string kullanici, bool fisAt = true)
+        {
+            var m = Ekle(dbName, gelen, kullanici);
+            lock (Kilit)
+            {
+                m.U_BankaHesabi = gelen.U_BankaHesabi ?? ""; m.U_DekontNo = gelen.U_DekontNo ?? ""; m.U_Durum = "ÖDENDİ"; m.U_EskiDurum = "ÖDENDİ"; m.U_OdenmeTarihi = odenmeTarihi.Date; m.U_OdenenTutar = m.U_Tutar; m.U_OdenenTutarPB = m.U_ParaBirimi;
+                if (!string.IsNullOrEmpty(yevmiyeNo)) m.U_YevmiyeNo = yevmiyeNo; else if (fisAt) FisAt(m, "Banka hareketi " + m.U_DekontNo, kullanici);
+                Log(dbName, m.DocEntry, "Ödeme", $"Banka hareketinden ÖDENDİ · {m.U_Kurum} · {(m.U_Tutar ?? 0).ToString("N2", Tr)} ₺ · {m.U_DekontNo}" + (string.IsNullOrEmpty(m.U_YevmiyeNo) ? " · fiş Takip Paneli onayında (cari / hesap seçilince) atılır" : " · fiş " + m.U_YevmiyeNo), kullanici);
+                GrupIciBelgeOrnek.Senkron(m, kullanici);
+            }
+            return m;
+        }
+        /// <summary>Takip Paneli onayında atılan fiş numarasını nakit akış satırına yazar (satırda fiş yoksa).</summary>
+        public static bool FisBagla(string dbName, int docEntry, string yevmiyeNo, string kullanici)
+        {
+            Tohumla();
+            lock (Kilit)
+            {
+                var m = _odemeler.TryGetValue(dbName, out var l) ? l.FirstOrDefault(x => x.DocEntry == docEntry) : null;
+                if (m == null || string.IsNullOrEmpty(yevmiyeNo) || !string.IsNullOrEmpty(m.U_YevmiyeNo)) return false;
+                m.U_YevmiyeNo = yevmiyeNo; Log(dbName, docEntry, "Muhasebe Fişi", $"{yevmiyeNo} · Takip Paneli onayında atıldı", kullanici); return true;
             }
         }
         public static bool Sil(string dbName, int docEntry, string kullanici)

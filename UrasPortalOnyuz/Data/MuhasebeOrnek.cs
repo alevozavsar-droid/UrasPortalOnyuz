@@ -32,7 +32,8 @@ namespace WebApplication3.Data
         public static readonly Dictionary<string, string> HesapPlani = new Dictionary<string, string>
         {
             ["100"] = "Kasa", ["101"] = "Alınan Çekler", ["102"] = "Bankalar", ["103"] = "Verilen Çekler ve Ödeme Emirleri", ["120"] = "Alıcılar", ["121"] = "Alacak Senetleri",
-            ["132"] = "İştiraklerden Alacaklar (Grup İçi)", ["196"] = "Personel Avansları", ["300"] = "Banka Kredileri (Kredi Kartı)", ["320"] = "Satıcılar", ["332"] = "İştiraklere Borçlar (Grup İçi)", ["770"] = "Genel Yönetim Giderleri"
+            ["132"] = "İştiraklerden Alacaklar (Grup İçi)", ["196"] = "Personel Avansları", ["300"] = "Banka Kredileri (Kredi Kartı)", ["320"] = "Satıcılar", ["332"] = "İştiraklere Borçlar (Grup İçi)", ["770"] = "Genel Yönetim Giderleri",
+            ["335"] = "Personele Borçlar", ["360"] = "Ödenecek Vergi ve Fonlar", ["361"] = "Ödenecek Sosyal Güvenlik Kesintileri", ["780"] = "Finansman Giderleri", ["159"] = "Verilen Sipariş Avansları", ["340"] = "Alınan Sipariş Avansları"
         };
         static YevmiyeSatiri S(string kod, decimal borc, decimal alacak, string aciklama) => new YevmiyeSatiri { HesapKodu = kod, HesapAdi = HesapPlani.TryGetValue(kod, out var ad) ? ad : kod, Borc = Math.Round(borc, 2), Alacak = Math.Round(alacak, 2), Aciklama = aciklama ?? "" };
 

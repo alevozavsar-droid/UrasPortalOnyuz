@@ -333,7 +333,34 @@ tasarımından uyarlandı:
     `/Rapor79/BelgePlanla`, `/Rapor79/BelgePlanKaldir`, `/Rapor79/YontemAlanKaydet`; ana projedeki `#btnSatirCekOnayla` akışı da `BelgePlanla` çağırır.
   - **Çek Akıbeti Raporu** (`Views/Rapor2/Index2.cshtml`): "Planlananlar (Kasa Nakit Akışı)" kartı, Planlanan Tedarikçi + Açıklama varsayılan görünür
     (`DUZEN_SURUMU` sade-v3), belge numarasız çeklerde `/CekAkibeti/UpdateCheckTransactionTypeByDocEntry`; ibraz / tahsilat detayı plan ↔ ibraz kontrolüyle.
-  - **Konsolide Finansal Takip Paneli** (`Views/Rapor123/Index.cshtml`): ÇEK sekmesinde Planlanan Tedarikçi, İbraz / Ciro Bilgisi ve KONTROL sütunları
+  - **Konsolide Finansal Takip Paneli — modern ekran** (`Views/Rapor123/Index.cshtml` + `wwwroot/js/takip-paneli.js`, Kasa Nakit Akışı tasarım dili; veri
+    `/Rapor123/Veri?sirket=&bas=&bit=`; eski görünüm `/Rapor123/Eski` = `Views/Rapor123/Eski.cshtml`): üst kartlar (Finekra onay bekleyen, nakit akışta olmayan çıkış,
+    banka / kasa / çek giriş-çıkış, plana aykırı çek, SAP ↔ Finekra fark), sekmeler Finekra · Banka · Kasa · Çek · Nakit Akış Eşleşme · Bakiyeler · Günlük, çekmece,
+    yapışkan başlıklar. **Finekra** (`Data/FinekraOrnek.cs`, `BankaHareketi`): bankadan otomatik akan hareketler (tohum: ödenmiş havaleler eşleşmiş / çoğu onaylı,
+    bankanın ödediği ama nakit akışta Planlandı kalan havaleler, nakit akışta olmayan otomatik ödeme / vergi-SGK / masraf / kredi / kart / kira çıkışları, müşteri havalesi
+    ve POS tahsilatları, çek tahsilatları, virman). `Listele` her okumada `Senkron` (otomatik eşleşme: aynı şirkette Havale / EFT satırı, tutar ± 1 ₺, ödenme ya da planlanan
+    tarih ± 7 gün). `Onayla(id, cariKod, cariAd, karsiHesap, not)` → fiş (giriş 102 / cari; çıkış cari / 102; `KarsiHesaplar`: 320, 120, 360, 361, 300, 770, 780, 335, 101,
+    102, 332, 132); eşleşmiş nakit akış satırı ÖDENDİ olur (`OdendiIsaretle`; cari hesaplarda 320 / 332 / 132 fiş nakit akışın kendi mantığıyla, başka hesapta fiş onayda seçilen
+    hesaba atılıp `NakitAkisOrnek.FisBagla` ile satıra yazılır), satırda fiş varsa yeniden atılmaz, dekont no satıra yazılır. `NakitAkisaGonder` → `NakitAkisOrnek.BankaHareketindenEkle`
+    (ÖDENDİ havale satırı, banka / IBAN / dekont = hareket no; hareket onaylıysa fişi taşınır, değilse fiş onayda atılır; virman "Diğer" satırı olur; tahsilat (giriş) gönderilmez — nakit
+    akış ödeme planıdır). `Eslestir` / `EslesmeKaldir` / `Adaylar`, `Oneri` (eşleşmiş satırın carisi, cari kart ad benzerliği, işlem türü; `BaslikDuzelt` kısaltmaları — GİB, VD, SGK …
+    — büyük bırakır), `Cariler`, `HareketOnaylari` (Kasa / Banka / Çek satırı onay / eksik işareti, `HareketOnay`), `GunlukEkle`.
+    Uçlar: `Veri` (`&gun=` gün sonu günü), `HareketOnay`, `FinekraOnayla`, `FinekraNakitAkisaGonder`, `FinekraEslestir`, `FinekraEslesmeKaldir`, `FinekraAdaylar`, `FinekraVeri`,
+    `GunIciOnayla`, `GunIciGeriAl`, `GunSonuSayim`, `GunSonuBildirimCoz`, `GunSonuPortfoy`.
+    Ekran: Finekra tablosunda cari / hesap (ya da öneri), nakit akış eşleşmesi (#kayıt bağlantısı, fark), onay, fiş; her satırda Kasa Nakit Akışı'na gönder düğmesi (eşleşmiş satırı
+    açar, çıkış / virmanı gönderir, tahsilatta pasif); onay penceresinde cari listesi (datalist), hesap, fiş önizleme, senkron notu; toplu onay (eşleşmiş bekleyenler önerilen cari /
+    hesapla); Nakit Akış Eşleşme sekmesi (havale satırı ↔ banka hareketi, fark, banka hareketi olmayan ödenmişler). Eski bağlantılar (`?hesapTipi=CEK`, `?tab=FINEKRA`, `dbFilter`) sekmeye çevrilir.
+    **Bakiyeler · Gün Sonu — gün sonu mutabakatı** (`Data/GunSonuOrnek.cs`, şirket × gün): 1) Gün içi işlemler onayı — Ahmet Özkan (Finans Sorumlusu, `GunIciSorumlu`; kullanıcı
+    `aoz`): günün kasa / banka / çek hareketleri toplu onaylanır (eksik / kontrol işaretliler hariç, `HareketOnayla(..., gunluk:false)`), Finekra bekleyen sayısı not edilir, kalan
+    bakiyelerin anlık görüntüsü alınır (`GunIciOnayla`; `GunIciGeriAl` sıfırlar). 2) Kalan bakiyeler otomatik (`Hesapla`): kasa (SAP kasa bakiyesi + günün nakit giriş / çıkışı),
+    banka hesapları (Finekra günü hareketleri hesap koduna göre), çek ve senet portföyü X · R işlem tipine göre adet · tutar — gün sonu itibarıyla portföyde olan belgeler
+    (`PortfoyGiris ≤ gün`, ibraz yoksa ya da gün sonrasıysa), o gün giren / çıkanlar; açılış = kalan − giriş + çıkış; onay öncesi canlı "ön hesap". 3) Fiziksel sayım — Berk
+    Berberoğlu (Kasa Sorumlusu, `KasaSorumlu`; kullanıcı `bbb`): `SayimKaydet(onayla:true)` sayım sistemle birebir eşleşmeli (yoksa ret), `onayla:false` farklı her tür için
+    `GsBildirim` (Eksik / Fazla, adet, tutar, sistem / sayılan, belge no'ları, açıklama; durum Açık → `BildirimCoz` ile Çözüldü; günün açık bildirimi kalmazsa sayım Bekliyor'a döner).
+    `Portfoy(dbName, gün, tür)` sayım penceresindeki belge listesi. Ekran: üç adım kartı, şirket blokları (adım rozetleri, Gün İçi İşlemleri Onayla / Fiziksel Sayım düğmeleri,
+    Tür · Açılış · Gün İçi Giriş · Çıkış · Kalan · Fiziksel Sayım · Fark tablosu, açık bildirim uyarısı), Banka SAP ↔ Finekra tablosu, Eksik / Fazla Bildirimleri tablosu
+    (Çözüldü İşaretle); üst kart "Gün Sonu Mutabakatı" (bakiye onaylı / şirket, açık bildirim). Gün seçici (`#tpGun`, varsayılan bitiş ≤ bugün).
+  - **Konsolide Finansal Takip Paneli — eski görünüm** (`Views/Rapor123/Eski.cshtml`): ÇEK sekmesinde Planlanan Tedarikçi, İbraz / Ciro Bilgisi ve KONTROL sütunları
     (`R123_HareketViewModel` yeni alanlar), "Çek Plan ↔ İbraz Kontrolü" kutusu (`data-kontrol` + DataTables arama kancası `r123KontrolSuz`), plana aykırı çıkışlar
     Eksik olarak işaretli; KASA / BANKA hareketleri ödeme planından, ÇEK hareketleri çek kaydından.
 * **Vade Tarihine Göre Çek ve Senet Özeti** (Mali İşler › Finans › Finansal Araçlar; Yönetim › Özel Raporlar'da aynı ekran; `Controllers/CekOzetController.cs`,
