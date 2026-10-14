@@ -3,7 +3,7 @@
     var sirketler = (List<KeyValuePair<string, string>>)ViewBag.Sirketler;
     string varsayilan = (string)ViewBag.VarsayilanSirket ?? "";
     string bas = (string)ViewBag.Bas, bit = (string)ViewBag.Bit, sekme = (string)ViewBag.Sekme ?? "finekra";
-    var sekmeler = new[] { ("finekra", "Finekra · Banka Hareketleri", "fa-building-columns"), ("banka", "Banka", "fa-landmark"), ("kasa", "Kasa", "fa-cash-register"), ("cek", "Çek · Senet", "fa-money-check-alt"), ("eslesme", "Nakit Akış Eşleşme", "fa-link"), ("bakiye", "Bakiyeler · Gün Sonu", "fa-scale-balanced"), ("gunluk", "Günlük", "fa-clock-rotate-left") };
+    var sekmeler = new[] { ("finekra", "Finekra · Banka Hareketleri", "fa-building-columns"), ("banka", "Banka", "fa-landmark"), ("kasa", "Kasa", "fa-cash-register"), ("cek", "Çek · Senet", "fa-money-check-alt"), ("eslesme", "Nakit Akış Eşleşme", "fa-link"), ("gunsonu", "Gün Sonu Mutabakatı", "fa-clipboard-check"), ("bakiye", "Bakiyeler", "fa-scale-balanced"), ("gunluk", "Günlük", "fa-clock-rotate-left") };
 }
 @*
     KONSOLİDE FİNANSAL TAKİP PANELİ (Rapor123) — Kasa Nakit Akışı tasarım dili (na-* ortak stil, kn/tp düzeni). Veri /Rapor123/Veri; betik wwwroot/js/takip-paneli.js.
@@ -37,7 +37,12 @@
     #tp .tp-tablo tr.giris td.para.g { color: #15803d; } #tp .tp-tablo tr.cikis td.para.c { color: #b91c1c; }
     #tp .tp-tablo tr.onayli td { background: #f0fdf4; } #tp .tp-tablo tr.eksik td { background: #fef2f2; } #tp .tp-tablo tr.bekliyor td { background: #fffbeb; }
     #tp .tp-tablo tr.toplam td { font-weight: 800; background: #f8fafc; border-top: 2px solid #1d4ed8; }
-    #tp #tpBakiyeBanka, #tp #tpBildirimler, #tp #tpGunluk { table-layout: auto; }
+    #tp #tpBakiyeBanka, #tp #tpBildirimler, #tp #tpGunluk { table-layout: auto; } #tp #tpBakiyeKasa { table-layout: fixed; } #tp #tpBakiyeKasa td small { white-space: nowrap; }
+    /* bakiyeler: özet kartları, alt toplam / grup satırları, X · R renkleri */
+    .tp-bozet { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; } .tp-bozet > div { background: #fff; border: 1px solid #e2e8f0; border-left: 3px solid var(--k, #94a3b8); border-radius: 8px; padding: 6px 9px; min-width: 0; }
+    .tp-bozet .l { font-size: .56rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .tp-bozet .v { font-size: .86rem; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .tp-bozet .s { font-size: .58rem; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    @@media (max-width: 1500px) { .tp-bozet { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    #tp .tp-tablo tr.ara td { background: #f1f5f9; font-weight: 800; border-top: 1px solid #cbd5e1; } #tp .tp-tablo td.x { color: #1d4ed8; } #tp .tp-tablo td.r { color: #7c3aed; } #tp #tpBakiyeKasa td { white-space: nowrap; }
     .tp-onay { display: inline-block; font-size: .56rem; font-weight: 800; border-radius: 4px; padding: 1px 5px; white-space: nowrap; } .tp-onay.bekliyor { background: #fef3c7; color: #92400e; } .tp-onay.onayli { background: #dcfce7; color: #166534; } .tp-onay.eksik { background: #fee2e2; color: #991b1b; }
     .tp-es { display: inline-block; font-size: .56rem; font-weight: 800; border-radius: 4px; padding: 1px 5px; white-space: nowrap; } .tp-es.var { background: #dbeafe; color: #1e40af; } .tp-es.yok { background: #fee2e2; color: #991b1b; } .tp-es.disi { background: #f1f5f9; color: #475569; } .tp-es.gonder { background: #ede9fe; color: #5b21b6; }
     .tp-tur { display: inline-block; font-size: .56rem; font-weight: 800; border-radius: 4px; padding: 1px 6px; color: #fff; white-space: nowrap; background: #64748b; }
@@ -126,18 +131,27 @@
             <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo" id="tpTablo-eslesme" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
         </div>
     </div>
-    @* ===== bakiyeler · gün sonu mutabakatı: 1) gün içi işlemler onayı (Ahmet Özkan) → 2) kalan bakiyeler otomatik (kasa, banka, çek / senet X · R) → 3) fiziksel sayım ve bakiye onayı ya da eksik / fazla bildirimi (Berk Berberoğlu) ===== *@
-    <div class="na-panel @(sekme == "bakiye" ? "aktif" : "")" data-p="bakiye">
+    @* ===== gün sonu mutabakatı: 1) gün içi işlemler onayı (Ahmet Özkan) → 2) kalan bakiyeler otomatik (kasa, banka, çek / senet X · R) → 3) fiziksel sayım ve bakiye onayı ya da eksik / fazla bildirimi (Berk Berberoğlu) ===== *@
+    <div class="na-panel @(sekme == "gunsonu" ? "aktif" : "")" data-p="gunsonu">
         <div class="na-kart">
-            <div class="na-kart-b"><span><i class="fas fa-clipboard-check me-1"></i>Gün Sonu Mutabakatı · Gün İçi Onay → Kalan Bakiyeler → Fiziksel Sayım</span><span class="d-flex gap-2 align-items-center"><span class="not">Gün</span><input type="date" class="form-control form-control-sm" id="tpGun" style="font-size:.68rem;height:24px;padding:1px 6px;width:132px" title="Mutabakat günü" /><span class="not" id="tpNot-bakiye"></span></span></div>
+            <div class="na-kart-b"><span><i class="fas fa-clipboard-check me-1"></i>Gün Sonu Mutabakatı · Gün İçi Onay → Kalan Bakiyeler → Fiziksel Sayım</span><span class="d-flex gap-2 align-items-center"><span class="not">Gün</span><input type="date" class="form-control form-control-sm" id="tpGun" style="font-size:.68rem;height:24px;padding:1px 6px;width:132px" title="Mutabakat günü" /><span class="not" id="tpNot-gunsonu"></span></span></div>
             <div class="na-kart-g">
                 <div class="tp-adimlar" id="tpAdimlar"></div>
                 <div id="tpGunSonu"></div>
             </div>
         </div>
-        <div class="row g-2">
-            <div class="col-lg-7"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-scale-balanced me-1"></i>Banka Bakiyeleri · SAP ↔ Finekra</span><span class="not" id="tpNot-banka-bakiye"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo" id="tpBakiyeBanka" data-dinamik="kapali"><thead><tr><th>Şirket</th><th>Hesap</th><th>Banka Hesabı</th><th>PB</th><th class="s">SAP (₺)</th><th class="s">Finekra (₺)</th><th class="s">Fark (₺)</th><th>Güncelleme</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div></div>
-            <div class="col-lg-5"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-triangle-exclamation me-1"></i>Eksik / Fazla Bildirimleri · Fiziksel Sayım</span><span class="not" id="tpNot-bildirim"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo" id="tpBildirimler" data-dinamik="kapali"><thead><tr><th>Bildirim</th><th>Şirket · Gün</th><th>Tür</th><th>Eksik / Fazla</th><th class="s">Adet · Tutar (₺)</th><th>Belgeler · Not</th><th>Durum</th><th></th></tr></thead><tbody></tbody></table></div></div></div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-triangle-exclamation me-1"></i>Eksik / Fazla Bildirimleri · Fiziksel Sayım</span><span class="not" id="tpNot-bildirim"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo" id="tpBildirimler" data-dinamik="kapali"><thead><tr><th>Bildirim</th><th>Şirket · Gün</th><th>Tür</th><th>Eksik / Fazla</th><th class="s">Adet · Tutar (₺)</th><th>Belgeler · Not</th><th>Durum</th><th></th></tr></thead><tbody></tbody></table></div></div></div>
+    </div>
+    @* ===== bakiyeler (ayrıntılı): özet kartları; kasa bakiyeleri şirket bazında nakit kasa · çek X / R · senet X / R · alt toplamlar (X kasa = nakit + çek X + senet X, R kasa = çek R + senet R); banka SAP ↔ Finekra şirket bazında kullanılabilir banka bakiyesi alt toplamı ===== *@
+    <div class="na-panel @(sekme == "bakiye" ? "aktif" : "")" data-p="bakiye">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-scale-balanced me-1"></i>Bakiye Özeti · Kullanılabilir Banka · Nakit Kasa · Çek / Senet (X · R)</span><span class="not" id="tpNot-bakiye"></span></div><div class="na-kart-g"><div class="tp-bozet" id="tpBakiyeOzet"></div></div></div>
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-vault me-1"></i>Kasa Bakiyeleri · Nakit Kasa · Çekler · Senetler (X / R) · Şirket Bazında Alt Toplamlar</span><span class="not" id="tpNot-kasa-bakiye"></span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo" id="tpBakiyeKasa" data-dinamik="kapali"><colgroup><col style="width:10%"><col style="width:6.5%"><col style="width:9.8%"><col style="width:9.8%"><col style="width:7.8%"><col style="width:9.8%"><col style="width:9.8%"><col style="width:7.8%"><col style="width:8%"><col style="width:7%"><col style="width:6.8%"><col style="width:6.9%"></colgroup><thead><tr><th>Şirket</th><th class="s">Nakit Kasa (₺)</th><th class="s">Çek X</th><th class="s">Çek R</th><th class="s">Çek Toplam (₺)</th><th class="s">Senet X</th><th class="s">Senet R</th><th class="s">Senet Toplam (₺)</th><th class="s">Çek + Senet Toplam (₺)</th><th class="s" title="Nakit kasa + Çek X + Senet X">X Kasa Toplamı (₺)</th><th class="s" title="Çek R + Senet R">R Kasa Toplamı (₺)</th><th class="s">Kasa Genel Toplamı (₺)</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+        </div>
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-landmark me-1"></i>Banka Bakiyeleri · SAP ↔ Finekra · Şirket Bazında Kullanılabilir Banka Bakiyesi</span><span class="not" id="tpNot-banka-bakiye"></span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo" id="tpBakiyeBanka" data-dinamik="kapali"><thead><tr><th>Şirket</th><th>Hesap</th><th>Banka Hesabı</th><th>PB</th><th class="s">SAP (₺)</th><th class="s">Finekra (₺)</th><th class="s">Fark (₺)</th><th>Güncelleme</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div>
         </div>
     </div>
     @* ===== günlük ===== *@

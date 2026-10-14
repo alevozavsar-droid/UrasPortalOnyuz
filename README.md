@@ -350,7 +350,11 @@ tasarımından uyarlandı:
     Ekran: Finekra tablosunda cari / hesap (ya da öneri), nakit akış eşleşmesi (#kayıt bağlantısı, fark), onay, fiş; her satırda Kasa Nakit Akışı'na gönder düğmesi (eşleşmiş satırı
     açar, çıkış / virmanı gönderir, tahsilatta pasif); onay penceresinde cari listesi (datalist), hesap, fiş önizleme, senkron notu; toplu onay (eşleşmiş bekleyenler önerilen cari /
     hesapla); Nakit Akış Eşleşme sekmesi (havale satırı ↔ banka hareketi, fark, banka hareketi olmayan ödenmişler). Eski bağlantılar (`?hesapTipi=CEK`, `?tab=FINEKRA`, `dbFilter`) sekmeye çevrilir.
-    **Bakiyeler · Gün Sonu — gün sonu mutabakatı** (`Data/GunSonuOrnek.cs`, şirket × gün): 1) Gün içi işlemler onayı — Ahmet Özkan (Finans Sorumlusu, `GunIciSorumlu`; kullanıcı
+    **Bakiyeler sekmesi (ayrıntılı)** (`Veri` › `bakiyeler.detay`: şirket bazında nakit kasa, banka toplamı, çek / senet portföyü X · R adet · tutar · kullanılabilir · planlı —
+    `CekAkibetOrnek.Kayitlar` Portföyde + Planlandı; `bakiyeler.banka` hesap bazında SAP ↔ Finekra): özet kartları (kullanılabilir banka bakiyesi, nakit kasa, çek X / R, çek + senet,
+    X kasa = nakit + çek X + senet X, R kasa = çek R + senet R, genel toplam), kasa matrisi (şirket satırları + TOPLAM: nakit, çek X / R / toplam, senet X / R / toplam, çek + senet,
+    X kasa, R kasa, genel), banka tablosu şirket bazında "Kullanılabilir Banka Bakiyesi" ara toplamı (`tr.ara`) ve genel toplam; Excel iki tabloyu birlikte verir.
+    **Gün Sonu Mutabakatı sekmesi** (`Data/GunSonuOrnek.cs`, şirket × gün): 1) Gün içi işlemler onayı — Ahmet Özkan (Finans Sorumlusu, `GunIciSorumlu`; kullanıcı
     `aoz`): günün kasa / banka / çek hareketleri toplu onaylanır (eksik / kontrol işaretliler hariç, `HareketOnayla(..., gunluk:false)`), Finekra bekleyen sayısı not edilir, kalan
     bakiyelerin anlık görüntüsü alınır (`GunIciOnayla`; `GunIciGeriAl` sıfırlar). 2) Kalan bakiyeler otomatik (`Hesapla`): kasa (SAP kasa bakiyesi + günün nakit giriş / çıkışı),
     banka hesapları (Finekra günü hareketleri hesap koduna göre), çek ve senet portföyü X · R işlem tipine göre adet · tutar — gün sonu itibarıyla portföyde olan belgeler

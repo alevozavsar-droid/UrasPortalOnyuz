@@ -66,10 +66,10 @@
     $('#tpKapsam').textContent = `${F.sirket ? sirketAdi(F.sirket) : 'Tüm Şirketler (Konsolide)'} · ${tarih(F.bas)} – ${tarih(F.bit)}${F.kpi ? ' · kart filtresi açık' : ''}`;
     kpi(); sayaclar();
     const p = aktifSekme();
-    if (p === 'finekra') cizFinekra(); else if (p === 'eslesme') cizEslesme(); else if (p === 'bakiye') cizBakiye(); else if (p === 'gunluk') cizGunluk(); else cizHareket(p);
+    if (p === 'finekra') cizFinekra(); else if (p === 'eslesme') cizEslesme(); else if (p === 'gunsonu') cizGunSonu(); else if (p === 'bakiye') cizBakiye(); else if (p === 'gunluk') cizGunluk(); else cizHareket(p);
     if (window.scrollY < 5) sabitUstOlc(); else { const kb = $('.na-panel.aktif > .na-kart > .na-kart-b'); if (kb) kok.style.setProperty('--tp-kartb', kb.offsetHeight + 'px'); }
   }
-  function sayaclar() { $('#tpN-finekra').textContent = V.finekra.length; ['banka', 'kasa', 'cek'].forEach(t => $('#tpN-' + t).textContent = V.hareketler.filter(r => r.hesapTipi === t.toUpperCase()).length); $('#tpN-eslesme').textContent = V.eslesme.length; $('#tpN-bakiye').textContent = (V.gunSonu || []).length; $('#tpN-gunluk').textContent = V.gunluk.length; }
+  function sayaclar() { $('#tpN-finekra').textContent = V.finekra.length; ['banka', 'kasa', 'cek'].forEach(t => $('#tpN-' + t).textContent = V.hareketler.filter(r => r.hesapTipi === t.toUpperCase()).length); $('#tpN-eslesme').textContent = V.eslesme.length; $('#tpN-gunsonu').textContent = (V.gunSonu || []).length; $('#tpN-bakiye').textContent = ((V.bakiyeler || {}).detay || []).length; $('#tpN-gunluk').textContent = V.gunluk.length; }
   function kpi() {
     const o = V.ozet, f = o.finekra;
     const K = [
@@ -82,7 +82,7 @@
       { k: '#0369a1', l: 'Çek Giriş (Portföy)', v: kisa(o.cek.giris), s: `${o.cek.girisAdet} hareket`, p: 'cek' },
       { k: '#7c3aed', l: 'Çek Çıkış (Ciro · İbraz)', v: kisa(o.cek.cikis), s: `${o.cek.cikisAdet} hareket`, p: 'cek' },
       { k: '#dc2626', l: 'Plana Aykırı Çek', v: String(o.cek.farkli), s: o.cek.farkli ? 'plan ≠ çıkış · tıkla: süz' : 'uyarı yok', f: 'farkli', p: 'cek' },
-      { k: '#9d174d', l: 'Gün Sonu Mutabakatı', v: `${o.gunSonu ? o.gunSonu.bakiyeOnayli : 0}/${o.gunSonu ? o.gunSonu.toplam : 0}`, s: `gün içi onaylı ${o.gunSonu ? o.gunSonu.gunIciOnayli : 0}${o.gunSonu && o.gunSonu.acikBildirim ? ' · açık bildirim ' + o.gunSonu.acikBildirim : ''} · SAP↔Finekra fark ${kisa(o.bakiyeFark)} ₺`, p: 'bakiye' }
+      { k: '#9d174d', l: 'Gün Sonu Mutabakatı', v: `${o.gunSonu ? o.gunSonu.bakiyeOnayli : 0}/${o.gunSonu ? o.gunSonu.toplam : 0}`, s: `bakiye onaylı şirket · gün içi onaylı ${o.gunSonu ? o.gunSonu.gunIciOnayli : 0}${o.gunSonu && o.gunSonu.acikBildirim ? ' · açık bildirim ' + o.gunSonu.acikBildirim : ''}`, p: 'gunsonu' }
     ];
     $('#tpKpi').innerHTML = K.map(k => `<div class="${k.f && k.f === F.kpi ? 'aktif' : ''}" style="--k:${k.k}" ${k.f ? `data-kpi="${k.f}"` : ''} data-p="${k.p}" title="${k.f ? 'Tıkla: bu karta göre süz / kaldır' : 'Sekmeye git'}"><div class="l">${esc(k.l)}</div><div class="v">${k.v}</div><div class="s">${esc(k.s)}</div></div>`).join('');
   }
@@ -146,11 +146,11 @@
     t.tFoot.innerHTML = L.length ? `<tr class="toplam"><td colspan="6" class="text-end">${L.length} satır · eşleşen ${L.filter(r => r.fnk).length} · banka hareketi olmayan ${L.filter(r => !r.fnk).length}</td><td class="para">${para(L.reduce((s, r) => s + r.tutarTL, 0))}</td><td colspan="4"></td></tr>` : '';
     $('#tpNot-eslesme').textContent = '';
   }
-  // ---------- Bakiyeler · Gün Sonu Mutabakatı: 1) gün içi işlemler onayı (Ahmet Özkan) → 2) kalan bakiyeler otomatik (kasa · banka · çek / senet X · R) → 3) fiziksel sayım / bakiye onayı ya da eksik / fazla bildirimi (Berk Berberoğlu)
+  // ---------- Gün Sonu Mutabakatı: 1) gün içi işlemler onayı (Ahmet Özkan) → 2) kalan bakiyeler otomatik (kasa · banka · çek / senet X · R) → 3) fiziksel sayım / bakiye onayı ya da eksik / fazla bildirimi (Berk Berberoğlu)
   const gsRozet = (d, t) => d === 'Onaylandı' ? `<span class="tp-onay onayli" title="${esc(t || '')}">Onaylandı</span>` : d === 'Eksik / Fazla' ? `<span class="tp-onay eksik" title="${esc(t || '')}">Eksik / Fazla</span>` : `<span class="tp-onay bekliyor" title="${esc(t || '')}">Bekliyor</span>`;
   const adetTutar = (a, t, grup) => grup === 'Kasa' || grup === 'Banka' ? `${para(t)} ₺` : `<b>${a}</b> adet · ${para(t)} ₺`;
   const gsBul = db => (V.gunSonu || []).find(g => g.dbName === db);
-  function cizBakiye() {
+  function cizGunSonu() {
     const G = V.gunSonu || [], S = V.sorumlular || { gunIci: {}, kasa: {} }; $('#tpGun').value = V.gun || '';
     const gi = G.filter(g => g.gunIci.durum === 'Onaylandı').length, so = G.filter(g => g.sayim.durum === 'Onaylandı').length, ef = G.filter(g => g.sayim.durum === 'Eksik / Fazla').length, acik = (V.bildirimler || []).filter(b => b.durum === 'Açık').length;
     const belge = G.reduce((s, g) => s + g.bakiyeler.filter(b => b.sayilir && b.grup !== 'Kasa').reduce((x, b) => x + b.adet, 0), 0);
@@ -175,16 +175,44 @@
         <table class="na-tablo tp-tablo tp-gs" data-dinamik="kapali"><colgroup><col style="width:22%"><col style="width:13%"><col style="width:13%"><col style="width:13%"><col style="width:14%"><col style="width:13%"><col style="width:12%"></colgroup><thead><tr><th>Tür · Hesap</th><th class="s">Açılış</th><th class="s">Gün İçi Giriş</th><th class="s">Gün İçi Çıkış</th><th class="s">Kalan (Gün Sonu)</th><th class="s">Fiziksel Sayım (${esc((S.kasa.ad || '').split(' ')[0])})</th><th class="s">Fark</th></tr></thead><tbody>${rows}</tbody></table>
         ${acikB.length ? `<div class="na-uyari sari m-2">${acikB.map(b => `<div><i class="fas fa-triangle-exclamation me-1"></i><b>${esc(b.tur)} ${esc(b.yon)}</b> ${b.adet ? b.adet + ' adet · ' : ''}${para(b.tutar)} ₺${b.belgeNolar ? ' · belgeler: ' + esc(b.belgeNolar) : ''}${b.aciklama ? ' · ' + esc(b.aciklama) : ''} <span class="text-muted">(${esc(b.kullanici)} · ${esc(b.tarih)})</span> <button type="button" class="btn btn-light border btn-xs tp-gs-coz ms-1" data-id="${b.id}" title="Çözüm açıklamasıyla kapat"><i class="fas fa-check me-1"></i>Çözüldü İşaretle</button></div>`).join('')}</div>` : ''}</div>`;
     }).join('') : '<div class="na-bos">Şirket yok.</div>';
-    $('#tpNot-bakiye').textContent = `${tarih(V.gun)} · gün içi onaylı ${gi}/${G.length} · bakiye onaylı ${so}/${G.length}${acik ? ' · açık bildirim ' + acik : ''}`;
-    // banka: SAP ↔ Finekra
-    const b = V.bakiyeler.banka, t = $('#tpBakiyeBanka');
-    t.tBodies[0].innerHTML = b.length ? b.map(x => `<tr><td class="sol">${esc(x.sirket)}</td><td>${esc(x.hesapKodu)}</td><td class="sol">${esc(x.hesapAdi)}</td><td>${esc(x.pb === 'TRY' ? 'TL' : x.pb)}</td><td class="para">${para(x.sapTL)}</td><td class="para">${para(x.finekraTL)}</td><td class="para ${x.fark ? 'text-danger' : 'text-success'}">${para(x.fark)}</td><td>${tarih(x.guncelleme)}</td></tr>`).join('') : '<tr><td colspan="8" class="na-bos">Bakiye yok.</td></tr>';
-    t.tFoot.innerHTML = b.length ? `<tr class="toplam"><td colspan="4" class="text-end">TOPLAM</td><td class="para">${para(b.reduce((s, x) => s + x.sapTL, 0))}</td><td class="para">${para(b.reduce((s, x) => s + x.finekraTL, 0))}</td><td class="para">${para(b.reduce((s, x) => s + x.fark, 0))}</td><td></td></tr>` : '';
-    $('#tpNot-banka-bakiye').textContent = `SAP ile Finekra arasındaki fark: ${para(b.reduce((s, x) => s + x.fark, 0))} ₺`;
+    $('#tpNot-gunsonu').textContent = `${tarih(V.gun)} · gün içi onaylı ${gi}/${G.length} · bakiye onaylı ${so}/${G.length}${acik ? ' · açık bildirim ' + acik : ''}`;
     // eksik / fazla bildirimleri
     const B = V.bildirimler || [], tb = $('#tpBildirimler');
     tb.tBodies[0].innerHTML = B.length ? B.map(x => `<tr class="${x.durum === 'Açık' ? 'eksik' : 'onayli'}"><td class="sol">#${x.id}<small>${esc(x.tarih)} · ${esc(x.kullanici)}</small></td><td class="sol">${esc(x.sirket)}<small>${tarih(x.gun)}</small></td><td>${esc(x.tur)}</td><td>${x.yon === 'Eksik' ? '<span class="tp-onay eksik">Eksik</span>' : '<span class="tp-onay bekliyor">Fazla</span>'}<small>sistem ${x.sistemAdet} · sayılan ${x.sayilanAdet}</small></td><td class="para">${x.adet ? x.adet + ' · ' : ''}${para(x.tutar)}</td><td class="sol wrap"><small>${esc(x.belgeNolar || '')}${x.aciklama ? (x.belgeNolar ? ' · ' : '') + esc(x.aciklama) : ''}</small></td><td>${x.durum === 'Açık' ? '<span class="tp-onay eksik">Açık</span>' : `<span class="tp-onay onayli" title="${esc(x.cozum)} · ${esc(x.cozen)} ${esc(x.cozumTarihi || '')}">Çözüldü</span>`}</td><td>${x.durum === 'Açık' ? `<button type="button" class="btn btn-light border btn-xs tp-gs-coz" data-id="${x.id}" title="Çözüm açıklamasıyla kapat"><i class="fas fa-check"></i></button>` : ''}</td></tr>`).join('') : '<tr><td colspan="8" class="na-bos">Bildirim yok.</td></tr>';
     $('#tpNot-bildirim').textContent = `${B.filter(x => x.durum === 'Açık').length} açık · ${B.length} toplam`;
+  }
+  // ---------- Bakiyeler (ayrıntılı): özet kartları; kasa bakiyeleri şirket bazında nakit · çek X / R · senet X / R, alt toplamlar (X kasa = nakit + çek X + senet X, R kasa = çek R + senet R); banka SAP ↔ Finekra şirket alt toplamlı
+  // matris hücresi: kuruşsuz tutar (tam değer, kullanılabilir / planlı / ileri tarihli ayrıntısı ipucunda)
+  const adetHucre = (p, sinif) => `<td class="para ${sinif || ''}" title="${p.adet} adet · ${para(p.tutar)} ₺ (bugün itibarıyla portföyde: Portföyde + Planlandı) · kullanılabilir ${p.kullanilabilirAdet} adet · ${para(p.kullanilabilir)} ₺ · planlı ${p.planliAdet} adet · ${para(p.planli)} ₺${p.ileriAdet ? ` · ileri tarihli portföy girişi ${p.ileriAdet} adet · ${para(p.ileri)} ₺ (sayılmadı)` : ''}">${p.adet ? `<b>${p.adet}</b> adet · ${kisa(p.tutar)}` : '—'}<small>${p.adet ? `kul. ${p.kullanilabilirAdet}${p.planliAdet ? ' · plan ' + p.planliAdet : ''}` : ''}${p.ileriAdet ? `${p.adet ? ' · ' : ''}ileri +${p.ileriAdet}` : ''}</small></td>`;
+  const tutarHucre = (v, sinif, title) => `<td class="para ${sinif || ''}" title="${esc(title || '')}${title ? ' · ' : ''}${para(v)} ₺">${kisa(v)}</td>`;
+  function cizBakiye() {
+    const D = (V.bakiyeler || {}).detay || [], b = (V.bakiyeler || {}).banka || [];
+    const top = f => D.reduce((s, x) => s + f(x), 0), topP = k => ({ adet: top(x => x[k].adet), tutar: top(x => x[k].tutar), kullanilabilirAdet: top(x => x[k].kullanilabilirAdet), kullanilabilir: top(x => x[k].kullanilabilir), planliAdet: top(x => x[k].planliAdet), planli: top(x => x[k].planli), ileriAdet: top(x => x[k].ileriAdet || 0), ileri: top(x => x[k].ileri || 0) });
+    const T = { banka: b.reduce((s, x) => s + x.sapTL, 0), finekra: b.reduce((s, x) => s + x.finekraTL, 0), fark: b.reduce((s, x) => s + x.fark, 0), nakit: top(x => x.nakit), cekX: topP('cekX'), cekR: topP('cekR'), senetX: topP('senetX'), senetR: topP('senetR') };
+    T.cek = T.cekX.tutar + T.cekR.tutar; T.senet = T.senetX.tutar + T.senetR.tutar; T.portfoy = T.cek + T.senet; T.xKasa = T.nakit + T.cekX.tutar + T.senetX.tutar; T.rKasa = T.cekR.tutar + T.senetR.tutar; T.genel = T.banka + T.nakit + T.portfoy;
+    $('#tpBakiyeOzet').innerHTML = [
+      { l: 'Kullanılabilir Banka', v: `${kisa(T.banka)} ₺`, s: `${b.length} hesap · SAP · Finekra farkı ${kisa(T.fark)} ₺`, k: '#1d4ed8' },
+      { l: 'Nakit Kasa Toplamı', v: `${kisa(T.nakit)} ₺`, s: `${D.length} şirket`, k: '#0f766e' },
+      { l: 'Çek X Toplamı', v: `${kisa(T.cekX.tutar)} ₺`, s: `${T.cekX.adet} adet · kullanılabilir ${kisa(T.cekX.kullanilabilir)} ₺`, k: '#1d4ed8' },
+      { l: 'Çek R Toplamı', v: `${kisa(T.cekR.tutar)} ₺`, s: `${T.cekR.adet} adet · kullanılabilir ${kisa(T.cekR.kullanilabilir)} ₺`, k: '#7c3aed' },
+      { l: 'Çek + Senet Toplamı', v: `${kisa(T.portfoy)} ₺`, s: `çek ${kisa(T.cek)} · senet ${kisa(T.senet)} (X ${kisa(T.senetX.tutar)} · R ${kisa(T.senetR.tutar)})`, k: '#0369a1' },
+      { l: 'X Kasa Toplamı', v: `${kisa(T.xKasa)} ₺`, s: 'nakit + çek X + senet X', k: '#1d4ed8' },
+      { l: 'R Kasa Toplamı', v: `${kisa(T.rKasa)} ₺`, s: 'çek R + senet R', k: '#7c3aed' },
+      { l: 'Genel Toplam', v: `${kisa(T.genel)} ₺`, s: 'banka + nakit kasa + çek / senet', k: '#15803d' }
+    ].map(k => `<div style="--k:${k.k}"><div class="l" title="${esc(k.l)}">${esc(k.l)}</div><div class="v" title="${esc(k.v)}">${esc(k.v)}</div><div class="s" title="${esc(k.s)}">${esc(k.s)}</div></div>`).join('');
+    $('#tpNot-bakiye').textContent = `${D.length} şirket · banka ${kisa(T.banka)} · nakit ${kisa(T.nakit)} · çek / senet ${kisa(T.portfoy)} ₺ · X kasa ${kisa(T.xKasa)} · R kasa ${kisa(T.rKasa)} ₺`;
+    // kasa matrisi: şirket satırları + TOPLAM
+    const tk = $('#tpBakiyeKasa');
+    const satir = (x, sinif) => { const cek = x.cekX.tutar + x.cekR.tutar, senet = x.senetX.tutar + x.senetR.tutar, xk = x.nakit + x.cekX.tutar + x.senetX.tutar, rk = x.cekR.tutar + x.senetR.tutar; return `<tr class="${sinif || ''}"><td class="sol" title="${esc(x.sirket)}"><b>${esc(x.sirket)}</b>${x.nakitDetay ? `<small>${esc(x.nakitDetay)}</small>` : ''}</td>${tutarHucre(x.nakit, '', 'Nakit kasa')}${adetHucre(x.cekX, 'x')}${adetHucre(x.cekR, 'r')}<td class="para" title="Çek X + Çek R · ${para(cek)} ₺">${kisa(cek)}<small>${x.cekX.adet + x.cekR.adet} adet</small></td>${adetHucre(x.senetX, 'x')}${adetHucre(x.senetR, 'r')}<td class="para" title="Senet X + Senet R · ${para(senet)} ₺">${kisa(senet)}<small>${x.senetX.adet + x.senetR.adet} adet</small></td><td class="para" title="Çek + Senet · ${para(cek + senet)} ₺">${kisa(cek + senet)}<small>${x.cekX.adet + x.cekR.adet + x.senetX.adet + x.senetR.adet} adet</small></td>${tutarHucre(xk, 'x', 'X kasa = nakit + çek X + senet X')}${tutarHucre(rk, 'r', 'R kasa = çek R + senet R')}${tutarHucre(x.nakit + cek + senet, '', 'Kasa genel toplamı = nakit + çek + senet')}</tr>`; };
+    tk.tBodies[0].innerHTML = D.length ? D.map(x => satir(x)).join('') : '<tr><td colspan="12" class="na-bos">Bakiye yok.</td></tr>';
+    tk.tFoot.innerHTML = D.length ? satir({ sirket: `TOPLAM · ${D.length} şirket`, nakitDetay: '', nakit: T.nakit, cekX: T.cekX, cekR: T.cekR, senetX: T.senetX, senetR: T.senetR }, 'toplam') : '';
+    $('#tpNot-kasa-bakiye').textContent = 'bugün itibarıyla portföy · kuruşsuz, tam değer ve kul. / plan / ileri ayrıntısı hücre ipucunda · X kasa = nakit + çek X + senet X · R kasa = çek R + senet R';
+    // banka: SAP ↔ Finekra, şirket bazında kullanılabilir banka bakiyesi alt toplamı
+    const tb = $('#tpBakiyeBanka'), gruplar = []; b.forEach(x => { let g = gruplar.find(y => y.sirket === x.sirket); if (!g) { g = { sirket: x.sirket, l: [] }; gruplar.push(g); } g.l.push(x); });
+    const sum = (l, k) => l.reduce((s, x) => s + x[k], 0);
+    tb.tBodies[0].innerHTML = gruplar.length ? gruplar.map(g => g.l.map(x => `<tr><td class="sol">${esc(x.sirket)}</td><td>${esc(x.hesapKodu)}</td><td class="sol">${esc(x.hesapAdi)}</td><td>${esc(x.pb === 'TRY' ? 'TL' : x.pb)}</td><td class="para">${para(x.sapTL)}${x.pb !== 'TRY' ? `<small>${para(x.sapDoviz)} ${esc(x.pb)}</small>` : ''}</td><td class="para">${para(x.finekraTL)}</td><td class="para ${x.fark ? 'text-danger' : 'text-success'}">${para(x.fark)}</td><td>${tarih(x.guncelleme)}</td></tr>`).join('') + `<tr class="ara"><td colspan="4" class="text-end">Kullanılabilir Banka Bakiyesi · ${esc(g.sirket)} · ${g.l.length} hesap</td><td class="para">${para(sum(g.l, 'sapTL'))}</td><td class="para">${para(sum(g.l, 'finekraTL'))}</td><td class="para ${sum(g.l, 'fark') ? 'text-danger' : 'text-success'}">${para(sum(g.l, 'fark'))}</td><td></td></tr>`).join('') : '<tr><td colspan="8" class="na-bos">Bakiye yok.</td></tr>';
+    tb.tFoot.innerHTML = b.length ? `<tr class="toplam"><td colspan="4" class="text-end">KULLANILABİLİR BANKA BAKİYESİ TOPLAMI · ${gruplar.length} şirket · ${b.length} hesap</td><td class="para">${para(T.banka)}</td><td class="para">${para(T.finekra)}</td><td class="para ${T.fark ? 'text-danger' : 'text-success'}">${para(T.fark)}</td><td></td></tr>` : '';
+    $('#tpNot-banka-bakiye').textContent = `SAP ile Finekra arasındaki fark: ${para(T.fark)} ₺`;
   }
   // gün içi işlemler onayı penceresi
   let GS = { g: null };
@@ -376,7 +404,9 @@
   $('#tpYenile').addEventListener('click', async () => { await yukle(true); mesaj('info', '<i class="fas fa-rotate me-1"></i>Finekra akışı ve listeler yenilendi · son akış ' + esc(V.ozet.finekra.sonAkis)); });
   $('#tpExcel').addEventListener('click', () => {
     const p = aktifSekme();
-    if (p === 'bakiye') { const ts = $$('#tpGunSonu table.tp-gs'); if (!ts.length) return; const bas = ['Şirket', ...$$('thead th', ts[0]).map(x => x.textContent.trim())]; const rows = []; ts.forEach(t => { const sirket = t.closest('.tp-gs-blok').querySelector('.tp-gs-baslik b').textContent; $$('tbody tr', t).forEach(r => rows.push([sirket, ...$$('td', r).map(td => td.textContent.trim().replace(/\s+/g, ' '))])); }); csvIndir('gun_sonu_bakiyeler', bas, rows); return; }
+    const hucreler = r => $$('td', r).map(td => td.textContent.trim().replace(/\s+/g, ' '));
+    if (p === 'gunsonu') { const ts = $$('#tpGunSonu table.tp-gs'); if (!ts.length) return; const bas = ['Şirket', ...$$('thead th', ts[0]).map(x => x.textContent.trim())]; const rows = []; ts.forEach(t => { const sirket = t.closest('.tp-gs-blok').querySelector('.tp-gs-baslik b').textContent; $$('tbody tr', t).forEach(r => rows.push([sirket, ...hucreler(r)])); }); csvIndir('gun_sonu_mutabakati', bas, rows); return; }
+    if (p === 'bakiye') { const tk = $('#tpBakiyeKasa'), tb = $('#tpBakiyeBanka'); const bas = $$('thead th', tk).map(x => x.textContent.trim()); const rows = [...$$('tbody tr', tk), ...$$('tfoot tr', tk)].filter(r => !r.querySelector('.na-bos')).map(hucreler); rows.push([]); rows.push($$('thead th', tb).map(x => x.textContent.trim())); [...$$('tbody tr', tb), ...$$('tfoot tr', tb)].filter(r => !r.querySelector('.na-bos')).forEach(r => rows.push(hucreler(r))); csvIndir('bakiyeler', bas, rows); return; }
     const t = $('#tpTablo-' + p) || $('#tpGunluk'); if (!t) return; const bas = $$('thead th', t).map(x => x.textContent.trim()); const rows = $$('tbody tr', t).filter(r => !r.querySelector('.na-bos')).map(r => $$('td', r).map(td => td.textContent.trim().replace(/\s+/g, ' '))); csvIndir('takip_paneli_' + p, bas, rows);
   });
   function sabitUstOlc() {

@@ -112,12 +112,20 @@ namespace WebApplication3.Controllers
             var gunSonu = sirketler.Select(s => GunSonuJson(s, gunT)).ToList(); var gsKayit = sirketler.Select(s => GunSonuOrnek.Bul(s.DbName, gunT)).ToList();
             int gsGunIci = gsKayit.Count(g => g != null && g.GunIciDurum == "Onaylandı"), gsSayim = gsKayit.Count(g => g != null && g.SayimDurumu == "Onaylandı"), gsEksik = gsKayit.Count(g => g != null && g.SayimDurumu == "Eksik / Fazla");
             var bildirimler = GunSonuOrnek.Bildirimler(sirket);
+            // ayrıntılı bakiyeler (Bakiyeler sekmesi): şirket bazında nakit kasa, banka toplamı, çek / senet portföyü X · R (adet, tutar, kullanılabilir, planlı)
+            var kasaDetay = sirketler.Select(s =>
+            {
+                var bak = NakitAkisOrnek.Bakiyeler(s.DbName); var port = CekAkibetOrnek.Kayitlar.Where(k => k.Sirket == s.Ad && k.Portfoyde).ToList();
+                // bugün itibarıyla portföy (gün sonu mutabakatıyla aynı ölçü); ileri tarihli portföy girişleri ayrıca sayılır
+                object P(string belge, string tip) { var hepsi = port.Where(k => k.Belge == belge && k.IslemTipi == tip).ToList(); var l = hepsi.Where(k => k.PortfoyGiris.Date <= DateTime.Today).ToList(); var ileri = hepsi.Where(k => k.PortfoyGiris.Date > DateTime.Today).ToList(); var u = l.Where(k => k.KullanimDurumu == "Kullanılabilir").ToList(); var pl = l.Where(k => k.IslemTuru == "Planlandı").ToList(); return new { adet = l.Count, tutar = l.Sum(k => k.Tutar), kullanilabilirAdet = u.Count, kullanilabilir = u.Sum(k => k.Tutar), planliAdet = pl.Count, planli = pl.Sum(k => k.Tutar), ileriAdet = ileri.Count, ileri = ileri.Sum(k => k.Tutar) }; }
+                return new { dbName = s.DbName, sirket = s.Ad, nakit = bak.Where(b => b.BankaKasa == "KASA").Sum(b => b.TutarTL), nakitDetay = string.Join(" · ", bak.Where(b => b.BankaKasa == "KASA").Select(b => b.Detay)), banka = bak.Where(b => b.BankaKasa == "BANKA").Sum(b => b.TutarTL), bankaHesap = bak.Count(b => b.BankaKasa == "BANKA"), cekX = P("Çek", "X"), cekR = P("Çek", "R"), senetX = P("Senet", "X"), senetR = P("Senet", "R") };
+            }).ToList();
             return Json(new
             {
                 success = true, bugun = DateTime.Today.ToString("yyyy-MM-dd"), bas = b1.ToString("yyyy-MM-dd"), bit = b2.ToString("yyyy-MM-dd"), kullanici = Kullanici,
                 sirketler = CekAkibetOrnek.Sirketler.Select(s => new { ad = s.Ad, dbName = s.DbName, dbKey = s.DbKey }),
                 hareketler, finekra = finekraListe.Select(FinekraOrnek.Json).ToList(), eslesme = FinekraOrnek.NakitAkisEslesme(string.IsNullOrEmpty(sirket) ? null : sirket, b1, b2),
-                bakiyeler = new { banka = bankaBak, kasa = kasaBak },
+                bakiyeler = new { banka = bankaBak, kasa = kasaBak, detay = kasaDetay },
                 ozet = new { kasa = Ozet("KASA"), banka = Ozet("BANKA"), cek = Ozet("CEK"), finekra = new { toplam = finekraListe.Count, bekleyen = bekleyen.Count, bekleyenTutar = bekleyen.Sum(h => h.Tutar), eslesmeyen = eslesmeyen.Count, eslesmeyenTutar = eslesmeyen.Sum(h => h.Tutar), onayli = finekraListe.Count(h => h.Durum == "Onaylandı"), giris = finekraListe.Where(h => h.Giris).Sum(h => h.Tutar), cikis = finekraListe.Where(h => !h.Giris).Sum(h => h.Tutar), sonAkis = FinekraOrnek.SonAkis.ToString("yyyy-MM-dd HH:mm") }, bakiyeFark = bankaBak.Sum(b => b.fark), gunSonu = new { toplam = sirketler.Count, gunIciOnayli = gsGunIci, bakiyeOnayli = gsSayim, eksikFazla = gsEksik, acikBildirim = bildirimler.Count(b => b.Durum == "Açık") } },
                 cariler = FinekraOrnek.Cariler(string.IsNullOrEmpty(sirket) ? null : sirket), hesaplar = FinekraOrnek.KarsiHesaplar.Select(k => new { kod = k.Kod, ad = k.Ad }), islemTurleri = FinekraOrnek.IslemTurleri,
                 gunluk = FinekraOrnek.GunlukListesi(string.IsNullOrEmpty(sirket) ? null : sirket).Select(g => new { tarih = g.Tarih.ToString("yyyy-MM-dd HH:mm"), g.Kullanici, g.Sirket, g.No, g.Islem, g.Aciklama }),
