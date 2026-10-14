@@ -358,6 +358,8 @@ namespace WebApplication3.Data
                 foreach (var l in _odemeler.Values) foreach (var m in l.Where(x => x.U_Durum == "ÖDENDİ" && string.IsNullOrEmpty(x.U_YevmiyeNo))) { var f = MuhasebeOrnek.OdemeFisi(m, m.U_OdemeYontemi == "Nakit" && !string.IsNullOrEmpty(m.U_MakbuzNo) ? "Kasa Tediye " + m.U_MakbuzNo : "Ödeme", "Nazlı Erdem"); if (f != null) { f.Tarih = (m.U_OdenmeTarihi ?? bugun).AddHours(16); m.U_YevmiyeNo = f.No; } }
                 // 8) fatura sahibi ≠ ödeyen satırların otomatik grup içi Mahsup / Temlik belgeleri (ödenmişlerde fatura sahibi fişi de atılır, grup içi bakiye güncellenir)
                 foreach (var l in _odemeler.Values) foreach (var m in l.Where(GrupIciBelgeOrnek.Gerekli).ToList()) GrupIciBelgeOrnek.Senkron(m, "Sistem");
+                // 9) planlı düzenli ödemeler (Data/DuzenliOdemeOrnek.cs): geçmiş iki ay ödenmiş, bu ay akmış satırlar (kilit yeniden girilebilir; Duzenli kilidi NakitAkis çağrılırken tutulmaz)
+                DuzenliOdemeOrnek.Tohumla();
             }
         }
         /// <summary>
@@ -438,13 +440,13 @@ namespace WebApplication3.Data
             var f = MuhasebeOrnek.OdemeFisi(m, kaynak, kullanici); if (f != null) { m.U_YevmiyeNo = f.No; Log(m.U_KaynakFirma, m.DocEntry, "Muhasebe Fişi", $"{f.No} · {string.Join(" / ", f.Satirlar.Select(s => s.HesapKodu + " " + s.HesapAdi + (s.Borc > 0 ? " B " + s.Borc.ToString("N2", Tr) : " A " + s.Alacak.ToString("N2", Tr))))}", kullanici); }
         }
         /// <summary>Talimat gerçekleşince: satır ÖDENDİ, avans olayı; çek / senet belgeleri dolaşım planı varsa kalan adımlar, yoksa tedarikçiye ciro.</summary>
-        public static void OdendiIsaretle(string dbName, int docEntry, string kaynak, string kullanici, bool fisAt = true)
+        public static void OdendiIsaretle(string dbName, int docEntry, string kaynak, string kullanici, bool fisAt = true, DateTime? odenmeTarihi = null)
         {
             Tohumla();
             lock (Kilit)
             {
                 var m = _odemeler.TryGetValue(dbName, out var l) ? l.FirstOrDefault(x => x.DocEntry == docEntry) : null; if (m == null) return;
-                if (m.U_Durum != "ÖDENDİ") { m.U_Durum = "ÖDENDİ"; m.U_EskiDurum = "ÖDENDİ"; m.U_OdenmeTarihi = m.U_IbrazTarihi ?? DateTime.Today; m.U_OdenenTutar = m.U_Tutar; m.U_OdenenTutarPB = m.U_ParaBirimi; Log(dbName, docEntry, "Ödeme", $"{kaynak} ile ödendi · {m.U_Kurum} · {(m.U_Tutar ?? 0).ToString("N2", Tr)} {m.U_ParaBirimi}", kullanici); }
+                if (m.U_Durum != "ÖDENDİ") { m.U_Durum = "ÖDENDİ"; m.U_EskiDurum = "ÖDENDİ"; m.U_OdenmeTarihi = odenmeTarihi?.Date ?? m.U_IbrazTarihi ?? DateTime.Today; m.U_OdenenTutar = m.U_Tutar; m.U_OdenenTutarPB = m.U_ParaBirimi; Log(dbName, docEntry, "Ödeme", $"{kaynak} ile ödendi · {m.U_Kurum} · {(m.U_Tutar ?? 0).ToString("N2", Tr)} {m.U_ParaBirimi}", kullanici); }
                 foreach (var id in (m.U_CekDocEntryler ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(x => int.TryParse(x, out var n) ? n : 0).Where(n => n > 0))
                 {
                     var k = CekAkibetOrnek.Bul(id); if (k == null) continue;

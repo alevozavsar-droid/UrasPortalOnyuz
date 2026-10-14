@@ -378,6 +378,16 @@ tasarımından uyarlandı:
     `CekAkibetOrnek.Kayitlar` Portföyde + Planlandı; `bakiyeler.banka` hesap bazında SAP ↔ Finekra): özet kartları (kullanılabilir banka bakiyesi, nakit kasa, çek X / R, çek + senet,
     X kasa = nakit + çek X + senet X, R kasa = çek R + senet R, genel toplam), kasa matrisi (şirket satırları + TOPLAM: nakit, çek X / R / toplam, senet X / R / toplam, çek + senet,
     X kasa, R kasa, genel), banka tablosu şirket bazında "Kullanılabilir Banka Bakiyesi" ara toplamı (`tr.ara`) ve genel toplam; Excel iki tabloyu birlikte verir.
+    **Düzenli Ödemeler sekmesi — planlı düzenli ödemeler** (`Data/DuzenliOdemeOrnek.cs`; kaynak "AYLIK ÖDEME TAKVİM LİSTESİ 2026", sorumlu Serkan Genç, personel P1024 /
+    kullanıcı `sgc`): 31 kayıt (tedarikçi, ürün / hizmet, şirket, ödeme şekli Nakit / Çek / Nakit / Çek, kategori, ödeme günü, ortalama aylık tutar). `Akit(ay, kullanici, dbName?, id?)`:
+    aktif her kayıt için o ayın ödeme gününe planlanmış Kasa Nakit Akışı satırı (`NakitAkisOrnek.Ekle`; kayıt tipi "Düzenli Ödeme", belge no "DÖ-xxx · AAAA-AA", talep eden
+    Serkan Genç, nakit satırı GMY nakit onayına düşer; "Nakit / Çek" → Çek + not); aynı kayıt aynı aya iki kez akmaz; `odenmisSay` ile geçmiş ay ödenmiş (`OdendiIsaretle`
+    `odenmeTarihi` parametresi, nakit makbuz no). Tohum `NakitAkisOrnek.Tohumla` sonunda: geçmiş iki ay ödenmiş, bu ay akmış (günü geçenler ödenmiş). `OtomatikAkit` panel
+    her açılışta bu ayın eksiklerini tamamlar (ay başı otomatik işinin karşılığı). `Kaydet` (yeni / düzenle; mükerrer kontrolü), `DurumDegistir` (Pasif → sonraki aylara akmaz),
+    `Json` (geçen / bu / gelecek ay akış durumu nakit akış satırından canlı), `Ozet` (aylık yük, nakit / çek / havale, akan / ödenen / planlı / akmamış, gelecek ay, şirket ve
+    kategori). Uçlar `DuzenliAkit` (`Ay`, `DbName`, `Id`), `DuzenliKaydet`, `DuzenliDurum`; `Veri` › `duzenli`. Ekran: özet kartları, şirket alt toplamlı liste (Geçen Ay · Bu Ay ·
+    Gelecek Ay sütunlarında nakit akış kaydı bağlantısı ve durum), Bu Ayı Akıt / Gelecek Ayı Planla / Yeni Düzenli Ödeme, satırda akıt / düzenle / pasif; çekmecede form, akan
+    aylar ve günlük. Kilit sırası: NakitAkis → Duzenli (tohum); Duzenli kilidi tutulurken NakitAkisOrnek çağrılmaz.
     **Gün Sonu Mutabakatı sekmesi** (`Data/GunSonuOrnek.cs`, şirket × gün): 1) Gün içi işlemler onayı — Ahmet Özkan (Finans Sorumlusu, `GunIciSorumlu`; kullanıcı
     `aoz`): günün kasa / banka / çek hareketleri toplu onaylanır (eksik / kontrol işaretliler hariç, `HareketOnayla(..., gunluk:false)`), Finekra bekleyen sayısı not edilir, kalan
     bakiyelerin anlık görüntüsü alınır (`GunIciOnayla`; `GunIciGeriAl` sıfırlar). 2) Kalan bakiyeler otomatik (`Hesapla`): kasa (SAP kasa bakiyesi + günün nakit giriş / çıkışı),

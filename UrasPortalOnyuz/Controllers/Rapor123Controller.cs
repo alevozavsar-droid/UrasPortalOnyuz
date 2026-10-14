@@ -113,6 +113,8 @@ namespace WebApplication3.Controllers
             int gsGunIci = gsKayit.Count(g => g != null && g.GunIciDurum == "Onaylandı"), gsSayim = gsKayit.Count(g => g != null && g.SayimDurumu == "Onaylandı"), gsEksik = gsKayit.Count(g => g != null && g.SayimDurumu == "Eksik / Fazla");
             var bildirimler = GunSonuOrnek.Bildirimler(sirket);
             // ayrıntılı bakiyeler (Bakiyeler sekmesi): şirket bazında nakit kasa, banka toplamı, çek / senet portföyü X · R (adet, tutar, kullanılabilir, planlı)
+            // planlı düzenli ödemeler (Data/DuzenliOdemeOrnek.cs): bu ay için akmamış aktif kayıtlar her açılışta tamamlanır (ay başı otomatik işi)
+            var dzOto = DuzenliOdemeOrnek.OtomatikAkit("Sistem (otomatik)"); var dzListe = DuzenliOdemeOrnek.Listele(sirket);
             var kasaDetay = sirketler.Select(s =>
             {
                 var bak = NakitAkisOrnek.Bakiyeler(s.DbName); var port = CekAkibetOrnek.Kayitlar.Where(k => k.Sirket == s.Ad && k.Portfoyde).ToList();
@@ -130,6 +132,7 @@ namespace WebApplication3.Controllers
                 cariler = FinekraOrnek.Cariler(string.IsNullOrEmpty(sirket) ? null : sirket), hesaplar = FinekraOrnek.KarsiHesaplar.Select(k => new { kod = k.Kod, ad = k.Ad }), islemTurleri = FinekraOrnek.IslemTurleri,
                 gunluk = FinekraOrnek.GunlukListesi(string.IsNullOrEmpty(sirket) ? null : sirket).Select(g => new { tarih = g.Tarih.ToString("yyyy-MM-dd HH:mm"), g.Kullanici, g.Sirket, g.No, g.Islem, g.Aciklama }),
                 gun = gunT.ToString("yyyy-MM-dd"), gunSonu, bildirimler = bildirimler.Select(GunSonuOrnek.BildirimJson).ToList(),
+                duzenli = new { liste = dzListe.Select(DuzenliOdemeOrnek.Json).ToList(), ozet = DuzenliOdemeOrnek.Ozet(dzListe), sorumlu = DuzenliOdemeOrnek.Sorumlu, odemeSekilleri = DuzenliOdemeOrnek.OdemeSekilleri, kategoriler = DuzenliOdemeOrnek.Kategoriler, sirketler = CekAkibetOrnek.Sirketler.Select(s => s.Ad).ToList(), otomatik = dzOto.eklenen, otomatikMesaj = dzOto.mesaj },
                 sorumlular = new { gunIci = new { ad = GunSonuOrnek.GunIciSorumlu.Ad, unvan = GunSonuOrnek.GunIciSorumlu.Unvan }, kasa = new { ad = GunSonuOrnek.KasaSorumlu.Ad, unvan = GunSonuOrnek.KasaSorumlu.Unvan } }
             });
         }
@@ -194,6 +197,33 @@ namespace WebApplication3.Controllers
         /// <summary>Sayım yardımcısı: gün sonu itibarıyla portföydeki belgeler (tür: "Çek X", "Senet R" …).</summary>
         [HttpGet("GunSonuPortfoy")]
         public IActionResult GunSonuPortfoy(string sirket, string gun, string tur) { if (!GunCoz(gun, out var g)) g = DateTime.Today; return Json(new { success = true, data = GunSonuOrnek.Portfoy(sirket, g, tur) }); }
+
+        // ---------- planlı düzenli ödemeler (Data/DuzenliOdemeOrnek.cs): her ay otomatik nakit akışa akar; elle akıt / gelecek ayı planla / kayıt / pasif ----------
+        public class DuzenliIstek { public int Id { get; set; } public string Ay { get; set; } public string DbName { get; set; } public string Tedarikci { get; set; } public string UrunHizmet { get; set; } public string Sirket { get; set; } public string OdemeSekli { get; set; } public string Kategori { get; set; } public int Gun { get; set; } public decimal AylikTutar { get; set; } public string Not { get; set; } public string Durum { get; set; } }
+        [HttpPost("DuzenliAkit")]
+        public IActionResult DuzenliAkit([FromBody] DuzenliIstek istek)
+        {
+            if (istek == null) return Json(new { success = false, message = "Veri yok." });
+            string db = string.IsNullOrEmpty(istek.DbName) || string.Equals(istek.DbName, "tumu", StringComparison.OrdinalIgnoreCase) ? null : istek.DbName;
+            var r = DuzenliOdemeOrnek.Akit(string.IsNullOrEmpty(istek.Ay) ? DuzenliOdemeOrnek.BuAy : istek.Ay, Kullanici, db, istek.Id > 0 ? istek.Id : (int?)null);
+            return Json(new { success = r.ok, message = r.mesaj, eklenen = r.eklenen, atlanan = r.atlanan });
+        }
+        [HttpPost("DuzenliKaydet")]
+        public IActionResult DuzenliKaydet([FromBody] DuzenliIstek istek)
+        {
+            if (istek == null) return Json(new { success = false, message = "Veri yok." });
+            var r = DuzenliOdemeOrnek.Kaydet(istek.Id, istek.Tedarikci, istek.UrunHizmet, istek.Sirket, istek.OdemeSekli, istek.Kategori, istek.Gun, istek.AylikTutar, istek.Not, Kullanici);
+            if (r.ok) FinekraOrnek.GunlukEkle(r.d.Sirket, r.d.No, istek.Id > 0 ? "Düzenli Ödeme Güncellendi" : "Düzenli Ödeme Eklendi", $"{r.d.Tedarikci} · {r.d.UrunHizmet} · {r.d.OdemeSekli} · {r.d.AylikTutar.ToString("N2", Tr)} ₺ · gün {r.d.Gun}", Kullanici);
+            return Json(new { success = r.ok, message = r.mesaj, kayit = r.d == null ? null : DuzenliOdemeOrnek.Json(r.d) });
+        }
+        [HttpPost("DuzenliDurum")]
+        public IActionResult DuzenliDurum([FromBody] DuzenliIstek istek)
+        {
+            if (istek == null) return Json(new { success = false, message = "Veri yok." });
+            var r = DuzenliOdemeOrnek.DurumDegistir(istek.Id, istek.Durum, Kullanici);
+            if (r.ok) FinekraOrnek.GunlukEkle(r.d.Sirket, r.d.No, r.d.Durum == "Pasif" ? "Düzenli Ödeme Pasif" : "Düzenli Ödeme Aktif", r.mesaj, Kullanici);
+            return Json(new { success = r.ok, message = r.mesaj, kayit = r.d == null ? null : DuzenliOdemeOrnek.Json(r.d) });
+        }
         public class HareketOnayIstek { public string Key { get; set; } public string Durum { get; set; } public string Not { get; set; } }
         /// <summary>Kasa / Banka / Çek satırı onayı (ONAYLANDI | EKSİK | boş); bellek içi (Data/FinekraOrnek.cs HareketOnaylari).</summary>
         [HttpPost("HareketOnay")]

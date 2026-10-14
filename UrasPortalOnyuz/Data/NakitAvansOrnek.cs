@@ -263,7 +263,8 @@ namespace WebApplication3.Data
             // Satın alma: Ödeme Talebi kapsamı (satınalmacısı olduğu şirketin tedarikçileri; Data/AlimOnayOrnek.cs Satinalmacilar) ve birim yöneticisi (Y onayı)
             K("P1021", "Emre Taş", "Selvi", "Satın Alma", "Satın Alma Uzmanı", "CC31 - Satın Alma", "ets", "Talep Sahibi"),
             K("P1022", "Burcu Aydın", "Avrupa Paper", "Satın Alma", "Satın Alma Uzmanı", "CC31 - Satın Alma", "bay", "Talep Sahibi"),
-            K("P1023", "Özge İsen", "Uras Holding", "Satın Alma", "Satın Alma Müdürü", "CC31 - Satın Alma", "ois", "Yönetici")
+            K("P1023", "Özge İsen", "Uras Holding", "Satın Alma", "Satın Alma Müdürü", "CC31 - Satın Alma", "ois", "Yönetici"),
+            K("P1024", "Serkan Genç", "Uras Holding", "İdari İşler", "İdari İşler Uzmanı (Düzenli Ödemeler)", "CC05 - İdari İşler", "sgc", "Talep Sahibi") // planlı düzenli ödemeler listesi sorumlusu (Data/DuzenliOdemeOrnek.cs)
         };
         private static NaKisi K(string no, string ad, string sirket, string dep, string unvan, string mm, string kul, string rol, bool aktif = true)
             => new NaKisi { PersonelNo = no, AdSoyad = ad, Sirket = sirket, Departman = dep, Unvan = unvan, MasrafMerkezi = mm, KullaniciId = kul, Rol = rol, Aktif = aktif };

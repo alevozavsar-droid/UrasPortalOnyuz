@@ -73,10 +73,10 @@
     $('#tpKapsam').textContent = `${F.sirket ? sirketAdi(F.sirket) : 'Tüm Şirketler (Konsolide)'} · ${tarih(F.bas)} – ${tarih(F.bit)}${F.kpi ? ' · kart filtresi açık' : ''}`;
     kpi(); sayaclar();
     const p = aktifSekme();
-    if (p === 'finekra') cizFinekra(); else if (p === 'eslesme') cizEslesme(); else if (p === 'gunsonu') cizGunSonu(); else if (p === 'bakiye') cizBakiye(); else if (p === 'gunluk') cizGunluk(); else cizHareket(p);
+    if (p === 'finekra') cizFinekra(); else if (p === 'eslesme') cizEslesme(); else if (p === 'duzenli') cizDuzenli(); else if (p === 'gunsonu') cizGunSonu(); else if (p === 'bakiye') cizBakiye(); else if (p === 'gunluk') cizGunluk(); else cizHareket(p);
     if (window.scrollY < 5) sabitUstOlc(); else { const kb = $('.na-panel.aktif > .na-kart > .na-kart-b'); if (kb) kok.style.setProperty('--tp-kartb', kb.offsetHeight + 'px'); }
   }
-  function sayaclar() { $('#tpN-finekra').textContent = V.finekra.length; ['kasa', 'cek'].forEach(t => $('#tpN-' + t).textContent = V.hareketler.filter(r => r.hesapTipi === t.toUpperCase()).length); $('#tpN-eslesme').textContent = V.eslesme.length; $('#tpN-gunsonu').textContent = (V.gunSonu || []).length; $('#tpN-bakiye').textContent = ((V.bakiyeler || {}).detay || []).length; $('#tpN-gunluk').textContent = V.gunluk.length; }
+  function sayaclar() { $('#tpN-finekra').textContent = V.finekra.length; ['kasa', 'cek'].forEach(t => $('#tpN-' + t).textContent = V.hareketler.filter(r => r.hesapTipi === t.toUpperCase()).length); $('#tpN-eslesme').textContent = V.eslesme.length; $('#tpN-duzenli').textContent = ((V.duzenli || {}).liste || []).length; $('#tpN-gunsonu').textContent = (V.gunSonu || []).length; $('#tpN-bakiye').textContent = ((V.bakiyeler || {}).detay || []).length; $('#tpN-gunluk').textContent = V.gunluk.length; }
   function kpi() {
     const o = V.ozet, f = o.finekra;
     const K = [
@@ -100,7 +100,8 @@
     banka: [K('Sıra', 26), K('Tarih', 62), K('Şirket', 72), K('Banka Hesabı', 104), K('Karşı Hesap · Cari', 126), K('Açıklama', 190), K('Tip', 34), K('Giriş (₺)', 86), K('Çıkış (₺)', 86), K('Nakit Akış · Banka Hareketi', 112), K('Onay', 88), K('', 64)],
     kasa: [K('Sıra', 26), K('Tarih', 62), K('Şirket', 72), K('Kasa', 100), K('Karşı Hesap · Cari', 126), K('Açıklama', 210), K('Tip', 34), K('Giriş (₺)', 86), K('Çıkış (₺)', 86), K('Nakit Akış', 90), K('Onay', 88), K('', 64)],
     cek: [K('Sıra', 26), K('Tarih', 62), K('Şirket', 72), K('Belge · Vade', 100), K('Karşı Taraf', 110), K('Planlanan Tedarikçi (Nakit Akış)', 118), K('İbraz / Ciro', 140), K('Kontrol', 72), K('Giriş (₺)', 84), K('Çıkış (₺)', 84), K('Onay', 88), K('', 64)],
-    eslesme: [K('Sıra', 26), K('Planlanan · Ödenme', 84), K('Şirket', 72), K('Ödenecek Cari', 130), K('Belge', 100), K('Durum', 72), K('Tutar (₺)', 92), K('Banka Hareketi (Finekra)', 150), K('Fark (₺)', 72), K('Dekont · Fiş', 96), K('', 60)]
+    eslesme: [K('Sıra', 26), K('Planlanan · Ödenme', 84), K('Şirket', 72), K('Ödenecek Cari', 130), K('Belge', 100), K('Durum', 72), K('Tutar (₺)', 92), K('Banka Hareketi (Finekra)', 150), K('Fark (₺)', 72), K('Dekont · Fiş', 96), K('', 60)],
+    duzenli: [K('Sıra', 26), K('No', 46), K('Tedarikçi', 100), K('Ürün / Hizmet', 110), K('Şirket', 64), K('Ödeme Şekli', 60), K('Gün', 32), K('Ort. Aylık (₺)', 82), K('Kategori', 56), K('Geçen Ay', 94), K('Bu Ay · Nakit Akış', 122), K('Gelecek Ay', 96), K('Sorumlu', 64), K('Durum', 46), K('', 84)]
   };
   function tabloKur(t, kol) {
     const topW = kol.reduce((s, k) => s + k.w, 0); let cg = t.querySelector('colgroup'); if (!cg) { cg = document.createElement('colgroup'); t.insertBefore(cg, t.tHead); }
@@ -221,6 +222,71 @@
     tb.tFoot.innerHTML = b.length ? `<tr class="toplam"><td colspan="4" class="text-end">KULLANILABİLİR BANKA BAKİYESİ TOPLAMI · ${gruplar.length} şirket · ${b.length} hesap</td><td class="para">${para(T.banka)}</td><td class="para">${para(T.finekra)}</td><td class="para ${T.fark ? 'text-danger' : 'text-success'}">${para(T.fark)}</td><td></td></tr>` : '';
     $('#tpNot-banka-bakiye').textContent = `SAP ile Finekra arasındaki fark: ${para(T.fark)} ₺`;
   }
+  // ---------- Planlı Düzenli Ödemeler (Data/DuzenliOdemeOrnek.cs): aylık ödeme takvim listesi (Serkan Genç) — her ay otomatik Kasa Nakit Akışı satırı
+  const dzAkisHucre = a => !a ? '<span class="tp-es yok">Akmadı</span>' : `<a class="tp-link" href="${esc(a.link)}" target="_blank" title="Kasa Nakit Akışı'nda aç">#${a.docEntry}</a> ${durumRozet(a.durum)}<small>${a.durum === 'ÖDENDİ' ? 'ödendi ' + tarih(a.odenme) + (a.makbuz ? ' · ' + esc(a.makbuz) : '') : 'planlanan ' + tarih(a.planlanan) + (a.onay && a.onay !== 'Onaylandı' ? ' · ' + esc(a.onay) : '')}</small>`;
+  const dzBul = id => (((V.duzenli || {}).liste) || []).find(d => d.id === id);
+  function cizDuzenli() {
+    const D = V.duzenli || { liste: [], ozet: {} }, o = D.ozet || {}; $('#tpDzSorumlu').textContent = D.sorumlu || '';
+    const L = (D.liste || []).filter(d => araUyar(d.no, d.tedarikci, d.urunHizmet, d.sirket, d.kategori, d.odemeSekli, d.sorumlu) && (F.durum === '' || (F.durum === 'onayli' ? !!d.buAy && d.buAy.durum === 'ÖDENDİ' : F.durum === 'bekliyor' ? d.durum === 'Aktif' && (!d.buAy || d.buAy.durum !== 'ÖDENDİ') : F.durum === 'eksik' ? d.durum === 'Aktif' && !d.buAy : true)));
+    $('#tpDzOzet').innerHTML = [
+      { l: `Aylık Yük · ${o.ayAdi || ''}`, v: `${kisa(o.aylikYuk)} ₺`, s: `${o.aktif || 0} aktif · ${o.pasif || 0} pasif kayıt`, k: '#0f766e' },
+      { l: 'Nakit / Çek', v: `${kisa(o.nakit)} / ${kisa(o.cek)}`, s: `havale ${kisa(o.havale)} ₺ · ödeme şekline göre aylık`, k: '#1d4ed8' },
+      { l: 'Bu Ay Akan', v: `${o.akan || 0} / ${o.aktif || 0}`, s: `${kisa(o.akanTutar)} ₺ · akmamış ${o.eksik || 0} (${kisa(o.eksikTutar)} ₺)`, k: o.eksik ? '#b45309' : '#15803d' },
+      { l: 'Bu Ay Ödenen', v: `${kisa(o.odenenTutar)} ₺`, s: `${o.odenen || 0} ödeme gerçekleşti`, k: '#15803d' },
+      { l: 'Bu Ay Planlı (Bekleyen)', v: `${kisa(o.planliTutar)} ₺`, s: `${o.planli || 0} satır nakit akışta bekliyor`, k: '#0369a1' },
+      { l: `Gelecek Ay · ${o.sonrakiAyAdi || ''}`, v: `${o.sonrakiAyAkan || 0} / ${o.aktif || 0}`, s: o.sonrakiAyAkan ? 'nakit akışa planlandı' : 'ay başında otomatik akar · Gelecek Ayı Planla', k: '#7c3aed' },
+      { l: 'Şirketler', v: String((o.sirketler || []).length), s: (o.sirketler || []).map(s => `${s.sirket} ${kisa(s.tutar)}`).join(' · '), k: '#9d174d' },
+      { l: 'Kategoriler', v: String((o.kategoriler || []).length), s: (o.kategoriler || []).map(k => `${k.kategori} ${kisa(k.tutar)}`).join(' · '), k: '#64748b' }
+    ].map(k => `<div style="--k:${k.k}"><div class="l" title="${esc(k.l)}">${esc(k.l)}</div><div class="v" title="${esc(k.v)}">${esc(k.v)}</div><div class="s" title="${esc(k.s)}">${esc(k.s)}</div></div>`).join('');
+    $('#tpDzNot').textContent = `${o.ayAdi || ''} · ${o.akan || 0}/${o.aktif || 0} aktı · ${o.odenen || 0} ödendi${D.otomatik ? ' · bu açılışta ' + D.otomatik + ' satır otomatik aktı' : ''}`;
+    const t = $('#tpTablo-duzenli'); tabloKur(t, KOL.duzenli);
+    const sekil = s => `<span class="tp-tur ${s === 'Nakit' ? 'kira' : s === 'Havale / EFT' ? 'havale' : 'cek'}">${esc(s)}</span>`;
+    const gruplar = []; L.forEach(d => { let g = gruplar.find(x => x.sirket === d.sirket); if (!g) { g = { sirket: d.sirket, l: [] }; gruplar.push(g); } g.l.push(d); });
+    const akan = l => l.reduce((s, d) => s + (d.buAy ? d.buAy.tutar : 0), 0), odenen = l => l.reduce((s, d) => s + (d.buAy && d.buAy.durum === 'ÖDENDİ' ? d.buAy.tutar : 0), 0);
+    let sira = 0;
+    t.tBodies[0].innerHTML = L.length ? gruplar.map(g => g.l.map(d => {
+      sira++; const pasif = d.durum !== 'Aktif';
+      const islem = `<button type="button" class="btn btn-success btn-xs tp-dz-akit" title="Bu aya nakit akışa akıt" ${d.buAy || pasif ? 'disabled' : ''}><i class="fas fa-play"></i></button> <button type="button" class="btn btn-light border btn-xs tp-dz-duzenle" title="Düzenle"><i class="fas fa-pen"></i></button> <button type="button" class="btn btn-light border btn-xs tp-dz-durum" title="${pasif ? 'Aktif yap' : 'Pasife al (sonraki aylara akmaz)'}"><i class="fas ${pasif ? 'fa-circle-play' : 'fa-pause'}"></i></button>`;
+      return `<tr class="tik ${pasif ? 'eksik' : d.buAy ? (d.buAy.durum === 'ÖDENDİ' ? 'onayli' : '') : 'bekliyor'}" data-dz="${d.id}"><td>${sira}</td><td><b>${esc(d.no)}</b></td><td class="sol kurum" title="${esc(d.tedarikci)}">${esc(d.tedarikci)}</td><td class="sol" title="${esc(d.urunHizmet)}">${esc(d.urunHizmet)}${d.not ? `<small>${esc(d.not)}</small>` : ''}</td><td class="sol">${esc(d.sirket)}</td><td>${sekil(d.odemeSekli)}</td><td>${d.gun}</td><td class="para">${para(d.aylikTutar)}</td><td><span class="tp-es disi">${esc(d.kategori)}</span></td><td class="sol">${dzAkisHucre(d.gecenAy)}</td><td class="sol">${dzAkisHucre(d.buAy)}</td><td class="sol">${d.sonrakiAy ? dzAkisHucre(d.sonrakiAy) : '<small>ay başında akar</small>'}</td><td class="sol">${esc(d.sorumlu)}</td><td>${pasif ? '<span class="tp-onay eksik">Pasif</span>' : '<span class="tp-onay onayli">Aktif</span>'}</td><td style="white-space:nowrap">${islem}</td></tr>`;
+    }).join('') + `<tr class="ara"><td colspan="7" class="text-end">${esc(g.sirket)} · ${g.l.filter(d => d.durum === 'Aktif').length} aktif kayıt · aylık yük</td><td class="para">${para(g.l.filter(d => d.durum === 'Aktif').reduce((s, d) => s + d.aylikTutar, 0))}</td><td colspan="2" class="sol"><small>bu ay akan ${para(akan(g.l))} ₺</small></td><td class="sol"><small>ödenen ${para(odenen(g.l))} ₺</small></td><td colspan="4"></td></tr>`).join('') : `<tr><td colspan="${KOL.duzenli.length}" class="na-bos text-center">Süzgece uyan düzenli ödeme yok.</td></tr>`;
+    const aktif = L.filter(d => d.durum === 'Aktif');
+    t.tFoot.innerHTML = L.length ? `<tr class="toplam"><td colspan="7" class="text-end">TOPLAM · ${aktif.length} aktif / ${L.length} kayıt · aylık yük (₺)</td><td class="para">${para(aktif.reduce((s, d) => s + d.aylikTutar, 0))}</td><td colspan="2" class="sol">bu ay akan ${para(akan(L))} ₺</td><td class="sol">ödenen ${para(odenen(L))} ₺</td><td colspan="4" class="sol">akmamış ${aktif.filter(d => !d.buAy).length}</td></tr>` : '';
+    $('#tpNot-duzenli').textContent = `${L.length} kayıt · kaynak: aylık ödeme takvim listesi · her ayın ödeme gününe planlanmış Kasa Nakit Akışı satırı açılır (nakit satırı GMY nakit onayına düşer)`;
+  }
+  // düzenli ödeme çekmecesi: kayıt formu + akan aylar + günlük
+  function dzFormAc(d) {
+    acik = { tip: 'dz', id: d ? d.id : 0 }; const D = V.duzenli || {};
+    const sel = (id, liste, v) => `<select class="form-select form-select-sm" id="${id}" style="font-size:.72rem">${(liste || []).map(x => `<option ${x === v ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
+    const inp = (id, v, tip, ph) => `<input class="form-control form-control-sm" id="${id}" type="${tip || 'text'}" value="${esc(v ?? '')}" placeholder="${esc(ph || '')}" style="font-size:.72rem" ${tip === 'number' ? 'min="0" step="any"' : ''}>`;
+    $('#tpDBaslik').innerHTML = d ? `${esc(d.no)} <span class="tp-pill">${esc(d.tedarikci)} · ${esc(d.sirket)}</span> ${d.durum === 'Aktif' ? '<span class="tp-onay onayli">Aktif</span>' : '<span class="tp-onay eksik">Pasif</span>'}` : '<i class="fas fa-plus me-1"></i>Yeni Düzenli Ödeme';
+    $('#tpDIc').innerHTML = `<div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-check me-1"></i>${d ? 'Düzenli Ödeme Kaydı' : 'Yeni Düzenli Ödeme'}</span><span class="not">sorumlu ${esc(D.sorumlu || '')} · her ay otomatik nakit akışa akar</span></div><div class="na-kart-g"><div class="row g-2" style="font-size:.72rem">
+        <div class="col-md-6"><label class="form-label mb-0">Tedarikçi</label>${inp('dz_tedarikci', d?.tedarikci, 'text', 'ör. CK Boğaziçi')}</div><div class="col-md-6"><label class="form-label mb-0">Ürün / Hizmet</label>${inp('dz_urun', d?.urunHizmet, 'text', 'ör. Elektrik Ödemesi')}</div>
+        <div class="col-md-4"><label class="form-label mb-0">Şirket</label>${sel('dz_sirket', D.sirketler, d?.sirket || (F.sirket ? sirketAdi(F.sirket) : (D.sirketler || [])[0]))}</div><div class="col-md-4"><label class="form-label mb-0">Ödeme Şekli</label>${sel('dz_sekil', D.odemeSekilleri, d?.odemeSekli || 'Çek')}</div><div class="col-md-4"><label class="form-label mb-0">Kategori</label>${sel('dz_kategori', D.kategoriler, d?.kategori || 'Hizmet')}</div>
+        <div class="col-md-3"><label class="form-label mb-0">Ödeme Günü (1–28)</label>${inp('dz_gun', d?.gun ?? 10, 'number')}</div><div class="col-md-4"><label class="form-label mb-0">Ort. Aylık Tutar (₺)</label>${inp('dz_tutar', d?.aylikTutar ?? '', 'number')}</div><div class="col-md-5"><label class="form-label mb-0">Not</label>${inp('dz_not', d?.not, 'text', 'isteğe bağlı')}</div>
+        <div class="col-12 d-flex gap-2 justify-content-end"><button type="button" class="btn btn-success btn-sm" id="dz_kaydet"><i class="fas fa-save me-1"></i>${d ? 'Kaydet' : 'Ekle'}</button></div></div>
+        <div class="na-mini mt-2">Değişiklik bir sonraki akışta geçerli olur; bu aya akmış satır Kasa Nakit Akışı'nda düzenlenir.</div></div></div>
+      ${d ? `<div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-money-bill-transfer me-1"></i>Nakit Akışa Akan Aylar</span><span class="not">${d.akisSayisi} ay · toplam ${para(d.toplamAkan)} ₺</span></div><div class="na-kart-g p-0"><table class="na-tablo tp-fis" data-dinamik="kapali"><thead><tr><th>Ay</th><th>Kayıt</th><th>Yöntem</th><th>Planlanan</th><th>Durum</th><th class="s">Tutar (₺)</th><th>Makbuz · Fiş</th></tr></thead><tbody>${(d.akislar || []).map(a => `<tr><td>${esc(a.ay)}</td><td><a class="tp-link" href="${esc(a.link)}" target="_blank">#${a.docEntry}</a></td><td>${esc(a.yontem)}</td><td>${tarih(a.planlanan)}</td><td>${durumRozet(a.durum)}${a.durum === 'ÖDENDİ' ? `<small>${tarih(a.odenme)}</small>` : ''}</td><td class="para">${para(a.tutar)}</td><td><small>${esc(a.makbuz || '')} ${esc(a.yevmiye || '')}</small></td></tr>`).join('') || '<tr><td colspan="7" class="na-bos">Henüz akmadı.</td></tr>'}</tbody></table></div></div>
+      <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Günlük</span></div><div class="na-kart-g"><ul class="na-zaman">${(d.gunluk || []).map(g => `<li class="${/Aktı|Kayıt/.test(g.islem) ? 'fin' : /Pasif/.test(g.islem) ? 'wf' : 'sis'}"><span class="t">${esc(g.tarih)}</span><b>${esc(g.islem)}</b> · ${esc(g.aciklama)} <span class="k">${esc(g.kullanici)}</span></li>`).join('') || '<li>Kayıt yok.</li>'}</ul></div></div>` : ''}`;
+    $('#tpDrawer').classList.add('acik'); $('#tpPerde').classList.add('acik'); $('#tpDrawer').scrollTop = 0;
+    $('#dz_kaydet').addEventListener('click', async () => {
+      const r = await post('/Rapor123/DuzenliKaydet', { Id: d ? d.id : 0, Tedarikci: $('#dz_tedarikci').value, UrunHizmet: $('#dz_urun').value, Sirket: $('#dz_sirket').value, OdemeSekli: $('#dz_sekil').value, Kategori: $('#dz_kategori').value, Gun: +$('#dz_gun').value, AylikTutar: +$('#dz_tutar').value, Not: $('#dz_not').value }).catch(() => ({ success: false, message: 'Ağ hatası.' }));
+      if (!r.success) { mesaj('danger', esc(r.message)); return; } mesaj('success', '<i class="fas fa-check me-1"></i>' + esc(r.message)); await yukle(true); drawerKapat();
+    });
+  }
+  kok.addEventListener('click', async e => {
+    const b = e.target.closest('#tpDzAkit,#tpDzSonraki,#tpDzYeni,.tp-dz-akit,.tp-dz-duzenle,.tp-dz-durum'); if (!b) return; e.stopPropagation();
+    const o = ((V.duzenli || {}).ozet) || {};
+    if (b.id === 'tpDzYeni') { dzFormAc(null); return; }
+    if (b.id === 'tpDzAkit' || b.id === 'tpDzSonraki') {
+      const ay = b.id === 'tpDzAkit' ? o.ay : o.sonrakiAy, ad = b.id === 'tpDzAkit' ? o.ayAdi : o.sonrakiAyAdi;
+      if (!confirm(`${ad} için ${F.sirket ? sirketAdi(F.sirket) : 'tüm şirketlerin'} akmamış düzenli ödemeleri Kasa Nakit Akışı'na akıtılsın mı? (aynı aya akmış olanlar atlanır)`)) return;
+      const r = await post('/Rapor123/DuzenliAkit', { Ay: ay, DbName: F.sirket || '' }).catch(() => ({ success: false, message: 'Ağ hatası.' })); mesaj(r.success ? (r.eklenen ? 'success' : 'info') : 'danger', esc(r.message)); if (r.success) await yukle(true); return;
+    }
+    const tr = b.closest('tr[data-dz]'); const d = tr ? dzBul(+tr.dataset.dz) : null; if (!d) return;
+    if (b.classList.contains('tp-dz-duzenle')) { dzFormAc(d); return; }
+    if (b.classList.contains('tp-dz-akit')) { const r = await post('/Rapor123/DuzenliAkit', { Ay: o.ay, Id: d.id }).catch(() => ({ success: false, message: 'Ağ hatası.' })); mesaj(r.success ? 'success' : 'danger', esc(r.message)); if (r.success) await yukle(true); return; }
+    if (b.classList.contains('tp-dz-durum')) { const yeni = d.durum === 'Aktif' ? 'Pasif' : 'Aktif'; if (yeni === 'Pasif' && !confirm(`${d.no} ${d.tedarikci} pasife alınsın mı? Sonraki aylara akmaz; açılmış satırlar nakit akışta kalır.`)) return; const r = await post('/Rapor123/DuzenliDurum', { Id: d.id, Durum: yeni }).catch(() => ({ success: false, message: 'Ağ hatası.' })); mesaj(r.success ? 'info' : 'danger', esc(r.message)); if (r.success) await yukle(true); }
+  });
   // gün içi işlemler onayı penceresi
   let GS = { g: null };
   function gunIciAc(g) {
@@ -316,6 +382,7 @@
   kok.addEventListener('click', e => {
     if (e.target.closest('input,select,a,button')) return;
     const tr = e.target.closest('tr.tik'); if (!tr) return;
+    if (tr.dataset.dz) { const d = dzBul(+tr.dataset.dz); if (d) dzFormAc(d); return; }
     if (tr.dataset.id) { const h = fnkBul(+tr.dataset.id); if (h) drawerAc(h); return; }
     if (tr.dataset.key) { const r = V.hareketler.find(x => x.key === tr.dataset.key); if (r) hareketDrawerAc(r); return; }
     if (tr.dataset.fnk) { const h = fnkBul(+tr.dataset.fnk); if (h) drawerAc(h); }
