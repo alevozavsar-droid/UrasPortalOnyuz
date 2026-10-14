@@ -259,7 +259,11 @@ namespace WebApplication3.Data
             K("P1017", "Selin Kara", "Uras Kimya", "Satın Alma", "Satın Alma Uzmanı", "CC31 - Satın Alma", "skr", "Talep Sahibi", false),
             K("P1018", "Derya Şen", "Uras Holding", "İnsan Kaynakları", "İK Uzmanı", "CC02 - İnsan Kaynakları", "dsn", "İK"),
             K("P1019", "Selçuk Arı", "Uras Holding", "Hukuk", "Hukuk Müşaviri", "CC03 - Hukuk", "sar", "Hukuk"),
-            K("P1020", "Ahmet Özkan", "Uras Holding", "Finans", "Finans Sorumlusu", "CC20 - Finans", "aoz", "Finans") // gün sonu mutabakatı: gün içi işlemleri onaylar (Data/GunSonuOrnek.cs)
+            K("P1020", "Ahmet Özkan", "Uras Holding", "Finans", "Finans Sorumlusu", "CC20 - Finans", "aoz", "Finans"), // gün sonu mutabakatı: gün içi işlemleri onaylar (Data/GunSonuOrnek.cs)
+            // Satın alma: Ödeme Talebi kapsamı (satınalmacısı olduğu şirketin tedarikçileri; Data/AlimOnayOrnek.cs Satinalmacilar) ve birim yöneticisi (Y onayı)
+            K("P1021", "Emre Taş", "Selvi", "Satın Alma", "Satın Alma Uzmanı", "CC31 - Satın Alma", "ets", "Talep Sahibi"),
+            K("P1022", "Burcu Aydın", "Avrupa Paper", "Satın Alma", "Satın Alma Uzmanı", "CC31 - Satın Alma", "bay", "Talep Sahibi"),
+            K("P1023", "Özge İsen", "Uras Holding", "Satın Alma", "Satın Alma Müdürü", "CC31 - Satın Alma", "ois", "Yönetici")
         };
         private static NaKisi K(string no, string ad, string sirket, string dep, string unvan, string mm, string kul, string rol, bool aktif = true)
             => new NaKisi { PersonelNo = no, AdSoyad = ad, Sirket = sirket, Departman = dep, Unvan = unvan, MasrafMerkezi = mm, KullaniciId = kul, Rol = rol, Aktif = aktif };

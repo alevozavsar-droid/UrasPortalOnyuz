@@ -208,6 +208,8 @@ namespace WebApplication3.Data
                   Kpi("Yeni Talepler", "Taleplerim", "Bekleyen Talepler", "Sonuçlanan Talepler"),
                   U("yeni-talep", "Yeni Talep",
                     G("satin-alma", "Satın Alma", R("Satınalma Talebi")),
+                    // Ödeme talebi: birime göre cari kapsamı (satın alma → temsilcisi olduğu tedarikçiler, idari işler → temsilcisi olduğu cariler, muhasebe / finans → resmi kurum ve finansal kuruluşlar); onaylanınca Kasa Nakit Akışı › Departman Talepleri (Data/OdemeTalebiModulu.cs)
+                    G("odeme", "Ödeme Talebi", R("Ödeme Talebi", "OdemeTalebi", "Index"), R("Ödeme Talebi Takip Raporu", "OdemeTalebi", "Takip")),
                     // Cari kart açılış talepleri (Cari Kart ve Faaliyet Eşleştirme şartnamesi; Controllers/CariKartController.cs)
                     G("tedarikci", "Tedarikçi", R("Tedarikçi Talep Formu", "CariKart", "TedarikciTalep")),
                     G("musteri", "Müşteri", R("Müşteri Talep Formu", "CariKart", "MusteriTalep"))),
@@ -224,7 +226,8 @@ namespace WebApplication3.Data
                     G("onay-merkezi", "Onay Merkezi", R("Onay Ekranı"))),
                   U("mali-isler-onaylari", "Mali İşler Onayları",
                     G("gider-kod-onaylari", "Gider ve Kod Onayları", R("Gider Onay Ekranı"), R("Gider / Gelir Kodu Talep Onayı")),
-                    G("kasa-onaylari", "Kasa Onayları", R("Kasa Onay"))),
+                    G("kasa-onaylari", "Kasa Onayları", R("Kasa Onay")),
+                    G("odeme-talebi-onaylari", "Ödeme Talebi Onayları", R("Ödeme Talebi Onay Bekleyenler", "OdemeTalebi", "Onay"))),
                   U("satin-alma-onaylari", "Satın Alma Onayları",
                     G("talep-onaylari", "Talep Onayları", R("Satınalma Talebi Onay Ekranı"), R("Tedarikçi Talebi Onayı", "Rapor134"), K("Aylık Alım Onay Ekranı", "#tedarik-zinciri/satin-alma/fiyat-alim-analizi"))),
                   U("satis-onaylari", "Satış Onayları",
@@ -238,7 +241,7 @@ namespace WebApplication3.Data
                   Not(U("finans", "Finans",
                     G("nakit-banka", "Nakit ve Banka Yönetimi", R("Kasa / Banka Bakiye Raporu"), R("Finekra Hareketler"), R("İhracat Finekra Hareketler"), R("Banka ve Finans Kuruluşları")),
                     G("nakit-akisi-likidite", "Nakit Akışı ve Likidite", R("Kasa Nakit Akışı"), R("Kasa Nakit Akışı Görünüm"), R("Konsolide Günlük Finansal Hareketler"), R("Nakit Akışı (Ödeme Bekleyenler)"), R("Nakit Akışı (Ödenenler)")),
-                    G("odeme-yonetimi", "Ödeme Yönetimi", R("Planlı Ödemeler"), R("Yapılan Ödemeler"), R("İthalat Ödeme Raporu"), R("Nakit Avans — Bekleyen Ödemeler"), R("Nakit Avans Takip Raporu")),
+                    G("odeme-yonetimi", "Ödeme Yönetimi", R("Ödeme Talebi", "OdemeTalebi", "Index"), R("Planlı Ödemeler"), R("Yapılan Ödemeler"), R("İthalat Ödeme Raporu"), R("Nakit Avans — Bekleyen Ödemeler"), R("Nakit Avans Takip Raporu")),
                     G("finansal-araclar", "Finansal Araçlar", R("Vade Tarihine Göre Çek ve Senet Özeti", "CekOzet", "Index"), R("Çek Akıbeti Raporu"), R("Çek Akıbeti Kontrol Raporu"), R("Çek Konsolide Raporu"), R("Çek Konsolide Kontrol Raporu"), R("Çek Ekstre Raporu"), R("Günlük Çek Nakit Tahsilat"), R("İbraz (Çek Depositi)"), R("Vadeli Çek İbrazı"), R("Tahsilat İbraz Çek Bordrosu"), R("Grup İçi Çek Devirleri"), R("Muhasebe Çek Akıbeti Raporu"), R("Muhasebe Çek İbraz Kontrolü")),
                     G("doviz-dis-ticaret", "Döviz ve Dış Ticaret Finansmanı", R("Kur Farkı"), R("İBKB Beyanname Takibi"), R("İhracat Tahsilat Raporu")),
                     // Bütçe Raporu: sabit giderler (personel, kira …), tedarik zinciri / hammadde ve genel giderler ayrı; bütçe – gerçekleşen – sapma (Data/ButceOrnek.cs)

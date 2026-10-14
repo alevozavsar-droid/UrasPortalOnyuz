@@ -333,6 +333,24 @@ tasarımından uyarlandı:
     `/Rapor79/BelgePlanla`, `/Rapor79/BelgePlanKaldir`, `/Rapor79/YontemAlanKaydet`; ana projedeki `#btnSatirCekOnayla` akışı da `BelgePlanla` çağırır.
   - **Çek Akıbeti Raporu** (`Views/Rapor2/Index2.cshtml`): "Planlananlar (Kasa Nakit Akışı)" kartı, Planlanan Tedarikçi + Açıklama varsayılan görünür
     (`DUZEN_SURUMU` sade-v3), belge numarasız çeklerde `/CekAkibeti/UpdateCheckTransactionTypeByDocEntry`; ibraz / tahsilat detayı plan ↔ ibraz kontrolüyle.
+  - **Ödeme Talebi — Talep › Yeni Talep** (`Data/OdemeTalebiModulu.cs` talep motoru modülü "ODEME", `Controllers/OdemeTalebiController.cs` sayfa (`/OdemeTalebi`,
+    `/OdemeTalebi/Onay`, `/OdemeTalebi/Takip`; görünüm `Views/IkTalep/Modul.cshtml`, veri uçları `IkTalep/Tm*`), departman talebi eşlemesi `Data/OdemeTalepOrnek.cs › Senkron`):
+    talep eden kişiye göre **cari kapsamı** (`Kapsam(NaKisi)`): Satın Alma → `AlimOnayOrnek.Satinalmacilar` ile satınalmacısı olduğu şirketin tedarikçileri + cari kartta
+    temsilcisi olduğu tedarikçiler; İdari İşler → cari kartta (`CariFaaliyet.SatisTemsilcisi`) temsilcisi olduğu cariler (tohum: Anadolu Temizlik, Bureau Veritas,
+    Gençosman Gayrimenkul → Canan Su); Muhasebe / Finans → Resmi Kurumlar + Finansal Kuruluşlar; Yönetici / Üst Yönetim ya da portal Yönetici yetkisi (it02) → tüm cariler;
+    diğer birimler → yalnız temsilcisi olduğu cariler. Konular birime göre (`Konular`). Alanlar: ödeyen şirket (`@kullanan.sirket` ile otomatik), cari (bağımlı seçim),
+    konu (bağımlı), açık fatura (cariye bağlı; `MutabakatOrnek.Cariler` kapanmamış faturalar; seçilince belge no / tutar / PB / son ödeme / belge tipi dolar), belge tipi,
+    belge no, tutar, PB, son ödeme, yöntem, öncelik, açıklama. Türler ve akış: FATURA / SIPARIS / BAKIYE / DIGER "Y,F", RESMI "F", FINANSAL "F,D", KIRA "D,F";
+    `Hesapla`: kapsam dışı cari = hata, tür ↔ belge tipi ↔ cari tipi uyarıları, mükerrer (açık talep aynı cari + belge no = hata; departman talebi / nakit akışta planlı = uyarı),
+    vade uyarıları, `direktorEsik` üstü TL'de "D" adımı, nakit / çek notu; Hesap: tutarTL, cariKod, kartTipi, vadeSarti, kapsam, onaycı. Durum2 "Nakit Akış Durumu" ve
+    Durum3 "Ödeme Durumu" `OdemeTalepOrnek.Bul(no)` + nakit akış satırından canlı (Finansa İletildi → Nakit Akışa Alındı · #no · durum → Ödendi tarih · yöntem).
+    Olaylar: `NakitAkisaAlindi` (= `OdemeTalepOrnek.NakitAkisaAl`), `Odendi` (satır ÖDENDİ, dekont). **Senkron**: talep motorundaki ODEME talepleri departman talebi olarak
+    görünür (aynı talep no, durum akıştan; nakit akışa alınan olduğu gibi kalır); `NakitAkisaAl` talebe `nakitAkisNo` / `alinmaTarihi` + timeline yazar. Kilit sırası
+    TalepMotoru → OdemeTalep → NakitAkis. **Talep motoru genişlemesi**: `TmAlan.Kaynak / Anahtar / Doldur` ve tip `"bagli"` (seçenekler `Master[Kaynak]` sözlüğünden; anahtar
+    `personel` | `departman` | `alan:<ad>`; `Doldur` ile seçeneğin `ek` verisi alanlara yazılır), `Varsayilan = "@kullanan.<alan>"`, `TmModul.MasterCanli` (her okumada hesaplanan
+    master; `IkTalepController.MasterBirlesik`), betikte `bagliSecenekler / bagliYenile / otoDoldur / bagliDoldur / masterKapsam` (yan kart "Cari Kapsamı"). Tohum: Emre Taş,
+    Burcu Aydın, Özge İsen (Satın Alma Müdürü, Y onaycısı) personele ve `OrnekVeri.Kullanicilar`'a (skr, ets, bay, ois) eklendi; örnek talepler her birimden
+    (onaylı → finansa iletildi / nakit akışa alındı / ödendi, bekleyen, reddedilen). Menü: Talep › Yeni Talep › Ödeme Talebi, Onaylarım › Mali İşler Onayları, Mali İşler › Finans › Ödeme Yönetimi.
   - **Konsolide Finansal Takip Paneli — modern ekran** (`Views/Rapor123/Index.cshtml` + `wwwroot/js/takip-paneli.js`, Kasa Nakit Akışı tasarım dili; veri
     `/Rapor123/Veri?sirket=&bas=&bit=`; eski görünüm `/Rapor123/Eski` = `Views/Rapor123/Eski.cshtml`): üst kartlar (Finekra onay bekleyen, nakit akışta olmayan çıkış,
     banka / kasa / çek giriş-çıkış, plana aykırı çek, SAP ↔ Finekra fark), sekmeler Finekra · Banka · Kasa · Çek · Nakit Akış Eşleşme · Bakiyeler · Günlük, çekmece,

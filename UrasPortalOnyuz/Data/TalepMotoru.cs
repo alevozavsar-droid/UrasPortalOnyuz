@@ -21,8 +21,12 @@ namespace WebApplication3.Data
         public bool Zorunlu { get; set; }
         public int Col { get; set; } = 4;
         public string Ipucu { get; set; }
-        public string Varsayilan { get; set; }
+        public string Varsayilan { get; set; }           // "@kullanan.sirket" gibi: seçilen personelden otomatik dolar
         public string Grup { get; set; } = "detay";      // ust | detay
+        // tip "bagli": seçenekler Master[Kaynak] sözlüğünden gelir; anahtar seçilen personel ("personel"), personelin birimi ("departman") ya da başka bir alanın değeri ("alan:<ad>")
+        public string Kaynak { get; set; }
+        public string Anahtar { get; set; }
+        public Dictionary<string, string> Doldur { get; set; }   // seçilen seçeneğin "ek" verisinden doldurulacak alanlar: hedef alan → ek anahtarı
     }
 
     public class TmTur { public string Kod { get; set; } public string Ad { get; set; } public string Akis { get; set; } public string Aciklama { get; set; } public string Ek { get; set; } }
@@ -111,6 +115,7 @@ namespace WebApplication3.Data
         public Dictionary<string, string> ParametreEtiketler { get; set; } = new Dictionary<string, string>();
         public List<string> Kurallar { get; set; } = new List<string>();                              // ekranda "Kritik Kurallar" listesi
         public Dictionary<string, object> Master { get; set; } = new Dictionary<string, object>();     // istemciye giden ek master veri (araç filosu vb.)
+        public Func<Dictionary<string, object>> MasterCanli { get; set; }                                // her veri okumasında hesaplanan master (kişi bazlı cari kapsamı vb.); Master ile birleşir
         public Func<TmTalep, TmSonuc> Hesapla { get; set; }
         public Func<TmTalep, string> Durum2 { get; set; }
         public Func<TmTalep, string> Durum3 { get; set; }

@@ -18,11 +18,13 @@ namespace WebApplication3.Data
         public string MahsupAciklama { get; set; } = "";
         public string Mutabakat { get; set; } = "Mutabakat Yok";   // ödeme öncesi cari mutabakat durumu: Mutabık | Mutabık Değil | Bekliyor | Mutabakat Yok | Gerekmez (resmi kurum)
         public DateTime? MutabakatTarihi { get; set; }
+        public string Konu { get; set; } = "";          // Ödeme Talebi modülünden gelen konu (birime göre: KDV, kira, hammadde alımı …)
+        public string Kaynak { get; set; } = "Tohum";   // Tohum | Talep Modülü (Data/OdemeTalebiModulu.cs; talep no aynı)
         public decimal Net => Math.Max(0, Tutar - MahsupTutari);
         public decimal TutarTL => Math.Round(Tutar * (NakitAkisOrnek.Kurlar.TryGetValue(PB, out var k) ? k : 1m), 2);
         public decimal NetTL => Math.Round(Net * (NakitAkisOrnek.Kurlar.TryGetValue(PB, out var k) ? k : 1m), 2);
         /// <summary>Kasa Nakit Akışı belge tipi karşılığı (Vergi / SGK / Gümrük → Resmi Ödeme, Kira → Diğer).</summary>
-        public string NakitAkisBelgeTipi => BelgeTipi == "Fatura" || BelgeTipi == "Sipariş" ? BelgeTipi : BelgeTipi == "Vergi" || BelgeTipi == "SGK" || BelgeTipi == "Gümrük" ? "Resmi Ödeme" : "Diğer";
+        public string NakitAkisBelgeTipi => BelgeTipi == "Fatura" || BelgeTipi == "Sipariş" || BelgeTipi == "Cari Bakiye" ? BelgeTipi : BelgeTipi == "Vergi" || BelgeTipi == "SGK" || BelgeTipi == "Gümrük" ? "Resmi Ödeme" : "Diğer";
     }
 
     public static class OdemeTalepOrnek
@@ -71,8 +73,31 @@ namespace WebApplication3.Data
             }
         }
 
-        public static List<OdemeTalebi> Listele(string dbName, bool sadeceAcik = true) { Tohumla(); lock (Kilit) return _talepler.Where(t => (string.IsNullOrEmpty(dbName) || t.DbName == dbName) && (!sadeceAcik || t.Durum == "Onay Bekliyor" || t.Durum == "Onaylandı")).OrderBy(t => t.SonOdeme).ThenBy(t => t.Id).ToList(); }
-        public static OdemeTalebi Bul(string no) { Tohumla(); lock (Kilit) return _talepler.FirstOrDefault(t => string.Equals(t.No, no, StringComparison.OrdinalIgnoreCase)); }
+        public static List<OdemeTalebi> Listele(string dbName, bool sadeceAcik = true) { Tohumla(); Senkron(); lock (Kilit) return _talepler.Where(t => (string.IsNullOrEmpty(dbName) || t.DbName == dbName) && (!sadeceAcik || t.Durum == "Onay Bekliyor" || t.Durum == "Onaylandı")).OrderBy(t => t.SonOdeme).ThenBy(t => t.Id).ToList(); }
+        public static OdemeTalebi Bul(string no) { Tohumla(); Senkron(); lock (Kilit) return _talepler.FirstOrDefault(t => string.Equals(t.No, no, StringComparison.OrdinalIgnoreCase)); }
+
+        /// <summary>
+        /// Talep modülündeki Ödeme Talebi kayıtlarını (Data/OdemeTalebiModulu.cs) departman talebi olarak eşler: aynı talep no; durum talep akışından
+        /// (Onay Bekliyor / Onaylandı / Reddedildi / İptal). Nakit akışa alınmış talep olduğu gibi kalır. Kilit sırası: TalepMotoru → OdemeTalep.
+        /// </summary>
+        static void Senkron()
+        {
+            List<TmTalep> tl; lock (TalepMotoru.Kilit) tl = TalepMotoru.Talepler.Where(t => t.ModulKod == OdemeTalebiModulu.Kod).ToList();
+            lock (Kilit)
+                foreach (var a in tl)
+                {
+                    var t = _talepler.FirstOrDefault(x => x.No == a.No);
+                    if (t == null) { t = new OdemeTalebi { Id = ++_sonId, No = a.No, Kaynak = "Talep Modülü" }; _talepler.Add(t); }
+                    if (t.Durum == "Nakit Akışa Alındı") continue;
+                    string belgeTipi = a.V("belgeTipi"); bool resmi = belgeTipi == "Vergi" || belgeTipi == "SGK" || belgeTipi == "Gümrük";
+                    t.Tarih = a.Tarih; t.Sirket = a.V("sirket"); t.DbName = CekAkibetOrnek.DbName(t.Sirket); t.Departman = a.Kullanan.Departman; t.TalepEden = a.Kullanan.AdSoyad; t.Kurum = a.V("cari"); t.Konu = a.V("konu");
+                    t.BelgeTipi = belgeTipi == "" ? "Diğer" : belgeTipi; t.BelgeNo = a.V("belgeNo"); t.Aciklama = (t.Konu != "" ? t.Konu + " · " : "") + a.V("aciklama"); t.Tutar = a.D("tutar"); t.PB = a.V("pb") == "" ? "TRY" : a.V("pb");
+                    t.SonOdeme = a.T("sonOdeme") ?? DateTime.Today; t.Oncelik = a.V("oncelik") == "" ? "Normal" : a.V("oncelik"); t.YontemOnerisi = a.V("yontem") == "" ? "Havale / EFT" : a.V("yontem");
+                    t.Durum = a.Iptal ? "İptal" : a.TalepDurumu == "Reddedildi" ? "Reddedildi" : a.Onaylandi ? "Onaylandı" : "Onay Bekliyor";
+                    t.Onaylayan = a.Onaylandi ? (a.Onaylar.Where(o => o.Sira > 1 && o.Durum == "Onaylandı").Select(o => o.Kisi).LastOrDefault() ?? "") : ""; t.OnayTarihi = a.OnayTarihi;
+                    if (resmi) t.Mutabakat = "Gerekmez";
+                }
+        }
 
         /// <summary>Talebi Kasa Nakit Akışı satırı yapar (doğrudan ekleme): kurum, belge tipi / no, tutar, son ödeme, önerilen yöntem, talep eden; nakit yöntemde satır onaya düşer.</summary>
         public static (bool ok, string mesaj, NakitAkisViewModel satir) NakitAkisaAl(string no, string kullanici)
@@ -85,16 +110,28 @@ namespace WebApplication3.Data
             {
                 U_Kurum = t.Kurum, U_UrunHizmet = t.Aciklama, U_OdemeYontemi = t.YontemOnerisi, U_BagliBelgeTipi = t.NakitAkisBelgeTipi, U_KayitTipi = t.NakitAkisBelgeTipi, U_FaturaSiparisNo = t.BelgeNo, BelgeTarihi = t.Tarih.Date,
                 U_SonOdemeTarihi = t.SonOdeme, U_PlanlananTarih = t.SonOdeme < bugun ? bugun : t.SonOdeme, U_Tutar = t.Net, U_ParaBirimi = t.PB, U_Kur = NakitAkisOrnek.Kurlar.TryGetValue(t.PB, out var k) ? k : 1m, U_TutarTL = t.NetTL, U_FaturaTutari = t.Tutar,
-                U_TalepEden = t.TalepEden, U_IslemTipi = "X", U_Satinalmaci = t.Departman == "Satınalma" ? t.TalepEden : "", U_Durum = t.Durum == "Onaylandı" ? "Planlandı" : "Bekliyor",
+                U_TalepEden = t.TalepEden, U_IslemTipi = "X", U_Satinalmaci = t.Departman == "Satınalma" || t.Departman == "Satın Alma" ? t.TalepEden : "", U_Durum = t.Durum == "Onaylandı" ? "Planlandı" : "Bekliyor",
                 U_MutabakatDurumu = t.Mutabakat == "Mutabık" || t.Mutabakat == "Mutabık Değil" ? t.Mutabakat : "", SonMutabakatTarihi = t.MutabakatTarihi,
                 U_Notlar = $"Departman talebi {t.No} · {t.Departman} · {t.BelgeTipi}" + (t.Oncelik != "Normal" ? " · " + t.Oncelik : "") + (t.Durum == "Onaylandı" ? $" · onay {t.Onaylayan}" : " · departman onayı bekliyor") + (t.MahsupTutari > 0 ? $" · mahsup {t.MahsupTutari.ToString("N2", Tr)} {t.PB} düşüldü ({t.MahsupAciklama})" : "") + (t.Mutabakat != "Mutabakat Yok" ? " · mutabakat: " + t.Mutabakat : "")
             };
             var satir = NakitAkisOrnek.Ekle(t.DbName, m, kullanici);
             lock (Kilit) { t.Durum = "Nakit Akışa Alındı"; t.NakitAkisDocEntry = satir.DocEntry; t.AlinmaZamani = DateTime.Now; t.Alan = kullanici ?? ""; }
             NakitAkisOrnek.Gunluge(t.DbName, satir.DocEntry, "Departman Talebi", $"{t.No} ({t.Departman} · {t.TalepEden}) nakit akışa alındı · {t.BelgeTipi} {t.BelgeNo} · {t.Tutar.ToString("N2", Tr)} {t.PB}", kullanici);
+            // Ödeme Talebi modülünden gelen talepte kaynak sistem verisi ve timeline (Data/OdemeTalebiModulu.cs › Durum2 / Durum3)
+            lock (TalepMotoru.Kilit)
+            {
+                var a = TalepMotoru.Talepler.FirstOrDefault(x => x.ModulKod == OdemeTalebiModulu.Kod && x.No == t.No);
+                if (a != null)
+                {
+                    var z = TalepModulleri.OlayZamani ?? DateTime.Now;
+                    a.Ek["nakitAkisNo"] = $"#{satir.DocEntry} · {NakitAkisOrnek.SirketAdi(t.DbName)}"; a.Ek["alinmaTarihi"] = z.ToString("dd.MM.yyyy HH:mm", Tr);
+                    TalepMotoru.Hareket(a, z, $"Kasa Nakit Akışı: talep nakit akışa alındı (#{satir.DocEntry} · {satir.U_Durum} · {satir.U_OdemeYontemi}) — {kullanici}", "Kasa Nakit Akışı");
+                    TalepMotoru.Log(a, z, "ÖT_EVENT", "CASHFLOW_DOC", "", satir.DocEntry.ToString(), kullanici ?? "", "Event", "Kasa Nakit Akışı"); a.SonSenkron = z;
+                }
+            }
             return (true, $"{t.No} nakit akışa alındı (#{satir.DocEntry}): {t.Kurum} · {t.Net.ToString("N2", Tr)} {t.PB}" + (t.MahsupTutari > 0 ? $" (mahsup {t.MahsupTutari.ToString("N2", Tr)} düşüldü)" : "") + $" · {t.YontemOnerisi}" + (t.YontemOnerisi == "Nakit" ? " · nakit onayı bekliyor" : "") + ".", satir);
         }
 
-        public static object Json(OdemeTalebi t) => new { no = t.No, tarih = t.Tarih.ToString("yyyy-MM-dd"), dbName = t.DbName, sirket = t.Sirket, departman = t.Departman, talepEden = t.TalepEden, kurum = t.Kurum, belgeTipi = t.BelgeTipi, nakitAkisBelgeTipi = t.NakitAkisBelgeTipi, belgeNo = t.BelgeNo, aciklama = t.Aciklama, tutar = t.Tutar, pb = t.PB, tutarTL = t.TutarTL, mahsup = t.MahsupTutari, mahsupAciklama = t.MahsupAciklama, net = t.Net, netTL = t.NetTL, mutabakat = t.Mutabakat, mutabakatTarihi = t.MutabakatTarihi?.ToString("yyyy-MM-dd"), sonOdeme = t.SonOdeme.ToString("yyyy-MM-dd"), gecikme = (DateTime.Today - t.SonOdeme).Days, oncelik = t.Oncelik, yontem = t.YontemOnerisi, durum = t.Durum, onaylayan = t.Onaylayan, onayTarihi = t.OnayTarihi?.ToString("yyyy-MM-dd"), nakitAkisDocEntry = t.NakitAkisDocEntry };
+        public static object Json(OdemeTalebi t) => new { no = t.No, tarih = t.Tarih.ToString("yyyy-MM-dd"), dbName = t.DbName, sirket = t.Sirket, departman = t.Departman, talepEden = t.TalepEden, kurum = t.Kurum, konu = t.Konu, kaynak = t.Kaynak, talepLink = t.Kaynak == "Talep Modülü" ? "/OdemeTalebi?no=" + Uri.EscapeDataString(t.No) : null, belgeTipi = t.BelgeTipi, nakitAkisBelgeTipi = t.NakitAkisBelgeTipi, belgeNo = t.BelgeNo, aciklama = t.Aciklama, tutar = t.Tutar, pb = t.PB, tutarTL = t.TutarTL, mahsup = t.MahsupTutari, mahsupAciklama = t.MahsupAciklama, net = t.Net, netTL = t.NetTL, mutabakat = t.Mutabakat, mutabakatTarihi = t.MutabakatTarihi?.ToString("yyyy-MM-dd"), sonOdeme = t.SonOdeme.ToString("yyyy-MM-dd"), gecikme = (DateTime.Today - t.SonOdeme).Days, oncelik = t.Oncelik, yontem = t.YontemOnerisi, durum = t.Durum, onaylayan = t.Onaylayan, onayTarihi = t.OnayTarihi?.ToString("yyyy-MM-dd"), nakitAkisDocEntry = t.NakitAkisDocEntry };
     }
 }

@@ -17,7 +17,8 @@ namespace WebApplication3.Data
             ("it02", "Ali Veli", "A"), ("fns2", "Kerem Aksoy", "FN"), ("muh36", "Nazlı Erdem", "MUH"), ("sat5", "Tolga Yaman", "ST"),
             ("sat8", "Gizem Tan", "ST"), ("muh58", "Onur Bal", "MUH"), ("ykb", "Sevgi Ay", "B"), ("muh19", "Hülya Er", "MUH"),
             ("muh45", "Canan Su", "MUH"), ("dns", "Esra Kaya", "T"), ("isg1", "Mert Doğan", "UR"), ("fns1", "Pınar Ak", "FN"),
-            ("aoz", "Ahmet Özkan", "FN"), ("bbb", "Berk Berberoğlu", "FN") // gün sonu mutabakatı: finans sorumlusu (gün içi onay) ve kasa sorumlusu (fiziksel sayım) — Data/GunSonuOrnek.cs
+            ("aoz", "Ahmet Özkan", "FN"), ("bbb", "Berk Berberoğlu", "FN"), // gün sonu mutabakatı: finans sorumlusu (gün içi onay) ve kasa sorumlusu (fiziksel sayım) — Data/GunSonuOrnek.cs
+            ("skr", "Selin Kara", "ST"), ("ets", "Emre Taş", "ST"), ("bay", "Burcu Aydın", "ST"), ("ois", "Özge İsen", "FN") // satın alma: Ödeme Talebi (Data/OdemeTalebiModulu.cs) — satınalmacılar ve satın alma müdürü
         };
         public static string KullaniciAdi(string kod) => Kullanicilar.FirstOrDefault(k => string.Equals(k.Kod, kod, StringComparison.OrdinalIgnoreCase)).Ad ?? kod;
 

@@ -54,16 +54,52 @@
 
   // ---- form ----
   const kisiOto = (k, baslik) => `<div class="h">${baslik}</div>` + (!k ? '<span class="text-muted">Kişi seçilmedi</span>' : `<span>Personel No <b>${esc(k.personelNo)}</b></span><span>Ad Soyad <b>${esc(k.adSoyad)}</b></span><span>Şirket <b>${esc(k.sirket)}</b></span><span>Departman <b>${esc(k.departman)}</b></span><span>Ünvan <b>${esc(k.unvan)}</b></span><span>Masraf Merkezi <b>${esc(k.masrafMerkezi)}</b></span><span>Yönetici <b>${esc((V.personel.find(p => p.rol === 'Yönetici' && p.departman === k.departman) || {}).adSoyad || '—')}</b></span><span>Aktif <b>${k.aktif ? 'Evet' : '<span class="text-danger">Hayır</span>'}</b></span>`);
+  // bağımlı seçim (tip "bagli"): seçenekler M.master[al.kaynak] sözlüğünden; anahtar seçilen personel, personelin birimi ya da başka bir alanın değeri
+  function bagliSecenekler(al, onEk) {
+    const kay = (M.master || {})[al.kaynak] || {}; let key = '';
+    if (al.anahtar === 'personel') key = $('#tmKullanan').value;
+    else if (al.anahtar === 'departman') { const pn = $('#tmKullanan').value; key = kay[pn] ? pn : ((kisi(pn) || {}).departman || ''); }
+    else if ((al.anahtar || '').startsWith('alan:')) key = ($('#' + (onEk || 'a_') + al.anahtar.slice(5)) || {}).value || '';
+    return { key, liste: kay[key] || kay['*'] || [] };
+  }
+  const bagliNot = (al, key) => ((M.master || {})[al.kaynak + 'Ozet'] || {})[key] || al.ipucu || '';
   function alanHtml(al, deger, idOnEk) {
-    const id = (idOnEk || 'a_') + al.ad, v = deger ?? al.varsayilan ?? '', z = al.zorunlu ? ' <span class="z">*</span>' : '';
+    const oto = (al.varsayilan || '').startsWith('@kullanan.') ? al.varsayilan.slice(10) : '';   // "@kullanan.sirket": seçilen personelden otomatik
+    const id = (idOnEk || 'a_') + al.ad, v = deger ?? (oto ? '' : al.varsayilan) ?? '', z = al.zorunlu ? ' <span class="z">*</span>' : '';
     if (al.tip === 'checkbox') return `<div class="col-md-${al.col}"><div class="form-check ps-0 d-flex align-items-center gap-1" style="min-height:32px;margin-top:18px"><input class="form-check-input ms-0" type="checkbox" id="${id}" name="${al.ad}" ${v === 'true' ? 'checked' : ''}><label class="form-check-label" for="${id}">${esc(al.etiket)}</label></div></div>`;
     let ic;
-    if (al.tip === 'select') ic = `<select class="form-select" id="${id}" name="${al.ad}" ${al.zorunlu ? 'required' : ''}><option value="">Seçiniz…</option>${(al.secenekler || []).map(s => `<option ${s === v ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>`;
+    if (al.tip === 'select') ic = `<select class="form-select" id="${id}" name="${al.ad}" ${oto ? `data-oto="${esc(oto)}"` : ''} ${al.zorunlu ? 'required' : ''}><option value="">Seçiniz…</option>${(al.secenekler || []).map(s => `<option ${s === v ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>`;
+    else if (al.tip === 'bagli') { const b = bagliSecenekler(al, idOnEk); ic = `<select class="form-select" id="${id}" name="${al.ad}" data-bagli="${esc(al.anahtar || '')}" ${al.zorunlu ? 'required' : ''}><option value="">Seçiniz…</option>${b.liste.map(s => `<option value="${esc(s.deger)}" ${s.deger === v ? 'selected' : ''}>${esc(s.etiket)}</option>`).join('')}</select>`; }
     else if (al.tip === 'personel') ic = `<select class="form-select" id="${id}" name="${al.ad}" ${al.zorunlu ? 'required' : ''}><option value="">Seçiniz…</option>${V.personel.map(p => `<option value="${p.personelNo}" ${p.personelNo === v ? 'selected' : ''}>${esc(p.adSoyad)} — ${esc(p.departman)}${p.aktif ? '' : ' (pasif)'}</option>`).join('')}</select>`;
     else if (al.tip === 'multiselect') ic = `<select class="form-select" id="${id}" name="${al.ad}" multiple size="3">${V.personel.filter(p => p.aktif).map(p => `<option value="${p.personelNo}" ${v.split('|').includes(p.personelNo) ? 'selected' : ''}>${esc(p.adSoyad)} — ${esc(p.departman)}</option>`).join('')}</select>`;
     else if (al.tip === 'textarea') ic = `<textarea class="form-control" id="${id}" name="${al.ad}" rows="2" placeholder="${esc(al.ipucu || '')}" ${al.zorunlu ? 'required' : ''}>${esc(v)}</textarea>`;
     else ic = `<input class="form-control" type="${al.tip}" id="${id}" name="${al.ad}" value="${esc(v)}" placeholder="${esc(al.ipucu || '')}" ${al.zorunlu ? 'required' : ''} ${al.tip === 'number' ? 'min="0" step="any"' : ''}>`;
-    return `<div class="col-md-${al.col}"><label class="form-label" for="${id}">${esc(al.etiket)}${z}</label>${ic}${al.ipucu && (al.tip === 'select' || al.tip === 'date' || al.tip === 'personel') ? `<div class="form-text">${esc(al.ipucu)}</div>` : ''}</div>`;
+    const not = al.tip === 'bagli' ? `<div class="form-text" id="${id}_not">${esc(bagliNot(al, bagliSecenekler(al, idOnEk).key))}</div>` : al.ipucu && (al.tip === 'select' || al.tip === 'date' || al.tip === 'personel') ? `<div class="form-text">${esc(al.ipucu)}</div>` : '';
+    return `<div class="col-md-${al.col}"><label class="form-label" for="${id}">${esc(al.etiket)}${z}</label>${ic}${not}</div>`;
+  }
+  // bağımlı alanları yeniden doldur (tetik: 'personel' | 'departman' | alan adı); seçim listede kalıyorsa korunur; alt bağımlılar zincirleme yenilenir
+  function bagliYenile(onEk, tetik) {
+    onEk = onEk || 'a_';
+    M.alanlar.filter(al => al.tip === 'bagli' && (!tetik || al.anahtar === tetik || al.anahtar === 'alan:' + tetik)).forEach(al => {
+      const e = $('#' + onEk + al.ad); if (!e) return; const mevcut = e.value, b = bagliSecenekler(al, onEk);
+      e.innerHTML = '<option value="">Seçiniz…</option>' + b.liste.map(s => `<option value="${esc(s.deger)}">${esc(s.etiket)}</option>`).join(''); if (b.liste.some(s => s.deger === mevcut)) e.value = mevcut;
+      const n = $('#' + onEk + al.ad + '_not'); if (n) n.textContent = bagliNot(al, b.key);
+      if (e.value !== mevcut) bagliYenile(onEk, al.ad);
+    });
+  }
+  // "@kullanan.<alan>" varsayılanı: seçilen personelin bilgisiyle doldur (seçenek listesinde varsa)
+  function otoDoldur(onEk) { const k = kisi($('#tmKullanan').value); if (!k) return; $$('[data-oto]', $(onEk === 'r_' ? '#tmRevizeForm' : '#tmForm')).forEach(e => { const v = k[e.dataset.oto]; if (v != null && Array.from(e.options).some(o => o.value === v || o.text === v)) e.value = v; }); }
+  // bağımlı seçimin "ek" verisiyle başka alanları doldur (ör. açık fatura → belge no, tutar, para birimi, son ödeme)
+  function bagliDoldur(e, onEk) {
+    const al = M.alanlar.find(x => (onEk || 'a_') + x.ad === e.id); if (!al || !al.doldur) return;
+    const s = bagliSecenekler(al, onEk).liste.find(x => x.deger === e.value); if (!s || !s.ek) return;
+    Object.keys(al.doldur).forEach(hedef => { const h = $('#' + (onEk || 'a_') + hedef); if (h && s.ek[al.doldur[hedef]] != null) h.value = s.ek[al.doldur[hedef]]; });
+  }
+  // yan kart: seçilen personelin cari kapsamı (Ödeme Talebi: M.master.cariKapsam)
+  function masterKapsam() {
+    if (!M.master || !M.master.cariKapsam) return; const k = kisi($('#tmKullanan').value) || V.ben; const l = M.master.cariKapsam[k.personelNo] || [];
+    $('#tmMasterKart').style.display = ''; $('#tmMasterBaslik').innerHTML = '<i class="fas fa-address-book me-1"></i>Cari Kapsamı · ' + esc(k.adSoyad);
+    $('#tmMaster').innerHTML = `<div class="na-mini p-2 border-bottom">${esc((M.master.cariKapsamOzet || {})[k.personelNo] || '')}</div><div class="table-responsive" style="max-height:320px"><table class="na-tablo" data-dinamik="kapali"><thead><tr><th>Cari</th><th>Tip</th><th>Şirket</th></tr></thead><tbody>${l.map(c => `<tr><td><b>${esc(c.deger)}</b><br><small class="text-muted">${esc(c.ek.kod)}${c.ek.vadeSarti ? ' · ' + esc(c.ek.vadeSarti) : ''}${c.ek.temsilci ? ' · ' + esc(c.ek.temsilci) : ''}</small></td><td>${esc(c.ek.kartTipi)}</td><td>${esc(c.ek.sirket)}</td></tr>`).join('') || '<tr><td colspan="3" class="na-bos">Kapsamda cari yok.</td></tr>'}</tbody></table></div>`;
   }
   function formDegerleri(kok2, onEk) { const d = {}; M.alanlar.forEach(al => { const e = $('#' + (onEk || 'a_') + al.ad, kok2); if (!e) return; d[al.ad] = al.tip === 'checkbox' ? (e.checked ? 'true' : 'false') : al.tip === 'multiselect' ? Array.from(e.selectedOptions).map(o => o.value).join('|') : e.value; }); return d; }
   function formHazirla() {
@@ -76,10 +112,16 @@
     const b = new Date(); b.setDate(b.getDate() + 7); while (b.getDay() === 0 || b.getDay() === 6) b.setDate(b.getDate() + 1);
     M.alanlar.filter(al => al.tip === 'date').forEach((al, i) => { const e = $('#a_' + al.ad); if (e && !e.value) { const d = new Date(b); if (i > 0) d.setDate(d.getDate() + 2); e.value = d.toISOString().slice(0, 10); } });
     $$('#tmAlanlar input, #tmAlanlar select, #tmAlanlar textarea').forEach(e => e.addEventListener('change', onizleme));
+    // bağımlı alanlar: değişince alt bağımlıları yenile ve "ek" verisiyle doldur; bağımlı olmayan üst alanlar da dinlenir
+    $$('#tmAlanlar select[data-bagli]').forEach(e => e.addEventListener('change', () => { const al = M.alanlar.find(x => 'a_' + x.ad === e.id); if (!al) return; bagliYenile('a_', al.ad); bagliDoldur(e, 'a_'); onizleme(); }));
+    M.alanlar.filter(al => al.tip === 'bagli' && (al.anahtar || '').startsWith('alan:')).forEach(al => { const p = $('#a_' + al.anahtar.slice(5)); if (p && !p.dataset.bagli && !p.dataset.bagliUst) { p.dataset.bagliUst = '1'; p.addEventListener('change', () => bagliYenile('a_', al.anahtar.slice(5))); } });
     kullananDegisti(); turDegisti();
   }
-  function kullananDegisti() { if (!V) return; const k = kisi($('#tmKullanan').value); $('#tmKullananBilgi').innerHTML = kisiOto(k, "Seçilen personel (İK / ERP'den otomatik)"); const u = $('#tmKullananUyari'); u.className = 'na-uyari'; if (k && !k.aktif) { u.className = 'na-uyari kirmizi'; u.innerHTML = '<i class="fas fa-ban me-1"></i>Personel aktif değil: talep açılamaz.'; } onizleme(); }
-  function turDegisti() { if (!V) return; const t = M.turler.find(x => x.kod === $('#tmTur').value); $('#tmTurBilgi').innerHTML = t ? `${esc(t.aciklama)} <span class="text-muted">· onay: ${t.akis.split(',').map(a => ({ Y: 'Yönetici', D: 'Direktör', I: 'İK', A: 'İdari İşler', F: 'Finans' }[a] || a)).join(' → ')}</span>` : ''; onizleme(); }
+  function kullananDegisti() {
+    if (!V) return; const k = kisi($('#tmKullanan').value); $('#tmKullananBilgi').innerHTML = kisiOto(k, "Seçilen personel (İK / ERP'den otomatik)"); const u = $('#tmKullananUyari'); u.className = 'na-uyari'; if (k && !k.aktif) { u.className = 'na-uyari kirmizi'; u.innerHTML = '<i class="fas fa-ban me-1"></i>Personel aktif değil: talep açılamaz.'; }
+    otoDoldur('a_'); bagliYenile('a_', 'personel'); bagliYenile('a_', 'departman'); masterKapsam(); onizleme();
+  }
+  function turDegisti() { if (!V) return; const t = M.turler.find(x => x.kod === $('#tmTur').value); $('#tmTurBilgi').innerHTML = t ? `${esc(t.aciklama)} <span class="text-muted">· onay: ${t.akis.split(',').map(a => ({ Y: 'Yönetici', D: 'Direktör', I: 'İK', A: 'İdari İşler', F: 'Finans', M: 'Muhasebe', H: 'Hukuk' }[a] || a)).join(' → ')}</span>` : ''; onizleme(); }
   function onizleme() {
     clearTimeout(onizlemeZ);
     onizlemeZ = setTimeout(async () => {

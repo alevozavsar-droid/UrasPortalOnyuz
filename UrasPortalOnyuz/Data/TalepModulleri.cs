@@ -43,7 +43,8 @@ namespace WebApplication3.Data
             TalepMotoru.Moduller["YANSITMA"] = Yansitma();
             TalepMotoru.Moduller["MAHSUP"] = Mahsup();
             TalepMotoru.Moduller["TEMLIK"] = Temlik();
-            MesaiTohum(); BelgeTohum(); SeyahatTohum(); AracTohum(); GrupIciTohum();
+            TalepMotoru.Moduller[OdemeTalebiModulu.Kod] = OdemeTalebiModulu.Modul();   // Ödeme Talebi (Data/OdemeTalebiModulu.cs)
+            MesaiTohum(); BelgeTohum(); SeyahatTohum(); AracTohum(); GrupIciTohum(); OdemeTalebiModulu.Tohum();
         }
 
         // =====================================================================

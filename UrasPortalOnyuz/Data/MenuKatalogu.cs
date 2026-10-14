@@ -252,6 +252,10 @@ namespace WebApplication3.Data
             ("IkTalep", "Belge", "fas fa-file-signature", "Belge Talebi", "İK ve İdari İşler"),
             ("IkTalep", "Seyahat", "fas fa-plane-departure", "Seyahat Talebi", "İK ve İdari İşler"),
             ("IkTalep", "Arac", "fas fa-car-side", "Araç Talebi", "İK ve İdari İşler"),
+            // Ödeme Talebi (Talep › Yeni Talep; talep motoru modülü Data/OdemeTalebiModulu.cs; Controllers/OdemeTalebiController.cs)
+            ("OdemeTalebi", "Index", "fas fa-money-bill-transfer", "Ödeme Talebi", "Finans"),
+            ("OdemeTalebi", "Onay", "fas fa-clipboard-check", "Ödeme Talebi Onay Bekleyenler", "Finans"),
+            ("OdemeTalebi", "Takip", "fas fa-list-check", "Ödeme Talebi Takip Raporu", "Finans"),
             ("AlimOnay", "Index", "fas fa-cart-shopping", "Aylık Alım Onay Ekranı", "Tedarik Zinciri"),
             ("GenelAnaliz", "Index", "fas fa-chart-line", "Genel Analiz Raporu", "Yönetim"),
         };

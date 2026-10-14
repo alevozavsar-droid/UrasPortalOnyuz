@@ -53,8 +53,10 @@ namespace WebApplication3.Controllers
         private static object TmModulDto(TmModul m) => new
         {
             m.Kod, m.Ad, m.NoOnEk, m.Ikon, m.Renk, m.Aciklama, m.AkisOzeti, m.KullananEtiket, m.Durum2Ad, m.Durum3Ad, m.IkinciKisiAlan, m.IkinciKisiEtiket, m.TakvimSatir, m.TakvimBas, m.TakvimBit, m.TakvimAd,
-            m.Turler, m.Alanlar, m.Olaylar, m.HesapEtiketler, m.EkEtiketler, TakipSutunlar = m.TakipSutunlar.Select(s => new { s.Baslik, s.Anahtar }), m.Parametreler, m.ParametreEtiketler, m.Kurallar, m.Master
+            m.Turler, m.Alanlar, m.Olaylar, m.HesapEtiketler, m.EkEtiketler, TakipSutunlar = m.TakipSutunlar.Select(s => new { s.Baslik, s.Anahtar }), m.Parametreler, m.ParametreEtiketler, m.Kurallar, Master = MasterBirlesik(m)
         };
+        /// <summary>Sabit master + her okumada hesaplanan canlı master (ör. Ödeme Talebi: kişi bazlı cari kapsamı, açık faturalar).</summary>
+        private static Dictionary<string, object> MasterBirlesik(TmModul m) { var d = new Dictionary<string, object>(m.Master); if (m.MasterCanli != null) foreach (var kv in m.MasterCanli()) d[kv.Key] = kv.Value; return d; }
 
         [HttpGet]
         public IActionResult TmVeri(string kod)
