@@ -39,6 +39,8 @@ namespace WebApplication3.Data
         static readonly List<BankaHareketi> _hareketler = new List<BankaHareketi>();
         static readonly List<FinekraGunluk> _gunluk = new List<FinekraGunluk>();
         public static readonly Dictionary<string, HareketOnay> HareketOnaylari = new Dictionary<string, HareketOnay>();
+        /// <summary>Kasa hareketi ↔ Kasa Nakit Akışı satırı eşleşmesi (Takip Paneli › Kasa › "Nakit Akışa Ekle" ile açılan satırlar): anahtar DbKey|KASA|IslemNo → (dbName, docEntry). Eşlenen nakit akış satırı Kasa sekmesinde ikinci kez listelenmez.</summary>
+        public static readonly Dictionary<string, (string dbName, int docEntry)> KasaEslesmeleri = new Dictionary<string, (string dbName, int docEntry)>();
         static int _sonId; static bool _tohumlandi; static DateTime _sonAkis;
         static int Seed(string s) => s.Aggregate(37, (a, ch) => unchecked(a * 31 + ch));
         public static readonly string[] IslemTurleri = { "Havale / EFT", "Müşteri Havalesi", "POS Tahsilatı", "Çek Tahsilatı", "Otomatik Ödeme", "Vergi / SGK", "Banka Masrafı", "Kredi Taksidi", "Kredi Kartı Ekstresi", "Kira", "Virman" };

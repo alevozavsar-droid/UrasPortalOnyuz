@@ -10,8 +10,9 @@
     Durum Özeti sekmesi (varsayılan): üst kartlar yerine tablo düzeninde durum göstergeleri (satıra tıklayınca ilgili sekme süzülür), şirket bazında durum, bugün ödenecek / gecikmiş ödemeler
     (banka hareketi var mı, SAP'ye işlendi mi; "Ödeme Ekle" ile eksik gün içi ödeme nakit akışa yazılır), vadesi gelen planlı çek / senetler ("Tedarikçiye Çık"), senkron bilgisi.
     Finekra sekmesi: bankadan otomatik akan hareketler (Data/FinekraOrnek.cs) — Kasa Nakit Akışı talimatı bankaya iletilince hareket otomatik düşer → "SAP'ye İşle" (cari / hesap / fatura seç; öneri otomatik) → muhasebe fişi;
-    her hareket Kasa Nakit Akışı ile eşlenir (otomatik / elle); nakit akışta karşılığı olmayan çıkış "Nakit Akışa Gönder" ile ÖDENDİ satır olur. Kasa hareketleri nakit akış ödemelerinden, Çek hareketleri Çek Akıbeti kaydından
-    (plan ↔ ibraz kontrolü; portföydeki belge "Nakit Akışa Gönder" ile planlanır, planlı belge "Tedarikçiye Çık" ile ciro edilir). Eski görünüm: /Rapor123/Eski. Derin bağlantı: /Rapor123?sirket=URASKIMYA&bas=&bit=&sekme=ozet
+    her hareket Kasa Nakit Akışı ile eşlenir (otomatik / elle); nakit akışta karşılığı olmayan çıkış "Nakit Akışa Gönder" ile ÖDENDİ satır olur. Kasa hareketleri nakit akış ödemelerinden (+ elden ödenmiş, nakit akışta olmayan masraflar), Çek hareketleri Çek Akıbeti kaydından
+    (plan ↔ ibraz kontrolü). Kasa ve Çek sekmelerinde "Kasa Nakit Akışı Eşleşmesi" sütunu: Var (#satır) / Yok → "Nakit Akışa Ekle" (kasa çıkışı ÖDENDİ nakit satırı olur ve hareketle eşlenir; portföydeki belge tedarikçiye planlanır), planlı belge "Tedarikçiye Çık" ile ciro edilir.
+    Süzgeç: Onay Durumu › Nakit Akışta Yok / Var. Eski görünüm: /Rapor123/Eski. Derin bağlantı: /Rapor123?sirket=URASKIMYA&bas=&bit=&sekme=kasa
 *@
 @section Styles {
 <link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
@@ -104,7 +105,7 @@
                 <div><label>Şirket</label><select class="form-select" id="tpSirket"><option value="">Tümü (Konsolide)</option>@foreach (var s in sirketler) { <option value="@s.Key" selected="@(s.Key == varsayilan)">@s.Value</option> }</select></div>
                 <div><label>Başlangıç</label><input type="date" class="form-control" id="tpBas" value="@bas" /></div>
                 <div><label>Bitiş</label><input type="date" class="form-control" id="tpBit" value="@bit" /></div>
-                <div><label>Onay Durumu</label><select class="form-select" id="tpDurum"><option value="">Tümü</option><option value="bekliyor">Onay Bekliyor</option><option value="onayli">Onaylandı</option><option value="eksik">Eksik / Kontrol</option><option value="sapYok">SAP'ye İşlenmemiş</option><option value="sapVar">SAP'ye İşlenmiş</option></select></div>
+                <div><label>Onay Durumu</label><select class="form-select" id="tpDurum"><option value="">Tümü</option><option value="bekliyor">Onay Bekliyor</option><option value="onayli">Onaylandı</option><option value="eksik">Eksik / Kontrol</option><option value="sapYok">SAP'ye İşlenmemiş</option><option value="sapVar">SAP'ye İşlenmiş</option><option value="naYok">Nakit Akışta Yok</option><option value="naVar">Nakit Akışta Var</option></select></div>
                 <div><label>Ara</label><input class="form-control" id="tpAra" placeholder="Karşı taraf, açıklama, referans, hareket no, çek no, fiş no…" /></div>
                 <div><label>Hızlı Dönem</label><div class="tp-hizli"><button type="button" class="btn btn-light border" data-gun="7">7 Gün</button><button type="button" class="btn btn-light border" data-gun="30">30 Gün</button><button type="button" class="btn btn-light border" data-gun="90">90 Gün</button></div></div>
             </div>
@@ -137,7 +138,8 @@
     </div>
     @* ===== Kasa / Banka / Çek hareketleri ===== *@
     @* banka hareketleri yalnız Finekra sekmesinde (üretilmiş BANKA satırları eski görünümde kaldı) *@
-    @foreach (var p in new[] { ("kasa", "Kasa Hareketleri · Nakit Ödeme · Nakit Tahsilat · Satırdan Kasa Nakit Akışı'na", "fa-cash-register"), ("cek", "Çek · Senet Hareketleri · Plan ↔ İbraz Kontrolü · Nakit Akışa Gönder · Tedarikçiye Çık", "fa-money-check-alt") })
+    @* her satırda "Kasa Nakit Akışı Eşleşmesi" sütunu: Var (nakit akış satırı bağlantısı) / Yok (+ "Nakit Akışa Ekle": kasa çıkışı ÖDENDİ nakit satırı, portföydeki çek / senet planlı satır olur) *@
+    @foreach (var p in new[] { ("kasa", "Kasa Hareketleri · Nakit Ödeme · Nakit Tahsilat · Kasa Nakit Akışı Eşleşmesi · Nakit Akışa Ekle", "fa-cash-register"), ("cek", "Çek · Senet Hareketleri · Plan ↔ İbraz Kontrolü · Kasa Nakit Akışı Eşleşmesi · Nakit Akışa Ekle · Tedarikçiye Çık", "fa-money-check-alt") })
     {
         <div class="na-panel @(sekme == p.Item1 ? "aktif" : "")" data-p="@p.Item1">
             <div class="na-kart">
