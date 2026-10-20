@@ -1011,5 +1011,6 @@
   ['#kaDetay', '#kaVadeDetay'].forEach(s => $(s).addEventListener('click', e => { const tr = e.target.closest('tr.tik'); if (!tr) return; e.stopPropagation(); satirGetirAc(+tr.dataset.doc, tr.dataset.db); }));
 
   // ---------- başlangıç
-  (async () => { await yukle(); if (V) sekme(kok.dataset.sekme || 'tumu'); })();
+  // ?doc=1234: Takip Paneli / Çek Akıbeti'nden gelen derin bağlantı — satır çekmecesi açılır (satır dönem dışındaysa sunucudan getirilir)
+  (async () => { await yukle(); if (!V) return; sekme(kok.dataset.sekme || 'tumu'); try { const u = new URL(location.href), doc = +(u.searchParams.get('doc') || 0); if (doc) { const db = u.searchParams.get('sirket'); await satirGetirAc(doc, db && db !== 'tumu' ? db : (F.sirket || 'URASKIMYA')); u.searchParams.delete('doc'); history.replaceState(null, '', u); } } catch (e) { } })();
 })();

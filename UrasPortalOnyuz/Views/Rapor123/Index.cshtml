@@ -2,14 +2,16 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
     var sirketler = (List<KeyValuePair<string, string>>)ViewBag.Sirketler;
     string varsayilan = (string)ViewBag.VarsayilanSirket ?? "";
-    string bas = (string)ViewBag.Bas, bit = (string)ViewBag.Bit, sekme = (string)ViewBag.Sekme ?? "finekra";
-    var sekmeler = new[] { ("finekra", "Finekra · Banka Hareketleri", "fa-building-columns"), ("kasa", "Kasa", "fa-cash-register"), ("cek", "Çek · Senet", "fa-money-check-alt"), ("eslesme", "Nakit Akış Eşleşme", "fa-link"), ("duzenli", "Düzenli Ödemeler", "fa-calendar-check"), ("gunsonu", "Gün Sonu Mutabakatı", "fa-clipboard-check"), ("bakiye", "Bakiyeler", "fa-scale-balanced"), ("gunluk", "Günlük", "fa-clock-rotate-left") };
+    string bas = (string)ViewBag.Bas, bit = (string)ViewBag.Bit, sekme = (string)ViewBag.Sekme ?? "ozet";
+    var sekmeler = new[] { ("ozet", "Durum Özeti", "fa-gauge-high"), ("finekra", "Finekra · Banka Hareketleri", "fa-building-columns"), ("kasa", "Kasa", "fa-cash-register"), ("cek", "Çek · Senet", "fa-money-check-alt"), ("eslesme", "Nakit Akış Eşleşme", "fa-link"), ("duzenli", "Düzenli Ödemeler", "fa-calendar-check"), ("gunsonu", "Gün Sonu Mutabakatı", "fa-clipboard-check"), ("bakiye", "Bakiyeler", "fa-scale-balanced"), ("gunluk", "Günlük", "fa-clock-rotate-left") };
 }
 @*
     KONSOLİDE FİNANSAL TAKİP PANELİ (Rapor123) — Kasa Nakit Akışı tasarım dili (na-* ortak stil, kn/tp düzeni). Veri /Rapor123/Veri; betik wwwroot/js/takip-paneli.js.
-    Finekra sekmesi: bankadan otomatik akan hareketler (Data/FinekraOrnek.cs) → Onayla (cari / hesap seç) → muhasebe fişi; her hareket Kasa Nakit Akışı ile eşlenir (otomatik / elle);
-    nakit akışta karşılığı olmayan çıkış "Nakit Akışa Gönder" ile ÖDENDİ satır olur. Kasa / Banka hareketleri nakit akış ödemelerinden, Çek hareketleri Çek Akıbeti kaydından (plan ↔ ibraz kontrolü).
-    Eski görünüm: /Rapor123/Eski. Derin bağlantı: /Rapor123?sirket=URASKIMYA&bas=&bit=&sekme=finekra (eski: ?hesapTipi=CEK, ?tab=FINEKRA)
+    Durum Özeti sekmesi (varsayılan): üst kartlar yerine tablo düzeninde durum göstergeleri (satıra tıklayınca ilgili sekme süzülür), şirket bazında durum, bugün ödenecek / gecikmiş ödemeler
+    (banka hareketi var mı, SAP'ye işlendi mi; "Ödeme Ekle" ile eksik gün içi ödeme nakit akışa yazılır), vadesi gelen planlı çek / senetler ("Tedarikçiye Çık"), senkron bilgisi.
+    Finekra sekmesi: bankadan otomatik akan hareketler (Data/FinekraOrnek.cs) — Kasa Nakit Akışı talimatı bankaya iletilince hareket otomatik düşer → "SAP'ye İşle" (cari / hesap / fatura seç; öneri otomatik) → muhasebe fişi;
+    her hareket Kasa Nakit Akışı ile eşlenir (otomatik / elle); nakit akışta karşılığı olmayan çıkış "Nakit Akışa Gönder" ile ÖDENDİ satır olur. Kasa hareketleri nakit akış ödemelerinden, Çek hareketleri Çek Akıbeti kaydından
+    (plan ↔ ibraz kontrolü; portföydeki belge "Nakit Akışa Gönder" ile planlanır, planlı belge "Tedarikçiye Çık" ile ciro edilir). Eski görünüm: /Rapor123/Eski. Derin bağlantı: /Rapor123?sirket=URASKIMYA&bas=&bit=&sekme=ozet
 *@
 @section Styles {
 <link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
@@ -26,8 +28,14 @@
     @@media (max-width: 1200px) { .tp-filtre { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
     #tp .na-sekme { flex-wrap: nowrap; gap: 0; } #tp .na-sekme button { flex: 1 1 auto; white-space: nowrap; padding: 7px 6px; font-size: .74rem; text-align: center; min-width: 0; overflow: hidden; } #tp .na-sekme button .n { font-size: .6rem; padding: 0 5px; margin-left: 4px; }
     @@media (max-width: 1400px) { #tp .na-sekme button { font-size: .66rem; padding: 6px 4px; } #tp .na-sekme button i { display: none; } }
-    #tp .na-kpi { grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 5px; } #tp .na-kpi > div { padding: 5px 8px; min-width: 0; overflow: hidden; } #tp .na-kpi .v { font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } #tp .na-kpi .l { font-size: .54rem; } #tp .na-kpi > div.aktif { background: #eff6ff; box-shadow: inset 0 0 0 1.5px var(--k, #1d4ed8); }
-    @@media (max-width: 1500px) { #tp .na-kpi { grid-template-columns: repeat(5, 1fr); } }
+    /* Durum Özeti: kutucuk yerine tablo düzeni — gösterge satırları (tıklanınca sekme süzülür), şirket matrisi, ödeme ve çek iş listeleri */
+    .tp-ozet-iki { display: grid; grid-template-columns: 1.05fr 1.6fr; gap: 8px; align-items: start; } @@media (max-width: 1400px) { .tp-ozet-iki { grid-template-columns: 1fr; } }
+    #tp .tp-ozet { table-layout: fixed; } #tp .tp-ozet td { white-space: normal; line-height: 1.25; vertical-align: middle; } #tp .tp-ozet tr.tik td { cursor: pointer; } #tp .tp-ozet tr.aktif td { background: #eff6ff; box-shadow: inset 2px 0 0 var(--k, #1d4ed8); }
+    #tp .tp-ozet td.gost { font-weight: 700; color: #0f172a; border-left: 3px solid var(--k, #cbd5e1); } #tp .tp-ozet td.gost small { font-weight: 500; } #tp .tp-ozet td.adet { font-size: .9rem; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; } #tp .tp-ozet td.adet.sifir { color: #94a3b8; font-weight: 600; }
+    #tp .tp-ozet tr.grup td { background: #f1f5f9; font-size: .56rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #475569; padding: 2px 6px; }
+    #tp .tp-ozet-sirket td, #tp .tp-ozet-sirket th { text-align: center; } #tp .tp-ozet-sirket td:first-child, #tp .tp-ozet-sirket th:first-child { text-align: left; } #tp .tp-ozet-sirket td.u { color: #b45309; font-weight: 800; } #tp .tp-ozet-sirket td.h { color: #b91c1c; font-weight: 800; } #tp .tp-ozet-sirket td.o { color: #15803d; }
+    .tp-senk { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .64rem; color: #475569; align-items: center; } .tp-senk b { color: #0f172a; } .tp-senk a { font-weight: 700; }
+    .tp-fat { font-size: .68rem; } .tp-fat td, .tp-fat th { padding: 3px 6px; white-space: nowrap; } .tp-fat tr.oneri td { background: #f0fdf4; } .tp-fat tr.tik { cursor: pointer; }
     #tp .tp-tablo { font-size: .68rem; table-layout: fixed; width: 100%; }
     #tp .tp-tablo th { font-size: .56rem; padding: 4px 5px; white-space: normal; line-height: 1.15; vertical-align: bottom; overflow: hidden; }
     #tp .tp-tablo td { padding: 3px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
@@ -81,6 +89,7 @@
         <a class="tp-pill" href="/Rapor79" title="Kasa Nakit Akışı: ödeme planı; banka hareketleri buradaki satırlarla eşlenir"><i class="fas fa-money-bill-transfer me-1"></i>Kasa Nakit Akışı ↔ Eşleşme <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:.56rem"></i></a>
         <a class="tp-pill" href="/CekAkibeti" title="Çek Akıbeti Raporu"><i class="fas fa-money-check-alt me-1"></i>Çek Akıbeti <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:.56rem"></i></a>
         <div class="sag">
+            <button type="button" class="btn btn-primary btn-sm" id="tpOdemeEkle" style="font-size:.7rem" title="Gün içinde yapılmış ama nakit akışta olmayan ödemeyi ya da yeni planı Kasa Nakit Akışı'na yaz"><i class="fas fa-plus me-1"></i>Ödeme Ekle</button>
             <button type="button" class="btn btn-light btn-sm border" id="tpYenile" style="font-size:.7rem" title="Finekra akışını ve listeleri yeniden oku"><i class="fas fa-rotate me-1"></i>Akışı Yenile</button>
             <button type="button" class="btn btn-light btn-sm border" id="tpExcel" style="font-size:.7rem"><i class="fas fa-file-excel me-1"></i>Excel</button>
             <a class="btn btn-light btn-sm border" href="/Rapor123/Eski" style="font-size:.7rem" title="Ana projedeki görünüm"><i class="fas fa-table me-1"></i>Eski Görünüm</a>
@@ -102,27 +111,37 @@
         </div>
     </div>
 
-    <div class="na-kpi" id="tpKpi"></div>
-
     <div class="na-sekme" id="tpSekmeler">
         @foreach (var s in sekmeler) { <button type="button" class="@(s.Item1 == sekme ? "aktif" : "")" data-p="@s.Item1"><i class="fas @s.Item3 me-1"></i>@s.Item2 <span class="n" id="tpN-@s.Item1">0</span></button> }
     </div>
 
+    @* ===== Durum Özeti: panelin durumunu gösteren bilgiler tablo düzeninde (kutucuk yok) — gösterge satırına tıklayınca ilgili sekme süzülür ===== *@
+    <div class="na-panel @(sekme == "ozet" ? "aktif" : "")" data-p="ozet">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-arrows-rotate me-1"></i>Senkron · Finekra ↔ Kasa Nakit Akışı ↔ Çek Akıbeti</span><span class="not" id="tpNot-senkron"></span></div><div class="na-kart-g"><div class="tp-senk" id="tpSenkron"></div></div></div>
+        <div class="tp-ozet-iki">
+            <div class="na-kart mb-0"><div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>Durum Özeti · İş Listesi</span><span class="not" id="tpNot-ozet"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo tp-ozet" id="tpOzetDurum" data-dinamik="kapali"><colgroup><col style="width:38%"><col style="width:11%"><col style="width:19%"><col style="width:32%"></colgroup><thead><tr><th>Gösterge</th><th class="s">Adet</th><th class="s">Tutar (₺)</th><th>Açıklama · İşlem</th></tr></thead><tbody></tbody></table></div></div></div>
+            <div class="na-kart mb-0"><div class="na-kart-b"><span><i class="fas fa-building me-1"></i>Şirket Bazında Durum</span><span class="not" id="tpNot-ozet-sirket"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo tp-ozet-sirket" id="tpOzetSirket" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+        </div>
+        <div class="na-kart mt-2"><div class="na-kart-b"><span><i class="fas fa-money-bill-transfer me-1"></i>Bugün Ödenecek · Gecikmiş Ödemeler · Banka Hareketi Kontrolü</span><span class="d-flex gap-2 align-items-center"><span class="not" id="tpNot-ozet-odeme"></span><button type="button" class="btn btn-primary btn-sm py-0 tp-odeme-ekle" style="font-size:.64rem" title="Gün içinde yapılmış ama nakit akışta olmayan ödemeyi ekle"><i class="fas fa-plus me-1"></i>Eksik Ödeme Ekle</button></span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo" id="tpOzetOdemeler" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-money-check-alt me-1"></i>Planlı Çek · Senetler · Vadesi Gelenler Tedarikçiye Çıkar</span><span class="not" id="tpNot-ozet-cek"></span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo" id="tpOzetCekler" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+    </div>
+
     @* ===== Finekra: bankadan otomatik akan hareketler ===== *@
     <div class="na-panel @(sekme == "finekra" ? "aktif" : "")" data-p="finekra">
-        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-sync-alt me-1"></i>Finekra Akışı · Banka Hareketleri Otomatik Akar</span><span class="not" id="tpAkisNot"></span></div><div class="na-kart-g"><div class="tp-akis" id="tpAkis"></div></div></div>
         <div class="na-kart">
-            <div class="na-kart-b"><span><i class="fas fa-building-columns me-1"></i>Banka Hareketleri · Onay → Cari / Hesap → Muhasebe Fişi · Nakit Akış Eşleşmesi</span><span class="d-flex gap-2 align-items-center"><span class="not" id="tpNot-finekra"></span><button type="button" class="btn btn-success btn-sm py-0" id="tpTopluOnay" style="font-size:.64rem" title="Eşleşmiş ve bekleyen hareketleri önerilen cari / hesapla onayla"><i class="fas fa-check-double me-1"></i>Eşleşenleri Toplu Onayla</button></span></div>
+            <div class="na-kart-b"><span><i class="fas fa-building-columns me-1"></i>Banka Hareketleri · Finekra'dan Otomatik Akar · SAP Kaydı: Cari / Hesap / Fatura → Muhasebe Fişi · Nakit Akış Eşleşmesi</span><span class="d-flex gap-2 align-items-center"><span class="not" id="tpNot-finekra"></span><button type="button" class="btn btn-success btn-sm py-0" id="tpTopluOnay" style="font-size:.64rem" title="Eşleşmiş ve bekleyen hareketleri önerilen cari / hesap / belgeyle SAP'ye işle"><i class="fas fa-check-double me-1"></i>Eşleşenleri Toplu SAP'ye İşle</button></span></div>
             <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo" id="tpTablo-finekra" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
         </div>
     </div>
     @* ===== Kasa / Banka / Çek hareketleri ===== *@
     @* banka hareketleri yalnız Finekra sekmesinde (üretilmiş BANKA satırları eski görünümde kaldı) *@
-    @foreach (var p in new[] { ("kasa", "Kasa Hareketleri · Nakit Ödeme · Nakit Tahsilat", "fa-cash-register"), ("cek", "Çek · Senet Hareketleri · Plan ↔ İbraz Kontrolü", "fa-money-check-alt") })
+    @foreach (var p in new[] { ("kasa", "Kasa Hareketleri · Nakit Ödeme · Nakit Tahsilat · Satırdan Kasa Nakit Akışı'na", "fa-cash-register"), ("cek", "Çek · Senet Hareketleri · Plan ↔ İbraz Kontrolü · Nakit Akışa Gönder · Tedarikçiye Çık", "fa-money-check-alt") })
     {
         <div class="na-panel @(sekme == p.Item1 ? "aktif" : "")" data-p="@p.Item1">
             <div class="na-kart">
-                <div class="na-kart-b"><span><i class="fas @p.Item3 me-1"></i>@p.Item2</span><span class="not" id="tpNot-@p.Item1"></span></div>
+                <div class="na-kart-b"><span><i class="fas @p.Item3 me-1"></i>@p.Item2</span><span class="d-flex gap-2 align-items-center"><span class="not" id="tpNot-@p.Item1"></span><button type="button" class="btn btn-primary btn-sm py-0 tp-odeme-ekle" data-yontem="@(p.Item1 == "kasa" ? "Nakit" : "Çek")" style="font-size:.64rem" title="Nakit akışta olmayan ödemeyi ekle"><i class="fas fa-plus me-1"></i>Eksik Ödeme Ekle</button></span></div>
                 <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo" id="tpTablo-@p.Item1" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
             </div>
         </div>
@@ -130,7 +149,7 @@
     @* ===== Nakit akış ↔ banka eşleşmesi ===== *@
     <div class="na-panel @(sekme == "eslesme" ? "aktif" : "")" data-p="eslesme">
         <div class="na-kart">
-            <div class="na-kart-b"><span><i class="fas fa-link me-1"></i>Kasa Nakit Akışı Havale Satırları ↔ Banka Hareketi Eşleşmesi</span><span class="not" id="tpNot-eslesme"></span></div>
+            <div class="na-kart-b"><span><i class="fas fa-link me-1"></i>Kasa Nakit Akışı Havale Satırları ↔ Banka Hareketi Eşleşmesi</span><span class="d-flex gap-2 align-items-center"><span class="not" id="tpNot-eslesme"></span><button type="button" class="btn btn-primary btn-sm py-0 tp-odeme-ekle" style="font-size:.64rem" title="Bankadan yapılmış ama nakit akışta olmayan ödemeyi ekle"><i class="fas fa-plus me-1"></i>Eksik Ödeme Ekle</button></span></div>
             <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo" id="tpTablo-eslesme" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
         </div>
     </div>
@@ -180,21 +199,82 @@
         <div id="tpDIc"></div>
     </div>
 
-    @* ===== onay: cari / hesap seçimi → muhasebe fişi ===== *@
-    <div class="modal fade tp-modal" id="tpOnayModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg"><div class="modal-content">
-        <div class="modal-header py-2"><h6 class="modal-title mb-0" style="font-size:.84rem"><i class="fas fa-user-check me-2 text-primary"></i>Banka Hareketini Onayla · Muhasebe Kaydı <span class="tp-pill ms-2" id="toNo"></span></h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    @* ===== SAP kaydı (onay): cari / hesap / belge (fatura) seçimi → muhasebe fişi; belge adayları tutar eşleşmesiyle otomatik önerilir ===== *@
+    <div class="modal fade tp-modal" id="tpOnayModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header py-2"><h6 class="modal-title mb-0" style="font-size:.84rem"><i class="fas fa-file-invoice me-2 text-primary"></i>SAP'ye İşle · Banka Hareketi Muhasebe Kaydı <span class="tp-pill ms-2" id="toNo"></span></h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
             <div class="na-ustbilgi mb-2" id="toBilgi"></div>
             <div class="na-uyari mavi" id="toOneri"></div>
             <div class="row g-2 mt-1" style="font-size:.72rem">
-                <div class="col-md-5"><label class="form-label mb-0">Cari (Müşteri / Tedarikçi / Kurum)</label><input id="toCari" class="form-control form-control-sm" list="toCariler" style="font-size:.72rem" placeholder="cari adı yazın ya da seçin" /><datalist id="toCariler"></datalist><div class="na-mini" id="toCariKod"></div></div>
-                <div class="col-md-4"><label class="form-label mb-0">Muhasebe Hesabı (Karşı)</label><select id="toHesap" class="form-select form-select-sm" style="font-size:.72rem"></select></div>
-                <div class="col-md-3"><label class="form-label mb-0">Not</label><input id="toNot" class="form-control form-control-sm" style="font-size:.72rem" placeholder="isteğe bağlı" /></div>
+                <div class="col-md-4"><label class="form-label mb-0">Cari (Müşteri / Tedarikçi / Kurum)</label><input id="toCari" class="form-control form-control-sm" list="toCariler" style="font-size:.72rem" placeholder="cari adı yazın ya da seçin" /><datalist id="toCariler"></datalist><div class="na-mini" id="toCariKod"></div></div>
+                <div class="col-md-3"><label class="form-label mb-0">Muhasebe Hesabı (Karşı)</label><select id="toHesap" class="form-select form-select-sm" style="font-size:.72rem"></select></div>
+                <div class="col-md-2"><label class="form-label mb-0">Belge Tipi</label><select id="toBelgeTipi" class="form-select form-select-sm" style="font-size:.72rem"></select></div>
+                <div class="col-md-3"><label class="form-label mb-0">Belge No (Fatura / Sipariş)</label><input id="toBelgeNo" class="form-control form-control-sm" style="font-size:.72rem" placeholder="listeden seç ya da yaz" /></div>
+                <div class="col-md-12"><label class="form-label mb-0">Not</label><input id="toNot" class="form-control form-control-sm" style="font-size:.72rem" placeholder="isteğe bağlı" /></div>
             </div>
-            <div class="na-kart mt-2 mb-0"><div class="na-kart-b"><span><i class="fas fa-book me-1"></i>Muhasebe Fişi Önizleme</span><span class="not" id="toFisNot"></span></div><div class="na-kart-g p-0"><table class="na-tablo tp-fis" id="toFis" data-dinamik="kapali"><thead><tr><th>Hesap</th><th>Hesap Adı · Açıklama</th><th class="s">Borç (₺)</th><th class="s">Alacak (₺)</th></tr></thead><tbody></tbody></table></div></div>
+            <div class="na-kart mt-2 mb-2"><div class="na-kart-b"><span><i class="fas fa-file-invoice-dollar me-1"></i>Hangi Faturaya İstinaden · Belge Adayları</span><span class="not" id="toFaturaNot">tutar yakınlığına göre · en iyi aday otomatik seçili</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:26vh"><table class="na-tablo tp-fat" id="toFaturalar" data-dinamik="kapali"><thead><tr><th style="width:28px"></th><th>Tip</th><th>Belge No</th><th>Tarih</th><th>Son Ödeme</th><th class="s">Belge Tutarı</th><th class="s">Kalan (₺)</th><th class="s">Fark (₺)</th><th>Kaynak</th></tr></thead><tbody></tbody></table></div></div></div>
+            <div class="na-kart mb-0"><div class="na-kart-b"><span><i class="fas fa-book me-1"></i>Muhasebe Fişi Önizleme (SAP)</span><span class="not" id="toFisNot"></span></div><div class="na-kart-g p-0"><table class="na-tablo tp-fis" id="toFis" data-dinamik="kapali"><thead><tr><th>Hesap</th><th>Hesap Adı · Açıklama</th><th class="s">Borç (₺)</th><th class="s">Alacak (₺)</th></tr></thead><tbody></tbody></table></div></div>
             <div class="na-mini mt-2" id="toSenkron"></div>
         </div>
-        <div class="modal-footer py-2"><button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Vazgeç</button><button type="button" class="btn btn-success btn-sm" id="toOnayla"><i class="fas fa-check me-1"></i>Onayla ve Fişi At</button></div>
+        <div class="modal-footer py-2"><button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Vazgeç</button><button type="button" class="btn btn-success btn-sm" id="toOnayla"><i class="fas fa-check me-1"></i>SAP'ye İşle · Fişi At</button></div>
+    </div></div></div>
+
+    @* ===== ödeme ekle: gün içinde yapılmış ama nakit akışta olmayan ödeme ya da yeni plan → Kasa Nakit Akışı satırı ===== *@
+    <div class="modal fade tp-modal" id="tpOdemeModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg"><div class="modal-content">
+        <div class="modal-header py-2"><h6 class="modal-title mb-0" style="font-size:.84rem"><i class="fas fa-plus me-2 text-primary"></i>Ödeme Ekle · Kasa Nakit Akışı'na Yaz <span class="tp-pill ms-2" id="odKaynak"></span></h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <div class="na-uyari mavi mb-2" id="odUyari"><i class="fas fa-info-circle me-1"></i>Gün içinde yapılmış ama nakit akışta görünmeyen ödeme için "Ödendi" işaretleyin: satır ÖDENDİ açılır, fiş atılır; havale ise banka hareketi Finekra'dan gelince otomatik eşleşir. İşaretlemezseniz satır Planlandı olur (nakit: GMY nakit onayına düşer) ve talimatla ödenir.</div>
+            <div class="row g-2" style="font-size:.72rem">
+                <div class="col-md-3"><label class="form-label mb-0">Şirket</label><select id="odSirket" class="form-select form-select-sm" style="font-size:.72rem"></select></div>
+                <div class="col-md-5"><label class="form-label mb-0">Ödenecek Cari (Tedarikçi / Kurum)</label><input id="odKurum" class="form-control form-control-sm" list="odCariler" style="font-size:.72rem" placeholder="cari adı" /><datalist id="odCariler"></datalist></div>
+                <div class="col-md-4"><label class="form-label mb-0">Ödeme Yöntemi</label><select id="odYontem" class="form-select form-select-sm" style="font-size:.72rem"></select></div>
+                <div class="col-md-3"><label class="form-label mb-0">Tutar</label><input id="odTutar" type="number" min="0" step="0.01" class="form-control form-control-sm" style="font-size:.72rem" /></div>
+                <div class="col-md-2"><label class="form-label mb-0">PB</label><select id="odPB" class="form-select form-select-sm" style="font-size:.72rem"></select></div>
+                <div class="col-md-3"><label class="form-label mb-0">Tarih (Planlanan / Ödeme)</label><input id="odTarih" type="date" class="form-control form-control-sm" style="font-size:.72rem" /></div>
+                <div class="col-md-2"><label class="form-label mb-0">Belge Tipi</label><select id="odBelgeTipi" class="form-select form-select-sm" style="font-size:.72rem"></select></div>
+                <div class="col-md-2"><label class="form-label mb-0">Belge No</label><input id="odBelgeNo" class="form-control form-control-sm" style="font-size:.72rem" placeholder="FT-…" /></div>
+                <div class="col-md-6"><label class="form-label mb-0">Ürün / Hizmet · Açıklama</label><input id="odUrun" class="form-control form-control-sm" style="font-size:.72rem" /></div>
+                <div class="col-md-3" id="odBankaKap"><label class="form-label mb-0">Banka Hesabı</label><select id="odBanka" class="form-select form-select-sm" style="font-size:.72rem"></select></div>
+                <div class="col-md-3 d-none" id="odKasaKap"><label class="form-label mb-0">Kasa</label><select id="odKasa" class="form-select form-select-sm" style="font-size:.72rem"></select></div>
+                <div class="col-md-3"><label class="form-label mb-0">Dekont / Makbuz No</label><input id="odDekont" class="form-control form-control-sm" style="font-size:.72rem" placeholder="ödendiyse" /></div>
+                <div class="col-md-12 d-none" id="odCekKap"><label class="form-label mb-0">Portföyden Çek / Senet</label><select id="odCek" class="form-select form-select-sm" style="font-size:.72rem"></select><div class="na-mini">Belge seçilirse satır tutarı belge tutarı olur; belge Çek Akıbeti'nde "Planlandı" görünür.</div></div>
+                <div class="col-md-12"><div class="form-check"><input class="form-check-input" type="checkbox" id="odOdendi" checked><label class="form-check-label" for="odOdendi">Ödendi (gün içinde yapıldı; nakit akışta eksikti)</label></div></div>
+            </div>
+        </div>
+        <div class="modal-footer py-2"><button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Vazgeç</button><button type="button" class="btn btn-primary btn-sm" id="odKaydet"><i class="fas fa-paper-plane me-1"></i>Kasa Nakit Akışı'na Yaz</button></div>
+    </div></div></div>
+
+    @* ===== çek → nakit akışa gönder: portföydeki belge için çek / senet ödeme satırı (Planlandı) ===== *@
+    <div class="modal fade tp-modal" id="tpCekGonderModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><div class="modal-content">
+        <div class="modal-header py-2"><h6 class="modal-title mb-0" style="font-size:.84rem"><i class="fas fa-paper-plane me-2 text-primary"></i>Çeki Nakit Akışa Gönder · Planla <span class="tp-pill ms-2" id="cgNo"></span></h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <div class="na-ustbilgi mb-2" id="cgBilgi"></div>
+            <div class="row g-2" style="font-size:.72rem">
+                <div class="col-md-12"><label class="form-label mb-0">Ödenecek Tedarikçi (Planlanan)</label><input id="cgTedarikci" class="form-control form-control-sm" list="cgTedarikciler" style="font-size:.72rem" placeholder="tedarikçi adı" /><datalist id="cgTedarikciler"></datalist></div>
+                <div class="col-md-5"><label class="form-label mb-0">Planlanan Tarih</label><input id="cgTarih" type="date" class="form-control form-control-sm" style="font-size:.72rem" /></div>
+                <div class="col-md-3"><label class="form-label mb-0">Belge Tipi</label><select id="cgBelgeTipi" class="form-select form-select-sm" style="font-size:.72rem"></select></div>
+                <div class="col-md-4"><label class="form-label mb-0">Belge No</label><input id="cgBelgeNo" class="form-control form-control-sm" style="font-size:.72rem" /></div>
+                <div class="col-md-12"><label class="form-label mb-0">Ürün / Hizmet · Açıklama</label><input id="cgUrun" class="form-control form-control-sm" style="font-size:.72rem" placeholder="isteğe bağlı" /></div>
+            </div>
+            <div class="na-mini mt-2">Kasa Nakit Akışı'nda çek / senet satırı açılır, belge satıra bağlanır; Çek Akıbeti'nde işlem türü "Planlandı", planlanan tedarikçi bu cari olur. Çıkış talimatla ya da "Tedarikçiye Çık" ile yapılır.</div>
+        </div>
+        <div class="modal-footer py-2"><button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Vazgeç</button><button type="button" class="btn btn-primary btn-sm" id="cgGonder"><i class="fas fa-paper-plane me-1"></i>Nakit Akışa Gönder</button></div>
+    </div></div></div>
+
+    @* ===== çek çıkış: planlı belgeyi tedarikçiye ciro et ya da bankaya tahsile ver (plansız belge GMY onayına düşer) ===== *@
+    <div class="modal fade tp-modal" id="tpCekCikisModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><div class="modal-content">
+        <div class="modal-header py-2"><h6 class="modal-title mb-0" style="font-size:.84rem"><i class="fas fa-share-from-square me-2 text-success"></i>Tedarikçiye Çık · Çek / Senet Çıkışı <span class="tp-pill ms-2" id="ccNo"></span></h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <div class="na-ustbilgi mb-2" id="ccBilgi"></div>
+            <div class="na-uyari mavi mb-2" id="ccUyari"></div>
+            <div class="row g-2" style="font-size:.72rem">
+                <div class="col-md-5"><label class="form-label mb-0">Çıkış Türü</label><select id="ccTur" class="form-select form-select-sm" style="font-size:.72rem"><option value="Tedarikçiye Ciro">Tedarikçiye Ciro</option><option value="Bankaya Tahsile Ver">Bankaya Tahsile Ver</option></select></div>
+                <div class="col-md-7"><label class="form-label mb-0">Ciro Edilen Tedarikçi / Banka</label><input id="ccYer" class="form-control form-control-sm" list="ccYerler" style="font-size:.72rem" /><datalist id="ccYerler"></datalist></div>
+                <div class="col-md-5"><label class="form-label mb-0">Ciro Bordrosu / İbraz Belge No</label><input id="ccBelge" class="form-control form-control-sm" style="font-size:.72rem" placeholder="boş: otomatik" /></div>
+                <div class="col-md-7"><label class="form-label mb-0">Not</label><input id="ccNot" class="form-control form-control-sm" style="font-size:.72rem" placeholder="isteğe bağlı" /></div>
+            </div>
+        </div>
+        <div class="modal-footer py-2"><button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Vazgeç</button><button type="button" class="btn btn-success btn-sm" id="ccCik"><i class="fas fa-check me-1"></i>Çıkışı İşle</button></div>
     </div></div></div>
 
     @* ===== elle eşleştirme: nakit akış adayları ===== *@
@@ -233,5 +313,5 @@
 </div>
 
 @section Scripts {
-<script src="/js/takip-paneli.js?v=3"></script>
+<script src="/js/takip-paneli.js?v=4"></script>
 }

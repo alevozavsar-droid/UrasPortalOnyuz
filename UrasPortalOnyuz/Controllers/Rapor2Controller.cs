@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FinansRaporlama.Controllers;
 using WebApplication3.Data;
 using WebApplication3.Models;
 
@@ -80,6 +81,55 @@ namespace WebApplication3.Controllers
         }
         /// <summary>Çek kaydı değişim sayacı: Kasa Nakit Akışı'nda plan / ibraz yapılıp bu sekmeye dönülünce sayfa kendini tazeler (Index2.cshtml visibilitychange).</summary>
         [HttpGet("Versiyon")] public IActionResult Versiyon() => Json(new { v = CekAkibetOrnek.Gunluk.Count + CekAkibetOrnek.Hareketler.Count });
+
+        // ---------- DURUM ÖZETİ · SENKRON (Kasa Nakit Akışı ↔ Çek Akıbeti ↔ Takip Paneli) ----------
+        static string OdemeLink(NakitAkisViewModel m) => $"/Rapor79?sirket={m.U_KaynakFirma}&sekme={(m.U_OdemeYontemi == "Senet" ? "senet" : m.U_OdemeYontemi == "Çek" ? "cek" : m.U_OdemeYontemi == "Nakit" ? "nakit" : m.U_OdemeYontemi == "Havale / EFT" ? "havale" : "tumu")}&doc={m.DocEntry}";
+        /// <summary>
+        /// Durum Özeti paneli: şirketin portföyü (X / R, kullanılabilir / planlı), vadesi gelen planlı belgeler (plan satırı, talimat, çıkış düğmesi), GMY onayı bekleyen plansız çıkış talepleri,
+        /// plana aykırı çıkışlar, bankada tahsildekiler, son günlük; her belge için plan satırı bilgisi (planlar: belge → nakit akış satırı) — detay penceresindeki hızlı işlemler bunu kullanır.
+        /// </summary>
+        [HttpGet("Ozet")]
+        public IActionResult Ozet()
+        {
+            string sirket = Sirket(); var bugun = DateTime.Today; string db = CekAkibetOrnek.DbName(sirket);
+            var hepsi = CekAkibetOrnek.Kayitlar.Where(k => k.Sirket == sirket).ToList(); var portfoy = hepsi.Where(k => k.Portfoyde && k.PortfoyGiris.Date <= bugun).ToList();
+            object P(string belge, string tip) { var l = portfoy.Where(k => k.Belge == belge && k.IslemTipi == tip).ToList(); return new { adet = l.Count, tutar = l.Sum(k => k.Tutar), kullanilabilir = l.Count(k => k.KullanimDurumu == "Kullanılabilir" && k.IslemTuru == "Portföyde"), kullanilabilirTutar = l.Where(k => k.KullanimDurumu == "Kullanılabilir" && k.IslemTuru == "Portföyde").Sum(k => k.Tutar), planli = l.Count(k => k.IslemTuru == "Planlandı"), planliTutar = l.Where(k => k.IslemTuru == "Planlandı").Sum(k => k.Tutar) }; }
+            var odemeler = NakitAkisOrnek.Odemeler(db);
+            object PlanJson(CekKaydi k) { var m = k.PlanDocEntry != null ? NakitAkisOrnek.Bul(k.PlanDocEntry.Value) : null; return new { docEntry = k.DocEntry, no = k.No, belge = k.Belge, tip = k.IslemTipi, musteri = k.Musteri, banka = k.Banka, vade = k.Vade.ToString("dd.MM.yyyy"), vadeGun = (k.Vade - bugun).Days, tutar = k.Tutar, islemTuru = k.IslemTuru, planlananTedarikci = k.PlanlananTedarikci, planlayan = k.Planlayan, planlamaTarihi = k.PlanlamaTarihi?.ToString("dd.MM.yyyy"), ibrazYeri = k.IbrazYeri, ibrazTuru = k.IbrazTuru, ibrazTarihi = k.IbrazTarihi?.ToString("dd.MM.yyyy"), kontrol = k.Kontrol, kullanim = k.KullanimDurumu, dolasim = k.DolasimOzeti, planDocEntry = k.PlanDocEntry, planDb = m?.U_KaynakFirma, planDurum = m?.U_Durum ?? "", planTalimat = m?.U_TalimatNo ?? "", planKurum = m?.U_Kurum ?? "", cikisTalebi = m?.U_CikisTalebi ?? "", planOnay = m?.U_OnayDurumu ?? "", planLink = m == null ? null : OdemeLink(m) }; }
+            var planliKayit = hepsi.Where(k => k.IslemTuru == "Planlandı").OrderBy(k => k.Vade).ToList(); var planli = planliKayit.Select(PlanJson).ToList();
+            var gmy = odemeler.Where(m => !string.IsNullOrEmpty(m.U_CikisTalebi) && m.U_OnayDurumu != "Onaylandı" && m.U_Durum != "ÖDENDİ").Select(m => new { docEntry = m.DocEntry, kurum = m.U_Kurum, cekNolar = m.U_CekNolar, cikisTalebi = m.U_CikisTalebi, ibrazYeri = m.U_CikisIbrazYeri, talepEden = m.U_CikisTalepEden, tutar = m.U_TutarTL ?? 0, tarih = m.U_PlanlananTarih?.ToString("dd.MM.yyyy"), link = OdemeLink(m) }).ToList();
+            var farkli = hepsi.Where(k => k.Kontrol == "Farklı").OrderByDescending(k => k.IbrazTarihi).Take(20).Select(PlanJson).ToList();
+            var bankada = hepsi.Where(k => k.IslemTuru == "Bankaya Tahsile Verildi").OrderBy(k => k.Vade).ToList();
+            var planlar = hepsi.Where(k => k.PlanDocEntry != null || k.Portfoyde).ToDictionary(k => k.DocEntry.ToString(), k => { var m = k.PlanDocEntry != null ? NakitAkisOrnek.Bul(k.PlanDocEntry.Value) : null; return new { planDocEntry = k.PlanDocEntry, planDb = m?.U_KaynakFirma, planDurum = m?.U_Durum ?? "", planTalimat = m?.U_TalimatNo ?? "", planKurum = m?.U_Kurum ?? "", cikisTalebi = m?.U_CikisTalebi ?? "", planOnay = m?.U_OnayDurumu ?? "", planLink = m == null ? null : OdemeLink(m), secilebilir = k.Secilebilir, portfoyde = k.Portfoyde, islemTuru = k.IslemTuru, dolasim = k.DolasimOzeti }; });
+            var gunluk = CekAkibetOrnek.Gunluk.Where(g => g.Sirket == sirket).Take(12).Select(g => new { tarih = g.Tarih.ToString("dd.MM.yyyy HH:mm"), g.Kullanici, g.No, g.Islem, g.Aciklama }).ToList();
+            return Json(new
+            {
+                success = true, sirket, db, bugun = bugun.ToString("dd.MM.yyyy"), surum = CekAkibetOrnek.Gunluk.Count + CekAkibetOrnek.Hareketler.Count,
+                portfoy = new { cekX = P("Çek", "X"), cekR = P("Çek", "R"), senetX = P("Senet", "X"), senetR = P("Senet", "R"), toplam = portfoy.Count, toplamTutar = portfoy.Sum(k => k.Tutar) },
+                planli, planliToplam = planliKayit.Sum(k => k.Tutar), vadesiGelen = planliKayit.Count(k => k.Vade <= bugun.AddDays(7)), gmy, farkli, bankada = new { adet = bankada.Count, tutar = bankada.Sum(k => k.Tutar), buHafta = bankada.Count(k => k.Vade <= bugun.AddDays(7)) },
+                nakitAkis = new { planliSatir = odemeler.Count(m => (m.U_OdemeYontemi == "Çek" || m.U_OdemeYontemi == "Senet") && m.U_Durum != "ÖDENDİ"), belgesiz = odemeler.Count(m => (m.U_OdemeYontemi == "Çek" || m.U_OdemeYontemi == "Senet") && m.U_Durum != "ÖDENDİ" && string.IsNullOrEmpty(m.U_CekDocEntryler)), acikTalimat = TalimatOrnek.Listele(db).Count(t => !t.Kapandi && (t.Yontem == "Çek" || t.Yontem == "Senet")), link = $"/Rapor79?sirket={db}&sekme=cek" },
+                takipPaneli = $"/Rapor123?sirket={db}&sekme=cek", planlar, gunluk, tedarikciler = CekOrnek.TedarikciAdlari
+            });
+        }
+        public class CekIslemIstek { public int DocEntry { get; set; } public string Tedarikci { get; set; } public string PlanlananTarih { get; set; } public string BelgeTipi { get; set; } public string BelgeNo { get; set; } public string UrunHizmet { get; set; } public string Tur { get; set; } public string IbrazYeri { get; set; } public string Not { get; set; } }
+        /// <summary>Detay penceresi › "Kasa Nakit Akışı'na Gönder": portföydeki belge için nakit akışta çek / senet satırı açılır, belge planlanır (Planlandı).</summary>
+        [HttpPost("NakitAkisaGonder")]
+        public IActionResult NakitAkisaGonder([FromBody] CekIslemIstek i)
+        {
+            if (i == null) return Json(new { success = false, message = "Veri yok." });
+            var tarih = DateTime.TryParse(i.PlanlananTarih, CultureInfo.InvariantCulture, DateTimeStyles.None, out var pt) ? pt.Date : (DateTime?)null;
+            var r = NakitAkisOrnek.CekIcinSatirAc(i.DocEntry, i.Tedarikci, tarih, i.BelgeTipi, i.BelgeNo, i.UrunHizmet, Kullanici);
+            return Json(new { success = r.ok, message = r.mesaj, satir = r.satir == null ? null : new { docEntry = r.satir.DocEntry, dbName = r.satir.U_KaynakFirma, link = OdemeLink(r.satir) } });
+        }
+        /// <summary>Detay penceresi › "Tedarikçiye Çık / Bankaya İbraz": planlı belge plan satırı üzerinden ciro / ibraz edilir (satır ÖDENDİ, fiş); plansız belge GMY onayına düşer.</summary>
+        [HttpPost("TedarikciyeCik")]
+        public IActionResult TedarikciyeCik([FromBody] CekIslemIstek i)
+        {
+            if (i == null) return Json(new { success = false, message = "Veri yok." });
+            var r = NakitAkisOrnek.CekCikisYap(i.DocEntry, i.Tur, i.IbrazYeri, i.BelgeNo, i.Not, Kullanici); var plan = r.docEntry != null ? NakitAkisOrnek.Bul(r.docEntry.Value) : null;
+            var k = CekAkibetOrnek.Bul(i.DocEntry); if (k != null && (r.ok || r.onayaDustu)) FinekraOrnek.GunlukEkle(k.Sirket, k.No, r.onayaDustu ? "Çek Çıkış Talebi (GMY)" : i.Tur == "Bankaya Tahsile Ver" ? "Bankaya İbraz" : "Tedarikçiye Ciro", r.mesaj + " (Çek Akıbeti)", Kullanici);
+            return Json(new { success = r.ok, message = r.mesaj, onayaDustu = r.onayaDustu, satir = plan == null ? null : new { docEntry = plan.DocEntry, dbName = plan.U_KaynakFirma, link = OdemeLink(plan) } });
+        }
         [HttpGet("GetIbrazDetay")]
         public IActionResult GetIbrazDetay(string no) { var k = CekAkibetOrnek.Kayitlar.FirstOrDefault(x => x.IbrazBelgeNo == no) ?? CekAkibetOrnek.Kayitlar.FirstOrDefault(x => x.No == no); return Content(k == null ? "<div class='p-3 text-muted'>İbraz belgesi bulunamadı.</div>" : DetayHtml(k, "İbraz Detayı"), "text/html; charset=utf-8"); }
         [HttpGet("GetTahsilatDetay")]

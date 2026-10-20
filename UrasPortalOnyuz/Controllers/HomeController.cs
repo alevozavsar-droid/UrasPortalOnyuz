@@ -69,7 +69,7 @@ namespace WebApplication3.Controllers
         public IActionResult Error() => View("~/Views/Shared/Error.cshtml");
 
         // ---- Dashboard verileri (örnek)//
-        // ----
+        // yeniden ----
         [HttpGet]
         public IActionResult GetDashboardData()
         {

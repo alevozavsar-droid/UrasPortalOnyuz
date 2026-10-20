@@ -150,7 +150,11 @@ namespace WebApplication3.Data
                     else NakitAkisOrnek.OdendiIsaretle(s.DbName, s.DocEntry, t.No, kullanici);
                 }
             else foreach (var s in t.Satirlar) NakitAkisOrnek.Gunluge(s.DbName, s.DocEntry, "Talimat", $"{t.No} → {yeniDurum}", kullanici);
-            return (true, yeniDurum == "Gerçekleşti" ? $"{t.No} gerçekleşti: {t.Satirlar.Count} satır ÖDENDİ" + (t.Satirlar.Any(s => s.Belgeler.Count > 0) ? "; belgeler dolaşım planına göre ciro / ibraz edildi (Çek Akıbeti ve Takip Paneli güncellendi)" : "") + (makbuzlar.Count > 0 ? "; kasa tediye makbuzları kesildi: " + string.Join(", ", makbuzlar) : "") + (t.Satirlar.Any(s => s.AvansNo != "") ? "; avanslar teslim edildi" : "") + "; muhasebe fişleri atıldı." : $"{t.No} → {yeniDurum}.");
+            // banka talimatı bankaya iletilince (ya da doğrudan gerçekleşince) Finekra'dan banka hareketi otomatik akar: Takip Paneli'ne satırla eşleşik düşer, SAP kaydı (cari / fatura) orada atılır
+            var akan = yeniDurum == "Bankaya İletildi" || yeniDurum == "Gerçekleşti" ? FinekraOrnek.TalimattanAkit(t, kullanici) : new List<BankaHareketi>();
+            if (akan.Count > 0) lock (Kilit) t.Gunluk.Add(new TalimatGunluk { Tarih = DateTime.Now, Kullanici = "Finekra", Islem = "Banka Hareketi", Aciklama = $"{akan.Count} banka hareketi Takip Paneli'ne düştü: {string.Join(", ", akan.Select(h => h.No))}" });
+            string finekraNotu = akan.Count > 0 ? $" Finekra: {akan.Count} banka hareketi Konsolide Finansal Takip Paneli'ne düştü ({string.Join(", ", akan.Select(h => h.No))}); SAP kaydı orada cari / fatura seçilerek atılır." : "";
+            return (true, yeniDurum == "Gerçekleşti" ? $"{t.No} gerçekleşti: {t.Satirlar.Count} satır ÖDENDİ" + (t.Satirlar.Any(s => s.Belgeler.Count > 0) ? "; belgeler dolaşım planına göre ciro / ibraz edildi (Çek Akıbeti ve Takip Paneli güncellendi)" : "") + (makbuzlar.Count > 0 ? "; kasa tediye makbuzları kesildi: " + string.Join(", ", makbuzlar) : "") + (t.Satirlar.Any(s => s.AvansNo != "") ? "; avanslar teslim edildi" : "") + "; muhasebe fişleri atıldı." + finekraNotu : $"{t.No} → {yeniDurum}.{finekraNotu}");
         }
     }
 }

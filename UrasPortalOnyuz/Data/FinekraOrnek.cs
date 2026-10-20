@@ -21,6 +21,8 @@ namespace WebApplication3.Data
         public string Durum { get; set; } = "Bekliyor";   // Bekliyor | Onaylandı (muhasebeleşti)
         public string Onaylayan { get; set; } = ""; public DateTime? OnayTarihi { get; set; } public string OnayNotu { get; set; } = "";
         public string CariKod { get; set; } = ""; public string CariAd { get; set; } = ""; public string KarsiHesap { get; set; } = ""; public string YevmiyeNo { get; set; } = "";
+        public string BelgeTipi { get; set; } = ""; public string BelgeNo { get; set; } = "";   // SAP kaydında "hangi faturaya istinaden": Fatura / Sipariş / Cari Bakiye · belge no (öneri nakit akış satırından ya da açık faturalardan tutar eşleşmesiyle)
+        public string TalimatNo { get; set; } = "";                                            // talimattan otomatik akan hareket (Kasa Nakit Akışı › Talimat → Bankaya İletildi)
         public int? NakitAkisDocEntry { get; set; } public string NakitAkisDb { get; set; } = ""; public string Eslesme { get; set; } = "";   // Otomatik | Elle | Nakit Akışa Gönderildi | ""
         public string EslesmeNotu { get; set; } = ""; public DateTime AkisZamani { get; set; } public string Kaynak { get; set; } = "Finekra API";
         public List<TalimatGunluk> Gunluk { get; set; } = new List<TalimatGunluk>();
@@ -160,12 +162,12 @@ namespace WebApplication3.Data
 
         // ---------- işlemler ----------
         /// <summary>Onay: cari / hesap seçilir, muhasebe fişi atılır. Nakit akışla eşleşmişse satır ÖDENDİ olur (fişi nakit akıştan gelir, iki kez atılmaz); dekont no satıra yazılır.</summary>
-        public static (bool ok, string mesaj, BankaHareketi h) Onayla(int id, string cariKod, string cariAd, string karsiHesap, string not, string kullanici)
+        public static (bool ok, string mesaj, BankaHareketi h) Onayla(int id, string cariKod, string cariAd, string karsiHesap, string not, string kullanici, string belgeTipi = null, string belgeNo = null)
         {
             var h = Bul(id); if (h == null) return (false, "Hareket bulunamadı.", null);
             if (h.Durum == "Onaylandı") return (false, $"{h.No} zaten onaylı (fiş {h.YevmiyeNo}).", h);
             karsiHesap = string.IsNullOrWhiteSpace(karsiHesap) ? (h.Giris ? "120" : "320") : karsiHesap.Trim(); if (!KarsiHesaplar.Any(k => k.Kod == karsiHesap) && !MuhasebeOrnek.HesapPlani.ContainsKey(karsiHesap)) return (false, "Geçersiz muhasebe hesabı.", h);
-            cariAd = (cariAd ?? "").Trim(); cariKod = (cariKod ?? "").Trim(); string yev = ""; var ek = new List<string>();
+            cariAd = (cariAd ?? "").Trim(); cariKod = (cariKod ?? "").Trim(); belgeTipi = (belgeTipi ?? "").Trim(); belgeNo = (belgeNo ?? "").Trim(); string yev = ""; var ek = new List<string>();
             if (h.NakitAkisDocEntry != null)
             {
                 var m = NakitAkisOrnek.Bul(h.NakitAkisDb, h.NakitAkisDocEntry.Value);
@@ -173,6 +175,9 @@ namespace WebApplication3.Data
                 {
                     // cari hesaplarda (320 / 332 / 132) fiş nakit akışın kendi mantığıyla atılır (grup içi mahsup / temlik dâhil); başka hesap seçildiyse fiş onayda seçilen hesaba atılıp satıra yazılır
                     bool cariHesap = karsiHesap == "320" || karsiHesap == "332" || karsiHesap == "132";
+                    // SAP kaydında seçilen belge (fatura / sipariş) nakit akış satırına da yazılır (satırda belge yoksa)
+                    if (belgeNo != "" && string.IsNullOrEmpty(m.U_FaturaSiparisNo) && (belgeTipi == "Fatura" || belgeTipi == "Sipariş")) { NakitAkisOrnek.AlanKaydet(h.NakitAkisDb, m.DocEntry, "U_BagliBelgeTipi", belgeTipi, kullanici); NakitAkisOrnek.AlanKaydet(h.NakitAkisDb, m.DocEntry, "U_FaturaSiparisNo", belgeNo, kullanici); ek.Add($"belge {belgeNo} nakit akış #{m.DocEntry} satırına yazıldı"); }
+                    if (belgeNo == "" && !string.IsNullOrEmpty(m.U_FaturaSiparisNo)) { belgeNo = m.U_FaturaSiparisNo; belgeTipi = m.U_BagliBelgeTipi ?? ""; }
                     if (m.U_Durum != "ÖDENDİ") { NakitAkisOrnek.OdendiIsaretle(h.NakitAkisDb, m.DocEntry, "Banka hareketi " + h.No, kullanici, cariHesap); ek.Add($"nakit akış #{m.DocEntry} ÖDENDİ oldu"); }
                     if (string.IsNullOrEmpty(m.U_DekontNo)) NakitAkisOrnek.AlanKaydet(h.NakitAkisDb, m.DocEntry, "U_DekontNo", h.No, kullanici);
                     yev = m.U_YevmiyeNo ?? ""; if (cariAd == "") cariAd = m.U_Kurum; if (cariKod == "") cariKod = CariKod(h.Sirket, m.U_Kurum, karsiHesap);
@@ -181,13 +186,65 @@ namespace WebApplication3.Data
                 }
             }
             if (cariAd == "") cariAd = h.KarsiAd;
+            lock (Kilit) { h.BelgeTipi = belgeTipi; h.BelgeNo = belgeNo; }
             if (string.IsNullOrEmpty(yev)) { var f = Fis(h, karsiHesap, cariAd, kullanici); yev = f.No; ek.Add($"fiş {f.No} atıldı ({(h.Giris ? "102 / " + karsiHesap : karsiHesap + " / 102")})"); }
             lock (Kilit)
             {
                 h.Durum = "Onaylandı"; h.Onaylayan = kullanici ?? ""; h.OnayTarihi = DateTime.Now; h.OnayNotu = (not ?? "").Trim(); h.CariKod = cariKod; h.CariAd = cariAd; h.KarsiHesap = karsiHesap; h.YevmiyeNo = yev;
-                Log(h, "Onay", $"{cariAd} ({cariKod}) · {karsiHesap} {HesapAdi(karsiHesap)} · {string.Join(" · ", ek)}" + (h.OnayNotu == "" ? "" : " · " + h.OnayNotu), kullanici);
+                Log(h, "Onay", $"{cariAd} ({cariKod}) · {karsiHesap} {HesapAdi(karsiHesap)}" + (belgeNo == "" ? "" : $" · {belgeTipi} {belgeNo}") + $" · {string.Join(" · ", ek)}" + (h.OnayNotu == "" ? "" : " · " + h.OnayNotu), kullanici);
             }
-            return (true, $"{h.No} onaylandı: {cariAd} · {karsiHesap} {HesapAdi(karsiHesap)} · {string.Join(" · ", ek)}.", h);
+            return (true, $"{h.No} SAP'ye işlendi: {cariAd} · {karsiHesap} {HesapAdi(karsiHesap)}" + (belgeNo == "" ? "" : $" · {belgeTipi} {belgeNo}") + $" · {string.Join(" · ", ek)}.", h);
+        }
+        /// <summary>
+        /// Talimattan otomatik banka hareketi: Kasa Nakit Akışı'nda hazırlanan Havale / EFT talimatı bankaya iletilince (ya da gerçekleşince) her satır için bankadan akmış gibi
+        /// "Çıkış" hareketi açılır; satırla eşleşik gelir (Otomatik), onay bekler — Takip Paneli'nde cari / fatura önerisiyle SAP kaydı atılır. Aynı satır için ikinci hareket açılmaz.
+        /// </summary>
+        public static List<BankaHareketi> TalimattanAkit(OdemeTalimati t, string kullanici)
+        {
+            var sonuc = new List<BankaHareketi>(); if (t == null || t.Yontem != "Havale / EFT") return sonuc; Tohumla();
+            var hesaplar = NakitAkisOrnek.BankaHesaplari; int idx = Math.Max(0, Array.IndexOf(hesaplar, t.BankaHesabi ?? "")); var p = hesaplar[idx].Split(" · ");
+            foreach (var s in t.Satirlar)
+            {
+                var m = NakitAkisOrnek.Bul(s.DbName, s.DocEntry); if (m == null) continue;
+                string db = CekAkibetOrnek.DbName(s.OdeyenSirket); if (string.IsNullOrEmpty(db) || db == s.OdeyenSirket) db = s.DbName;
+                lock (Kilit) { if (_hareketler.Any(x => x.NakitAkisDb == s.DbName && x.NakitAkisDocEntry == s.DocEntry)) continue; }
+                string pb = string.IsNullOrEmpty(s.PB) ? "TRY" : s.PB; var zaman = DateTime.Now;
+                var h = new BankaHareketi
+                {
+                    DbName = db, Sirket = CekAkibetOrnek.SirketAdi(db), Banka = p[0], HesapKodu = "102.01." + (idx + 1).ToString("000"), Iban = p.Length > 1 ? p[1] : "", Tarih = zaman, Yon = "Çıkış", Tutar = Math.Round(s.TutarTL, 2), PB = pb,
+                    DovizTutar = pb == "TRY" ? Math.Round(s.TutarTL, 2) : Math.Round(s.Tutar, 2), Kur = pb == "TRY" || s.Tutar == 0 ? 1 : Math.Round(s.TutarTL / s.Tutar, 4), KurKaynagi = pb == "TRY" ? "" : (string.IsNullOrEmpty(m.U_KurKaynagi) ? "Anlaşmalı Kur" : m.U_KurKaynagi), KurTarihi = pb == "TRY" ? null : (m.U_KurTarihi ?? zaman.Date),
+                    IslemTuru = "Havale / EFT", KarsiAd = (string.IsNullOrEmpty(s.AliciHesapAdi) ? s.Kurum : s.AliciHesapAdi).ToUpper(Tr), KarsiIban = s.AliciIban ?? "", Aciklama = $"EFT {s.Aciklama} {t.No}".Trim(), Referans = $"{zaman:yyyyMMdd}{Math.Abs(Seed(t.No + s.DocEntry)) % 900000 + 100000}",
+                    AkisZamani = zaman, Kaynak = "Finekra API · talimat", TalimatNo = t.No, NakitAkisDocEntry = s.DocEntry, NakitAkisDb = s.DbName, Eslesme = "Otomatik", EslesmeNotu = $"talimat {t.No} ile bankaya iletildi; hareket otomatik aktı (#{s.DocEntry} {s.Kurum})"
+                };
+                lock (Kilit) { h.Id = ++_sonId; h.No = $"FNK-{zaman.Year}-{_sonId:000000}"; _hareketler.Add(h); _sonAkis = zaman; Log(h, "Akış", $"{h.Banka} · {h.Referans} · Çıkış {h.Tutar.ToString("N2", Tr)} ₺ · Havale / EFT · talimat {t.No} ({t.Durum})", "Finekra", zaman); Log(h, "Eşleşme", $"Nakit akış #{s.DocEntry} {s.Kurum} ile talimat üzerinden eşleşti", "Sistem", zaman); }
+                NakitAkisOrnek.Gunluge(s.DbName, s.DocEntry, "Banka Hareketi", $"{h.No} Finekra'dan aktı ({t.No} → {t.Durum}); Takip Paneli'nde SAP kaydı bekliyor", kullanici);
+                sonuc.Add(h);
+            }
+            return sonuc;
+        }
+        /// <summary>
+        /// SAP kaydı için belge adayları ("hangi faturaya istinaden"): eşleşmiş nakit akış satırının belgesi önce; sonra carinin açık faturaları / siparişleri (Data/NakitAkisOrnek.cs › CariBelgeler)
+        /// tutar yakınlığına göre. En iyi aday (tutar farkı en küçük, ± %1 içindeyse) "öneri" işaretlidir; onay penceresi bunu otomatik seçer.
+        /// </summary>
+        public static List<object> FaturaAdaylari(int id, string cariAd = null)
+        {
+            var h = Bul(id); if (h == null) return new List<object>();
+            string kurum; if (!string.IsNullOrWhiteSpace(cariAd)) kurum = cariAd.Trim(); else if (!string.IsNullOrEmpty(h.CariAd)) kurum = h.CariAd; else { dynamic o = Oneri(h); kurum = (string)o.cariAd ?? BaslikDuzelt(h.KarsiAd); }
+            var l = new List<(string tip, string no, string tarih, string sonOdeme, decimal tutar, string pb, decimal kalan, string kaynak, decimal fark, bool nakitAkis)>();
+            NakitAkisViewModel m = h.NakitAkisDocEntry != null ? NakitAkisOrnek.Bul(h.NakitAkisDb, h.NakitAkisDocEntry.Value) : null;
+            if (m != null) l.Add((m.U_BagliBelgeTipi ?? "Cari Bakiye", string.IsNullOrEmpty(m.U_FaturaSiparisNo) ? "" : m.U_FaturaSiparisNo, m.BelgeTarihi?.ToString("yyyy-MM-dd"), m.U_SonOdemeTarihi?.ToString("yyyy-MM-dd"), m.U_FaturaTutari ?? m.U_TutarTL ?? 0, m.U_ParaBirimi ?? "TRY", m.U_TutarTL ?? 0, $"nakit akış #{m.DocEntry}", Math.Round((m.U_TutarTL ?? 0) - h.Tutar, 2), true));
+            if (!string.IsNullOrEmpty(kurum) && !h.Giris)
+            {
+                foreach (dynamic b in (IEnumerable<object>)((dynamic)NakitAkisOrnek.CariBelgeler(h.DbName, kurum, "")).belgeler)
+                {
+                    string no = (string)b.no; if (l.Any(x => x.no == no)) continue; string pb = (string)b.pb ?? "TRY"; decimal kur = (decimal)(b.kur ?? 1m); decimal kalanTL = Math.Round((decimal)b.kalan * (pb == "TRY" ? 1 : kur), 2);
+                    l.Add(((string)b.tip, no, (string)b.tarih, (string)b.sonOdeme, (decimal)b.tutar, pb, kalanTL, (string)b.kaynak, Math.Round(kalanTL - h.Tutar, 2), false));
+                }
+            }
+            var sirali = l.OrderByDescending(x => x.nakitAkis).ThenBy(x => Math.Abs(x.fark)).ToList();
+            var enIyi = sirali.FirstOrDefault(x => x.nakitAkis) ; bool enIyiVar = enIyi.no != null;
+            if (!enIyiVar) { var yakin = sirali.Where(x => h.Tutar > 0 && Math.Abs(x.fark) <= Math.Max(1m, h.Tutar * 0.01m)).OrderBy(x => Math.Abs(x.fark)).FirstOrDefault(); if (yakin.no != null) { enIyi = yakin; enIyiVar = true; } }
+            return sirali.Select(x => (object)new { tip = x.tip, no = x.no, tarih = x.tarih, sonOdeme = x.sonOdeme, tutar = x.tutar, pb = x.pb, kalanTL = x.kalan, kaynak = x.kaynak, fark = x.fark, oneri = enIyiVar && x.no == enIyi.no && x.kaynak == enIyi.kaynak, cari = kurum }).ToList();
         }
         /// <summary>Nakit akışta karşılığı olmayan çıkış → Kasa Nakit Akışı'nda ÖDENDİ havale satırı (banka bilgileri, dekont = hareket no); fiş zaten atıldıysa numarası taşınır.</summary>
         public static (bool ok, string mesaj, BankaHareketi h, NakitAkisViewModel satir) NakitAkisaGonder(int id, string kullanici)
@@ -241,18 +298,18 @@ namespace WebApplication3.Data
         /// <summary>Onay penceresi için öneri: eşleşmiş nakit akış satırının carisi, cari karttan ad benzerliği ya da işlem türüne göre hesap.</summary>
         public static object Oneri(BankaHareketi h)
         {
-            if (h.NakitAkisDocEntry != null) { var m = NakitAkisOrnek.Bul(h.NakitAkisDb, h.NakitAkisDocEntry.Value); if (m != null) { bool grup = CekAkibetOrnek.GrupSirketleri.Contains(m.U_Kurum ?? ""); return new { cariKod = CariKod(h.Sirket, m.U_Kurum, grup ? "332" : "320"), cariAd = m.U_Kurum, karsiHesap = grup ? "332" : "320", kaynak = $"nakit akış #{m.DocEntry}" }; } }
+            if (h.NakitAkisDocEntry != null) { var m = NakitAkisOrnek.Bul(h.NakitAkisDb, h.NakitAkisDocEntry.Value); if (m != null) { bool grup = CekAkibetOrnek.GrupSirketleri.Contains(m.U_Kurum ?? ""); return new { cariKod = CariKod(h.Sirket, m.U_Kurum, grup ? "332" : "320"), cariAd = m.U_Kurum, karsiHesap = grup ? "332" : "320", kaynak = $"nakit akış #{m.DocEntry}", belgeTipi = m.U_BagliBelgeTipi ?? "", belgeNo = m.U_FaturaSiparisNo ?? "", talimatNo = m.U_TalimatNo ?? "" }; } }
             string ad = BaslikDuzelt(h.KarsiAd);
-            if (h.IslemTuru == "Vergi / SGK") return new { cariKod = h.KarsiAd.Contains("SGK") ? "361.001" : "360.001", cariAd = ad, karsiHesap = h.KarsiAd.Contains("SGK") ? "361" : "360", kaynak = "işlem türü" };
-            if (h.IslemTuru == "Banka Masrafı") return new { cariKod = "", cariAd = ad, karsiHesap = "780", kaynak = "işlem türü" };
-            if (h.IslemTuru == "Kredi Taksidi") return new { cariKod = "", cariAd = ad, karsiHesap = "300", kaynak = "işlem türü" };
-            if (h.IslemTuru == "Kredi Kartı Ekstresi") return new { cariKod = "", cariAd = ad, karsiHesap = "300", kaynak = "işlem türü" };
-            if (h.IslemTuru == "Virman") return new { cariKod = "", cariAd = ad, karsiHesap = "102", kaynak = "işlem türü" };
-            if (h.IslemTuru == "Çek Tahsilatı") return new { cariKod = "", cariAd = ad, karsiHesap = "101", kaynak = "işlem türü" };
+            if (h.IslemTuru == "Vergi / SGK") return new { cariKod = h.KarsiAd.Contains("SGK") ? "361.001" : "360.001", cariAd = ad, karsiHesap = h.KarsiAd.Contains("SGK") ? "361" : "360", kaynak = "işlem türü", belgeTipi = "Resmi Ödeme", belgeNo = "", talimatNo = "" };
+            if (h.IslemTuru == "Banka Masrafı") return new { cariKod = "", cariAd = ad, karsiHesap = "780", kaynak = "işlem türü", belgeTipi = "Diğer", belgeNo = "", talimatNo = "" };
+            if (h.IslemTuru == "Kredi Taksidi") return new { cariKod = "", cariAd = ad, karsiHesap = "300", kaynak = "işlem türü", belgeTipi = "Diğer", belgeNo = "", talimatNo = "" };
+            if (h.IslemTuru == "Kredi Kartı Ekstresi") return new { cariKod = "", cariAd = ad, karsiHesap = "300", kaynak = "işlem türü", belgeTipi = "Diğer", belgeNo = "", talimatNo = "" };
+            if (h.IslemTuru == "Virman") return new { cariKod = "", cariAd = ad, karsiHesap = "102", kaynak = "işlem türü", belgeTipi = "Diğer", belgeNo = "", talimatNo = "" };
+            if (h.IslemTuru == "Çek Tahsilatı") return new { cariKod = "", cariAd = ad, karsiHesap = "101", kaynak = "işlem türü", belgeTipi = "Diğer", belgeNo = "", talimatNo = "" };
             var kart = CariKartOrnek.Kartlar.Where(k => k.Sirket == h.Sirket || true).FirstOrDefault(k => AdBenzer(k.KisaAd, h.KarsiAd));
-            if (kart != null) return new { cariKod = kart.Kod, cariAd = kart.KisaAd, karsiHesap = kart.KartTipi == "Müşteri" ? "120" : "320", kaynak = "cari kart (ad benzerliği)" };
-            var ted = CekOrnek.TedarikciAdlari.FirstOrDefault(t => AdBenzer(t, h.KarsiAd)); if (ted != null) return new { cariKod = CariKod(h.Sirket, ted, "320"), cariAd = ted, karsiHesap = "320", kaynak = "tedarikçi listesi" };
-            return new { cariKod = "", cariAd = ad, karsiHesap = h.Giris ? "120" : h.IslemTuru == "Kira" || h.IslemTuru == "Otomatik Ödeme" ? "770" : "320", kaynak = "varsayılan" };
+            if (kart != null) return new { cariKod = kart.Kod, cariAd = kart.KisaAd, karsiHesap = kart.KartTipi == "Müşteri" ? "120" : "320", kaynak = "cari kart (ad benzerliği)", belgeTipi = "", belgeNo = "", talimatNo = "" };
+            var ted = CekOrnek.TedarikciAdlari.FirstOrDefault(t => AdBenzer(t, h.KarsiAd)); if (ted != null) return new { cariKod = CariKod(h.Sirket, ted, "320"), cariAd = ted, karsiHesap = "320", kaynak = "tedarikçi listesi", belgeTipi = "", belgeNo = "", talimatNo = "" };
+            return new { cariKod = "", cariAd = ad, karsiHesap = h.Giris ? "120" : h.IslemTuru == "Kira" || h.IslemTuru == "Otomatik Ödeme" ? "770" : "320", kaynak = "varsayılan", belgeTipi = h.IslemTuru == "Kira" || h.IslemTuru == "Otomatik Ödeme" ? "Diğer" : "", belgeNo = "", talimatNo = "" };
         }
         static bool AdBenzer(string a, string b) { if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false; string x = a.ToUpper(Tr), y = b.ToUpper(Tr); var ilk = x.Split(' ')[0]; return y.Contains(x) || x.Contains(y) || (ilk.Length >= 4 && y.Contains(ilk)); }
         static readonly HashSet<string> Kisaltmalar = new HashSet<string> { "GİB", "VD", "VDB", "SGK", "SGM", "A.Ş.", "A.Ş", "AŞ", "LTD.", "LTD", "ŞTİ.", "ŞTİ", "TİC.", "TİC", "SAN.", "SAN", "PAZ.", "PAZ", "EFT", "POS", "KDV", "BSMV", "TL", "TC", "T.C.", "İGDAŞ", "BEDAŞ", "AYEDAŞ", "İSKİ", "PTT", "TEB", "QNB", "ING", "HSBC", "OSB" };
@@ -304,7 +361,7 @@ namespace WebApplication3.Data
             return new
             {
                 id = h.Id, no = h.No, dbName = h.DbName, sirket = h.Sirket, banka = h.Banka, hesapKodu = h.HesapKodu, iban = h.Iban, tarih = h.Tarih.ToString("yyyy-MM-dd HH:mm"), gun = h.Tarih.ToString("yyyy-MM-dd"), yon = h.Yon, giris = h.Giris, tutar = h.Tutar, pb = h.PB, dovizTutar = h.DovizTutar, kur = h.Kur, kurOzet = h.PB == "TRY" ? "" : KurOrnek.Ozet(h.PB, h.KurTarihi, h.KurKaynagi, h.Kur), sap = !string.IsNullOrEmpty(h.YevmiyeNo), islemTuru = h.IslemTuru, karsiAd = h.KarsiAd, karsiIban = h.KarsiIban, aciklama = h.Aciklama, referans = h.Referans,
-                durum = h.Durum, onaylayan = h.Onaylayan, onayTarihi = h.OnayTarihi?.ToString("yyyy-MM-dd HH:mm"), onayNotu = h.OnayNotu, cariKod = h.CariKod, cariAd = h.CariAd, karsiHesap = h.KarsiHesap, karsiHesapAdi = string.IsNullOrEmpty(h.KarsiHesap) ? "" : HesapAdi(h.KarsiHesap), yevmiyeNo = h.YevmiyeNo,
+                durum = h.Durum, onaylayan = h.Onaylayan, onayTarihi = h.OnayTarihi?.ToString("yyyy-MM-dd HH:mm"), onayNotu = h.OnayNotu, cariKod = h.CariKod, cariAd = h.CariAd, karsiHesap = h.KarsiHesap, karsiHesapAdi = string.IsNullOrEmpty(h.KarsiHesap) ? "" : HesapAdi(h.KarsiHesap), yevmiyeNo = h.YevmiyeNo, belgeTipi = h.BelgeTipi, belgeNo = h.BelgeNo, talimatNo = string.IsNullOrEmpty(h.TalimatNo) ? (m?.U_TalimatNo ?? "") : h.TalimatNo,
                 eslesme = h.Eslesme, eslesmeNotu = h.EslesmeNotu, akisZamani = h.AkisZamani.ToString("yyyy-MM-dd HH:mm"), kaynak = h.Kaynak, oneri = h.Durum == "Onaylandı" ? null : Oneri(h),
                 nakitAkis = m == null ? (h.NakitAkisDocEntry == null ? null : new { docEntry = h.NakitAkisDocEntry.Value, dbName = h.NakitAkisDb, bulundu = false, kurum = "", durum = "", tutarTL = 0m, planlanan = (string)null, odenme = (string)null, yevmiyeNo = "", fark = 0m, link = "" })
                     : new { docEntry = m.DocEntry, dbName = m.U_KaynakFirma, bulundu = true, kurum = m.U_Kurum, durum = m.U_Durum, tutarTL = m.U_TutarTL ?? 0, planlanan = m.U_PlanlananTarih?.ToString("yyyy-MM-dd"), odenme = m.U_OdenmeTarihi?.ToString("yyyy-MM-dd"), yevmiyeNo = m.U_YevmiyeNo ?? "", fark = Math.Round((m.U_TutarTL ?? 0) - h.Tutar, 2), link = $"/Rapor79?sirket={m.U_KaynakFirma}&sekme=havale" },
