@@ -526,6 +526,9 @@ return default;
         public DateTime? IbrazTarihi { get; set; }
         public string IbrazBelgeNo { get; set; }
         public string PlanKontrol { get; set; }          // Uyumlu | Farklı | İbraz Bekliyor | Plansız İbraz | —
+        // --- satır kaynağı (Takip Paneli "Satır Kaynağı · İşlem" sütunu): satır hangi kayıttan üretildi — Kasa Nakit Akışı (nakit ödeme / plan), Kasa Fişi (elden ödeme / tahsilat), Çek Akıbeti (portföy girişi / ciro / ibraz), Dolaşım Planı (adım)
+        public string Kaynak { get; set; }               // Title Case rozet metni, ör. "Kasa Fişi · Elden Ödeme"
+        public string KaynakDetay { get; set; }          // belge / numara / tarih açıklaması
 
         public string OnayDurumu { get; set; }
         public string NotBasligi { get; set; }
