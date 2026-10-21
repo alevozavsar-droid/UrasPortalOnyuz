@@ -529,6 +529,10 @@ return default;
         // --- satır kaynağı (Takip Paneli "Satır Kaynağı · İşlem" sütunu): satır hangi kayıttan üretildi — Kasa Nakit Akışı (nakit ödeme / plan), Kasa Fişi (elden ödeme / tahsilat), Çek Akıbeti (portföy girişi / ciro / ibraz), Dolaşım Planı (adım)
         public string Kaynak { get; set; }               // Title Case rozet metni, ör. "Kasa Fişi · Elden Ödeme"
         public string KaynakDetay { get; set; }          // belge / numara / tarih açıklaması
+        public string Referans { get; set; }             // "Referans · No" sütunu: makbuz / fiş / ciro bordrosu / ibraz belge no
+        public string IslemTuruAdi { get; set; }         // "İşlem Türü" sütunu (Title Case): Nakit Ödeme | Elden Ödeme | Nakit Tahsilat | Portföye Giriş | Tedarikçiye Ciro | Bankaya İbraz | Grup İçi Ciro | Plan Adımı | Plan
+        public decimal? DovizTutar { get; set; }         // dövizli işlem: döviz tutarı (Borc / Alacak TL karşılığıdır), ParaBirimi döviz kodu
+        public decimal? Kur { get; set; }
 
         public string OnayDurumu { get; set; }
         public string NotBasligi { get; set; }
