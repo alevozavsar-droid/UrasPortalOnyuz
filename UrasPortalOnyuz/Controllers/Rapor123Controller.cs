@@ -100,8 +100,11 @@ namespace WebApplication3.Controllers
                 var naSatir = naDoc != null ? NakitAkisOrnek.Bul(naDb, naDoc.Value) : null;
                 // çek satırı: Çek Akıbeti kaydının güncel durumu (plan satırı, portföyde mi, gönderilebilir mi) — satırdan "Nakit Akışa Gönder" / "Tedarikçiye Çık" için
                 var k = h.CekDocEntry != null ? CekAkibetOrnek.Bul(h.CekDocEntry.Value) : null; var plan = k?.PlanDocEntry != null ? NakitAkisOrnek.Bul(k.PlanDocEntry.Value) : null;
+                // muhasebe fişi ("Fiş" sütunu): nakit akış satırının fişi; kasa fişleri ve çek giriş / ibraz fişleri ilk istendiğinde örnek olarak üretilir (plan satırlarının fişi yok)
+                var fisNo = HareketFisi(h, anahtar, naSatir, k); var fisKaydi = fisNo == null ? null : MuhasebeOrnek.Bul(fisNo);
                 return new
                 {
+                    fis = fisKaydi == null ? null : new { no = fisKaydi.No, kaynak = fisKaydi.Kaynak, tarih = fisKaydi.Tarih.ToString("yyyy-MM-dd"), sirket = fisKaydi.Sirket },
                     key = anahtar, dbKey = h.DbKey, dbName, sirket = h.Sirket, islemNo = h.IslemNo, tarih = h.KayitTarihi.ToString("yyyy-MM-dd"), hesapTipi = h.HesapTipi, kasaKodu = h.KasaKodu, kasaAdi = h.KasaAdi, karsiKod = h.KarsiHesapKodu, karsiAd = h.KarsiHesapAdi,
                     borc = h.Borc, alacak = h.Alacak, pb = h.ParaBirimi, aciklama = h.Aciklama, islemTipi = h.IslemTipi, yon = h.IslemYonu,
                     onay = new { durum = h.OnayDurumu ?? "", kullanici = h.OnaylayanKullaniciAdi, tarih = h.OnayTarihi?.ToString("yyyy-MM-dd"), notBaslik = h.NotBasligi, notIcerik = h.NotIcerigi },
@@ -365,6 +368,57 @@ namespace WebApplication3.Controllers
         /// <summary>Elle eşleştirme adayları (aynı şirkette bağlanmamış Havale / EFT satırları, tutar yakınlığına göre).</summary>
         [HttpGet("FinekraAdaylar")] public IActionResult FinekraAdaylar(int id) => Json(new { success = true, data = FinekraOrnek.Adaylar(id) });
         [HttpGet("FinekraVeri")] public IActionResult FinekraVeri(int id) { var h = FinekraOrnek.Bul(id); return Json(h == null ? new { success = false, message = "Hareket bulunamadı." } : (object)new { success = true, hareket = FinekraOrnek.Json(h), yevmiye = MuhasebeOrnek.Json(MuhasebeOrnek.Bul(h.YevmiyeNo)) }); }
+
+        // ---------- satır fişi ("Fiş" sütunu): hareketin muhasebe fişi ----------
+        /// <summary>Fiş detayı (Fiş sütunundaki numaraya tıklanınca): yevmiye başlığı ve satırları.</summary>
+        [HttpGet("FisVeri")]
+        public IActionResult FisVeri(string no) { var f = MuhasebeOrnek.Bul(no ?? ""); return Json(f == null ? new { success = false, message = "Fiş bulunamadı: " + no } : (object)new { success = true, yevmiye = MuhasebeOrnek.Json(f) }); }
+        static readonly Dictionary<string, string> HareketFisleri = new Dictionary<string, string>(); static readonly object FisKilit = new object();
+        static YevmiyeSatiri YS(string kod, decimal borc, decimal alacak, string aciklama) => new YevmiyeSatiri { HesapKodu = kod, HesapAdi = MuhasebeOrnek.HesapPlani.TryGetValue((kod ?? "").Split('.')[0].Split('/')[0], out var ad) ? ad : kod, Borc = Math.Round(borc, 2), Alacak = Math.Round(alacak, 2), Aciklama = aciklama ?? "" };
+        /// <summary>
+        /// Hareketin muhasebe fişi: nakit akış satırından gelen kasa çıkışı → satırın fişi (U_YevmiyeNo); elden ödenmiş kasa çıkışı → kasa tediye fişi; nakit tahsilat → kasa tahsil fişi;
+        /// çek portföy girişi → çek giriş fişi (101 / 120); ciro / ibraz → plan satırının fişi ya da ciro / ibraz fişi (MuhasebeOrnek.CiroFisiTaslak); dolaşım adımı → adımda atılan fiş (kaynak + belge no ile bulunur).
+        /// Plan satırları (PLAN adımı, Kasa Nakit Akışı planı) ve teminat için fiş yoktur. Örnek fişler ilk istendiğinde üretilir ve hareket anahtarıyla saklanır (mükerrer üretilmez).
+        /// </summary>
+        static string HareketFisi(R123_HareketViewModel h, string anahtar, NakitAkisViewModel naSatir, CekKaydi k)
+        {
+            if (naSatir != null && !string.IsNullOrEmpty(naSatir.U_YevmiyeNo)) return naSatir.U_YevmiyeNo;
+            string kaynak = h.Kaynak ?? "";
+            if (kaynak == "Kasa Nakit Akışı · Plan" || kaynak == "Çek Akıbeti · Plan" || kaynak == "Dolaşım Planı · Planlı Adım" || kaynak == "Çek Akıbeti · Teminat") return null;
+            lock (FisKilit)
+            {
+                if (HareketFisleri.TryGetValue(anahtar, out var mevcut)) return mevcut;
+                string dbName = CekAkibetOrnek.DbName(h.Sirket), no = null; decimal tutar = h.Borc > 0 ? h.Borc : h.Alacak;
+                if (h.HesapTipi == "KASA" && tutar > 0)
+                {
+                    bool cikis = h.IslemYonu == "Çıkış"; string fisNo = System.Text.RegularExpressions.Regex.Match(h.Aciklama ?? "", @"(?:fiş|makbuzu)\s+([A-Z0-9-]+)").Groups[1].Value;
+                    var f = MuhasebeOrnek.Olustur(dbName, (cikis ? "Kasa Tediye Fişi " : "Kasa Tahsil Fişi ") + fisNo, $"{h.KarsiHesapAdi} · {h.Aciklama}",
+                        cikis ? new[] { YS(h.KarsiHesapKodu, tutar, 0, h.KarsiHesapAdi + " · " + h.Aciklama), YS(h.KasaKodu, 0, tutar, h.KasaAdi + " · elden ödeme") } : new[] { YS(h.KasaKodu, tutar, 0, h.KasaAdi + " · nakit tahsilat"), YS(h.KarsiHesapKodu, 0, tutar, h.KarsiHesapAdi) },
+                        h.OnaylayanKullaniciAdi ?? "Nazlı Erdem", h.KayitTarihi.AddHours(15));
+                    no = f.No;
+                }
+                else if (h.HesapTipi == "CEK" && k != null)
+                {
+                    if (kaynak == "Çek Akıbeti · Portföy Girişi")
+                    { var f = MuhasebeOrnek.Olustur(dbName, $"Çek Giriş {k.No}", $"{k.No} · {k.Musteri} · {k.Banka} · vade {k.Vade:dd.MM.yyyy}", new[] { YS(h.KasaKodu, k.Tutar, 0, k.No + " portföye giriş"), YS(k.MusteriKod, 0, k.Tutar, k.Musteri) }, "Nazlı Erdem", k.PortfoyGiris.AddHours(11)); no = f.No; }
+                    else if (kaynak.StartsWith("Dolaşım Planı"))
+                    {
+                        // adım gerçekleşirken atılan fiş: eden şirkette "Çek Ciro / Çek İbraz {belge}", alan şirkette "Çek Giriş {belge}"
+                        string belge = h.IbrazBelgeNo ?? ""; bool cikis = h.IslemYonu == "Çıkış";
+                        no = MuhasebeOrnek.Listele(dbName).FirstOrDefault(f => (f.Aciklama ?? "").StartsWith(k.No) && belge != "" && (cikis ? f.Kaynak == "Çek Ciro " + belge || f.Kaynak == "Çek İbraz " + belge : f.Kaynak == "Çek Giriş " + belge))?.No;
+                    }
+                    else if (kaynak.StartsWith("Çek Akıbeti") && k.IbrazYeri != "")
+                    {
+                        var plan = k.PlanDocEntry != null ? NakitAkisOrnek.Bul(k.PlanDocEntry.Value) : null;
+                        if (plan != null && !string.IsNullOrEmpty(plan.U_YevmiyeNo)) no = plan.U_YevmiyeNo;
+                        else if (k.IbrazTuru == "İade") { var f = MuhasebeOrnek.Olustur(dbName, $"Çek İade {k.IbrazBelgeNo}", $"{k.No} · {k.IbrazBelgeNo} · {k.Sirket} → {k.IbrazYeri}", new[] { YS(k.MusteriKod, k.Tutar, 0, "İade: " + k.IbrazYeri), YS(h.KasaKodu, 0, k.Tutar, k.No + " iade") }, "Nazlı Erdem", (k.IbrazTarihi ?? DateTime.Today).AddHours(14)); no = f.No; }
+                        else { var t = MuhasebeOrnek.CiroFisiTaslak(dbName, null, k.Sirket, k.IbrazYeri, k.IbrazTuru == "Bankaya İbraz" ? "Bankaya İbraz" : "Tedarikçiye Ciro", k.IbrazBelgeNo, k.No, k.Tutar).FirstOrDefault(); var f = MuhasebeOrnek.Kaydet(t, "Nazlı Erdem", (k.IbrazTarihi ?? DateTime.Today).AddHours(14)); no = f?.No; }
+                    }
+                }
+                if (no != null) HareketFisleri[anahtar] = no;
+                return no;
+            }
+        }
 
         // ---------- hareket üreticileri (Kasa / Banka / Çek) ----------
         static List<R123_HareketViewModel> Hareketler(List<(string Ad, string DbName, string DbKey)> sirketler, DateTime bas, DateTime bit)
