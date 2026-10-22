@@ -73,7 +73,7 @@ namespace WebApplication3.Data
         }
         /// <summary>Mahsupta karşılıklı bakiye varsa (ödeyenin fatura sahibine borcu ≥ tutar) borçtan düşülür; yoksa fatura sahibi ödeyene borçlanır. Temlikte her zaman borçlanma.</summary>
         public static bool KarsilikliMahsup(NakitAkisViewModel m) => m.U_GrupIciTur == "Mahsup" && CekAkibetOrnek.GrupBakiye(m.U_OdeyenSirket, m.U_FaturaSahibi) >= (m.U_TutarTL ?? 0) && (m.U_TutarTL ?? 0) > 0;
-        static string Sekil(GrupIciBelge b) => b.Tur == "Temlik" ? "Temlik: fatura sahibinin tedarikçi borcu ödeyen şirkete devredilir (332)" : CekAkibetOrnek.GrupBakiye(b.Odeyen, b.FaturaSahibi) >= b.TutarTL ? "Mahsup: ödeyenin fatura sahibine olan borcundan düşülür (132 / 332 karşılıklı kapanır)" : "Mahsup: karşılıklı bakiye yok, fatura sahibi ödeyene borçlanır (332)";
+        public static string Sekil(GrupIciBelge b) => b.Tur == "Temlik" ? "Temlik: fatura sahibinin tedarikçi borcu ödeyen şirkete devredilir (332)" : CekAkibetOrnek.GrupBakiye(b.Odeyen, b.FaturaSahibi) >= b.TutarTL ? "Mahsup: ödeyenin fatura sahibine olan borcundan düşülür (132 / 332 karşılıklı kapanır)" : "Mahsup: karşılıklı bakiye yok, fatura sahibi ödeyene borçlanır (332)";
 
         /// <summary>Fatura sahibi fişinin taslağı (simülasyon / kayıt): 320 (tedarikçi grup şirketiyse 332) borç · 132 (karşılıklı mahsup) ya da 332 alacak; grup içi bakiye etkisi.</summary>
         public static (MuhasebeOrnek.FisTaslagi fis, string sekil, string bakiyeEtkisi, bool karsilikli, decimal tl) FisTaslagi(NakitAkisViewModel m, GrupIciBelge b = null)

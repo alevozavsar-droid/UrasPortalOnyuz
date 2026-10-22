@@ -533,6 +533,26 @@ return default;
         public string IslemTuruAdi { get; set; }         // "İşlem Türü" sütunu (Title Case): Nakit Ödeme | Elden Ödeme | Nakit Tahsilat | Portföye Giriş | Tedarikçiye Ciro | Bankaya İbraz | Grup İçi Ciro | Plan Adımı | Plan
         public decimal? DovizTutar { get; set; }         // dövizli işlem: döviz tutarı (Borc / Alacak TL karşılığıdır), ParaBirimi döviz kodu
         public decimal? Kur { get; set; }
+        // --- Kredi · Banka Kartı sekmesi (HesapTipi KART, IslemNo = Kasa Nakit Akışı DocEntry): kart, taksit, ekstre dönemi, Finekra kart ekstresi ödemesiyle eşleşme
+        public string Kart { get; set; }
+        public string Taksit { get; set; }
+        public string EkstreDonemi { get; set; }
+        public string EkstreDurumu { get; set; }         // Ekstre Ödendi | Ekstre Bekleniyor | Plan
+        public int? EkstreFnkId { get; set; }
+        public string EkstreFnkNo { get; set; }
+        // --- Temlik · Mahsup · Yansıtma sekmesi (HesapTipi GRUPICI, IslemNo = DocEntry): ödeyen şirket ≠ fatura sahibi; otomatik grup içi belge (Data/GrupIciBelgeOrnek.cs) ya da bağlı modül kaydı
+        public string FaturaSahibi { get; set; }
+        public string Odeyen { get; set; }
+        public string GrupTur { get; set; }              // Mahsup | Temlik | Yansıtma
+        public string GrupBelgeNo { get; set; }          // GİM-2026-0001 / GİT-2026-0001
+        public string GrupBelgeDurum { get; set; }       // Hazırlandı | Muhasebeleşti | İptal
+        public string GrupSekil { get; set; }
+        public string GrupBelgeLink { get; set; }
+        public string GrupKayitNo { get; set; }          // Mahsup / Temlik / Yansıtma modülü kayıt no
+        public string GrupKayitLink { get; set; }
+        public string FaturaSahibiFisNo { get; set; }
+        public string OdeyenFisNo { get; set; }
+        public string GrupKontrol { get; set; }          // Muhasebeleşti | Belge Hazır | Belge Yok | Belge İptal | Kayıt Bağlı | Kayıt Bağlı Değil
 
         public string OnayDurumu { get; set; }
         public string NotBasligi { get; set; }

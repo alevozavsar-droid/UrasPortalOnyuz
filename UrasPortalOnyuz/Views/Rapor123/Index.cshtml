@@ -3,7 +3,8 @@
     var sirketler = (List<KeyValuePair<string, string>>)ViewBag.Sirketler;
     string varsayilan = (string)ViewBag.VarsayilanSirket ?? "";
     string bas = (string)ViewBag.Bas, bit = (string)ViewBag.Bit, sekme = (string)ViewBag.Sekme ?? "ozet";
-    var sekmeler = new[] { ("ozet", "Durum Özeti", "fa-gauge-high"), ("finekra", "Finekra · Banka Hareketleri", "fa-building-columns"), ("kasa", "Kasa", "fa-cash-register"), ("cek", "Çek · Senet", "fa-money-check-alt"), ("eslesme", "Nakit Akış Eşleşme", "fa-link"), ("duzenli", "Düzenli Ödemeler", "fa-calendar-check"), ("gunsonu", "Gün Sonu Mutabakatı", "fa-clipboard-check"), ("bakiye", "Bakiyeler", "fa-scale-balanced"), ("gunluk", "Günlük", "fa-clock-rotate-left") };
+    // sekme sırası: hareket sekmeleri önde (Banka · Kasa · Çek · Kart · Temlik / Mahsup / Yansıtma), Durum Özeti en sonda
+    var sekmeler = new[] { ("finekra", "Finekra · Banka Hareketleri", "fa-building-columns"), ("kasa", "Kasa", "fa-cash-register"), ("cek", "Çek · Senet", "fa-money-check-alt"), ("kart", "Kredi · Banka Kartı", "fa-credit-card"), ("grupici", "Temlik · Mahsup · Yansıtma", "fa-right-left"), ("eslesme", "Nakit Akış Eşleşme", "fa-link"), ("duzenli", "Düzenli Ödemeler", "fa-calendar-check"), ("gunsonu", "Gün Sonu Mutabakatı", "fa-clipboard-check"), ("bakiye", "Bakiyeler", "fa-scale-balanced"), ("gunluk", "Günlük", "fa-clock-rotate-left"), ("ozet", "Durum Özeti", "fa-gauge-high") };
 }
 @*
     KONSOLİDE FİNANSAL TAKİP PANELİ (Rapor123) — Kasa Nakit Akışı tasarım dili (na-* ortak stil, kn/tp düzeni). Veri /Rapor123/Veri; betik wwwroot/js/takip-paneli.js.
@@ -14,7 +15,9 @@
     (plan ↔ ibraz kontrolü). Kasa ve Çek sekmelerinde "Satır Kaynağı · İşlem" sütunu: satır nereden geldi (Kasa Nakit Akışı / Kasa Fişi elden ödeme · tahsilat / Çek Akıbeti portföy girişi · ciro · ibraz / Dolaşım Planı adımı)
     ve kaynağa göre yapılacak iş: elden ödenmiş kasa çıkışı ya da planlanmamış portföy belgesi → "Nakit Akışa Ekle" (kasa çıkışı ÖDENDİ nakit satırı olur ve hareketle eşlenir; belge tedarikçiye planlanır), planlı belge → "İbraz Et · Tedarikçiye Çık"
     (plan satırı üzerinden ciro / bankaya ibraz; plansız belgede "İbraz Et" GMY onayına düşer). "Kasa Nakit Akışı Eşleşmesi" sütunu: Var (#satır) / Yok.
-    Süzgeç: Onay Durumu › Nakit Akışta Yok / Var. Eski görünüm: /Rapor123/Eski. Derin bağlantı: /Rapor123?sirket=URASKIMYA&bas=&bit=&sekme=kasa
+    Kredi · Banka Kartı sekmesi: Kasa Nakit Akışı'nda kartla ödenen / planlı satırlar (kart, taksit, ekstre dönemi) + Finekra kart ekstresi ödemesiyle eşleşme (Kontrol: Ekstre Ödendi / Bekleniyor) ve altta kart ekstre ödemeleri listesi.
+    Temlik · Mahsup · Yansıtma sekmesi: ödeyen şirket ≠ fatura sahibi olan ödemeler (otomatik grup içi Mahsup / Temlik belgesi: hazır / muhasebeleşti; tür değiştirme) ve yöntemi Mahsup / Temlik / Yansıtma olan satırlar (bağlı modül kaydı); üstte modül özetleri.
+    Durum Özeti sekmesi en sonda (varsayılan açılış yine Durum Özeti). Süzgeç: Onay Durumu › Nakit Akışta Yok / Var. Eski görünüm: /Rapor123/Eski. Derin bağlantı: /Rapor123?sirket=URASKIMYA&bas=&bit=&sekme=kasa
 *@
 @section Styles {
 <link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
@@ -23,9 +26,9 @@
     .tp-pill { font-size: .66rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; } a.tp-pill { text-decoration: none; } a.tp-pill:hover { background: #e0f2fe; color: #0c4a6e; border-color: #bae6fd; }
     #tp .na-panel .table-responsive { overflow: visible !important; } .table-container:has(#tp) { overflow: visible !important; }
     /* ortak başlık düzenli geniş tablolar (Banka / Kasa / Çek · Senet): tablo en az sütun toplamı kadar geniş, kart içinde yatay kayar */
-    #tp .na-panel[data-p="finekra"] .table-responsive, #tp .na-panel[data-p="kasa"] .table-responsive, #tp .na-panel[data-p="cek"] .table-responsive { overflow-x: auto !important; overflow-y: visible; }
+    #tp .na-panel[data-p="finekra"] .table-responsive, #tp .na-panel[data-p="kasa"] .table-responsive, #tp .na-panel[data-p="cek"] .table-responsive, #tp .na-panel[data-p="kart"] .table-responsive, #tp .na-panel[data-p="grupici"] .table-responsive { overflow-x: auto !important; overflow-y: visible; }
     /* yatay kayan kapta yapışkan başlık kabın içine takılır (satırların üstüne biner) → bu üç tabloda başlık normal akışta */
-    #tp .na-panel[data-p="finekra"] .tp-tablo thead th, #tp .na-panel[data-p="kasa"] .tp-tablo thead th, #tp .na-panel[data-p="cek"] .tp-tablo thead th { position: static !important; }
+    #tp .na-panel[data-p="finekra"] .tp-tablo thead th, #tp .na-panel[data-p="kasa"] .tp-tablo thead th, #tp .na-panel[data-p="cek"] .tp-tablo thead th, #tp .na-panel[data-p="kart"] .tp-tablo thead th, #tp .na-panel[data-p="grupici"] .tp-tablo thead th { position: static !important; }
     .tp-dol { white-space: nowrap; } .tp-dol i { font-size: .5rem; color: #94a3b8; margin: 0 1px; } .tp-dol .ok { color: #15803d; font-weight: 700; } .tp-dol .plan { color: #64748b; }
     #tp .na-panel > .na-kart > .na-kart-b { position: sticky; top: var(--tp-sabit-ust, 0px); z-index: 7; }
     #tp .na-panel .tp-tablo thead th { position: sticky; top: calc(var(--tp-sabit-ust, 0px) + var(--tp-kartb, 31px)); z-index: 6; background: #f8fafc; box-shadow: 0 1px 0 #e2e8f0; }
@@ -151,13 +154,16 @@
     @* ===== Kasa / Banka / Çek hareketleri ===== *@
     @* banka hareketleri yalnız Finekra sekmesinde (üretilmiş BANKA satırları eski görünümde kaldı) *@
     @* her satırda "Satır Kaynağı · İşlem" (kaynak rozeti + Nakit Akışa Ekle / İbraz Et) ve "Kasa Nakit Akışı Eşleşmesi" (Var: nakit akış satırı bağlantısı / Yok) sütunları *@
-    @foreach (var p in new[] { ("kasa", "Kasa Hareketleri", "fa-cash-register"), ("cek", "Çek · Senet", "fa-money-check-alt") })
+    @* Kredi · Banka Kartı: kartla ödenen nakit akış satırları + altta Finekra kart ekstresi ödemeleri; Temlik · Mahsup · Yansıtma: ödeyen ≠ fatura sahibi ödemeleri + üstte grup içi modül özetleri *@
+    @foreach (var p in new[] { ("kasa", "Kasa Hareketleri", "fa-cash-register", "Nakit"), ("cek", "Çek · Senet", "fa-money-check-alt", "Çek"), ("kart", "Kredi · Banka Kartı Ödemeleri", "fa-credit-card", "Kredi Kartı / Banka Kartı"), ("grupici", "Temlik · Mahsup · Yansıtma · Ödeyen ≠ Fatura Sahibi", "fa-right-left", "Havale / EFT") })
     {
         <div class="na-panel @(sekme == p.Item1 ? "aktif" : "")" data-p="@p.Item1">
+            @if (p.Item1 == "grupici") { <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-diagram-project me-1"></i>Grup İçi Modüller · Mahsup · Temlik · Yansıtma</span></div><div class="na-kart-g"><div class="tp-bozet" id="tpGrupOzet"></div></div></div> }
             <div class="na-kart">
-                <div class="na-kart-b"><span><i class="fas @p.Item3 me-1"></i>@p.Item2</span><span class="d-flex gap-2 align-items-center"><button type="button" class="btn btn-primary btn-sm py-0 tp-odeme-ekle" data-yontem="@(p.Item1 == "kasa" ? "Nakit" : "Çek")" style="font-size:.64rem" title="Nakit akışta olmayan ödemeyi ekle"><i class="fas fa-plus me-1"></i>Eksik Ödeme Ekle</button></span></div>
+                <div class="na-kart-b"><span><i class="fas @p.Item3 me-1"></i>@p.Item2</span><span class="d-flex gap-2 align-items-center"><button type="button" class="btn btn-primary btn-sm py-0 tp-odeme-ekle" data-yontem="@p.Item4" style="font-size:.64rem" title="Nakit akışta olmayan ödemeyi ekle"><i class="fas fa-plus me-1"></i>Eksik Ödeme Ekle</button></span></div>
                 <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo" id="tpTablo-@p.Item1" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
             </div>
+            @if (p.Item1 == "kart") { <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-building-columns me-1"></i>Kart Ekstre Ödemeleri · Finekra Banka Hareketi</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo" id="tpTablo-kartEkstre" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div> }
         </div>
     }
     @* ===== Nakit akış ↔ banka eşleşmesi ===== *@
@@ -334,5 +340,5 @@
 </div>
 
 @section Scripts {
-<script src="/js/takip-paneli.js?v=21"></script>
+<script src="/js/takip-paneli.js?v=22"></script>
 }
