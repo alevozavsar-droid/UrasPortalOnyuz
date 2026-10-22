@@ -27,7 +27,8 @@ namespace WebApplication3.Controllers
         public IActionResult Index2(string yil = null)
         {
             // şirketin portföyündeki belgeler + grup içi dolaşımla bu şirketten geçip ciro edilmiş belgeler (şirket açısından "Ciro Edildi")
-            string sirket = Sirket(); var hepsi = CekAkibetOrnek.Kayitlar.Where(k => k.Sirket == sirket || k.Dolasim.Any(a => a.Durum == "Gerçekleşti" && a.Eden == sirket)).ToList();
+            string sirket = Sirket(); NakitAkisOrnek.Odemeler(CekAkibetOrnek.DbName(sirket));   // Kasa Nakit Akışı örnek verisi (plan satırları, dolaşım planları) listeden önce tohumlanır
+            var hepsi = CekAkibetOrnek.Kayitlar.Where(k => k.Sirket == sirket || k.Dolasim.Any(a => a.Durum == "Gerçekleşti" && a.Eden == sirket)).ToList();
             var yillar = hepsi.Select(k => k.Vade.Year).Distinct().OrderByDescending(y => y).Select(y => y.ToString()).ToList();
             string secilen = !string.IsNullOrEmpty(yil) && yil != "all" ? yil : DateTime.Today.Year.ToString();
             var liste = hepsi.Where(k => yil == "all" || k.Vade.Year.ToString() == secilen).OrderBy(k => k.Vade).ThenBy(k => k.No).Select(k => k.Sirket == sirket ? Satir(k) : GecisSatiri(k, sirket)).ToList();
@@ -44,7 +45,7 @@ namespace WebApplication3.Controllers
             string aciklama = k.IslemTuru == "Planlandı" ? $"Kasa Nakit Akışı #{k.PlanDocEntry} · {k.PlanlananTedarikci} için planlandı" + (k.PlanlamaTarihi != null ? $" ({k.PlanlamaTarihi:dd.MM.yyyy}, {k.Planlayan})" : "")
                 : k.IbrazYeri != "" ? $"{k.IbrazTuru}: {k.IbrazYeri}" + (k.Kontrol == "Farklı" ? $" · DİKKAT: plan {k.PlanlananTedarikci} (farklı)" : k.Kontrol == "Uyumlu" ? " · plana uygun" : k.Kontrol == "Plansız İbraz" ? " · plansız" : "") : k.KullanimDurumu != "Kullanılabilir" ? k.KullanimDurumu : "";
             if (k.Dolasim.Count > 0) aciklama = $"Grup içi dolaşım {k.GerceklesenAdim}/{k.Dolasim.Count}: {k.DolasimOzeti}" + (k.Sirket != k.KaynakSirket ? $" · şu an {k.Sirket} portföyünde" : "") + " · " + aciklama;
-            return new Rapor2ViewModel
+            var m = new Rapor2ViewModel
             {
                 DocEntry = k.DocEntry, CekNumarasi = k.No, BankaAdi = k.Banka, Sube = k.Sube, HareketDurumu = hareket, IslemTuru = k.IslemTuru, KonumDurumu = k.KonumDurumu + (k.Portfoyde && !string.IsNullOrEmpty(k.KaynakSirket) && k.Sirket != k.KaynakSirket ? " · " + k.Sirket : ""), VadeDurumu = k.VadeDurumu, Aciklama = aciklama,
                 // uygunluk: portföyde (ya da Kasa Nakit Akışı'nda planlı) ve kullanılabilir belge "Uygun"; ciro / ibraz / teminat ile çıkan belge "Uygun Değil"
@@ -52,9 +53,40 @@ namespace WebApplication3.Controllers
                 VadeAyiVeYili = ButceOrnek.Aylar[k.Vade.Month - 1] + " " + k.Vade.Year, VadeliCekIbrazi = k.IbrazTuru == "Bankaya İbraz" ? "Evet" : "", PortfoyVadeAyiYili = ButceOrnek.Aylar[k.PortfoyGiris.Month - 1] + " " + k.PortfoyGiris.Year,
                 PortfoyeGirisTarihi = k.PortfoyGiris, IbrazTarihi = k.IbrazTarihi, TahsilatBelgeNo = k.TahsilatBelgeNo, IbrazBelgeNo = k.IbrazBelgeNo, PlanlananTedarikci = k.PlanlananTedarikci, BelgeTipi = k.Belge,
                 CekIslemTuru = CekAkibetOrnek.IslemKodu(k.IslemTuru), IslemTipiAdi = k.IslemTuru, CekKimeVerildi = k.IbrazTuru == "Ciro" ? k.IbrazYeri : k.IbrazTuru == "Bankaya İbraz" ? k.IbrazYeri + " (Tahsil)" : k.IbrazTuru == "Teminat" ? k.IbrazYeri : "", TlKarsiligi = k.Tutar, KullanımDurumu = k.KullanimDurumu,
-                CekinBankasi = k.Banka, GelmeNedeni = "Tahsilat", SirketAdi = k.Sirket, SirlamaTarihi = k.Vade, CekBankaAdi = k.Banka
+                CekinBankasi = k.Banka, GelmeNedeni = "Tahsilat", SirketAdi = k.Sirket, SirlamaTarihi = k.Vade, CekBankaAdi = k.Banka, CekTipi = k.IslemTipi
             };
+            PanelAlanlari(m, k); return m;
         }
+
+        /// <summary>
+        /// Konsolide Finansal Takip Paneli › Çek · Senet sekmesiyle ortak sütunlar: Dolaşım (plan zinciri, gerçekleşen adım, sıradaki adım), Satır Kaynağı · İşlem
+        /// (belgenin geldiği kayıt ve yapılacak iş), Nakit Akış Eşleşmesi (plan satırı), Kontrol (plan ↔ ibraz) ve Fiş (panelle aynı muhasebe fişi numarası).
+        /// </summary>
+        static void PanelAlanlari(Rapor2ViewModel m, CekKaydi k)
+        {
+            var plan = k.PlanDocEntry != null ? NakitAkisOrnek.Bul(k.PlanDocEntry.Value) : null;
+            m.PlanDocEntry = k.PlanDocEntry; m.PlanDurum = plan?.U_Durum ?? ""; m.PlanTalimat = plan?.U_TalimatNo ?? ""; m.CikisTalebi = plan?.U_CikisTalebi ?? ""; m.PlanOnay = plan?.U_OnayDurumu ?? ""; m.PlanLink = plan == null ? null : OdemeLink(plan);
+            m.Kontrol = k.Kontrol ?? "";
+            m.Dolasim = k.DolasimOzeti; m.DolasimGerceklesen = k.GerceklesenAdim; m.DolasimToplam = k.Dolasim.Count;
+            var sonraki = k.Dolasim.FirstOrDefault(a => a.Durum != "Gerçekleşti"); m.DolasimSiradaki = sonraki == null ? "" : $"{sonraki.Tur} → {sonraki.Alan} ({sonraki.PlanTarih:dd.MM.yyyy})";
+            m.DolasimAdimlar = k.Dolasim.Select(a => new Rapor2DolasimAdim { Sira = a.Sira, Tur = a.Tur, Eden = a.Eden, Alan = a.Alan, Durum = a.Durum, Tarih = (a.GercekTarih ?? a.PlanTarih).ToString("dd.MM.yyyy"), BelgeNo = a.BelgeNo ?? "" }).ToList();
+            bool gmy = plan != null && !string.IsNullOrEmpty(plan.U_CikisTalebi) && plan.U_OnayDurumu != "Onaylandı" && plan.U_Durum != "ÖDENDİ";
+            if (k.IbrazYeri != "")
+            {
+                m.Kaynak = k.IbrazTuru == "Bankaya İbraz" ? "Çek Akıbeti · Bankaya İbraz" : k.IbrazTuru == "Teminat" ? "Çek Akıbeti · Teminat" : k.IbrazTuru == "İade" ? "Çek Akıbeti · İade" : "Çek Akıbeti · Ciro";
+                m.KaynakDetay = $"{k.IbrazBelgeNo} · {k.IbrazTarihi:dd.MM.yyyy} · {k.IslemTuru}" + (k.PlanDocEntry != null ? $" · plan Kasa Nakit Akışı #{k.PlanDocEntry}" : k.Kontrol == "Plansız İbraz" ? " · plansız" : ""); m.SatirIslem = "yok";
+            }
+            else if (k.IslemTuru == "Planlandı")
+            {
+                if (k.PlanDocEntry != null) { m.Kaynak = "Kasa Nakit Akışı · Plan"; m.KaynakDetay = $"#{k.PlanDocEntry} · {k.PlanlananTedarikci} · {k.PlanlamaTarihi:dd.MM.yyyy}" + (k.Planlayan != "" ? " · " + k.Planlayan : ""); }
+                else { m.Kaynak = "Çek Akıbeti · Plan"; m.KaynakDetay = $"{k.PlanlananTedarikci} · {k.PlanlamaTarihi:dd.MM.yyyy} · nakit akış satırı yok"; }
+                m.SatirIslem = gmy ? "gmy" : "planli";
+            }
+            else if (k.IslemTuru == "Portföyde") { m.Kaynak = "Çek Akıbeti · Portföy Girişi"; m.KaynakDetay = $"{k.Musteri} · giriş {k.PortfoyGiris:dd.MM.yyyy} · {k.Banka}"; m.SatirIslem = gmy ? "gmy" : k.Secilebilir ? "portfoy" : "yok"; }
+            else { m.Kaynak = "Çek Akıbeti · " + k.IslemTuru; m.KaynakDetay = $"{k.Musteri} · giriş {k.PortfoyGiris:dd.MM.yyyy} · {k.KullanimDurumu}"; m.SatirIslem = "yok"; }
+            Fis(m, Rapor123Controller.CekFisNo(k, k.Sirket));
+        }
+        static void Fis(Rapor2ViewModel m, string fisNo) { var f = fisNo == null ? null : MuhasebeOrnek.Bul(fisNo); if (f == null) return; m.FisNo = f.No; m.FisKaynak = f.Kaynak; m.FisTarih = f.Tarih.ToString("dd.MM.yyyy"); }
 
         /// <summary>Dolaşım zincirinde bu şirketten geçmiş belge: şirket açısından grup içi ciro ile çıkmıştır (alan şirket, ciro belge no, tarih); belge şu an başka şirketin portföyündedir.</summary>
         static Rapor2ViewModel GecisSatiri(CekKaydi k, string sirket)
@@ -62,6 +94,9 @@ namespace WebApplication3.Controllers
             var s = Satir(k); var adim = k.Dolasim.Last(a => a.Durum == "Gerçekleşti" && a.Eden == sirket);
             s.HareketDurumu = "İşlem Yapıldı"; s.IslemTuru = "Ciro Edildi"; s.IslemTipiAdi = "Ciro Edildi"; s.CekIslemTuru = CekAkibetOrnek.IslemKodu("Ciro Edildi"); s.KonumDurumu = "Grup İçi Ciro · " + adim.Alan; s.CekKimeVerildi = adim.Alan; s.IbrazTarihi = adim.GercekTarih; s.IbrazBelgeNo = adim.BelgeNo ?? ""; s.SirketAdi = sirket;
             s.Aciklama = $"Grup içi dolaşım {k.GerceklesenAdim}/{k.Dolasim.Count}: {k.DolasimOzeti} · {sirket} → {adim.Alan} ciro edildi ({adim.BelgeNo}, {adim.GercekTarih:dd.MM.yyyy}, adım {adim.Sira}) · şu an {k.Sirket} portföyünde · plana uygun";
+            // panel sütunları: dolaşım geçiş satırı — kaynak gerçekleşen dolaşım adımı, kontrol uyumlu, fiş adımın ciro fişi (eden şirkette)
+            s.Kontrol = "Uyumlu"; s.Kaynak = "Dolaşım Planı · Gerçekleşen Adım"; s.KaynakDetay = $"{adim.Tur} · {adim.BelgeNo} · adım {adim.Sira}/{k.Dolasim.Count} · {adim.GercekTarih:dd.MM.yyyy}"; s.SatirIslem = "yok";
+            s.UygunlukDurumu = "Uygun Değil"; s.FisNo = null; s.FisKaynak = null; s.FisTarih = null; Fis(s, Rapor123Controller.CekFisNo(k, sirket, adim));
             return s;
         }
 

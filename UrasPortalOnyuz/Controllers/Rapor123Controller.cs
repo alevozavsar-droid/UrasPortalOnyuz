@@ -430,6 +430,22 @@ namespace WebApplication3.Controllers
             }
         }
 
+        /// <summary>
+        /// Çek Akıbeti Raporu "Fiş" sütunu: paneldeki Çek · Senet satırıyla aynı anahtar ve aynı fiş numarası — çıkmış belgede ibraz / ciro fişi, portföydeki (ya da planlı) belgede
+        /// portföy giriş fişi, dolaşım geçiş satırında adımın ciro fişi. Plan satırlarının fişi yoktur (null).
+        /// </summary>
+        public static string CekFisNo(CekKaydi k, string sirket, CekDolasimAdim adim = null)
+        {
+            if (k == null) return null; var s = CekAkibetOrnek.Sirketler.FirstOrDefault(x => x.Ad == sirket); if (s.Ad == null) return null;
+            string tip = k.DocEntry % 4 == 0 ? "R" : "X"; R123_HareketViewModel h;
+            if (adim != null) { h = Temel(s, "CEK", k.DocEntry * 10 + 3 + adim.Sira, (adim.GercekTarih ?? k.Vade).Date, "X"); Doldur(h, k); h.Alacak = k.Tutar; h.IslemYonu = "Çıkış"; h.IbrazBelgeNo = adim.BelgeNo; h.Kaynak = "Dolaşım Planı · Gerçekleşen Adım"; }
+            else if (k.IbrazYeri != "") { h = Temel(s, "CEK", k.DocEntry * 10 + 2, (k.IbrazTarihi ?? k.Vade).Date, tip); Doldur(h, k); h.Alacak = k.Tutar; h.IslemYonu = "Çıkış"; h.Kaynak = k.IbrazTuru == "Bankaya İbraz" ? "Çek Akıbeti · Bankaya İbraz" : k.IbrazTuru == "Teminat" ? "Çek Akıbeti · Teminat" : k.IbrazTuru == "İade" ? "Çek Akıbeti · İade" : "Çek Akıbeti · Ciro"; }
+            else if (k.Portfoyde) { h = Temel(s, "CEK", k.DocEntry * 10 + 1, k.PortfoyGiris.Date, tip); Doldur(h, k); h.Borc = k.Tutar; h.IslemYonu = "Giriş"; h.Kaynak = "Çek Akıbeti · Portföy Girişi"; }
+            else return null;
+            h.KasaKodu = k.Belge == "Senet" ? "121.01.001" : "101.01.001"; h.KasaAdi = k.Belge == "Senet" ? "Alınan Senetler" : "Alınan Çekler";
+            return HareketFisi(h, $"{s.DbKey}|CEK|{h.IslemNo}", null, k);
+        }
+
         // ---------- hareket üreticileri (Kasa / Banka / Çek) ----------
         static List<R123_HareketViewModel> Hareketler(List<(string Ad, string DbName, string DbKey)> sirketler, DateTime bas, DateTime bit)
         {
