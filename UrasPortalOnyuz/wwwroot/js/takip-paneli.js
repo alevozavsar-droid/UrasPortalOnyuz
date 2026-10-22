@@ -265,7 +265,7 @@
     }).join('') : `<tr><td colspan="${KOL[p].length}" class="na-bos text-center">Süzgece uyan hareket yok.</td></tr>`;
     // altlık: Giriş sütunu olmayan tablolarda (Kart · Temlik / Mahsup / Yansıtma) yalnız Çıkış toplamı
     const giris = L.reduce((s, r) => s + r.borc, 0), cikis = L.reduce((s, r) => s + r.alacak, 0), gi = KOL[p].findIndex(k => k.ad.startsWith('Giriş')), ci = KOL[p].findIndex(k => k.ad.startsWith('Çıkış')), ilk = gi >= 0 ? gi : ci;
-    if (p === 'kart') cizKartEkstre(); if (p === 'grupici') cizGrupOzet(L);
+    if (p === 'kart') cizKartEkstre();
     const naYokSay = p === 'cek' ? new Set(L.filter(naEklenebilir).map(r => r.cek.docEntry)).size : L.filter(naYok).length, naVarSay = p === 'cek' ? new Set(L.filter(naVar).map(r => r.cek.docEntry)).size : L.filter(naVar).length;
     const ibrazSay = p === 'cek' ? new Set(L.filter(r => r.cek && r.cek.portfoyde && r.cek.durum === 'Planlandı' && !(r.cek.cikisTalebi && r.cek.planOnay !== 'Onaylandı')).map(r => r.cek.docEntry)).size : 0;
     // kaynak dağılımı (altlık): rozet → adet
@@ -490,19 +490,6 @@
     const t = $('#tpTablo-kartEkstre'); if (!t) return; const L = finekraSatirlar().filter(h => h.islemTuru === 'Kredi Kartı Ekstresi'); tabloKur(t, KOL.kartEkstre);
     t.tBodies[0].innerHTML = L.length ? L.map((h, i) => `<tr class="tik" data-id="${h.id}" title="${esc(fnkTitle(h))}"><td>${i + 1}</td><td>${tarih(h.gun)}</td><td class="sol">${esc(h.sirket)}</td><td class="sol">${esc(h.banka)}<small>${esc(h.hesapKodu)}</small></td><td class="sol kurum" title="${esc(h.karsiAd)}">${esc(h.karsiAd)}</td><td class="sol" title="${esc(h.aciklama)}">${esc(h.aciklama)}</td><td class="sol">${esc(h.referans)}<small>${esc(h.no)}</small></td><td class="para c">${tutarF(h)}</td><td class="sol">${esRozet(h)}</td><td>${fnkOnayRozet(h)}</td><td>${sapRozet(h)}</td><td style="white-space:nowrap">${gonderBtn(h)}</td></tr>`).join('') : `<tr><td colspan="${KOL.kartEkstre.length}" class="na-bos text-center">Dönemde kart ekstresi ödemesi yok.</td></tr>`;
     t.tFoot.innerHTML = L.length ? `<tr class="toplam"><td colspan="7" class="text-end">TOPLAM (₺) · ${L.length} ekstre ödemesi · nakit akışta eşleşen ${L.filter(h => h.nakitAkis).length} · SAP'ye işlenmemiş ${L.filter(h => !h.sap).length}</td><td class="para">${para(L.reduce((s, h) => s + h.tutar, 0))}</td><td colspan="4"></td></tr>` : '';
-  }
-  // ---------- Temlik · Mahsup · Yansıtma üst özeti: adına ödeme satırları (belge durumu) + Mahsup / Temlik / Yansıtma modül özetleri (NakitAkisOrnek.GrupIciOzet)
-  function cizGrupOzet(L) {
-    const kap = $('#tpGrupOzet'); if (!kap) return; const G = V.grupIci || {}, m = G.mahsup || {}, t = G.temlik || {}, y = G.yansitma || {};
-    const say = k => L.filter(r => r.grup && r.grup.kontrol === k).length, adina = L.filter(r => r.grup && !/Modülü$/.test(r.kaynak || '')), modul = L.filter(r => r.grup && /Modülü$/.test(r.kaynak || ''));
-    kap.innerHTML = [
-      { l: 'Adına Ödeme · Ödeyen ≠ Fatura Sahibi', v: `${adina.length} satır`, s: `belge hazır ${say('Belge Hazır')} · muhasebeleşti ${say('Muhasebeleşti')} · belge yok ${say('Belge Yok')} · ${kisa(adina.reduce((s, r) => s + r.alacak, 0))} ₺`, k: say('Belge Yok') ? '#b45309' : '#1d4ed8' },
-      { l: 'Modül Ödemeleri · Mahsup / Temlik / Yansıtma', v: `${modul.length} satır`, s: `kayıt bağlı ${say('Kayıt Bağlı')} · bağlı değil ${say('Kayıt Bağlı Değil')} · ${kisa(modul.reduce((s, r) => s + r.alacak, 0))} ₺`, k: say('Kayıt Bağlı Değil') ? '#b91c1c' : '#0f766e' },
-      { l: 'Mahsup Modülü', v: `${m.toplam || 0} işlem`, s: `açık ${m.acik || 0} (${kisa(m.acikTutar)} ₺) · onay bekleyen ${m.onayBekleyen || 0} · kontrol ${m.kontrol || 0}`, k: '#7c3aed', href: m.link },
-      { l: 'Temlik Modülü', v: `${t.toplam || 0} işlem`, s: `açık ${t.acik || 0} (${kisa(t.acikTutar)} ₺) · onay bekleyen ${t.onayBekleyen || 0} · imza bekleyen ${t.imzaBekleyen || 0}`, k: '#0369a1', href: t.link },
-      { l: 'Yansıtma Modülü', v: `${y.toplam || 0} işlem`, s: `açık ${y.acik || 0} (${kisa(y.acikTutar)} ₺) · onay bekleyen ${y.onayBekleyen || 0} · fatura bekleyen ${y.faturaBekleyen || 0}`, k: '#9d174d', href: y.link },
-      { l: 'Grup İçi Rapor', v: 'Mahsup · Temlik · Yansıtma', s: 'modül raporu · beklenen ↔ gerçekleşen kontrol', k: '#64748b', href: G.rapor || '/GrupIci/Rapor' }
-    ].map(k => `<div style="--k:${k.k}"><div class="l" title="${esc(k.l)}">${esc(k.l)}</div><div class="v" title="${esc(k.v)}">${esc(k.v)}</div><div class="s" title="${esc(k.s)}">${esc(k.s)}${k.href ? ` · <a href="${esc(k.href)}" target="_blank">aç</a>` : ''}</div></div>`).join('');
   }
   // ---------- çekmece: Kasa / Banka / Çek hareketi (Referans · No, Cari · Muhasebe Hesabı ve Dolaşım ayrıntıları burada; tabloda sütun değil)
   // dolaşım akışı: Kasa Nakit Akışı dolaşım planı — eden → alan → … (gerçekleşen adım yeşil, planlı gri); plan yoksa sahip → planlanan tedarikçi
