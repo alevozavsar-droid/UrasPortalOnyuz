@@ -186,6 +186,8 @@
         #rapor2Table.rapor-tablo tbody td[data-column="CekIslemTuru"], #rapor2Table.rapor-tablo tbody td[data-column="VadeTarihi"], #rapor2Table.rapor-tablo tbody td[data-column="PortfoyeGirisTarihi"], #rapor2Table.rapor-tablo tbody td[data-column="IbrazTarihi"] { padding: 2px 2px !important; }
         .ca-durum.ok { background: #dcfce7; color: #166534; } .ca-durum.uyari { background: #fef3c7; color: #92400e; } .ca-durum.hata { background: #fee2e2; color: #991b1b; } .ca-durum.bilgi { background: #dbeafe; color: #1e40af; } .ca-durum.mor { background: #ede9fe; color: #5b21b6; } .ca-durum.notr { background: #e2e8f0; color: #334155; }
         .rapor-tablo td .alt.konum { font-weight: 700; color: #475569; }
+        .pb-simge { display: inline-block; min-width: 1em; font-weight: 800; color: #0f766e; }
+        .rapor-tablo td .alt .ca-link { font-size: .58rem; }
         /* işlem türü değişiklik penceresi: standart akış önizlemesi */
         .it-onizleme { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 8px; } .it-onizleme > div { background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 5px 8px; min-width: 0; } .it-onizleme label { display: block; font-size: .56rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #64748b; margin-bottom: 2px; } .it-onizleme .d { font-size: .74rem; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .it-onizleme .d .ca-durum { font-size: .64rem; } .it-not { font-size: .66rem; color: #475569; margin-top: 6px; } .it-not b { color: #0f172a; }
@@ -945,8 +947,11 @@
                 ? '<a href="' + esc(item.PlanLink || '#') + '" target="_blank" class="ca-link" title="Kasa Nakit Akışı satırını aç">#' + item.PlanDocEntry + '</a> <span class="ca-roz ' + (item.PlanDurum === 'ÖDENDİ' ? 'ok' : item.PlanDurum === 'Gecikti' ? 'hata' : 'bilgi') + '">' + esc(item.PlanDurum || '') + '</span>' + altSatir(item.PlanTalimat ? 'talimat ' + item.PlanTalimat : item.CikisTalebi && item.PlanOnay !== 'Onaylandı' ? 'GMY onayı bekliyor' : '')
                 : item.IslemTuru === 'Planlandı' ? '<span class="ca-roz hata">Satır Yok</span>' + altSatir('Çek Akıbeti\'nden planlı') : '<span class="text-muted">—</span>';
             const fisHtml = item => item.FisNo ? '<a href="#" class="ca-link cek-fis-ac" data-docentry="' + item.DocEntry + '" title="Muhasebe fişini aç">' + esc(item.FisNo) + '</a>' + altSatir(item.FisKaynak) : '<span class="text-muted">—</span>';
-            // Çek Tutarı; altında Para Birimi · TL Karşılığı (her belgede; dövizli belgede kur farkı görünür)
-            const tutarHtml = item => { const v = item.Tutar == null ? '' : item.Tutar.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); const pb = item.ParaBirimi || 'TRY'; return '<span class="fw-bold">' + esc(v) + '</span>' + altSatir(pb + ' · ' + (item.TlKarsiligi == null ? '' : item.TlKarsiligi.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) + ' TL'); };
+            // Çek Tutarı para simgesiyle (₺ € $ £); altında Para Birimi kodu · TL karşılığı (₺) — dövizli belgede kur farkı görünür
+            const PB_SIMGE = { 'TRY': '₺', 'TL': '₺', 'USD': '$', 'EUR': '€', 'GBP': '£', 'CHF': '₣', 'JPY': '¥' };
+            const pbSimge = pb => PB_SIMGE[(pb || 'TRY').toUpperCase()] || (pb || '');
+            const tl2 = v => v == null ? '' : Number(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const tutarHtml = item => { const pb = (item.ParaBirimi || 'TRY').toUpperCase(); return '<span class="fw-bold">' + esc(tl2(item.Tutar)) + ' <span class="pb-simge" title="' + esc(pb) + '">' + esc(pbSimge(pb)) + '</span></span>' + altSatir(pb + (pb === 'TRY' ? '' : ' · ₺ ' + tl2(item.TlKarsiligi) + ' karşılığı')); };
             const ayYil = v => v ? new Date(v).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' }) : '';
 
             // Sütun genişlikleri: her sütun içeriğine göre ölçülür ve SUTUN_SINIR aralığına alınır. Toplam kaptan küçükse boşluk orantılı dağıtılır;
@@ -1138,7 +1143,10 @@
                             });
                             cell.appendChild(input);
                             cell.appendChild(datalist);
-                        } 
+                            // Kasa Nakit Akışı bağı: plan satırı ve durumu (tıklayınca satır açılır); plansız belgede tedarikçi yazılınca satır açılır
+                            cell.insertAdjacentHTML('beforeend', item.PlanDocEntry ? '<span class="alt"><a href="' + esc(item.PlanLink || '#') + '" target="_blank" class="ca-link" title="Kasa Nakit Akışı satırını aç">Nakit Akış #' + item.PlanDocEntry + '</a> · ' + esc(item.PlanDurum || '') + (item.CikisTalebi && item.PlanOnay !== 'Onaylandı' ? ' · GMY onayı' : '') + '</span>' : altSatir(item.UygunlukDurumu === 'Uygun' ? 'tedarikçi yazınca nakit akış satırı açılır' : item.PlanlananTedarikci ? 'nakit akış satırı yok' : ''));
+                            cell.title = item.PlanlananTedarikci ? item.PlanlananTedarikci + (item.PlanDocEntry ? ' · Kasa Nakit Akışı #' + item.PlanDocEntry + ' ' + (item.PlanDurum || '') : ' · nakit akış satırı yok') : 'Planlanan tedarikçi yok' + (item.UygunlukDurumu === 'Uygun' ? '; tedarikçi yazınca Kasa Nakit Akışı satırı açılır ve belge planlanır' : '');
+                        }
                         else if (colName === 'CekNumarasi') {
                             const bag = document.createElement('span');
                             bag.className = 'cek-no-link';
@@ -1511,8 +1519,11 @@
                 // Takip Paneli › Çek · Plan ↔ İbraz Kontrolü kartıyla aynı alanlar (tabloda sütun olmayan ayrıntılar burada)
                 { baslik: 'Kasa Nakit Akışı Planı ↔ İbraz Kontrolü', alanlar: [
                     ['Kaynak', 'Satır Kaynağı'], ['KaynakDetay', 'Kaynak Ayrıntısı'], ['Kontrol', 'Plan ↔ İbraz Kontrolü'],
-                    ['NakitAkis', 'Nakit Akış Satırı'], ['PlanlananTedarikci', 'Planlanan Tedarikçi'], ['Dolasim', 'Dolaşım Planı'],
-                    ['DolasimSiradaki', 'Sıradaki Adım'], ['Fis', 'Muhasebe Fişi']
+                    ['NakitAkis', 'Nakit Akış Satırı'], ['PlanlananTedarikci', 'Planlanan Tedarikçi'], ['Fis', 'Muhasebe Fişi']
+                ]},
+                // grup içi dolaşım: Kasa Nakit Akışı › Çek / Senet › Dolaşım Planı zinciri, gerçekleşen / planlı adımlar (adım tablosu altta)
+                { baslik: 'Dolaşım · Grup İçi Ciro Zinciri', alanlar: [
+                    ['Dolasim', 'Dolaşım Zinciri'], ['DolasimSiradaki', 'Sıradaki Adım']
                 ]},
                 { baslik: 'Çek Bilgileri', alanlar: [
                     ['CekNumarasi', 'Çek No'], ['BelgeTipi', 'Belge Tipi'], ['CekTipi', 'İşlem Tipi (X / R)'], ['BankaAdi', 'Banka'],
@@ -1556,11 +1567,16 @@
                     });
                     html += '</div>';
                     if (bolum.alanlar[0][0] === 'IslemTipiAdi') html += '<div class="it-not"><b>Otomatik kural:</b> Konum ve Hareket işlem türünden; Vade Durumu vade tarihinden (tahsil → Tahsil, iade / iptal → Kapandı); Uygunluk = Portföyde ya da Erteleme Yapıldı + konum Portföyde + Vade Bekleniyor + kullanılabilir. Vadesi bugün / geçmiş, planlı, bankada, tedarikçide, avukatta ve riskli evrak başka tedarikçiye verilemez.</div>';
-                    // dolaşım planı adımları (tür, eden → alan, durum, tarih, belge) — Takip Paneli çekmecesindeki adım listesiyle aynı
-                    if (bolum.alanlar[0][0] === 'Kaynak' && (item.DolasimAdimlar || []).length) {
-                        html += '<table class="ca-dol-tablo" data-dinamik="kapali"><thead><tr><th>Adım</th><th>Tür</th><th>Eden → Alan</th><th>Durum</th><th>Tarih</th><th>Belge</th></tr></thead><tbody>'
-                            + item.DolasimAdimlar.map(a => '<tr><td>' + a.Sira + '</td><td>' + esc(a.Tur) + '</td><td>' + esc(a.Eden) + ' → <b>' + esc(a.Alan) + '</b></td><td>' + (a.Durum === 'Gerçekleşti' ? '<span class="ca-roz ok">Gerçekleşti</span>' : '<span class="ca-roz uyari">Planlandı</span>') + '</td><td>' + esc(a.Tarih) + '</td><td>' + esc(a.BelgeNo || '—') + '</td></tr>').join('')
-                            + '</tbody></table>';
+                    // dolaşım bölümü: zincir görseli, adım tablosu (tür, eden → alan, durum, tarih, belge) ve Kasa Nakit Akışı bağlantıları — Takip Paneli çekmecesindeki adım listesiyle aynı
+                    if (bolum.alanlar[0][0] === 'Dolasim') {
+                        const L = item.DolasimAdimlar || []; const db = (ozetVeri && ozetVeri.db) || '';
+                        if (L.length) {
+                            html += '<div class="mb-1" style="font-size:.8rem">' + dolasimHtml(item) + '</div>'
+                                + '<table class="ca-dol-tablo" data-dinamik="kapali"><thead><tr><th>Adım</th><th>Tür</th><th>Eden → Alan</th><th>Durum</th><th>Tarih</th><th>Belge</th></tr></thead><tbody>'
+                                + L.map(a => '<tr><td>' + a.Sira + '</td><td>' + esc(a.Tur) + '</td><td>' + esc(a.Eden) + ' → <b>' + esc(a.Alan) + '</b></td><td>' + (a.Durum === 'Gerçekleşti' ? '<span class="ca-roz ok">Gerçekleşti</span>' : '<span class="ca-roz uyari">Planlandı</span>') + '</td><td>' + esc(a.Tarih) + '</td><td>' + esc(a.BelgeNo || '—') + '</td></tr>').join('')
+                                + '</tbody></table>';
+                        } else html += '<div class="it-not"><i class="fas fa-info-circle me-1"></i>Bu belge için grup içi dolaşım planı yok. Dolaşım planı Kasa Nakit Akışı › Çek / Senet sekmesinde ' + (item.PlanDocEntry ? 'plan satırından' : 'belge planlandıktan sonra') + ' kurulur; adımlar gerçekleştikçe burada ve Konsolide Günlük Finansal Hareketler › Çek sekmesinde görünür.</div>';
+                        html += '<div class="it-not">' + (item.PlanDocEntry && item.PlanLink ? '<a href="' + esc(item.PlanLink) + '" target="_blank" class="fw-bold me-3"><i class="fas fa-money-bill-transfer me-1"></i>Kasa Nakit Akışı #' + item.PlanDocEntry + '</a>' : '<a href="/Rapor79?sirket=' + esc(db) + '&sekme=cek" target="_blank" class="fw-bold me-3"><i class="fas fa-money-bill-transfer me-1"></i>Kasa Nakit Akışı › Çek / Senet</a>') + '<a href="/Rapor123?sirket=' + esc(db) + '&sekme=cek" target="_blank" class="fw-bold"><i class="fas fa-clipboard-check me-1"></i>Konsolide Günlük Finansal Hareketler › Çek</a></div>';
                     }
                 });
 
@@ -1779,14 +1795,13 @@
                 try {
                     const token = $('input[name="__RequestVerificationToken"]').val();
                     const response = await fetch(`/CekAkibeti/UpdatePlannedSupplier${dbQueryString}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'RequestVerificationToken': token }, body: JSON.stringify({ DocEntry: docEntry, NewPlannedSupplier: newSupplier }) });
-                    if (!response.ok) return;
+                    if (!response.ok) { toastr.error('HTTP ' + response.status); return false; }
                     const data = await response.json();
-                    if (data.success) {
-                        toastr.success(data.message);
-                        const itemToUpdate = reportDataMap.get(docEntry);
-                        if (itemToUpdate) itemToUpdate.PlanlananTedarikci = newSupplier;
-                    } else toastr.error(data.message);
-                } catch (error) { console.error(error); }
+                    // Kasa Nakit Akışı ile bütünleşik: plan satırı açıldı / kurumu değişti / belge satırdan çıktı → güncel satır tabloya konur, özet tazelenir
+                    if (data.satirJson) satiriGuncelle(JSON.parse(data.satirJson));
+                    if (data.success) { toastr.success(data.message + (data.satir ? ' <a href="' + data.satir.link + '" target="_blank" class="fw-bold">Kasa Nakit Akışı #' + data.satir.docEntry + '</a>' : ''), 'Planlanan Tedarikçi', { timeOut: 9000, escapeHtml: false }); cekOzetYukle(true); return true; }
+                    toastr.error(data.message || 'Güncellenemedi.'); return false;
+                } catch (error) { console.error(error); return false; }
             }
 
             document.getElementById('farkliIslemlerBtn').addEventListener('click', async function () {
@@ -2004,7 +2019,7 @@
                 if (secilebilir) html += '<div style="min-width:220px"><label>Ödenecek Tedarikçi</label><input id="hzTedarikci" class="form-control" list="hzTedarikciler" placeholder="tedarikçi adı" value="' + h(item.PlanlananTedarikci || '') + '"></div><div><label>Planlanan Tarih</label><input id="hzTarih" type="date" class="form-control" value="' + h(item.VadeTarihi || '') + '"></div><div><label>Belge Tipi</label><select id="hzBelgeTipi" class="form-select"><option>Cari Bakiye</option><option>Fatura</option><option>Sipariş</option><option>Diğer</option></select></div><div><label>Belge No</label><input id="hzBelgeNo" class="form-control" placeholder="FT-…"></div><div><button type="button" class="btn btn-primary btn-sm" id="hzGonder"><i class="fas fa-paper-plane me-1"></i>Nakit Akışa Gönder</button></div>';
                 if (portfoyde && !gmy) html += '<div><label>Çıkış Türü</label><select id="hzTur" class="form-select"><option value="Tedarikçiye Ciro">Tedarikçiye Ciro</option><option value="Bankaya Tahsile Ver">Bankaya Tahsile Ver</option></select></div><div style="min-width:200px"><label>Ciro Edilen Tedarikçi / Banka</label><input id="hzYer" class="form-control" list="hzTedarikciler" value="' + h(item.PlanlananTedarikci || '') + '"></div><div><button type="button" class="btn btn-success btn-sm" id="hzCik"><i class="fas fa-share-from-square me-1"></i>' + (planli ? 'Tedarikçiye Çık · İbraz Et' : 'Çıkış Talebi (GMY Onayı)') + '</button></div>';
                 if (p && p.planDocEntry) html += '<div><a class="btn btn-light border btn-sm" href="' + h(p.planLink || '#') + '" target="_blank"><i class="fas fa-money-bill-transfer me-1"></i>Kasa Nakit Akışı #' + p.planDocEntry + ' (' + h(p.planDurum || '') + (p.planTalimat ? ' · ' + h(p.planTalimat) : '') + ')</a></div>';
-                html += '<div><a class="btn btn-light border btn-sm" href="' + h((ozetVeri && ozetVeri.takipPaneli) || '/Rapor123?sekme=cek') + '" target="_blank"><i class="fas fa-clipboard-check me-1"></i>Takip Paneli</a></div>';
+                html += '<div><a class="btn btn-light border btn-sm" href="' + h((ozetVeri && ozetVeri.takipPaneli) || '/Rapor123?sekme=cek') + '" target="_blank" title="Konsolide Günlük Finansal Hareketler (Takip Paneli) › Çek · Senet"><i class="fas fa-clipboard-check me-1"></i>Konsolide Günlük Finansal Hareketler</a></div>';
                 if (item.FisNo) html += '<div><button type="button" class="btn btn-light border btn-sm" id="hzFis" title="Muhasebe fişi (Takip Paneli ile aynı numara)"><i class="fas fa-file-invoice me-1"></i>Fiş ' + h(item.FisNo) + '</button></div>';
                 html += '<div class="not">' + (gmy ? '<i class="fas fa-user-shield me-1 text-danger"></i>Plansız çıkış talebi GMY onayı bekliyor (Kasa Nakit Akışı #' + p.planDocEntry + ').' : planli ? '<i class="fas fa-check me-1 text-success"></i>Belge Kasa Nakit Akışı\'nda planlı: çıkış plan satırı üzerinden işlenir (satır ÖDENDİ, fiş atılır, Takip Paneli güncellenir).' : secilebilir ? '<i class="fas fa-info-circle me-1"></i>Portföyde: "Nakit Akışa Gönder" ile ödeme satırı açılır ve belge planlanır; plansız çıkış GMY onayına düşer.' : '<i class="fas fa-info-circle me-1"></i>' + h(item.IslemTipiAdi || '') + (item.CekKimeVerildi ? ' → ' + h(item.CekKimeVerildi) : '') + ' · bu belge için hızlı işlem yok.') + '</div></div>';
                 return html;
@@ -2017,14 +2032,25 @@
             // özet verisi her açılışta yüklenir (detay penceresindeki hızlı işlemler plan bilgisini kullanır); panel son durumunu hatırlar
             cekOzetYukle(true).then(() => { let acik = false; try { acik = localStorage.getItem('cekAkibetiOzetAcik') === '1'; } catch (e) { } if (acik) document.getElementById('cekOzetBtn').click(); });
 
-            // Kasa Nakit Akışı'nda çek planlanınca / ibraz edilince bu sekmeye dönüldüğünde liste kendini tazeler (planlanan tedarikçi, Planlandı, kime verildi, uygunluk):
-            // /CekAkibeti/Versiyon değişim sayacı sayfa açılışındakinden farklıysa yeniden yüklenir.
+            // DİNAMİK LİSTE: Kasa Nakit Akışı / Konsolide Günlük Finansal Hareketler'de belge planlanınca, ibraz edilince, dolaşım adımı gerçekleşince sürüm sayacı değişir;
+            // ekran 20 sn'de bir ve sekmeye dönüşte sayacı okur, değişmişse listeyi /CekAkibeti/Veri'den sayfa yenilemeden tazeler (süzgeç, sıralama ve seçim korunur).
             (function () {
-                const q = typeof dbQueryString === 'string' ? dbQueryString : '';
-                let surum = null; const oku = () => fetch('/CekAkibeti/Versiyon' + q).then(r => r.json()).catch(() => null);
+                const q = typeof dbQueryString === 'string' ? dbQueryString : ''; const yil = new URLSearchParams(window.location.search).get('yil') || '';
+                let surum = null, mesgul = false; const oku = () => fetch('/CekAkibeti/Versiyon' + q).then(r => r.json()).catch(() => null);
                 oku().then(v => { if (v) surum = v.v; });
-                document.addEventListener('visibilitychange', async () => { if (document.visibilityState !== 'visible' || surum === null) return; const v = await oku(); if (v && v.v !== surum) location.reload(); });
-                window.addEventListener('focus', async () => { if (surum === null) return; const v = await oku(); if (v && v.v !== surum) location.reload(); });
+                async function tazele() {
+                    if (mesgul) return; mesgul = true;
+                    try {
+                        const r = await fetch('/CekAkibeti/Veri' + (q ? q + '&' : '?') + 'yil=' + encodeURIComponent(yil)); const d = await r.json(); if (!d || !d.success) return;
+                        allReportData.length = 0; reportDataMap.clear(); d.satirlar.forEach(x => { turetilmisAlanlar(x); allReportData.push(x); reportDataMap.set(x.DocEntry, x); });
+                        surum = d.surum; if (window.filterTableAndRender) window.filterTableAndRender(); cekOzetYukle(true);
+                        toastr.info('Çek listesi tazelendi (Kasa Nakit Akışı / Takip Paneli değişikliği).', '', { timeOut: 4000 });
+                    } catch (e) { } finally { mesgul = false; }
+                }
+                async function kontrol() { if (surum === null || document.visibilityState !== 'visible') return; const v = await oku(); if (v && v.v !== surum) tazele(); }
+                setInterval(kontrol, 20000);
+                document.addEventListener('visibilitychange', kontrol); window.addEventListener('focus', kontrol);
+                window.cekListesiniTazele = tazele;
             })();
         });
     </script>

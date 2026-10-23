@@ -23,20 +23,30 @@ namespace WebApplication3.Controllers
         string Kullanici => OrnekVeri.KullaniciAdi(User?.Identity?.Name ?? "");
         string Sirket() { string db = Request.Query["db"].ToString(); if (string.IsNullOrEmpty(db)) db = Request.Cookies["SelectedDatabase"] ?? "DefaultConnection"; return CekAkibetOrnek.SirketAdi(db); }
 
+        /// <summary>Şirketin portföyündeki belgeler + grup içi dolaşımla bu şirketten geçip ciro edilmiş belgeler (şirket açısından "Ciro Edildi"); vade yılına göre süzülür (yil = "all" → hepsi).</summary>
+        static List<Rapor2ViewModel> Liste(string sirket, string yil, out List<string> yillar, out string secilen)
+        {
+            NakitAkisOrnek.Odemeler(CekAkibetOrnek.DbName(sirket));   // Kasa Nakit Akışı örnek verisi (plan satırları, dolaşım planları) listeden önce tohumlanır
+            var hepsi = CekAkibetOrnek.Kayitlar.Where(k => k.Sirket == sirket || k.Dolasim.Any(a => a.Durum == "Gerçekleşti" && a.Eden == sirket)).ToList();
+            yillar = hepsi.Select(k => k.Vade.Year).Distinct().OrderByDescending(y => y).Select(y => y.ToString()).ToList();
+            string s = !string.IsNullOrEmpty(yil) && yil != "all" ? yil : DateTime.Today.Year.ToString(); secilen = s;
+            return hepsi.Where(k => yil == "all" || k.Vade.Year.ToString() == s).OrderBy(k => k.Vade).ThenBy(k => k.No).Select(k => k.Sirket == sirket ? Satir(k) : GecisSatiri(k, sirket)).ToList();
+        }
+        static readonly Newtonsoft.Json.JsonSerializerSettings JsonAyar = new Newtonsoft.Json.JsonSerializerSettings { DateFormatString = "yyyy-MM-dd" };
+
         [HttpGet(""), HttpGet("Index"), HttpGet("Index2")]
         public IActionResult Index2(string yil = null)
         {
-            // şirketin portföyündeki belgeler + grup içi dolaşımla bu şirketten geçip ciro edilmiş belgeler (şirket açısından "Ciro Edildi")
-            string sirket = Sirket(); NakitAkisOrnek.Odemeler(CekAkibetOrnek.DbName(sirket));   // Kasa Nakit Akışı örnek verisi (plan satırları, dolaşım planları) listeden önce tohumlanır
-            var hepsi = CekAkibetOrnek.Kayitlar.Where(k => k.Sirket == sirket || k.Dolasim.Any(a => a.Durum == "Gerçekleşti" && a.Eden == sirket)).ToList();
-            var yillar = hepsi.Select(k => k.Vade.Year).Distinct().OrderByDescending(y => y).Select(y => y.ToString()).ToList();
-            string secilen = !string.IsNullOrEmpty(yil) && yil != "all" ? yil : DateTime.Today.Year.ToString();
-            var liste = hepsi.Where(k => yil == "all" || k.Vade.Year.ToString() == secilen).OrderBy(k => k.Vade).ThenBy(k => k.No).Select(k => k.Sirket == sirket ? Satir(k) : GecisSatiri(k, sirket)).ToList();
+            string sirket = Sirket(); var liste = Liste(sirket, yil, out var yillar, out var secilen);
             ViewBag.CheckTransactionTypes = new[] { new CheckTransactionType { Code = "0", Description = "Seçiniz" } }.Concat(CekAkibetOrnek.IslemTurleri.Select(t => new CheckTransactionType { Code = t.Kod, Description = t.Ad })).ToList();
             ViewBag.MevcutYillar = yillar; ViewBag.SecilenYil = secilen; ViewData["CurrentDbDisplay"] = sirket;
             OrnekDoldurucu.Hazirla(this);
             return View("Index2", liste);
         }
+        /// <summary>Dinamik tazeleme: Kasa Nakit Akışı / Takip Paneli'nde belge planlanıp ibraz edilince (sürüm sayacı değişince) ekran listeyi sayfa yenilemeden buradan çeker.</summary>
+        [HttpGet("Veri")]
+        public IActionResult Veri(string yil = null) { string sirket = Sirket(); var liste = Liste(sirket, yil, out _, out var secilen); return Content(Newtonsoft.Json.JsonConvert.SerializeObject(new { success = true, sirket, yil = secilen, surum = Surum(), satirlar = liste }, JsonAyar), "application/json; charset=utf-8"); }
+        static int Surum() => CekAkibetOrnek.Gunluk.Count + CekAkibetOrnek.Hareketler.Count + NakitAkisOrnek.LogSayisi;
 
         /// <summary>
         /// Çek Akıbeti kaydı → ekran satırı (ana projedeki alan adları). Durum parametreleri (Hareket, Konum, Vade Durumu, Uygunluk) Çek / Senet Durum Parametreleri Standart Raporu kuralıyla
@@ -121,7 +131,7 @@ namespace WebApplication3.Controllers
 <div class='small text-muted'>Kaynak: Kasa Nakit Akışı (Rapor79) › Çek / Senet sekmesi · Konsolide Finansal Takip Paneli › Çek: plana aykırı çıkışlar.</div></div>";
         }
         /// <summary>Çek kaydı değişim sayacı: Kasa Nakit Akışı'nda plan / ibraz yapılıp bu sekmeye dönülünce sayfa kendini tazeler (Index2.cshtml visibilitychange).</summary>
-        [HttpGet("Versiyon")] public IActionResult Versiyon() => Json(new { v = CekAkibetOrnek.Gunluk.Count + CekAkibetOrnek.Hareketler.Count });
+        [HttpGet("Versiyon")] public IActionResult Versiyon() => Json(new { v = Surum() });
 
         // ---------- DURUM ÖZETİ · SENKRON (Kasa Nakit Akışı ↔ Çek Akıbeti ↔ Takip Paneli) ----------
         static string OdemeLink(NakitAkisViewModel m) => $"/Rapor79?sirket={m.U_KaynakFirma}&sekme={(m.U_OdemeYontemi == "Senet" ? "senet" : m.U_OdemeYontemi == "Çek" ? "cek" : m.U_OdemeYontemi == "Nakit" ? "nakit" : m.U_OdemeYontemi == "Havale / EFT" ? "havale" : "tumu")}&doc={m.DocEntry}";
@@ -203,7 +213,7 @@ namespace WebApplication3.Controllers
         public IActionResult UpdateCheckTransactionTypeByDocEntry([FromBody] DocEntryIslemIstek model)
         {
             var r = NakitAkisOrnek.CekCikisKontrollu(model?.DocEntry ?? 0, model?.NewCheckTransactionType, model?.IbrazYeri, model?.IbrazBelgeNo, Kullanici, model?.Konum);
-            var k = CekAkibetOrnek.Bul(model?.DocEntry ?? 0); string satirJson = k == null ? null : Newtonsoft.Json.JsonConvert.SerializeObject(Satir(k), new Newtonsoft.Json.JsonSerializerSettings { DateFormatString = "yyyy-MM-dd" });
+            var k = CekAkibetOrnek.Bul(model?.DocEntry ?? 0); string satirJson = k == null ? null : Newtonsoft.Json.JsonConvert.SerializeObject(Satir(k), JsonAyar);
             return Json(new { success = r.ok, message = r.mesaj, onayaDustu = r.onayaDustu, nakitAkisDocEntry = r.docEntry, satirJson });
         }
         /// <summary>İşlem türlerinin standart tanımı ve konum olasılıkları (ekran: işlem türü değişiklik penceresi).</summary>
@@ -211,7 +221,13 @@ namespace WebApplication3.Controllers
         public IActionResult IslemTurleri() => Json(CekAkibetOrnek.IslemTurleri.Select(t => new { kod = t.Kod, ad = t.Ad, aciklama = CekAkibetOrnek.IslemTuruAciklamalari.TryGetValue(t.Ad, out var a) ? a : "", konumlar = CekAkibetOrnek.KonumSecenekleri(t.Ad) }));
         public class PlanlananTedarikciIstek { public int DocEntry { get; set; } public string NewPlannedSupplier { get; set; } }
         [HttpPost("UpdatePlannedSupplier")]
-        public IActionResult UpdatePlannedSupplier([FromBody] PlanlananTedarikciIstek model) { var r = CekAkibetOrnek.PlanlananTedarikciDegistir(model?.DocEntry ?? 0, model?.NewPlannedSupplier, Kullanici); return Json(new { success = r.ok, message = r.mesaj }); }
+        /// <summary>Planlanan Tedarikçi — Kasa Nakit Akışı ile bütünleşik (NakitAkisOrnek.PlanTedarikciDegistir): plan satırının kurumu değişir / satır açılır / belge satırdan çıkar; güncel satır JSON döner.</summary>
+        public IActionResult UpdatePlannedSupplier([FromBody] PlanlananTedarikciIstek model)
+        {
+            var r = NakitAkisOrnek.PlanTedarikciDegistir(model?.DocEntry ?? 0, model?.NewPlannedSupplier, Kullanici);
+            var k = CekAkibetOrnek.Bul(model?.DocEntry ?? 0); string satirJson = k == null ? null : Newtonsoft.Json.JsonConvert.SerializeObject(Satir(k), JsonAyar);
+            return Json(new { success = r.ok, message = r.mesaj, satirJson, satir = r.satir == null ? null : new { docEntry = r.satir.DocEntry, durum = r.satir.U_Durum, link = OdemeLink(r.satir) } });
+        }
         [HttpGet("SearchSuppliers")]
         public IActionResult SearchSuppliers(string term) { string q = (term ?? "").ToUpper(Tr); return Json(CekOrnek.TedarikciAdlari.Where(t => q == "" || t.ToUpper(Tr).Contains(q)).Take(20).ToList()); }
         [HttpGet("DownloadAttachment/{ibrazBelgeNo}")] public IActionResult DownloadAttachment(string ibrazBelgeNo) => Content("Ön yüz örneği: ibraz belgesi eki üretilmez.", "text/plain; charset=utf-8");

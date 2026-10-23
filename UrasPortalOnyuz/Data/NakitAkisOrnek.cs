@@ -980,6 +980,30 @@ namespace WebApplication3.Data
             if (!r.ok) { Sil(k.DbName, m.DocEntry, kullanici); return (false, r.mesaj, null); }
             return (true, $"{k.No} Kasa Nakit Akışı'na gönderildi: #{m.DocEntry} {m.U_Kurum} · {k.Tutar.ToString("N2", Tr)} ₺ · planlanan {m.U_PlanlananTarih:dd.MM.yyyy} (Planlandı). Çek Akıbeti'nde işlem türü \"Planlandı\" oldu; talimatla ya da \"Tedarikçiye Çık\" ile ciro edilir.", m);
         }
+        /// <summary>Değişim sayacı için: Kasa Nakit Akışı günlük kayıt sayısı (Çek Akıbeti listesi bu sayaç değişince kendini tazeler).</summary>
+        public static int LogSayisi { get { Tohumla(); lock (Kilit) return _gunluk.Count; } }
+        /// <summary>
+        /// Çek Akıbeti › Planlanan Tedarikçi hücresi — Kasa Nakit Akışı ile bütünleşik: belge planlıysa plan satırının kurumu da değişir; planlı değilse ve belge uygunsa tedarikçi için çek / senet satırı açılıp belge planlanır;
+        /// tedarikçi silinirse belge plan satırından çıkarılır (Planlandı → Portföyde). Uygun olmayan belgede yalnız bilgi alanı güncellenir (satır açılmaz).
+        /// </summary>
+        public static (bool ok, string mesaj, NakitAkisViewModel satir) PlanTedarikciDegistir(int cekDocEntry, string tedarikci, string kullanici)
+        {
+            Tohumla(); var k = CekAkibetOrnek.Bul(cekDocEntry); if (k == null) return (false, "Belge bulunamadı.", null);
+            tedarikci = (tedarikci ?? "").Trim();
+            if (k.PlanDocEntry != null)
+            {
+                NakitAkisViewModel m; lock (Kilit) m = _odemeler.TryGetValue(k.DbName, out var l) ? l.FirstOrDefault(x => x.DocEntry == k.PlanDocEntry.Value) : null;
+                if (m == null) { var r0 = CekAkibetOrnek.PlanlananTedarikciDegistir(cekDocEntry, tedarikci, kullanici); return (r0.ok, r0.mesaj, null); }
+                if (tedarikci == "") { var r1 = BelgePlanKaldir(k.DbName, m.DocEntry, cekDocEntry, kullanici); return (r1.ok, r1.ok ? $"{k.No} Kasa Nakit Akışı #{m.DocEntry} satırından çıkarıldı; portföye döndü." : r1.mesaj, r1.satir); }
+                if (m.U_Durum == "ÖDENDİ") return (false, $"Kasa Nakit Akışı #{m.DocEntry} ödenmiş; planlanan tedarikçi değiştirilemez.", m);
+                lock (Kilit) { string eski = m.U_Kurum; m.U_Kurum = tedarikci; Log(k.DbName, m.DocEntry, "Güncelleme", $"Planlanan tedarikçi (Çek Akıbeti): {eski} → {tedarikci}", kullanici); }
+                CekAkibetOrnek.PlanlananTedarikciDegistir(cekDocEntry, tedarikci, kullanici);
+                return (true, $"{k.No}: planlanan tedarikçi {tedarikci}; Kasa Nakit Akışı #{m.DocEntry} satırının kurumu da güncellendi.", m);
+            }
+            if (tedarikci != "" && k.Secilebilir) { var r2 = CekIcinSatirAc(cekDocEntry, tedarikci, null, null, null, null, kullanici); return (r2.ok, r2.mesaj, r2.satir); }
+            var r3 = CekAkibetOrnek.PlanlananTedarikciDegistir(cekDocEntry, tedarikci, kullanici);
+            return (r3.ok, r3.ok && tedarikci != "" ? $"{k.No}: planlanan tedarikçi {tedarikci} yazıldı; belge uygun olmadığı ({k.UygunlukNedeni}) için Kasa Nakit Akışı satırı açılmadı." : r3.mesaj, null);
+        }
         /// <summary>
         /// Belgeyi tedarikçiye çıkar (ciro) ya da bankaya tahsile verir — Çek Akıbeti ve Takip Paneli'ndeki tek düğme. Kasa Nakit Akışı'nda planlı belge: plan satırı üzerinden ibraz (CekIbrazEt; satır ÖDENDİ, fiş atılır);
         /// planlanmamış belge: çıkış işlenmez, GMY onayına düşer (CekCikisKontrollu). İbraz yeri boşsa planlanan tedarikçi.
