@@ -30,7 +30,8 @@ namespace WebApplication3.Data
         public decimal Tutar { get; set; }
         public string PB { get; set; } = "TRY";
         public DateTime PortfoyGiris { get; set; }
-        public string IslemTuru { get; set; }        // Portföyde | Planlandı | Bankaya Tahsile Verildi | Bankadan Tahsil Edildi | Ciro Edildi | Karşılıksız | Teminata Verildi | İade Edildi | İptal Edildi
+        public string IslemTuru { get; set; }        // standart liste (CekAkibetOrnek.IslemTurleri): Portföyde | Planlandı | Erteleme Yapıldı | Bankaya Tahsile Verildi | Bankadan Tahsil Edildi | Elden Tahsil Edildi | Ciro Edildi | Teminata Verildi | Tahsil Riski | Konkordato Sürecinde | Karşılıksız | Protesto Edildi | İade Edildi | İptal Edildi
+        public string Konum { get; set; } = "";      // konumu işlem türünden tek başına çıkmayan türlerde (Erteleme, Tahsil Riski, Konkordato, Karşılıksız, Protesto) seçilen konum: Portföyde | Bankada | Tedarikçide | Avukatta; boşsa ibraz türünden türetilir
         public string KullanimDurumu { get; set; }   // Kullanılabilir | Riskli | Teminat | Bloke
         // --- plan (Kasa Nakit Akışı)
         public string PlanlananTedarikci { get; set; } = "";
@@ -52,10 +53,51 @@ namespace WebApplication3.Data
         public int GerceklesenAdim => Dolasim.Count(a => a.Durum == "Gerçekleşti");
         public CekDolasimAdim SonrakiAdim => Dolasim.FirstOrDefault(a => a.Durum == "Planlandı");
 
-        public bool Portfoyde => IslemTuru == "Portföyde" || IslemTuru == "Planlandı";
-        public bool Secilebilir => IslemTuru == "Portföyde" && KullanimDurumu == "Kullanılabilir";
-        public string KonumDurumu => IslemTuru == "Ciro Edildi" ? "Tedarikçide" : IslemTuru == "Bankaya Tahsile Verildi" || IslemTuru == "Bankadan Tahsil Edildi" || IslemTuru == "Karşılıksız" ? "Bankada" : IslemTuru == "Teminata Verildi" ? "Teminatta" : IslemTuru == "İade Edildi" || IslemTuru == "İptal Edildi" ? "Çıktı" : "Portföyde";
-        public string VadeDurumu { get { int g = (Vade - DateTime.Today).Days; return g < 0 ? "Vadesi Geçti" : g == 0 ? "Bugün" : g <= 7 ? "Bu Hafta" : g <= 30 ? "Bu Ay" : "İleri Vadeli"; } }
+        // ---- ÇEK / SENET DURUM PARAMETRELERİ STANDART RAPORU (otomatik akış): İşlem Türü (+ Konum seçimi) → Konum Durumu → Hareket Durumu; Vade Tarihi / İşlem Türü → Vade Durumu; dördü → Uygunluk Durumu ----
+        /// <summary>Konum Durumu: Portföyde | Bankada | Tedarikçide | Avukatta | Kapandı. İşlem türünün tek konumu varsa o; birden çok olasılık varsa seçilen Konum, yoksa ibraz türünden türetilir (ciro → Tedarikçide, bankaya ibraz / teminat → Bankada, avukat → Avukatta, yoksa Portföyde).</summary>
+        public string KonumDurumu
+        {
+            get
+            {
+                var s = CekAkibetOrnek.KonumSecenekleri(IslemTuru); if (s.Length == 1) return s[0];
+                if (!string.IsNullOrEmpty(Konum) && s.Contains(Konum)) return Konum;
+                string t = IbrazTuru == "Ciro" ? "Tedarikçide" : IbrazTuru == "Bankaya İbraz" || IbrazTuru == "Teminat" ? "Bankada" : IbrazTuru == "Avukat" ? "Avukatta" : "Portföyde";
+                return s.Contains(t) ? t : s[0];
+            }
+        }
+        /// <summary>Hareket Durumu: Portföyde | İşlem Yapıldı (konum portföy dışındaysa işlem yapılmıştır).</summary>
+        public string HareketDurumu => KonumDurumu == "Portföyde" ? "Portföyde" : "İşlem Yapıldı";
+        /// <summary>Vade Durumu (otomatik kural): tahsil türleri → Tahsil; iade / iptal → Kapandı; vade &gt; bugün → Vade Bekleniyor; = bugün → Vadesi Bugün; &lt; bugün → Vadesi Geçti.</summary>
+        public string VadeDurumu
+        {
+            get
+            {
+                if (IslemTuru == "Bankadan Tahsil Edildi" || IslemTuru == "Elden Tahsil Edildi") return "Tahsil";
+                if (IslemTuru == "İade Edildi" || IslemTuru == "İptal Edildi") return "Kapandı";
+                int g = (Vade.Date - DateTime.Today).Days; return g > 0 ? "Vade Bekleniyor" : g == 0 ? "Vadesi Bugün" : "Vadesi Geçti";
+            }
+        }
+        /// <summary>Vade yakınlığı (bilgi): Vadesi Geçti | Bugün | Bu Hafta | Bu Ay | İleri Vadeli.</summary>
+        public string VadeYakinligi { get { int g = (Vade.Date - DateTime.Today).Days; return g < 0 ? "Vadesi Geçti" : g == 0 ? "Bugün" : g <= 7 ? "Bu Hafta" : g <= 30 ? "Bu Ay" : "İleri Vadeli"; } }
+        /// <summary>Uygun Değil nedeni ("" = Uygun). Kural: işlem türü Portföyde ya da Erteleme Yapıldı + konum Portföyde + Vade Bekleniyor + kullanılabilir → Uygun; planlı, vadesi bugün / geçmiş, bankada, tedarikçide, avukatta, tahsil, iade, iptal ya da riskli belgeler Uygun Değil.</summary>
+        public string UygunlukNedeni
+        {
+            get
+            {
+                if (IslemTuru == "Planlandı") return "Planlandı: " + (PlanlananTedarikci == "" ? "tedarikçiye ayrılmış" : PlanlananTedarikci + " için ayrılmış");
+                if (IslemTuru != "Portföyde" && IslemTuru != "Erteleme Yapıldı") return IslemTuru;
+                if (KonumDurumu != "Portföyde") return KonumDurumu;
+                if (VadeDurumu != "Vade Bekleniyor") return VadeDurumu;
+                if (KullanimDurumu != "Kullanılabilir") return "Kullanım durumu " + KullanimDurumu;
+                return "";
+            }
+        }
+        public bool Uygun => UygunlukNedeni == "";
+        public string UygunlukDurumu => Uygun ? "Uygun" : "Uygun Değil";
+        /// <summary>Belge portföyde (konum Portföyde: Portföyde, Planlandı, portföydeki erteleme / riskli belgeler).</summary>
+        public bool Portfoyde => KonumDurumu == "Portföyde";
+        /// <summary>Kasa Nakit Akışı'na seçilebilir = Uygun (portföyde, planlanmamış, vadesi bekleniyor, kullanılabilir).</summary>
+        public bool Secilebilir => Uygun;
         /// <summary>Plan ↔ ibraz karşılaştırması (finans kontrolü).</summary>
         public string Kontrol
         {
@@ -113,18 +155,53 @@ namespace WebApplication3.Data
         }
         public static string DbName(string sirket) => Sirketler.FirstOrDefault(s => s.Ad == sirket).DbName ?? sirket;
         public static string SirketAdi(string dbNameOrKey) { var s = Sirketler.FirstOrDefault(x => x.DbName == dbNameOrKey || x.DbKey == dbNameOrKey || x.Ad == dbNameOrKey); return s.Ad ?? dbNameOrKey; }
-        /// <summary>Çek Akıbeti Raporu işlem türleri (kod, açıklama) — ana projedeki sıra.</summary>
+        /// <summary>
+        /// Çek / Senet Durum Parametreleri Standart Raporu › İşlem Türü (kod, ad). Konum, hareket, vade durumu ve uygunluk bu türden (ve gerekirse seçilen konumdan) otomatik türetilir (CekKaydi.KonumDurumu …).
+        /// Erteleme / konkordato gibi türlerde konum ayrı alandır ("Erteleme Yapıldı - Bankada" gibi birleşik adlar kullanılmaz).
+        /// </summary>
         public static readonly (string Kod, string Ad)[] IslemTurleri =
         {
-            ("1", "Portföyde"), ("2", "Planlandı"), ("3", "Erteleme Yapıldı - Portföyde"), ("4", "Erteleme Yapıldı - Bankada"), ("5", "Bankaya Tahsile Verildi"), ("6", "Bankadan Tahsil Edildi"),
-            ("7", "Elden Tahsil Edildi"), ("8", "Ciro Edildi"), ("9", "Teminata Verildi"), ("10", "Karşılıksız"), ("11", "Protesto Edildi"), ("12", "Konkordato - Portföyde"),
-            ("13", "Konkordato - Bankada"), ("14", "Konkordato - Tedarikçide"), ("15", "İade Edildi"), ("16", "İptal Edildi")
+            ("1", "Portföyde"), ("2", "Planlandı"), ("3", "Erteleme Yapıldı"), ("4", "Bankaya Tahsile Verildi"), ("5", "Bankadan Tahsil Edildi"), ("6", "Elden Tahsil Edildi"), ("7", "Ciro Edildi"),
+            ("8", "Teminata Verildi"), ("9", "Tahsil Riski"), ("10", "Konkordato Sürecinde"), ("11", "Karşılıksız"), ("12", "Protesto Edildi"), ("13", "İade Edildi"), ("14", "İptal Edildi")
         };
+        /// <summary>İşlem türünün açıklaması (standart rapor › parametre listesi).</summary>
+        public static readonly Dictionary<string, string> IslemTuruAciklamalari = new Dictionary<string, string>
+        {
+            ["Portföyde"] = "Evrak kasada / portföyde beklemektedir.", ["Planlandı"] = "Evrak belirli bir tedarikçi veya işlem için ayrılmıştır (Kasa Nakit Akışı).", ["Erteleme Yapıldı"] = "Evrakın vadesi ötelenmiştir; portföyde, bankada veya tedarikçide olabilir.",
+            ["Bankaya Tahsile Verildi"] = "Evrak tahsil edilmek üzere bankaya verilmiştir.", ["Bankadan Tahsil Edildi"] = "Evrak bedeli bankadan tahsil edilmiştir.", ["Elden Tahsil Edildi"] = "Evrak bedeli elden / nakit tahsil edilmiştir.",
+            ["Ciro Edildi"] = "Evrak tedarikçiye devredilmiştir.", ["Teminata Verildi"] = "Evrak teminat amacıyla kullanılmıştır.", ["Tahsil Riski"] = "Evrakta tahsilat riski oluşmuştur.", ["Konkordato Sürecinde"] = "Evrak borçlusu konkordato sürecindedir.",
+            ["Karşılıksız"] = "Çek için karşılıksız işlemi oluşmuştur.", ["Protesto Edildi"] = "Senet için protesto işlemi oluşmuştur.", ["İade Edildi"] = "Evrak iade edilmiştir; süreç kapalı kabul edilir.", ["İptal Edildi"] = "Evrak iptal edilmiştir; süreç kapalı kabul edilir."
+        };
+        public static readonly string[] KonumDurumlari = { "Portföyde", "Bankada", "Tedarikçide", "Avukatta", "Kapandı" };
+        public static readonly string[] VadeDurumlari = { "Vade Bekleniyor", "Vadesi Bugün", "Vadesi Geçti", "Tahsil", "Kapandı" };
+        public static readonly string[] HareketDurumlari = { "Portföyde", "İşlem Yapıldı" };
+        static readonly string[] KonumPortfoy = { "Portföyde" }, KonumBanka = { "Bankada" }, KonumTedarikci = { "Tedarikçide" }, KonumKapandi = { "Kapandı" }, KonumErteleme = { "Portföyde", "Bankada", "Tedarikçide" }, KonumRisk = { "Portföyde", "Bankada", "Tedarikçide", "Avukatta" };
+        /// <summary>İşlem türüyle çelişmeyen konum olasılıkları (standart tablo): tek olasılık varsa konum otomatik, birden çoksa kullanıcı seçer.</summary>
+        public static string[] KonumSecenekleri(string islemTuru)
+        {
+            switch (islemTuru ?? "")
+            {
+                case "Portföyde": case "Planlandı": return KonumPortfoy;
+                case "Erteleme Yapıldı": return KonumErteleme;
+                case "Bankaya Tahsile Verildi": case "Teminata Verildi": return KonumBanka;
+                case "Ciro Edildi": return KonumTedarikci;
+                case "Bankadan Tahsil Edildi": case "Elden Tahsil Edildi": case "İade Edildi": case "İptal Edildi": return KonumKapandi;
+                case "Tahsil Riski": case "Konkordato Sürecinde": case "Karşılıksız": case "Protesto Edildi": return KonumRisk;
+                default: return KonumPortfoy;
+            }
+        }
         public static string IslemKodu(string ad) => IslemTurleri.FirstOrDefault(t => t.Ad == ad).Kod ?? "1";
         /// <summary>Belgenin işlem tipi (X / R): belge numarasının rakamlarından deterministik, yaklaşık %78 X.</summary>
         public static string IslemTipiHesapla(string no) { var d = new string((no ?? "").Where(char.IsDigit).ToArray()); if (d.Length == 0) return "X"; long n = long.Parse(d.Length > 9 ? d.Substring(d.Length - 9) : d); return n % 100 < 78 ? "X" : "R"; }
-        /// <summary>Belgenin şirketten çıktığı işlem türleri: Kasa Nakit Akışı'nda planlanmamış belge için bu türlere geçiş GMY onayına düşer (NakitAkisOrnek.CekCikisKontrollu).</summary>
-        public static bool CikisTuruMu(string ad) => ad == "Ciro Edildi" || ad == "Bankaya Tahsile Verildi" || ad == "Teminata Verildi" || ad == "Konkordato - Tedarikçide" || ad == "Konkordato - Bankada" || ad == "Erteleme Yapıldı - Bankada";
+        /// <summary>Belgenin şirketten çıktığı işlem türleri (ya da konum olarak Bankada / Tedarikçide seçimi): Kasa Nakit Akışı'nda planlanmamış belge için bu geçişler GMY onayına düşer (NakitAkisOrnek.CekCikisKontrollu).</summary>
+        public static bool CikisTuruMu(string ad, string konum = null) => ad == "Ciro Edildi" || ad == "Bankaya Tahsile Verildi" || ad == "Teminata Verildi" || konum == "Bankada" || konum == "Tedarikçide";
+        /// <summary>"İşlem Türü · Konum" biçimindeki değeri ayırır (GMY onay satırı U_CikisTalebi böyle saklar).</summary>
+        public static (string ad, string konum) AdVeKonum(string kodVeyaAd, string konum)
+        {
+            string ad = kodVeyaAd ?? ""; int i = ad.IndexOf(" · ", StringComparison.Ordinal); if (i > 0) { if (string.IsNullOrEmpty(konum)) konum = ad.Substring(i + 3).Trim(); ad = ad.Substring(0, i).Trim(); }
+            if (IslemTurleri.Any(t => t.Kod == ad)) ad = IslemAdi(ad);
+            return (ad, konum ?? "");
+        }
         public static string IslemAdi(string kod) => IslemTurleri.FirstOrDefault(t => t.Kod == kod).Ad ?? kod;
         public static readonly string[] KullanimDurumlari = { "Kullanılabilir", "Riskli", "Teminat", "Bloke" };
         static readonly string[] Subeler = { "Merkez", "Gebze", "Çorlu", "İkitelli", "Bursa OSB", "Kadıköy", "Bornova", "Çerkezköy", "Kartal", "Ümraniye" };
@@ -170,30 +247,42 @@ namespace WebApplication3.Data
                         Vade = c.Vade, Tutar = c.Tutar, PB = "TRY", PortfoyGiris = c.Vade.AddDays(-rnd.Next(20, 90)),
                         KullanimDurumu = c.Durum == "Riskli" ? "Riskli" : rnd.Next(40) == 0 ? "Teminat" : "Kullanılabilir"
                     };
+                    // bütçe belgesinin durumu → standart işlem türü (Çek / Senet Durum Parametreleri Standart Raporu); örnek dağılım için bazı belgeler erteleme, elden tahsil, tahsil riski, konkordato, protesto, iade, iptal olur
+                    double z = rnd.NextDouble(); bool vadesiGecti = k.Vade.Date < bugun;
                     switch (c.Durum)
                     {
-                        case "Tahsilde": k.IslemTuru = "Bankaya Tahsile Verildi"; break;
-                        case "Tahsil Edildi": k.IslemTuru = "Bankadan Tahsil Edildi"; break;
+                        case "Tahsilde": k.IslemTuru = z < 0.12 ? "Erteleme Yapıldı" : "Bankaya Tahsile Verildi"; if (k.IslemTuru == "Erteleme Yapıldı") k.Konum = "Bankada"; break;
+                        case "Tahsil Edildi": k.IslemTuru = z < 0.15 ? "Elden Tahsil Edildi" : z < 0.17 ? "İade Edildi" : z < 0.185 ? "İptal Edildi" : "Bankadan Tahsil Edildi"; break;
                         case "Ciro Edildi": k.IslemTuru = "Ciro Edildi"; break;
-                        case "Karşılıksız": k.IslemTuru = "Karşılıksız"; break;
-                        default: k.IslemTuru = "Portföyde"; break;   // Portföyde, Riskli
+                        case "Karşılıksız": k.IslemTuru = k.Belge == "Senet" ? "Protesto Edildi" : "Karşılıksız"; k.Konum = z < 0.4 ? "Avukatta" : z < 0.85 ? "Bankada" : "Portföyde"; break;
+                        case "Riskli": k.IslemTuru = vadesiGecti ? "Tahsil Riski" : z < 0.4 ? "Konkordato Sürecinde" : "Portföyde"; if (k.IslemTuru != "Portföyde") k.Konum = z < 0.6 ? "Portföyde" : z < 0.85 ? "Bankada" : "Avukatta"; break;
+                        default:   // Portföyde
+                            k.IslemTuru = z < 0.08 ? "Erteleme Yapıldı" : vadesiGecti && z < 0.11 ? "İade Edildi" : vadesiGecti && z < 0.125 ? "İptal Edildi" : "Portföyde";
+                            if (k.IslemTuru == "Erteleme Yapıldı") { k.Konum = "Portföyde"; if (vadesiGecti) k.Vade = bugun.AddDays(rnd.Next(10, 45)); }   // vade ötelendi: portföyde + vade bekleniyor → Uygun (standart rapor revizyon notu)
+                            break;
                     }
                     if (k.KullanimDurumu == "Teminat" && k.IslemTuru == "Portföyde") k.IslemTuru = "Teminata Verildi";
-                    // gerçek çıkış: ciro → tedarikçi, tahsil → banka
-                    if (k.IslemTuru == "Ciro Edildi")
+                    // gerçek çıkış: ciro → tedarikçi, bankadaki belgeler → tahsil bankası, avukattakiler → hukuk bürosu, tahsil → tahsilat belgesi, iade → müşteri
+                    string konum = k.KonumDurumu;
+                    if (k.IslemTuru == "Ciro Edildi" || konum == "Tedarikçide")
                     {
                         k.IbrazYeri = tedarikciler[rnd.Next(tedarikciler.Length)]; k.IbrazTuru = "Ciro";
                         var t = k.Vade.AddDays(-rnd.Next(5, 45)); if (t < k.PortfoyGiris) t = k.PortfoyGiris.AddDays(1); k.IbrazTarihi = t;
                         k.IbrazBelgeNo = $"CRO-{t:yyMM}-{rnd.Next(1000, 9999)}";
                     }
-                    else if (c.TahsileGonderildi)
+                    else if (k.IslemTuru == "Teminata Verildi") { k.IbrazYeri = "Teminat · " + (rnd.NextDouble() < 0.5 ? "Ziraat Bankası" : "Halk Bankası"); k.IbrazTuru = "Teminat"; k.IbrazTarihi = k.PortfoyGiris.AddDays(rnd.Next(1, 10)); k.IbrazBelgeNo = $"TMN-{k.PortfoyGiris:yyMM}-{rnd.Next(1000, 9999)}"; }
+                    else if (konum == "Bankada" || k.IslemTuru == "Bankadan Tahsil Edildi" || (konum == "Avukatta" && c.TahsileGonderildi))
                     {
-                        k.IbrazYeri = c.TahsilBankasi; k.IbrazTuru = "Bankaya İbraz";
+                        k.IbrazYeri = string.IsNullOrEmpty(c.TahsilBankasi) ? ButceOrnek.TahsilBankalari[k.DocEntry % 2] : c.TahsilBankasi; k.IbrazTuru = "Bankaya İbraz";
                         var t = k.Vade.AddDays(-rnd.Next(2, 12)); if (t < k.PortfoyGiris) t = k.PortfoyGiris.AddDays(1); k.IbrazTarihi = t;
                         k.IbrazBelgeNo = $"İBZ-{t:yyMM}-{rnd.Next(1000, 9999)}";
                         if (k.IslemTuru == "Bankadan Tahsil Edildi") k.TahsilatBelgeNo = $"{k.Vade:yyMM}{rnd.Next(1000, 9999)}";   // sayısal (Çek Akıbeti ekranı parseInt ile gönderir)
+                        if (konum == "Avukatta") { k.IbrazTuru = "Avukat"; k.IbrazYeri = "Av. " + new[] { "Demir Hukuk", "Yıldız & Ortakları", "Kaya Hukuk Bürosu" }[rnd.Next(3)]; k.IbrazTarihi = k.Vade.AddDays(rnd.Next(15, 60)); k.IbrazBelgeNo = $"HUK-{k.IbrazTarihi:yyMM}-{rnd.Next(1000, 9999)}"; }
                     }
-                    else if (k.IslemTuru == "Teminata Verildi") { k.IbrazYeri = "Teminat · " + (rnd.NextDouble() < 0.5 ? "Ziraat Bankası" : "Halk Bankası"); k.IbrazTuru = "Teminat"; k.IbrazTarihi = k.PortfoyGiris.AddDays(rnd.Next(1, 10)); k.IbrazBelgeNo = $"TMN-{k.PortfoyGiris:yyMM}-{rnd.Next(1000, 9999)}"; }
+                    else if (konum == "Avukatta") { k.IbrazTuru = "Avukat"; k.IbrazYeri = "Av. " + new[] { "Demir Hukuk", "Yıldız & Ortakları", "Kaya Hukuk Bürosu" }[rnd.Next(3)]; k.IbrazTarihi = k.Vade.AddDays(rnd.Next(15, 60)); k.IbrazBelgeNo = $"HUK-{k.IbrazTarihi:yyMM}-{rnd.Next(1000, 9999)}"; }
+                    else if (k.IslemTuru == "Elden Tahsil Edildi") { k.IbrazTuru = "Elden Tahsil"; k.IbrazYeri = "Kasa · " + k.Musteri; k.IbrazTarihi = k.Vade.AddDays(rnd.Next(0, 5)); k.TahsilatBelgeNo = $"{k.Vade:yyMM}{rnd.Next(1000, 9999)}"; }
+                    else if (k.IslemTuru == "İade Edildi") { k.IbrazTuru = "İade"; k.IbrazYeri = k.Musteri; k.IbrazTarihi = k.Vade.AddDays(rnd.Next(1, 20)); k.IbrazBelgeNo = $"İAD-{k.IbrazTarihi:yyMM}-{rnd.Next(1000, 9999)}"; }
+                    else if (k.IslemTuru == "İptal Edildi") { k.IbrazTuru = "İptal"; k.IbrazYeri = "İptal · " + k.Musteri; k.IbrazTarihi = k.Vade.AddDays(rnd.Next(1, 20)); k.IbrazBelgeNo = $"İPT-{k.IbrazTarihi:yyMM}-{rnd.Next(1000, 9999)}"; }
                     // örnek plan senaryoları (yalnız içinde bulunulan yıl):
                     //   portföyde, vadesi yakın belgelerin bir kısmı Kasa Nakit Akışı'nda planlanmış (plan satırı NakitAkisOrnek bağlar);
                     //   ciroda / bankaya verilen yakın tarihli belgelerin bir kısmında plan vardı: çoğu uyumlu, bir kısmı FARKLI yere çıkmış (finans kontrolü örneği)
@@ -227,9 +316,10 @@ namespace WebApplication3.Data
             lock (Kilit)
             {
                 var k = _kayitlar.FirstOrDefault(x => x.DocEntry == cekDocEntry); if (k == null) return (false, "Belge bulunamadı.");
-                if (k.IslemTuru != "Portföyde" && !(k.IslemTuru == "Planlandı" && k.PlanDocEntry == planDocEntry)) return (false, $"{k.No} seçilemez: işlem türü {k.IslemTuru}" + (k.PlanlananTedarikci != "" ? $" ({k.PlanlananTedarikci} için planlı)" : "") + ".");
+                bool portfoyTuru = (k.IslemTuru == "Portföyde" || k.IslemTuru == "Erteleme Yapıldı") && k.KonumDurumu == "Portföyde";
+                if (!portfoyTuru && !(k.IslemTuru == "Planlandı" && k.PlanDocEntry == planDocEntry)) return (false, $"{k.No} seçilemez: işlem türü {k.IslemTuru}" + (k.KonumDurumu != "Portföyde" ? $" · konum {k.KonumDurumu}" : "") + (k.PlanlananTedarikci != "" ? $" ({k.PlanlananTedarikci} için planlı)" : "") + ".");
                 if (k.KullanimDurumu != "Kullanılabilir") return (false, $"{k.No} kullanım durumu {k.KullanimDurumu}; planlanamaz.");
-                k.IslemTuru = "Planlandı"; k.PlanlananTedarikci = tedarikci ?? ""; k.PlanDocEntry = planDocEntry; k.PlanSirket = planSirket ?? k.Sirket; k.PlanlamaTarihi = DateTime.Now; k.Planlayan = kullanici ?? "";
+                k.IslemTuru = "Planlandı"; k.Konum = ""; k.PlanlananTedarikci = tedarikci ?? ""; k.PlanDocEntry = planDocEntry; k.PlanSirket = planSirket ?? k.Sirket; k.PlanlamaTarihi = DateTime.Now; k.Planlayan = kullanici ?? "";
                 _gunluk.Add(new CekAkibetGunluk { Tarih = DateTime.Now, Kullanici = kullanici ?? "", Sirket = k.Sirket, No = k.No, Islem = "Planlandı", Aciklama = $"Kasa Nakit Akışı: {tedarikci} ödemesi için planlandı (kayıt {planDocEntry})" });
                 return (true, $"{k.No} planlandı → {tedarikci}. Çek Akıbeti Raporu'nda işlem türü \"Planlandı\" oldu.");
             }
@@ -247,21 +337,37 @@ namespace WebApplication3.Data
                 return (true, $"{k.No} planı kaldırıldı; portföye döndü.");
             }
         }
-        /// <summary>Çek Akıbeti Raporu: işlem türü değişikliği (kod ya da ad). Ciro / tahsil türlerinde ibraz bilgisi verilmemişse plan yeri ya da banka yazılır.</summary>
-        public static (bool ok, string mesaj) IslemTuruDegistir(int cekDocEntry, string kodVeyaAd, string ibrazYeri, string ibrazBelgeNo, string kullanici)
+        /// <summary>
+        /// Çek Akıbeti Raporu: işlem türü değişikliği (kod ya da ad; "Ad · Konum" biçimi de olur). Standart akış: tür (+ konum) yazılır, konum / hareket / vade durumu / uygunluk otomatik türetilir;
+        /// konuma göre ibraz bilgisi tamamlanır (tedarikçide → ciro, bankada → bankaya ibraz, avukatta → avukat, portföyde → ibraz silinir, tahsil → tahsilat belgesi, iade / iptal → kapanış). Verilmeyen yer plan tedarikçisi ya da tahsil bankasıdır.
+        /// </summary>
+        public static (bool ok, string mesaj) IslemTuruDegistir(int cekDocEntry, string kodVeyaAd, string ibrazYeri, string ibrazBelgeNo, string kullanici, string konum = null)
         {
             Tohumla();
             lock (Kilit)
             {
                 var k = _kayitlar.FirstOrDefault(x => x.DocEntry == cekDocEntry); if (k == null) return (false, "Belge bulunamadı.");
-                string ad = IslemTurleri.Any(t => t.Kod == kodVeyaAd) ? IslemAdi(kodVeyaAd) : kodVeyaAd; if (string.IsNullOrEmpty(ad) || !IslemTurleri.Any(t => t.Ad == ad)) return (false, "Geçersiz işlem türü.");
-                string eski = k.IslemTuru; k.IslemTuru = ad;
-                if (ad == "Ciro Edildi" || ad == "Konkordato - Tedarikçide") { k.IbrazTuru = "Ciro"; k.IbrazYeri = !string.IsNullOrEmpty(ibrazYeri) ? ibrazYeri : k.IbrazYeri != "" ? k.IbrazYeri : k.PlanlananTedarikci; k.IbrazTarihi ??= DateTime.Today; k.IbrazBelgeNo = !string.IsNullOrEmpty(ibrazBelgeNo) ? ibrazBelgeNo : k.IbrazBelgeNo != "" ? k.IbrazBelgeNo : $"CRO-{DateTime.Today:yyMM}-{k.DocEntry % 9000 + 1000}"; }
-                else if (ad == "Bankaya Tahsile Verildi" || ad == "Bankadan Tahsil Edildi" || ad == "Karşılıksız" || ad == "Erteleme Yapıldı - Bankada" || ad == "Konkordato - Bankada") { k.IbrazTuru = "Bankaya İbraz"; k.IbrazYeri = !string.IsNullOrEmpty(ibrazYeri) ? ibrazYeri : k.IbrazYeri != "" ? k.IbrazYeri : ButceOrnek.TahsilBankalari[k.DocEntry % 2]; k.IbrazTarihi ??= DateTime.Today; k.IbrazBelgeNo = !string.IsNullOrEmpty(ibrazBelgeNo) ? ibrazBelgeNo : k.IbrazBelgeNo != "" ? k.IbrazBelgeNo : $"İBZ-{DateTime.Today:yyMM}-{k.DocEntry % 9000 + 1000}"; }
-                else if (ad == "Teminata Verildi") { k.IbrazTuru = "Teminat"; k.IbrazYeri = !string.IsNullOrEmpty(ibrazYeri) ? ibrazYeri : "Teminat"; k.IbrazTarihi ??= DateTime.Today; }
-                else if (ad == "Portföyde" || ad == "Erteleme Yapıldı - Portföyde" || ad == "Konkordato - Portföyde") { k.IbrazYeri = ""; k.IbrazTuru = ""; k.IbrazTarihi = null; k.IbrazBelgeNo = ""; if (ad == "Portföyde") { k.PlanlananTedarikci = ""; k.PlanDocEntry = null; k.PlanlamaTarihi = null; } }
-                _gunluk.Add(new CekAkibetGunluk { Tarih = DateTime.Now, Kullanici = kullanici ?? "", Sirket = k.Sirket, No = k.No, Islem = ad, Aciklama = $"İşlem türü {eski} → {ad}" + (k.IbrazYeri != "" ? $" · {k.IbrazTuru}: {k.IbrazYeri}" : "") + (k.Kontrol == "Farklı" ? $" · DİKKAT: plan {k.PlanlananTedarikci}" : "") });
-                return (true, $"{k.No}: {eski} → {ad}" + (k.Kontrol == "Farklı" ? $" — DİKKAT: Kasa Nakit Akışı planı {k.PlanlananTedarikci}, çıkış {k.IbrazYeri}." : "."));
+                var ak = AdVeKonum(kodVeyaAd, konum); string ad = ak.ad; konum = ak.konum; if (string.IsNullOrEmpty(ad) || !IslemTurleri.Any(t => t.Ad == ad)) return (false, "Geçersiz işlem türü.");
+                var secenekler = KonumSecenekleri(ad); if (!string.IsNullOrEmpty(konum) && !secenekler.Contains(konum)) return (false, $"{ad} için konum {konum} olamaz (olası: {string.Join(", ", secenekler)}).");
+                string eski = k.IslemTuru, eskiKonum = k.KonumDurumu; k.IslemTuru = ad; k.Konum = secenekler.Length == 1 ? "" : !string.IsNullOrEmpty(konum) ? konum : k.Konum;
+                string yeniKonum = k.KonumDurumu; string bugunKisa = DateTime.Today.ToString("yyMM"); int sira = k.DocEntry % 9000 + 1000;
+                string Yer(string varsayilan) => !string.IsNullOrEmpty(ibrazYeri) ? ibrazYeri : k.IbrazYeri != "" ? k.IbrazYeri : varsayilan;
+                string No(string onek) => !string.IsNullOrEmpty(ibrazBelgeNo) ? ibrazBelgeNo : k.IbrazBelgeNo != "" ? k.IbrazBelgeNo : $"{onek}-{bugunKisa}-{sira}";
+                if (ad == "Ciro Edildi" || yeniKonum == "Tedarikçide") { bool yeni = k.IbrazTuru != "Ciro"; k.IbrazTuru = "Ciro"; k.IbrazYeri = yeni && !string.IsNullOrEmpty(ibrazYeri) ? ibrazYeri : Yer(k.PlanlananTedarikci == "" ? "Tedarikçi" : k.PlanlananTedarikci); k.IbrazTarihi ??= DateTime.Today; k.IbrazBelgeNo = No("CRO"); }
+                else if (ad == "Teminata Verildi") { k.IbrazTuru = "Teminat"; k.IbrazYeri = Yer("Teminat"); k.IbrazTarihi ??= DateTime.Today; k.IbrazBelgeNo = No("TMN"); }
+                else if (ad == "Bankaya Tahsile Verildi" || ad == "Bankadan Tahsil Edildi" || yeniKonum == "Bankada")
+                {
+                    bool yeni = k.IbrazTuru != "Bankaya İbraz"; k.IbrazTuru = "Bankaya İbraz"; k.IbrazYeri = yeni && !string.IsNullOrEmpty(ibrazYeri) ? ibrazYeri : Yer(ButceOrnek.TahsilBankalari[k.DocEntry % 2]); k.IbrazTarihi ??= DateTime.Today; k.IbrazBelgeNo = No("İBZ");
+                    if (ad == "Bankadan Tahsil Edildi" && k.TahsilatBelgeNo == "") k.TahsilatBelgeNo = !string.IsNullOrEmpty(ibrazBelgeNo) && ibrazBelgeNo.All(char.IsDigit) ? ibrazBelgeNo : $"{bugunKisa}{sira}";
+                }
+                else if (yeniKonum == "Avukatta") { bool yeni = k.IbrazTuru != "Avukat"; k.IbrazTuru = "Avukat"; k.IbrazYeri = yeni && !string.IsNullOrEmpty(ibrazYeri) ? ibrazYeri : Yer("Hukuk Bürosu"); k.IbrazTarihi ??= DateTime.Today; k.IbrazBelgeNo = No("HUK"); }
+                else if (ad == "Elden Tahsil Edildi") { k.IbrazTuru = "Elden Tahsil"; k.IbrazYeri = !string.IsNullOrEmpty(ibrazYeri) ? ibrazYeri : "Kasa · " + k.Musteri; k.IbrazTarihi = DateTime.Today; if (k.TahsilatBelgeNo == "") k.TahsilatBelgeNo = !string.IsNullOrEmpty(ibrazBelgeNo) && ibrazBelgeNo.All(char.IsDigit) ? ibrazBelgeNo : $"{bugunKisa}{sira}"; }
+                else if (ad == "İade Edildi") { k.IbrazTuru = "İade"; k.IbrazYeri = !string.IsNullOrEmpty(ibrazYeri) ? ibrazYeri : k.Musteri; k.IbrazTarihi = DateTime.Today; k.IbrazBelgeNo = !string.IsNullOrEmpty(ibrazBelgeNo) ? ibrazBelgeNo : $"İAD-{bugunKisa}-{sira}"; }
+                else if (ad == "İptal Edildi") { k.IbrazTuru = "İptal"; k.IbrazYeri = "İptal · " + k.Musteri; k.IbrazTarihi = DateTime.Today; k.IbrazBelgeNo = !string.IsNullOrEmpty(ibrazBelgeNo) ? ibrazBelgeNo : $"İPT-{bugunKisa}-{sira}"; }
+                else if (yeniKonum == "Portföyde") { k.IbrazYeri = ""; k.IbrazTuru = ""; k.IbrazTarihi = null; k.IbrazBelgeNo = ""; if (ad == "Portföyde") { k.PlanlananTedarikci = ""; k.PlanDocEntry = null; k.PlanlamaTarihi = null; } }
+                string ozet = $"İşlem türü {eski} → {ad}" + (yeniKonum != eskiKonum ? $" · konum {eskiKonum} → {yeniKonum}" : $" · konum {yeniKonum}") + $" · vade durumu {k.VadeDurumu} · {k.UygunlukDurumu}" + (k.IbrazYeri != "" ? $" · {k.IbrazTuru}: {k.IbrazYeri}" : "");
+                _gunluk.Add(new CekAkibetGunluk { Tarih = DateTime.Now, Kullanici = kullanici ?? "", Sirket = k.Sirket, No = k.No, Islem = ad, Aciklama = ozet + (k.Kontrol == "Farklı" ? $" · DİKKAT: plan {k.PlanlananTedarikci}" : "") });
+                return (true, $"{k.No}: {eski} → {ad} · konum {yeniKonum} · hareket {k.HareketDurumu} · vade durumu {k.VadeDurumu} · {k.UygunlukDurumu}" + (k.Kontrol == "Farklı" ? $" — DİKKAT: Kasa Nakit Akışı planı {k.PlanlananTedarikci}, çıkış {k.IbrazYeri}." : "."));
             }
         }
         /// <summary>Çek Akıbeti Raporu: planlanan tedarikçi elle değişikliği.</summary>

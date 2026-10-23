@@ -38,21 +38,24 @@ namespace WebApplication3.Controllers
             return View("Index2", liste);
         }
 
-        /// <summary>Çek Akıbeti kaydı → ekran satırı (ana projedeki alan adları).</summary>
+        /// <summary>
+        /// Çek Akıbeti kaydı → ekran satırı (ana projedeki alan adları). Durum parametreleri (Hareket, Konum, Vade Durumu, Uygunluk) Çek / Senet Durum Parametreleri Standart Raporu kuralıyla
+        /// CekKaydi üzerinde otomatik türetilir; burada yalnız okunur (Data/CekAkibetOrnek.cs › KonumDurumu, HareketDurumu, VadeDurumu, UygunlukNedeni).
+        /// </summary>
         static Rapor2ViewModel Satir(CekKaydi k)
         {
-            bool portfoyde = k.Portfoyde; string hareket = portfoyde ? "Portföyde" : k.IslemTuru == "İade Edildi" ? "İade Edildi" : "İşlem Yapıldı";
             string aciklama = k.IslemTuru == "Planlandı" ? $"Kasa Nakit Akışı #{k.PlanDocEntry} · {k.PlanlananTedarikci} için planlandı" + (k.PlanlamaTarihi != null ? $" ({k.PlanlamaTarihi:dd.MM.yyyy}, {k.Planlayan})" : "")
                 : k.IbrazYeri != "" ? $"{k.IbrazTuru}: {k.IbrazYeri}" + (k.Kontrol == "Farklı" ? $" · DİKKAT: plan {k.PlanlananTedarikci} (farklı)" : k.Kontrol == "Uyumlu" ? " · plana uygun" : k.Kontrol == "Plansız İbraz" ? " · plansız" : "") : k.KullanimDurumu != "Kullanılabilir" ? k.KullanimDurumu : "";
+            if (CekAkibetOrnek.IslemTuruAciklamalari.TryGetValue(k.IslemTuru, out var tanim)) aciklama = tanim + (aciklama == "" ? "" : " · " + aciklama);
             if (k.Dolasim.Count > 0) aciklama = $"Grup içi dolaşım {k.GerceklesenAdim}/{k.Dolasim.Count}: {k.DolasimOzeti}" + (k.Sirket != k.KaynakSirket ? $" · şu an {k.Sirket} portföyünde" : "") + " · " + aciklama;
+            else if (k.Portfoyde && !string.IsNullOrEmpty(k.KaynakSirket) && k.Sirket != k.KaynakSirket) aciklama += $" · {k.Sirket} portföyünde";
             var m = new Rapor2ViewModel
             {
-                DocEntry = k.DocEntry, CekNumarasi = k.No, BankaAdi = k.Banka, Sube = k.Sube, HareketDurumu = hareket, IslemTuru = k.IslemTuru, KonumDurumu = k.KonumDurumu + (k.Portfoyde && !string.IsNullOrEmpty(k.KaynakSirket) && k.Sirket != k.KaynakSirket ? " · " + k.Sirket : ""), VadeDurumu = k.VadeDurumu, Aciklama = aciklama,
-                // uygunluk: portföyde (ya da Kasa Nakit Akışı'nda planlı) ve kullanılabilir belge "Uygun"; ciro / ibraz / teminat ile çıkan belge "Uygun Değil"
-                UygunlukDurumu = k.Portfoyde && k.KullanimDurumu == "Kullanılabilir" ? "Uygun" : "Uygun Değil", CekKimdenGeldi = k.Musteri, AsilBorclu = k.AsilBorclu, Tutar = k.Tutar, ParaBirimi = k.PB, VadeTarihi = k.Vade,
+                DocEntry = k.DocEntry, CekNumarasi = k.No, BankaAdi = k.Banka, Sube = k.Sube, HareketDurumu = k.HareketDurumu, IslemTuru = k.IslemTuru, KonumDurumu = k.KonumDurumu, VadeDurumu = k.VadeDurumu, VadeYakinligi = k.VadeYakinligi, Aciklama = aciklama,
+                UygunlukDurumu = k.UygunlukDurumu, UygunlukNedeni = k.UygunlukNedeni, CekKimdenGeldi = k.Musteri, AsilBorclu = k.AsilBorclu, Tutar = k.Tutar, ParaBirimi = k.PB, VadeTarihi = k.Vade,
                 VadeAyiVeYili = ButceOrnek.Aylar[k.Vade.Month - 1] + " " + k.Vade.Year, VadeliCekIbrazi = k.IbrazTuru == "Bankaya İbraz" ? "Evet" : "", PortfoyVadeAyiYili = ButceOrnek.Aylar[k.PortfoyGiris.Month - 1] + " " + k.PortfoyGiris.Year,
                 PortfoyeGirisTarihi = k.PortfoyGiris, IbrazTarihi = k.IbrazTarihi, TahsilatBelgeNo = k.TahsilatBelgeNo, IbrazBelgeNo = k.IbrazBelgeNo, PlanlananTedarikci = k.PlanlananTedarikci, BelgeTipi = k.Belge,
-                CekIslemTuru = CekAkibetOrnek.IslemKodu(k.IslemTuru), IslemTipiAdi = k.IslemTuru, CekKimeVerildi = k.IbrazTuru == "Ciro" ? k.IbrazYeri : k.IbrazTuru == "Bankaya İbraz" ? k.IbrazYeri + " (Tahsil)" : k.IbrazTuru == "Teminat" ? k.IbrazYeri : "", TlKarsiligi = k.Tutar, KullanımDurumu = k.KullanimDurumu,
+                CekIslemTuru = CekAkibetOrnek.IslemKodu(k.IslemTuru), IslemTipiAdi = k.IslemTuru, IbrazTuru = k.IbrazTuru, CekKimeVerildi = k.IbrazYeri, TlKarsiligi = k.Tutar, KullanımDurumu = k.KullanimDurumu,
                 CekinBankasi = k.Banka, GelmeNedeni = "Tahsilat", SirketAdi = k.Sirket, SirlamaTarihi = k.Vade, CekBankaAdi = k.Banka, CekTipi = k.IslemTipi
             };
             PanelAlanlari(m, k); return m;
@@ -82,8 +85,9 @@ namespace WebApplication3.Controllers
                 else { m.Kaynak = "Çek Akıbeti · Plan"; m.KaynakDetay = $"{k.PlanlananTedarikci} · {k.PlanlamaTarihi:dd.MM.yyyy} · nakit akış satırı yok"; }
                 m.SatirIslem = gmy ? "gmy" : "planli";
             }
-            else if (k.IslemTuru == "Portföyde") { m.Kaynak = "Çek Akıbeti · Portföy Girişi"; m.KaynakDetay = $"{k.Musteri} · giriş {k.PortfoyGiris:dd.MM.yyyy} · {k.Banka}"; m.SatirIslem = gmy ? "gmy" : k.Secilebilir ? "portfoy" : "yok"; }
-            else { m.Kaynak = "Çek Akıbeti · " + k.IslemTuru; m.KaynakDetay = $"{k.Musteri} · giriş {k.PortfoyGiris:dd.MM.yyyy} · {k.KullanimDurumu}"; m.SatirIslem = "yok"; }
+            // portföydeki belge: Uygun → Nakit Akışa Ekle / İbraz Et; vadesi bugün / geçmiş ya da ertelenmiş kullanılabilir belge → yalnız İbraz Et (başka tedarikçiye verilemez; standart rapor); riskli → işlem gerekmez
+            else if (k.IslemTuru == "Portföyde" || k.IslemTuru == "Erteleme Yapıldı") { m.Kaynak = k.IslemTuru == "Portföyde" ? "Çek Akıbeti · Portföy Girişi" : "Çek Akıbeti · Erteleme"; m.KaynakDetay = $"{k.Musteri} · giriş {k.PortfoyGiris:dd.MM.yyyy} · {k.Banka}" + (k.IslemTuru == "Erteleme Yapıldı" ? " · vade ötelendi" : ""); m.SatirIslem = gmy ? "gmy" : k.Secilebilir ? "portfoy" : k.KullanimDurumu == "Kullanılabilir" ? "ibraz" : "yok"; }
+            else { m.Kaynak = "Çek Akıbeti · " + k.IslemTuru; m.KaynakDetay = $"{k.Musteri} · giriş {k.PortfoyGiris:dd.MM.yyyy} · {k.KonumDurumu} · {k.KullanimDurumu}"; m.SatirIslem = "yok"; }
             Fis(m, Rapor123Controller.CekFisNo(k, k.Sirket));
         }
         static void Fis(Rapor2ViewModel m, string fisNo) { var f = fisNo == null ? null : MuhasebeOrnek.Bul(fisNo); if (f == null) return; m.FisNo = f.No; m.FisKaynak = f.Kaynak; m.FisTarih = f.Tarih.ToString("dd.MM.yyyy"); }
@@ -92,11 +96,13 @@ namespace WebApplication3.Controllers
         static Rapor2ViewModel GecisSatiri(CekKaydi k, string sirket)
         {
             var s = Satir(k); var adim = k.Dolasim.Last(a => a.Durum == "Gerçekleşti" && a.Eden == sirket);
-            s.HareketDurumu = "İşlem Yapıldı"; s.IslemTuru = "Ciro Edildi"; s.IslemTipiAdi = "Ciro Edildi"; s.CekIslemTuru = CekAkibetOrnek.IslemKodu("Ciro Edildi"); s.KonumDurumu = "Grup İçi Ciro · " + adim.Alan; s.CekKimeVerildi = adim.Alan; s.IbrazTarihi = adim.GercekTarih; s.IbrazBelgeNo = adim.BelgeNo ?? ""; s.SirketAdi = sirket;
+            // standart parametreler şirket açısından: ciro edildi → konum Tedarikçide (grup şirketi), hareket İşlem Yapıldı, vade durumu tarihten, uygunluk Uygun Değil
+            s.HareketDurumu = "İşlem Yapıldı"; s.IslemTuru = "Ciro Edildi"; s.IslemTipiAdi = "Ciro Edildi"; s.CekIslemTuru = CekAkibetOrnek.IslemKodu("Ciro Edildi"); s.KonumDurumu = "Tedarikçide"; s.IbrazTuru = "Ciro"; s.CekKimeVerildi = adim.Alan; s.IbrazTarihi = adim.GercekTarih; s.IbrazBelgeNo = adim.BelgeNo ?? ""; s.SirketAdi = sirket;
+            int g = (k.Vade.Date - DateTime.Today).Days; s.VadeDurumu = g > 0 ? "Vade Bekleniyor" : g == 0 ? "Vadesi Bugün" : "Vadesi Geçti";
             s.Aciklama = $"Grup içi dolaşım {k.GerceklesenAdim}/{k.Dolasim.Count}: {k.DolasimOzeti} · {sirket} → {adim.Alan} ciro edildi ({adim.BelgeNo}, {adim.GercekTarih:dd.MM.yyyy}, adım {adim.Sira}) · şu an {k.Sirket} portföyünde · plana uygun";
             // panel sütunları: dolaşım geçiş satırı — kaynak gerçekleşen dolaşım adımı, kontrol uyumlu, fiş adımın ciro fişi (eden şirkette)
             s.Kontrol = "Uyumlu"; s.Kaynak = "Dolaşım Planı · Gerçekleşen Adım"; s.KaynakDetay = $"{adim.Tur} · {adim.BelgeNo} · adım {adim.Sira}/{k.Dolasim.Count} · {adim.GercekTarih:dd.MM.yyyy}"; s.SatirIslem = "yok";
-            s.UygunlukDurumu = "Uygun Değil"; s.FisNo = null; s.FisKaynak = null; s.FisTarih = null; Fis(s, Rapor123Controller.CekFisNo(k, sirket, adim));
+            s.UygunlukDurumu = "Uygun Değil"; s.UygunlukNedeni = "Grup içi ciro edildi · " + adim.Alan; s.FisNo = null; s.FisKaynak = null; s.FisTarih = null; Fis(s, Rapor123Controller.CekFisNo(k, sirket, adim));
             return s;
         }
 
@@ -134,7 +140,7 @@ namespace WebApplication3.Controllers
             var planliKayit = hepsi.Where(k => k.IslemTuru == "Planlandı").OrderBy(k => k.Vade).ToList(); var planli = planliKayit.Select(PlanJson).ToList();
             var gmy = odemeler.Where(m => !string.IsNullOrEmpty(m.U_CikisTalebi) && m.U_OnayDurumu != "Onaylandı" && m.U_Durum != "ÖDENDİ").Select(m => new { docEntry = m.DocEntry, kurum = m.U_Kurum, cekNolar = m.U_CekNolar, cikisTalebi = m.U_CikisTalebi, ibrazYeri = m.U_CikisIbrazYeri, talepEden = m.U_CikisTalepEden, tutar = m.U_TutarTL ?? 0, tarih = m.U_PlanlananTarih?.ToString("dd.MM.yyyy"), link = OdemeLink(m) }).ToList();
             var farkli = hepsi.Where(k => k.Kontrol == "Farklı").OrderByDescending(k => k.IbrazTarihi).Take(20).Select(PlanJson).ToList();
-            var bankada = hepsi.Where(k => k.IslemTuru == "Bankaya Tahsile Verildi").OrderBy(k => k.Vade).ToList();
+            var bankada = hepsi.Where(k => k.KonumDurumu == "Bankada").OrderBy(k => k.Vade).ToList();   // standart konum: tahsilde, teminatta, bankada ertelenmiş / riskli belgeler
             var planlar = hepsi.Where(k => k.PlanDocEntry != null || k.Portfoyde).ToDictionary(k => k.DocEntry.ToString(), k => { var m = k.PlanDocEntry != null ? NakitAkisOrnek.Bul(k.PlanDocEntry.Value) : null; return new { planDocEntry = k.PlanDocEntry, planDb = m?.U_KaynakFirma, planDurum = m?.U_Durum ?? "", planTalimat = m?.U_TalimatNo ?? "", planKurum = m?.U_Kurum ?? "", cikisTalebi = m?.U_CikisTalebi ?? "", planOnay = m?.U_OnayDurumu ?? "", planLink = m == null ? null : OdemeLink(m), secilebilir = k.Secilebilir, portfoyde = k.Portfoyde, islemTuru = k.IslemTuru, dolasim = k.DolasimOzeti }; });
             var gunluk = CekAkibetOrnek.Gunluk.Where(g => g.Sirket == sirket).Take(12).Select(g => new { tarih = g.Tarih.ToString("dd.MM.yyyy HH:mm"), g.Kullanici, g.No, g.Islem, g.Aciklama }).ToList();
             return Json(new
@@ -188,10 +194,21 @@ namespace WebApplication3.Controllers
             var k = CekAkibetOrnek.Kayitlar.FirstOrDefault(x => x.TahsilatBelgeNo == model?.TahsilatBelgeNo); if (k == null) return Json(new { success = false, message = "Tahsilat belgesi bulunamadı." });
             var r = NakitAkisOrnek.CekCikisKontrollu(k.DocEntry, model.NewCheckTransactionType, null, null, Kullanici); return Json(new { success = r.ok, message = r.mesaj, onayaDustu = r.onayaDustu, nakitAkisDocEntry = r.docEntry });
         }
-        public class DocEntryIslemIstek { public int DocEntry { get; set; } public string NewCheckTransactionType { get; set; } public string IbrazYeri { get; set; } public string IbrazBelgeNo { get; set; } }
-        /// <summary>Belge numarası olmayan (portföydeki) çekler için kayıtla işlem türü güncelleme. Kasa Nakit Akışı'nda planlanmamış belge için çıkış türleri uygulanmaz; GMY onayına düşer (NakitAkisOrnek.CekCikisKontrollu).</summary>
+        public class DocEntryIslemIstek { public int DocEntry { get; set; } public string NewCheckTransactionType { get; set; } public string Konum { get; set; } public string IbrazYeri { get; set; } public string IbrazBelgeNo { get; set; } }
+        /// <summary>
+        /// İşlem türü (+ konum, ibraz yeri, belge no) değişikliği: standart akış kayıt üzerinde işler (konum / hareket / vade durumu / uygunluk otomatik), güncel satır JSON olarak döner (ekran satırı yeniden çizilir).
+        /// Kasa Nakit Akışı'nda planlanmamış belge için çıkış türleri uygulanmaz; GMY onayına düşer (NakitAkisOrnek.CekCikisKontrollu).
+        /// </summary>
         [HttpPost("UpdateCheckTransactionTypeByDocEntry")]
-        public IActionResult UpdateCheckTransactionTypeByDocEntry([FromBody] DocEntryIslemIstek model) { var r = NakitAkisOrnek.CekCikisKontrollu(model?.DocEntry ?? 0, model?.NewCheckTransactionType, model?.IbrazYeri, model?.IbrazBelgeNo, Kullanici); return Json(new { success = r.ok, message = r.mesaj, onayaDustu = r.onayaDustu, nakitAkisDocEntry = r.docEntry }); }
+        public IActionResult UpdateCheckTransactionTypeByDocEntry([FromBody] DocEntryIslemIstek model)
+        {
+            var r = NakitAkisOrnek.CekCikisKontrollu(model?.DocEntry ?? 0, model?.NewCheckTransactionType, model?.IbrazYeri, model?.IbrazBelgeNo, Kullanici, model?.Konum);
+            var k = CekAkibetOrnek.Bul(model?.DocEntry ?? 0); string satirJson = k == null ? null : Newtonsoft.Json.JsonConvert.SerializeObject(Satir(k), new Newtonsoft.Json.JsonSerializerSettings { DateFormatString = "yyyy-MM-dd" });
+            return Json(new { success = r.ok, message = r.mesaj, onayaDustu = r.onayaDustu, nakitAkisDocEntry = r.docEntry, satirJson });
+        }
+        /// <summary>İşlem türlerinin standart tanımı ve konum olasılıkları (ekran: işlem türü değişiklik penceresi).</summary>
+        [HttpGet("IslemTurleri")]
+        public IActionResult IslemTurleri() => Json(CekAkibetOrnek.IslemTurleri.Select(t => new { kod = t.Kod, ad = t.Ad, aciklama = CekAkibetOrnek.IslemTuruAciklamalari.TryGetValue(t.Ad, out var a) ? a : "", konumlar = CekAkibetOrnek.KonumSecenekleri(t.Ad) }));
         public class PlanlananTedarikciIstek { public int DocEntry { get; set; } public string NewPlannedSupplier { get; set; } }
         [HttpPost("UpdatePlannedSupplier")]
         public IActionResult UpdatePlannedSupplier([FromBody] PlanlananTedarikciIstek model) { var r = CekAkibetOrnek.PlanlananTedarikciDegistir(model?.DocEntry ?? 0, model?.NewPlannedSupplier, Kullanici); return Json(new { success = r.ok, message = r.mesaj }); }

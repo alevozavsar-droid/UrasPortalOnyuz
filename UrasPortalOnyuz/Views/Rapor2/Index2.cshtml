@@ -45,6 +45,8 @@
         distinctValues["IslemTipiAdi"] = Model.Where(m => !string.IsNullOrEmpty(m.IslemTipiAdi)).Select(m => m.IslemTipiAdi).Distinct().OrderBy(s => s).ToList();
         distinctValues["Aciklama"] = Model.Where(m => !string.IsNullOrEmpty(m.Aciklama)).Select(m => m.Aciklama).Distinct().OrderBy(s => s).ToList();
         distinctValues["KullanimDurumu"] = Model.Where(m => !string.IsNullOrEmpty(m.KullanımDurumu)).Select(m => m.KullanımDurumu).Distinct().OrderBy(s => s).ToList();
+        distinctValues["CekTipi"] = Model.Where(m => !string.IsNullOrEmpty(m.CekTipi)).Select(m => m.CekTipi).Distinct().OrderBy(s => s).ToList();
+        distinctValues["UygunlukNedeni"] = Model.Select(m => string.IsNullOrEmpty(m.UygunlukNedeni) ? "Uygun" : m.UygunlukNedeni).Distinct().OrderBy(s => s).ToList();
         // Takip Paneli ile ortak sütunlar: Satır Kaynağı, Nakit Akış Eşleşmesi (plan satırı durumu), Kontrol
         distinctValues["Kaynak"] = Model.Where(m => !string.IsNullOrEmpty(m.Kaynak)).Select(m => m.Kaynak).Distinct().OrderBy(s => s).ToList();
         distinctValues["NakitAkis"] = Model.Select(m => m.PlanDocEntry != null ? m.PlanDurum : m.IslemTuru == "Planlandı" ? "Satır Yok" : "—").Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s).ToList();
@@ -106,6 +108,9 @@
         .sticky-toolbar .ms-auto { gap: 4px !important; padding-left: 8px !important; }
         .summary-cards-wrapper { background-color: #f8fafc; padding: 5px 10px; border-bottom: 1px solid var(--border-color); }
         .summary-cards-wrapper .row { --bs-gutter-x: .4rem; --bs-gutter-y: .4rem; }
+        /* 8 yönetici süzgeci kartı: geniş ekranda tek sıra (8 × 12,5 %), orta ekranda 4'lü iki sıra */
+        @@media (min-width: 1500px) { .summary-cards-wrapper .row > [class*="col-"] { flex: 0 0 12.5%; max-width: 12.5%; } }
+        @@media (min-width: 992px) and (max-width: 1499.98px) { .summary-cards-wrapper .row > [class*="col-"] { flex: 0 0 25%; max-width: 25%; } }
         .footer-row-container { padding: 3px 10px; border-top: 1px solid var(--border-color); background-color: #f8fafc; border-radius: 0 0 12px 12px; font-size: .66rem; }
         .footer-row-container .small { font-size: .66rem !important; }
 
@@ -154,16 +159,16 @@
         #rapor2Table.rapor-tablo thead .main-header-row th, body.sekme-icinde #rapor2Table.rapor-tablo thead tr:first-child th, html.cerceve-icinde #rapor2Table.rapor-tablo thead tr:first-child th { white-space: normal; line-height: 1.15 !important; font-size: .6rem !important; letter-spacing: .02em !important; padding: 5px 4px !important; vertical-align: middle; }
         #rapor2Table.rapor-tablo thead .filter-row th { padding: 3px 3px !important; }
         .rapor-tablo thead .main-header-row th i { margin-left: 2px !important; }
-        .rapor-tablo .cek-no-link { letter-spacing: 0; }
-        .check-transaction-select, .planned-supplier-input { padding: 1px 2px !important; font-size: .68rem !important; }
+        .rapor-tablo .cek-no-link { letter-spacing: 0; font-size: .7rem; }
+        .check-transaction-select, .planned-supplier-input { padding: 1px 2px !important; font-size: .64rem !important; }
+        .check-transaction-select { padding: 1px 0 1px 2px !important; }
         /* Uzun metinli kolonlar: içerik kırpılmaz, alt satıra geçer. Tablonun
            tek ekrana sığması için genişlikleri sutunGenisliklerineUygula()
            tarafından daraltılabiliyor. */
         .rapor-tablo td[data-column="AsilBorclu"],
         .rapor-tablo td[data-column="IslemTipiAdi"],
-        .rapor-tablo td[data-column="HareketDurumu"],
         .rapor-tablo td[data-column="KonumDurumu"],
-        .rapor-tablo td[data-column="VadeDurumu"],
+        .rapor-tablo td[data-column="UygunlukNedeni"],
         .rapor-tablo td[data-column="BelgeTipi"] {
             white-space: normal;
             overflow: visible;
@@ -184,6 +189,16 @@
         .rapor-tablo.dar .ca-kyn-is { white-space: normal; line-height: 1.1; } .rapor-tablo.dar .ca-kyn-is .btn-xs { margin-bottom: 1px; }
         .ca-roz { display: inline-block; font-size: .56rem; font-weight: 800; border-radius: 4px; padding: 1px 5px; white-space: nowrap; vertical-align: middle; } .ca-roz.ok { background: #dcfce7; color: #166534; } .ca-roz.uyari { background: #fef3c7; color: #92400e; } .ca-roz.hata { background: #fee2e2; color: #991b1b; } .ca-roz.bilgi { background: #dbeafe; color: #1e40af; }
         .ca-kontrol { display: inline-block; font-size: .56rem; font-weight: 800; border-radius: 999px; padding: 1px 6px; white-space: nowrap; } .ca-kontrol.uyumlu { background: #dcfce7; color: #166534; } .ca-kontrol.farkli { background: #fee2e2; color: #991b1b; } .ca-kontrol.bekliyor { background: #fef9c3; color: #854d0e; } .ca-kontrol.plansiz { background: #e0f2fe; color: #0c4a6e; }
+        /* standart durum parametreleri rozetleri (Hareket, Konum, Vade Durumu, Uygunluk, Kullanım) */
+        .ca-durum { display: inline-block; font-size: .56rem; font-weight: 800; border-radius: 4px; padding: 1px 5px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; background: #f1f5f9; color: #475569; letter-spacing: 0; }
+        #rapor2Table.rapor-tablo tbody td[data-column="VadeDurumu"], #rapor2Table.rapor-tablo tbody td[data-column="UygunlukDurumu"], #rapor2Table.rapor-tablo tbody td[data-column="KullanimDurumu"], #rapor2Table.rapor-tablo tbody td[data-column="HareketDurumu"] { padding: 3px 3px !important; }
+        #rapor2Table.rapor-tablo tbody td[data-column="CekIslemTuru"], #rapor2Table.rapor-tablo tbody td[data-column="VadeTarihi"], #rapor2Table.rapor-tablo tbody td[data-column="PortfoyeGirisTarihi"] { padding: 3px 2px !important; }
+        .ca-durum.ok { background: #dcfce7; color: #166534; } .ca-durum.uyari { background: #fef3c7; color: #92400e; } .ca-durum.hata { background: #fee2e2; color: #991b1b; } .ca-durum.bilgi { background: #dbeafe; color: #1e40af; } .ca-durum.mor { background: #ede9fe; color: #5b21b6; } .ca-durum.notr { background: #e2e8f0; color: #334155; }
+        .rapor-tablo td .alt.konum { font-weight: 700; color: #475569; }
+        /* işlem türü değişiklik penceresi: standart akış önizlemesi */
+        .it-onizleme { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 8px; } .it-onizleme > div { background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 5px 8px; min-width: 0; } .it-onizleme label { display: block; font-size: .56rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #64748b; margin-bottom: 2px; } .it-onizleme .d { font-size: .74rem; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .it-onizleme .d .ca-durum { font-size: .64rem; } .it-not { font-size: .66rem; color: #475569; margin-top: 6px; } .it-not b { color: #0f172a; }
+        #islemTuruModal .form-label { font-size: .64rem; font-weight: 700; color: #64748b; margin-bottom: 2px; } #islemTuruModal .form-control, #islemTuruModal .form-select { font-size: .74rem; height: 28px; padding: 2px 6px; } #islemTuruModal .modal-header { padding: 6px 14px; } #islemTuruModal .modal-title { font-size: .84rem; } #islemTuruModal .modal-body { padding: 8px 14px; } #islemTuruModal .modal-footer { padding: 5px 12px; }
         .ca-dol { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ca-dol i { font-size: .5rem; color: #94a3b8; margin: 0 1px; } .ca-dol .ok { color: #15803d; font-weight: 700; } .ca-dol .plan { color: #64748b; }
         .ca-link { font-weight: 700; color: #1d4ed8; cursor: pointer; text-decoration: none; } .ca-link:hover { text-decoration: underline; }
         .ca-fis-tablo { width: 100%; font-size: .74rem; border-collapse: collapse; } .ca-fis-tablo th { font-size: .6rem; text-transform: uppercase; letter-spacing: .04em; color: #64748b; background: #f8fafc; padding: 4px 7px; border-bottom: 1px solid var(--border-color); text-align: left; } .ca-fis-tablo td { padding: 4px 7px; border-bottom: 1px solid #f1f5f9; } .ca-fis-tablo .s { text-align: right; font-variant-numeric: tabular-nums; }
@@ -205,7 +220,7 @@
             font-size: .62rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
             color: #64748b; margin: 12px 0 4px; padding-bottom: 3px; border-bottom: 2px solid #e2e8f0;
         }
-        #cekDetayModal .modal-header, #cekFisModal .modal-header { padding: 6px 14px; } #cekDetayModal .modal-title, #cekFisModal .modal-title { font-size: .84rem; } #cekDetayModal .modal-body { padding: 8px 14px; } #cekDetayModal .modal-footer { padding: 5px 12px; }
+        #cekDetayModal .modal-header, #cekFisModal .modal-header { padding: 6px 14px; } #cekDetayModal .modal-title, #cekFisModal .modal-title { font-size: .84rem; } #cekDetayModal .modal-title { color: #fff !important; }   /* koyu başlık şeridi: tema başlık rengini koyuya çeviriyordu, yazı görünmüyordu */ #cekDetayModal .modal-body { padding: 8px 14px; } #cekDetayModal .modal-footer { padding: 5px 12px; }
 
         /* Hem başlık hem filtre satırı kaydırma sırasında sabit kalır (--head-row-h JS'te ölçülür) */
         .rapor-tablo thead th { position: sticky; background-color: var(--header-bg); }
@@ -228,43 +243,49 @@
 
         .rapor-tablo [data-column="ParaBirimi"],
         .rapor-tablo [data-column="UygunlukDurumu"],
+        .rapor-tablo [data-column="VadeDurumu"],
+        .rapor-tablo [data-column="CekTipi"],
         .rapor-tablo [data-column="VadeTarihi"],
         .rapor-tablo [data-column="PortfoyeGirisTarihi"],
         .rapor-tablo [data-column="IbrazTarihi"] { text-align: center; }
 
-        /* Takip Paneli › Çek · Senet sekmesiyle aynı sütun ölçüleri (Satır Kaynağı · İşlem ve Dolaşım kırpılmaz; ek sütun açılınca tablo sağa kayar) */
-        .rapor-tablo [data-column="Dolasim"]            { width: 190px; }
+        /* Standart rapor sütun düzeni: Belge Tipi · Çek Numarası, Vade Tarihi (ay/yıl), Vade Durumu, Uygunluk, Çek Tutarı (PB · TL), Kimden Geldi (asıl borçlu), Hareket · Konum, İşlem Türü, Kime Verildi, Satır Kaynağı · İşlem, Planlanan Tedarikçi, Kullanım, Portföye Giriş (ay/yıl) */
+        .rapor-tablo [data-column="CekNumarasi"]        { width: 150px; }
+        .rapor-tablo [data-column="VadeTarihi"]         { width: 92px; }
+        .rapor-tablo [data-column="VadeDurumu"]         { width: 100px; }
+        .rapor-tablo [data-column="UygunlukDurumu"]     { width: 86px; }
+        .rapor-tablo [data-column="Tutar"]              { width: 104px; }
+        .rapor-tablo [data-column="CekKimdenGeldi"]     { width: 130px; }
+        .rapor-tablo [data-column="HareketDurumu"]      { width: 110px; }
+        .rapor-tablo [data-column="CekIslemTuru"]       { width: 150px; }
+        .rapor-tablo [data-column="CekKimeVerildi"]     { width: 150px; }
         .rapor-tablo [data-column="Kaynak"]             { width: 206px; }
+        .rapor-tablo [data-column="PlanlananTedarikci"] { width: 130px; }
+        .rapor-tablo [data-column="KullanimDurumu"]     { width: 92px; }
+        .rapor-tablo [data-column="PortfoyeGirisTarihi"]{ width: 92px; }
+
+        /* Varsayılan gizli kolonlar ("Sütunlar"dan açılır; belge detayında da var): genişlikleri hazır */
+        .rapor-tablo [data-column="Dolasim"]            { width: 190px; }
         .rapor-tablo [data-column="NakitAkis"]          { width: 124px; }
         .rapor-tablo [data-column="Kontrol"]            { width: 100px; }
         .rapor-tablo [data-column="Fis"]                { width: 90px; }
-        .rapor-tablo [data-column="CekNumarasi"]        { width: 160px; }
         .rapor-tablo [data-column="BelgeTipi"]          { width: 66px; }
-        .rapor-tablo [data-column="HareketDurumu"]      { width: 84px; }
-        .rapor-tablo [data-column="CekIslemTuru"]       { width: 150px; }
-        .rapor-tablo [data-column="KonumDurumu"]        { width: 78px; }
-        .rapor-tablo [data-column="UygunlukDurumu"]     { width: 66px; }
-        .rapor-tablo [data-column="Tutar"]              { width: 92px; }
+        .rapor-tablo [data-column="CekTipi"]            { width: 60px; }
+        .rapor-tablo [data-column="KonumDurumu"]        { width: 84px; }
+        .rapor-tablo [data-column="UygunlukNedeni"]     { width: 150px; }
         .rapor-tablo [data-column="ParaBirimi"]         { width: 44px; }
         .rapor-tablo [data-column="TlKarsiligi"]        { width: 100px; }
-        .rapor-tablo [data-column="VadeTarihi"]         { width: 110px; }
-        .rapor-tablo [data-column="PlanlananTedarikci"] { width: 116px; }
-        .rapor-tablo [data-column="IbrazBelgeNo"]       { width: 80px; }
-
-        /* Varsayılan gizli kolonlar: "Sütunları Yönet"ten açıldığında düzen bozulmasın diye genişlikleri hazır */
-        .rapor-tablo [data-column="VadeDurumu"]         { width: 76px; }
-        .rapor-tablo [data-column="KullanimDurumu"]     { width: 90px; }
+        .rapor-tablo [data-column="IbrazBelgeNo"]       { width: 96px; }
         .rapor-tablo [data-column="VadeAyiVeYili"]      { width: 92px; }
-        .rapor-tablo [data-column="PortfoyeGirisTarihi"]{ width: 78px; }
         .rapor-tablo [data-column="PortfoyVadeAyiYili"] { width: 92px; }
         .rapor-tablo [data-column="IbrazTarihi"]        { width: 78px; }
         .rapor-tablo [data-column="AsilBorclu"]         { width: 120px; }
-        .rapor-tablo [data-column="CekKimeVerildi"]     { width: 110px; }
         .rapor-tablo [data-column="VadeliCekIbrazi"]    { width: 96px; }
         .rapor-tablo [data-column="BankaAdi"]           { width: 100px; }
         .rapor-tablo [data-column="Sube"]               { width: 80px; }
         .rapor-tablo [data-column="TahsilatBelgeNo"]    { width: 84px; }
         .rapor-tablo [data-column="IslemTipiAdi"]       { width: 110px; }
+        .rapor-tablo [data-column="Aciklama"]           { width: 220px; }
 
         .checkbox-column { min-width: 30px !important; width: 30px !important; text-align: center !important; padding: 4px !important; }
 
@@ -280,17 +301,19 @@
 
         .quick-filter-card { background-color: #ffffff; border: 1px solid var(--border-color) !important; border-radius: 8px; transition: all 0.2s ease; cursor: pointer; box-shadow: none; }
         .quick-filter-card:hover { transform: translateY(-1px); box-shadow: 0 4px 8px -2px rgba(0,0,0,0.08) !important; border-color: var(--primary-color) !important; }
-        .quick-filter-card .card-body { padding: 4px 8px !important; }
-        .quick-filter-card .icon-box { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 7px; font-size: .72rem; flex-shrink: 0; margin-right: 8px !important; }
+        .quick-filter-card .card-body, body.rapor-sayfasi .quick-filter-card .card-body { padding: 3px 6px !important; }
+        .quick-filter-card .icon-box, body.rapor-sayfasi .quick-filter-card .icon-box { width: 22px !important; height: 22px !important; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: .64rem !important; flex-shrink: 0; margin-right: 6px !important; }
         
         .icon-box-info { background-color: #e0f2fe; color: #0ea5e9; }
         .icon-box-success { background-color: #dcfce7; color: #10b981; }
         .icon-box-secondary { background-color: #f1f5f9; color: #64748b; }
         .icon-box-danger { background-color: #fee2e2; color: #ef4444; }
 
-        .stat-title { font-size: .56rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .stat-amount { font-size: .84rem; font-weight: 800; color: #1e293b; margin-bottom: 0; line-height: 1.2; white-space: nowrap; }
-        .stat-count { font-size: .6rem; color: #94a3b8; font-weight: 600; line-height: 1.2; }
+        /* ortak tema kart yazılarını büyütüyor (!important): tek sıradaki dar kartlara sığması için burada ezilir */
+        body.rapor-sayfasi .quick-filter-card .stat-title, .quick-filter-card .stat-title { font-size: .52rem !important; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: .02em !important; margin: 0 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2 !important; }
+        body.rapor-sayfasi .quick-filter-card .stat-amount, .quick-filter-card .stat-amount { font-size: .72rem !important; font-weight: 800; color: #1e293b; margin: 0 !important; line-height: 1.2 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0 !important; }
+        body.rapor-sayfasi .quick-filter-card .stat-count, .quick-filter-card .stat-count { font-size: .56rem !important; color: #94a3b8; font-weight: 600; line-height: 1.2 !important; }
+        body.rapor-sayfasi .summary-cards-wrapper { padding: 5px 10px !important; }
         .quick-filter-card .card-body > div:last-child { min-width: 0; }
 
         .detail-link { cursor: pointer; color: var(--primary-color); text-decoration: underline; font-weight: 600; }
@@ -374,48 +397,72 @@
                     <div class="database-info ms-3 shadow-sm"><i class="fas fa-database"></i>@ViewBag.CurrentDbDisplay</div>
                 </div>
 
+                @* Yönetici süzgeçleri (Çek / Senet Durum Parametreleri Standart Raporu › 6): kart tıklanınca ilgili standart parametre süzülür *@
                 <div class="summary-cards-wrapper">
                     <div class="row g-3">
-                        <div class="col-xl col-md-6">
-                            <div class="card quick-filter-card h-100" data-column="HareketDurumu" data-value="Portföyde">
+                        <div class="col-xl col-md-3">
+                            <div class="card quick-filter-card h-100" data-column="HareketDurumu" data-value="Portföyde" title="Hareket Durumu = Portföyde: portföyde toplam evrak">
                                 <div class="card-body p-2 d-flex align-items-center">
                                     <div class="icon-box icon-box-info me-3"><i class="fas fa-wallet"></i></div>
-                                    <div><div class="stat-title">Portföydeki Çekler</div><div class="stat-amount" id="statPortfoyTutar">0,00 TL</div><div class="stat-count" id="statPortfoyAdet">0 Adet</div></div>
+                                    <div><div class="stat-title">Portföyde</div><div class="stat-amount" id="statPortfoyTutar">0,00 TL</div><div class="stat-count" id="statPortfoyAdet">0 Adet</div></div>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-xl col-md-6">
+                        <div class="col-xl col-md-3">
+                            <div class="card quick-filter-card h-100" data-column="UygunlukDurumu" data-value="Uygun" title="Uygunluk Durumu = Uygun: başka tedarikçiye verilebilir evrak (portföyde, vadesi bekleniyor, planlanmamış, riskli değil)">
+                                <div class="card-body p-2 d-flex align-items-center">
+                                    <div class="icon-box icon-box-success me-3"><i class="fas fa-circle-check"></i></div>
+                                    <div><div class="stat-title">Uygun · Verilebilir</div><div class="stat-amount" id="statUygunTutar">0,00 TL</div><div class="stat-count" id="statUygunAdet">0 Adet</div></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xl col-md-3">
                             <!-- Kasa Nakit Akışı'nda ödeme satırına seçilen belgeler (işlem türü 2 = Planlandı); planlanan tedarikçi sütununda kurum -->
-                            <div class="card quick-filter-card h-100" data-column="CekIslemTuru" data-value="2" title="Kasa Nakit Akışı › Çek / Senet sekmesinde seçilen belgeler">
+                            <div class="card quick-filter-card h-100" data-column="CekIslemTuru" data-value="2" title="İşlem Türü = Planlandı: Kasa Nakit Akışı › Çek / Senet sekmesinde seçilen belgeler">
                                 <div class="card-body p-2 d-flex align-items-center">
                                     <div class="icon-box icon-box-warning me-3"><i class="fas fa-calendar-check"></i></div>
-                                    <div><div class="stat-title">Planlananlar (Kasa Nakit Akışı)</div><div class="stat-amount" id="statPlanTutar">0,00 TL</div><div class="stat-count" id="statPlanAdet">0 Adet</div></div>
+                                    <div><div class="stat-title">Planlandı</div><div class="stat-amount" id="statPlanTutar">0,00 TL</div><div class="stat-count" id="statPlanAdet">0 Adet</div></div>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-xl col-md-6">
-                            <!-- İşlem Türü (Manuel) dropdown ID'lerine göre filtreleniyor (Tahsil Edilenler: 6,7) -->
-                            <div class="card quick-filter-card h-100" data-column="CekIslemTuru" data-value="6,7">
+                        <div class="col-xl col-md-3">
+                            <div class="card quick-filter-card h-100" data-column="VadeDurumu" data-value="Vadesi Geçti" title="Vade Durumu = Vadesi Geçti">
                                 <div class="card-body p-2 d-flex align-items-center">
-                                    <div class="icon-box icon-box-success me-3"><i class="fas fa-check-circle"></i></div>
-                                    <div><div class="stat-title">Tahsil Edilenler</div><div class="stat-amount" id="statTahsilTutar">0,00 TL</div><div class="stat-count" id="statTahsilAdet">0 Adet</div></div>
+                                    <div class="icon-box icon-box-danger me-3"><i class="fas fa-calendar-xmark"></i></div>
+                                    <div><div class="stat-title">Vadesi Geçti</div><div class="stat-amount" id="statVadesiGectiTutar">0,00 TL</div><div class="stat-count" id="statVadesiGectiAdet">0 Adet</div></div>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-xl col-md-6">
-                            <div class="card quick-filter-card h-100" data-column="HareketDurumu" data-value="İşlem Yapıldı">
+                        <div class="col-xl col-md-3">
+                            <div class="card quick-filter-card h-100" data-column="KonumDurumu" data-value="Bankada" title="Konum Durumu = Bankada: tahsilde, teminatta, bankada ertelenmiş / riskli evrak">
                                 <div class="card-body p-2 d-flex align-items-center">
-                                    <div class="icon-box icon-box-secondary me-3"><i class="fas fa-sign-out-alt"></i></div>
-                                    <div><div class="stat-title">Çıkışı Yapılanlar</div><div class="stat-amount" id="statCikisTutar">0,00 TL</div><div class="stat-count" id="statCikisAdet">0 Adet</div></div>
+                                    <div class="icon-box icon-box-secondary me-3"><i class="fas fa-building-columns"></i></div>
+                                    <div><div class="stat-title">Bankada</div><div class="stat-amount" id="statBankadaTutar">0,00 TL</div><div class="stat-count" id="statBankadaAdet">0 Adet</div></div>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-xl col-md-6">
-                            <!-- İşlem Türü (Manuel) dropdown ID'lerine göre filtreleniyor (Riskli/Karşılıksız vb: 10,11,12,13,14) -->
-                            <div class="card quick-filter-card h-100" data-column="CekIslemTuru" data-value="10,11,12,13,14">
+                        <div class="col-xl col-md-3">
+                            <!-- riskli türler: 9 Tahsil Riski, 10 Konkordato Sürecinde, 11 Karşılıksız, 12 Protesto Edildi (konum sütunu nerede olduğunu gösterir) -->
+                            <div class="card quick-filter-card h-100" data-column="CekIslemTuru" data-value="9,10,11,12" title="İşlem Türü = Tahsil Riski / Konkordato Sürecinde / Karşılıksız / Protesto Edildi (+ Konum Durumu nerede olduğunu gösterir)">
                                 <div class="card-body p-2 d-flex align-items-center">
                                     <div class="icon-box icon-box-danger me-3"><i class="fas fa-exclamation-triangle"></i></div>
-                                    <div><div class="stat-title">Riskli / Karşılıksız</div><div class="stat-amount" id="statRiskliTutar">0,00 TL</div><div class="stat-count" id="statRiskliAdet">0 Adet</div></div>
+                                    <div><div class="stat-title">Riskli · Karşılıksız</div><div class="stat-amount" id="statRiskliTutar">0,00 TL</div><div class="stat-count" id="statRiskliAdet">0 Adet</div></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xl col-md-3">
+                            <div class="card quick-filter-card h-100" data-column="VadeDurumu" data-value="Tahsil" title="Vade Durumu = Tahsil: bankadan ya da elden tahsil edilmiş evrak">
+                                <div class="card-body p-2 d-flex align-items-center">
+                                    <div class="icon-box icon-box-success me-3"><i class="fas fa-sack-dollar"></i></div>
+                                    <div><div class="stat-title">Tahsil Edildi</div><div class="stat-amount" id="statTahsilTutar">0,00 TL</div><div class="stat-count" id="statTahsilAdet">0 Adet</div></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xl col-md-3">
+                            <div class="card quick-filter-card h-100" data-column="VadeDurumu" data-value="Kapandı" title="Vade Durumu = Kapandı: iade / iptal ile kapanan evrak">
+                                <div class="card-body p-2 d-flex align-items-center">
+                                    <div class="icon-box icon-box-secondary me-3"><i class="fas fa-box-archive"></i></div>
+                                    <div><div class="stat-title">Kapandı · İade / İptal</div><div class="stat-amount" id="statKapandiTutar">0,00 TL</div><div class="stat-count" id="statKapandiAdet">0 Adet</div></div>
                                 </div>
                             </div>
                         </div>
@@ -444,70 +491,74 @@
                 <div class="table-container" id="tableContainer">
                     <table class="rapor-tablo" id="rapor2Table">
                         <thead>
-                            @* Sütun düzeni Konsolide Finansal Takip Paneli › Çek · Senet sekmesiyle aynı dilde: Belge · No, Vade, Kimden Geldi, İşlem Türü, Dolaşım, Satır Kaynağı · İşlem,
-                               Planlanan Tedarikçi, İbraz / Ciro · Kime Çıktı, Tutar, Nakit Akış Eşleşmesi, Kontrol, Uygunluk, Fiş. Kalan alanlar varsayılan gizli ("Sütunlar"dan açılır) ve belge detayında. *@
+                            @* Sütunlar Çek / Senet Durum Parametreleri Standart Raporu'nun başlık listesidir; birbirini tamamlayan bilgiler tek sütunda (üst satır ana değer, alt satır tamamlayıcı):
+                               Belge Tipi · Çek Numarası (İşlem Tipi X/R, Banka Adı, Şube) · Vade Tarihi (Vade Ay/Yıl) · Vade Durumu · Uygunluk Durumu · Çek Tutarı (Para Birimi, TL Karşılığı) · Çek Kimden Geldi (Asıl Borçlu) ·
+                               Hareket Durumu (Konum Durumu) · İşlem Türü · Çek Kime Verildi (İbraz Tarihi, İbraz / Tahsilat Belge No, Vadeli Çek İbrazı) · Satır Kaynağı · İşlem (Açıklama / İşlem Tipi) · Planlanan Tedarikçi · Kullanım Durumu · Portföye Giriş (Portföy Ay/Yıl).
+                               Her alan ayrıca kendi sütunuyla "Sütunlar"dan açılabilir; belge detayında da var. *@
                             <tr class="main-header-row">
                                 <th class="checkbox-column no-drag" data-column="Checkbox"><input type="checkbox" id="selectAllCheckbox" class="form-check-input" /></th>
-                                <th class="sortable-column" data-column="CekNumarasi" data-sort-type="text" title="Belge tipi, numarası ve bankası; tıklayınca belge detayı">Belge · No <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column text-center" data-column="VadeTarihi" data-sort-type="date" title="Vade tarihi ve vade durumu">Vade <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="CekKimdenGeldi" data-sort-type="text" title="Çekin geldiği müşteri (altında keşideci)">Kimden Geldi <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="CekIslemTuru" data-sort-type="text" title="İşlem Türü (buradan değiştirilir)">İşlem Türü <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="Dolasim" data-sort-type="text" title="Kasa Nakit Akışı dolaşım planı: eden → alan → … (gerçekleşen adım yeşil)">Dolaşım <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="Kaynak" data-sort-type="text" title="Satır hangi kayıttan geldi ve yapılacak iş (Nakit Akışa Ekle / İbraz Et / Tedarikçiye Çık)">Satır Kaynağı · İşlem <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="CekNumarasi" data-sort-type="text" title="Belge Tipi · Çek Numarası; altında İşlem Tipi (X / R), Banka Adı / Şube. Tıklayınca belge detayı">Belge Tipi · Çek Numarası <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column text-center" data-column="VadeTarihi" data-sort-type="date" title="Vade Tarihi; altında Vade Ay/Yıl">Vade Tarihi <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column text-center" data-column="VadeDurumu" data-sort-type="text" title="Vade Durumu (otomatik): tahsil türleri → Tahsil; iade / iptal → Kapandı; vade tarihi > bugün → Vade Bekleniyor; = bugün → Vadesi Bugün; < bugün → Vadesi Geçti">Vade Durumu <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column text-center" data-column="UygunlukDurumu" data-sort-type="text" title="Uygunluk Durumu (otomatik): Portföyde ya da Erteleme Yapıldı + konum Portföyde + Vade Bekleniyor + kullanılabilir → Uygun; planlı, vadesi bugün / geçmiş, bankada, tedarikçide, avukatta, tahsil, iade, iptal, riskli → Uygun Değil (neden araç ipucunda)">Uygunluk Durumu <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column text-end" data-column="Tutar" data-sort-type="number" title="Çek Tutarı; dövizli belgede Para Birimi ve TL Karşılığı altında">Çek Tutarı <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="CekKimdenGeldi" data-sort-type="text" title="Çek Kimden Geldi (ciro eden müşteri); altında Asıl Borçlu (keşideci) farklıysa">Çek Kimden Geldi <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="HareketDurumu" data-sort-type="text" title="Hareket Durumu (Portföyde | İşlem Yapıldı) ve altında Konum Durumu (Portföyde | Bankada | Tedarikçide | Avukatta | Kapandı); ikisi de işlem türünden otomatik">Hareket · Konum Durumu <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="CekIslemTuru" data-sort-type="text" title="İşlem Türü (standart liste); değiştirilince konum, hareket, vade durumu ve uygunluk otomatik güncellenir">İşlem Türü <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="CekKimeVerildi" data-sort-type="text" title="Çek Kime Verildi: ciro edilen tedarikçi, tahsile verilen banka, avukat, iade edilen müşteri; altında çıkış türü, İbraz Tarihi, İbraz / Tahsilat Belge No">Çek Kime Verildi <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="Kaynak" data-sort-type="text" title="Satır hangi kayıttan geldi ve yapılacak iş (Nakit Akışa Ekle / İbraz Et / Tedarikçiye Çık); açıklama araç ipucunda ve belge detayında">Satır Kaynağı · İşlem <i class="fas fa-sort text-muted ms-1"></i></th>
                                 <th class="sortable-column" data-column="PlanlananTedarikci" data-sort-type="text" title="Kasa Nakit Akışı'nda planlanan tedarikçi">Planlanan Tedarikçi <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="CekKimeVerildi" data-sort-type="text" title="Ciro edilen tedarikçi ya da tahsile verilen banka; altında çıkış türü, tarihi ve ibraz belgesi">İbraz / Ciro · Kime Çıktı <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column text-end" data-column="Tutar" data-sort-type="number" title="Belge tutarı (dövizli belgede para birimi ve TL karşılığı altında)">Tutar <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="NakitAkis" data-sort-type="text" title="Kasa Nakit Akışı ödeme satırı ve durumu">Nakit Akış Eşleşmesi <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="Kontrol" data-sort-type="text" title="Plan ↔ ibraz kontrolü">Kontrol <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="UygunlukDurumu" data-sort-type="text" title="Uygunluk Durumu">Uygunluk <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="Fis" data-sort-type="text" title="Muhasebe fişi (Takip Paneli ile aynı numara); tıklayınca fiş">Fiş <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="BelgeTipi" data-sort-type="text" title="Belge Tipi">Belge <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="HareketDurumu" data-sort-type="text" title="Hareket Durumu">Hareket <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="Aciklama" data-sort-type="text" title="Açıklama / İşlem Tipi">Açıklama <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="KonumDurumu" data-sort-type="text" title="Konum Durumu">Konum <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="KullanimDurumu" data-sort-type="text" title="Kullanım Durumu">Kullanım <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="VadeDurumu" data-sort-type="text" title="Vade Durumu">Vade Durumu <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column text-center" data-column="ParaBirimi" data-sort-type="text" title="Para Birimi">PB <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="KullanimDurumu" data-sort-type="text" title="Kullanım Durumu: Kullanılabilir | Riskli | Teminat | Bloke">Kullanım Durumu <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column text-center" data-column="PortfoyeGirisTarihi" data-sort-type="date" title="Portföye Giriş Tarihi; altında Portföy Ay/Yıl">Portföye Giriş <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="BelgeTipi" data-sort-type="text" title="Belge Tipi">Belge Tipi <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column text-center" data-column="CekTipi" data-sort-type="text" title="İşlem Tipi (X / R)">İşlem Tipi <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="KonumDurumu" data-sort-type="text" title="Konum Durumu">Konum Durumu <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="UygunlukNedeni" data-sort-type="text" title="Uygun Değil nedeni">Uygunluk Nedeni <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="Aciklama" data-sort-type="text" title="Açıklama / İşlem Tipi">Açıklama / İşlem Tipi <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column text-center" data-column="ParaBirimi" data-sort-type="text" title="Para Birimi">Para Birimi <i class="fas fa-sort text-muted ms-1"></i></th>
                                 <th class="sortable-column text-end" data-column="TlKarsiligi" data-sort-type="number" title="TL Karşılığı">TL Karşılığı <i class="fas fa-sort text-muted ms-1"></i></th>
                                 <th class="sortable-column text-center" data-column="VadeAyiVeYili" data-sort-type="text" title="Vade Ay/Yıl">Vade Ay/Yıl <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column text-center" data-column="PortfoyeGirisTarihi" data-sort-type="date" title="Portföye Giriş Tarihi">Portföye Giriş <i class="fas fa-sort text-muted ms-1"></i></th>
                                 <th class="sortable-column text-center" data-column="PortfoyVadeAyiYili" data-sort-type="text" title="Portföy Ay/Yıl">Portföy Ay/Yıl <i class="fas fa-sort text-muted ms-1"></i></th>
                                 <th class="sortable-column text-center" data-column="IbrazTarihi" data-sort-type="date" title="İbraz Tarihi">İbraz Tarihi <i class="fas fa-sort text-muted ms-1"></i></th>
                                 <th class="sortable-column" data-column="AsilBorclu" data-sort-type="text" title="Asıl Borçlu (Keşideci)">Asıl Borçlu <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="VadeliCekIbrazi" data-sort-type="text" title="Vadeli Çek İbrazı">Vadeli İbraz <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="BankaAdi" data-sort-type="text" title="Banka Adı">Banka <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="VadeliCekIbrazi" data-sort-type="text" title="Vadeli Çek İbrazı">Vadeli Çek İbrazı <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="BankaAdi" data-sort-type="text" title="Banka Adı">Banka Adı <i class="fas fa-sort text-muted ms-1"></i></th>
                                 <th class="sortable-column" data-column="Sube" data-sort-type="text" title="Şube">Şube <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="IbrazBelgeNo" data-sort-type="text" title="İbraz Belge No">İbraz No <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="TahsilatBelgeNo" data-sort-type="text" title="Tahsilat Belge No">Tahsilat No <i class="fas fa-sort text-muted ms-1"></i></th>
-                                <th class="sortable-column" data-column="IslemTipiAdi" data-sort-type="text" title="İşlem Tipi">İşlem Tipi <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="IbrazBelgeNo" data-sort-type="text" title="İbraz Belge No">İbraz Belge No <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="TahsilatBelgeNo" data-sort-type="text" title="Tahsilat Belge No">Tahsilat Belge No <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="IslemTipiAdi" data-sort-type="text" title="İşlem Türü (metin)">İşlem Türü (Metin) <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="Dolasim" data-sort-type="text" title="Kasa Nakit Akışı dolaşım planı: eden → alan → … (gerçekleşen adım yeşil)">Dolaşım <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="NakitAkis" data-sort-type="text" title="Kasa Nakit Akışı ödeme satırı ve durumu">Nakit Akış Eşleşmesi <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="Kontrol" data-sort-type="text" title="Plan ↔ ibraz kontrolü">Kontrol <i class="fas fa-sort text-muted ms-1"></i></th>
+                                <th class="sortable-column" data-column="Fis" data-sort-type="text" title="Muhasebe fişi (Takip Paneli ile aynı numara); tıklayınca fiş">Fiş <i class="fas fa-sort text-muted ms-1"></i></th>
                             </tr>
-                            
+
                             <tr class="filter-row">
                                 <th class="checkbox-column" data-column="Checkbox"></th>
-                                @foreach (var sutun in new[] { "CekNumarasi", "VadeTarihi", "CekKimdenGeldi" })
+                                @foreach (var sutun in new[] { "CekNumarasi", "VadeTarihi", "VadeDurumu", "UygunlukDurumu", "Tutar", "CekKimdenGeldi", "HareketDurumu" })
                                 {
                                     <th data-column="@sutun"><select class="form-select form-select-sm filter-select-bs" multiple title="Tümü">@if(distinctValues.ContainsKey(sutun)){foreach(var item in distinctValues[sutun]){<option value="@item">@item</option>}}</select></th>
                                 }
                                 <th data-column="CekIslemTuru">
                                     <select class="form-select form-select-sm filter-select-bs" multiple title="Tümü">
-                                        @foreach (var type in checkTransactionTypes.OrderBy(t => t.Description)) { if (type.Code != "0" && type.Code != "12") { <option value="@type.Code">@type.Description</option> } }
+                                        @foreach (var type in checkTransactionTypes) { if (type.Code != "0") { <option value="@type.Code">@type.Description</option> } }
                                     </select>
                                 </th>
-                                <th data-column="Dolasim"><input type="text" class="form-control form-control-sm column-text-filter" placeholder="Şirket ara..."></th>
-                                @foreach (var sutun in new[] { "Kaynak", "PlanlananTedarikci", "CekKimeVerildi", "Tutar", "NakitAkis", "Kontrol", "UygunlukDurumu" })
-                                {
-                                    <th data-column="@sutun"><select class="form-select form-select-sm filter-select-bs" multiple title="Tümü">@if(distinctValues.ContainsKey(sutun)){foreach(var item in distinctValues[sutun]){<option value="@item">@item</option>}}</select></th>
-                                }
-                                <th data-column="Fis"><input type="text" class="form-control form-control-sm column-text-filter" placeholder="Fiş no..."></th>
-                                @foreach (var sutun in new[] { "BelgeTipi", "HareketDurumu" })
+                                @foreach (var sutun in new[] { "CekKimeVerildi", "Kaynak", "PlanlananTedarikci", "KullanimDurumu", "PortfoyeGirisTarihi", "BelgeTipi", "CekTipi", "KonumDurumu", "UygunlukNedeni" })
                                 {
                                     <th data-column="@sutun"><select class="form-select form-select-sm filter-select-bs" multiple title="Tümü">@if(distinctValues.ContainsKey(sutun)){foreach(var item in distinctValues[sutun]){<option value="@item">@item</option>}}</select></th>
                                 }
                                 <th data-column="Aciklama"><input type="text" class="form-control form-control-sm column-text-filter" placeholder="Metin Ara..."></th>
-                                @foreach (var sutun in new[] { "KonumDurumu", "KullanimDurumu", "VadeDurumu", "ParaBirimi", "TlKarsiligi", "VadeAyiVeYili", "PortfoyeGirisTarihi", "PortfoyVadeAyiYili", "IbrazTarihi", "AsilBorclu", "VadeliCekIbrazi", "BankaAdi", "Sube", "IbrazBelgeNo", "TahsilatBelgeNo", "IslemTipiAdi" })
+                                @foreach (var sutun in new[] { "ParaBirimi", "TlKarsiligi", "VadeAyiVeYili", "PortfoyVadeAyiYili", "IbrazTarihi", "AsilBorclu", "VadeliCekIbrazi", "BankaAdi", "Sube", "IbrazBelgeNo", "TahsilatBelgeNo", "IslemTipiAdi" })
                                 {
                                     <th data-column="@sutun"><select class="form-select form-select-sm filter-select-bs" multiple title="Tümü">@if(distinctValues.ContainsKey(sutun)){foreach(var item in distinctValues[sutun]){<option value="@item">@item</option>}}</select></th>
                                 }
+                                <th data-column="Dolasim"><input type="text" class="form-control form-control-sm column-text-filter" placeholder="Şirket ara..."></th>
+                                @foreach (var sutun in new[] { "NakitAkis", "Kontrol" })
+                                {
+                                    <th data-column="@sutun"><select class="form-select form-select-sm filter-select-bs" multiple title="Tümü">@if(distinctValues.ContainsKey(sutun)){foreach(var item in distinctValues[sutun]){<option value="@item">@item</option>}}</select></th>
+                                }
+                                <th data-column="Fis"><input type="text" class="form-control form-control-sm column-text-filter" placeholder="Fiş no..."></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -556,6 +607,32 @@
                 </a>
                 <button type="button" class="btn btn-light btn-sm border" data-bs-dismiss="modal">Kapat</button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- İşlem türü değişikliği: standart akış (tür → konum seçimi → ibraz yeri / belge no; hareket, vade durumu ve uygunluk otomatik önizlenir); plansız çıkış GMY onayına düşer -->
+<div class="modal fade" id="islemTuruModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="border-radius:14px; overflow:hidden;">
+            <div class="modal-header"><h6 class="modal-title fw-bold mb-0"><i class="fas fa-shuffle me-2 text-primary"></i>İşlem Türü Değişikliği <span class="badge bg-light text-primary border ms-1" id="itBelge"></span></h6><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+            <div class="modal-body">
+                <div class="row g-2">
+                    <div class="col-md-4"><label class="form-label">İşlem Türü</label><select id="itTur" class="form-select"></select><div class="text-muted" style="font-size:.62rem; margin-top:2px" id="itTurAciklama"></div></div>
+                    <div class="col-md-3" id="itKonumKutu"><label class="form-label">Konum Durumu</label><select id="itKonum" class="form-select"></select></div>
+                    <div class="col-md-3" id="itYerKutu"><label class="form-label" id="itYerEtiket">Kime Verildi</label><input id="itYer" class="form-control" list="itYerListesi" placeholder="tedarikçi / banka"><datalist id="itYerListesi"></datalist></div>
+                    <div class="col-md-2" id="itNoKutu"><label class="form-label" id="itNoEtiket">Belge No</label><input id="itNo" class="form-control" placeholder="otomatik"></div>
+                </div>
+                <div class="it-onizleme">
+                    <div><label>Hareket Durumu</label><div class="d" id="itOnHareket"></div></div>
+                    <div><label>Konum Durumu</label><div class="d" id="itOnKonum"></div></div>
+                    <div><label>Vade Durumu</label><div class="d" id="itOnVade"></div></div>
+                    <div><label>Uygunluk Durumu</label><div class="d" id="itOnUygunluk"></div></div>
+                    <div><label>Kime Verildi</label><div class="d" id="itOnYer"></div></div>
+                </div>
+                <div class="it-not" id="itNot"></div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-light btn-sm border" data-bs-dismiss="modal">Vazgeç</button><button type="button" class="btn btn-primary btn-sm" id="itUygula"><i class="fas fa-check me-1"></i>Uygula</button></div>
         </div>
     </div>
 </div>
@@ -621,7 +698,7 @@
             // .table-container icinde render ettigi icin olusan stacking context
             // yuzunden pencere backdrop'un altinda kalip bulanik ve tiklanamaz
             // goruluyordu. Body'ye tasiyoruz.
-            ['detayModal', 'cekDetayModal', 'cekFisModal', 'farkliIslemlerModal'].forEach(function (id) {
+            ['detayModal', 'cekDetayModal', 'cekFisModal', 'islemTuruModal', 'farkliIslemlerModal'].forEach(function (id) {
                 const el = document.getElementById(id);
                 if (el && el.parentElement !== document.body) document.body.appendChild(el);
             });
@@ -635,12 +712,23 @@
             allReportData.forEach(function (d) {
                 reportDataMap.set(d.DocEntry, d);
                 // süzgeç / sıralama için türetilmiş metinler (Nakit Akış Eşleşmesi, Kontrol, Fiş)
+                turetilmisAlanlar(d);
+            });
+            function turetilmisAlanlar(d) {
                 d.NakitAkisDurum = d.PlanDocEntry ? (d.PlanDurum || '') : d.IslemTuru === 'Planlandı' ? 'Satır Yok' : '—';
                 d.KontrolMetni = d.Kontrol || '—';
                 d.FisNo = d.FisNo || '';
                 d.Dolasim = d.Dolasim || '';
                 d.Kaynak = d.Kaynak || '';
-            });
+                d.UygunlukNedeniMetni = d.UygunlukDurumu === 'Uygun' ? 'Uygun' : (d.UygunlukNedeni || 'Uygun Değil');
+            }
+            // sunucudan dönen güncel satır (işlem türü değişikliği) tablodaki kaydın yerine konur ve tablo yeniden çizilir
+            function satiriGuncelle(yeni) {
+                if (!yeni) return; turetilmisAlanlar(yeni);
+                const i = allReportData.findIndex(x => x.DocEntry === yeni.DocEntry); if (i >= 0) allReportData[i] = yeni; else allReportData.push(yeni);
+                reportDataMap.set(yeni.DocEntry, yeni);
+                if (window.filterTableAndRender) window.filterTableAndRender();
+            }
             
             const table = document.getElementById('rapor2Table');
             const tableBody = table.querySelector('tbody');
@@ -704,6 +792,9 @@
                 'TahsilatBelgeNo': 'TahsilatBelgeNo', 
                 'IslemTipiAdi': 'IslemTipiAdi',
                 'CekIslemTuru': 'CekIslemTuru',
+                // standart durum parametreleri (ek sütunlar)
+                'CekTipi': 'CekTipi',
+                'UygunlukNedeni': 'UygunlukNedeniMetni',
                 // Takip Paneli ile ortak sütunlar
                 'Dolasim': 'Dolasim',
                 'Kaynak': 'Kaynak',
@@ -755,13 +846,10 @@
                 }, { passive: true });
             })();
 
+            // özet kartları = standart raporun yönetici süzgeçleri (Hareket = Portföyde, Uygunluk = Uygun, İşlem Türü = Planlandı, Vade Durumu = Vadesi Geçti / Tahsil / Kapandı, Konum = Bankada, riskli türler)
+            const RISKLI_TURLER = ['Tahsil Riski', 'Konkordato Sürecinde', 'Karşılıksız', 'Protesto Edildi'];
             function calculateSummaryCards() {
-                let portfoyAdet = 0, portfoyTutar = 0;
-                let tahsilAdet = 0, tahsilTutar = 0;
-                let cikisAdet = 0, cikisTutar = 0;
-                let riskliAdet = 0, riskliTutar = 0;
-                let planAdet = 0, planTutar = 0;   // Kasa Nakit Akışı'nda planlanan belgeler
-
+                const t = { Portfoy: [0, 0], Uygun: [0, 0], Plan: [0, 0], VadesiGecti: [0, 0], Bankada: [0, 0], Riskli: [0, 0], Tahsil: [0, 0], Kapandi: [0, 0] };
                 let dataToCalculate = allReportData;
                 if (activeYearFilter !== 'all') {
                     dataToCalculate = allReportData.filter(item => {
@@ -769,31 +857,25 @@
                         return false;
                     });
                 }
-
+                const ekle = (k, tutar) => { t[k][0]++; t[k][1] += tutar; };
                 dataToCalculate.forEach(item => {
-                    const durum = item.HareketDurumu || '';
-                    const islem = item.IslemTuru || '';
-                    const tutar = item.TlKarsiligi || item.Tutar || 0;
-
-                    if (durum === 'Portföyde') { portfoyAdet++; portfoyTutar += tutar; }
-                    else if (islem === 'Bankadan Tahsil Edildi' || islem === 'Elden Tahsil Edildi') { tahsilAdet++; tahsilTutar += tutar; }
-                    else if (durum === 'İşlem Yapıldı' && (islem !== 'Bankadan Tahsil Edildi' && islem !== 'Elden Tahsil Edildi' && !islem.includes('Karşılıksız') && !islem.includes('Protesto') && !islem.includes('Konkordato'))) { cikisAdet++; cikisTutar += tutar; }
-                    
-                    if (islem.includes('Karşılıksız') || islem.includes('Protesto') || islem.includes('Konkordato')) { riskliAdet++; riskliTutar += tutar; }
-                    if (islem === 'Planlandı' || item.CekIslemTuru === '2') { planAdet++; planTutar += tutar; }
+                    const islem = item.IslemTuru || '', vd = item.VadeDurumu || '', tutar = item.TlKarsiligi || item.Tutar || 0;
+                    if (item.HareketDurumu === 'Portföyde') ekle('Portfoy', tutar);
+                    if (item.UygunlukDurumu === 'Uygun') ekle('Uygun', tutar);
+                    if (islem === 'Planlandı') ekle('Plan', tutar);
+                    if (vd === 'Vadesi Geçti') ekle('VadesiGecti', tutar);
+                    if (item.KonumDurumu === 'Bankada') ekle('Bankada', tutar);
+                    if (RISKLI_TURLER.includes(islem)) ekle('Riskli', tutar);
+                    if (vd === 'Tahsil') ekle('Tahsil', tutar);
+                    if (vd === 'Kapandı') ekle('Kapandi', tutar);
                 });
-                const statPlanTutar = document.getElementById('statPlanTutar'), statPlanAdet = document.getElementById('statPlanAdet');
-                if (statPlanTutar) statPlanTutar.textContent = planTutar.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL';
-                if (statPlanAdet) statPlanAdet.textContent = planAdet + ' Adet';
-
-                document.getElementById('statPortfoyTutar').textContent = portfoyTutar.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL';
-                document.getElementById('statPortfoyAdet').textContent = portfoyAdet + ' Adet';
-                document.getElementById('statTahsilTutar').textContent = tahsilTutar.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL';
-                document.getElementById('statTahsilAdet').textContent = tahsilAdet + ' Adet';
-                document.getElementById('statCikisTutar').textContent = cikisTutar.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL';
-                document.getElementById('statCikisAdet').textContent = cikisAdet + ' Adet';
-                document.getElementById('statRiskliTutar').textContent = riskliTutar.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL';
-                document.getElementById('statRiskliAdet').textContent = riskliAdet + ' Adet';
+                // kartlar tek sırada dar olduğundan tutar kısa yazılır (292,96 Mn TL); tam değer araç ipucunda
+                const kisaTutar = v => Math.abs(v) >= 1e6 ? (v / 1e6).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Mn TL' : Math.abs(v) >= 1e3 ? (v / 1e3).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + ' Bin TL' : v.toLocaleString('tr-TR', { maximumFractionDigits: 0 }) + ' TL';
+                Object.keys(t).forEach(k => {
+                    const tutarEl = document.getElementById('stat' + k + 'Tutar'), adetEl = document.getElementById('stat' + k + 'Adet');
+                    if (tutarEl) { tutarEl.textContent = kisaTutar(t[k][1]); tutarEl.title = t[k][1].toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL'; }
+                    if (adetEl) adetEl.textContent = t[k][0] + ' Adet';
+                });
             }
 
             document.querySelectorAll('.quick-filter-card').forEach(card => {
@@ -807,6 +889,9 @@
 
                     const $select = $(`.filter-row th[data-column="${column}"] .filter-select-bs`);
                     if($select.length > 0) {
+                        // listede olmayan değer (ör. bu yıl hiç Kapandı yok) seçeneğe eklenir ki süzgeç "tümü" yerine boş sonuç versin
+                        let eklendi = false; valueArray.forEach(v => { if (!$select.find('option').filter((i, o) => o.value === v).length) { $select.append($('<option>').attr('value', v).text(v)); eklendi = true; } });
+                        if (eklendi) $select.selectpicker('refresh');
                         $select.selectpicker('val', valueArray);
                         filterTableAndRender();
                         toastr.success('Tablo seçiminize göre filtrelendi.');
@@ -822,22 +907,21 @@
             // Görünür sütunların toplamı tabloya min-width olarak verilir: az
             // sütunda tablo ekrana sığar, çok sütunda yatay kaydırma çıkar.
             // ---------------------------------------------------------------
-            // Takip Paneli › Çek · Senet ile aynı ölçüler: Satır Kaynağı · İşlem (206) ve Dolaşım (190) kırpılmaz
-            const SUTUN_ALT_SINIR = { 'Checkbox': 34, 'IbrazBelgeNo': 96, 'PlanlananTedarikci': 130, 'CekIslemTuru': 150, 'CekNumarasi': 160, 'VadeTarihi': 110, 'CekKimdenGeldi': 130, 'Dolasim': 190, 'Kaynak': 206, 'CekKimeVerildi': 150, 'Tutar': 104, 'NakitAkis': 124, 'Kontrol': 100, 'UygunlukDurumu': 80, 'Fis': 90 };
+            // standart düzen ölçüleri: Satır Kaynağı · İşlem (206) kırpılmaz; iki satırlı hücreler en uzun veriye göre büyümez (alt satır "…", tam metin araç ipucunda)
+            const SUTUN_ALT_SINIR = { 'Checkbox': 34, 'CekNumarasi': 150, 'VadeTarihi': 92, 'VadeDurumu': 100, 'UygunlukDurumu': 86, 'Tutar': 104, 'CekKimdenGeldi': 130, 'HareketDurumu': 110, 'CekIslemTuru': 150, 'CekKimeVerildi': 150, 'Kaynak': 206, 'PlanlananTedarikci': 130, 'KullanimDurumu': 92, 'PortfoyeGirisTarihi': 92, 'IbrazBelgeNo': 96, 'Dolasim': 190, 'NakitAkis': 124, 'Kontrol': 100, 'Fis': 90 };
             const SUTUN_UST_SINIR = 280;
-            // iki satırlı hücreler (alt satır "…" ile kırpılır, tam metin araç ipucunda): en uzun veriye göre büyümesin
-            // genişliğe sığdırırken kolonların inebileceği en küçük genişlik (varsayılan görünür 14 kolonun toplamı ≈ 1290 px: 1366 px ekranda yatay kaydırma yok)
-            const SIGDIRMA_ALT_SINIR = { 'Checkbox': 28, 'CekNumarasi': 116, 'VadeTarihi': 76, 'CekKimdenGeldi': 90, 'CekIslemTuru': 104, 'Dolasim': 112, 'Kaynak': 146, 'PlanlananTedarikci': 92, 'CekKimeVerildi': 100, 'Tutar': 88, 'NakitAkis': 92, 'Kontrol': 76, 'UygunlukDurumu': 62, 'Fis': 74 };
+            // genişliğe sığdırırken kolonların inebileceği en küçük genişlik (varsayılan görünür 14 kolonun toplamı ≈ 1230 px: 1600 px pencerede menü açıkken yatay kaydırma yok)
+            // rozetli sütunlar (Vade Durumu "Vade Bekleniyor", Uygunluk "Uygun Değil", Kullanım "Kullanılabilir") kırpılmayacak kadar geniş kalır
+            const SIGDIRMA_ALT_SINIR = { 'Checkbox': 28, 'CekNumarasi': 110, 'VadeTarihi': 80, 'VadeDurumu': 94, 'UygunlukDurumu': 80, 'Tutar': 88, 'CekKimdenGeldi': 94, 'HareketDurumu': 88, 'CekIslemTuru': 104, 'CekKimeVerildi': 100, 'Kaynak': 146, 'PlanlananTedarikci': 86, 'KullanimDurumu': 84, 'PortfoyeGirisTarihi': 80, 'Dolasim': 112, 'NakitAkis': 92, 'Kontrol': 76, 'Fis': 74 };
             // dar ekran (≈ 1100 px kap): ikinci kademe; işlem düğmeleri alt alta geçer, kalan yatay kaydırma küçülür
-            const SIGDIRMA_DAR_SINIR = { 'Checkbox': 28, 'CekNumarasi': 108, 'VadeTarihi': 72, 'CekKimdenGeldi': 84, 'CekIslemTuru': 96, 'Dolasim': 96, 'Kaynak': 108, 'PlanlananTedarikci': 84, 'CekKimeVerildi': 92, 'Tutar': 82, 'NakitAkis': 84, 'Kontrol': 70, 'UygunlukDurumu': 58, 'Fis': 70 };
-            const SUTUN_UST_SINIR_KOLON = { 'CekNumarasi': 160, 'VadeTarihi': 110, 'CekKimdenGeldi': 150, 'CekIslemTuru': 150, 'PlanlananTedarikci': 150, 'CekKimeVerildi': 170, 'NakitAkis': 134, 'Fis': 96, 'Kontrol': 100, 'UygunlukDurumu': 80, 'Tutar': 112 };
+            const SIGDIRMA_DAR_SINIR = { 'Checkbox': 28, 'CekNumarasi': 104, 'VadeTarihi': 72, 'VadeDurumu': 86, 'UygunlukDurumu': 72, 'Tutar': 82, 'CekKimdenGeldi': 88, 'HareketDurumu': 80, 'CekIslemTuru': 96, 'CekKimeVerildi': 92, 'Kaynak': 108, 'PlanlananTedarikci': 84, 'KullanimDurumu': 76, 'PortfoyeGirisTarihi': 70, 'Dolasim': 96, 'NakitAkis': 84, 'Kontrol': 70, 'Fis': 70 };
+            const SUTUN_UST_SINIR_KOLON = { 'CekNumarasi': 160, 'VadeTarihi': 100, 'VadeDurumu': 104, 'UygunlukDurumu': 90, 'Tutar': 112, 'CekKimdenGeldi': 150, 'HareketDurumu': 116, 'CekIslemTuru': 150, 'CekKimeVerildi': 170, 'PlanlananTedarikci': 150, 'KullanimDurumu': 96, 'PortfoyeGirisTarihi': 100, 'NakitAkis': 134, 'Fis': 96, 'Kontrol': 100 };
             const HUCRE_DOLGUSU = 16;
 
             // Uzun metin taşıyan kolonlar. Tablo ekrana sığmıyorsa önce bunlar
             // daraltılır; içerik kırpılmaz, alt satıra geçer.
             const SARILABILIR_KOLONLAR = [
-                'AsilBorclu', 'IslemTipiAdi',
-                'HareketDurumu', 'KonumDurumu', 'VadeDurumu', 'BelgeTipi'
+                'AsilBorclu', 'IslemTipiAdi', 'KonumDurumu', 'UygunlukNedeni', 'BelgeTipi'
             ];
             const SARILABILIR_UST_SINIR = 170;   // bu kolonlar en fazla bu kadar geniş başlar
             const SARILABILIR_ALT_SINIR = 76;    // daraltma bu değerin altına inmez
@@ -869,8 +953,25 @@
                 if (colName === 'Fis') return item.FisNo ? item.FisNo + (item.FisKaynak ? ' · ' + item.FisKaynak : '') : '';
                 if (colName === 'KaynakDetay') return item.KaynakDetay || '';
                 if (colName === 'DolasimSiradaki') return item.DolasimSiradaki || '';
+                if (colName === 'HareketDurumu') return (item.HareketDurumu || '') + ' · ' + (item.KonumDurumu || '');
+                if (colName === 'CekKimeVerildi') return item.CekKimeVerildi ? item.CekKimeVerildi + ' · ' + (item.IbrazTuru || '') + (item.IbrazTarihi ? ' · ' + tarihTr(item.IbrazTarihi) : '') + (item.IbrazBelgeNo ? ' · ' + item.IbrazBelgeNo : item.TahsilatBelgeNo ? ' · ' + item.TahsilatBelgeNo : '') : '';
+                if (colName === 'UygunlukNedeni') return item.UygunlukNedeniMetni || '';
                 return item[columnMappings[colName]] || '';
             }
+            // ---- standart durum parametreleri (Çek / Senet Durum Parametreleri Standart Raporu): rozetler ve istemci tarafı türetme (işlem türü değişiklik penceresi önizlemesi) ----
+            const KONUM_SECENEKLERI = { 'Portföyde': ['Portföyde'], 'Planlandı': ['Portföyde'], 'Erteleme Yapıldı': ['Portföyde', 'Bankada', 'Tedarikçide'], 'Bankaya Tahsile Verildi': ['Bankada'], 'Bankadan Tahsil Edildi': ['Kapandı'], 'Elden Tahsil Edildi': ['Kapandı'], 'Ciro Edildi': ['Tedarikçide'], 'Teminata Verildi': ['Bankada'], 'Tahsil Riski': ['Portföyde', 'Bankada', 'Tedarikçide', 'Avukatta'], 'Konkordato Sürecinde': ['Portföyde', 'Bankada', 'Tedarikçide', 'Avukatta'], 'Karşılıksız': ['Portföyde', 'Bankada', 'Tedarikçide', 'Avukatta'], 'Protesto Edildi': ['Portföyde', 'Bankada', 'Tedarikçide', 'Avukatta'], 'İade Edildi': ['Kapandı'], 'İptal Edildi': ['Kapandı'] };
+            function durumTuret(tur, konum, vadeTarihi, kullanim) {
+                const sec = KONUM_SECENEKLERI[tur] || ['Portföyde']; konum = sec.length === 1 ? sec[0] : (sec.includes(konum) ? konum : sec[0]);
+                const hareket = konum === 'Portföyde' ? 'Portföyde' : 'İşlem Yapıldı';
+                let vade; if (tur === 'Bankadan Tahsil Edildi' || tur === 'Elden Tahsil Edildi') vade = 'Tahsil'; else if (tur === 'İade Edildi' || tur === 'İptal Edildi') vade = 'Kapandı';
+                else { const g = Math.round((new Date(vadeTarihi).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000); vade = g > 0 ? 'Vade Bekleniyor' : g === 0 ? 'Vadesi Bugün' : 'Vadesi Geçti'; }
+                let neden = ''; if (tur === 'Planlandı') neden = 'Planlandı'; else if (tur !== 'Portföyde' && tur !== 'Erteleme Yapıldı') neden = tur; else if (konum !== 'Portföyde') neden = konum; else if (vade !== 'Vade Bekleniyor') neden = vade; else if ((kullanim || 'Kullanılabilir') !== 'Kullanılabilir') neden = 'Kullanım durumu ' + kullanim;
+                return { konum, hareket, vade, uygunluk: neden ? 'Uygun Değil' : 'Uygun', neden };
+            }
+            const vadeDurumSinif = v => v === 'Vade Bekleniyor' ? 'bilgi' : v === 'Vadesi Bugün' ? 'uyari' : v === 'Vadesi Geçti' ? 'hata' : v === 'Tahsil' ? 'ok' : 'notr';
+            const konumSinif = k => k === 'Portföyde' ? 'bilgi' : k === 'Bankada' ? 'mor' : k === 'Tedarikçide' ? 'uyari' : k === 'Avukatta' ? 'hata' : 'notr';
+            const durumRozet = (metin, sinif, baslik) => '<span class="ca-durum ' + (sinif || '') + '" title="' + esc(baslik || metin) + '">' + esc(metin) + '</span>';
+            const kullanimSinif = k => k === 'Kullanılabilir' ? 'ok' : k === 'Riskli' ? 'hata' : k === 'Bloke' ? 'notr' : 'uyari';
 
             // ---- Takip Paneli › Çek · Senet ile aynı hücre dili ----
             const esc = s => String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -888,6 +989,7 @@
                 const k = item.Kaynak || ''; const b = (ad, ikon, sinif, baslik) => '<button type="button" class="btn btn-xs ' + sinif + ' cek-islem-btn" data-docentry="' + item.DocEntry + '" title="' + esc(baslik) + '">' + (ikon ? '<i class="fas ' + ikon + ' me-1"></i>' : '') + ad + '</button>';
                 let is;
                 if (item.SatirIslem === 'portfoy') is = b('Nakit Akışa Ekle', '', 'btn-primary', 'Kasa Nakit Akışı\'nda çek / senet satırı açılır, belge planlanır') + ' ' + b('İbraz Et', '', 'btn-outline-success', 'Plansız çıkış: GMY onayına düşer');
+                else if (item.SatirIslem === 'ibraz') is = b('İbraz Et', '', 'btn-outline-success', 'Vadesi gelmiş / geçmiş belge başka tedarikçiye verilemez; bankaya ibraz ya da ciro (plansız çıkış GMY onayına düşer)') + ' <span class="text-muted">' + esc(item.UygunlukNedeni || '') + '</span>';
                 else if (item.SatirIslem === 'planli') is = b('Tedarikçiye Çık', 'fa-share-from-square', 'btn-success', 'Plan satırı üzerinden ciro / ibraz: Kasa Nakit Akışı satırı ÖDENDİ, fiş atılır');
                 else if (item.SatirIslem === 'gmy') is = '<span class="ca-roz uyari"><i class="fas fa-user-shield me-1"></i>GMY Onayı Bekliyor</span>';
                 else is = 'işlem gerekmez';
@@ -954,7 +1056,7 @@
                         const kisilabilir = aday.reduce(function (t, x) { return t + Math.max(0, x.genislik - altSinir(x)); }, 0);
                         if (kisilabilir <= 0 || toplam <= kullanilabilir) return;
                         const oran = Math.min(1, (toplam - kullanilabilir) / kisilabilir);
-                        aday.forEach(function (x) { const kis = Math.floor(Math.max(0, x.genislik - altSinir(x)) * oran); x.genislik -= kis; toplam -= kis; });
+                        aday.forEach(function (x) { const kis = Math.ceil(Math.max(0, x.genislik - altSinir(x)) * oran); x.genislik -= kis; toplam -= kis; });   // yukarı yuvarlama: yuvarlama payı yüzünden gereksiz "dar" kademesine düşülmez, artan boşluk sonra orantılı dağıtılır
                     }
                     table.classList.remove('dar');
                     if (kullanilabilir > 40 && toplam > kullanilabilir) {
@@ -1036,11 +1138,8 @@
 
                 cizimSatirYapici = function (item) {
                     const row = document.createElement('tr');
-                    const rowClass = item.HareketDurumu ? {
-                        'Portföyde': 'table-info',
-                        'İşlem Yapıldı': 'table-secondary',
-                        'İade Edildi': 'table-danger',
-                    }[item.HareketDurumu.trim()] || '' : '';
+                    // satır rengi: portföyde mavi, işlem yapılmış gri, iade / iptal ile kapanan kırmızı
+                    const rowClass = item.VadeDurumu === 'Kapandı' ? 'table-danger' : item.HareketDurumu === 'Portföyde' ? 'table-info' : item.HareketDurumu === 'İşlem Yapıldı' ? 'table-secondary' : '';
 
                     if (rowClass) row.classList.add(rowClass);
                     row.dataset.docentry = item.DocEntry;
@@ -1108,7 +1207,7 @@
                             select.appendChild(emptyOption);
 
                             checkTransactionTypesJs.forEach(type => {
-                                if (type.Code !== "0" && type.Code !== "12") {
+                                if (type.Code !== "0") {
                                     const option = document.createElement('option');
                                     option.value = type.Code;
                                     option.textContent = type.Description;
@@ -1116,26 +1215,11 @@
                                     select.appendChild(option);
                                 }
                             });
-
-                            select.disabled = item.HareketDurumu === 'İade Edildi';
-                            select.addEventListener('change', async function() {
-                                const newType = this.value;
-                                const tahsilatNo = this.dataset.tahsilatBelgeNo;
-                                const ibrazNo = this.dataset.ibrazBelgeNo;
-                                let isSuccess = false;
-
-                                if (ibrazNo && ibrazNo !== 'null' && ibrazNo !== '') isSuccess = await updateCheckTransactionTypeByIbrazBelge(ibrazNo, newType);
-                                else if (tahsilatNo && tahsilatNo !== 'null' && tahsilatNo !== '') isSuccess = await updateCheckTransactionTypeByTahsilat(tahsilatNo, newType);
-                                else isSuccess = await updateCheckTransactionTypeByDocEntry(this.dataset.docentry, newType);   // portföydeki (belge numarasız) çek: kayıtla güncelle
-
-                                if (isSuccess) {
-                                    this.dataset.previousValue = newType;
-                                    if (item) item.CekIslemTuru = newType;
-                                    toastr.success("İşlem başarıyla güncellendi. Yeni hesaplamaların yansıması için sayfayı yenileyiniz.");
-                                } else { this.value = this.dataset.previousValue; }
-                            });
+                            select.title = (item.IslemTuru || '') + ' · konum ' + (item.KonumDurumu || '') + ' · ' + (item.VadeDurumu || '') + ' · ' + (item.UygunlukDurumu || '');
+                            // standart akış: yeni tür seçilince konum / ibraz yeri sorulur, hareket · konum · vade durumu · uygunluk önizlenir, uygulanınca satır sunucudan dönen değerlerle yeniden çizilir
+                            select.addEventListener('change', function () { islemTuruDegistirAkisi(item, this.value, this); });
                             cell.appendChild(select);
-                        } 
+                        }
                         else if (colName === 'PlanlananTedarikci') {
                             const input = document.createElement('input');
                             input.type = 'text';
@@ -1184,24 +1268,36 @@
                             bag.textContent = item.CekNumarasi || '';
                             bag.title = 'Detayları görmek için tıklayın';
                             cell.appendChild(bag);
-                            cell.insertAdjacentHTML('beforeend', altSatir(((item.BelgeTipi || '') + ' ' + (item.CekTipi || '')).trim() + (item.BankaAdi ? ' · ' + item.BankaAdi : '')));
+                            // Çek Numarası; altında Belge Tipi + İşlem Tipi (X / R), Banka Adı / Şube
+                            cell.insertAdjacentHTML('beforeend', altSatir(((item.BelgeTipi || '') + ' ' + (item.CekTipi || '')).trim() + (item.BankaAdi ? ' · ' + item.BankaAdi : '') + (item.Sube ? ' / ' + item.Sube : '')));
+                            cell.title = (item.BelgeTipi || '') + ' ' + (item.CekNumarasi || '') + ' · ' + (item.CekTipi || '') + ' · ' + (item.BankaAdi || '') + (item.Sube ? ' / ' + item.Sube : '');
                         }
-                        // ---- Takip Paneli › Çek · Senet ile ortak hücreler ----
+                        // ---- standart rapor sütunları: üst satır ana değer, alt satır tamamlayıcı bilgi ----
                         else if (colName === 'VadeTarihi') {
-                            cell.classList.add('text-center'); const vd = item.VadeDurumu || '';
-                            cell.innerHTML = esc(tarihTr(item.VadeTarihi)) + altSatir(vd, vd === 'Vadesi Geçti' ? 'text-danger' : vd === 'Bugün' || vd === 'Bu Hafta' ? 'text-warning' : '');
-                            cell.title = tarihTr(item.VadeTarihi) + (vd ? ' · ' + vd : '');
+                            cell.classList.add('text-center');
+                            cell.innerHTML = esc(tarihTr(item.VadeTarihi)) + altSatir(item.VadeAyiVeYili || '');
+                            cell.title = tarihTr(item.VadeTarihi) + (item.VadeYakinligi ? ' · ' + item.VadeYakinligi : '');
                         }
+                        else if (colName === 'VadeDurumu') { cell.classList.add('text-center'); const vd = item.VadeDurumu || ''; cell.innerHTML = vd ? durumRozet(vd, vadeDurumSinif(vd), vd + (item.VadeYakinligi && item.VadeYakinligi !== vd ? ' · ' + item.VadeYakinligi : '')) : ''; }
+                        else if (colName === 'UygunlukDurumu') { cell.classList.add('text-center'); const u = item.UygunlukDurumu || ''; cell.innerHTML = u ? durumRozet(u, u === 'Uygun' ? 'ok' : 'hata', u === 'Uygun' ? 'Başka tedarikçiye verilebilir' : 'Uygun Değil: ' + (item.UygunlukNedeni || '')) : ''; }
+                        else if (colName === 'HareketDurumu') {
+                            const hd = item.HareketDurumu || '', kd = item.KonumDurumu || '';
+                            cell.innerHTML = durumRozet(hd, hd === 'Portföyde' ? 'bilgi' : 'notr') + altSatir(kd, 'konum');
+                            cell.title = 'Hareket: ' + hd + ' · Konum: ' + kd;
+                        }
+                        else if (colName === 'KullanimDurumu') { const k = item.KullanımDurumu || ''; cell.innerHTML = k ? durumRozet(k, kullanimSinif(k)) : ''; }
+                        else if (colName === 'PortfoyeGirisTarihi') { cell.classList.add('text-center'); cell.innerHTML = esc(tarihTr(item.PortfoyeGirisTarihi)) + altSatir(item.PortfoyVadeAyiYili || ''); cell.title = tarihTr(item.PortfoyeGirisTarihi) + ' · ' + (item.PortfoyVadeAyiYili || ''); }
                         else if (colName === 'CekKimdenGeldi') {
-                            cell.innerHTML = esc(item.CekKimdenGeldi || '') + (item.AsilBorclu && item.AsilBorclu !== item.CekKimdenGeldi ? altSatir('keşideci: ' + item.AsilBorclu) : '');
-                            cell.title = (item.CekKimdenGeldi || '') + (item.AsilBorclu ? ' · keşideci ' + item.AsilBorclu : '');
+                            cell.innerHTML = esc(item.CekKimdenGeldi || '') + (item.AsilBorclu && item.AsilBorclu !== item.CekKimdenGeldi ? altSatir('asıl borçlu: ' + item.AsilBorclu) : '');
+                            cell.title = (item.CekKimdenGeldi || '') + (item.AsilBorclu ? ' · asıl borçlu ' + item.AsilBorclu : '');
                         }
                         else if (colName === 'Dolasim') cell.innerHTML = dolasimHtml(item);
-                        else if (colName === 'Kaynak') cell.innerHTML = kaynakHtml(item);
+                        else if (colName === 'Kaynak') { cell.innerHTML = kaynakHtml(item); cell.title = (item.Aciklama || '') + (item.KaynakDetay ? ' · ' + item.KaynakDetay : ''); }
                         else if (colName === 'CekKimeVerildi') {
                             if (item.CekKimeVerildi) {
-                                cell.innerHTML = esc(item.CekKimeVerildi) + '<span class="alt">' + esc((item.IslemTipiAdi || '') + (item.IbrazTarihi ? ' · ' + tarihTr(item.IbrazTarihi) : '')) + (item.IbrazBelgeNo ? ' · <span class="detail-link" data-ibraz="' + esc(item.IbrazBelgeNo) + '" title="İbraz detayı">' + esc(item.IbrazBelgeNo) + '</span>' : '') + '</span>';
-                                cell.title = item.CekKimeVerildi + ' · ' + (item.IslemTipiAdi || '') + (item.IbrazTarihi ? ' · ' + tarihTr(item.IbrazTarihi) : '') + (item.IbrazBelgeNo ? ' · ' + item.IbrazBelgeNo : '');
+                                const belgeNo = item.IbrazBelgeNo || item.TahsilatBelgeNo || '';
+                                cell.innerHTML = esc(item.CekKimeVerildi) + '<span class="alt">' + esc((item.IbrazTuru || '') + (item.IbrazTarihi ? ' · ' + tarihTr(item.IbrazTarihi) : '')) + (belgeNo ? ' · <span class="detail-link" data-ibraz="' + esc(belgeNo) + '" title="İbraz / tahsilat detayı">' + esc(belgeNo) + '</span>' : '') + (item.VadeliCekIbrazi === 'Evet' ? ' · vadeli ibraz' : '') + '</span>';
+                                cell.title = hucreMetni(item, 'CekKimeVerildi');
                             } else cell.innerHTML = '<span class="text-muted">—</span>';
                         }
                         else if (colName === 'Tutar') { cell.classList.add('text-end'); cell.innerHTML = tutarHtml(item); cell.title = hucreMetni(item, 'Tutar') + ' ' + (item.ParaBirimi || 'TRY'); }
@@ -1518,6 +1614,12 @@
             // İşlem türü ve planlanan tedarikçi buradan da düzenlenebilir.
             // ---------------------------------------------------------------
             const DETAY_BOLUMLERI = [
+                // Çek / Senet Durum Parametreleri Standart Raporu: beş parametre ve otomatik kuralın gerekçesi
+                { baslik: 'Durum Parametreleri (Standart · Otomatik)', alanlar: [
+                    ['IslemTipiAdi', 'İşlem Türü'], ['KonumDurumu', 'Konum Durumu'], ['HareketDurumu', 'Hareket Durumu'],
+                    ['VadeDurumu', 'Vade Durumu'], ['UygunlukDurumu', 'Uygunluk Durumu'], ['UygunlukNedeni', 'Uygunluk Gerekçesi'],
+                    ['KullanimDurumu', 'Kullanım Durumu'], ['Aciklama', 'Açıklama / İşlem Tipi']
+                ]},
                 // Takip Paneli › Çek · Plan ↔ İbraz Kontrolü kartıyla aynı alanlar (tabloda sütun olmayan ayrıntılar burada)
                 { baslik: 'Kasa Nakit Akışı Planı ↔ İbraz Kontrolü', alanlar: [
                     ['Kaynak', 'Satır Kaynağı'], ['KaynakDetay', 'Kaynak Ayrıntısı'], ['Kontrol', 'Plan ↔ İbraz Kontrolü'],
@@ -1525,7 +1627,7 @@
                     ['DolasimSiradaki', 'Sıradaki Adım'], ['Fis', 'Muhasebe Fişi']
                 ]},
                 { baslik: 'Çek Bilgileri', alanlar: [
-                    ['CekNumarasi', 'Çek No'], ['BelgeTipi', 'Belge Tipi'], ['BankaAdi', 'Banka'],
+                    ['CekNumarasi', 'Çek No'], ['BelgeTipi', 'Belge Tipi'], ['CekTipi', 'İşlem Tipi (X / R)'], ['BankaAdi', 'Banka'],
                     ['Sube', 'Şube'], ['ParaBirimi', 'Para Birimi'], ['Tutar', 'Tutar'],
                     ['TlKarsiligi', 'TL Karşılığı']
                 ]},
@@ -1533,12 +1635,6 @@
                     ['VadeTarihi', 'Vade Tarihi'], ['VadeAyiVeYili', 'Vade Ay / Yıl'],
                     ['PortfoyeGirisTarihi', 'Portföye Giriş'], ['PortfoyVadeAyiYili', 'Portföy Ay / Yıl'],
                     ['IbrazTarihi', 'İbraz Tarihi']
-                ]},
-                { baslik: 'Durum', alanlar: [
-                    ['HareketDurumu', 'Hareket Durumu'], ['KonumDurumu', 'Konum'],
-                    ['KullanimDurumu', 'Kullanım'], ['VadeDurumu', 'Vade Durumu'],
-                    ['UygunlukDurumu', 'Uygunluk'], ['IslemTipiAdi', 'İşlem Tipi'],
-                    ['Aciklama', 'Açıklama']
                 ]},
                 { baslik: 'Taraflar', alanlar: [
                     ['CekKimdenGeldi', 'Kimden Geldi'], ['AsilBorclu', 'Asıl Borçlu'],
@@ -1568,9 +1664,10 @@
                 DETAY_BOLUMLERI.forEach(function (bolum) {
                     html += '<div class="detay-bolum-baslik">' + bolum.baslik + '</div><div class="detay-grid">';
                     bolum.alanlar.forEach(function (a) {
-                        html += detaySatiri(a[1], hucreMetni(item, a[0]));
+                        html += detaySatiri(a[1], a[0] === 'HareketDurumu' ? (item.HareketDurumu || '') : hucreMetni(item, a[0]));
                     });
                     html += '</div>';
+                    if (bolum.alanlar[0][0] === 'IslemTipiAdi') html += '<div class="it-not"><b>Otomatik kural:</b> Konum ve Hareket işlem türünden; Vade Durumu vade tarihinden (tahsil → Tahsil, iade / iptal → Kapandı); Uygunluk = Portföyde ya da Erteleme Yapıldı + konum Portföyde + Vade Bekleniyor + kullanılabilir. Vadesi bugün / geçmiş, planlı, bankada, tedarikçide, avukatta ve riskli evrak başka tedarikçiye verilemez.</div>';
                     // dolaşım planı adımları (tür, eden → alan, durum, tarih, belge) — Takip Paneli çekmecesindeki adım listesiyle aynı
                     if (bolum.alanlar[0][0] === 'Kaynak' && (item.DolasimAdimlar || []).length) {
                         html += '<table class="ca-dol-tablo" data-dinamik="kapali"><thead><tr><th>Adım</th><th>Tür</th><th>Eden → Alan</th><th>Durum</th><th>Tarih</th><th>Belge</th></tr></thead><tbody>'
@@ -1599,7 +1696,7 @@
                 secim.appendChild(bosSecenek);
 
                 checkTransactionTypesJs.forEach(function (type) {
-                    if (type.Code !== "0" && type.Code !== "12") {
+                    if (type.Code !== "0") {
                         const o = document.createElement('option');
                         o.value = type.Code;
                         o.textContent = type.Description;
@@ -1607,26 +1704,9 @@
                         secim.appendChild(o);
                     }
                 });
-
-                secim.disabled = item.HareketDurumu === 'İade Edildi';
                 secim.dataset.previousValue = item.CekIslemTuru || '';
-
-                secim.addEventListener('change', async function () {
-                    const newType = this.value;
-                    const ibrazNo = item.IbrazBelgeNo;
-                    const tahsilatNo = item.TahsilatBelgeNo;
-                    let isSuccess = false;
-
-                    if (ibrazNo && ibrazNo !== 'null' && ibrazNo !== '') isSuccess = await updateCheckTransactionTypeByIbrazBelge(ibrazNo, newType);
-                    else if (tahsilatNo && tahsilatNo !== 'null' && tahsilatNo !== '') isSuccess = await updateCheckTransactionTypeByTahsilat(tahsilatNo, newType);
-                    else { toastr.warning("Güncellenecek belge numarası bulunamadı."); this.value = this.dataset.previousValue; return; }
-
-                    if (isSuccess) {
-                        this.dataset.previousValue = newType;
-                        item.CekIslemTuru = newType;
-                        toastr.success("İşlem başarıyla güncellendi. Yeni hesaplamaların yansıması için sayfayı yenileyiniz.");
-                    } else { this.value = this.dataset.previousValue; }
-                });
+                // standart akış penceresi (konum / ibraz yeri sorulur, türetilen durumlar önizlenir); uygulanınca detay penceresi yeni satırla yeniden açılır
+                secim.addEventListener('change', function () { const s = this; bootstrap.Modal.getInstance(document.getElementById('cekDetayModal'))?.hide(); islemTuruDegistirAkisi(item, s.value, s, function () { cekDetayiniAc(item.DocEntry); }); });
 
                 // --- Planlanan tedarikçi ---
                 const tedarikci = document.getElementById('detayTedarikci');
@@ -1735,19 +1815,76 @@
                 } catch (error) { return false; }
             }
 
-            // Portföydeki (ibraz / tahsilat belgesi olmayan) çekler: işlem türü kayıt numarasıyla güncellenir (Data/CekAkibetOrnek.cs; Kasa Nakit Akışı planıyla ortak kayıt)
-            async function updateCheckTransactionTypeByDocEntry(docEntry, newType) {
+            // İşlem türü (+ konum, ibraz yeri, belge no) kayıt numarasıyla güncellenir (Data/CekAkibetOrnek.cs; Kasa Nakit Akışı planıyla ortak kayıt). Başarıda sunucunun döndürdüğü güncel satır tabloya konur.
+            async function updateCheckTransactionTypeByDocEntry(docEntry, newType, konum, ibrazYeri, ibrazBelgeNo) {
                 try {
                     const token = $('input[name="__RequestVerificationToken"]').val();
-                    const response = await fetch(`/CekAkibeti/UpdateCheckTransactionTypeByDocEntry${dbQueryString}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'RequestVerificationToken': token }, body: JSON.stringify({ DocEntry: parseInt(docEntry), NewCheckTransactionType: newType }) });
+                    const response = await fetch(`/CekAkibeti/UpdateCheckTransactionTypeByDocEntry${dbQueryString}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'RequestVerificationToken': token }, body: JSON.stringify({ DocEntry: parseInt(docEntry), NewCheckTransactionType: newType, Konum: konum || '', IbrazYeri: ibrazYeri || '', IbrazBelgeNo: ibrazBelgeNo || '' }) });
                     if (!response.ok) { toastr.error(`HTTP Hata: ${response.status}`); return false; }
                     const data = await response.json();
-                    // Kasa Nakit Akışı'nda planlanmamış çek: çıkış işlenmez, GMY onayına düşer (seçim eski değerine döner)
-                    if (data.onayaDustu) { toastr.warning(data.message, 'GMY onayı', { timeOut: 12000 }); return false; }
-                    if (data.success) { if (data.message && data.message.indexOf('DİKKAT') >= 0) toastr.warning(data.message); return true; }
+                    // Kasa Nakit Akışı'nda planlanmamış çek: çıkış işlenmez, GMY onayına düşer (belge Planlandı olur; satır tazelenir)
+                    if (data.onayaDustu) { toastr.warning(data.message, 'GMY onayı', { timeOut: 12000 }); if (data.satirJson) satiriGuncelle(JSON.parse(data.satirJson)); cekOzetYukle(true); return false; }
+                    if (data.success) { if (data.message && data.message.indexOf('DİKKAT') >= 0) toastr.warning(data.message, '', { timeOut: 10000 }); else toastr.success(data.message || 'Güncellendi.'); if (data.satirJson) satiriGuncelle(JSON.parse(data.satirJson)); cekOzetYukle(true); return true; }
                     toastr.error(data.message || 'Güncellenemedi.'); return false;
                 } catch (error) { return false; }
             }
+
+            // ---------------------------------------------------------------
+            // İŞLEM TÜRÜ DEĞİŞİKLİĞİ · STANDART AKIŞ PENCERESİ
+            // Tür seçilir → konumu türden tek başına çıkmayan türlerde konum seçilir → konuma göre ibraz / ciro yeri ve belge no →
+            // hareket, konum, vade durumu ve uygunluk anında önizlenir (sunucu aynı kuralla hesaplar) → Uygula.
+            // ---------------------------------------------------------------
+            const itModalEl = document.getElementById('islemTuruModal'); let itBaglam = null;
+            const itTur = document.getElementById('itTur'), itKonum = document.getElementById('itKonum'), itYer = document.getElementById('itYer'), itNo = document.getElementById('itNo');
+            function islemTuruDegistirAkisi(item, yeniKod, selectEl, sonra) {
+                const tur = checkTransactionTypesJs.find(t => t.Code == yeniKod); if (!tur) { if (selectEl) selectEl.value = selectEl.dataset.previousValue || item.CekIslemTuru; return; }
+                itBaglam = { item, selectEl, sonra, uygulandi: false };
+                document.getElementById('itBelge').textContent = (item.BelgeTipi || '') + ' ' + (item.CekNumarasi || '') + ' · ' + (item.IslemTuru || '');
+                itTur.innerHTML = checkTransactionTypesJs.filter(t => t.Code !== '0').map(t => '<option value="' + t.Code + '"' + (t.Code == yeniKod ? ' selected' : '') + '>' + esc(t.Description) + '</option>').join('');
+                const ted = (ozetVeri && ozetVeri.tedarikciler) || []; document.getElementById('itYerListesi').innerHTML = ted.map(t => '<option value="' + esc(t) + '">').join('') + ['Ziraat Bankası', 'Halk Bankası'].map(b => '<option value="' + b + '">').join('');
+                itNo.value = '';
+                itTurDegisti(true);
+                new bootstrap.Modal(itModalEl).show();
+            }
+            function itTurDegisti(ilk) {
+                const item = itBaglam.item; const ad = itTur.options[itTur.selectedIndex].text; const sec = KONUM_SECENEKLERI[ad] || ['Portföyde'];
+                document.getElementById('itTurAciklama').textContent = ({ 'Portföyde': 'Evrak kasada / portföyde beklemektedir.', 'Planlandı': 'Evrak belirli bir tedarikçi için ayrılmıştır (Kasa Nakit Akışı).', 'Erteleme Yapıldı': 'Vade ötelendi; portföyde, bankada veya tedarikçide olabilir.', 'Bankaya Tahsile Verildi': 'Tahsil edilmek üzere bankaya verildi.', 'Bankadan Tahsil Edildi': 'Bedeli bankadan tahsil edildi.', 'Elden Tahsil Edildi': 'Bedeli elden / nakit tahsil edildi.', 'Ciro Edildi': 'Tedarikçiye devredildi.', 'Teminata Verildi': 'Teminat amacıyla kullanıldı.', 'Tahsil Riski': 'Tahsilat riski oluştu.', 'Konkordato Sürecinde': 'Borçlu konkordato sürecinde.', 'Karşılıksız': 'Çek için karşılıksız işlemi oluştu.', 'Protesto Edildi': 'Senet için protesto işlemi oluştu.', 'İade Edildi': 'İade edildi; süreç kapalı.', 'İptal Edildi': 'İptal edildi; süreç kapalı.' })[ad] || '';
+                // konum: tek olasılık → otomatik (kutu gizli); birden çok → seçim (mevcut konum uygunsa o)
+                const konumKutu = document.getElementById('itKonumKutu'); konumKutu.style.display = sec.length > 1 ? '' : 'none';
+                const mevcut = sec.includes(item.KonumDurumu) ? item.KonumDurumu : sec[0];
+                itKonum.innerHTML = sec.map(k => '<option' + (k === mevcut ? ' selected' : '') + '>' + k + '</option>').join('');
+                itKonumDegisti(ilk);
+            }
+            function itKonumDegisti(ilk) {
+                const item = itBaglam.item; const ad = itTur.options[itTur.selectedIndex].text; const konum = itKonum.value;
+                const yerKutu = document.getElementById('itYerKutu'), noKutu = document.getElementById('itNoKutu');
+                const cikis = ad === 'Ciro Edildi' || konum === 'Tedarikçide', banka = ad === 'Bankaya Tahsile Verildi' || ad === 'Bankadan Tahsil Edildi' || ad === 'Teminata Verildi' || konum === 'Bankada', avukat = konum === 'Avukatta', iade = ad === 'İade Edildi', tahsil = ad === 'Bankadan Tahsil Edildi' || ad === 'Elden Tahsil Edildi';
+                const yerGerekli = cikis || banka || avukat || iade; yerKutu.style.display = yerGerekli ? '' : 'none'; noKutu.style.display = yerGerekli || tahsil ? '' : 'none';
+                document.getElementById('itYerEtiket').textContent = cikis ? 'Ciro Edilen Tedarikçi' : banka ? 'Banka' : avukat ? 'Avukat / Hukuk Bürosu' : iade ? 'İade Edilen (Müşteri)' : 'Kime Verildi';
+                document.getElementById('itNoEtiket').textContent = tahsil ? 'Tahsilat Belge No' : 'İbraz Belge No';
+                const mevcutYer = (item.CekKimeVerildi || '').replace(' (Tahsil)', '');
+                itYer.value = cikis ? (item.IbrazTuru === 'Ciro' && mevcutYer ? mevcutYer : item.PlanlananTedarikci || '') : banka ? (item.IbrazTuru === 'Bankaya İbraz' && mevcutYer ? mevcutYer : 'Ziraat Bankası') : avukat ? (item.IbrazTuru === 'Avukat' && mevcutYer ? mevcutYer : '') : iade ? item.CekKimdenGeldi || '' : '';
+                itOnizle();
+            }
+            function itOnizle() {
+                const item = itBaglam.item; const ad = itTur.options[itTur.selectedIndex].text; const d = durumTuret(ad, itKonum.value, item.VadeTarihi, item.KullanımDurumu);
+                document.getElementById('itOnHareket').innerHTML = durumRozet(d.hareket, d.hareket === 'Portföyde' ? 'bilgi' : 'notr');
+                document.getElementById('itOnKonum').innerHTML = durumRozet(d.konum, konumSinif(d.konum));
+                document.getElementById('itOnVade').innerHTML = durumRozet(d.vade, vadeDurumSinif(d.vade));
+                document.getElementById('itOnUygunluk').innerHTML = durumRozet(d.uygunluk, d.uygunluk === 'Uygun' ? 'ok' : 'hata') + (d.neden ? ' <span class="text-muted" style="font-size:.6rem">' + esc(d.neden) + '</span>' : '');
+                const yerGorunur = document.getElementById('itYerKutu').style.display !== 'none'; document.getElementById('itOnYer').textContent = yerGorunur ? (itYer.value || '—') : (d.konum === 'Portföyde' ? 'portföyde kalır' : d.konum === 'Kapandı' ? 'süreç kapanır' : '—');
+                const planli = item.IslemTuru === 'Planlandı' && item.PlanDocEntry, cikis = (['Ciro Edildi', 'Bankaya Tahsile Verildi', 'Teminata Verildi'].includes(ad) || d.konum === 'Bankada' || d.konum === 'Tedarikçide') && item.KonumDurumu === 'Portföyde';
+                document.getElementById('itNot').innerHTML = cikis && !planli ? '<i class="fas fa-user-shield me-1 text-danger"></i><b>Plansız çıkış:</b> belge Kasa Nakit Akışı\'nda planlanmamış; çıkış işlenmez, GMY onayına düşer (onaylanınca uygulanır).' : cikis && planli ? '<i class="fas fa-check me-1 text-success"></i><b>Planlı çıkış:</b> Kasa Nakit Akışı #' + item.PlanDocEntry + ' üzerinden işlenir (plan ↔ ibraz kontrolü: planlanan ' + esc(item.PlanlananTedarikci || '—') + ').' : '<i class="fas fa-info-circle me-1"></i>Hareket, konum, vade durumu ve uygunluk standart kuralla otomatik yazılır; elle girilmez.';
+            }
+            itTur.addEventListener('change', function () { itTurDegisti(false); }); itKonum.addEventListener('change', function () { itKonumDegisti(false); }); itYer.addEventListener('input', itOnizle);
+            document.getElementById('itUygula').addEventListener('click', async function () {
+                if (!itBaglam) return; const item = itBaglam.item, b = this; const sec = KONUM_SECENEKLERI[itTur.options[itTur.selectedIndex].text] || [];
+                const yerGorunur = document.getElementById('itYerKutu').style.display !== 'none'; if (yerGorunur && !itYer.value.trim() && itTur.options[itTur.selectedIndex].text !== 'Teminata Verildi') { toastr.warning('Kime verildiğini girin.'); return; }
+                b.disabled = true; const ok = await updateCheckTransactionTypeByDocEntry(item.DocEntry, itTur.value, sec.length > 1 ? itKonum.value : '', yerGorunur ? itYer.value.trim() : '', itNo.value.trim()); b.disabled = false;
+                itBaglam.uygulandi = true; bootstrap.Modal.getInstance(itModalEl).hide();
+                if (ok && itBaglam.sonra) itBaglam.sonra();
+            });
+            itModalEl.addEventListener('hidden.bs.modal', function () { if (itBaglam && !itBaglam.uygulandi && itBaglam.selectEl) { itBaglam.selectEl.value = itBaglam.selectEl.dataset.previousValue || itBaglam.item.CekIslemTuru; if (itBaglam.sonra) itBaglam.sonra(); } itBaglam = null; });
 
             async function updatePlannedSupplier(docEntry, newSupplier) {
                 try {
@@ -1932,28 +2069,29 @@
                 //
                 // Ana tabloda duracak kolonlar ve soldan sağa sırası:
                 // Konsolide Finansal Takip Paneli › Çek · Senet sekmesiyle aynı sıra ve adlar:
+                // Çek / Senet Durum Parametreleri Standart Raporu başlık sırası (tamamlayıcı bilgiler aynı sütunun alt satırında):
                 const DEFAULT_COLUMN_ORDER = [
                     'Checkbox',
-                    'CekNumarasi',      // Belge · No (belge tipi, X / R ve banka altında)
-                    'VadeTarihi',       // Vade (vade durumu altında)
-                    'CekKimdenGeldi',   // Kimden Geldi (keşideci altında)
-                    'CekIslemTuru',     // İşlem Türü
-                    'Dolasim',          // Dolaşım (Kasa Nakit Akışı dolaşım planı zinciri)
-                    'Kaynak',           // Satır Kaynağı · İşlem
-                    'PlanlananTedarikci', // Planlanan Tedarikçi (Kasa Nakit Akışı'ndan)
-                    'CekKimeVerildi',   // İbraz / Ciro · Kime Çıktı (çıkış türü, tarih, ibraz belgesi altında)
-                    'Tutar',            // Tutar (dövizde PB ve TL karşılığı altında)
-                    'NakitAkis',        // Nakit Akış Eşleşmesi
-                    'Kontrol',          // Plan ↔ İbraz Kontrolü
-                    'UygunlukDurumu',   // Uygunluk
-                    'Fis'               // Muhasebe Fişi
+                    'CekNumarasi',        // Belge Tipi · Çek Numarası (İşlem Tipi X / R, Banka Adı / Şube altında)
+                    'VadeTarihi',         // Vade Tarihi (Vade Ay/Yıl altında)
+                    'VadeDurumu',         // Vade Durumu (otomatik)
+                    'UygunlukDurumu',     // Uygunluk Durumu (otomatik; nedeni araç ipucunda)
+                    'Tutar',              // Çek Tutarı (Para Birimi · TL Karşılığı altında)
+                    'CekKimdenGeldi',     // Çek Kimden Geldi (Asıl Borçlu altında)
+                    'HareketDurumu',      // Hareket Durumu (Konum Durumu altında)
+                    'CekIslemTuru',       // İşlem Türü (standart liste; değişince durumlar otomatik)
+                    'CekKimeVerildi',     // Çek Kime Verildi (çıkış türü, İbraz Tarihi, İbraz / Tahsilat Belge No altında)
+                    'Kaynak',             // Satır Kaynağı · İşlem (Açıklama / İşlem Tipi araç ipucunda)
+                    'PlanlananTedarikci', // Planlanan Tedarikçi
+                    'KullanimDurumu',     // Kullanım Durumu
+                    'PortfoyeGirisTarihi' // Portföye Giriş Tarihi (Portföy Ay/Yıl altında)
                 ];
 
                 // Kalan bütün alanlar belge detayında ("Sütunlar"dan tabloya da açılabilir).
                 const DEFAULT_HIDDEN_COLUMNS = [
-                    'BelgeTipi', 'HareketDurumu', 'Aciklama', 'KonumDurumu', 'KullanimDurumu', 'VadeDurumu', 'ParaBirimi', 'TlKarsiligi',
-                    'VadeAyiVeYili', 'PortfoyeGirisTarihi', 'PortfoyVadeAyiYili', 'IbrazTarihi', 'AsilBorclu', 'VadeliCekIbrazi', 'BankaAdi',
-                    'Sube', 'IbrazBelgeNo', 'TahsilatBelgeNo', 'IslemTipiAdi'
+                    'BelgeTipi', 'CekTipi', 'KonumDurumu', 'UygunlukNedeni', 'Aciklama', 'ParaBirimi', 'TlKarsiligi',
+                    'VadeAyiVeYili', 'PortfoyVadeAyiYili', 'IbrazTarihi', 'AsilBorclu', 'VadeliCekIbrazi', 'BankaAdi',
+                    'Sube', 'IbrazBelgeNo', 'TahsilatBelgeNo', 'IslemTipiAdi', 'Dolasim', 'NakitAkis', 'Kontrol', 'Fis'
                 ];
 
                 function createInitialConfig() {
@@ -1989,7 +2127,7 @@
                 }
 
                 // Sade görünüme geçiş: kayıtlı eski sütun düzenleri bir kereliğine yok sayılır.
-                const DUZEN_SURUMU = 'sade-v4';   // v4: Takip Paneli › Çek · Senet düzeni (Dolaşım, Satır Kaynağı · İşlem, Nakit Akış Eşleşmesi, Kontrol, Fiş)
+                const DUZEN_SURUMU = 'standart-v5';   // v5: Çek / Senet Durum Parametreleri Standart Raporu başlık düzeni (Vade Durumu, Uygunluk, Hareket · Konum, Kime Verildi, Kullanım, Portföye Giriş)
                 if (localStorage.getItem('cekAkibetiDuzenSurumu') !== DUZEN_SURUMU) {
                     localStorage.removeItem(storageKey);
                     localStorage.setItem('cekAkibetiDuzenSurumu', DUZEN_SURUMU);
@@ -2055,7 +2193,7 @@
                     { k: '#9d174d', l: 'GMY Onayı Bekleyen Plansız Çıkış', s: 'Çek Akıbeti\'nden planlanmamış belge çıkışı talebi; onaylanınca çıkış işlenir', n: V.gmy.length, t: V.gmy.reduce((s, x) => s + x.tutar, 0), link: n.link, linkAd: 'Kasa Nakit Akışı' },
                     { grup: 'Kontrol' },
                     { k: '#dc2626', l: 'Plana Aykırı Çıkış', s: 'Kasa Nakit Akışı planı ≠ ibraz / ciro yeri · Takip Paneli › Çek', n: V.farkli.length, t: V.farkli.reduce((s, x) => s + x.tutar, 0), link: V.takipPaneli, linkAd: 'Takip Paneli' },
-                    { k: '#15803d', l: 'Bankada Tahsilde', s: 'bu hafta vadesi gelen ' + V.bankada.buHafta, n: V.bankada.adet, t: V.bankada.tutar, f: { column: 'CekIslemTuru', value: '5' } }
+                    { k: '#15803d', l: 'Bankada (Konum Durumu)', s: 'tahsilde, teminatta, bankada ertelenmiş / riskli · bu hafta vadesi gelen ' + V.bankada.buHafta, n: V.bankada.adet, t: V.bankada.tutar, f: { column: 'KonumDurumu', value: 'Bankada' } }
                 ];
                 document.querySelector('#cekOzetDurum tbody').innerHTML = R.map(r => r.grup ? '<tr class="grup"><td colspan="4">' + h(r.grup) + '</td></tr>' : '<tr class="' + (r.f ? 'tik' : '') + '" style="--k:' + r.k + '" ' + (r.f ? 'data-column="' + r.f.column + '" data-value="' + r.f.value + '" title="Tabloyu süz"' : '') + '><td class="gost">' + h(r.l) + '<small>' + h(r.s) + '</small></td><td class="s adet ' + (!r.n || r.n === 0 ? 'sifir' : '') + '">' + h(String(r.n)) + '</td><td class="s">' + (r.t == null ? '' : kisa(r.t)) + '</td><td>' + (r.link ? '<a href="' + h(r.link) + '" target="_blank" class="fw-bold">' + h(r.linkAd) + ' <i class="fas fa-arrow-up-right-from-square" style="font-size:.5rem"></i></a>' : r.f ? '<span class="text-muted">tıkla: tabloyu süz</span>' : '') + '</td></tr>').join('');
                 document.getElementById('cekOzetNot').textContent = V.bugun + ' · ' + V.sirket;
@@ -2106,7 +2244,7 @@
             // detay penceresi: hızlı işlemler (portföyde → Nakit Akışa Gönder; planlı → Tedarikçiye Çık; plan satırı / Takip Paneli bağlantıları)
             window.cekHizliIslemHtml = function (item) {
                 const p = (ozetVeri && ozetVeri.planlar && ozetVeri.planlar[String(item.DocEntry)]) || null;
-                const portfoyde = p ? p.portfoyde : item.HareketDurumu === 'Portföyde', secilebilir = p ? p.secilebilir : (item.HareketDurumu === 'Portföyde' && item.CekIslemTuru == '1' && item.UygunlukDurumu === 'Uygun');
+                const portfoyde = p ? p.portfoyde : item.HareketDurumu === 'Portföyde', secilebilir = p ? p.secilebilir : item.UygunlukDurumu === 'Uygun';
                 const planli = p ? p.islemTuru === 'Planlandı' : item.CekIslemTuru == '2', gmy = p && p.cikisTalebi && p.planOnay !== 'Onaylandı';
                 const ted = (ozetVeri && ozetVeri.tedarikciler) || [];
                 const dl = '<datalist id="hzTedarikciler">' + ted.map(t => '<option value="' + h(t) + '">').join('') + '</datalist>';

@@ -630,25 +630,28 @@ namespace WebApplication3.Data
 
         // ---------- PLANSIZ ÇEK ÇIKIŞI KONTROLÜ: Çek Akıbeti'nden Kasa Nakit Akışı'nda planlanmamış bir çek çıkarılmak istenirse çıkış yapılmaz, GMY onayına düşer ----------
         /// <summary>Çek Akıbeti Raporu işlem türü değişikliği: çıkış türü (ciro, bankaya tahsil, teminat, konkordato-tedarikçi) ve belge planlı değilse Kasa Nakit Akışı'na "Özel Onay" satırı açılır; planlıysa çıkış işlenir.</summary>
-        public static (bool ok, string mesaj, bool onayaDustu, int? docEntry) CekCikisKontrollu(int cekDocEntry, string kodVeyaAd, string ibrazYeri, string ibrazBelgeNo, string kullanici)
+        public static (bool ok, string mesaj, bool onayaDustu, int? docEntry) CekCikisKontrollu(int cekDocEntry, string kodVeyaAd, string ibrazYeri, string ibrazBelgeNo, string kullanici, string konum = null)
         {
             Tohumla();
             var k = CekAkibetOrnek.Bul(cekDocEntry); if (k == null) return (false, "Belge bulunamadı.", false, null);
-            string ad = CekAkibetOrnek.IslemTurleri.Any(t => t.Kod == kodVeyaAd) ? CekAkibetOrnek.IslemAdi(kodVeyaAd) : kodVeyaAd;
-            if (CekAkibetOrnek.CikisTuruMu(ad) && k.PlanDocEntry == null && k.Dolasim.Count == 0)
+            var ak = CekAkibetOrnek.AdVeKonum(kodVeyaAd, konum); string ad = ak.ad; konum = CekAkibetOrnek.KonumSecenekleri(ad).Length == 1 ? "" : ak.konum;
+            // çıkış = ciro / bankaya tahsil / teminat türü ya da portföydeki belgenin konumunun Bankada / Tedarikçide'ye alınması (erteleme, tahsil riski, konkordato …); belge zaten portföy dışındaysa konum değişikliği çıkış sayılmaz
+            bool cikis = CekAkibetOrnek.CikisTuruMu(ad, konum) && k.KonumDurumu == "Portföyde";
+            if (cikis && k.PlanDocEntry == null && k.Dolasim.Count == 0)
             {
-                var m = CekCikisTalebi(k, ad, ibrazYeri, ibrazBelgeNo, kullanici);
-                return (true, $"DİKKAT: {k.No} Kasa Nakit Akışı'nda planlanmamış; çıkış ({ad}{(string.IsNullOrEmpty(ibrazYeri) ? "" : " → " + ibrazYeri)}) yapılmadı, GMY onayına düştü (Kasa Nakit Akışı #{m.DocEntry}, {string.Join(" / ", CekCikisOnaycilari)}). Onaylanınca çıkış işlenir.", true, m.DocEntry);
+                var m = CekCikisTalebi(k, ad + (string.IsNullOrEmpty(konum) ? "" : " · " + konum), ibrazYeri, ibrazBelgeNo, kullanici);
+                return (true, $"DİKKAT: {k.No} Kasa Nakit Akışı'nda planlanmamış; çıkış ({ad}{(string.IsNullOrEmpty(konum) ? "" : " · " + konum)}{(string.IsNullOrEmpty(ibrazYeri) ? "" : " → " + ibrazYeri)}) yapılmadı, GMY onayına düştü (Kasa Nakit Akışı #{m.DocEntry}, {string.Join(" / ", CekCikisOnaycilari)}). Onaylanınca çıkış işlenir.", true, m.DocEntry);
             }
-            if (CekAkibetOrnek.CikisTuruMu(ad) && k.PlanDocEntry != null) { var plan = Bul(k.PlanDocEntry.Value); if (plan != null && !string.IsNullOrEmpty(plan.U_CikisTalebi) && plan.U_OnayDurumu != "Onaylandı") return (false, $"{k.No} için çıkış talebi GMY onayı bekliyor (Kasa Nakit Akışı #{plan.DocEntry}); onaylanmadan çıkış yapılamaz.", true, plan.DocEntry); }
-            var r = CekAkibetOrnek.IslemTuruDegistir(cekDocEntry, kodVeyaAd, ibrazYeri, ibrazBelgeNo, kullanici);
+            if (cikis && k.PlanDocEntry != null) { var plan = Bul(k.PlanDocEntry.Value); if (plan != null && !string.IsNullOrEmpty(plan.U_CikisTalebi) && plan.U_OnayDurumu != "Onaylandı") return (false, $"{k.No} için çıkış talebi GMY onayı bekliyor (Kasa Nakit Akışı #{plan.DocEntry}); onaylanmadan çıkış yapılamaz.", true, plan.DocEntry); }
+            var r = CekAkibetOrnek.IslemTuruDegistir(cekDocEntry, ad, ibrazYeri, ibrazBelgeNo, kullanici, konum);
             return (r.ok, r.mesaj, false, k.PlanDocEntry);
         }
-        /// <summary>Plansız çıkış talebi satırı: belge planlanır (Çek Akıbeti: Planlandı → kontrol "İbraz Bekliyor"), satır "Özel Onay" + "Onay Bekliyor"; onaylanınca çıkış işlenir, reddedilince belge portföye döner.</summary>
+        /// <summary>Plansız çıkış talebi satırı: belge planlanır (Çek Akıbeti: Planlandı → kontrol "İbraz Bekliyor"), satır "Özel Onay" + "Onay Bekliyor"; onaylanınca çıkış işlenir, reddedilince belge portföye döner. islemTuru "Ad · Konum" biçiminde olabilir.</summary>
         static NakitAkisViewModel CekCikisTalebi(CekKaydi k, string islemTuru, string ibrazYeri, string ibrazBelgeNo, string kullanici)
         {
             // bankaya ibraz türlerinde yer belirtilmemişse Çek Akıbeti'nin kullanacağı tahsil bankası (plan ↔ çıkış kontrolü "Uyumlu" kalsın diye)
-            bool bankaya = islemTuru == "Bankaya Tahsile Verildi" || islemTuru == "Erteleme Yapıldı - Bankada" || islemTuru == "Konkordato - Bankada";
+            var ak = CekAkibetOrnek.AdVeKonum(islemTuru, null);
+            bool bankaya = ak.ad == "Bankaya Tahsile Verildi" || ak.konum == "Bankada";
             if (string.IsNullOrEmpty(ibrazYeri) && bankaya) ibrazYeri = ButceOrnek.TahsilBankalari[k.DocEntry % 2];
             string db = k.DbName; string kurum = !string.IsNullOrEmpty(ibrazYeri) ? (bankaya && !ibrazYeri.Contains("(Tahsil)") ? ibrazYeri + " (Tahsil)" : ibrazYeri) : islemTuru == "Teminata Verildi" ? "Teminat" : "Tedarikçi (belirtilmedi)";
             lock (Kilit)

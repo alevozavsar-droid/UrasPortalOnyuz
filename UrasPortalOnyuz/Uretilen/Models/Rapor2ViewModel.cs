@@ -72,6 +72,10 @@ namespace WebApplication3.Models
         public string FisNo { get; set; }                   // muhasebe fişi (panelle aynı numara)
         public string FisKaynak { get; set; }
         public string FisTarih { get; set; }
+        // ---- Çek / Senet Durum Parametreleri Standart Raporu: otomatik türetilen alanların gerekçesi ----
+        public string UygunlukNedeni { get; set; }          // "" = Uygun; aksi halde Uygun Değil nedeni (Planlandı, Vadesi Geçti, Bankada …)
+        public string VadeYakinligi { get; set; }           // Bugün | Bu Hafta | Bu Ay | İleri Vadeli | Vadesi Geçti (bilgi)
+        public string IbrazTuru { get; set; }               // Ciro | Bankaya İbraz | Teminat | Avukat | Elden Tahsil | İade | İptal | ""
     }
 
     public class Rapor2DolasimAdim { public int Sira { get; set; } public string Tur { get; set; } public string Eden { get; set; } public string Alan { get; set; } public string Durum { get; set; } public string Tarih { get; set; } public string BelgeNo { get; set; } }
