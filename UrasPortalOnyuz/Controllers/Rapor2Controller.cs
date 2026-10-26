@@ -96,7 +96,7 @@ namespace WebApplication3.Controllers
                 m.SatirIslem = gmy ? "gmy" : "planli";
             }
             // portföydeki belge: Uygun → Nakit Akışa Ekle / İbraz Et; vadesi bugün / geçmiş ya da ertelenmiş kullanılabilir belge → yalnız İbraz Et (başka tedarikçiye verilemez; standart rapor); riskli → işlem gerekmez
-            else if (k.IslemTuru == "Portföyde" || k.IslemTuru == "Erteleme Yapıldı") { m.Kaynak = k.IslemTuru == "Portföyde" ? "Çek Akıbeti · Portföy Girişi" : "Çek Akıbeti · Erteleme"; m.KaynakDetay = $"{k.Musteri} · giriş {k.PortfoyGiris:dd.MM.yyyy} · {k.Banka}" + (k.IslemTuru == "Erteleme Yapıldı" ? " · vade ötelendi" : ""); m.SatirIslem = gmy ? "gmy" : k.Secilebilir ? "portfoy" : k.KullanimDurumu == "Kullanılabilir" ? "ibraz" : "yok"; }
+            else if (k.IslemTuru == "Portföyde" || k.IslemTuru == "Erteleme Yapıldı") { m.Kaynak = k.IslemTuru == "Portföyde" ? "Çek Akıbeti · Portföy Girişi" : "Çek Akıbeti · Erteleme"; m.KaynakDetay = $"{k.Musteri} · giriş {k.PortfoyGiris:dd.MM.yyyy} · {k.Banka}" + (k.IslemTuru == "Erteleme Yapıldı" ? " · vade ötelendi" : ""); m.SatirIslem = gmy ? "gmy" : k.Secilebilir ? "portfoy" : "ibraz"; }
             else { m.Kaynak = "Çek Akıbeti · " + k.IslemTuru; m.KaynakDetay = $"{k.Musteri} · giriş {k.PortfoyGiris:dd.MM.yyyy} · {k.KonumDurumu} · {k.KullanimDurumu}"; m.SatirIslem = "yok"; }
             Fis(m, Rapor123Controller.CekFisNo(k, k.Sirket));
         }

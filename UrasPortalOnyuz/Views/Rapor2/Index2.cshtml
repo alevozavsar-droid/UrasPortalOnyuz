@@ -908,13 +908,17 @@
             }
             // ---- standart durum parametreleri (Çek / Senet Durum Parametreleri Standart Raporu): rozetler ve istemci tarafı türetme (işlem türü değişiklik penceresi önizlemesi) ----
             const KONUM_SECENEKLERI = { 'Portföyde': ['Portföyde'], 'Planlandı': ['Portföyde'], 'Erteleme Yapıldı': ['Portföyde', 'Bankada', 'Tedarikçide'], 'Bankaya Tahsile Verildi': ['Bankada'], 'Bankadan Tahsil Edildi': ['Kapandı'], 'Elden Tahsil Edildi': ['Kapandı'], 'Ciro Edildi': ['Tedarikçide'], 'Teminata Verildi': ['Bankada'], 'Tahsil Riski': ['Portföyde', 'Bankada', 'Tedarikçide', 'Avukatta'], 'Konkordato Sürecinde': ['Portföyde', 'Bankada', 'Tedarikçide', 'Avukatta'], 'Karşılıksız': ['Portföyde', 'Bankada', 'Tedarikçide', 'Avukatta'], 'Protesto Edildi': ['Portföyde', 'Bankada', 'Tedarikçide', 'Avukatta'], 'İade Edildi': ['Kapandı'], 'İptal Edildi': ['Kapandı'] };
-            function durumTuret(tur, konum, vadeTarihi, kullanim) {
+            // standart tabloda yalnız Vadesi Geçti ile görülen türler (sunucu da aynı kuralı uygular: CekAkibetOrnek.SadeceVadesiGecmis)
+            const SADECE_VADESI_GECMIS = ['Tahsil Riski', 'Karşılıksız', 'Protesto Edildi'];
+            function durumTuret(tur, konum, vadeTarihi) {
                 const sec = KONUM_SECENEKLERI[tur] || ['Portföyde']; konum = sec.length === 1 ? sec[0] : (sec.includes(konum) ? konum : sec[0]);
                 const hareket = konum === 'Portföyde' ? 'Portföyde' : 'İşlem Yapıldı';
                 let vade; if (tur === 'Bankadan Tahsil Edildi' || tur === 'Elden Tahsil Edildi') vade = 'Tahsil'; else if (tur === 'İade Edildi' || tur === 'İptal Edildi') vade = 'Kapandı';
                 else { const g = Math.round((new Date(vadeTarihi).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000); vade = g > 0 ? 'Vade Bekleniyor' : g === 0 ? 'Vadesi Bugün' : 'Vadesi Geçti'; }
-                let neden = ''; if (tur === 'Planlandı') neden = 'Planlandı'; else if (tur !== 'Portföyde' && tur !== 'Erteleme Yapıldı') neden = tur; else if (konum !== 'Portföyde') neden = konum; else if (vade !== 'Vade Bekleniyor') neden = vade; else if ((kullanim || 'Kullanılabilir') !== 'Kullanılabilir') neden = 'Kullanım durumu ' + kullanim;
-                return { konum, hareket, vade, uygunluk: neden ? 'Uygun Değil' : 'Uygun', neden };
+                // 5. Uygunluk Durumu Otomatik Kuralı: yalnız işlem türü + konum + hareket + vade durumu; başka koşul yok
+                let neden = ''; if (tur === 'Planlandı') neden = 'Planlandı'; else if (tur !== 'Portföyde' && tur !== 'Erteleme Yapıldı') neden = tur; else if (konum !== 'Portföyde') neden = konum; else if (vade !== 'Vade Bekleniyor') neden = vade;
+                const gecersiz = SADECE_VADESI_GECMIS.includes(tur) && vade !== 'Vadesi Geçti' ? tur + ' yalnızca vadesi geçmiş evrak için kullanılabilir (standart tablo: Vade Durumu = Vadesi Geçti).' : '';
+                return { konum, hareket, vade, uygunluk: neden ? 'Uygun Değil' : 'Uygun', neden, gecersiz };
             }
             const vadeDurumSinif = v => v === 'Vade Bekleniyor' ? 'bilgi' : v === 'Vadesi Bugün' ? 'uyari' : v === 'Vadesi Geçti' ? 'hata' : v === 'Tahsil' ? 'ok' : 'notr';
             const konumSinif = k => k === 'Portföyde' ? 'bilgi' : k === 'Bankada' ? 'mor' : k === 'Tedarikçide' ? 'uyari' : k === 'Avukatta' ? 'hata' : 'notr';
@@ -1773,18 +1777,20 @@
                 itOnizle();
             }
             function itOnizle() {
-                const item = itBaglam.item; const ad = itTur.options[itTur.selectedIndex].text; const d = durumTuret(ad, itKonum.value, item.VadeTarihi, item.KullanımDurumu);
+                const item = itBaglam.item; const ad = itTur.options[itTur.selectedIndex].text; const d = durumTuret(ad, itKonum.value, item.VadeTarihi);
                 document.getElementById('itOnHareket').innerHTML = durumRozet(d.hareket, d.hareket === 'Portföyde' ? 'bilgi' : 'notr');
                 document.getElementById('itOnKonum').innerHTML = durumRozet(d.konum, konumSinif(d.konum));
                 document.getElementById('itOnVade').innerHTML = durumRozet(d.vade, vadeDurumSinif(d.vade));
                 document.getElementById('itOnUygunluk').innerHTML = durumRozet(d.uygunluk, d.uygunluk === 'Uygun' ? 'ok' : 'hata') + (d.neden ? ' <span class="text-muted" style="font-size:.6rem">' + esc(d.neden) + '</span>' : '');
                 const yerGorunur = document.getElementById('itYerKutu').style.display !== 'none'; document.getElementById('itOnYer').textContent = yerGorunur ? (itYer.value || '—') : (d.konum === 'Portföyde' ? 'portföyde kalır' : d.konum === 'Kapandı' ? 'süreç kapanır' : '—');
                 const planli = item.IslemTuru === 'Planlandı' && item.PlanDocEntry, cikis = (['Ciro Edildi', 'Bankaya Tahsile Verildi', 'Teminata Verildi'].includes(ad) || d.konum === 'Bankada' || d.konum === 'Tedarikçide') && item.KonumDurumu === 'Portföyde';
-                document.getElementById('itNot').innerHTML = cikis && !planli ? '<i class="fas fa-user-shield me-1 text-danger"></i><b>Plansız çıkış:</b> belge Kasa Nakit Akışı\'nda planlanmamış; çıkış işlenmez, GMY onayına düşer (onaylanınca uygulanır).' : cikis && planli ? '<i class="fas fa-check me-1 text-success"></i><b>Planlı çıkış:</b> Kasa Nakit Akışı #' + item.PlanDocEntry + ' üzerinden işlenir (plan ↔ ibraz kontrolü: planlanan ' + esc(item.PlanlananTedarikci || '—') + ').' : '<i class="fas fa-info-circle me-1"></i>Hareket, konum, vade durumu ve uygunluk standart kuralla otomatik yazılır; elle girilmez.';
+                document.getElementById('itUygula').disabled = !!d.gecersiz;
+                document.getElementById('itNot').innerHTML = d.gecersiz ? '<i class="fas fa-ban me-1 text-danger"></i><b>Geçersiz kombinasyon:</b> ' + esc(d.gecersiz) : cikis && !planli ? '<i class="fas fa-user-shield me-1 text-danger"></i><b>Plansız çıkış:</b> belge Kasa Nakit Akışı\'nda planlanmamış; çıkış işlenmez, GMY onayına düşer (onaylanınca uygulanır).' : cikis && planli ? '<i class="fas fa-check me-1 text-success"></i><b>Planlı çıkış:</b> Kasa Nakit Akışı #' + item.PlanDocEntry + ' üzerinden işlenir (plan ↔ ibraz kontrolü: planlanan ' + esc(item.PlanlananTedarikci || '—') + ').' : '<i class="fas fa-info-circle me-1"></i>Hareket, konum, vade durumu ve uygunluk standart kuralla otomatik yazılır; elle girilmez.';
             }
             itTur.addEventListener('change', function () { itTurDegisti(false); }); itKonum.addEventListener('change', function () { itKonumDegisti(false); }); itYer.addEventListener('input', itOnizle);
             document.getElementById('itUygula').addEventListener('click', async function () {
                 if (!itBaglam) return; const item = itBaglam.item, b = this; const sec = KONUM_SECENEKLERI[itTur.options[itTur.selectedIndex].text] || [];
+                const gecersiz = durumTuret(itTur.options[itTur.selectedIndex].text, itKonum.value, item.VadeTarihi).gecersiz; if (gecersiz) { toastr.warning(gecersiz); return; }
                 const yerGorunur = document.getElementById('itYerKutu').style.display !== 'none'; if (yerGorunur && !itYer.value.trim() && itTur.options[itTur.selectedIndex].text !== 'Teminata Verildi') { toastr.warning('Kime verildiğini girin.'); return; }
                 b.disabled = true; const ok = await updateCheckTransactionTypeByDocEntry(item.DocEntry, itTur.value, sec.length > 1 ? itKonum.value : '', yerGorunur ? itYer.value.trim() : '', itNo.value.trim()); b.disabled = false;
                 itBaglam.uygulandi = true; bootstrap.Modal.getInstance(itModalEl).hide();

@@ -79,7 +79,7 @@ namespace WebApplication3.Data
         }
         /// <summary>Vade yakınlığı (bilgi): Vadesi Geçti | Bugün | Bu Hafta | Bu Ay | İleri Vadeli.</summary>
         public string VadeYakinligi { get { int g = (Vade.Date - DateTime.Today).Days; return g < 0 ? "Vadesi Geçti" : g == 0 ? "Bugün" : g <= 7 ? "Bu Hafta" : g <= 30 ? "Bu Ay" : "İleri Vadeli"; } }
-        /// <summary>Uygun Değil nedeni ("" = Uygun). Kural: işlem türü Portföyde ya da Erteleme Yapıldı + konum Portföyde + Vade Bekleniyor + kullanılabilir → Uygun; planlı, vadesi bugün / geçmiş, bankada, tedarikçide, avukatta, tahsil, iade, iptal ya da riskli belgeler Uygun Değil.</summary>
+        /// <summary>Uygun Değil nedeni ("" = Uygun). Standart rapor › 5. Uygunluk Durumu Otomatik Kuralı (başka koşul eklenmez): işlem türü Portföyde ya da Erteleme Yapıldı + konum Portföyde + hareket Portföyde + Vade Bekleniyor → Uygun; planlı, vadesi bugün / geçmiş, bankada, tedarikçide, avukatta, tahsil, iade, iptal ya da riskli (Tahsil Riski, Konkordato, Karşılıksız, Protesto) belgeler Uygun Değil.</summary>
         public string UygunlukNedeni
         {
             get
@@ -88,7 +88,6 @@ namespace WebApplication3.Data
                 if (IslemTuru != "Portföyde" && IslemTuru != "Erteleme Yapıldı") return IslemTuru;
                 if (KonumDurumu != "Portföyde") return KonumDurumu;
                 if (VadeDurumu != "Vade Bekleniyor") return VadeDurumu;
-                if (KullanimDurumu != "Kullanılabilir") return "Kullanım durumu " + KullanimDurumu;
                 return "";
             }
         }
@@ -96,7 +95,7 @@ namespace WebApplication3.Data
         public string UygunlukDurumu => Uygun ? "Uygun" : "Uygun Değil";
         /// <summary>Belge portföyde (konum Portföyde: Portföyde, Planlandı, portföydeki erteleme / riskli belgeler).</summary>
         public bool Portfoyde => KonumDurumu == "Portföyde";
-        /// <summary>Kasa Nakit Akışı'na seçilebilir = Uygun (portföyde, planlanmamış, vadesi bekleniyor, kullanılabilir).</summary>
+        /// <summary>Kasa Nakit Akışı'na seçilebilir = Uygun (portföyde, planlanmamış, vadesi bekleniyor, riskli olmayan).</summary>
         public bool Secilebilir => Uygun;
         /// <summary>Plan ↔ ibraz karşılaştırması (finans kontrolü).</summary>
         public string Kontrol
@@ -191,6 +190,8 @@ namespace WebApplication3.Data
             }
         }
         public static string IslemKodu(string ad) => IslemTurleri.FirstOrDefault(t => t.Ad == ad).Kod ?? "1";
+        /// <summary>Standart tabloda yalnız Vadesi Geçti ile görülen işlem türleri (Tahsil Riski, Karşılıksız, Protesto Edildi).</summary>
+        public static bool SadeceVadesiGecmis(string ad) => ad == "Tahsil Riski" || ad == "Karşılıksız" || ad == "Protesto Edildi";
         /// <summary>Belgenin işlem tipi (X / R): belge numarasının rakamlarından deterministik, yaklaşık %78 X.</summary>
         public static string IslemTipiHesapla(string no) { var d = new string((no ?? "").Where(char.IsDigit).ToArray()); if (d.Length == 0) return "X"; long n = long.Parse(d.Length > 9 ? d.Substring(d.Length - 9) : d); return n % 100 < 78 ? "X" : "R"; }
         /// <summary>Belgenin şirketten çıktığı işlem türleri (ya da konum olarak Bankada / Tedarikçide seçimi): Kasa Nakit Akışı'nda planlanmamış belge için bu geçişler GMY onayına düşer (NakitAkisOrnek.CekCikisKontrollu).</summary>
@@ -255,7 +256,7 @@ namespace WebApplication3.Data
                         case "Tahsil Edildi": k.IslemTuru = z < 0.15 ? "Elden Tahsil Edildi" : z < 0.17 ? "İade Edildi" : z < 0.185 ? "İptal Edildi" : "Bankadan Tahsil Edildi"; break;
                         case "Ciro Edildi": k.IslemTuru = "Ciro Edildi"; break;
                         case "Karşılıksız": k.IslemTuru = k.Belge == "Senet" ? "Protesto Edildi" : "Karşılıksız"; k.Konum = z < 0.4 ? "Avukatta" : z < 0.85 ? "Bankada" : "Portföyde"; break;
-                        case "Riskli": k.IslemTuru = vadesiGecti ? "Tahsil Riski" : z < 0.4 ? "Konkordato Sürecinde" : "Portföyde"; if (k.IslemTuru != "Portföyde") k.Konum = z < 0.6 ? "Portföyde" : z < 0.85 ? "Bankada" : "Avukatta"; break;
+                        case "Riskli": k.IslemTuru = vadesiGecti ? "Tahsil Riski" : "Konkordato Sürecinde"; k.Konum = z < 0.6 ? "Portföyde" : z < 0.85 ? "Bankada" : "Avukatta"; break;   // standart tablo: Tahsil Riski yalnız vadesi geçmiş; vadesi gelmemiş riskli evrak Konkordato Sürecinde
                         default:   // Portföyde
                             k.IslemTuru = z < 0.08 ? "Erteleme Yapıldı" : vadesiGecti && z < 0.11 ? "İade Edildi" : vadesiGecti && z < 0.125 ? "İptal Edildi" : "Portföyde";
                             if (k.IslemTuru == "Erteleme Yapıldı") { k.Konum = "Portföyde"; if (vadesiGecti) k.Vade = bugun.AddDays(rnd.Next(10, 45)); }   // vade ötelendi: portföyde + vade bekleniyor → Uygun (standart rapor revizyon notu)
@@ -318,7 +319,6 @@ namespace WebApplication3.Data
                 var k = _kayitlar.FirstOrDefault(x => x.DocEntry == cekDocEntry); if (k == null) return (false, "Belge bulunamadı.");
                 bool portfoyTuru = (k.IslemTuru == "Portföyde" || k.IslemTuru == "Erteleme Yapıldı") && k.KonumDurumu == "Portföyde";
                 if (!portfoyTuru && !(k.IslemTuru == "Planlandı" && k.PlanDocEntry == planDocEntry)) return (false, $"{k.No} seçilemez: işlem türü {k.IslemTuru}" + (k.KonumDurumu != "Portföyde" ? $" · konum {k.KonumDurumu}" : "") + (k.PlanlananTedarikci != "" ? $" ({k.PlanlananTedarikci} için planlı)" : "") + ".");
-                if (k.KullanimDurumu != "Kullanılabilir") return (false, $"{k.No} kullanım durumu {k.KullanimDurumu}; planlanamaz.");
                 k.IslemTuru = "Planlandı"; k.Konum = ""; k.PlanlananTedarikci = tedarikci ?? ""; k.PlanDocEntry = planDocEntry; k.PlanSirket = planSirket ?? k.Sirket; k.PlanlamaTarihi = DateTime.Now; k.Planlayan = kullanici ?? "";
                 _gunluk.Add(new CekAkibetGunluk { Tarih = DateTime.Now, Kullanici = kullanici ?? "", Sirket = k.Sirket, No = k.No, Islem = "Planlandı", Aciklama = $"Kasa Nakit Akışı: {tedarikci} ödemesi için planlandı (kayıt {planDocEntry})" });
                 return (true, $"{k.No} planlandı → {tedarikci}. Çek Akıbeti Raporu'nda işlem türü \"Planlandı\" oldu.");
@@ -349,6 +349,8 @@ namespace WebApplication3.Data
                 var k = _kayitlar.FirstOrDefault(x => x.DocEntry == cekDocEntry); if (k == null) return (false, "Belge bulunamadı.");
                 var ak = AdVeKonum(kodVeyaAd, konum); string ad = ak.ad; konum = ak.konum; if (string.IsNullOrEmpty(ad) || !IslemTurleri.Any(t => t.Ad == ad)) return (false, "Geçersiz işlem türü.");
                 var secenekler = KonumSecenekleri(ad); if (!string.IsNullOrEmpty(konum) && !secenekler.Contains(konum)) return (false, $"{ad} için konum {konum} olamaz (olası: {string.Join(", ", secenekler)}).");
+                // standart tablo: Tahsil Riski, Karşılıksız ve Protesto Edildi yalnız Vade Durumu = Vadesi Geçti ile geçerli (vade durumu tarihten otomatik üretilir)
+                if (SadeceVadesiGecmis(ad) && k.Vade.Date >= DateTime.Today) return (false, $"{ad} yalnızca vadesi geçmiş evrak için kullanılabilir (standart tablo: Vade Durumu = Vadesi Geçti); {k.No} vadesi {k.Vade:dd.MM.yyyy}.");
                 string eski = k.IslemTuru, eskiKonum = k.KonumDurumu; k.IslemTuru = ad; k.Konum = secenekler.Length == 1 ? "" : !string.IsNullOrEmpty(konum) ? konum : k.Konum;
                 string yeniKonum = k.KonumDurumu; string bugunKisa = DateTime.Today.ToString("yyMM"); int sira = k.DocEntry % 9000 + 1000;
                 string Yer(string varsayilan) => !string.IsNullOrEmpty(ibrazYeri) ? ibrazYeri : k.IbrazYeri != "" ? k.IbrazYeri : varsayilan;
