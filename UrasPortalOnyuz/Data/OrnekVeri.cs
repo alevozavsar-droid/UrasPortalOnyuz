@@ -88,27 +88,38 @@ namespace WebApplication3.Data
         };
 
         // ---------------- cari ekstre satırları ----------------
+        /// <summary>CARİ_MASTER kartı (Müşteri / Tedarikçi Cari Kartları, 120.xxx / 320.xxx) → ekstre cari modeli; Cari Ekstre raporu kart kodlarıyla da açılır.</summary>
+        public static CariViewModel KartCari(string kod)
+        {
+            var k = CariKartOrnek.KartBul(kod); if (k == null) return null;
+            return new CariViewModel { CardCode = k.Kod, CardName = k.ResmiUnvan, Address = string.Join(" ", new[] { k.Sehir, k.Ulke }.Where(x => !string.IsNullOrEmpty(x))), Phone = k.Telefon };
+        }
+        public static CariViewModel CariBul(string kod) => Cariler.FirstOrDefault(c => c.CardCode == kod) ?? KartCari(kod);
+        /// <summary>Rapor seçim listesi: örnek M/T carileri + Müşteri ve Tedarikçi kartları (kod sırasıyla).</summary>
+        public static List<CariViewModel> CarilerVeKartlar() => Cariler.Concat(CariKartOrnek.Kartlar.Where(k => k.KartTipi == "Müşteri" || k.KartTipi == "Tedarikçi").OrderBy(k => k.Kod).Select(k => KartCari(k.Kod))).ToList();
         public static List<Rapor20CariEkstreViewModel> CariEkstre(string kod, DateTime bas, DateTime bit)
         {
-            var cari = Cariler.FirstOrDefault(c => c.CardCode == kod) ?? Cariler[0];
+            var cari = CariBul(kod) ?? Cariler[0];
+            bool tedarikci = cari.CardCode.StartsWith("320") || cari.CardCode.StartsWith("T");   // tedarikçi: alış faturası alacak, ödeme borç yazar
             var rnd = new Random(kod.GetHashCode());
             var liste = new List<Rapor20CariEkstreViewModel>();
-            decimal bakiye = 0;
-            liste.Add(new Rapor20CariEkstreViewModel { IslemNo = 0, SatirNo = 0, KayitTarihi = bas, VadeTarihi = bas, MuhatapKodu = cari.CardCode, MuhatapAdi = cari.CardName, Aciklama = "Devir Bakiyesi", IslemTipi = "Devir", AktarimTipi = "", TRYB = 125340.50m, TRYA = 0, IslemB = 125340.50m, IslemA = 0, IslemPB = "TRY", Sirket = "Uras Kimya", BakiyeDurumu = "Açık" });
-            bakiye = 125340.50m; liste[0].TRY_KmlBky = bakiye; liste[0].Islem_KmlBky = bakiye;
+            decimal bakiye = 0; decimal devir = 125340.50m;
+            liste.Add(new Rapor20CariEkstreViewModel { IslemNo = 0, SatirNo = 0, KayitTarihi = bas, VadeTarihi = bas, MuhatapKodu = cari.CardCode, MuhatapAdi = cari.CardName, Aciklama = "Devir Bakiyesi", IslemTipi = "Devir", AktarimTipi = "", TRYB = tedarikci ? 0 : devir, TRYA = tedarikci ? devir : 0, IslemB = tedarikci ? 0 : devir, IslemA = tedarikci ? devir : 0, IslemPB = "TRY", Sirket = "Uras Kimya", BakiyeDurumu = "Açık" });
+            bakiye = tedarikci ? -devir : devir; liste[0].TRY_KmlBky = bakiye; liste[0].Islem_KmlBky = bakiye;
             var tarih = bas; int no = 17000;
             while (tarih <= bit && liste.Count < 60)
             {
                 tarih = tarih.AddDays(rnd.Next(2, 9)); if (tarih > bit) break;
                 bool fatura = rnd.Next(10) < 6;
                 decimal tutar = Math.Round((decimal)(rnd.Next(8, 260) * 1000 + rnd.Next(0, 99)) + rnd.Next(0, 99) / 100m, 2);
+                bool borc = fatura != tedarikci;   // müşteri: fatura borç / tahsilat alacak · tedarikçi: fatura alacak / ödeme borç
                 var s = new Rapor20CariEkstreViewModel
                 {
                     IslemNo = ++no, SatirNo = 1, KayitTarihi = tarih, VadeTarihi = tarih.AddDays(fatura ? 60 : 0),
                     MuhatapKodu = cari.CardCode, MuhatapAdi = cari.CardName, Phone1 = cari.Phone, Street = cari.Address,
-                    Aciklama = fatura ? $"Satış Faturası - Belge No: {no} · URS2026{no:0000000}" : (rnd.Next(2) == 0 ? $"Tahsilat - Belge No: {no} (Havale/EFT · Garanti BBVA)" : $"Tahsilat - Belge No: {no} (Çek No: {rnd.Next(1000000, 9999999)} · Vade: {tarih.AddDays(90):dd.MM.yyyy})"),
-                    IslemTipi = fatura ? "Fatura" : "Tahsilat", AktarimTipi = fatura ? "X" : "R", IslemPB = "TRY", Sirket = "Uras Kimya",
-                    TRYB = fatura ? tutar : 0, TRYA = fatura ? 0 : tutar, IslemB = fatura ? tutar : 0, IslemA = fatura ? 0 : tutar, CheckNum = fatura ? null : (rnd.Next(2) == 0 ? rnd.Next(1000000, 9999999).ToString() : null)
+                    Aciklama = fatura ? $"{(tedarikci ? "Alış" : "Satış")} Faturası - Belge No: {no} · {(tedarikci ? "ALF" : "URS")}2026{no:0000000}" : (rnd.Next(2) == 0 ? $"{(tedarikci ? "Ödeme" : "Tahsilat")} - Belge No: {no} (Havale/EFT · Garanti BBVA)" : $"{(tedarikci ? "Ödeme" : "Tahsilat")} - Belge No: {no} (Çek No: {rnd.Next(1000000, 9999999)} · Vade: {tarih.AddDays(90):dd.MM.yyyy})"),
+                    IslemTipi = fatura ? "Fatura" : (tedarikci ? "Ödeme" : "Tahsilat"), AktarimTipi = fatura ? "X" : "R", IslemPB = "TRY", Sirket = "Uras Kimya",
+                    TRYB = borc ? tutar : 0, TRYA = borc ? 0 : tutar, IslemB = borc ? tutar : 0, IslemA = borc ? 0 : tutar, CheckNum = fatura ? null : (rnd.Next(2) == 0 ? rnd.Next(1000000, 9999999).ToString() : null)
                 };
                 bakiye += (s.TRYB ?? 0) - (s.TRYA ?? 0); s.TRY_KmlBky = bakiye; s.Islem_KmlBky = bakiye; s.BakiyeDurumu = fatura && rnd.Next(3) == 0 ? "Kapalı" : "Açık";
                 liste.Add(s);

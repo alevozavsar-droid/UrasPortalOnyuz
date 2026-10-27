@@ -27,9 +27,10 @@ namespace WebApplication3.Controllers
             ViewBag.SelectedAktarimTipi = aktarimTipi ?? new List<string>(); ViewBag.SelectedBakiyeDurumu = bakiyeDurumu ?? new List<string>();
             ViewBag.IncludeInitialBalance = includeInitialBalance; ViewBag.IncludeConnectedBp = includeConnectedBp; ViewBag.TlEkstre = tlEkstre; ViewBag.IsConsolidated = isConsolidated;
             ViewBag.UseBpDueDate = useBpDueDate; ViewBag.IncludeOpenOrders = includeOpenOrders; ViewBag.IsEnglish = isEnglish;
-            ViewBag.CariList = OrnekVeri.Cariler; ViewBag.AktarimTipiList = new List<string> { "R", "X", "Y" };
+            // Cari listesi: örnek M/T carileri + CARİ_MASTER kartları (Müşteri / Tedarikçi Cari Kartları'ndaki "Cari Ekstre" bağlantısı 120.xxx / 320.xxx koduyla gelir)
+            ViewBag.CariList = OrnekVeri.CarilerVeKartlar(); ViewBag.AktarimTipiList = new List<string> { "R", "X", "Y" };
             ViewBag.HasNotes = false; ViewBag.MutabakatUyarilari = new List<UyariViewModel>(); ViewBag.BpRelatedAccountBalances = new List<AccountBalanceViewModel>();
-            ViewBag.SelectedBpNames = secilen.ToDictionary(k => k, k => OrnekVeri.Cariler.FirstOrDefault(c => c.CardCode == k)?.CardName ?? k);
+            ViewBag.SelectedBpNames = secilen.ToDictionary(k => k, k => OrnekVeri.CariBul(k)?.CardName ?? k);
             ViewBag.SelectedBpName = secilen.Count == 1 ? (string)ViewBag.SelectedBpNames[secilen[0]] : secilen.Count + " cari seçildi";
             ViewBag.ConnectedBpCode = null; ViewBag.ConnectedBpName = null; ViewBag.SorguHatasi = null; ViewBag.MutabakatUyariMesaji = null; ViewBag.MutabakatUyariTipi = null;
 
@@ -37,7 +38,8 @@ namespace WebApplication3.Controllers
             foreach (var k in secilen) liste.AddRange(OrnekVeri.CariEkstre(k, bas, bit));
             if (secilen.Count > 0)
             {
-                ViewBag.BpRelatedAccountBalances = new List<AccountBalanceViewModel> { new AccountBalanceViewModel { CompanyName = OrnekVeri.SirketAdi(db), AccountCode = "120.01.001", AccountName = "Müşteriler", TLBalance = liste.LastOrDefault()?.TRY_KmlBky ?? 0, Currency = "TRY" } };
+                bool tedarikci = secilen.All(k => k.StartsWith("320") || k.StartsWith("T"));
+                ViewBag.BpRelatedAccountBalances = new List<AccountBalanceViewModel> { new AccountBalanceViewModel { CompanyName = OrnekVeri.SirketAdi(db), AccountCode = tedarikci ? "320.01.001" : "120.01.001", AccountName = tedarikci ? "Satıcılar" : "Müşteriler", TLBalance = liste.LastOrDefault()?.TRY_KmlBky ?? 0, Currency = "TRY" } };
                 ViewBag.MutabakatUyarilari = new List<UyariViewModel> { new UyariViewModel { UyariTipi = "info", AnalizSonucu = "Son mutabakat 31.08.2026 tarihinde yapıldı (örnek)." } };
                 ViewBag.MutabakatUyariMesaji = "Bu cari için mutabakat formu hazır (örnek veri)."; ViewBag.MutabakatUyariTipi = "success";
             }
