@@ -26,7 +26,14 @@
   const limitHucre = k => { const L = k.limit; if (!L) return '—'; if (L.tur === 'Yok') return '<span class="text-muted">Limit Yok</span>'; return `<b>${esc(L.limitTr)}</b><br><small class="text-muted">${esc(limitTanim(L))}</small>`; };
   // Tedarikçide bakiye alacak (eksi) yönlüdür; hücrede ödenmemiş borç (risk) gösterilir
   const bakiyeMetni = L => 'risk ' + esc(L.toplamRiskTr || tl(L.risk));
-  const kullanimHucre = k => { const L = k.limit; if (!L) return '—'; if (L.tur === 'Yok') return `<small class="text-muted">${bakiyeMetni(L)}</small>`; return `${limitBar(L)}<small>${L.kullanimYuzde != null ? '%' + Number(L.kullanimYuzde).toLocaleString('tr-TR') : (L.risk > 0 ? 'limitsiz risk' : '%0')} · ${bakiyeMetni(L)}</small><br>${limitRozet(L.durum)}`; };
+  // Liste hücresi: tek satır — ince çubuk + yüzde; durum rengi (yeşil / amber / kırmızı) ve ipucu (durum · risk / limit · kalan). Limit yoksa kısa gri metin.
+  const kullanimHucre = k => {
+    const L = k.limit; if (!L) return '—';
+    if (L.tur === 'Yok') return `<span class="ck-kul yok" title="Limit tanımlı değil · toplam risk ${esc(L.toplamRiskTr || tl(L.risk))}">Limit Yok</span>`;
+    const y = L.kullanimYuzde != null ? Number(L.kullanimYuzde) : (L.risk > 0 ? 999 : 0), g = Math.min(y, 100), r = L.durum === 'Limit Aşıldı' ? '#dc2626' : L.durum === 'Limite Yakın' ? '#f59e0b' : '#16a34a';
+    const yazi = L.kullanimYuzde != null ? '%' + Math.round(y).toLocaleString('tr-TR') : '∞';
+    return `<span class="ck-kul" style="--y:${g}%;--r:${r}" title="${esc(L.durum)} · kullanım ${yazi} · risk ${esc(L.toplamRiskTr || tl(L.risk))} / limit ${esc(L.limitTr)} · kalan ${esc(L.kalanTr)}"><i></i><b>${yazi}</b></span>`;
+  };
   const $ = (s, k) => (k || document).querySelector(s), $$ = (s, k) => Array.from((k || document).querySelectorAll(s));
   const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   const bh = s => { s = String(s ?? ''); return s ? s.charAt(0).toLocaleUpperCase('tr-TR') + s.slice(1) : s; };
