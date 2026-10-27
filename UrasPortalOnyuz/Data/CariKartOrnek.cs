@@ -49,12 +49,36 @@ namespace WebApplication3.Data
         public decimal AlimToplam { get; set; } public decimal AylikOrtalama { get; set; } public List<(string Ay, decimal Tutar, int Adet)> Aylar { get; set; } = new List<(string, decimal, int)>();
         /// <summary>Tedarikçi kartı: risk = borç bakiyemiz (alacak fazlası); müşteri kartı: risk = alacak bakiyemiz (borç fazlası).</summary>
         public bool Tedarikci { get; set; }
-        public decimal Bakiye { get; set; } public decimal Risk => Tedarikci ? Math.Max(-Bakiye, 0) : Math.Max(Bakiye, 0); public string BakiyeKaynak { get; set; } = "";
+        public decimal Bakiye { get; set; } public string BakiyeKaynak { get; set; } = "";
+        /// <summary>Limit kullanımına esas TOPLAM CARİ RİSK (CariKartOrnek.RiskHesapla): açık bakiye + içerideki (vadesi bekleyen) çek / senet + riskli çekler.</summary>
+        public decimal ToplamRisk { get; set; } public decimal Risk => ToplamRisk;
         public decimal? KullanimYuzde => Limit > 0 ? Math.Round(Risk / Limit * 100, 1) : (decimal?)null;
         public decimal Kalan => Limit - Risk;
         /// <summary>Limit Yok | Limit İçinde | Limite Yakın (≥ %80) | Limit Aşıldı</summary>
         public string Durum => Tur == "Yok" ? "Limit Yok" : Limit <= 0 ? (Risk > 0 ? "Limit Aşıldı" : "Limit İçinde") : KullanimYuzde >= 100 ? "Limit Aşıldı" : KullanimYuzde >= 80 ? "Limite Yakın" : "Limit İçinde";
         public string Aciklama { get; set; } = "";
+    }
+    /// <summary>
+    /// CARİ RİSK ÖZETİ (CariKartOrnek.RiskHesapla; kaynak Cari Mutabakat hareketleri + Çek Akıbeti): toplam bakiye, vadesi geçmiş / gelecek açık faturalar, içerideki çek / senet,
+    /// riskli çekler ve toplam cari risk. Durum otomatik (yalnız gecikmeye göre): 30 günden fazla vadesi geçmiş ödeme → Riskli; 1–30 gün gecikme → İzlemede; yoksa Risksiz.
+    /// </summary>
+    public class CariRisk
+    {
+        public bool Tedarikci { get; set; }
+        public decimal Bakiye { get; set; }                                   // TL; müşteride alacağımız (+), tedarikçide borcumuz (−)
+        public decimal AcikBakiye => Tedarikci ? Math.Max(-Bakiye, 0) : Math.Max(Bakiye, 0);
+        public decimal VadesiGecmis { get; set; } public int VadesiGecmisAdet { get; set; } public int MaxGecikme { get; set; } public DateTime? EnEskiVade { get; set; }
+        public decimal VadesiGelecek { get; set; } public int VadesiGelecekAdet { get; set; } public DateTime? EnYakinVade { get; set; }
+        public decimal Odenmemis => VadesiGecmis + VadesiGelecek;
+        public decimal Cek { get; set; } public int CekAdet { get; set; } public DateTime? EnYakinCekVade { get; set; }   // içerideki (vadesi bekleyen) çek / senet
+        public decimal RiskliCek { get; set; } public int RiskliCekAdet { get; set; }                                   // karşılıksız / protesto / tahsil riski / konkordato (Çek Akıbeti)
+        public int KarsiliksizAdet { get; set; }                                                                        // bunlardan karşılıksız / protestolu olanlar (tek başına Riskli yapar)
+        public decimal ToplamRisk => AcikBakiye + Cek + RiskliCek;
+        public const int RiskGunSiniri = 30;
+        /// <summary>Otomatik durum, yalnız vadesi geçmiş ödemeye göre: 30 günden fazla → Riskli; 1–30 gün → İzlemede; yoksa Risksiz. Riskli çekler bilgi ve tutar olarak izlenir (durumu tek başına değiştirmez).</summary>
+        public string Durum => MaxGecikme > RiskGunSiniri ? "Riskli" : MaxGecikme > 0 ? "İzlemede" : "Risksiz";
+        public string Neden { get; set; } = "";
+        public List<(string BelgeNo, DateTime Vade, int Gecikme, decimal Kalan, string Pb)> GecmisListe { get; set; } = new List<(string, DateTime, int, decimal, string)>();
     }
     /// <summary>Cari Kart Talebi (Müşteri / Tedarikçi Talep Formu): onaylanınca CARİ_MASTER'a kart açılır.</summary>
     public class CariTalep
@@ -135,10 +159,10 @@ namespace WebApplication3.Data
         public static readonly Dictionary<string, string> KodOnEkleri = new Dictionary<string, string> { ["Müşteri"] = "120", ["Tedarikçi"] = "320", ["Finansal Kuruluşlar"] = "102", ["Resmi Kurumlar"] = "360", ["Personel Carileri"] = "335" };
         public static readonly string[] TalepDurumlari = { "Taslak", "Onay Bekliyor", "Onaylandı", "Reddedildi", "İptal" };
         /// <summary>Rol yetkileri. "duzenle": kart detayında doğrudan düzeltme (yeni talep açmadan); her rolde açık, değişiklikler kartın günlüğüne yazılır.</summary>
-        public static readonly Dictionary<string, string[]> Yetkiler = new Dictionary<string, string[]> { ["Talep Eden (Satış / Satın Alma)"] = new[] { "taslak", "onayaGonder", "iptal", "duzenle" }, ["Muhasebe (Cari Açılış Onayı)"] = new[] { "taslak", "onayaGonder", "onay", "kartAc", "iptal", "limit", "duzenle" }, ["Yönetici"] = new[] { "taslak", "onayaGonder", "onay", "kartAc", "iptal", "limit", "duzenle" } };
+        public static readonly Dictionary<string, string[]> Yetkiler = new Dictionary<string, string[]> { ["Talep Eden (Satış / Satın Alma)"] = new[] { "taslak", "onayaGonder", "iptal", "duzenle", "limit" }, ["Muhasebe (Cari Açılış Onayı)"] = new[] { "taslak", "onayaGonder", "onay", "kartAc", "iptal", "limit", "duzenle" }, ["Yönetici"] = new[] { "taslak", "onayaGonder", "onay", "kartAc", "iptal", "limit", "duzenle" } };
         /// <summary>Kredi limiti türleri: Yok (limit izlenmez) · Manuel (elle TL tutar) · Dinamik (son N ay aylık alım ortalaması × çarpan).</summary>
         public static readonly string[] LimitTurleri = { "Yok", "Manuel", "Dinamik" };
-        public static readonly Dictionary<string, string> LimitTuruAciklama = new Dictionary<string, string> { ["Yok"] = "Limit izlenmez (ör. grup içi cari).", ["Manuel"] = "Muhasebe / yönetici tarafından elle girilen TL limit.", ["Dinamik"] = "Son N ayın faturalarından (müşteride satış, tedarikçide alış faturaları) aylık alım ortalaması alınır ve çarpanla çarpılır (ör. son 3 ay ortalaması × 2); her açılışta güncel veriyle yeniden hesaplanır. Çarpan genellikle vade süresine göre seçilir (30 gün ≈ ×2, 60 gün ≈ ×3, 90 gün ≈ ×4)." };
+        public static readonly Dictionary<string, string> LimitTuruAciklama = new Dictionary<string, string> { ["Yok"] = "Limit izlenmez (ör. grup içi cari).", ["Manuel"] = "Muhasebe / yönetici tarafından elle girilen TL limit.", ["Dinamik"] = "Son N ayın faturalarından (müşteride satış, tedarikçide alış faturaları) aylık alım ortalaması alınır ve yüzdeyle çarpılır (ör. son 3 ay ortalamasının %200'ü = × 2); her açılışta güncel veriyle yeniden hesaplanır. Yüzde genellikle vade süresine göre seçilir (30 gün ≈ %200, 60 gün ≈ %300, 90 gün ≈ %400)." };
         public static bool Yetkili(string rol, string e) => Yetkiler.TryGetValue(rol ?? "", out var l) && l.Contains(e);
 
         // ---- kayıtlar ----
@@ -314,6 +338,7 @@ namespace WebApplication3.Data
             var s = new CariLimit { Tur = k.LimitTuru ?? "Yok", Ay = k.DinamikAy <= 0 ? 3 : k.DinamikAy, Carpan = k.DinamikCarpan <= 0 ? 2m : k.DinamikCarpan, Tedarikci = ted };
             var c = string.IsNullOrEmpty(k.Kod) ? null : MutabakatOrnek.Bul(k.Kod);
             if (c != null) { s.Bakiye = c.BakiyeTl; s.BakiyeKaynak = c.Dovizler.Count == 0 ? "" : string.Join(" · ", c.Dovizler.Where(d => d.Net != 0).Select(d => $"{d.ParaBirimi} {d.Net.ToString("N2", Tr)}")); }
+            s.ToplamRisk = RiskHesapla(k).ToplamRisk;   // kullanım = toplam cari risk (açık bakiye + içerideki çek / senet + riskli çek)
             var bugun = DateTime.Today; var bas = new DateTime(bugun.Year, bugun.Month, 1).AddMonths(-(s.Ay - 1));   // içinde bulunulan ay dahil son N takvim ayı
             for (int i = 0; i < s.Ay; i++) { var ay = bas.AddMonths(i); var fat = c == null ? new List<MtHareket>() : c.Hareketler.Where(h => h.BelgeTipi == "Fatura" && (ted ? h.Alacak : h.Borc) > 0 && h.Tarih.Year == ay.Year && h.Tarih.Month == ay.Month).ToList(); s.Aylar.Add((ay.ToString("MMMM yyyy", Tr), Math.Round(fat.Sum(h => (ted ? h.Alacak : h.Borc) * KurTl(h.ParaBirimi)), 2), fat.Count)); }
             s.AlimToplam = s.Aylar.Sum(a => a.Tutar); s.AylikOrtalama = Math.Round(s.AlimToplam / s.Ay, 2);
@@ -322,7 +347,38 @@ namespace WebApplication3.Data
             else s.Aciklama = k.KartTipi == "Müşteri" || ted ? "Limit tanımlı değil; bakiye izlenir ama limit kontrolü yapılmaz." : "Limit yalnız müşteri ve tedarikçi kartlarında izlenir.";
             return s;
         }
-        static string LimitOzet(CariKart k) => k.LimitTuru == "Manuel" ? $"Manuel {k.ManuelLimit.ToString("N0", Tr)} ₺" : k.LimitTuru == "Dinamik" ? $"Dinamik son {k.DinamikAy} ay ort. × {k.DinamikCarpan.ToString("0.##", Tr)}" : "Yok";
+        static string LimitOzet(CariKart k) => k.LimitTuru == "Manuel" ? $"Manuel {k.ManuelLimit.ToString("N0", Tr)} ₺" : k.LimitTuru == "Dinamik" ? $"Dinamik son {k.DinamikAy} ay ort. %{(k.DinamikCarpan * 100).ToString("0.#", Tr)} (× {k.DinamikCarpan.ToString("0.##", Tr)})" : "Yok";
+        /// <summary>
+        /// CARİ RİSK ÖZETİ: Cari Mutabakat hareketlerinden açık faturalar (vadesi geçmiş / gelecek, TL karşılığı), içerideki vadesi bekleyen çek / senet ve Çek Akıbeti'ndeki riskli çekler.
+        /// Durum otomatik: 30 günden fazla vadesi geçmiş ödeme → Riskli; 1–30 gün → İzlemede; yoksa Risksiz (CariRisk.Durum).
+        /// </summary>
+        public static CariRisk RiskHesapla(CariKart k)
+        {
+            bool ted = k.KartTipi == "Tedarikçi"; var r = new CariRisk { Tedarikci = ted };
+            var c = string.IsNullOrEmpty(k.Kod) ? null : MutabakatOrnek.Bul(k.Kod); if (c == null) { r.Neden = "Cari hareket kaydı yok."; return r; }
+            var bugun = DateTime.Today; r.Bakiye = c.BakiyeTl;
+            foreach (var h in c.Hareketler.Where(h => h.BelgeTipi == "Fatura" && h.Kalan > 0 && h.KapamaDurumu != "Kapalı" && (ted ? h.Alacak : h.Borc) > 0))
+            {
+                var vade = (h.Vade ?? h.Tarih).Date; decimal kalan = Math.Round(h.Kalan * KurTl(h.ParaBirimi), 2); int gec = (bugun - vade).Days;
+                if (gec > 0) { r.VadesiGecmis += kalan; r.VadesiGecmisAdet++; if (gec > r.MaxGecikme) r.MaxGecikme = gec; if (r.EnEskiVade == null || vade < r.EnEskiVade) r.EnEskiVade = vade; r.GecmisListe.Add((h.BelgeNo, vade, gec, h.Kalan, h.ParaBirimi)); }
+                else { r.VadesiGelecek += kalan; r.VadesiGelecekAdet++; if (r.EnYakinVade == null || vade < r.EnYakinVade) r.EnYakinVade = vade; }
+            }
+            r.GecmisListe = r.GecmisListe.OrderByDescending(x => x.Gecikme).ToList();
+            foreach (var h in c.Hareketler.Where(h => (h.BelgeTipi == "Çek" || h.BelgeTipi == "Senet") && h.KapamaDurumu == "Vade Bekliyor"))
+            { decimal t = Math.Round((ted ? h.Borc : h.Alacak) * KurTl(h.ParaBirimi), 2); r.Cek += t; r.CekAdet++; var v = h.Vade?.Date; if (v != null && (r.EnYakinCekVade == null || v < r.EnYakinCekVade)) r.EnYakinCekVade = v; }
+            if (!ted)
+            {
+                var riskliTurler = new[] { "Tahsil Riski", "Konkordato Sürecinde", "Karşılıksız", "Protesto Edildi" };
+                foreach (var ck in CekAkibetOrnek.Kayitlar.Where(x => riskliTurler.Contains(x.IslemTuru) && (x.MusteriKod == k.Kod || CekAkibetOrnek.AyniMi(x.Musteri, k.KisaAd) || CekAkibetOrnek.AyniMi(x.Musteri, k.ResmiUnvan))))
+                { r.RiskliCek += Math.Round(ck.Tutar * KurTl(ck.PB), 2); r.RiskliCekAdet++; if (ck.IslemTuru == "Karşılıksız" || ck.IslemTuru == "Protesto Edildi") r.KarsiliksizAdet++; }
+            }
+            var n = new List<string>();
+            if (r.MaxGecikme > CariRisk.RiskGunSiniri) n.Add($"{r.VadesiGecmisAdet} {(ted ? "ödeme" : "fatura")} vadesini {r.MaxGecikme} güne kadar geçmiş ({r.VadesiGecmis.ToString("N0", Tr)} ₺; sınır {CariRisk.RiskGunSiniri} gün)");
+            else if (r.MaxGecikme > 0) n.Add($"{r.VadesiGecmisAdet} {(ted ? "ödeme" : "fatura")} vadesini {r.MaxGecikme} gün geçmiş ({r.VadesiGecmis.ToString("N0", Tr)} ₺); {CariRisk.RiskGunSiniri} günü aşarsa Riskli");
+            if (r.RiskliCekAdet > 0) n.Add($"bilgi: {r.RiskliCekAdet} çek takipte ({r.RiskliCek.ToString("N0", Tr)} ₺{(r.KarsiliksizAdet > 0 ? $"; {r.KarsiliksizAdet} karşılıksız / protestolu" : "")}; toplam riske dahil, durumu değiştirmez)");
+            r.Neden = n.Count == 0 ? "Vadesi geçmiş ödeme yok." : string.Join(" · ", n);
+            return r;
+        }
         /// <summary>Kredi limiti tanımı: tür + (manuel tutar | dinamik ay ve çarpan). Yetki: Muhasebe / Yönetici ("limit"). Dönüş: hata metni ya da null.</summary>
         public static string LimitDegistir(CariKart k, string tur, decimal manuelLimit, int ay, decimal carpan, string not, string kullanici)
         {

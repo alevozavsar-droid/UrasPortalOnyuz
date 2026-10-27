@@ -274,7 +274,7 @@ namespace WebApplication3.Data
             else { pbler.Add("TL"); if (k.Kod == "320.008" || k.Kod == "320.002" || k.Kod == "120.001" || k.Kod == "120.003") { doviz = k.Kod == "320.008" ? "EUR" : "USD"; pbler.Add(doviz); } }
             decimal olcek = (k.Sinif ?? "").Contains("Distribütör") || (k.Sinif ?? "").Contains("Bayi") ? 2.2m : k.Sinif == "Özel Takip" ? 0.6m : 1m;
             // eski bakiye senaryosu: aktif carilerin deterministik bir azınlığında 7–16 ay önceki bir fatura kısmen açık kalır (şartname senaryo kodları hariç)
-            bool eskiKalem = aktif && !SenaryoKodlari.Contains(k.Kod) && Math.Abs(Seed(k.Kod) % 4) == 0;
+            bool eskiKalem = aktif && musteri && !SenaryoKodlari.Contains(k.Kod) && Math.Abs(Seed(k.Kod) % 7) == 0;   // yalnız müşteri carilerinde (tedarikçide 1 yılı aşan ödenmemiş alış faturası gerçekçi değil)
             int id = 0;
             void KismiAc(MtHareket f)
             {
@@ -289,7 +289,7 @@ namespace WebApplication3.Data
                 bool tl = pb == "TL"; decimal taban = tl ? 90_000m : 6_000m, tavan = tl ? 620_000m : 42_000m;
                 DateTime bas = aktif ? bugun.AddMonths(-18) : bugun.AddMonths(-30), bit = aktif ? bugun : bugun.AddMonths(-(AktifPasifAy + 1)).AddDays(-rnd.Next(5, 40));
                 var faturalar = new List<MtHareket>();
-                var ay = new DateTime(bas.Year, bas.Month, 1); int gecikme = rnd.Next(0, 41); // cariye özgü ödeme gecikmesi (gün)
+                var ay = new DateTime(bas.Year, bas.Month, 1); int gecikme = rnd.Next(10) < 8 ? rnd.Next(0, 21) : rnd.Next(25, 46); // cariye özgü ödeme gecikmesi (gün): çoğunluk 0–20, azınlık 25–45 (30 günü aşanlar cari riskte "Riskli")
                 while (ay <= bit)
                 {
                     int n = rnd.Next(1, 3);
@@ -316,6 +316,15 @@ namespace WebApplication3.Data
                     }
                     ay = ay.AddMonths(1);
                 }
+                // bugüne kadar vadesi (+ cariye özgü gecikme) dolmuş açık faturalar ödenmiş olur: açık kalan faturalar en çok "gecikme" gün vadesini geçer (cari risk: 30 günü aşan → Riskli)
+                if (aktif)
+                    foreach (var f in faturalar.Where(f => f.Kalan > 0 && (f.Vade ?? f.Tarih).AddDays(gecikme) <= bugun).OrderBy(f => f.Tarih).ToList())
+                    {
+                        var t3 = (f.Vade ?? f.Tarih).AddDays(gecikme); decimal ode = f.Kalan; f.Kalan = 0; f.KapamaDurumu = "Kapalı";
+                        var h = new MtHareket { Id = ++id, Tarih = t3, ParaBirimi = pb, BelgeTipi = musteri ? "Tahsilat" : "Ödeme", BelgeNo = Belge(musteri ? "Tahsilat" : "Ödeme", t3), Aciklama = (musteri ? "Havale / EFT · " : "Banka ödemesi · ") + f.BelgeNo, KapamaDurumu = "—" };
+                        if (musteri) h.Alacak = ode; else h.Borc = ode;
+                        c.Hareketler.Add(h);
+                    }
                 // pasif carilerde eski açık kalem: son faturanın bir kısmı açık kalır (eski bakiye / değerleme riski senaryosu)
                 if (!aktif && faturalar.Any()) KismiAc(faturalar.OrderByDescending(x => x.Tarih).First());
                 // aktif azınlıkta 7–16 ay önceki kapanmış bir fatura kısmen açık kalır (eski bakiye uyarısı; dövizde değerleme riski)
@@ -397,6 +406,21 @@ namespace WebApplication3.Data
                 Hesapla(c8); Ac(c8, 4); IletisimTamam(c8, 3);
                 L(c8, new MtLog { Zaman = bugun.AddDays(-4).AddHours(10).AddMinutes(1), Kullanici = "Sistem", Islem = "Değerleme Riski İşaretlendi", Onceki = "", Yeni = $"EUR 4.850,00 · {t:dd.MM.yyyy}", Aciklama = $"Yabancı para açık kalemi {DegerlemeRiskiGun} günden eski; kapanış kontrolü çözülmeden gönderime hazır olamaz", DurumGecisi = "İç Kontrolde → Kapanış Kontrolü Gerekli" });
             }
+            // Cari risk örnekleri (Müşteri / Tedarikçi Cari Kartları › Risk): 30 günden fazla vadesi geçmiş açık faturalar → Riskli; 1–30 gün → İzlemede
+            void GecmisFatura(string kod, int gecikmeGun, decimal tutar, string pb, bool kismi = false)
+            {
+                var cx = C(kod); if (cx == null) return; var v = bugun.AddDays(-gecikmeGun); var t = v.AddDays(-60); int id = cx.Hareketler.Count + 1; bool musteri = kod.StartsWith("120");
+                var f = new MtHareket { Id = id, Tarih = t, ParaBirimi = pb, BelgeTipi = "Fatura", BelgeNo = (musteri ? "URS" : "ALF") + $"{t:yyyy}{900000 + id:000000}", Aciklama = (musteri ? "Satış faturası" : "Alış faturası") + (kismi ? " (kısmi ödendi; kalan vadesi geçmiş)" : " (vadesi geçmiş açık kalem)"), Vade = v, KapamaDurumu = kismi ? "Kısmi Kapalı" : "Açık", Kalan = kismi ? Math.Round(tutar * 0.4m, 2) : tutar };
+                if (musteri) f.Borc = tutar; else f.Alacak = tutar;
+                cx.Hareketler.Add(f); Hesapla(cx);
+            }
+            GecmisFatura("120.011", 95, 180_000m, "TL");          // Nil Tekstil: özel takip, 95 gün gecikme → Riskli
+            GecmisFatura("120.011", 62, 70_000m, "TL", true);
+            GecmisFatura("120.007", 41, 240_000m, "TL");          // Anadolu Emprime: 41 gün → Riskli
+            GecmisFatura("120.013", 18, 12_500m, "USD");          // Lahore Prints: 18 gün → İzlemede
+            GecmisFatura("120.002", 9, 310_000m, "TL", true);     // Marmara Plastik: 9 gün → İzlemede
+            GecmisFatura("320.010", 52, 95_000m, "TL");           // Dost Kimya (tedarikçi): ödememiz 52 gün gecikmiş → Riskli
+            GecmisFatura("320.004", 12, 48_000m, "TL");           // Öz Fason: 12 gün → İzlemede
             // 320.009 Uras Kimya GmbH (T) pasif: eski EUR açık kalem 2023'ten (şartname örnek senaryosu)
             var c9 = C("320.009"); if (c9 != null)
             {
