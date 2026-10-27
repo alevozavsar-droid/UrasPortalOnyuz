@@ -92,13 +92,13 @@ namespace WebApplication3.Controllers
  {return default;
 }
 
+        /// <summary>Cari Bilgileri = Müşteri ve Tedarikçi Cari Kartları'nın birleşik görünümü (Views/CariKart/Kartlar.cshtml, tip "Tümü"; veri CariKart/Veri). Süzgeç ön ayarı için ?tip=&bolge=&sinif=&risk=&limit=&ara=&kod= desteklenir.</summary>
         [HttpGet]
         public IActionResult Index(string searchKeyword)
- {ViewBag.Countries = new System.Collections.Generic.List<object>();
-ViewBag.States = new System.Collections.Generic.List<object>();
-WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index", WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.BusinessPartnerViewModel>(12));
-}
+        {
+            ViewData["Title"] = "Cari Bilgileri"; ViewBag.Tip = "Tümü"; ViewBag.Sayfa = "kartlar"; ViewBag.Ara = searchKeyword ?? "";
+            return View("~/Views/CariKart/Kartlar.cshtml");
+        }
 
         [HttpPost("UpdateBp")]
         public async Task<IActionResult> UpdateBp([FromBody] UpdateBpRequest request)

@@ -87,16 +87,10 @@ namespace WebApplication3.Controllers
         [HttpGet]
         [Route("")]
         [Route("Index")]
+        /// <summary>Cari Bakiye Raporu — yeni tasarım: veri CariKart/Veri (CARİ_MASTER + cari risk + kredi limiti), ekran Views/Rapor65/Index.cshtml + wwwroot/js/cari-bakiye.js; süzgeç ön ayarı ?tip=&risk=&limit=&ara=.</summary>
         public IActionResult Index(string searchKeyword, bool hideZeroRisk = true, bool useBpDueDate = false, bool isLoad = false, string cariTipi = "")
- {ViewBag.SelectedCariTipi = "";
-ViewBag.CurrentDbDisplay = "";
-ViewBag.SelviContext = "";
-ViewBag.SearchKeyword = "";
-ViewBag.PaymentTerms = WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.Rapor65Controller.LookupModel>(12);
-ViewBag.IsLoad = false;
-ViewBag.ShowSelviColumn = false;
-WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index", WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Models.CariRiskRaporuViewModel>(12));
+ {ViewBag.Ara = searchKeyword ?? ""; ViewBag.Tip = cariTipi ?? "";
+return View("Index");
 }
 
         [HttpPost("UpdateBpPaymentTerm")]

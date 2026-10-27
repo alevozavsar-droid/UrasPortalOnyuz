@@ -258,7 +258,8 @@ namespace WebApplication3.Data
                     // Cari Mutabakat Yönetimi: aktif / pasif cariler, iç kontrol (iletişim + bakiye), eski bakiye / değerleme riski, otomatik mutabakat gönderimi (Data/MutabakatOrnek.cs); Cari İşler › Mutabakat ve Kapama'da da aynı ekran
                     G("cari-mutabakat", "Cari Mutabakat", R("Cari Mutabakat Yönetimi", "CariMutabakat", "Index"))),
                   U("cari-isler", "Cari İşler",
-                    G("cari-hesap", "Cari Hesap Yönetimi", R("Cari Bilgileri"), R("Muhattap Ana Verileri"), R("Muhatap (Cari) Ana Verileri"), R("Cari Ekstre Raporu"), R("Cari Bakiye Raporu"), R("Adat Hesaplama")),
+                    // Cari Bilgileri = Müşteri + Tedarikçi Cari Kartları birleşik görünümü (CariKart modülü); "Muhatap (Cari) Ana Verileri" ekranı kaldırıldı (Rapor162 → Cari Bilgileri)
+                    G("cari-hesap", "Cari Hesap Yönetimi", R("Cari Bilgileri"), R("Cari Ekstre Raporu"), R("Cari Bakiye Raporu"), R("Adat Hesaplama")),
                     G("alacak-tahsilat", "Alacak ve Tahsilat Takibi", R("Tahsilat"), R("Fatura ve Tahsilat Takip Raporu"), R("Konsolide Tahsilat Takip Raporu"), R("Bekleyen Cari İşlemler Raporu")),
                     G("tedarikci-borc", "Tedarikçi ve Borç Takibi", R("Tedarikçi Fatura ve Ödeme Takip Raporu"), R("Tedarikçi Konsolide Ödeme Takip Raporu")),
                     G("mutabakat-kapama", "Mutabakat ve Kapama", R("Cari Mutabakat Yönetimi", "CariMutabakat", "Index"), R("Mutabakat"), R("E-Mutabakat"), R("Otomatik Kapama"), R("Cari & Hesap Ekstre Karşılaştırma")),

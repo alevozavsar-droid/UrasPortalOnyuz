@@ -110,7 +110,7 @@ namespace WebApplication3.Data
             ("Rapor130", "Index", "fas fa-money-check-alt text-danger", "Kasa Nakit Akışı Görünüm", null),
             ("Rapor131", "Index", "fas fa-money-check-alt text-danger", "Satınalma Siparişi", null),
             ("Rapor132", "Index", "fas fa-money-check-alt text-danger", "Tahsilat İbraz Çek Bordrosu", null),
-            ("Rapor120", "Index", "fas fa-file-invoice-dollar text-danger", "Cari Bilgileri", null),
+            ("Rapor120", "Index", "fas fa-address-book", "Cari Bilgileri", null),
             ("Rapor121", "Index", "fas fa-file-invoice-dollar text-danger", "Temlik İşlemleri", null),
             ("Rapor122", "Index", "fas fa-file-invoice-dollar text-danger", "İhracat Finekra Hareketler", null),
             ("Rapor123", "Index", "fas fa-file-invoice-dollar text-danger", "Konsolide Günlük Finansal Hareketler", null),
@@ -137,7 +137,6 @@ namespace WebApplication3.Data
             ("Rapor140", "Index", "fas fa-chart-line", "Stok Maliyeti", null),
             ("Rapor139", "Index", "fas fa-tags text-warning", "Ürün İsimlendirme ve Kod Karşılaştırma", null),
             ("Rapor161", "Index", "fas fa-ship", "İhracat Dosya Raporu", null),
-            ("Rapor162", "Index", "fas fa-address-book", "Muhatap (Cari) Ana Verileri", null),
             ("Rapor163", "Index", "fas fa-scale-balanced", "Gider / Gelir Seçim Ekranı", null),
             ("Envanter", "Index", "fas fa-table-list", "Envanter Raporu", null),
             ("MobilSiparis", "Index", "fas fa-table-list", "Mobil Sipariş Portali", null),
@@ -333,7 +332,6 @@ namespace WebApplication3.Data
                 case "Rapor121":
                 case "Rapor133":
                 case "Rapor134":
-                case "Rapor162":
                     return "Cari İşler";
 
                 case "Rapor9":

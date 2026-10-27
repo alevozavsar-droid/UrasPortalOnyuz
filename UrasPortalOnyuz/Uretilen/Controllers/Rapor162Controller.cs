@@ -96,14 +96,9 @@ namespace WebApplication3.Controllers
         private string GetConnectionString(string dbKey)  {return default;
 }
 
+        /// <summary>Muhatap (Cari) Ana Verileri ekranı kaldırıldı; işlevi Cari Bilgileri'nde (Müşteri + Tedarikçi Cari Kartları birleşik görünümü, CARİ_MASTER düzenleme). Eski bağlantılar oraya yönlenir.</summary>
         [HttpGet]
-        public IActionResult Index()
- {ViewBag.SatisTemsilcileri = WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.Rapor162Controller.LookupModel>(12);
-ViewBag.OdemeKosullari = WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.Rapor162Controller.LookupModel>(12);
-ViewBag.Ulkeler = WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.Rapor162Controller.KodAd>(12);
-WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index");
-}
+        public IActionResult Index() => RedirectToAction("Index", "Rapor120");
 
 
         [HttpGet("Liste")]
