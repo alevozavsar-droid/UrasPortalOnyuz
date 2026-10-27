@@ -92,16 +92,67 @@
     const k = V.kartlar.find(x => x.kod === kod); if (!k) { mesaj('warning', kod + ' bulunamadı.'); return; }
     $('#ckDrawer').dataset.kod = kod; $('#ckDrawerBaslik').innerHTML = `<i class="fas fa-address-card me-1"></i>${esc(k.kod)} · ${esc(k.kisaAd)} ${durumRozet(k.durum)}${k.limit && k.limit.tur !== 'Yok' ? ' ' + limitRozet(k.limit.durum) : ''}`;
     const talepUrl = `/CariKart/${k.kartTipi === 'Tedarikçi' ? 'TedarikciTalep' : 'MusteriTalep'}?kod=${encodeURIComponent(k.kod)}`;
-    $('#ckDrawerAksiyon').innerHTML = `${yetki('kartAc') ? `<button type="button" class="btn btn-light btn-sm py-0" data-durum="${k.elleDurum === 'Pasif' ? 'Aktif' : 'Pasif'}" title="${k.elleDurum === 'Pasif' ? 'Elle pasif kaldırılır; durum yeniden otomatik hesaplanır (1 yıl hareket yoksa Pasif kalır)' : 'Otomatik kuraldan bağımsız olarak kartı pasife alır'}" style="font-size:.66rem"><i class="fas fa-power-off me-1"></i>${k.elleDurum === 'Pasif' ? 'Elle Pasifi Kaldır' : 'Elle Pasife Al'}</button>` : ''}<a class="btn btn-light btn-sm py-0" href="${talepUrl}" style="font-size:.66rem"><i class="fas fa-pen me-1"></i>Güncelleme Talebi</a>${k.esCariKodu ? `<button type="button" class="btn btn-light btn-sm py-0" data-es="${esc(k.esCariKodu)}" style="font-size:.66rem"><i class="fas fa-link me-1"></i>Eş Kart ${esc(k.esCariKodu)}</button>` : ''}`;
+    $('#ckDrawerAksiyon').innerHTML = `${yetki('duzenle') ? `<button type="button" class="btn btn-primary btn-sm py-0" id="ckDuzenleBtn" title="Yeni talep açmadan kartı doğrudan düzelt" style="font-size:.66rem"><i class="fas fa-pen me-1"></i>Düzenle</button>` : ''}${yetki('kartAc') ? `<button type="button" class="btn btn-light btn-sm py-0" data-durum="${k.elleDurum === 'Pasif' ? 'Aktif' : 'Pasif'}" title="${k.elleDurum === 'Pasif' ? 'Elle pasif kaldırılır; durum yeniden otomatik hesaplanır (1 yıl hareket yoksa Pasif kalır)' : 'Otomatik kuraldan bağımsız olarak kartı pasife alır'}" style="font-size:.66rem"><i class="fas fa-power-off me-1"></i>${k.elleDurum === 'Pasif' ? 'Elle Pasifi Kaldır' : 'Elle Pasife Al'}</button>` : ''}<a class="btn btn-light btn-sm py-0" href="${talepUrl}" style="font-size:.66rem"><i class="fas fa-pen me-1"></i>Güncelleme Talebi</a>${k.esCariKodu ? `<button type="button" class="btn btn-light btn-sm py-0" data-es="${esc(k.esCariKodu)}" style="font-size:.66rem"><i class="fas fa-link me-1"></i>Eş Kart ${esc(k.esCariKodu)}</button>` : ''}`;
     $('#ckDrawerIc').innerHTML = `<div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-database me-1"></i>CARİ_MASTER</span><span class="not">${esc(k.olusturmaTarihi)} · ${esc(k.olusturan)}${k.kaynakTalepNo ? ' · talep ' + esc(k.kaynakTalepNo) : ''}</span></div><div class="na-kart-g">${masterHtml(k)}</div></div>
       ${k.limit ? limitKartHtml(k) : ''}
-      <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-diagram-project me-1"></i>CARİ_FAALİYET_EŞLEŞTİRME (${k.faaliyetler.length})</span><span class="not">faaliyet grubu bazında ${temsilciAdi(k.kartTipi).toLocaleLowerCase('tr-TR')} · ana faaliyet tek satırda Evet</span></div><div class="na-kart-g p-0">${faaliyetTablo(k.faaliyetler, k.kartTipi)}</div></div>`;
-    if (k.limit) limitBagla(kod);
+      <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-diagram-project me-1"></i>CARİ_FAALİYET_EŞLEŞTİRME (${k.faaliyetler.length})</span><span class="not">faaliyet grubu bazında ${temsilciAdi(k.kartTipi).toLocaleLowerCase('tr-TR')} · ana faaliyet tek satırda Evet</span></div><div class="na-kart-g p-0">${faaliyetTablo(k.faaliyetler, k.kartTipi)}</div></div>
+      ${k.degisiklikler && k.degisiklikler.length ? `<div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Değişiklik Geçmişi (${k.degisiklikler.length})</span><span class="not">doğrudan düzenlemeler · talep akışı dışı</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:220px"><table class="na-tablo" data-dinamik="kapali" style="font-size:.66rem"><thead><tr><th>Zaman</th><th>Alan</th><th>Eski → Yeni</th><th>Kim</th></tr></thead><tbody>${k.degisiklikler.map(a => `<tr><td><small>${esc(a.zaman)}</small></td><td><b>${esc(a.alan)}</b></td><td>${a.eski ? `<span class="text-muted">${esc(a.eski)}</span> → ` : ''}${esc(a.yeni) || '<span class="text-muted">(boş)</span>'}</td><td><small>${esc(a.kullanici)}</small></td></tr>`).join('')}</tbody></table></div></div></div>` : ''}`;
+    DZ = null; if (k.limit) limitBagla(kod);
+    const db = $('#ckDuzenleBtn'); if (db) db.addEventListener('click', () => duzenleAc(kod));
     $$('#ckDrawerAksiyon [data-durum]').forEach(b => b.addEventListener('click', async () => { const j = await post('/CariKart/KartDurum', { kod, durum: b.dataset.durum, rol: ROL }); if (j.kart) { const i = V.kartlar.findIndex(x => x.kod === kod); if (i >= 0) V.kartlar[i] = j.kart; } mesaj(j.success ? 'success' : 'danger', esc(j.message)); cizKartlar(); drawerAc(kod); }));
     $$('#ckDrawerAksiyon [data-es]').forEach(b => b.addEventListener('click', () => drawerAc(b.dataset.es)));
     $('#ckDrawer').classList.add('acik'); $('#ckPerde').classList.add('acik');
   }
-  function drawerKapat() { $('#ckDrawer').classList.remove('acik'); $('#ckPerde').classList.remove('acik'); }
+  function drawerKapat() { DZ = null; $('#ckDrawer').classList.remove('acik'); $('#ckPerde').classList.remove('acik'); }
+  // ---- kart düzenleme (drawer): yeni talep açmadan doğrudan düzeltme. Talep formuyla aynı alan kimlikleri (M) kullanılır; bağımlı seçimler (bagimliGuncelle),
+  //      faaliyet satırları (cizFaaliyetler) ve canlı doğrulama (dogrula) aynen çalışır. Kart kodu ve tipi kilitli; kayıt /CariKart/KartDuzenle.
+  function duzenleAc(kod) {
+    const k = V.kartlar.find(x => x.kod === kod); if (!k) return;
+    DZ = kod; F = { id: 0, no: '', durum: '', faaliyetler: [] }; SON = null;
+    const inp = (col, lbl, id, ekstra = '') => `<div class="${col}"><label class="form-label">${lbl}</label><input class="form-control" id="${id}" ${ekstra}></div>`;
+    const sel = (col, lbl, id, ekstra = '', alt = '') => `<div class="${col}"><label class="form-label">${lbl}</label><select class="form-select" id="${id}" ${ekstra}></select>${alt}</div>`;
+    const z = '<span class="z">*</span>';
+    $('#ckDrawerBaslik').innerHTML = `<i class="fas fa-pen me-1"></i>${esc(k.kod)} · ${esc(k.kisaAd)} <span class="ck-durum">Düzenleme</span>`;
+    $('#ckDrawerAksiyon').innerHTML = `<button type="button" class="btn btn-primary btn-sm py-0" id="ckDzKaydet" style="font-size:.66rem"><i class="fas fa-floppy-disk me-1"></i>Kaydet</button><button type="button" class="btn btn-light btn-sm py-0" id="ckDzVazgec" style="font-size:.66rem"><i class="fas fa-rotate-left me-1"></i>Vazgeç</button>`;
+    $('#ckDrawerIc').innerHTML = `<form id="ckForm" autocomplete="off" novalidate onsubmit="return false">
+      <div id="ckDzMesaj" class="alert py-1 px-2 mb-2" style="display:none;font-size:.7rem"></div>
+      <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-shield-halved me-1"></i>Validasyon (§13)</span><span class="not" id="ckDogrulamaNot"></span></div><div class="na-kart-g"><ul class="mb-0 ps-3 ck-dogrulama" id="ckDogrulama"><li class="text-muted">Alanlar değiştikçe kurallar çalışır.</li></ul></div></div>
+      <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-address-card me-1"></i>CARİ_MASTER</span><span class="not">kart kodu ve kart tipi değişmez · durum otomatik (Pasif seçimi elle pasif)</span></div><div class="na-kart-g"><div class="row g-2">
+        ${inp('col-md-3', '1. Cari Kodu <i class="fas fa-lock na-kilit"></i>', 'ckKod', 'disabled')}${inp('col-md-4', '2. Cari Kısa Adı ' + z, 'ckKisaAd', 'required maxlength="60"')}${inp('col-md-5', '3. Kısaltmalı Ünvan', 'ckKisaltmaliUnvan', 'maxlength="80"')}
+        ${inp('col-md-7', '4. Resmi Ünvan ' + z, 'ckResmiUnvan', 'required maxlength="200"')}${inp('col-md-2', '5. Vergi No / TCKN ' + z, 'ckVergiNo', 'required maxlength="20"')}${inp('col-md-3', '6. Vergi Dairesi', 'ckVergiDairesi', 'maxlength="60"')}
+        ${sel('col-md-3', '7. Cari Kart Tipi <i class="fas fa-lock na-kilit"></i>', 'ckKartTipi', 'disabled')}${sel('col-md-2', '8. Cari Bölge ' + z, 'ckBolge')}${sel('col-md-3', '9. Ülke ' + z, 'ckUlke')}
+        <div class="col-md-4"><label class="form-label">10. Şehir</label><input class="form-control" id="ckSehir" list="ckSehirListe"><datalist id="ckSehirListe"></datalist></div>
+        ${sel('col-md-4', '11. Cari Sınıfı ' + z + ' <span class="form-text d-inline" id="ckSinifNot"></span>', 'ckSinif', 'required')}${sel('col-md-4', '12. İlişki Durumu ' + z, 'ckIliski', 'required', '<div class="na-mini" id="ckIliskiNot"></div>')}${sel('col-md-4', '13. Cari Rolü ' + z, 'ckCariRolu', 'required')}
+        <div class="col-md-4"><label class="form-label">14. Eş Cari Kodu <span class="form-text d-inline">(çift rol)</span></label><input class="form-control" id="ckEsCari" list="ckEsCariListe" disabled placeholder="Karşı kart kodu"><datalist id="ckEsCariListe"></datalist><div class="na-mini" id="ckEsCariNot"></div></div>
+        ${inp('col-md-4', '15. Yetkili Kişi', 'ckYetkili', 'maxlength="80"')}${inp('col-md-4', '16. Telefon', 'ckTelefon', 'maxlength="30"')}${inp('col-md-4', '17. E-posta', 'ckEposta', 'type="email" maxlength="80"')}
+        ${sel('col-md-4', '18. Vade / Ödeme Şartı ' + z, 'ckVade', 'required')}${sel('col-md-2', '19. Durum', 'ckKartDurum')}${sel('col-md-2', 'Şirket (ERP)', 'ckSirket')}
+        ${inp('col-12', '20. Not', 'ckNot', 'maxlength="300"')}
+      </div></div></div>
+      <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-diagram-project me-1"></i>CARİ_FAALİYET_EŞLEŞTİRME</span><span class="d-flex gap-1 align-items-center"><span class="not">her faaliyet ayrı satır · ana faaliyet tek satırda Evet</span><button type="button" class="btn btn-light btn-sm py-0" id="ckFaaliyetEkle" style="font-size:.66rem"><i class="fas fa-plus me-1"></i>Satır Ekle</button></span></div>
+        <div class="na-kart-g"><div class="table-responsive"><table class="ck-faaliyet" id="ckFaaliyetler" data-dinamik="kapali"><thead><tr><th>#</th><th>Faaliyet Ana Grubu</th><th>Faaliyet Grubu</th><th>${temsilciAdi(k.kartTipi)}</th><th>Ana Faaliyet mi?</th><th>Ürün Sınıfı</th><th>Ürün Grubu</th><th>Ürün Serisi</th><th>Ürün Adı</th><th>Durum</th><th>Başlangıç</th><th>Not</th><th></th></tr></thead><tbody></tbody></table></div></div></div>
+      <div class="d-flex gap-1 justify-content-end mb-2"><button type="button" class="btn btn-light btn-sm py-0" id="ckDzVazgec2" style="font-size:.66rem">Vazgeç</button><button type="button" class="btn btn-primary btn-sm py-0" id="ckDzKaydet2" style="font-size:.66rem"><i class="fas fa-floppy-disk me-1"></i>Kaydet</button></div>
+    </form>`;
+    secDoldur($('#ckKartTipi'), V.kartTipleri, null, k.kartTipi); secDoldur($('#ckBolge'), V.bolgeler, 'Seçiniz…', k.bolge); secDoldur($('#ckIliski'), V.iliskiDurumlari, 'Seçiniz…', k.iliskiDurumu); secDoldur($('#ckCariRolu'), V.roller2, 'Seçiniz…', k.rol); secDoldur($('#ckVade'), V.vadeSartlari, 'Seçiniz…', k.vadeSarti); secDoldur($('#ckKartDurum'), V.durumlar, null, k.durum); secDoldur($('#ckSirket'), V.sirketler, null, k.sirket);
+    $('#ckKod').value = k.kod;
+    Object.values(M).concat(['#ckSirket']).forEach(s => { const e = $(s); e.addEventListener('input', () => { bagimliGuncelle(s); dogrula(); }); e.addEventListener('change', () => { bagimliGuncelle(s); dogrula(); }); });
+    $('#ckForm').addEventListener('input', e => e.target.classList.remove('is-invalid'));
+    $('#ckFaaliyetEkle').addEventListener('click', () => { F.faaliyetler.push(yeniFaaliyet()); cizFaaliyetler(); dogrula(); });
+    karttanDoldur(k); $('#ckKartDurum').value = k.durum; $('#ckSirket').value = k.sirket;
+    const dzMesaj = (tip, m) => { const s = $('#ckDzMesaj'); if (!s) return; s.className = 'alert py-1 px-2 mb-2 alert-' + tip; s.innerHTML = m; s.style.display = 'block'; $('#ckDrawer').scrollTo({ top: 0, behavior: 'smooth' }); };
+    const kaydet = async () => {
+      if (!zorunluKontrol()) { dzMesaj('danger', 'Zorunlu alanları doldurun.'); return; }
+      const bs = ['#ckDzKaydet', '#ckDzKaydet2'].map(s => $(s)); bs.forEach(b => b.disabled = true);
+      try {
+        const j = await post('/CariKart/KartDuzenle', girisYap());
+        if (j.kart) { const i = V.kartlar.findIndex(x => x.kod === kod); if (i >= 0) V.kartlar[i] = j.kart; }
+        if (!j.success) { dzMesaj('danger', `<b>Kaydedilemedi:</b> ${esc(j.message)}`); dogrula(); return; }
+        mesaj('success', `<i class="fas fa-circle-check me-1"></i>${esc(j.message)}` + (j.uyarilar && j.uyarilar.length ? ` <span class="text-warning">(${j.uyarilar.map(esc).join(' · ')})</span>` : ''));
+        DZ = null; cizKartlar(); drawerAc(kod);
+      } finally { bs.forEach(b => b.disabled = false); }
+    };
+    ['#ckDzKaydet', '#ckDzKaydet2'].forEach(s => $(s).addEventListener('click', kaydet)); ['#ckDzVazgec', '#ckDzVazgec2'].forEach(s => $(s).addEventListener('click', () => { DZ = null; drawerAc(kod); }));
+    $('#ckDrawer').scrollTo({ top: 0 }); $('#ckKisaAd').focus();
+  }
   // ---- kredi limiti kartı (drawer): tanım, dinamik hesap ayrıntısı (son N ay satış faturaları), cari risk / kullanım, Muhasebe / Yönetici için tanım formu, geçmiş
   function limitKartHtml(k) {
     const L = k.limit;
@@ -122,7 +173,7 @@
   // ============================================================
   // TALEP SAYFASI
   // ============================================================
-  let F = { id: 0, no: '', durum: '', faaliyetler: [] }, aktifNo = kok.dataset.no || '', dogZ = null, SON = null;
+  let F = { id: 0, no: '', durum: '', faaliyetler: [] }, aktifNo = kok.dataset.no || '', dogZ = null, SON = null, DZ = null;   // DZ: kartlar sayfasında drawer'da düzenlenen kart kodu
   const M = { kisaAd: '#ckKisaAd', kisaltmaliUnvan: '#ckKisaltmaliUnvan', resmiUnvan: '#ckResmiUnvan', vergiNo: '#ckVergiNo', vergiDairesi: '#ckVergiDairesi', kartTipi: '#ckKartTipi', bolge: '#ckBolge', ulke: '#ckUlke', sehir: '#ckSehir', sinif: '#ckSinif', iliskiDurumu: '#ckIliski', cariRolu: '#ckCariRolu', esCariKodu: '#ckEsCari', yetkili: '#ckYetkili', telefon: '#ckTelefon', eposta: '#ckEposta', vadeSarti: '#ckVade', durum: '#ckKartDurum', not: '#ckNot' };
   function talepBaslat() {
     rolBaslik(); sekme('yeni');
@@ -186,15 +237,19 @@
       const s = $('.sil', tr); if (s) s.addEventListener('click', () => { F.faaliyetler.splice(+tr.dataset.i, 1); cizFaaliyetler(); dogrula(); });
     });
   }
-  function girisYap() { const g = { id: F.id, rol: ROL, sirket: $('#ckSirket').value, talepTuru: $('#ckTalepTuru').value, gerekce: $('#ckGerekce').value, faaliyetler: F.faaliyetler.filter(f => f.anaGrup || f.grup).map(f => ({ ...f })) }; Object.keys(M).forEach(k => g[k] = $(M[k]).value); return g; }
+  // talep formu ve drawer düzenleme formu aynı alan kimliklerini kullanır; drawer'da olmayan alanlar boş gider
+  function girisYap() { const v = s => { const e = $(s); return e ? e.value : ''; }; const g = { id: F.id, rol: ROL, kod: DZ || '', sirket: v('#ckSirket'), talepTuru: v('#ckTalepTuru'), gerekce: v('#ckGerekce'), faaliyetler: F.faaliyetler.filter(f => f.anaGrup || f.grup).map(f => ({ ...f })) }; Object.keys(M).forEach(k => g[k] = v(M[k])); return g; }
   function zorunluKontrol() { const eksik = $$('#ckForm [required]').filter(x => !String(x.value).trim() && !x.disabled); eksik.forEach(x => x.classList.add('is-invalid')); if (eksik.length) { mesaj('danger', 'Zorunlu alanları doldurun.'); eksik[0].focus(); return false; } return true; }
   function dogrula() {
     clearTimeout(dogZ);
     dogZ = setTimeout(async () => {
-      if (!V || SAYFA !== 'talep') return; const g = girisYap(); const j = await post('/CariKart/Dogrula', g); SON = j; const h = j.hatalar || [], u = j.uyarilar || [];
-      $('#ckDogrulama').innerHTML = (h.map(x => `<li class="h"><i class="fas fa-circle-xmark me-1"></i>${esc(x)}</li>`).join('') + u.map(x => `<li class="u"><i class="fas fa-triangle-exclamation me-1"></i>${esc(x)}</li>`).join('')) || '<li class="text-success"><i class="fas fa-circle-check me-1"></i>Kural ihlali yok; onaya gönderilebilir.</li>';
+      if (!V || (SAYFA !== 'talep' && !(DZ && $('#ckDogrulama')))) return; const g = girisYap(); const j = await post('/CariKart/Dogrula', g); SON = j; const h = j.hatalar || [], u = j.uyarilar || [];
+      if (!$('#ckDogrulama')) return;   // bu arada drawer kapanmış olabilir
+      $('#ckDogrulama').innerHTML = (h.map(x => `<li class="h"><i class="fas fa-circle-xmark me-1"></i>${esc(x)}</li>`).join('') + u.map(x => `<li class="u"><i class="fas fa-triangle-exclamation me-1"></i>${esc(x)}</li>`).join('')) || `<li class="text-success"><i class="fas fa-circle-check me-1"></i>Kural ihlali yok; ${DZ ? 'kaydedilebilir' : 'onaya gönderilebilir'}.</li>`;
       $('#ckDogrulamaNot').textContent = h.length ? `${h.length} blokaj` : u.length ? `${u.length} uyarı` : 'temiz';
-      $('#ckKod').value = j.olasiKod ? j.olasiKod + ' (onayda kesinleşir)' : ''; $('#ckEsCariNot').innerHTML = j.esKart ? `<span class="text-success">✔ ${esc(j.esKart.kod)} ${esc(j.esKart.kisaAd)} · ${esc(j.esKart.kartTipi)} / ${esc(j.esKart.sinif)}${j.esKart.esCariKodu ? ' · eş: ' + esc(j.esKart.esCariKodu) : ''}</span>` : ($('#ckCariRolu').value === 'Çift Rol' && $('#ckEsCari').value ? '<span class="text-danger">kart bulunamadı</span>' : '');
+      $('#ckEsCariNot').innerHTML = j.esKart ? `<span class="text-success">✔ ${esc(j.esKart.kod)} ${esc(j.esKart.kisaAd)} · ${esc(j.esKart.kartTipi)} / ${esc(j.esKart.sinif)}${j.esKart.esCariKodu ? ' · eş: ' + esc(j.esKart.esCariKodu) : ''}</span>` : ($('#ckCariRolu').value === 'Çift Rol' && $('#ckEsCari').value ? '<span class="text-danger">kart bulunamadı</span>' : '');
+      if (DZ) return;   // drawer düzenlemesinde kod, akış ve özet alanları yok
+      $('#ckKod').value = j.olasiKod ? j.olasiKod + ' (onayda kesinleşir)' : '';
       $('#ckAkis').innerHTML = (j.akis || []).map((a, i) => (i ? '<i class="fas fa-chevron-right"></i>' : '') + `<span>${esc(a)}</span>`).join('');
       const f = F.faaliyetler.filter(x => x.grup); $('#ckOzet').innerHTML = [['Cari Kodu (olası)', j.olasiKod || '—'], ['Kart Tipi', g.kartTipi], ['Bölge / Ülke / Şehir', [g.bolge, g.ulke, g.sehir].filter(Boolean).join(' / ') || '—'], ['Cari Sınıfı', g.sinif || '—'], ['İlişki Durumu', g.iliskiDurumu || '—'], ['Rol / Eş Cari', (g.cariRolu || '—') + (g.esCariKodu ? ' · ' + g.esCariKodu : '')], ['Vade', g.vadeSarti || '—'], ['Faaliyet Satırı', f.length], ['Ana Faaliyet', (f.find(x => x.anaFaaliyet) || {}).grup || '—'], ['Temsilciler', [...new Set(f.map(x => x.satisTemsilcisi).filter(Boolean))].join(', ') || '—']].map(([l, v]) => `<span class="l">${l}</span><span class="v">${esc(v)}</span>`).join('');
     }, 250);

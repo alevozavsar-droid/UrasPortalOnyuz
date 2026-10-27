@@ -37,6 +37,8 @@ namespace WebApplication3.Data
         public string LimitTuru { get; set; } = "Yok"; public decimal ManuelLimit { get; set; } public int DinamikAy { get; set; } = 3; public decimal DinamikCarpan { get; set; } = 2m;
         public string LimitNot { get; set; } = ""; public string LimitKim { get; set; } = ""; public DateTime? LimitZaman { get; set; }
         public List<CariLimitLog> LimitGecmisi { get; set; } = new List<CariLimitLog>();
+        /// <summary>Kart üzerinde doğrudan yapılan düzeltmelerin günlüğü (talep akışı dışı; CariKartOrnek.KartDuzenle). En yeni başta.</summary>
+        public List<YnAudit> Degisiklikler { get; set; } = new List<YnAudit>();
     }
     /// <summary>Kredi limiti değişiklik kaydı.</summary>
     public class CariLimitLog { public DateTime Zaman { get; set; } public string Kullanici { get; set; } public string Eski { get; set; } public string Yeni { get; set; } public string Not { get; set; } = ""; }
@@ -66,6 +68,8 @@ namespace WebApplication3.Data
     public class CariTalepGiris
     {
         public int Id { get; set; } public string Rol { get; set; } public string TalepTuru { get; set; } public string Sirket { get; set; } public string Gerekce { get; set; }
+        /// <summary>Doğrudan kart düzenlemede (KartDuzenle) düzenlenen kartın kodu; talep formunda boş.</summary>
+        public string Kod { get; set; }
         public string KisaAd { get; set; } public string KisaltmaliUnvan { get; set; } public string ResmiUnvan { get; set; } public string VergiNo { get; set; } public string VergiDairesi { get; set; } public string KartTipi { get; set; } public string Bolge { get; set; } public string Ulke { get; set; } public string Sehir { get; set; } public string Sinif { get; set; } public string IliskiDurumu { get; set; } public string CariRolu { get; set; } public string EsCariKodu { get; set; }
         public string Yetkili { get; set; } public string Telefon { get; set; } public string Eposta { get; set; } public string VadeSarti { get; set; } public string Durum { get; set; } public string Not { get; set; }
         public List<CariFaaliyetGiris> Faaliyetler { get; set; }
@@ -130,7 +134,8 @@ namespace WebApplication3.Data
         public static readonly string[] Sirketler = OrnekVeri.Sirketler.Select(s => s.Display).Distinct().ToArray();
         public static readonly Dictionary<string, string> KodOnEkleri = new Dictionary<string, string> { ["Müşteri"] = "120", ["Tedarikçi"] = "320", ["Finansal Kuruluşlar"] = "102", ["Resmi Kurumlar"] = "360", ["Personel Carileri"] = "335" };
         public static readonly string[] TalepDurumlari = { "Taslak", "Onay Bekliyor", "Onaylandı", "Reddedildi", "İptal" };
-        public static readonly Dictionary<string, string[]> Yetkiler = new Dictionary<string, string[]> { ["Talep Eden (Satış / Satın Alma)"] = new[] { "taslak", "onayaGonder", "iptal" }, ["Muhasebe (Cari Açılış Onayı)"] = new[] { "taslak", "onayaGonder", "onay", "kartAc", "iptal", "limit" }, ["Yönetici"] = new[] { "taslak", "onayaGonder", "onay", "kartAc", "iptal", "limit" } };
+        /// <summary>Rol yetkileri. "duzenle": kart detayında doğrudan düzeltme (yeni talep açmadan); her rolde açık, değişiklikler kartın günlüğüne yazılır.</summary>
+        public static readonly Dictionary<string, string[]> Yetkiler = new Dictionary<string, string[]> { ["Talep Eden (Satış / Satın Alma)"] = new[] { "taslak", "onayaGonder", "iptal", "duzenle" }, ["Muhasebe (Cari Açılış Onayı)"] = new[] { "taslak", "onayaGonder", "onay", "kartAc", "iptal", "limit", "duzenle" }, ["Yönetici"] = new[] { "taslak", "onayaGonder", "onay", "kartAc", "iptal", "limit", "duzenle" } };
         /// <summary>Kredi limiti türleri: Yok (limit izlenmez) · Manuel (elle TL tutar) · Dinamik (son N ay aylık alım ortalaması × çarpan).</summary>
         public static readonly string[] LimitTurleri = { "Yok", "Manuel", "Dinamik" };
         public static readonly Dictionary<string, string> LimitTuruAciklama = new Dictionary<string, string> { ["Yok"] = "Limit izlenmez (ör. grup içi cari).", ["Manuel"] = "Muhasebe / yönetici tarafından elle girilen TL limit.", ["Dinamik"] = "Son N ayın faturalarından (müşteride satış, tedarikçide alış faturaları) aylık alım ortalaması alınır ve çarpanla çarpılır (ör. son 3 ay ortalaması × 2); her açılışta güncel veriyle yeniden hesaplanır. Çarpan genellikle vade süresine göre seçilir (30 gün ≈ ×2, 60 gün ≈ ×3, 90 gün ≈ ×4)." };
@@ -199,6 +204,36 @@ namespace WebApplication3.Data
             if (string.IsNullOrEmpty(k.KisaltmaliUnvan)) k.KisaltmaliUnvan = k.KisaAd;
             int n = 0; k.Faaliyetler = (g.Faaliyetler ?? new List<CariFaaliyetGiris>()).Where(f => !string.IsNullOrEmpty(f.AnaGrup) || !string.IsNullOrEmpty(f.Grup)).Select(f => new CariFaaliyet { Sira = ++n, AnaGrup = f.AnaGrup, Grup = f.Grup, SatisTemsilcisi = f.SatisTemsilcisi ?? "", AnaFaaliyet = f.AnaFaaliyet, UrunSinifi = f.UrunSinifi ?? "", UrunGrubu = f.UrunGrubu ?? "", UrunSerisi = f.UrunSerisi ?? "", UrunAdi = f.UrunAdi ?? "", Durum = string.IsNullOrEmpty(f.Durum) ? "Aktif" : f.Durum, BaslangicTarihi = DateTime.TryParseExact(f.BaslangicTarihi ?? "", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : (DateTime?)null, Not = f.Not ?? "" }).ToList();
             return k;
+        }
+        /// <summary>
+        /// Kartta DOĞRUDAN DÜZELTME (yeni talep açmadan): CARİ_MASTER alanları ve faaliyet satırları. Kart kodu ve kart tipi değişmez; durum otomatik kalır
+        /// (formda Pasif seçilirse elle pasif, Aktif seçilirse elle pasif kaldırılır). Aynı §13 doğrulaması çalışır; değişen alanlar kartın Degisiklikler günlüğüne yazılır. Yetki: "duzenle".
+        /// </summary>
+        public static YnSonuc KartDuzenle(CariKart k, CariTalepGiris g, string kullanici)
+        {
+            lock (Kilit)
+            {
+                g.KartTipi = k.KartTipi; var y = KartKur(g); var s = Dogrula(y, false, k.Kod); if (!s.Gecerli) return s;
+                var z = DateTime.Now; var log = new List<YnAudit>();
+                void D(string alan, string e, string n) { if ((e ?? "") != (n ?? "")) log.Add(new YnAudit { Zaman = z, Kullanici = kullanici ?? "", Alan = alan, Eski = e ?? "", Yeni = n ?? "", Kaynak = "Kart Düzenleme", Gerekce = "" }); }
+                D("Kısa Ad", k.KisaAd, y.KisaAd); D("Kısaltmalı Ünvan", k.KisaltmaliUnvan, y.KisaltmaliUnvan); D("Resmi Ünvan", k.ResmiUnvan, y.ResmiUnvan); D("Vergi No", k.VergiNo, y.VergiNo); D("Vergi Dairesi", k.VergiDairesi, y.VergiDairesi);
+                D("Bölge", k.Bolge, y.Bolge); D("Ülke", k.Ulke, y.Ulke); D("Şehir", k.Sehir, y.Sehir); D("Cari Sınıfı", k.Sinif, y.Sinif); D("İlişki Durumu", k.IliskiDurumu, y.IliskiDurumu); D("Cari Rolü", k.Rol, y.Rol); D("Eş Cari Kodu", k.EsCariKodu, y.EsCariKodu);
+                D("Yetkili", k.Yetkili, y.Yetkili); D("Telefon", k.Telefon, y.Telefon); D("E-posta", k.Eposta, y.Eposta); D("Vade", k.VadeSarti, y.VadeSarti); D("Not", k.Not, y.Not); if (!string.IsNullOrEmpty(y.Sirket)) D("Şirket", k.Sirket, y.Sirket);
+                string Ozet(List<CariFaaliyet> l) => l.Count == 0 ? "" : string.Join(" | ", l.Select(f => $"{f.AnaGrup} / {f.Grup}{(string.IsNullOrEmpty(f.SatisTemsilcisi) ? "" : " · " + f.SatisTemsilcisi)}{(f.AnaFaaliyet ? " (ana)" : "")}{(f.Durum == "Pasif" ? " [pasif]" : "")}{(string.IsNullOrEmpty(f.UrunAdi) ? "" : " · " + f.UrunAdi)}"));
+                D("Faaliyetler", Ozet(k.Faaliyetler), Ozet(y.Faaliyetler));
+                bool ellePasif = false, elleKaldir = false;
+                if (g.Durum == "Pasif" && k.Durum == "Aktif") { D("Durum", "Aktif", "Pasif (elle)"); ellePasif = true; }
+                else if (g.Durum == "Aktif" && k.Durum == "Pasif") { if (k.ElleDurum == "Pasif") { D("Durum", "Pasif (elle)", "Otomatik"); elleKaldir = true; } else s.Uyarilar.Add("Durum otomatik hesaplanır: son 1 yılda hareket olmadığı için kart Pasif kalır."); }
+                if (log.Count == 0) { s.Uyarilar.Insert(0, "Değişiklik yok; kart aynı kaldı."); return s; }
+                k.KisaAd = y.KisaAd; k.KisaltmaliUnvan = y.KisaltmaliUnvan; k.ResmiUnvan = y.ResmiUnvan; k.VergiNo = y.VergiNo; k.VergiDairesi = y.VergiDairesi; k.Bolge = y.Bolge; k.Ulke = y.Ulke; k.Sehir = y.Sehir; k.Sinif = y.Sinif; k.IliskiDurumu = y.IliskiDurumu; k.Rol = y.Rol; k.EsCariKodu = y.EsCariKodu;
+                k.Yetkili = y.Yetkili; k.Telefon = y.Telefon; k.Eposta = y.Eposta; k.VadeSarti = y.VadeSarti; k.Not = y.Not; if (!string.IsNullOrEmpty(y.Sirket)) k.Sirket = y.Sirket;
+                foreach (var f in y.Faaliyetler) if (f.BaslangicTarihi == null) f.BaslangicTarihi = k.Faaliyetler.FirstOrDefault(x => x.AnaGrup == f.AnaGrup && x.Grup == f.Grup)?.BaslangicTarihi ?? z.Date;   // mevcut satırın başlangıcı korunur
+                k.Faaliyetler = y.Faaliyetler;
+                if (ellePasif) { k.ElleDurum = "Pasif"; k.ElleDurumKim = kullanici; k.ElleDurumZaman = z; } if (elleKaldir) { k.ElleDurum = null; k.ElleDurumKim = null; k.ElleDurumZaman = null; }
+                if (k.Rol == "Çift Rol" && !string.IsNullOrEmpty(k.EsCariKodu)) { var es = KartBul(k.EsCariKodu); if (es != null && string.IsNullOrEmpty(es.EsCariKodu)) { es.EsCariKodu = k.Kod; es.Rol = "Çift Rol"; } }   // karşı kart bağı
+                k.Degisiklikler.InsertRange(0, log);
+                return s;
+            }
         }
 
         // =====================================================================
