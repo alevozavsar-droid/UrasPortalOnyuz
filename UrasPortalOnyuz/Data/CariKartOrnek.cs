@@ -33,6 +33,24 @@ namespace WebApplication3.Data
         public string Sirket { get; set; } public DateTime OlusturmaTarihi { get; set; } public string Olusturan { get; set; } public string KaynakTalepNo { get; set; } = "";
         public List<CariFaaliyet> Faaliyetler { get; set; } = new List<CariFaaliyet>();
         public string AnaFaaliyet => Faaliyetler.FirstOrDefault(f => f.AnaFaaliyet)?.Grup ?? "";
+        /// <summary>KREDİ LİMİTİ (müşteri kartı). Tür: Yok | Manuel (elle girilen TL tutar) | Dinamik (son N ayın aylık alım ortalaması × çarpan; satış faturalarından her seferinde yeniden hesaplanır). Hesap: CariKartOrnek.LimitHesapla.</summary>
+        public string LimitTuru { get; set; } = "Yok"; public decimal ManuelLimit { get; set; } public int DinamikAy { get; set; } = 3; public decimal DinamikCarpan { get; set; } = 2m;
+        public string LimitNot { get; set; } = ""; public string LimitKim { get; set; } = ""; public DateTime? LimitZaman { get; set; }
+        public List<CariLimitLog> LimitGecmisi { get; set; } = new List<CariLimitLog>();
+    }
+    /// <summary>Kredi limiti değişiklik kaydı.</summary>
+    public class CariLimitLog { public DateTime Zaman { get; set; } public string Kullanici { get; set; } public string Eski { get; set; } public string Yeni { get; set; } public string Not { get; set; } = ""; }
+    /// <summary>Kredi limiti hesabı (CariKartOrnek.LimitHesapla sonucu): limit, dinamik hesap ayrıntısı, cari risk (bakiye), kullanım ve durum.</summary>
+    public class CariLimit
+    {
+        public string Tur { get; set; } = "Yok"; public decimal Limit { get; set; } public int Ay { get; set; } public decimal Carpan { get; set; }
+        public decimal AlimToplam { get; set; } public decimal AylikOrtalama { get; set; } public List<(string Ay, decimal Tutar, int Adet)> Aylar { get; set; } = new List<(string, decimal, int)>();
+        public decimal Bakiye { get; set; } public decimal Risk => Math.Max(Bakiye, 0); public string BakiyeKaynak { get; set; } = "";
+        public decimal? KullanimYuzde => Limit > 0 ? Math.Round(Risk / Limit * 100, 1) : (decimal?)null;
+        public decimal Kalan => Limit - Risk;
+        /// <summary>Limit Yok | Limit İçinde | Limite Yakın (≥ %80) | Limit Aşıldı</summary>
+        public string Durum => Tur == "Yok" ? "Limit Yok" : Limit <= 0 ? (Risk > 0 ? "Limit Aşıldı" : "Limit İçinde") : KullanimYuzde >= 100 ? "Limit Aşıldı" : KullanimYuzde >= 80 ? "Limite Yakın" : "Limit İçinde";
+        public string Aciklama { get; set; } = "";
     }
     /// <summary>Cari Kart Talebi (Müşteri / Tedarikçi Talep Formu): onaylanınca CARİ_MASTER'a kart açılır.</summary>
     public class CariTalep
@@ -110,7 +128,10 @@ namespace WebApplication3.Data
         public static readonly string[] Sirketler = OrnekVeri.Sirketler.Select(s => s.Display).Distinct().ToArray();
         public static readonly Dictionary<string, string> KodOnEkleri = new Dictionary<string, string> { ["Müşteri"] = "120", ["Tedarikçi"] = "320", ["Finansal Kuruluşlar"] = "102", ["Resmi Kurumlar"] = "360", ["Personel Carileri"] = "335" };
         public static readonly string[] TalepDurumlari = { "Taslak", "Onay Bekliyor", "Onaylandı", "Reddedildi", "İptal" };
-        public static readonly Dictionary<string, string[]> Yetkiler = new Dictionary<string, string[]> { ["Talep Eden (Satış / Satın Alma)"] = new[] { "taslak", "onayaGonder", "iptal" }, ["Muhasebe (Cari Açılış Onayı)"] = new[] { "taslak", "onayaGonder", "onay", "kartAc", "iptal" }, ["Yönetici"] = new[] { "taslak", "onayaGonder", "onay", "kartAc", "iptal" } };
+        public static readonly Dictionary<string, string[]> Yetkiler = new Dictionary<string, string[]> { ["Talep Eden (Satış / Satın Alma)"] = new[] { "taslak", "onayaGonder", "iptal" }, ["Muhasebe (Cari Açılış Onayı)"] = new[] { "taslak", "onayaGonder", "onay", "kartAc", "iptal", "limit" }, ["Yönetici"] = new[] { "taslak", "onayaGonder", "onay", "kartAc", "iptal", "limit" } };
+        /// <summary>Kredi limiti türleri: Yok (limit izlenmez) · Manuel (elle TL tutar) · Dinamik (son N ay aylık alım ortalaması × çarpan).</summary>
+        public static readonly string[] LimitTurleri = { "Yok", "Manuel", "Dinamik" };
+        public static readonly Dictionary<string, string> LimitTuruAciklama = new Dictionary<string, string> { ["Yok"] = "Limit izlenmez (ör. grup içi cari).", ["Manuel"] = "Muhasebe / yönetici tarafından elle girilen TL limit.", ["Dinamik"] = "Son N ayın satış faturalarından aylık alım ortalaması alınır ve çarpanla çarpılır (ör. son 3 ay ortalaması × 2); her açılışta güncel veriyle yeniden hesaplanır. Çarpan genellikle vade süresine göre seçilir (30 gün ≈ ×2, 60 gün ≈ ×3, 90 gün ≈ ×4)." };
         public static bool Yetkili(string rol, string e) => Yetkiler.TryGetValue(rol ?? "", out var l) && l.Contains(e);
 
         // ---- kayıtlar ----
@@ -237,6 +258,44 @@ namespace WebApplication3.Data
         }
 
         // =====================================================================
+        // KREDİ LİMİTİ (müşteri kartı): Manuel (elle TL) ya da Dinamik (son N ay aylık alım ortalaması × çarpan)
+        // Alımlar = müşterinin satış faturaları (Cari Mutabakat hareketleri, TL karşılığı; döviz faturalar güncel kurla); cari risk = açık bakiye (TL).
+        // =====================================================================
+        static decimal KurTl(string pb) => string.IsNullOrEmpty(pb) || pb == "TL" || pb == "TRY" ? 1m : (MutabakatOrnek.Kurlar.TryGetValue(pb, out var k) ? k : 1m);
+        /// <summary>Limit hesabı; her çağrıda güncel satış faturaları ve bakiyeyle yeniden üretilir (dinamik limit sabit tutulmaz).</summary>
+        public static CariLimit LimitHesapla(CariKart k)
+        {
+            var s = new CariLimit { Tur = k.LimitTuru ?? "Yok", Ay = k.DinamikAy <= 0 ? 3 : k.DinamikAy, Carpan = k.DinamikCarpan <= 0 ? 2m : k.DinamikCarpan };
+            var c = string.IsNullOrEmpty(k.Kod) ? null : MutabakatOrnek.Bul(k.Kod);
+            if (c != null) { s.Bakiye = c.BakiyeTl; s.BakiyeKaynak = c.Dovizler.Count == 0 ? "" : string.Join(" · ", c.Dovizler.Where(d => d.Net != 0).Select(d => $"{d.ParaBirimi} {d.Net.ToString("N2", Tr)}")); }
+            var bugun = DateTime.Today; var bas = new DateTime(bugun.Year, bugun.Month, 1).AddMonths(-(s.Ay - 1));   // içinde bulunulan ay dahil son N takvim ayı
+            for (int i = 0; i < s.Ay; i++) { var ay = bas.AddMonths(i); var fat = c == null ? new List<MtHareket>() : c.Hareketler.Where(h => h.BelgeTipi == "Fatura" && h.Borc > 0 && h.Tarih.Year == ay.Year && h.Tarih.Month == ay.Month).ToList(); s.Aylar.Add((ay.ToString("MMMM yyyy", Tr), Math.Round(fat.Sum(h => h.Borc * KurTl(h.ParaBirimi)), 2), fat.Count)); }
+            s.AlimToplam = s.Aylar.Sum(a => a.Tutar); s.AylikOrtalama = Math.Round(s.AlimToplam / s.Ay, 2);
+            if (s.Tur == "Manuel") { s.Limit = k.ManuelLimit; s.Aciklama = $"Manuel limit{(string.IsNullOrEmpty(k.LimitKim) ? "" : $" · {k.LimitKim} {k.LimitZaman:dd.MM.yyyy}")}"; }
+            else if (s.Tur == "Dinamik") { s.Limit = Math.Round(s.AylikOrtalama * s.Carpan / 1000m, 0) * 1000m; s.Aciklama = $"Son {s.Ay} ay alım {s.AlimToplam.ToString("N0", Tr)} ₺ → aylık ortalama {s.AylikOrtalama.ToString("N0", Tr)} ₺ × {s.Carpan.ToString("0.##", Tr)} = {s.Limit.ToString("N0", Tr)} ₺ (1.000 ₺'ye yuvarlı; her açılışta yeniden hesaplanır)"; }
+            else s.Aciklama = k.KartTipi == "Müşteri" ? "Limit tanımlı değil; bakiye izlenir ama limit kontrolü yapılmaz." : "Limit yalnız müşteri kartlarında izlenir.";
+            return s;
+        }
+        static string LimitOzet(CariKart k) => k.LimitTuru == "Manuel" ? $"Manuel {k.ManuelLimit.ToString("N0", Tr)} ₺" : k.LimitTuru == "Dinamik" ? $"Dinamik son {k.DinamikAy} ay ort. × {k.DinamikCarpan.ToString("0.##", Tr)}" : "Yok";
+        /// <summary>Kredi limiti tanımı: tür + (manuel tutar | dinamik ay ve çarpan). Yetki: Muhasebe / Yönetici ("limit"). Dönüş: hata metni ya da null.</summary>
+        public static string LimitDegistir(CariKart k, string tur, decimal manuelLimit, int ay, decimal carpan, string not, string kullanici)
+        {
+            lock (Kilit)
+            {
+                if (k.KartTipi != "Müşteri") return "Kredi limiti yalnız müşteri kartlarında tanımlanır.";
+                if (!LimitTurleri.Contains(tur ?? "")) return "Limit türü Yok / Manuel / Dinamik olmalı.";
+                if (tur == "Manuel" && manuelLimit < 0) return "Manuel limit sıfırdan küçük olamaz.";
+                if (tur == "Dinamik" && (ay < 1 || ay > 24)) return "Dinamik limitte ay sayısı 1–24 arasında olmalı.";
+                if (tur == "Dinamik" && (carpan <= 0 || carpan > 12)) return "Dinamik limitte çarpan 0'dan büyük, en çok 12 olmalı.";
+                string eski = LimitOzet(k); var z = DateTime.Now;
+                k.LimitTuru = tur; if (tur == "Manuel") k.ManuelLimit = Math.Round(manuelLimit, 2); if (tur == "Dinamik") { k.DinamikAy = ay; k.DinamikCarpan = carpan; }
+                k.LimitNot = (not ?? "").Trim(); k.LimitKim = kullanici ?? ""; k.LimitZaman = z;
+                string yeni = LimitOzet(k); if (eski != yeni || !string.IsNullOrEmpty(k.LimitNot)) k.LimitGecmisi.Insert(0, new CariLimitLog { Zaman = z, Kullanici = kullanici ?? "", Eski = eski, Yeni = yeni, Not = k.LimitNot });
+                return null;
+            }
+        }
+
+        // =====================================================================
         // SON HAREKET → OTOMATİK DURUM (1 yıl kuralı)
         // Kaynaklar: kart açılışı; müşteri kodu ile teklif / sipariş (TeklifOrnek), numune (NumuneOrnek), ihracat belge / tahsilat (IhracatBelgeOrnek);
         // ad eşleşmesiyle alım faturaları (AlimOnayOrnek) ve ödemeler (YapilanOdemelerOrnek); personel carilerinde nakit avans (NakitAvansOrnek).
@@ -325,6 +384,16 @@ namespace WebApplication3.Data
                 K("120.015", "Warszawa Papier", "Warszawa Papier Sp. z o.o.", "PL5262345678", "", "Müşteri", "Yurtdışı", "Polonya", "Varşova", "Ticari Müşteriler", "Grup Dışı", "Sadece Müşteri", "", "Piotr Nowak", "+48 22 555 08 10", "zakupy@warszawapapier.pl", "Vade 60 Gün", "Avrupa Paper", 240, "AB içi; A.TR ile sevk.", F("Kağıt Grubu", "Süblime Kağıt", "Gizem Tan", true, "Süblimasyon", "Standart", "ST Serisi", "ST 60 gr"), F("Binder Grubu", "Kağıt Kaplama Binderleri", "Emre Taş"));
                 K("120.016", "Dhaka Dyeing", "Dhaka Dyeing & Printing Mills Ltd.", "BD001234567", "", "Müşteri", "Yurtdışı", "Bangladeş", "Dakka", "Ticari Müşteriler", "Grup Dışı", "Sadece Müşteri", "", "Rahim Uddin", "+880 2 5566 7788", "rahim@dhakadyeing.com", "Akreditif (L/C)", "Alv Kimya", 200, "Akreditifle çalışır; amir banka Eastern Bank Ltd.", F("Binder Grubu", "Tekstil Binderleri", "Ayşe Demir", true, "Tekstil Binder", "Akrilik", "TB Serisi", "TB 100"), F("Yardımcı Kimyasallar", "Tekstil Yardımcı Kimyasalları", "Ayşe Demir"));
                 K("120.017", "Casablanca Textile", "Casablanca Textile SARL", "MA001987654", "", "Müşteri", "Yurtdışı", "Fas", "Kazablanka", "Yurtdışı Bayi", "Grup Dışı", "Sadece Müşteri", "", "Youssef Benali", "+212 522 30 40 50", "achat@casatextile.ma", "Vesaik Mukabili", "Daf Kimya", 180, "", F("Yardımcı Kimyasallar", "Tekstil Yardımcı Kimyasalları", "Selin Kara", true, "Yardımcı Kimyasal", "Yumuşatıcı", "SF Serisi", "SF 10"), F("Baskı Makineleri", "Emprime", "Ali Yılmaz"));
+                // ---- Kredi limitleri (müşteri kartları): varsayılan Dinamik = son 3 ay aylık alım ortalaması × çarpan; çarpan vade şartına göre (30 gün ×2, 45–60 gün ×3, 90 gün ×4, 120 gün ×5,
+                //      akreditif / vesaik / mal mukabili ×3, vadeli çek ×4). Bazıları manuel (yönetim kararı / teminat), grup içi cariler limitsiz.
+                decimal VadeCarpan(string v) => v == "Vade 30 Gün" ? 2m : v == "Vade 90 Gün" || v == "Çek (Vadeli)" ? 4m : v == "Vade 120 Gün" ? 5m : 3m;
+                foreach (var k in _kartlar.Where(x => x.KartTipi == "Müşteri")) { k.LimitTuru = k.IliskiDurumu == "Grup İçi" ? "Yok" : "Dinamik"; k.DinamikAy = 3; k.DinamikCarpan = VadeCarpan(k.VadeSarti); k.LimitNot = k.LimitTuru == "Yok" ? "Grup içi cari; limit izlenmez." : $"Çarpan vade şartına göre ({k.VadeSarti})."; k.LimitKim = "Nazlı Erdem"; k.LimitZaman = b.AddDays(-45).AddHours(10); }
+                void ML(string kod, decimal tutar, int gunOnce, string not) { var k = _kartlar.First(x => x.Kod == kod); string eski = LimitOzet(k); k.LimitTuru = "Manuel"; k.ManuelLimit = tutar; k.LimitNot = not; k.LimitKim = "Nazlı Erdem"; k.LimitZaman = b.AddDays(-gunOnce).AddHours(11); k.LimitGecmisi.Add(new CariLimitLog { Zaman = k.LimitZaman.Value, Kullanici = "Nazlı Erdem", Eski = eski, Yeni = LimitOzet(k), Not = not }); }
+                ML("120.001", 9_000_000m, 30, "Yönetim kararı: yıllık çerçeve anlaşması; teminat mektubu 3 Mn ₺.");
+                ML("120.003", 15_000_000m, 20, "Distribütör; teminat ipoteği var.");
+                ML("120.011", 250_000m, 12, "Vadesi geçmiş bakiye; peşin çalışılır, limit düşürüldü.");
+                ML("120.012", 5_000_000m, 25, "Akreditifli çalışır; açık hesap limiti yönetim onaylı.");
+                ML("120.007", 900_000m, 8, "İlişkili cari; yönetim onaylı limit.");
                 // ---- Tedarikçiler
                 K("320.001", "Petkim", "Petkim Petrokimya Holding A.Ş.", "7290030050", "Aliağa", "Tedarikçi", "Yurtiçi", "Türkiye", "İzmir", "Hammadde", "Grup Dışı", "Sadece Tedarikçi", "", "Satış Ofisi", "0232 616 12 40", "satis@petkim.com.tr", "Vade 60 Gün", "Uras Kimya", 600, "", F("Binder Grubu", "Tekstil Binderleri", "", true, "Tekstil Binder"), F("Yardımcı Kimyasallar", "Tekstil Yardımcı Kimyasalları", ""));
                 K("320.002", "Brenntag", "Brenntag Kimya Tic. Ltd. Şti.", "1850035940", "Tuzla", "Tedarikçi", "Yurtiçi", "Türkiye", "İstanbul", "Hammadde", "Grup Dışı", "Sadece Tedarikçi", "", "Deniz Aksu", "0216 593 40 00", "tr-siparis@brenntag.com", "Vade 45 Gün", "Uras Kimya", 520, "", F("Yardımcı Kimyasallar", "İnşaat ve Boya Yardımcı Kimyasalları", "", true), F("Yardımcı Kimyasallar", "Kağıt Kaplama Yardımcı Kimyasalları", ""));
