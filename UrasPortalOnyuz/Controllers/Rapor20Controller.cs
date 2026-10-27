@@ -49,7 +49,14 @@ namespace WebApplication3.Controllers
         [HttpGet("downloadexcel")] public IActionResult DownloadExcel() => Content("Ön yüz örneğinde Excel üretimi yok.");
         [HttpGet("downloadpdf")] public IActionResult DownloadPdf() => Content("Ön yüz örneğinde PDF üretimi yok.");
         [HttpGet("GetCariNotlar")] public IActionResult GetCariNotlar() => Json(new { success = true, data = new object[0] });
-        [HttpGet("GetOpenTransactions")] public IActionResult GetOpenTransactions(string cardCode) => Json(new { success = true, data = OrnekVeri.CariEkstre(cardCode ?? "M0001", new DateTime(DateTime.Today.Year, 1, 1), DateTime.Today).Where(x => x.BakiyeDurumu == "Açık" && x.IslemNo > 0).Take(15).Select(x => new { transId = x.IslemNo, lineId = x.SatirNo, refDate = x.KayitTarihi, dueDate = x.VadeTarihi, memo = x.Aciklama, debit = x.TRYB, credit = x.TRYA, balance = (x.TRYB ?? 0) - (x.TRYA ?? 0), currency = "TRY", isBond = false }) });
+        /// <summary>Mutabakat (kapama) penceresi için açık kalemler — alan adları ekrandaki renderReconTable ile aynı (openDebit / openCredit / dovizliBorc / dovizliAlacak / paraBirimi / docDate / dueDate / islemTipi / memo / dbName / companyName).</summary>
+        [HttpGet("GetOpenTransactions")] public IActionResult GetOpenTransactions(string cardCode)
+        {
+            string db = Request.Query["db"].ToString(); if (string.IsNullOrEmpty(db)) db = Request.Cookies["SelectedDatabase"] ?? "DefaultConnection";
+            var l = OrnekVeri.CariEkstre(cardCode ?? "M0001", new DateTime(DateTime.Today.Year, 1, 1), DateTime.Today).Where(x => x.BakiyeDurumu == "Açık" && x.IslemNo > 0).Take(15)
+                .Select(x => new { transId = x.IslemNo, lineId = x.SatirNo, docDate = x.KayitTarihi?.ToString("dd.MM.yyyy") ?? "", dueDate = x.VadeTarihi?.ToString("dd.MM.yyyy") ?? "", islemTipi = x.IslemTipi, paraBirimi = x.IslemPB ?? "TRY", kurFarkiParaBirimi = "", dovizliBorc = x.IslemPB == "TRY" ? 0m : (x.IslemB ?? 0), dovizliAlacak = x.IslemPB == "TRY" ? 0m : (x.IslemA ?? 0), openDebit = x.TRYB ?? 0, openCredit = x.TRYA ?? 0, memo = x.Aciklama ?? "", dbName = db, companyName = OrnekVeri.SirketAdi(db), isBond = false });
+            return Json(new { success = true, data = l });
+        }
         [HttpPost("SaveManualMutabakat")] public IActionResult SaveManualMutabakat() => Json(new { success = true, message = "Örnek: mutabakat kaydedildi (bellek içi)." });
         [HttpGet("CheckUnreconciledForMutabakat")] public IActionResult CheckUnreconciledForMutabakat() => Json(new { success = true, acikVar = false, message = "" });
     }
