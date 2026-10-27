@@ -76,7 +76,7 @@ namespace WebApplication3.Controllers
         /// <summary>Kredi limiti: tanım (tür / manuel tutar / dinamik ay-çarpan), güncel hesap, cari risk, kullanım ve geçmiş.</summary>
         private static object LimitDto(CariKart k)
         {
-            if (k.KartTipi != "Müşteri") return null;
+            if (k.KartTipi != "Müşteri" && k.KartTipi != "Tedarikçi") return null;
             var l = CariKartOrnek.LimitHesapla(k);
             return new { tur = l.Tur, manuelLimit = k.ManuelLimit, dinamikAy = l.Ay, dinamikCarpan = l.Carpan, limit = l.Limit, limitTr = l.Tur == "Yok" ? "" : Tl(l.Limit), alimToplam = l.AlimToplam, alimToplamTr = Tl(l.AlimToplam), aylikOrtalama = l.AylikOrtalama, aylikOrtalamaTr = Tl(l.AylikOrtalama), aylar = l.Aylar.Select(a => new { ay = a.Ay, tutar = a.Tutar, tutarTr = Tl(a.Tutar), adet = a.Adet }), bakiye = l.Bakiye, bakiyeTr = l.Bakiye.ToString("N0", Tr) + " ₺", bakiyeKaynak = l.BakiyeKaynak, risk = l.Risk, kullanimYuzde = l.KullanimYuzde, kalan = l.Kalan, kalanTr = l.Tur == "Yok" ? "" : Tl(l.Kalan), durum = l.Durum, aciklama = l.Aciklama, not = k.LimitNot, kim = k.LimitKim, zaman = Zmn(k.LimitZaman), gecmis = k.LimitGecmisi.Select(g => new { zaman = Zmn(g.Zaman), g.Kullanici, g.Eski, g.Yeni, g.Not }) };
         }
