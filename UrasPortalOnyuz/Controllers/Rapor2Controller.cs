@@ -55,7 +55,7 @@ namespace WebApplication3.Controllers
         static Rapor2ViewModel Satir(CekKaydi k)
         {
             string aciklama = k.IslemTuru == "Planlandı" ? $"Kasa Nakit Akışı #{k.PlanDocEntry} · {k.PlanlananTedarikci} için planlandı" + (k.PlanlamaTarihi != null ? $" ({k.PlanlamaTarihi:dd.MM.yyyy}, {k.Planlayan})" : "")
-                : k.IbrazYeri != "" ? $"{k.IbrazTuru}: {k.IbrazYeri}" + (k.Kontrol == "Farklı" ? $" · DİKKAT: plan {k.PlanlananTedarikci} (farklı)" : k.Kontrol == "Uyumlu" ? " · plana uygun" : k.Kontrol == "Plansız İbraz" ? " · plansız" : "") : k.KullanimDurumu != "Kullanılabilir" ? k.KullanimDurumu : "";
+                : k.IbrazYeri != "" ? $"{k.IbrazTuru}: {k.IbrazYeri}" + (k.Kontrol == "Farklı" ? $" · DİKKAT: plan {k.PlanlananTedarikci} (farklı)" : k.Kontrol == "Uyumlu" ? " · plana uygun" : k.Kontrol == "Plansız İbraz" ? " · plansız" : "") : "";
             if (CekAkibetOrnek.IslemTuruAciklamalari.TryGetValue(k.IslemTuru, out var tanim)) aciklama = tanim + (aciklama == "" ? "" : " · " + aciklama);
             if (k.Dolasim.Count > 0) aciklama = $"Grup içi dolaşım {k.GerceklesenAdim}/{k.Dolasim.Count}: {k.DolasimOzeti}" + (k.Sirket != k.KaynakSirket ? $" · şu an {k.Sirket} portföyünde" : "") + " · " + aciklama;
             else if (k.Portfoyde && !string.IsNullOrEmpty(k.KaynakSirket) && k.Sirket != k.KaynakSirket) aciklama += $" · {k.Sirket} portföyünde";
@@ -189,7 +189,7 @@ namespace WebApplication3.Controllers
         // ---------- güncellemeler (bellek içi) ----------
         public class KullanimDurumuIstek { public int DocEntry { get; set; } public string NewKullanimDurumu { get; set; } }
         [HttpPost("UpdateKullanimDurumu")]
-        public IActionResult UpdateKullanimDurumu([FromBody] KullanimDurumuIstek model) { var r = CekAkibetOrnek.KullanimDurumuDegistir(model?.DocEntry ?? 0, model?.NewKullanimDurumu, Kullanici); return Json(new { success = r.ok, message = r.mesaj }); }
+        public IActionResult UpdateKullanimDurumu([FromBody] KullanimDurumuIstek model) => Json(new { success = false, message = "Kullanım Durumu standart raporda yer almaz; durum parametreleri İşlem Türü / Konum Durumu / Hareket Durumu / Vade Durumu / Uygunluk Durumu'dur." });
         public class IbrazBelgeIstek { public string IbrazBelgeNo { get; set; } public string NewCheckTransactionType { get; set; } }
         [HttpPost("UpdateCheckTransactionTypeByIbrazBelge")]
         public IActionResult UpdateCheckTransactionTypeByIbrazBelge([FromBody] IbrazBelgeIstek model)
