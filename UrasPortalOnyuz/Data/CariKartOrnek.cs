@@ -148,6 +148,12 @@ namespace WebApplication3.Data
         public static CariKart KartBul(string kod) => Kartlar.FirstOrDefault(k => string.Equals(k.Kod, kod, StringComparison.OrdinalIgnoreCase));
         public static CariTalep TalepBul(string no) => Talepler.FirstOrDefault(t => string.Equals(t.No, no, StringComparison.OrdinalIgnoreCase));
         private static void Log(CariTalep t, DateTime z, string k, string alan, string eski, string yeni, string kaynak = "Ekran", string gerekce = null) => t.Audit.Add(new YnAudit { Zaman = z, Kullanici = k, Alan = alan, Eski = eski ?? "", Yeni = yeni ?? "", Kaynak = kaynak, Gerekce = gerekce ?? "" });
+        /// <summary>KART DEĞİŞİKLİK GÜNLÜĞÜ: kart açılışı, doğrudan düzenleme, durum (elle pasif) ve kredi limiti değişiklikleri tek günlükte (CariKart.Degisiklikler, en yeni başta). Kaynak: "Kart Açılışı" | "Kart Düzenleme" | "Durum" | "Kredi Limiti".</summary>
+        public static void Gunluk(CariKart k, DateTime z, string kullanici, string alan, string eski, string yeni, string kaynak, string gerekce = null)
+        {
+            var a = new YnAudit { Zaman = z, Kullanici = kullanici ?? "", Alan = alan, Eski = eski ?? "", Yeni = yeni ?? "", Kaynak = kaynak, Gerekce = gerekce ?? "" };
+            int i = 0; while (i < k.Degisiklikler.Count && k.Degisiklikler[i].Zaman > z) i++; k.Degisiklikler.Insert(i, a);
+        }
         /// <summary>Kart tipi ön ekine göre sıradaki benzersiz cari kodu (ör. 120.031).</summary>
         public static string YeniKod(string tip) { var on = KodOnEkleri.TryGetValue(tip ?? "", out var p) ? p : "199"; int n = Kartlar.Where(k => k.Kod.StartsWith(on + ".")).Select(k => int.TryParse(k.Kod.Substring(on.Length + 1), out var x) ? x : 0).DefaultIfEmpty(0).Max() + 1; return $"{on}.{n:000}"; }
 
@@ -231,7 +237,7 @@ namespace WebApplication3.Data
                 k.Faaliyetler = y.Faaliyetler;
                 if (ellePasif) { k.ElleDurum = "Pasif"; k.ElleDurumKim = kullanici; k.ElleDurumZaman = z; } if (elleKaldir) { k.ElleDurum = null; k.ElleDurumKim = null; k.ElleDurumZaman = null; }
                 if (k.Rol == "Çift Rol" && !string.IsNullOrEmpty(k.EsCariKodu)) { var es = KartBul(k.EsCariKodu); if (es != null && string.IsNullOrEmpty(es.EsCariKodu)) { es.EsCariKodu = k.Kod; es.Rol = "Çift Rol"; } }   // karşı kart bağı
-                k.Degisiklikler.InsertRange(0, log);
+                foreach (var a in log.AsEnumerable().Reverse()) Gunluk(k, a.Zaman, a.Kullanici, a.Alan, a.Eski, a.Yeni, a.Kaynak, a.Gerekce);
                 return s;
             }
         }
@@ -281,6 +287,7 @@ namespace WebApplication3.Data
             var k = t.Kart; k.Kod = YeniKod(k.KartTipi); k.OlusturmaTarihi = z; k.Olusturan = kullanici; k.KaynakTalepNo = t.No; foreach (var f in k.Faaliyetler) if (f.BaslangicTarihi == null) f.BaslangicTarihi = z.Date;
             _kartlar.Add(k); if (k.Rol == "Çift Rol") { var es = KartBul(k.EsCariKodu); if (es != null && string.IsNullOrEmpty(es.EsCariKodu)) { es.EsCariKodu = k.Kod; es.Rol = "Çift Rol"; } }
             t.Durum = "Onaylandı"; t.OlusanKod = k.Kod; Log(t, z, kullanici, "STATUS", "Onay Bekliyor", "Onaylandı", "Workflow"); Log(t, z, kullanici, "CARI_MASTER", "", $"{k.Kod} {k.KisaAd} açıldı · {k.Faaliyetler.Count} faaliyet satırı", "ERP");
+            Gunluk(k, z, kullanici, "Kart Açılışı", "", $"{k.KartTipi} kartı açıldı · {k.Sinif} · {k.Faaliyetler.Count} faaliyet satırı", "Kart Açılışı", $"Talep {t.No} ({t.TalepEden}) onaylandı");
         }
         public static string Iptal(CariTalep t, string neden, string kullanici, DateTime? simdi = null) { lock (Kilit) { var z = simdi ?? DateTime.Now; if (string.IsNullOrWhiteSpace(neden)) return "İptal nedeni zorunludur."; if (t.Durum == "Onaylandı") return "Kartı açılmış talep iptal edilemez; kart pasife alınmalıdır."; Log(t, z, kullanici, "STATUS", t.Durum, "İptal", "Ekran", neden); t.Durum = "İptal"; t.RedNedeni = neden; t.GuncellemeZamani = z; return null; } }
         /// <summary>Durum otomatik hesaplanır; buradan yalnız "elle pasif" konur ("Pasif") ya da kaldırılır ("Aktif" → otomatik kural yeniden geçerli).</summary>
@@ -288,8 +295,8 @@ namespace WebApplication3.Data
         {
             lock (Kilit)
             {
-                if (durum == "Pasif") { k.ElleDurum = "Pasif"; k.ElleDurumKim = kullanici; k.ElleDurumZaman = DateTime.Now; k.Not = (k.Not + $" [{DateTime.Now:dd.MM.yyyy} {kullanici}: elle pasif]").Trim(); return null; }
-                if (durum == "Aktif") { if (k.ElleDurum != "Pasif") return $"Kart elle pasife alınmamış; durum otomatik hesaplanıyor ({k.DurumKaynagi})."; k.ElleDurum = null; k.ElleDurumKim = null; k.ElleDurumZaman = null; k.Not = (k.Not + $" [{DateTime.Now:dd.MM.yyyy} {kullanici}: elle pasif kaldırıldı]").Trim(); return null; }
+                if (durum == "Pasif") { string e = k.Durum; k.ElleDurum = "Pasif"; k.ElleDurumKim = kullanici; k.ElleDurumZaman = DateTime.Now; k.Not = (k.Not + $" [{DateTime.Now:dd.MM.yyyy} {kullanici}: elle pasif]").Trim(); Gunluk(k, DateTime.Now, kullanici, "Durum", e, "Pasif (elle)", "Durum"); return null; }
+                if (durum == "Aktif") { if (k.ElleDurum != "Pasif") return $"Kart elle pasife alınmamış; durum otomatik hesaplanıyor ({k.DurumKaynagi})."; k.ElleDurum = null; k.ElleDurumKim = null; k.ElleDurumZaman = null; k.Not = (k.Not + $" [{DateTime.Now:dd.MM.yyyy} {kullanici}: elle pasif kaldırıldı]").Trim(); Gunluk(k, DateTime.Now, kullanici, "Durum", "Pasif (elle)", $"{k.Durum} (otomatik)", "Durum"); return null; }
                 return "Durum Aktif / Pasif olmalı.";
             }
         }
@@ -329,7 +336,7 @@ namespace WebApplication3.Data
                 string eski = LimitOzet(k); var z = DateTime.Now;
                 k.LimitTuru = tur; if (tur == "Manuel") k.ManuelLimit = Math.Round(manuelLimit, 2); if (tur == "Dinamik") { k.DinamikAy = ay; k.DinamikCarpan = carpan; }
                 k.LimitNot = (not ?? "").Trim(); k.LimitKim = kullanici ?? ""; k.LimitZaman = z;
-                string yeni = LimitOzet(k); if (eski != yeni || !string.IsNullOrEmpty(k.LimitNot)) k.LimitGecmisi.Insert(0, new CariLimitLog { Zaman = z, Kullanici = kullanici ?? "", Eski = eski, Yeni = yeni, Not = k.LimitNot });
+                string yeni = LimitOzet(k); if (eski != yeni || !string.IsNullOrEmpty(k.LimitNot)) { k.LimitGecmisi.Insert(0, new CariLimitLog { Zaman = z, Kullanici = kullanici ?? "", Eski = eski, Yeni = yeni, Not = k.LimitNot }); Gunluk(k, z, kullanici, "Kredi Limiti", eski, yeni, "Kredi Limiti", k.LimitNot); }
                 return null;
             }
         }
@@ -427,7 +434,7 @@ namespace WebApplication3.Data
                 //      akreditif / vesaik / mal mukabili ×3, vadeli çek ×4). Bazıları manuel (yönetim kararı / teminat), grup içi cariler limitsiz.
                 decimal VadeCarpan(string v) => v == "Vade 30 Gün" ? 2m : v == "Vade 90 Gün" || v == "Çek (Vadeli)" ? 4m : v == "Vade 120 Gün" ? 5m : 3m;
                 foreach (var k in _kartlar.Where(x => x.KartTipi == "Müşteri")) { k.LimitTuru = k.IliskiDurumu == "Grup İçi" ? "Yok" : "Dinamik"; k.DinamikAy = 3; k.DinamikCarpan = VadeCarpan(k.VadeSarti); k.LimitNot = k.LimitTuru == "Yok" ? "Grup içi cari; limit izlenmez." : $"Çarpan vade şartına göre ({k.VadeSarti})."; k.LimitKim = "Nazlı Erdem"; k.LimitZaman = b.AddDays(-45).AddHours(10); }
-                void ML(string kod, decimal tutar, int gunOnce, string not) { var k = _kartlar.First(x => x.Kod == kod); string eski = LimitOzet(k); k.LimitTuru = "Manuel"; k.ManuelLimit = tutar; k.LimitNot = not; k.LimitKim = "Nazlı Erdem"; k.LimitZaman = b.AddDays(-gunOnce).AddHours(11); k.LimitGecmisi.Add(new CariLimitLog { Zaman = k.LimitZaman.Value, Kullanici = "Nazlı Erdem", Eski = eski, Yeni = LimitOzet(k), Not = not }); }
+                void ML(string kod, decimal tutar, int gunOnce, string not) { var k = _kartlar.First(x => x.Kod == kod); string eski = LimitOzet(k); k.LimitTuru = "Manuel"; k.ManuelLimit = tutar; k.LimitNot = not; k.LimitKim = "Nazlı Erdem"; k.LimitZaman = b.AddDays(-gunOnce).AddHours(11); k.LimitGecmisi.Add(new CariLimitLog { Zaman = k.LimitZaman.Value, Kullanici = "Nazlı Erdem", Eski = eski, Yeni = LimitOzet(k), Not = not }); Gunluk(k, k.LimitZaman.Value, "Nazlı Erdem", "Kredi Limiti", eski, LimitOzet(k), "Kredi Limiti", not); }
                 ML("120.001", 9_000_000m, 30, "Yönetim kararı: yıllık çerçeve anlaşması; teminat mektubu 3 Mn ₺.");
                 ML("120.003", 15_000_000m, 20, "Distribütör; teminat ipoteği var.");
                 ML("120.011", 250_000m, 12, "Vadesi geçmiş bakiye; peşin çalışılır, limit düşürüldü.");
@@ -459,6 +466,21 @@ namespace WebApplication3.Data
                 K("360.001", "Gebze Vergi Dairesi", "Gebze Vergi Dairesi Müdürlüğü", "", "", "Resmi Kurumlar", "Yurtiçi", "Türkiye", "Kocaeli", "Vergi Dairesi", "Grup Dışı", "Diğer", "", "", "0262 642 00 00", "", "", "Uras Kimya", 700, "");
                 K("360.002", "SGK Gebze", "Sosyal Güvenlik Kurumu Gebze Merkezi", "", "", "Resmi Kurumlar", "Yurtiçi", "Türkiye", "Kocaeli", "SGK", "Grup Dışı", "Diğer", "", "", "0262 643 00 00", "", "", "Uras Kimya", 700, "");
                 K("335.001", "Ali Veli (Avans)", "Ali Veli — Personel Avans Carisi", "12345678901", "", "Personel Carileri", "Yurtiçi", "Türkiye", "Kocaeli", "Personel Avans", "Grup Dışı", "Diğer", "", "Ali Veli", "0532 111 22 33", "ali.veli@uraskimya.com", "", "Uras Kimya", 300, "");
+                // ---- Kart değişiklik günlüğü (örnek): her kartın açılış kaydı + dinamik limit tanımları + birkaç doğrudan düzenleme ve durum kaydı
+                foreach (var k in _kartlar) { Gunluk(k, k.OlusturmaTarihi.AddHours(9), k.Olusturan, "Kart Açılışı", "", $"{k.KartTipi} kartı açıldı · {k.Sinif} · {k.Faaliyetler.Count} faaliyet satırı", "Kart Açılışı", "ERP cari açılışı"); if (k.LimitTuru == "Dinamik" && k.LimitZaman != null) Gunluk(k, k.LimitZaman.Value, k.LimitKim, "Kredi Limiti", "Yok", LimitOzet(k), "Kredi Limiti", k.LimitNot); }
+                void GD(string kod, int gunOnce, string kim, string alan, string eski, string yeni, string gerekce = "", string kaynak = "Kart Düzenleme") { var k = _kartlar.First(x => x.Kod == kod); Gunluk(k, b.AddDays(-gunOnce).AddHours(10 + gunOnce % 7), kim, alan, eski, yeni, kaynak, gerekce); }
+                GD("120.001", 25, "Ayşe Demir", "Telefon", "0282 654 10 00", "0282 654 10 10", "Santral numarası değişti");
+                GD("120.001", 25, "Ayşe Demir", "E-posta", "info@abctekstil.com.tr", "muhasebe@abctekstil.com.tr");
+                GD("120.003", 48, "Nazlı Erdem", "Vade", "Vade 60 Gün", "Vade 90 Gün", "Distribütör sözleşmesi yenilendi");
+                GD("120.011", 90, "Nazlı Erdem", "Cari Sınıfı", "Ticari Müşteriler", "Özel Takip", "Vadesi geçmiş bakiye; peşin çalışılır");
+                GD("120.011", 90, "Nazlı Erdem", "Vade", "Vade 30 Gün", "Peşin", "Vadesi geçmiş bakiye; peşin çalışılır");
+                GD("120.007", 60, "Nazlı Erdem", "İlişki Durumu", "Grup Dışı", "İlişkili Cari", "Yönetim bağlantısı; Mali İşler kararı");
+                GD("120.010", 12, "Gizem Tan", "Faaliyetler", "Kağıt Grubu / Süblime Kağıt · Gizem Tan (ana)", "Kağıt Grubu / Süblime Kağıt · Gizem Tan (ana) · ST 90 gr", "Ürün seviyesinde takip açıldı");
+                GD("320.010", 35, "Emre Taş", "Cari Sınıfı", "Yardımcı Malzemeler", "Özel Takip", "Kalite şikayeti; satın alma sınırlandı");
+                GD("320.002", 15, "Burcu Aydın", "Yetkili", "Murat Kaya", "Deniz Aksu", "Tedarikçi satış temsilcisi değişti");
+                GD("320.002", 15, "Burcu Aydın", "Telefon", "0216 593 40 10", "0216 593 40 00");
+                GD("320.003", 7, "Gizem Tan", "E-posta", "info@korozo.com.tr", "satis@korozo.com.tr");
+                GD("320.004", 20, "Emre Taş", "Vade", "Peşin", "Vade 30 Gün", "Düzenli fason çalışması; açık hesap");
                 // ---- Talepler
                 CariTalep T(int gunOnce, string talepEden, string dept, string sirket, string tur, string gerekce, CariKart k) { var z = b.AddDays(-gunOnce).AddHours(11); var t = new CariTalep { Id = ++_sonTalep, No = $"CT-{z:yyyy}-{_sonTalep:0000}", Tarih = z, TalepEden = talepEden, Departman = dept, Sirket = sirket, TalepTuru = tur, Gerekce = gerekce, Kart = k, GuncellemeZamani = z }; k.Sirket = sirket; int n = 0; foreach (var f in k.Faaliyetler) f.Sira = ++n; Log(t, z, talepEden, "STATUS", "", "Taslak", "Sistem"); _talepler.Insert(0, t); return t; }
                 CariKart Y(string kisa, string unvan, string vkn, string vd, string tip, string bolge, string ulke, string sehir, string sinif, string iliski, string rol, string es, string yetkili, string tel, string mail, string vade, string not, params CariFaaliyet[] f) => new CariKart { KisaAd = kisa, KisaltmaliUnvan = kisa, ResmiUnvan = unvan, VergiNo = vkn, VergiDairesi = vd, KartTipi = tip, Bolge = bolge, Ulke = ulke, Sehir = sehir, Sinif = sinif, IliskiDurumu = iliski, Rol = rol, EsCariKodu = es, Yetkili = yetkili, Telefon = tel, Eposta = mail, VadeSarti = vade, Not = not, Faaliyetler = f.ToList() };
