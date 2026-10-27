@@ -67,10 +67,12 @@ namespace WebApplication3.Controllers
  {return default;
 }
 
+        /// <summary>Konsolide Tahsilat Takip Raporu (yeni tasarım): Views/Rapor17/Index.cshtml + wwwroot/js/konsolide-tahsilat.js; veri /Tahsilat/KonsolideTakip (cari kartları + Cari Mutabakat + Tahsilat ekranı).</summary>
         public async Task<IActionResult> Index()
- {WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index", WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Models.CustomerFinancialReportViewModel>(12));
-}
+        {
+            ViewData["Title"] = "Konsolide Tahsilat Takip Raporu";
+            return await Task.FromResult(View("Index"));
+        }
 
         [HttpPost]
         [Route("ExportToExcel")]

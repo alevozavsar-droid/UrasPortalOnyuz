@@ -450,7 +450,7 @@ namespace WebApplication3.Controllers
         static List<R123_HareketViewModel> Hareketler(List<(string Ad, string DbName, string DbKey)> sirketler, DateTime bas, DateTime bit)
         {
             var hepsi = new List<R123_HareketViewModel>();
-            foreach (var s in sirketler) { hepsi.AddRange(Kasa(s, bas, bit)); hepsi.AddRange(Banka(s, bas, bit)); hepsi.AddRange(Cek(s, bas, bit)); hepsi.AddRange(Kart(s, bas, bit)); hepsi.AddRange(GrupIci(s, bas, bit)); }
+            foreach (var s in sirketler) { hepsi.AddRange(Kasa(s, bas, bit)); hepsi.AddRange(Banka(s, bas, bit)); hepsi.AddRange(Cek(s, bas, bit)); hepsi.AddRange(Kart(s, bas, bit)); hepsi.AddRange(GrupIci(s, bas, bit)); hepsi.AddRange(TahsilatEkrani(s, bas, bit)); }
             // Takip Paneli'nde elle verilen onay / eksik işaretleri (bellek içi) üretilmiş satırların üstüne yazılır
             foreach (var h in hepsi) if (FinekraOrnek.HareketOnaylari.TryGetValue($"{h.DbKey}|{h.HesapTipi}|{h.IslemNo}", out var o)) { h.OnayDurumu = o.Durum; h.OnaylayanKullaniciAdi = o.Durum == "" ? null : o.Kullanici; h.OnayTarihi = o.Durum == "" ? (DateTime?)null : o.Tarih; if (!string.IsNullOrEmpty(o.Not)) { h.NotBasligi = o.Durum == "EKSİK" ? "Eksik / kontrol" : "Not"; h.NotIcerigi = o.Not; } }
             return hepsi;
@@ -501,6 +501,27 @@ namespace WebApplication3.Controllers
                 h.KaynakDetay = modul ? $"{m.U_OdemeYontemi} ödemesi #{m.DocEntry} · {m.U_Durum}{(h.GrupKayitNo == "" ? " · kayıt bağlı değil" : " · kayıt " + h.GrupKayitNo)}" : $"ödeme #{m.DocEntry} · {m.U_Durum} · {h.Odeyen}, {h.FaturaSahibi} adına ödüyor{(b == null ? " · grup içi belge yok" : $" · {b.No} {b.Durum}")}";
                 if (!odendi) { h.OnayDurumu = null; h.OnaylayanKullaniciAdi = null; h.OnayTarihi = null; }
                 if (!string.IsNullOrEmpty(m.U_ParaBirimi) && m.U_ParaBirimi != "TRY") { h.ParaBirimi = m.U_ParaBirimi; h.DovizTutar = m.U_Tutar; h.Kur = m.U_Kur; }
+                yield return h;
+            }
+        }
+        /// <summary>
+        /// TAHSİLAT EKRANI entegrasyonu (Rapor117 / Data/TahsilatOrnek.cs): kaydedilen müşteri tahsilatları şirketine göre panele düşer — Havale / EFT ve Kredi Kartı → Banka sekmesi (giriş),
+        /// Nakit → Kasa (giriş), Çek / Senet → Çek · Senet (portföye giriş). Satır kaynağı "Tahsilat Ekranı · Bakiyeden / Fatura Bazlı", referans tahsilat no; dövizli tahsilatta döviz tutarı ve kur.
+        /// </summary>
+        static IEnumerable<R123_HareketViewModel> TahsilatEkrani((string Ad, string DbName, string DbKey) s, DateTime bas, DateTime bit)
+        {
+            int i = 0;
+            foreach (var t in TahsilatOrnek.Tahsilatlar.Where(t => t.Sirket == s.Ad && t.Tarih >= bas && t.Tarih <= bit).OrderBy(t => t.Tarih))
+            {
+                i++; bool banka = t.Yontem == "Havale / EFT" || t.Yontem == "Kredi Kartı", kasa = t.Yontem == "Nakit";
+                var h = Temel(s, banka ? "BANKA" : kasa ? "KASA" : "CEK", 97000 + i, t.Tarih, t.IslemTipi);
+                h.KasaKodu = banka ? "102.01.001" : kasa ? "100.01.001" : t.Yontem == "Senet" ? "121.01.001" : "101.01.001"; h.KasaAdi = banka ? "Ziraat Bankası" : kasa ? "Merkez Kasa" : t.Yontem == "Senet" ? "Alınan Senetler" : "Alınan Çekler";
+                h.KarsiHesapKodu = t.CariKodu; h.KarsiHesapAdi = t.CariAd; h.Borc = t.TutarTl; h.IslemYonu = "Giriş";
+                if (t.ParaBirimi != "TL") { h.ParaBirimi = t.ParaBirimi; h.DovizTutar = t.Tutar; h.Kur = t.Kur; }
+                h.Aciklama = $"Müşteri tahsilatı · {t.Yontem} · {(t.Mod == "Fatura" ? "fatura bazlı" : "bakiyeden")}{(t.Dagitim.Count > 0 ? " · " + string.Join(", ", t.Dagitim.Select(d => d.BelgeNo)) : "")}{(t.Avans > 0.005m ? $" · avans {t.Avans.ToString("N2", Tr)} {t.ParaBirimi}" : "")}{(t.VadeFarki > 0 ? $" · vade farkı {t.VadeFarki.ToString("N0", Tr)} ₺" : "")}{(t.KurFarki != 0 ? $" · kur farkı {t.KurFarki.ToString("N0", Tr)} ₺" : "")}";
+                h.Kaynak = "Tahsilat Ekranı · " + (t.Mod == "Fatura" ? "Fatura Bazlı" : "Bakiyeden"); h.KaynakDetay = $"{t.No} · {t.Yontem} · {t.Kullanici} {t.Zaman:dd.MM.yyyy HH:mm}" + (string.IsNullOrEmpty(t.KurFarkiFaturaNo) ? "" : $" · {t.KurFarkiFaturaNo}") + (string.IsNullOrEmpty(t.VadeFarkiFaturaNo) ? "" : $" · {t.VadeFarkiFaturaNo}");
+                h.Referans = t.No; h.IslemTuruAdi = kasa ? "Nakit Tahsilat" : banka ? "Müşteri Tahsilatı" : t.Yontem + " Girişi"; h.OnaylayanKullaniciAdi = t.Kullanici; h.OnayTarihi = t.Zaman;
+                if (!banka && !kasa) { h.CekVadeTarihi = t.Tarih.AddDays(60); h.CekNumarasi = t.No; h.CekBelge = t.Yontem; h.PlanKontrol = "—"; }
                 yield return h;
             }
         }

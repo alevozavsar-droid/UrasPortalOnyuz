@@ -77,15 +77,9 @@ namespace WebApplication3.Controllers
         private string GetConnectionString(string dbKey)  {return default;
 }
 
+        /// <summary>"Otomatik Kapama" ekranı kaldırıldı; işlevi Otomatik Kapatma'da (Rapor64: açık fatura ↔ eşleştirilmemiş ödeme kapatma). Eski bağlantılar oraya yönlenir.</summary>
         [HttpGet]
-        public IActionResult Index()
- {ViewBag.CurrentDbDisplay = "";
-ViewBag.Databases = WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.Rapor103Controller.DatabaseConfig>(12);
-ViewBag.Customers = WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.Rapor103Controller.DatabaseConfig>(12);
-ViewBag.Suppliers = WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.Rapor103Controller.DatabaseConfig>(12);
-WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index");
-}
+        public IActionResult Index(string kod) => RedirectToAction("Index", "Rapor64", string.IsNullOrEmpty(kod) ? null : new { kod });
 
         [HttpGet("GetCustomersList")]
         public IActionResult GetCustomersList([FromQuery] string db = null)

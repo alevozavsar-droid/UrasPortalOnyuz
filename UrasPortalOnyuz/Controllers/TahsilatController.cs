@@ -69,7 +69,28 @@ namespace WebApplication3.Controllers
             return Json(new { success = true, message = $"{f.No} kesildi: {Tl(f.Toplam)} (KDV dahil) · {f.CariAd} cari hesabına işlendi.", fatura = FaturaDto(f), tahsilat = TahsilatDto(TahsilatOrnek.TahsilatBul(i.TahsilatNo)) });
         }
         private static object DagitimDto(TahsilatDagitim d) => new { d.BelgeNo, faturaTarihi = Trh(d.FaturaTarihi), vade = Trh(d.Vade), d.Pb, d.IslemTipi, d.Kalan, kalanTr = d.Kalan.ToString("N2", Tr), d.Tutar, tutarTr = d.Tutar.ToString("N2", Tr), tutarTl = d.TutarTl, tutarTlTr = Tl(d.TutarTl), d.FaturaKuru, d.TahsilatKuru, d.GecikmeGun, d.VadeFarki, vadeFarkiTr = Tl(d.VadeFarki), d.KurFarki, kurFarkiTr = Tl(d.KurFarki) };
-        private static object TahsilatDto(TahsilatKaydi t) => t == null ? null : new { t.No, tarih = Trh(t.Tarih), t.CariKodu, t.CariAd, t.Sirket, t.Yontem, t.ParaBirimi, t.Tutar, tutarTr = t.Tutar.ToString("N2", Tr) + " " + t.ParaBirimi, t.Kur, tutarTl = t.TutarTl, tutarTlTr = Tl(t.TutarTl), t.IslemTipi, t.Mod, t.Aciklama, t.BelgeNo, dagitim = t.Dagitim.Select(DagitimDto), dagitilan = t.Dagitilan, avans = t.Avans, avansTr = t.Avans.ToString("N2", Tr) + " " + t.ParaBirimi, kurFarki = t.KurFarki, kurFarkiTr = Tl(t.KurFarki), vadeFarki = t.VadeFarki, vadeFarkiTr = Tl(t.VadeFarki), t.KurFarkiFaturaNo, t.VadeFarkiFaturaNo, t.Kullanici, zaman = Zmn(t.Zaman) };
+        /// <summary>Konsolide Tahsilat Takip (Rapor17): şirket bazında müşteri carilerinin açık fatura vade kırılımı (gecikmiş, bu hafta, 8–30, 31–60, 60+ gün), içerideki çek / senet, son 30 gün tahsilatı, son tahsilat, risk ve temsilci; haftalık beklenen tahsilat planı için fatura vadeleri.</summary>
+        [HttpGet]
+        public IActionResult KonsolideTakip()
+        {
+            var bugun = DateTime.Today; var son30 = bugun.AddDays(-30);
+            var satirlar = CariKartOrnek.Kartlar.Where(k => k.KartTipi == "Müşteri").Select(k =>
+            {
+                var c = MutabakatOrnek.Bul(k.Kod); var r = CariKartOrnek.RiskHesapla(k);
+                decimal KurTl(string pb) => pb == "TL" || pb == "TRY" || string.IsNullOrEmpty(pb) ? 1m : (MutabakatOrnek.Kurlar.TryGetValue(pb, out var x) ? x : 1m);
+                var acik = c == null ? new List<MtHareket>() : c.Hareketler.Where(h => h.BelgeTipi == "Fatura" && h.Borc > 0 && h.Kalan > 0.005m).ToList();
+                var kalemler = acik.Select(h => new { vade = (h.Vade ?? h.Tarih).ToString("yyyy-MM-dd"), gun = ((h.Vade ?? h.Tarih).Date - bugun).Days, tl = Math.Round(h.Kalan * KurTl(h.ParaBirimi), 2), belge = h.BelgeNo, pb = h.ParaBirimi, kalan = h.Kalan, islemTipi = h.IslemTipi }).OrderBy(x => x.vade).ToList();
+                decimal Kova(int a, int b) => kalemler.Where(x => x.gun >= a && x.gun <= b).Sum(x => x.tl);
+                var tahs = c == null ? new List<MtHareket>() : c.Hareketler.Where(h => (h.BelgeTipi == "Tahsilat" || h.BelgeTipi == "Çek" || h.BelgeTipi == "Senet") && h.Alacak > 0).ToList();
+                var sonTahsilat = tahs.OrderByDescending(h => h.Tarih).FirstOrDefault();
+                return new { k.Kod, k.KisaAd, k.ResmiUnvan, k.Sirket, sirketDb = CekAkibetOrnek.DbName(k.Sirket), k.Bolge, k.Sinif, k.VadeSarti, temsilci = string.Join(", ", k.Faaliyetler.Select(f => f.SatisTemsilcisi).Where(x => !string.IsNullOrEmpty(x)).Distinct()), risk = r.Durum, riskNeden = r.Neden, bakiye = r.AcikBakiye, bakiyeX = r.BakiyeX, bakiyeR = r.BakiyeR,
+                    gecmis = Kova(int.MinValue, -1), gecmisAdet = kalemler.Count(x => x.gun < 0), maxGecikme = r.MaxGecikme, buHafta = Kova(0, 7), g8_30 = Kova(8, 30), g31_60 = Kova(31, 60), g60 = Kova(61, int.MaxValue), acikToplam = kalemler.Sum(x => x.tl), acikAdet = kalemler.Count,
+                    cek = r.Cek, cekAdet = r.CekAdet, son30Tahsilat = Math.Round(tahs.Where(h => h.Tarih >= son30).Sum(h => h.Alacak * KurTl(h.ParaBirimi)), 2), son30Adet = tahs.Count(h => h.Tarih >= son30), sonTahsilat = sonTahsilat == null ? "" : Trh(sonTahsilat.Tarih), sonTahsilatTl = sonTahsilat == null ? 0 : Math.Round(sonTahsilat.Alacak * KurTl(sonTahsilat.ParaBirimi), 2),
+                    limitDurum = CariKartOrnek.LimitHesapla(k).Durum, kalemler };
+            }).ToList();
+            return Json(new { success = true, bugun = bugun.ToString("yyyy-MM-dd"), sirketler = CekAkibetOrnek.Sirketler.Select(s => new { ad = s.Ad, db = s.DbName }), satirlar, tahsilatlar = TahsilatOrnek.Tahsilatlar.Select(TahsilatDto) });
+        }
+        private static object TahsilatDto(TahsilatKaydi t) => t == null ? null : new { t.No, tarih = Trh(t.Tarih), t.CariKodu, t.CariAd, t.Sirket, sirketDb = CekAkibetOrnek.DbName(t.Sirket), panelSekme = t.Yontem == "Havale / EFT" || t.Yontem == "Kredi Kartı" ? "banka" : t.Yontem == "Nakit" ? "kasa" : "cek", t.Yontem, t.ParaBirimi, t.Tutar, tutarTr = t.Tutar.ToString("N2", Tr) + " " + t.ParaBirimi, t.Kur, tutarTl = t.TutarTl, tutarTlTr = Tl(t.TutarTl), t.IslemTipi, t.Mod, t.Aciklama, t.BelgeNo, dagitim = t.Dagitim.Select(DagitimDto), dagitilan = t.Dagitilan, avans = t.Avans, avansTr = t.Avans.ToString("N2", Tr) + " " + t.ParaBirimi, kurFarki = t.KurFarki, kurFarkiTr = Tl(t.KurFarki), vadeFarki = t.VadeFarki, vadeFarkiTr = Tl(t.VadeFarki), t.KurFarkiFaturaNo, t.VadeFarkiFaturaNo, t.Kullanici, zaman = Zmn(t.Zaman) };
         private static object FaturaDto(FarkFaturasi f) => new { f.No, tarih = Trh(f.Tarih), vade = Trh(f.Vade), f.CariKodu, f.CariAd, f.CariUnvan, f.VergiNo, f.VergiDairesi, f.Tur, f.TahsilatNo, f.IslemTipi, kalemler = f.Kalemler.Select(k => new { aciklama = k.Aciklama, tutar = k.Tutar, tutarTr = Tl(k.Tutar) }), matrah = f.Matrah, matrahTr = Tl(f.Matrah), f.KdvOran, kdv = f.Kdv, kdvTr = Tl(f.Kdv), toplam = f.Toplam, toplamTr = Tl(f.Toplam), f.Kullanici, zaman = Zmn(f.Zaman), f.Durum };
     }
 }

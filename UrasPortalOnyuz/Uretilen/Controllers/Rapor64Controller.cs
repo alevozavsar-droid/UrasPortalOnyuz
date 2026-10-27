@@ -63,10 +63,12 @@ namespace WebApplication3.Controllers
         private string GetConnectionString(string dbKey)  {return default;
 }
 
-        public IActionResult Index()
- {WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index", WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.Rapor64ViewModel>(12));
-}
+        /// <summary>Otomatik Kapatma (eski "Mutabakat"; "Otomatik Kapama" / Rapor103 de buraya yönlenir): Views/Rapor64/Index.cshtml + wwwroot/js/otomatik-kapatma.js; uçlar Controllers/KapamaController.cs. ?kod= ile cari ön seçilir.</summary>
+        public IActionResult Index(string kod)
+        {
+            ViewData["Title"] = "Otomatik Kapatma"; ViewBag.Kod = kod ?? "";
+            return View("Index");
+        }
 
 
 

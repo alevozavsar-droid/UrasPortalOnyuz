@@ -186,10 +186,12 @@ namespace WebApplication3.Controllers
 
         private class BalanceRaw { public string Key { get; set; } public string Currency { get; set; } public string AktarimTipi { get; set; } public decimal TotalTL { get; set; } public decimal TotalFC { get; set; } }
 
-        public IActionResult Index(MutabakatFilterModel filter)
- {WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index", WebApplication3.OrnekDoldurucu.Yeni<WebApplication3.Models.MutabakatViewModel>());
-}
+        /// <summary>E-Mutabakat (yeni tasarım): Views/Rapor59/Index.cshtml + wwwroot/js/e-mutabakat.js; uçlar Controllers/EMutabakatController.cs (e-posta / WhatsApp). ?kod= ile cari ön seçilir.</summary>
+        public IActionResult Index(string kod)
+        {
+            ViewData["Title"] = "E-Mutabakat"; ViewBag.Kod = kod ?? "";
+            return View("Index");
+        }
 
         [HttpPost]
         public IActionResult GetBalanceBreakdown(string cardCode, string endDate, List<string> selectedTypes, bool includeConnected)

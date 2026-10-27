@@ -1,542 +1,86 @@
-﻿@model WebApplication3.Models.MutabakatViewModel
-
-@{
-    ViewData["Title"] = "E-Mutabakat Gönderim Listesi";
+﻿@{
+    ViewData["Title"] = "E-Mutabakat";
     Layout = "~/Views/Shared/_Layout.cshtml";
-    var currentDb = Context.Request.Query["db"].FirstOrDefault() ?? Context.Request.Cookies["AktifSirket"] ?? "";
+    string onKod = (string)ViewBag.Kod ?? "";
 }
-
+@*
+    E-MUTABAKAT — yeni tasarım. Kayıtlı iletişim bilgileriyle (ana mutabakat yetkilisinin e-postası / cep telefonu) sistem üzerinden otomatik mutabakat:
+    E-POSTA (PDF ekstre + yanıt bağlantısı) ve WHATSAPP (kısa mesaj + yanıt bağlantısı) kanalları; şablondan üretilen mesaj, tekil / toplu gönderim, hatırlatma, cari yanıtı (Mutabık / İtirazlı),
+    yanıt senkronu, iletişim bilgisi düzeltme. Veri ve kurallar: Data/EMutabakatOrnek.cs (Cari Mutabakat üzerinde) · uçlar: Controllers/EMutabakatController.cs · betik: wwwroot/js/e-mutabakat.js
+*@
 @section Styles {
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-
-    <style>
-        body { background-color: #f4f6f9; }
-        
-        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.9); z-index: 9999; display: none; justify-content: center; align-items: center; flex-direction: column; }
-        .status-badge { font-size: 0.8rem; padding: 6px 12px; border-radius: 20px; font-weight: 600; letter-spacing: 0.5px; }
-        .status-wait { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
-        .status-ok { background-color: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; }
-        .status-reject { background-color: #f8d7da; color: #842029; border: 1px solid #f5c2c7; }
-
-        .dataTables_filter { display: none; }
-        .email-input-group { min-width: 220px; }
-        .email-input-group input { font-size: 0.85rem; border-radius: 4px 0 0 4px !important; }
-        .btn-save-email { border-radius: 0 4px 4px 0 !important; }
-
-        .table-custom { box-shadow: 0 0 15px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; background: white; }
-        .table-custom thead th { background-color: #2c3e50; color: white; font-weight: 500; font-size: 0.85rem; text-transform: uppercase; padding: 12px; vertical-align: middle; border-bottom: none; white-space: nowrap; }
-        .table-custom tbody td { font-size: 0.85rem; vertical-align: middle; border-bottom: 1px solid #eee; padding: 10px; }
-        .table-custom tbody tr:hover { background-color: #f8faFC; }
-        
-        .col-bakiye { border-left: 1px solid #e0e0e0; background-color: #fafbfc; }
-        .val-positive { color: #dc3545; font-weight: 600; }
-        .val-negative { color: #198754; font-weight: 600; }
-        .val-zero { color: #6c757d; }
-        .curr-text { font-size: 0.75rem; color: #0d6efd; font-weight: bold; }
-        
-        .top-toolbar { background: white; border-radius: 8px; padding: 15px 20px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); }
-
-        /* Tıklanabilir Bakiye Linki Stili */
-        .balance-link { text-decoration: underline; text-underline-offset: 3px; cursor: pointer; transition: all 0.2s; }
-        .balance-link:hover { opacity: 0.7; }
-
-        /* Modal İçi Modern Tasarım Stilleri */
-        .breakdown-card { border: none; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; overflow: hidden; }
-        .breakdown-header { padding: 12px 20px; font-weight: bold; color: white; display: flex; justify-content: space-between; align-items: center; }
-        .header-R { background-color: #0d6efd; } /* Mavi */
-        .header-X { background-color: #198754; } /* Yeşil */
-        .header-Y { background-color: #fd7e14; } /* Turuncu */
-        .header-Diğer { background-color: #6c757d; } /* Gri */
-
-        .table-breakdown th { background-color: #f8f9fa; font-size: 0.8rem; color: #495057; }
-        .table-breakdown td { font-size: 0.85rem; vertical-align: middle; }
-        
-        .table-ekstre th { background-color: #e9ecef; font-size: 0.8rem; color: #495057; border-bottom: 2px solid #dee2e6; }
-        .table-ekstre td { font-size: 0.85rem; vertical-align: middle; padding: 8px; }
-        
-        .bakiye-badge { font-size: 0.9rem; padding: 5px 10px; border-radius: 6px; background: rgba(255,255,255,0.2); }
-    </style>
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<link rel="stylesheet" href="/css/cari-islem.css?v=1" />
 }
-
-@Html.AntiForgeryToken()
-
-<div id="loadingOverlay" class="loading-overlay">
-    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
-    <div class="mt-3 fw-bold text-primary" style="font-size:1.1rem;">İşlem yapılıyor, lütfen bekleyiniz...</div>
-</div>
-
-<div class="container-fluid mt-3 px-4">
-    
-    <div class="top-toolbar d-flex justify-content-between align-items-center flex-wrap gap-3">
-        <div class="d-flex align-items-center gap-3">
-            <h4 class="m-0 text-primary fw-bold"><i class="fa fa-chart-line me-2"></i>Gönderim Listesi</h4>
-            <span class="badge bg-secondary px-3 py-2 fs-6 rounded-pill">Veritabanı: @ViewBag.CurrentDb</span>
-            <span class="badge bg-info px-3 py-2 fs-6 rounded-pill">Dönem: 01.01.2024 - Bugün</span>
-        </div>
-        
-        <form asp-action="Index" method="get" id="filterForm" class="d-flex align-items-center gap-2 m-0">
-            <input type="hidden" name="db" value="@currentDb" />
-            
-            <div class="input-group input-group-sm shadow-sm" style="width: 150px;">
-                <button type="submit" class="btn btn-primary w-100" title="Verileri Yenile"><i class="fa fa-sync-alt me-1"></i> Listeyi Yenile</button>
-            </div>
-            
-            <div class="input-group input-group-sm shadow-sm" style="width: 250px;">
-                <span class="input-group-text bg-light"><i class="fa fa-search text-muted"></i></span>
-                <input type="text" id="customSearchBox" class="form-control" placeholder="Tabloda Ara (Kod, Ad, Mail...)" />
-            </div>
-
-            <button type="button" class="btn btn-success btn-sm shadow-sm px-4 fw-bold" onclick="sendSelectedEmails()">
-                <i class="fa fa-paper-plane me-1"></i> SEÇİLENLERE GÖNDER (<span id="selectedCount">0</span>)
-            </button>
-        </form>
+<div class="container-fluid py-3 na ci em" id="em" data-kod="@onKod">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-paper-plane"></i></span>E-Mutabakat</h4>
+        <span style="font-size:.68rem;font-weight:700;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px"><i class="fas fa-database me-1"></i>Cari Mutabakat · İletişim Bilgileri</span>
+        <span class="ci-kanal mail"><i class="fas fa-envelope"></i> E-posta</span><span class="ci-kanal wa"><i class="fab fa-whatsapp"></i> WhatsApp</span>
+        <span class="sub w-100">Cari kartta kayıtlı <b>ana mutabakat yetkilisinin e-postası ve cep telefonu</b> üzerinden sistem mutabakat talebini kendisi gönderir: e-postaya PDF ekstre ve yanıt bağlantısı, WhatsApp'a kısa mesaj ve aynı bağlantı. Cari bağlantıdan <b>Mutabıkız / İtiraz</b> der, yanıt otomatik işlenir; yanıtsız gönderimlere hatırlatma gider. Mesaj metinleri Şablonlar sekmesinden düzenlenir; mailto: / wa.me bağlantıları cihazdaki posta ve WhatsApp uygulamasını da açar.</span>
     </div>
-
-    @if (!string.IsNullOrEmpty(ViewBag.Error))
-    {
-        <div class="alert alert-danger shadow-sm"><i class="fa fa-exclamation-triangle"></i> @ViewBag.Error</div>
-    }
-
-    <div class="card shadow-sm border-0">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table id="mutabakatTable" class="table table-custom mb-0 w-100">
-                    <thead>
-                        <tr>
-                            <th style="width: 30px;" class="text-center"><input type="checkbox" id="selectAll" class="form-check-input" style="cursor:pointer;" /></th>
-                            <th>Cari Kodu</th>
-                            <th style="min-width: 250px;">Cari Adı</th>
-                            <th class="text-end col-bakiye">R Bakiye (TL)</th>
-                            <th class="text-end">R Döviz</th>
-                            <th class="text-end col-bakiye">X Bakiye (TL)</th>
-                            <th class="text-end">X Döviz</th>
-                            <th class="text-end col-bakiye">Y Bakiye (TL)</th>
-                            <th class="text-end">Y Döviz</th>
-                            <th class="text-end col-bakiye">Diğer Bakiye</th>
-                            <th class="text-end">Diğer Döviz</th>
-                            <th class="text-end col-bakiye bg-primary" style="color:white !important;">TOPLAM TL</th>
-                            <th style="min-width: 240px;">E-Mail Adresi</th>
-                            <th class="text-center">Durum</th>
-                            <th class="text-center">İşlem</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (Model.Items != null && Model.Items.Any())
-                        {
-                            foreach (var item in Model.Items)
-                            {
-                                <tr>
-                                    <td class="text-center">
-                                        <input type="checkbox" class="form-check-input row-checkbox" id="chk_@item.CardCode" data-code="@item.CardCode" data-name="@item.CardName" data-email="@item.Email" data-balancetl="@item.BalanceTL" @(string.IsNullOrEmpty(item.Email) ? "disabled" : "") />
-                                    </td>
-                                    <td class="fw-bold text-secondary text-nowrap">@item.CardCode</td>
-                                    <td>@item.CardName</td>
-
-                                    <td class="text-end text-nowrap col-bakiye @(item.BalanceTL_R > 0 ? "val-positive" : (item.BalanceTL_R < 0 ? "val-negative" : "val-zero"))">@item.BalanceTL_R.ToString("N2")</td>
-                                    <td class="text-end text-nowrap curr-text">@Html.Raw(item.Currency_R ?? "-")</td>
-
-                                    <td class="text-end text-nowrap col-bakiye @(item.BalanceTL_X > 0 ? "val-positive" : (item.BalanceTL_X < 0 ? "val-negative" : "val-zero"))">@item.BalanceTL_X.ToString("N2")</td>
-                                    <td class="text-end text-nowrap curr-text">@Html.Raw(item.Currency_X ?? "-")</td>
-
-                                    <td class="text-end text-nowrap col-bakiye @(item.BalanceTL_Y > 0 ? "val-positive" : (item.BalanceTL_Y < 0 ? "val-negative" : "val-zero"))">@item.BalanceTL_Y.ToString("N2")</td>
-                                    <td class="text-end text-nowrap curr-text">@Html.Raw(item.Currency_Y ?? "-")</td>
-
-                                    <td class="text-end text-nowrap col-bakiye @(item.BalanceTL_Diger > 0 ? "val-positive" : (item.BalanceTL_Diger < 0 ? "val-negative" : "val-zero"))">@item.BalanceTL_Diger.ToString("N2")</td>
-                                    <td class="text-end text-nowrap curr-text">@Html.Raw(item.Currency_Diger ?? "-")</td>
-
-                                    <!-- Tıklanabilir Bakiye Alanı -->
-                                    <td class="text-end text-nowrap col-bakiye fw-bold" style="font-size:0.95rem;">
-                                        <a href="javascript:void(0);" 
-                                           onclick="showBreakdown('@item.CardCode', '@item.CardName.Replace("'", "\\'")')" 
-                                           class="balance-link @(item.BalanceTL > 0 ? "text-danger" : (item.BalanceTL < 0 ? "text-success" : "text-dark"))" 
-                                           title="Hesap Kırılımını Görmek İçin Tıklayın">
-                                            @item.BalanceTL.ToString("N2")
-                                        </a>
-                                    </td>
-
-                                    <td>
-                                        <div class="input-group email-input-group input-group-sm">
-                                            <input type="email" class="form-control txt-email" value="@item.Email" data-cardcode="@item.CardCode" placeholder="E-Mail Giriniz..." />
-                                            <button class="btn btn-outline-secondary btn-save-email" type="button" title="Kaydet"><i class="fa fa-save"></i></button>
-                                        </div>
-                                    </td>
-
-                                    <td class="text-center">
-                                        @if (item.LastStatus == 0) { <span class="status-badge status-wait">Bekliyor</span> }
-                                        else if (item.LastStatus == 1) { <span class="status-badge status-ok">Mutabık</span> }
-                                        else if (item.LastStatus == 2) { <span class="status-badge status-reject">Red</span> }
-                                        else { <span class="badge bg-light text-dark border">Yok</span> }
-                                        @if (item.LastEmailDate.HasValue && item.LastStatus == 0) { <div style="font-size:10px;" class="text-muted mt-1">@item.LastEmailDate.Value.ToString("dd.MM HH:mm")</div> }
-                                    </td>
-
-                                    <td class="text-center">
-                                        <a href="@Url.Action("DurumRaporu", "Rapor59", new { cardCode = item.CardCode, db = currentDb })" class="btn btn-light btn-sm border shadow-sm text-primary" title="Geçmiş Hareketler">
-                                            <i class="fa fa-history"></i>
-                                        </a>
-                                    </td>
-                                </tr>
-                            }
-                        }
-                        else
-                        {
-                            <tr><td colspan="15" class="text-center py-5 text-muted"><i class="fa fa-search fa-2x mb-2"></i><br>Kayıt bulunamadı.</td></tr>
-                        }
-                    </tbody>
-                </table>
+    <div class="na-sekme" id="emSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="liste" class="aktif"><i class="fas fa-list me-1"></i>Cariler <span class="n" id="emN">0</span></button>
+        <button type="button" data-p="gonderim"><i class="fas fa-paper-plane me-1"></i>Gönderimler ve Yanıtlar <span class="n" id="emNG">0</span></button>
+        <button type="button" data-p="iletisim"><i class="fas fa-address-book me-1"></i>İletişim Bilgileri <span class="n" id="emNI">0</span></button>
+        <button type="button" data-p="sablon"><i class="fas fa-file-lines me-1"></i>Şablonlar</button>
+        <button type="button" data-p="gunluk"><i class="fas fa-clock-rotate-left me-1"></i>Günlük</button>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+    <div class="ci-kpi" id="emKpi"></div>
+    <div class="na-panel aktif" data-p="liste">
+        <div class="row g-2">
+            <div class="col-lg-8">
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Filtreler</span><span class="d-flex gap-1 align-items-center">
+                        <button type="button" class="btn btn-light btn-sm py-0" id="emTemizle" style="font-size:.66rem">Temizle</button>
+                        <select class="form-select" id="emKanal" style="width:auto;font-size:.66rem;height:24px;padding:0 22px 0 6px"><option value="E-posta">E-posta</option><option value="WhatsApp">WhatsApp</option><option value="İkisi">E-posta + WhatsApp</option></select>
+                        <button type="button" class="btn btn-primary btn-sm py-0" id="emSeciliGonder" style="font-size:.66rem" disabled><i class="fas fa-paper-plane me-1"></i>Seçilenlere Gönder</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm py-0" id="emHatirlatHepsi" style="font-size:.66rem" title="Hatırlatma zamanı gelmiş tüm bekleyenlere"><i class="fas fa-bell me-1"></i>Hatırlat</button>
+                        <button type="button" class="btn btn-light btn-sm py-0" id="emSenkron" style="font-size:.66rem" title="Yanıt bağlantısından gelen cevapları çek"><i class="fas fa-rotate me-1"></i>Yanıtları Çek</button></span></div>
+                    <div class="na-kart-g">
+                        <div class="ci-filtre">
+                            <div><label>Ara</label><input class="form-control" id="emAra" placeholder="Kod, ünvan, yetkili, e-posta…"></div>
+                            <div><label>Cari Tipi</label><select class="form-select" id="emTip"><option value="">Tümü</option><option>Müşteri</option><option>Tedarikçi</option></select></div>
+                            <div><label>Şirket</label><select class="form-select" id="emSirket"><option value="">Tümü</option></select></div>
+                            <div><label>Kanal Uygunluğu</label><select class="form-select" id="emUygun"><option value="">Tümü</option><option value="mail">E-posta Var</option><option value="wa">WhatsApp Var</option><option value="ikisi">İkisi De Var</option><option value="yok">İletişim Eksik</option></select></div>
+                            <div><label>E-Mutabakat Durumu</label><select class="form-select" id="emDurum"><option value="">Tümü</option><option>Gönderilmedi</option><option>Yanıt Bekliyor</option><option value="hatirlat">Hatırlatma Zamanı</option><option>Mutabık</option><option>İtirazlı</option></select></div>
+                            <div><label>Bakiye</label><select class="form-select" id="emBakiye"><option value="">Tümü</option><option value="var">Bakiyesi Olan</option><option value="yok">Bakiyesi Sıfır</option></select></div>
+                            <div class="ms-auto na-mini" id="emSayi"></div>
+                        </div>
+                        <div class="table-responsive"><table class="na-tablo ci-liste" id="emTablo" data-dinamik="kapali"><thead><tr><th class="s"><input type="checkbox" id="emHepsi" title="Listedekilerin tümünü seç"></th><th>Cari</th><th>Şirket</th><th class="e">Bakiye</th><th>Mutabakat Yetkilisi</th><th>Kanallar</th><th>Son Gönderim</th><th>Durum</th><th></th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="na-kart ci-yan"><div class="na-kart-b"><span><i class="fas fa-eye me-1"></i>Mesaj Önizleme</span><span class="not" id="emOnNot">satıra tıklayın</span></div>
+                    <div class="na-kart-g" id="emOnizle"><div class="na-bos">Listeden bir cari seçince e-posta ve WhatsApp mesajı burada görünür.</div></div></div>
             </div>
         </div>
     </div>
-    
-    <div class="mt-4 mb-5 text-center">
-        <a asp-controller="Home" asp-action="Index" asp-route-db="@currentDb" class="btn btn-outline-secondary fw-bold shadow-sm px-4">
-            <i class="fas fa-home me-2"></i> Ana Sayfaya Dön
-        </a>
+    <div class="na-panel" data-p="gonderim">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-paper-plane me-1"></i>Gönderimler ve Yanıtlar</span><span class="d-flex gap-1 align-items-center"><input class="form-control" id="emGAra" placeholder="Belge, cari, kime…" style="width:200px;font-size:.66rem;height:24px"><select class="form-select" id="emGSonuc" style="width:auto;font-size:.66rem;height:24px;padding:0 22px 0 6px"><option value="">Tüm Sonuçlar</option><option>Bekliyor</option><option>Mutabık</option><option>İtirazlı</option></select><select class="form-select" id="emGKanal" style="width:auto;font-size:.66rem;height:24px;padding:0 22px 0 6px"><option value="">Tüm Kanallar</option><option>E-posta</option><option>WhatsApp</option></select><button type="button" class="btn btn-light btn-sm py-0" id="emGExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ci-liste" id="emGonderimler" data-dinamik="kapali"><thead><tr><th>Belge No</th><th>Gönderim</th><th>Cari</th><th class="s">Kanal</th><th>Kime</th><th>Bakiye Özeti</th><th class="e">TL</th><th class="s">Tekrar</th><th>Sonuç</th><th>Yanıt</th><th>Gönderen</th><th></th></tr></thead><tbody></tbody></table></div></div></div>
+    </div>
+    <div class="na-panel" data-p="iletisim">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-address-book me-1"></i>Kayıtlı İletişim Bilgileri (Mutabakat Yetkilileri)</span><span class="d-flex gap-1 align-items-center"><input class="form-control" id="emIAra" placeholder="Cari, kişi, e-posta, telefon…" style="width:220px;font-size:.66rem;height:24px"><select class="form-select" id="emIEksik" style="width:auto;font-size:.66rem;height:24px;padding:0 22px 0 6px"><option value="">Tümü</option><option value="mail">E-postası Eksik</option><option value="cep">Cep Telefonu Eksik</option><option value="ana">Ana Yetkili Yok</option></select></span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ci-liste" id="emKisiler" data-dinamik="kapali"><thead><tr><th>Cari</th><th>Kişi</th><th>Ünvan · Departman</th><th>E-posta</th><th>Cep Telefonu (WhatsApp)</th><th class="s">Ana Yetkili</th><th></th></tr></thead><tbody></tbody></table></div></div></div>
+    </div>
+    <div class="na-panel" data-p="sablon">
+        <div class="row g-2">
+            <div class="col-lg-6"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-envelope me-1"></i>E-posta Şablonu</span><span class="not">PDF ekstre otomatik eklenir</span></div><div class="na-kart-g">
+                <label class="na-mini">Konu</label><input class="form-control form-control-sm mb-1" id="emSMailKonu" style="font-size:.68rem">
+                <label class="na-mini">Gövde</label><textarea class="form-control" id="emSMailGovde" rows="12"></textarea></div></div></div>
+            <div class="col-lg-6"><div class="na-kart"><div class="na-kart-b"><span><i class="fab fa-whatsapp me-1"></i>WhatsApp Şablonu</span><span class="not">kısa metin · tek mesaj</span></div><div class="na-kart-g">
+                <label class="na-mini">Mesaj</label><textarea class="form-control mb-1" id="emSWaGovde" rows="6"></textarea>
+                <label class="na-mini">Hatırlatma Eki (iki kanalda da)</label><textarea class="form-control" id="emSHatirlatma" rows="3"></textarea></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-tags me-1"></i>Yer Tutucular</span></div><div class="na-kart-g"><div id="emAlanlar" class="na-mini" style="font-size:.64rem"></div><div class="d-flex gap-1 mt-2"><button type="button" class="btn btn-primary btn-sm" id="emSablonKaydet"><i class="fas fa-floppy-disk me-1"></i>Şablonu Kaydet</button><span class="na-mini" id="emSablonNot">Hatırlatma eşiği: <b id="emHatGun"></b> gün yanıtsız</span></div></div></div></div>
+        </div>
+    </div>
+    <div class="na-panel" data-p="gunluk">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Günlük (E-Mutabakat ve İletişim Değişiklikleri)</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ci-liste" id="emLog" data-dinamik="kapali"><thead><tr><th>Zaman</th><th>Kullanıcı</th><th>İşlem</th><th>Belge</th><th>Açıklama</th></tr></thead><tbody></tbody></table></div></div></div>
     </div>
 </div>
-
-<!-- 1. Bakiye Detayı (Kümülatif Gruplama) Modalı -->
-<div class="modal fade" id="breakdownModal" tabindex="-1" aria-labelledby="breakdownModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-xl">
-    <div class="modal-content">
-      <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title" id="breakdownModalLabel"></h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body bg-light" id="breakdownModalBody">
-        <!-- İçerik AJAX ile yüklenecek -->
-      </div>
-      <div class="modal-footer bg-white border-top">
-        <button type="button" class="btn btn-secondary shadow-sm" data-bs-dismiss="modal">Kapat</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- 2. Ekstre Detayı (Satır Satır Fiş Hareketleri) Modalı -->
-<div class="modal fade" id="ekstreModal" tabindex="-1" aria-labelledby="ekstreModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-xl modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header bg-dark text-white">
-        <h5 class="modal-title" id="ekstreModalLabel"><i class="fa fa-list-alt me-2"></i> Hesap Ekstresi</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body p-0" id="ekstreModalBody">
-        <!-- İçerik AJAX ile yüklenecek -->
-      </div>
-      <div class="modal-footer bg-light">
-        <button type="button" class="btn btn-secondary shadow-sm" onclick="goBackToBreakdown()">Geri Dön</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 @section Scripts {
-    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
-    <script>
-        const activeDbCode = '@currentDb';
-        const csrfToken = $('input[name="__RequestVerificationToken"]').val();
-
-        // Geri dönüşler için son açılan carinin kodunu ve adını aklımızda tutalım
-        let activeCardCode = '';
-        let activeCardName = '';
-
-        $(document).ready(function () {
-            var table = $('#mutabakatTable').DataTable({
-                "language": { "url": "//cdn.datatables.net/plug-ins/1.13.4/i18n/tr.json" },
-                "paging": false,
-                "scrollY": "70vh",
-                "scrollX": true,
-                "scrollCollapse": true,
-                "info": true,
-                "order": [[2, "asc"]], 
-                "columnDefs": [{ "orderable": false, "targets": [0, 12, 14] }],
-                "dom": 'lrtip' 
-            });
-
-            $('#customSearchBox').on('keyup', function () { table.search(this.value).draw(); });
-
-            function updateSelectedCount() { $('#selectedCount').text($('.row-checkbox:checked').length); }
-
-            $('#selectAll').on('click', function () {
-                var rows = table.rows({ 'search': 'applied' }).nodes();
-                $('input[type="checkbox"].row-checkbox:not(:disabled)', rows).prop('checked', this.checked);
-                updateSelectedCount();
-            });
-
-            $(document).on('change', '.row-checkbox', function() { updateSelectedCount(); });
-
-            $(document).on('click', '.btn-save-email', function() {
-                var btn = $(this);
-                var input = btn.closest('.input-group').find('.txt-email');
-                var cardCode = input.data('cardcode');
-                var newEmail = input.val();
-                var icon = btn.find('i');
-
-                icon.attr('class', 'fa fa-spinner fa-spin');
-                btn.prop('disabled', true);
-
-                $.ajax({
-                    url: '@Url.Action("UpdateCustomerEmail", "Rapor59")?db=' + activeDbCode,
-                    type: 'POST',
-                    headers: { "RequestVerificationToken": csrfToken },
-                    data: { cardCode: cardCode, email: newEmail },
-                    success: function(res) {
-                        btn.prop('disabled', false); icon.attr('class', 'fa fa-save');
-                        if(res.success) {
-                            const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
-                            Toast.fire({ icon: 'success', title: 'E-Mail Kaydedildi' });
-                            var checkbox = $('#chk_' + cardCode);
-                            checkbox.data('email', newEmail);
-                            if(newEmail && newEmail.trim() !== "") { checkbox.prop('disabled', false); } 
-                            else { checkbox.prop('disabled', true).prop('checked', false); updateSelectedCount(); }
-                        } else { Swal.fire('Hata', res.message, 'error'); }
-                    },
-                    error: function() {
-                        btn.prop('disabled', false); icon.attr('class', 'fa fa-save');
-                        Swal.fire('Hata', 'Sunucu bağlantı hatası.', 'error');
-                    }
-                });
-            });
-        });
-
-        // Tıklanan Bakiyenin Kümülatif Gruplarını Gösteren Fonksiyon
-        function showBreakdown(cardCode, cardName) {
-            activeCardCode = cardCode;
-            activeCardName = cardName;
-
-            $('#breakdownModalLabel').html(`
-                <i class="fa fa-sitemap me-2"></i> Kümülatif Hesap Kırılımı 
-                <span class="badge bg-light text-primary ms-2 fs-6">01.01.2024 - Bugün</span>
-            `);
-            
-            $('#breakdownModalBody').html('<div class="text-center my-5"><div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div><div class="mt-3 text-muted">Kümülatif hesap bakiyeleri getiriliyor...</div></div>');
-            
-            // Eğer Ekstre Modalı Açıksa Kapat (Üst üste binmeyi önler)
-            var ekstreEl = document.getElementById('ekstreModal');
-            var ekstreModal = bootstrap.Modal.getInstance(ekstreEl);
-            if(ekstreModal) { ekstreModal.hide(); }
-
-            // Breakdown modalını göster
-            var breakdownEl = document.getElementById('breakdownModal');
-            var breakdownModal = bootstrap.Modal.getInstance(breakdownEl) || new bootstrap.Modal(breakdownEl);
-            breakdownModal.show();
-
-            $.ajax({
-                url: '@Url.Action("GetBalanceBreakdown", "Rapor59")?db=' + activeDbCode,
-                type: 'POST',
-                data: {
-                    cardCode: cardCode,
-                    includeConnected: true
-                },
-                success: function(res) {
-                    if (!res || res.length === 0) {
-                        $('#breakdownModalBody').html('<div class="alert alert-info border-0 shadow-sm"><i class="fa fa-info-circle me-2"></i> Bu cariye ait bakiye oluşturan hesap/işlem kaydı bulunamadı.</div>');
-                        return;
-                    }
-
-                    var groupedData = {};
-                    res.forEach(function(item) {
-                        var type = item.aktarimTipi;
-                        if (!groupedData[type]) {
-                            groupedData[type] = { items: [], totalTL: 0 };
-                        }
-                        groupedData[type].items.push(item);
-                        groupedData[type].totalTL += item.tl;
-                    });
-
-                    var html = `<div class="mb-3 p-3 bg-white rounded shadow-sm border text-secondary" style="font-size:0.95rem;">
-                                  <i class="fa fa-user text-primary me-2"></i> <strong>Ana Cari:</strong> ${cardCode} - ${cardName}
-                                </div>`;
-
-                    Object.keys(groupedData).sort().forEach(function(type) {
-                        var group = groupedData[type];
-                        var headerClass = 'header-' + type;
-                        if(type !== 'R' && type !== 'X' && type !== 'Y') headerClass = 'header-Diğer';
-
-                        html += `
-                        <div class="card breakdown-card">
-                            <div class="breakdown-header ${headerClass}">
-                                <span><i class="fa fa-layer-group me-2"></i> ${type === 'Diğer' ? 'DİĞER' : type} İŞLEMLERİ</span>
-                                <span class="bakiye-badge">Grup Toplamı: ${group.totalTL.toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL</span>
-                            </div>
-                            <div class="card-body p-0">
-                                <div class="table-responsive">
-                                    <table class="table table-hover table-breakdown mb-0">
-                                        <thead>
-                                            <tr>
-                                                <th>Hesap Türü</th>
-                                                <th>Hesap Kodu</th>
-                                                <th>Hesap Adı</th>
-                                                <th class="text-center">Para Birimi</th>
-                                                <th class="text-end">Döviz Tutarı</th>
-                                                <th class="text-end">TL Karşılığı (Ekstre Gör)</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>`;
-
-                        group.items.forEach(function(item) {
-                            var tlColor = item.tl > 0 ? "text-danger" : (item.tl < 0 ? "text-success" : "text-dark");
-                            var categoryBadge = item.kategori === 'Muhasebe Hesabı' ? '<span class="badge bg-warning text-dark shadow-sm">Muhasebe</span>' : `<span class="badge bg-light text-secondary border shadow-sm">${item.kategori}</span>`;
-                            var actualAmount = (item.curr === 'TRY' || item.curr === 'TL') ? item.tl : item.fc;
-
-                            html += `
-                                <tr>
-                                    <td>${categoryBadge}</td>
-                                    <td class="fw-bold">${item.hesapKodu}</td>
-                                    <td class="text-wrap" style="max-width: 250px;">${item.hesapAdi}</td>
-                                    <td class="text-center fw-bold text-primary">${item.curr}</td>
-                                    <td class="text-end">${actualAmount.toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
-                                    <td class="text-end fw-bold">
-                                        <a href="javascript:void(0);" onclick="showEkstre('${item.hesapKodu}', '${item.aktarimTipi}', '${item.kategori}', '${item.hesapAdi.replace(/'/g, "\\'")}')" class="${tlColor} balance-link" title="Fiş Detaylarını Görüntüle">
-                                            ${item.tl.toLocaleString('tr-TR', {minimumFractionDigits: 2})} ₺
-                                        </a>
-                                    </td>
-                                </tr>`;
-                        });
-
-                        html += `       </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>`;
-                    });
-
-                    $('#breakdownModalBody').html(html);
-                },
-                error: function() {
-                    $('#breakdownModalBody').html('<div class="alert alert-danger border-0 shadow-sm"><i class="fa fa-times-circle me-2"></i> Detaylar yüklenirken sunucu ile iletişim koptu. Lütfen sayfayı yenileyip tekrar deneyin.</div>');
-                }
-            });
-        }
-
-        // Tıklanan Satırın Yevmiye Fiş Detaylarını (Ekstre) Gösteren Fonksiyon
-        function showEkstre(hesapKodu, aktarimTipi, kategori, hesapAdi) {
-            
-            // Ekran kitlenmesini önlemek için Birinci (Breakdown) modalını gizliyoruz.
-            var breakdownEl = document.getElementById('breakdownModal');
-            var breakdownModal = bootstrap.Modal.getInstance(breakdownEl);
-            if (breakdownModal) { breakdownModal.hide(); }
-            
-            $('#ekstreModalLabel').html(`<i class="fa fa-list-alt me-2"></i> ${hesapKodu} - ${hesapAdi} (${aktarimTipi === 'Diğer' ? 'DİĞER' : aktarimTipi} İşlemleri)`);
-            $('#ekstreModalBody').html('<div class="text-center my-5"><div class="spinner-border text-dark" style="width: 3rem; height: 3rem;"></div><div class="mt-3 text-muted">Fiş hareketleri taranıyor...</div></div>');
-            
-            // İkinci (Ekstre) modalını açıyoruz
-            var ekstreEl = document.getElementById('ekstreModal');
-            var ekstreModal = bootstrap.Modal.getInstance(ekstreEl) || new bootstrap.Modal(ekstreEl);
-            ekstreModal.show();
-
-            $.ajax({
-                url: '@Url.Action("GetAccountDetails", "Rapor59")?db=' + activeDbCode,
-                type: 'POST',
-                data: {
-                    hesapKodu: hesapKodu,
-                    aktarimTipi: aktarimTipi,
-                    kategori: kategori
-                },
-                success: function(res) {
-                    if (!res || res.length === 0) {
-                        $('#ekstreModalBody').html('<div class="alert alert-warning m-3 border-0 shadow-sm"><i class="fa fa-exclamation-triangle me-2"></i> Bu döneme ait hareket bulunamadı.</div>');
-                        return;
-                    }
-
-                    var html = `
-                        <div class="table-responsive" style="max-height: 60vh;">
-                            <table class="table table-hover table-striped table-ekstre mb-0">
-                                <thead style="position: sticky; top: 0; z-index: 1;">
-                                    <tr>
-                                        <th>Tarih</th>
-                                        <th>İşlem No</th>
-                                        <th>Belge No</th>
-                                        <th style="min-width: 200px;">Açıklama</th>
-                                        <th class="text-center">Para Birimi</th>
-                                        <th class="text-end">Borç (TL)</th>
-                                        <th class="text-end">Alacak (TL)</th>
-                                        <th class="text-end">Bakiye (TL)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>`;
-
-                    res.forEach(function(item) {
-                        var bakiyeColor = item.bakiyeTL > 0 ? "text-danger" : (item.bakiyeTL < 0 ? "text-success" : "text-dark");
-                        html += `
-                            <tr>
-                                <td>${item.tarih}</td>
-                                <td>${item.islemNo}</td>
-                                <td>${item.belgeNo}</td>
-                                <td>${item.aciklama}</td>
-                                <td class="text-center fw-bold">${item.paraBirimi}</td>
-                                <td class="text-end text-danger">${item.borcTL > 0 ? item.borcTL.toLocaleString('tr-TR', {minimumFractionDigits: 2}) : '-'}</td>
-                                <td class="text-end text-success">${item.alacakTL > 0 ? item.alacakTL.toLocaleString('tr-TR', {minimumFractionDigits: 2}) : '-'}</td>
-                                <td class="text-end fw-bold ${bakiyeColor}">${item.bakiyeTL.toLocaleString('tr-TR', {minimumFractionDigits: 2})} ₺</td>
-                            </tr>`;
-                    });
-
-                    html += `   </tbody>
-                            </table>
-                        </div>`;
-
-                    $('#ekstreModalBody').html(html);
-                },
-                error: function() {
-                    $('#ekstreModalBody').html('<div class="alert alert-danger m-3 border-0 shadow-sm"><i class="fa fa-times-circle me-2"></i> Veriler getirilemedi. Bağlantınızı kontrol edin.</div>');
-                }
-            });
-        }
-
-        // İkinci Modaldan Birinci Modala Dönüş Fonksiyonu
-        function goBackToBreakdown() {
-            var ekstreEl = document.getElementById('ekstreModal');
-            var ekstreModal = bootstrap.Modal.getInstance(ekstreEl);
-            if(ekstreModal) { ekstreModal.hide(); }
-
-            if(activeCardCode !== '') {
-                // Hafızadaki son aktif cariden breakdown metodunu tekrar tetikliyoruz
-                showBreakdown(activeCardCode, activeCardName);
-            }
-        }
-
-        function sendSelectedEmails() {
-            var selectedItems = [];
-            $('.row-checkbox:checked').each(function () {
-                var chk = $(this);
-                selectedItems.push({
-                    CardCode: chk.data('code'), CardName: chk.data('name'), Email: chk.data('email'),
-                    BalanceTL: parseFloat(chk.data('balancetl').toString().replace(',', '.')), BalanceFC: 0, Currency: "TRY" 
-                });
-            });
-
-            if (selectedItems.length === 0) { Swal.fire('Uyarı', 'Lütfen listeden en az bir cari seçiniz.', 'warning'); return; }
-
-            // Backend tarihleri eziyor ama modeli kırmamak adına null değerleri iletiyoruz.
-            var filters = {
-                StartDate: "2024-01-01", EndDate: new Date().toISOString().split('T')[0],
-                CariTipi: "S", IncludeConnected: true, SelectedIslemTipleri: [] 
-            };
-
-            Swal.fire({
-                title: 'E-Mutabakat Gönderimi', text: selectedItems.length + " adet cariye detaylı (X, R, Y kırılımlı) ekstre maili gönderilecektir. Onaylıyor musunuz?",
-                icon: 'question', showCancelButton: true, confirmButtonText: 'Evet, Gönder', cancelButtonText: 'İptal', confirmButtonColor: '#0d6efd',
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    $('#loadingOverlay').css('display', 'flex');
-                    $.ajax({
-                        url: '@Url.Action("SendEmails", "Rapor59")?db=' + activeDbCode,
-                        type: 'POST', contentType: 'application/json', headers: { "RequestVerificationToken": csrfToken },
-                        data: JSON.stringify({ SelectedItems: selectedItems, Filters: filters }),
-                        success: function (response) {
-                            $('#loadingOverlay').hide();
-                            if (response.success) { Swal.fire('Başarılı', response.message, 'success').then(() => location.reload()); } 
-                            else { Swal.fire('Hata', 'İşlem sırasında bir hata oluştu.', 'error'); }
-                        },
-                        error: function () { $('#loadingOverlay').hide(); Swal.fire('Hata', 'Sunucu ile iletişim sağlanamadı.', 'error'); }
-                    });
-                }
-            });
-        }
-    </script>
+<script src="/js/e-mutabakat.js?v=1"></script>
 }

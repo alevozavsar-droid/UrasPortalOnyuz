@@ -262,7 +262,7 @@ namespace WebApplication3.Data
                     G("cari-hesap", "Cari Hesap Yönetimi", R("Cari Bilgileri"), R("Cari Ekstre Raporu"), R("Cari Bakiye Raporu"), R("Adat Hesaplama")),
                     G("alacak-tahsilat", "Alacak ve Tahsilat Takibi", R("Tahsilat"), R("Fatura ve Tahsilat Takip Raporu"), R("Konsolide Tahsilat Takip Raporu"), R("Bekleyen Cari İşlemler Raporu")),
                     G("tedarikci-borc", "Tedarikçi ve Borç Takibi", R("Tedarikçi Fatura ve Ödeme Takip Raporu"), R("Tedarikçi Konsolide Ödeme Takip Raporu")),
-                    G("mutabakat-kapama", "Mutabakat ve Kapama", R("Cari Mutabakat Yönetimi", "CariMutabakat", "Index"), R("Mutabakat"), R("E-Mutabakat"), R("Otomatik Kapama"), R("Cari & Hesap Ekstre Karşılaştırma")),
+                    G("mutabakat-kapama", "Mutabakat ve Kapama", R("Cari Mutabakat Yönetimi", "CariMutabakat", "Index"), R("Otomatik Kapatma"), R("E-Mutabakat"), R("Cari & Hesap Ekstre Karşılaştırma")),   // "Mutabakat" → Otomatik Kapatma; "Otomatik Kapama" (Rapor103) kaldırıldı, oraya yönlenir
                     G("temlik-ozel", "Temlik ve Özel İşlemler", R("Temlik İşlemleri"), R("Hukuki Süreçteki Cariler"))),
                   // Grup şirketleri arası yansıtma, mahsup ve temlik işlemleri (Controllers/GrupIciController.cs; talep motoru)
                   G("grup-ici-ozel", "Grup İçi Özel Finansal İşlemler",

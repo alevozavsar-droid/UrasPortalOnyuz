@@ -519,12 +519,13 @@ namespace WebApplication3.Controllers
  {return default;
 }
 
+        /// <summary>Cari Ekstre / Hesap Ekstresi Mutabakatı (yeni tasarım): Views/Rapor141/Index.cshtml + wwwroot/js/ekstre-karsilastirma.js; uçlar Controllers/EkstreKarsilastirmaController.cs. ?kod= ile cari ön seçilir.</summary>
         [HttpGet]
-        public async Task<IActionResult> Index(string bas, string bit, string tipler, string cariTipi,
-            bool devirDahil = false, bool sadeceUyusmayanlar = false, string arama = "", string konsolide = "")
- {WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index", WebApplication3.OrnekDoldurucu.Yeni<WebApplication3.Controllers.Rapor141ViewModel>());
-}
+        public async Task<IActionResult> Index(string kod)
+        {
+            ViewData["Title"] = "Cari Ekstre / Hesap Ekstresi Mutabakatı"; ViewBag.Kod = kod ?? "";
+            return await Task.FromResult(View("Index"));
+        }
 
 
 

@@ -104,6 +104,7 @@ namespace WebApplication3.Data
                 var z = simdi ?? DateTime.Now; var no = $"TH-{tarih:yyyy}-{++_sayac:00000}";
                 var h = new MtHareket { Tarih = tarih.Date, ParaBirimi = pb, BelgeTipi = yontem == "Çek" ? "Çek" : yontem == "Senet" ? "Senet" : "Tahsilat", BelgeNo = no, Aciklama = $"{yontem} · {(mod == "Fatura" ? "fatura bazlı" : "bakiyeden")}{(dag.Count > 0 ? " · " + string.Join(", ", dag.Select(d => d.BelgeNo)) : "")}{(string.IsNullOrWhiteSpace(aciklama) ? "" : " · " + aciklama.Trim())}", Alacak = Math.Round(tutar, 2), KapamaDurumu = yontem == "Çek" || yontem == "Senet" ? "Vade Bekliyor" : "—", IslemTipi = islemTipi };
                 if (yontem == "Çek" || yontem == "Senet") h.Vade = tarih.Date.AddDays(60);
+                decimal avans = Math.Round(tutar - dag.Sum(d => d.Tutar), 2); if (avans > 0.005m) { h.Kalan = avans; if (h.KapamaDurumu == "—") h.KapamaDurumu = "Açık"; }   // dağıtılmayan kısım kapama bekleyen ödeme (Otomatik Kapatma)
                 MutabakatOrnek.HareketEkle(kod, h, dag.Select(d => (d.BelgeNo, d.Tutar)));
                 kayit = new TahsilatKaydi { No = no, Tarih = tarih.Date, CariKodu = k.Kod, CariAd = k.KisaAd, Sirket = k.Sirket, Yontem = yontem, ParaBirimi = pb, Tutar = Math.Round(tutar, 2), Kur = kur, IslemTipi = islemTipi, Mod = mod == "Fatura" ? "Fatura" : "Bakiye", Aciklama = (aciklama ?? "").Trim(), BelgeNo = no, Dagitim = dag, Kullanici = kullanici ?? "", Zaman = z };
                 _tahsilatlar.Insert(0, kayit);

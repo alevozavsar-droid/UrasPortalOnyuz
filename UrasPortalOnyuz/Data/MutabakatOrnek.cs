@@ -327,6 +327,16 @@ namespace WebApplication3.Data
                         if (musteri) h.Alacak = ode; else h.Borc = ode;
                         c.Hareketler.Add(h);
                     }
+                // KAPAMA BEKLEYEN ÖDEME senaryosu (Otomatik Kapatma ekranı): aktif carilerin deterministik bir azınlığında son tahsilat / ödeme faturalarla eşleştirilmemiştir —
+                // faturalar açık kalır, ödeme hareketi Kalan = tutar ile "Açık" (kapanmamış) durur; Otomatik Kapatma'da otomatik ya da elle eşleştirilip kapatılır.
+                if (aktif && pb == pbler[0] && Math.Abs(Seed(k.Kod) % 5) == 1)
+                {
+                    var acikFat = faturalar.Where(f => f.Kalan > 0.005m).OrderBy(f => f.Vade ?? f.Tarih).Take(rnd.Next(1, 3)).ToList();
+                    decimal tutar = acikFat.Count > 0 && rnd.Next(2) == 0 ? Math.Round(acikFat.Sum(f => f.Kalan), 2) : Math.Round((taban + (decimal)rnd.NextDouble() * (tavan - taban)) * olcek * 0.8m, 2);
+                    var t4 = bugun.AddDays(-rnd.Next(8, 26)); var h = new MtHareket { Id = ++id, Tarih = t4, ParaBirimi = pb, BelgeTipi = musteri ? "Tahsilat" : "Ödeme", BelgeNo = Belge(musteri ? "Tahsilat" : "Ödeme", t4), Aciklama = (musteri ? "Havale / EFT · " : "Banka ödemesi · ") + "faturayla eşleştirilmedi (kapama bekliyor)", KapamaDurumu = "Açık", Kalan = tutar, IslemTipi = acikFat.Count > 0 ? acikFat[0].IslemTipi : "X" };
+                    if (musteri) h.Alacak = tutar; else h.Borc = tutar;
+                    c.Hareketler.Add(h);
+                }
                 // pasif carilerde eski açık kalem: son faturanın bir kısmı açık kalır (eski bakiye / değerleme riski senaryosu)
                 if (!aktif && faturalar.Any()) KismiAc(faturalar.OrderByDescending(x => x.Tarih).First());
                 // aktif azınlıkta 7–16 ay önceki kapanmış bir fatura kısmen açık kalır (eski bakiye uyarısı; dövizde değerleme riski)
@@ -615,5 +625,20 @@ namespace WebApplication3.Data
 
         /// <summary>Bakiyeleri yeniler (bakiye zamanı = şimdi; kurlar güncel).</summary>
         public static void Yenile(MtCari c) { lock (Kilit) Hesapla(c); }
+
+        /// <summary>Dış modüller (E-Mutabakat, Otomatik Kapatma, Ekstre Karşılaştırma) için günlük kaydı.</summary>
+        public static void LogYaz(MtCari c, string kullanici, string islem, string onceki, string yeni, string aciklama) { lock (Kilit) Log(c, Kim(kullanici), islem, onceki, yeni, aciklama, c.Durum); }
+        /// <summary>E-Mutabakat gönderimi (e-posta / WhatsApp): numara ve belge no verilir, cariye eklenir, günlüğe yazılır. Resmi süreç (SurecAcik) değişmez.</summary>
+        public static MtGonderim GonderimEkle(MtCari c, MtGonderim g, string kullanici, DateTime? zaman = null)
+        {
+            lock (Kilit)
+            {
+                var t = zaman ?? DateTime.Now; g.Id = ++_gonderimSayac; g.SurecNo = c.SurecNo; g.Tarih = t; g.BakiyeTarihi = t; g.Gonderen = Kim(kullanici);
+                if (string.IsNullOrEmpty(g.BelgeNo)) g.BelgeNo = $"EMT-{t:yyyy}-{_gonderimSayac:000000}"; if (string.IsNullOrEmpty(g.Ozet)) g.Ozet = string.Join(" · ", c.Dovizler.Where(x => x.Net != 0).Select(x => $"{x.ParaBirimi} {x.Net.ToString("N2", CariKartOrnek.Tr)}")); if (g.TlKarsiligi == 0) g.TlKarsiligi = c.BakiyeTl;
+                c.Gonderimler.Add(g); var l = new MtLog { Zaman = t, Kullanici = Kim(kullanici), Islem = "E-Mutabakat Gönder · " + g.Kanal, Onceki = "", Yeni = g.BelgeNo, Aciklama = $"{g.BelgeNo} → {g.Kime} · {g.Ozet}", DurumGecisi = "" };
+                c.Log.Insert(0, l); GenelLog.Insert(0, new MtLog { Zaman = l.Zaman, Kullanici = l.Kullanici, Islem = $"{c.CariKodu} {c.Kart?.KisaAd} · {l.Islem}", Onceki = "", Yeni = l.Yeni, Aciklama = l.Aciklama, DurumGecisi = "" });
+                return g;
+            }
+        }
     }
 }

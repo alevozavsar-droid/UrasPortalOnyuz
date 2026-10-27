@@ -55,7 +55,7 @@ namespace WebApplication3.Data
             ("Rapor61", "Index", "fas fa-shopping-bag", "Malzeme Ekstre Raporu", null),
             ("Rapor62", "Index", "fas fa-shopping-bag", "Toptan Alış Siparişleri Kontrol Listesi", null),
             ("Rapor63", "Index", "fas fa-shopping-bag", "Konsolide Alım Raporu", null),
-            ("Rapor64", "Index", "fas fa-shopping-bag", "Mutabakat", null),
+            ("Rapor64", "Index", "fas fa-link", "Otomatik Kapatma", null),   // eski adı "Mutabakat"; "Otomatik Kapama" (Rapor103) buraya yönlenir
             ("Rapor66", "Index", "fas fa-shopping-bag", "Hammadde Fiyat Raporu", null),
             ("Rapor67", "Index", "fas fa-shopping-bag", "KDV Durum Raporu", null),
             ("Rapor65", "Index", "fas fa-shopping-bag", "Cari Bakiye Raporu", null),
@@ -127,7 +127,6 @@ namespace WebApplication3.Data
             ("Rapor99", "Index", "fas fa-chart-line", "Aktarım Robotu Kontrol Paneli-ASIA", null),
             ("Rapor101", "Index", "fas fa-chart-line", "Açılış Kapanış Kayıt", null),
             ("Rapor102", "Index", "fas fa-chart-line", "Konsolide Gider Raporu", null),
-            ("Rapor103", "Index", "fas fa-chart-line", "Otomatik Kapama", null),
             ("Rapor107", "Index", "fas fa-chart-line", "Yevmiye Kaydı", null),
             ("Rapor106", "Index", "fas fa-chart-line", "Üretim Simülasyonu", null),
             ("Rapor105", "Index", "fas fa-chart-line", "Finekra Hareketler", null),
@@ -326,7 +325,6 @@ namespace WebApplication3.Data
                 case "Rapor53":
                 case "Rapor60":
                 case "Rapor73":
-                case "Rapor103":
                 case "Rapor105":
                 case "Rapor120":
                 case "Rapor121":
