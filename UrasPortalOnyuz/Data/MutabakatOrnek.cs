@@ -56,6 +56,8 @@ namespace WebApplication3.Data
         public DateTime? Vade { get; set; }
         public string KapamaDurumu { get; set; }     // Açık | Kapalı | Kısmi Kapalı | — (faturalarda; çekte vade bekliyor)
         public decimal Kalan { get; set; }           // faturada kapanmamış kısım
+        /// <summary>X | R — ERP aktarım / kayıt tipi (Cari Ekstre AktarimTipi, Çek Akıbeti ve Yapılan Ödemeler'deki X / R ile aynı kavram). Bakiyeler X ve R olarak ayrı izlenir (Cari Bakiye Raporu, kart Cari Risk kartı, Tahsilat).</summary>
+        public string IslemTipi { get; set; } = "X";
     }
 
     /// <summary>Döviz bazında bakiye özeti (§7 tablo).</summary>
@@ -297,7 +299,7 @@ namespace WebApplication3.Data
                     {
                         var t = ay.AddDays(rnd.Next(0, 27)); if (t > bit || t < bas) continue;
                         decimal tutar = Math.Round((taban + (decimal)rnd.NextDouble() * (tavan - taban)) * olcek, 2);
-                        var f = new MtHareket { Id = ++id, Tarih = t, ParaBirimi = pb, BelgeTipi = "Fatura", BelgeNo = Belge("Fatura", t), Aciklama = musteri ? "Satış faturası" : "Alış faturası", Vade = t.AddDays(new[] { 30, 45, 60, 90 }[rnd.Next(4)]), KapamaDurumu = "Açık", Kalan = tutar };
+                        var f = new MtHareket { Id = ++id, Tarih = t, ParaBirimi = pb, BelgeTipi = "Fatura", BelgeNo = Belge("Fatura", t), Aciklama = musteri ? "Satış faturası" : "Alış faturası", Vade = t.AddDays(new[] { 30, 45, 60, 90 }[rnd.Next(4)]), KapamaDurumu = "Açık", Kalan = tutar, IslemTipi = rnd.Next(100) < 78 ? "X" : "R" };   // X / R: çoğunluk X
                         if (musteri) f.Borc = tutar; else f.Alacak = tutar;
                         c.Hareketler.Add(f); faturalar.Add(f);
                     }
@@ -309,7 +311,7 @@ namespace WebApplication3.Data
                         decimal toplam = 0; var kapanan = new List<string>();
                         for (int j = 0; j < acik.Count; j++) { var f = acik[j]; bool kismi = j == acik.Count - 1 && f.Kalan == f.Borc + f.Alacak && rnd.Next(4) == 0; decimal ode = kismi ? Math.Round(f.Kalan * 0.6m, 2) : f.Kalan; f.Kalan = Math.Round(f.Kalan - ode, 2); f.KapamaDurumu = f.Kalan <= 0.005m ? "Kapalı" : "Kısmi Kapalı"; toplam += ode; kapanan.Add(f.BelgeNo); }
                         bool cek = tl && musteri && rnd.Next(3) == 0;
-                        var h = new MtHareket { Id = ++id, Tarih = t2, ParaBirimi = pb, BelgeTipi = cek ? "Çek" : (musteri ? "Tahsilat" : "Ödeme"), BelgeNo = Belge(cek ? "Çek" : (musteri ? "Tahsilat" : "Ödeme"), t2), Aciklama = (cek ? "Alınan çek · " : (musteri ? "Havale / EFT · " : "Banka ödemesi · ")) + string.Join(", ", kapanan), KapamaDurumu = "—" };
+                        var h = new MtHareket { Id = ++id, Tarih = t2, ParaBirimi = pb, BelgeTipi = cek ? "Çek" : (musteri ? "Tahsilat" : "Ödeme"), BelgeNo = Belge(cek ? "Çek" : (musteri ? "Tahsilat" : "Ödeme"), t2), Aciklama = (cek ? "Alınan çek · " : (musteri ? "Havale / EFT · " : "Banka ödemesi · ")) + string.Join(", ", kapanan), KapamaDurumu = "—", IslemTipi = acik[0].IslemTipi };
                         if (cek) { h.Vade = t2.AddDays(rnd.Next(45, 120)); h.KapamaDurumu = h.Vade > bugun ? "Vade Bekliyor" : "Tahsil Edildi"; }
                         if (musteri) h.Alacak = Math.Round(toplam, 2); else h.Borc = Math.Round(toplam, 2);
                         c.Hareketler.Add(h);
@@ -321,7 +323,7 @@ namespace WebApplication3.Data
                     foreach (var f in faturalar.Where(f => f.Kalan > 0 && (f.Vade ?? f.Tarih).AddDays(gecikme) <= bugun).OrderBy(f => f.Tarih).ToList())
                     {
                         var t3 = (f.Vade ?? f.Tarih).AddDays(gecikme); decimal ode = f.Kalan; f.Kalan = 0; f.KapamaDurumu = "Kapalı";
-                        var h = new MtHareket { Id = ++id, Tarih = t3, ParaBirimi = pb, BelgeTipi = musteri ? "Tahsilat" : "Ödeme", BelgeNo = Belge(musteri ? "Tahsilat" : "Ödeme", t3), Aciklama = (musteri ? "Havale / EFT · " : "Banka ödemesi · ") + f.BelgeNo, KapamaDurumu = "—" };
+                        var h = new MtHareket { Id = ++id, Tarih = t3, ParaBirimi = pb, BelgeTipi = musteri ? "Tahsilat" : "Ödeme", BelgeNo = Belge(musteri ? "Tahsilat" : "Ödeme", t3), Aciklama = (musteri ? "Havale / EFT · " : "Banka ödemesi · ") + f.BelgeNo, KapamaDurumu = "—", IslemTipi = f.IslemTipi };
                         if (musteri) h.Alacak = ode; else h.Borc = ode;
                         c.Hareketler.Add(h);
                     }
@@ -352,6 +354,20 @@ namespace WebApplication3.Data
             return c;
         }
 
+        /// <summary>
+        /// Tahsilat / ödeme / fark faturası ekler (Tahsilat ekranı): kapatılacak faturaların kalanı düşülür, hareket eklenir, özetler yeniden hesaplanır.
+        /// kapat: (BelgeNo, Tutar) — fatura para biriminde.
+        /// </summary>
+        public static MtHareket HareketEkle(string kod, MtHareket h, IEnumerable<(string BelgeNo, decimal Tutar)> kapat = null)
+        {
+            var c = Bul(kod); if (c == null) return null;
+            lock (Kilit)
+            {
+                h.Id = c.Hareketler.Count == 0 ? 1 : c.Hareketler.Max(x => x.Id) + 1;
+                if (kapat != null) foreach (var (no, t) in kapat) { var f = c.Hareketler.FirstOrDefault(x => x.BelgeNo == no && x.BelgeTipi == "Fatura"); if (f == null) continue; f.Kalan = Math.Max(0, Math.Round(f.Kalan - t, 2)); f.KapamaDurumu = f.Kalan <= 0.005m ? "Kapalı" : "Kısmi Kapalı"; }
+                c.Hareketler.Add(h); Hesapla(c); return h;
+            }
+        }
         /// <summary>Döviz özetleri ve kümülatif bakiyeleri yeniden hesaplar (hareketler değişince).</summary>
         private static void Hesapla(MtCari c)
         {

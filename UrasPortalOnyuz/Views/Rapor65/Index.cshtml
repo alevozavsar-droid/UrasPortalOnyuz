@@ -3,23 +3,28 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 @*
-    CARİ BAKİYE RAPORU — yeni tasarım. Müşteri ve tedarikçi carilerinin bakiye, vadesi geçmiş / gelecek, içerideki çek-senet, toplam risk, kredi limiti ve risk durumu;
-    Müşteri / Tedarikçi Cari Kartları ile aynı süzgeçler (ara, tip, bölge, ülke, sınıf, ilişki, rol, durum, faaliyet ana grubu / grubu, temsilci, şirket, limit, risk).
-    Veri: /CariKart/Veri (CARİ_MASTER + kredi limiti + cari risk; Data/CariKartOrnek.cs, Data/MutabakatOrnek.cs). Betik: wwwroot/js/cari-bakiye.js
+    CARİ BAKİYE RAPORU — yeni tasarım. Müşteri ve tedarikçi carilerinin bakiye (para birimi kırılımı, TL karşılığı, X / R işlem tipi), vadesi geçmiş / gelecek,
+    içerideki çek-senet, toplam risk, kredi limiti ve risk durumu; Müşteri / Tedarikçi Cari Kartları ile aynı süzgeçler. Sekmeler: Liste · Özet (satışçı / temsilci, tip-bölge).
+    Veri: /CariKart/Veri (Data/CariKartOrnek.cs, Data/MutabakatOrnek.cs). Betik: wwwroot/js/cari-bakiye.js
 *@
 @section Styles {
 <link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
 <link rel="stylesheet" href="/css/cari-kart.css?v=13" />
-<link rel="stylesheet" href="/css/cari-bakiye.css?v=4" />
+<link rel="stylesheet" href="/css/cari-bakiye.css?v=6" />
 }
 <div class="container-fluid py-3 na ck sik cb" id="cb" data-sayfa="bakiye">
     <div class="na-ust">
         <h4><span class="rt-ikon"><i class="fas fa-scale-balanced"></i></span>Cari Bakiye Raporu</h4>
         <span style="font-size:.68rem;font-weight:700;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px"><i class="fas fa-database me-1"></i>CARİ_MASTER + Cari Mutabakat + Kredi Limiti</span>
-        <span class="sub w-100">Müşteri ve tedarikçi carilerinin <b>bakiye</b> (para birimi kırılımı ve TL karşılığı), <b>vadesi geçmiş / gelecek</b> açık faturaları, içerideki <b>çek / senet</b>, <b>toplam cari risk</b>, <b>kredi limiti</b> ve otomatik <b>risk durumu</b>. Süzgeçler Müşteri / Tedarikçi Cari Kartları ile aynıdır; satırdan karta ve cari ekstreye geçilir.</span>
+        <span class="sub w-100">Müşteri ve tedarikçi carilerinin <b>bakiye</b> (para birimi kırılımı, TL karşılığı ve <b>X / R</b> işlem tipi), <b>vadesi geçmiş / gelecek</b> açık faturaları, içerideki <b>çek / senet</b>, <b>toplam cari risk</b>, <b>kredi limiti</b> ve otomatik <b>risk durumu</b>. Süzgeçler Müşteri / Tedarikçi Cari Kartları ile aynıdır; sütun başlığına tıklayınca sıralanır, satırdan karta ve cari ekstreye geçilir.</span>
+    </div>
+    <div class="na-sekme" id="cbSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="liste" class="aktif"><i class="fas fa-list me-1"></i>Liste <span class="n" id="cbNListe">0</span></button>
+        <button type="button" data-p="ozet"><i class="fas fa-user-tie me-1"></i>Özet · Satışçı</button>
     </div>
     <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
     <div class="cb-kpi" id="cbKpi"></div>
+    <div class="na-panel aktif" data-p="liste">
     <div class="na-kart">
         <div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Filtreler</span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="ckTemizle" style="font-size:.66rem">Temizle</button><button type="button" class="btn btn-light btn-sm py-0" id="cbExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div>
         <div class="na-kart-g">
@@ -39,11 +44,24 @@
                 <div><label>Limit Durumu</label><select class="form-select" id="ckFLimit"><option value="">Tümü</option><option>Limit İçinde</option><option>Limite Yakın</option><option>Limit Aşıldı</option><option>Limit Yok</option></select></div>
                 <div><label>Risk Durumu</label><select class="form-select" id="ckFRisk" title="Otomatik: 30 günden fazla vadesi geçmiş ödeme → Riskli; 1–30 gün gecikme → İzlemede"><option value="">Tümü</option><option>Riskli</option><option>İzlemede</option><option>Risksiz</option></select></div>
             </div>
-            <div class="d-flex align-items-center gap-2 flex-wrap"><div class="na-mini" id="ckSayi"></div><div class="na-mini ms-auto cb-sirala">Sırala: <select class="form-select form-select-sm d-inline-block w-auto" id="cbSirala"><option value="risk">Toplam Risk (Büyükten)</option><option value="bakiye">Bakiye (Büyükten)</option><option value="gecmis">Vadesi Geçmiş (Büyükten)</option><option value="gecikme">Gecikme Günü (Büyükten)</option><option value="kullanim">Limit Kullanımı (Büyükten)</option><option value="kod">Cari Kodu</option><option value="ad">Kısa Ad</option></select></div></div>
-            <div class="table-responsive"><table class="na-tablo ck-liste" id="cbTablo" data-dinamik="kapali"><thead><tr><th class="k-kod">Cari Kodu</th><th>Kısa Ad / Resmi Ünvan</th><th>Tip</th><th>Cari Sınıfı</th><th class="k-vade">Vade</th><th>Bakiye (PB)</th><th class="e">Toplam Bakiye (TL)</th><th class="e">Vadesi Geçmiş</th><th class="e">Vadesi Gelecek</th><th class="e">Çek / Senet</th><th class="e">Toplam Risk</th><th class="e">Kredi Limiti</th><th class="k-kul">Kullanım</th><th>Risk</th><th>Durum</th><th></th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>
+            <div class="d-flex align-items-center gap-2 flex-wrap cb-arac"><div class="na-mini" id="ckSayi"></div>
+                <div class="na-mini cb-sirala ms-auto">Bakiye Tipi: <select class="form-select form-select-sm d-inline-block w-auto" id="cbXR" title="X / R işlem tipi: bakiye, özet kutuları ve sıralama seçilen tipe göre hesaplanır"><option value="">X + R (Tümü)</option><option value="X">Yalnız X</option><option value="R">Yalnız R</option></select></div>
+                <div class="na-mini cb-sirala">Sırala: <select class="form-select form-select-sm d-inline-block w-auto" id="cbSirala"><option value="risk">Toplam Risk</option><option value="bakiye">Bakiye</option><option value="gecmis">Vadesi Geçmiş</option><option value="gecikme">Gecikme Günü</option><option value="gelecek">Vadesi Gelecek</option><option value="cek">Çek / Senet</option><option value="kullanim">Limit Kullanımı</option><option value="kod">Cari Kodu</option><option value="ad">Kısa Ad</option></select> <button type="button" class="btn btn-light btn-sm py-0" id="cbYon" title="Sıralama yönü" style="font-size:.6rem"><i class="fas fa-arrow-down-wide-short"></i></button></div></div>
+            <div class="table-responsive"><table class="na-tablo ck-liste" id="cbTablo" data-dinamik="kapali"><thead><tr><th class="k-kod sr" data-sort="kod">Cari Kodu</th><th class="sr" data-sort="ad">Kısa Ad / Resmi Ünvan</th><th class="sr" data-sort="tip">Tip</th><th class="sr" data-sort="bolge">Cari Bölge</th><th class="sr" data-sort="sinif">Cari Sınıfı</th><th>Bakiye (PB)</th><th class="e sr" data-sort="bakiye">Toplam Bakiye (TL)</th><th class="e sr" data-sort="gecmis">Vadesi Geçmiş</th><th class="e sr" data-sort="gelecek">Vadesi Gelecek</th><th class="e sr" data-sort="cek">Çek / Senet</th><th class="e sr" data-sort="risk">Toplam Risk</th><th class="e sr" data-sort="limit">Kredi Limiti</th><th class="k-kul sr" data-sort="kullanim">Kullanım</th><th class="sr" data-sort="riskd">Risk</th><th class="sr" data-sort="durum">Durum</th><th></th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>
+        </div>
+    </div>
+    </div>
+    <div class="na-panel" data-p="ozet">
+        <div class="row g-2">
+            <div class="col-lg-8"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-user-tie me-1"></i>Satışçı (Temsilci) Özeti</span><span class="not">liste süzgecine göre · bir cari birden çok temsilcide sayılabilir · satıra tıklayınca liste o temsilciye süzülür</span></div>
+                <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ck-liste" id="cbTemsilci" data-dinamik="kapali"><thead><tr><th>Temsilci</th><th class="s">Cari</th><th class="e">Toplam Bakiye</th><th class="e">Vadesi Geçmiş</th><th class="s">Gecikmeli Cari</th><th class="e">Çek / Senet</th><th class="e">Toplam Risk</th><th class="s">Riskli</th><th class="s">Limit Aşan</th><th class="e">Kredi Limiti</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div></div>
+            <div class="col-lg-4"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-earth-europe me-1"></i>Tip · Bölge Özeti</span></div>
+                <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ck-liste" id="cbBolge" data-dinamik="kapali"><thead><tr><th>Tip · Bölge</th><th class="s">Cari</th><th class="e">Bakiye</th><th class="e">Vadesi Geçmiş</th><th class="s">Riskli</th></tr></thead><tbody></tbody></table></div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-code-branch me-1"></i>X / R Özeti</span></div>
+                <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ck-liste" id="cbXr" data-dinamik="kapali"><thead><tr><th>Tip</th><th class="e">Bakiye X</th><th class="e">Bakiye R</th><th class="e">Toplam</th></tr></thead><tbody></tbody></table></div></div></div></div>
         </div>
     </div>
 </div>
 @section Scripts {
-<script src="/js/cari-bakiye.js?v=3"></script>
+<script src="/js/cari-bakiye.js?v=4"></script>
 }

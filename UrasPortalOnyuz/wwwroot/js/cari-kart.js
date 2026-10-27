@@ -228,6 +228,7 @@
     const R = k.risk, ted = tedMi(k), m = (l, v, alt) => `<div><div class="l">${l}</div><div class="v">${v}</div>${alt ? `<small class="text-muted">${alt}</small>` : ''}</div>`;
     const ozet = [
       m(ted ? 'Toplam Bakiye (Borcumuz)' : 'Toplam Bakiye (Alacağımız)', esc(R.acikBakiyeTr), 'cari ekstre bakiyesi ' + esc(R.bakiyeTr) + ((R.dovizler || []).length ? ' · ' + R.dovizler.map(d => d.pb + ' ' + d.netTr).join(' · ') : '')),
+      m('Bakiye X / R', `${esc(R.bakiyeXTr)} <span class="text-muted">/</span> ${esc(R.bakiyeRTr)}`, 'işlem tipine göre (X: resmi aktarım · R)'),
       m('Vadesi Geçmiş', `<span class="${R.vadesiGecmis > 0 ? 'text-danger' : ''}">${esc(R.vadesiGecmisTr)}</span>`, R.vadesiGecmisAdet ? `${R.vadesiGecmisAdet} kalem · en uzun ${R.maxGecikme} gün · en eski vade ${esc(R.enEskiVade)}` : 'gecikmiş ödeme yok'),
       m('Vadesi Gelecek', esc(R.vadesiGelecekTr), R.vadesiGelecekAdet ? `${R.vadesiGelecekAdet} kalem · en yakın vade ${esc(R.enYakinVade)}` : 'bekleyen fatura yok'),
       m(ted ? 'Verilen Çek / Senet (İçeride)' : 'Alınan Çek / Senet (İçeride)', esc(R.cekTr), R.cekAdet ? `${R.cekAdet} belge vade bekliyor · en yakın ${esc(R.enYakinCekVade)}` : 'vade bekleyen çek / senet yok'),

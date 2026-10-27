@@ -66,7 +66,7 @@ namespace WebApplication3.Controllers
         {
             var c = MutabakatOrnek.Bul(kod); if (c == null) return Json(new { success = false, message = "Cari bulunamadı." });
             lock (MutabakatOrnek.Kilit)
-                return Json(new { success = true, kod = c.CariKodu, bakiyeZamani = c.BakiyeZamani?.ToString("dd.MM.yyyy HH:mm"), hareketler = c.Hareketler.Where(h => string.IsNullOrEmpty(pb) || h.ParaBirimi == pb).Select(h => new { h.Id, tarih = h.Tarih.ToString("dd.MM.yyyy"), h.ParaBirimi, h.BelgeTipi, h.BelgeNo, h.Aciklama, h.Borc, h.Alacak, h.Bakiye, vade = h.Vade?.ToString("dd.MM.yyyy") ?? "", h.KapamaDurumu, h.Kalan }) });
+                return Json(new { success = true, kod = c.CariKodu, bakiyeZamani = c.BakiyeZamani?.ToString("dd.MM.yyyy HH:mm"), hareketler = c.Hareketler.Where(h => string.IsNullOrEmpty(pb) || h.ParaBirimi == pb).Select(h => new { h.Id, tarih = h.Tarih.ToString("dd.MM.yyyy"), h.ParaBirimi, h.BelgeTipi, h.BelgeNo, h.Aciklama, h.Borc, h.Alacak, h.Bakiye, vade = h.Vade?.ToString("dd.MM.yyyy") ?? "", h.KapamaDurumu, h.Kalan, islemTipi = h.IslemTipi }) });
         }
 
         /// <summary>Yazdırılabilir ekstre (seçilen döviz) — PDF: tarayıcı yazdır.</summary>

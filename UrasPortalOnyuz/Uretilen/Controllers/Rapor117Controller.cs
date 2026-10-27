@@ -107,22 +107,13 @@ namespace WebApplication3.Controllers
  {return default;
 }
 
+        /// <summary>Tahsilat ekranı (yeni tasarım): Views/Rapor117/Index.cshtml + wwwroot/js/tahsilat.js; uçlar Controllers/TahsilatController.cs (bakiyeden / fatura bazlı tahsilat, vade farkı, kur farkı, fark faturası). ?kod= ile cari ön seçilir.</summary>
         [HttpGet]
-        public IActionResult Index()
- {ViewBag.Databases = WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.Rapor117Controller.DatabaseConfig>(12);
-ViewBag.CurrentDbDisplay = "";
-ViewBag.Accounts = WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.Rapor117Controller.AccountModel>(12);
-ViewBag.Currencies = WebApplication3.OrnekDoldurucu.Liste<string>(12);
-ViewBag.Banks = WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.Rapor117Controller.BankModel>(12);
-ViewBag.CreditCards = WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.Rapor117Controller.CreditCardDefModel>(12);
-ViewBag.DovizTipleri = WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.Rapor117Controller.UdfValidValue>(12);
-ViewBag.IadeDurumlari = WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.Rapor117Controller.UdfValidValue>(12);
-ViewBag.AktarTipleri = WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.Rapor117Controller.UdfValidValue>(12);
-ViewBag.CheckTransactionTypes = WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Controllers.Rapor117Controller.UdfValidValue>(12);
-ViewBag.IsCheckBond = false;
-WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index");
-}
+        public IActionResult Index(string kod)
+        {
+            ViewData["Title"] = "Tahsilat"; ViewBag.Kod = kod ?? "";
+            return View("Index");
+        }
 
         [HttpGet("GetNextSenetNumber")]
         public IActionResult GetNextSenetNumber()

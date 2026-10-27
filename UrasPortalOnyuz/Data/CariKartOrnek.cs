@@ -81,6 +81,8 @@ namespace WebApplication3.Data
         public List<(string BelgeNo, DateTime Vade, int Gecikme, decimal Kalan, string Pb)> GecmisListe { get; set; } = new List<(string, DateTime, int, decimal, string)>();
         /// <summary>Para birimi bazında net bakiye (borç − alacak) ve TL karşılığı (Cari Mutabakat döviz özeti).</summary>
         public List<(string Pb, decimal Net, decimal Tl)> Dovizler { get; set; } = new List<(string, decimal, decimal)>();
+        /// <summary>X / R işlem tipine göre TL bakiye (borç − alacak); BakiyeX + BakiyeR = Bakiye.</summary>
+        public decimal BakiyeX { get; set; } public decimal BakiyeR { get; set; }
     }
     /// <summary>Cari Kart Talebi (Müşteri / Tedarikçi Talep Formu): onaylanınca CARİ_MASTER'a kart açılır.</summary>
     public class CariTalep
@@ -359,6 +361,7 @@ namespace WebApplication3.Data
             bool ted = k.KartTipi == "Tedarikçi"; var r = new CariRisk { Tedarikci = ted };
             var c = string.IsNullOrEmpty(k.Kod) ? null : MutabakatOrnek.Bul(k.Kod); if (c == null) { r.Neden = "Cari hareket kaydı yok."; return r; }
             var bugun = DateTime.Today; r.Bakiye = c.BakiyeTl; r.Dovizler = c.Dovizler.Where(d => d.Net != 0).Select(d => (d.ParaBirimi, d.Net, d.TlKarsiligi)).ToList();
+            r.BakiyeR = Math.Round(c.Hareketler.Where(h => h.IslemTipi == "R").Sum(h => (h.Borc - h.Alacak) * KurTl(h.ParaBirimi)), 2); r.BakiyeX = Math.Round(r.Bakiye - r.BakiyeR, 2);
             foreach (var h in c.Hareketler.Where(h => h.BelgeTipi == "Fatura" && h.Kalan > 0 && h.KapamaDurumu != "Kapalı" && (ted ? h.Alacak : h.Borc) > 0))
             {
                 var vade = (h.Vade ?? h.Tarih).Date; decimal kalan = Math.Round(h.Kalan * KurTl(h.ParaBirimi), 2); int gec = (bugun - vade).Days;
