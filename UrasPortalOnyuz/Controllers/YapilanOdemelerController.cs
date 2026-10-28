@@ -19,13 +19,16 @@ namespace WebApplication3.Controllers
     {
         private static readonly CultureInfo Tr = new CultureInfo("tr-TR");
 
-        /// <param name="sekme">sirket (varsayılan) | konsolide | liste (derin bağlantı)</param>
-        public IActionResult Index(string sekme)
+        /// <param name="sekme">sirket (varsayılan) | konsolide | liste | yeni (Yeni Ödeme Ekle — derin bağlantı)</param>
+        /// <param name="kod">yeni sekmesinde ön seçili tedarikçi cari kodu (ör. Tedarikçi Fatura ve Ödeme Takip › Ödeme Yap)</param>
+        /// <param name="no">yeni sekmesinde açılacak kayıtlı ödeme (ÖD-…; Ödeme Listesi çekmecesi / Adat'tan aktarım)</param>
+        public IActionResult Index(string sekme, string kod, string no)
         {
             ViewData["Title"] = "Yapılan Ödemeler";
             ViewBag.Sirketler = YapilanOdemelerOrnek.Sirketler;
             ViewBag.Yil = DateTime.Today.Year;
-            ViewBag.Sekme = sekme == "konsolide" || sekme == "liste" ? sekme : "sirket";
+            ViewBag.Sekme = sekme == "konsolide" || sekme == "liste" || sekme == "yeni" ? sekme : (!string.IsNullOrEmpty(kod) || !string.IsNullOrEmpty(no) ? "yeni" : "sirket");
+            ViewBag.Kod = kod ?? ""; ViewBag.No = no ?? "";
             return View();
         }
 

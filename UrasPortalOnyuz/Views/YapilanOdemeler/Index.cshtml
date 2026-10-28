@@ -4,6 +4,8 @@
     int yil = (int)ViewBag.Yil;
     string sekme = (string)ViewBag.Sekme ?? "liste";
     string q = Context.Request.Query.ContainsKey("_sekme") ? "?_sekme=1" : "";
+    string onKod = (string)ViewBag.Kod ?? "";   // Yeni Ödeme: ön seçili tedarikçi (?kod=)
+    string onNo = (string)ViewBag.No ?? "";     // Yeni Ödeme: açılacak kayıtlı ödeme (?no=ÖD-…)
 }
 @*
     YAPILAN ÖDEMELER — Yönetim › Özel Analizler › Özel Raporlar. Üç sekme:
@@ -11,11 +13,18 @@
       Şirket Bazlı Ödeme Raporu : "2026 Şirket Bazlı Ödeme Raporu" şablonu (BANKA X/R • ÇEK X/R • NAKİT X/R • aylık şirket detayı)
       Konsolide Ödeme Raporu    : "2026 Konsolide Ödeme Raporu" şablonu (ödeme türü konsolidesi • şirket konsolidesi)
     Veri: /YapilanOdemeler/Veri (Data/YapilanOdemelerOrnek.cs). Betik: wwwroot/js/yapilan-odemeler.js · Ortak stil: wwwroot/css/nakit-avans.css
-    Sekme sırası ve varsayılan: Şirket Bazlı Ödeme Raporu (açılış) → Konsolide Ödeme Raporu → Ödeme Listesi. Derin bağlantı: /YapilanOdemeler?sekme=konsolide | liste
+    Sekme sırası ve varsayılan: Yeni Ödeme Ekle → Şirket Bazlı Ödeme Raporu (açılış) → Konsolide Ödeme Raporu → Ödeme Listesi. Derin bağlantı: /YapilanOdemeler?sekme=konsolide | liste | yeni (&kod=320.xxx | &no=ÖD-…)
+    YENİ ÖDEME EKLE: Cari İşler › Tahsilat ekranının (Rapor117) ödeme yönü — aynı betik wwwroot/js/tahsilat.js (data-mod="odeme"), uçlar /Odeme/… (Controllers/OdemeController.cs : TahsilatController), kurallar Data/TahsilatOrnek.cs.
+      İşlenen ödeme cari hesabına borç, Kasa Nakit Akışı'na ÖDENDİ satır ve bu listede "Ödeme Ekranı" kaynağı olur (YapilanOdemelerOrnek.OdemeEkrani); "odemeIslendi" olayı listeyi tazeler.
 *@
 @section Styles {
 <link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<link rel="stylesheet" href="/css/cari-islem.css?v=2" />
+<link rel="stylesheet" href="/css/tahsilat.css?v=3" />
 <style>
+    /* Yeni Ödeme Ekle sekmesi: Tahsilat ekranı kökü sayfanın içinde (iç sekmeleri ve panelleri kendi kökünde) */
+    #yo #th { padding: 0; } #yo #th .na-ust { margin-bottom: 6px; } #yo #th .na-ust h4 { font-size: .95rem; }
+    #yo #th.th { --na-k: #0f766e; }
     .na.yo { --na-k: #1d4ed8; }
     .yo-pill { font-size: .68rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; }
     .yo-filtre { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px 8px; margin-bottom: 8px; }
@@ -65,14 +74,96 @@
         @* Rozetler tıklanabilir (rapor-tema.js): ilgili sekme + filtre alanına gider *@
         <span class="yo-pill" data-git="sirket|#yoRSirket" title="Şirket Bazlı Ödeme Raporu › Şirket seçimi"><i class="fas fa-building me-1"></i>Konsolide · @sirketler.Length Şirket</span>
         <span class="yo-pill" data-git="liste|#yoTur" title="Ödeme Listesi › Ödeme Türü filtresi"><i class="fas fa-layer-group me-1"></i>Banka · Çek · Nakit (Kasa) · Nakit Avans · X / R</span>
-        <span class="sub w-100">Grup şirketlerinin yaptığı <b>tüm ödemeler</b> tek listede: <b>Banka (Havale / EFT)</b>, <b>Çek</b> (verilen vadeli çekler), <b>Nakit (Kasa)</b> çıkışları ve <b>Nakit Avans</b> teslimleri; ERP aktarım tipi <b>X / R</b> ayrımıyla. Kaynaklar: ERP banka ve kasa hareketleri, çek bordrosu, Nakit Avans modülü ve Aylık Alım Onay'daki ödenmiş tedarikçi faturaları. Döviz ödemeleri işlem günü kuruyla TL'ye çevrilir. <b>Şirket Bazlı</b> ve <b>Konsolide</b> sekmeleri yıllık Excel şablonlarının (12 ay + Toplam + Aylık Ort.) portal karşılığıdır.</span>
+        <button type="button" class="btn btn-primary btn-sm py-0" id="yoYeniBtn" style="font-size:.7rem;margin-left:auto" title="Tedarikçiye ödeme: Tahsilat mantığıyla (ödemeyi biz yapıyoruz)"><i class="fas fa-plus me-1"></i>Yeni Ödeme Ekle</button>
+        <span class="sub w-100">Grup şirketlerinin yaptığı <b>tüm ödemeler</b> tek listede: <b>Banka (Havale / EFT)</b>, <b>Çek</b> (verilen vadeli çekler), <b>Nakit (Kasa)</b> çıkışları ve <b>Nakit Avans</b> teslimleri; ERP aktarım tipi <b>X / R</b> ayrımıyla. Kaynaklar: ERP banka ve kasa hareketleri, çek bordrosu, Nakit Avans modülü, Aylık Alım Onay'daki ödenmiş tedarikçi faturaları ve bu ekranın <b>Yeni Ödeme Ekle</b> sekmesinden işlenen ödemeler. Döviz ödemeleri işlem günü kuruyla TL'ye çevrilir. <b>Şirket Bazlı</b> ve <b>Konsolide</b> sekmeleri yıllık Excel şablonlarının (12 ay + Toplam + Aylık Ort.) portal karşılığıdır.</span>
     </div>
     <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
-    @* Sekme sırası: Şirket Bazlı (varsayılan açılış) → Konsolide → Ödeme Listesi *@
+    @* Sekme sırası: Yeni Ödeme Ekle → Şirket Bazlı (varsayılan açılış) → Konsolide → Ödeme Listesi *@
     <div class="na-sekme" id="yoSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="yeni"><i class="fas fa-plus me-1"></i>Yeni Ödeme Ekle</button>
         <button type="button" data-p="sirket"><i class="fas fa-building me-1"></i>Şirket Bazlı Ödeme Raporu</button>
         <button type="button" data-p="konsolide"><i class="fas fa-layer-group me-1"></i>Konsolide Ödeme Raporu</button>
         <button type="button" data-p="liste"><i class="fas fa-list me-1"></i>Ödeme Listesi <span class="n" id="yoNListe">0</span></button>
+    </div>
+
+    @* ============================ SEKME 0: YENİ ÖDEME EKLE (Tahsilat ekranının ödeme yönü; wwwroot/js/tahsilat.js data-mod="odeme", uçlar /Odeme) ============================ *@
+    <div class="na-panel" data-p="yeni">
+        <div class="na ci th" id="th" data-mod="odeme" data-kod="@onKod" data-no="@onNo">
+            <div class="na-ust">
+                <h4><span class="rt-ikon"><i class="fas fa-money-bill-transfer"></i></span>Yeni Ödeme (Tedarikçiye)</h4>
+                <span class="yo-pill"><i class="fas fa-database me-1"></i>Cari Mutabakat + Tedarikçi Kartları + Kasa Nakit Akışı + Takip Paneli</span>
+                <span class="th-kur" id="thKurlar"></span>
+                <span class="sub w-100">Cari İşler › Tahsilat mantığının tersi: <b>ödemeyi biz yapıyoruz</b>. Tedarikçiyi seçin; bir ödemede <b>birden çok ödeme satırı</b> (havale + nakit + çek + senet + kart) birlikte girilir; her satırın kuru o günün TCMB kurundan <b>otomatik</b> gelir, istenirse elle yazılır. Açık <b>alış faturaları</b> <b>Otomatik</b> (en eski vadeliden FIFO) ya da <b>Manuel</b> (işaretlenen faturalar, istenirse tutar sınırı) seçilir; kapanış simülasyonu her değişiklikte yenilenir: gün, vade farkı, kur farkı, tedarikçiye avans. <b>Kaydet ve İşle</b> cari hesabına borç olarak işler, satırlar <b>Kasa Nakit Akışı</b>'na ÖDENDİ olarak düşer ve <b>Ödeme Listesi</b>'nde görünür; <b>Taslak Kaydet</b> işlemez, istenen zaman "İşleme Al" ile aynı kayıttan işlenir (çek teslim edilince vb.). Ekstre ve simülasyon PDF / Excel indirilir; ödemeden önce <b>Otomatik Kapat</b> ile eşleşmemiş ödemeler kapatılır.</span>
+            </div>
+            <div class="na-sekme" id="thSekmeler" data-dinamik="kapali">
+                <button type="button" data-p="yeni" class="aktif"><i class="fas fa-plus me-1"></i>Yeni Ödeme</button>
+                <button type="button" data-p="liste"><i class="fas fa-list me-1"></i>Kayıtlı Ödemeler <span class="n" id="thNListe">0</span> <span class="n" id="thNTaslak" title="taslak">0 taslak</span></button>
+            </div>
+
+            <div class="na-panel aktif" data-p="yeni">
+                <div class="row g-2">
+                    <div class="col-xl-9">
+                        <div class="na-kart">
+                            <div class="na-kart-b"><span><i class="fas fa-truck me-1"></i>Cari (Tedarikçi)</span><span class="not" id="thCariSayi"></span></div>
+                            <div class="na-kart-g">
+                                <div class="d-flex gap-1 align-items-center mb-2 flex-wrap">
+                                    <input class="form-control" id="thCariAra" placeholder="Kod ya da ad yazın…" style="width:240px;font-size:.78rem;height:32px" autocomplete="off">
+                                    <select class="form-select" id="thCari" style="flex:1;min-width:320px;font-size:.78rem;height:32px"><option value="">Tedarikçi seçiniz…</option></select>
+                                </div>
+                                <div class="ci-bilgi" id="thCariOzet"><span class="text-muted">Tedarikçi seçince borç bakiyesi, son ödememiz / son alış faturası, gecikme ve açık alış faturaları burada görünür.</span></div>
+                                <div class="d-flex gap-1 flex-wrap mt-1" id="thCariIslem" style="display:none !important"></div>
+                            </div>
+                        </div>
+                        <div class="na-kart">
+                            <div class="na-kart-b"><span><i class="fas fa-money-bill-transfer me-1"></i>Ödeme Satırları <span class="n" id="thNSatir">0</span></span>
+                                <span class="d-flex gap-1 align-items-center flex-wrap">
+                                    <span class="na-mini me-1">Ödeme Tarihi <input type="date" class="form-control d-inline-block" id="thTarih" style="width:125px;font-size:.66rem;height:22px;padding:0 4px"></span>
+                                    <span class="na-mini me-1">İşlem Tipi <select class="form-select d-inline-block" id="thTip" style="width:55px;font-size:.66rem;height:22px;padding:0 16px 0 4px"><option>X</option><option>R</option></select></span>
+                                    <span class="na-mini me-1">Para Birimi <select class="form-select d-inline-block" id="thPb" style="width:70px;font-size:.66rem;height:22px;padding:0 16px 0 4px"><option>TL</option></select></span>
+                                    <button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Havale / EFT" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Havale</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Nakit" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Nakit</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Çek" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Çek</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Senet" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Senet</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Kredi Kartı" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Kart</button>
+                                    <button type="button" class="btn btn-light btn-sm py-0" id="thSatirTemizle" style="font-size:.62rem">Satırları Sil</button>
+                                </span></div>
+                            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ci-liste" id="thSatirlar" data-dinamik="kapali"><thead><tr><th class="s">#</th><th>Yöntem</th><th>Tarih / Vade</th><th>Belge (Çek) No</th><th>Banka</th><th class="e">Kur</th><th class="s">Kur Kaynağı</th><th class="e">Tutar</th><th class="e">TL Karşılığı</th><th>Not</th><th></th></tr></thead><tbody><tr><td colspan="11" class="na-bos">Yukarıdaki düğmelerle ödeme satırı ekleyin (havale, nakit, çek, senet, kart — birlikte).</td></tr></tbody><tfoot></tfoot></table></div>
+                                <div class="na-mini px-2 pb-1"><input class="form-control d-inline-block" id="thAciklama" placeholder="Açıklama (dekont no, not…)" style="width:100%;font-size:.66rem;height:22px"></div></div>
+                        </div>
+                        <div class="na-kart">
+                            <div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>Açık Alış Faturaları ve Kapanış Simülasyonu (FIFO) <span class="n" id="thNFat">0</span></span>
+                                <span class="d-flex gap-1 align-items-center">
+                                    <span class="ci-mod" id="thMod"><button type="button" class="aktif" data-mod="Otomatik" title="Ödemeler tüm açık alış faturalarına en eski vadeliden başlayarak otomatik dağıtılır"><i class="fas fa-wand-magic-sparkles me-1"></i>Otomatik (FIFO)</button><button type="button" data-mod="Manuel" title="Ödenecek faturalar işaretlenir; istenirse faturaya tutar sınırı yazılır"><i class="fas fa-hand-pointer me-1"></i>Manuel Seçim</button></span>
+                                    <button type="button" class="btn btn-light btn-sm py-0" id="thHepsi" style="font-size:.62rem"><i class="fas fa-check-double me-1"></i>Tümünü Seç</button><button type="button" class="btn btn-light btn-sm py-0" id="thHicbiri" style="font-size:.62rem">Kaldır</button>
+                                    <button type="button" class="btn btn-light btn-sm py-0" id="thTutarDoldur" style="font-size:.62rem" title="Seçili faturaların kalanı kadar tek havale satırı oluşturur"><i class="fas fa-equals me-1"></i>Tutarı Faturalardan Al</button>
+                                </span></div>
+                            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ci-liste" id="thFaturalar" data-dinamik="kapali"><thead><tr><th class="s"><input type="checkbox" id="thFatHepsi"></th><th>Belge No</th><th>Tarih</th><th>Vade</th><th class="s">Gecikme</th><th class="s">Tip</th><th class="e">Kalan</th><th class="e">Fatura Kuru</th><th class="e">Sınır (Manuel)</th><th class="e">Kapanan</th><th class="e">Kalan (Sonra)</th><th>Ödeme</th><th class="s">Gün</th><th class="e">Kur Farkı (₺)</th><th class="e">Vade Farkı (₺)</th></tr></thead><tbody><tr><td colspan="15" class="na-bos">Önce tedarikçi seçin.</td></tr></tbody><tfoot></tfoot></table></div></div>
+                        </div>
+                    </div>
+                    <div class="col-xl-3">
+                        <div class="na-kart th-sag">
+                            <div class="na-kart-b"><span><i class="fas fa-calculator me-1"></i>Hesap Özeti</span><span class="not" id="thOzetNot">otomatik</span></div>
+                            <div class="na-kart-g">
+                                <div class="ci-ozet" id="thOzet"></div>
+                                <div class="d-grid gap-1 mt-2">
+                                    <button type="button" class="btn btn-primary btn-sm" id="thKaydetIsle" title="Cari hesabına borç işlenir; satırlar Kasa Nakit Akışı'na ÖDENDİ düşer"><i class="fas fa-floppy-disk me-1"></i>Kaydet ve İşle</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="thKaydetTaslak" title="Cariye işlenmez; Kayıtlı Ödemeler sekmesinden İşleme Al"><i class="fas fa-file-pen me-1"></i>Taslak Kaydet (İşleme Alma)</button>
+                                    <div class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm flex-fill" id="thSimPdf"><i class="fas fa-file-pdf me-1"></i>Simülasyon PDF</button><button type="button" class="btn btn-light btn-sm flex-fill" id="thSimExcel"><i class="fas fa-file-excel me-1"></i>Simülasyon Excel</button></div>
+                                    <button type="button" class="btn btn-light btn-sm" id="thYeni"><i class="fas fa-file me-1"></i>Yeni Ödeme</button>
+                                </div>
+                                <div class="ci-rehber" id="thRehber"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="na-panel" data-p="liste">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Kayıtlı Ödemeler (Taslak / İşlendi)</span><span class="d-flex gap-1 align-items-center"><input class="form-control" id="thListeAra" placeholder="No, tedarikçi, yöntem, çek no…" style="width:200px;font-size:.66rem;height:24px"><select class="form-select" id="thListeDurum" style="width:auto;font-size:.66rem;height:24px;padding:0 20px 0 6px"><option value="">Tüm Durumlar</option><option>Taslak</option><option>İşlendi</option></select><button type="button" class="btn btn-light btn-sm py-0" id="thListeExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div>
+                    <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ci-liste" id="thListe" data-dinamik="kapali"><thead><tr><th>Ödeme No</th><th>Tarih</th><th>Tedarikçi</th><th>Yöntem</th><th class="s">Tip</th><th class="e">Tutar</th><th class="e">TL</th><th class="s">Mod</th><th>Durum</th><th class="s">Fatura</th><th class="e">Avans</th><th class="e">Kur Farkı</th><th class="e">Vade Farkı</th><th>Nakit Akış</th><th>Kim</th><th></th></tr></thead><tbody></tbody></table></div></div></div>
+                <div id="thDetay"></div>
+            </div>
+        </div>
     </div>
 
     @* ============================ SEKME 1: ÖDEME LİSTESİ ============================ *@
@@ -149,5 +240,6 @@
 </div>
 
 @section Scripts {
-<script src="/js/yapilan-odemeler.js?v=2"></script>
+<script src="/js/yapilan-odemeler.js?v=3"></script>
+<script src="/js/tahsilat.js?v=6"></script>
 }

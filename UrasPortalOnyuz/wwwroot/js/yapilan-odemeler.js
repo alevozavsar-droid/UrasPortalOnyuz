@@ -1,6 +1,7 @@
 // ============================================================
 // YAPILAN ÖDEMELER — ekran betiği (Views/YapilanOdemeler/Index.cshtml; veri /YapilanOdemeler/Veri; kaynaklar Data/YapilanOdemelerOrnek.cs)
-// Sekme sırası: Şirket Bazlı Ödeme Raporu (varsayılan açılış) → Konsolide Ödeme Raporu → Ödeme Listesi
+// Sekme sırası: Yeni Ödeme Ekle → Şirket Bazlı Ödeme Raporu (varsayılan açılış) → Konsolide Ödeme Raporu → Ödeme Listesi
+// Yeni Ödeme Ekle       : Tahsilat ekranının ödeme yönü (wwwroot/js/tahsilat.js, kök #th data-mod="odeme"); işlenen ödeme "odemeIslendi" olayıyla bu listeyi tazeler
 // Ödeme Listesi         : tüm grup şirketlerinin ödemeleri (Banka / Çek / Nakit Kasa / Nakit Avans, X / R) — dönem + şirket + tür + X/R + kategori +
 //                         alıcı tipi + para birimi + durum + kaynak filtreleri, KPI kutuları (tıklayınca filtre), Şirket × Tür ve Ay × Tür matrisleri,
 //                         kategori dağılımı, en büyük 10 alıcı, satır detay drawer'ı (kaynak belgeye bağlantı), Excel (CSV)
@@ -38,7 +39,7 @@
     $$('#yoSekmeler button').forEach(b => b.classList.toggle('aktif', b.dataset.p === p));
     $$('#yo > .na-panel').forEach(x => x.classList.toggle('aktif', x.dataset.p === p));
     if (V) { if (p === 'sirket') cizSirket(); if (p === 'konsolide') cizKonsolide(); }
-    try { const u = new URL(location.href); if (p === 'sirket') u.searchParams.delete('sekme'); else u.searchParams.set('sekme', p); history.replaceState(null, '', u); } catch (e) { /* çerçeve içinde yoksay */ }   // varsayılan sekme: Şirket Bazlı
+    try { const u = new URL(location.href); if (p === 'sirket') u.searchParams.delete('sekme'); else u.searchParams.set('sekme', p); if (p !== 'yeni') { u.searchParams.delete('kod'); u.searchParams.delete('no'); } history.replaceState(null, '', u); } catch (e) { /* çerçeve içinde yoksay */ }   // varsayılan sekme: Şirket Bazlı; "yeni" = Yeni Ödeme Ekle
   }
 
   // ---- dönem
@@ -153,12 +154,13 @@
   function drawerAc(id) {
     const o = V.odemeler.find(x => x.id === id); if (!o) return;
     $('#yoDrawerBaslik').innerHTML = `<i class="fas fa-money-bill-transfer me-1"></i>${esc(o.no)} · ${esc(o.sirket)} ${durumRozet(o.durum)}`;
-    $('#yoDrawerAksiyon').innerHTML = o.link ? `<button type="button" class="btn btn-light btn-sm py-0" id="yoKaynakAc" style="font-size:.66rem"><i class="fas fa-arrow-up-right-from-square me-1"></i>${o.kanal === 'Avans' ? 'Avans Talebini Aç' : 'Kaynak Ekranı Aç'}</button>` : '';
+    const ekran = o.kaynak === 'Ödeme Ekranı';   // bu sayfanın Yeni Ödeme Ekle sekmesinde kayıtlı ödeme (ÖD-…)
+    $('#yoDrawerAksiyon').innerHTML = o.link ? `<button type="button" class="btn btn-light btn-sm py-0" id="yoKaynakAc" style="font-size:.66rem"><i class="fas fa-arrow-up-right-from-square me-1"></i>${o.kanal === 'Avans' ? 'Avans Talebini Aç' : ekran ? 'Ödeme Kaydını Aç' : 'Kaynak Ekranı Aç'}</button>` : '';
     const a = [['Ödeme No', o.no], ['Tarih', o.tarihTr], ['Şirket', o.sirket], ['Ödeme Türü', o.tur], ['X / R (Aktarım Tipi)', o.aktarimTipi], ['Kaynak Hesap', o.kaynakHesap], ['Banka', o.banka], ['Alıcı', o.alici], ['Alıcı Tipi', o.aliciTipi], ['Kategori', o.kategori],
       ['Tutar', tl(o.tutar) + ' ' + o.paraBirimi], ['Kur', o.paraBirimi === 'TL' ? '1,00' : tl(o.kur)], ['Tutar (TL)', tl(o.tutarTl) + ' TL'], ['Belge', o.belge], ['Vade', o.vadeTr], ['Durum', o.durum], ['Kaynak Sistem', o.kaynak], ['Onaylayan', o.onaylayan], ['İşlemi Yapan', o.islemiYapan]];
     $('#yoDrawerIc').innerHTML = `<div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-receipt me-1"></i>Ödeme Bilgileri</span><span class="not">${esc(o.kaynak)}</span></div><div class="na-kart-g"><div class="yo-master">${a.map(([l, v]) => `<div><div class="l">${l}</div><div class="v">${bos(v)}</div></div>`).join('')}<div style="grid-column:1/-1"><div class="l">Açıklama</div><div class="v" style="font-weight:500">${bos(o.aciklama)}</div></div></div></div></div>
       <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-building me-1"></i>${esc(o.sirket)} · Aynı Alıcıya Yapılan Ödemeler</span><span class="not">Tüm dönem</span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:260px"><table class="na-tablo" data-dinamik="kapali"><thead><tr><th>Tarih</th><th>Ödeme No</th><th>Tür</th><th>Belge</th><th class="s">Tutar (TL)</th><th>Durum</th></tr></thead><tbody>${V.odemeler.filter(x => x.alici === o.alici && x.sirket === o.sirket).map(x => `<tr class="${x.id === o.id ? 'table-active' : ''}"><td>${esc(x.tarihTr)}</td><td>${esc(x.no)}</td><td>${turRozet(x)}</td><td>${bos(x.belge)}</td><td class="s">${tl(x.tutarTl)}</td><td>${durumRozet(x.durum)}</td></tr>`).join('')}</tbody></table></div></div></div>`;
-    const b = $('#yoKaynakAc'); if (b) b.addEventListener('click', () => ac(o.link, o.kanal === 'Avans' ? 'Avans Talebi ' + o.belge : 'Aylık Alım Onay Ekranı'));
+    const b = $('#yoKaynakAc'); if (b) b.addEventListener('click', () => { if (ekran) { const no = (o.link.match(/no=([^&]+)/) || [])[1]; drawerKapat(); sekme('yeni'); if (no) window.dispatchEvent(new CustomEvent('thDetayAc', { detail: decodeURIComponent(no) })); return; } ac(o.link, o.kanal === 'Avans' ? 'Avans Talebi ' + o.belge : 'Aylık Alım Onay Ekranı'); });
     $('#yoDrawer').classList.add('acik'); $('#yoPerde').classList.add('acik');
   }
   function drawerKapat() { $('#yoDrawer').classList.remove('acik'); $('#yoPerde').classList.remove('acik'); }
@@ -187,7 +189,10 @@
     $('#yoRYil').addEventListener('change', cizSirket); $('#yoRSirket').addEventListener('change', cizSirket); $('#yoRExcel').addEventListener('click', () => tabloCsv('yoSirketTablo', 'sirket_bazli_odeme_raporu', $('#yoRYil').value));
     $('#yoKYil').addEventListener('change', cizKonsolide); $('#yoKExcel').addEventListener('click', () => { tabloCsv('yoTurKons', 'konsolide_odeme_raporu_odeme_turu', $('#yoKYil').value); setTimeout(() => tabloCsv('yoSirketKons', 'konsolide_odeme_raporu_sirket', $('#yoKYil').value), 300); });
     $$('#yoSekmeler button').forEach(b => b.addEventListener('click', () => sekme(b.dataset.p)));
+    $('#yoYeniBtn').addEventListener('click', () => { sekme('yeni'); window.scrollTo({ top: 0, behavior: 'smooth' }); });
     $('#yoDrawerKapat').addEventListener('click', drawerKapat); $('#yoPerde').addEventListener('click', drawerKapat);
+    // Yeni Ödeme Ekle sekmesinde bir ödeme işlenince (tahsilat.js › odemeIslendi) liste ve şablon raporları tazelenir
+    window.addEventListener('odemeIslendi', async () => { try { const v2 = await (await fetch('/YapilanOdemeler/Veri')).json(); V.odemeler = v2.odemeler; ciz(); cizSirket(); cizKonsolide(); const s = $('#naSonuc'); if (s && s.style.display !== 'none') s.innerHTML += ' <small class="text-muted">· Ödeme Listesi, Şirket Bazlı ve Konsolide raporlar tazelendi ("Ödeme Ekranı" kaynağı).</small>'; } catch (e) { /* liste bir sonraki açılışta tazelenir */ } });
     donemDegisti(); sekme(kok.dataset.baslangic || 'sirket'); window.NA_HAZIR = true;
   }).catch(e => mesaj('danger', 'Veri yüklenemedi: ' + esc(e.message)));
 })();

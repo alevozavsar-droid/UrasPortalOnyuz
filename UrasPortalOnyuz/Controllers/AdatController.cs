@@ -64,7 +64,8 @@ namespace WebApplication3.Controllers
             if (sat.Count == 0) return Json(new { success = false, message = "Aktarılacak (seçili, tutarlı) ödeme satırı yok." });
             var h = TahsilatOrnek.Kaydet(i.Kod, DateTime.Today, i.IslemTipi ?? "X", "TL", i.FaturaSecim != null && i.FaturaSecim.Count > 0 ? "Manuel" : "Otomatik", i.FaturaSecim, sat, "Adat Hesaplama'dan aktarıldı", Ben(), false, out var k);
             if (h != null) return Json(new { success = false, message = h });
-            return Json(new { success = true, message = $"{k.No} taslak tahsilat oluşturuldu ({N2(k.Tutar)} TL, {k.Yontem}); Tahsilat ekranından İşleme Al.", no = k.No, link = "/Rapor117?no=" + Uri.EscapeDataString(k.No) });
+            // tedarikçide taslak ÖDEME olur (Yapılan Ödemeler › Yeni Ödeme), müşteride taslak tahsilat (Tahsilat ekranı)
+            return Json(new { success = true, message = k.Odeme ? $"{k.No} taslak ödeme oluşturuldu ({N2(k.Tutar)} TL, {k.Yontem}); Yapılan Ödemeler › Yeni Ödeme ekranından İşleme Al." : $"{k.No} taslak tahsilat oluşturuldu ({N2(k.Tutar)} TL, {k.Yontem}); Tahsilat ekranından İşleme Al.", no = k.No, link = (k.Odeme ? "/YapilanOdemeler?sekme=yeni&no=" : "/Rapor117?no=") + Uri.EscapeDataString(k.No) });
         }
         [HttpPost]
         public IActionResult OtomatikKapat([FromBody] TaslakIstek i) { var r = KapamaOrnek.TumunuKapat(new[] { i?.Kod ?? "" }, Ben()); return Json(new { success = true, message = r.Eslesme == 0 ? "Bu caride kapatılacak eşleşmemiş ödeme yok." : $"{r.Eslesme} fatura–ödeme eşleşmesi kapatıldı · {N2(r.ToplamTl)} ₺.", eslesme = r.Eslesme }); }

@@ -73,7 +73,7 @@ namespace WebApplication3.Data
         public static readonly string[] Kategoriler = { "Tedarikçi Ödemesi", "Personel Avansı", "Maaş ve Ücret", "Vergi ve SGK", "Kira", "Kredi Taksiti", "Enerji ve Hizmet", "Genel Gider", "Grup İçi Ödeme" };
         public static readonly string[] AliciTipleri = { "Tedarikçi", "Personel", "Kurum", "Banka", "Grup Şirketi", "Diğer" };
         public static readonly string[] Durumlar = { "Ödendi", "Vade Bekliyor", "İptal" };
-        public static readonly string[] Kaynaklar = { "ERP Banka", "ERP Kasa", "Çek Bordrosu", "Nakit Avans Modülü", "Aylık Alım Onay / ERP Banka", "Aylık Alım Onay / Çek Bordrosu" };
+        public static readonly string[] Kaynaklar = { "Ödeme Ekranı", "ERP Banka", "ERP Kasa", "Çek Bordrosu", "Nakit Avans Modülü", "Aylık Alım Onay / ERP Banka", "Aylık Alım Onay / Çek Bordrosu" };
         public static readonly Dictionary<string, decimal> Kurlar = new Dictionary<string, decimal> { ["TL"] = 1m, ["USD"] = 41.35m, ["EUR"] = 48.70m, ["GBP"] = 55.80m, ["AED"] = 11.26m };
         public static readonly string[] Bankalar = { "Garanti BBVA", "İş Bankası", "Yapı Kredi", "Akbank", "Ziraat Bankası", "QNB", "Halkbank" };
 
@@ -88,6 +88,7 @@ namespace WebApplication3.Data
             l.AddRange(ErpOrnekleri.Value);
             l.AddRange(AvansTeslimleri());
             l.AddRange(FaturaOdemeleri());
+            l.AddRange(OdemeEkrani());
             int id = 0;
             foreach (var o in l.OrderByDescending(x => x.Tarih).ThenBy(x => x.Sirket).ThenBy(x => x.No)) o.Id = ++id;
             return l.OrderBy(x => x.Id).ToList();
@@ -116,6 +117,31 @@ namespace WebApplication3.Data
                         });
                     }
             }
+            return l;
+        }
+
+        /// <summary>
+        /// Yapılan Ödemeler › "Yeni Ödeme Ekle" ekranında işlenen tedarikçi ödemeleri (Data/TahsilatOrnek.cs › Odemeler, ÖD-…): her ödeme satırı bir kayıt — havale / kart → Banka, nakit → Nakit (Kasa), çek / senet → Çek
+        /// (vadesi gelmemiş çek "Vade Bekliyor"). Belge = kapatılan alış faturaları; bağlantı aynı ekranın Kayıtlı Ödemeler sekmesine. Taslaklar listeye girmez.
+        /// </summary>
+        private static IEnumerable<YoOdeme> OdemeEkrani()
+        {
+            var bugun = DateTime.Today; var l = new List<YoOdeme>();
+            foreach (var t in TahsilatOrnek.Odemeler.Where(t => t.Islendi))
+                foreach (var s in t.Satirlar)
+                {
+                    bool banka = s.Yontem == "Havale / EFT" || s.Yontem == "Kredi Kartı", kasa = s.Yontem == "Nakit"; string kanal = banka ? "Banka" : kasa ? "Kasa" : "Cek"; string pb = TahsilatOrnek.TlMi(s.Pb) ? "TL" : s.Pb;
+                    var fat = t.Dagitim.Where(d => d.OdemeSira == s.Sira).Select(d => d.BelgeNo).Distinct().ToList();
+                    l.Add(new YoOdeme
+                    {
+                        No = string.IsNullOrEmpty(s.HareketNo) ? $"{t.No}/{s.Sira}" : s.HareketNo, Tarih = (s.Vadeli ? t.Tarih : s.Tarih).Date, Sirket = SirketAdi(t.Sirket), Tur = TurAdi(kanal), Kanal = kanal, AktarimTipi = t.IslemTipi,
+                        KaynakHesap = banka ? $"{(string.IsNullOrEmpty(s.Banka) ? "Banka" : s.Banka)} · {pb} Hesabı" : kasa ? "KS01 - Merkez TL Kasası" : $"{(string.IsNullOrEmpty(s.Banka) ? "Banka" : s.Banka)} · {s.Yontem}", Banka = s.Banka ?? "",
+                        Alici = t.CariAd, AliciTipi = "Tedarikçi", Kategori = "Tedarikçi Ödemesi", Tutar = s.Tutar, ParaBirimi = pb, Kur = s.Kur, TutarTl = s.TutarTl, Belge = fat.Count > 0 ? string.Join(", ", fat) : "Cari Bakiye",
+                        Vade = s.Vadeli ? s.Tarih : (DateTime?)null, Durum = s.Vadeli && s.Tarih > bugun ? "Vade Bekliyor" : "Ödendi",
+                        Aciklama = $"{t.No} · {s.Yontem} · {(t.Mod == "Manuel" ? "manuel fatura seçimi" : "otomatik (FIFO)")}{(string.IsNullOrEmpty(t.Aciklama) ? "" : " · " + t.Aciklama)}{(string.IsNullOrEmpty(s.Not) ? "" : " · " + s.Not)}{(s.NakitAkisDocEntry != null ? $" · nakit akış #{s.NakitAkisDocEntry}" : "")}",
+                        Kaynak = "Ödeme Ekranı", Onaylayan = t.Kullanici, IslemiYapan = t.IslemeAlan, Link = "/YapilanOdemeler?sekme=yeni&no=" + Uri.EscapeDataString(t.No)
+                    });
+                }
             return l;
         }
 

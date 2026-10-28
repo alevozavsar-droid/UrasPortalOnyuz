@@ -8,11 +8,14 @@
 //   • KAYIT: "Kaydet ve İşle" → Cari Mutabakat hareketleri (satır başına Tahsilat / Çek / Senet, X / R) eklenir, faturaların kalanı düşer, Konsolide Finansal Takip Paneli'ne düşer;
 //     "Taslak Kaydet" → cariye işlenmez, listede Taslak olarak durur, istenen zaman "İşleme Al" ile aynı kayıttan işlenir (ibraz).
 //   • Basit fatura kesme: kur farkı / vade farkı için tek tıkla KDV'li fark faturası (KFF / VFF). PDF / Excel: Controllers/TahsilatController.cs + Data/DisaAktar.cs
+//   • ÖDEME (Yapılan Ödemeler › Yeni Ödeme, Controllers/OdemeController.cs): AYNI MOTOR, YÖN TERS — cari tedarikçiyse kayıt Tur = "Ödeme" (ÖD-…): açık ALIŞ faturaları (alacak) FIFO kapanır,
+//     işlenince cari hesabına BORÇ (Ödeme / Çek / Senet) yazılır, her ödeme satırı şirketin Kasa Nakit Akışı'na ÖDENDİ satır olarak düşer (Data/NakitAkisOrnek.cs) ve Yapılan Ödemeler listesinde görünür.
 // ============================================================
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using FinansRaporlama.Controllers;
 
 namespace WebApplication3.Data
 {
@@ -23,6 +26,7 @@ namespace WebApplication3.Data
         public string BelgeNo { get; set; } = ""; public string Banka { get; set; } = ""; public string Pb { get; set; } = "TL"; public decimal Kur { get; set; } = 1; public bool KurElle { get; set; }
         public decimal Tutar { get; set; } public decimal TutarTl => Math.Round(Tutar * Kur, 2); public string Not { get; set; } = "";
         public string HareketNo { get; set; } = "";   // işlenince Cari Mutabakat hareket belge no
+        public int? NakitAkisDocEntry { get; set; } public string NakitAkisDb { get; set; } = "";   // ödemede: işlenince açılan Kasa Nakit Akışı satırı (ÖDENDİ)
         public bool Nakit => Yontem == "Nakit"; public bool Vadeli => Yontem == "Çek" || Yontem == "Senet";
     }
     /// <summary>Fatura ↔ ödeme satırı eşleşmesi (simülasyon / dağıtım).</summary>
@@ -39,6 +43,8 @@ namespace WebApplication3.Data
     public class TahsilatKaydi
     {
         public string No { get; set; } public DateTime Tarih { get; set; } public string CariKodu { get; set; } public string CariAd { get; set; } public string Sirket { get; set; }
+        /// <summary>Tahsilat (müşteriden, TH-…) | Ödeme (tedarikçiye, ÖD-…; Yapılan Ödemeler › Yeni Ödeme).</summary>
+        public string Tur { get; set; } = "Tahsilat"; public bool Odeme => Tur == "Ödeme";
         public string ParaBirimi { get; set; } public string IslemTipi { get; set; } = "X"; public string Mod { get; set; } = "Otomatik"; public string Aciklama { get; set; } = ""; public string BelgeNo { get; set; } = "";
         public List<TahsilatSatir> Satirlar { get; set; } = new List<TahsilatSatir>();
         public Dictionary<string, decimal> FaturaSecim { get; set; } = new Dictionary<string, decimal>();   // Manuel: belge no → tutar sınırı (0 = kalanın tamamı)
@@ -83,8 +89,14 @@ namespace WebApplication3.Data
         public static readonly string[] Bankalar = { "Ziraat Bankası", "Halk Bankası", "İş Bankası", "Garanti BBVA", "Yapı Kredi", "Akbank", "QNB", "Vakıfbank", "Denizbank" };
         public static Dictionary<string, decimal> Kurlar => MutabakatOrnek.Kurlar;
         private static readonly List<TahsilatKaydi> _tahsilatlar = new List<TahsilatKaydi>(); private static readonly List<FarkFaturasi> _faturalar = new List<FarkFaturasi>();
-        private static int _sayac = 0, _kff = 0, _vff = 0; private static bool _tohumlandi;
-        public static List<TahsilatKaydi> Tahsilatlar { get { Tohumla(); lock (Kilit) return _tahsilatlar.OrderByDescending(t => t.Zaman).ToList(); } }
+        private static int _sayac = 0, _odemeSayac = 0, _kff = 0, _vff = 0; private static bool _tohumlandi;
+        /// <summary>Müşteri tahsilatları (TH-…).</summary>
+        public static List<TahsilatKaydi> Tahsilatlar { get { Tohumla(); lock (Kilit) return _tahsilatlar.Where(t => !t.Odeme).OrderByDescending(t => t.Zaman).ToList(); } }
+        /// <summary>Tedarikçiye yapılan ödemeler (ÖD-…; Yapılan Ödemeler › Yeni Ödeme).</summary>
+        public static List<TahsilatKaydi> Odemeler { get { Tohumla(); lock (Kilit) return _tahsilatlar.Where(t => t.Odeme).OrderByDescending(t => t.Zaman).ToList(); } }
+        public static bool TedarikciMi(string kod) => CariKartOrnek.KartBul(kod ?? "")?.KartTipi == "Tedarikçi";
+        /// <summary>İşlenmiş ödeme satırının Kasa Nakit Akışı bağlantısı (satır çekmecesi).</summary>
+        public static string NakitAkisLink(TahsilatSatir s) => s.NakitAkisDocEntry == null ? "" : $"/Rapor79?sirket={s.NakitAkisDb}&sekme={(s.Yontem == "Nakit" ? "nakit" : s.Yontem == "Çek" ? "cek" : s.Yontem == "Senet" ? "senet" : s.Yontem == "Havale / EFT" ? "havale" : "kredi")}&doc={s.NakitAkisDocEntry}";
         public static List<FarkFaturasi> Faturalar { get { Tohumla(); lock (Kilit) return _faturalar.OrderByDescending(f => f.Zaman).ToList(); } }
         public static TahsilatKaydi TahsilatBul(string no) { Tohumla(); lock (Kilit) return _tahsilatlar.FirstOrDefault(t => t.No == no); }
         public static FarkFaturasi FaturaBul(string no) { Tohumla(); lock (Kilit) return _faturalar.FirstOrDefault(t => t.No == no); }
@@ -98,11 +110,11 @@ namespace WebApplication3.Data
         }
         /// <summary>Fatura tarihindeki kur (TCMB serisi; TL faturada 1).</summary>
         public static decimal FaturaKuru(MtHareket f) => TlMi(f.ParaBirimi) ? 1m : KurOto(f.ParaBirimi, f.Tarih);
-        /// <summary>Carinin açık satış faturaları (vade sırasıyla).</summary>
+        /// <summary>Carinin açık faturaları (vade sırasıyla): müşteride satış faturaları (borç), tedarikçide ALIŞ faturaları (alacak).</summary>
         public static List<MtHareket> AcikFaturalar(string kod)
         {
-            var c = MutabakatOrnek.Bul(kod); if (c == null) return new List<MtHareket>();
-            return c.Hareketler.Where(h => h.BelgeTipi == "Fatura" && h.Borc > 0 && h.Kalan > 0.005m).OrderBy(h => h.Vade ?? h.Tarih).ThenBy(h => h.Tarih).ToList();
+            var c = MutabakatOrnek.Bul(kod); if (c == null) return new List<MtHareket>(); bool ted = c.Kart?.KartTipi == "Tedarikçi";
+            return c.Hareketler.Where(h => h.BelgeTipi == "Fatura" && (ted ? h.Alacak > 0 : h.Borc > 0) && h.Kalan > 0.005m).OrderBy(h => h.Vade ?? h.Tarih).ThenBy(h => h.Tarih).ToList();
         }
         /// <summary>Cari tahsilat özeti (son ödeme, son yükleme, ortalama gecikme, 12 ay hacim, eşleşmemiş ödeme, vade bekleyen çek).</summary>
         public static TahsilatCariBilgi CariBilgi(string kod)
@@ -167,26 +179,29 @@ namespace WebApplication3.Data
         public static string Kaydet(string kod, DateTime tarih, string islemTipi, string pb, string mod, Dictionary<string, decimal> secim, List<TahsilatSatir> satirlar, string aciklama, string kullanici, bool isle, out TahsilatKaydi kayit, DateTime? simdi = null)
         {
             kayit = null; Tohumla();
-            var k = CariKartOrnek.KartBul(kod); if (k == null) return "Cari bulunamadı."; if (k.KartTipi != "Müşteri") return "Tahsilat yalnız müşteri carilerinde kaydedilir.";
+            var k = CariKartOrnek.KartBul(kod); if (k == null) return "Cari bulunamadı."; bool ted = k.KartTipi == "Tedarikçi"; if (!ted && k.KartTipi != "Müşteri") return "Tahsilat yalnız müşteri, ödeme yalnız tedarikçi carilerinde kaydedilir.";
             pb = string.IsNullOrEmpty(pb) ? "TL" : pb; var l = SatirlariHazirla(satirlar, pb, tarih); if (l.Count == 0) return "En az bir ödeme satırı girin (tutar sıfırdan büyük)."; if (l.Any(s => s.Pb != pb)) return "Tüm ödeme satırları tahsilat para biriminde olmalı.";
             if (l.Any(s => s.Kur <= 0)) return "Kur sıfırdan büyük olmalı."; if (l.Any(s => s.Vadeli && string.IsNullOrEmpty(s.BelgeNo))) return "Çek / senet satırlarında belge (çek) no zorunludur."; if (!IslemTipleri.Contains(islemTipi ?? "")) return "İşlem tipi X ya da R olmalı.";
             mod = mod == "Manuel" ? "Manuel" : "Otomatik"; if (mod == "Manuel" && (secim == null || secim.Count == 0)) return "Manuel modda kapatılacak faturaları işaretleyin.";
             var dag = Hesapla(kod, pb, mod, secim, l);
             lock (Kilit)
             {
-                var z = simdi ?? DateTime.Now; var no = $"TH-{tarih:yyyy}-{++_sayac:00000}";
-                kayit = new TahsilatKaydi { No = no, Tarih = tarih.Date, CariKodu = k.Kod, CariAd = k.KisaAd, Sirket = k.Sirket, ParaBirimi = pb, IslemTipi = islemTipi, Mod = mod, Aciklama = (aciklama ?? "").Trim(), BelgeNo = no, Satirlar = l, FaturaSecim = mod == "Manuel" ? new Dictionary<string, decimal>(secim) : new Dictionary<string, decimal>(), Dagitim = dag, Durum = "Taslak", Kullanici = kullanici ?? "", Zaman = z };
+                var z = simdi ?? DateTime.Now; var no = ted ? $"ÖD-{tarih:yyyy}-{++_odemeSayac:00000}" : $"TH-{tarih:yyyy}-{++_sayac:00000}";
+                kayit = new TahsilatKaydi { No = no, Tur = ted ? "Ödeme" : "Tahsilat", Tarih = tarih.Date, CariKodu = k.Kod, CariAd = k.KisaAd, Sirket = k.Sirket, ParaBirimi = pb, IslemTipi = islemTipi, Mod = mod, Aciklama = (aciklama ?? "").Trim(), BelgeNo = no, Satirlar = l, FaturaSecim = mod == "Manuel" ? new Dictionary<string, decimal>(secim) : new Dictionary<string, decimal>(), Dagitim = dag, Durum = "Taslak", Kullanici = kullanici ?? "", Zaman = z };
                 _tahsilatlar.Insert(0, kayit);
-                CariKartOrnek.Gunluk(k, z, kullanici, "Tahsilat Taslağı", "", $"{no} · {kayit.Tutar.ToString("N2", Tr)} {pb} ({kayit.Yontem}, {islemTipi}) · {dag.Count} fatura eşleşmesi", "Tahsilat", kayit.Aciklama);
+                CariKartOrnek.Gunluk(k, z, kullanici, ted ? "Ödeme Taslağı" : "Tahsilat Taslağı", "", $"{no} · {kayit.Tutar.ToString("N2", Tr)} {pb} ({kayit.Yontem}, {islemTipi}) · {dag.Count} fatura eşleşmesi", ted ? "Ödeme" : "Tahsilat", kayit.Aciklama);
             }
             if (isle) { var h = IslemeAl(kayit.No, kullanici, simdi); if (h != null) return h; }
             return null;
         }
-        /// <summary>Taslak tahsilatı cariye işler (ibraz): satır başına Cari Mutabakat hareketi, fatura kalanları düşer, avans eşleşmemiş tahsilat olarak kalır. Hata metni ya da null.</summary>
+        /// <summary>
+        /// Taslak kaydı cariye işler (ibraz): satır başına Cari Mutabakat hareketi, fatura kalanları düşer, avans eşleşmemiş tahsilat / ödeme olarak kalır. Hata metni ya da null.
+        /// Tahsilat → alacak (Tahsilat / Çek / Senet); Ödeme → BORÇ (Ödeme / Çek / Senet) ve her satır için Kasa Nakit Akışı'na ÖDENDİ satır (NakitAkisaYaz).
+        /// </summary>
         public static string IslemeAl(string no, string kullanici, DateTime? simdi = null)
         {
-            var t = TahsilatBul(no); if (t == null) return "Tahsilat bulunamadı."; if (t.Islendi) return $"{no} zaten işlenmiş.";
-            var k = CariKartOrnek.KartBul(t.CariKodu); if (k == null) return "Cari bulunamadı.";
+            var t = TahsilatBul(no); if (t == null) return "Kayıt bulunamadı."; if (t.Islendi) return $"{no} zaten işlenmiş.";
+            var k = CariKartOrnek.KartBul(t.CariKodu); if (k == null) return "Cari bulunamadı."; bool od = t.Odeme; string ad = od ? "ödeme" : "tahsilat";
             // güncel açık faturalarla yeniden hesapla (taslak bekletilirken faturalar değişmiş olabilir)
             var dag = Hesapla(t.CariKodu, t.ParaBirimi, t.Mod, t.FaturaSecim, t.Satirlar);
             lock (Kilit)
@@ -195,28 +210,57 @@ namespace WebApplication3.Data
                 foreach (var s in t.Satirlar)
                 {
                     var kapat = dag.Where(d => d.OdemeSira == s.Sira).GroupBy(d => d.BelgeNo).Select(g => (g.Key, g.Sum(d => d.Tutar))).ToList(); decimal dagitilan = Math.Round(kapat.Sum(x => x.Item2), 2), avans = Math.Round(s.Tutar - dagitilan, 2);
-                    var h = new MtHareket { Tarih = s.Vadeli ? t.Tarih : s.Tarih, ParaBirimi = t.ParaBirimi, BelgeTipi = s.Yontem == "Çek" ? "Çek" : s.Yontem == "Senet" ? "Senet" : "Tahsilat", BelgeNo = s.Vadeli && !string.IsNullOrEmpty(s.BelgeNo) ? s.BelgeNo : $"{t.No}/{s.Sira}", Alacak = s.Tutar, IslemTipi = t.IslemTipi,
-                        Aciklama = $"{s.Yontem}{(string.IsNullOrEmpty(s.Banka) ? "" : " · " + s.Banka)}{(s.Vadeli ? $" · vade {s.Tarih:dd.MM.yyyy}" : "")} · tahsilat {t.No} · {(t.Mod == "Manuel" ? "manuel" : "otomatik")}{(kapat.Count > 0 ? " · " + string.Join(", ", kapat.Select(x => x.Key)) : "")}{(string.IsNullOrWhiteSpace(t.Aciklama) ? "" : " · " + t.Aciklama)}", KapamaDurumu = s.Vadeli ? (s.Tarih > DateTime.Today ? "Vade Bekliyor" : "Tahsil Edildi") : "—" };
+                    var h = new MtHareket { Tarih = s.Vadeli ? t.Tarih : s.Tarih, ParaBirimi = t.ParaBirimi, BelgeTipi = s.Yontem == "Çek" ? "Çek" : s.Yontem == "Senet" ? "Senet" : (od ? "Ödeme" : "Tahsilat"), BelgeNo = s.Vadeli && !string.IsNullOrEmpty(s.BelgeNo) ? s.BelgeNo : $"{t.No}/{s.Sira}", Alacak = od ? 0 : s.Tutar, Borc = od ? s.Tutar : 0, IslemTipi = t.IslemTipi,
+                        Aciklama = $"{s.Yontem}{(string.IsNullOrEmpty(s.Banka) ? "" : " · " + s.Banka)}{(s.Vadeli ? $" · vade {s.Tarih:dd.MM.yyyy}" : "")} · {ad} {t.No} · {(t.Mod == "Manuel" ? "manuel" : "otomatik")}{(kapat.Count > 0 ? " · " + string.Join(", ", kapat.Select(x => x.Key)) : "")}{(string.IsNullOrWhiteSpace(t.Aciklama) ? "" : " · " + t.Aciklama)}", KapamaDurumu = s.Vadeli ? (s.Tarih > DateTime.Today ? "Vade Bekliyor" : (od ? "Ödendi" : "Tahsil Edildi")) : "—" };
                     if (s.Vadeli) h.Vade = s.Tarih;
-                    if (avans > 0.005m) { h.Kalan = avans; if (!s.Vadeli) h.KapamaDurumu = "Açık"; }   // dağıtılmayan kısım kapama bekleyen tahsilat (Otomatik Kapatma)
+                    if (avans > 0.005m) { h.Kalan = avans; if (!s.Vadeli) h.KapamaDurumu = "Açık"; }   // dağıtılmayan kısım kapama bekleyen tahsilat / ödeme (Otomatik Kapatma)
                     MutabakatOrnek.HareketEkle(t.CariKodu, h, kapat); s.HareketNo = h.BelgeNo;
                 }
                 t.Durum = "İşlendi"; t.IslemeAlan = kullanici ?? ""; t.IslemeZamani = z;
-                CariKartOrnek.Gunluk(k, z, kullanici, "Tahsilat", "Taslak", $"{t.No} işlendi · {t.Tutar.ToString("N2", Tr)} {t.ParaBirimi} ({t.Yontem}, {t.IslemTipi}) · {dag.Count} fatura eşleşmesi{(t.Avans > 0.005m ? $" · avans {t.Avans.ToString("N2", Tr)} {t.ParaBirimi}" : "")}{(t.VadeFarki > 0 ? $" · vade farkı {t.VadeFarki.ToString("N0", Tr)} ₺" : "")}{(t.KurFarki != 0 ? $" · kur farkı {t.KurFarki.ToString("N0", Tr)} ₺" : "")}", "Tahsilat", t.Aciklama);
+                CariKartOrnek.Gunluk(k, z, kullanici, od ? "Ödeme" : "Tahsilat", "Taslak", $"{t.No} işlendi · {t.Tutar.ToString("N2", Tr)} {t.ParaBirimi} ({t.Yontem}, {t.IslemTipi}) · {dag.Count} fatura eşleşmesi{(t.Avans > 0.005m ? $" · avans {t.Avans.ToString("N2", Tr)} {t.ParaBirimi}" : "")}{(t.VadeFarki > 0 ? $" · vade farkı {t.VadeFarki.ToString("N0", Tr)} ₺" : "")}{(t.KurFarki != 0 ? $" · kur farkı {t.KurFarki.ToString("N0", Tr)} ₺" : "")}", od ? "Ödeme" : "Tahsilat", t.Aciklama);
             }
+            if (od) NakitAkisaYaz(t, k, kullanici);   // kilit dışında: NakitAkisOrnek kendi kilidini kullanır
             return null;
         }
-        /// <summary>Taslak tahsilatı siler (işlenmiş kayıt silinemez).</summary>
+        /// <summary>
+        /// İşlenen ÖDEMENİN her satırını şirketin Kasa Nakit Akışı'na ÖDENDİ satır olarak yazar (Takip Paneli'nden "Ödeme Ekle" ile aynı yol): yöntem, belge / dekont no, banka hesabı, kapatılan fatura, kur;
+        /// nakit satırda makbuz; çek / senette planlanan tarih = vade. Satıra DocEntry yazılır (çekmecede bağlantı). Hata nakit akışı bozmasın diye satır satır yutulur.
+        /// </summary>
+        private static void NakitAkisaYaz(TahsilatKaydi t, CariKart k, string kullanici)
+        {
+            string db; try { db = CekAkibetOrnek.DbName(k.Sirket); } catch { return; } if (string.IsNullOrEmpty(db)) return;
+            foreach (var s in t.Satirlar)
+            {
+                if (s.NakitAkisDocEntry != null) continue;
+                try
+                {
+                    var kapat = t.Dagitim.Where(d => d.OdemeSira == s.Sira).Select(d => d.BelgeNo).Distinct().ToList();
+                    string yontem = s.Yontem == "Kredi Kartı" ? "Kredi Kartı / Banka Kartı" : s.Yontem; string pb = TlMi(s.Pb) ? "TRY" : s.Pb;
+                    var m = NakitAkisOrnek.Ekle(db, new NakitAkisViewModel
+                    {
+                        U_Kurum = k.KisaAd, U_UrunHizmet = kapat.Count > 0 ? $"Alış faturası ödemesi · {string.Join(", ", kapat)}" : "Cari bakiye ödemesi", U_OdemeYontemi = yontem, U_BagliBelgeTipi = kapat.Count > 0 ? "Fatura" : "Cari Bakiye", U_FaturaSiparisNo = kapat.FirstOrDefault() ?? "",
+                        U_PlanlananTarih = s.Tarih, U_SonOdemeTarihi = s.Tarih, U_Tutar = s.Tutar, U_ParaBirimi = pb, U_Kur = s.Kur, U_TutarTL = s.TutarTl, U_IslemTipi = t.IslemTipi, U_TalepEden = kullanici ?? "", U_Kasa = yontem == "Nakit" ? NakitAkisOrnek.Kasalar[0] : "",
+                        U_Notlar = $"Yapılan Ödemeler › Yeni Ödeme {t.No}/{s.Sira} · {(t.Mod == "Manuel" ? "manuel fatura seçimi" : "otomatik (FIFO)")}{(s.Vadeli ? $" · {s.Yontem} vade {s.Tarih:dd.MM.yyyy}" : "")}{(string.IsNullOrEmpty(s.Not) ? "" : " · " + s.Not)}", U_Satinalmaci = "", U_FaturaSahibi = k.Sirket, U_OdeyenSirket = k.Sirket
+                    }, kullanici);
+                    if (!string.IsNullOrEmpty(s.BelgeNo)) NakitAkisOrnek.AlanKaydet(db, m.DocEntry, yontem == "Nakit" ? "U_MakbuzNo" : "U_DekontNo", s.BelgeNo, kullanici);
+                    if (yontem == "Havale / EFT" && !string.IsNullOrEmpty(s.Banka)) { var bh = NakitAkisOrnek.BankaHesaplari.FirstOrDefault(x => x.StartsWith(s.Banka, StringComparison.OrdinalIgnoreCase)); if (bh != null) NakitAkisOrnek.AlanKaydet(db, m.DocEntry, "U_BankaHesabi", bh, kullanici); }
+                    NakitAkisOrnek.OdendiIsaretle(db, m.DocEntry, $"Yapılan Ödemeler · {t.No}", kullanici, true, s.Vadeli ? t.Tarih : s.Tarih);
+                    lock (Kilit) { s.NakitAkisDocEntry = m.DocEntry; s.NakitAkisDb = db; }
+                }
+                catch { /* nakit akış yazılamadıysa ödeme kaydı yine de işlenmiştir */ }
+            }
+        }
+        /// <summary>Taslak kaydı siler (işlenmiş kayıt silinemez).</summary>
         public static string Sil(string no, string kullanici)
         {
-            var t = TahsilatBul(no); if (t == null) return "Tahsilat bulunamadı."; if (t.Islendi) return "İşlenmiş tahsilat silinemez.";
-            lock (Kilit) _tahsilatlar.Remove(t); var k = CariKartOrnek.KartBul(t.CariKodu); if (k != null) CariKartOrnek.Gunluk(k, DateTime.Now, kullanici, "Tahsilat Taslağı Silindi", t.No, "", "Tahsilat");
+            var t = TahsilatBul(no); if (t == null) return "Kayıt bulunamadı."; if (t.Islendi) return $"İşlenmiş {(t.Odeme ? "ödeme" : "tahsilat")} silinemez.";
+            lock (Kilit) _tahsilatlar.Remove(t); var k = CariKartOrnek.KartBul(t.CariKodu); if (k != null) CariKartOrnek.Gunluk(k, DateTime.Now, kullanici, t.Odeme ? "Ödeme Taslağı Silindi" : "Tahsilat Taslağı Silindi", t.No, "", t.Odeme ? "Ödeme" : "Tahsilat");
             return null;
         }
         /// <summary>Kur farkı / vade farkı faturası keser (KDV'li, 30 gün vadeli) ve cari hesabına Fatura olarak işler. Hata metni ya da null.</summary>
         public static string FaturaKes(string tahsilatNo, string tur, string kullanici, out FarkFaturasi fatura, DateTime? simdi = null)
         {
-            fatura = null; var t = TahsilatBul(tahsilatNo); if (t == null) return "Tahsilat bulunamadı."; if (!t.Islendi) return "Fark faturası yalnız işlenmiş tahsilatta kesilir; önce İşleme Al.";
+            fatura = null; var t = TahsilatBul(tahsilatNo); if (t == null) return "Tahsilat bulunamadı."; if (t.Odeme) return "Fark faturası yalnız müşteri tahsilatında kesilir (ödemede tedarikçi keser)."; if (!t.Islendi) return "Fark faturası yalnız işlenmiş tahsilatta kesilir; önce İşleme Al.";
             bool kur = tur == "Kur Farkı"; if (!kur && tur != "Vade Farkı") return "Fatura türü Kur Farkı ya da Vade Farkı olmalı.";
             if (kur && !string.IsNullOrEmpty(t.KurFarkiFaturaNo)) return $"Kur farkı faturası zaten kesildi: {t.KurFarkiFaturaNo}."; if (!kur && !string.IsNullOrEmpty(t.VadeFarkiFaturaNo)) return $"Vade farkı faturası zaten kesildi: {t.VadeFarkiFaturaNo}.";
             var kalemler = t.Dagitim.Where(d => (kur ? d.KurFarki : d.VadeFarki) > 0.005m).Select(d => (kur ? $"{d.BelgeNo} kur farkı: {d.Tutar.ToString("N2", Tr)} {d.Pb} × ({d.TahsilatKuru.ToString("N4", Tr)} − {d.FaturaKuru.ToString("N4", Tr)})" : $"{d.BelgeNo} vade farkı: {d.GecikmeGun} gün gecikme × %{VadeFarkiAylikOran.ToString("0.##", Tr)} / ay ({d.OdemeYontem} {d.OdemeTarihi:dd.MM.yyyy})", kur ? d.KurFarki : d.VadeFarki)).ToList();
@@ -247,6 +291,11 @@ namespace WebApplication3.Data
                 if (gec.Count > 0) { decimal top = Math.Round(gec.Sum(f => f.Kalan), 2); Kaydet("120.011", b.AddDays(-1), "R", "TL", "Manuel", gec.GroupBy(f => f.BelgeNo).ToDictionary(g => g.Key, g => 0m), new List<TahsilatSatir> { S("Nakit", b.AddDays(-1), Math.Round(top * 0.3m, 2)), S("Çek", b.AddDays(44), Math.Round(top * 0.7m, 2), "TL", "ÇK-4471920", "İş Bankası") }, "Gecikmiş faturalar nakit + çekle tahsil", "Nazlı Erdem", true, out var k3, b.AddDays(-1).AddHours(16)); if (k3 != null && k3.VadeFarki > 0) FaturaKes(k3.No, "Vade Farkı", "Nazlı Erdem", out _, b.AddDays(-1).AddHours(16).AddMinutes(20)); }
                 var tas = AcikFaturalar("120.002").Where(f => f.ParaBirimi == "TL").Take(3).ToList();
                 if (tas.Count > 0) Kaydet("120.002", b, "X", "TL", "Otomatik", null, new List<TahsilatSatir> { S("Çek", b.AddDays(30), Math.Round(tas.Sum(f => f.Kalan) * 0.5m, 2), "TL", "ÇK-5580113", "Yapı Kredi"), S("Çek", b.AddDays(60), Math.Round(tas.Sum(f => f.Kalan) * 0.5m, 2), "TL", "ÇK-5580114", "Yapı Kredi") }, "Müşteriden gelen iki vadeli çek; teslim alınınca işlenecek", "Nazlı Erdem", false, out _, b.AddHours(9));
+                // --- ÖDEME örnekleri (Yapılan Ödemeler › Yeni Ödeme): havaleyle fatura bazlı ödeme (işlenmiş), nakit + vadeli çek toplu ödeme (işlenmiş), teslim bekleyen çek taslağı
+                var tedler = CariKartOrnek.Kartlar.Where(x => x.KartTipi == "Tedarikçi").Select(x => x.Kod).Where(kod => AcikFaturalar(kod).Any(f => f.ParaBirimi == "TL")).Take(3).ToList();
+                if (tedler.Count > 0) { var f1 = AcikFaturalar(tedler[0]).Where(f => f.ParaBirimi == "TL").Take(2).ToList(); Kaydet(tedler[0], b.AddDays(-5), "X", "TL", "Manuel", f1.GroupBy(f => f.BelgeNo).ToDictionary(g => g.Key, g => 0m), new List<TahsilatSatir> { S("Havale / EFT", b.AddDays(-5), Math.Round(f1.Sum(f => f.Kalan), 2), "TL", "DK-5520341", "Ziraat Bankası") }, "Vadesi gelen alış faturaları havaleyle ödendi", "Serkan Genç", true, out _, b.AddDays(-5).AddHours(15)); }
+                if (tedler.Count > 1) { decimal top = Math.Round(AcikFaturalar(tedler[1]).Where(f => f.ParaBirimi == "TL").Sum(f => f.Kalan), 2); if (top > 0) Kaydet(tedler[1], b.AddDays(-2), "X", "TL", "Otomatik", null, new List<TahsilatSatir> { S("Nakit", b.AddDays(-2), Math.Round(top * 0.25m, 2)), S("Çek", b.AddDays(58), Math.Round(top * 0.75m, 2), "TL", "ÇK-7731204", "Garanti BBVA") }, "Bir kısmı nakit, kalanı 60 gün vadeli çekle", "Serkan Genç", true, out _, b.AddDays(-2).AddHours(11)); }
+                if (tedler.Count > 2) { var f3 = AcikFaturalar(tedler[2]).Where(f => f.ParaBirimi == "TL").Take(2).ToList(); if (f3.Count > 0) Kaydet(tedler[2], b, "X", "TL", "Manuel", f3.GroupBy(f => f.BelgeNo).ToDictionary(g => g.Key, g => 0m), new List<TahsilatSatir> { S("Çek", b.AddDays(45), Math.Round(f3.Sum(f => f.Kalan), 2), "TL", "ÇK-7731205", "Garanti BBVA") }, "Çek hazırlandı; tedarikçiye teslim edilince işlenecek", "Serkan Genç", false, out _, b.AddHours(10)); }
             }
         }
     }
