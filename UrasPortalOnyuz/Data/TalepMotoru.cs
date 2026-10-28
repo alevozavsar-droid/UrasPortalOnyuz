@@ -264,7 +264,8 @@ namespace WebApplication3.Data
         {
             var t = DateTime.Today.AddDays(-gunOnce).AddHours(9).AddMinutes(5 + _sonId);
             var a = new TmTalep { ModulKod = modul, Olusturan = KisiBul(olusturan), Kullanan = KisiBul(kullanan), TurKod = tur, Degerler = degerler, Tarih = t };
-            var s = Hazirla(a); if (s.Hata != null) throw new InvalidOperationException($"{modul} tohumu hatalı ({kullanan}, {tur}): {s.Hata}");
+            // tohum kural kontrolünden geçmezse (tarihe bağlı: izin / tatil çakışması gibi) uygulama açılışı durmaz — tohum atlanır (TohumOlay / TohumRed null'u yok sayar)
+            var s = Hazirla(a); if (s.Hata != null) { System.Diagnostics.Debug.WriteLine($"{modul} tohumu atlandı ({kullanan}, {tur}): {s.Hata}"); return null; }
             a.Id = ++_sonId; a.No = $"{a.Modul.NoOnEk}-{DateTime.Today.Year}-{(_sonId + 300):000000}"; a.Tarih = t; a.Uyarilar = s.Uyarilar; a.Onaylar = OnayAkisiOlustur(a, t, s.EkAdimlar);
             Hareket(a, t, $"Talep oluşturuldu ({a.Tur.Ad}) — {a.Ozet}", a.Olusturan.AdSoyad);
             Log(a, t, a.Modul.NoOnEk + "_REQUEST", "REQUEST_STATUS", "", a.TalepDurumu, a.Olusturan.KullaniciId, "Insert", "Portal");
@@ -279,10 +280,11 @@ namespace WebApplication3.Data
             a.SonSenkron = a.Zaman.Last().Tarih;
             Talepler.Add(a); return a;
         }
-        public static void TohumRed(TmTalep a, string not) { var adim = a.Onaylar.First(x => x.Durum == "Onay Bekliyor"); adim.Durum = "Reddedildi"; adim.Tarih = a.Tarih.AddHours(3); adim.Not = not; foreach (var o in a.Onaylar.Where(o => o.Durum == "Pasif")) o.Durum = "İptal"; Hareket(a, adim.Tarih.Value, adim.Adim + " — reddedildi (" + not + ")", adim.Kisi); }
-        public static void TohumRevizyon(TmTalep a, string not) { var adim = a.Onaylar.First(x => x.Durum == "Onay Bekliyor"); adim.Durum = "Revizyon"; adim.Tarih = a.Tarih.AddHours(2); adim.Not = not; Hareket(a, adim.Tarih.Value, adim.Adim + " — revizyona gönderildi (" + not + ")", adim.Kisi); }
+        public static void TohumRed(TmTalep a, string not) { if (a == null) return; var adim = a.Onaylar.First(x => x.Durum == "Onay Bekliyor"); adim.Durum = "Reddedildi"; adim.Tarih = a.Tarih.AddHours(3); adim.Not = not; foreach (var o in a.Onaylar.Where(o => o.Durum == "Pasif")) o.Durum = "İptal"; Hareket(a, adim.Tarih.Value, adim.Adim + " — reddedildi (" + not + ")", adim.Kisi); }
+        public static void TohumRevizyon(TmTalep a, string not) { if (a == null) return; var adim = a.Onaylar.First(x => x.Durum == "Onay Bekliyor"); adim.Durum = "Revizyon"; adim.Tarih = a.Tarih.AddHours(2); adim.Not = not; Hareket(a, adim.Tarih.Value, adim.Adim + " — revizyona gönderildi (" + not + ")", adim.Kisi); }
         public static void TohumOlay(TmTalep a, string olay, Dictionary<string, string> g, int gunOnce, int saat = 10)
         {
+            if (a == null) return;
             var t = DateTime.Today.AddDays(-gunOnce).AddHours(saat).AddMinutes(a.Id * 3 % 50);
             TalepModulleri.OlayZamani = t;
             string hata; try { hata = a.Modul.Olay(a, olay, g ?? new Dictionary<string, string>()); } finally { TalepModulleri.OlayZamani = null; }

@@ -34,7 +34,7 @@ namespace WebApplication3.Controllers
             ViewBag.Bas = (startDate ?? (DateTime.TryParse(bas, CultureInfo.InvariantCulture, DateTimeStyles.None, out var b1) ? b1 : DateTime.Today.AddDays(-30))).ToString("yyyy-MM-dd");
             ViewBag.Bit = (endDate ?? (DateTime.TryParse(bit, CultureInfo.InvariantCulture, DateTimeStyles.None, out var b2) ? b2 : DateTime.Today)).ToString("yyyy-MM-dd");
             string sk = sekme;
-            if (string.IsNullOrEmpty(sk)) { string ht = (hesapTipi ?? "").ToUpperInvariant(), tb = (tab ?? "").ToUpperInvariant(); sk = tb == "FINEKRA" ? "finekra" : tb == "VIRMAN" ? "eslesme" : ht == "BANKA" ? "banka" : ht == "CEK" || ht == "ÇEK" ? "cek" : ht == "KASA" ? "kasa" : "ozet"; }   // varsayılan: Durum Özeti sekmesi
+            if (string.IsNullOrEmpty(sk)) { string ht = (hesapTipi ?? "").ToUpperInvariant(), tb = (tab ?? "").ToUpperInvariant(); sk = tb == "FINEKRA" ? "finekra" : tb == "VIRMAN" ? "eslesme" : ht == "BANKA" ? "banka" : ht == "CEK" || ht == "ÇEK" ? "cek" : ht == "KASA" ? "kasa" : "tumu"; }   // varsayılan: Tümü sekmesi (o gün yapılan tüm işlemler; dönem seçilince dönem)
             ViewBag.Sekme = sk;
             OrnekDoldurucu.Hazirla(this);
             return View("Index");

@@ -56,6 +56,8 @@ namespace WebApplication3.Controllers
         }
 
         // ---------- modern ekran veri ve kayıt uçları ----------
+        /// <summary>"Talepler" düğmesi rozeti: tüm şirketlerdeki açık ödeme talepleri (onay bekleyen / onaylanmış, nakit akışa alınmamış).</summary>
+        static object TalepOzet() { var l = OdemeTalepOrnek.Listele(null); return new { acik = l.Count, onayli = l.Count(t => t.Durum == "Onaylandı"), bekleyen = l.Count(t => t.Durum == "Onay Bekliyor"), onayliTutar = l.Where(t => t.Durum == "Onaylandı").Sum(t => t.TutarTL) }; }
         [HttpGet("Veri")]
         public IActionResult Veri(string sirket, string bas, string bit)
         {
@@ -75,6 +77,7 @@ namespace WebApplication3.Controllers
                 grupBakiyeleri = CekAkibetOrnek.GrupBakiyeleri.Where(x => x.Value > 0).Select(x => new { borclu = x.Key.Split('|')[0], alacakli = x.Key.Split('|')[1], tutar = x.Value }).OrderBy(x => x.borclu).ThenBy(x => x.alacakli).ToList(),
                 talimatlar = TalimatOrnek.Listele(sirket).Select(TalimatJson).ToList(),
                 avans = new { bekleyen = avanslar.Count, bekleyenTutar = avanslar.Sum(a => NakitAvansOrnek.TlKarsiligi(a.OdemeBekleyen, a.ParaBirimi)), link = "/IkTalep/AvansBekleyenOdemeler" },
+                talepOzet = TalepOzet(),
                 onaycilar = new { nakit = NakitAkisOrnek.NakitOnaycilari, cekCikis = NakitAkisOrnek.CekCikisOnaycilari }, kullanici = Kullanici, belgeTipleri = NakitAkisOrnek.BelgeTipleri,
                 makbuzlar = MakbuzOrnek.Listele(string.IsNullOrEmpty(sirket) ? null : sirket).Take(100).Select(MakbuzOrnek.Json).ToList(),
                 kurKaynaklari = KurOrnek.Kaynaklar, kurFarkiSecenekleri = KurOrnek.KurFarkiSecenekleri, aliciBankalar = NakitAkisOrnek.AliciBankalari, ekTurleri = NakitAkisOrnek.EkTurleri, tahsilBankalari = ButceOrnek.TahsilBankalari,

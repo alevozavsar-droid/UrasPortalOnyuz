@@ -808,7 +808,8 @@ namespace WebApplication3.Data
             Tohumla(); string sirket = SirketAdi(dbName); var bugun = DateTime.Today;
             List<NakitAkisViewModel> mevcut; lock (Kilit) mevcut = _odemeler.Values.SelectMany(l => l).Where(m => m.U_Durum != "ÖDENDİ").ToList();
             decimal Tl(decimal v, string pb) => Math.Round(v * (Kurlar.TryGetValue(pb, out var kk) ? kk : 1m), 2);
-            var cariler = MutabakatOrnek.Cariler.Where(c => c.Kart != null && c.Kart.Sirket == sirket && c.Kart.KartTipi != "Müşteri").Select(c =>
+            // Tedarikçiler grup şirketlerinin ortak tedarikçileridir (fatura sahibi ≠ ödeyen olabilir): liste hiçbir şirkette boş kalmaz — seçilen şirketin kendi carileri önde, diğer grup şirketlerinin tedarikçileri arkada (şirket sütunuyla)
+            var cariler = MutabakatOrnek.Cariler.Where(c => c.Kart != null && c.Kart.KartTipi != "Müşteri").Select(c =>
             {
                 var acik = c.Hareketler.Where(h => h.BelgeTipi == "Fatura" && h.Kalan > 0 && h.KapamaDurumu != "Kapalı").OrderBy(h => h.Vade ?? h.Tarih).ToList();
                 var faturalar = acik.Select(h => { string pb = h.ParaBirimi == "TL" || string.IsNullOrEmpty(h.ParaBirimi) ? "TRY" : h.ParaBirimi; var vade = h.Vade ?? h.Tarih.AddDays(30); return new { belgeNo = h.BelgeNo, tarih = h.Tarih.ToString("yyyy-MM-dd"), vade = vade.ToString("yyyy-MM-dd"), tutar = h.Borc > 0 ? h.Borc : h.Alacak, kalan = h.Kalan, pb, kalanTL = Tl(h.Kalan, pb), aciklama = h.Aciklama, gecikme = (bugun - vade).Days, kapama = h.KapamaDurumu, planlandi = mevcut.Any(m => string.Equals(m.U_FaturaSiparisNo, h.BelgeNo, StringComparison.OrdinalIgnoreCase)) }; }).ToList();
@@ -816,17 +817,18 @@ namespace WebApplication3.Data
                 var tb = TedarikciBanka(c.Kart.KisaAd); int vadeGun = VadeGunu(c.Kart.VadeSarti);
                 return new
                 {
-                    kod = c.CariKodu, ad = c.Kart.KisaAd, unvan = c.Kart.ResmiUnvan, kartTipi = c.Kart.KartTipi, sinif = c.Kart.Sinif, temsilciler = MutabakatOrnek.Temsilciler(c.Kart), adet = faturalar.Count, toplam, gecmis, gelecek = toplam - gecmis,
+                    kod = c.CariKodu, ad = c.Kart.KisaAd, unvan = c.Kart.ResmiUnvan, kartTipi = c.Kart.KartTipi, sinif = c.Kart.Sinif, sirket = c.Kart.Sirket, kendi = c.Kart.Sirket == sirket, temsilciler = MutabakatOrnek.Temsilciler(c.Kart), adet = faturalar.Count, toplam, gecmis, gelecek = toplam - gecmis,
                     vadeSarti = c.Kart.VadeSarti ?? $"Vade {vadeGun} Gün", vadeGun, sonOdemeOnerisi = bugun.AddDays(vadeGun).ToString("yyyy-MM-dd"), banka = tb.banka, iban = tb.iban, hesapAdi = tb.hesapAdi,
                     gecmisAdet = faturalar.Count(f => f.gecikme > 0), enEskiVade = faturalar.Where(f => f.gecikme > 0).Select(f => f.vade).DefaultIfEmpty("").Min(), ilkVade = faturalar.Where(f => f.gecikme <= 0).Select(f => f.vade).DefaultIfEmpty("").Min(), enUzunGecikme = faturalar.Select(f => f.gecikme).DefaultIfEmpty(0).Max(),
                     dovizler = c.Dovizler.Select(d => new { pb = d.ParaBirimi, acikAdet = d.AcikFaturaAdet, acikTutar = d.AcikFaturaTutar, enEski = d.EnEskiAcikFatura?.ToString("yyyy-MM-dd") }), bakiyeZamani = c.BakiyeZamani?.ToString("yyyy-MM-dd HH:mm"),
                     planlanan = mevcut.Where(m => string.Equals(m.U_Kurum, c.Kart.KisaAd, StringComparison.OrdinalIgnoreCase)).Sum(m => m.U_TutarTL ?? 0),
                     ekstre = "/Rapor20/Index?bpCode=" + Uri.EscapeDataString(c.CariKodu), ekstreYazdir = "/CariMutabakat/Ekstre?kod=" + Uri.EscapeDataString(c.CariKodu), faturalar
                 };
-            }).OrderByDescending(x => x.toplam).ThenBy(x => x.ad).ToList();
-            var talepler = OdemeTalepOrnek.Listele(dbName).Select(OdemeTalepOrnek.Json).ToList();
-            var temsilciler = cariler.SelectMany(x => x.temsilciler).Concat(OdemeTalepOrnek.Listele(dbName).Select(t => t.TalepEden)).Distinct().OrderBy(x => x, StringComparer.Create(Tr, false)).ToList();
-            return new { sirket, cariler, toplam = cariler.Sum(x => x.toplam), gecmis = cariler.Sum(x => x.gecmis), gelecek = cariler.Sum(x => x.gelecek), adet = cariler.Sum(x => x.adet), talepler, temsilciler, departmanlar = OdemeTalepOrnek.Departmanlar };
+            }).OrderByDescending(x => x.kendi).ThenByDescending(x => x.toplam).ThenBy(x => x.ad).ToList();
+            // ödeme talepleri tüm şirketlerden (Ödeme Talebi modülü + tohum); her talep kendi şirketinin nakit akışına alınır
+            var talepListe = OdemeTalepOrnek.Listele(null); var talepler = talepListe.OrderByDescending(t => t.DbName == dbName).ThenBy(t => t.SonOdeme).Select(OdemeTalepOrnek.Json).ToList();
+            var temsilciler = cariler.SelectMany(x => x.temsilciler).Concat(talepListe.Select(t => t.TalepEden)).Distinct().OrderBy(x => x, StringComparer.Create(Tr, false)).ToList();
+            return new { sirket, cariler, kendiAdet = cariler.Count(x => x.kendi), toplam = cariler.Sum(x => x.toplam), gecmis = cariler.Sum(x => x.gecmis), gelecek = cariler.Sum(x => x.gelecek), adet = cariler.Sum(x => x.adet), talepler, talepOnayli = talepListe.Count(t => t.Durum == "Onaylandı"), talepBekleyen = talepListe.Count(t => t.Durum == "Onay Bekliyor"), temsilciler, departmanlar = OdemeTalepOrnek.Departmanlar };
         }
         /// <summary>Çekmecede "Belge Seç": carinin açık faturaları / siparişleri (deterministik örnek; Kasa Nakit Akışı'ndaki satırlarla eşleşen belgeler "planlanan" ile gelir) ya da cari bakiyesi.</summary>
         public static object CariBelgeler(string dbName, string kurum, string tip)

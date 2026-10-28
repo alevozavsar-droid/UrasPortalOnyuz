@@ -44,7 +44,8 @@ namespace WebApplication3.Data
             TalepMotoru.Moduller["MAHSUP"] = Mahsup();
             TalepMotoru.Moduller["TEMLIK"] = Temlik();
             TalepMotoru.Moduller[OdemeTalebiModulu.Kod] = OdemeTalebiModulu.Modul();   // Ödeme Talebi (Data/OdemeTalebiModulu.cs)
-            MesaiTohum(); BelgeTohum(); SeyahatTohum(); AracTohum(); GrupIciTohum(); OdemeTalebiModulu.Tohum();
+            // tohumlar birbirinden bağımsız: biri tarihe bağlı kural nedeniyle düşerse (ör. tatil / izin çakışması) diğerleri ve talep motoru yine açılır
+            foreach (var th in new Action[] { MesaiTohum, BelgeTohum, SeyahatTohum, AracTohum, GrupIciTohum, OdemeTalebiModulu.Tohum }) { try { th(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Talep tohumu atlandı: " + ex.Message); } }
         }
 
         // =====================================================================
