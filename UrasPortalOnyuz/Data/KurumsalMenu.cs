@@ -22,8 +22,13 @@ namespace WebApplication3.Data
         public string Controller { get; set; }
         public string Action { get; set; }
         public string Kisayol { get; set; }
-        public bool Hazir => !string.IsNullOrEmpty(Controller);
-        public string Durum => Hazir ? "hazir" : !string.IsNullOrEmpty(Kisayol) ? "kisayol" : "plan";
+        /// <summary>Menüden kaldırılan rapor: listede adı "(Kaldırıldı)" rozetiyle (üstü çizili) durur, ekran açılmaz; Not = neden / nerede, Yerine = yerine geçen ekran.</summary>
+        public bool Kaldirildi { get; set; }
+        public string Not { get; set; }
+        public string YerineAd { get; set; }
+        public string YerineUrl { get; set; }
+        public bool Hazir => !Kaldirildi && !string.IsNullOrEmpty(Controller);
+        public string Durum => Kaldirildi ? "kaldirildi" : Hazir ? "hazir" : !string.IsNullOrEmpty(Kisayol) ? "kisayol" : "plan";
     }
 
     public class KmGrup
@@ -140,6 +145,9 @@ namespace WebApplication3.Data
         /// <summary>Ana sahibi başka yerde olan kayıt (kısayol).</summary>
         private static KmRapor K(string ad, string kisayol) => new KmRapor { Ad = ad, Kisayol = kisayol };
 
+        /// <summary>Menüden kaldırılan rapor: adı "(Kaldırıldı)" rozetiyle listede kalır (Data/PortalDegisiklikler.cs'ye Kaldirma satırı da yazılır).</summary>
+        private static KmRapor X(string ad, string not, string yerineAd = null, string yerineUrl = null) => new KmRapor { Ad = ad, Kaldirildi = true, Not = not, YerineAd = yerineAd, YerineUrl = yerineUrl };
+
         /// <summary>Rapor taşıyan grup (2. alt menü ya da doğrudan rapor taşıyan 1. alt menü).</summary>
         private static KmGrup G(string key, string ad, params KmRapor[] raporlar) => new KmGrup { Key = key, Ad = ad, Raporlar = raporlar.ToList() };
 
@@ -239,8 +247,11 @@ namespace WebApplication3.Data
                   "Finans, Muhasebe, Cari İşler ve Grup İçi Özel Finansal İşlemler 1. alt menü olarak açılır; raporlar 2. alt menüler altında toplanır.",
                   Kpi("Nakit / Banka", "Ödeme Bekleyen", "Tahsilat Bekleyen", "Vadesi Geçen Alacak"),
                   Not(U("finans", "Finans",
-                    G("nakit-banka", "Nakit ve Banka Yönetimi", R("Kasa / Banka Bakiye Raporu"), R("Finekra Hareketler"), R("İhracat Finekra Hareketler"), R("Banka ve Finans Kuruluşları")),
-                    G("nakit-akisi-likidite", "Nakit Akışı ve Likidite", R("Kasa Nakit Akışı"), R("Kasa Nakit Akışı Görünüm"), R("Konsolide Günlük Finansal Hareketler"), R("Nakit Akışı (Ödeme Bekleyenler)"), R("Nakit Akışı (Ödenenler)")),
+                    // 29 Eki 2026: Kasa / Banka Bakiye Raporu, Nakit Akışı (Ödeme Bekleyenler) ve Nakit Akışı (Ödenenler) menüden kaldırıldı; adları "(Kaldırıldı)" rozetiyle listede kalır (X)
+                    G("nakit-banka", "Nakit ve Banka Yönetimi", X("Kasa / Banka Bakiye Raporu", "Kasa ve banka bakiyeleri Konsolide Finansal Takip Paneli › Bakiyeler sekmesinde şirket şirket izlenir.", "Konsolide Finansal Takip Paneli › Bakiyeler", "/Rapor123?sekme=bakiye"), R("Finekra Hareketler"), R("İhracat Finekra Hareketler"), R("Banka ve Finans Kuruluşları")),
+                    G("nakit-akisi-likidite", "Nakit Akışı ve Likidite", R("Kasa Nakit Akışı"), R("Kasa Nakit Akışı Görünüm"), R("Konsolide Günlük Finansal Hareketler"),
+                        X("Nakit Akışı (Ödeme Bekleyenler)", "Ödeme bekleyen satırlar Kasa Nakit Akışı'nda (planlanan tarihe göre üstte; Talepler ve Yeni Ödeme ile birlikte).", "Kasa Nakit Akışı", "/Rapor79"),
+                        X("Nakit Akışı (Ödenenler)", "Ödenen satırlar Kasa Nakit Akışı'nda (ödenme tarihine göre altta) ve Konsolide Finansal Takip Paneli › Tümü sekmesinde izlenir.", "Kasa Nakit Akışı", "/Rapor79")),
                     G("odeme-yonetimi", "Ödeme Yönetimi", R("Ödeme Talebi", "OdemeTalebi", "Index"), R("Planlı Ödemeler"), R("Yapılan Ödemeler"), R("İthalat Ödeme Raporu"), R("Nakit Avans — Bekleyen Ödemeler"), R("Nakit Avans Takip Raporu")),
                     G("finansal-araclar", "Finansal Araçlar", R("Vade Tarihine Göre Çek ve Senet Özeti", "CekOzet", "Index"), R("Çek Akıbeti Raporu"), R("Çek Akıbeti Kontrol Raporu"), R("Çek Konsolide Raporu"), R("Çek Konsolide Kontrol Raporu"), R("Çek Ekstre Raporu"), R("Günlük Çek Nakit Tahsilat"), R("İbraz (Çek Depositi)"), R("Vadeli Çek İbrazı"), R("Tahsilat İbraz Çek Bordrosu"), R("Grup İçi Çek Devirleri"), R("Muhasebe Çek Akıbeti Raporu"), R("Muhasebe Çek İbraz Kontrolü")),
                     G("doviz-dis-ticaret", "Döviz ve Dış Ticaret Finansmanı", R("Kur Farkı"), R("İBKB Beyanname Takibi"), R("İhracat Tahsilat Raporu")),

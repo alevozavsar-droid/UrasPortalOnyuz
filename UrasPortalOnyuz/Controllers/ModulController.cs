@@ -79,7 +79,11 @@ namespace WebApplication3.Controllers
                     kisayol = r.Kisayol,
                     durum = r.Durum,
                     yeni = yeni ? true : (bool?)null,
-                    duzenlendi = duzenlendi ? true : (bool?)null
+                    duzenlendi = duzenlendi ? true : (bool?)null,
+                    // Menüden kaldırılan rapor: "(Kaldırıldı)" rozeti, not ve yerine geçen ekran (KurumsalMenu.X)
+                    kaldirildi = r.Kaldirildi ? true : (bool?)null,
+                    not = r.Kaldirildi ? r.Not : null,
+                    yerine = r.Kaldirildi && !string.IsNullOrEmpty(r.YerineUrl) ? new { ad = r.YerineAd ?? r.YerineUrl, url = r.YerineUrl } : null
                 };
             }).ToList()
         };

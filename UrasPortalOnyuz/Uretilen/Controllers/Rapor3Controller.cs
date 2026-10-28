@@ -34,9 +34,9 @@ namespace FinansRaporlama.Controllers
 
 
         public IActionResult Index(int pageNumber = 1, int pageSize = InitialPageSize)
- {ViewBag.DatabaseName = "";
-WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index", WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Models.BelgeViewModel>(12));
+ {
+            // 29 Eki 2026: "Nakit Akışı (Ödenenler)" menüden kaldırıldı; ödenen satırlar Kasa Nakit Akışı'nda (Data/KurumsalMenu.cs › X)
+            return Redirect("/Rapor79");
 }
 
 

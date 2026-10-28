@@ -114,9 +114,9 @@ namespace WebApplication3.Controllers
 
         [HttpGet("")]
         public IActionResult Index()
- {ViewBag.IslemTipleri = WebApplication3.OrnekDoldurucu.Liste<string>(12);
-WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index");
+ {
+            // 29 Eki 2026: "Kasa / Banka Bakiye Raporu" menüden kaldırıldı; bakiyeler Konsolide Finansal Takip Paneli › Bakiyeler sekmesinde (Data/KurumsalMenu.cs › X)
+            return Redirect("/Rapor123?sekme=bakiye");
 }
 
 

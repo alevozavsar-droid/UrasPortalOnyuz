@@ -9,8 +9,6 @@ namespace WebApplication3.Data
     {
         private static readonly (string C, string A, string I, string T, string K)[] _ekranlar = new (string, string, string, string, string)[]
         {
-            ("Rapor", "Index", "fas fa-file-alt", "Nakit Akışı (Ödeme Bekleyenler)", null),
-            ("Rapor3", "Index", "fas fa-file-invoice-dollar", "Nakit Akışı (Ödenenler)", null),
             ("Rapor2", "Index2", "fas fa-money-check-alt", "Çek Akıbeti Raporu", null),
             ("Rapor15", "Index", "fas fa-receipt", "Fatura ve Tahsilat Takip Raporu", null),
             ("Rapor17", "Index", "fas fa-receipt", "Konsolide Tahsilat Takip Raporu", null),
@@ -153,7 +151,6 @@ namespace WebApplication3.Data
             ("Rapor144", "Index", "fas fa-table-list", "Aktarım Veri Denetimi (AVRASYA)", null),
             ("Rapor145", "Index", "fas fa-table-list", "İrsaliye / Fatura Aktarım Denetimi", null),
             ("Rapor146", "Index", "fas fa-table-list", "Tahsilat Prim Tablosu", null),
-            ("Rapor147", "Index", "fas fa-table-list", "Kasa / Banka Bakiye Raporu", null),
             ("Rapor153", "Index", "fas fa-table-list", "Aktarım Veri Denetimi (DAF)", null),
             ("Rapor154", "Index", "fas fa-table-list", "Aktarım Veri Denetimi (AVRUPA PAPER)", null),
             ("Rapor155", "Index", "fas fa-table-list", "Aktarım Veri Denetimi (URAS HOLDİNG)", null),
@@ -297,8 +294,6 @@ namespace WebApplication3.Data
                 case "Mesaj":
                     return "Diğer Ekranlar";
 
-                case "Rapor":
-                case "Rapor3":
                 case "Rapor2":
                 case "Rapor24":
                 case "Rapor25":

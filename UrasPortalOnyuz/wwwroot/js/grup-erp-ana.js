@@ -116,7 +116,7 @@
     const kok = '/Modul/' + m.key;
     m.alt.forEach(a => {
       const gruplar = a.alt ? a.alt.map(b => ({ b, yol: `${m.ad} › ${a.ad}`, yolKey: `${a.key}/${b.key}` })) : [{ b: a, yol: m.ad, yolKey: a.key }];
-      gruplar.forEach(({ b, yol, yolKey }) => (b.raporlar || []).forEach((r, i) => ARAMA.push({ ad: r.ad, yol: `${yol} › ${b.ad}`, href: `${kok}?yol=${yolKey}/r${i}` })));
+      gruplar.forEach(({ b, yol, yolKey }) => (b.raporlar || []).forEach((r, i) => { if (!r.kaldirildi) ARAMA.push({ ad: r.ad, yol: `${yol} › ${b.ad}`, href: `${kok}?yol=${yolKey}/r${i}` }); }));   // menüden kaldırılan raporlar önerilmez
     });
   });
   const mdLite = t => { let h = esc(t).replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, a, u) => /^(https?:\/\/|[\w./?=&#%-]+)$/.test(u) ? `<a href="${u}" data-sekme="${a}">${a}</a>` : a).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>'); const satirlar = h.split('\n'); let out = '', liste = false; for (const s of satirlar) { const m = s.match(/^\s*[-•*]\s+(.*)$/); if (m) { if (!liste) { out += '<ul>'; liste = true; } out += `<li>${m[1]}</li>`; } else { if (liste) { out += '</ul>'; liste = false; } out += (out && !out.endsWith('</ul>') ? '\n' : '') + s; } } if (liste) out += '</ul>'; return out; };

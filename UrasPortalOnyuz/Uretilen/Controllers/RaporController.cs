@@ -90,33 +90,13 @@ namespace FinansRaporlama.Controllers
 }
 
 
+        [HttpGet("")]
         [HttpGet("Index")]
         [Authorize]
         public IActionResult Index()
- {ViewBag.DatabaseName = "";
-ViewBag.HaftaList = new System.Collections.Generic.List<object>();
-ViewBag.TarihAraligiList = new System.Collections.Generic.List<object>();
-ViewBag.BelgeTarihiAraligiList = new System.Collections.Generic.List<object>();
-ViewBag.BelgeTarihiList = new System.Collections.Generic.List<object>();
-ViewBag.TedarikciAlacakliList = new System.Collections.Generic.List<object>();
-ViewBag.DocNumList = new System.Collections.Generic.List<object>();
-ViewBag.FaturaNoList = new System.Collections.Generic.List<object>();
-ViewBag.OdeplanTarihiList = new System.Collections.Generic.List<object>();
-ViewBag.OdeplanNotList = new System.Collections.Generic.List<object>();
-ViewBag.OdemeNedeniList = new System.Collections.Generic.List<object>();
-ViewBag.MutabakatDurumuList = new System.Collections.Generic.List<object>();
-ViewBag.VadeTarihiList = new System.Collections.Generic.List<object>();
-ViewBag.GunFarkiList = new System.Collections.Generic.List<object>();
-ViewBag.TutarList = new System.Collections.Generic.List<object>();
-ViewBag.OdenenTutarList = new System.Collections.Generic.List<object>();
-ViewBag.KalanTutarList = new System.Collections.Generic.List<object>();
-ViewBag.ParaBirimiList = new System.Collections.Generic.List<object>();
-ViewBag.OdemeSekliList = new System.Collections.Generic.List<object>();
-ViewBag.GuncelTLTutarList = new System.Collections.Generic.List<object>();
-ViewBag.DurumList = new System.Collections.Generic.List<object>();
-ViewBag.BelgeTipiList = new System.Collections.Generic.List<object>();
-WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index", WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Models.BelgeViewModel>(12));
+ {
+            // 29 Eki 2026: "Nakit Akışı (Ödeme Bekleyenler)" menüden kaldırıldı; ödeme bekleyen satırlar Kasa Nakit Akışı'nda (Data/KurumsalMenu.cs › X)
+            return Redirect("/Rapor79");
 }
 
         [HttpGet("OnayBekleyenler")]

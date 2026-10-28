@@ -18,13 +18,15 @@
   const raporSayisi = n => n.raporlar ? n.raporlar.length : (n.alt || []).reduce((t, a) => t + raporSayisi(a), 0);
   const hazirSayisi = n => n.raporlar ? n.raporlar.filter(r => r.url).length : (n.alt || []).reduce((t, a) => t + hazirSayisi(a), 0);
   const tur = ad => /rapor|liste|tablo|analiz|dashboard|ekstre|mizan|karşılaştırma|denetim|defter/i.test(ad) ? 'Rapor' : 'Ekran';
-  const durum = r => r.url ? 'hazir' : r.kisayol ? 'kisayol' : 'plan';
+  const durum = r => r.kaldirildi ? 'kaldirildi' : r.url ? 'hazir' : r.kisayol ? 'kisayol' : 'plan';
   const sekmeli = url => url + (url.indexOf('?') >= 0 ? '&' : '?') + '_sekme=1';
   // Son eklenen raporlar (Yapi.js › yeni: true; kaynak Data/PortalDegisiklikler.cs): şemada, sol menüde ve listede "(yeni)" rozeti
   // "(Yeni)" son 30 günde eklenen, "(Düzenlendi)" son 30 günde güncellenen / taşınan rapor (Yapi.js › yeni / duzenlendi)
-  const yeniRozet = r => r.yeni ? '<span class="yeni" title="Son 30 günde eklendi">(Yeni)</span>' : r.duzenlendi ? '<span class="yeni duzenlendi" title="Son 30 günde düzenlendi">(Düzenlendi)</span>' : '';
+  // "(Kaldırıldı)" menüden kaldırılan rapor (Yapi.js › kaldirildi / not / yerine; Data/KurumsalMenu.cs › X): adı üstü çizili, listeden silinmez
+  const yeniRozet = r => r.kaldirildi ? `<span class="yeni kaldirildi" title="Menüden kaldırıldı${r.not ? ' · ' + esc(r.not) : ''}">(Kaldırıldı)</span>` : r.yeni ? '<span class="yeni" title="Son 30 günde eklendi">(Yeni)</span>' : r.duzenlendi ? '<span class="yeni duzenlendi" title="Son 30 günde düzenlendi">(Düzenlendi)</span>' : '';
   const yeniSayisi = n => n.raporlar ? n.raporlar.filter(r => r.yeni).length : (n.alt || []).reduce((t, a) => t + yeniSayisi(a), 0);
   const duzenlenenSayisi = n => n.raporlar ? n.raporlar.filter(r => r.duzenlendi).length : (n.alt || []).reduce((t, a) => t + duzenlenenSayisi(a), 0);
+  const kaldirilanSayisi = n => n.raporlar ? n.raporlar.filter(r => r.kaldirildi).length : (n.alt || []).reduce((t, a) => t + kaldirilanSayisi(a), 0);
 
   // ?yol=… ile gelen derin bağlantı (kabuk sekmesi "#" taşıyamadığı için sorgu olarak gelir)
   if (root.dataset.yol && !location.hash.slice(1)) history.replaceState(null, '', '#' + root.dataset.yol);
@@ -73,7 +75,7 @@
           : raporListesi(a, yol1);
         return `<div class="grp l1 ${acik.has(yol1) ? 'open' : ''} ${a === l1 ? 'current' : ''}"><button type="button" class="grp-h" data-yol="${yol1}"><span class="ad">${esc(a.ad)}</span><span class="n">${raporSayisi(a) || ''}</span>${chev}</button><div class="grp-b">${govde}</div></div>`;
       }).join('') +
-      `<div class="legend"><span class="h">Hazır ekran</span><span class="k">Kısayol</span><span>Planlanıyor</span></div>`;
+      `<div class="legend"><span class="h">Hazır ekran</span><span class="k">Kısayol</span><span>Planlanıyor</span><span class="x">Kaldırıldı</span></div>`;
     document.querySelectorAll('#kmSide button.grp-h').forEach(b => b.addEventListener('click', () => {
       const yol = b.dataset.yol, g = b.closest('.grp'), suanki = decodeURIComponent(location.hash.slice(1));
       if (acik.has(yol) && suanki === yol) { acik.delete(yol); g.classList.remove('open'); return; }
@@ -104,10 +106,10 @@
   // ---- Organizasyon şeması: modül → 1. alt menü → 2. alt menü (süreç grubu) → rapor / ekran ----
   // Gösterge paneli (KPI, trend, bekleyen işler) kaldırıldı; modüle tıklayınca kırılım şeması çıkar.
   // Kutulara tıklayınca ilgili bölüm / rapor açılır. Seçili düğüm vurgulanır.
-  const ozet = n => `${raporSayisi(n)} rapor / ekran${hazirSayisi(n) ? ` · ${hazirSayisi(n)} hazır` : ''}${yeniSayisi(n) ? ` · ${yeniSayisi(n)} yeni` : ''}${duzenlenenSayisi(n) ? ` · ${duzenlenenSayisi(n)} düzenlendi` : ''}`;
+  const ozet = n => `${raporSayisi(n)} rapor / ekran${hazirSayisi(n) ? ` · ${hazirSayisi(n)} hazır` : ''}${yeniSayisi(n) ? ` · ${yeniSayisi(n)} yeni` : ''}${duzenlenenSayisi(n) ? ` · ${duzenlenenSayisi(n)} düzenlendi` : ''}${kaldirilanSayisi(n) ? ` · ${kaldirilanSayisi(n)} kaldırıldı` : ''}`;
   const dugum = (n, yol, cls, alt) => `<a class="org-node ${cls}" href="#${yol}" title="${esc(n.ad)}"><span class="ad">${esc(n.ad)}</span><span class="s">${esc(alt)}</span></a>`;
   const raporKutu = (grup, yol) => `<div class="org-box">${grup.raporlar.length
-    ? grup.raporlar.map((r, i) => `<a class="org-rap ${durum(r)}" href="#${yol}/r${i}" title="${esc(r.ad)}${r.kisayol ? ' · kısayol: ' + esc(sahip(r.kisayol)) : r.url ? ' · hazır ekran' : ' · planlanıyor'}${r.yeni ? ' · yeni eklendi' : r.duzenlendi ? ' · düzenlendi' : ''}"><span class="dot"></span><span class="ad">${esc(r.ad)}</span>${yeniRozet(r)}</a>`).join('')
+    ? grup.raporlar.map((r, i) => `<a class="org-rap ${durum(r)}" href="#${yol}/r${i}" title="${esc(r.ad)}${r.kaldirildi ? ' · menüden kaldırıldı' + (r.not ? ': ' + esc(r.not) : '') : r.kisayol ? ' · kısayol: ' + esc(sahip(r.kisayol)) : r.url ? ' · hazır ekran' : ' · planlanıyor'}${r.yeni ? ' · yeni eklendi' : r.duzenlendi ? ' · düzenlendi' : ''}"><span class="dot"></span><span class="ad">${esc(r.ad)}</span>${yeniRozet(r)}</a>`).join('')
     : '<div class="org-bos">Rapor kaydı yok, ekran planlanıyor</div>'}</div>`;
   // Kolon: başlık düğümü + altında 2. alt menü kutuları ya da (kırılımsızsa) doğrudan rapor kutusu
   function kolon(n, yol, secili) {
@@ -118,7 +120,7 @@
   }
   function semaHtml(kok, kokYol, kokAlt, kolonlar, secili) {
     return `<div class="org-wrap"><div class="org"><div class="org-root">${dugum(kok, kokYol, 'root', kokAlt)}</div><div class="org-l1s">${kolonlar.map(k => kolon(k.n, k.yol, secili)).join('')}</div></div></div>
-      <div class="org-legend"><span class="h">Hazır ekran</span><span class="k">Kısayol (ana sahibi başka bölümde)</span><span>Planlanıyor</span><span class="y"><em class="yeni">(Yeni)</em> son 30 günde eklendi</span><span class="y"><em class="yeni duzenlendi">(Düzenlendi)</em> son 30 günde güncellendi</span><span class="i">Kutulara tıklayınca ilgili bölüm ya da rapor açılır.</span></div>`;
+      <div class="org-legend"><span class="h">Hazır ekran</span><span class="k">Kısayol (ana sahibi başka bölümde)</span><span>Planlanıyor</span><span class="y"><em class="yeni">(Yeni)</em> son 30 günde eklendi</span><span class="y"><em class="yeni duzenlendi">(Düzenlendi)</em> son 30 günde güncellendi</span><span class="y"><em class="yeni kaldirildi">(Kaldırıldı)</em> menüden kaldırıldı</span><span class="i">Kutulara tıklayınca ilgili bölüm ya da rapor açılır.</span></div>`;
   }
   const modulSemasi = secili => semaHtml(modul, '', `${modul.alt.length} alt menü · ${ozet(modul)}`, modul.alt.map(a => ({ n: a, yol: a.key })), secili);
   const l1Semasi = (l1, secili) => l1.alt
@@ -181,6 +183,14 @@
     if (rapor) {
       if (rapor.kisayol) { location.hash = rapor.kisayol.replace(/^#/, ''); return; }
       const geri = `<a class="km-btn sm" href="#${yol}">← ${esc(grup.ad)}</a>`;
+      // Menüden kaldırılan rapor: ekran açılmaz; kaldırılma notu ve yerine geçen ekran (sekmede açılır)
+      if (rapor.kaldirildi) {
+        raporAcik = false; genisUygula();
+        el.innerHTML = `<div class="head"><span class="ic">${ic}</span><div><h1>${esc(rapor.ad)} <span class="yeni kaldirildi">(Kaldırıldı)</span></h1><div class="sub">${esc(sahipYolu)}</div></div><div class="act">${geri}</div></div>
+          <div class="pane"><div class="km-placeholder"><div class="big">${ic}</div><span class="tag x" style="margin-bottom:12px">${esc(tur(rapor.ad))} · kaldırıldı</span><h2>${esc(rapor.ad)}</h2><p>Bu ${tur(rapor.ad).toLowerCase()} menüden kaldırıldı; adı bilgi için listede duruyor.${rapor.not ? ' ' + esc(rapor.not) : ''}</p>${rapor.yerine ? `<button type="button" class="km-btn" id="kmYerine">${esc(rapor.yerine.ad)} ↗</button> ` : ''}<a class="km-btn sm" href="#${yol}">← Rapor listesine dön</a></div></div>`;
+        const yb = $('#kmYerine'); if (yb) yb.addEventListener('click', () => yeniSekmedeAc(rapor.yerine.ad, rapor.yerine.url));
+        return;
+      }
       if (rapor.url) {
         el.innerHTML = `<div class="ekran-wrap"><div class="ekran-bar">${geri}<span>${esc(rapor.ad)}</span><span class="tag ok">Hazır ekran</span><span class="spacer"></span>${kabukDugmesiVar ? '' : '<button type="button" class="km-btn sm" id="kmGenisBtn" title="Sol menüleri gizleyip raporu tam genişlikte göster"></button>'}<button type="button" class="km-btn sm" id="kmYeniSekme">Sekmede aç ↗</button></div><iframe class="ekran" src="${esc(sekmeli(rapor.url))}" title="${esc(rapor.ad)}"></iframe></div>`;
         $('#kmYeniSekme').addEventListener('click', () => yeniSekmedeAc(rapor.ad, rapor.url));
@@ -201,13 +211,13 @@
       const liste = grup.raporlar;
       el.innerHTML = `<div class="head"><span class="ic">${ic}</span><div><h1>${esc(grup.ad)}</h1><div class="sub">${esc([modul.ad, l2 && l1.ad].filter(Boolean).join(' › '))} · ${esc(ozet(grup))}${l1.not ? ' · ' + esc(l1.not) : ''}</div></div></div>
         ${l1Semasi(l1, grup)}
-        <div class="filters"><input id="kmAra" placeholder="Rapor veya ekran ara…" autocomplete="off"><select id="kmTur"><option value="">Tüm türler</option><option>Rapor</option><option>Ekran</option></select><select id="kmDurum"><option value="">Tüm durumlar</option><option value="hazir">Hazır</option><option value="kisayol">Kısayol</option><option value="plan">Planlanıyor</option></select><span class="cnt" id="kmSayac"></span></div>
+        <div class="filters"><input id="kmAra" placeholder="Rapor veya ekran ara…" autocomplete="off"><select id="kmTur"><option value="">Tüm türler</option><option>Rapor</option><option>Ekran</option></select><select id="kmDurum"><option value="">Tüm durumlar</option><option value="hazir">Hazır</option><option value="kisayol">Kısayol</option><option value="plan">Planlanıyor</option><option value="kaldirildi">Kaldırıldı</option></select><span class="cnt" id="kmSayac"></span></div>
         <div class="pane"><h3>${esc(grup.ad)} · rapor / ekran listesi</h3><div id="kmTablo"></div></div>`;
       const ciz = () => {
         const q = ($('#kmAra').value || '').toLocaleLowerCase('tr-TR'), t = $('#kmTur').value, d = $('#kmDurum').value;
         const g = liste.map((r, i) => ({ r, i })).filter(({ r }) => (!q || r.ad.toLocaleLowerCase('tr-TR').includes(q)) && (!t || tur(r.ad) === t) && (!d || durum(r) === d));
         $('#kmSayac').textContent = `${g.length} / ${liste.length} kayıt`;
-        $('#kmTablo').innerHTML = g.length ? `<div class="table-wrap"><table class="km-tablo"><thead><tr><th class="num">#</th><th>Rapor / Ekran</th><th>Tür</th><th>Durum</th><th>Ana Sahibi</th><th></th></tr></thead><tbody>${g.map(({ r, i }) => `<tr class="km-row" data-r="${i}"><td class="num">${i + 1}</td><td><b>${esc(r.ad)}</b> ${yeniRozet(r)}</td><td>${esc(tur(r.ad))}</td><td>${r.url ? '<span class="tag ok">Hazır</span>' : r.kisayol ? '<span class="tag ks">Kısayol</span>' : '<span class="tag plan">Planlanıyor</span>'}</td><td class="muted">${r.kisayol ? esc(sahip(r.kisayol)) : esc(sahipYolu)}</td><td style="text-align:right"><a class="km-btn sm" href="#${yol}/r${i}">Aç →</a></td></tr>`).join('')}</tbody></table></div>`
+        $('#kmTablo').innerHTML = g.length ? `<div class="table-wrap"><table class="km-tablo"><thead><tr><th class="num">#</th><th>Rapor / Ekran</th><th>Tür</th><th>Durum</th><th>Ana Sahibi</th><th></th></tr></thead><tbody>${g.map(({ r, i }) => `<tr class="km-row ${r.kaldirildi ? 'kaldirildi' : ''}" data-r="${i}"><td class="num">${i + 1}</td><td><b>${esc(r.ad)}</b> ${yeniRozet(r)}</td><td>${esc(tur(r.ad))}</td><td>${r.kaldirildi ? '<span class="tag x">Kaldırıldı</span>' : r.url ? '<span class="tag ok">Hazır</span>' : r.kisayol ? '<span class="tag ks">Kısayol</span>' : '<span class="tag plan">Planlanıyor</span>'}</td><td class="muted">${r.kisayol ? esc(sahip(r.kisayol)) : esc(sahipYolu)}</td><td style="text-align:right"><a class="km-btn sm" href="#${yol}/r${i}">Aç →</a></td></tr>`).join('')}</tbody></table></div>`
           : `<div class="km-empty">${liste.length ? 'Filtreye uyan kayıt yok.' : 'Bu süreç grubuna henüz rapor / ekran atanmadı. Yeni ekranlar bu grup altında geliştirilecek.'}</div>`;
         document.querySelectorAll('#kmTablo tr.km-row').forEach(tr => tr.addEventListener('click', e => { if (!e.target.closest('a')) location.hash = `${yol}/r${tr.dataset.r}`; }));
       };

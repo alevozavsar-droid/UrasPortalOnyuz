@@ -48,7 +48,7 @@
         if (b !== a) ARAMA.push({ ad: b.ad, yol, href: `${kok}?yol=${yolKey}`, tip: 'Grup', c: 'g' });
         (b.raporlar || []).forEach((r, i) => {
           const href = r.kisayol ? '/Modul/' + r.kisayol.replace(/^#/, '').replace(/\//, '?yol=') : `${kok}?yol=${yolKey}/r${i}`;
-          ARAMA.push({ ad: r.ad, yol: `${yol} › ${b.ad}`, href, tip: RAPOR_MU(r.ad) ? 'Rapor' : 'Ekran', c: RAPOR_MU(r.ad) ? 'r' : 'e', hazir: !!r.url });
+          ARAMA.push({ ad: r.ad, yol: `${yol} › ${b.ad}`, href, tip: RAPOR_MU(r.ad) ? 'Rapor' : 'Ekran', c: RAPOR_MU(r.ad) ? 'r' : 'e', hazir: !!r.url, kaldirildi: !!r.kaldirildi });
         });
       });
     });
@@ -69,7 +69,7 @@
     secIdx = sonuclar.length ? 0 : -1;
     const vurgula = ad => { const i = TR_LOWER(ad).indexOf(kelimeler[0]); return i < 0 ? esc(ad) : esc(ad.slice(0, i)) + '<b>' + esc(ad.slice(i, i + kelimeler[0].length)) + '</b>' + esc(ad.slice(i + kelimeler[0].length)); };
     dd.innerHTML = `<div class="hd">${sonuclar.length ? `${sonuclar.length} sonuç · Enter ile aç` : 'Sonuç yok'}</div>` +
-      (sonuclar.length ? sonuclar.map((x, i) => `<a href="${esc(x.href)}" class="${i === secIdx ? 'sel' : ''}" data-i="${i}"><span class="tip ${x.c}">${esc(x.tip)}</span><div style="min-width:0"><div class="ad">${vurgula(x.ad)}</div><div class="yol">${esc(x.yol)}${x.tip !== 'Modül' && x.tip !== 'Grup' ? (x.hazir ? ' · hazır' : ' · planlanıyor') : ''}</div></div></a>`).join('')
+      (sonuclar.length ? sonuclar.map((x, i) => `<a href="${esc(x.href)}" class="${i === secIdx ? 'sel' : ''}" data-i="${i}"><span class="tip ${x.c}">${esc(x.tip)}</span><div style="min-width:0"><div class="ad">${vurgula(x.ad)}</div><div class="yol">${esc(x.yol)}${x.tip !== 'Modül' && x.tip !== 'Grup' ? (x.kaldirildi ? ' · <b style="color:#b91c1c">(Kaldırıldı)</b>' : x.hazir ? ' · hazır' : ' · planlanıyor') : ''}</div></div></a>`).join('')
         : `<div class="bos">Menüde eşleşen rapor veya ekran yok.</div>`);
     dd.hidden = false;
     dd.querySelectorAll('a').forEach(a => a.addEventListener('click', e => { e.preventDefault(); ac(sonuclar[+a.dataset.i]); }));
