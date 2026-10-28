@@ -18,6 +18,8 @@ namespace WebApplication3.Data
 {
     /// <summary>Satış markası: belgelerde görünecek ad, ünvan, adres, iletişim ve banka bilgisi.</summary>
     public class SsMarka { public string Kod { get; set; } public string Ad { get; set; } public string BelgeAdi { get; set; } public string Slogan { get; set; } public string Unvan { get; set; } public string Adres { get; set; } public string Eposta { get; set; } public string Web { get; set; } public string Tel { get; set; } public string Banka { get; set; } public string Renk { get; set; } }
+    /// <summary>Grup şirketi: fatura kesen (satıcı) ya da gönderici (malı sevk eden depo / fabrika) olarak seçilir; belgelerde Seller / Shipper satırında çıkar.</summary>
+    public class SsSirket { public string Ad { get; set; } public string Unvan { get; set; } public string Adres { get; set; } public string VergiNo { get; set; } public string Depo { get; set; } }
     public class SsKalem { public int Sira { get; set; } public string UrunKod { get; set; } public string Urun { get; set; } public string Grup { get; set; } public string HsKodu { get; set; } public decimal Miktar { get; set; } public string Birim { get; set; } = "kg"; public decimal KoliKg { get; set; } = 25; public int Koli => KoliKg > 0 ? (int)Math.Ceiling(Miktar / KoliKg) : 0; public decimal NetKg => Miktar; public decimal BrutKg => Math.Round(Miktar * 1.04m + Koli * 0.4m, 1); public decimal BirimFiyat { get; set; } public decimal Tutar => Math.Round(Miktar * BirimFiyat, 2); public string Not { get; set; } = ""; }
     public class SsHareket { public DateTime Zaman { get; set; } public string Kullanici { get; set; } public string Islem { get; set; } public string Aciklama { get; set; } }
     public class SsBelge { public string Tur { get; set; } public string No { get; set; } public DateTime Tarih { get; set; } public string Kullanici { get; set; } public string Marka { get; set; } }
@@ -30,6 +32,8 @@ namespace WebApplication3.Data
         public DateTime Tarih { get; set; }
         public string Bolge { get; set; }               // Yurtiçi | Yurtdışı
         public string Satici { get; set; } = SatisSiparisOrnek.Satici;
+        public string FaturaKesen { get; set; } = SatisSiparisOrnek.Satici;   // faturayı kesen grup şirketi (SsSirket.Ad)
+        public string Gonderici { get; set; } = SatisSiparisOrnek.Satici;     // malı sevk eden grup şirketi / depo (SsSirket.Ad)
         public string Marka { get; set; }               // SsMarka.Kod
         public string CariKodu { get; set; } public string Cari { get; set; } public string Ulke { get; set; } public string Sehir { get; set; }
         public string Temsilci { get; set; }
@@ -52,7 +56,8 @@ namespace WebApplication3.Data
     }
 
     public class SsKalemIstek { public string UrunKod { get; set; } public string Urun { get; set; } public decimal Miktar { get; set; } public decimal? BirimFiyat { get; set; } public decimal? KoliKg { get; set; } public string Not { get; set; } }
-    public class SsKayitIstek { public string No { get; set; } public string Bolge { get; set; } public string Marka { get; set; } public string CariKodu { get; set; } public string Temsilci { get; set; } public string ParaBirimi { get; set; } public string OdemeSekli { get; set; } public string TeslimSekli { get; set; } public string SevkAdresi { get; set; } public string MusteriSiparisNo { get; set; } public string TeklifNo { get; set; } public string YuklemeTarihi { get; set; } public string YuklemeSaati { get; set; } public string YuklemeYeri { get; set; } public string Nakliye { get; set; } public string NakliyeFirmasi { get; set; } public string YuklemeNotu { get; set; } public string Not { get; set; } public bool TalepOlarak { get; set; } public List<SsKalemIstek> Kalemler { get; set; } = new List<SsKalemIstek>(); }
+    public class SsSirketIstek { public string No { get; set; } public string FaturaKesen { get; set; } public string Gonderici { get; set; } }
+    public class SsKayitIstek { public string No { get; set; } public string Bolge { get; set; } public string Marka { get; set; } public string FaturaKesen { get; set; } public string Gonderici { get; set; } public string CariKodu { get; set; } public string Temsilci { get; set; } public string ParaBirimi { get; set; } public string OdemeSekli { get; set; } public string TeslimSekli { get; set; } public string SevkAdresi { get; set; } public string MusteriSiparisNo { get; set; } public string TeklifNo { get; set; } public string YuklemeTarihi { get; set; } public string YuklemeSaati { get; set; } public string YuklemeYeri { get; set; } public string Nakliye { get; set; } public string NakliyeFirmasi { get; set; } public string YuklemeNotu { get; set; } public string Not { get; set; } public bool TalepOlarak { get; set; } public List<SsKalemIstek> Kalemler { get; set; } = new List<SsKalemIstek>(); }
     public class SsYuklemeIstek { public string No { get; set; } public string YuklemeTarihi { get; set; } public string YuklemeSaati { get; set; } public string YuklemeYeri { get; set; } public string Nakliye { get; set; } public string NakliyeFirmasi { get; set; } public string YuklemeNotu { get; set; } }
     public class SsDurumIstek { public string No { get; set; } public string Durum { get; set; } public string Not { get; set; } public string FaturaNo { get; set; } }
     public class SsMarkaIstek { public string No { get; set; } public string Marka { get; set; } }
@@ -81,6 +86,16 @@ namespace WebApplication3.Data
             new SsMarka { Kod = "selvi", Ad = "Selvi", BelgeAdi = "SELVİ KİMYA", Slogan = "Chemicals & Sublimation Paper", Unvan = "Selvi Kimya San. ve Tic. Ltd. Şti.", Adres = "Çorlu / Tekirdağ, Türkiye", Eposta = "info@selvikimya.com", Web = "www.selvikimya.com", Tel = "+90 282 651 20 00", Banka = "Yapı Kredi · USD IBAN TR45 0006 7010 0000 0098 7654 32 · SWIFT YAPITRIS", Renk = "#b45309" }
         };
         public static SsMarka MarkaBul(string kod) => Markalar.FirstOrDefault(m => string.Equals(m.Kod, kod, StringComparison.OrdinalIgnoreCase)) ?? Markalar[3];
+        /// <summary>Fatura kesen / gönderici olabilecek grup şirketleri.</summary>
+        public static readonly List<SsSirket> Sirketler = new List<SsSirket>
+        {
+            new SsSirket { Ad = "Selvi Kimya", Unvan = "Selvi Kimya San. ve Tic. Ltd. Şti.", Adres = "Çorlu / Tekirdağ, Türkiye", VergiNo = "7590012345", Depo = "Çorlu Depo" },
+            new SsSirket { Ad = "Uras Kimya", Unvan = "Uras Kimya San. ve Tic. A.Ş.", Adres = "Velimeşe OSB Mah. 105. Sok. No:3, Ergene / Tekirdağ, Türkiye", VergiNo = "8920034567", Depo = "Velimeşe Fabrika" },
+            new SsSirket { Ad = "Alv Kimya", Unvan = "Alv Kimya San. ve Tic. A.Ş.", Adres = "Çerkezköy OSB, Kapaklı / Tekirdağ, Türkiye", VergiNo = "0560045678", Depo = "Çerkezköy Depo" },
+            new SsSirket { Ad = "Avrupa Paper", Unvan = "Avrupa Paper Kağıt San. ve Tic. A.Ş.", Adres = "Çorlu / Tekirdağ, Türkiye", VergiNo = "1230056789", Depo = "Çorlu Depo" },
+            new SsSirket { Ad = "Daf Kimya", Unvan = "Daf Kimya San. ve Tic. Ltd. Şti.", Adres = "Çerkezköy / Tekirdağ, Türkiye", VergiNo = "2670067890", Depo = "Çerkezköy Depo" }
+        };
+        public static SsSirket SirketBul(string ad) => Sirketler.FirstOrDefault(s => string.Equals(s.Ad, ad, StringComparison.OrdinalIgnoreCase)) ?? Sirketler[0];
         public static string HsKodu(string grup) => (grup ?? "").StartsWith("Boya") ? "3204.17.00" : (grup ?? "").StartsWith("Binder") ? "3906.90.90" : "3809.91.00";
 
         private static readonly List<SsSiparis> _liste = new List<SsSiparis>();
@@ -115,6 +130,8 @@ namespace WebApplication3.Data
                     var pb = bolge == "Yurtiçi" ? "TL" : (k.Ulke == "Almanya" || k.Ulke == "İtalya" || k.Ulke == "Fransa" || k.Ulke == "İspanya" || k.Ulke == "Polonya" ? "EUR" : "USD");
                     var s = new SsSiparis { Id = ++_sonId, Tarih = bugun.AddDays(-gunOnce), Bolge = bolge, Marka = marka, CariKodu = k.Kod, Cari = k.KisaAd, Ulke = k.Ulke, Sehir = k.Sehir, Temsilci = Temsilci(k), Kaynak = kaynak, TeklifNo = teklifNo ?? "", ParaBirimi = pb, Kur = KurBul(pb), OdemeSekli = bolge == "Yurtiçi" ? (k.VadeSarti != null && OdemeYurtici.Contains(k.VadeSarti) ? k.VadeSarti : OdemeYurtici[rnd.Next(1, 4)]) : (OdemeYurtdisi.Contains(k.VadeSarti ?? "") ? k.VadeSarti : OdemeYurtdisi[rnd.Next(OdemeYurtdisi.Length)]), TeslimSekli = bolge == "Yurtiçi" ? TeslimYurtici[0] : TeslimYurtdisi[rnd.Next(TeslimYurtdisi.Length)], SevkAdresi = (k.Sehir ?? "") + (bolge == "Yurtiçi" ? " · müşteri deposu" : " · " + k.Ulke), YuklemeYeri = YuklemeYerleri[rnd.Next(YuklemeYerleri.Length)], Nakliye = bolge == "Yurtiçi" ? NakliyeYurtici[rnd.Next(2)] : NakliyeYurtdisi[rnd.Next(3)], NakliyeFirmasi = NakliyeFirmalari[rnd.Next(NakliyeFirmalari.Length)], Durum = durum, Olusturan = olusturan, MusteriSiparisNo = rnd.NextDouble() < 0.6 ? $"PO-{rnd.Next(1000, 9999)}" : "" };
                     s.YuklemeTarihi = bugun.AddDays(yuklemeGun); s.YuklemeSaati = saat;
+                    // gönderici: markanın fabrikası / deposu (Uras → Uras Kimya, Alv → Alv Kimya, diğerleri Selvi); fatura kesen çoğunlukla Selvi Kimya, bazı siparişlerde gönderici şirket
+                    s.Gonderici = marka == "uras" ? "Uras Kimya" : marka == "alv" ? "Alv Kimya" : "Selvi Kimya"; s.FaturaKesen = s.Id % 4 == 0 ? s.Gonderici : "Selvi Kimya"; s.YuklemeYeri = SirketBul(s.Gonderici).Depo;
                     // kalemler: kartın faaliyet gruplarındaki ürünler (2–4), fiyat özel fiyat / liste
                     var gruplar = new HashSet<string>(k.Faaliyetler.Select(f => f.AnaGrup + "|" + f.Grup)); var aday = urunler.Where(u => gruplar.Contains(u.GrupAnahtari)).ToList(); if (aday.Count < 2) aday = urunler;
                     int n = rnd.Next(2, 5); var secilen = aday.OrderBy(_ => rnd.Next()).Take(n).ToList(); int sira = 0;
@@ -200,6 +217,8 @@ namespace WebApplication3.Data
                 bool yeni = s == null;
                 if (yeni) { s = new SsSiparis { Id = ++_sonId, Tarih = DateTime.Today, Bolge = bolge, Olusturan = kullanici, Kaynak = i.TalepOlarak ? "Satışçı Talebi" : (!string.IsNullOrEmpty(i.TeklifNo) ? "Teklif" : "Elle") }; _liste.Add(s); }
                 else if (s.Asama >= 4) return (false, $"{s.No} yüklendi / faturalandı; kalemler değiştirilemez.", s);
+                if (!string.IsNullOrEmpty(i.FaturaKesen)) { if (!Sirketler.Any(x => x.Ad == i.FaturaKesen)) return (false, "Fatura kesen şirket listede yok.", s); s.FaturaKesen = i.FaturaKesen; }
+                if (!string.IsNullOrEmpty(i.Gonderici)) { if (!Sirketler.Any(x => x.Ad == i.Gonderici)) return (false, "Gönderici şirket listede yok.", s); s.Gonderici = i.Gonderici; }
                 s.Marka = marka.Kod; s.CariKodu = kart.Kod; s.Cari = kart.KisaAd; s.Ulke = kart.Ulke; s.Sehir = kart.Sehir; s.Temsilci = string.IsNullOrWhiteSpace(i.Temsilci) ? Temsilci(kart) : i.Temsilci.Trim();
                 s.ParaBirimi = pb; s.Kur = KurBul(pb); s.OdemeSekli = i.OdemeSekli ?? (bolge == "Yurtiçi" ? OdemeYurtici[1] : OdemeYurtdisi[0]); s.TeslimSekli = i.TeslimSekli ?? (bolge == "Yurtiçi" ? TeslimYurtici[0] : TeslimYurtdisi[0]); s.SevkAdresi = (i.SevkAdresi ?? "").Trim(); s.MusteriSiparisNo = (i.MusteriSiparisNo ?? "").Trim(); s.TeklifNo = (i.TeklifNo ?? "").Trim(); s.Not = (i.Not ?? "").Trim();
                 s.Kalemler = kalemler; s.YuklemeTarihi = yt; s.YuklemeSaati = (i.YuklemeSaati ?? "").Trim(); s.YuklemeYeri = string.IsNullOrEmpty(i.YuklemeYeri) ? s.YuklemeYeri : i.YuklemeYeri; s.Nakliye = i.Nakliye ?? s.Nakliye; s.NakliyeFirmasi = i.NakliyeFirmasi ?? s.NakliyeFirmasi; s.YuklemeNotu = (i.YuklemeNotu ?? "").Trim();
@@ -246,6 +265,18 @@ namespace WebApplication3.Data
             if (s.Asama >= 4) return (false, $"{s.No} yüklendi; marka değiştirilemez (belgeler kesildi).", s);
             lock (Kilit) { string eski = MarkaBul(s.Marka).Ad; s.Marka = m.Kod; Log(s, "Marka Değişti", $"{eski} → {m.Ad}; belgeler {m.BelgeAdi} adıyla üretilir" + (s.Belgeler.Count > 0 ? " · mevcut belgeler yeniden oluşturulmalı" : ""), kullanici); }
             return (true, $"Marka {m.Ad} olarak ayarlandı; belgeler {m.BelgeAdi} adı ve ünvanıyla çıkar.", s);
+        }
+        /// <summary>Fatura kesen ve gönderici şirketi değiştirir (yüklenmemiş siparişlerde); belgeler yeniden oluşturulmalıdır.</summary>
+        public static (bool ok, string mesaj, SsSiparis s) SirketDegistir(SsSirketIstek i, string kullanici)
+        {
+            var s = Bul(i?.No); if (s == null) return (false, "Kayıt bulunamadı.", null); if (s.Asama >= 4) return (false, $"{s.No} yüklendi; fatura kesen / gönderici değiştirilemez.", s);
+            var fk = Sirketler.FirstOrDefault(x => x.Ad == (i.FaturaKesen ?? "")); var g = Sirketler.FirstOrDefault(x => x.Ad == (i.Gonderici ?? "")); if (fk == null || g == null) return (false, "Şirket listeden seçilmelidir.", s);
+            lock (Kilit)
+            {
+                string eski = $"{s.FaturaKesen} / {s.Gonderici}"; if (s.FaturaKesen == fk.Ad && s.Gonderici == g.Ad) return (true, "Değişiklik yok.", s);
+                s.FaturaKesen = fk.Ad; s.Gonderici = g.Ad; Log(s, "Şirket Değişti", $"fatura kesen / gönderici: {eski} → {fk.Ad} / {g.Ad}" + (s.Belgeler.Count > 0 ? " · belgeler yeniden oluşturulmalı" : ""), kullanici);
+            }
+            return (true, $"Fatura kesen {fk.Ad}, gönderici {g.Ad} olarak ayarlandı.", s);
         }
         static readonly Dictionary<string, string[]> Gecisler = new Dictionary<string, string[]> { ["Talep"] = new[] { "Reddedildi", "İptal" }, ["Sipariş"] = new[] { "Hazırlanıyor", "İptal" }, ["Hazırlanıyor"] = new[] { "Yüklemeye Hazır", "Sipariş", "İptal" }, ["Yüklemeye Hazır"] = new[] { "Yüklendi", "Hazırlanıyor", "İptal" }, ["Yüklendi"] = new[] { "Faturalandı" }, ["Faturalandı"] = new string[0], ["Reddedildi"] = new string[0], ["İptal"] = new string[0] };
         public static string[] SonrakiDurumlar(SsSiparis s) => Gecisler.TryGetValue(s.Durum, out var g) ? g : new string[0];
@@ -301,13 +332,14 @@ namespace WebApplication3.Data
                 }
                 idx++;
             }
-            b.Bloklar.Add(new DaBlok { Baslik = en ? "Seller / Exporter" : "Satıcı", Not = $"{m.Unvan} · {m.Adres} · {m.Eposta} · {m.Web} · {m.Tel}   —   {(en ? "Authorized signature" : "Yetkili imza")}: {kullanici}   ({(en ? "issued under the brand" : "marka")} {m.BelgeAdi})" });
+            var fk = SirketBul(s.FaturaKesen); var gnd = SirketBul(s.Gonderici);
+            b.Bloklar.Add(new DaBlok { Baslik = en ? "Seller / Exporter · Shipper" : "Satıcı · Gönderici", Not = (en ? "Seller (invoice issued by): " : "Fatura kesen: ") + $"{fk.Unvan} · {fk.Adres} · {(en ? "VAT / Tax No" : "VKN")} {fk.VergiNo}\n" + (en ? "Shipper / Consignor: " : "Gönderici: ") + $"{gnd.Unvan} · {gnd.Adres} · {gnd.Depo}\n" + (en ? "Brand: " : "Marka: ") + $"{m.BelgeAdi} — {m.Slogan} · {m.Eposta} · {m.Web} · {m.Tel}   —   {(en ? "Authorized signature" : "Yetkili imza")}: {kullanici}" });
             return (true, $"{string.Join(", ", turler)} oluşturuldu · marka {m.BelgeAdi}.", b);
         }
         static List<(string Etiket, string Deger)> OzetSatirlari(SsSiparis s, string tur, bool en)
         {
             var belge = s.Belgeler.FirstOrDefault(x => x.Tur == tur); string pbAd = s.ParaBirimi == "TL" ? "TRY" : s.ParaBirimi;
-            var l = new List<(string, string)> { (en ? "Document No" : "Belge No", belge?.No ?? ""), (en ? "Date" : "Tarih", (belge?.Tarih ?? DateTime.Today).ToString("dd.MM.yyyy")), (en ? "Order No" : "Sipariş No", s.No + (s.MusteriSiparisNo != "" ? " / PO " + s.MusteriSiparisNo : "")), (en ? "Buyer" : "Alıcı", $"{s.Cari} · {s.Sehir} / {s.Ulke}"), (en ? "Payment" : "Ödeme", s.OdemeSekli ?? ""), (en ? "Delivery" : "Teslim", s.TeslimSekli ?? ""), (en ? "Currency" : "Para Birimi", pbAd) };
+            var l = new List<(string, string)> { (en ? "Document No" : "Belge No", belge?.No ?? ""), (en ? "Date" : "Tarih", (belge?.Tarih ?? DateTime.Today).ToString("dd.MM.yyyy")), (en ? "Order No" : "Sipariş No", s.No + (s.MusteriSiparisNo != "" ? " / PO " + s.MusteriSiparisNo : "")), (en ? "Seller" : "Fatura Kesen", s.FaturaKesen), (en ? "Shipper" : "Gönderici", s.Gonderici), (en ? "Buyer" : "Alıcı", $"{s.Cari} · {s.Sehir} / {s.Ulke}"), (en ? "Payment" : "Ödeme", s.OdemeSekli ?? ""), (en ? "Delivery" : "Teslim", s.TeslimSekli ?? ""), (en ? "Currency" : "Para Birimi", pbAd) };
             if (tur == "Packing List" || tur == "Commercial Invoice") l.Add((en ? "Loading" : "Yükleme", $"{s.YuklemeTarihi:dd.MM.yyyy} {s.YuklemeSaati} · {s.Nakliye}"));
             return l;
         }
@@ -318,7 +350,7 @@ namespace WebApplication3.Data
             var m = MarkaBul(s.Marka); int kalan = s.YuklemeTarihi != null ? (s.YuklemeTarihi.Value.Date - DateTime.Today).Days : int.MinValue;
             return new
             {
-                s.Id, no = s.No, talepNo = s.TalepNo, tarih = s.Tarih.ToString("yyyy-MM-dd"), bolge = s.Bolge, satici = s.Satici, marka = m.Kod, markaAd = m.Ad, markaBelge = m.BelgeAdi, markaRenk = m.Renk,
+                s.Id, no = s.No, talepNo = s.TalepNo, tarih = s.Tarih.ToString("yyyy-MM-dd"), bolge = s.Bolge, satici = s.Satici, faturaKesen = s.FaturaKesen, gonderici = s.Gonderici, faturaKesenUnvan = SirketBul(s.FaturaKesen).Unvan, gondericiUnvan = SirketBul(s.Gonderici).Unvan, marka = m.Kod, markaAd = m.Ad, markaBelge = m.BelgeAdi, markaRenk = m.Renk,
                 cariKodu = s.CariKodu, cari = s.Cari, ulke = s.Ulke, sehir = s.Sehir, temsilci = s.Temsilci, kaynak = s.Kaynak, teklifNo = s.TeklifNo, musteriSiparisNo = s.MusteriSiparisNo, pb = s.ParaBirimi, kur = s.Kur,
                 kalemler = s.Kalemler.Select(k => new { k.Sira, k.UrunKod, k.Urun, k.Grup, k.HsKodu, k.Miktar, k.Birim, k.KoliKg, k.Koli, k.NetKg, k.BrutKg, k.BirimFiyat, k.Tutar, k.Not }).ToList(),
                 kalem = s.Kalemler.Count, tutar = s.Tutar, tutarTl = s.TutarTl, toplamKg = s.ToplamKg, toplamKoli = s.ToplamKoli, brutKg = s.BrutKg, palet = s.Palet,
@@ -344,5 +376,6 @@ namespace WebApplication3.Data
             };
         }
         public static object MarkaJson(SsMarka m) => new { m.Kod, m.Ad, m.BelgeAdi, m.Slogan, m.Unvan, m.Adres, m.Eposta, m.Web, m.Tel, m.Banka, m.Renk };
+        public static object SirketJson(SsSirket s) => new { s.Ad, s.Unvan, s.Adres, s.VergiNo, s.Depo };
     }
 }
