@@ -1,0 +1,168 @@
+@{
+    string kategori = (string)ViewBag.Kategori ?? "";
+    string kategoriAd = (string)ViewBag.KategoriAd ?? "";
+    ViewData["Title"] = kategori == "" ? "Şirket Dökümanları" : kategoriAd;
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string onSekme = (string)ViewBag.Sekme ?? "belgeler";
+    string onSirket = (string)ViewBag.Sirket ?? "";
+    string onId = (string)ViewBag.Id ?? "";
+    string ben = (string)ViewBag.Ben ?? "";
+}
+@*
+    ŞİRKET DÖKÜMANLARI — Yönetim › Şirket Dökümanları. Tüm grup şirketlerinin (Uras Baskı Teknolojileri, Uras Kimya, Alv Kimya, Selvi Kimya, Uras Holding, Avrupa Paper, Alv Filo,
+    URS Makine, DRN) resmî belgeleri tek yerde; kategori kırılımları (Kuruluş ve Sicil · Vergi ve Mali · İmza ve Yetki · Ruhsat, İzin ve Sertifika · Sözleşmeler ve Kiralar · Sigorta ·
+    Banka ve Finans · Marka ve Tescil · Araç, Taşınmaz ve Demirbaş) menüde ayrı rapor olarak açılır (aynı ekran, kategori ön süzgeçli: /SirketDokuman/Kurulus …).
+    Sekmeler: Belgeler (liste) · Şirket × Kategori (matris) · Yenileme Takvimi (geçerliliği dolacaklar) · Eksik Belgeler (zorunlu ama yok) · Şirketler (künye + şirket dosyası PDF) · Yeni Belge (dosya yükleme) · Günlük.
+    Çekmece: belge bilgileri, sürümler (dosya aç / yeni sürüm yükle), yenile (yeni geçerlilik), arşivle, günlük. Veri: /SirketDokuman/Veri (Controllers/SirketDokumanController.cs, Data/SirketDokumanOrnek.cs) · betik: wwwroot/js/sirket-dokuman.js
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<style>
+    .na.sd { --na-k: #4338ca; }
+    .sd-pill { font-size: .66rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; } a.sd-pill { text-decoration: none; } a.sd-pill:hover { background: #e0e7ff; color: #3730a3; border-color: #c7d2fe; } .sd-pill.sec { background: var(--na-k); color: #fff; border-color: var(--na-k); }
+    .sd-kirilim { display: flex; flex-wrap: wrap; gap: 4px; }
+    #sd .na-kpi { grid-template-columns: repeat(7, 1fr); } @@media (max-width: 1300px) { #sd .na-kpi { grid-template-columns: repeat(4, 1fr); } } #sd .na-kpi > div.aktif { outline: 2px solid var(--k, #4338ca); outline-offset: -1px; }
+    .sd-filtre { display: grid; grid-template-columns: 1fr 1.2fr 1.4fr 1fr 1fr 1.6fr auto; gap: 6px 8px; align-items: end; } @@media (max-width: 1300px) { .sd-filtre { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    .sd-filtre label, .sd-form label, .sd-yenile label { display: block; font-size: .58rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; }
+    .sd-filtre .form-control, .sd-filtre .form-select, .sd-form .form-control, .sd-form .form-select, .sd-yenile .form-control, .sd-yenile .form-select { font-size: .72rem; padding: 3px 7px; height: 28px; }
+    #sd .sd-tablo { font-size: .68rem; table-layout: fixed; width: 100%; }
+    #sd .sd-tablo th { font-size: .56rem; padding: 5px 5px; white-space: normal; line-height: 1.15; vertical-align: middle; position: sticky; top: 0; z-index: 3; background: #f8fafc; box-shadow: 0 1px 0 #e2e8f0; }
+    #sd .sd-tablo td { padding: 4px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; line-height: 1.2; border-bottom: 1px solid #e2e8f0; }
+    #sd .sd-tablo td.sol { text-align: left !important; } #sd .sd-tablo td.para { font-variant-numeric: tabular-nums; text-align: right !important; font-weight: 700; }
+    #sd .sd-tablo td small { display: block; font-size: .56rem; color: #64748b; font-weight: 500; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; }
+    #sd .sd-tablo tr.tik { cursor: pointer; } #sd .sd-tablo tr.tik:hover td { background: #eef2ff; }
+    #sd .sd-tablo tr.dolan td { background: #fef2f2; } #sd .sd-tablo tr.yaklasan td { background: #fffbeb; } #sd .sd-tablo tr.arsiv td { background: #f8fafc; color: #94a3b8; }
+    #sd .sd-tablo tr.ara td { background: #f1f5f9; font-weight: 800; border-top: 1px solid #cbd5e1; } #sd .sd-tablo tr.toplam td { font-weight: 800; background: #f8fafc; border-top: 2px solid var(--na-k); }
+    .sd-sirket { display: inline-block; font-size: .56rem; font-weight: 800; color: #fff; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+    .sd-rozet { display: inline-block; font-size: .58rem; font-weight: 800; border-radius: 4px; padding: 1px 6px; white-space: nowrap; } .sd-rozet.ok { background: #dcfce7; color: #166534; } .sd-rozet.uyar { background: #fef3c7; color: #92400e; } .sd-rozet.hata { background: #fee2e2; color: #991b1b; } .sd-rozet.bilgi { background: #dbeafe; color: #1e40af; } .sd-rozet.notr { background: #f1f5f9; color: #475569; } .sd-rozet.mor { background: #ede9fe; color: #5b21b6; }
+    .sd-zorunlu { display: inline-block; font-size: .52rem; font-weight: 800; border-radius: 3px; padding: 0 4px; background: #e0e7ff; color: #3730a3; }
+    #sd .btn-xs { font-size: .58rem; padding: 1px 6px; line-height: 1.3; }
+    /* matris */
+    #sd .sd-matris td { text-align: center !important; padding: 3px 4px; } .sd-h { display: inline-block; min-width: 54px; border-radius: 6px; padding: 2px 4px; font-size: .62rem; font-weight: 700; cursor: pointer; border: 1px solid transparent; line-height: 1.15; }
+    .sd-h.ok { background: #dcfce7; color: #166534; } .sd-h.uyar { background: #fef3c7; color: #92400e; } .sd-h.hata { background: #fee2e2; color: #991b1b; } .sd-h.bos { background: #f1f5f9; color: #94a3b8; } .sd-h:hover { filter: brightness(.95); } .sd-h small { display: block; font-size: .52rem; font-weight: 600; }
+    /* takvim */
+    .sd-takvim { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; } @@media (max-width: 1200px) { .sd-takvim { grid-template-columns: repeat(2, 1fr); } }
+    .sd-ay { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 10px; } .sd-ay.gecmis { border-color: #fecaca; background: #fef2f2; } .sd-ay .b { font-size: .72rem; font-weight: 800; color: #0f172a; display: flex; justify-content: space-between; } .sd-ay ul { list-style: none; margin: 4px 0 0; padding: 0; } .sd-ay li { font-size: .62rem; padding: 3px 0; border-top: 1px dashed #e2e8f0; cursor: pointer; line-height: 1.2; } .sd-ay li:hover { background: #f8fafc; } .sd-ay li small { display: block; color: #64748b; font-size: .56rem; }
+    /* şirket kartları */
+    .sd-sirketler { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } @@media (max-width: 1200px) { .sd-sirketler { grid-template-columns: repeat(2, 1fr); } }
+    .sd-kart { background: #fff; border: 1px solid #e2e8f0; border-top: 4px solid var(--r, #4338ca); border-radius: 10px; padding: 10px 12px; } .sd-kart h5 { font-size: .86rem; font-weight: 800; margin: 0 0 2px; } .sd-kart .u { font-size: .64rem; color: #64748b; line-height: 1.3; } .sd-kart .k { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; font-size: .62rem; margin-top: 6px; } .sd-kart .k b { color: #0f172a; } .sd-kart .s { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; } .sd-kart .btns { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+    /* çekmece */
+    .sd-drawer { position: fixed; top: 0; right: -820px; width: 780px; max-width: 97vw; height: 100vh; background: #fff; box-shadow: -8px 0 24px rgba(15,23,42,.18); z-index: 1060; transition: right .25s; overflow: auto; padding: 12px 14px; } .sd-drawer.acik { right: 0; }
+    .main-content #sdDrawer { height: 100vh !important; max-height: 100vh !important; overflow: auto !important; }
+    .sd-drawer-ust { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: sticky; top: 0; background: #fff; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; z-index: 2; flex-wrap: wrap; }
+    .sd-perde { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1055; display: none; } .sd-perde.acik { display: block; }
+    .sd-yenile { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1.4fr auto; gap: 6px 8px; align-items: end; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 10px; padding: 8px 10px; } @@media (max-width: 900px) { .sd-yenile { grid-template-columns: repeat(2, 1fr); } }
+    .sd-form { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px 8px; align-items: end; } @@media (max-width: 1200px) { .sd-form { grid-template-columns: repeat(3, minmax(0, 1fr)); } } .sd-form .g2 { grid-column: span 2; } .sd-form .g3 { grid-column: span 3; }
+    .sd-uyari { font-size: .68rem; color: #991b1b; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 5px 10px; }
+</style>
+}
+
+<div class="container-fluid py-3 na sd" id="sd" data-kategori="@kategori" data-sekme="@onSekme" data-sirket="@onSirket" data-id="@onId">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-folder-tree"></i></span>Şirket Dökümanları@(kategori == "" ? "" : " · " + kategoriAd)</h4>
+        <span class="sd-pill" id="sdKapsam">9 şirket</span>
+        <a class="sd-pill" href="/SirketDokuman/Sirketler"><i class="fas fa-building me-1"></i>Şirket Künyeleri</a>
+        <a class="sd-pill" href="/SirketDokuman/Eksik"><i class="fas fa-triangle-exclamation me-1"></i>Eksik Belgeler</a>
+        <a class="sd-pill" href="/SirketDokuman/Takvim"><i class="fas fa-calendar-check me-1"></i>Yenileme Takvimi</a>
+        <span class="sd-pill"><i class="fas fa-user me-1"></i>@ben</span>
+        <span class="sub w-100">Tüm grup şirketlerinin resmî belgeleri tek yerde: <b>Uras Baskı Teknolojileri, Uras Kimya, Alv Kimya, Selvi Kimya, Uras Holding, Avrupa Paper, Alv Filo, URS Makine, DRN</b>. Belgeler kırılımlara ayrılır (kuruluş ve sicil, vergi ve mali, imza ve yetki, ruhsat / izin / sertifika, sözleşmeler ve kiralar, sigorta, banka ve finans, marka ve tescil, araç / taşınmaz / demirbaş); her kırılım menüde ayrı rapordur. Süreli belgelerde geçerlilik izlenir: <b>60 gün içinde dolacaklar</b> sarı, <b>dolanlar</b> kırmızı; her şirkette bulunması zorunlu olup yüklenmemiş belgeler <b>Eksik</b> listesine düşer. Belge dosyası yüklenir, sürümlenir, yenilenir; şirket dosyası PDF olarak alınır.</span>
+        <div class="sd-kirilim w-100" id="sdKirilim"></div>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+
+    <div class="na-kpi" id="sdKpi" data-dinamik="kapali"></div>
+
+    <div class="na-sekme" id="sdSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="belgeler" class="aktif"><i class="fas fa-list me-1"></i>Belgeler <span class="n" id="sdN-belgeler">0</span></button>
+        <button type="button" data-p="matris"><i class="fas fa-table-cells me-1"></i>Şirket × Kategori</button>
+        <button type="button" data-p="takvim"><i class="fas fa-calendar-check me-1"></i>Yenileme Takvimi <span class="n" id="sdN-takvim">0</span></button>
+        <button type="button" data-p="eksik"><i class="fas fa-triangle-exclamation me-1"></i>Eksik Belgeler <span class="n" id="sdN-eksik">0</span></button>
+        <button type="button" data-p="sirketler"><i class="fas fa-building me-1"></i>Şirketler</button>
+        <button type="button" data-p="yeni"><i class="fas fa-plus me-1"></i>Yeni Belge</button>
+        <button type="button" data-p="gunluk"><i class="fas fa-clock-rotate-left me-1"></i>Günlük</button>
+    </div>
+
+    <div class="na-panel aktif" data-p="belgeler">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-list me-1"></i>Belge Listesi · Şirket Bazında</span><span class="not" id="sdSayi"></span></div>
+            <div class="na-kart-g">
+                <div class="sd-filtre">
+                    <div><label>Şirket</label><select class="form-select" id="sdSirketF"><option value="">Tümü</option></select></div>
+                    <div><label>Kategori</label><select class="form-select" id="sdKategoriF"><option value="">Tümü</option></select></div>
+                    <div><label>Belge Türü</label><select class="form-select" id="sdTurF"><option value="">Tümü</option></select></div>
+                    <div><label>Durum</label><select class="form-select" id="sdDurumF"><option value="">Aktif (Arşiv Hariç)</option><option value="Geçerli">Geçerli</option><option value="Süresi Yaklaşıyor">Süresi Yaklaşıyor</option><option value="Süresi Doldu">Süresi Doldu</option><option value="Süresiz">Süresiz</option><option value="zorunlu">Zorunlu Belgeler</option><option value="Arşiv">Arşiv</option></select></div>
+                    <div><label>Sorumlu</label><select class="form-select" id="sdSorumluF"><option value="">Tümü</option></select></div>
+                    <div><label>Ara</label><input class="form-control" id="sdAra" placeholder="Belge, belge no, kurum, şirket, not…" autocomplete="off"></div>
+                    <div><label>&nbsp;</label><div class="d-flex gap-1"><button type="button" class="btn btn-light border btn-sm py-0" id="sdExcel" style="font-size:.66rem;height:28px"><i class="fas fa-file-excel me-1"></i>Excel</button><button type="button" class="btn btn-primary btn-sm py-0" id="sdYeniBtn" style="font-size:.66rem;height:28px"><i class="fas fa-plus me-1"></i>Yeni Belge</button></div></div>
+                </div>
+            </div>
+            <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:64vh"><table class="na-tablo sd-tablo" id="sdTablo" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+        </div>
+    </div>
+
+    <div class="na-panel" data-p="matris">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-table-cells me-1"></i>Şirket × Kategori · Belge Sayısı ve Durum</span><span class="not">hücre: belge / beklenen tür · yeşil tam · sarı süresi yaklaşan var · kırmızı süresi dolan ya da eksik var · hücreye tıklayınca liste süzülür</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo sd-tablo sd-matris" id="sdMatris" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+        </div>
+    </div>
+
+    <div class="na-panel" data-p="takvim">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-calendar-check me-1"></i>Yenileme Takvimi · Geçerliliği Dolan ve Dolacak Belgeler</span><span class="d-flex gap-2 align-items-center"><span class="not">ay bazında · önce süresi dolmuşlar · satıra tıklayınca belge açılır</span><select class="form-select" id="sdTakvimAy" style="font-size:.66rem;height:24px;width:auto;padding:2px 20px 2px 6px"><option value="3">3 Ay</option><option value="6" selected>6 Ay</option><option value="12">12 Ay</option></select></span></div>
+            <div class="na-kart-g"><div class="sd-takvim" id="sdTakvim"></div></div>
+        </div>
+    </div>
+
+    <div class="na-panel" data-p="eksik">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-triangle-exclamation me-1"></i>Eksik Belgeler · Zorunlu Olup Bulunmayanlar</span><span class="not">şirket × belge türü · "Ekle" ile yeni belge formu dolu açılır</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:64vh"><table class="na-tablo sd-tablo" id="sdEksikTablo" data-dinamik="kapali"><thead></thead><tbody></tbody></table></div></div>
+        </div>
+    </div>
+
+    <div class="na-panel" data-p="sirketler">
+        <div class="sd-sirketler" id="sdSirketler"></div>
+    </div>
+
+    <div class="na-panel" data-p="yeni">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-plus me-1"></i>Yeni Belge Ekle</span><span class="not">dosya (PDF / görsel / Office) isteğe bağlı; sonradan sürüm olarak yüklenebilir</span></div>
+            <div class="na-kart-g">
+                <form class="sd-form" id="sdForm" enctype="multipart/form-data" onsubmit="return false;">
+                    <input type="hidden" id="ynId">
+                    <div><label>Şirket</label><select class="form-select" id="ynSirket" name="SirketKod"></select></div>
+                    <div><label>Kategori</label><select class="form-select" id="ynKategori"></select></div>
+                    <div class="g2"><label>Belge Türü</label><select class="form-select" id="ynTur" name="TurKod"></select></div>
+                    <div class="g2"><label>Belge Adı (Boş = Tür Adı)</label><input class="form-control" id="ynAd" name="Ad"></div>
+                    <div><label>Belge No</label><input class="form-control" id="ynBelgeNo" name="BelgeNo"></div>
+                    <div><label>Düzenleyen Kurum</label><input class="form-control" id="ynKurum" name="Kurum"></div>
+                    <div><label>Düzenleme Tarihi</label><input type="date" class="form-control" id="ynDuzenleme" name="DuzenlemeTarihi"></div>
+                    <div><label>Geçerlilik Bitişi</label><input type="date" class="form-control" id="ynBitis" name="GecerlilikBitis" title="boş = süresiz; süreli türde otomatik önerilir"></div>
+                    <div><label>Sorumlu</label><input class="form-control" id="ynSorumlu" name="Sorumlu" list="ynSorumlular"><datalist id="ynSorumlular"></datalist></div>
+                    <div><label>Gizlilik</label><select class="form-select" id="ynGizlilik" name="Gizlilik"><option>Genel</option><option>Kısıtlı</option><option>Gizli</option></select></div>
+                    <div class="g3"><label>Dosya</label><input type="file" class="form-control" id="ynDosya" name="dosya" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"></div>
+                    <div class="g3"><label>Not</label><input class="form-control" id="ynNot" name="Not"></div>
+                </form>
+                <div class="text-muted mt-1" style="font-size:.64rem" id="ynTurBilgi"></div>
+                <div class="d-flex gap-2 align-items-center mt-2"><button type="button" class="btn btn-primary btn-sm" id="ynKaydet" style="font-size:.72rem"><i class="fas fa-floppy-disk me-1"></i>Kaydet</button><button type="button" class="btn btn-light border btn-sm" id="ynTemizle" style="font-size:.72rem">Temizle</button></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="na-panel" data-p="gunluk">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Günlük</span><span class="not">belge ekleme, sürüm, yenileme, arşiv · kim, ne zaman</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:64vh"><table class="na-tablo sd-tablo" id="sdGunlukTablo" data-dinamik="kapali"><thead></thead><tbody></tbody></table></div></div>
+        </div>
+    </div>
+
+    <div class="sd-perde" id="sdPerde"></div>
+    <div class="sd-drawer" id="sdDrawer">
+        <div class="sd-drawer-ust"><b id="sdDBaslik" style="font-size:.88rem"></b><span class="ms-auto"></span><button type="button" class="btn btn-light btn-sm py-0" id="sdDKapat" style="font-size:.66rem"><i class="fas fa-xmark"></i></button></div>
+        <div id="sdDIc"></div>
+    </div>
+</div>
+@section Scripts {
+<script src="/js/sirket-dokuman.js?v=1"></script>
+}
