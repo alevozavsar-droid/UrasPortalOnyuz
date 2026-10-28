@@ -111,6 +111,8 @@ namespace WebApplication3.Controllers
                     cek = h.HesapTipi == "CEK" || h.CekDocEntry != null ? new
                     {
                         docEntry = h.CekDocEntry, no = h.CekNumarasi, vade = h.CekVadeTarihi?.ToString("yyyy-MM-dd"), belge = h.CekBelge, planlananTedarikci = h.PlanlananTedarikci, planKaynak = h.PlanKaynak, planlamaTarihi = h.PlanlamaTarihi?.ToString("yyyy-MM-dd"), ibrazYeri = h.IbrazYeri, ibrazTuru = h.IbrazTuru, ibrazTarihi = h.IbrazTarihi?.ToString("yyyy-MM-dd"), ibrazBelgeNo = h.IbrazBelgeNo, kontrol = h.PlanKontrol,
+                        // imzalı ibraz / ciro belgesi (Data/CekAkibetOrnek.cs): PDF oluştur → imzalat → yükle; önerilen belge no
+                        ibrazBelgeOneri = k == null ? "" : CekAkibetOrnek.IbrazBelgeNoOner(k), ibrazBelgeImzali = k?.IbrazBelgeImzali ?? false, ibrazBelgeYolu = k?.IbrazBelgeYolu ?? "", ibrazBelgeDosya = k?.IbrazBelgeDosya ?? "", ibrazBelgeYukleme = k?.IbrazBelgeYukleme?.ToString("yyyy-MM-dd HH:mm"), ibrazBelgeYukleyen = k?.IbrazBelgeYukleyen ?? "",
                         durum = k?.IslemTuru, portfoyde = k?.Portfoyde ?? false, secilebilir = k?.Secilebilir ?? false, kullanim = k?.KullanimDurumu, sahip = k?.Sirket, sahipDb = k?.DbName, musteri = k?.Musteri, banka = k?.Banka, tutar = k?.Tutar, dolasim = k?.DolasimOzeti ?? "",
                         planDocEntry = k?.PlanDocEntry, planDb = plan?.U_KaynakFirma, planDurum = plan?.U_Durum, planTalimat = plan?.U_TalimatNo ?? "", cikisTalebi = plan?.U_CikisTalebi ?? "", planOnay = plan?.U_OnayDurumu ?? "", planLink = plan == null ? null : OdemeLink(plan),
                         // Dolaşım sütunu: Kasa Nakit Akışı dolaşım planı adımları (eden → alan, tür, durum, tarih)
@@ -174,7 +176,7 @@ namespace WebApplication3.Controllers
             var planliCekler = CekAkibetOrnek.Kayitlar.Where(k => k.IslemTuru == "Planlandı" && (string.IsNullOrEmpty(sirket) || k.DbName == sirket)).OrderBy(k => k.Vade).Take(80).Select(k =>
             {
                 var plan = k.PlanDocEntry != null ? NakitAkisOrnek.Bul(k.PlanDocEntry.Value) : null;
-                return new { cekDocEntry = k.DocEntry, no = k.No, belge = k.Belge, tip = k.IslemTipi, sirket = k.Sirket, dbName = k.DbName, musteri = k.Musteri, banka = k.Banka, vade = k.Vade.ToString("yyyy-MM-dd"), vadeGun = (k.Vade - bugun).Days, tutar = k.Tutar, planlananTedarikci = k.PlanlananTedarikci, planlamaTarihi = k.PlanlamaTarihi?.ToString("yyyy-MM-dd"), planlayan = k.Planlayan, planDocEntry = k.PlanDocEntry, planDb = plan?.U_KaynakFirma, planDurum = plan?.U_Durum ?? "", planTalimat = plan?.U_TalimatNo ?? "", cikisTalebi = plan?.U_CikisTalebi ?? "", planOnay = plan?.U_OnayDurumu ?? "", planLink = plan == null ? null : OdemeLink(plan), dolasim = k.DolasimOzeti, kontrol = k.Kontrol };
+                return new { cekDocEntry = k.DocEntry, no = k.No, belge = k.Belge, tip = k.IslemTipi, sirket = k.Sirket, dbName = k.DbName, musteri = k.Musteri, banka = k.Banka, vade = k.Vade.ToString("yyyy-MM-dd"), vadeGun = (k.Vade - bugun).Days, tutar = k.Tutar, planlananTedarikci = k.PlanlananTedarikci, planlamaTarihi = k.PlanlamaTarihi?.ToString("yyyy-MM-dd"), planlayan = k.Planlayan, planDocEntry = k.PlanDocEntry, planDb = plan?.U_KaynakFirma, planDurum = plan?.U_Durum ?? "", planTalimat = plan?.U_TalimatNo ?? "", cikisTalebi = plan?.U_CikisTalebi ?? "", planOnay = plan?.U_OnayDurumu ?? "", planLink = plan == null ? null : OdemeLink(plan), dolasim = k.DolasimOzeti, kontrol = k.Kontrol, ibrazYeri = k.IbrazYeri, ibrazTuru = k.IbrazTuru, ibrazBelgeNo = k.IbrazBelgeNo, ibrazBelgeOneri = CekAkibetOrnek.IbrazBelgeNoOner(k), ibrazBelgeImzali = k.IbrazBelgeImzali, ibrazBelgeYolu = k.IbrazBelgeYolu, ibrazBelgeDosya = k.IbrazBelgeDosya };
             }).ToList();
             var senkron = new { finekraSonAkis = FinekraOrnek.SonAkis.ToString("yyyy-MM-dd HH:mm"), cekAkibetSurum = CekAkibetOrnek.Gunluk.Count + CekAkibetOrnek.Hareketler.Count, nakitAkisGunluk = NakitAkisOrnek.Gunluk(string.IsNullOrEmpty(sirket) ? null : sirket).Count, acikTalimat = TalimatOrnek.Listele(string.IsNullOrEmpty(sirket) ? null : sirket).Count(t => !t.Kapandi), sonTalimat = TalimatOrnek.Listele(string.IsNullOrEmpty(sirket) ? null : sirket).FirstOrDefault()?.No ?? "" };
             return Json(new
@@ -359,6 +361,7 @@ namespace WebApplication3.Controllers
                 return new { docEntry = k.DocEntry, sirket = k.Sirket, sahip = k.Sirket, dbName = k.DbName, no = k.No, belge = k.Belge, islemTipi = k.IslemTipi, musteri = k.Musteri, asilBorclu = k.AsilBorclu, banka = k.Banka, sube = k.Sube, vade = k.Vade.ToString("yyyy-MM-dd"), gun = (k.Vade.Date - bugun).Days, tutar = k.Tutar, pb = k.PB, portfoyGiris = k.PortfoyGiris.ToString("yyyy-MM-dd"),
                     islemTuru = k.IslemTuru, durum = k.IslemTuru, kullanimDurumu = k.KullanimDurumu, secilebilir = k.Secilebilir, uygunlukNedeni = k.UygunlukNedeni, portfoyde = true, planli = k.IslemTuru == "Planlandı" || k.PlanDocEntry != null,
                     planlananTedarikci = k.PlanlananTedarikci ?? "", planlamaTarihi = k.PlanlamaTarihi?.ToString("yyyy-MM-dd"), planlayan = k.Planlayan ?? "", planDocEntry = k.PlanDocEntry, planDb = plan?.U_KaynakFirma, planSirket = k.PlanSirket ?? "", planTarih = plan?.U_PlanlananTarih?.ToString("yyyy-MM-dd"), planGun = plan?.U_PlanlananTarih != null ? (plan.U_PlanlananTarih.Value.Date - bugun).Days : (int?)null,
+                    ibrazYeri = k.IbrazYeri, ibrazTuru = k.IbrazTuru, ibrazBelgeNo = k.IbrazBelgeNo, ibrazBelgeOneri = CekAkibetOrnek.IbrazBelgeNoOner(k), ibrazBelgeImzali = k.IbrazBelgeImzali, ibrazBelgeYolu = k.IbrazBelgeYolu, ibrazBelgeDosya = k.IbrazBelgeDosya,
                     planDurum = plan?.U_Durum ?? "", planTalimat = plan?.U_TalimatNo ?? "", planOnay = plan?.U_OnayDurumu ?? "", cikisTalebi = plan?.U_CikisTalebi ?? "", planBelge = plan == null ? "" : $"{plan.U_BagliBelgeTipi} {plan.U_FaturaSiparisNo}".Trim(), planUrun = plan?.U_UrunHizmet ?? "", planLink = plan == null ? null : OdemeLink(plan), dolasim = k.DolasimOzeti, dolasimAdim = k.Dolasim.Count, dolasimGerceklesen = k.Dolasim.Count(a => a.Durum == "Gerçekleşti") };
             }).ToList();
             return Json(new { success = true, bugun = bugun.ToString("yyyy-MM-dd"), data = l, ozet = new { portfoy = l.Count, portfoyTutar = l.Sum(x => x.tutar), planli = l.Count(x => x.planli), planliTutar = l.Where(x => x.planli).Sum(x => x.tutar), plansiz = l.Count(x => !x.planli && x.secilebilir), plansizTutar = l.Where(x => !x.planli && x.secilebilir).Sum(x => x.tutar), vadesiGecmis = l.Count(x => x.gun < 0), buHafta = l.Count(x => x.gun >= 0 && x.gun <= 7), buHaftaTutar = l.Where(x => x.gun >= 0 && x.gun <= 7).Sum(x => x.tutar), uygunDegil = l.Count(x => !x.secilebilir) } });
@@ -383,6 +386,62 @@ namespace WebApplication3.Controllers
             if (k != null && (r.ok || r.onayaDustu)) FinekraOrnek.GunlukEkle(k.Sirket, k.No, r.onayaDustu ? "Çek Çıkış Talebi (GMY)" : i.Tur == "Bankaya Tahsile Ver" ? "Bankaya İbraz" : "Tedarikçiye Ciro", r.mesaj, Kullanici);
             var plan = r.docEntry != null ? NakitAkisOrnek.Bul(r.docEntry.Value) : null;
             return Json(new { success = r.ok, message = r.mesaj, onayaDustu = r.onayaDustu, satir = plan == null ? null : new { docEntry = plan.DocEntry, dbName = plan.U_KaynakFirma, link = OdemeLink(plan) } });
+        }
+        // ---------- İBRAZ / CİRO BELGESİ: PDF oluştur (imzalatmak için) → imzalı belgeyi yükle (Çek Akıbeti, Çek Ekstre, Kasa Nakit Akışı entegre) ----------
+        /// <summary>Çek / senet ciro bordrosu ya da bankaya ibraz belgesi PDF'i: belge bilgileri, planlanan tedarikçi, Kasa Nakit Akışı satırı, dolaşım, teslim eden / teslim alan imza alanları. Belge no çıkışta üretilecek numarayla aynıdır.</summary>
+        [HttpGet("IbrazBelgesi")]
+        public IActionResult IbrazBelgesi(int cekDocEntry, string tur, string yer, string belgeNo)
+        {
+            var k = CekAkibetOrnek.Bul(cekDocEntry); if (k == null) return NotFound("Belge bulunamadı.");
+            bool bankaya = tur == "Bankaya Tahsile Ver" || k.IbrazTuru == "Bankaya İbraz"; string no = !string.IsNullOrWhiteSpace(belgeNo) ? belgeNo.Trim() : CekAkibetOrnek.IbrazBelgeNoOner(k, bankaya);
+            string hedef = !string.IsNullOrWhiteSpace(yer) ? yer.Trim() : k.IbrazYeri != "" ? k.IbrazYeri : k.PlanlananTedarikci != "" ? k.PlanlananTedarikci : (bankaya ? "Banka" : "Tedarikçi");
+            var plan = k.PlanDocEntry != null ? NakitAkisOrnek.Bul(k.PlanDocEntry.Value) : null; string sirket = k.Sirket;
+            var b = new DaBelge { Baslik = bankaya ? "Çek / Senet İbraz Belgesi · Bankaya Tahsil" : "Çek / Senet Ciro Bordrosu · Tedarikçiye Teslim", AltBaslik = $"Belge No {no} · {sirket} · {DateTime.Today:dd.MM.yyyy}" + (k.IbrazYeri != "" ? $" · çıkış yapıldı: {k.IbrazTuru} → {k.IbrazYeri} {k.IbrazTarihi:dd.MM.yyyy}" : " · çıkış öncesi düzenlendi (imzalatılıp portala yüklenir)"), Sirket = sirket, Hazirlayan = Kullanici, Yatay = false };
+            b.Ozet.Add(("Belge", $"{k.Belge} {k.No}")); b.Ozet.Add(("Tutar", $"{k.Tutar.ToString("N2", Tr)} {k.PB}")); b.Ozet.Add(("Vade", k.Vade.ToString("dd.MM.yyyy"))); b.Ozet.Add((bankaya ? "Tahsil Bankası" : "Teslim Alan Tedarikçi", hedef)); b.Ozet.Add(("İşlem Tipi", k.IslemTipi)); b.Ozet.Add(("Akıbet", k.IslemTuru));
+            var bl = new DaBlok { Baslik = "Belge Bilgileri", Kolonlar = new List<string> { "Alan", "Değer" }, Sag = new List<bool> { false, false } };
+            bl.Satirlar.Add(new[] { "Belge Türü · No", $"{k.Belge} · {k.No}" }); bl.Satirlar.Add(new[] { "Keşideci (Asıl Borçlu)", k.AsilBorclu ?? "" }); bl.Satirlar.Add(new[] { "Kimden Geldi (Ciro Eden)", k.Musteri ?? "" }); bl.Satirlar.Add(new[] { "Banka · Şube", $"{k.Banka} · {k.Sube}" }); bl.Satirlar.Add(new[] { "Vade", k.Vade.ToString("dd.MM.yyyy") }); bl.Satirlar.Add(new[] { "Tutar", $"{k.Tutar.ToString("N2", Tr)} {k.PB}" });
+            bl.Satirlar.Add(new[] { "Portföy Şirketi", sirket }); bl.Satirlar.Add(new[] { "Planlanan Tedarikçi", k.PlanlananTedarikci == "" ? "—" : k.PlanlananTedarikci }); bl.Satirlar.Add(new[] { "Kasa Nakit Akışı Satırı", plan == null ? "—" : $"#{plan.DocEntry} · {plan.U_Kurum} · {plan.U_BagliBelgeTipi} {plan.U_FaturaSiparisNo} · planlanan {plan.U_PlanlananTarih:dd.MM.yyyy} · {plan.U_Durum}" + (string.IsNullOrEmpty(plan.U_TalimatNo) ? "" : " · talimat " + plan.U_TalimatNo) });
+            if (k.Dolasim.Count > 0) bl.Satirlar.Add(new[] { "Dolaşım Planı", k.DolasimOzeti });
+            bl.Satirlar.Add(new[] { bankaya ? "İbraz Türü" : "Çıkış Türü", bankaya ? "Bankaya tahsile verme (vadesinde tahsil)" : "Tedarikçiye ciro (kapatılan borç: nakit akış satırı)" }); bl.Satirlar.Add(new[] { "Belge No", no }); b.Bloklar.Add(bl);
+            var im = new DaBlok { Baslik = "Teslim · İmza", Kolonlar = new List<string> { "Teslim Eden (" + sirket + ")", bankaya ? "Teslim Alan (Banka)" : "Teslim Alan (Tedarikçi)" }, Sag = new List<bool> { false, false } };
+            im.Satirlar.Add(new[] { "Ad Soyad: ______________________________", "Ad Soyad: ______________________________" }); im.Satirlar.Add(new[] { "Görev: ________________________________", "Görev / Ünvan: _________________________" }); im.Satirlar.Add(new[] { "Tarih: ____ / ____ / ________", "Tarih: ____ / ____ / ________" }); im.Satirlar.Add(new[] { "İmza · Kaşe:", "İmza · Kaşe:" }); im.Satirlar.Add(new[] { " ", " " }); im.Satirlar.Add(new[] { " ", " " });
+            im.Not = $"Bu belge iki nüsha düzenlenir; biri {(bankaya ? "bankada" : "tedarikçide")}, imzalı nüsha taranıp portala yüklenir (Konsolide Finansal Takip Paneli › Çek › İmzalı Belgeyi Yükle). Yüklenen belge Çek Akıbeti Raporu, Çek Ekstre Raporu ve Kasa Nakit Akışı satırında görünür. Belge no {no}; çıkış işlendiğinde Çek Akıbeti'ne bu numarayla yazılır."; b.Bloklar.Add(im);
+            return File(DisaAktar.Pdf(b), "application/pdf", $"{(bankaya ? "IbrazBelgesi" : "CiroBordrosu")}_{k.No}_{no}.pdf");
+        }
+        /// <summary>İmzalı ibraz / ciro belgesini yükler; istenirse aynı adımda çıkışı da işler (planlı belge: tedarikçiye ciro / bankaya tahsil). Belge Çek Akıbeti kaydına bağlanır, plan satırı varsa Kasa Nakit Akışı ekine de yazılır.</summary>
+        [HttpPost("IbrazBelgesiYukle")]
+        public IActionResult IbrazBelgesiYukle(Microsoft.AspNetCore.Http.IFormFile dosya, int cekDocEntry, string belgeNo, string not, bool ibrazEt, string tur, string yer)
+        {
+            var k = CekAkibetOrnek.Bul(cekDocEntry); if (k == null) return Json(new { success = false, message = "Belge bulunamadı." });
+            var mesajlar = new List<string>(); object satir = null;
+            if (ibrazEt && k.IbrazYeri == "")
+            {
+                var r = NakitAkisOrnek.CekCikisYap(cekDocEntry, string.IsNullOrEmpty(tur) ? "Tedarikçiye Ciro" : tur, yer, belgeNo, not, Kullanici);
+                if (!r.ok && !r.onayaDustu) return Json(new { success = false, message = r.mesaj });
+                FinekraOrnek.GunlukEkle(k.Sirket, k.No, r.onayaDustu ? "Çek Çıkış Talebi (GMY)" : tur == "Bankaya Tahsile Ver" ? "Bankaya İbraz" : "Tedarikçiye Ciro", r.mesaj, Kullanici); mesajlar.Add(r.mesaj);
+                var plan = r.docEntry != null ? NakitAkisOrnek.Bul(r.docEntry.Value) : null; if (plan != null) satir = new { docEntry = plan.DocEntry, dbName = plan.U_KaynakFirma, link = OdemeLink(plan) };
+                k = CekAkibetOrnek.Bul(cekDocEntry);
+            }
+            byte[] veri = null; string ad = dosya?.FileName;
+            if (dosya != null && dosya.Length > 0) { if (dosya.Length > 8_000_000) return Json(new { success = false, message = "Dosya 8 MB'ı aşamaz." }); using (var ms = new System.IO.MemoryStream()) { dosya.CopyTo(ms); veri = ms.ToArray(); } }
+            if (dosya == null && !ibrazEt) return Json(new { success = false, message = "İmzalı belge dosyasını seçin." });
+            if (dosya != null)
+            {
+                var b = CekAkibetOrnek.IbrazBelgesiBagla(cekDocEntry, ad, dosya.ContentType, veri, Kullanici, not); if (!b.ok) return Json(new { success = false, message = b.mesaj }); mesajlar.Add(b.mesaj);
+                // plan satırı varsa Kasa Nakit Akışı ekine de yazılır (satır çekmecesi › Ekler: Ciro Bordrosu)
+                if (k.PlanDocEntry != null) { var plan = NakitAkisOrnek.Bul(k.PlanDocEntry.Value); if (plan != null) { var e = NakitAkisOrnek.EkEkle(plan.U_KaynakFirma, plan.DocEntry, ad, "Ciro Bordrosu", $"İmzalı ibraz belgesi · {k.No} · {(string.IsNullOrEmpty(k.IbrazBelgeNo) ? belgeNo : k.IbrazBelgeNo)}", dosya.ContentType, veri, Kullanici); if (e.ok) mesajlar.Add($"Kasa Nakit Akışı #{plan.DocEntry} ekine yazıldı."); } }
+                FinekraOrnek.GunlukEkle(k.Sirket, k.No, "İmzalı İbraz Belgesi", $"{ad} yüklendi" + (k.IbrazYeri != "" ? $" · {k.IbrazTuru} → {k.IbrazYeri}" : ""), Kullanici);
+            }
+            k = CekAkibetOrnek.Bul(cekDocEntry);
+            return Json(new { success = true, message = string.Join(" ", mesajlar), satir, cek = new { k.DocEntry, k.No, k.IslemTuru, k.IbrazYeri, k.IbrazTuru, k.IbrazBelgeNo, ibrazBelgeImzali = k.IbrazBelgeImzali, ibrazBelgeYolu = k.IbrazBelgeYolu, ibrazBelgeDosya = k.IbrazBelgeDosya } });
+        }
+        /// <summary>İmzalı ibraz belgesi dosyası (Çek Akıbeti, Çek Ekstre, Takip Paneli bağlantıları).</summary>
+        [HttpGet("IbrazBelgeDosya")]
+        public IActionResult IbrazBelgeDosya(int cek)
+        {
+            var k = CekAkibetOrnek.Bul(cek); if (k == null || !k.IbrazBelgeImzali) return NotFound("İmzalı ibraz belgesi yok.");
+            if (k.IbrazBelgeVeri == null) return Content($"{k.IbrazBelgeDosya}: ön yüz örneğinde dosya içeriği yok.", "text/plain; charset=utf-8");
+            return File(k.IbrazBelgeVeri, string.IsNullOrEmpty(k.IbrazBelgeTip) ? "application/octet-stream" : k.IbrazBelgeTip, k.IbrazBelgeDosya);
         }
         /// <summary>Nakit akışta karşılığı olmayan banka çıkışı → Kasa Nakit Akışı'nda ÖDENDİ satır.</summary>
         [HttpPost("FinekraNakitAkisaGonder")]

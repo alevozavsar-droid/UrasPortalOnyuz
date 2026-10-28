@@ -113,6 +113,7 @@ namespace FinansRaporlama.Controllers
     {
         public int CekDocEntry { get; set; } public string No { get; set; } public string Belge { get; set; } public string Banka { get; set; } public string AsilBorclu { get; set; } public string KimdenGeldi { get; set; }
         public DateTime Vade { get; set; } public decimal Tutar { get; set; } public string PB { get; set; } public string Akibet { get; set; } public string IbrazYeri { get; set; } public string Kontrol { get; set; } public string PlanlananTedarikci { get; set; }
+        public string IbrazBelgeNo { get; set; } = ""; public string IbrazBelgeYolu { get; set; } = "";   // imzalı ibraz / ciro belgesi (Data/CekAkibetOrnek.cs; Takip Paneli'nden yüklenir)
     }
 
     public class KasaBakiyeViewModel

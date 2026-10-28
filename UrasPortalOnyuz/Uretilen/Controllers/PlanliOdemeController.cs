@@ -22,11 +22,13 @@ namespace WebApplication3.Controllers
 
         /// <param name="sirket">ön süzgeç: şirket DbName (ör. URASKIMYA)</param>
         /// <param name="id">açılışta çekmecede gösterilecek kayıt (DÖ-… Id)</param>
+        /// <param name="sekme">açılış sekmesi: liste (varsayılan) · ozet · matris · takvim</param>
         [HttpGet("")]
-        public IActionResult Index(string sirket, int? id)
+        public IActionResult Index(string sirket, int? id, string sekme)
         {
             ViewData["Title"] = "Planlı Ödemeler";
             ViewBag.Sirket = sirket ?? ""; ViewBag.Id = id?.ToString() ?? "";
+            ViewBag.Sekme = new[] { "liste", "ozet", "matris", "takvim" }.Contains(sekme) ? sekme : "liste";
             return View("Index");
         }
 

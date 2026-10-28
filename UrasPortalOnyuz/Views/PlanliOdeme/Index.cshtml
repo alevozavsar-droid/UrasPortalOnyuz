@@ -3,12 +3,14 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
     string onSirket = (string)ViewBag.Sirket ?? "";
     string onId = (string)ViewBag.Id ?? "";
+    string onSekme = (string)ViewBag.Sekme ?? "liste";
 }
 @*
     PLANLI ÖDEMELER — Mali İşler › Finans › Ödeme Yönetimi. Konsolide Finansal Takip Paneli › Düzenli Ödemeler sekmesiyle AYNI LİSTE ve AYNI TASARIM
     (Data/DuzenliOdemeOrnek.cs: aylık ödeme takvim listesi — tedarikçi, ürün / hizmet, şirket, ödeme şekli, gün, ort. aylık tutar, kategori; her ay otomatik Kasa Nakit Akışı satırı).
-    Özet kutuları, şirket alt toplamlı liste, Bu Ayı Akıt / Gelecek Ayı Planla / satır akıt, yeni kayıt / düzenle / pasife al, çekmece (kayıt + akan aylar + günlük) panelle birebir;
-    ek olarak Bu Ayın Ödeme Takvimi (gün bazında). Uçlar: /PlanliOdemeler/Veri · Akit · Kaydet · Durum (Uretilen/Controllers/PlanliOdemeController.cs) · betik: wwwroot/js/planli-odeme.js
+    Şirket alt toplamlı liste, Bu Ayı Akıt / Gelecek Ayı Planla / satır akıt, yeni kayıt / düzenle / pasife al, çekmece (kayıt + çek planı + akan aylar + günlük) panelle birebir.
+    SEKMELER (süzgeçler ve düğmeler üstte ortak): Planlı Ödeme Listesi (varsayılan) · Özet (özet kutuları + şirket / kategori dağılımı) · Çek Planı Matrisi · Bu Ayın Ödeme Takvimi; derin bağlantı ?sekme=liste|ozet|matris|takvim.
+    Uçlar: /PlanliOdemeler/Veri · Akit · Kaydet · Durum · PortfoyCekler · CekPlanla · CekPlanKaldir (Uretilen/Controllers/PlanliOdemeController.cs) · betik: wwwroot/js/planli-odeme.js
 *@
 @section Styles {
 <link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
@@ -51,8 +53,10 @@
     .po-gun .g { display: flex; align-items: baseline; gap: 6px; font-size: .62rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; } .po-gun .g b { font-size: .95rem; color: #0f172a; } .po-gun .g .t { margin-left: auto; font-size: .64rem; color: #0f172a; font-variant-numeric: tabular-nums; }
     .po-gun ul { list-style: none; margin: 4px 0 0; padding: 0; } .po-gun li { font-size: .62rem; line-height: 1.2; padding: 2px 0; border-top: 1px dashed #e2e8f0; display: flex; gap: 4px; align-items: center; } .po-gun li .ad { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .po-gun li .ad small { color: #64748b; display: block; font-size: .56rem; }
     .po-gun li i.d { width: 7px; height: 7px; border-radius: 50%; flex: none; background: #94a3b8; } .po-gun li i.d.ok { background: #16a34a; } .po-gun li i.d.plan { background: #0369a1; } .po-gun li i.d.yok { background: #dc2626; }
-    /* özet kutuları: 10 kutu → 5 sütun */
+    /* özet sekmesi: 10 kutu → 5 sütun; altında şirket / kategori dağılım tabloları yan yana */
     #po .tp-bozet { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .po-ozet-ikili { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } @@media (max-width: 1200px) { .po-ozet-ikili { grid-template-columns: 1fr; } }
+    #po .po-ozet-tablo th { position: static; }
     /* çek planı matrisi: kayıt × önümüzdeki aylar — hücre: planlanan / ihtiyaç; tam yeşil, kısmi sarı, yok kırmızı; tıklayınca o ay için çek seçimi */
     #po .po-matris td { padding: 3px 4px; } .po-m { display: block; font-size: .6rem; line-height: 1.15; padding: 2px 4px; border-radius: 5px; text-align: center; cursor: pointer; border: 1px solid transparent; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .po-m.tam { background: #dcfce7; color: #166534; border-color: #bbf7d0; } .po-m.kismi { background: #fef3c7; color: #92400e; border-color: #fde68a; } .po-m.yok { background: #fee2e2; color: #991b1b; border-color: #fecaca; } .po-m.pasif { background: #f1f5f9; color: #94a3b8; }
@@ -70,7 +74,7 @@
 </style>
 }
 
-<div class="container-fluid py-3 na po" id="po" data-sirket="@onSirket" data-id="@onId">
+<div class="container-fluid py-3 na po" id="po" data-sirket="@onSirket" data-id="@onId" data-sekme="@onSekme">
     <div class="na-ust">
         <h4><span class="rt-ikon"><i class="fas fa-calendar-check"></i></span>Planlı Ödemeler</h4>
         <a class="tp-pill" href="/Rapor123?sekme=duzenli" target="_blank" rel="noopener" title="Konsolide Finansal Takip Paneli › Düzenli Ödemeler sekmesi — aynı liste"><i class="fas fa-clipboard-check me-1"></i>Takip Paneli › Düzenli Ödemeler ile aynı liste</a>
@@ -91,23 +95,52 @@
                 <div><label>Ödeme Şekli</label><select class="form-select" id="poSekil"><option value="">Tümü</option></select></div>
                 <div><label>Ara</label><input class="form-control" id="poAra" placeholder="No, tedarikçi, ürün / hizmet, şirket, kategori…" autocomplete="off"></div>
             </div>
-            <div class="tp-bozet mt-2" id="poOzet"></div>
         </div>
     </div>
 
-    <div class="na-kart">
-        <div class="na-kart-b"><span><i class="fas fa-list me-1"></i>Planlı Ödeme Listesi · Şirket Bazında Alt Toplamlar · Sorumlu: <span id="poSorumlu"></span></span><span class="not" id="poSayi"></span></div>
-        <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo" id="poTablo" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+    <div class="na-sekme" id="poSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="liste" class="aktif"><i class="fas fa-list me-1"></i>Planlı Ödeme Listesi <span class="n" id="poN-liste">0</span></button>
+        <button type="button" data-p="ozet"><i class="fas fa-chart-pie me-1"></i>Özet</button>
+        <button type="button" data-p="matris"><i class="fas fa-money-check-dollar me-1"></i>Çek Planı Matrisi <span class="n" id="poN-matris">0</span></button>
+        <button type="button" data-p="takvim"><i class="fas fa-calendar-days me-1"></i>Bu Ayın Ödeme Takvimi <span class="n" id="poN-takvim"></span></button>
     </div>
 
-    <div class="na-kart">
-        <div class="na-kart-b"><span><i class="fas fa-money-check-dollar me-1"></i>Çek Planı Matrisi · Hangi Aya Kadar, Ne Kadarlık Çek Planlandı</span><span class="d-flex gap-2 align-items-center"><span class="not" id="poMatrisNot"></span><select class="form-select" id="poMatrisAy" style="font-size:.66rem;height:24px;width:auto;padding:2px 20px 2px 6px"><option value="6">6 Ay</option><option value="9">9 Ay</option><option value="12">12 Ay</option></select></span></div>
-        <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo po-matris" id="poMatris" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+    <div class="na-panel aktif" data-p="liste">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-list me-1"></i>Planlı Ödeme Listesi · Şirket Bazında Alt Toplamlar · Sorumlu: <span id="poSorumlu"></span></span><span class="not" id="poSayi"></span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo" id="poTablo" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+        </div>
     </div>
 
-    <div class="na-kart">
-        <div class="na-kart-b"><span><i class="fas fa-calendar-days me-1"></i>Bu Ayın Ödeme Takvimi · <span id="poTakvimAy"></span></span><span class="not">gün bazında · yeşil ödendi · mavi nakit akışta planlı · kırmızı akmamış · gri pasif</span></div>
-        <div class="na-kart-g"><div class="po-takvim" id="poTakvim"></div></div>
+    <div class="na-panel" data-p="ozet">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-chart-pie me-1"></i>Özet · <span id="poOzetAy"></span></span><span class="not">aylık yük, nakit / çek, bu ay akan · ödenen · planlı, gelecek ay, çek planı ve çek karşılama · süzgeçlere göre</span></div>
+            <div class="na-kart-g"><div class="tp-bozet" id="poOzet"></div></div>
+        </div>
+        <div class="po-ozet-ikili">
+            <div class="na-kart">
+                <div class="na-kart-b"><span><i class="fas fa-building me-1"></i>Şirket Dağılımı</span><span class="not">aktif kayıt · aylık yük · bu ay akan / ödenen · çek planı</span></div>
+                <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo po-ozet-tablo" id="poOzetSirket" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+            </div>
+            <div class="na-kart">
+                <div class="na-kart-b"><span><i class="fas fa-tags me-1"></i>Kategori Dağılımı</span><span class="not">bütçe kalemine eşlenir · Bütçe Raporu'na otomatik</span></div>
+                <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo po-ozet-tablo" id="poOzetKategori" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="na-panel" data-p="matris">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-money-check-dollar me-1"></i>Çek Planı Matrisi · Hangi Aya Kadar, Ne Kadarlık Çek Planlandı</span><span class="d-flex gap-2 align-items-center"><span class="not" id="poMatrisNot"></span><select class="form-select" id="poMatrisAy" style="font-size:.66rem;height:24px;width:auto;padding:2px 20px 2px 6px"><option value="6">6 Ay</option><option value="9">9 Ay</option><option value="12">12 Ay</option></select></span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tp-tablo po-matris" id="poMatris" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+        </div>
+    </div>
+
+    <div class="na-panel" data-p="takvim">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-calendar-days me-1"></i>Bu Ayın Ödeme Takvimi · <span id="poTakvimAy"></span></span><span class="not">gün bazında · yeşil ödendi · mavi nakit akışta planlı · kırmızı akmamış · gri pasif</span></div>
+            <div class="na-kart-g"><div class="po-takvim" id="poTakvim"></div></div>
+        </div>
     </div>
 
     <div class="tp-perde" id="poPerde"></div>
@@ -117,5 +150,5 @@
     </div>
 </div>
 @section Scripts {
-<script src="/js/planli-odeme.js?v=4"></script>
+<script src="/js/planli-odeme.js?v=6"></script>
 }

@@ -45,9 +45,16 @@
   const sekil = s => `<span class="tp-tur ${s === 'Nakit' ? 'kira' : s === 'Havale / EFT' ? 'havale' : 'cek'}">${esc(s)}</span>`;
   const cekHucre = d => { const c = cp(d); return c.planliAy ? `<b>→ ${esc(c.sonPlanliAyAdi)}</b><small>${c.planliAy} ay · ${kisa(c.toplamPlanlanan)} ₺${c.tamSonAyAdi ? ' · tam ' + esc(c.tamSonAyAdi) : ' · tam ay yok'}</small>` : (d.durum === 'Aktif' ? '<span class="tp-es yok">Çek Planı Yok</span>' : '<span class="tp-es disi">—</span>'); };
 
-  // ---------- özet kutuları (panelle aynı sekiz kutu + çek planı)
+  // ---------- sekmeler: liste (varsayılan — ekran HER ZAMAN Planlı Ödeme Listesi ile açılır) · ozet · matris · takvim — süzgeçler ve düğmeler ortak
+  //   ?sekme= yalnız dışarıdan açık derin bağlantı içindir; seçilen sekme adrese yazılmaz (kabuk / yer imi sonraki açılışta Özet'e düşürmesin)
+  function sekme(p) {
+    if (!$(`#poSekmeler button[data-p="${p}"]`)) p = 'liste';
+    $$('#poSekmeler button').forEach(b => b.classList.toggle('aktif', b.dataset.p === p)); $$('#po > .na-panel').forEach(x => x.classList.toggle('aktif', x.dataset.p === p));
+    try { const u = new URL(location.href); if (u.searchParams.has('sekme')) { u.searchParams.delete('sekme'); history.replaceState(null, '', u); } } catch (e) { }
+  }
+  // ---------- özet sekmesi: panelle aynı sekiz kutu + çek planı kutuları; altında şirket / kategori dağılım tabloları (süzgeçlere göre)
   function cizOzet() {
-    const o = D().ozet || {}, yuk = o.aylikYuk || 0;
+    const o = D().ozet || {}, yuk = o.aylikYuk || 0; $('#poOzetAy').textContent = o.ayAdi || '';
     $('#poOzet').innerHTML = [
       { l: `Aylık Yük · ${o.ayAdi || ''}`, v: `${kisa(o.aylikYuk)} ₺`, s: `${o.aktif || 0} aktif · ${o.pasif || 0} pasif kayıt`, k: '#0f766e' },
       { l: 'Nakit / Çek', v: `${kisa(o.nakit)} / ${kisa(o.cek)}`, s: `havale ${kisa(o.havale)} ₺ · ödeme şekline göre aylık`, k: '#1d4ed8' },
@@ -60,6 +67,17 @@
       { l: `Çek Karşılama · ${o.sonrakiAyAdi || ''}`, v: pct(yuk ? (o.sonrakiAyCekPlanlanan || 0) / yuk : 0), s: `${kisa(o.sonrakiAyCekPlanlanan)} ₺ çek · ${o.sonrakiAyCekTam || 0} kayıt tam`, k: '#0369a1' },
       { l: 'Şirketler · Kategoriler', v: `${(o.sirketler || []).length} · ${(o.kategoriler || []).length}`, s: (o.sirketler || []).map(s => `${s.sirket} ${kisa(s.tutar)}`).join(' · '), k: '#64748b' }
     ].map(k => `<div style="--k:${k.k}"><div class="l" title="${esc(k.l)}">${esc(k.l)}</div><div class="v" title="${esc(k.v)}">${esc(k.v)}</div><div class="s" title="${esc(k.s)}">${esc(k.s)}</div></div>`).join('');
+    // şirket / kategori dağılımı — süzgeçlenmiş listeden: aktif kayıt, aylık yük, nakit · havale · çek, bu ay akan / ödenen, çek planı toplamı, bu ay çek karşılama
+    const L = liste(); const dagilim = (t, alan, baslik) => {
+      const kol = [K(baslik, 110), K('Aktif', 40, 'c'), K('Aylık Yük (₺)', 84), K('Nakit (₺)', 70), K('Havale (₺)', 70), K('Çek (₺)', 70), K('Bu Ay Akan (₺)', 80), K('Bu Ay Ödenen (₺)', 80), K('Çek Planı (₺)', 84), K('Çek Karşılama · Bu Ay', 90, 'c')]; tabloKur(t, kol);
+      const gr = []; L.forEach(d => { let g = gr.find(x => x.ad === d[alan]); if (!g) { g = { ad: d[alan], l: [] }; gr.push(g); } g.l.push(d); });
+      const topla = l => { const a = l.filter(d => d.durum === 'Aktif'); const s = { aktif: a.length, yuk: a.reduce((s, d) => s + d.aylikTutar, 0), nakit: a.filter(d => d.odemeSekli === 'Nakit').reduce((s, d) => s + d.aylikTutar, 0), havale: a.filter(d => d.odemeSekli === 'Havale / EFT').reduce((s, d) => s + d.aylikTutar, 0), akan: l.reduce((s, d) => s + (d.buAy ? d.buAy.tutar : 0), 0), odenen: l.reduce((s, d) => s + (d.buAy && d.buAy.durum === 'ÖDENDİ' ? d.buAy.tutar : 0), 0), cekPlan: l.reduce((s, d) => s + cp(d).toplamPlanlanan, 0), buAyCek: a.reduce((s, d) => { const m = cp(d).aylar[0]; return s + (m ? m.planlanan : 0); }, 0) }; s.cek = s.yuk - s.nakit - s.havale; return s; };
+      const satir = (ad, s, cls) => `<tr class="${cls || ''}"><td class="sol"><b>${esc(ad)}</b></td><td>${s.aktif}</td><td class="para">${para(s.yuk)}</td><td class="para">${para(s.nakit)}</td><td class="para">${para(s.havale)}</td><td class="para">${para(s.cek)}</td><td class="para">${para(s.akan)}</td><td class="para">${para(s.odenen)}</td><td class="para">${para(s.cekPlan)}</td><td><span class="po-kap"><i class="${s.yuk && s.buAyCek >= s.yuk ? '' : s.buAyCek > 0 ? 'kismi' : 'yok'}" style="width:${s.yuk ? Math.min(100, Math.round(s.buAyCek / s.yuk * 100)) : 0}%"></i></span>${pct(s.yuk ? s.buAyCek / s.yuk : 0)}</td></tr>`;
+      gr.sort((a, b) => topla(b.l).yuk - topla(a.l).yuk);
+      t.tBodies[0].innerHTML = gr.length ? gr.map(g => satir(g.ad, topla(g.l))).join('') : `<tr><td colspan="${kol.length}" class="na-bos text-center">Süzgece uyan kayıt yok.</td></tr>`;
+      t.tFoot.innerHTML = gr.length ? satir('TOPLAM · ' + gr.length + ' ' + baslik.toLocaleLowerCase('tr-TR'), topla(L), 'toplam') : '';
+    };
+    dagilim($('#poOzetSirket'), 'sirket', 'Şirket'); dagilim($('#poOzetKategori'), 'kategori', 'Kategori');
   }
   // ---------- liste (şirket bazında alt toplamlar; panelle aynı satır düzeni + Çek Planı)
   function cizListe() {
@@ -75,6 +93,7 @@
     const aktif = L.filter(d => d.durum === 'Aktif');
     t.tFoot.innerHTML = L.length ? `<tr class="toplam"><td colspan="7" class="text-end">TOPLAM · ${aktif.length} aktif / ${L.length} kayıt · aylık yük (₺)</td><td class="para">${para(aktif.reduce((s, d) => s + d.aylikTutar, 0))}</td><td colspan="2" class="sol">bu ay akan ${para(akan(L))} ₺</td><td class="sol">ödenen ${para(odenen(L))} ₺</td><td class="sol">akmamış ${aktif.filter(d => !d.buAy).length}</td><td class="sol">çek planı ${para(cekli(L))} ₺ · ${L.filter(d => cp(d).planliAy).length} kayıt</td><td colspan="3"></td></tr>` : '';
     $('#poSayi').textContent = `${L.length} / ${(D().liste || []).length} kayıt · satıra tıklayınca kayıt, çek planı, akan aylar ve günlük açılır`;
+    $('#poN-liste').textContent = L.length; $('#poN-matris').textContent = aktif.length; $('#poN-takvim').textContent = (D().ozet || {}).ayAdi ? (D().ozet.ayAdi || '').split(' ')[0] : '';
   }
   // ---------- çek planı matrisi: kayıt × önümüzdeki N ay — planlanan / ihtiyaç (tam · kısmi · yok); tıklayınca o ay için portföyden çek seçimi
   function cizMatris() {
@@ -207,6 +226,8 @@
   $('#poDurum').addEventListener('change', () => { F.durum = $('#poDurum').value; ciz(); }); $('#poKategori').addEventListener('change', () => { F.kategori = $('#poKategori').value; ciz(); }); $('#poSekil').addEventListener('change', () => { F.sekil = $('#poSekil').value; ciz(); });
   $('#poAra').addEventListener('input', () => { F.ara = $('#poAra').value; ciz(); });
   $('#poMatrisAy').addEventListener('change', () => { F.matrisAy = +$('#poMatrisAy').value; cizMatris(); });
+  $$('#poSekmeler button').forEach(b => b.addEventListener('click', () => sekme(b.dataset.p)));
+  sekme(kok.dataset.sekme || 'liste');
   $('#poExcel').addEventListener('click', () => csvIndir('planli_odemeler', ['No', 'Tedarikçi', 'Ürün / Hizmet', 'Şirket', 'Ödeme Şekli', 'Gün', 'Ort. Aylık (₺)', 'Kategori', 'Bütçe Kalemi', 'Geçen Ay', 'Bu Ay', 'Gelecek Ay', 'Çek Planı Son Ay', 'Çek Planı Ay Sayısı', 'Çek Planı Toplam (₺)', 'Tam Karşılanan Son Ay', 'Sorumlu', 'Durum', 'Not'],
     liste().map(d => [d.no, d.tedarikci, d.urunHizmet, d.sirket, d.odemeSekli, d.gun, d.aylikTutar, d.kategori, d.butceKalemAd, d.gecenAy ? `#${d.gecenAy.docEntry} ${d.gecenAy.durum}` : 'akmadı', d.buAy ? `#${d.buAy.docEntry} ${d.buAy.durum}` : 'akmadı', d.sonrakiAy ? `#${d.sonrakiAy.docEntry} ${d.sonrakiAy.durum}` : '', cp(d).sonPlanliAyAdi || '', cp(d).planliAy || 0, cp(d).toplamPlanlanan || 0, cp(d).tamSonAyAdi || '', d.sorumlu, d.durum, d.not])));
   // pencereye dönünce tazele (panel / Kasa Nakit Akışı / Çek Akıbeti'nde yapılan değişiklikler)

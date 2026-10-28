@@ -86,6 +86,9 @@
     .tp-aksiyon { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; } .tp-aksiyon .btn { font-size: .64rem; padding: 2px 8px; }
     .tp-kalem td { font-size: .7rem; } .tp-modal .table { font-size: .7rem; } .tp-modal .table td, .tp-modal .table th { padding: 4px 6px; white-space: nowrap; }
     .tp-fis { font-size: .7rem; } .tp-fis td, .tp-fis th { padding: 3px 6px; }
+    /* ibraz süreci şeridi: Planlandı → İbraz Belgesi (PDF) → Tedarikçiye Çıkış → İmzalı Belge Yüklendi */
+    .tp-surec { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin-top: 6px; } .tp-surec span { font-size: .58rem; font-weight: 700; border-radius: 999px; padding: 2px 8px; background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; white-space: nowrap; }
+    .tp-surec span.ok { background: #dcfce7; color: #166534; border-color: #bbf7d0; } .tp-surec span.simdi { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; } .tp-surec i.ok { color: #cbd5e1; font-size: .5rem; }
     /* gün sonu mutabakatı: adımlar, şirket blokları, sayım */
     .tp-adimlar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
     .tp-adim { display: flex; gap: 8px; align-items: flex-start; background: #fff; border: 1px solid #e2e8f0; border-left: 3px solid #94a3b8; border-radius: 8px; padding: 6px 9px; } .tp-adim.ok { border-left-color: #16a34a; } .tp-adim.hata { border-left-color: #dc2626; }
@@ -322,9 +325,32 @@
                 <div class="col-md-7"><label class="form-label mb-0">Ciro Edilen Tedarikçi / Banka</label><input id="ccYer" class="form-control form-control-sm" list="ccYerler" style="font-size:.72rem" /><datalist id="ccYerler"></datalist></div>
                 <div class="col-md-5"><label class="form-label mb-0">Ciro Bordrosu / İbraz Belge No</label><input id="ccBelge" class="form-control form-control-sm" style="font-size:.72rem" placeholder="boş: otomatik" /></div>
                 <div class="col-md-7"><label class="form-label mb-0">Not</label><input id="ccNot" class="form-control form-control-sm" style="font-size:.72rem" placeholder="isteğe bağlı" /></div>
+                @* ibraz belgesi: PDF oluştur → tedarikçiye imzalat → imzalı nüshayı yükle (çıkışla birlikte ya da sonra) *@
+                <div class="col-12"><div class="na-uyari mavi mb-0" style="font-size:.68rem"><i class="fas fa-file-signature me-1"></i><b>İbraz belgesi:</b> <button type="button" class="btn btn-outline-primary btn-xs ms-1" id="ccPdf" style="font-size:.62rem;padding:1px 7px"><i class="fas fa-file-pdf me-1"></i>Ciro Bordrosu / İbraz Belgesi PDF Oluştur</button> <span class="text-muted">· belge no aynı; imzalatıp aşağıdan yükleyin (sonra da yüklenebilir)</span></div></div>
+                <div class="col-md-7"><label class="form-label mb-0">İmzalı İbraz Belgesi (PDF / görsel, isteğe bağlı)</label><input id="ccDosya" type="file" class="form-control form-control-sm" style="font-size:.72rem" accept=".pdf,image/*" /></div>
+                <div class="col-md-5 d-flex align-items-end"><small class="text-muted" id="ccSurec" style="font-size:.64rem"></small></div>
             </div>
         </div>
         <div class="modal-footer py-2"><button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Vazgeç</button><button type="button" class="btn btn-success btn-sm" id="ccCik"><i class="fas fa-check me-1"></i>Çıkışı İşle</button></div>
+    </div></div></div>
+
+    @* ===== imzalı ibraz / ciro belgesi: PDF oluştur · imzalat · yükle (çıkmış belgede sonradan yükleme; çıkmamış planlı belgede çıkışla birlikte) ===== *@
+    <div class="modal fade tp-modal" id="tpIbrazBelgeModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><div class="modal-content">
+        <div class="modal-header py-2"><h6 class="modal-title mb-0" style="font-size:.84rem"><i class="fas fa-file-signature me-2 text-success"></i>İbraz Belgesi · İmzalı Nüshayı Yükle <span class="tp-pill ms-2" id="ibNo"></span></h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <div class="na-ustbilgi mb-2" id="ibBilgi"></div>
+            <div class="mb-2" id="ibSurec"></div>
+            <div class="row g-2" style="font-size:.72rem">
+                <div class="col-12"><div class="na-uyari mavi mb-0" style="font-size:.68rem"><i class="fas fa-1 me-1"></i><b>1. Belgeyi oluştur:</b> <button type="button" class="btn btn-outline-primary btn-xs ms-1" id="ibPdf" style="font-size:.62rem;padding:1px 7px"><i class="fas fa-file-pdf me-1"></i>PDF Oluştur</button> <span class="text-muted">· 2. tedarikçiye / bankaya imzalat · 3. imzalı nüshayı aşağıdan yükle</span></div></div>
+                <div class="col-md-5" id="ibTurAlan"><label class="form-label mb-0">Çıkış Türü</label><select id="ibTur" class="form-select form-select-sm" style="font-size:.72rem"><option value="Tedarikçiye Ciro">Tedarikçiye Ciro</option><option value="Bankaya Tahsile Ver">Bankaya Tahsile Ver</option></select></div>
+                <div class="col-md-7" id="ibYerAlan"><label class="form-label mb-0">Ciro Edilen Tedarikçi / Banka</label><input id="ibYer" class="form-control form-control-sm" list="ccYerler" style="font-size:.72rem" /></div>
+                <div class="col-md-5"><label class="form-label mb-0">Belge No</label><input id="ibBelge" class="form-control form-control-sm" style="font-size:.72rem" /></div>
+                <div class="col-md-7"><label class="form-label mb-0">İmzalı İbraz Belgesi (PDF / görsel) *</label><input id="ibDosya" type="file" class="form-control form-control-sm" style="font-size:.72rem" accept=".pdf,image/*" /></div>
+                <div class="col-md-12"><label class="form-label mb-0">Not</label><input id="ibNot" class="form-control form-control-sm" style="font-size:.72rem" placeholder="isteğe bağlı (teslim alan, tarih…)" /></div>
+                <div class="col-12" id="ibCikisAlan"><label class="d-flex align-items-center gap-2" style="font-size:.7rem"><input type="checkbox" id="ibCikis" checked> Yüklerken çıkışı da işle (belge planlı: plan satırı ÖDENDİ olur, fiş atılır, Çek Akıbeti güncellenir)</label></div>
+            </div>
+        </div>
+        <div class="modal-footer py-2"><button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Vazgeç</button><button type="button" class="btn btn-success btn-sm" id="ibYukle"><i class="fas fa-upload me-1"></i>İmzalı Belgeyi Yükle</button></div>
     </div></div></div>
 
     @* ===== fiş penceresi: Kasa / Çek sekmesi "Fiş" sütunu — belge / ibraz detayı + yevmiye fişi (FisVeri) ===== *@
@@ -370,5 +396,5 @@
 </div>
 
 @section Scripts {
-<script src="/js/takip-paneli.js?v=27"></script>
+<script src="/js/takip-paneli.js?v=28"></script>
 }

@@ -37,6 +37,8 @@ namespace WebApplication3.Models
         public string TahsilatBelgeNo { get; set; }
 
         public string IbrazBelgeNo { get; set; }
+        public string IbrazBelgeYolu { get; set; }          // imzalı ibraz / ciro belgesi (Takip Paneli'nden yüklenir; /Rapor123/IbrazBelgeDosya?cek=…)
+        public string IbrazBelgeDosya { get; set; }
         public string PlanlananTedarikci { get; set; }
         public string BelgeTipi { get; set; }
         public string CekIslemTuru { get; set; }

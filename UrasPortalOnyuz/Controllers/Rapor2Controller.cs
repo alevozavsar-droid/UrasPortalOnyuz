@@ -64,7 +64,7 @@ namespace WebApplication3.Controllers
                 DocEntry = k.DocEntry, CekNumarasi = k.No, BankaAdi = k.Banka, Sube = k.Sube, HareketDurumu = k.HareketDurumu, IslemTuru = k.IslemTuru, KonumDurumu = k.KonumDurumu, VadeDurumu = k.VadeDurumu, VadeYakinligi = k.VadeYakinligi, Aciklama = aciklama,
                 UygunlukDurumu = k.UygunlukDurumu, UygunlukNedeni = k.UygunlukNedeni, CekKimdenGeldi = k.Musteri, AsilBorclu = k.AsilBorclu, Tutar = k.Tutar, ParaBirimi = k.PB, VadeTarihi = k.Vade,
                 VadeAyiVeYili = ButceOrnek.Aylar[k.Vade.Month - 1] + " " + k.Vade.Year, VadeliCekIbrazi = k.IbrazTuru == "Bankaya İbraz" ? "Evet" : "", PortfoyVadeAyiYili = ButceOrnek.Aylar[k.PortfoyGiris.Month - 1] + " " + k.PortfoyGiris.Year,
-                PortfoyeGirisTarihi = k.PortfoyGiris, IbrazTarihi = k.IbrazTarihi, TahsilatBelgeNo = k.TahsilatBelgeNo, IbrazBelgeNo = k.IbrazBelgeNo, PlanlananTedarikci = k.PlanlananTedarikci, BelgeTipi = k.Belge,
+                PortfoyeGirisTarihi = k.PortfoyGiris, IbrazTarihi = k.IbrazTarihi, TahsilatBelgeNo = k.TahsilatBelgeNo, IbrazBelgeNo = k.IbrazBelgeNo, IbrazBelgeYolu = k.IbrazBelgeYolu, IbrazBelgeDosya = k.IbrazBelgeDosya, PlanlananTedarikci = k.PlanlananTedarikci, BelgeTipi = k.Belge,
                 CekIslemTuru = CekAkibetOrnek.IslemKodu(k.IslemTuru), IslemTipiAdi = k.IslemTuru, IbrazTuru = k.IbrazTuru, CekKimeVerildi = k.IbrazYeri, TlKarsiligi = k.Tutar, KullanımDurumu = k.KullanimDurumu,
                 CekinBankasi = k.Banka, GelmeNedeni = "Tahsilat", SirketAdi = k.Sirket, SirlamaTarihi = k.Vade, CekBankaAdi = k.Banka, CekTipi = k.IslemTipi
             };
@@ -127,7 +127,8 @@ namespace WebApplication3.Controllers
 <tr><th class='text-muted'>İşlem Türü</th><td>{Html(k.IslemTuru)}</td></tr>
 <tr><th class='text-muted'>Kasa Nakit Akışı Planı</th><td>{(k.PlanlananTedarikci == "" ? "<span class='text-muted'>plan yok</span>" : Html(k.PlanlananTedarikci) + (k.PlanDocEntry != null ? $" · kayıt #{k.PlanDocEntry}" : "") + (k.PlanlamaTarihi != null ? $" · {k.PlanlamaTarihi:dd.MM.yyyy} {Html(k.Planlayan)}" : ""))}</td></tr>
 <tr><th class='text-muted'>İbraz / Ciro</th><td>{(k.IbrazYeri == "" ? "<span class='text-muted'>henüz çıkış yok</span>" : Html(k.IbrazTuru) + ": " + Html(k.IbrazYeri) + (k.IbrazTarihi != null ? $" · {k.IbrazTarihi:dd.MM.yyyy}" : "") + (k.IbrazBelgeNo != "" ? " · belge " + Html(k.IbrazBelgeNo) : "") + (k.TahsilatBelgeNo != "" ? " · tahsilat " + Html(k.TahsilatBelgeNo) : ""))}</td></tr>
-<tr><th class='text-muted'>Plan ↔ İbraz Kontrolü</th><td>{kontrolRozet}</td></tr></tbody></table>
+<tr><th class='text-muted'>Plan ↔ İbraz Kontrolü</th><td>{kontrolRozet}</td></tr>
+<tr><th class='text-muted'>İmzalı İbraz Belgesi</th><td>{(k.IbrazBelgeImzali ? $"<a href='{Html(k.IbrazBelgeYolu)}' target='_blank'><i class='fas fa-file-signature me-1'></i>{Html(k.IbrazBelgeDosya)}</a> · {k.IbrazBelgeYukleme:dd.MM.yyyy HH:mm} {Html(k.IbrazBelgeYukleyen)}" : (k.IbrazYeri == "" ? "<span class='text-muted'>çıkış öncesi: Takip Paneli › Çek › İbraz Et penceresinden belge PDF'i oluşturulur</span>" : "<span class='text-warning'>yüklenmedi — Konsolide Finansal Takip Paneli › Çek › İmzalı Belgeyi Yükle</span>"))}</td></tr></tbody></table>
 <div class='small text-muted'>Kaynak: Kasa Nakit Akışı (Rapor79) › Çek / Senet sekmesi · Konsolide Finansal Takip Paneli › Çek: plana aykırı çıkışlar.</div></div>";
         }
         /// <summary>Çek kaydı değişim sayacı: Kasa Nakit Akışı'nda plan / ibraz yapılıp bu sekmeye dönülünce sayfa kendini tazeler (Index2.cshtml visibilitychange).</summary>

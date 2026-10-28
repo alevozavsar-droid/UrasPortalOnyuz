@@ -70,6 +70,9 @@ namespace WebApplication3
             {
                 e.MapControllerRoute("default", "{controller=Home}/{action=Index}/{id?}");
             });
+
+            // Örnek veri ısınması: bellek içi örnek listeler dinlemeye başlamadan tek iş parçacığında tohumlanır (eşzamanlı ilk isteklerde iç içe tohumlama kilit sırası çakışması → kilitlenme önlenir; Data/OrnekIsinma.cs)
+            Data.OrnekIsinma.Calistir();
         }
     }
 }

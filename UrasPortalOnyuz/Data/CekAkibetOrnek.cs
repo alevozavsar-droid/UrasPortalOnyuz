@@ -45,6 +45,13 @@ namespace WebApplication3.Data
         public DateTime? IbrazTarihi { get; set; }
         public string IbrazBelgeNo { get; set; } = "";
         public string TahsilatBelgeNo { get; set; } = "";
+        // ---- İMZALI İBRAZ / CİRO BELGESİ (Takip Paneli › Tedarikçiye Çık: belge PDF oluşturulur, imzalatılır, yüklenir; Çek Akıbeti, Çek Ekstre, Kasa Nakit Akışı'nda görünür) ----
+        public string IbrazBelgeDosya { get; set; } = "";     // yüklenen dosya adı
+        public string IbrazBelgeYolu { get; set; } = "";      // indirme adresi (/Rapor123/IbrazBelgeDosya?cek=…)
+        public string IbrazBelgeTip { get; set; } = "";       // içerik tipi
+        public byte[] IbrazBelgeVeri { get; set; }            // dosya içeriği (bellek içi)
+        public DateTime? IbrazBelgeYukleme { get; set; } public string IbrazBelgeYukleyen { get; set; } = "";
+        public bool IbrazBelgeImzali => !string.IsNullOrEmpty(IbrazBelgeYolu);
         // --- grup içi dolaşım senaryosu (Kasa Nakit Akışı › Çek / Senet › Dolaşım Planı): belge grup şirketleri arasında ciro edilerek grup içi bakiyeleri kapatır, sonunda tedarikçiye ciro ya da bankaya ibraz
         public string KaynakSirket { get; set; } = "";       // belgenin ilk portföy şirketi (dolaşımda Sirket = güncel sahip)
         public List<CekDolasimAdim> Dolasim { get; set; } = new List<CekDolasimAdim>();
@@ -335,6 +342,25 @@ namespace WebApplication3.Data
                 _gunluk.Add(new CekAkibetGunluk { Tarih = DateTime.Now, Kullanici = kullanici ?? "", Sirket = k.Sirket, No = k.No, Islem = "Plan Kaldırıldı", Aciklama = $"{k.PlanlananTedarikci} planı kaldırıldı; belge portföye döndü" });
                 k.IslemTuru = "Portföyde"; k.PlanlananTedarikci = ""; k.PlanDocEntry = null; k.PlanSirket = ""; k.PlanlamaTarihi = null; k.Planlayan = "";
                 return (true, $"{k.No} planı kaldırıldı; portföye döndü.");
+            }
+        }
+        /// <summary>İbraz / ciro belgesi numarası: belge çıkmışsa mevcut no; çıkmamışsa Kasa Nakit Akışı ibrazında üretilecek numara (CRO / İBZ-yyAA-xxxx, plan satırına göre) — PDF ön izlemede aynı numara.</summary>
+        public static string IbrazBelgeNoOner(CekKaydi k, bool bankaya = false)
+        {
+            if (k == null) return ""; if (!string.IsNullOrEmpty(k.IbrazBelgeNo)) return k.IbrazBelgeNo;
+            int sira = (k.PlanDocEntry ?? k.DocEntry) % 9000 + 1000; return $"{(bankaya ? "İBZ" : "CRO")}-{DateTime.Today:yyMM}-{sira}";
+        }
+        /// <summary>İmzalı ibraz / ciro belgesi (tedarikçi ya da banka imzalı PDF / görsel) belgeye bağlanır; dosya bellek içinde tutulur, /Rapor123/IbrazBelgeDosya ile açılır. Günlüğe yazılır.</summary>
+        public static (bool ok, string mesaj) IbrazBelgesiBagla(int cekDocEntry, string dosyaAdi, string icerikTipi, byte[] veri, string kullanici, string not = null)
+        {
+            Tohumla(); if (veri != null && veri.LongLength > 8_000_000) return (false, "Dosya 8 MB'ı aşamaz.");
+            lock (Kilit)
+            {
+                var k = _kayitlar.FirstOrDefault(x => x.DocEntry == cekDocEntry); if (k == null) return (false, "Belge bulunamadı.");
+                k.IbrazBelgeDosya = string.IsNullOrWhiteSpace(dosyaAdi) ? $"ibraz_belgesi_{k.No}.pdf" : dosyaAdi.Trim(); k.IbrazBelgeTip = icerikTipi ?? ""; k.IbrazBelgeVeri = veri; k.IbrazBelgeYukleme = DateTime.Now; k.IbrazBelgeYukleyen = kullanici ?? "";
+                k.IbrazBelgeYolu = $"/Rapor123/IbrazBelgeDosya?cek={k.DocEntry}";
+                _gunluk.Add(new CekAkibetGunluk { Tarih = DateTime.Now, Kullanici = kullanici ?? "", Sirket = k.Sirket, No = k.No, Islem = "İmzalı İbraz Belgesi Yüklendi", Aciklama = $"{k.IbrazBelgeDosya}" + (veri != null ? $" ({Math.Max(1, veri.LongLength / 1024)} KB)" : "") + (string.IsNullOrEmpty(k.IbrazBelgeNo) ? "" : $" · belge {k.IbrazBelgeNo}") + (k.IbrazYeri != "" ? $" · {k.IbrazTuru} → {k.IbrazYeri}" : "") + (string.IsNullOrWhiteSpace(not) ? "" : " · " + not.Trim()) });
+                return (true, $"{k.No}: imzalı ibraz belgesi yüklendi ({k.IbrazBelgeDosya}); Çek Akıbeti, Çek Ekstre ve Kasa Nakit Akışı'nda görünür.");
             }
         }
         /// <summary>

@@ -165,7 +165,7 @@ namespace WebApplication3.Data
             var idler = (m.U_CekDocEntryler ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(s => int.TryParse(s.Trim(), out var n) ? n : 0).Where(n => n > 0).ToList();
             var kayitlar = idler.Count == 0 ? new List<CekKaydi>() : CekAkibetOrnek.BulHepsi(idler);
             m.Belgeler = idler.Select(id => kayitlar.FirstOrDefault(k => k.DocEntry == id)).Where(k => k != null)
-                .Select(k => new NakitAkisBelge { CekDocEntry = k.DocEntry, No = k.No, Belge = k.Belge, Banka = k.Banka, AsilBorclu = k.AsilBorclu, KimdenGeldi = k.Musteri, Vade = k.Vade, Tutar = k.Tutar, PB = k.PB, Akibet = k.IslemTuru, IbrazYeri = k.IbrazYeri, Kontrol = k.Kontrol, PlanlananTedarikci = k.PlanlananTedarikci }).ToList();
+                .Select(k => new NakitAkisBelge { CekDocEntry = k.DocEntry, No = k.No, Belge = k.Belge, Banka = k.Banka, AsilBorclu = k.AsilBorclu, KimdenGeldi = k.Musteri, Vade = k.Vade, Tutar = k.Tutar, PB = k.PB, Akibet = k.IslemTuru, IbrazYeri = k.IbrazYeri, Kontrol = k.Kontrol, PlanlananTedarikci = k.PlanlananTedarikci, IbrazBelgeNo = k.IbrazBelgeNo, IbrazBelgeYolu = k.IbrazBelgeYolu }).ToList();
             m.U_CekNolar = string.Join(", ", m.Belgeler.Select(b => b.No));
         }
 
