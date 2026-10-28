@@ -103,6 +103,8 @@ namespace WebApplication3.Data
             ("SirketDokuman", "Banka", "fas fa-building-columns", "Banka ve Finans Belgeleri", null),
             ("SirketDokuman", "Marka", "fas fa-trademark", "Marka, Patent ve Tescil Belgeleri", null),
             ("SirketDokuman", "Varlik", "fas fa-warehouse", "Araç, Taşınmaz ve Demirbaş Belgeleri", null),
+            ("Sigorta", "Index", "fas fa-shield-halved", "Sigorta ve Kasko Poliçe Takibi", null),
+            ("AracBakim", "Index", "fas fa-car-wrench", "Araç Bakım ve Onarım Takibi", null),
             ("Rapor108", "Index", "fas-cart-plus", "Teslimat", null),
             ("Rapor109", "Index", "fas fa-file-invoice-dollar", "Satış Faturası", null),
             ("Rapor110", "Index", "fas fa-undo text-danger", "İade İrsaliyesi", null),
