@@ -21,15 +21,17 @@
   function mesaj(tip, m) { const s = $('#naSonuc'); s.className = 'alert py-2 px-3 mb-2 alert-' + tip; s.innerHTML = m; s.style.display = 'block'; clearTimeout(mesaj.z); mesaj.z = setTimeout(() => s.style.display = 'none', 14000); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   async function post(url, veri) { const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); return r.json(); }
   async function indir(url, veri, ad) { const r = veri ? await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }) : await fetch(url); if (!r.ok) { mesaj('danger', 'Dosya üretilemedi.'); return; } const b = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = ad; a.click(); }
-  let V = null, S = null, FAT = [], BILGI = null, SAT = [], MOD = 'Otomatik', ON = null, SON = null, onZ = null, siraSayac = 0;
+  let V = null, FAT = [], BILGI = null, SAT = [], MOD = 'Otomatik', ON = null, SON = null, onZ = null, siraSayac = 0;
   const cari = () => V.cariler.find(c => c.kod === $('#thCari').value);
   function sekme(p) { $$('#thSekmeler button').forEach(b => b.classList.toggle('aktif', b.dataset.p === p)); $$('.na-panel').forEach(x => x.classList.toggle('aktif', x.dataset.p === p)); }
 
-  // ---- cari listesi (ortak süzgeç) ve özet
+  // ---- cari listesi (kod / ad araması) ve özet
   function cariDoldur() {
-    const sel = $('#thCari'), eski = sel.value; const l = V.cariler.filter(c => S.uyuyor(c.suzgec));
-    sel.innerHTML = '<option value="">Seçiniz…</option>' + l.map(c => `<option value="${esc(c.kod)}">${esc(c.kod)} · ${esc(c.kisaAd)}${c.acikAdet ? ` (${c.acikAdet} açık fatura · ${esc(tl(c.acikTl))})` : ''}</option>`).join('');
-    sel.value = l.some(c => c.kod === eski) ? eski : (l.length === 1 ? l[0].kod : '');
+    const q = ($('#thCariAra').value || '').toLocaleLowerCase('tr-TR'), sel = $('#thCari'), eski = sel.value;
+    const l = V.cariler.filter(c => !q || [c.kod, c.kisaAd, c.resmiUnvan].join(' ').toLocaleLowerCase('tr-TR').includes(q));
+    sel.innerHTML = '<option value="">Cari seçiniz…</option>' + l.map(c => `<option value="${esc(c.kod)}">${esc(c.kod)} · ${esc(c.kisaAd)}${c.acikAdet ? ` (${c.acikAdet} açık fatura · ${esc(tl(c.acikTl))})` : ' (açık fatura yok)'}</option>`).join('');
+    sel.value = l.some(c => c.kod === eski) ? eski : (q && l.length === 1 ? l[0].kod : '');
+    $('#thCariSayi').textContent = `${l.length} / ${V.cariler.length} müşteri`;
     if (sel.value !== eski) cariSec();
   }
   function cariOzet() {
@@ -131,7 +133,7 @@
     const i = V.tahsilatlar.findIndex(t => t.no === hedef); if (i >= 0) V.tahsilatlar[i] = j.tahsilat; if (SON && SON.no === hedef) SON = j.tahsilat; V.faturalar.unshift(j.fatura);
     mesaj('success', `<i class="fas fa-file-invoice me-1"></i>${esc(j.message)}`); cizListe(); cizFaturaListe(); faturaOnizle(j.fatura.no); ozet(); await veriYenile(); if (no) detay(no);
   }
-  async function veriYenile() { const j = await (await fetch('/Tahsilat/Veri')).json(); V.cariler = j.cariler; V.tahsilatlar = j.tahsilatlar; V.faturalar = j.faturalar; S.kartlar(V.cariler.map(c => c.suzgec)); cariDoldur(); await faturaYukle(); cariOzet(); cizFaturalar(); cizListe(); cizFaturaListe(); onizle(); }
+  async function veriYenile() { const j = await (await fetch('/Tahsilat/Veri')).json(); V.cariler = j.cariler; V.tahsilatlar = j.tahsilatlar; V.faturalar = j.faturalar; cariDoldur(); await faturaYukle(); cariOzet(); cizFaturalar(); cizListe(); cizFaturaListe(); onizle(); }
   function yeni() { SON = null; ON = null; SAT = []; $('#thAciklama').value = ''; $('#thTarih').value = bugunIso; MOD = 'Otomatik'; $$('#thMod button').forEach(b => b.classList.toggle('aktif', b.dataset.mod === MOD)); FAT.forEach(f => { f.sec = true; f.sinir = 0; }); satirCiz(); cizFaturalar(); ozet(); sekme('yeni'); }
 
   // ---- listeler
@@ -172,9 +174,8 @@
   function baslat() {
     $('#thKurlar').innerHTML = Object.keys(V.kurlar).filter(p => p !== 'TL').map(p => `<span>${p} ${Number(V.kurlar[p]).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>`).join('') + `<span class="text-muted" style="background:none;border:none">kur ${esc(V.kurTarihi)} · vade farkı %${Number(V.vadeFarkiAylikOran).toLocaleString('tr-TR')} / ay · KDV %${Number(V.kdvOran)}</span>`;
     $('#thTarih').value = bugunIso;
-    S = CariSuzgec.kur($('#thSuzgec'), V.secenekler, { tip: 'Müşteri', tipSabit: true, onChange: cariDoldur }); S.kartlar(V.cariler.map(c => c.suzgec)); S.urlOn(new URLSearchParams(location.search));
     cariDoldur(); rehber(); ozet(); cizListe(); cizFaturaListe(); satirCiz();
-    $('#thSuzgecTemizle').addEventListener('click', () => S.temizle());
+    $('#thCariAra').addEventListener('input', cariDoldur);
     $('#thCari').addEventListener('change', cariSec);
     $('#thPb').addEventListener('change', async () => { const pb = $('#thPb').value; for (const s of SAT) { s.pb = pb; s.kurElle = false; if (pb === 'TL') s.kur = 1; else await kurOto(s); } FAT.forEach(f => { f.sec = true; f.sinir = 0; }); satirCiz(); onizle(); });
     $('#thTarih').addEventListener('change', onizle); $('#thTip').addEventListener('change', onizle);

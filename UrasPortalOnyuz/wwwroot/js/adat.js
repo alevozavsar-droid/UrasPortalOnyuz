@@ -21,13 +21,14 @@
   function mesaj(tip, m) { const s = $('#naSonuc'); s.className = 'alert py-2 px-3 mb-2 alert-' + tip; s.innerHTML = m; s.style.display = 'block'; clearTimeout(mesaj.z); mesaj.z = setTimeout(() => s.style.display = 'none', 14000); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   async function post(url, veri) { const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); return r.json(); }
   async function indir(url, veri, ad) { const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); if (!r.ok) { mesaj('danger', 'Dosya üretilemedi.'); return; } const b = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = ad; a.click(); }
-  let V = null, S = null, D = null, FAT = [], ODE = [], SIM = { satirlar: [], aylik: [], kpi: {} };
+  let V = null, D = null, FAT = [], ODE = [], SIM = { satirlar: [], aylik: [], kpi: {} };
   const cari = () => V.cariler.find(c => c.kod === $('#adCari').value);
 
   function cariDoldur() {
-    const sel = $('#adCari'), eski = sel.value; const l = V.cariler.filter(c => S.uyuyor(c.suzgec));
-    sel.innerHTML = '<option value="">Seçiniz…</option>' + l.map(c => `<option value="${esc(c.kod)}">${esc(c.kod)} · ${esc(c.kisaAd)} (${esc(c.kartTipi)}${c.acikAdet ? ` · ${c.acikAdet} açık fatura · ${esc(tl(c.acikTl))}` : ''}${c.taslak ? ' · taslak' : ''})</option>`).join('');
-    sel.value = l.some(c => c.kod === eski) ? eski : (l.length === 1 ? l[0].kod : ''); if (sel.value !== eski) cariSec();
+    const q = ($('#adCariAra').value || '').toLocaleLowerCase('tr-TR'), tip = $('#adTip').value, sel = $('#adCari'), eski = sel.value;
+    const l = V.cariler.filter(c => (!tip || c.kartTipi === tip) && (!q || [c.kod, c.kisaAd, c.resmiUnvan].join(' ').toLocaleLowerCase('tr-TR').includes(q)));
+    sel.innerHTML = '<option value="">Cari seçiniz…</option>' + l.map(c => `<option value="${esc(c.kod)}">${esc(c.kod)} · ${esc(c.kisaAd)} (${esc(c.kartTipi)}${c.acikAdet ? ` · ${c.acikAdet} açık fatura · ${esc(tl(c.acikTl))}` : ' · açık fatura yok'}${c.taslak ? ' · taslak var' : ''})</option>`).join('');
+    sel.value = l.some(c => c.kod === eski) ? eski : (q && l.length === 1 ? l[0].kod : ''); $('#adCariSayi').textContent = `${l.length} / ${V.cariler.length} cari`; if (sel.value !== eski) cariSec();
   }
   async function cariSec() {
     const c = cari(); D = null; FAT = []; ODE = []; if (!c) { $('#adGovde').style.display = 'none'; $('#adCariOzet').innerHTML = '<span class="text-muted">Cari seçince bakiye, son ödeme / yükleme, gecikme ve açık faturalar burada görünür.</span>'; $('#adCariIslem').innerHTML = ''; return; }
@@ -100,8 +101,8 @@
       simulasyon: SIM.satirlar.map(s => [s.no, s.odeme ? `${s.odeme.tip} ${s.odeme.tip === 'Nakit' ? '' : s.odeme.no}`.trim() : '-', s.odemeTarihi ? trh(yerelIso(s.odemeTarihi)) : '-', s.vade ? trh(yerelIso(s.vade)) : '-', String(s.gun), n2(s.odenen), s.kalan == null ? '-' : n2(s.kalan), n2(s.vf)]), simToplam: ['Toplam', '', '', '', '', n2(SIM.satirlar.reduce((a, s) => a + s.odenen, 0)), '', n2(k.vf)] };
   }
   function baslat() {
-    S = CariSuzgec.kur($('#adSuzgec'), V.secenekler, { tipler: ['Müşteri', 'Tedarikçi'], tipIlk: 'Müşteri + Tedarikçi', onChange: cariDoldur }); S.kartlar(V.cariler.map(c => c.suzgec)); S.urlOn(new URLSearchParams(location.search));
-    cariDoldur(); $('#adSuzgecTemizle').addEventListener('click', () => S.temizle()); $('#adCari').addEventListener('change', cariSec);
+    const q0 = new URLSearchParams(location.search); if (q0.get('tip')) $('#adTip').value = q0.get('tip');
+    cariDoldur(); $('#adCariAra').addEventListener('input', cariDoldur); $('#adTip').addEventListener('change', cariDoldur); $('#adCari').addEventListener('change', cariSec);
     $('#adOran').addEventListener('input', hesapla); $('#adDinamik').addEventListener('change', () => { cizFaturalar(); hesapla(); });
     $('#adFatHepsi').addEventListener('click', () => { FAT.forEach(f => f.sec = true); cizFaturalar(); hesapla(); }); $('#adFatHicbiri').addEventListener('click', () => { FAT.forEach(f => f.sec = false); cizFaturalar(); hesapla(); }); $('#adFatMaster').addEventListener('change', e => { FAT.forEach(f => f.sec = e.target.checked); cizFaturalar(); hesapla(); });
     $$('[data-ekle]').forEach(b => b.addEventListener('click', () => odemeEkle(b.dataset.ekle))); $('#adTaslakKaydet').addEventListener('click', taslakKaydet);
