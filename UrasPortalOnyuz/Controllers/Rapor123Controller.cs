@@ -345,6 +345,24 @@ namespace WebApplication3.Controllers
             FinekraOrnek.GunlukEkle(s.Ad, $"Nakit Akış #{m.DocEntry}", i.Odendi ? "Ödeme Eklendi (Ödendi)" : "Ödeme Eklendi", $"{m.U_Kurum} · {yontem} · {m.U_TutarTL:N2} ₺ · {string.Join(" · ", ek)}", Kullanici);
             return Json(new { success = true, message = $"Kasa Nakit Akışı #{m.DocEntry} açıldı: {m.U_Kurum} · {yontem} · {(m.U_TutarTL ?? 0).ToString("N2", Tr)} ₺ · {string.Join(" · ", ek)}.", satir = new { docEntry = m.DocEntry, dbName = s.DbName, link = OdemeLink(m) } });
         }
+        /// <summary>
+        /// "Ödeme Ekle" penceresi › Portföy ve Planlı Çek / Senet: tüm grup şirketlerinin (ya da seçilen şirketin) portföydeki çek / senetleri — kimden geldi, banka, vade (kalan gün), tutar, kullanım durumu,
+        /// Çek Akıbeti işlem türü (Portföyde / Planlandı …), planlanan tedarikçi ve Kasa Nakit Akışı plan satırı (durum, talimat, onay, bağlantı), dolaşım özeti. Satırdan "Bu Belgeyle Öde", "Planla", "İbraz / Ciro".
+        /// </summary>
+        [HttpGet("PortfoyCekler")]
+        public IActionResult PortfoyCekler(string sirket)
+        {
+            if (string.Equals(sirket, "tumu", StringComparison.OrdinalIgnoreCase)) sirket = null; var bugun = DateTime.Today;
+            var l = CekAkibetOrnek.Kayitlar.Where(k => k.Portfoyde && (string.IsNullOrEmpty(sirket) || k.DbName == sirket)).OrderBy(k => k.Vade).ThenBy(k => k.No).Select(k =>
+            {
+                var plan = k.PlanDocEntry != null ? NakitAkisOrnek.Bul(k.PlanDocEntry.Value) : null;
+                return new { docEntry = k.DocEntry, sirket = k.Sirket, sahip = k.Sirket, dbName = k.DbName, no = k.No, belge = k.Belge, islemTipi = k.IslemTipi, musteri = k.Musteri, asilBorclu = k.AsilBorclu, banka = k.Banka, sube = k.Sube, vade = k.Vade.ToString("yyyy-MM-dd"), gun = (k.Vade.Date - bugun).Days, tutar = k.Tutar, pb = k.PB, portfoyGiris = k.PortfoyGiris.ToString("yyyy-MM-dd"),
+                    islemTuru = k.IslemTuru, durum = k.IslemTuru, kullanimDurumu = k.KullanimDurumu, secilebilir = k.Secilebilir, uygunlukNedeni = k.UygunlukNedeni, portfoyde = true, planli = k.IslemTuru == "Planlandı" || k.PlanDocEntry != null,
+                    planlananTedarikci = k.PlanlananTedarikci ?? "", planlamaTarihi = k.PlanlamaTarihi?.ToString("yyyy-MM-dd"), planlayan = k.Planlayan ?? "", planDocEntry = k.PlanDocEntry, planDb = plan?.U_KaynakFirma, planSirket = k.PlanSirket ?? "", planTarih = plan?.U_PlanlananTarih?.ToString("yyyy-MM-dd"), planGun = plan?.U_PlanlananTarih != null ? (plan.U_PlanlananTarih.Value.Date - bugun).Days : (int?)null,
+                    planDurum = plan?.U_Durum ?? "", planTalimat = plan?.U_TalimatNo ?? "", planOnay = plan?.U_OnayDurumu ?? "", cikisTalebi = plan?.U_CikisTalebi ?? "", planBelge = plan == null ? "" : $"{plan.U_BagliBelgeTipi} {plan.U_FaturaSiparisNo}".Trim(), planUrun = plan?.U_UrunHizmet ?? "", planLink = plan == null ? null : OdemeLink(plan), dolasim = k.DolasimOzeti, dolasimAdim = k.Dolasim.Count, dolasimGerceklesen = k.Dolasim.Count(a => a.Durum == "Gerçekleşti") };
+            }).ToList();
+            return Json(new { success = true, bugun = bugun.ToString("yyyy-MM-dd"), data = l, ozet = new { portfoy = l.Count, portfoyTutar = l.Sum(x => x.tutar), planli = l.Count(x => x.planli), planliTutar = l.Where(x => x.planli).Sum(x => x.tutar), plansiz = l.Count(x => !x.planli && x.secilebilir), plansizTutar = l.Where(x => !x.planli && x.secilebilir).Sum(x => x.tutar), vadesiGecmis = l.Count(x => x.gun < 0), buHafta = l.Count(x => x.gun >= 0 && x.gun <= 7), buHaftaTutar = l.Where(x => x.gun >= 0 && x.gun <= 7).Sum(x => x.tutar), uygunDegil = l.Count(x => !x.secilebilir) } });
+        }
         public class CekIstek { public int CekDocEntry { get; set; } public string Tedarikci { get; set; } public string PlanlananTarih { get; set; } public string BelgeTipi { get; set; } public string BelgeNo { get; set; } public string UrunHizmet { get; set; } public string Tur { get; set; } public string IbrazYeri { get; set; } public string Not { get; set; } }
         /// <summary>Çek sekmesi › "Nakit Akışa Gönder": portföydeki belge için Kasa Nakit Akışı'nda çek / senet satırı açılır ve belge planlanır.</summary>
         [HttpPost("CekNakitAkisaGonder")]

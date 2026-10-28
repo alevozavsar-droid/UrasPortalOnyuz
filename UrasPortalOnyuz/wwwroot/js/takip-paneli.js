@@ -660,7 +660,7 @@
     secOlustur($('#odBelgeTipi'), S.belgeTipleri || ['Fatura', 'Cari Bakiye'], on.belgeTipi || 'Cari Bakiye'); secOlustur($('#odBanka'), S.bankaHesaplari || [], on.bankaHesabi); secOlustur($('#odKasa'), S.kasalar || [], on.kasa);
     $('#odCariler').innerHTML = [...new Set([...(V.cariler || []).map(c => c.ad), ...(S.tedarikciler || [])])].map(x => `<option value="${esc(x)}">`).join('');
     $('#odKurum').value = on.kurum || ''; $('#odTutar').value = on.tutar != null ? on.tutar : ''; $('#odTarih').value = on.tarih || bugun(); $('#odBelgeNo').value = on.belgeNo || ''; $('#odUrun').value = on.urun || ''; $('#odDekont').value = on.dekont || ''; $('#odOdendi').checked = on.odendi !== false;
-    $('#odKaynak').textContent = on.baslik || (F.sirket ? sirketAdi(F.sirket) : 'Konsolide'); odYontemDegisti(); modalAc($('#tpOdemeModal'));
+    $('#odKaynak').textContent = on.baslik || (F.sirket ? sirketAdi(F.sirket) : 'Konsolide'); odYontemDegisti(); odSekme(on.sekme || 'form', on.durum); PF.yuklendi = false; portfoyYukle().then(() => { if (!$('#odPanelPortfoy').classList.contains('d-none')) portfoyCiz(); }); modalAc($('#tpOdemeModal'));
   }
   async function odYontemDegisti() {
     const y = $('#odYontem').value, cek = y === 'Çek' || y === 'Senet'; $('#odBankaKap').classList.toggle('d-none', y !== 'Havale / EFT'); $('#odKasaKap').classList.toggle('d-none', y !== 'Nakit'); $('#odCekKap').classList.toggle('d-none', !cek);
@@ -675,6 +675,45 @@
     const d = await post('/Rapor123/OdemeEkle', { DbName: $('#odSirket').value, Kurum: $('#odKurum').value.trim(), Yontem: y, Tutar: +$('#odTutar').value, PB: $('#odPB').value, PlanlananTarih: $('#odTarih').value, BelgeTipi: $('#odBelgeTipi').value, BelgeNo: $('#odBelgeNo').value, UrunHizmet: $('#odUrun').value, Odendi: $('#odOdendi').checked, DekontNo: $('#odDekont').value, Kasa: $('#odKasa').value, BankaHesabi: $('#odBanka').value, CekDocEntry: cek, Not: OD.kaynak ? 'Kaynak: ' + OD.kaynak : '', KaynakKey: OD.kaynakKey || '' }).catch(() => ({ success: false, message: 'Ağ hatası.' }));
     if (!d.success) { mesaj('danger', esc(d.message)); return; }
     modalKapat($('#tpOdemeModal')); mesaj('success', '<i class="fas fa-paper-plane me-1"></i>' + esc(d.message) + (d.satir ? ` <a href="${esc(d.satir.link)}" target="_blank" class="ms-1"><i class="fas fa-arrow-up-right-from-square"></i> Kasa Nakit Akışı'nda aç</a>` : '')); await yukle(true); if (acik) drawerKapat();
+  });
+  // ---------- Ödeme Ekle › "Portföy Çek / Senet" ve "Planlı" sekmeleri: tüm şirketlerin portföy belgeleri aranır (PortfoyCekler); satırdan Bu Belgeyle Öde · Planla · İbraz / Ciro
+  let PF = { veri: null, yuklendi: false };
+  function odSekme(p, durum) {
+    $$('#odSekmeler button').forEach(b => b.classList.toggle('aktif', b.dataset.p === p && (p !== 'portfoy' || (b.dataset.durum || '') === (durum || ''))));
+    $('#odPanelForm').classList.toggle('d-none', p !== 'form'); $('#odPanelPortfoy').classList.toggle('d-none', p !== 'portfoy'); $('#odKaydet').classList.toggle('d-none', p !== 'form');
+    if (p === 'portfoy') { if (durum !== undefined) $('#pfDurum').value = durum; portfoyYukle().then(portfoyCiz); }
+  }
+  async function portfoyYukle(zorla) {
+    if (PF.yuklendi && !zorla) return; const d = await getJ('/Rapor123/PortfoyCekler?sirket=tumu').catch(() => null); PF.veri = d && d.success ? d : { data: [], ozet: {} }; PF.yuklendi = true;
+    $('#odNPortfoy').textContent = PF.veri.ozet.portfoy ?? 0; $('#odNPlanli').textContent = PF.veri.ozet.planli ?? 0;
+    const s = $('#pfSirket'); if (!s.options.length) s.innerHTML = '<option value="">Tüm Şirketler</option>' + V.sirketler.map(x => `<option value="${esc(x.dbName)}">${esc(x.ad)}</option>`).join('');
+  }
+  function pfListe() {
+    const q = ($('#pfAra').value || '').toLocaleLowerCase('tr-TR'), s = $('#pfSirket').value, b = $('#pfBelge').value, d = $('#pfDurum').value, v = $('#pfVade').value;
+    return ((PF.veri || {}).data || []).filter(c => (!s || c.dbName === s) && (!b || c.belge === b) && (!d || (d === 'plansiz' ? (!c.planli && c.secilebilir) : d === 'planli' ? c.planli : !c.secilebilir)) && (!v || (v === 'gecmis' ? c.gun < 0 : v === 'hafta' ? (c.gun >= 0 && c.gun <= 7) : c.gun <= 30))
+      && (!q || [c.no, c.musteri, c.asilBorclu, c.banka, c.planlananTedarikci, c.sirket, c.planTalimat, c.planBelge].join(' ').toLocaleLowerCase('tr-TR').includes(q)));
+  }
+  function portfoyCiz() {
+    const l = pfListe(); const o = (PF.veri || {}).ozet || {};
+    $('#pfOzet').innerHTML = `portföy <b>${o.portfoy ?? 0}</b> belge · ${para(o.portfoyTutar || 0)} ₺ · planlı <b>${o.planli ?? 0}</b> (${para(o.planliTutar || 0)} ₺) · plansız kullanılabilir <b>${o.plansiz ?? 0}</b> · bu hafta vadesi gelen <b>${o.buHafta ?? 0}</b> · vadesi geçmiş <b>${o.vadesiGecmis ?? 0}</b>`;
+    $('#pfTablo tbody').innerHTML = l.map(c => `<tr data-pf="${c.docEntry}"><td><b>${esc(c.no)}</b><br><small class="text-muted">${esc(c.belge)} · ${esc(c.islemTipi)}</small></td><td><small><b>${esc(c.sirket)}</b><br>giriş ${tarih(c.portfoyGiris)}</small></td><td><small>${esc(c.musteri || '—')}${c.asilBorclu && c.asilBorclu !== c.musteri ? ` <span class="text-muted">(keşideci ${esc(c.asilBorclu)})</span>` : ''}<br>${esc(c.banka || '—')}${c.sube ? ' · ' + esc(c.sube) : ''}</small></td><td class="${c.gun < 0 ? 'text-danger fw-bold' : (c.gun <= 7 ? 'text-warning fw-bold' : '')}">${tarih(c.vade)}<br><small>${c.gun < 0 ? -c.gun + ' gün geçti' : c.gun === 0 ? 'bugün' : c.gun + ' gün kaldı'}</small></td><td class="e"><b>${para(c.tutar)} ${esc(c.pb === 'TRY' ? '₺' : c.pb)}</b></td><td><span class="tp-pill ${c.planli ? 'bg-primary text-white' : c.secilebilir ? 'bg-success text-white' : 'bg-warning'}">${esc(c.islemTuru)}</span><br><small class="text-muted">${esc(c.kullanimDurumu || '')}${c.uygunlukNedeni ? ' · ' + esc(c.uygunlukNedeni) : ''}</small></td><td><small>${c.planli ? `<b>${esc(c.planlananTedarikci || '—')}</b>${c.planTarih ? ` · ${tarih(c.planTarih)}${c.planGun != null ? ` (${c.planGun < 0 ? -c.planGun + ' gün gecikti' : c.planGun + ' gün kaldı'})` : ''}` : ''}<br>${c.planDocEntry ? `Nakit Akış <a href="${esc(c.planLink || '#')}" target="_blank" rel="noopener">#${c.planDocEntry}</a> · ${esc(c.planDurum || '')}${c.planTalimat ? ' · ' + esc(c.planTalimat) : ''}${c.planOnay ? ' · ' + esc(c.planOnay) : ''}${c.cikisTalebi ? ' · çıkış talebi: ' + esc(c.cikisTalebi) : ''}` : 'Çek Akıbeti: Planlandı (nakit akış satırı yok)'}${c.dolasim ? `<br>dolaşım ${esc(c.dolasim)} (${c.dolasimGerceklesen}/${c.dolasimAdim})` : ''}` : '<span class="text-muted">plansız · portföyde</span>'}</small></td><td class="text-nowrap">${!c.planli && c.secilebilir ? `<button type="button" class="btn btn-primary btn-sm py-0 pf-ode" style="font-size:.64rem" title="Ödeme formuna bu belgeyi seç"><i class="fas fa-hand-pointer me-1"></i>Bu Belgeyle Öde</button> <button type="button" class="btn btn-outline-primary btn-sm py-0 pf-planla" style="font-size:.64rem" title="Kasa Nakit Akışı'na planla"><i class="fas fa-paper-plane me-1"></i>Planla</button> ` : ''}${c.secilebilir || c.planli ? `<button type="button" class="btn btn-success btn-sm py-0 pf-cik" style="font-size:.64rem" title="${c.planli ? 'Plan satırı üzerinden tedarikçiye ciro / bankaya ibraz' : 'Plansız çıkış: GMY onayına düşer'}"><i class="fas fa-share me-1"></i>İbraz / Ciro</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="8" class="na-bos">Süzgece uyan portföy belgesi yok.</td></tr>';
+    $('#pfTablo tfoot').innerHTML = l.length ? `<tr><td colspan="4"><b>${l.length} belge</b> · ${l.filter(c => c.planli).length} planlı · ${l.filter(c => !c.planli && c.secilebilir).length} plansız kullanılabilir</td><td class="e"><b>${para(l.reduce((s, c) => s + c.tutar, 0))} ₺</b></td><td colspan="3"></td></tr>` : '';
+  }
+  const pfBul = el => { const tr = el.closest('tr[data-pf]'); const c = ((PF.veri || {}).data || []).find(x => x.docEntry === +tr.dataset.pf); return c ? { ...c, durum: c.islemTuru } : null; };
+  async function pfOde(c) {
+    $('#odSirket').value = c.dbName; $('#odYontem').value = c.belge; await odYontemDegisti(); const s = $('#odCek'); s.value = String(c.docEntry);
+    if (s.value !== String(c.docEntry)) { s.insertAdjacentHTML('beforeend', `<option value="${c.docEntry}" data-tutar="${c.tutar}" selected>${esc(c.no)} · ${esc(c.musteri)} · ${esc(c.banka)} · vade ${tarih(c.vade)} · ${para(c.tutar)} ₺</option>`); s.value = String(c.docEntry); }
+    $('#odTutar').value = c.tutar; $('#odPB').value = 'TRY'; $('#odTarih').value = c.vade; if (c.planlananTedarikci && !$('#odKurum').value.trim()) $('#odKurum').value = c.planlananTedarikci;
+    $('#odCekBilgi').innerHTML = `<i class="fas fa-check text-success me-1"></i><b>${esc(c.no)}</b> · ${esc(c.belge)} · ${esc(c.musteri)} · ${esc(c.banka)} · vade ${tarih(c.vade)} · ${para(c.tutar)} ₺ · ${esc(c.sirket)} portföyü. Kaydedince belge Kasa Nakit Akışı'na planlanır (Çek Akıbeti: Planlandı); çıkış talimatla ya da "İbraz / Ciro" ile.`;
+    odSekme('form'); $('#odKurum').focus();
+  }
+  $('#odSekmeler').addEventListener('click', e => { const b = e.target.closest('button[data-p]'); if (!b) return; odSekme(b.dataset.p, b.dataset.p === 'portfoy' ? (b.dataset.durum || '') : undefined); });
+  ['#pfAra', '#pfSirket', '#pfBelge', '#pfDurum', '#pfVade'].forEach(s => { $(s).addEventListener('input', portfoyCiz); $(s).addEventListener('change', portfoyCiz); });
+  $('#odPortfoyAc').addEventListener('click', () => { $('#pfSirket').value = $('#odSirket').value; $('#pfBelge').value = $('#odYontem').value === 'Senet' ? 'Senet' : 'Çek'; $('#pfAra').value = ''; odSekme('portfoy', 'plansiz'); });
+  $('#pfTablo').addEventListener('click', e => {
+    const b = e.target.closest('.pf-ode,.pf-planla,.pf-cik'); if (!b) return; const c = pfBul(b); if (!c) return;
+    if (b.classList.contains('pf-ode')) { pfOde(c); return; }
+    modalKapat($('#tpOdemeModal')); setTimeout(() => { if (b.classList.contains('pf-planla')) cekGonderAc(c); else cekCikisAc(c); }, 380);
   });
   kok.addEventListener('click', e => {
     const b = e.target.closest('#tpOdemeEkle,.tp-odeme-ekle,.tp-kasa-gonder'); if (!b) return; e.stopPropagation();
