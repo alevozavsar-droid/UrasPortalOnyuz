@@ -378,8 +378,10 @@ namespace WebApplication3.Data
                     G("personel-maliyet-bordro", "Personel Maliyet ve Bordro", R("Personel Maliyet Raporu", "PersonelMaliyet", "Index"), R("Personel Maliyet Yansıtması", "PersonelYansitma", "Index"), R("Personel Maliyet Tablosu"))),   // Yansıtma: SGK işvereni ≠ fiili görev yeri olan personelin maliyeti GDR.13 ↔ YNS.13 ile iki şirkete kaydedilir   // Personel Maliyet Raporu: "PERSONEL 19.06 GÜNCEL" tablosu + Personel Cari Kartı (Yönetim › Özel Raporlar'da da aynı ekran)
                   U("idari-isler", "İdari İşler",
                     G("danisma-giris-cikis", "Danışma ve Giriş-Çıkış", R("Danışma Giriş-Çıkış Defteri")),
-                    // Araç Bakım ve Onarım Takibi ile Sigorta / Kasko Poliçe Takibi ana sahibi Yönetim › Şirket Dökümanları; burada kısayol (28 Eki 2026)
-                    G("arac-seyahat", "Araç ve Seyahat", R("Araç Takvimi (Filo)"), R("Seyahat Takvimi"), K("Araç Bakım ve Onarım Takibi", "#yonetim/sirket-dokumanlari/dok-varlik"), K("Sigorta ve Kasko Poliçe Takibi", "#yonetim/sirket-dokumanlari/dok-sigorta")))),
+                    G("arac-seyahat", "Araç ve Seyahat", R("Araç Takvimi (Filo)"), R("Seyahat Takvimi")),
+                    // 28 Eki 2026: Sigorta ile Araç, Taşınmaz ve Demirbaş grupları Şirket Dökümanları'ndan buraya taşındı — poliçe takibi (Data/SigortaOrnek.cs), araç bakım (Data/AracBakimOrnek.cs), belge kırılımları (Data/SirketDokumanOrnek.cs)
+                    G("arac-tasinmaz-demirbas", "Araç, Taşınmaz ve Demirbaş", R("Araç Bakım ve Onarım Takibi", "AracBakim", "Index"), R("Araç, Taşınmaz ve Demirbaş Belgeleri", "SirketDokuman", "Varlik")),
+                    G("sigorta", "Sigorta", R("Sigorta ve Kasko Poliçe Takibi", "Sigorta", "Index"), R("Sigorta Poliçeleri", "SirketDokuman", "Sigorta")))),
 
                 M("bilgi-teknolojileri", "Bilgi Teknolojileri", "bt",
                   "BT entegrasyon, otomasyon, envanter ve yapay zeka asistanları için merkezi sayfa.",
@@ -437,11 +439,9 @@ namespace WebApplication3.Data
                     G("dok-imza", "İmza ve Yetki", R("İmza ve Yetki Belgeleri", "SirketDokuman", "Imza")),
                     G("dok-ruhsat", "Ruhsat, İzin ve Sertifika", R("Ruhsat, İzin ve Sertifikalar", "SirketDokuman", "Ruhsat")),
                     G("dok-sozlesme", "Sözleşmeler ve Kiralar", R("Sözleşmeler ve Kiralar", "SirketDokuman", "Sozlesme")),
-                    // Sigorta ve Kasko Poliçe Takibi: tüm poliçeler, PDF, 12 aylık taksit takvimi, yenileme, hasar (Data/SigortaOrnek.cs; araç poliçeleri Araç Bakım ile bağlı)
-                    G("dok-sigorta", "Sigorta", R("Sigorta ve Kasko Poliçe Takibi", "Sigorta", "Index"), R("Sigorta Poliçeleri", "SirketDokuman", "Sigorta")),
+                    // Sigorta ile Araç, Taşınmaz ve Demirbaş grupları 28 Eki 2026'da İK ve İdari İşler › İdari İşler altına taşındı (ekran kırılımları Şirket Dökümanları'nda durur)
                     G("dok-banka", "Banka ve Finans", R("Banka ve Finans Belgeleri", "SirketDokuman", "Banka")),
-                    G("dok-marka", "Marka ve Tescil", R("Marka, Patent ve Tescil Belgeleri", "SirketDokuman", "Marka")),
-                    G("dok-varlik", "Araç, Taşınmaz ve Demirbaş", R("Araç, Taşınmaz ve Demirbaş Belgeleri", "SirketDokuman", "Varlik"), R("Araç Bakım ve Onarım Takibi", "AracBakim", "Index")))),   // İhracat Belge Gönderim Takibi: akreditif / vesaik / orijinal evrak kargo takibi (Satış ve Operasyon › İhracat Operasyon Takibi ile aynı ekran) · Numune Gönderim Takip Raporu: konsolide numune gönderimleri + aylık özet (Satış ve Operasyon › Numune Yönetimi ile aynı ekran) · Müşteri Teklifleri: konsolide teklif listesi + aylık satışa dönüşüm özeti (Satış ve Operasyon › Teklif Yönetimi ile aynı ekran) · Yapılan Ödemeler: tüm şirketlerin banka / çek / kasa / nakit avans ödemeleri konsolide (Finans'taki Rapor118 giriş ekranından ayrıdır) · Personel Maliyet Raporu: "PERSONEL 19.06 GÜNCEL" tablosu
+                    G("dok-marka", "Marka ve Tescil", R("Marka, Patent ve Tescil Belgeleri", "SirketDokuman", "Marka")))),   // İhracat Belge Gönderim Takibi: akreditif / vesaik / orijinal evrak kargo takibi (Satış ve Operasyon › İhracat Operasyon Takibi ile aynı ekran) · Numune Gönderim Takip Raporu: konsolide numune gönderimleri + aylık özet (Satış ve Operasyon › Numune Yönetimi ile aynı ekran) · Müşteri Teklifleri: konsolide teklif listesi + aylık satışa dönüşüm özeti (Satış ve Operasyon › Teklif Yönetimi ile aynı ekran) · Yapılan Ödemeler: tüm şirketlerin banka / çek / kasa / nakit avans ödemeleri konsolide (Finans'taki Rapor118 giriş ekranından ayrıdır) · Personel Maliyet Raporu: "PERSONEL 19.06 GÜNCEL" tablosu
 
                 M("takvim", "Takvim", "takvim",
                   "Şirket ve departman takvimleri, toplantılar, görevler ve hatırlatmalar. Ekranlar yeni geliştirilecek.",
