@@ -294,7 +294,8 @@ namespace WebApplication3.Data
                     G("teklif-yonetimi", "Teklif Yönetimi", R("Müşteri Teklifleri", "MusteriTeklif", "Index")),
                     // Numune Gönderim Takip Raporu: yurtiçi / yurtdışı numune gönderimleri — gerçek bedel, kargo firması, takip no, masraflar, temsilci, sonuç (Data/NumuneOrnek.cs)
                     G("numune-yonetimi", "Numune Yönetimi", R("Numune Gönderim Takip Raporu", "NumuneGonderim", "Index")),
-                    G("fiyat-musteri-kosullari", "Fiyat ve Müşteri Koşulları", R("Muhattaplar İçn Özel Fiyatlar"))),
+                    // Muhataplar İçin Özel Fiyatlar: müşteri × tüm ürünler özel fiyat; fiyatsız kalemlere Min Fiyat Listesi + % ile toplu fiyat (Data/OzelFiyatOrnek.cs; 28 Eki 2026 sıfırdan)
+                    G("fiyat-musteri-kosullari", "Fiyat ve Müşteri Koşulları", R("Muhataplar İçin Özel Fiyatlar"))),
                   U("yurtici-satis", "Yurtiçi Satış",
                     G("satis-islemleri", "Satış İşlemleri", R("Satış Siparişi"), R("Taslak Faturalar"), R("Satış Faturası"), R("Müşteri İade Faturası"), R("Bedelsiz Satış Raporu"), R("Grup İçi Satış (Uras > Selvi > Müşteri)")),
                     G("satis-analizleri", "Satış Analizleri ve Performans", R("Satış Raporu"), R("Satış Ekstre Raporu"), R("Satış Analiz Raporu"), R("Satış Analiz Dashboard"), R("Satışçı Analiz Raporu"), R("Konsolide Prim Raporu"), R("Tahsilat Prim Tablosu"))),

@@ -21,6 +21,7 @@ using System.Text.RegularExpressions;
 using WebApplication3.Services;
 namespace WebApplication3.Controllers
 {
+#if URETILEN_KAPALI   // üretilmiş denetleyici devre dışı: elle yazılmış sürüm Controllers/Rapor95Controller.cs (Data/OzelFiyatOrnek.cs + FiyatOrnek.cs verisiyle; 28 Eki 2026)
     [Authorize]
     [Route("[controller]")]
     public class Rapor95Controller : Controller
@@ -173,4 +174,5 @@ stokCache = default;
         public class MultipleCustomerPriceRequest { public string ItemCode { get; set; } public List<CustomerPriceItem> Customers { get; set; } }
         public class CustomerPriceItem { public string CardCode { get; set; } public double PackagePrice { get; set; } public string Currency { get; set; } }
     }
+#endif
 }

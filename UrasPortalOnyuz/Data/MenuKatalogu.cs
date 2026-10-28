@@ -116,7 +116,7 @@ namespace WebApplication3.Data
             ("Rapor129", "Index", "fas fa-file-invoice-dollar text-danger", "Grup İçi Çek Devirleri", null),
             ("Rapor126", "Index", "fas fa-file-invoice-dollar text-danger", "Muhasebe Çek İbraz Kontrolü", null),
             ("Rapor127", "Index", "fas fa-file-invoice-dollar text-danger", "Gider Seçim Raporu", null),
-            ("Rapor95", "Index", "fas fa-cart-plus", "Muhattaplar İçn Özel Fiyatlar", null),
+            ("Rapor95", "Index", "fas fa-tags", "Muhataplar İçin Özel Fiyatlar", null),
             ("Rapor96", "Index", "fas fa-cart-plus", "Satış Analiz Raporu", null),
             ("Rapor97", "Index", "fas fa-cart-plus", "Muhattap Ana Verileri", null),
             ("Rapor100", "Index", "fas fa-cart-plus", "Kalem Ana Verileri", null),
