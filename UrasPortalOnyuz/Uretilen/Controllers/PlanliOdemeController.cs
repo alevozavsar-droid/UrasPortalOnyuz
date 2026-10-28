@@ -1,129 +1,74 @@
-﻿// <ornek-uretildi/> Bu dosya ana projeden OTOMATIK uretildi: govdeler sokuldu, baglanti yok.
-#pragma warning disable
-using Microsoft.AspNetCore.Mvc.Rendering;
-using System.Linq;
+﻿// PLANLI ÖDEMELER — Mali İşler › Finans › Ödeme Yönetimi › Planlı Ödemeler (/PlanliOdemeler)
+// Konsolide Finansal Takip Paneli › Düzenli Ödemeler sekmesiyle AYNI VERİ ve AYNI TASARIM: Data/DuzenliOdemeOrnek.cs (aylık ödeme takvim listesi — tedarikçi, ürün / hizmet, şirket,
+// ödeme şekli, ödeme günü, ortalama aylık tutar, kategori). Her ay aktif her kayıt için o ayın ödeme gününe planlanmış bir Kasa Nakit Akışı satırı açılır; burada ya da panelde yapılan
+// kayıt / düzenleme / pasif / akıt işlemleri iki ekranda da anında görünür (tek liste, bellek içi). Ekran: Views/PlanliOdeme/Index.cshtml · betik: wwwroot/js/planli-odeme.js
+// (Eski "hatırlatma e-postası + taksit planı" ekranı kaldırıldı; Uretilen/Services/PlanliOdeme* dosyaları kullanılmıyor.)
 using System;
-using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using WebApplication3.Services;
+using WebApplication3.Data;
 
 namespace WebApplication3.Controllers
 {
-
-
-
-
-
+    [Authorize]
     [Route("PlanliOdemeler")]
     public class PlanliOdemeController : Controller
     {
-        private readonly IConfiguration _yapilandirma;
-        private readonly PlanliOdemeServisi _servis;
-        private readonly ILogger<PlanliOdemeController> _gunluk;
+        private static readonly CultureInfo Tr = CultureInfo.GetCultureInfo("tr-TR");
+        private string Kullanici => NakitAvansOrnek.KisiBul(User?.Identity?.Name)?.AdSoyad ?? (User?.Identity?.Name ?? "Finans");
 
-        private string KullaniciKodu()  {return default;
-}
-
-
+        /// <param name="sirket">ön süzgeç: şirket DbName (ör. URASKIMYA)</param>
+        /// <param name="id">açılışta çekmecede gösterilecek kayıt (DÖ-… Id)</param>
         [HttpGet("")]
-        public async Task<IActionResult> Index()
- {ViewBag.Sirketler = WebApplication3.OrnekDoldurucu.Liste<(string DbName, string Ad)>(12);
-ViewBag.Alicilar = WebApplication3.OrnekDoldurucu.Liste<dynamic>(12);
-ViewBag.Gecmis = WebApplication3.OrnekDoldurucu.Liste<dynamic>(12);
-ViewBag.Bugun = System.DateTime.Today;
-ViewBag.TaksitOzet = WebApplication3.OrnekDoldurucu.Liste<dynamic>(12);
-ViewBag.SonrakiTaksitler = WebApplication3.OrnekDoldurucu.Liste<PlanliOdemeTaksit>(12);
-WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index", WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Services.PlanliOdeme>(12));
-}
+        public IActionResult Index(string sirket, int? id)
+        {
+            ViewData["Title"] = "Planlı Ödemeler";
+            ViewBag.Sirket = sirket ?? ""; ViewBag.Id = id?.ToString() ?? "";
+            return View("Index");
+        }
 
+        /// <summary>Liste + özet (Takip Paneli › Düzenli Ödemeler ile birebir aynı nesne); bu ay için akmamış aktif kayıtlar her açılışta tamamlanır (ay başı otomatik işi).</summary>
+        [HttpGet("Veri")]
+        public IActionResult Veri(string sirket)
+        {
+            string db = string.IsNullOrEmpty(sirket) || string.Equals(sirket, "tumu", StringComparison.OrdinalIgnoreCase) ? null : sirket;
+            var oto = DuzenliOdemeOrnek.OtomatikAkit("Sistem (otomatik)"); var l = DuzenliOdemeOrnek.Listele(db);
+            return Json(new
+            {
+                success = true, bugun = DateTime.Today.ToString("yyyy-MM-dd"), kullanici = Kullanici,
+                sirketler = CekAkibetOrnek.Sirketler.Select(s => new { ad = s.Ad, db = s.DbName }).ToList(),
+                duzenli = new { liste = l.Select(DuzenliOdemeOrnek.Json).ToList(), ozet = DuzenliOdemeOrnek.Ozet(l), sorumlu = DuzenliOdemeOrnek.Sorumlu, odemeSekilleri = DuzenliOdemeOrnek.OdemeSekilleri, kategoriler = DuzenliOdemeOrnek.Kategoriler, sirketler = CekAkibetOrnek.Sirketler.Select(s => s.Ad).ToList(), otomatik = oto.eklenen, otomatikMesaj = oto.mesaj }
+            });
+        }
 
+        public class Istek { public int Id { get; set; } public string Ay { get; set; } public string DbName { get; set; } public string Tedarikci { get; set; } public string UrunHizmet { get; set; } public string Sirket { get; set; } public string OdemeSekli { get; set; } public string Kategori { get; set; } public int Gun { get; set; } public decimal AylikTutar { get; set; } public string Not { get; set; } public string Durum { get; set; } }
 
-
-
-
-        [HttpGet("Taksitler")]
-        public async Task<IActionResult> Taksitler(int planId)
- {return Json(new { success = true, plan = global::WebApplication3.OrnekDoldurucu.Yeni<global::WebApplication3.Services.PlanliOdeme>(), taksitler = global::WebApplication3.OrnekDoldurucu.Liste<global::WebApplication3.Services.PlanliOdemeTaksit>(12) });
-}
-
-
-        [HttpPost("TaksitOnizle")]
-        public IActionResult TaksitOnizle([FromBody] PlanliOdeme model)
- {return Json(new { success = true, taksitler = global::WebApplication3.OrnekDoldurucu.Liste<global::WebApplication3.Services.PlanliOdemeTaksit>(12), toplam = global::WebApplication3.OrnekDoldurucu.Deger<decimal>("toplam", 0), anapara = global::WebApplication3.OrnekDoldurucu.Deger<decimal>("anapara", 0), faiz = global::WebApplication3.OrnekDoldurucu.Deger<decimal>("faiz", 0) });
-}
-
-
-        [HttpPost("TaksitUret")]
-        public async Task<IActionResult> TaksitUret(int planId)
- {return Json(new { success = true, message = global::WebApplication3.OrnekDoldurucu.Deger<string>("message", 0) });
-}
-
-        public class TaksitKayitIstek { public int PlanId { get; set; } public List<PlanliOdemeTaksit> Taksitler { get; set; } }
-
-
-        [HttpPost("TaksitKaydet")]
-        public async Task<IActionResult> TaksitKaydet([FromBody] TaksitKayitIstek req)
- {return Json(new { success = true, message = global::WebApplication3.OrnekDoldurucu.Deger<string>("message", 0) });
-}
-
-
-        [HttpPost("TaksitOdendi")]
-        public async Task<IActionResult> TaksitOdendi(int id, bool odendi)
- {return Json(new { success = true, message = global::WebApplication3.OrnekDoldurucu.Deger<string>("message", 0) });
-}
-
-
+        /// <summary>Bir ayın (bu ay / gelecek ay) akmamış aktif kayıtlarını — ya da tek kaydı — Kasa Nakit Akışı'na akıtır (aynı aya akmış olanlar atlanır).</summary>
+        [HttpPost("Akit")]
+        public IActionResult Akit([FromBody] Istek i)
+        {
+            if (i == null) return Json(new { success = false, message = "Veri yok." });
+            string db = string.IsNullOrEmpty(i.DbName) || string.Equals(i.DbName, "tumu", StringComparison.OrdinalIgnoreCase) ? null : i.DbName;
+            var r = DuzenliOdemeOrnek.Akit(string.IsNullOrEmpty(i.Ay) ? DuzenliOdemeOrnek.BuAy : i.Ay, Kullanici, db, i.Id > 0 ? i.Id : (int?)null);
+            return Json(new { success = r.ok, message = r.mesaj, eklenen = r.eklenen, atlanan = r.atlanan });
+        }
         [HttpPost("Kaydet")]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Kaydet(PlanliOdeme model)
- {return RedirectToAction("Index");
-}
-
-        [HttpPost("Sil")]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Sil(int id)
- {return RedirectToAction("Index");
-}
-
-        [HttpPost("DurumDegistir")]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DurumDegistir(int id)
- {return RedirectToAction("Index");
-}
-
-
-        [HttpPost("AliciEkle")]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AliciEkle(string eposta, string adSoyad)
- {return RedirectToAction("Index");
-}
-
-        [HttpPost("AliciSil")]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AliciSil(int id)
- {return RedirectToAction("Index");
-}
-
-
-
-        [HttpPost("HatirlatmalariCalistir")]
-        [AllowAnonymous]
-        public async Task<IActionResult> HatirlatmalariCalistir(string anahtar = null, string tarih = null)
- {return Json(new { tarih = global::WebApplication3.OrnekDoldurucu.Deger<string>("tarih", 0), HatirlatmaGonderildi = global::WebApplication3.OrnekDoldurucu.Deger<int>("HatirlatmaGonderildi", 0), SatirOlusturuldu = global::WebApplication3.OrnekDoldurucu.Deger<int>("SatirOlusturuldu", 0), Hatalar = global::System.Linq.Enumerable.Range(0, 12).Select(i2 => global::WebApplication3.OrnekDoldurucu.Deger<string>("Hatalar", i2)).ToList() });
-}
-
-
-        [HttpPost("SimdiGonder")]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> SimdiGonder(int id)
- {return RedirectToAction("Index");
-}
-
+        public IActionResult Kaydet([FromBody] Istek i)
+        {
+            if (i == null) return Json(new { success = false, message = "Veri yok." });
+            var r = DuzenliOdemeOrnek.Kaydet(i.Id, i.Tedarikci, i.UrunHizmet, i.Sirket, i.OdemeSekli, i.Kategori, i.Gun, i.AylikTutar, i.Not, Kullanici);
+            if (r.ok) FinekraOrnek.GunlukEkle(r.d.Sirket, r.d.No, i.Id > 0 ? "Düzenli Ödeme Güncellendi" : "Düzenli Ödeme Eklendi", $"{r.d.Tedarikci} · {r.d.UrunHizmet} · {r.d.OdemeSekli} · {r.d.AylikTutar.ToString("N2", Tr)} ₺ · gün {r.d.Gun} · Planlı Ödemeler ekranı", Kullanici);
+            return Json(new { success = r.ok, message = r.mesaj, kayit = r.d == null ? null : DuzenliOdemeOrnek.Json(r.d) });
+        }
+        [HttpPost("Durum")]
+        public IActionResult Durum([FromBody] Istek i)
+        {
+            if (i == null) return Json(new { success = false, message = "Veri yok." });
+            var r = DuzenliOdemeOrnek.DurumDegistir(i.Id, i.Durum, Kullanici);
+            if (r.ok) FinekraOrnek.GunlukEkle(r.d.Sirket, r.d.No, r.d.Durum == "Pasif" ? "Düzenli Ödeme Pasif" : "Düzenli Ödeme Aktif", r.mesaj + " (Planlı Ödemeler ekranı)", Kullanici);
+            return Json(new { success = r.ok, message = r.mesaj, kayit = r.d == null ? null : DuzenliOdemeOrnek.Json(r.d) });
+        }
     }
 }
