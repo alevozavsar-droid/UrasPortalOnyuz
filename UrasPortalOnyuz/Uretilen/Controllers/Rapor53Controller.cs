@@ -68,10 +68,12 @@ namespace WebApplication3.Controllers
         private string GetSelectedDatabase()
  {return default;
 }
+        /// <summary>Tedarikçi Konsolide Ödeme Takip Raporu (yeni tasarım): Views/Rapor53/Index.cshtml + wwwroot/js/tedarikci-konsolide.js; veri /Tedarikci/Veri (Controllers/TedarikciController.cs).</summary>
         public async Task<IActionResult> Index()
- {WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index", WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Models.TedarikciFinansalBorcRaporuViewModel>(12));
-}
+        {
+            ViewData["Title"] = "Tedarikçi Konsolide Ödeme Takip Raporu";
+            return await Task.FromResult(View("Index"));
+        }
 
         [HttpPost]
         [Route("ExportToExcel")]

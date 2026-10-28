@@ -211,14 +211,13 @@ namespace WebApplication3.Controllers
  {}
 
 
+        /// <summary>Adat Hesaplama (yeni tasarım): Views/Rapor21/Index.cshtml + wwwroot/js/adat.js; uçlar Controllers/AdatController.cs. ?kod= (ya da ?bpCode=) ile cari ön seçilir.</summary>
         [HttpGet]
-        public IActionResult Index(string bpCode, [FromQuery] List<string> aktarimTipi)
- {ViewBag.CurrentDbDisplay = "";
-ViewBag.Approvers = WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Models.ApproverViewModel>(12);
-ViewBag.OnayKurulumEksikleri = new System.Collections.Generic.List<object>();
-WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index", WebApplication3.OrnekDoldurucu.Yeni<WebApplication3.Models.AdatHesaplamaModel>());
-}
+        public IActionResult Index(string kod, string bpCode)
+        {
+            ViewData["Title"] = "Adat Hesaplama"; ViewBag.Kod = kod ?? bpCode ?? "";
+            return View("Index");
+        }
 
 
 

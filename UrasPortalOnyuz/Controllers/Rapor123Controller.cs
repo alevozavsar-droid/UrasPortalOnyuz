@@ -511,19 +511,20 @@ namespace WebApplication3.Controllers
         static IEnumerable<R123_HareketViewModel> TahsilatEkrani((string Ad, string DbName, string DbKey) s, DateTime bas, DateTime bit)
         {
             int i = 0;
-            foreach (var t in TahsilatOrnek.Tahsilatlar.Where(t => t.Sirket == s.Ad && t.Tarih >= bas && t.Tarih <= bit).OrderBy(t => t.Tarih))
-            {
-                i++; bool banka = t.Yontem == "Havale / EFT" || t.Yontem == "Kredi Kartı", kasa = t.Yontem == "Nakit";
-                var h = Temel(s, banka ? "BANKA" : kasa ? "KASA" : "CEK", 97000 + i, t.Tarih, t.IslemTipi);
-                h.KasaKodu = banka ? "102.01.001" : kasa ? "100.01.001" : t.Yontem == "Senet" ? "121.01.001" : "101.01.001"; h.KasaAdi = banka ? "Ziraat Bankası" : kasa ? "Merkez Kasa" : t.Yontem == "Senet" ? "Alınan Senetler" : "Alınan Çekler";
-                h.KarsiHesapKodu = t.CariKodu; h.KarsiHesapAdi = t.CariAd; h.Borc = t.TutarTl; h.IslemYonu = "Giriş";
-                if (t.ParaBirimi != "TL") { h.ParaBirimi = t.ParaBirimi; h.DovizTutar = t.Tutar; h.Kur = t.Kur; }
-                h.Aciklama = $"Müşteri tahsilatı · {t.Yontem} · {(t.Mod == "Fatura" ? "fatura bazlı" : "bakiyeden")}{(t.Dagitim.Count > 0 ? " · " + string.Join(", ", t.Dagitim.Select(d => d.BelgeNo)) : "")}{(t.Avans > 0.005m ? $" · avans {t.Avans.ToString("N2", Tr)} {t.ParaBirimi}" : "")}{(t.VadeFarki > 0 ? $" · vade farkı {t.VadeFarki.ToString("N0", Tr)} ₺" : "")}{(t.KurFarki != 0 ? $" · kur farkı {t.KurFarki.ToString("N0", Tr)} ₺" : "")}";
-                h.Kaynak = "Tahsilat Ekranı · " + (t.Mod == "Fatura" ? "Fatura Bazlı" : "Bakiyeden"); h.KaynakDetay = $"{t.No} · {t.Yontem} · {t.Kullanici} {t.Zaman:dd.MM.yyyy HH:mm}" + (string.IsNullOrEmpty(t.KurFarkiFaturaNo) ? "" : $" · {t.KurFarkiFaturaNo}") + (string.IsNullOrEmpty(t.VadeFarkiFaturaNo) ? "" : $" · {t.VadeFarkiFaturaNo}");
-                h.Referans = t.No; h.IslemTuruAdi = kasa ? "Nakit Tahsilat" : banka ? "Müşteri Tahsilatı" : t.Yontem + " Girişi"; h.OnaylayanKullaniciAdi = t.Kullanici; h.OnayTarihi = t.Zaman;
-                if (!banka && !kasa) { h.CekVadeTarihi = t.Tarih.AddDays(60); h.CekNumarasi = t.No; h.CekBelge = t.Yontem; h.PlanKontrol = "—"; }
-                yield return h;
-            }
+            foreach (var t in TahsilatOrnek.Tahsilatlar.Where(t => t.Islendi && t.Sirket == s.Ad && t.Tarih >= bas && t.Tarih <= bit).OrderBy(t => t.Tarih))
+                foreach (var sat in t.Satirlar)
+                {
+                    i++; bool banka = sat.Yontem == "Havale / EFT" || sat.Yontem == "Kredi Kartı", kasa = sat.Yontem == "Nakit"; var dag = t.Dagitim.Where(d => d.OdemeSira == sat.Sira).ToList(); decimal avans = Math.Round(sat.Tutar - dag.Sum(d => d.Tutar), 2);
+                    var h = Temel(s, banka ? "BANKA" : kasa ? "KASA" : "CEK", 97000 + i, sat.Vadeli ? t.Tarih : sat.Tarih, t.IslemTipi);
+                    h.KasaKodu = banka ? "102.01.001" : kasa ? "100.01.001" : sat.Yontem == "Senet" ? "121.01.001" : "101.01.001"; h.KasaAdi = banka ? (string.IsNullOrEmpty(sat.Banka) ? "Ziraat Bankası" : sat.Banka) : kasa ? "Merkez Kasa" : sat.Yontem == "Senet" ? "Alınan Senetler" : "Alınan Çekler";
+                    h.KarsiHesapKodu = t.CariKodu; h.KarsiHesapAdi = t.CariAd; h.Borc = sat.TutarTl; h.IslemYonu = "Giriş";
+                    if (!TahsilatOrnek.TlMi(t.ParaBirimi)) { h.ParaBirimi = t.ParaBirimi; h.DovizTutar = sat.Tutar; h.Kur = sat.Kur; }
+                    h.Aciklama = $"Müşteri tahsilatı · {sat.Yontem}{(string.IsNullOrEmpty(sat.Banka) ? "" : " · " + sat.Banka)} · {(t.Mod == "Manuel" ? "manuel fatura seçimi" : "otomatik (FIFO)")}{(dag.Count > 0 ? " · " + string.Join(", ", dag.Select(d => d.BelgeNo).Distinct()) : "")}{(avans > 0.005m ? $" · avans {avans.ToString("N2", Tr)} {t.ParaBirimi}" : "")}{(dag.Sum(d => d.VadeFarki) > 0 ? $" · vade farkı {dag.Sum(d => d.VadeFarki).ToString("N0", Tr)} ₺" : "")}{(dag.Sum(d => d.KurFarki) != 0 ? $" · kur farkı {dag.Sum(d => d.KurFarki).ToString("N0", Tr)} ₺" : "")}";
+                    h.Kaynak = "Tahsilat Ekranı · " + (t.Mod == "Manuel" ? "Manuel" : "Otomatik"); h.KaynakDetay = $"{t.No}/{sat.Sira} · {sat.Yontem} · {t.IslemeAlan} {t.IslemeZamani:dd.MM.yyyy HH:mm}" + (string.IsNullOrEmpty(t.KurFarkiFaturaNo) ? "" : $" · {t.KurFarkiFaturaNo}") + (string.IsNullOrEmpty(t.VadeFarkiFaturaNo) ? "" : $" · {t.VadeFarkiFaturaNo}");
+                    h.Referans = t.No; h.IslemTuruAdi = kasa ? "Nakit Tahsilat" : banka ? "Müşteri Tahsilatı" : sat.Yontem + " Girişi"; h.OnaylayanKullaniciAdi = t.IslemeAlan; h.OnayTarihi = t.IslemeZamani;
+                    if (!banka && !kasa) { h.CekVadeTarihi = sat.Tarih; h.CekNumarasi = string.IsNullOrEmpty(sat.BelgeNo) ? t.No : sat.BelgeNo; h.CekBelge = sat.Yontem; h.PlanKontrol = "—"; }
+                    yield return h;
+                }
         }
         /// <summary>Elden ödenen örnek kasa masrafları (nakit akışta karşılığı yok): açıklama, alıcı, muhasebe hesabı.</summary>
         static readonly (string aciklama, string alici, string hesap)[] KasaMasraflari =

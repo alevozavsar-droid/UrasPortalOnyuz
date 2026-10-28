@@ -28,7 +28,7 @@ namespace WebApplication3.Controllers
         {
             var fat = KapamaOrnek.AcikFaturalar(c); var ode = KapamaOrnek.AcikOdemeler(c); var k = c.Kart; var oner = fat.Count > 0 && ode.Count > 0 ? KapamaOrnek.Oner(c) : new List<KapamaCifti>();
             decimal fatTl = fat.Sum(f => f.Kalan * KurTl(f.ParaBirimi)), odeTl = ode.Sum(o => o.Kalan * KurTl(o.ParaBirimi)), kap = KapamaOrnek.Kapatilabilir(c);
-            return new { kod = c.CariKodu, kisaAd = k?.KisaAd ?? c.CariKodu, resmiUnvan = k?.ResmiUnvan ?? "", tip = k?.KartTipi ?? "", sirket = k?.Sirket ?? "", bolge = k?.Bolge ?? "", bakiyeTl = c.BakiyeTl, acikFatura = fat.Count, acikFaturaTl = Math.Round(fatTl, 2), acikOdeme = ode.Count, acikOdemeTl = Math.Round(odeTl, 2), kapatilabilir = kap, oneri = oner.Count, oneriTl = Math.Round(oner.Sum(o => o.Tutar * KurTl(o.Pb)), 2), birebir = oner.Count(o => o.Yontem == "Birebir"),
+            return new { suzgec = k == null ? null : CariSuzgec.Alanlar(k), kod = c.CariKodu, kisaAd = k?.KisaAd ?? c.CariKodu, resmiUnvan = k?.ResmiUnvan ?? "", tip = k?.KartTipi ?? "", sirket = k?.Sirket ?? "", bolge = k?.Bolge ?? "", vergiNo = k?.VergiNo ?? "", yetkili = k?.Yetkili ?? "", eposta = k?.Eposta ?? "", bakiyeTl = c.BakiyeTl, acikFatura = fat.Count, acikFaturaTl = Math.Round(fatTl, 2), acikOdeme = ode.Count, acikOdemeTl = Math.Round(odeTl, 2), kapatilabilir = kap, oneri = oner.Count, oneriTl = Math.Round(oner.Sum(o => o.Tutar * KurTl(o.Pb)), 2), birebir = oner.Count(o => o.Yontem == "Birebir"),
                 durum = oner.Count > 0 ? "Kapatılabilir" : ode.Count > 0 ? "Ödeme Bekliyor" : fat.Count > 0 ? "Yalnız Açık Fatura" : "Temiz", pbler = fat.Concat(ode).Select(h => h.ParaBirimi).Distinct().OrderBy(p => p == "TL" ? "" : p).ToArray(), sonKapama = c.Log.Where(l => l.Islem == "Kapama").Select(l => (DateTime?)l.Zaman).FirstOrDefault()?.ToString("dd.MM.yyyy HH:mm", Tr) ?? "" };
         }
         static object KayitDto(KapamaKaydi k) => new { k.Id, zaman = k.Zaman.ToString("dd.MM.yyyy HH:mm", Tr), k.CariKodu, k.CariAd, k.Mod, adet = k.Ciftler.Count, toplamTl = Math.Round(k.Ciftler.Sum(c => c.Tutar * KurTl(c.Pb)), 2), ozet = string.Join(" · ", k.Ciftler.GroupBy(c => c.Pb).Select(g => g.Sum(c => c.Tutar).ToString("N2", Tr) + " " + g.Key)), k.Kullanici, ciftler = k.Ciftler.Select(c => new { c.FaturaNo, c.OdemeNo, c.Tutar, tutarTr = c.Tutar.ToString("N2", Tr) + " " + c.Pb, c.Pb, c.Yontem }) };
@@ -38,7 +38,7 @@ namespace WebApplication3.Controllers
         public IActionResult Veri()
         {
             List<object> cariler; lock (MutabakatOrnek.Kilit) cariler = MutabakatOrnek.Cariler.Select(CariDto).ToList();
-            return Json(new { success = true, ben = Ben(), bugun = DateTime.Today.ToString("yyyy-MM-dd"), kurlar = MutabakatOrnek.Kurlar, cariler, kayitlar = KapamaOrnek.Kayitlar.Select(KayitDto) });
+            return Json(new { success = true, ben = Ben(), bugun = DateTime.Today.ToString("yyyy-MM-dd"), kurlar = MutabakatOrnek.Kurlar, secenekler = CariSuzgec.Secenekler(), cariler, kayitlar = KapamaOrnek.Kayitlar.Select(KayitDto) });
         }
         /// <summary>Cari detayı: açık faturalar ve eşleştirilmemiş ödemeler (kalan, para birimi, vade, gecikme) + otomatik öneri.</summary>
         [HttpGet]

@@ -2,69 +2,84 @@
     ViewData["Title"] = "Tahsilat";
     Layout = "~/Views/Shared/_Layout.cshtml";
     string onKod = (string)ViewBag.Kod ?? "";
+    string onNo = (string)ViewBag.No ?? "";
 }
 @*
-    TAHSİLAT — yeni tasarım. Müşteri tahsilatı: BAKİYEDEN (en eski vadeli açık faturalardan FIFO) ya da FATURA BAZLI (seçilen faturalara tutar yazılır);
-    her satırda otomatik gecikme günü, VADE FARKI ve (dövizli faturada) KUR FARKI; tek tıkla KDV'li Kur Farkı / Vade Farkı faturası (basit fatura kesme).
-    Veri ve kurallar: Data/TahsilatOrnek.cs · uçlar: Controllers/TahsilatController.cs · betik: wwwroot/js/tahsilat.js · tahsilat Cari Mutabakat hareketine (X / R) işlenir.
+    TAHSİLAT — dinamik tasarım (Adat Hesaplama mantığı). Müşteri tahsilatında birden çok ödeme satırı (nakit + çek + çek + havale …) birlikte girilir; her satırda yöntem, tarih / vade, belge no, banka,
+    OTOMATİK (TCMB) ya da ELLE kur ve tutar. Faturalar OTOMATİK (FIFO) ya da MANUEL seçilir; kapanış simülasyonu her değişiklikte yeniden hesaplanır (gün, vade farkı, kur farkı, avans).
+    "Kaydet ve İşle" cari hesabına işler (Konsolide Finansal Takip Paneli'ne düşer); "Taslak Kaydet" işlemez, Tahsilatlar sekmesinden istenen zaman "İşleme Al" ile işlenir.
+    Cari bilgisi: son ödeme, son yükleme, ortalama gecikme; ekstre ve simülasyon PDF / Excel; tahsilat almadan önce "Otomatik Kapat" ile eşleşmemiş ödemeler kapatılır.
+    Veri ve kurallar: Data/TahsilatOrnek.cs · uçlar: Controllers/TahsilatController.cs · betik: wwwroot/js/tahsilat.js · süzgeç: wwwroot/js/cari-suzgec.js
 *@
 @section Styles {
 <link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
-<link rel="stylesheet" href="/css/tahsilat.css?v=1" />
+<link rel="stylesheet" href="/css/cari-islem.css?v=2" />
+<link rel="stylesheet" href="/css/tahsilat.css?v=3" />
 }
-<div class="container-fluid py-3 na th" id="th" data-kod="@onKod">
+<div class="container-fluid py-3 na ci th" id="th" data-kod="@onKod" data-no="@onNo">
     <div class="na-ust">
         <h4><span class="rt-ikon"><i class="fas fa-hand-holding-dollar"></i></span>Tahsilat</h4>
-        <span style="font-size:.68rem;font-weight:700;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px"><i class="fas fa-database me-1"></i>Cari Mutabakat + Cari Kartları</span>
+        <span style="font-size:.68rem;font-weight:700;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px"><i class="fas fa-database me-1"></i>Cari Mutabakat + Cari Kartları + Takip Paneli</span>
         <span class="th-kur" id="thKurlar"></span>
-        <span class="sub w-100">Müşteri tahsilatı iki yöntemle kaydedilir: <b>Bakiyeden</b> (tutar en eski vadeli açık faturalardan başlayarak otomatik dağıtılır) ya da <b>Fatura Bazlı</b> (kapatılacak faturalar seçilir, tutar yazılır). Her satır için <b>gecikme günü</b>, <b>vade farkı</b> (kalan × kur × aylık oran / 30 × gün) ve dövizli faturada <b>kur farkı</b> (tutar × (tahsilat kuru − fatura kuru)) otomatik hesaplanır; kayıttan sonra tek tıkla KDV'li <b>fark faturası</b> kesilir. Tahsilat, cari hesabına X / R işlem tipiyle işlenir ve kart günlüğüne yazılır.</span>
+        <span class="sub w-100">Bir tahsilatta <b>birden çok ödeme satırı</b> (nakit + çek + senet + havale + kart) birlikte girilir; her satırın kuru o günün TCMB kurundan <b>otomatik</b> gelir, istenirse elle yazılır. Faturalar <b>Otomatik</b> (en eski vadeliden FIFO) ya da <b>Manuel</b> (işaretlenen faturalar, istenirse tutar sınırı) seçilir; kapanış simülasyonu her değişiklikte yenilenir: gün, <b>vade farkı</b>, <b>kur farkı</b>, avans. <b>Kaydet ve İşle</b> cari hesabına işler; <b>Taslak Kaydet</b> işlemez, istenen zaman "İşleme Al" ile aynı kayıttan ibraz edilir. Ekstre ve simülasyon PDF / Excel indirilir; tahsilattan önce <b>Otomatik Kapat</b> ile eşleşmemiş ödemeler kapatılır.</span>
     </div>
     <div class="na-sekme" id="thSekmeler" data-dinamik="kapali">
         <button type="button" data-p="yeni" class="aktif"><i class="fas fa-plus me-1"></i>Yeni Tahsilat</button>
-        <button type="button" data-p="liste">Tahsilatlar <span class="n" id="thNListe">0</span></button>
+        <button type="button" data-p="liste"><i class="fas fa-list me-1"></i>Tahsilatlar <span class="n" id="thNListe">0</span> <span class="n" id="thNTaslak" title="taslak">0 taslak</span></button>
         <button type="button" data-p="fatura"><i class="fas fa-file-invoice me-1"></i>Fark Faturaları <span class="n" id="thNFatura">0</span></button>
     </div>
     <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
 
     <div class="na-panel aktif" data-p="yeni">
         <div class="row g-2">
-            <div class="col-lg-8">
+            <div class="col-xl-9">
                 <div class="na-kart">
-                    <div class="na-kart-b"><span><i class="fas fa-user-tie me-1"></i>Cari ve Tahsilat Bilgileri</span><span class="not">* zorunlu · kur güncel kurdan gelir, değiştirilebilir</span></div>
+                    <div class="na-kart-b"><span><i class="fas fa-user-tie me-1"></i>Cari (Müşteri)</span><span class="d-flex gap-1 align-items-center"><button type="button" class="btn btn-light btn-sm py-0" id="thSuzgecTemizle" style="font-size:.64rem">Süzgeci Temizle</button><select class="form-select" id="thCari" style="width:340px;font-size:.68rem;height:24px;padding:0 20px 0 6px"><option value="">Seçiniz…</option></select></span></div>
                     <div class="na-kart-g">
-                        <div class="th-grid">
-                            <div class="g3"><label>Cari (Müşteri) *</label><div class="d-flex gap-1"><input class="form-control" id="thCariAra" placeholder="Kod ya da ad ile ara…"><select class="form-select" id="thCari"><option value="">Seçiniz…</option></select></div></div>
-                            <div><label>Tarih *</label><input type="date" class="form-control" id="thTarih"></div>
-                            <div><label>Yöntem *</label><select class="form-select" id="thYontem"></select></div>
-                            <div><label>İşlem Tipi *</label><select class="form-select" id="thTip"><option>X</option><option>R</option></select></div>
-                            <div><label>Para Birimi *</label><select class="form-select" id="thPb"><option>TL</option></select></div>
-                            <div><label>Kur</label><input class="form-control" id="thKur" inputmode="decimal" value="1"></div>
-                            <div><label>Tutar *</label><input class="form-control" id="thTutar" inputmode="decimal" placeholder="0,00"></div>
-                            <div class="g2"><label>Açıklama</label><input class="form-control" id="thAciklama" placeholder="Dekont no, not…"></div>
-                        </div>
-                        <div class="th-cari-ozet" id="thCariOzet"><span class="text-muted">Cari seçince bakiye, X / R, vadesi geçmiş ve açık faturalar burada görünür.</span></div>
+                        <div id="thSuzgec"></div>
+                        <div class="ci-bilgi" id="thCariOzet"><span class="text-muted">Cari seçince bakiye, son ödeme / yükleme, gecikme ve açık faturalar burada görünür.</span></div>
+                        <div class="d-flex gap-1 flex-wrap mt-1" id="thCariIslem" style="display:none !important"></div>
                     </div>
                 </div>
                 <div class="na-kart">
-                    <div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>Açık Faturalar ve Dağıtım</span>
-                        <span class="d-flex gap-1 align-items-center">
-                            <span class="th-mod" id="thMod"><button type="button" class="aktif" data-mod="Bakiye" title="Tutar en eski vadeli açık faturalardan başlayarak otomatik dağıtılır (FIFO); artan kısım bakiyeye avans"><i class="fas fa-layer-group me-1"></i>Bakiyeden (FIFO)</button><button type="button" data-mod="Fatura" title="Kapatılacak faturalar seçilir, her birine tutar yazılır"><i class="fas fa-file-invoice me-1"></i>Fatura Bazlı</button></span>
-                            <button type="button" class="btn btn-light btn-sm py-0" id="thHepsi" style="font-size:.64rem" title="Fatura bazlı: tüm açık faturaların kalanını dağıt"><i class="fas fa-check-double me-1"></i>Tümünü Doldur</button>
+                    <div class="na-kart-b"><span><i class="fas fa-money-bill-transfer me-1"></i>Ödeme Satırları <span class="n" id="thNSatir">0</span></span>
+                        <span class="d-flex gap-1 align-items-center flex-wrap">
+                            <span class="na-mini me-1">Tahsilat Tarihi <input type="date" class="form-control d-inline-block" id="thTarih" style="width:125px;font-size:.66rem;height:22px;padding:0 4px"></span>
+                            <span class="na-mini me-1">İşlem Tipi <select class="form-select d-inline-block" id="thTip" style="width:55px;font-size:.66rem;height:22px;padding:0 16px 0 4px"><option>X</option><option>R</option></select></span>
+                            <span class="na-mini me-1">Para Birimi <select class="form-select d-inline-block" id="thPb" style="width:70px;font-size:.66rem;height:22px;padding:0 16px 0 4px"><option>TL</option></select></span>
+                            <button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Nakit" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Nakit</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Çek" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Çek</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Senet" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Senet</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Havale / EFT" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Havale</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Kredi Kartı" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Kart</button>
+                            <button type="button" class="btn btn-light btn-sm py-0" id="thSatirTemizle" style="font-size:.62rem">Satırları Sil</button>
                         </span></div>
-                    <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo th-liste" id="thFaturalar" data-dinamik="kapali"><thead><tr><th>Belge No</th><th>Tarih</th><th>Vade</th><th class="s">Gecikme</th><th class="s">Tip</th><th class="e">Kalan</th><th class="e">Fatura Kuru</th><th class="e">Dağıtılan</th><th class="e">Kur Farkı (₺)</th><th class="e">Vade Farkı (₺)</th></tr></thead><tbody><tr><td colspan="10" class="na-bos">Önce cari seçin.</td></tr></tbody><tfoot></tfoot></table></div></div>
+                    <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ci-liste" id="thSatirlar" data-dinamik="kapali"><thead><tr><th class="s">#</th><th>Yöntem</th><th>Tarih / Vade</th><th>Belge (Çek) No</th><th>Banka</th><th class="e">Kur</th><th class="s">Kur Kaynağı</th><th class="e">Tutar</th><th class="e">TL Karşılığı</th><th>Not</th><th></th></tr></thead><tbody><tr><td colspan="11" class="na-bos">Yukarıdaki düğmelerle ödeme satırı ekleyin (nakit, çek, senet, havale, kart — birlikte).</td></tr></tbody><tfoot></tfoot></table></div>
+                        <div class="na-mini px-2 pb-1"><input class="form-control d-inline-block" id="thAciklama" placeholder="Açıklama (dekont no, not…)" style="width:100%;font-size:.66rem;height:22px"></div></div>
+                </div>
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>Açık Faturalar ve Kapanış Simülasyonu (FIFO) <span class="n" id="thNFat">0</span></span>
+                        <span class="d-flex gap-1 align-items-center">
+                            <span class="ci-mod" id="thMod"><button type="button" class="aktif" data-mod="Otomatik" title="Ödemeler tüm açık faturalara en eski vadeliden başlayarak otomatik dağıtılır"><i class="fas fa-wand-magic-sparkles me-1"></i>Otomatik (FIFO)</button><button type="button" data-mod="Manuel" title="Kapatılacak faturalar işaretlenir; istenirse faturaya tutar sınırı yazılır"><i class="fas fa-hand-pointer me-1"></i>Manuel Seçim</button></span>
+                            <button type="button" class="btn btn-light btn-sm py-0" id="thHepsi" style="font-size:.62rem"><i class="fas fa-check-double me-1"></i>Tümünü Seç</button><button type="button" class="btn btn-light btn-sm py-0" id="thHicbiri" style="font-size:.62rem">Kaldır</button>
+                            <button type="button" class="btn btn-light btn-sm py-0" id="thTutarDoldur" style="font-size:.62rem" title="Seçili faturaların kalanı kadar tek havale satırı oluşturur"><i class="fas fa-equals me-1"></i>Tutarı Faturalardan Al</button>
+                        </span></div>
+                    <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ci-liste" id="thFaturalar" data-dinamik="kapali"><thead><tr><th class="s"><input type="checkbox" id="thFatHepsi"></th><th>Belge No</th><th>Tarih</th><th>Vade</th><th class="s">Gecikme</th><th class="s">Tip</th><th class="e">Kalan</th><th class="e">Fatura Kuru</th><th class="e">Sınır (Manuel)</th><th class="e">Kapanan</th><th class="e">Kalan (Sonra)</th><th>Ödeme</th><th class="s">Gün</th><th class="e">Kur Farkı (₺)</th><th class="e">Vade Farkı (₺)</th></tr></thead><tbody><tr><td colspan="15" class="na-bos">Önce cari seçin.</td></tr></tbody><tfoot></tfoot></table></div></div>
                 </div>
             </div>
-            <div class="col-lg-4">
+            <div class="col-xl-3">
                 <div class="na-kart th-sag">
                     <div class="na-kart-b"><span><i class="fas fa-calculator me-1"></i>Hesap Özeti</span><span class="not" id="thOzetNot">otomatik</span></div>
                     <div class="na-kart-g">
-                        <div class="th-ozet" id="thOzet"></div>
+                        <div class="ci-ozet" id="thOzet"></div>
                         <div class="d-grid gap-1 mt-2">
-                            <button type="button" class="btn btn-primary btn-sm" id="thKaydet"><i class="fas fa-floppy-disk me-1"></i>Tahsilatı Kaydet</button>
-                            <div class="d-flex gap-1"><button type="button" class="btn btn-outline-primary btn-sm flex-fill" id="thKff" disabled><i class="fas fa-file-invoice me-1"></i>Kur Farkı Faturası Kes</button><button type="button" class="btn btn-outline-primary btn-sm flex-fill" id="thVff" disabled><i class="fas fa-file-invoice me-1"></i>Vade Farkı Faturası Kes</button></div>
+                            <button type="button" class="btn btn-primary btn-sm" id="thKaydetIsle"><i class="fas fa-floppy-disk me-1"></i>Kaydet ve İşle</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="thKaydetTaslak" title="Cariye işlenmez; Tahsilatlar sekmesinden İşleme Al"><i class="fas fa-file-pen me-1"></i>Taslak Kaydet (İşleme Alma)</button>
+                            <div class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm flex-fill" id="thSimPdf"><i class="fas fa-file-pdf me-1"></i>Simülasyon PDF</button><button type="button" class="btn btn-light btn-sm flex-fill" id="thSimExcel"><i class="fas fa-file-excel me-1"></i>Simülasyon Excel</button></div>
+                            <div class="d-flex gap-1"><button type="button" class="btn btn-outline-primary btn-sm flex-fill" id="thKff" disabled><i class="fas fa-file-invoice me-1"></i>Kur Farkı Faturası</button><button type="button" class="btn btn-outline-primary btn-sm flex-fill" id="thVff" disabled><i class="fas fa-file-invoice me-1"></i>Vade Farkı Faturası</button></div>
                             <button type="button" class="btn btn-light btn-sm" id="thYeni"><i class="fas fa-file me-1"></i>Yeni Tahsilat</button>
                         </div>
-                        <div class="th-rehber" id="thRehber"></div>
+                        <div class="ci-rehber" id="thRehber"></div>
                     </div>
                 </div>
             </div>
@@ -72,19 +87,20 @@
     </div>
 
     <div class="na-panel" data-p="liste">
-        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Kaydedilen Tahsilatlar</span><span class="d-flex gap-1 align-items-center"><input class="form-control form-control-sm" id="thListeAra" placeholder="No, cari, yöntem…" style="width:200px;font-size:.66rem;height:24px"><button type="button" class="btn btn-light btn-sm py-0" id="thListeExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div>
-            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo th-liste" id="thListe" data-dinamik="kapali"><thead><tr><th>Tahsilat No</th><th>Tarih</th><th>Cari</th><th>Yöntem</th><th class="s">Tip</th><th class="e">Tutar</th><th class="e">TL Karşılığı</th><th>Mod</th><th class="s">Kapanan Fatura</th><th class="e">Avans</th><th class="e">Kur Farkı</th><th class="e">Vade Farkı</th><th>Fark Faturası</th><th>Kim</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Kaydedilen Tahsilatlar</span><span class="d-flex gap-1 align-items-center"><input class="form-control" id="thListeAra" placeholder="No, cari, yöntem, çek no…" style="width:200px;font-size:.66rem;height:24px"><select class="form-select" id="thListeDurum" style="width:auto;font-size:.66rem;height:24px;padding:0 20px 0 6px"><option value="">Tüm Durumlar</option><option>Taslak</option><option>İşlendi</option></select><button type="button" class="btn btn-light btn-sm py-0" id="thListeExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ci-liste" id="thListe" data-dinamik="kapali"><thead><tr><th>Tahsilat No</th><th>Tarih</th><th>Cari</th><th>Yöntem</th><th class="s">Tip</th><th class="e">Tutar</th><th class="e">TL</th><th class="s">Mod</th><th>Durum</th><th class="s">Fatura</th><th class="e">Avans</th><th class="e">Kur Farkı</th><th class="e">Vade Farkı</th><th>Fark Faturası</th><th>Kim</th><th></th></tr></thead><tbody></tbody></table></div></div></div>
         <div id="thDetay"></div>
     </div>
 
     <div class="na-panel" data-p="fatura">
         <div class="row g-2">
             <div class="col-lg-7"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-file-invoice me-1"></i>Kur Farkı / Vade Farkı Faturaları</span><span class="not">satıra tıklayınca fatura önizlemesi</span></div>
-                <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo th-liste" id="thFaturaListe" data-dinamik="kapali"><thead><tr><th>Fatura No</th><th>Tarih</th><th>Vade</th><th>Cari</th><th>Tür</th><th class="e">Matrah</th><th class="e">KDV</th><th class="e">Toplam</th><th>Tahsilat</th><th>Kim</th></tr></thead><tbody></tbody></table></div></div></div></div>
+                <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ci-liste" id="thFaturaListe" data-dinamik="kapali"><thead><tr><th>Fatura No</th><th>Tarih</th><th>Vade</th><th>Cari</th><th>Tür</th><th class="e">Matrah</th><th class="e">KDV</th><th class="e">Toplam</th><th>Tahsilat</th><th>Kim</th></tr></thead><tbody></tbody></table></div></div></div></div>
             <div class="col-lg-5"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-print me-1"></i>Fatura Önizleme</span><button type="button" class="btn btn-light btn-sm py-0" id="thYazdir" style="font-size:.66rem"><i class="fas fa-print me-1"></i>Yazdır</button></div><div class="na-kart-g" id="thFaturaOnizle"><div class="na-bos">Listeden bir fatura seçin.</div></div></div></div>
         </div>
     </div>
 </div>
 @section Scripts {
-<script src="/js/tahsilat.js?v=3"></script>
+<script src="/js/cari-suzgec.js?v=1"></script>
+<script src="/js/tahsilat.js?v=4"></script>
 }

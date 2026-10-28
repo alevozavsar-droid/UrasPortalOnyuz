@@ -109,9 +109,9 @@ namespace WebApplication3.Controllers
 
         /// <summary>Tahsilat ekranı (yeni tasarım): Views/Rapor117/Index.cshtml + wwwroot/js/tahsilat.js; uçlar Controllers/TahsilatController.cs (bakiyeden / fatura bazlı tahsilat, vade farkı, kur farkı, fark faturası). ?kod= ile cari ön seçilir.</summary>
         [HttpGet]
-        public IActionResult Index(string kod)
+        public IActionResult Index(string kod, string no)
         {
-            ViewData["Title"] = "Tahsilat"; ViewBag.Kod = kod ?? "";
+            ViewData["Title"] = "Tahsilat"; ViewBag.Kod = kod ?? ""; ViewBag.No = no ?? "";
             return View("Index");
         }
 

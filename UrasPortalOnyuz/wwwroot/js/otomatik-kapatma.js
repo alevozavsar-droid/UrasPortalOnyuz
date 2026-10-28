@@ -15,16 +15,17 @@
   const csvIndir = (ad, basliklar, satirlar) => { const t = [basliklar, ...satirlar].map(r => r.map(x => `"${String(x ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n'); const b = new Blob(['﻿' + t], { type: 'text/csv;charset=utf-8' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = ad + '.csv'; a.click(); };
   function mesaj(tip, m) { const s = $('#naSonuc'); s.className = 'alert py-2 px-3 mb-2 alert-' + tip; s.innerHTML = m; s.style.display = 'block'; }
   function sekme(p) { $$('#okSekmeler button').forEach(b => b.classList.toggle('aktif', b.dataset.p === p)); $$('.na-panel').forEach(x => x.classList.toggle('aktif', x.dataset.p === p)); }
-  let V = null, KUR = {}, D = null, CIFT = [];
+  let V = null, KUR = {}, D = null, CIFT = [], S = null;
   const kurTl = pb => pb === 'TL' || pb === 'TRY' || !pb ? 1 : (KUR[pb] || 1);
   const toplam = (l, f) => l.reduce((s, k) => s + (Number(f(k)) || 0), 0);
 
   // ---- liste
   function liste() {
-    const ara = ($('#okAra').value || '').toLocaleLowerCase('tr-TR'), v = id => $(id).value;
-    return V.cariler.filter(k => (!v('#okTip') || k.tip === v('#okTip')) && (!v('#okSirket') || k.sirket === v('#okSirket')) && (!v('#okDurum') || k.durum === v('#okDurum')) && (!v('#okPb') || k.pbler.includes(v('#okPb'))) && (!ara || [k.kod, k.kisaAd, k.resmiUnvan].join(' ').toLocaleLowerCase('tr-TR').includes(ara)));
+    const v = id => $(id).value;
+    return V.cariler.filter(k => (!k.suzgec || S.uyuyor(k.suzgec)) && (!v('#okDurum') || k.durum === v('#okDurum')) && (!v('#okPb') || k.pbler.includes(v('#okPb'))));
   }
-  function sirala(l) { const s = $('#okSirala').value; const f = { kap: k => -k.kapatilabilir, fat: k => -k.acikFaturaTl, ode: k => -k.acikOdemeTl }[s]; return l.slice().sort((a, b) => f ? (f(a) - f(b)) || a.kod.localeCompare(b.kod) : a.kod.localeCompare(b.kod)); }
+  function sirala(l) { const s = $('#okSirala').value; const f = { kap: k => -k.kapatilabilir, fat: k => -k.acikFaturaTl, ode: k => -k.acikOdemeTl, bakiye: k => -Math.abs(k.bakiyeTl) }[s]; return l.slice().sort((a, b) => f ? (f(a) - f(b)) || a.kod.localeCompare(b.kod) : a.kod.localeCompare(b.kod)); }
+  const riskRozet = d => rozet(d || '—', d === 'Riskli' ? 'hata' : d === 'İzlemede' ? 'bekle' : 'ok');
   function kpi() {
     const l = V.cariler; const kutu = (k, l1, v, s, sec) => `<div style="--k:${k}" ${sec ? `data-sec="${sec}"` : ''}><div class="l">${l1}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
     const bugun = V.bugun.split('-').reverse().join('.'); const bugunK = V.kayitlar.filter(k => k.zaman.startsWith(bugun));
@@ -33,8 +34,8 @@
   }
   function ciz() {
     const l = sirala(liste());
-    $('#okTablo tbody').innerHTML = l.map(k => `<tr data-kod="${esc(k.kod)}" class="tik"><td class="s">${k.durum === 'Kapatılabilir' ? `<input type="checkbox" class="okSec" value="${esc(k.kod)}">` : ''}</td><td><b>${esc(k.kod)}</b> ${esc(k.kisaAd)}<br><small class="text-muted">${esc(k.pbler.join(' · '))}</small></td><td><span class="ck-tip">${esc(k.tip)}</span></td><td><small>${esc(k.sirket)}</small></td><td class="e">${tl(k.bakiyeTl)}</td><td class="e">${k.acikFatura ? `${tl(k.acikFaturaTl)}<br><small class="text-muted">${k.acikFatura} fatura</small>` : '—'}</td><td class="e ${k.acikOdeme ? 'gec' : ''}">${k.acikOdeme ? `${tl(k.acikOdemeTl)}<br><small>${k.acikOdeme} belge</small>` : '—'}</td><td class="e ${k.kapatilabilir ? 'ok' : ''}"><b>${k.kapatilabilir ? tl(k.kapatilabilir) : '—'}</b></td><td class="s">${k.oneri ? `${k.oneri}<br><small class="text-muted">${k.birebir} birebir</small>` : '—'}</td><td>${durumRozet(k.durum)}</td><td><small>${esc(k.sonKapama || '—')}</small></td><td class="ci-git"><button type="button" data-ac="${esc(k.kod)}" title="Eşleştirme ekranı"><i class="fas fa-arrows-left-right"></i></button>${k.oneri ? `<button type="button" data-oto="${esc(k.kod)}" title="Bu caride otomatik kapat"><i class="fas fa-bolt"></i></button>` : ''}</td></tr>`).join('') || '<tr><td colspan="12" class="na-bos">Süzgece uyan cari yok.</td></tr>';
-    $('#okTablo tfoot').innerHTML = l.length ? `<tr><td colspan="4">Toplam · ${l.length} cari</td><td class="e">${tl(toplam(l, k => k.bakiyeTl))}</td><td class="e">${tl(toplam(l, k => k.acikFaturaTl))}</td><td class="e">${tl(toplam(l, k => k.acikOdemeTl))}</td><td class="e">${tl(toplam(l, k => k.kapatilabilir))}</td><td class="s">${toplam(l, k => k.oneri)}</td><td colspan="3">${l.filter(k => k.durum === 'Kapatılabilir').length} kapatılabilir</td></tr>` : '';
+    $('#okTablo tbody').innerHTML = l.map(k => `<tr data-kod="${esc(k.kod)}" class="tik"><td class="s">${k.durum === 'Kapatılabilir' ? `<input type="checkbox" class="okSec" value="${esc(k.kod)}">` : ''}</td><td><b>${esc(k.kod)}</b> ${esc(k.kisaAd)}<br><small class="text-muted">${esc(k.pbler.join(' · '))}${k.vergiNo ? ' · VKN ' + esc(k.vergiNo) : ''}</small></td><td><span class="ck-tip">${esc(k.tip)}</span><br><small class="text-muted">${esc(k.suzgec ? k.suzgec.sinif : '')} · ${esc(k.bolge)}</small></td><td><small>${esc(k.sirket)}<br>${esc(k.suzgec ? k.suzgec.temsilci : '')}</small></td><td class="e">${tl(k.bakiyeTl)}</td><td class="e">${k.acikFatura ? `${tl(k.acikFaturaTl)}<br><small class="text-muted">${k.acikFatura} fatura</small>` : '—'}</td><td class="e ${k.acikOdeme ? 'gec' : ''}">${k.acikOdeme ? `${tl(k.acikOdemeTl)}<br><small>${k.acikOdeme} belge</small>` : '—'}</td><td class="e ${k.kapatilabilir ? 'ok' : ''}"><b>${k.kapatilabilir ? tl(k.kapatilabilir) : '—'}</b></td><td class="s">${k.oneri ? `${k.oneri}<br><small class="text-muted">${k.birebir} birebir</small>` : '—'}</td><td>${durumRozet(k.durum)}</td><td>${k.suzgec ? `${riskRozet(k.suzgec.risk)}<br><small class="text-muted">${esc(k.suzgec.limitDurum)}</small>` : '—'}</td><td><small>${esc(k.sonKapama || '—')}</small></td><td class="ci-git"><button type="button" data-ac="${esc(k.kod)}" title="Eşleştirme ekranı"><i class="fas fa-arrows-left-right"></i></button>${k.oneri ? `<button type="button" data-oto="${esc(k.kod)}" title="Bu caride otomatik kapat"><i class="fas fa-bolt"></i></button>` : ''}<a href="/CariKart/${k.tip === 'Tedarikçi' ? 'Tedarikci' : 'Musteri'}?kod=${encodeURIComponent(k.kod)}" title="Cari kartı"><i class="fas fa-address-card"></i></a>${k.tip === 'Tedarikçi' ? `<a href="/Rapor52?kod=${encodeURIComponent(k.kod)}" title="Tedarikçi Fatura ve Ödeme Takip"><i class="fas fa-truck"></i></a>` : `<a href="/Rapor117?kod=${encodeURIComponent(k.kod)}" title="Tahsilat"><i class="fas fa-hand-holding-dollar"></i></a>`}</td></tr>`).join('') || '<tr><td colspan="13" class="na-bos">Süzgece uyan cari yok.</td></tr>';
+    $('#okTablo tfoot').innerHTML = l.length ? `<tr><td colspan="4">Toplam · ${l.length} cari</td><td class="e">${tl(toplam(l, k => k.bakiyeTl))}</td><td class="e">${tl(toplam(l, k => k.acikFaturaTl))}</td><td class="e">${tl(toplam(l, k => k.acikOdemeTl))}</td><td class="e">${tl(toplam(l, k => k.kapatilabilir))}</td><td class="s">${toplam(l, k => k.oneri)}</td><td colspan="4">${l.filter(k => k.durum === 'Kapatılabilir').length} kapatılabilir</td></tr>` : '';
     $('#okSayi').textContent = `${l.length} / ${V.cariler.length} cari`; $('#okN').textContent = l.length; $('#okNKayit').textContent = V.kayitlar.length;
     $$('#okTablo [data-ac]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); cariAc(b.dataset.ac); }));
     $$('#okTablo [data-oto]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); topluKapat([b.dataset.oto], `${b.dataset.oto} carisinde otomatik kapatma yapılsın mı?`); }));
@@ -89,7 +90,7 @@
   }
   async function yenile(kod) { const j = await fetch('/Kapama/Veri').then(r => r.json()); V = j; KUR = j.kurlar || {}; doldurSec(); ciz(); if (kod) await cariAc(kod); }
   function doldurSec() {
-    const sirk = $('#okSirket'), v = sirk.value; sirk.innerHTML = '<option value="">Tümü</option>' + [...new Set(V.cariler.map(k => k.sirket))].sort().map(s => `<option>${esc(s)}</option>`).join(''); sirk.value = v;
+    if (S) S.kartlar(V.cariler.map(k => k.suzgec).filter(Boolean));
     const ara = ($('#okCariAra').value || '').toLocaleLowerCase('tr-TR'); const cs = $('#okCari'), cv = cs.value;
     cs.innerHTML = '<option value="">Seçiniz…</option>' + V.cariler.filter(k => !ara || (k.kod + ' ' + k.kisaAd).toLocaleLowerCase('tr-TR').includes(ara)).map(k => `<option value="${esc(k.kod)}">${esc(k.kod)} · ${esc(k.kisaAd)}${k.oneri ? ` · ${k.oneri} öneri` : ''}</option>`).join(''); cs.value = cv;
   }
@@ -99,9 +100,10 @@
     kayitlar.son = l;
   }
   function baslat() {
-    ['#okAra', '#okTip', '#okSirket', '#okDurum', '#okPb', '#okSirala'].forEach(s => { $(s).addEventListener('input', ciz); $(s).addEventListener('change', ciz); });
+    S = CariSuzgec.kur($('#okSuzgec'), V.secenekler, { tipler: ['Müşteri', 'Tedarikçi'], tipIlk: 'Müşteri + Tedarikçi', onChange: ciz }); S.kartlar(V.cariler.map(k => k.suzgec).filter(Boolean)); S.urlOn(new URLSearchParams(location.search));
+    ['#okDurum', '#okPb', '#okSirala'].forEach(s => { $(s).addEventListener('input', ciz); $(s).addEventListener('change', ciz); });
     $('#okKayitAra').addEventListener('input', kayitlar);
-    $('#okTemizle').addEventListener('click', () => { $('#okAra').value = ''; ['#okTip', '#okSirket', '#okDurum', '#okPb'].forEach(s => $(s).value = ''); ciz(); });
+    $('#okTemizle').addEventListener('click', () => { ['#okDurum', '#okPb'].forEach(s => $(s).value = ''); S.temizle(); });
     $$('#okSekmeler button').forEach(b => b.addEventListener('click', () => sekme(b.dataset.p)));
     $('#okHepsi').addEventListener('change', e => { $$('.okSec').forEach(c => c.checked = e.target.checked); seciliSay(); });
     $('#okSeciliKapat').addEventListener('click', () => { const k = $$('.okSec:checked').map(c => c.value); topluKapat(k, `${k.length} caride otomatik kapatma yapılsın mı? (birebir + FIFO)`); });

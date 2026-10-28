@@ -86,28 +86,17 @@ namespace WebApplication3.Controllers
  {return default;
 }
 
+        /// <summary>Tedarikçi Fatura ve Ödeme Takip Raporu (yeni tasarım): Views/Rapor52/Index.cshtml + wwwroot/js/tedarikci-takip.js; veri /Tedarikci/Veri ve /Tedarikci/Detay (Controllers/TedarikciController.cs). ?kod= (ya da ?bpCode=) ile tedarikçi ön seçilir.</summary>
         [HttpGet]
-        public async Task<IActionResult> Index(string bpCode)
- {ViewBag.CurrentDbDisplay = "";
-ViewBag.SelectedBpCode = "";
-ViewBag.TotalOverdueAmount = 0;
-ViewBag.AvgOverdueAdat = 0;
-ViewBag.CountOverdueInvoices = 0;
-ViewBag.DaysSinceOldestOverdue = 0;
-ViewBag.VendorList = WebApplication3.OrnekDoldurucu.Liste<CariViewModel>(12);
-WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index", WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Models.Rapor52ViewModel>(12));
-}
+        public async Task<IActionResult> Index(string kod, string bpCode)
+        {
+            ViewData["Title"] = "Tedarikçi Fatura ve Ödeme Takip Raporu"; ViewBag.Kod = kod ?? bpCode ?? "";
+            return await Task.FromResult(View("Index"));
+        }
 
         [HttpGet]
         [Route("ReconciliationSimulation")]
-        public async Task<IActionResult> ReconciliationSimulation(string bpCode)
- {ViewBag.CurrentDbDisplay = "";
-ViewBag.SelectedBpCode = "";
-ViewBag.SelectedBpName = "";
-WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("ReconciliationSimulation", WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Models.VendorReconciliationSimulationViewModel>(12));
-}
+        public async Task<IActionResult> ReconciliationSimulation(string bpCode) => await Task.FromResult<IActionResult>(RedirectToAction("Index", new { kod = bpCode }));   // eski mutabakat simülasyonu: yeni tasarımda tedarikçi detayı
 
 
         [HttpPost]
