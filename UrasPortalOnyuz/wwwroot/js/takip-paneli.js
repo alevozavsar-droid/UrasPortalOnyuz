@@ -110,7 +110,7 @@
   }
   function cizTumu() {
     const t = $('#tpTablo-tumu'); if (!t) return; const L = tumuSatirlar(); const gunStr = tarih(V.bugun);
-    tabloKur(t, [K('Sıra', 28), K('Tarih', 72), K('Şirket', 80), K('Hesap · Tip', 118), K('İşlem Türü', 94), K('Karşı Taraf', 118), K('Açıklama', 150), K('Satır Kaynağı', 128), K('Giriş (₺)', 88), K('Çıkış (₺)', 88), K('Nakit Akış', 68), K('Onay', 86), K('SAP', 42), K('Fiş', 78, 'l'), K('', 36)]);
+    tabloKur(t, [K('Sıra', 28), K('Tarih', 80), K('Şirket', 80), K('Hesap · Tip', 110), K('İşlem Türü', 94), K('Karşı Taraf', 118), K('Açıklama', 150), K('Satır Kaynağı', 128), K('Giriş (₺)', 88), K('Çıkış (₺)', 88), K('Nakit Akış', 68), K('Onay', 86), K('SAP', 42), K('Fiş', 78, 'l'), K('', 36)]);
     $$('#tpTumuMod button').forEach(b => { const a = b.dataset.m === F.tumuMod; b.classList.toggle('aktif', a); b.style.background = a ? '#0369a1' : '#fff'; b.style.color = a ? '#fff' : '#475569'; });
     $('#tpTumuNot').textContent = F.tumuMod === 'bugun' ? `${gunStr} · bugün yapılan işlemler` : `${tarih(F.bas)} – ${tarih(F.bit)} · seçili dönem`;
     const tipRozet = x => `<span class="tp-kyn ${x.tip === 'BANKA' ? 'banka' : x.tip === 'KASA' ? 'fis' : x.tip === 'CEK' ? 'akibet' : x.tip === 'KART' ? 'na' : 'dolasim'}">${esc(tipAdiKisa(x.tip))}</span>`;
