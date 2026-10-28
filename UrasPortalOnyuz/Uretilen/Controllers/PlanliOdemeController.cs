@@ -4,6 +4,7 @@
 // kayıt / düzenleme / pasif / akıt işlemleri iki ekranda da anında görünür (tek liste, bellek içi). Ekran: Views/PlanliOdeme/Index.cshtml · betik: wwwroot/js/planli-odeme.js
 // (Eski "hatırlatma e-postası + taksit planı" ekranı kaldırıldı; Uretilen/Services/PlanliOdeme* dosyaları kullanılmıyor.)
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
@@ -39,11 +40,44 @@ namespace WebApplication3.Controllers
             {
                 success = true, bugun = DateTime.Today.ToString("yyyy-MM-dd"), kullanici = Kullanici,
                 sirketler = CekAkibetOrnek.Sirketler.Select(s => new { ad = s.Ad, db = s.DbName }).ToList(),
-                duzenli = new { liste = l.Select(DuzenliOdemeOrnek.Json).ToList(), ozet = DuzenliOdemeOrnek.Ozet(l), sorumlu = DuzenliOdemeOrnek.Sorumlu, odemeSekilleri = DuzenliOdemeOrnek.OdemeSekilleri, kategoriler = DuzenliOdemeOrnek.Kategoriler, sirketler = CekAkibetOrnek.Sirketler.Select(s => s.Ad).ToList(), otomatik = oto.eklenen, otomatikMesaj = oto.mesaj }
+                duzenli = new { liste = l.Select(DuzenliOdemeOrnek.Json).ToList(), ozet = DuzenliOdemeOrnek.Ozet(l), sorumlu = DuzenliOdemeOrnek.Sorumlu, odemeSekilleri = DuzenliOdemeOrnek.OdemeSekilleri, kategoriler = DuzenliOdemeOrnek.Kategoriler, sirketler = CekAkibetOrnek.Sirketler.Select(s => s.Ad).ToList(), otomatik = oto.eklenen, otomatikMesaj = oto.mesaj,
+                    kullanimlar = DuzenliOdemeOrnek.Kullanimlar, cekPlanUfku = DuzenliOdemeOrnek.CekPlanUfku, butceKalemleri = ButceOrnek.Kalemler.Select(k => new { kod = k.Kod, ad = k.Ad, grup = k.Grup, altGrup = k.AltGrup }).ToList() }
             });
         }
 
-        public class Istek { public int Id { get; set; } public string Ay { get; set; } public string DbName { get; set; } public string Tedarikci { get; set; } public string UrunHizmet { get; set; } public string Sirket { get; set; } public string OdemeSekli { get; set; } public string Kategori { get; set; } public int Gun { get; set; } public decimal AylikTutar { get; set; } public string Not { get; set; } public string Durum { get; set; } }
+        public class Istek { public int Id { get; set; } public string Ay { get; set; } public string DbName { get; set; } public string Tedarikci { get; set; } public string UrunHizmet { get; set; } public string Sirket { get; set; } public string OdemeSekli { get; set; } public string Kategori { get; set; } public int Gun { get; set; } public decimal AylikTutar { get; set; } public string Not { get; set; } public string Durum { get; set; } public string ButceKalem { get; set; } public int[] Cekler { get; set; } public string Kullanim { get; set; } public int CekDocEntry { get; set; } }
+
+        /// <summary>Bir ay için seçilebilir portföy çekleri / senetleri (tüm grup şirketleri; vade uygunluğu ödeme gününe göre) + o aya zaten planlı olanlar.</summary>
+        [HttpGet("PortfoyCekler")]
+        public IActionResult PortfoyCekler(int id, string ay)
+        {
+            var d = DuzenliOdemeOrnek.Bul(id); if (d == null) return Json(new { success = false, message = "Kayıt bulunamadı." });
+            if (!DuzenliOdemeOrnek.AyGecerli(ay)) return Json(new { success = false, message = "Ay AAAA-AA biçiminde olmalı." });
+            var tarih = DuzenliOdemeOrnek.OdemeTarihi(ay, d.Gun); var bugun = DateTime.Today;
+            HashSet<int> planli; lock (DuzenliOdemeOrnek.Kilit) planli = new HashSet<int>(d.CekPlanlari.Where(p => p.Ay == ay).Select(p => p.CekDocEntry));
+            var adaylar = CekAkibetOrnek.Secilebilirler(null, "Çek").Concat(CekAkibetOrnek.Secilebilirler(null, "Senet")).Concat(CekAkibetOrnek.BulHepsi(planli)).GroupBy(k => k.DocEntry).Select(g => g.First()).ToList();
+            string Uygunluk(CekKaydi k) { int gun = (tarih - k.Vade.Date).Days; return k.Vade.Date < bugun ? "Vadesi Geçmiş" : gun >= 0 ? "Uygun" : gun >= -7 ? "Sınırda" : "Vade Geç"; }
+            int Sira(string u) => u == "Uygun" ? 0 : u == "Sınırda" ? 1 : u == "Vade Geç" ? 2 : 3;
+            var cekler = adaylar.Select(k => new { k.DocEntry, k.No, k.Belge, k.Sirket, k.Musteri, k.Banka, vade = k.Vade.ToString("yyyy-MM-dd"), vadeTr = k.Vade.ToString("dd.MM.yyyy"), k.Tutar, k.IslemTipi, k.IslemTuru, uygunluk = Uygunluk(k), gunFark = (tarih - k.Vade.Date).Days, secili = planli.Contains(k.DocEntry) })
+                .OrderByDescending(x => x.secili).ThenBy(x => Sira(x.uygunluk)).ThenBy(x => x.uygunluk == "Uygun" ? x.gunFark : -x.gunFark).ThenBy(x => x.vade).ToList();
+            decimal planlanan; lock (DuzenliOdemeOrnek.Kilit) planlanan = d.CekPlanlari.Where(p => p.Ay == ay).Sum(p => p.Tutar);
+            return Json(new { success = true, id, ay, ayAdi = DuzenliOdemeOrnek.AyAdi(ay), tarih = tarih.ToString("yyyy-MM-dd"), ihtiyac = d.AylikTutar, planlanan, kalan = Math.Max(0, d.AylikTutar - planlanan), kullanimOneri = DuzenliOdemeOrnek.KullanimOner(d), kullanimlar = DuzenliOdemeOrnek.Kullanimlar, cekler });
+        }
+        /// <summary>Seçilen çek / senetleri bir ayın düzenli ödemesine planlar (Ciro ya da Tahsil).</summary>
+        [HttpPost("CekPlanla")]
+        public IActionResult CekPlanla([FromBody] Istek i)
+        {
+            if (i == null) return Json(new { success = false, message = "Veri yok." });
+            var r = DuzenliOdemeOrnek.CekPlanla(i.Id, i.Ay, i.Cekler ?? Array.Empty<int>(), i.Kullanim, Kullanici);
+            return Json(new { success = r.ok, message = r.mesaj, kayit = r.d == null ? null : DuzenliOdemeOrnek.Json(r.d) });
+        }
+        [HttpPost("CekPlanKaldir")]
+        public IActionResult CekPlanKaldir([FromBody] Istek i)
+        {
+            if (i == null) return Json(new { success = false, message = "Veri yok." });
+            var r = DuzenliOdemeOrnek.CekPlanKaldir(i.Id, i.Ay, i.CekDocEntry, Kullanici);
+            return Json(new { success = r.ok, message = r.mesaj, kayit = r.d == null ? null : DuzenliOdemeOrnek.Json(r.d) });
+        }
 
         /// <summary>Bir ayın (bu ay / gelecek ay) akmamış aktif kayıtlarını — ya da tek kaydı — Kasa Nakit Akışı'na akıtır (aynı aya akmış olanlar atlanır).</summary>
         [HttpPost("Akit")]
@@ -58,7 +92,7 @@ namespace WebApplication3.Controllers
         public IActionResult Kaydet([FromBody] Istek i)
         {
             if (i == null) return Json(new { success = false, message = "Veri yok." });
-            var r = DuzenliOdemeOrnek.Kaydet(i.Id, i.Tedarikci, i.UrunHizmet, i.Sirket, i.OdemeSekli, i.Kategori, i.Gun, i.AylikTutar, i.Not, Kullanici);
+            var r = DuzenliOdemeOrnek.Kaydet(i.Id, i.Tedarikci, i.UrunHizmet, i.Sirket, i.OdemeSekli, i.Kategori, i.Gun, i.AylikTutar, i.Not, Kullanici, i.ButceKalem);
             if (r.ok) FinekraOrnek.GunlukEkle(r.d.Sirket, r.d.No, i.Id > 0 ? "Düzenli Ödeme Güncellendi" : "Düzenli Ödeme Eklendi", $"{r.d.Tedarikci} · {r.d.UrunHizmet} · {r.d.OdemeSekli} · {r.d.AylikTutar.ToString("N2", Tr)} ₺ · gün {r.d.Gun} · Planlı Ödemeler ekranı", Kullanici);
             return Json(new { success = r.ok, message = r.mesaj, kayit = r.d == null ? null : DuzenliOdemeOrnek.Json(r.d) });
         }

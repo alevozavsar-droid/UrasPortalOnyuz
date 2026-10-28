@@ -25,7 +25,7 @@ namespace WebApplication3.Controllers
         public IActionResult Index(string sekme, string kalem)
         {
             ViewData["Title"] = "Bütçe Raporu";
-            ViewBag.Sekme = new[] { "sabit", "tedarik", "genel" }.Contains(sekme) ? sekme : "ozet";
+            ViewBag.Sekme = new[] { "sabit", "tedarik", "genel", "duzenli" }.Contains(sekme) ? sekme : "ozet";   // duzenli: planlı düzenli ödemelerin otomatik bütçe katkısı
             ViewBag.Kalem = kalem ?? "";
             ViewBag.Yil = DateTime.Today.Year;
             ViewBag.Sirketler = ButceOrnek.Sirketler;
@@ -51,7 +51,9 @@ namespace WebApplication3.Controllers
                     revizyonlar = ButceOrnek.Revizyonlar.Select(RevDto),
                     cekDurumlari = ButceOrnek.CekDurumlari,
                     // vadeli müşteri çekleri: vade ayına göre; bütçede "Kullanılabilir Çek" (Portföyde + Tahsilde + Tahsil Edildi)
-                    cekler = ButceOrnek.Cekler.Select(c => new { c.Sirket, c.No, c.MusteriKod, c.Musteri, c.Banka, vade = c.Vade.ToString("dd.MM.yyyy"), yil = c.Vade.Year, ay = c.Vade.Month, c.Tutar, c.Durum, kullanilabilir = c.Kullanilabilir, tahsilBankasi = c.TahsilBankasi })
+                    cekler = ButceOrnek.Cekler.Select(c => new { c.Sirket, c.No, c.MusteriKod, c.Musteri, c.Banka, vade = c.Vade.ToString("dd.MM.yyyy"), yil = c.Vade.Year, ay = c.Vade.Month, c.Tutar, c.Durum, kullanilabilir = c.Kullanilabilir, tahsilBankasi = c.TahsilBankasi }),
+                    // planlı düzenli ödemeler OTOMATİK bütçeye gelir (Data/DuzenliOdemeOrnek.cs › ButceKatki): kayıt bütçe kalemine eşlenir; aylık plan (aktif kayıtların aylık tutarı), ödenen (Kasa Nakit Akışı ÖDENDİ satırları)
+                    duzenli = DuzenliOdemeOrnek.ButceKatki(ButceOrnek.Yillar)
                 });
             }
         }
