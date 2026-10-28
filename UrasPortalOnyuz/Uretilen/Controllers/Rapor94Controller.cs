@@ -25,6 +25,7 @@ using QuestPDF.Infrastructure;
 using WebApplication3.Services;
 namespace WebApplication3.Controllers
 {
+#if URETILEN_KAPALI   // üretilmiş denetleyici devre dışı: elle yazılmış sürüm Controllers/Rapor94Controller.cs (Data/SatisSiparisOrnek.cs verisiyle; 28 Eki 2026)
     [Authorize]
     [Route("[controller]")]
     public class Rapor94Controller : Controller
@@ -509,4 +510,5 @@ return View("Index");
             public string Gtip { get; set; }
         }
     }
+#endif
 }

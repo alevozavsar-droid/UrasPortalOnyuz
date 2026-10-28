@@ -13,7 +13,7 @@ using QuestPDF.Infrastructure;
 
 namespace WebApplication3.Data
 {
-    public class DaBlok { public string Baslik { get; set; } public List<string> Kolonlar { get; set; } = new List<string>(); public List<bool> Sag { get; set; } = new List<bool>(); public List<string[]> Satirlar { get; set; } = new List<string[]>(); public string[] Toplam { get; set; } public string Not { get; set; } }
+    public class DaBlok { public string Baslik { get; set; } public List<string> Kolonlar { get; set; } = new List<string>(); public List<bool> Sag { get; set; } = new List<bool>(); public List<string[]> Satirlar { get; set; } = new List<string[]>(); public string[] Toplam { get; set; } public string Not { get; set; } public bool YeniSayfa { get; set; } public string UstNot { get; set; } }   // YeniSayfa: blok yeni sayfada başlar (belge setleri: Proforma / Commercial Invoice / Packing List); UstNot: blok başlığının altında açıklama
     public class DaBelge { public string Baslik { get; set; } public string AltBaslik { get; set; } public string Sirket { get; set; } = "Uras Grup"; public List<(string Etiket, string Deger)> Ozet { get; set; } = new List<(string, string)>(); public List<DaBlok> Bloklar { get; set; } = new List<DaBlok>(); public bool Yatay { get; set; } = true; public string Hazirlayan { get; set; } = ""; }
 
     public static class DisaAktar
@@ -36,7 +36,10 @@ namespace WebApplication3.Data
                 {
                     foreach (var bl in b.Bloklar)
                     {
+                        if (bl.YeniSayfa) col.Item().PageBreak();
                         if (!string.IsNullOrEmpty(bl.Baslik)) col.Item().PaddingTop(6).PaddingBottom(2).Text(bl.Baslik).FontSize(9).Bold().FontColor(mavi);
+                        if (!string.IsNullOrEmpty(bl.UstNot)) col.Item().PaddingBottom(3).Text(bl.UstNot).FontSize(7).FontColor("#475569");
+                        if (bl.Kolonlar.Count == 0) { if (!string.IsNullOrEmpty(bl.Not)) col.Item().PaddingTop(2).Text(bl.Not).FontSize(7).FontColor("#334155"); continue; }   // yalnız metin bloğu (belge notları, banka bilgileri, imza)
                         col.Item().Table(t =>
                         {
                             t.ColumnsDefinition(cd => { for (int i = 0; i < bl.Kolonlar.Count; i++) cd.RelativeColumn(i == 0 ? 1.4f : 1f); });

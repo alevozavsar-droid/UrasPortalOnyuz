@@ -1,0 +1,189 @@
+// ============================================================
+// SATIŞ SİPARİŞİ — Yurtiçi / Yurtdışı (Views/Rapor94/Index.cshtml; veri /Rapor94/Veri?bolge=, satır /Rapor94/Siparis, kayıt Kaydet / Donustur / Yukleme / Durum / Marka, belge /Rapor94/Belge?no=&tur=)
+//   Siparişler (yükleme tarihi-saati, süreç şeridi, belgeler) · Sipariş Talepleri (satışçıdan gelen; siparişe dönüştür) · Yükleme Takvimi · Yeni Sipariş / Talep (kalem fiyatı özel fiyattan) · Marka / Temsilci özeti.
+//   Çekmece: marka seçimi (belgelerde o markanın adı), kalemler, yükleme planı, durum adımları, tek tuşla belge (seti), günlük.
+// ============================================================
+(() => {
+  'use strict';
+  const kok = document.getElementById('ss'); if (!kok) return;
+  const $ = (s, k) => (k || document).querySelector(s), $$ = (s, k) => Array.from((k || document).querySelectorAll(s));
+  const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const para = v => (Number(v) || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const kisa = v => (Number(v) || 0).toLocaleString('tr-TR', { maximumFractionDigits: 0 });
+  const tarih = s => { if (!s) return '—'; const p = String(s).slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : s; };
+  const pbAd = pb => pb === 'TL' ? '₺' : pb === 'EUR' ? '€' : '$';
+  function mesaj(tip, m) { const s = $('#naSonuc'); s.className = 'alert py-2 px-3 mb-2 alert-' + tip; s.innerHTML = m; s.style.display = 'block'; clearTimeout(mesaj.z); mesaj.z = setTimeout(() => s.style.display = 'none', 12000); }
+  const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+  const getJ = url => fetch(url).then(r => r.json());
+  const rozet = (m, t) => `<span class="ss-rozet ${t}">${esc(m)}</span>`;
+  const BOLGE = kok.dataset.bolge || 'Yurtiçi', IHR = BOLGE === 'Yurtdışı';
+
+  let V = null, F = { durum: '', marka: '', temsilci: '', musteri: '', ara: '' }, A = null, Y = { kalemler: [], marka: 'uras' };
+  const markaBul = k => (V.markalar || []).find(m => m.kod === k) || V.markalar[0];
+  const markaRozet = s => `<span class="ss-marka" style="background:${esc(s.markaRenk)}" title="Belgelerde: ${esc(s.markaBelge)}">${esc(s.markaBelge)}</span>`;
+  const durumRozet = s => s.talep ? rozet('Talep', 'bekle') : s.durum === 'Faturalandı' ? rozet('Faturalandı', 'ok') : s.durum === 'Yüklendi' ? rozet('Yüklendi', 'ok') : s.durum === 'Yüklemeye Hazır' ? rozet('Yüklemeye Hazır', 'bilgi') : s.durum === 'Hazırlanıyor' ? rozet('Hazırlanıyor', 'mor') : s.durum === 'Sipariş' ? rozet('Sipariş', 'bilgi') : rozet(s.durum, 'hata');
+  const kalanMetni = s => s.yuklemeKalan == null ? '' : s.asama >= 4 ? (s.yuklendiTarihi ? 'yüklendi' : '') : s.yuklemeKalan < 0 ? `${-s.yuklemeKalan} gün gecikti` : s.yuklemeKalan === 0 ? 'bugün' : s.yuklemeKalan === 1 ? 'yarın' : `${s.yuklemeKalan} gün kaldı`;
+  const surec = s => { const ad = V.asamalar; const basla = s.talepNo ? 0 : 1; let simdi = false; if (s.asama < 0) return `<div class="ss-surec"><span class="iptal">${esc(s.durum)}</span></div>`; return `<div class="ss-surec">${ad.slice(basla).map((a, i) => { const idx = i + basla; const ok = idx < s.asama || (idx === s.asama && s.asama === 5); const cls = ok ? 'ok' : (!simdi && idx === s.asama) ? (simdi = true, s.gecikti ? 'gec' : 'simdi') : ''; return `<span class="${cls}" title="${esc(a)}">${ok ? '✓ ' : ''}${esc(a)}</span>`; }).join('')}</div>`; };
+  const belgeRozetleri = s => (V.belgeTurleri || []).map(t => { const b = (s.belgeler || []).find(x => x.tur === t); const kisa = t === 'Proforma Invoice' || t === 'Proforma Fatura' ? 'PRF' : t === 'Commercial Invoice' ? 'CI' : t === 'Packing List' ? 'PL' : 'SF'; return `<span class="ss-belge ${b ? (b.eskiMarka ? 'eski' : 'var') : ''}" title="${esc(t)}${b ? ' · ' + b.no + ' · ' + b.tarih + ' · ' + b.markaBelge + (b.eskiMarka ? ' (marka değişti, yeniden oluşturun)' : '') : ' · henüz oluşturulmadı'}">${kisa}</span>`; }).join('');
+
+  const q = () => (F.ara || '').toLocaleLowerCase('tr-TR');
+  const uyar = s => (!F.marka || s.marka === F.marka) && (!F.temsilci || s.temsilci === F.temsilci) && (!F.musteri || s.cariKodu === F.musteri) && (!q() || [s.no, s.talepNo, s.cari, s.ulke, s.musteriSiparisNo, s.faturaNo, s.teklifNo, s.temsilci, ...(s.kalemler || []).map(k => k.urun)].join(' ').toLocaleLowerCase('tr-TR').includes(q())) && durumUyar(s);
+  const durumUyar = s => { const d = F.durum; if (!d) return true; if (d === 'acik') return s.acik; if (d === 'gec') return s.gecikti; if (d === 'hafta') return s.acik && s.yuklemeKalan != null && s.yuklemeKalan >= 0 && s.yuklemeKalan <= 7; if (d === 'belgesiz') return s.acik && !(s.belgeler || []).some(b => b.tur === 'Packing List'); return s.durum === d; };
+  const siparisler = () => (V.siparisler || []).filter(s => !s.talep);
+  const talepler = () => (V.siparisler || []).filter(s => s.talep);
+  const liste = () => siparisler().filter(uyar);
+
+  function sekme(p) { $$('#ssSekmeler button').forEach(b => b.classList.toggle('aktif', b.dataset.p === p)); $$('#ss > .na-panel').forEach(x => x.classList.toggle('aktif', x.dataset.p === p)); }
+
+  // ---------- kpi
+  function cizKpi() {
+    const o = V.ozet || {};
+    const k = [
+      { k: 'talep', l: 'Sipariş Talepleri', v: String(o.talep || 0), s: `${kisa(o.talepTutar)} ₺ · satışçıdan geldi`, r: o.talep ? '#b45309' : '#94a3b8' },
+      { k: 'acik', l: 'Açık Siparişler', v: String(o.acik || 0), s: `${kisa(o.acikTutar)} ₺ · ${kisa(o.acikKg)} kg`, r: '#0369a1' },
+      { k: 'hafta', l: 'Bu Hafta Yüklenecek', v: String(o.buHafta || 0), s: `${kisa(o.buHaftaKg)} kg · 7 gün içinde`, r: '#1d4ed8' },
+      { k: 'gec', l: 'Yüklemesi Geciken', v: String(o.gecikmis || 0), s: 'planlanan tarih geçti', r: o.gecikmis ? '#dc2626' : '#15803d' },
+      { k: 'Yüklemeye Hazır', l: 'Yüklemeye Hazır', v: String(o.hazir || 0), s: 'depo hazırladı', r: '#7c3aed' },
+      { k: 'Yüklendi', l: 'Yüklendi · Bu Ay', v: String(o.yuklendiAy || 0), s: 'sevk edildi', r: '#15803d' },
+      { k: 'Faturalandı', l: 'Faturalandı · Bu Ay', v: String(o.faturalandiAy || 0), s: `${kisa(o.faturaAyTutar)} ₺`, r: '#15803d' },
+      IHR ? { k: 'belgesiz', l: 'Belgesi Eksik', v: String(o.belgesiz || 0), s: 'Packing List / CI oluşturulmadı', r: o.belgesiz ? '#b45309' : '#15803d' } : { k: '', l: 'Markalar', v: String((o.markalar || []).filter(m => m.adet).length), s: (o.markalar || []).filter(m => m.adet).map(m => `${m.ad} ${m.adet}`).join(' · '), r: '#64748b' }
+    ];
+    $('#ssKpi').innerHTML = k.map(x => `<div style="--k:${x.r}" data-durum="${x.k}" class="${F.durum === x.k && x.k ? 'aktif' : ''}" title="Tıklayınca liste süzülür"><div class="l">${esc(x.l)}</div><div class="v">${esc(x.v)}</div><div class="s">${esc(x.s)}</div></div>`).join('');
+  }
+
+  // ---------- siparişler tablosu
+  function cizTablo() {
+    const L = liste();
+    $('#ssTablo thead').innerHTML = '<tr><th style="width:8%">No · Tarih</th><th style="width:14%">Müşteri</th><th style="width:7%">Marka</th><th style="width:8%">Temsilci</th><th style="width:8%">Kalem · Miktar</th><th style="width:8%">Tutar</th><th style="width:9%">Ödeme · Teslim</th><th style="width:10%">Yükleme</th><th style="width:16%">Süreç</th><th style="width:7%">Durum</th><th style="width:5%">Belge</th></tr>';
+    $('#ssTablo tbody').innerHTML = L.length ? L.map(s => `<tr class="tik ${s.gecikti ? 'gec' : ''} ${s.asama >= 5 || s.asama < 0 ? 'bitti' : ''}" data-no="${esc(s.no)}"><td class="sol"><b>${esc(s.no)}</b><small>${tarih(s.tarih)}${s.talepNo ? ' · ' + esc(s.talepNo) : ''}${s.teklifNo ? ' · ' + esc(s.teklifNo) : ''}</small></td><td class="sol"><b>${esc(s.cari)}</b><small>${esc(s.sehir || '')}${IHR ? ' / ' + esc(s.ulke) : ''}${s.musteriSiparisNo ? ' · PO ' + esc(s.musteriSiparisNo) : ''}</small></td><td>${markaRozet(s)}</td><td class="sol">${esc(s.temsilci)}</td><td class="para">${s.kalem} kalem<small>${kisa(s.toplamKg)} kg · ${s.toplamKoli} koli</small></td><td class="para">${para(s.tutar)} ${pbAd(s.pb)}<small>${s.pb !== 'TL' ? kisa(s.tutarTl) + ' ₺' : ''}</small></td><td class="sol"><small style="display:inline">${esc(s.odemeSekli)}</small><small>${esc(s.teslimSekli)}</small></td><td class="sol"><b>${s.yuklemeTarihi ? tarih(s.yuklemeTarihi) + ' ' + esc(s.yuklemeSaati) : '—'}</b><small class="${s.gecikti ? 'text-danger fw-bold' : ''}">${esc(kalanMetni(s))}${s.yuklemeYeri ? ' · ' + esc(s.yuklemeYeri) : ''}</small></td><td>${surec(s)}</td><td>${durumRozet(s)}${s.faturaNo ? `<small>${esc(s.faturaNo)}</small>` : ''}</td><td>${belgeRozetleri(s)}</td></tr>`).join('') : '<tr><td colspan="11" class="na-bos text-center">Süzgece uyan sipariş yok.</td></tr>';
+    $('#ssTablo tfoot').innerHTML = L.length ? `<tr class="toplam"><td colspan="4" class="text-end">TOPLAM · ${L.length} sipariş · açık ${L.filter(s => s.acik).length} · geciken ${L.filter(s => s.gecikti).length}</td><td class="para">${kisa(L.reduce((a, s) => a + s.toplamKg, 0))} kg</td><td class="para">${kisa(L.reduce((a, s) => a + s.tutarTl, 0))} ₺</td><td colspan="5" class="sol">bu hafta yüklenecek ${L.filter(s => s.acik && s.yuklemeKalan != null && s.yuklemeKalan >= 0 && s.yuklemeKalan <= 7).length} · belgesi eksik ${L.filter(s => s.acik && !(s.belgeler || []).some(b => b.tur === 'Packing List')).length}</td></tr>` : '';
+    $('#ssSayi').textContent = `${L.length} / ${siparisler().length} sipariş · satıra tıklayınca marka, kalemler, yükleme planı, belgeler ve süreç açılır`;
+    $('#ssN-siparisler').textContent = siparisler().length; $('#ssN-talepler').textContent = talepler().length; cizKpi();
+  }
+  function cizTalepler() {
+    const L = talepler();
+    $('#ssTalepTablo thead').innerHTML = '<tr><th style="width:9%">Talep No · Tarih</th><th style="width:16%">Müşteri</th><th style="width:9%">Temsilci</th><th style="width:8%">Önerilen Marka</th><th style="width:22%">Kalemler</th><th style="width:9%">Tutar</th><th style="width:11%">İstenen Yükleme</th><th style="width:16%">İşlem</th></tr>';
+    $('#ssTalepTablo tbody').innerHTML = L.length ? L.map(s => `<tr class="tik talep" data-no="${esc(s.talepNo)}"><td class="sol"><b>${esc(s.talepNo)}</b><small>${tarih(s.tarih)}</small></td><td class="sol"><b>${esc(s.cari)}</b><small>${esc(s.sehir || '')}${IHR ? ' / ' + esc(s.ulke) : ''}</small></td><td class="sol">${esc(s.temsilci)}</td><td>${markaRozet(s)}</td><td class="sol" title="${esc(s.kalemler.map(k => k.urun + ' ' + kisa(k.miktar) + ' kg').join(' · '))}">${esc(s.kalemler.map(k => k.urun + ' ' + kisa(k.miktar) + ' kg').join(' · '))}<small>${s.kalem} kalem · ${kisa(s.toplamKg)} kg</small></td><td class="para">${para(s.tutar)} ${pbAd(s.pb)}</td><td class="sol">${s.yuklemeTarihi ? tarih(s.yuklemeTarihi) + ' ' + esc(s.yuklemeSaati) : '<span class="text-muted">belirtilmedi</span>'}</td><td><button type="button" class="btn btn-success btn-xs ss-donustur"><i class="fas fa-cart-plus me-1"></i>Siparişe Dönüştür</button> <button type="button" class="btn btn-light border btn-xs ss-ac"><i class="fas fa-folder-open"></i></button></td></tr>`).join('') : '<tr><td colspan="8" class="na-bos text-center">Bekleyen sipariş talebi yok.</td></tr>';
+  }
+  function cizTakvim() {
+    const n = +$('#ssTakvimGun').value || 14, bugun = V.bugun; const acik = siparisler().filter(s => s.acik && s.yuklemeTarihi);
+    const gunler = []; for (let i = 0; i < n; i++) { const d = new Date(bugun + 'T00:00:00'); d.setDate(d.getDate() + i); gunler.push(d.toISOString().slice(0, 10)); }
+    const gec = acik.filter(s => s.yuklemeTarihi < bugun).sort((a, b) => a.yuklemeTarihi.localeCompare(b.yuklemeTarihi));
+    const kart = (baslik, l, cls) => `<div class="ss-gun ${cls}"><div class="g"><b>${esc(baslik.b)}</b> ${esc(baslik.k)}<span class="t">${l.length ? kisa(l.reduce((a, s) => a + s.toplamKg, 0)) + ' kg' : ''}</span></div><ul>${l.length ? l.map(s => `<li data-no="${esc(s.no)}"><span class="s">${esc(s.yuklemeSaati || '—')}</span> ${esc(s.cari)} ${markaRozet(s)}<small>${esc(s.no)} · ${kisa(s.toplamKg)} kg · ${esc(s.nakliye || '')} · ${esc(s.durum)}${s.gecikti ? ' · GECİKTİ' : ''}</small></li>`).join('') : '<li class="text-muted" style="cursor:default">yükleme yok</li>'}</ul></div>`;
+    $('#ssTakvim').innerHTML = (gec.length ? kart({ b: '!', k: 'Geciken Yüklemeler' }, gec, 'gecti') : '') + gunler.map(g => { const l = acik.filter(s => s.yuklemeTarihi === g).sort((a, b) => (a.yuklemeSaati || '').localeCompare(b.yuklemeSaati || '')); const d = new Date(g + 'T00:00:00'); return kart({ b: String(d.getDate()), k: d.toLocaleDateString('tr-TR', { month: 'long', weekday: 'short' }) }, l, g === bugun ? 'bugun' : ''); }).join('');
+    $('#ssTakvimBaslik').textContent = `${tarih(bugun)} – ${tarih(gunler[gunler.length - 1])} · ${acik.filter(s => s.yuklemeTarihi >= bugun && s.yuklemeTarihi <= gunler[gunler.length - 1]).length} yükleme · ${gec.length} geciken`;
+    $('#ssN-takvim').textContent = acik.filter(s => s.yuklemeTarihi >= bugun && s.yuklemeTarihi <= gunler[6]).length;
+  }
+  function cizOzet() {
+    const o = V.ozet || {};
+    $('#ssMarkaTablo tbody').innerHTML = (o.markalar || []).map(m => { const mk = markaBul(m.kod); return `<tr><td class="sol"><span class="ss-marka" style="background:${esc(mk.renk)}">${esc(mk.belgeAdi)}</span> ${esc(mk.ad)}</td><td class="sol" title="${esc(mk.unvan + ' · ' + mk.adres)}">${esc(mk.unvan)}</td><td class="para">${m.adet}</td><td class="para">${kisa(m.tutar)}</td></tr>`; }).join('');
+    $('#ssTemsilciTablo tbody').innerHTML = (o.temsilciler || []).map(t => `<tr><td class="sol"><b>${esc(t.ad)}</b></td><td class="para">${t.talep}</td><td class="para">${t.acik}</td><td class="para ${t.gecikmis ? 'text-danger' : ''}">${t.gecikmis}</td><td class="para">${kisa(t.tutar)}</td><td><button type="button" class="btn btn-light border btn-xs ss-temsilci" data-t="${esc(t.ad)}">Siparişleri</button></td></tr>`).join('');
+  }
+
+  // ---------- çekmece
+  async function drawerAc(no) {
+    let r; try { r = await getJ('/Rapor94/Siparis?no=' + encodeURIComponent(no)); } catch (e) { r = { success: false, message: 'Ağ hatası.' }; }
+    if (!r.success) { mesaj('warning', esc(r.message)); return; }
+    A = r.siparis; cizDrawer(); $('#ssDrawer').classList.add('acik'); $('#ssPerde').classList.add('acik'); $('#ssDrawer').scrollTop = 0;
+  }
+  function drawerKapat() { $('#ssDrawer').classList.remove('acik'); $('#ssPerde').classList.remove('acik'); A = null; }
+  function cizDrawer() {
+    const s = A, m = markaBul(s.marka); const kilitli = s.asama >= 4 || s.asama < 0;
+    $('#ssDBaslik').innerHTML = `${esc(s.no || s.talepNo)} · ${esc(s.cari)} ${markaRozet(s)} ${durumRozet(s)}${s.gecikti ? ' ' + rozet('Yükleme Gecikti', 'hata') : ''}`;
+    const adimlar = V.asamalar.slice(s.talepNo ? 0 : 1).map((a, i) => { const idx = i + (s.talepNo ? 0 : 1); const ok = idx < s.asama || (idx === s.asama && s.asama === 5); const cls = ok ? 'ok' : idx === s.asama ? (s.gecikti ? 'gec' : 'simdi') : ''; const alt = idx === 1 && s.siparisTarihi ? tarih(s.siparisTarihi) : idx === 3 && s.yuklemeTarihi ? 'plan ' + tarih(s.yuklemeTarihi) + ' ' + s.yuklemeSaati : idx === 4 && s.yuklendiTarihi ? s.yuklendiTarihi.slice(0, 10).split('-').reverse().join('.') : idx === 5 && s.faturaNo ? s.faturaNo : ''; return `<div class="${cls}">${esc(a)}<small>${esc(alt || ' ')}</small></div>`; }).join('');
+    const belgeler = (V.belgeTurleri || []).map(t => { const b = (s.belgeler || []).find(x => x.tur === t); return `<button type="button" class="btn ${b ? 'btn-outline-success' : 'btn-outline-primary'} btn-sm ss-belge-btn" data-tur="${esc(t)}" ${s.talep ? 'disabled' : ''} title="${b ? esc(b.no + ' · ' + b.tarih + ' · ' + b.markaBelge) + ' — yeniden oluşturur' : 'oluştur (PDF)'}"><i class="fas ${b ? 'fa-file-circle-check' : 'fa-file-pdf'} me-1"></i>${esc(t)}${b ? ` <small>${esc(b.no)}${b.eskiMarka ? ' · eski marka!' : ''}</small>` : ''}</button>`; }).join('');
+    $('#ssDIc').innerHTML = `
+      <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-route me-1"></i>Süreç</span><span class="not">${s.talep ? 'satışçı talebi · siparişe dönüştürülecek' : 'sıradaki: <b>' + esc(s.sonraki[0] || 'tamamlandı') + '</b>'}</span></div><div class="na-kart-g"><div class="ss-adimlar">${adimlar}</div>
+        <div class="d-flex gap-1 flex-wrap mt-2 align-items-center">${s.talep ? '' : s.sonraki.map(d => `<button type="button" class="btn ${d === 'İptal' || d === 'Reddedildi' ? 'btn-outline-danger' : d === 'Sipariş' || d === 'Hazırlanıyor' && s.durum === 'Yüklemeye Hazır' ? 'btn-light border' : 'btn-primary'} btn-sm ss-durum" data-d="${esc(d)}" style="font-size:.68rem"><i class="fas ${d === 'Hazırlanıyor' ? 'fa-boxes-packing' : d === 'Yüklemeye Hazır' ? 'fa-pallet' : d === 'Yüklendi' ? 'fa-truck-ramp-box' : d === 'Faturalandı' ? 'fa-file-invoice-dollar' : d === 'İptal' ? 'fa-ban' : 'fa-rotate-left'} me-1"></i>${esc(d)}</button>`).join('')}${s.talep ? `<button type="button" class="btn btn-outline-danger btn-sm ss-durum" data-d="Reddedildi" style="font-size:.68rem"><i class="fas fa-ban me-1"></i>Reddet</button>` : ''}</div></div></div>
+      ${s.talep ? `<div class="na-kart"><div class="na-kart-b" style="background:#fef3c7;color:#92400e"><span><i class="fas fa-cart-plus me-1"></i>Siparişe Dönüştür</span><span class="not">yükleme tarihi / saati ve marka kesinleşir, sipariş numarası verilir</span></div><div class="na-kart-g"><div class="ss-yukleme"><div><label>Yükleme Tarihi</label><input type="date" class="form-control" id="dnTarih" value="${esc(s.yuklemeTarihi || '')}"></div><div><label>Saat</label><input type="time" class="form-control" id="dnSaat" value="${esc(s.yuklemeSaati || '09:00')}"></div><div><label>Yükleme Yeri</label><select class="form-select" id="dnYer">${V.yuklemeYerleri.map(y => `<option ${y === s.yuklemeYeri ? 'selected' : ''}>${esc(y)}</option>`).join('')}</select></div><div><label>Marka</label><select class="form-select" id="dnMarka">${V.markalar.map(x => `<option value="${x.kod}" ${x.kod === s.marka ? 'selected' : ''}>${esc(x.ad)} (${esc(x.belgeAdi)})</option>`).join('')}</select></div><div></div><div><label>&nbsp;</label><button type="button" class="btn btn-success btn-sm py-0" id="dnUygula" style="font-size:.68rem;height:28px"><i class="fas fa-cart-plus me-1"></i>Siparişe Dönüştür</button></div></div></div></div>` : ''}
+      <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-tag me-1"></i>Marka · Belgelerde Çıkacak Ad</span><span class="not">${kilitli ? 'yüklendi / kapandı: marka değiştirilemez' : 'tıklayınca değişir; belgeler seçili markanın adı, ünvanı ve adresiyle üretilir'}</span></div><div class="na-kart-g"><div class="ss-markalar">${V.markalar.map(x => `<div class="${x.kod === s.marka ? 'sec' : ''} ${kilitli ? '' : 'ss-marka-sec'}" data-m="${x.kod}" style="--mr:${esc(x.renk)}"><div class="ad">${esc(x.belgeAdi)}</div><div class="u">${esc(x.unvan)}</div><div class="a">${esc(x.adres)} · ${esc(x.slogan)}</div></div>`).join('')}</div></div></div>
+      <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-file-pdf me-1"></i>${IHR ? 'İhracat Belgeleri' : 'Sipariş Belgeleri'} · Tek Tuş</span><span class="not">${IHR ? 'Proforma Invoice · Commercial Invoice · Packing List' : 'Sipariş Formu · Proforma Fatura'} · belge no sipariş kaydına yazılır</span></div><div class="na-kart-g"><div class="ss-belgeler"><button type="button" class="btn btn-success btn-sm ss-belge-btn" data-tur="set" ${s.talep ? 'disabled' : ''} title="Tüm belgeler tek PDF'te, seçili markanın adıyla"><i class="fas fa-wand-magic-sparkles me-1"></i>Tek Tuşla ${IHR ? 'İhracat Belge Seti' : 'Belge Seti'} (PDF)</button>${belgeler}</div>${(s.belgeler || []).some(b => b.eskiMarka) ? '<div class="ss-uyari mt-2"><i class="fas fa-triangle-exclamation me-1"></i>Marka değişti; sarı işaretli belgeler eski marka adıyla üretildi, yeniden oluşturun.</div>' : ''}${s.talep ? '<div class="na-bos">Belgeler talep siparişe dönüştükten sonra üretilir.</div>' : ''}</div></div>
+      <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-truck-ramp-box me-1"></i>Yükleme Planı</span><span class="not">${s.yuklemeTarihi ? `<b>${tarih(s.yuklemeTarihi)} ${esc(s.yuklemeSaati)}</b> · ${esc(kalanMetni(s))}` : 'henüz planlanmadı'}</span></div><div class="na-kart-g"><div class="ss-yukleme"><div><label>Yükleme Tarihi</label><input type="date" class="form-control" id="ykTarih" value="${esc(s.yuklemeTarihi || '')}" ${kilitli ? 'disabled' : ''}></div><div><label>Saat</label><input type="time" class="form-control" id="ykSaat" value="${esc(s.yuklemeSaati || '')}" ${kilitli ? 'disabled' : ''}></div><div><label>Yükleme Yeri</label><select class="form-select" id="ykYer" ${kilitli ? 'disabled' : ''}>${V.yuklemeYerleri.map(y => `<option ${y === s.yuklemeYeri ? 'selected' : ''}>${esc(y)}</option>`).join('')}</select></div><div><label>Nakliye</label><select class="form-select" id="ykNakliye" ${kilitli ? 'disabled' : ''}>${V.nakliyeler.map(y => `<option ${y === s.nakliye ? 'selected' : ''}>${esc(y)}</option>`).join('')}</select></div><div><label>Nakliye Firması</label><select class="form-select" id="ykFirma" ${kilitli ? 'disabled' : ''}>${V.nakliyeFirmalari.map(y => `<option ${y === s.nakliyeFirmasi ? 'selected' : ''}>${esc(y)}</option>`).join('')}</select></div><div><label>&nbsp;</label><button type="button" class="btn btn-primary btn-sm py-0" id="ykKaydet" style="font-size:.68rem;height:28px" ${kilitli ? 'disabled' : ''}><i class="fas fa-calendar-check me-1"></i>Planı Kaydet</button></div><div class="g6" style="grid-column:1/-1"><label>Yükleme Notu</label><input class="form-control" id="ykNot" value="${esc(s.yuklemeNotu || '')}" placeholder="rampa, araç plakası, konteyner no, özel talimat…" ${kilitli ? 'disabled' : ''}></div></div></div></div>
+      <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-receipt me-1"></i>Sipariş Bilgileri</span><span class="not">${esc(s.kaynak)}${s.teklifNo ? ' · teklif ' + esc(s.teklifNo) : ''}${s.talepNo && s.no ? ' · talep ' + esc(s.talepNo) : ''}</span></div><div class="na-kart-g"><div class="na-ustbilgi">${[['Müşteri', `${s.cariKodu} · ${s.cari}`], ['Şehir / Ülke', `${s.sehir || '—'} / ${s.ulke || '—'}`], ['Temsilci', s.temsilci], ['Satıcı', s.satici], ['Ödeme', s.odemeSekli], ['Teslim', s.teslimSekli], ['Sevk Adresi', s.sevkAdresi || '—'], ['Müşteri PO', s.musteriSiparisNo || '—'], ['Para Birimi · Kur', `${s.pb}${s.pb !== 'TL' ? ' · ' + Number(s.kur).toLocaleString('tr-TR', { minimumFractionDigits: 4 }) : ''}`], ['Tutar', `${para(s.tutar)} ${pbAd(s.pb)}${s.pb !== 'TL' ? ' · ' + para(s.tutarTl) + ' ₺' : ''}`], ['Ağırlık', `${kisa(s.toplamKg)} kg net · ${kisa(s.brutKg)} kg brüt · ${s.toplamKoli} koli · ${s.palet} palet`], ['Fatura', s.faturaNo ? `${s.faturaNo} · ${tarih(s.faturaTarihi)}` : '—'], ['Oluşturan', s.olusturan || '—'], ['Not', s.not || '—']].map(([l, v]) => `<div><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div></div>`).join('')}</div></div></div>
+      <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-boxes-stacked me-1"></i>Kalemler</span><span class="not">${s.kalem} kalem · fiyatlar ${s.pb}</span></div><div class="na-kart-g p-0"><table class="na-tablo ss-tablo" data-dinamik="kapali"><thead><tr><th>No</th><th>Ürün</th><th>Grup</th><th>GTİP / HS</th><th class="s">Miktar (kg)</th><th class="s">Koli</th><th class="s">Brüt (kg)</th><th class="s">Birim Fiyat</th><th class="s">Tutar</th></tr></thead><tbody>${s.kalemler.map(k => `<tr><td>${k.sira}</td><td class="sol"><b>${esc(k.urunKod)}</b> ${esc(k.urun)}${k.not ? `<small>${esc(k.not)}</small>` : ''}</td><td class="sol">${esc(k.grup)}</td><td>${esc(k.hsKodu)}</td><td class="para">${kisa(k.miktar)}</td><td class="para">${k.koli} × ${k.koliKg}</td><td class="para">${kisa(k.brutKg)}</td><td class="para">${para(k.birimFiyat)}</td><td class="para">${para(k.tutar)}</td></tr>`).join('')}</tbody><tfoot><tr class="toplam"><td colspan="4">TOPLAM</td><td class="para">${kisa(s.toplamKg)}</td><td class="para">${s.toplamKoli}</td><td class="para">${kisa(s.brutKg)}</td><td></td><td class="para">${para(s.tutar)} ${pbAd(s.pb)}</td></tr></tfoot></table></div></div>
+      <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Günlük</span></div><div class="na-kart-g"><ul class="na-zaman">${s.hareketler.map(h => `<li class="${/Yüklendi|Faturalandı|Hazır/.test(h.islem) ? 'fin' : /Belge/.test(h.islem) ? 'muh' : /Talep/.test(h.islem) ? 'wf' : 'sis'}"><span class="t">${esc(h.zaman)}</span><b>${esc(h.islem)}</b> · ${esc(h.aciklama)} <span class="k">${esc(h.kullanici)}</span></li>`).join('') || '<li>Kayıt yok.</li>'}</ul></div></div>`;
+  }
+  async function islem(url, body, basari) {
+    const r = await post(url, body).catch(() => ({ success: false, message: 'Ağ hatası.' }));
+    if (!r.success) { mesaj('danger', '<i class="fas fa-triangle-exclamation me-1"></i>' + esc(r.message)); return false; }
+    mesaj('success', '<i class="fas fa-check me-1"></i>' + esc(r.message)); if (r.siparis) A = r.siparis; await yukle(true); if (A) { const g = (V.siparisler || []).find(x => x.id === A.id); if (g) { A = g; cizDrawer(); } } if (basari) basari(r); return true;
+  }
+  $('#ssDIc').addEventListener('click', async e => {
+    const s = A; if (!s) return;
+    const mk = e.target.closest('.ss-marka-sec'); if (mk) { if (mk.dataset.m === s.marka) return; await islem('/Rapor94/Marka', { No: s.no || s.talepNo, Marka: mk.dataset.m }); return; }
+    const bb = e.target.closest('.ss-belge-btn'); if (bb) { window.open(`/Rapor94/Belge?no=${encodeURIComponent(s.no)}&tur=${encodeURIComponent(bb.dataset.tur)}`, '_blank'); setTimeout(async () => { await yukle(true); const g = (V.siparisler || []).find(x => x.id === s.id); if (g) { A = g; cizDrawer(); } }, 1500); return; }
+    const db = e.target.closest('.ss-durum'); if (db) { const d = db.dataset.d; let fatura = ''; if (d === 'Faturalandı') { fatura = prompt('Fatura no (boş bırakılırsa otomatik):', '') ?? null; if (fatura === null) return; } else if (!confirm(`${s.no || s.talepNo}: durum "${d}" olsun mu?`)) return; await islem('/Rapor94/Durum', { No: s.no || s.talepNo, Durum: d, FaturaNo: fatura }); return; }
+    if (e.target.closest('#ykKaydet')) { await islem('/Rapor94/Yukleme', { No: s.no || s.talepNo, YuklemeTarihi: $('#ykTarih').value, YuklemeSaati: $('#ykSaat').value, YuklemeYeri: $('#ykYer').value, Nakliye: $('#ykNakliye').value, NakliyeFirmasi: $('#ykFirma').value, YuklemeNotu: $('#ykNot').value }); return; }
+    if (e.target.closest('#dnUygula')) { if (!$('#dnTarih').value) { mesaj('warning', 'Yükleme tarihi girin.'); return; } await islem('/Rapor94/Donustur', { No: s.talepNo, YuklemeTarihi: $('#dnTarih').value, YuklemeSaati: $('#dnSaat').value, YuklemeYeri: $('#dnYer').value, Marka: $('#dnMarka').value }, () => sekme('siparisler')); return; }
+  });
+
+  // ---------- yeni sipariş / talep formu
+  function formKur() {
+    $('#ynMusteri').innerHTML = V.musteriler.map(m => `<option value="${esc(m.kod)}" data-temsilci="${esc(m.temsilci)}" data-sevk="${esc((m.sehir || '') + (IHR ? ' / ' + (m.ulke || '') : ''))}" data-vade="${esc(m.vade || '')}">${esc(m.kod)} · ${esc(m.ad)}${IHR ? ' · ' + esc(m.ulke) : ''}${m.ozelFiyat ? ' · ' + m.ozelFiyat + ' özel fiyat' : ''}</option>`).join('');
+    $('#ynTemsilciler').innerHTML = V.temsilciler.map(t => `<option value="${esc(t)}">`).join('');
+    $('#ynPb').innerHTML = V.paraBirimleri.map(p => `<option>${p}</option>`).join(''); $('#ynOdeme').innerHTML = V.odemeSekilleri.map(p => `<option>${esc(p)}</option>`).join(''); $('#ynTeslim').innerHTML = V.teslimSekilleri.map(p => `<option>${esc(p)}</option>`).join('');
+    $('#ynYuklemeYeri').innerHTML = V.yuklemeYerleri.map(p => `<option>${esc(p)}</option>`).join(''); $('#ynNakliye').innerHTML = V.nakliyeler.map(p => `<option>${esc(p)}</option>`).join(''); $('#ynNakliyeFirmasi').innerHTML = V.nakliyeFirmalari.map(p => `<option>${esc(p)}</option>`).join('');
+    $('#ynMarkalar').innerHTML = V.markalar.map(x => `<div class="${x.kod === Y.marka ? 'sec' : ''}" data-m="${x.kod}" style="--mr:${esc(x.renk)}"><div class="ad">${esc(x.belgeAdi)}</div><div class="u">${esc(x.unvan)}</div><div class="a">${esc(x.adres)}</div></div>`).join('');
+    const d = new Date(V.bugun + 'T00:00:00'); d.setDate(d.getDate() + 5); $('#ynYuklemeTarihi').value = d.toISOString().slice(0, 10);
+    if (!Y.kalemler.length) { kalemEkle(); kalemEkle(); } musteriDegisti();   // önce kalemler, sonra müşteri → fiyatlar özel fiyattan çekilir
+  }
+  function musteriDegisti() { const o = $('#ynMusteri').selectedOptions[0]; if (!o) return; $('#ynTemsilci').value = o.dataset.temsilci || ''; $('#ynSevk').value = o.dataset.sevk || ''; const vade = o.dataset.vade; if (vade && [...$('#ynOdeme').options].some(x => x.value === vade)) $('#ynOdeme').value = vade; Y.kalemler.forEach(k => { k.fiyat = null; }); fiyatlariGetir(); }
+  function kalemEkle() { const u = V.urunler[Y.kalemler.length % V.urunler.length]; Y.kalemler.push({ urun: u.kod, miktar: 500, koliKg: 25, fiyat: null, kaynak: '', hs: u.hs }); }
+  async function fiyatlariGetir() {
+    const kod = $('#ynMusteri').value, pb = $('#ynPb').value;
+    await Promise.all(Y.kalemler.filter(k => k.fiyat == null).map(async k => { try { const r = await getJ(`/Rapor94/Fiyat?kod=${encodeURIComponent(kod)}&urun=${encodeURIComponent(k.urun)}&pb=${encodeURIComponent(pb)}`); if (r.success) { k.fiyat = r.fiyat; k.kaynak = r.kaynak; k.hs = r.hs; } } catch (e) { } }));
+    cizKalemler();
+  }
+  function cizKalemler() {
+    const pb = $('#ynPb').value; const t = $('#ynKalemTablo');
+    t.tBodies[0].innerHTML = Y.kalemler.map((k, i) => `<tr data-i="${i}"><td class="sol"><select class="form-select form-select-sm yn-urun" style="font-size:.68rem;padding:2px 24px 2px 6px;height:26px">${V.urunler.map(u => `<option value="${esc(u.kod)}" ${u.kod === k.urun ? 'selected' : ''}>${esc(u.kod)} · ${esc(u.ad)} · ${esc(u.grup)}</option>`).join('')}</select></td><td>${esc(k.hs || '')}</td><td><input type="number" step="25" min="25" class="form-control ss-kalem yn-miktar" value="${k.miktar}"></td><td><input type="number" step="1" min="1" class="form-control ss-kalem yn-koli" value="${k.koliKg}"></td><td><input type="number" step="0.01" min="0" class="form-control ss-kalem yn-fiyat" value="${k.fiyat != null ? Number(k.fiyat).toFixed(2) : ''}" placeholder="…"></td><td><small style="display:inline">${esc(k.kaynak || '')}</small></td><td class="para">${para((k.miktar || 0) * (k.fiyat || 0))} ${pbAd(pb)}</td><td><button type="button" class="btn btn-light border btn-xs yn-sil"><i class="fas fa-xmark"></i></button></td></tr>`).join('');
+    const kg = Y.kalemler.reduce((a, k) => a + (+k.miktar || 0), 0), tutar = Y.kalemler.reduce((a, k) => a + (+k.miktar || 0) * (+k.fiyat || 0), 0), koli = Y.kalemler.reduce((a, k) => a + Math.ceil((+k.miktar || 0) / (+k.koliKg || 25)), 0);
+    t.tFoot.innerHTML = `<tr class="toplam"><td colspan="2">TOPLAM · ${Y.kalemler.length} kalem</td><td class="para">${kisa(kg)} kg</td><td class="para">${koli} koli</td><td colspan="2"></td><td class="para">${para(tutar)} ${pbAd(pb)}</td><td></td></tr>`;
+    $('#ynOzet').textContent = `${Y.kalemler.length} kalem · ${kisa(kg)} kg · ${koli} koli · ${Math.ceil(koli / 40)} palet · ${para(tutar)} ${pbAd(pb)} · marka ${markaBul(Y.marka).belgeAdi}`;
+  }
+  $('#ynKalemTablo').addEventListener('change', e => { const tr = e.target.closest('tr[data-i]'); if (!tr) return; const k = Y.kalemler[+tr.dataset.i]; if (!k) return; if (e.target.classList.contains('yn-urun')) { k.urun = e.target.value; k.fiyat = null; fiyatlariGetir(); return; } if (e.target.classList.contains('yn-miktar')) k.miktar = +e.target.value; if (e.target.classList.contains('yn-koli')) k.koliKg = +e.target.value || 25; if (e.target.classList.contains('yn-fiyat')) { k.fiyat = +e.target.value; k.kaynak = 'Elle'; } cizKalemler(); });
+  $('#ynKalemTablo').addEventListener('click', e => { const b = e.target.closest('.yn-sil'); if (!b) return; const tr = b.closest('tr[data-i]'); Y.kalemler.splice(+tr.dataset.i, 1); cizKalemler(); });
+  $('#ynKalemEkle').addEventListener('click', () => { kalemEkle(); fiyatlariGetir(); });
+  $('#ynMusteri').addEventListener('change', musteriDegisti); $('#ynPb').addEventListener('change', () => { Y.kalemler.forEach(k => { k.fiyat = null; }); fiyatlariGetir(); });
+  $('#ynMarkalar').addEventListener('click', e => { const d = e.target.closest('[data-m]'); if (!d) return; Y.marka = d.dataset.m; $$('#ynMarkalar > div').forEach(x => x.classList.toggle('sec', x.dataset.m === Y.marka)); cizKalemler(); });
+  $('#ynTemizle').addEventListener('click', () => { Y = { kalemler: [], marka: Y.marka }; $('#ynPo').value = ''; $('#ynNot').value = ''; formKur(); });
+  async function formGonder(talep) {
+    const istek = { Bolge: BOLGE, Marka: Y.marka, CariKodu: $('#ynMusteri').value, Temsilci: $('#ynTemsilci').value, ParaBirimi: $('#ynPb').value, OdemeSekli: $('#ynOdeme').value, TeslimSekli: $('#ynTeslim').value, SevkAdresi: $('#ynSevk').value, MusteriSiparisNo: $('#ynPo').value, YuklemeTarihi: $('#ynYuklemeTarihi').value, YuklemeSaati: $('#ynYuklemeSaati').value, YuklemeYeri: $('#ynYuklemeYeri').value, Nakliye: $('#ynNakliye').value, NakliyeFirmasi: $('#ynNakliyeFirmasi').value, Not: $('#ynNot').value, TalepOlarak: talep, Kalemler: Y.kalemler.map(k => ({ UrunKod: k.urun, Miktar: +k.miktar, BirimFiyat: k.fiyat, KoliKg: k.koliKg })) };
+    const r = await post('/Rapor94/Kaydet', istek).catch(() => ({ success: false, message: 'Ağ hatası.' }));
+    if (!r.success) { mesaj('danger', '<i class="fas fa-triangle-exclamation me-1"></i>' + esc(r.message)); return; }
+    mesaj('success', '<i class="fas fa-check me-1"></i>' + esc(r.message) + (r.siparis && !r.siparis.talep && IHR ? ` <a href="/Rapor94/Belge?no=${encodeURIComponent(r.siparis.no)}&tur=set" target="_blank" class="ms-1"><i class="fas fa-file-pdf"></i> İhracat belge setini oluştur</a>` : ''));
+    Y = { kalemler: [], marka: Y.marka }; $('#ynPo').value = ''; $('#ynNot').value = ''; await yukle(true); formKur(); sekme(talep ? 'talepler' : 'siparisler'); if (r.siparis) drawerAc(r.siparis.no || r.siparis.talepNo);
+  }
+  $('#ynSiparis').addEventListener('click', () => formGonder(false)); $('#ynTalep').addEventListener('click', () => formGonder(true));
+
+  // ---------- olaylar
+  $$('#ssSekmeler button').forEach(b => b.addEventListener('click', () => sekme(b.dataset.p))); $('#ssYeniBtn').addEventListener('click', () => sekme('yeni'));
+  $('#ssDKapat').addEventListener('click', drawerKapat); $('#ssPerde').addEventListener('click', drawerKapat);
+  ['#ssDurumF', '#ssMarkaF', '#ssTemsilciF', '#ssMusteriF'].forEach(s => $(s).addEventListener('change', () => { F.durum = $('#ssDurumF').value; F.marka = $('#ssMarkaF').value; F.temsilci = $('#ssTemsilciF').value; F.musteri = $('#ssMusteriF').value; cizTablo(); }));
+  $('#ssAra').addEventListener('input', () => { F.ara = $('#ssAra').value; cizTablo(); });
+  $('#ssKpi').addEventListener('click', e => { const k = e.target.closest('[data-durum]'); if (!k) return; if (k.dataset.durum === 'talep') { sekme('talepler'); return; } F.durum = F.durum === k.dataset.durum ? '' : k.dataset.durum; $('#ssDurumF').value = F.durum; sekme('siparisler'); cizTablo(); });
+  $('#ssTablo').addEventListener('click', e => { const tr = e.target.closest('tr.tik[data-no]'); if (tr) drawerAc(tr.dataset.no); });
+  $('#ssTalepTablo').addEventListener('click', e => { const tr = e.target.closest('tr[data-no]'); if (!tr) return; drawerAc(tr.dataset.no); });
+  $('#ssTakvim').addEventListener('click', e => { const li = e.target.closest('li[data-no]'); if (li) drawerAc(li.dataset.no); }); $('#ssTakvimGun').addEventListener('change', cizTakvim);
+  $('#ssTemsilciTablo').addEventListener('click', e => { const b = e.target.closest('.ss-temsilci'); if (!b) return; F.temsilci = b.dataset.t; $('#ssTemsilciF').value = F.temsilci; sekme('siparisler'); cizTablo(); });
+  $('#ssExcel').addEventListener('click', () => window.open('/Rapor94/Excel?bolge=' + encodeURIComponent(BOLGE), '_blank'));
+  let sonYukleme = 0; document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - sonYukleme > 20000) yukle(true); });
+
+  // ---------- veri
+  let ilk = true;
+  async function yukle(sessiz) {
+    let r; try { r = await getJ('/Rapor94/Veri?bolge=' + encodeURIComponent(BOLGE)); } catch (e) { mesaj('danger', 'Veri yüklenemedi.'); return; }
+    if (!r.success) { mesaj('danger', 'Veri yüklenemedi.'); return; }
+    V = r; sonYukleme = Date.now();
+    if (ilk) {
+      ilk = false;
+      $('#ssMarkaF').innerHTML = '<option value="">Tümü</option>' + V.markalar.map(m => `<option value="${m.kod}">${esc(m.ad)}</option>`).join('');
+      $('#ssTemsilciF').innerHTML = '<option value="">Tümü</option>' + V.temsilciler.map(t => `<option>${esc(t)}</option>`).join('');
+      $('#ssMusteriF').innerHTML = '<option value="">Tümü</option>' + V.musteriler.map(m => `<option value="${esc(m.kod)}">${esc(m.ad)}</option>`).join('');
+      formKur(); sekme(kok.dataset.sekme || 'siparisler');
+      if (kok.dataset.no) drawerAc(kok.dataset.no);
+    }
+    cizTablo(); cizTalepler(); cizTakvim(); cizOzet();
+  }
+  yukle();
+})();

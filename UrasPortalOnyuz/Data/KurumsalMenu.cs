@@ -297,9 +297,11 @@ namespace WebApplication3.Data
                     // Muhataplar İçin Özel Fiyatlar: müşteri × tüm ürünler özel fiyat; fiyatsız kalemlere Min Fiyat Listesi + % ile toplu fiyat (Data/OzelFiyatOrnek.cs; 28 Eki 2026 sıfırdan)
                     G("fiyat-musteri-kosullari", "Fiyat ve Müşteri Koşulları", R("Muhataplar İçin Özel Fiyatlar"))),
                   U("yurtici-satis", "Yurtiçi Satış",
-                    G("satis-islemleri", "Satış İşlemleri", R("Satış Siparişi"), R("Taslak Faturalar"), R("Satış Faturası"), R("Müşteri İade Faturası"), R("Bedelsiz Satış Raporu"), R("Grup İçi Satış (Uras > Selvi > Müşteri)")),
+                    // Satış Siparişi 28 Eki 2026'da ikiye ayrıldı: Yurtiçi (/Rapor94) ve Yurtdışı / İhracat (/Rapor94/Ihracat; Yurtdışı Satış › İhracat Satış İşlemleri) — marka seçimi, tek tuşla belgeler, satışçı talepleri, yükleme tarihi / saati (Data/SatisSiparisOrnek.cs)
+                    G("satis-islemleri", "Satış İşlemleri", R("Yurtiçi Satış Siparişi", "Rapor94", "Index"), R("Taslak Faturalar"), R("Satış Faturası"), R("Müşteri İade Faturası"), R("Bedelsiz Satış Raporu"), R("Grup İçi Satış (Uras > Selvi > Müşteri)")),
                     G("satis-analizleri", "Satış Analizleri ve Performans", R("Satış Raporu"), R("Satış Ekstre Raporu"), R("Satış Analiz Raporu"), R("Satış Analiz Dashboard"), R("Satışçı Analiz Raporu"), R("Konsolide Prim Raporu"), R("Tahsilat Prim Tablosu"))),
                   U("yurtdisi-satis", "Yurtdışı Satış",
+                    G("ihracat-satis", "İhracat Satış İşlemleri", R("Yurtdışı Satış Siparişi", "Rapor94", "Ihracat")),
                     // İhracat Belge Gönderim Takibi: akreditif ibrazı / vesaik / orijinal evrak gönderileri — kargo firması, takip no, ibraz son tarihi, banka sonucu (Data/IhracatBelgeOrnek.cs)
                     G("ihracat-operasyon", "İhracat Operasyon Takibi", R("İhracat Dosya Raporu"), R("İhracat Belge Gönderim Takibi", "IhracatBelge", "Index"), K("İhracat Tahsilat Raporu", "#mali-isler/finans/doviz-dis-ticaret"), K("İBKB Beyanname Takibi", "#mali-isler/finans/doviz-dis-ticaret"), R("Yurtdışı Müşteri Kartları"))),
                   U("depo-siparis", "Depo ve Sipariş Yönetimi",
