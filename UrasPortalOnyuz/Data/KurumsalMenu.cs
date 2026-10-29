@@ -372,7 +372,7 @@ namespace WebApplication3.Data
                   "İnsan Kaynakları ile İdari İşler tek çatı altında iki ayrı 1. alt menü olarak çalışır.",
                   Kpi("Toplam Çalışan", "İzinde", "Açık Pozisyon", "Bugünkü Ziyaretçi"),
                   U("insan-kaynaklari", "İnsan Kaynakları",
-                    G("personel-organizasyon", "Personel ve Organizasyon", R("Personel Carileri")),
+                    G("personel-organizasyon", "Personel ve Organizasyon", R("Personel Carileri"), R("Personel Dosyası", "PersonelDosya", "Index")),   // Personel Dosyası (29 Eki 2026): kimlik / iletişim, şirket pasaportu, belgeler, eğitimler; zimmet ve araç canlı (Data/PersonelDosyaOrnek.cs)
                     G("izin-devamlilik", "İzin ve Devamlılık", R("Yaklaşan İzinler", "Home", "Index"), R("Ekip İzin Takvimi"), R("İzin Takip Raporu")),   // tabloda: index.html#yaklasanIzin (ana sayfa kartı)
                     G("performans-is-takibi", "Performans ve İş Takibi", R("Mesai Takip Raporu")),
                     G("personel-maliyet-bordro", "Personel Maliyet ve Bordro", R("Personel Maliyet Raporu", "PersonelMaliyet", "Index"), R("Personel Maliyet Yansıtması", "PersonelYansitma", "Index"), R("Personel Maliyet Tablosu"))),   // Yansıtma: SGK işvereni ≠ fiili görev yeri olan personelin maliyeti GDR.13 ↔ YNS.13 ile iki şirkete kaydedilir   // Personel Maliyet Raporu: "PERSONEL 19.06 GÜNCEL" tablosu + Personel Cari Kartı (Yönetim › Özel Raporlar'da da aynı ekran)
@@ -380,8 +380,11 @@ namespace WebApplication3.Data
                     G("danisma-giris-cikis", "Danışma ve Giriş-Çıkış", R("Danışma Giriş-Çıkış Defteri")),
                     G("arac-seyahat", "Araç ve Seyahat", R("Araç Takvimi (Filo)"), R("Seyahat Takvimi")),
                     // 28 Eki 2026: Sigorta ile Araç, Taşınmaz ve Demirbaş grupları Şirket Dökümanları'ndan buraya taşındı — poliçe takibi (Data/SigortaOrnek.cs), araç bakım (Data/AracBakimOrnek.cs), belge kırılımları (Data/SirketDokumanOrnek.cs)
-                    G("arac-tasinmaz-demirbas", "Araç, Taşınmaz ve Demirbaş", R("Araç Bakım ve Onarım Takibi", "AracBakim", "Index"), R("Araç, Taşınmaz ve Demirbaş Belgeleri", "SirketDokuman", "Varlik")),
-                    G("sigorta", "Sigorta", R("Sigorta ve Kasko Poliçe Takibi", "Sigorta", "Index"), R("Sigorta Poliçeleri", "SirketDokuman", "Sigorta")))),
+                    G("arac-tasinmaz-demirbas", "Araç, Taşınmaz ve Demirbaş", R("Araç Takip Raporu (Filo Özeti)", "AracTakip", "Index"), R("Araç Bakım ve Onarım Takibi", "AracBakim", "Index"), R("Araç, Taşınmaz ve Demirbaş Belgeleri", "SirketDokuman", "Varlik")),   // Araç Takip (29 Eki 2026): şirket, zimmet, kasko / trafik, bakım, km girişi, yakıt ve HGS limitleri, ev–iş hesabı — Data/AracTakipOrnek.cs (AracBakim, Sigorta, SirketDokuman ile senkron)
+                    G("sigorta", "Sigorta", R("Sigorta ve Kasko Poliçe Takibi", "Sigorta", "Index"), R("Sigorta Poliçeleri", "SirketDokuman", "Sigorta"))),
+                  // IT (29 Eki 2026): İK ve İdari İşler altında IT alanı — IT ve idari varlıkların zimmeti (Data/ZimmetOrnek.cs); Bilgi Teknolojileri modülündeki Zimmet Takip Raporu'na kısayol
+                  U("it", "IT",
+                    G("zimmet-envanter", "Zimmet ve Envanter", R("Zimmet Raporu", "Zimmet", "Index"), K("Zimmet Takip Raporu (BT)", "#bilgi-teknolojileri/bt-envanter-zimmet/zimmet-takibi")))),
 
                 M("bilgi-teknolojileri", "Bilgi Teknolojileri", "bt",
                   "BT entegrasyon, otomasyon, envanter ve yapay zeka asistanları için merkezi sayfa.",

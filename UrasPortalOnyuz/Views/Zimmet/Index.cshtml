@@ -1,0 +1,136 @@
+@{
+    ViewData["Title"] = "Zimmet Raporu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string onSekme = (string)ViewBag.Sekme ?? "varliklar";
+    string onPersonel = (string)ViewBag.Personel ?? "";
+    string onId = (string)ViewBag.Id ?? "";
+    string ben = (string)ViewBag.Ben ?? "";
+}
+@*
+    ZİMMET RAPORU — İK ve İdari İşler › IT › Zimmet ve Envanter. IT ve idari varlıklar (dizüstü, masaüstü, monitör, telefon, SIM, tablet, yazıcı, erişim kartı, lisans, kredi kartı, e-imza)
+    personele zimmetlenir; sekmeler: Varlıklar (liste) · Kişi Bazında (kimde ne var + araç) · Depo ve Arızalı · Yeni Varlık · Günlük. Çekmece: varlık bilgileri, zimmet ver / iade al,
+    dosyalar (zimmet tutanağı, fatura), hareketler; kişi için Zimmet Tutanağı PDF. Personel Dosyası (/PersonelDosya) kişinin zimmetlerini buradan canlı okur.
+    Veri: /Zimmet/Veri (Controllers/ZimmetController.cs, Data/ZimmetOrnek.cs) · betik: wwwroot/js/zimmet.js · derin bağlantı ?personel=P1001 · ?id=12
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<style>
+    .na.zm { --na-k: #0369a1; }
+    .zm-pill { font-size: .66rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; } a.zm-pill { text-decoration: none; } a.zm-pill:hover { background: #e0f2fe; color: #0c4a6e; border-color: #bae6fd; }
+    #zm .na-kpi { grid-template-columns: repeat(7, 1fr); } @@media (max-width: 1300px) { #zm .na-kpi { grid-template-columns: repeat(4, 1fr); } } #zm .na-kpi > div.aktif { outline: 2px solid var(--k, #0369a1); outline-offset: -1px; }
+    .zm-filtre { display: grid; grid-template-columns: 1fr 1fr 1fr 1.2fr 1.6fr auto; gap: 6px 8px; align-items: end; } @@media (max-width: 1300px) { .zm-filtre { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .zm-filtre label, .zm-form label, .zm-ic label { display: block; font-size: .58rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; }
+    .zm-filtre .form-control, .zm-filtre .form-select, .zm-form .form-control, .zm-form .form-select, .zm-ic .form-control, .zm-ic .form-select { font-size: .72rem; padding: 3px 7px; height: 28px; }
+    #zm .zm-tablo { font-size: .68rem; table-layout: fixed; width: 100%; }
+    #zm .zm-tablo th { font-size: .56rem; padding: 5px 5px; white-space: normal; line-height: 1.15; vertical-align: middle; position: sticky; top: 0; z-index: 3; background: #f8fafc; box-shadow: 0 1px 0 #e2e8f0; }
+    #zm .zm-tablo td { padding: 4px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; line-height: 1.2; border-bottom: 1px solid #e2e8f0; }
+    #zm .zm-tablo td.sol { text-align: left !important; } #zm .zm-tablo td.para { font-variant-numeric: tabular-nums; text-align: right !important; font-weight: 700; }
+    #zm .zm-tablo td small { display: block; font-size: .56rem; color: #64748b; font-weight: 500; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; }
+    #zm .zm-tablo tr.tik { cursor: pointer; } #zm .zm-tablo tr.tik:hover td { background: #f0f9ff; }
+    #zm .zm-tablo tr.arizali td { background: #fef2f2; } #zm .zm-tablo tr.depoda td { background: #f8fafc; } #zm .zm-tablo tr.kayip td { background: #fee2e2; color: #991b1b; }
+    #zm .zm-tablo tr.ara td { background: #f1f5f9; font-weight: 800; border-top: 1px solid #cbd5e1; } #zm .zm-tablo tr.toplam td { font-weight: 800; background: #f8fafc; border-top: 2px solid var(--na-k); }
+    .zm-rozet { display: inline-block; font-size: .58rem; font-weight: 800; border-radius: 4px; padding: 1px 6px; white-space: nowrap; } .zm-rozet.ok { background: #dcfce7; color: #166534; } .zm-rozet.uyar { background: #fef3c7; color: #92400e; } .zm-rozet.hata { background: #fee2e2; color: #991b1b; } .zm-rozet.bilgi { background: #dbeafe; color: #1e40af; } .zm-rozet.notr { background: #f1f5f9; color: #475569; }
+    .zm-tur { display: inline-block; font-size: .56rem; font-weight: 800; border-radius: 4px; padding: 1px 6px; color: #fff; background: #64748b; white-space: nowrap; } .zm-tur.pc { background: #0369a1; } .zm-tur.tel { background: #0f766e; } .zm-tur.kart { background: #7c3aed; } .zm-tur.lisans { background: #b45309; }
+    #zm .btn-xs { font-size: .58rem; padding: 1px 6px; line-height: 1.3; }
+    .zm-drawer { position: fixed; top: 0; right: -820px; width: 780px; max-width: 97vw; height: 100vh; background: #fff; box-shadow: -8px 0 24px rgba(15,23,42,.18); z-index: 1060; transition: right .25s; overflow: auto; padding: 12px 14px; } .zm-drawer.acik { right: 0; }
+    .main-content #zmDrawer { height: 100vh !important; max-height: 100vh !important; overflow: auto !important; }
+    .zm-drawer-ust { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: sticky; top: 0; background: #fff; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; z-index: 2; flex-wrap: wrap; }
+    .zm-perde { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1055; display: none; } .zm-perde.acik { display: block; }
+    .zm-ic { display: grid; grid-template-columns: 2fr 1fr 1.6fr auto; gap: 6px 8px; align-items: end; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 10px; padding: 8px 10px; } @@media (max-width: 900px) { .zm-ic { grid-template-columns: repeat(2, 1fr); } }
+    .zm-form { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px 8px; align-items: end; } @@media (max-width: 1200px) { .zm-form { grid-template-columns: repeat(3, minmax(0, 1fr)); } } .zm-form .g2 { grid-column: span 2; } .zm-form .g3 { grid-column: span 3; }
+    .zm-kisi { display: flex; flex-wrap: wrap; gap: 3px; } .zm-kisi span { font-size: .56rem; background: #f1f5f9; border-radius: 999px; padding: 1px 6px; color: #334155; }
+</style>
+}
+
+<div class="container-fluid py-3 na zm" id="zm" data-sekme="@onSekme" data-personel="@onPersonel" data-id="@onId">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-laptop"></i></span>Zimmet Raporu · IT ve İdari Varlıklar</h4>
+        <span class="zm-pill" id="zmKapsam">…</span>
+        <a class="zm-pill" href="/PersonelDosya" target="_blank" rel="noopener"><i class="fas fa-id-card me-1"></i>Personel Dosyası</a>
+        <a class="zm-pill" href="/AracTakip" target="_blank" rel="noopener"><i class="fas fa-car me-1"></i>Araç Takip (Araç Zimmetleri)</a>
+        <span class="zm-pill"><i class="fas fa-user me-1"></i>@ben</span>
+        <span class="sub w-100">Dizüstü / masaüstü bilgisayar, monitör, cep telefonu, SIM hattı, tablet, yazıcı, erişim kartı, yazılım lisansı, şirket kredi kartı ve e-imza gibi varlıklar <b>seri numarası, şirket, alış tarihi, değer ve garanti</b> bilgisiyle envantere alınır; <b>personele zimmetlenir</b>, iade alınır, arızalı / serviste / hurda / kayıp olarak izlenir. Kişi bazında görünümde kimde ne var (araç zimmeti Araç Takip'ten gelir) ve <b>Zimmet Tutanağı PDF</b> üretilir. Personel Dosyası her kişinin zimmetlerini bu kayıttan canlı okur.</span>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+
+    <div class="na-kpi" id="zmKpi" data-dinamik="kapali"></div>
+
+    <div class="na-sekme" id="zmSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="varliklar" class="aktif"><i class="fas fa-list me-1"></i>Varlıklar <span class="n" id="zmN-varliklar">0</span></button>
+        <button type="button" data-p="kisiler"><i class="fas fa-users me-1"></i>Kişi Bazında <span class="n" id="zmN-kisiler">0</span></button>
+        <button type="button" data-p="depo"><i class="fas fa-warehouse me-1"></i>Depo ve Arızalı <span class="n" id="zmN-depo">0</span></button>
+        <button type="button" data-p="yeni"><i class="fas fa-plus me-1"></i>Yeni Varlık</button>
+        <button type="button" data-p="gunluk"><i class="fas fa-clock-rotate-left me-1"></i>Günlük</button>
+    </div>
+
+    <div class="na-panel aktif" data-p="varliklar">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-list me-1"></i>Varlık Listesi</span><span class="not" id="zmSayi"></span></div>
+            <div class="na-kart-g">
+                <div class="zm-filtre">
+                    <div><label>Tür</label><select class="form-select" id="zmTurF"><option value="">Tümü</option></select></div>
+                    <div><label>Durum</label><select class="form-select" id="zmDurumF"><option value="">Tümü</option></select></div>
+                    <div><label>Şirket</label><select class="form-select" id="zmSirketF"><option value="">Tümü</option></select></div>
+                    <div><label>Personel</label><select class="form-select" id="zmPersonelF"><option value="">Tümü</option></select></div>
+                    <div><label>Ara</label><input class="form-control" id="zmAra" placeholder="No, seri no, marka, model, kişi…" autocomplete="off"></div>
+                    <div><label>&nbsp;</label><div class="d-flex gap-1"><button type="button" class="btn btn-light border btn-sm py-0" id="zmExcel" style="font-size:.66rem;height:28px"><i class="fas fa-file-excel me-1"></i>Excel</button><button type="button" class="btn btn-primary btn-sm py-0" id="zmYeniBtn" style="font-size:.66rem;height:28px"><i class="fas fa-plus me-1"></i>Yeni Varlık</button></div></div>
+                </div>
+            </div>
+            <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:64vh"><table class="na-tablo zm-tablo" id="zmTablo" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+        </div>
+    </div>
+
+    <div class="na-panel" data-p="kisiler">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-users me-1"></i>Kişi Bazında Zimmet · Kimde Ne Var</span><span class="not">varlıklar + araç · tıklayınca kişinin varlıkları süzülür · Zimmet Tutanağı PDF · Personel Dosyası</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:64vh"><table class="na-tablo zm-tablo" id="zmKisiTablo" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+        </div>
+    </div>
+
+    <div class="na-panel" data-p="depo">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-warehouse me-1"></i>Depo, Arızalı, Serviste, Hurda ve Kayıp</span><span class="not">depodakiler zimmet verilebilir</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:64vh"><table class="na-tablo zm-tablo" id="zmDepoTablo" data-dinamik="kapali"><thead></thead><tbody></tbody></table></div></div>
+        </div>
+    </div>
+
+    <div class="na-panel" data-p="yeni">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-plus me-1"></i>Yeni Varlık · Envantere Al</span><span class="not">isteğe bağlı: doğrudan personele zimmetle</span></div>
+            <div class="na-kart-g">
+                <div class="zm-form">
+                    <input type="hidden" id="ynId">
+                    <div><label>Tür</label><select class="form-select" id="ynTur"></select></div>
+                    <div><label>Marka</label><input class="form-control" id="ynMarka"></div>
+                    <div class="g2"><label>Model</label><input class="form-control" id="ynModel"></div>
+                    <div><label>Seri No / Hat / Kart No</label><input class="form-control" id="ynSeri"></div>
+                    <div><label>Şirket</label><select class="form-select" id="ynSirket"></select></div>
+                    <div class="g2"><label>Özellik</label><input class="form-control" id="ynOzellik" placeholder="i7 · 16 GB · 512 GB"></div>
+                    <div><label>Alış Tarihi</label><input type="date" class="form-control" id="ynAlis"></div>
+                    <div><label>Değer (₺)</label><input type="number" step="1" class="form-control" id="ynDeger"></div>
+                    <div><label>Garanti Bitiş</label><input type="date" class="form-control" id="ynGaranti"></div>
+                    <div><label>Lokasyon</label><select class="form-select" id="ynLokasyon"></select></div>
+                    <div class="g2"><label>Zimmetle (İsteğe Bağlı)</label><select class="form-select" id="ynPersonel"><option value="">— depoda kalsın —</option></select></div>
+                    <div class="g3"><label>Not</label><input class="form-control" id="ynNot"></div>
+                </div>
+                <div class="d-flex gap-2 align-items-center mt-2"><button type="button" class="btn btn-primary btn-sm" id="ynKaydet" style="font-size:.72rem"><i class="fas fa-floppy-disk me-1"></i>Kaydet</button><button type="button" class="btn btn-light border btn-sm" id="ynTemizle" style="font-size:.72rem">Temizle</button></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="na-panel" data-p="gunluk">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Günlük</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:64vh"><table class="na-tablo zm-tablo" id="zmGunlukTablo" data-dinamik="kapali"><thead></thead><tbody></tbody></table></div></div>
+        </div>
+    </div>
+
+    <div class="zm-perde" id="zmPerde"></div>
+    <div class="zm-drawer" id="zmDrawer">
+        <div class="zm-drawer-ust"><b id="zmDBaslik" style="font-size:.88rem"></b><span class="ms-auto"></span><button type="button" class="btn btn-light btn-sm py-0" id="zmDKapat" style="font-size:.66rem"><i class="fas fa-xmark"></i></button></div>
+        <div id="zmDIc"></div>
+    </div>
+</div>
+@section Scripts {
+<script src="/js/zimmet.js?v=1"></script>
+}

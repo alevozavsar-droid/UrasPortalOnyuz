@@ -1,0 +1,110 @@
+@{
+    ViewData["Title"] = "Personel Dosyası";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string onSekme = (string)ViewBag.Sekme ?? "personel";
+    string onNo = (string)ViewBag.No ?? "";
+    string ben = (string)ViewBag.Ben ?? "";
+}
+@*
+    PERSONEL DOSYASI — İK ve İdari İşler › İnsan Kaynakları › Personel ve Organizasyon. Her personel için tek dosya; zimmetler (Zimmet Raporu), araç (Araç Bakım / Araç Takip), açık avanslar
+    (Nakit Avans) canlı okunur. Dosyada kimlik / iletişim, acil durum, ehliyet, ŞİRKET PASAPORTU (kullanıyor mu, kasada mı, no, bitiş, vizeler), belgeler (dosya yükleme, geçerlilik),
+    eğitimler, günlük; Personel Dosyası PDF. Sekmeler: Personel (liste) · Pasaport ve Vize · Belge Takibi · Zimmet ve Araç. Veri: /PersonelDosya/Veri (Controllers/PersonelDosyaController.cs,
+    Data/PersonelDosyaOrnek.cs) · betik: wwwroot/js/personel-dosya.js · derin bağlantı ?no=P1001
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<style>
+    .na.pd { --na-k: #4338ca; }
+    .pd-pill { font-size: .66rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; } a.pd-pill { text-decoration: none; } a.pd-pill:hover { background: #e0e7ff; color: #3730a3; border-color: #c7d2fe; }
+    #pd .na-kpi { grid-template-columns: repeat(7, 1fr); } @@media (max-width: 1300px) { #pd .na-kpi { grid-template-columns: repeat(4, 1fr); } }
+    .pd-filtre { display: grid; grid-template-columns: 1fr 1fr 1fr 1.6fr auto; gap: 6px 8px; align-items: end; }
+    .pd-filtre label, .pd-form label, .pd-ic label { display: block; font-size: .58rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; }
+    .pd-filtre .form-control, .pd-filtre .form-select, .pd-form .form-control, .pd-form .form-select, .pd-ic .form-control, .pd-ic .form-select { font-size: .72rem; padding: 3px 7px; height: 28px; }
+    #pd .pd-tablo { font-size: .68rem; table-layout: fixed; width: 100%; }
+    #pd .pd-tablo th { font-size: .56rem; padding: 5px 5px; white-space: normal; line-height: 1.15; vertical-align: middle; position: sticky; top: 0; z-index: 3; background: #f8fafc; box-shadow: 0 1px 0 #e2e8f0; }
+    #pd .pd-tablo td { padding: 4px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; line-height: 1.2; border-bottom: 1px solid #e2e8f0; }
+    #pd .pd-tablo td.sol { text-align: left !important; } #pd .pd-tablo td.para { font-variant-numeric: tabular-nums; text-align: right !important; font-weight: 700; }
+    #pd .pd-tablo td small { display: block; font-size: .56rem; color: #64748b; font-weight: 500; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; }
+    #pd .pd-tablo tr.tik { cursor: pointer; } #pd .pd-tablo tr.tik:hover td { background: #eef2ff; } #pd .pd-tablo tr.pasif td { background: #f8fafc; color: #94a3b8; } #pd .pd-tablo tr.uyari td { background: #fffbeb; } #pd .pd-tablo tr.kritik td { background: #fef2f2; }
+    #pd .pd-tablo tr.toplam td { font-weight: 800; background: #f8fafc; border-top: 2px solid var(--na-k); }
+    .pd-rozet { display: inline-block; font-size: .58rem; font-weight: 800; border-radius: 4px; padding: 1px 6px; white-space: nowrap; } .pd-rozet.ok { background: #dcfce7; color: #166534; } .pd-rozet.uyar { background: #fef3c7; color: #92400e; } .pd-rozet.hata { background: #fee2e2; color: #991b1b; } .pd-rozet.bilgi { background: #dbeafe; color: #1e40af; } .pd-rozet.notr { background: #f1f5f9; color: #475569; } .pd-rozet.mor { background: #ede9fe; color: #5b21b6; }
+    .pd-plaka { display: inline-block; font-family: monospace; font-weight: 800; font-size: .62rem; background: #fff; border: 1.5px solid #0f172a; border-left: 5px solid #1d4ed8; border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+    #pd .btn-xs { font-size: .58rem; padding: 1px 6px; line-height: 1.3; }
+    .pd-drawer { position: fixed; top: 0; right: -900px; width: 860px; max-width: 97vw; height: 100vh; background: #fff; box-shadow: -8px 0 24px rgba(15,23,42,.18); z-index: 1060; transition: right .25s; overflow: auto; padding: 12px 14px; } .pd-drawer.acik { right: 0; }
+    .main-content #pdDrawer { height: 100vh !important; max-height: 100vh !important; overflow: auto !important; }
+    .pd-drawer-ust { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: sticky; top: 0; background: #fff; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; z-index: 2; flex-wrap: wrap; }
+    .pd-perde { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1055; display: none; } .pd-perde.acik { display: block; }
+    .pd-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 8px; align-items: end; } .pd-form .g2 { grid-column: span 2; } .pd-form .g4 { grid-column: span 4; }
+    .pd-ic { display: grid; grid-template-columns: 1.4fr 1.4fr 1fr auto; gap: 6px 8px; align-items: end; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 10px; padding: 8px 10px; }
+    .pd-kart { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 10px; font-size: .68rem; } .pd-kart b { color: #0f172a; }
+    .pd-sek { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; } .pd-sek span { font-size: .6rem; background: #f1f5f9; border-radius: 999px; padding: 2px 8px; color: #334155; }
+</style>
+}
+
+<div class="container-fluid py-3 na pd" id="pd" data-sekme="@onSekme" data-no="@onNo">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-id-card"></i></span>Personel Dosyası</h4>
+        <span class="pd-pill" id="pdKapsam">…</span>
+        <a class="pd-pill" href="/Zimmet?sekme=kisiler" target="_blank" rel="noopener"><i class="fas fa-laptop me-1"></i>Zimmet Raporu</a>
+        <a class="pd-pill" href="/AracTakip" target="_blank" rel="noopener"><i class="fas fa-car me-1"></i>Araç Takip</a>
+        <a class="pd-pill" href="/IkTalep/AvansBekleyenOdemeler" target="_blank" rel="noopener"><i class="fas fa-money-bill me-1"></i>Nakit Avans</a>
+        <span class="pd-pill"><i class="fas fa-user me-1"></i>@ben</span>
+        <span class="sub w-100">Her personel için <b>tek dosya</b>: kimlik ve iletişim, acil durum, ehliyet, <b>şirket pasaportu</b> (kullanıyor mu, şirket kasasında mı, no, bitiş, vizeler), <b>zimmetler</b> (Zimmet Raporu'ndan canlı), <b>araç</b> (Araç Bakım / Araç Takip'ten canlı: km, bakım, kasko), açık <b>avanslar</b> (Nakit Avans), belgeler (iş sözleşmesi, SGK giriş, sağlık raporu, İSG sertifikası … dosya yükleme ve geçerlilik takibi), eğitimler ve günlük. Dosya PDF olarak alınır. Süresi dolan belge / pasaport / vize kırmızı, 60 gün içinde dolacaklar sarı.</span>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+
+    <div class="na-kpi" id="pdKpi" data-dinamik="kapali"></div>
+
+    <div class="na-sekme" id="pdSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="personel" class="aktif"><i class="fas fa-users me-1"></i>Personel <span class="n" id="pdN-personel">0</span></button>
+        <button type="button" data-p="pasaport"><i class="fas fa-passport me-1"></i>Pasaport ve Vize <span class="n" id="pdN-pasaport">0</span></button>
+        <button type="button" data-p="belgeler"><i class="fas fa-file-circle-exclamation me-1"></i>Belge Takibi <span class="n" id="pdN-belgeler">0</span></button>
+        <button type="button" data-p="zimmet"><i class="fas fa-laptop me-1"></i>Zimmet ve Araç</button>
+    </div>
+
+    <div class="na-panel aktif" data-p="personel">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-users me-1"></i>Personel Listesi</span><span class="not" id="pdSayi"></span></div>
+            <div class="na-kart-g">
+                <div class="pd-filtre">
+                    <div><label>Şirket</label><select class="form-select" id="pdSirketF"><option value="">Tümü</option></select></div>
+                    <div><label>Departman</label><select class="form-select" id="pdDepartmanF"><option value="">Tümü</option></select></div>
+                    <div><label>Durum</label><select class="form-select" id="pdDurumF"><option value="">Aktif</option><option value="hepsi">Aktif + Ayrılan</option><option value="pasaport">Şirket Pasaportu Kullanan</option><option value="arac">Aracı Olan</option><option value="belge">Belgesi Eksik / Dolan</option><option value="avans">Açık Avansı Olan</option></select></div>
+                    <div><label>Ara</label><input class="form-control" id="pdAra" placeholder="Ad, personel no, ünvan, e-posta…" autocomplete="off"></div>
+                    <div><label>&nbsp;</label><span class="text-muted" style="font-size:.62rem">satıra tıklayınca dosya açılır</span></div>
+                </div>
+            </div>
+            <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:66vh"><table class="na-tablo pd-tablo" id="pdTablo" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+        </div>
+    </div>
+
+    <div class="na-panel" data-p="pasaport">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-passport me-1"></i>Pasaport ve Vize Takibi · Şirket Sorumluluğundaki Pasaportlar</span><span class="not">kasadaki pasaportlar, bitiş tarihleri, vize geçerlilikleri</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:66vh"><table class="na-tablo pd-tablo" id="pdPasaportTablo" data-dinamik="kapali"><thead></thead><tbody></tbody></table></div></div>
+        </div>
+    </div>
+
+    <div class="na-panel" data-p="belgeler">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-file-circle-exclamation me-1"></i>Belge Takibi · Eksik, Süresi Dolan ve Dolacak</span><span class="not">zorunlu belgeler: iş sözleşmesi, SGK giriş, kimlik, sağlık raporu, KVKK, İSG sertifikası</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:66vh"><table class="na-tablo pd-tablo" id="pdBelgeTablo" data-dinamik="kapali"><thead></thead><tbody></tbody></table></div></div>
+        </div>
+    </div>
+
+    <div class="na-panel" data-p="zimmet">
+        <div class="na-kart">
+            <div class="na-kart-b"><span><i class="fas fa-laptop me-1"></i>Zimmet ve Araç · Kimde Ne Var</span><span class="not">Zimmet Raporu ve Araç Takip ile aynı veri</span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:66vh"><table class="na-tablo pd-tablo" id="pdZimmetTablo" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+        </div>
+    </div>
+
+    <div class="pd-perde" id="pdPerde"></div>
+    <div class="pd-drawer" id="pdDrawer">
+        <div class="pd-drawer-ust"><b id="pdDBaslik" style="font-size:.88rem"></b><span class="ms-auto"></span><button type="button" class="btn btn-light btn-sm py-0" id="pdDKapat" style="font-size:.66rem"><i class="fas fa-xmark"></i></button></div>
+        <div id="pdDIc"></div>
+    </div>
+</div>
+@section Scripts {
+<script src="/js/personel-dosya.js?v=1"></script>
+}
