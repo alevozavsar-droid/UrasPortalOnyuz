@@ -269,9 +269,10 @@ namespace WebApplication3.Data
         private static NaKisi K(string no, string ad, string sirket, string dep, string unvan, string mm, string kul, string rol, bool aktif = true)
             => new NaKisi { PersonelNo = no, AdSoyad = ad, Sirket = sirket, Departman = dep, Unvan = unvan, MasrafMerkezi = mm, KullaniciId = kul, Rol = rol, Aktif = aktif };
 
-        public static NaKisi KisiBul(string adVeyaNo) => Personel.FirstOrDefault(p => string.Equals(p.PersonelNo, adVeyaNo, StringComparison.OrdinalIgnoreCase) || string.Equals(p.AdSoyad, adVeyaNo, StringComparison.OrdinalIgnoreCase) || string.Equals(p.KullaniciId, adVeyaNo, StringComparison.OrdinalIgnoreCase));
-        public static NaKisi Yonetici(NaKisi k) => Personel.FirstOrDefault(p => p.Rol == "Yönetici" && p.Departman == k.Departman && p.Sirket == k.Sirket) ?? Personel.FirstOrDefault(p => p.Rol == "Yönetici" && p.Departman == k.Departman) ?? Personel.First(p => p.Rol == "Yönetici");
-        public static NaKisi UstYonetim(NaKisi k) => Personel.FirstOrDefault(p => p.Rol == "Üst Yönetim" && p.Unvan == "CFO") ?? Personel.First(p => p.Rol == "Üst Yönetim");
+        /// <summary>Ad, personel no ya da kullanıcı koduyla kişi; master listede yoksa Personel Maliyet Tablosu kişileri (cari kodu 335.xxx) aranır — bordrolu personel mesai / avans talebi açabilir.</summary>
+        public static NaKisi KisiBul(string adVeyaNo) => Personel.FirstOrDefault(p => string.Equals(p.PersonelNo, adVeyaNo, StringComparison.OrdinalIgnoreCase) || string.Equals(p.AdSoyad, adVeyaNo, StringComparison.OrdinalIgnoreCase) || string.Equals(p.KullaniciId, adVeyaNo, StringComparison.OrdinalIgnoreCase)) ?? PersonelKesintiOrnek.KisiBul(adVeyaNo);
+        public static NaKisi Yonetici(NaKisi k) => (PersonelKesintiOrnek.PmKisiMi(k) ? PersonelKesintiOrnek.Yonetici(k) : null) ?? Personel.FirstOrDefault(p => p.Rol == "Yönetici" && p.Departman == k.Departman && p.Sirket == k.Sirket) ?? Personel.FirstOrDefault(p => p.Rol == "Yönetici" && p.Departman == k.Departman) ?? Personel.First(p => p.Rol == "Yönetici");
+        public static NaKisi UstYonetim(NaKisi k) => (PersonelKesintiOrnek.PmKisiMi(k) ? PersonelKesintiOrnek.UstYonetim() : null) ?? Personel.FirstOrDefault(p => p.Rol == "Üst Yönetim" && p.Unvan == "CFO") ?? Personel.First(p => p.Rol == "Üst Yönetim");
         public static NaKisi Finans() => Personel.First(p => p.Rol == "Finans" && p.Unvan.Contains("Müdür"));
         /// <summary>Şahsi (maaş / kişisel ihtiyaç) avansı: şirket masrafı değildir; Kasa Nakit Akışı gibi ortak ekranlarda personel adı gizlenir (gizlilik).</summary>
         public static bool SahsiMi(NakitAvans a) => a != null && ((a.TalepTuru ?? "").Contains("Şahsi") || (a.TalepTuru ?? "").Contains("Maaş") || (a.TalepTuru ?? "").Contains("Kişisel"));
@@ -488,6 +489,43 @@ namespace WebApplication3.Data
         public static List<NakitAvans> AcikAvanslar(NaKisi k) => Talepler.Where(t => t.Kullanan.PersonelNo == k.PersonelNo && t.TeslimEdilen > 0 && !t.Kapandi).ToList();
 
         // ---------- Örnek tohum ----------
+        /// <summary>Şahsi (maaş) avansı tohumu — Personel Maliyet Raporu "Diğer Kesintiler" sekmesi için: talep, tüm onaylar, kasa ödemesi; maaştan mahsup planı PersonelKesintiOrnek'te.</summary>
+        public static NakitAvans SahsiAvansTohumu(NaKisi kisi, decimal tutar, string konu, string aciklama, int gunOnce, int odemeGunOnce)
+        {
+            var bugun = DateTime.Today;
+            var a = new NakitAvans
+            {
+                Olusturan = kisi, Kullanan = kisi, Sirket = kisi.Sirket, Departman = kisi.Departman, MasrafMerkezi = kisi.MasrafMerkezi, TalepTuru = "Şahsi Avans (Maaş)",
+                Konu = konu, Aciklama = aciklama, Tutar = tutar, ParaBirimi = "TL", KullanimTarihi = bugun.AddDays(-odemeGunOnce),
+                FaturaDurumu = "Faturasız", BelgeTurleri = new List<string> { "Makbuz" }, HarcamaKategorisi = "13 - Diğer", Oncelik = "Normal"
+            };
+            lock (Kilit)
+            {
+                a.Id = ++_sonId; a.No = $"NA-{bugun.Year}-{(_sonId + 140):000000}"; a.Tarih = bugun.AddDays(-gunOnce).AddHours(9).AddMinutes(10 + a.Id % 40);
+                a.KapatmaTarihi = a.KullanimTarihi.AddMonths(3);
+                a.Onaylar = OnayAkisiOlustur(a, a.Tarih);
+                Hareket(a, a.Tarih, "Talep oluşturuldu (şahsi avans, maaştan mahsup)", kisi.AdSoyad);
+                Log(a, a.Tarih, "CASH_ADVANCE_HEADER", "REQUEST_STATUS", "", a.TalepDurumu, kisi.KullaniciId, "Insert", "Portal");
+                for (int i = 0; i < 9; i++)
+                {
+                    var adim = a.Onaylar.FirstOrDefault(x => x.Durum == "Onay Bekliyor"); if (adim == null) break;
+                    var t = a.Tarih.AddHours(3.5 * (i + 1)); adim.Durum = "Onaylandı"; adim.Tarih = t;
+                    var sonraki = a.Onaylar.FirstOrDefault(x => x.Durum == "Pasif");
+                    if (sonraki != null) sonraki.Durum = "Onay Bekliyor"; else a.OnaylananTutar = a.Tutar;
+                    Hareket(a, t, adim.Adim == "Finans Uygunluk Onayı" ? "Finans uygunluk onayı verildi" : adim.Adim.Replace(" Onayı", "") + " onayladı", adim.Kisi);
+                    Log(a, t, "CASH_ADVANCE_APPROVAL", "STATUS", "Onay Bekliyor", "Onaylandı", adim.Kisi, "Update", "Workflow");
+                }
+                var to = bugun.AddDays(-odemeGunOnce).AddHours(15).AddMinutes(20 + a.Id % 30);
+                var od = new NaOdeme { IslemId = "FT-" + (90000 + a.Id * 10), Tarih = to, Tutar = tutar, ParaBirimi = "TL", Kasa = Kasalar[0], FisNo = "KÇ-" + (2600 + a.Id * 3), TeslimEden = Finans().AdSoyad, TeslimAlan = kisi.AdSoyad, TeslimSekli = "Havale", Durum = "Teslim Edildi", TeslimAlanOnayi = true, TeslimOnayTarihi = to.AddMinutes(8) };
+                a.Odemeler.Add(od); IslenenIslemler.Add(od.IslemId);
+                Hareket(a, to, $"{tutar.ToString("N0", Tr)} TL teslim edildi (havale)", "Finans/Kasa");
+                Log(a, to, "CASH_ADVANCE_PAYMENT", "PAID_AMOUNT", "0", tutar.ToString("N2", Tr), "Sistem", "Event", "Finans/Kasa");
+                a.SonSenkron = to;
+                Talepler.Add(a);
+            }
+            return a;
+        }
+
         private static void Tohum()
         {
             var bugun = DateTime.Today;

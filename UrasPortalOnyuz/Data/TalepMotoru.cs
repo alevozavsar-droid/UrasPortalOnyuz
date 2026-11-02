@@ -145,12 +145,12 @@ namespace WebApplication3.Data
 
         public static NaKisi AdimKisisi(string kod, NaKisi k)
         {
-            var P = NakitAvansOrnek.Personel;
+            var P = NakitAvansOrnek.Personel; bool pm = PersonelKesintiOrnek.PmKisiMi(k);   // Personel Maliyet Tablosu kişisi: Direktör = GMY (Alev Özavşar Eren), İK = Bordro ve Özlük İşleri Yöneticisi
             switch (kod)
             {
                 case "Y": return NakitAvansOrnek.Yonetici(k);
-                case "D": return P.First(p => p.Unvan == "Genel Müdür Yardımcısı");
-                case "I": return P.First(p => p.Rol == "İK");
+                case "D": return (pm ? PersonelKesintiOrnek.UstYonetim() : null) ?? P.First(p => p.Unvan == "Genel Müdür Yardımcısı");
+                case "I": return (pm ? PersonelKesintiOrnek.Ik() : null) ?? P.First(p => p.Rol == "İK");
                 case "A": return P.First(p => p.Departman == "İdari İşler");
                 case "F": return NakitAvansOrnek.Finans();
                 case "M": return P.First(p => p.Rol == "Muhasebe" && p.Unvan.Contains("Şef"));

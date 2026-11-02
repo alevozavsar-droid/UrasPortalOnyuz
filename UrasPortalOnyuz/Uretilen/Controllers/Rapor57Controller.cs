@@ -37,8 +37,9 @@ namespace WebApplication3.Controllers
         [Route("")]
         [ResponseCache(Location = ResponseCacheLocation.None, NoStore = true)]
         public async Task<IActionResult> Index()
- {WebApplication3.OrnekDoldurucu.Hazirla(this);
-return View("Index", WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Models.PersonelMaliyetViewModel>(12));
+ {
+            // 2 Kas 2026: "Personel Maliyet Tablosu" menüden kaldırıldı; aynı kişiler ve maliyet kalemleri Personel Maliyet Raporu'nda (Data/KurumsalMenu.cs › X)
+            return Redirect("/PersonelMaliyet");
 }
 
 

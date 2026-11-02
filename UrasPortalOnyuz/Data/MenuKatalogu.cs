@@ -79,7 +79,7 @@ namespace WebApplication3.Data
             ("Rapor84", "Index", "fas fa-chart-line", "Aktarım Robotu Kontrol Paneli-ALV", null),
             ("Rapor85", "Index", "fas fa-chart-line", "Aktarım Robotu Kontrol Paneli-SATINALMA TALEBİ", null),
             ("Rapor86", "Index", "fas fa-chart-line", "Satınalma Talebi Onay Ekranı", null),
-            ("Rapor57", "Index", "fas fa-chart-line", "Personel Maliyet Tablosu", null),
+            // 2 Kas 2026: ("Rapor57", "Personel Maliyet Tablosu") menüden kaldırıldı → Personel Maliyet Raporu (/PersonelMaliyet); Data/KurumsalMenu.cs'de X(...) rozeti, Rapor57 Index yönlenir
             ("Rapor83", "Index", "fas fa-chart-line", "Satışçı Analiz Raporu", null),
             ("Rapor87", "Index", "fas fa-chart-line", "Fatura Mutabakat Raporu - QNB", null),
             ("Rapor135", "Index", "fas fa-chart-line", "İrsaliye Mutabakat Raporu - QNB", null),

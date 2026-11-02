@@ -1,0 +1,214 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string sekme = (string)ViewBag.Sekme ?? "kayitlar";
+    string donem = (string)ViewBag.Donem;
+    string donemAd = (string)ViewBag.DonemAd;
+}
+@*
+    PERSONEL MUHASEBE İŞLEMLERİ — İK ve İdari İşler › İnsan Kaynakları › Personel Maliyet ve Bordro (eski adı: Personel Maliyet Yansıtması; /PersonelYansitma buraya yönlenir)
+    Personel ile ilgili tüm muhasebe işlemlerinin ayrıntılı ekranı. Personel Maliyet Raporu › Muhasebe Kayıtları sekmesiyle AYNI veri (Data/PersonelMuhasebeOrnek.cs):
+    burada yapılan onay / muhasebeleştirme / ters kayıt / hesap eşleştirmesi orada da görünür, orada yapılan burada. Yansıtma kuralları: Data/PersonelYansitmaOrnek.cs (GDR.13 ↔ YNS.13).
+    Sekmeler: Muhasebe Kayıtları · Ödemeler · Yansıtma Hazırlığı · Yansıtma Kayıtları · Kalem Eşleme · Hesap Eşleştirme · Fiş Arşivi. Dönem seçimi ortak (Personel Maliyet Raporu dönemleri).
+    Veri: /PersonelMuhasebe/Veri?donem= · Simule · Islem · Esleme · YansitOlustur · YansitFatura · YansitIptal · KalemEsleme · Dagilim · Kdv. Betik: wwwroot/js/personel-muhasebe.js
+    Yerleşim kuralı: üst bölüm tek satırlık şeritler (KPI kartları ortak na-kpi ölçüsünde), tablolar kendi kaydırma kabında (section), başlıklar yapışkan, koyu şeritte başlık beyaz.
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<style>
+    .na.ph { --na-k: #0f766e; }
+    .pm-pill { font-size: .62rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 2px 8px; }
+    .ph .na-ust { margin-bottom: 4px; gap: 8px; } .ph .na-ust h4 { font-size: .95rem; } .ph .na-ust .sub { display: none; } .ph.aciklama .na-ust .sub { display: block; }
+    .pm-bilgi { border: 1px solid #e2e8f0; background: #fff; color: #64748b; border-radius: 50%; width: 20px; height: 20px; font-size: .62rem; font-weight: 800; line-height: 1; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; } .ph.aciklama .pm-bilgi { background: #0f766e; color: #fff; border-color: #0f766e; }
+    .ph .na-kpi { margin-bottom: 6px; }
+    /* filtre çubuğu: tek satır */
+    .pm-filtre-bar { display: flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 3px 8px; margin-bottom: 6px; }
+    .pm-filtre-bar .f { display: inline-flex; align-items: center; gap: 4px; }
+    .pm-filtre-bar label { margin: 0; font-size: .54rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+    .ph .pm-filtre-bar .form-control, .ph .pm-filtre-bar .form-select { font-size: .66rem; padding: 1px 6px; height: 24px; min-height: 24px; width: auto; max-width: 190px; } .ph .pm-filtre-bar .form-select { padding-right: 22px; } .ph .pm-filtre-bar #phAra { width: 190px; }
+    .pm-filtre-bar .pm-donem { font-weight: 700; color: #134e4a; background-color: #f0fdfa; border-color: #99f6e4; }
+    .pm-filtre-bar .btn, .pm-filtre-bar a.btn { font-size: .62rem; padding-top: 1px; padding-bottom: 1px; } .pm-filtre-bar .na-mini { margin: 0 0 0 auto; font-size: .6rem; white-space: nowrap; }
+    .ph .na-sekme { margin-bottom: 6px; } .ph .na-sekme button { padding: 4px 10px; font-size: .74rem; }
+    /* sekme şeridi (ince araç çubuğu, başlık beyaz) */
+    .pm-rapor-ust { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: linear-gradient(90deg, #134e4a, #0f766e); color: #fff; border-radius: 8px; padding: 3px 10px; margin-bottom: 6px; min-height: 32px; }
+    .pm-rapor-ust > div:first-child { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    .pm-rapor-ust h5 { margin: 0; font-weight: 800; letter-spacing: .05em; font-size: .78rem; text-transform: uppercase; color: #fff !important; }
+    .pm-rapor-ust .pm-sayac { margin: 0; font-size: .66rem; color: #ccfbf1; white-space: nowrap; }
+    .pm-rapor-ust .ayar { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; } .pm-rapor-ust .ayar .btn { font-size: .64rem; padding-top: 1px; padding-bottom: 1px; } .pm-rapor-ust .ayar select, .pm-rapor-ust .ayar input.form-control { font-size: .68rem; padding: 1px 6px; height: 24px !important; min-height: 24px; width: auto; }
+    .pm-rapor-ust .pm-anahtar { font-size: .66rem; font-weight: 700; color: #fff; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.35); border-radius: 6px; padding: 2px 8px; display: inline-flex; align-items: center; gap: 5px; margin: 0 2px; cursor: pointer; white-space: nowrap; } .pm-rapor-ust .pm-anahtar input { margin: 0; accent-color: #fbbf24; }
+    /* tablolar: kaydırma kabı, yapışkan başlık ve dip toplam */
+    .pm-kaydir { display: block; overflow: auto; max-height: 70vh; position: relative; }
+    .pm-excel { font-size: .67rem; border-collapse: separate; border-spacing: 0; } .pm-excel th, .pm-excel td { white-space: nowrap; padding: 3px 6px; border-bottom: 1px solid #e2e8f0; }
+    .pm-excel thead th { position: sticky; top: 0; background: #1e293b; color: #fff; text-transform: uppercase; font-size: .58rem; letter-spacing: .04em; z-index: 3; text-align: left; }
+    .pm-excel thead th.s, .pm-excel td.s { text-align: right; font-variant-numeric: tabular-nums; }
+    .pm-excel td.ad { font-weight: 700; color: #0f172a; } .pm-excel td.kucuk { color: #64748b; font-size: .62rem; } .pm-excel td.hesap { background: #f8fafc; font-weight: 700; } .pm-excel td.genel { background: #ccfbf1; font-weight: 800; color: #134e4a; }
+    .pm-excel tfoot td, .pm-excel tr.toplam td { font-weight: 800; background: #dbeafe; border-top: 2px solid #1d4ed8; } .pm-excel tfoot td { position: sticky; bottom: 0; }
+    .pm-excel td small.alt { display: block; font-size: .56rem; color: #64748b; font-weight: 400; }
+    .pm-excel.pm-tik tbody tr { cursor: pointer; } .pm-excel.pm-tik tbody tr:hover td { background: #f0fdfa; }
+    .pm-excel tr.hatali td { background: #fff1f2; } .pm-excel tr.secili td { background: #f0fdfa; } .pm-excel tr.ayrildi td { color: #94a3b8; } .pm-excel tr.kaydedildi td.ad { color: #16a34a; }
+    .pm-excel .kart { font-size: .6rem; padding: 0 6px; line-height: 18px; }
+    .pm-rz { display: inline-block; font-size: .58rem; font-weight: 800; letter-spacing: .03em; padding: 1px 7px; border-radius: 999px; white-space: nowrap; } .pm-rz.ok { background: #dcfce7; color: #166534; } .pm-rz.bekle { background: #fef3c7; color: #92400e; } .pm-rz.hata { background: #fee2e2; color: #991b1b; } .pm-rz.gri { background: #f1f5f9; color: #475569; } .pm-rz.mavi { background: #dbeafe; color: #1e40af; }
+    /* muhasebe: akış şeridi, kontrol listesi, aksiyonlar, fiş önizleme, audit */
+    .pm-akis { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; } .pm-akis span { font-size: .62rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; } .pm-akis span.oldu { background: #dcfce7; color: #166534; border-color: #bbf7d0; } .pm-akis span.simdi { background: #0f766e; color: #fff; border-color: #0f766e; } .pm-akis span.hata { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .pm-kontrol { width: 100%; font-size: .68rem; } .pm-kontrol td { padding: 3px 6px; border-top: 1px solid #f1f5f9; vertical-align: top; } .pm-kontrol td.n { width: 24px; color: #64748b; } .pm-kontrol tr.hata td { background: #fff1f2; } .pm-kontrol tr.uyari td { background: #fffbeb; }
+    .pm-aksiyon { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; } .pm-aksiyon .btn { font-size: .66rem; } .pm-aksiyon .btn:disabled { opacity: .45; }
+    .pm-tfis { width: 100%; font-size: .68rem; border-collapse: collapse; } .pm-tfis th { font-size: .58rem; text-transform: uppercase; color: #64748b; text-align: left; padding: 2px 6px; border-bottom: 1px solid #e2e8f0; } .pm-tfis td { padding: 3px 6px; border-bottom: 1px solid #f1f5f9; } .pm-tfis td.s, .pm-tfis th.s { text-align: right; font-variant-numeric: tabular-nums; } .pm-tfis tr.toplam td { font-weight: 800; background: #f8fafc; border-top: 2px solid #cbd5e1; }
+    .pm-zaman { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid #e2e8f0; } .pm-zaman li { position: relative; font-size: .68rem; padding: 2px 0 6px 10px; } .pm-zaman li::before { content: ""; position: absolute; left: -19px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: #0f766e; } .pm-zaman li small { display: block; color: #64748b; font-size: .58rem; }
+    .pm-not { font-size: .66rem; color: #475569; margin-top: 6px; }
+    .ph .na-kart { margin-bottom: 6px; } .ph .na-kart-b { padding: 4px 10px; font-size: .66rem; }
+    /* formlar (hesap eşleştirme) */
+    .pm-form { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px 10px; } .pm-form .g2 { grid-column: span 2; }
+    .pm-form label { display: block; font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; } .pm-form label.z::after { content: " *"; color: #dc2626; }
+    .pm-form .form-control, .pm-form .form-select { font-size: .72rem; padding: 3px 7px; height: 28px; min-height: 28px; } .pm-form .ro { background: #f1f5f9; font-weight: 700; }
+    @@media (max-width: 1200px) { .pm-form { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    /* yansıtma: yön, kalem tabloları, dağılım, matris, iki taraflı fiş */
+    .ph-yon { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; } .ph-yon b { color: #0f172a; } .ph-yon .ok { color: #b45309; font-weight: 800; } .ph-pay { font-size: .6rem; color: #64748b; }
+    #phAdayTablo tbody tr.detay td { background: #fffbeb; padding: 6px 10px; white-space: normal; cursor: default; } #phAdayTablo tbody tr.detay:hover td { background: #fffbeb; }
+    .ph-kalem { font-size: .66rem; width: auto; } .ph-kalem th, .ph-kalem td { padding: 2px 6px; white-space: nowrap; } .ph-kalem td.s, .ph-kalem th.s { text-align: right; } .ph-kalem .kod { font-family: ui-monospace, monospace; font-size: .62rem; color: #475569; } .ph-kalem tr.top td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; }
+    .ph-dagilim { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: .66rem; } .ph-dagilim input { width: 64px; font-size: .66rem; padding: 1px 4px; height: 22px; min-height: 22px; text-align: right; } .ph-dagilim .form-select { width: auto; font-size: .66rem; padding: 1px 22px 1px 4px; height: 22px; min-height: 22px; }
+    .ph-matris td.s, .ph-matris th.s { text-align: right; white-space: nowrap; } .ph-matris tr.toplam td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; }
+    .ph-fis { font-size: .66rem; width: 100%; } .ph-fis th, .ph-fis td { padding: 2px 6px; white-space: nowrap; } .ph-fis td.s, .ph-fis th.s { text-align: right; } .ph-fis tr.top td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; } .ph-fis .kod { font-family: ui-monospace, monospace; font-size: .62rem; color: #475569; }
+    .ph-fis-bas { display: flex; align-items: center; gap: 8px; font-size: .7rem; font-weight: 800; padding: 6px 8px; border-radius: 8px 8px 0 0; color: #fff; } .ph-fis-bas.k { background: #b45309; } .ph-fis-bas.h { background: #0f766e; } .ph-fis-bas small { font-weight: 500; opacity: .85; margin-left: auto; }
+    .ph-master { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 12px; font-size: .72rem; } .ph-master .l { font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; } .ph-master .v { font-weight: 600; color: #0f172a; }
+    .ph-gecmis { font-size: .66rem; color: #475569; } .ph-gecmis li { margin-bottom: 2px; }
+    .ph-esleme td .form-select { font-size: .7rem; padding: 2px 22px 2px 6px; height: 26px; min-height: 26px; width: auto; max-width: 360px; }
+    /* çekmece */
+    .pm-drawer { position: fixed; top: 0; right: -900px; width: 860px; max-width: 96vw; height: 100vh; background: #fff; box-shadow: -8px 0 24px rgba(15,23,42,.18); z-index: 1060; transition: right .25s; overflow: auto; padding: 12px 14px; } .pm-drawer.acik { right: 0; }
+    .pm-drawer-ust { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: sticky; top: 0; background: #fff; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; z-index: 2; flex-wrap: wrap; } .pm-drawer-ust .btn { font-size: .66rem; }
+    .pm-perde { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1055; display: none; } .pm-perde.acik { display: block; }
+</style>
+}
+
+<div class="container-fluid py-3 na ph" id="ph" data-baslangic="@sekme" data-donem="@donem">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-building-columns"></i></span>Personel Muhasebe İşlemleri</h4>
+        <span class="pm-pill"><i class="fas fa-link me-1"></i>Personel Maliyet Raporu › Muhasebe Kayıtları ile Senkron</span>
+        <span class="pm-pill"><i class="fas fa-calendar me-1"></i><span id="phDonemPill">@donemAd</span></span>
+        <span class="pm-pill"><i class="fas fa-code-compare me-1"></i>Yansıtma GDR.13 ↔ YNS.13</span>
+        <button type="button" class="pm-bilgi" id="phBilgi" title="Ekran açıklamasını göster / gizle">i</button>
+        <span class="sub w-100">Personelle ilgili <b>tüm muhasebe işlemleri</b> bu ekrandan yapılır ve Personel Maliyet Raporu'ndaki <b>Muhasebe Kayıtları</b> sekmesiyle aynı veriyi kullanır: seçili dönemin bordro simülasyonu burada personel bazlı satırlarıyla, 11 kontrolüyle, şirket fişleriyle ve özet (muhasebeye atılacak) kayıtlarıyla görünür; <b>Onaya Gönder → Onayla → Muhasebeleştir → Ters Kayıt</b> adımları burada atılır ve raporda anında görünür (raporda atılan adımlar da burada). <b>Ödemeler</b> sekmesi dönemin net ödeme listesini (banka R / kasa X, ödeyen şirket, hesap, fiş) verir. <b>Yansıtma Hazırlığı</b> ve <b>Yansıtma Kayıtları</b> SGK işvereni ≠ fiili görev yeri olan personelin maliyetini Gider Kataloğu 13 (GDR.13.AA.KK ↔ YNS.13.AA.KK) kalemleriyle iki şirkete kaydeder ve simülasyonun B grubuyla mutabakatını gösterir. <b>Hesap Eşleştirme</b> simülasyon hesaplarını, <b>Kalem Eşleme</b> yansıtma kalemlerini tanımlar; <b>Fiş Arşivi</b> tüm dönemlerin simülasyonlarını ve muhasebe fiş numaralarını listeler. Her personel tablosunda <b>SGK İşvereni · Fiili Görev Yeri · Ödeme Şirketi</b> sütunları vardır; filtre çubuğundaki aynı üç seçim tüm sekmelerdeki personel satırlarını süzer (tanım ve arşiv sekmelerinde personel satırı olmadığından pasiftir).</span>
+    </div>
+    <div class="na-kpi" id="phKpi" data-dinamik="kapali"></div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+    <div class="pm-filtre-bar" data-dinamik="kapali">
+        <div class="f"><label for="phDonem">Dönem</label><select class="form-select pm-donem" id="phDonem" title="Bordro dönemi (Personel Maliyet Raporu dönemleri)"></select></div>
+        <div class="f"><label for="phAra">Ara</label><input class="form-control" id="phAra" placeholder="Personel, hesap, fiş, şirket, yansıtma no…"></div>
+        @* ortak üç filtre: tüm sekmelerdeki personel satırlarına uygulanır (aynı üç alan her personel tablosunda sütundur); tanım / arşiv sekmelerinde pasif *@
+        <div class="f"><label for="phSgk">SGK İşvereni</label><select class="form-select" id="phSgk" title="Tüm sekmelerdeki personel satırlarını SGK işverenine göre süzer"><option value="">Tüm SGK İşverenleri</option></select></div>
+        <div class="f"><label for="phGorevYeri">Fiili Görev Yeri</label><select class="form-select" id="phGorevYeri" title="Tüm sekmelerdeki personel satırlarını fiili görev yerine göre süzer"><option value="">Tüm Görev Yerleri</option></select></div>
+        <div class="f"><label for="phOdemeSirketi">Ödeme Şirketi</label><select class="form-select" id="phOdemeSirketi" title="Tüm sekmelerdeki personel satırlarını ödeme şirketine göre süzer"><option value="">Tüm Ödeme Şirketleri</option></select></div>
+        <a class="btn btn-light btn-sm py-0" id="phRapor" href="/PersonelMaliyet?sekme=muhasebe" target="_blank" title="Personel Maliyet Raporu › Muhasebe Kayıtları (özet görünüm)"><i class="fas fa-table-list me-1"></i>Personel Maliyet Raporu</a>
+        <span class="na-mini" id="phSayi"></span>
+    </div>
+    <div class="na-sekme" id="phSekmeler" data-dinamik="kapali">
+        <button type="button" data-p="kayitlar"><i class="fas fa-book me-1"></i>Muhasebe Kayıtları <span class="n" id="phNSim">0</span></button>
+        <button type="button" data-p="odemeler"><i class="fas fa-money-bill-transfer me-1"></i>Ödemeler <span class="n" id="phNOdeme">0</span></button>
+        <button type="button" data-p="hazirlik"><i class="fas fa-wand-magic-sparkles me-1"></i>Yansıtma Hazırlığı <span class="n" id="phNAday">0</span></button>
+        <button type="button" data-p="yansitma"><i class="fas fa-file-invoice-dollar me-1"></i>Yansıtma Kayıtları <span class="n" id="phNKayit">0</span></button>
+        <button type="button" data-p="esleme"><i class="fas fa-code-compare me-1"></i>Kalem Eşleme</button>
+        <button type="button" data-p="hesap"><i class="fas fa-sitemap me-1"></i>Hesap Eşleştirme <span class="n" id="phNEsleme">0</span></button>
+        <button type="button" data-p="arsiv"><i class="fas fa-box-archive me-1"></i>Fiş Arşivi <span class="n" id="phNArsiv">0</span></button>
+    </div>
+
+    @* ============================ SEKME: MUHASEBE KAYITLARI (ayrıntılı; Personel Maliyet Raporu ile aynı simülasyon) ============================ *@
+    <div class="na-panel" data-p="kayitlar">
+        <div class="pm-rapor-ust">
+            <div><h5>Muhasebe Kayıtları</h5><span class="pm-sayac" id="phKayitSayi"></span></div>
+            <div class="ayar"><label class="pm-anahtar" for="phDetay" title="Personel bazlı satırlar bu ekranda açık gelir (muhasebe çalışma alanı); raporda varsayılan özet görünümdür"><input type="checkbox" id="phDetay" checked> Personel Bazlı Satırlar</label><button type="button" class="btn btn-light btn-sm py-0" id="phSimule" title="Seçili dönem için yeni simülasyon versiyonu üretir (gerçek fiş atmaz)"><i class="fas fa-rotate me-1"></i>Yeniden Simüle</button><button type="button" class="btn btn-light btn-sm py-0" id="phKayitExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+        </div>
+        <div class="pm-akis" id="phAkis"></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-list-ol me-1"></i>Simülasyonlar</span><span class="not">seçili dönem · SIM no + versiyon · satıra tıklayınca seçilir · raporla aynı liste</span></div><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:24vh"><table class="na-tablo pm-excel pm-tik" id="phSimTablo" data-dinamik="kapali"><thead><tr class="tek"><th>Sim. No</th><th>Ver.</th><th>Dönem</th><th>Kapsam</th><th class="s">Personel</th><th class="s">Fiş</th><th class="s">Satır</th><th class="s">Toplam Borç</th><th class="s">Toplam Alacak</th><th>Durum</th><th>Oluşturan</th><th>Onaya Gönderen</th><th>Onaylayan</th><th>Muhasebeleştiren</th><th>Güncel</th></tr></thead><tbody></tbody></table></section></div></div>
+        <div id="phSecili"></div>
+        <div class="pm-not"><b>Senkron:</b> Bu sekme ile Personel Maliyet Raporu › Muhasebe Kayıtları aynı simülasyon kayıtlarını okur ve yazar; burada atılan Onaya Gönder / Onayla / Muhasebeleştir / Ters Kayıt adımı raporda, raporda atılan burada görünür (sekmeye her girişte veri tazelenir). Fark: raporda varsayılan görünüm bilgi gizliliği için personel adı içermeyen özet simülasyondur; burada muhasebe çalışma alanı olduğundan personel bazlı satırlar açıktır ve satırdaki personel adı Personel Cari Kartı'nı açar. Kayıtlar doğrudan muhasebeleştirilmez: simülasyon gerçek fiş atmaz; 11 kontrol geçmeden onay, onay olmadan fiş yoktur; Muhasebeleştir bellek içi Muhasebe modülünde yevmiye fişlerini (hesap + X/R + karşı şirket bazında özetlenmiş) oluşturur; Ters Kayıt referanslı ters fiş atar. İşlem grupları: A Bordro Tahakkuku (SGK işvereni), B Fiili Görev Yeri Yansıtması, C Net Personel Ödemesi, D Başka Şirket Tarafından Ödeme (R banka ödemeleri varsayılan Uras Power), E Ters Kayıt.</div>
+    </div>
+
+    @* ============================ SEKME: ÖDEMELER (net ödeme listesi: banka R / kasa X; simülasyon C / D grubu) ============================ *@
+    <div class="na-panel" data-p="odemeler">
+        <div class="pm-rapor-ust">
+            <div><h5>Ödemeler</h5><span class="pm-sayac" id="phOdemeSayi"></span></div>
+            <div class="ayar"><select class="form-select" id="phOdemeSirket"><option value="">Tüm Ödeyen Şirketler</option></select><select class="form-select" id="phOdemeKanal"><option value="">Banka + Kasa</option><option value="Banka (R)">Banka (R)</option><option value="Kasa / Elden (X)">Kasa / Elden (X)</option></select><button type="button" class="btn btn-light btn-sm py-0" id="phOdemeExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+        </div>
+        <div class="row g-2">
+            <div class="col-lg-8"><div class="na-kart"><div class="na-kart-g p-0"><section class="pm-kaydir" data-tam><table class="na-tablo pm-excel pm-tik" id="phOdemeTablo" data-dinamik="kapali"><thead><tr class="tek"><th>Sıra</th><th>Ödeyen Şirket</th><th>Kanal</th><th>Adı-Soyadı</th><th>SGK İşvereni</th><th>Fiili Görev Yeri</th><th>Ödeme Şirketi</th><th>Hesap</th><th class="s">Tutar</th><th>Fiş</th><th>Muhasebe Fiş No</th><th>Durum</th></tr></thead><tbody></tbody><tfoot><tr></tr></tfoot></table></section></div></div></div>
+            <div class="col-lg-4">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-building me-1"></i>Şirket × Kanal Toplamı</span><span class="not">filtreye göre</span></div><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:34vh"><table class="na-tablo pm-excel" id="phOdemeOzet" data-dinamik="kapali"><thead><tr class="tek"><th>Ödeyen Şirket</th><th>Kanal</th><th class="s">Kişi</th><th class="s">Tutar</th></tr></thead><tbody></tbody></table></section></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-ban me-1"></i>Ödeme Yapılmıyor Notlu Personel</span><span class="not" id="phOdemeYokSayi"></span></div><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:30vh"><table class="na-tablo pm-excel pm-tik" id="phOdemeYok" data-dinamik="kapali"><thead><tr class="tek"><th>Adı-Soyadı</th><th>SGK İşvereni</th><th>Fiili Görev Yeri</th><th>Ödeme Şirketi</th><th class="s">Net-R</th><th class="s">Net-X</th><th>Not</th></tr></thead><tbody></tbody></table></section></div></div>
+            </div>
+        </div>
+        <div class="pm-not">Liste seçili dönemin güncel simülasyonundaki <b>C Net Personel Ödemesi</b> ve <b>D Başka Şirket Tarafından Ödeme</b> fişlerinin banka / kasa satırlarından türetilir: R (bordro) netleri ödeme şirketinin maaş hesabından (varsayılan Uras Power; kartta kişi bazında değiştirilir), X (bordro dışı) netleri SGK işvereninin kasasından elden. Durum simülasyonun durumudur; ödeme talimatı için fişlerin muhasebeleştirilmiş olması beklenir. "Ödeme Yapılmıyor" notlu personel için ödeme kaydı üretilmez (tahakkuk ve yansıtma yapılır). Satıra tıklayınca Personel Cari Kartı açılır.</div>
+    </div>
+
+    @* ============================ SEKME: YANSITMA HAZIRLIĞI (SGK işvereni ≠ fiili görev yeri; GDR.13 ↔ YNS.13; iki şirkete kayıt) ============================ *@
+    <div class="na-panel" data-p="hazirlik">
+        <div class="pm-rapor-ust">
+            <div><h5>Yansıtma Hazırlığı</h5><span class="pm-sayac" id="phHazirlikSayi"></span></div>
+            <div class="ayar"><select class="form-select" id="phHHedef"><option value="">Tüm Hedef Şirketler</option></select><select class="form-select" id="phHCati"><option value="">Tüm Çatı Departmanlar</option></select><select class="form-select" id="phHDurum"><option value="">Tüm Durumlar</option><option value="Hazır">Hazır (Kayıt Yok)</option><option value="Kısmen Kaydedildi">Kısmen Kaydedildi</option><option value="Kaydedildi">Kaydedildi</option></select><button type="button" class="btn btn-warning btn-sm py-0" id="phYansit"><i class="fas fa-bolt me-1"></i>Seçilenleri Yansıt</button><button type="button" class="btn btn-light btn-sm py-0" id="phTumunuSec">Kayıtsızları Seç</button><button type="button" class="btn btn-light btn-sm py-0" id="phSecimTemizle">Seçimi Temizle</button><button type="button" class="btn btn-light btn-sm py-0" id="phHazirlikExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+        </div>
+        <div class="na-kart"><div class="na-kart-g p-0"><section class="pm-kaydir" data-tam><table class="na-tablo pm-excel pm-tik" id="phAdayTablo" data-dinamik="kapali"><thead><tr class="tek"><th style="width:28px"><input type="checkbox" id="phHepsi" title="Tümünü seç"></th><th>Adı-Soyadı</th><th>Ünvan / Görev</th><th>Çatı Departman</th><th>SGK İşvereni</th><th>Fiili Görev Yeri</th><th>Ödeme Şirketi</th><th>Yansıtma Yönü</th><th class="s">Aylık Maliyet</th><th class="s">Yansıtılan Pay</th><th class="s">Yansıtılacak</th><th class="s">Kalem</th><th>Durum</th></tr></thead><tbody></tbody><tfoot><tr><td></td><td id="phTopKisi"></td><td colspan="6">Toplam (filtre)</td><td class="s" id="phTopMaliyet"></td><td></td><td class="s" id="phTopYansitma"></td><td></td><td></td></tr></tfoot></table></section></div></div>
+        <div class="pm-not">Akış: Dönem Seç → Otomatik Tespit → Seçilenleri Yansıt → İki Şirkete Kayıt. Satıra tıklayınca kalem detayı ve görev yeri dağılımı açılır; "+" ile birden fazla şirkette çalışan personelde maliyet eşit paylaştırılır, paylar satır içinden düzenlenip kaydedilir (SGK işvereninin kendi payı yansıtılmaz). Aynı personel + hedef şirket + dönem için ikinci kayıt açılmaz. Kalemler Gider Kataloğu 13 (GDR.13.AA.KK) ile bire bir yansıtma gelir kalemine (YNS.13.AA.KK) eşlenir; eşleme Kalem Eşleme sekmesinde. Simülasyonun B grubu (genel maliyet bazında) ile karşılaştırma Yansıtma Kayıtları sekmesindeki mutabakat tablosundadır.</div>
+    </div>
+
+    @* ============================ SEKME: YANSITMA KAYITLARI (iki taraflı fişler, fatura, iptal; simülasyon mutabakatı) ============================ *@
+    <div class="na-panel" data-p="yansitma">
+        <div class="pm-rapor-ust">
+            <div><h5>Yansıtma Kayıtları</h5><span class="pm-sayac" id="phYKayitSayi"></span></div>
+            <div class="ayar"><select class="form-select" id="phKDonem"><option value="">Tüm Dönemler</option></select><select class="form-select" id="phKHedef"><option value="">Tüm Hedef Şirketler</option></select><select class="form-select" id="phKDurum"><option value="">Tüm Durumlar</option><option>Kaydedildi</option><option>Faturalandı</option><option>İptal</option></select><button type="button" class="btn btn-light btn-sm py-0" id="phKayitlarExcel"><i class="fas fa-file-excel me-1"></i>Excel</button><button type="button" class="btn btn-light btn-sm py-0" id="phFisExcel"><i class="fas fa-file-excel me-1"></i>Fiş Satırları Excel</button></div>
+        </div>
+        <div class="na-kart"><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:40vh"><table class="na-tablo pm-excel pm-tik" id="phYKayitTablo" data-dinamik="kapali"><thead><tr class="tek"><th>Yansıtma No</th><th>Dönem</th><th>Adı-Soyadı</th><th>SGK İşvereni</th><th>Fiili Görev Yeri</th><th>Ödeme Şirketi</th><th>Kaynak → Hedef</th><th class="s">Pay</th><th class="s">Net</th><th class="s">KDV</th><th class="s">Toplam</th><th>Kaynak Fişi</th><th>Hedef Fişi</th><th>Fatura</th><th>Durum</th><th>Oluşturan</th></tr></thead><tbody></tbody><tfoot><tr></tr></tfoot></table></section></div></div>
+        <div class="row g-2">
+            <div class="col-lg-6"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-scale-balanced me-1"></i>Simülasyon B Grubu ↔ Yansıtma Kayıtları</span><span class="not">seçili dönem · şirket çifti · iptal hariç</span></div><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:34vh"><table class="na-tablo pm-excel" id="phMutabakat" data-dinamik="kapali"><thead><tr class="tek"><th>Kaynak → Hedef</th><th class="s">Simülasyon B (Genel Maliyet)</th><th class="s">Yansıtma Kayıtları (Net)</th><th class="s">Fark</th><th class="s">Kayıt</th><th>Durum</th></tr></thead><tbody></tbody></table></section></div></div></div>
+            <div class="col-lg-6"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-table-cells me-1"></i>Şirket Çiftleri (Kaynak → Hedef)</span><span class="not">filtreye göre · iptal hariç · ₺</span></div><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:34vh"><table class="na-tablo pm-excel ph-matris" id="phMatris" data-dinamik="kapali"><thead></thead><tbody></tbody></table></section></div></div></div>
+        </div>
+        <div class="pm-not"><b>Kaynak (SGK işvereni) fişi:</b> 120 hedef şirket carisi borç · 649 yansıtma gelirleri (YNS.13.AA.KK) alacak · varsa 391 hesaplanan KDV. <b>Hedef (fiili görev yeri) fişi:</b> 770 personel giderleri (GDR.13.AA.KK) borç · varsa 191 indirilecek KDV · 320 kaynak şirket carisi alacak. Her kayıt personel + hedef şirket + dönem bazında tekildir; iki fiş aynı anda atılır, iptalde ikisi de ters kayıtla kapanır. <b>Fatura Oluştur</b> yansıtma e-faturasını üretir; KDV oranı Kalem Eşleme sekmesindeki parametreden gelir. <b>Mutabakat:</b> simülasyonun B grubu personelin <b>genel maliyetini</b> tek kalem yansıtır (SGK işvereni → fiili görev yeri şirketi); yansıtma kayıtları ise <b>katalog kalemlerinin</b> (X-Net, R-Net, brüt masraflar, SGK işveren, yemek / yol…) toplamıdır. Fark, kesinti ve X tarafı kalemlerin iki modelde farklı yerde sayılmasından, eşlenmemiş kalemlerden ya da kayıt açılmamış personelden gelir; "Simülasyonda Yok" satırı görev yeri eşlemesi farklı olan personeli gösterir. Asia gibi lokasyon adları tüzel şirket değildir, iki modelde de yansıtma hedefi olmaz. Satıra tıklayınca kayıt detayı (kalemler, iki taraflı fiş, geçmiş) açılır.</div>
+    </div>
+
+    @* ============================ SEKME: KALEM EŞLEME (maliyet alanı → GDR.13 ↔ YNS.13; KDV; katalog) ============================ *@
+    <div class="na-panel" data-p="esleme">
+        <div class="pm-rapor-ust"><div><h5>Kalem Eşleme</h5><span class="pm-sayac" id="phKatalogSayi"></span></div><div class="ayar"><label class="pm-anahtar" for="phKdv">Yansıtma Faturası KDV % <input class="form-control" id="phKdv" type="number" min="0" max="50" step="1" style="width:70px;height:22px;font-size:.66rem;padding:1px 4px"></label><button type="button" class="btn btn-light btn-sm py-0" id="phKdvKaydet"><i class="fas fa-floppy-disk me-1"></i>KDV Kaydet</button></div></div>
+        <div class="row g-2">
+            <div class="col-lg-7"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-code-compare me-1"></i>Maliyet Alanı → Gider Kalemi ↔ Yansıtma Gelir Kalemi</span><span class="not">Gider / Gelir Kataloğu · 13 Personel ve İşçilik Giderleri · değişiklik yeni kayıtlarda geçerli</span></div><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:62vh"><table class="na-tablo pm-excel ph-esleme" id="phKalemEslemeTablo" data-dinamik="kapali"><thead><tr class="tek"><th>Personel Maliyet Alanı</th><th>X / R</th><th>Gider Kodu (GDR.13)</th><th>Gider Kalemi</th><th>Yansıtma Kodu</th><th>Yansıtma Gelir Kalemi</th></tr></thead><tbody></tbody></table></section></div></div></div>
+            <div class="col-lg-5"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-book me-1"></i>Katalog · 13 Personel ve İşçilik Giderleri</span><span class="not">GDR.13.AA.KK ↔ YNS.13.AA.KK</span></div><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:62vh"><table class="na-tablo pm-excel ph-kalem" id="phKatalog" data-dinamik="kapali"><thead><tr class="tek"><th>Gider Kodu</th><th>Alt Grup</th><th>Kalem</th><th>Yansıtma Kodu</th><th>Yansıtma Kalemi</th></tr></thead><tbody></tbody></table></section></div></div></div>
+        </div>
+        <div class="pm-not">Eşleme değişikliği yeni yansıtma kayıtlarında geçerlidir; mevcut kayıtların kalemleri oluşturuldukları andaki eşlemeyle saklanır. Yansıtma kodu gider kodundan otomatik türetilir. KDV: personel maliyet yansıtmasında varsayılan %0, Mali İşler kararına göre değiştirilir.</div>
+    </div>
+
+    @* ============================ SEKME: HESAP EŞLEŞTİRME (simülasyon hesapları; Personel Maliyet Raporu ile aynı tablo) ============================ *@
+    <div class="na-panel" data-p="hesap">
+        <div class="pm-rapor-ust"><div><h5>Hesap Eşleştirme</h5><span class="pm-sayac" id="phHesapSayi"></span></div><div class="ayar"><button type="button" class="btn btn-light btn-sm py-0" id="phHesapExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-sitemap me-1"></i>Şirket + İşlem Türü + Kaynak Kalem + X/R + Yön → Hesap</span><span class="not">kodlar sabit değildir, muhasebe birimi tanımlar · değişiklik açık simülasyonları güncelliğini yitirtir (raporda da) · satıra tıklayınca forma gelir</span></div><div class="na-kart-g">
+            <form id="phEslemeForm" class="pm-form mb-2">
+                <div><label for="phe_sirket">Şirket</label><select class="form-select" id="phe_sirket"><option value="*">Tüm Şirketler</option></select></div>
+                <div><label for="phe_karsi">Karşı Şirket</label><select class="form-select" id="phe_karsi"><option value="*">Tümü</option></select></div>
+                <div><label class="z" for="phe_islem">İşlem Türü</label><select class="form-select" id="phe_islem"></select></div>
+                <div><label class="z" for="phe_kalem">Kaynak Kalem</label><input class="form-control" id="phe_kalem" list="dlPhKalem" required placeholder="Net-R Bordro, SGK İşçi Payı…"><datalist id="dlPhKalem"></datalist></div>
+                <div><label for="phe_xr">X/R</label><select class="form-select" id="phe_xr"><option value="*">Her İkisi</option><option value="R">R</option><option value="X">X</option></select></div>
+                <div><label class="z" for="phe_yon">Borç / Alacak</label><select class="form-select" id="phe_yon"><option value="Borç">Borç</option><option value="Alacak">Alacak</option></select></div>
+                <div><label class="z" for="phe_hesap">Hesap Kodu</label><input class="form-control" id="phe_hesap" list="dlPhHesap" required placeholder="335.01"><datalist id="dlPhHesap"></datalist></div>
+                <div><label>Hesap Adı</label><input class="form-control ro" id="phe_hesapAd" readonly></div>
+                <div><label for="phe_bas">Geçerlilik Başlangıç</label><input class="form-control" id="phe_bas" type="month"></div>
+                <div><label for="phe_bit">Geçerlilik Bitiş</label><input class="form-control" id="phe_bit" type="month"></div>
+                <div class="d-flex align-items-end gap-3" style="font-size:.7rem"><label class="m-0"><input type="checkbox" id="phe_varsayilan" checked> Varsayılan</label><label class="m-0"><input type="checkbox" id="phe_aktif" checked> Aktif</label></div>
+                <div class="d-flex align-items-end gap-2"><button type="submit" class="btn btn-warning btn-sm py-0"><i class="fas fa-floppy-disk me-1"></i><span id="phe_kaydetYazi">Eşleştirme Ekle</span></button><button type="button" class="btn btn-light btn-sm py-0" id="phe_temizle">Temizle</button><input type="hidden" id="phe_id"></div>
+            </form>
+            <section class="pm-kaydir" style="max-height:48vh"><table class="na-tablo pm-excel pm-tik" id="phEslemeTablo" data-dinamik="kapali"><thead><tr class="tek"><th>#</th><th>Şirket</th><th>Karşı Şirket</th><th>İşlem Türü</th><th>Kaynak Kalem</th><th>X/R</th><th>Yön</th><th>Hesap Kodu</th><th>Hesap Adı</th><th>Varsayılan</th><th>Geçerlilik</th><th>Durum</th><th>Versiyon</th><th>Değiştiren</th></tr></thead><tbody></tbody></table></section>
+        </div></div>
+        <div class="pm-not">Hesaplar personel satırına yazılmaz; simülasyon her satırın hesabını bu tablodan şirket + işlem türü + kaynak kalem + X/R + yön (+ karşı şirket) ile seçer; en özel eşleşme kazanır (şirkete özel > karşı şirkete özel > X/R'ye özel > varsayılan). Üst seviye (posting olmayan) hesaba kayıt atılamaz. Tablo Personel Maliyet Raporu'ndaki Hesap Eşleştirme ile aynıdır.</div>
+    </div>
+
+    @* ============================ SEKME: FİŞ ARŞİVİ (tüm dönemlerin simülasyonları, muhasebe fiş numaraları, ters kayıtlar) ============================ *@
+    <div class="na-panel" data-p="arsiv">
+        <div class="pm-rapor-ust"><div><h5>Fiş Arşivi</h5><span class="pm-sayac" id="phArsivSayi"></span></div><div class="ayar"><select class="form-select" id="phArsivDurum"><option value="">Tüm Durumlar</option><option>Muhasebeleştirildi</option><option>Ters Kayıt Yapıldı</option><option>Onaylandı</option><option>Onaya Gönderildi</option><option>Kontrole Hazır</option><option>Kontrol Gerekiyor</option><option>İptal</option></select><button type="button" class="btn btn-light btn-sm py-0" id="phArsivExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div></div>
+        <div class="na-kart"><div class="na-kart-g p-0"><section class="pm-kaydir" data-tam><table class="na-tablo pm-excel pm-tik" id="phArsivTablo" data-dinamik="kapali"><thead><tr class="tek"><th>Sim. No</th><th>Ver.</th><th>Dönem</th><th>Kapsam</th><th class="s">Personel</th><th class="s">Fiş</th><th class="s">Toplam Borç</th><th class="s">Toplam Alacak</th><th>Durum</th><th>Muhasebe Fişleri</th><th>Ters Fişler</th><th>Oluşturan</th><th>Onaylayan</th><th>Muhasebeleştiren</th><th>Son İşlem</th></tr></thead><tbody></tbody></table></section></div></div>
+        <div class="pm-not">Tüm dönemlerin simülasyon kayıtları (iptal ve eski versiyonlar dahil). Satıra tıklayınca o dönem seçilir ve simülasyon Muhasebe Kayıtları sekmesinde açılır. Gerçek yevmiye fişleri Muhasebe modülünde (bellek içi) saklanır; fiş numarası burada referanstır.</div>
+    </div>
+
+    @* ============================ ÇEKMECE: fiş önizleme / yansıtma kaydı detayı ============================ *@
+    <div class="pm-perde" id="phPerde"></div>
+    <div class="pm-drawer" id="phDrawer">
+        <div class="pm-drawer-ust"><b id="phDrawerBaslik" style="font-size:.86rem"></b><span class="ms-auto d-flex gap-1 flex-wrap" id="phDrawerAksiyon"></span><button type="button" class="btn btn-light btn-sm py-0" id="phDrawerKapat" aria-label="Kapat" title="Kapat"><i class="fas fa-xmark"></i></button></div>
+        <div id="phDrawerIc"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="/js/personel-muhasebe.js?v=3"></script>
+}

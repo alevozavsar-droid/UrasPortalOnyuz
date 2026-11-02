@@ -88,6 +88,8 @@ namespace WebApplication3.Data
         public static List<NakitAkisViewModel> Odemeler(string dbName) { Tohumla(); AvanslariSenkronla(); List<NakitAkisViewModel> l; lock (Kilit) l = (_odemeler.TryGetValue(dbName, out var x) ? x : new List<NakitAkisViewModel>()).ToList(); foreach (var m in l) BelgeleriDoldur(m); return l; }
         public static NakitAkisViewModel Bul(string dbName, int docEntry) { Tohumla(); AvanslariSenkronla(); lock (Kilit) return _odemeler.TryGetValue(dbName, out var l) ? l.FirstOrDefault(m => m.DocEntry == docEntry) : null; }
         public static NakitAkisViewModel Bul(int docEntry) { Tohumla(); lock (Kilit) return _odemeler.Values.SelectMany(l => l).FirstOrDefault(m => m.DocEntry == docEntry); }
+        /// <summary>Nakit avansın Kasa Nakit Akışı satırı (finans konsolide senkronu; Personel Maliyet › Diğer Kesintiler).</summary>
+        public static NakitAkisViewModel AvansSatiri(string avansNo) { Tohumla(); AvanslariSenkronla(); lock (Kilit) return _odemeler.Values.SelectMany(l => l).FirstOrDefault(m => m.U_AvansNo == avansNo); }
         /// <summary>Dış modüller (Talimat) için günlük kaydı.</summary>
         public static void Gunluge(string dbName, int docEntry, string tip, string aciklama, string kullanici) { Tohumla(); lock (Kilit) Log(dbName, docEntry, tip, aciklama, kullanici); }
 

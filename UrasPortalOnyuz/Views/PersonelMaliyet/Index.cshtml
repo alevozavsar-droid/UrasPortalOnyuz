@@ -1,34 +1,58 @@
+﻿@using WebApplication3.Data
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     int yil = (int)ViewBag.Yil;
     string kaynak = (string)ViewBag.Kaynak;
-    var gruplar = ((string Grup, string[] Sutunlar)[])ViewBag.Gruplar;
-    string sekme = Context.Request.Query["sekme"].ToString() == "ozet" ? "ozet" : "tablo";
+    var gruplar = ((string Grup, PmSutun[] Sutunlar)[])ViewBag.Gruplar;
+    string[] sekmeler = { "tablo", "ozet", "uretim", "prim", "ozel", "birlesim", "ekcalisma", "kesinti", "muhasebe", "cikis" };
+    string sekme = sekmeler.Contains(Context.Request.Query["sekme"].ToString()) ? Context.Request.Query["sekme"].ToString() : "tablo";
     string kod = Context.Request.Query["kod"].ToString();
+    string donem = Context.Request.Query["donem"].ToString();
 }
 @*
     PERSONEL MALİYET RAPORU — Yönetim › Özel Analizler › Özel Raporlar ve İK ve İdari İşler › İnsan Kaynakları › Personel Maliyet ve Bordro (aynı ekran).
-    "PERSONEL 19.06 GÜNCEL" Google E-Tablosunun portal karşılığı. İki sekme:
-      Personel Maliyet Tablosu : kimlik bilgileri + brüt ücret (X / R-Net) + işveren payları + ek çalışmalar + sosyal yardımlar + prim + yan haklar + yasal ödemeler + genel maliyet + not.
-                                 Düzenle modunda kimlik bilgileri ve tüm tutarlar satır bazında değiştirilir; her satırdaki Kart düğmesi Personel Cari Kartı'nı açar
-                                 (335.xxx cari kodu, durum, ayrılış, TC kimlik, telefon, e-posta, ücret ve maliyet kalemleri, not); Personel Ekle / Sil; Excel
+    "Personel Bordro ve Ödeme Tablosu"nun portal karşılığı; sütun grupları ve sütunlar Data/PersonelMaliyetOrnek.cs › SutunGruplari'ndan gelir (kaynak tabloyla aynı sıra). İki sekme:
+      Personel Maliyet Tablosu : kimlik bilgileri · net ücret · puantaj ve çalışma kazançları · ek çalışmalar · sosyal yardımlar · prim ve ek kazançlar · yan haklar · yasal ödemeler ·
+                                 brüt kazanç ve SGK matrahı · gelir vergisi · damga vergisi · SGK işçi payları · işveren payları · diğer kesintiler · ödeme özeti · maliyet ve not.
+                                 Düzenle modunda kimlik bilgileri, günler ve girilen tutarlar satır bazında değiştirilir (hesaplanan sütunlar anında güncellenir); Kart düğmesi Personel Cari Kartı'nı açar
+                                 (335.xxx cari kodu, durum, ayrılış, TC kimlik, telefon, e-posta, tüm girilen kalemler, not); Personel Ekle / Sil; Excel
       Özet Raporu              : seçilebilir kırılım × maliyet kalemleri, SGK işvereni × çatı departman matrisi, kalem dağılımı, ünvan / özel durum / kıdem dağılımları, en yüksek maliyetli 10 personel
-    Filtreler (Durum dahil) ve KPI kutuları her iki sekme için ortaktır. Derin bağlantı: ?sekme=ozet · ?kod=335.012 (kartı açar)
+      Üretim Personeli         : SGK'sız, tamamen X, saat / gün bazlı (Data/PersonelMaliyetEkOrnek.cs) · Prim Ödemeleri: ana tablodaki prim tutarlarının detayı + kişi bazında uyum
+      Özel Kişiler             : PmPersonel.Ozel = true satırlar (aile üyeleri, ev çalışanları); Personel Maliyet Tablosu paneli aynı sütunlarla "özel" kapsamında açılır, ana tabloda görünmezler
+      Birleşik Tablo           : Bordro + Üretim + Özel satırları; net kalemler (yol, yemek, mesai, prim), Toplam Brüt Masraflar, Toplam İşveren, Genel Maliyet
+      Ek Çalışmalar            : mesai talepleri (TalepMotoru MESAI; Data/PersonelKesintiOrnek.cs) — kim, kim onayladı, ne zaman, PDKS / puantaj, tabloyla karşılaştırma; talep detayı çekmecede
+      Diğer Kesintiler         : şahsi avans talepleri (NakitAvansOrnek) + Kasa Nakit Akışı senkronu, kesinti / icra planları (PDF ekleri, bitiş dönemi), yeni plan formu (KesintiEkle, multipart)
+      Muhasebe Kayıtları       : IT Analiz 01.11.2026 — simülasyon (gerçek fiş yok) → 11 kontrol → onaya gönder → onayla (yetki) → muhasebeleştir (MuhasebeOrnek yevmiye) → ters kayıt; hesap eşleştirme tanım ekranı (Data/PersonelMuhasebeOrnek.cs)
+    Dönem (Ay) seçimi filtrelerdedir: seçilen ayın verisi /PersonelMaliyet/Veri?donem=yyyy-MM ile yüklenir (güncel Kasım 2026 kaynak tablodan, Ekim / Eylül 2026 türetilmiş örnek); kayıt / ekle / sil seçili döneme işlenir.
+    Filtreler (Durum dahil) ve KPI kutuları ilk iki sekme için ortaktır; "0 ₺ Sütunları Gizle" anahtarı tablolarda tamamı sıfır olan sütunları kaldırır. Derin bağlantı: ?sekme=ozet|uretim|prim|ozel|birlesim · ?kod=335.012 (kartı açar)
     Veri: /PersonelMaliyet/Veri · Kayıt: /PersonelMaliyet/Kaydet · Ekle · Sil. Betik: wwwroot/js/personel-maliyet.js · Ortak stil: wwwroot/css/nakit-avans.css
 *@
 @section Styles {
 <link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
 <style>
     .na.pm { --na-k: #0f766e; }
-    .pm-pill { font-size: .68rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px 10px; }
-    .pm-filtre { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px 8px; margin-bottom: 8px; }
-    .pm-filtre label { display: block; font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; }
-    .pm-filtre .form-control, .pm-filtre .form-select { font-size: .72rem; padding: 3px 7px; height: 28px; }
-    @@media (max-width: 1200px) { .pm-filtre { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-    .pm-rapor-ust { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: linear-gradient(90deg, #134e4a, #0f766e); color: #fff; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
-    .pm-rapor-ust h5 { margin: 0; font-weight: 800; letter-spacing: .05em; font-size: .95rem; text-transform: uppercase; }
-    .pm-rapor-ust .alt { font-size: .64rem; letter-spacing: .12em; opacity: .85; text-transform: uppercase; }
-    .pm-rapor-ust .ayar { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; } .pm-rapor-ust .ayar .btn { font-size: .66rem; } .pm-rapor-ust .ayar select { font-size: .72rem; padding: 2px 6px; height: 26px; width: auto; }
+    .pm-pill { font-size: .62rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 2px 8px; }
+    /* ---- yoğun yerleşim: üst bölüm tek satırlık şeritler (kutu yok), tablo ekranın kalanını doldurur ---- */
+    .pm .na-ust { margin-bottom: 4px; gap: 8px; } .pm .na-ust h4 { font-size: .95rem; } .pm .na-ust .sub { display: none; } .pm.aciklama .na-ust .sub { display: block; }
+    .pm-bilgi { border: 1px solid #e2e8f0; background: #fff; color: #64748b; border-radius: 50%; width: 20px; height: 20px; font-size: .62rem; font-weight: 800; line-height: 1; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; } .pm.aciklama .pm-bilgi { background: #0f766e; color: #fff; border-color: #0f766e; }
+    /* KPI kutuları: Personel Maliyet Yansıtması ile aynı ölçü (ortak nakit-avans.css .na-kpi); kendi KPI şeridi olan sekmede genel şerit gizlenir */
+    .pm .na-kpi { margin-bottom: 6px; }
+    /* filtreler: tek satırlık çubuk (etiket solda, kutu sağda) */
+    .pm-filtre-bar { display: flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 3px 8px; margin-bottom: 6px; }
+    .pm-filtre { display: contents; }   /* filtre grupları çubuğun doğrudan öğeleri gibi akar, Temizle ile aynı satırda sarar */
+    .pm-filtre .f { display: inline-flex; align-items: center; gap: 4px; }
+    .pm-filtre label { margin: 0; font-size: .54rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+    .pm .pm-filtre .form-control, .pm .pm-filtre .form-select { font-size: .66rem; padding: 1px 6px; height: 24px; min-height: 24px; width: auto; max-width: 150px; } .pm .pm-filtre .form-select { padding-right: 22px; } .pm .pm-filtre #pmAra { width: 150px; }
+    .pm-filtre .pm-donem { font-weight: 700; color: #134e4a; background-color: #f0fdfa; border-color: #99f6e4; }
+    .pm-filtre-bar .btn { font-size: .62rem; padding-top: 1px; padding-bottom: 1px; }
+    .pm-rapor-ust .pm-sayac { margin: 0; font-size: .7rem; font-weight: 700; color: #fff; white-space: nowrap; }
+    .pm .na-sekme { margin-bottom: 6px; } .pm .na-sekme button { padding: 4px 10px; font-size: .74rem; }
+    /* sekme şeridi: ince araç çubuğu; başlık beyaz (rapor teması h5 rengini ezer), alt açıklama başlığın ipucunda */
+    .pm-rapor-ust { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: linear-gradient(90deg, #134e4a, #0f766e); color: #fff; border-radius: 8px; padding: 3px 10px; margin-bottom: 6px; min-height: 32px; }
+    .pm-rapor-ust > div:first-child { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    .pm-rapor-ust h5 { margin: 0; font-weight: 800; letter-spacing: .05em; font-size: .78rem; text-transform: uppercase; color: #fff !important; cursor: help; }
+    .pm-rapor-ust .alt { display: none; } .pm-rapor-ust .alt#pmOzetKapsam { display: block; font-size: .64rem; color: #ccfbf1; }
+    .pm-rapor-ust .ayar { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; } .pm-rapor-ust .ayar .btn { font-size: .64rem; padding-top: 1px; padding-bottom: 1px; } .pm-rapor-ust .ayar select, .pm-rapor-ust .ayar input.form-control { font-size: .68rem; padding: 1px 6px; height: 24px !important; min-height: 24px; width: auto; }
     .pm-excel { font-size: .67rem; border-collapse: separate; border-spacing: 0; } .pm-excel th, .pm-excel td { white-space: nowrap; padding: 3px 6px; border-bottom: 1px solid #e2e8f0; }
     .pm-excel thead th { position: sticky; background: #1e293b; color: #fff; text-transform: uppercase; font-size: .58rem; letter-spacing: .04em; z-index: 3; text-align: left; }
     .pm-excel thead tr.grup th { top: 0; text-align: center; background: #0f172a; border-left: 1px solid #334155; letter-spacing: .08em; }
@@ -36,12 +60,51 @@
     .pm-excel td.ad { font-weight: 700; color: #0f172a; } .pm-excel td.kucuk { color: #64748b; font-size: .62rem; }
     .pm-excel td.hesap { background: #f8fafc; font-weight: 700; } .pm-excel td.genel { background: #ccfbf1; font-weight: 800; color: #134e4a; }
     .pm-excel td.grupBas, .pm-excel th.grupBas { border-left: 2px solid #cbd5e1; }
+    /* kaydırma kabı: kabuk tablo içeren div'lerin max-height'ını ezdiği için section (başlık ve dip toplam bu kap içinde yapışkan) */
+    .pm-kaydir { display: block; overflow: auto; max-height: 70vh; position: relative; }
+    /* sola sabit sütunlar (Sıra … Adı-Soyadı): yatay kaydırmada yerinde kalır; arka plan satırın rengini izler */
+    .pm-excel td.sabit, .pm-excel th.sabit { position: sticky; z-index: 2; background: #fff; }
+    .pm-excel thead th.sabit { z-index: 5; background: #1e293b; } .pm-excel thead tr.grup th.sabit { background: #0f172a; z-index: 6; }
+    .pm-excel td.sabit:last-of-type, .pm-excel td.sabit.ad { box-shadow: 2px 0 0 #cbd5e1; }
+    .pm-excel tbody tr:nth-child(even) td.sabit { background: #fff; } .pm-excel tr.secili td.sabit, .pm-excel.pm-tik tbody tr:hover td.sabit, .pm-excel tbody tr[data-sira]:hover td.sabit, .pm-excel tbody tr[data-deger]:hover td.sabit { background: #f0fdfa; }
+    .pm-excel tr.cikacak td.sabit { background: #fff1f2; } .pm-excel tr.hatali td.sabit { background: #fff1f2; } .pm-excel tfoot td.sabit { background: #dbeafe; z-index: 4; } .pm-excel tr.toplam td.sabit { background: #f8fafc; } .pm-excel tr.ayrildi td.sabit { color: #94a3b8; }
     .pm-excel tfoot td, .pm-excel tr.toplam td { font-weight: 800; background: #dbeafe; border-top: 2px solid #1d4ed8; } .pm-excel tfoot td { position: sticky; bottom: 0; }
     .pm-excel tr.emekli td.ad::after { content: " · E"; color: #b45309; font-size: .58rem; } .pm-excel tr.engelli td.ad::after { content: " · ♿"; color: #1d4ed8; font-size: .6rem; }
     .pm-excel tr.ayrildi td { color: #94a3b8; } .pm-excel tr.ayrildi td.ad { text-decoration: line-through; color: #94a3b8; }
     .pm-excel input.gir, .pm-excel select.gir { font-size: .66rem; padding: 1px 4px; height: 22px; border: 1px solid #94a3b8; border-radius: 4px; background: #fffbeb; }
-    .pm-excel input.gir { width: 84px; text-align: right; } .pm-excel input.gir.metin { width: 140px; text-align: left; } .pm-excel input.gir.dar { width: 108px; text-align: left; } .pm-excel input.gir.genis { width: 190px; text-align: left; } .pm-excel input.gir.tarih { width: 120px; text-align: left; } .pm-excel input.gir.not { width: 160px; text-align: left; } .pm-excel select.gir { width: auto; }
+    .pm-excel input.gir { width: 84px; text-align: right; } .pm-excel input.gir.gun { width: 56px; } .pm-excel input.gir.metin { width: 140px; text-align: left; } .pm-excel input.gir.dar { width: 108px; text-align: left; } .pm-excel input.gir.genis { width: 190px; text-align: left; } .pm-excel input.gir.tarih { width: 120px; text-align: left; } .pm-excel input.gir.not { width: 160px; text-align: left; } .pm-excel select.gir { width: auto; }
     .pm-excel tr.degisti td.ad { color: #b45309; }
+    /* rx hücresi: aynı kalemin R (bordrolu) tutarı üstte, X (bordro dışı) tutarı altta */
+    .pm-excel td.rx .rx { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; } .pm-excel td.rx .rx span { white-space: nowrap; } .pm-excel td.rx .rx small { display: inline-block; width: 10px; margin-left: 3px; font-size: .5rem; font-weight: 800; color: #0f766e; text-align: left; } .pm-excel td.rx .rx .x { color: #b45309; } .pm-excel td.rx .rx .x small { color: #b45309; }
+    .pm-excel td.rx input.gir { margin: 1px 0; } .pm-excel td.rx input.gir.x { background: #fff7ed; }
+    .pm-excel td small.dv { display: block; font-size: .5rem; color: #64748b; font-weight: 400; }   /* dövizli maaş: tutar × kur */
+    .pm-excel input.gir.ro { background: #f1f5f9; color: #475569; }
+    .pm-form .pm-doviz-not { font-size: .66rem; color: #475569; } .pm-form .pm-doviz-not b { color: #0f766e; }
+    .pm-rapor-ust .pm-anahtar { font-size: .66rem; font-weight: 700; color: #fff; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.35); border-radius: 6px; padding: 2px 8px; display: inline-flex; align-items: center; gap: 5px; margin: 0 2px; cursor: pointer; white-space: nowrap; } .pm-rapor-ust .pm-anahtar input { margin: 0; accent-color: #fbbf24; }
+    .pm-excel .gizli { display: none; }   /* 0 ₺ sütunları gizle */
+    /* Ek Çalışmalar / Diğer Kesintiler: durum rozetleri, tıklanabilir satırlar, zaman çizelgesi */
+    .pm-rz { display: inline-block; font-size: .58rem; font-weight: 800; letter-spacing: .03em; padding: 1px 7px; border-radius: 999px; white-space: nowrap; } .pm-rz.ok { background: #dcfce7; color: #166534; } .pm-rz.bekle { background: #fef3c7; color: #92400e; } .pm-rz.hata { background: #fee2e2; color: #991b1b; } .pm-rz.gri { background: #f1f5f9; color: #475569; } .pm-rz.mavi { background: #dbeafe; color: #1e40af; }
+    .pm-excel.pm-tik tbody tr, .pm-ozet.pm-tik tbody tr:not(.toplam), .pm-excel tbody tr[data-sira], .pm-excel tbody tr[data-deger] { cursor: pointer; } .pm-excel.pm-tik tbody tr:hover td, .pm-ozet.pm-tik tbody tr:not(.toplam):hover td, .pm-excel tbody tr[data-sira]:hover td, .pm-excel tbody tr[data-deger]:hover td { background: #f0fdfa; }
+    .pm-matris tbody td[data-sgk], .pm-matris tbody td[data-cati] { cursor: pointer; } .pm-matris tbody td[data-sgk]:hover, .pm-matris tbody td[data-cati]:hover { background: #f0fdfa; }
+    .pm-kontrol tr.hata, .pm-kontrol tr.uyari { cursor: pointer; }
+    .pm-excel td small.alt { display: block; font-size: .56rem; color: #64748b; font-weight: 400; }
+    .pm-excel td .ek { display: inline-block; font-size: .58rem; margin: 0 4px 2px 0; padding: 1px 6px; border: 1px solid #cbd5e1; border-radius: 6px; color: #1d4ed8; text-decoration: none; background: #fff; } .pm-excel td .ek:hover { background: #eff6ff; }
+    .pm-excel td .ekyukle { font-size: .56rem; padding: 0 6px; line-height: 16px; }
+    .pm-drawer-dar { width: 720px; }
+    .pm-zaman { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid #e2e8f0; } .pm-zaman li { position: relative; font-size: .68rem; padding: 2px 0 6px 10px; } .pm-zaman li::before { content: ""; position: absolute; left: -19px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: #0f766e; } .pm-zaman li small { display: block; color: #64748b; font-size: .58rem; }
+    .pm-onay { width: 100%; font-size: .68rem; } .pm-onay th { font-size: .58rem; text-transform: uppercase; color: #64748b; text-align: left; padding: 2px 6px; } .pm-onay td { padding: 3px 6px; border-top: 1px solid #f1f5f9; }
+    .pm-ozet-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 10px; font-size: .68rem; } .pm-ozet-grid div span { display: block; font-size: .56rem; text-transform: uppercase; color: #64748b; font-weight: 700; } .pm-ozet-grid div b { color: #0f172a; }
+    /* Muhasebe Kayıtları: akış şeridi, kontrol listesi, fiş önizleme */
+    .pm-akis { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; } .pm-akis span { font-size: .62rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; } .pm-akis span.oldu { background: #dcfce7; color: #166534; border-color: #bbf7d0; } .pm-akis span.simdi { background: #0f766e; color: #fff; border-color: #0f766e; } .pm-akis span.hata { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .pm-kontrol { width: 100%; font-size: .68rem; } .pm-kontrol td { padding: 3px 6px; border-top: 1px solid #f1f5f9; vertical-align: top; } .pm-kontrol td.n { width: 24px; color: #64748b; } .pm-kontrol tr.hata td { background: #fff1f2; } .pm-kontrol tr.uyari td { background: #fffbeb; }
+    .pm-aksiyon { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; } .pm-aksiyon .btn { font-size: .66rem; } .pm-aksiyon .btn:disabled { opacity: .45; }
+    .pm-excel tr.hatali td { background: #fff1f2; } .pm-excel tr.secili td { background: #f0fdfa; }
+    .pm-tfis { width: 100%; font-size: .68rem; border-collapse: collapse; } .pm-tfis th { font-size: .58rem; text-transform: uppercase; color: #64748b; text-align: left; padding: 2px 6px; border-bottom: 1px solid #e2e8f0; } .pm-tfis td { padding: 3px 6px; border-bottom: 1px solid #f1f5f9; } .pm-tfis td.s { text-align: right; font-variant-numeric: tabular-nums; } .pm-tfis tr.toplam td { font-weight: 800; background: #f8fafc; border-top: 2px solid #cbd5e1; }
+    /* emekli / engelli rozetleri (tüm sekmelerde ad hücresi) */
+    .pm-oz { display: inline-block; margin-left: 4px; font-size: .56rem; font-weight: 800; vertical-align: middle; } .pm-oz.e { color: #b45309; } .pm-oz.en { color: #1d4ed8; font-size: .62rem; }
+    .pm-excel tr.cikacak td { background: #fff1f2; } .pm-excel tr.cikacak td.ad { text-decoration: line-through; color: #991b1b; }
+    .pm-excel select.pmCikisSec { font-size: .64rem; padding: 1px 22px 1px 6px; height: 22px; width: auto; border-color: #cbd5e1; background-color: #f8fafc; } .pm-excel select.pmCikisSec.cikacak { border-color: #fca5a5; background-color: #fee2e2; color: #991b1b; font-weight: 700; }
+    .pm-excel td.kaynak { font-size: .6rem; font-weight: 800; letter-spacing: .04em; } .pm-excel td.kaynak.k-uretim { color: #b45309; } .pm-excel td.kaynak.k-ozel { color: #7c3aed; } .pm-excel td.kaynak.k-bordro { color: #0f766e; }
     .pm-excel .kart, .pm-excel .sil { font-size: .6rem; padding: 0 6px; line-height: 18px; } .pm-excel .sil { color: #b91c1c; }
     .pm-ozet td.s, .pm-ozet th.s { text-align: right; white-space: nowrap; } .pm-ozet tr.toplam td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; }
     .pm-not { font-size: .66rem; color: #475569; margin-top: 6px; }
@@ -58,64 +121,72 @@
     .pm-form label { display: block; font-size: .6rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; } .pm-form label.z::after { content: " *"; color: #dc2626; }
     .pm-form .form-control, .pm-form .form-select { font-size: .72rem; padding: 3px 7px; height: 28px; } .pm-form textarea.form-control { height: auto; }
     .pm-form .ro { background: #f1f5f9; font-weight: 700; }
+    .pm-form .pm-grup-bas { grid-column: 1 / -1; font-size: .62rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #0f766e; border-bottom: 1px solid #e2e8f0; margin-top: 4px; padding-bottom: 2px; }
     .pm-ozet-serit { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 6px; } .pm-ozet-serit div { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px 8px; font-size: .68rem; } .pm-ozet-serit b { display: block; font-size: .8rem; color: #0f172a; } .pm-ozet-serit div.genel { background: #ccfbf1; border-color: #99f6e4; }
     .pm-kart-hata { display: none; font-size: .7rem; }
 </style>
 }
 
-<div class="container-fluid py-3 na pm" id="pm" data-yil="@yil" data-baslangic="@sekme" data-kod="@kod">
+<div class="container-fluid py-3 na pm" id="pm" data-yil="@yil" data-baslangic="@sekme" data-kod="@kod" data-donem="@donem">
     <div class="na-ust">
         <h4><span class="rt-ikon"><i class="fas fa-users-gear"></i></span>Personel Maliyet Raporu</h4>
         <span class="pm-pill"><i class="fas fa-table me-1"></i>Kaynak: @kaynak</span>
-        <span class="pm-pill"><i class="fas fa-calendar me-1"></i>@yil · Aylık Tutarlar (TL)</span>
+        <span class="pm-pill"><i class="fas fa-calendar me-1"></i><span id="pmDonemPill">@yil</span> · Aylık Tutarlar (₺)</span>
         <span class="pm-pill"><i class="fas fa-id-card me-1"></i>Personel Cari Kartı · 335.xxx</span>
-        <span class="sub w-100">Grup şirketlerinin personel listesi ve aylık maliyet kalemleri: <b>brüt ücret</b> (X-Net, R-Net, brüt ücret masrafları), <b>işveren payları</b>, <b>ek çalışmalar</b>, <b>sosyal yardımlar</b>, <b>prim</b>, <b>yan haklar</b>, <b>yasal ödemeler</b> ve <b>genel maliyet</b>. <b>Düzenle</b> modunda kimlik bilgileri ve tüm tutarlar tabloda satır bazında değiştirilir; her satırdaki <b>Kart</b> düğmesi çalışanın <b>Personel Cari Kartı</b>'nı açar ve tüm alanlar orada doğrudan düzeltilip kaydedilir. <b>Personel Ekle</b> ile yeni kart açılır; hatalı satır silinir, işten ayrılan personel kartında "İşten Ayrıldı" yapılır. Filtreler ve KPI kutuları iki sekme için ortaktır.</span>
+        <button type="button" class="pm-bilgi" id="pmBilgi" title="Rapor açıklamasını göster / gizle">i</button>
+        <span class="sub w-100">Grup şirketlerinin personel listesi ve aylık bordro kalemleri: <b>net ücret</b> (X-Net, R-Net), <b>puantaj ve çalışma kazançları</b>, <b>ek çalışmalar</b>, <b>sosyal yardımlar</b>, <b>prim ve ek kazançlar</b>, <b>yan haklar</b>, <b>yasal ödemeler</b>, <b>brüt kazanç ve SGK matrahı</b>, <b>gelir ve damga vergisi</b>, <b>SGK işçi ve işveren payları</b>, <b>diğer kesintiler</b>, <b>ödeme özeti</b> ve <b>genel maliyet</b>. <b>Düzenle</b> modunda kimlik bilgileri, günler ve girilen tutarlar tabloda satır bazında değiştirilir, hesaplanan sütunlar anında yenilenir; her satırdaki <b>Kart</b> düğmesi çalışanın <b>Personel Cari Kartı</b>'nı açar ve tüm alanlar orada doğrudan düzeltilip kaydedilir. <b>Personel Ekle</b> ile yeni kart açılır; hatalı satır silinir, işten ayrılan personel kartında "İşten Ayrıldı" yapılır. Filtreler ve KPI kutuları iki sekme için ortaktır.</span>
     </div>
     <div class="na-kpi" id="pmKpi" data-dinamik="kapali"></div>
     <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
 
-    <div class="na-kart">
-        <div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Filtreler</span><span class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm py-0" id="pmTemizle" style="font-size:.66rem">Temizle</button></span></div>
-        <div class="na-kart-g">
-            <div class="pm-filtre">
-                <div><label for="pmAra">Ara</label><input class="form-control" id="pmAra" placeholder="Ad soyad, görev, cari kodu, not…"></div>
-                <div><label for="pmDurum">Durum</label><select class="form-select" id="pmDurum"><option value="Aktif" selected>Aktif</option><option value="İşten Ayrıldı">İşten Ayrıldı</option><option value="">Tümü</option></select></div>
-                <div><label for="pmSgk">SGK İşvereni</label><select class="form-select" id="pmSgk"><option value="">Tümü</option></select></div>
-                <div><label for="pmYer">Fiili Görev Yeri</label><select class="form-select" id="pmYer"><option value="">Tümü</option></select></div>
-                <div><label for="pmCati">Çatı Departman</label><select class="form-select" id="pmCati"><option value="">Tümü</option></select></div>
-                <div><label for="pmBolum">Bölüm</label><select class="form-select" id="pmBolum"><option value="">Tümü</option></select></div>
-                <div><label for="pmUnvan">Ünvan</label><select class="form-select" id="pmUnvan"><option value="">Tümü</option></select></div>
-                <div><label for="pmOzel">Özel Durumu</label><select class="form-select" id="pmOzel"><option value="">Tümü</option><option value="_yok">Özel Durumu Yok</option></select></div>
-            </div>
-            <div class="na-mini" id="pmSayi"></div>
+    @* filtreler: tek satırlık çubuk — etiketler kutunun solunda; sayaç sağda *@
+    <div class="pm-filtre-bar" data-dinamik="kapali">
+        <div class="pm-filtre">
+            <div class="f"><label for="pmDonem">Dönem</label><select class="form-select pm-donem" id="pmDonem" title="Seçilen ayın bordro verisi yüklenir"></select></div>
+            <div class="f"><label for="pmAra">Ara</label><input class="form-control" id="pmAra" placeholder="Ad, görev, sicil, cari kodu, not…"></div>
+            <div class="f"><label for="pmDurum">Durum</label><select class="form-select" id="pmDurum"><option value="Aktif" selected>Aktif</option><option value="İşten Ayrıldı">İşten Ayrıldı</option><option value="">Tümü</option></select></div>
+            <div class="f"><label for="pmSgk">SGK İşvereni</label><select class="form-select" id="pmSgk"><option value="">Tümü</option></select></div>
+            <div class="f"><label for="pmYer" id="pmYerEtiket">Fiili Görev Yeri</label><select class="form-select" id="pmYer"><option value="">Tümü</option></select></div>
+            <div class="f"><label for="pmCati">Çatı Departman</label><select class="form-select" id="pmCati"><option value="">Tümü</option></select></div>
+            <div class="f"><label for="pmBolum">Bölüm</label><select class="form-select" id="pmBolum"><option value="">Tümü</option></select></div>
+            <div class="f"><label for="pmUnvan">Unvan</label><select class="form-select" id="pmUnvan"><option value="">Tümü</option></select></div>
+            <div class="f"><label for="pmOzel">Özel Durumu</label><select class="form-select" id="pmOzel"><option value="">Tümü</option><option value="_yok">Özel Durumu Yok</option></select></div>
         </div>
+        <button type="button" class="btn btn-light btn-sm py-0" id="pmTemizle">Temizle</button>
     </div>
     <datalist id="dlSgk"></datalist><datalist id="dlYer"></datalist><datalist id="dlUnvan"></datalist><datalist id="dlBolum"></datalist><datalist id="dlCati"></datalist><datalist id="dlGorev"></datalist>
 
     <div class="na-sekme" id="pmSekmeler" data-dinamik="kapali">
         <button type="button" data-p="tablo"><i class="fas fa-table-list me-1"></i>Personel Maliyet Tablosu <span class="n" id="pmNTablo">0</span></button>
+        <button type="button" data-p="ekcalisma"><i class="fas fa-business-time me-1"></i>Ek Çalışmalar <span class="n" id="pmNEk">0</span></button>
+        <button type="button" data-p="kesinti"><i class="fas fa-hand-holding-dollar me-1"></i>Diğer Kesintiler <span class="n" id="pmNKes">0</span></button>
+        <button type="button" data-p="prim"><i class="fas fa-sack-dollar me-1"></i>Prim Ödemeleri <span class="n" id="pmNPrim">0</span></button>
+        <button type="button" data-p="uretim"><i class="fas fa-industry me-1"></i>Üretim Personeli <span class="n" id="pmNUretim">0</span></button>
+        <button type="button" data-p="ozel"><i class="fas fa-house-user me-1"></i>Özel Kişiler <span class="n" id="pmNOzel">0</span></button>
+        <button type="button" data-p="birlesim"><i class="fas fa-layer-group me-1"></i>Birleşik Tablo <span class="n" id="pmNBirlesim">0</span></button>
+        <button type="button" data-p="cikis"><i class="fas fa-person-walking-arrow-right me-1"></i>İşten Çıkış Senaryosu <span class="n" id="pmNCikis">0</span></button>
         <button type="button" data-p="ozet"><i class="fas fa-chart-pie me-1"></i>Özet Raporu</button>
+        <button type="button" data-p="muhasebe"><i class="fas fa-book me-1"></i>Muhasebe Kayıtları <span class="n" id="pmNMh">0</span></button>
     </div>
 
     @* ============================ SEKME 1: PERSONEL MALİYET TABLOSU ============================ *@
     <div class="na-panel" data-p="tablo">
         <div class="pm-rapor-ust">
-            <div><h5>@yil Personel Maliyet Tablosu</h5><div class="alt">Personel Kimlik Bilgileri • Brüt Ücret • İşveren Payları • Ek Çalışmalar • Sosyal Yardımlar • Prim • Yan Haklar • Yasal Ödemeler • Maliyet</div></div>
-            <div class="ayar"><span id="pmKayitBilgi" style="font-size:.64rem;opacity:.9"></span><button type="button" class="btn btn-light btn-sm py-0" id="pmEkle"><i class="fas fa-user-plus me-1"></i>Personel Ekle</button><button type="button" class="btn btn-light btn-sm py-0" id="pmDuzenle"><i class="fas fa-pen me-1"></i>Düzenle</button><button type="button" class="btn btn-warning btn-sm py-0" id="pmKaydet" style="display:none"><i class="fas fa-floppy-disk me-1"></i>Kaydet</button><button type="button" class="btn btn-light btn-sm py-0" id="pmVazgec" style="display:none">Vazgeç</button><button type="button" class="btn btn-light btn-sm py-0" id="pmExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+            <div><span class="pm-sayac" id="pmSayi"></span></div>   @* başlık sekme adıyla aynı olduğundan kaldırıldı; şeritte yalnız sayaç (kapsam · dönem) *@
+            <div class="ayar"><label class="pm-anahtar" for="pmSifirGizle"><input type="checkbox" id="pmSifirGizle"> 0 ₺ Sütunları Gizle</label><button type="button" class="btn btn-light btn-sm py-0" id="pmEkle"><i class="fas fa-user-plus me-1"></i>Personel Ekle</button><button type="button" class="btn btn-light btn-sm py-0" id="pmDuzenle"><i class="fas fa-pen me-1"></i>Düzenle</button><button type="button" class="btn btn-warning btn-sm py-0" id="pmKaydet" style="display:none"><i class="fas fa-floppy-disk me-1"></i>Kaydet</button><button type="button" class="btn btn-light btn-sm py-0" id="pmVazgec" style="display:none">Vazgeç</button><button type="button" class="btn btn-light btn-sm py-0" id="pmExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
         </div>
-        <div class="na-kart"><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:70vh">
+        <div class="na-kart"><div class="na-kart-g p-0"><section class="pm-kaydir" data-tam>
             <table class="na-tablo pm-excel" id="pmTablo" data-dinamik="kapali">
                 <thead>
                     <tr class="grup">@foreach (var g in gruplar) { <th colspan="@g.Sutunlar.Length" class="grupBas">@g.Grup</th> }</tr>
                     <tr class="sutun">
                         @foreach (var g in gruplar)
                         {
-                            bool metinGrup = g.Grup == "Personel Kimlik Bilgileri" || g.Grup == "Not" || g.Grup == "Kart";
                             for (int i = 0; i < g.Sutunlar.Length; i++)
                             {
-                                string ad = g.Sutunlar[i];
-                                string baslik = (ad == "X-Net" || ad == "R-Net" || ad == "Top. Net" || ad == "Genel Maliyet") ? yil + " " + ad : ad;
-                                <th class="@(!metinGrup || ad == "Kıdem (Yıl)" ? "s" : "") @(i == 0 ? "grupBas" : "")">@baslik</th>
+                                var s = g.Sutunlar[i];
+                                string baslik = (s.Anahtar == "xNet" || s.Anahtar == "rNet" || s.Anahtar == "toplamNet" || s.Anahtar == "genelMaliyet") ? yil + " " + s.Ad : s.Ad;
+                                <th class="@(s.Sayisal ? "s" : "") @(i == 0 ? "grupBas" : "")" data-k="@s.Anahtar">@baslik</th>
                             }
                         }
                     </tr>
@@ -123,26 +194,148 @@
                 <tbody></tbody>
                 <tfoot><tr id="pmToplam"></tr></tfoot>
             </table>
-        </div></div></div>
-        <div class="pm-not">Top. Net = X-Net + R-Net · Toplam Brüt Ücret = Top. Net + Brüt Üc. Masrafları · Top. Sosyal Yrd. = Yemek + Yol + Servis + Kira Desteği + Eğitim · Top. Prim = Satış Primi + Özel Ödeme · Genel Maliyet = Toplam Brüt Ücret + Top. İşv. Payı + Top. Ek Çalışma + Top. Sosyal Yrd. + Top. Prim + Top. Yan Haklar + Top. Yasal Öd. Tablodaki boş hücreler 0 alınır. Kıdem işe giriş tarihinden bugüne (ayrılanlarda ayrılış tarihine) yıl olarak hesaplanır. "E" = Emekli, "♿" = Engelli; üstü çizili satır işten ayrılan personeldir. Düzenle modunda SGK işvereni, görev yeri, ünvan, bölüm ve çatı departman alanlarında mevcut değerler listeden seçilir ya da yeni değer yazılır.</div>
+        </section></div></div>
+        <div class="pm-not"><b>R = bordrolu ücret, X = bordro dışı ödeme</b> (kaynak tablo: BAZ R MAAŞ → R-Net, YOL-YEMEK-KİRA → Yemek / Yol, MESAİ → Fazla Mesai, BAZ X MAAŞ → X-Net, X tarafı yol-yemek / mesai / prim → aynı kalemin X satırı, KESİNTİLER TOPLAMI → Borç). Girilen alanlar sarı zeminli; gri zeminli sütunlar hesaplanır. Hem R hem X tarafı olan kalemler (Yemek, Yol, Fazla Mesai, Prim) tek sütunda altlı üstlü gösterilir: üstte <b>R</b> (bordrolu, brüte ve vergiye girer), altta <b>X</b> (bordro dışı, yalnız Net-X Bordro'ya eklenir); bu grupların toplamları -R ve -X olarak ayrı sütunlardadır. Tüm tutarlar ₺'dir. <b>Dövizli maaş:</b> kartta Para Birimi, Döviz Tutarı ve Kur girilirse X-Net o satırda tutar × kur (₺ karşılığı) olur ve tabloda altında kur notu görünür. Ödeme Özeti-X: X-Net → Diğer Ek Ödemeler-X → Kesintiler Toplamı-X (girilir) → Kalan Net Tutar (Elden) = Net-X Bordro − Kesintiler Toplamı-X; X kesintisi maliyeti düşürmez, elden ödenen tutarı azaltır. Kaynak tablodaki Toplam Brüt Maliyet ve İş Veren tutarları satıra bağlıdır: brüt kazanç, SGK işveren toplamı ve genel maliyet tabloyla birebir aynıdır; vergi ve SGK işçi kalemleri bu tutarlarla tutarlı türetilir. Bir satırda tutar, gün ya da özel durum değiştirilip kaydedilince o satır modelle yeniden hesaplanır (brütleştirme: bordro net = brüt − SGK işçi − GV − DV; SGK matrahı tavanlı, yol ve servis matrah dışı; GV kümülatif dilimle, asgari ücret istisnası düşülür; damga ‰7,59; emeklide SGDP %7,5 / %22,5 + KVSK %2, diğerlerinde işçi %15, işveren %22,5 − 4 puan hazine indirimi). Ödeme Özeti-R: R-Net (bordro net ücret) → Diğer Ek Ödemeler-R → Kesintiler Toplamı-R → Kalan Net Tutar (Banka) = bordro net − kesintiler · <b>Net-R Bordro</b> = tüm ekler dahil, kesintiler düşülmüş, bankadan yatacak net (Kalan Net (Banka) + Diğer Ek Ödemeler-R) · <b>Net-X Bordro</b> = X-Net + X tarafı kalemler (bordro dışı ödenen toplam) · Ara Toplam = Net-X Bordro + Net-R Bordro · Toplam Brüt Masraflar = brüt kazanç − Kalan Net (Banka) · Toplam İşveren = SGK işveren toplamı · Genel Maliyet = Ara Toplam + Toplam Brüt Masraflar + Toplam İşveren. Boş hücreler 0 alınır. "E" = Emekli, "♿" = Engelli; üstü çizili satır işten ayrılan personeldir.</div>
     </div>
 
     @* ============================ SEKME 2: ÖZET RAPORU ============================ *@
     <div class="na-panel" data-p="ozet">
         <div class="pm-rapor-ust">
-            <div><h5>@yil Personel Maliyet Özet Raporu</h5><div class="alt">Kırılım Özeti • SGK İşvereni × Çatı Departman • Maliyet Kalemi Dağılımı • Dağılımlar • En Yüksek Maliyetli Personel</div></div>
-            <div class="ayar"><label class="me-1" for="pmKirilim" style="font-size:.66rem;font-weight:700">Kırılım</label><select class="form-select" id="pmKirilim"><option value="catiDepartman">Çatı Departman</option><option value="sgkIsvereni">SGK İşvereni</option><option value="fiiliGorevYeri">Fiili Görev Yeri</option><option value="bolum">Bölüm</option><option value="unvan">Ünvan</option><option value="gorev">Görev</option><option value="ozelDurum">Özel Durumu</option><option value="kidemAralik">Kıdem Aralığı</option></select><button type="button" class="btn btn-light btn-sm py-0" id="pmOzetExcel"><i class="fas fa-file-excel me-1"></i>Özet Excel</button></div>
+            <div><h5>@yil Personel Maliyet Özet Raporu</h5><div class="alt">Tüm Maliyetler: Bordrolu Personel + Özel Kişiler + SGK'sız Gündelikçiler • Kırılım • Matris • Kalem Dağılımı • En Yüksek Maliyetli Personel</div><div class="alt" id="pmOzetKapsam" style="text-transform:none;letter-spacing:0;opacity:1;font-weight:700"></div></div>
+            <div class="ayar"><label class="me-1" for="pmKirilim" style="font-size:.66rem;font-weight:700">Kırılım</label><select class="form-select" id="pmKirilim"><option value="catiDepartman">Çatı Departman</option><option value="kaynak">Kaynak (Bordro / Özel / Üretim)</option><option value="sgkIsvereni">SGK İşvereni</option><option value="fiiliGorevYeri">Fiili Görev Yeri</option><option value="bolum">Bölüm</option><option value="unvan">Unvan</option><option value="gorev">Görev</option><option value="departmanKodu">Departman Kodu</option><option value="ozelDurum">Özel Durumu</option><option value="kidemAralik">Kıdem Aralığı</option></select><button type="button" class="btn btn-light btn-sm py-0" id="pmOzetExcel"><i class="fas fa-file-excel me-1"></i>Özet Excel</button></div>
         </div>
-        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-layer-group me-1"></i><span id="pmKirilimBaslik">Çatı Departman</span> Bazında Maliyet Kalemleri</span><span class="not">Filtreye göre · aylık TL · genel maliyete göre sıralı</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo pm-excel" id="pmKirilimTablo" data-dinamik="kapali"><thead><tr class="tek"><th id="pmKirilimTh">Çatı Departman</th><th class="s">Personel</th><th class="s grupBas">X-Net</th><th class="s">R-Net</th><th class="s">Top. Net</th><th class="s">Brüt Üc. Masr.</th><th class="s">Toplam Brüt</th><th class="s grupBas">İşv. Payı</th><th class="s grupBas">Ek Çalışma</th><th class="s grupBas">Sosyal Yrd.</th><th class="s grupBas">Prim</th><th class="s grupBas">Yan Haklar</th><th class="s grupBas">Yasal Öd.</th><th class="s grupBas">Genel Maliyet</th><th class="s">Ort. Maliyet</th><th class="s">Pay %</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-layer-group me-1"></i><span id="pmKirilimBaslik">Çatı Departman</span> Bazında Maliyet Kalemleri</span><span class="not">Filtreye göre · aylık ₺ · genel maliyete göre sıralı · satıra tıklayınca o kırılım filtre olarak uygulanır ve tabloya dönülür</span></div><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:60vh"><table class="na-tablo pm-excel pm-tik" id="pmKirilimTablo" data-dinamik="kapali"><thead><tr class="tek" id="pmKirilimBas"></tr></thead><tbody></tbody></table></section></div></div>
         <div class="row g-2">
-            <div class="col-lg-7"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-table-cells me-1"></i>SGK İşvereni × Çatı Departman</span><span class="not">Personel sayısı · altında genel maliyet (TL)</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo pm-ozet pm-matris" id="pmMatris" data-dinamik="kapali"><thead></thead><tbody></tbody></table></div></div></div></div>
+            <div class="col-lg-7"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-table-cells me-1"></i>SGK İşvereni × Çatı Departman</span><span class="not">Personel sayısı · altında genel maliyet (TL)</span></div><div class="na-kart-g p-0"><section class="pm-kaydir"><table class="na-tablo pm-ozet pm-matris" id="pmMatris" data-dinamik="kapali"><thead></thead><tbody></tbody></table></section></div></div></div>
             <div class="col-lg-5"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-chart-bar me-1"></i>Maliyet Kalemi Dağılımı</span><span class="not">Genel maliyet içindeki pay</span></div><div class="na-kart-g" id="pmKalemler"></div></div></div>
-            <div class="col-lg-4"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-id-badge me-1"></i>Ünvan Dağılımı</span><span class="not">Personel · genel maliyet</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo pm-ozet" id="pmDagUnvan" data-dinamik="kapali"><thead><tr><th>Ünvan</th><th class="s">Personel</th><th class="s">Genel Maliyet</th><th class="s">Ort.</th></tr></thead><tbody></tbody></table></div></div></div></div>
-            <div class="col-lg-4"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-user-check me-1"></i>Özel Durum Dağılımı</span><span class="not">Emekli · Engelli · diğer</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo pm-ozet" id="pmDagOzel" data-dinamik="kapali"><thead><tr><th>Özel Durumu</th><th class="s">Personel</th><th class="s">Genel Maliyet</th><th class="s">Ort.</th></tr></thead><tbody></tbody></table></div></div></div></div>
-            <div class="col-lg-4"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-hourglass-half me-1"></i>Kıdem Dağılımı</span><span class="not">İşe giriş tarihine göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo pm-ozet" id="pmDagKidem" data-dinamik="kapali"><thead><tr><th>Kıdem Aralığı</th><th class="s">Personel</th><th class="s">Genel Maliyet</th><th class="s">Ort.</th></tr></thead><tbody></tbody></table></div></div></div></div>
-            <div class="col-12"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-ranking-star me-1"></i>En Yüksek Maliyetli 10 Personel</span><span class="not">Filtreye göre · genel maliyet · satıra tıklayınca kart açılır</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo pm-ozet" id="pmTop10" data-dinamik="kapali"><thead><tr><th>#</th><th>Ad Soyad</th><th>Ünvan</th><th>Görev</th><th>SGK İşvereni</th><th>Çatı Departman</th><th class="s">Top. Net</th><th class="s">Sosyal Yrd.</th><th class="s">Prim</th><th class="s">Genel Maliyet</th><th class="s">Pay %</th></tr></thead><tbody></tbody></table></div></div></div></div>
+            <div class="col-lg-4"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-id-badge me-1"></i>Unvan Dağılımı</span><span class="not">Personel · genel maliyet</span></div><div class="na-kart-g p-0"><section class="pm-kaydir"><table class="na-tablo pm-ozet pm-tik" id="pmDagUnvan" data-dinamik="kapali"><thead><tr><th>Unvan</th><th class="s">Personel</th><th class="s">Genel Maliyet</th><th class="s">Ort.</th></tr></thead><tbody></tbody></table></section></div></div></div>
+            <div class="col-lg-4"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-user-check me-1"></i>Özel Durum Dağılımı</span><span class="not">Emekli · Engelli · diğer</span></div><div class="na-kart-g p-0"><section class="pm-kaydir"><table class="na-tablo pm-ozet pm-tik" id="pmDagOzel" data-dinamik="kapali"><thead><tr><th>Özel Durumu</th><th class="s">Personel</th><th class="s">Genel Maliyet</th><th class="s">Ort.</th></tr></thead><tbody></tbody></table></section></div></div></div>
+            <div class="col-lg-4"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-hourglass-half me-1"></i>Kıdem Dağılımı</span><span class="not">İşe giriş tarihine göre</span></div><div class="na-kart-g p-0"><section class="pm-kaydir"><table class="na-tablo pm-ozet" id="pmDagKidem" data-dinamik="kapali"><thead><tr><th>Kıdem Aralığı</th><th class="s">Personel</th><th class="s">Genel Maliyet</th><th class="s">Ort.</th></tr></thead><tbody></tbody></table></section></div></div></div>
+            <div class="col-lg-4"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-layer-group me-1"></i>Kaynak Dağılımı</span><span class="not">Bordro · Özel Kişiler · SGK'sız Gündelikçi</span></div><div class="na-kart-g p-0"><section class="pm-kaydir"><table class="na-tablo pm-ozet pm-tik" id="pmDagKaynak" data-dinamik="kapali"><thead><tr><th>Kaynak</th><th class="s">Kişi</th><th class="s">Genel Maliyet</th><th class="s">Ort.</th></tr></thead><tbody></tbody></table></section></div></div></div>
+            <div class="col-12"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-ranking-star me-1"></i>En Yüksek Maliyetli 10 Personel</span><span class="not">Filtreye göre · genel maliyet · satıra tıklayınca kart açılır</span></div><div class="na-kart-g p-0"><section class="pm-kaydir"><table class="na-tablo pm-ozet" id="pmTop10" data-dinamik="kapali"><thead><tr><th>#</th><th>Adı-Soyadı</th><th>Unvan</th><th>Görev</th><th>SGK İşvereni</th><th>Çatı Departman</th><th class="s">Toplam Net</th><th class="s">Toplam Brüt Kazanç</th><th class="s">Toplam İşveren</th><th class="s">Genel Maliyet</th><th class="s">Pay %</th></tr></thead><tbody></tbody></table></section></div></div></div>
         </div>
-        <div class="pm-not">Özet, filtre kapsamındaki personel üzerinden hesaplanır; düzenleme modunda kaydedilmemiş değişiklikler de özete yansır. Ort. Maliyet = Genel Maliyet / Personel · Pay % = kırılımın genel maliyeti / toplam genel maliyet. Kıdem aralıkları: 1 Yıldan Az, 1–3 Yıl, 3–5 Yıl, 5–10 Yıl, 10 Yıl ve Üzeri, Tarih Yok.</div>
+        <div class="pm-not">Özet, raporun <b>tüm maliyetlerini</b> kapsar: Personel Maliyet Tablosu (bordrolu), Özel Kişiler ve SGK'sız gündelikçi üretim personeli (hangi sekme açık olursa olsun); üstteki filtreler (dönem, durum, işveren, görev yeri vb.) hepsine uygulanır, düzenleme modunda kaydedilmemiş değişiklikler de yansır. SGK'lı gündelikçiler bordro satırlarında sayılır (mükerrer eklenmez). Kırılım tablosunda Top. Ek Ödemeler = ek çalışma + sosyal yardım + prim + yan haklar + yasal ödemeler + diğer ek ödemeler (R) ve X tarafı ek kalemler (X); Toplam Kesintiler = bordro kesintileri (R) ve elden kesintiler (X). Ort. Maliyet = Genel Maliyet / Personel · Pay % = kırılımın genel maliyeti / toplam genel maliyet. Kıdem aralıkları: 1 Yıldan Az, 1–3 Yıl, 3–5 Yıl, 5–10 Yıl, 10 Yıl ve Üzeri, Tarih Yok.</div>
+    </div>
+
+    @* ============================ SEKME: İŞTEN ÇIKIŞ SENARYOSU (Birleşik Tablo özeti; işaretlenen kişiler ayrılırsa kalan maliyet, tasarruf, tahmini kıdem / ihbar) ============================ *@
+    <div class="na-panel" data-p="cikis">
+        <div class="pm-rapor-ust">
+            <div><h5 id="pmCikisBaslik">@yil İşten Çıkış Senaryosu</h5><div class="alt">Kişileri İşaretle • Kalan Aylık Maliyet • Yıllık Tasarruf • Tahmini Kıdem ve İhbar (Tek Seferlik)</div></div>
+            <div class="ayar"><input class="form-control" id="pmCikisAra" placeholder="Ad, görev, İstanbul / Çorlu…" style="font-size:.72rem;height:26px;width:170px"><select class="form-select" id="pmCikisKaynak"><option value="">Tüm Kaynaklar</option><option value="Bordro">Bordro</option><option value="Üretim">Üretim</option></select><label class="pm-anahtar" for="pmCikisSecili"><input type="checkbox" id="pmCikisSecili"> Yalnız Çıkacaklar</label><label class="pm-anahtar" for="pmKidemTavan" title="Kıdem tazminatı tavanı (aylık brüt üst sınır) — parametre">Kıdem Tavanı ₺ <input class="form-control" id="pmKidemTavan" type="number" min="0" step="1" value="58000" style="width:92px;height:22px;font-size:.66rem;padding:1px 4px"></label><button type="button" class="btn btn-light btn-sm py-0" id="pmCikisTemizle"><i class="fas fa-eraser me-1"></i>Planı Sıfırla</button><button type="button" class="btn btn-light btn-sm py-0" id="pmCikisExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+        </div>
+        <div class="na-kpi" id="pmCikisKpi" data-dinamik="kapali"></div>
+        <div class="na-kart"><div class="na-kart-g p-0"><section class="pm-kaydir" data-tam><table class="na-tablo pm-excel pm-tik" id="pmCikisTablo" data-dinamik="kapali"><thead><tr class="tek"><th>Sıra</th><th>Kaynak</th><th>Adı-Soyadı</th><th>Görev</th><th>Görev Yeri</th><th class="s">Kıdem (Yıl)</th><th class="s">Net Toplam</th><th class="s" title="Yol + Yemek + Mesai + Prim + Diğer Ek Ödemeler (R ve X)">Ek Ödemeler</th><th class="s" title="Kesintiler Toplamı (R ve X): ödemeyi azaltır, maliyeti değil">Kesintiler</th><th class="s" title="Net Toplam + Ek Ödemeler − Kesintiler">Net Ödenen</th><th class="s" title="Vergi + SGK işçi payları (kesintiler ayrı sütunda)">Toplam Brüt Masraflar</th><th class="s">Toplam İşveren</th><th class="s">Aylık Genel Maliyet</th><th class="s">Yıllık Maliyet</th><th class="s">Tahmini Kıdem</th><th class="s">Tahmini İhbar</th><th class="s">Tek Seferlik Çıkış Maliyeti</th><th>Senaryo</th></tr></thead><tbody></tbody><tfoot><tr></tr></tfoot></table></section></div></div>
+        <div class="na-mini" id="pmCikisSayi"></div>
+        <div class="pm-not">Senaryo veriyi değiştirmez: sağdaki <b>Senaryo</b> sütunundan kişiyi "İşten Çıkacak" seçtiğinizde aylık genel maliyetin ne kalacağı, yıllık tasarruf ve tahmini tek seferlik çıkış maliyeti hesaplanır. Planınız sabit kalır (bu tarayıcıda saklanır; uygulama yeniden başlasa da korunur), "Planı Sıfırla" ile temizlenir. <b>Tahmini kıdem</b> = min(aylık brüt kazanç, kıdem tavanı) × kıdem yılı (işe giriş tarihinden); <b>tahmini ihbar</b> = haftalık brüt (aylık brüt / 30 × 7) × ihbar haftası (6 aya kadar 2, 1,5 yıla kadar 4, 3 yıla kadar 6, üzeri 8 hafta). Gündelikçi üretim personeli ve işe giriş tarihi olmayanlarda tazminat 0 alınır; emekli statüsü kıdem hakkını etkilemez, ihbar uygulanır. Gerçek tazminat hesabı giydirilmiş ücret ve yasal tavana göre bordro servisince yapılır; buradaki rakamlar karar desteği içindir. Satırlar bordrolu personel ve SGK'sız gündelikçi üretim personelidir; Özel Kişiler senaryoya girmez; rakamlar Birleşik Tablo ile birebirdir (Özel Kişiler çıkarılmış hali). Satır bağı: <b>Net Toplam + Ek Ödemeler − Kesintiler = Net Ödenen</b>; <b>Net Ödenen + Kesintiler + Toplam Brüt Masraflar + Toplam İşveren = Aylık Genel Maliyet</b>. Bu sekmede üstteki "Görev Yeri" filtresi İstanbul / Çorlu olarak çalışır (Çorlu içeren görev yerleri Çorlu, diğerleri İstanbul).</div>
+    </div>
+
+    @* ============================ SEKME: EK ÇALIŞMALAR (mesai talepleri — kim, kim onayladı, ne zaman; PDKS, puantaj; tabloyla karşılaştırma) ============================ *@
+    <div class="na-panel" data-p="ekcalisma">
+        <div class="pm-rapor-ust">
+            <div><h5 id="pmEkBaslik">@yil Ek Çalışmalar</h5><div class="alt">Mesai Talepleri • Onaylar • PDKS Gerçekleşme • Puantaj • Personel Maliyet Tablosu ile Karşılaştırma</div></div>
+            <div class="ayar"><input class="form-control" id="pmEkAra" placeholder="Ad, talep no, proje…" style="font-size:.72rem;height:26px;width:180px"><select class="form-select" id="pmEkDurum"><option value="">Tüm Talepler</option><option value="onayli">Onaylı</option><option value="bekliyor">Onay Bekliyor</option><option value="puantaj">Puantaj Bekliyor</option><option value="red">Reddedilen / İptal</option></select><a class="btn btn-light btn-sm py-0" id="pmEkTalep" href="/IkTalep/Mesai" target="_blank" title="İK ve İdari İşler › Mesai Talebi"><i class="fas fa-plus me-1"></i>Mesai Talebi Aç</a><button type="button" class="btn btn-light btn-sm py-0" id="pmEkExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+        </div>
+        <div class="na-kpi" id="pmEkKpi" data-dinamik="kapali"></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-user-clock me-1"></i>Kişi Bazında Ek Çalışma ↔ Mesai Talepleri</span><span class="not">Tablodaki Ek Çalışmalar (R + X) · puantaja aktarılan taleplerden hesaplanan tutar · fark</span></div><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:40vh"><table class="na-tablo pm-excel pm-tik" id="pmEkOzet" data-dinamik="kapali"><thead><tr class="tek"><th>Sıra</th><th>Adı-Soyadı</th><th>Bölüm</th><th>SGK İşvereni</th><th class="s">Saat Ücreti</th><th class="s">Fazla Mesai-R</th><th class="s">Fazla Mesai-X</th><th class="s">Bayram</th><th class="s">Gece Farkı</th><th class="s">Pazar</th><th class="s">Resmi Tatil</th><th class="s">Toplam Ek Çalışma (R+X)</th><th class="s">Talep (Adet)</th><th class="s">Fiili Saat</th><th class="s">Taleplerden Hesaplanan</th><th class="s">Fark</th></tr></thead><tbody></tbody><tfoot><tr></tr></tfoot></table></section></div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>Mesai Talepleri</span><span class="not">Talep motoru (MESAI) · satıra tıklayınca onay adımları ve zaman çizelgesi</span></div><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:55vh"><table class="na-tablo pm-excel pm-tik" id="pmMesaiTablo" data-dinamik="kapali"><thead><tr class="tek"><th>Talep No</th><th>Adı-Soyadı</th><th>Bölüm</th><th>Tür</th><th>Mesai Tarihi</th><th>Saat</th><th class="s">Planlanan (sa)</th><th class="s">Fiili (sa)</th><th class="s">Çarpan</th><th class="s">Saat Ücreti</th><th class="s">Tutar</th><th>Karşılık</th><th>Talep Durumu</th><th>Yönetici Onayı</th><th>Diğer Onaylar</th><th>Gerçekleşme (PDKS)</th><th>Puantaj</th><th>Dönem</th><th>İş / Proje</th><th>Talep Tarihi</th></tr></thead><tbody></tbody><tfoot><tr></tr></tfoot></table></section></div></div>
+        <div class="na-mini" id="pmEkSayi"></div>
+        <div class="pm-not">Bu sekme <b>dinamiktir</b>: satırlar İK ve İdari İşler › Mesai Talebi modülünden (talep motoru) okunur; yeni açılan, onaylanan, PDKS'den gerçekleşen ve puantaja aktarılan her talep burada görünür. Bir önceki ayın puantajı bu ayın bordrosuna girer: seçili dönem için önceki ayın puantaja aktarılmış mesaileri ile bu ay tarihli planlı / onay bekleyen talepler listelenir. Tutar = fiili saat (PDKS; yoksa planlanan) × saat ücreti × çarpan; saat ücreti = (R-Net + X-Net) / 225. Hafta içi ×1,5, hafta sonu ve resmi tatil ×2, gece ×1,5. "Taleplerden Hesaplanan" yalnız puantaja ücret olarak aktarılan talepleri toplar; Personel Maliyet Tablosu'ndaki Fazla Mesai (R + X) ile farkı gösterilir. Onay adımları: Talep Oluşturma → Yönetici Onayı (bölüm müdürü / yöneticisi) → gerekirse Direktör (GMY) ve İK (Bordro ve Özlük) onayı.</div>
+    </div>
+
+    @* ============================ SEKME: DİĞER KESİNTİLER (şahsi avans talepleri + Kasa Nakit Akışı senkronu, kesinti ve icra planları, PDF ekleri) ============================ *@
+    <div class="na-panel" data-p="kesinti">
+        <div class="pm-rapor-ust">
+            <div><h5 id="pmKesBaslik">@yil Diğer Kesintiler</h5><div class="alt">Avans Talepleri ve Ödemeleri • Kasa Nakit Akışı Senkronu • İcra ve Borç Planları • PDF Ekleri • Bitiş Dönemi</div></div>
+            <div class="ayar"><input class="form-control" id="pmKesAra" placeholder="Ad, talep / dosya no…" style="font-size:.72rem;height:26px;width:180px"><select class="form-select" id="pmKesTur"><option value="">Tüm Türler</option></select><a class="btn btn-light btn-sm py-0" id="pmKesAvans" href="/IkTalep/Avans" target="_blank" title="İK ve İdari İşler › Avans Talebi"><i class="fas fa-plus me-1"></i>Avans Talebi Aç</a><button type="button" class="btn btn-warning btn-sm py-0" id="pmKesFormAc"><i class="fas fa-gavel me-1"></i>Kesinti / İcra Ekle</button><button type="button" class="btn btn-light btn-sm py-0" id="pmKesExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+        </div>
+        <div class="na-kpi" id="pmKesKpi" data-dinamik="kapali"></div>
+        <div class="na-kart" id="pmKesForm" style="display:none"><div class="na-kart-b"><span><i class="fas fa-gavel me-1"></i>Yeni Kesinti / İcra Planı</span><span class="not">Taksit, başlangıç dönemindeki bordroya ilgili kesinti sütunu olarak yansır · PDF (icra dairesi yazısı, ödeme planı) eklenebilir</span></div><div class="na-kart-g"><form id="pmKesFormu" class="pm-form" enctype="multipart/form-data">
+            <div><label class="z" for="pmkf_personel">Personel</label><select class="form-select" id="pmkf_personel" name="personelSira" required></select></div>
+            <div><label class="z" for="pmkf_tur">Kesinti Türü</label><select class="form-select" id="pmkf_tur" name="tur"></select></div>
+            <div><label for="pmkf_baslangic">Başlangıç Dönemi</label><input class="form-control" id="pmkf_baslangic" name="baslangic" type="month" required></div>
+            <div><label class="z" for="pmkf_toplam">Toplam Tutar (₺)</label><input class="form-control" id="pmkf_toplam" name="toplam" type="number" min="0" step="0.01" required></div>
+            <div><label class="z" for="pmkf_taksit">Aylık Taksit (₺)</label><input class="form-control" id="pmkf_taksit" name="taksit" type="number" min="0" step="0.01" required></div>
+            <div><label>Taksit Sayısı / Bitiş</label><input class="form-control ro" id="pmkf_ozet" readonly></div>
+            <div><label for="pmkf_dosyaNo">Dosya No (İcra)</label><input class="form-control" id="pmkf_dosyaNo" name="dosyaNo" placeholder="2026/1234 E."></div>
+            <div><label for="pmkf_daire">İcra Dairesi</label><input class="form-control" id="pmkf_daire" name="icraDairesi"></div>
+            <div><label for="pmkf_alacakli">Alacaklı</label><input class="form-control" id="pmkf_alacakli" name="alacakli"></div>
+            <div class="g2"><label for="pmkf_aciklama">Açıklama</label><input class="form-control" id="pmkf_aciklama" name="aciklama" maxlength="300"></div>
+            <div><label for="pmkf_dosya">PDF / Belge</label><input class="form-control" id="pmkf_dosya" name="dosya" type="file" accept=".pdf,image/*,.doc,.docx"></div>
+            <div class="g3 d-flex gap-2 align-items-center"><button type="submit" class="btn btn-warning btn-sm py-0"><i class="fas fa-floppy-disk me-1"></i>Planı Kaydet</button><button type="button" class="btn btn-light btn-sm py-0" id="pmKesFormKapat">Vazgeç</button><span class="text-muted" style="font-size:.66rem">Kaynak alanı boşsa icra için dosya no, borç için "Personel borç senedi" yazılır.</span></div>
+        </form></div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-users me-1"></i>Kişi Bazında Kesintiler</span><span class="not">Seçili dönem · Personel Maliyet Tablosu'ndaki kesinti sütunları · açık avans · plan bitişi</span></div><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:40vh"><table class="na-tablo pm-excel pm-tik" id="pmKesOzet" data-dinamik="kapali"><thead><tr class="tek"><th>Sıra</th><th>Adı-Soyadı</th><th>Bölüm</th><th>SGK İşvereni</th><th class="s">Avans</th><th class="s">İcra</th><th class="s">Borç</th><th class="s">Özel Sigorta</th><th class="s">Sendika</th><th class="s">BES</th><th class="s">Kesintiler-R</th><th class="s">Kesintiler-X</th><th class="s">Kalan Net (Banka)</th><th class="s">Açık Avans</th><th class="s">Plan (Adet)</th><th>Son Kesinti Dönemi</th></tr></thead><tbody></tbody><tfoot><tr></tr></tfoot></table></section></div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-money-bill-transfer me-1"></i>Şahsi Avans Talepleri ve Ödemeleri</span><span class="not">Nakit Avans modülü · onaylar · kasa ödemesi · Kasa Nakit Akışı (Rapor79) satırı · maaştan mahsup planı</span></div><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:45vh"><table class="na-tablo pm-excel pm-tik" id="pmAvansTablo" data-dinamik="kapali"><thead><tr class="tek"><th>Talep No</th><th>Adı-Soyadı</th><th>Şirket</th><th>Konu</th><th class="s">Tutar</th><th class="s">Onaylanan</th><th>Talep Tarihi</th><th>Yönetici</th><th>Üst Yönetim</th><th>Finans</th><th>Talep Durumu</th><th>Kasa Ödemesi</th><th class="s">Teslim Edilen</th><th class="s">Açık Tutar</th><th>Kapatma</th><th>Nakit Akış (Finans)</th><th>Mahsup Planı</th><th>Bitiş</th></tr></thead><tbody></tbody><tfoot><tr></tr></tfoot></table></section></div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-file-invoice-dollar me-1"></i>Kesinti ve İcra Planları</span><span class="not">Toplam · aylık taksit · ödenen / kalan · başlangıç – bitiş ("ne zamana kadar") · PDF ekleri</span></div><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:50vh"><table class="na-tablo pm-excel pm-tik" id="pmPlanTablo" data-dinamik="kapali"><thead><tr class="tek"><th>Tür</th><th>Adı-Soyadı</th><th>Kaynak / Dosya No</th><th>İcra Dairesi</th><th>Alacaklı</th><th class="s">Toplam</th><th class="s">Aylık Taksit</th><th class="s">Ödenen / Taksit</th><th class="s">Ödenen</th><th class="s">Kalan</th><th>Başlangıç</th><th>Bitiş (Ne Zamana Kadar)</th><th class="s">Bu Dönem</th><th>Durum</th><th>Ekler</th><th>Açıklama</th><th>Oluşturan</th></tr></thead><tbody></tbody><tfoot><tr></tr></tfoot></table></section></div></div>
+        <div class="na-mini" id="pmKesSayi"></div>
+        <div class="pm-not">Bu sekme <b>dinamiktir</b>: şahsi (maaş) avansları İK ve İdari İşler › Avans Talebi modülünden okunur (onay adımları, kasa ödemesi, makbuz); onaylanan avans Kasa Nakit Akışı (Rapor79, finans konsolide) satırına otomatik yansır ve buradaki "Nakit Akış" sütunu o satırın durumunu gösterir. Avans mahsubu, icra ve borç kesintileri plan olarak izlenir: toplam, aylık taksit, ödenen / kalan taksit ve bitiş dönemi; "Bu Dönem" sütunu seçili dönemin bordrosundan düşülen tutardır ve Personel Maliyet Tablosu'ndaki Avans / İcra / Borç sütunlarıyla aynıdır. "Kesinti / İcra Ekle" ile yeni plan açılır, PDF (icra dairesi yazısı, ödeme planı) eklenir; plan ilgili kişinin başlangıç dönemindeki kesinti sütununa yansır. Kesintiler maliyeti düşürmez: Toplam Brüt Masraflar içinde kalır, bankaya yatan neti azaltır. Örnek icra dosyaları gerçek dosya değildir.</div>
+    </div>
+
+    @* ============================ SEKME: MUHASEBE KAYITLARI (simülasyon → kontrol → onay → muhasebeleştirme → ters kayıt; hesap eşleştirme) ============================ *@
+    <div class="na-panel" data-p="muhasebe">
+        <div class="pm-rapor-ust">
+            <div><h5 id="pmMhBaslik">@yil Muhasebe Kayıtları</h5><div class="alt">Veriyi Hazırla → Simülasyon → Kontrol / Analiz → Onay → Muhasebe Fişi → İzleme / Ters Kayıt</div></div>
+            <div class="ayar"><label class="pm-anahtar" for="pmMhDetay" title="Bilgi gizliliği: varsayılan görünüm personel adı içermeyen özet simülasyondur"><input type="checkbox" id="pmMhDetay"> Personel Detayını Göster</label><a class="btn btn-warning btn-sm py-0" id="pmMhMerkez" href="/PersonelMuhasebe" target="_blank" title="Personel Muhasebe İşlemleri: ayrıntılı muhasebe ekranı (personel bazlı satırlar, ödemeler, yansıtma, fiş arşivi) — bu sekmeyle aynı veri"><i class="fas fa-building-columns me-1"></i>Personel Muhasebe İşlemleri</a><button type="button" class="btn btn-light btn-sm py-0" id="pmMhEslemeAc"><i class="fas fa-sitemap me-1"></i>Hesap Eşleştirme</button><button type="button" class="btn btn-light btn-sm py-0" id="pmMhExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+        </div>
+        <div class="pm-akis" id="pmMhAkis"></div>
+        <div class="na-kpi" id="pmMhKpi" data-dinamik="kapali"></div>
+        <div class="na-kart" id="pmMhEsleme" style="display:none"><div class="na-kart-b"><span><i class="fas fa-sitemap me-1"></i>Muhasebe Hesap Eşleştirme Tanımları</span><span class="not">Şirket + işlem türü + kaynak kalem + X/R + yön → hesap · kodlar sabit değildir, muhasebe birimi tanımlar · değişiklik açık simülasyonları güncelliğini yitirtir</span></div><div class="na-kart-g">
+            <form id="pmMhEslemeForm" class="pm-form mb-2">
+                <div><label for="pmme_sirket">Şirket</label><select class="form-select" id="pmme_sirket"><option value="*">Tüm Şirketler</option></select></div>
+                <div><label for="pmme_karsi">Karşı Şirket</label><select class="form-select" id="pmme_karsi"><option value="*">Tümü</option></select></div>
+                <div><label class="z" for="pmme_islem">İşlem Türü</label><select class="form-select" id="pmme_islem"></select></div>
+                <div><label class="z" for="pmme_kalem">Kaynak Kalem</label><input class="form-control" id="pmme_kalem" list="dlMhKalem" required placeholder="Net-R Bordro, SGK İşçi Payı…"><datalist id="dlMhKalem"></datalist></div>
+                <div><label for="pmme_xr">X/R</label><select class="form-select" id="pmme_xr"><option value="*">Her İkisi</option><option value="R">R</option><option value="X">X</option></select></div>
+                <div><label class="z" for="pmme_yon">Borç / Alacak</label><select class="form-select" id="pmme_yon"><option value="Borç">Borç</option><option value="Alacak">Alacak</option></select></div>
+                <div><label class="z" for="pmme_hesap">Hesap Kodu</label><input class="form-control" id="pmme_hesap" list="dlMhHesap" required placeholder="335.01"><datalist id="dlMhHesap"></datalist></div>
+                <div><label>Hesap Adı</label><input class="form-control ro" id="pmme_hesapAd" readonly></div>
+                <div><label for="pmme_bas">Geçerlilik Başlangıç</label><input class="form-control" id="pmme_bas" type="month"></div>
+                <div><label for="pmme_bit">Geçerlilik Bitiş</label><input class="form-control" id="pmme_bit" type="month"></div>
+                <div class="d-flex align-items-end gap-3" style="font-size:.7rem"><label class="m-0"><input type="checkbox" id="pmme_varsayilan" checked> Varsayılan</label><label class="m-0"><input type="checkbox" id="pmme_aktif" checked> Aktif</label></div>
+                <div class="d-flex align-items-end gap-2"><button type="submit" class="btn btn-warning btn-sm py-0"><i class="fas fa-floppy-disk me-1"></i><span id="pmme_kaydetYazi">Eşleştirme Ekle</span></button><button type="button" class="btn btn-light btn-sm py-0" id="pmme_temizle">Temizle</button><input type="hidden" id="pmme_id"></div>
+            </form>
+            <section class="pm-kaydir" style="max-height:40vh"><table class="na-tablo pm-excel pm-tik" id="pmMhEslemeTablo" data-dinamik="kapali"><thead><tr class="tek"><th>#</th><th>Şirket</th><th>Karşı Şirket</th><th>İşlem Türü</th><th>Kaynak Kalem</th><th>X/R</th><th>Yön</th><th>Hesap Kodu</th><th>Hesap Adı</th><th>Varsayılan</th><th>Geçerlilik</th><th>Durum</th><th>Versiyon</th><th>Değiştiren</th></tr></thead><tbody></tbody></table></section>
+        </div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-list-ol me-1"></i>Simülasyonlar</span><span class="not">Seçili dönem · her simülasyon SIM no + versiyon · satıra tıklayınca seçilir</span></div><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:30vh"><table class="na-tablo pm-excel pm-tik" id="pmMhSimTablo" data-dinamik="kapali"><thead><tr class="tek"><th>Sim. No</th><th>Ver.</th><th>Dönem</th><th>Kapsam</th><th class="s">Personel</th><th class="s">Fiş</th><th class="s">Satır</th><th class="s">Toplam Borç</th><th class="s">Toplam Alacak</th><th>Durum</th><th>Oluşturan</th><th>Onaya Gönderen</th><th>Onaylayan</th><th>Muhasebeleştiren</th><th>Güncel</th></tr></thead><tbody></tbody></table></section></div></div>
+        <div id="pmMhSecili"></div>
+        <div class="na-mini" id="pmMhSayi"></div>
+        <div class="pm-not"><b>Senkron:</b> Bu sekme ile <b>Personel Muhasebe İşlemleri</b> ekranı (İK › Personel Maliyet ve Bordro) aynı simülasyon kayıtlarını kullanır; orada atılan onay / muhasebeleştirme / ters kayıt burada, burada atılan orada görünür (sekmeye her girişte veri tazelenir). Ayrıntılı işlemler (personel bazlı satırlar, ödeme listesi, yansıtma kayıtları, hesap eşleştirme, fiş arşivi) o ekrandadır. <b>Kayıtlar doğrudan muhasebeleştirilmez.</b> Simülasyon ekran açılınca otomatik oluşur (düğme yok): gerçek fiş atmaz; seçili dönem için atılacak tüm fişleri şirket, hesap, borç / alacak, X/R ve tutar bazında önizler; bordro verisi ya da hesap eşleştirmesi değişince yeni versiyon kendiliğinden üretilir. <b>Bilgi gizliliği:</b> varsayılan görünüm özet simülasyondur — kayıtlar hesap + X/R + karşı şirket bazında toplanmış hâliyle (personel adı olmadan) gösterilir ve muhasebeye de bu genel hâliyle atılır; personel bazlı satırlar yalnız "Personel Detayını Göster" ile açılır. R (banka) net ödemelerinin tamamı varsayılan olarak Uras Power'dan yapılır (kartta kişi bazında değiştirilebilir); X (elden) ödemesi SGK işvereninin kasasından. Her tüzel şirket için ayrı fiş; işlem grupları: A Bordro Tahakkuku (SGK işvereni; gider ↔ personel borcu, vergi, SGK, kesintiler), B Fiili Görev Yeri Yansıtması (SGK işvereni ≠ fiili görev yeri şirketi; genel maliyet bazında, bileşenler ayrıca gider yazılmaz), C Net Personel Ödemesi (ödeme şirketi = SGK işvereni; banka / kasa), D Başka Şirket Tarafından Ödeme (iki şirkette karşılıklı dengeli set; fiili görev yeri ≠ ödeme şirketi tek başına üçüncü kayıt oluşturmaz), E Ters Kayıt. Hesaplar satıra elle yazılmaz: Hesap Eşleştirme tablosundan şirket + işlem türü + kaynak kalem + X/R + yön ile gelir. 11 kontrol (fiş dengesi, şirket-hesap uyumu, posting hesabı, X/R ve genel maliyet mutabakatı, yansıtma, ödeme şirketi, mükerrer, dönem, açıklama standardı, "Ödeme Yapılmıyor" istisnası); kritik hata varken Onayla kapalıdır. Kaynak veri ya da eşleştirme değişirse açık simülasyon "Güncelliğini Yitirdi" olur. Onaydan sonra içerik kilitlenir; Muhasebeleştir gerçek yevmiye fişlerini (bellek içi Muhasebe modülü) oluşturur ve fiş numaralarını simülasyona yazar; Ters Kayıt referanslı ters fiş atar, kayıt silinmez.</div>
+    </div>
+
+    @* ============================ SEKME 3: ÜRETİM PERSONELİ (SGK'sız, tamamen X; saat / gün bazlı) ============================ *@
+    <div class="na-panel" data-p="uretim">
+        <div class="pm-rapor-ust">
+            <div><h5>@yil Gündelikçi Üretim Personeli Maliyet Tablosu</h5><div class="alt">Günlük Ücret × Çalışılan Gün • SGK'lı Gündelikçide Bordro Net-R Mahsubu • Kalan Fark Elden Nakit (X)</div></div>
+            <div class="ayar"><input class="form-control" id="pmUretimAra" placeholder="Ad, görev, vardiya…" style="font-size:.72rem;height:26px;width:180px"><select class="form-select" id="pmUretimYer"><option value="">Tüm Görev Yerleri</option></select><label class="pm-anahtar" for="pmUretimSifir"><input type="checkbox" id="pmUretimSifir"> 0 ₺ Sütunları Gizle</label><button type="button" class="btn btn-light btn-sm py-0" id="pmUretimEkle"><i class="fas fa-user-plus me-1"></i>Üretim Personeli Ekle</button><button type="button" class="btn btn-light btn-sm py-0" id="pmUretimExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+        </div>
+        <div class="na-kart"><div class="na-kart-g p-0"><section class="pm-kaydir" data-tam><table class="na-tablo pm-excel pm-tik" id="pmUretimTablo" data-dinamik="kapali"><thead><tr class="tek"></tr></thead><tbody></tbody><tfoot><tr></tr></tfoot></table></section></div></div>
+        <div class="na-mini" id="pmUretimSayi"></div>
+        <div class="pm-not">Kaynak: "Gündelikçi Ücretleri 2026 – 20.10.2026" listesi (günlük ücretler; çalışılan gün listede olmadığından 26 varsayıldı, satıra tıklayıp düzeltin). Hak Ediş = Günlük Ücret × Çalışılan Gün · Saat Ücreti = Günlük Ücret / Günlük Saat (7,5) · Fazla Mesai Kazancı = saat × saat ücreti × 1,5 · Tatil Kazancı = gün × günlük ücret × 2 · Toplam Hak Ediş = kazançlar + yemek + yol + diğer. <b>SGK'lı gündelikçi</b> (Personel Maliyet Tablosu'nda bordrolu): bordrodan bankaya yatan Net-R mahsup edilir, kalan fark <b>elden nakit X</b> olarak ödenir ve kişinin ana tablodaki X-Net'ine otomatik yazılır; R kısımları aynen kalır, X brüte ve vergiye girmez. <b>SGK'sız gündelikçi</b>: tamamı elden X, Birleşik Tablo'ya "Üretim" satırı olarak girer. Net Ödenen (Elden) = Elden X − Avans / Kesinti. Bordro Net-R değişirse mahsup ve fark her veri okumasında yeniden hesaplanır.</div>
+    </div>
+
+    @* ============================ SEKME 4: PRİM ÖDEMELERİ (ana tablodaki prim tutarlarının detayı) ============================ *@
+    <div class="na-panel" data-p="prim">
+        <div class="pm-rapor-ust">
+            <div><h5>@yil Prim Ödemeleri</h5><div class="alt">Ciro • Tahsilat • Hedef Primi • Özel Ödeme — Personel Maliyet Tablosu'ndaki Prim Tutarlarının Detayı</div></div>
+            <div class="ayar"><input class="form-control" id="pmPrimAra" placeholder="Ad, tür, işveren…" style="font-size:.72rem;height:26px;width:180px"><select class="form-select" id="pmPrimDonem"></select><button type="button" class="btn btn-light btn-sm py-0" id="pmPrimEkle"><i class="fas fa-plus me-1"></i>Prim Satırı Ekle</button><button type="button" class="btn btn-light btn-sm py-0" id="pmPrimExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+        </div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-list me-1"></i>Prim Satırları</span><span class="not">Baz × Oran ya da sabit tutar · ödeme ayı = dönemi izleyen ay · satıra tıklayınca oran / baz / tür düzenlenir, bordro primi ve kart güncellenir</span></div><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:55vh"><table class="na-tablo pm-excel pm-tik" id="pmPrimTablo" data-dinamik="kapali"><thead><tr class="tek"></tr></thead><tbody></tbody><tfoot><tr></tr></tfoot></table></section></div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-scale-balanced me-1"></i>Kişi Bazında Dönem Toplamı ↔ Personel Maliyet Tablosu</span><span class="not">Seçili dönem · Prim-X + Prim-R · fark varsa kırmızı</span></div><div class="na-kart-g p-0"><section class="pm-kaydir" style="max-height:40vh"><table class="na-tablo pm-excel pm-tik" id="pmPrimUyum" data-dinamik="kapali"><thead><tr class="tek"><th>Adı-Soyadı</th><th class="s">Dönem Primi</th><th class="s">Tablodaki Prim</th><th class="s">Fark</th></tr></thead><tbody></tbody></table></section></div></div>
+        <div class="na-mini" id="pmPrimSayi"></div>
+        <div class="pm-not">Prim satırları Personel Maliyet Tablosu'na gelen Prim-X / Prim-R tutarlarının detayıdır; birleşik tabloya ayrı satır olarak girmez (prim zaten kişinin satırında). Hesaplanan Prim = Baz × Oran / 100, sabit tutar varsa sabit tutar. Dönem seçimi aylık ya da "@yil Yıllık" toplam; yıllık seçimde kişi toplamı tablodaki aylık primle karşılaştırılmaz. Ödeme (R / X): X bordro dışı, R bordrolu prim.</div>
+    </div>
+
+    @* SEKME 5: ÖZEL KİŞİLER — ayrı panel yok: "Özel Kişiler" düğmesi Personel Maliyet Tablosu panelini ozel = true kapsamıyla açar (aynı sütunlar, düzenleme, kart, Excel); betik: kapsam *@
+
+    @* ============================ SEKME 6: BİRLEŞİK TABLO (Personel Maliyet + Üretim + Özel; prim kişinin satırında) ============================ *@
+    <div class="na-panel" data-p="birlesim">
+        <div class="pm-rapor-ust">
+            <div><h5>@yil Birleşik Personel Maliyeti</h5><div class="alt">Bordrolu Personel • Üretim Personeli • Özel Kişiler — Net Kalemler ve Toplam Brüt Masraflar</div></div>
+            <div class="ayar"><input class="form-control" id="pmBirlesimAra" placeholder="Ad, görev, işveren…" style="font-size:.72rem;height:26px;width:180px"><select class="form-select" id="pmBirlesimKaynak"><option value="">Tüm Kaynaklar</option><option value="Bordro">Bordro</option><option value="Üretim">Üretim</option><option value="Özel">Özel</option></select><label class="pm-anahtar" for="pmBirlesimSifir"><input type="checkbox" id="pmBirlesimSifir"> 0 ₺ Sütunları Gizle</label><button type="button" class="btn btn-light btn-sm py-0" id="pmBirlesimExcel"><i class="fas fa-file-excel me-1"></i>Excel</button></div>
+        </div>
+        <div class="na-kpi" id="pmBirlesimKpi" data-dinamik="kapali"></div>
+        <div class="na-kart"><div class="na-kart-g p-0"><section class="pm-kaydir" data-tam><table class="na-tablo pm-excel pm-tik" id="pmBirlesimTablo" data-dinamik="kapali"><thead><tr class="tek"></tr></thead><tbody></tbody><tfoot><tr></tr></tfoot></table></section></div></div>
+        <div class="na-mini" id="pmBirlesimSayi"></div>
+        <div class="pm-not">Dört sekmenin birleşimi: Personel Maliyet Tablosu (Bordro) ve Özel Kişiler (aynı bordro modeli; ana sekmedeki Durum ve diğer filtreler her ikisinde geçerlidir) ile Üretim Personeli satır olarak; prim ödemeleri kişinin Prim sütununda (ayrı satır değil). Brüt kalemler açılmaz: vergi ve SGK işçi payı <b>Toplam Brüt Masraflar</b>'da (kesintiler ayrı sütunda), SGK işveren payı <b>Toplam İşveren</b>'de. Net Toplam = R-Net + X-Net. "Diğer Ek Ödemeler" sütunu yalnız dolu olduğu dönemlerde görünür. Yol, Yemek, Mesai, Prim sütunları R + X toplamıdır · Net Ödenen = bankadan + elden ödenen (kesintiler düşülmüş) · Genel Maliyet = Net Ödenen + Kesintiler + Toplam Brüt Masraflar + Toplam İşveren (ana tablodaki Genel Maliyet ile aynı).</div>
     </div>
 
     @* ============================ PERSONEL CARİ KARTI (çekmece) ============================ *@
@@ -152,8 +345,14 @@
         <div class="alert alert-danger py-1 px-2 mb-2 pm-kart-hata" id="pmKartHata" role="alert"></div>
         <div id="pmKartIc"></div>
     </div>
+    @* ============================ TALEP DETAYI (çekmece): mesai / avans — onay adımları, zaman çizelgesi, ödemeler, plan ============================ *@
+    <div class="pm-perde" id="pmTalepPerde"></div>
+    <div class="pm-drawer pm-drawer-dar" id="pmTalepKart">
+        <div class="pm-drawer-ust"><b id="pmTalepBaslik" style="font-size:.9rem"></b><span class="ms-auto d-flex gap-1 flex-wrap" id="pmTalepAksiyon"></span><button type="button" class="btn btn-light btn-sm py-0" id="pmTalepKapat" style="font-size:.66rem" aria-label="Kapat" title="Kapat"><i class="fas fa-xmark"></i></button></div>
+        <div id="pmTalepIc"></div>
+    </div>
 </div>
 
 @section Scripts {
-<script src="/js/personel-maliyet.js?v=3"></script>
+<script src="/js/personel-maliyet.js?v=40"></script>
 }
