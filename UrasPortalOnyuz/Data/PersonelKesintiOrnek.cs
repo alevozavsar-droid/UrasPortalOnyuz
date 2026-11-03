@@ -5,7 +5,7 @@
 //   Diğer Kesintiler: Şahsi (maaş) avans talepleri (Data/NakitAvansOrnek.cs) — onay adımları, kasa ödemesi, Kasa Nakit Akışı (finans konsolide) senkron satırı;
 //                     kesinti planları (PkKesinti: avans mahsubu, icra, borç, BES …) — toplam, aylık taksit, ödenen / kalan, başlangıç ve bitiş dönemi ("ne zamana kadar"), PDF ekleri (icra dosyası).
 //   Personel eşlemesi: Personel Maliyet Tablosu kişileri talep modüllerinde NaKisi olarak tanınır (PersonelNo = cari kodu 335.xxx; NakitAvansOrnek.KisiBul bu listeye de bakar).
-//   Tohum: güncel dönemde Fazla Mesai (R / X) olan kişiler için Ekim 2026 mesai talepleri; kesintisi olanlar için şahsi avans + mahsup planı, iki örnek icra dosyası, borç planları.
+//   Tohum: Eylül 2026 dönemi için Fazla Mesai (R / X) olan kişilere mesai talepleri; kesintisi olanlar için şahsi avans + mahsup planı, iki örnek icra dosyası, borç planları.
 //   Yeni kesinti / icra kaydı (KesintiEkle) ilgili kişinin seçili dönemdeki kesinti sütununa yansır (PersonelMaliyetOrnek.KesintiYansit).
 // Ekran: Controllers/PersonelMaliyetController.cs (Paket: ekCalisma, kesinti; KesintiEkle, KesintiEkYukle, KesintiEk) + Views/PersonelMaliyet/Index.cshtml + wwwroot/js/personel-maliyet.js
 // ============================================================
@@ -47,9 +47,9 @@ namespace WebApplication3.Data
     {
         public static readonly object Kilit = new object();
         private static readonly CultureInfo Tr = new CultureInfo("tr-TR");
-        public static readonly string[] KesintiTurleri = { "Avans Kesintisi", "İcra Kesintisi", "Borç Kesintisi", "BES", "Özel Sigorta Kesintisi", "Sendika Katkısı" };
+        public static readonly string[] KesintiTurleri = { "Avans Kesintisi", "İcra Kesintisi", "Borç Kesintisi", "BES", "Özel Sigorta Kesintisi", "Sendika Katkısı", "Mazot Kesintisi", "İhbar Kesintisi" };
         /// <summary>Kesinti türü → Personel Maliyet Tablosu sütunu (PmPersonel özelliği).</summary>
-        public static readonly Dictionary<string, string> TurSutun = new Dictionary<string, string> { ["Avans Kesintisi"] = "Avans", ["İcra Kesintisi"] = "Icra", ["Borç Kesintisi"] = "Borc", ["BES"] = "Bes", ["Özel Sigorta Kesintisi"] = "OzelSigortaKesintisi", ["Sendika Katkısı"] = "SendikaKatkisi" };
+        public static readonly Dictionary<string, string> TurSutun = new Dictionary<string, string> { ["Avans Kesintisi"] = "Avans", ["İcra Kesintisi"] = "Icra", ["Borç Kesintisi"] = "Borc", ["BES"] = "Bes", ["Özel Sigorta Kesintisi"] = "OzelSigortaKesintisi", ["Sendika Katkısı"] = "SendikaKatkisi", ["Mazot Kesintisi"] = "MazotKesintisi", ["İhbar Kesintisi"] = "IhbarKesintisi" };
         private static readonly string[] Aylar = { "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık" };
         public const decimal AylikSaat = 225m;   // saat ücreti = aylık net ücret / 225 (30 gün × 7,5 saat)
 
@@ -65,7 +65,7 @@ namespace WebApplication3.Data
             lock (_kisiler)
             {
                 if (!_kisiler.TryGetValue(p.Sira, out var k)) _kisiler[p.Sira] = k = new NaKisi { PersonelNo = p.CariKodu, Rol = "Talep Sahibi" };
-                k.AdSoyad = p.AdSoyad; k.Sirket = MasterSirket(p.SgkIsvereni); k.Departman = p.Bolum; k.Unvan = p.Gorev; k.MasrafMerkezi = p.DepartmanKodu + " - " + p.Bolum; k.KullaniciId = p.SicilNo; k.Aktif = p.Durum == "Aktif";
+                k.AdSoyad = p.AdSoyad; k.Sirket = MasterSirket(p.SgkIsvereni); k.Departman = p.Bolum; k.Unvan = p.Gorev; k.MasrafMerkezi = string.IsNullOrEmpty(p.DepartmanKodu) ? p.Bolum : p.DepartmanKodu + " - " + p.Bolum; k.KullaniciId = p.SicilNo; k.Aktif = p.Durum == "Aktif";
                 return k;
             }
         }
@@ -99,12 +99,12 @@ namespace WebApplication3.Data
         private static decimal Carpan(TmTalep t) => decimal.TryParse((t.Hesap.TryGetValue("carpan", out var c) ? c : "x1,5").TrimStart('x'), NumberStyles.Any, TalepMotoru.Tr, out var d) ? d : 1.5m;
         private static decimal Saat(TmTalep t, string anahtar, bool ek) => decimal.TryParse(ek ? t.E(anahtar) : (t.Hesap.TryGetValue(anahtar, out var v) ? v : "0"), NumberStyles.Any, CultureInfo.InvariantCulture, out var d) ? d : 0;
         private static string MesaiDonemi(TmTalep t) => t.Ek.ContainsKey("puantajDonemi") ? t.E("puantajDonemi") : t.T("tarih")?.ToString("yyyy-MM") ?? "";
-        /// <summary>Seçili bordro dönemine düşen mesai talepleri (Personel Maliyet kişileri): bir önceki ayın puantajı bu ayın bordrosuna girer (prim gibi) — puantaj dönemi / mesai ayı = dönem − 1;
+        /// <summary>Seçili bordro dönemine düşen mesai talepleri (Personel Maliyet kişileri): puantaj dönemi bordro dönemiyle aynı olan talepler;
         /// ayrıca henüz puantaja aktarılmamış, bu ay tarihli (planlı / onay bekleyen) talepler de gösterilir. Dönem boşsa hepsi.</summary>
         public static List<TmTalep> Mesailer(string donem)
         {
-            Hazirla(); string onceki = string.IsNullOrEmpty(donem) ? "" : AyEkle(donem, -1);
-            lock (TalepMotoru.Kilit) return TalepMotoru.Talepler.Where(t => t.ModulKod == "MESAI" && PmBul(t.Kullanan) != null && (string.IsNullOrEmpty(donem) || MesaiDonemi(t) == onceki || (!t.Ek.ContainsKey("puantajTarihi") && (t.T("tarih")?.ToString("yyyy-MM") ?? "") == donem))).OrderByDescending(t => t.T("tarih")).ThenBy(t => t.Kullanan.AdSoyad).ToList();
+            Hazirla();
+            lock (TalepMotoru.Kilit) return TalepMotoru.Talepler.Where(t => t.ModulKod == "MESAI" && PmBul(t.Kullanan) != null && (string.IsNullOrEmpty(donem) || MesaiDonemi(t) == donem || (!t.Ek.ContainsKey("puantajTarihi") && (t.T("tarih")?.ToString("yyyy-MM") ?? "") == donem))).OrderByDescending(t => t.T("tarih")).ThenBy(t => t.Kullanan.AdSoyad).ToList();
         }
         private static object Onay(NaOnay o) => new { o.Sira, o.Adim, o.Kisi, o.Durum, tarih = o.Tarih?.ToString("dd.MM.yyyy HH:mm"), o.Not };
         private static object Zaman(NaHareket z) => new { tarih = z.Tarih.ToString("dd.MM.yyyy HH:mm"), z.Hareket, z.Kaynak };
@@ -245,9 +245,9 @@ namespace WebApplication3.Data
         private static void Tohum()
         {
             List<PmPersonel> liste; lock (PersonelMaliyetOrnek.Kilit) liste = PersonelMaliyetOrnek.Liste.Where(p => p.Durum == "Aktif").OrderBy(p => p.Sira).ToList();
-            string guncel = PersonelMaliyetOrnek.GuncelDonem, onceki = AyEkle(guncel, -1);
-            int ay = int.Parse(onceki.Substring(5, 2)), yil = int.Parse(onceki.Substring(0, 4));
-            // --- mesai talepleri: Fazla Mesai (R + X) tutarını fiili saat × saat ücreti × 1,5 ile karşılayan hafta içi talepler (önceki ay = bordro dönemi), PDKS + puantaj işlenmiş
+            string donem = PersonelMaliyetOrnek.GuncelDonem;
+            int ay = int.Parse(donem.Substring(5, 2)), yil = int.Parse(donem.Substring(0, 4));
+            // --- mesai talepleri: Fazla Mesai (R + X) tutarını fiili saat × saat ücreti × 1,5 ile karşılayan hafta içi talepler (bordro dönemi), PDKS + puantaj işlenmiş
             var projeler = new[] { "Ay sonu kapanış", "Sevkiyat yoğunluğu", "Hat 2 bakım", "İhracat yüklemesi", "Stok sayımı", "Dolum hattı arıza", "Fuar hazırlığı", "Yıl sonu planlama" };
             foreach (var p in liste)
             {
@@ -264,15 +264,9 @@ namespace WebApplication3.Data
                     var t = TalepMotoru.Tohum("MESAI", p.AdSoyad, p.AdSoyad, "HAFTAICI", d, Math.Max(1, gunOnce));
                     if (t == null) continue;
                     TalepMotoru.TohumOlay(t, "PdksGiris", new Dictionary<string, string> { ["giris"] = "08:0" + (p.Sira % 10), ["cikis"] = bitis }, Math.Max(0, gunOnce - 2), 22);
-                    if (!(i == parca - 1 && p.Sira % 4 == 0)) TalepMotoru.TohumOlay(t, "PuantajAktarildi", new Dictionary<string, string> { ["donem"] = onceki }, 1, 9);   // bazı son parçalar puantaj bekliyor (örnek)
+                    if (!(i == parca - 1 && p.Sira % 4 == 0)) TalepMotoru.TohumOlay(t, "PuantajAktarildi", new Dictionary<string, string> { ["donem"] = donem }, 1, 9);   // bazı son parçalar puantaj bekliyor (örnek)
                     _tohumSayac++;
                 }
-            }
-            // bu ay açılmış, onay bekleyen birkaç talep (dinamik örnek)
-            foreach (var p in liste.Where(x => x.FazlaMesai > 0).Take(3))
-            {
-                var d = new Dictionary<string, string> { ["tarih"] = DateTime.Today.AddDays(2 + p.Sira % 3).ToString("yyyy-MM-dd"), ["baslangicSaat"] = "18:00", ["bitisSaat"] = "20:30", ["mola"] = "0", ["karsilik"] = "Ücret", ["proje"] = "Kasım sevkiyat planı", ["gerekce"] = "Müşteri termini için ek çalışma.", ["servis"] = "true" };
-                TalepMotoru.Tohum("MESAI", p.AdSoyad, p.AdSoyad, "HAFTAICI", d, 1, 0);
             }
             // --- kesintiler: Avans ≥ 10.000 → şahsi avans talebi + mahsup planı · İcra → icra dosyası (örnek PDF) · Borç → borç planı
             foreach (var p in liste)
@@ -281,19 +275,19 @@ namespace WebApplication3.Data
                 {
                     int taksit = 2 + p.Sira % 2; decimal toplam = Math.Round(p.Avans * taksit, 2);
                     var a = NakitAvansOrnek.SahsiAvansTohumu(NaKisi(p), toplam, "Maaş avansı (şahsi ihtiyaç)", $"{taksit} ay maaştan mahsup edilecek; aylık {p.Avans.ToString("N2", Tr)} ₺.", 40 + p.Sira % 7, 37 + p.Sira % 7);
-                    Kesintiler.Add(new PkKesinti { Id = ++_sonId, PersonelSira = p.Sira, AdSoyad = p.AdSoyad, Tur = "Avans Kesintisi", Kaynak = a.No, ToplamTutar = toplam, AylikTaksit = p.Avans, TaksitSayisi = taksit, OdenenTaksit = 1, BaslangicDonem = onceki, Aciklama = $"Nakit Avans {a.No} mahsubu; kasa ödemesi {a.IlkTeslim:dd.MM.yyyy}.", Olusturma = a.Tarih, Olusturan = "Sistem (Nakit Avans)" });
+                    Kesintiler.Add(new PkKesinti { Id = ++_sonId, PersonelSira = p.Sira, AdSoyad = p.AdSoyad, Tur = "Avans Kesintisi", Kaynak = a.No, ToplamTutar = toplam, AylikTaksit = p.Avans, TaksitSayisi = taksit, OdenenTaksit = 1, BaslangicDonem = donem, Aciklama = $"Nakit Avans {a.No} mahsubu; kasa ödemesi {a.IlkTeslim:dd.MM.yyyy}.", Olusturma = a.Tarih, Olusturan = "Sistem (Nakit Avans)" });
                 }
                 if (p.Icra > 0)
                 {
                     int taksit = 8; decimal toplam = Math.Round(p.Icra * taksit, 2); string dosya = $"2026/{1200 + p.Sira * 7} E.";
-                    var k = new PkKesinti { Id = ++_sonId, PersonelSira = p.Sira, AdSoyad = p.AdSoyad, Tur = "İcra Kesintisi", Kaynak = dosya, DosyaNo = dosya, IcraDairesi = p.Sira % 2 == 0 ? "İstanbul Anadolu 7. İcra Dairesi" : "Çorlu 2. İcra Dairesi", Alacakli = p.Sira % 2 == 0 ? "X Bankası A.Ş." : "Y Finansman A.Ş.", ToplamTutar = toplam, AylikTaksit = p.Icra, TaksitSayisi = taksit, OdenenTaksit = 1, BaslangicDonem = onceki, Aciklama = "Maaş haczi — net ücretin 1/4'ü sınırında aylık kesinti; dosya kapanınca durur. Örnek kayıt.", Olusturma = DateTime.Today.AddDays(-45).AddHours(11), Olusturan = "Hukuk (Selçuk Arı)" };
+                    var k = new PkKesinti { Id = ++_sonId, PersonelSira = p.Sira, AdSoyad = p.AdSoyad, Tur = "İcra Kesintisi", Kaynak = dosya, DosyaNo = dosya, IcraDairesi = p.Sira % 2 == 0 ? "İstanbul Anadolu 7. İcra Dairesi" : "Çorlu 2. İcra Dairesi", Alacakli = p.Sira % 2 == 0 ? "X Bankası A.Ş." : "Y Finansman A.Ş.", ToplamTutar = toplam, AylikTaksit = p.Icra, TaksitSayisi = taksit, OdenenTaksit = 1, BaslangicDonem = donem, Aciklama = "Maaş haczi — net ücretin 1/4'ü sınırında aylık kesinti; dosya kapanınca durur. Örnek kayıt.", Olusturma = DateTime.Today.AddDays(-45).AddHours(11), Olusturan = "Hukuk (Selçuk Arı)" };
                     k.Ekler.Add(OrnekIcraPdf(k, p));
                     Kesintiler.Add(k);
                 }
                 if (p.Borc > 0)
                 {
                     int taksit = 2 + p.Sira % 3; decimal toplam = Math.Round(p.Borc * taksit, 2);
-                    Kesintiler.Add(new PkKesinti { Id = ++_sonId, PersonelSira = p.Sira, AdSoyad = p.AdSoyad, Tur = "Borç Kesintisi", Kaynak = "Personel borç senedi", ToplamTutar = toplam, AylikTaksit = p.Borc, TaksitSayisi = taksit, OdenenTaksit = 1, BaslangicDonem = onceki, Aciklama = "Personel borç kesintisi (kaynak tablo: KESİNTİLER TOPLAMI).", Olusturma = DateTime.Today.AddDays(-35).AddHours(10), Olusturan = "İK (Dilber Güney)" });
+                    Kesintiler.Add(new PkKesinti { Id = ++_sonId, PersonelSira = p.Sira, AdSoyad = p.AdSoyad, Tur = "Borç Kesintisi", Kaynak = "Personel borç senedi", ToplamTutar = toplam, AylikTaksit = p.Borc, TaksitSayisi = taksit, OdenenTaksit = 1, BaslangicDonem = donem, Aciklama = "Personel borç kesintisi (kaynak tablo: KESİNTİLER TOPLAMI).", Olusturma = DateTime.Today.AddDays(-35).AddHours(10), Olusturan = "İK (Dilber Güney)" });
                 }
             }
         }

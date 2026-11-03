@@ -30,7 +30,7 @@ namespace WebApplication3.Controllers
         [HttpGet]
         public IActionResult Veri(string donem)
         {
-            if (string.IsNullOrWhiteSpace(donem)) donem = PersonelYansitmaOrnek.DonemBugun;
+            if (string.IsNullOrWhiteSpace(donem)) donem = PersonelYansitmaOrnek.GuncelDonem;
             lock (PersonelYansitmaOrnek.Kilit) return Json(PersonelYansitmaOrnek.Paket(donem, Ben(), true, null));
         }
 
@@ -77,7 +77,7 @@ namespace WebApplication3.Controllers
             if (d == null) return Json(new { success = false, message = "Veri yok." });
             var h = PersonelYansitmaOrnek.EslemeKaydet(d.Alan, d.GiderKodu); if (h != null) return Json(new { success = false, message = h });
             var k = PersonelYansitmaOrnek.KatalogBul(d.GiderKodu);
-            lock (PersonelYansitmaOrnek.Kilit) return Json(PersonelYansitmaOrnek.Paket(d.Donem ?? PersonelYansitmaOrnek.DonemBugun, Ben(), true, $"Eşleme güncellendi: {d.Alan} → {k.GiderKodu} {k.Kalem} ↔ {k.YansitmaKodu} {k.YansitmaKalem}. Yeni kayıtlarda geçerlidir."));
+            lock (PersonelYansitmaOrnek.Kilit) return Json(PersonelYansitmaOrnek.Paket(d.Donem ?? PersonelYansitmaOrnek.GuncelDonem, Ben(), true, $"Eşleme güncellendi: {d.Alan} → {k.GiderKodu} {k.Kalem} ↔ {k.YansitmaKodu} {k.YansitmaKalem}. Yeni kayıtlarda geçerlidir."));
         }
 
         public class DagilimIstek { public int Sira { get; set; } public string Donem { get; set; } public List<DagilimSatir> Dagilim { get; set; } }
@@ -87,7 +87,7 @@ namespace WebApplication3.Controllers
         {
             if (d == null) return Json(new { success = false, message = "Veri yok." });
             var h = PersonelYansitmaOrnek.DagilimKaydet(d.Sira, d.Dagilim?.Select(x => (x.Sirket, x.Pay)).ToList()); if (h != null) return Json(new { success = false, message = h });
-            lock (PersonelYansitmaOrnek.Kilit) return Json(PersonelYansitmaOrnek.Paket(d.Donem ?? PersonelYansitmaOrnek.DonemBugun, Ben(), true, d.Dagilim == null || d.Dagilim.Count == 0 ? "Dağılım varsayılana döndürüldü." : "Görev yeri dağılımı kaydedildi; hedef tutarlar yeniden hesaplandı."));
+            lock (PersonelYansitmaOrnek.Kilit) return Json(PersonelYansitmaOrnek.Paket(d.Donem ?? PersonelYansitmaOrnek.GuncelDonem, Ben(), true, d.Dagilim == null || d.Dagilim.Count == 0 ? "Dağılım varsayılana döndürüldü." : "Görev yeri dağılımı kaydedildi; hedef tutarlar yeniden hesaplandı."));
         }
 
         public class KdvIstek { public decimal Kdv { get; set; } public string Donem { get; set; } }
@@ -96,7 +96,7 @@ namespace WebApplication3.Controllers
         {
             if (d == null) return Json(new { success = false, message = "Veri yok." });
             var h = PersonelYansitmaOrnek.KdvKaydet(d.Kdv); if (h != null) return Json(new { success = false, message = h });
-            lock (PersonelYansitmaOrnek.Kilit) return Json(PersonelYansitmaOrnek.Paket(d.Donem ?? PersonelYansitmaOrnek.DonemBugun, Ben(), true, $"Yansıtma faturası KDV oranı %{d.Kdv.ToString("0.##", Tr)} olarak kaydedildi (yeni kayıtlarda geçerli)."));
+            lock (PersonelYansitmaOrnek.Kilit) return Json(PersonelYansitmaOrnek.Paket(d.Donem ?? PersonelYansitmaOrnek.GuncelDonem, Ben(), true, $"Yansıtma faturası KDV oranı %{d.Kdv.ToString("0.##", Tr)} olarak kaydedildi (yeni kayıtlarda geçerli)."));
         }
     }
 }

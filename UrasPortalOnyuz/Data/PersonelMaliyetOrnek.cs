@@ -1,26 +1,21 @@
 // ============================================================
 // PERSONEL MALİYET RAPORU — veri, doğrulama ve bordro hesabı (Yönetim › Özel Raporlar ve İK › Personel Maliyet ve Bordro)
-// Sütun düzeni: "Personel Bordro ve Ödeme Tablosu" (PersonelTakibi, 1 Kas 2026) — 17 grup, 108 sütun dahil Not + Kart (SutunGruplari); tutarlar ekranda ₺ ile gösterilir.
-// Kişi ve rakamlar: "GÜNCEL EKSİKSİZ 01.11.2026" tablosu (86 satır → Cüneyt Arda Ceylan'ın 3 satırı tek satırda toplandı: 84 satır; 8'i Ozel = true → "Özel Kişiler" sekmesi: Alev Özavşar Eren, Murat / Nükhet Özavşar, Devrim / Hale Bisren,
-//   Mustafa Savaş, Erman Kaval, Medine Rozykulova, Orazgül Jumayeva — aynı bordro modeli, Personel Maliyet Tablosu'nda görünmez). Bu tabloda
-//   R = BORDROLU (resmi) ücret: BAZ R MAAŞ, YOL-YEMEK-KİRA, MESAİ → ARA TOPLAM-R; Bordro R = ARA TOPLAM-R − KESİNTİLER; Brüt Masraflar; Toplam Brüt Maliyet; İş Veren
-//   X = BORDRO DIŞI ödeme: BAZ X MAAŞ, YOL-YEMEK-KİRA X, MESAİ X, PRİM X → ARA TOPLAM-X (vergi / SGK yok)
-//   GENEL MALİYET = Toplam Brüt Maliyet + İş Veren + ARA TOPLAM-X
-// Eşleme: BAZ R MAAŞ → R-Net · YOL-YEMEK-KİRA → Yemek (7.500,22 olan satırlarda Yol; 11.150,32 = Yol 7.500,22 + Yemek 3.650,10) · MESAİ → Fazla Mesai
-//         BAZ X MAAŞ → X-Net · YOL-YEMEK-KİRA X → Yemek-X · MESAİ X → Fazla Mesai-X · PRİM X → Prim-X (rx sütunları: R üstte, X altta) · KESİNTİLER TOPLAMI → Borç
-//         Toplam Brüt Maliyet → BrutKaynak, İş Veren → IsverenKaynak (kaynak değerleri; satır portalda tutar / özel durum değişikliğiyle kaydedilince silinir, model yeniden hesaplar)
-//         Ödenme Durumu "Ödeme Yapılmıyor" → Not. Özel Durumu: Emekli / Engelli / Gündelikçi.
-//         KESİNTİLER TOPLAMI tohumda türlere ayrılır (KesintileriSinifla: Avans / İcra / Borç) — "Diğer Kesintiler" sekmesi (Data/PersonelKesintiOrnek.cs) planları buna göre kurar; mesai talepleri "Ek Çalışmalar" sekmesinde.
+// Sütun düzeni: "Personel Bordro ve Ödeme Tablosu" (PersonelTakibi, 1 Kas 2026); tutarlar ekranda ₺ ile gösterilir.
+// Kişi ve rakamlar: "Personel Maliyet Raporu 2026-09" (DUZELTILMIS_v5_2), 87 kişi. 13 SGK'sız üretim (X) kişisi rapor dışıdır ve Üretim Personeli'nde kalır.
+//   Özel Kişiler (Ozel = true, 9 kişi): Alper Köse, Devrim / Hale Bisren, Emine Tanış, Erman Kaval, Medine Rozykulova, Murat Özavşar, Mustafa Savaş, Nükhet Özavşar, Orazgül Jumayeva.
+//   Kalan 78 kişi Personel Maliyet Tablosu'nda bordrolu (Alev Özavşar Eren ve Bedirhan Genç dahil). Brüt ve SGK bilgisi raporda olmayanlarda (Alper Köse, Emine Tanış, Murat Özavşar, Orazgül Jumayeva, Mesut Akıncı) brüt ve SGK hesaplanmaz (SgkDetayYok).
+//   Sütun eşlemesi: 2026 R-NET → RNet · 2026 X-NET → XNet · YEMEK-R / X → Yemek / YemekX · YOL-R / X → Yol / YolX · FAZLA MESAİ-R / X → FazlaMesai / X · PRİM-R / X → Prim / X · KİRA DESTEĞİ → KiraDestegi · AVANS, İCRA, BORÇ, BES, ÖZEL SİGORTA KESİNTİSİ, SENDİKA KATKISI → kesinti sütunları · DİĞER EK ÖDEMELER-R → DigerEkOdemelerR · KESİNTİLER TOPLAMI-X → KesintilerToplamiX · İSTİHDAM HAZİNE İNDİRİMİ → HazineKaynak (yalnız gösterim)
+//   TOPLAM BRÜT KAZANÇ → BrutKaynak · TOPLAM İŞVEREN → IsverenKaynak (satır düzenlenince silinir, model yeniden hesaplar) · ÖZEL DURUMU → Emekli / Gündelikçi · NOT → Not ("Ödeme Yapılmıyor" ödeme kaydını engeller)
 // Hesaplanan alanlar (BordroParametre ile; kaynak değer varsa ona bağlanır):
-//   Esas brüt: kaynak varsa Toplam Brüt Maliyet − bordrodaki ekler; yoksa R-Net'ten brütleştirme (net = brüt − SGK işçi − GV − DV, ikiye bölme). Günlük = brüt / 30, kazançlar = gün × günlük.
-//   Toplam Brüt Kazanç = kazançlar + ek çalışma + sosyal yardım + prim + yan haklar + yasal ödemeler. SGK matrahı = kazançlar + ek çalışma + prim + sosyal yardımlar (yol ve servis hariç), tavanlı.
+//   Brüt: kaynakta Toplam Brüt Kazanç; gün toplamına bölünerek günlük ücret ve kazanç kalemleri çıkar (kazançlar toplamı brüte eşit kalır).
+//   Toplam Brüt Kazanç = kazançlar + ek çalışma + sosyal yardım + prim + yan haklar + yasal ödemeler. SGK matrahı = kazançlar + ek çalışma + prim + sosyal yardımlar (servis ve SgkDisi hariç), tavanlı.
 //   SGK işçi oranla (normal %15; emekli SGDP %7,5). DV = (brüt kazanç − yan haklar) × ‰7,59 − asgari ücret istisnası.
 //   GV: kaynak varsa artık (brüt − bordro net − SGK işçi − DV); yoksa kümülatif dilim farkı − asgari ücret istisnası − indirimler.
-//   İşveren: kaynak varsa İş Veren tutarı (kalemler oran payıyla dağıtılır); yoksa normal %22,5 − 4 puan hazine indirimi, emekli SGDP %22,5 + KVSK %2.
-//   Bordro net = brüt kazanç − SGK işçi − GV − DV · Kalan Net (Banka) = bordro net − kesintiler · Net-R Bordro = Kalan Net (Banka) + Diğer Ek Ödemeler-R (bankadan yatacak net)
+//   İşveren: kaynak varsa İş Veren tutarı (kalemler oran payıyla dağıtılır); yoksa normal %23,75 − 4 puan hazine indirimi, emekli SGDP %22,5 + KVSK %2,25.
+//   Bordro net = brüt kazanç − SGK işçi − GV − DV · Kalan Net (Banka) = bordro net − kesintiler · Net-R Bordro = Kalan Net (Banka) + Ek Ödemeler Toplam-R (Yol, Yemek, Fazla Mesai, Prim toplamı + bunların dışındaki tüm R ek ödemeler; bankadan yatacak net)
 //   Dövizli maaş: kartta Para Birimi (USD / EUR / GBP) + Döviz Tutarı + Kur girilirse X-Net = tutar × kur (₺ karşılığı); X-Net ve X tarafı kalemler bordroya girmediğinden kaynak değerleri düşürmez.
-//   Grup toplamları R / X ayrı: Toplam Ek Çalışma-R / -X, Toplam Sosyal Yardımlar-R / -X, Toplam Prim-R / -X (X toplamları = Diğer Ek Ödemeler-X).
-//   Ödeme Özeti-R: R-Net, Diğer Ek Ödemeler-R, Kesintiler Toplamı-R, Kalan Net Tutar (Banka) · Ödeme Özeti-X: X-Net, Diğer Ek Ödemeler-X, Kesintiler Toplamı-X (girilir), Kalan Net Tutar (Elden) = Net-X Bordro − Kesintiler Toplamı-X
+//   Grup toplamları R / X ayrı: Toplam Ek Çalışma-R / -X, Toplam Sosyal Yardımlar-R / -X, Toplam Prim-R / -X (X toplamları = Ek Ödemeler Toplam-X).
+//   Ödeme Özeti-R: R-Net, Ek Ödemeler Toplam-R, Kesintiler Toplamı-R, Kalan Net Tutar (Banka) · Ödeme Özeti-X: X-Net, Ek Ödemeler Toplam-X, Kesintiler Toplamı-X (girilir), Kalan Net Tutar (Elden) = Net-X Bordro − Kesintiler Toplamı-X
 //   Net-X Bordro = X-Net + X tarafı kalemler (Yemek-X, Yol-X, Fazla Mesai-X, Prim-X; brüt ve vergiye girmez; X kesintisi maliyeti düşürmez) · Ara Toplam = Net-X Bordro + Net-R Bordro · Toplam Brüt Masraflar = brüt kazanç − Kalan Net (Banka) (vergi, SGK işçi, kesintiler)
 //   Toplam İşveren = SGK işveren toplam · Genel Maliyet = Ara Toplam + Toplam Brüt Masraflar + Toplam İşveren (= kaynak tablodaki GENEL MALİYET)
 // Personel Cari Kartı: 335.xxx cari kodu, durum (Aktif / İşten Ayrıldı), ayrılış tarihi, TC kimlik, telefon, e-posta kart çekmecesinden düzenlenir.
@@ -38,10 +33,10 @@ namespace WebApplication3.Data
     public static class BordroParametre
     {
         public const decimal AsgariBrut = 33030m;                       // 2026 brüt asgari ücret (aylık)
-        public const decimal SgkTavanKati = 7.5m;
-        public static decimal SgkTavan => AsgariBrut * SgkTavanKati;    // 247.725
+        public const decimal SgkTavanKati = 9m;
+        public static decimal SgkTavan => AsgariBrut * SgkTavanKati;    // 297.270
         public const decimal IsciIssizlik = 0.01m, IsciMyo = 0.09m, IsciGss = 0.05m, IsciSgdp = 0.075m;
-        public const decimal IsvIssizlik = 0.02m, IsvMyo = 0.11m, IsvGss = 0.075m, IsvSgdp = 0.225m, Kvsk = 0.02m, HazineIndirimi = 0.04m;
+        public const decimal IsvIssizlik = 0.02m, IsvMyo = 0.12m, IsvGss = 0.075m, IsvSgdp = 0.225m, Kvsk = 0.0225m, HazineIndirimi = 0.04m;
         public const decimal Damga = 0.00759m;
         /// <summary>Gelir vergisi tarifesi (ücret gelirleri): dilim üst sınırı → oran.</summary>
         public static readonly (decimal Ust, decimal Oran)[] GvDilimleri = { (190000m, 0.15m), (400000m, 0.20m), (1500000m, 0.27m), (5300000m, 0.35m), (decimal.MaxValue, 0.40m) };
@@ -77,12 +72,12 @@ namespace WebApplication3.Data
         public decimal DamgaMatrahi { get; set; } public decimal AsgariDamga { get; set; } public decimal DvTutari { get; set; }
         public decimal IsciIssizlik { get; set; } public decimal IsciMyo { get; set; } public decimal IsciGss { get; set; } public decimal IsciSgdp { get; set; } public decimal SgkIsciToplam { get; set; }
         public decimal IsvIssizlik { get; set; } public decimal IsvMyo { get; set; } public decimal IsvGss { get; set; } public decimal IsvSgdp { get; set; } public decimal Kvsk { get; set; } public decimal HazineIndirimi { get; set; } public decimal SgkIsverenToplam { get; set; }
-        public decimal RNet2 { get; set; } public decimal KesintilerToplami { get; set; } public decimal KalanNetBanka { get; set; }
-        /// <summary>X tarafı grup toplamları (rx sütunlarının alt satırları) ve bunların toplamı Diğer Ek Ödemeler-X (= Fazla Mesai-X + Yemek-X + Yol-X + Prim-X).</summary>
+        public decimal RNet2 { get; set; } public decimal KesintilerToplami { get; set; } public decimal KalanNetBanka { get; set; } public decimal DigerEkR { get; set; }
+        /// <summary>X tarafı grup toplamları (rx sütunlarının alt satırları) ve bunların toplamı Ek Ödemeler Toplam-X (= Fazla Mesai-X + Yemek-X + Yol-X + Prim-X).</summary>
         public decimal ToplamEkCalismaX { get; set; } public decimal ToplamSosyalX { get; set; } public decimal ToplamPrimX { get; set; } public decimal DigerEkOdemelerX { get; set; }
-        /// <summary>X-Net'in ₺ karşılığı (dövizli maaşta Döviz Tutarı × Kur, yoksa girilen X-Net) · Ödeme Özeti-X: X-Net, Diğer Ek Ödemeler-X, Kesintiler Toplamı-X (girilir), Kalan Net Tutar (Elden) = Net-X Bordro − Kesintiler Toplamı-X.</summary>
+        /// <summary>X-Net'in ₺ karşılığı (dövizli maaşta Döviz Tutarı × Kur, yoksa girilen X-Net) · Ödeme Özeti-X: X-Net, Ek Ödemeler Toplam-X, Kesintiler Toplamı-X (girilir), Kalan Net Tutar (Elden) = Net-X Bordro − Kesintiler Toplamı-X.</summary>
         public decimal XNetTl { get; set; } public decimal XNet2 { get; set; } public decimal KalanNetElden { get; set; }
-        /// <summary>Net-X Bordro = X-Net + X tarafı kalemler (bordro dışı ödenen toplam) · Net-R Bordro = Kalan Net (Banka) + Diğer Ek Ödemeler-R (tüm ekler dahil, kesintiler düşülmüş, bankadan yatacak net).</summary>
+        /// <summary>Net-X Bordro = X-Net + X tarafı kalemler (bordro dışı ödenen toplam) · Net-R Bordro = Kalan Net (Banka) + Ek Ödemeler Toplam-R (Yol, Yemek, Fazla Mesai, Prim toplamı ile bunların dışındaki tüm R ek ödemelerin toplamı; banka = R-NET + bu toplam − kesintiler.</summary>
         public decimal NetXBordro { get; set; } public decimal NetRBordro { get; set; } public decimal AraToplam { get; set; } public decimal ToplamBrutMasraflar { get; set; } public decimal ToplamIsveren { get; set; } public decimal GenelMaliyet { get; set; }
 
         public static PmBordro Hesapla(PmPersonel p)
@@ -96,11 +91,12 @@ namespace WebApplication3.Data
             // grup toplamları (bordrodaki ekler)
             h.ToplamEkCalisma = p.FazlaMesai + p.BayramCalisma + p.GeceFarki + p.PazarCalisma + p.ResmiTatilCalisma;
             h.ToplamSosyal = p.Yemek + p.Yol + p.Servis + p.KiraDestegi + p.Egitim + p.CocukYardimi;
-            h.ToplamPrim = p.MaasFarki + p.Prim + p.OzelOdeme;
+            h.ToplamPrim = p.MaasFarki + p.Prim + p.OzelOdeme + p.KasaTazminati;
             h.ToplamYanHaklar = p.OzelSaglik + p.Kiyafet + p.KoruyucuEkipman + p.DogumYardimi + p.EvlilikYardimi;
             h.ToplamYasal = p.KidemTazminati + p.IhbarTazminati + p.IseIade + p.YillikIzinOdemesi + p.RaporFarki + p.DogumIzni;
             decimal ekler = h.ToplamEkCalisma + h.ToplamSosyal + h.ToplamPrim + h.ToplamYanHaklar + h.ToplamYasal;
-            bool kaynak = p.BrutKaynak.HasValue && p.BrutKaynak.Value > 0;
+            bool sgkYok = p.SgkDetayYok;
+            bool kaynak = !sgkYok && p.BrutKaynak.HasValue && p.BrutKaynak.Value > 0;
             // 1) esas brüt: kaynak tablodan ya da R-Net'ten brütleştirme (net(B) artan olduğundan ikiye bölme)
             decimal Net(decimal b)
             {
@@ -111,26 +107,27 @@ namespace WebApplication3.Data
             }
             decimal brut = 0;
             if (kaynak) brut = R(Math.Max(0, p.BrutKaynak.Value - ekler));
-            else if (p.RNet > 0) { decimal lo = 0, hi = p.RNet * 3 + 50000; for (int i = 0; i < 80; i++) { decimal mid = (lo + hi) / 2; if (Net(mid) < p.RNet) lo = mid; else hi = mid; } brut = R(hi); }
-            decimal gunluk = brut / 30m;
+            else if (!sgkYok && p.RNet > 0) { decimal lo = 0, hi = p.RNet * 3 + 50000; for (int i = 0; i < 80; i++) { decimal mid = (lo + hi) / 2; if (Net(mid) < p.RNet) lo = mid; else hi = mid; } brut = R(hi); }
+            decimal gunSayisi = p.NormalGun + p.HaftaSonuGun + p.ResmiTatilGun + p.BayramGun + p.UcretliIzinGun;
+            decimal gunluk = kaynak && gunSayisi > 0 ? brut / gunSayisi : brut / 30m;   // kaynak tabloda gün toplamı 30 değilse brüt o günlere bölünür; toplam brüt yine kaynakla aynı kalır
             h.BrutUcret = brut; h.Gunluk = R(gunluk);
             // 2) puantaj kazançları
             h.NormalKazanc = R(p.NormalGun * gunluk); h.HaftaSonuKazanc = R(p.HaftaSonuGun * gunluk); h.ResmiTatilKazanc = R(p.ResmiTatilGun * gunluk); h.BayramKazanc = R(p.BayramGun * gunluk); h.UcretliIzinKazanc = R(p.UcretliIzinGun * gunluk);
             decimal kazanclar = h.NormalKazanc + h.HaftaSonuKazanc + h.ResmiTatilKazanc + h.BayramKazanc + h.UcretliIzinKazanc;
-            if (kaynak && p.NormalGun + p.HaftaSonuGun + p.ResmiTatilGun + p.BayramGun + p.UcretliIzinGun == 30) { h.NormalKazanc += brut - kazanclar; kazanclar = brut; }   // kuruş farkı normal çalışmaya
+            if (kaynak) { h.NormalKazanc += brut - kazanclar; kazanclar = brut; }   // kaynakta kazançlar brüte eşit; kuruş ve gün yuvarlama farkı normal çalışmaya
             // 3) brüt kazanç ve SGK matrahı
-            h.ToplamBrutKazanc = kazanclar + ekler;
-            h.SgkMatrahi = Math.Min(kazanclar + h.ToplamEkCalisma + h.ToplamPrim + (h.ToplamSosyal - p.Servis - p.Yol), tavan);   // yol yardımı ve servis SGK matrahı dışında (kaynak tabloyla aynı)
+            h.ToplamBrutKazanc = sgkYok ? 0 : kazanclar + ekler;
+            h.SgkMatrahi = sgkYok ? 0 : Math.Min(kazanclar + h.ToplamEkCalisma + h.ToplamPrim + (h.ToplamSosyal - p.Servis - p.SgkDisi), tavan);   // yol yardımı ve servis SGK matrahı dışında (kaynak tabloyla aynı)
             // 4) SGK işçi
             h.IsciIssizlik = emekli ? 0 : R(h.SgkMatrahi * BordroParametre.IsciIssizlik); h.IsciMyo = emekli ? 0 : R(h.SgkMatrahi * BordroParametre.IsciMyo);
             h.IsciGss = emekli ? 0 : R(h.SgkMatrahi * BordroParametre.IsciGss); h.IsciSgdp = emekli ? R(h.SgkMatrahi * BordroParametre.IsciSgdp) : 0;
             h.SgkIsciToplam = h.IsciIssizlik + h.IsciMyo + h.IsciGss + h.IsciSgdp;
             // 5) damga vergisi
-            h.DamgaMatrahi = R(Math.Max(0, h.ToplamBrutKazanc - h.ToplamYanHaklar)); h.AsgariDamga = h.DamgaMatrahi > 0 ? asgDamga : 0;
+            h.DamgaMatrahi = R(Math.Max(0, h.ToplamBrutKazanc - h.ToplamYanHaklar - p.SgkDisi)); h.AsgariDamga = h.DamgaMatrahi > 0 ? asgDamga : 0;   // yemek istisnası (SgkDisi) damga matrahından da düşer
             h.DvTutari = Math.Max(0, R(h.DamgaMatrahi * BordroParametre.Damga - h.AsgariDamga));
             // 6) gelir vergisi
-            h.GvMatrahi = R(Math.Max(0, h.ToplamBrutKazanc - h.ToplamYasal - h.SgkIsciToplam));
-            h.KumulatifMatrah = R(h.GvMatrahi * ay); h.AsgariIstisna = h.GvMatrahi > 0 ? istisna : 0; h.AsgariKumulatifMatrah = R(BordroParametre.AsgariGvMatrahi * ay);
+            h.GvMatrahi = R(Math.Max(0, h.ToplamBrutKazanc - h.ToplamYasal - h.SgkIsciToplam - p.SgkDisi));
+            h.KumulatifMatrah = R(h.GvMatrahi * ay); h.AsgariIstisna = h.GvMatrahi > 0 ? istisna : 0; h.AsgariKumulatifMatrah = sgkYok ? 0 : R(BordroParametre.AsgariGvMatrahi * ay);
             if (kaynak)
             {   // bordro net = R-Net + ekler; vergi artık olarak bulunur, böylece brüt − net kaynak tabloyla birebir tutar
                 h.GvTutari = Math.Max(0, R(h.ToplamBrutKazanc - (p.RNet + ekler) - h.SgkIsciToplam - h.DvTutari));
@@ -146,20 +143,20 @@ namespace WebApplication3.Data
             h.IsvGss = emekli ? 0 : R(h.SgkMatrahi * BordroParametre.IsvGss); h.IsvSgdp = emekli ? R(h.SgkMatrahi * BordroParametre.IsvSgdp) : 0;
             h.Kvsk = R(h.SgkMatrahi * BordroParametre.Kvsk); h.HazineIndirimi = emekli ? 0 : R(h.SgkMatrahi * BordroParametre.HazineIndirimi);
             if (p.IsverenKaynak.HasValue && p.IsverenKaynak.Value > 0)
-            {   // kaynak tablodaki İş Veren tutarı kalemlere oran payıyla dağıtılır; hazine indirimi ayrıca gösterilmez
-                decimal z = p.IsverenKaynak.Value, top = h.IsvIssizlik + h.IsvMyo + h.IsvGss + h.IsvSgdp + h.Kvsk; h.HazineIndirimi = 0;
+            {   // kaynak tablodaki İş Veren tutarı kalemlere oran payıyla dağıtılır; hazine indirimi yalnız gösterilir, toplamdan düşülmez (rapor gibi)
+                decimal z = p.IsverenKaynak.Value, top = h.IsvIssizlik + h.IsvMyo + h.IsvGss + h.IsvSgdp + h.Kvsk; h.HazineIndirimi = p.HazineKaynak;
                 if (top > 0) { decimal k = z / top; h.IsvIssizlik = R(h.IsvIssizlik * k); h.IsvGss = R(h.IsvGss * k); h.Kvsk = R(h.Kvsk * k); h.IsvSgdp = R(h.IsvSgdp * k); h.IsvMyo = R(h.IsvMyo * k); }
                 decimal fark = z - (h.IsvIssizlik + h.IsvMyo + h.IsvGss + h.IsvSgdp + h.Kvsk); if (emekli) h.IsvSgdp += fark; else h.IsvMyo += fark;
                 h.SgkIsverenToplam = z;
             }
             else h.SgkIsverenToplam = h.IsvIssizlik + h.IsvMyo + h.IsvGss + h.IsvSgdp + h.Kvsk - h.HazineIndirimi;
             // 8) ödeme özeti ve maliyet (R bordrolu, X bordro dışı)
-            decimal bordroNet = h.ToplamBrutKazanc - h.SgkIsciToplam - h.GvTutari - h.DvTutari;
-            h.RNet2 = p.RNet; h.KesintilerToplami = p.Avans + p.Icra + p.Borc + p.OzelSigortaKesintisi + p.SendikaKatkisi + p.Bes;
-            h.KalanNetBanka = R(bordroNet - h.KesintilerToplami);
+            // banka = anlaşılan net R-Net + R ek ödemeler (ekler) + Ek Ödemeler Toplam-R − kesintiler; brütten türetilmez (kaynak KALAN NET TUTAR (BANKA))
+            h.RNet2 = p.RNet; h.KesintilerToplami = p.Avans + p.Icra + p.Borc + p.OzelSigortaKesintisi + p.SendikaKatkisi + p.Bes + p.MazotKesintisi + p.IhbarKesintisi;
+            h.DigerEkR = R(ekler + p.DigerEkOdemelerR); h.KalanNetBanka = R(p.RNet + h.DigerEkR - h.KesintilerToplami);
             h.ToplamEkCalismaX = p.FazlaMesaiX; h.ToplamSosyalX = p.YemekX + p.YolX; h.ToplamPrimX = p.PrimX; h.DigerEkOdemelerX = h.ToplamEkCalismaX + h.ToplamSosyalX + h.ToplamPrimX;
-            h.NetRBordro = R(h.KalanNetBanka + p.DigerEkOdemelerR); h.NetXBordro = xNet + h.DigerEkOdemelerX; h.KalanNetElden = R(h.NetXBordro - p.KesintilerToplamiX);   // X kesintisi maliyeti düşürmez, elden ödenen tutarı azaltır
-            h.AraToplam = h.NetXBordro + h.NetRBordro; h.ToplamBrutMasraflar = R(h.ToplamBrutKazanc - h.KalanNetBanka); h.ToplamIsveren = h.SgkIsverenToplam;
+            h.NetRBordro = h.KalanNetBanka; h.NetXBordro = xNet + h.DigerEkOdemelerX; h.KalanNetElden = R(h.NetXBordro - p.KesintilerToplamiX);   // X kesintisi maliyeti düşürmez, elden ödenen tutarı azaltır
+            h.AraToplam = h.NetXBordro + h.NetRBordro; h.ToplamBrutMasraflar = sgkYok ? 0 : R(h.ToplamBrutKazanc - h.KalanNetBanka); h.ToplamIsveren = h.SgkIsverenToplam;
             h.GenelMaliyet = R(h.AraToplam + h.ToplamBrutMasraflar + h.ToplamIsveren);
             return h;
         }
@@ -172,8 +169,6 @@ namespace WebApplication3.Data
         // ---- kimlik
         public string SgkIsvereni { get; set; }
         public string FiiliGorevYeri { get; set; }
-        /// <summary>R (banka) net ödemesini yapan tüzel şirket (boş = varsayılan: Uras Power). SGK işvereninden farklıysa Muhasebe Kayıtları sekmesi iki şirkette karşılıklı ödeme / mahsup seti simüle eder; X (elden) ödemesi SGK işvereni kasasından.</summary>
-        public string OdemeSirketi { get; set; } = "";
         public string AdSoyad { get; set; }
         public string Unvan { get; set; }
         public string Bolum { get; set; }
@@ -202,6 +197,7 @@ namespace WebApplication3.Data
         public decimal GvIndirimleri { get; set; } public decimal OzelSigortaIndirimi { get; set; }
         public decimal Avans { get; set; } public decimal Icra { get; set; } public decimal Borc { get; set; } public decimal OzelSigortaKesintisi { get; set; } public decimal SendikaKatkisi { get; set; } public decimal Bes { get; set; }
         public decimal DigerEkOdemelerR { get; set; }
+        public decimal KasaTazminati { get; set; } public decimal MazotKesintisi { get; set; } public decimal IhbarKesintisi { get; set; }
         /// <summary>X (bordro dışı) tarafı ödenen kalemler; tabloda aynı kalemin R değerinin altında gösterilir (rx sütunu). Brüt ve vergiye girmez, Net-X Bordro'ya eklenir. Kesintiler Toplamı-X elden ödenen tutardan düşülür.</summary>
         public decimal YemekX { get; set; } public decimal YolX { get; set; } public decimal FazlaMesaiX { get; set; } public decimal PrimX { get; set; } public decimal KesintilerToplamiX { get; set; }
         /// <summary>Dövizli maaş (kartta girilir): Para Birimi (USD / EUR / GBP; boş = ₺), aylık Döviz Tutarı ve Kur (1 birim = ? ₺). Doluysa X-Net = Döviz Tutarı × Kur.</summary>
@@ -212,7 +208,12 @@ namespace WebApplication3.Data
         public string Not { get; set; } = "";
         /// <summary>Kaynak tablodan gelen Toplam Brüt Maliyet ve İş Veren tutarları (varsa hesap bunlara bağlanır; satır düzenlenince silinir).</summary>
         public decimal? BrutKaynak { get; set; } public decimal? IsverenKaynak { get; set; }
-        public PmPersonel Kopya() => (PmPersonel)MemberwiseClone();
+        /// <summary>SGK ve brüt detayı kaynakta yok (Özel kişiler, rapor 2026-09): brüt, SGK, vergi ve işveren maliyeti hesaplanmaz; bordro Net-R = R-Net + R ekleri − kesintiler; Genel Maliyet = Ara Toplam.</summary>
+        public bool SgkDetayYok { get; set; }
+        /// <summary>Yemek istisnası (rapor 2026-09: 7.500,22): SGK, damga ve gelir vergisi matrahından düşülür.</summary>
+        public decimal SgkDisi { get; set; }
+        /// <summary>Kaynak tablodaki İstihdam Hazine İndirimi (yalnız gösterim; İş Veren toplamı kaynak tutardır).</summary>
+        public decimal HazineKaynak { get; set; }
         // ---- hesaplanan
         public PmBordro Hesap => PmBordro.Hesapla(this);
         /// <summary>Kıdem (yıl): işe girişten bugüne, ayrılanlarda ayrılış tarihine; planlanmış (gelecek tarihli) işe girişte 0.</summary>
@@ -223,7 +224,7 @@ namespace WebApplication3.Data
     public class PmDuzenleme
     {
         public int Sira { get; set; }
-        public string SgkIsvereni { get; set; } public string FiiliGorevYeri { get; set; } public string OdemeSirketi { get; set; } public string AdSoyad { get; set; } public string Unvan { get; set; } public string Bolum { get; set; } public string Gorev { get; set; }
+        public string SgkIsvereni { get; set; } public string FiiliGorevYeri { get; set; } public string AdSoyad { get; set; } public string Unvan { get; set; } public string Bolum { get; set; } public string Gorev { get; set; }
         public string IseGiris { get; set; } public string CatiDepartman { get; set; } public string OzelDurum { get; set; }
         public string DepartmanKodu { get; set; } public string DepartmanAciklamasi { get; set; } public string SicilNo { get; set; } public string SgkNo { get; set; }
         public string Durum { get; set; } public string AyrilisTarihi { get; set; } public string TcKimlik { get; set; } public string Telefon { get; set; } public string Eposta { get; set; }
@@ -238,6 +239,7 @@ namespace WebApplication3.Data
         public decimal Avans { get; set; } public decimal Icra { get; set; } public decimal Borc { get; set; } public decimal OzelSigortaKesintisi { get; set; } public decimal SendikaKatkisi { get; set; } public decimal Bes { get; set; }
         public decimal DigerEkOdemelerR { get; set; }
         public decimal YemekX { get; set; } public decimal YolX { get; set; } public decimal FazlaMesaiX { get; set; } public decimal PrimX { get; set; } public decimal KesintilerToplamiX { get; set; }
+        public decimal KasaTazminati { get; set; } public decimal MazotKesintisi { get; set; } public decimal IhbarKesintisi { get; set; }
         public string Doviz { get; set; } public decimal DovizTutar { get; set; } public decimal Kur { get; set; }
         public bool Ozel { get; set; }
         /// <summary>Kaydın ait olduğu dönem (yyyy-MM); boşsa güncel dönem.</summary>
@@ -259,7 +261,7 @@ namespace WebApplication3.Data
     public static class PersonelMaliyetOrnek
     {
         public static readonly object Kilit = new object();
-        public static readonly string Kaynak = "Güncel Eksiksiz 01.11.2026";
+        public static readonly string Kaynak = "Personel Maliyet Raporu 2026-09 (DUZELTILMIS_v5_2)";
         public static (string Kisi, DateTime Tarih)? SonKayit { get; private set; }
         private static readonly CultureInfo Tr = new CultureInfo("tr-TR");
 
@@ -267,12 +269,12 @@ namespace WebApplication3.Data
         /// <summary>Sütun grupları — "Personel Bordro ve Ödeme Tablosu" 1. satır (grup) ve 2. satır (sütun) ile aynı sırada; sonda Not ve Kart.</summary>
         public static readonly (string Grup, PmSutun[] Sutunlar)[] SutunGruplari =
         {
-            ("Personel Kimlik Bilgileri", new[] { S("Sıra", "sira", "sira"), S("SGK İşvereni", "sgkIsvereni", "metin", "dlSgk"), S("Fiili Görev Yeri", "fiiliGorevYeri", "metin", "dlYer"), S("Ödeme Şirketi", "odemeSirketi", "metin", "dlSgk"), S("Adı-Soyadı", "adSoyad", "ad"), S("Unvan", "unvan", "metin", "dlUnvan"), S("Bölüm", "bolum", "metin", "dlBolum"), S("Görev", "gorev", "metin", "dlGorev"), S("İşe Giriş Tarihi", "iseGiris", "tarih"), S("Çatı Departman", "catiDepartman", "metin", "dlCati"), S("Özel Durumu", "ozelDurum", "secim"), S("Departman Kodu", "departmanKodu", "metin"), S("Departman Açıklaması", "departmanAciklamasi", "metin"), S("Sicil Numarası", "sicilNo", "metin"), S("SGK Numarası", "sgkNo", "metin") }),
-            ("Net Ücret", new[] { S("X-Net", "xNet", "sayi"), S("R-Net", "rNet", "sayi"), S("Toplam Net", "toplamNet", "hesap") }),
+            ("Personel Kimlik Bilgileri", new[] { S("Sıra", "sira", "sira"), S("SGK İşvereni", "sgkIsvereni", "metin", "dlSgk"), S("Fiili Görev Yeri", "fiiliGorevYeri", "metin", "dlYer"), S("Ödeme Şirketi-R", "odemeSirketiR", "bilgi"), S("Ödeme Şirketi-X", "odemeSirketiX", "bilgi"), S("Adı-Soyadı", "adSoyad", "ad"), S("Unvan", "unvan", "metin", "dlUnvan"), S("Bölüm", "bolum", "metin", "dlBolum"), S("Görev", "gorev", "metin", "dlGorev"), S("İşe Giriş Tarihi", "iseGiris", "tarih"), S("Çatı Departman", "catiDepartman", "metin", "dlCati"), S("Özel Durumu", "ozelDurum", "secim"), S("Departman Kodu", "departmanKodu", "metin"), S("Departman Açıklaması", "departmanAciklamasi", "metin"), S("Sicil Numarası", "sicilNo", "metin"), S("SGK Numarası", "sgkNo", "metin") }),
+            ("Net Ücret", new[] { S("R-Net", "rNet", "sayi"), S("X-Net", "xNet", "sayi"), S("Toplam Net", "toplamNet", "hesap") }),
             ("Puantaj ve Çalışma Kazançları", new[] { S("Prim Gün", "primGun", "gun"), S("Normal Çalışma (Gün)", "normalGun", "gun"), S("Normal Çalışma Kazancı", "normalKazanc", "hesap"), S("Hafta Sonu (Gün)", "haftaSonuGun", "gun"), S("Hafta Sonu Kazancı", "haftaSonuKazanc", "hesap"), S("Resmî Tatil (Gün)", "resmiTatilGun", "gun"), S("Resmî Tatil Kazancı", "resmiTatilKazanc", "hesap"), S("Bayram Tatili (Gün)", "bayramGun", "gun"), S("Bayram Tatili Kazancı", "bayramKazanc", "hesap"), S("Ücretli İzin (Gün)", "ucretliIzinGun", "gun"), S("Ücretli İzin Kazancı", "ucretliIzinKazanc", "hesap") }),
             ("Ek Çalışmalar", new[] { S("Fazla Mesai", "fazlaMesai", "rx"), S("Bayram", "bayramCalisma", "sayi"), S("Gece Farkı", "geceFarki", "sayi"), S("Pazar", "pazarCalisma", "sayi"), S("Resmi Tatil", "resmiTatilCalisma", "sayi"), S("Toplam Ek Çalışma-R", "toplamEkCalisma", "hesap"), S("Toplam Ek Çalışma-X", "toplamEkCalismaX", "hesap") }),
             ("Sosyal Yardımlar", new[] { S("Yemek", "yemek", "rx"), S("Yol", "yol", "rx"), S("Servis", "servis", "sayi"), S("Kira Desteği", "kiraDestegi", "sayi"), S("Eğitim", "egitim", "sayi"), S("Çocuk Yardımı", "cocukYardimi", "sayi"), S("Toplam Sosyal Yardımlar-R", "toplamSosyal", "hesap"), S("Toplam Sosyal Yardımlar-X", "toplamSosyalX", "hesap") }),
-            ("Prim ve Ek Kazançlar", new[] { S("Maaş Farkı", "maasFarki", "sayi"), S("Prim", "prim", "rx"), S("Özel Ödeme", "ozelOdeme", "sayi"), S("Toplam Prim-R", "toplamPrim", "hesap"), S("Toplam Prim-X", "toplamPrimX", "hesap") }),
+            ("Prim ve Ek Kazançlar", new[] { S("Maaş Farkı", "maasFarki", "sayi"), S("Prim", "prim", "rx"), S("Özel Ödeme", "ozelOdeme", "sayi"), S("Kasa Tazminatı", "kasaTazminati", "sayi"), S("Toplam Prim-R", "toplamPrim", "hesap"), S("Toplam Prim-X", "toplamPrimX", "hesap") }),
             ("Yan Haklar", new[] { S("Özel Sağlık", "ozelSaglik", "sayi"), S("Kıyafet", "kiyafet", "sayi"), S("Koruyucu Ekipman", "koruyucuEkipman", "sayi"), S("Doğum Yardımı", "dogumYardimi", "sayi"), S("Evlilik Yardımı", "evlilikYardimi", "sayi"), S("Toplam Yan Haklar", "toplamYanHaklar", "hesap") }),
             ("Yasal Ödemeler", new[] { S("Kıdem Tazminatı", "kidemTazminati", "sayi"), S("İhbar Tazminatı", "ihbarTazminati", "sayi"), S("İşe İade", "iseIade", "sayi"), S("Yıllık İzin Ödemesi", "yillikIzinOdemesi", "sayi"), S("Rapor Farkı", "raporFarki", "sayi"), S("Doğum İzni", "dogumIzni", "sayi"), S("Toplam Yasal Ödemeler", "toplamYasal", "hesap") }),
             ("Brüt Kazanç ve SGK Matrahı", new[] { S("Toplam Brüt Kazanç", "toplamBrutKazanc", "hesap"), S("SGK Matrahı", "sgkMatrahi", "hesap") }),
@@ -280,9 +282,9 @@ namespace WebApplication3.Data
             ("Damga Vergisi", new[] { S("Damga Vergisi Matrahı", "damgaMatrahi", "hesap"), S("Asgari Ücret Damga Vergisi", "asgariDamga", "hesap"), S("Damga Vergisi Tutarı", "dvTutari", "hesap") }),
             ("SGK İşçi Payları", new[] { S("İşsizlik Sigortası Primi (İşçi)", "isciIssizlik", "hesap"), S("Malullük, Yaşlılık ve Ölüm Primi (İşçi)", "isciMyo", "hesap"), S("Genel Sağlık Sigortası Primi (İşçi)", "isciGss", "hesap"), S("SGDP Primi (İşçi)", "isciSgdp", "hesap"), S("SGK İşçi Toplam Prim", "sgkIsciToplam", "hesap") }),
             ("İşveren Payları", new[] { S("İşsizlik Sigortası Primi (İşveren)", "isvIssizlik", "hesap"), S("Malullük, Yaşlılık ve Ölüm Primi (İşveren)", "isvMyo", "hesap"), S("Genel Sağlık Sigortası Primi (İşveren)", "isvGss", "hesap"), S("SGDP Primi (İşveren)", "isvSgdp", "hesap"), S("Kısa Vadeli Sigorta Kolu Primi", "kvsk", "hesap"), S("İstihdam Hazine İndirimi", "hazineIndirimi", "hesap"), S("SGK İşveren Toplam Prim", "sgkIsverenToplam", "hesap") }),
-            ("Diğer Kesintiler", new[] { S("Avans", "avans", "sayi"), S("İcra", "icra", "sayi"), S("Borç", "borc", "sayi"), S("Özel Sigorta Kesintisi", "ozelSigortaKesintisi", "sayi"), S("Sendika Katkısı", "sendikaKatkisi", "sayi"), S("Bireysel Emeklilik Sistemi", "bes", "sayi") }),
-            ("Ödeme Özeti-R", new[] { S("R-Net", "rNet2", "hesap"), S("Diğer Ek Ödemeler-R", "digerEkOdemelerR", "sayi"), S("Kesintiler Toplamı-R", "kesintilerToplami", "hesap"), S("Kalan Net Tutar (Banka)", "kalanNetBanka", "hesap") }),
-            ("Ödeme Özeti-X", new[] { S("X-Net", "xNet2", "hesap"), S("Diğer Ek Ödemeler-X", "digerEkOdemelerX", "hesap"), S("Kesintiler Toplamı-X", "kesintilerToplamiX", "sayi"), S("Kalan Net Tutar (Elden)", "kalanNetElden", "hesap") }),
+            ("Diğer Kesintiler", new[] { S("Avans", "avans", "sayi"), S("İcra", "icra", "sayi"), S("Borç", "borc", "sayi"), S("Özel Sigorta Kesintisi", "ozelSigortaKesintisi", "sayi"), S("Sendika Katkısı", "sendikaKatkisi", "sayi"), S("Bireysel Emeklilik Sistemi", "bes", "sayi"), S("Mazot Kesintisi", "mazotKesintisi", "sayi"), S("İhbar Kesintisi", "ihbarKesintisi", "sayi") }),
+            ("Ödeme Özeti-R", new[] { S("R-Net", "rNet2", "hesap"), S("Ek Ödemeler Toplam-R", "digerEkR", "hesap"), S("Kesintiler Toplamı-R", "kesintilerToplami", "hesap"), S("Kalan Net Tutar (Banka)", "kalanNetBanka", "hesap") }),
+            ("Ödeme Özeti-X", new[] { S("X-Net", "xNet2", "hesap"), S("Ek Ödemeler Toplam-X", "digerEkOdemelerX", "hesap"), S("Kesintiler Toplamı-X", "kesintilerToplamiX", "sayi"), S("Kalan Net Tutar (Elden)", "kalanNetElden", "hesap") }),
             ("Maliyet ve Not", new[] { S("Net-X Bordro", "netXBordro", "hesap"), S("Net-R Bordro", "netRBordro", "hesap"), S("Ara Toplam", "araToplam", "hesap"), S("Toplam Brüt Masraflar", "toplamBrutMasraflar", "hesap"), S("Toplam İşveren", "toplamIsveren", "hesap"), S("Genel Maliyet", "genelMaliyet", "genel"), S("Not", "not", "not") }),
             ("Kart", new[] { S("Personel Kartı", "kart", "kart") })
         };
@@ -294,11 +296,11 @@ namespace WebApplication3.Data
         public static readonly string[] ParaBirimleri = { "USD", "EUR", "GBP" };
         public static readonly string[] Durumlar = { "Aktif", "İşten Ayrıldı" };
 
-        // ---- dönemler (ay): güncel dönem kaynak tablodan; önceki aylar ondan türetilmiş örnek dönemler (işe giriş tarihi dönemden sonra olanlar yok, mesai farklı, prim o ayın prim tablosundan, kaynak değerler yok → model hesaplar)
-        public const string GuncelDonem = "2026-11";
+        // ---- dönem (ay): tek dönem Eylül 2026; kaynak tablo bu dönemin bordrosudur (diğer aylar yok)
+        public const string GuncelDonem = "2026-09";
         private static readonly Lazy<SortedDictionary<string, List<PmPersonel>>> _donemler = new Lazy<SortedDictionary<string, List<PmPersonel>>>(DonemleriKur);
         public static SortedDictionary<string, List<PmPersonel>> Donemler => _donemler.Value;
-        /// <summary>Güncel dönem listesi (Kasım 2026 · "Güncel Eksiksiz 01.11.2026"). Diğer ekranlar (yansıtma) bunu kullanır.</summary>
+        /// <summary>Eylül 2026 bordro listesi (Personel Maliyet Raporu 2026-09). Diğer ekranlar (yansıtma, muhasebe) bunu kullanır.</summary>
         public static List<PmPersonel> Liste => Donemler[GuncelDonem];
         public static List<PmPersonel> ListeDonem(string donem) => !string.IsNullOrEmpty(donem) && Donemler.TryGetValue(donem, out var l) ? l : null;
         private static readonly string[] AyAdlari = { "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık" };
@@ -307,23 +309,7 @@ namespace WebApplication3.Data
         private static SortedDictionary<string, List<PmPersonel>> DonemleriKur()
         {
             var guncel = Tohumla();
-            return new SortedDictionary<string, List<PmPersonel>> { [GuncelDonem] = guncel, ["2026-10"] = Turet(guncel, "2026-10", 0.85m, false), ["2026-09"] = Turet(guncel, "2026-09", 0.70m, true) };
-        }
-        /// <summary>Önceki ay örneği: aynı kişiler (işe girişi dönemden sonra olanlar hariç), mesai × katsayı, Prim-X o ayda ödenen prim satırlarından, avans / borç kesintisi isteğe bağlı sıfır; kaynak değerler yok.</summary>
-        private static List<PmPersonel> Turet(List<PmPersonel> kaynak, string donem, decimal mesaiKat, bool borcSifir)
-        {
-            int yil = int.Parse(donem.Substring(0, 4)), ay = int.Parse(donem.Substring(5, 2));
-            var son = new DateTime(yil, ay, DateTime.DaysInMonth(yil, ay));
-            var prim = PersonelMaliyetEkOrnek.Primler.Where(x => x.OdemeDonem == donem).GroupBy(x => x.AdSoyad).ToDictionary(g => g.Key, g => g.Sum(x => x.HesaplananPrim));
-            return kaynak.Where(p => !(p.IseGiris.HasValue && p.IseGiris.Value > son)).Select(p =>
-            {
-                var k = p.Kopya();
-                k.FazlaMesai = BordroParametre.Yuvarla(p.FazlaMesai * mesaiKat); k.FazlaMesaiX = BordroParametre.Yuvarla(p.FazlaMesaiX * mesaiKat);
-                k.PrimX = prim.TryGetValue(p.AdSoyad, out var v) ? v : 0;
-                if (borcSifir) { k.Borc = 0; k.Avans = 0; k.Icra = 0; }   // kesinti planları bir sonraki ay başlar (Diğer Kesintiler sekmesi)
-                k.BrutKaynak = null; k.IsverenKaynak = null;
-                return k;
-            }).ToList();
+            return new SortedDictionary<string, List<PmPersonel>> { [GuncelDonem] = guncel };
         }
         private static readonly StringComparer TrSira = StringComparer.Create(new CultureInfo("tr-TR"), true);
         private static string[] Ayrik(Func<PmPersonel, string> f) => Liste.Select(f).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x, TrSira).ToArray();
@@ -341,7 +327,7 @@ namespace WebApplication3.Data
         // ---- girilen sayısal alanlar: PmDuzenleme → PmPersonel aynı adlı özellikler (sütun tanımından türetilir)
         private static readonly PropertyInfo[] DuzenlemeSayisal = TumSutunlar.SelectMany(s => s.GirdiAnahtarlari).Select(k => typeof(PmDuzenleme).GetProperty(Pascal(k))).Where(p => p != null).ToArray();
         /// <summary>X tarafı alanlar (rx sütunlarının alt satırı): brüt, vergi ve SGK'ya girmez; değişmesi kaynak tablo değerlerini düşürmez.</summary>
-        private static readonly HashSet<string> XAlanlari = new HashSet<string>(TumSutunlar.Where(s => s.Tip == "rx").Select(s => Pascal(s.Anahtar) + "X").Concat(new[] { "XNet", "KesintilerToplamiX", "Avans", "Icra", "Borc", "OzelSigortaKesintisi", "SendikaKatkisi", "Bes", "DigerEkOdemelerR" }));   // kesintiler ve R ek ödemeleri de brüte girmez
+        private static readonly HashSet<string> XAlanlari = new HashSet<string>(TumSutunlar.Where(s => s.Tip == "rx").Select(s => Pascal(s.Anahtar) + "X").Concat(new[] { "XNet", "KesintilerToplamiX", "Avans", "Icra", "Borc", "OzelSigortaKesintisi", "SendikaKatkisi", "Bes", "MazotKesintisi", "IhbarKesintisi", "DigerEkOdemelerR" }));   // kesintiler ve R ek ödemeleri de brüte girmez
         private static string Pascal(string k) => char.ToUpperInvariant(k[0]) + k.Substring(1);
         private static readonly Dictionary<string, PropertyInfo> PersonelOzellik = typeof(PmPersonel).GetProperties().ToDictionary(p => p.Name, p => p);
         private static readonly Dictionary<string, PropertyInfo> BordroOzellik = typeof(PmBordro).GetProperties().ToDictionary(p => p.Name, p => p);
@@ -353,7 +339,7 @@ namespace WebApplication3.Data
             var h = p.Hesap;
             var d = new Dictionary<string, object> { ["sira"] = p.Sira, ["cariKodu"] = p.CariKodu, ["durum"] = p.Durum, ["tcKimlik"] = p.TcKimlik, ["telefon"] = p.Telefon, ["eposta"] = p.Eposta, ["kidemYil"] = p.KidemYil, ["brutUcret"] = h.BrutUcret, ["gunluk"] = h.Gunluk,
                 ["brutKaynak"] = p.BrutKaynak, ["isverenKaynak"] = p.IsverenKaynak,
-                ["xNet"] = h.XNetTl, ["xNetGirilen"] = p.XNet, ["doviz"] = p.Doviz, ["dovizTutar"] = p.DovizTutar, ["kur"] = p.Kur, ["ozel"] = p.Ozel, ["odemeSirketi"] = PersonelMuhasebeOrnek.OdemeSirketi(p),   // xNet ekranda ₺ karşılığı (dövizli maaşta tutar × kur)
+                ["xNet"] = h.XNetTl, ["xNetGirilen"] = p.XNet, ["doviz"] = p.Doviz, ["dovizTutar"] = p.DovizTutar, ["kur"] = p.Kur, ["ozel"] = p.Ozel, ["odemeSirketiR"] = h.NetRBordro > 0 ? PersonelMuhasebeOrnek.OdemeSirketiR : "", ["odemeSirketiX"] = h.KalanNetElden > 0 ? PersonelMuhasebeOrnek.OdemeSirketiX(p) : "",   // xNet ekranda ₺ karşılığı (dövizli maaşta tutar × kur)
                 ["iseGiris"] = p.IseGiris?.ToString("yyyy-MM-dd"), ["iseGirisTr"] = p.IseGiris?.ToString("dd.MM.yyyy"), ["ayrilisTarihi"] = p.AyrilisTarihi?.ToString("yyyy-MM-dd"), ["ayrilisTr"] = p.AyrilisTarihi?.ToString("dd.MM.yyyy") };
             foreach (var k in TumSutunlar.Where(s => s.Tip != "kart").SelectMany(s => s.Tip == "rx" ? s.GirdiAnahtarlari : new[] { s.Anahtar }))
             {
@@ -406,7 +392,7 @@ namespace WebApplication3.Data
         private static void Uygula(PmPersonel p, PmDuzenleme d)
         {
             bool hesapDegisti = p.OzelDurum != Temiz(d.OzelDurum) || DuzenlemeSayisal.Any(pi => !XAlanlari.Contains(pi.Name) && (decimal)pi.GetValue(d) != (decimal)PersonelOzellik[pi.Name].GetValue(p));
-            p.AdSoyad = Temiz(d.AdSoyad); p.SgkIsvereni = Temiz(d.SgkIsvereni); p.FiiliGorevYeri = Temiz(d.FiiliGorevYeri); p.OdemeSirketi = Temiz(d.OdemeSirketi) == PersonelMuhasebeOrnek.VarsayilanOdemeSirketi ? "" : Temiz(d.OdemeSirketi); p.Unvan = Temiz(d.Unvan); p.Bolum = Temiz(d.Bolum); p.Gorev = Temiz(d.Gorev);
+            p.AdSoyad = Temiz(d.AdSoyad); p.SgkIsvereni = Temiz(d.SgkIsvereni); p.FiiliGorevYeri = Temiz(d.FiiliGorevYeri); p.Unvan = Temiz(d.Unvan); p.Bolum = Temiz(d.Bolum); p.Gorev = Temiz(d.Gorev);
             p.IseGiris = Tarih(d.IseGiris); p.CatiDepartman = Temiz(d.CatiDepartman); p.OzelDurum = Temiz(d.OzelDurum);
             p.DepartmanKodu = Temiz(d.DepartmanKodu); p.DepartmanAciklamasi = Temiz(d.DepartmanAciklamasi); p.SicilNo = Temiz(d.SicilNo); p.SgkNo = Temiz(d.SgkNo);
             p.Durum = string.IsNullOrWhiteSpace(d.Durum) ? "Aktif" : d.Durum.Trim(); p.AyrilisTarihi = p.Durum == "İşten Ayrıldı" ? Tarih(d.AyrilisTarihi) : null;
@@ -473,7 +459,7 @@ namespace WebApplication3.Data
             return null;
         }
 
-        // ---------- Tohum: "GÜNCEL EKSİKSİZ 01.11.2026" (86 satır, tablo sırasıyla) ----------
+        // ---------- Tohum: Personel Maliyet Raporu 2026-09 (DUZELTILMIS_v5_2, 87 satır, tablo sırasıyla) ----------
         private static readonly Dictionary<string, string> BolumKodu = new Dictionary<string, string>
         {
             ["İdari İşler"] = "D10", ["Muhasebe"] = "D20", ["Finans"] = "D21", ["Cari İşler"] = "D22", ["Üretim"] = "D30", ["Ar-Ge"] = "D31", ["Kalite Güvence"] = "D32", ["Kalite Kontrol"] = "D33",
@@ -485,30 +471,22 @@ namespace WebApplication3.Data
         };
         private const string ODEME_YOK = "Ödeme Yapılmıyor", ALV = "ALV Kimya", URS = "Uras Kimya", SLV = "Selvi Kimya", HLD = "Uras Holding", AVP = "Avrupa Paper", COR = "ALV Kimya Çorlu", IST = "ALV Kimya İst.";
         private static int _sira;
-        /// <summary>Kaynak satırı: r = BAZ R MAAŞ, yy = YOL-YEMEK-KİRA, mesai = MESAİ, x = BAZ X MAAŞ, xyy / xMesai / xPrim = X tarafı ekler, kesinti = KESİNTİLER TOPLAMI, brut = Toplam Brüt Maliyet, isveren = İş Veren.</summary>
+        /// <summary>Kaynak satırı (Personel Maliyet Raporu 2026-09 sütunlarıyla birebir): r = 2026 R-NET, x = 2026 X-NET; yemek / yol (R) ve yemekX / yolX (X) = YEMEK ve YOL; mesai / mesaiX = FAZLA MESAİ; prim / primX = PRİM; kira = KİRA DESTEĞİ; avans / icra / borc / bes / ozelSigorta / sendika = Diğer Kesintiler; digerR = DİĞER EK ÖDEMELER-R; kesintiX = KESİNTİLER TOPLAMI-X; brut = TOPLAM BRÜT KAZANÇ; isveren = TOPLAM İŞVEREN; hazine = İSTİHDAM HAZİNE İNDİRİMİ (yalnız gösterim); dk / da / sicil / sgkNo = departman kodu ve açıklaması, sicil, SGK numarası (verilmezse üretilir); sgkYok = SGK / brüt detayı yok.</summary>
         private static PmPersonel P(string sgk, string yer, string ad, string unvan, string bolum, string gorev, string cati, string ozel = "", string odeme = "",
-            decimal r = 0, decimal yy = 0, decimal mesai = 0, decimal x = 0, decimal xyy = 0, decimal xMesai = 0, decimal xPrim = 0, decimal kesinti = 0, decimal brut = 0, decimal isveren = 0, string giris = "", bool ozelKisi = false)
+            decimal r = 0, decimal x = 0, decimal yemek = 0, decimal yemekX = 0, decimal yol = 0, decimal yolX = 0, decimal mesai = 0, decimal mesaiX = 0, decimal prim = 0, decimal primX = 0, decimal kira = 0, decimal avans = 0, decimal icra = 0, decimal borc = 0, decimal bes = 0, decimal ozelSigorta = 0, decimal sendika = 0, decimal digerR = 0, decimal kesintiX = 0, decimal sgkDisi = 0, decimal brut = 0, decimal isveren = 0, decimal primGun = 30, decimal normalGun = 22, decimal haftaSonuGun = 8, bool sgkYok = false, string giris = "", bool ozelKisi = false, decimal hazine = 0, string dk = null, string da = null, string sicil = null, string sgkNo = null)
         {
             int sira = ++_sira;
-            decimal yol = yy == 7500.22m || yy == 11150.32m ? 7500.22m : 0, yemek = yy - yol;
             return new PmPersonel
             {
                 Sira = sira, SgkIsvereni = sgk, FiiliGorevYeri = yer, AdSoyad = ad, Unvan = unvan, Bolum = bolum, Gorev = gorev, CatiDepartman = cati, OzelDurum = ozel ?? "", IseGiris = Tarih(giris), Ozel = ozelKisi,
-                RNet = r, Yemek = yemek, Yol = yol, FazlaMesai = mesai, XNet = x, YemekX = xyy, FazlaMesaiX = xMesai, PrimX = xPrim, Borc = kesinti,   // X tarafı yol-yemek tutarları Yol kuralına (7.500,22) uymaz → Yemek-X
+                RNet = r, Yemek = yemek, Yol = yol, FazlaMesai = mesai, XNet = x, YemekX = yemekX, YolX = yolX, FazlaMesaiX = mesaiX, Prim = prim, PrimX = primX, Avans = avans, Icra = icra, Borc = borc, Bes = bes, OzelSigortaKesintisi = ozelSigorta, SendikaKatkisi = sendika, KiraDestegi = kira, DigerEkOdemelerR = digerR, KesintilerToplamiX = kesintiX, SgkDisi = sgkDisi, SgkDetayYok = sgkYok, HazineKaynak = hazine, PrimGun = primGun, NormalGun = normalGun, HaftaSonuGun = haftaSonuGun,
                 BrutKaynak = brut > 0 ? brut : (decimal?)null, IsverenKaynak = isveren > 0 ? isveren : (decimal?)null, Not = odeme ?? "",
-                DepartmanKodu = BolumKodu.TryGetValue(bolum, out var bk) ? bk : "D00", DepartmanAciklamasi = bolum + " Departmanı",
-                SicilNo = (SgkKisaltma.TryGetValue(sgk, out var ks) ? ks : "PRS") + "-" + sira.ToString("0000"), SgkNo = (2600000000000L + sira * 1234567L + 8191L * (sira % 7)).ToString()
+                DepartmanKodu = dk ?? (BolumKodu.TryGetValue(bolum, out var bk) ? bk : "D00"), DepartmanAciklamasi = da ?? bolum + " Departmanı",
+                SicilNo = sicil ?? ((SgkKisaltma.TryGetValue(sgk, out var ks) ? ks : "PRS") + "-" + sira.ToString("0000")), SgkNo = sgkNo ?? (2600000000000L + sira * 1234567L + 8191L * (sira % 7)).ToString()
             };
         }
 
-        private static List<PmPersonel> Tohumla() { var l = TohumListe(); KesintileriSinifla(l); return l; }
-        /// <summary>Kaynak tablodaki KESİNTİLER TOPLAMI tek sütundur (Borç'a yazılır); "Diğer Kesintiler" sekmesi için türlere ayrılır: ≥ 10.000 → Avans Kesintisi (şahsi avans mahsubu), 5.000 altı ilk iki kişi → İcra, kalanı Borç. Toplam değişmez.</summary>
-        private static void KesintileriSinifla(List<PmPersonel> l)
-        {
-            foreach (var p in l.Where(x => x.Borc >= 10000)) { p.Avans = p.Borc; p.Borc = 0; }
-            foreach (var p in l.Where(x => x.Borc > 0 && x.Borc < 5000).OrderBy(x => x.Sira).Take(2)) { p.Icra = p.Borc; p.Borc = 0; }
-            // Ödeme Şirketi: boş = varsayılan (Uras Power) — R (banka) net ödemelerinin tamamı Uras Power'dan yapılır (kullanıcı kuralı, 1 Kas 2026); X (elden) ödemesi SGK işvereninin kasasından
-        }
+        private static List<PmPersonel> Tohumla() => TohumListe();
         /// <summary>Kesinti planları (Diğer Kesintiler sekmesi) değişince kişinin dönemdeki kesinti sütunu plan toplamına eşitlenir (ozellik: Avans | Icra | Borc | Bes | OzelSigortaKesintisi | SendikaKatkisi). Kesintiler brüte girmez; kaynak değerler korunur.</summary>
         public static void KesintiAyarla(string donem, int sira, string ozellik, decimal tutar)
         {
@@ -520,91 +498,94 @@ namespace WebApplication3.Data
             _sira = 0;
             return new List<PmPersonel>
             {
-                P(ALV, IST, "Aksel Güler", "Yönetici", "İhracat", "İhracat Operasyon Yöneticisi", "Tedarik Zinciri ve Operasyonlar", r: 85000, yy: 3650.10m, kesinti: 18120, brut: 137357.98m, isveren: 32622.52m, giris: "01.03.2022"),
-                P(ALV, HLD, "Alev Özavşar Eren", "Yönetim Özel", "Yönetim Özel", "Yönetim Temsilcisi", "Genel Yönetim", r: 60000.01m, x: 201209.12m, kesinti: 2505, brut: 83507.76m, isveren: 19833.09m, ozelKisi: true),
-                P(ALV, COR, "Arslan Çoşkun", "Personel", "İdari İşler", "Temizlik Görevlisi", "Kurumsal Hizmetler", r: 35000.01m, mesai: 1866.67m, brut: 46104.12m, isveren: 10949.73m, giris: "23.03.2019"),
-                P(ALV, COR, "Aslan Huseynov", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", ODEME_YOK, r: 39180.35m, brut: 49545.00m, isveren: 11766.93m),
-                P(ALV, URS, "Berk Yenilmez", "Uzman", "Üretim", "Üretim Planlama Uzmanı", "Üretim", r: 65000, yy: 3650.10m, brut: 104726.76m, isveren: 24872.61m, giris: "01.07.2025"),
-                P(URS, URS, "Ayşegül Zent Ula", "Uzman", "Cari İşler", "Cari Hesap Uzmanı", "Mali İşler", "Emekli", r: 4266.67m, yy: 3650.10m, x: 46733.33m, brut: 8558.67m, isveren: 2118.27m, giris: "11.12.2023"),
-                P(ALV, URS, "Burak Sergen Ada", "Uzman", "İdari İşler", "İdari İşler Uzmanı", "Kurumsal Hizmetler", r: 40000, mesai: 3866.67m, brut: 55118.35m, isveren: 13090.60m, giris: "27.07.2026"),
-                P(ALV, COR, "Burhan Evvel", "Personel", "İdari İşler", "Temizlik Görevlisi", "Kurumsal Hizmetler", r: 35000.01m, brut: 43328.04m, isveren: 10290.41m, giris: "30.11.2020"),
-                P(ALV, URS, "Burhan Gün", "Personel", "İdari İşler", "Sevkiyat Şoförü", "Kurumsal Hizmetler", r: 46000, kesinti: 2033, brut: 67771.76m, isveren: 16095.79m, giris: "29.11.2021"),
-                P(ALV, URS, "Dilber Güney", "Yönetici", "İnsan Kaynakları", "Bordro ve Özlük İşleri Yöneticisi", "Kurumsal Hizmetler", r: 80000, yy: 3650.10m, kesinti: 16876, brut: 129200.18m, isveren: 30685.05m, giris: "23.11.2020"),
-                P(ALV, IST, "Dilek Güden", "Yönetici", "Muhasebe", "Muhasebe Yöneticisi", "Mali İşler", r: 90000, yy: 3650.10m, brut: 143225.42m, isveren: 34016.04m, giris: "01.09.2022"),
-                P(ALV, URS, "Berkan Özkan", "Müdür", "İhracat", "İhracat Müdürü", "Satış ve Pazarlama", r: 97801.60m, yy: 3650.10m, x: 0.01m, xPrim: 66793.28m, brut: 157711.98m, isveren: 37456.59m, giris: "01.08.2022"),
-                P(ALV, URS, "Efe Akçakale", "Uzman Yardımcısı", "Teknik Hizmetler", "Teknik Servis Personeli", "Satış ve Pazarlama", r: 35000, yy: 11150.32m, kesinti: 1525, brut: 58344.31m, isveren: 12075.46m, giris: "24.06.2024"),
-                P(ALV, COR, "Emre Can Yavuz", "Uzman", "Üretim", "Otomasyon Uzmanı", "Üretim", r: 54000.01m, yy: 9100, kesinti: 2801, brut: 93381.07m, isveren: 22177.99m, giris: "18.10.2021"),
-                P(ALV, URS, "Erman Kaval", "Uzman", "Yurtdışı Şube", "Yurtdışı Şube - Genel Müdür", "Satış ve Pazarlama", "", ODEME_YOK, r: 28100, kesinti: 1040, brut: 34668.66m, isveren: 8233.80m, ozelKisi: true),
-                P(ALV, IST, "Eser Şenürek", "Uzman", "Ar-Ge", "Ar-Ge Uzmanı", "Üretim", r: 70000, yy: 3650.10m, brut: 110594.21m, isveren: 26266.13m, giris: "11.06.2019"),
-                P(ALV, COR, "Görkem Akbulut", "Uzman", "Ar-Ge", "Ar-Ge Uzmanı", "Üretim", r: 47000, brut: 67112.95m, isveren: 15939.33m, giris: "04.07.2024"),
-                P(ALV, URS, "Cafer İpek", "Müdür", "Teknik Hizmetler", "İnşaat Mühendisi", "Satış ve Pazarlama", "Emekli", ODEME_YOK, r: 5333.33m, x: 114666.67m, brut: 5765.76m, isveren: 1427.03m, giris: "03.05.2025"),
-                P(ALV, COR, "Kamil Mahmudov", "Personel", "Üretim", "Üretim Personeli", "Üretim", r: 51000.01m, yy: 3650.10m, brut: 79594.54m, isveren: 18903.70m),
-                P(ALV, URS, "Mustafa Budak", "Uzman", "İhracat", "İhracat Operasyon Uzmanı", "Tedarik Zinciri ve Operasyonlar", r: 58500, yy: 3650.10m, brut: 93589.02m, isveren: 22227.39m, giris: "04.08.2025"),
-                P(ALV, URS, "Mustafa Savaş", "Uzman", "Yurtdışı Şube", "Yurtdışı Şube - Sorumlusu", "Satış ve Pazarlama", "", ODEME_YOK, r: 28100, kesinti: 1040, brut: 34668.66m, isveren: 8233.80m, ozelKisi: true),
-                P(ALV, IST, "Nevruz Sarıtaş", "Uzman", "Muhasebe", "Muhasebe Uzmanı", "Mali İşler", r: 52000, yy: 3650.10m, brut: 81226.12m, isveren: 19291.21m, giris: "25.10.2021"),
-                P(ALV, URS, "Dinçer Özdemir", "Personel", "İdari İşler", "Sevkiyat Şoförü", "Kurumsal Hizmetler", "Emekli", r: 4266.67m, x: 41733.32m, xyy: 1095.03m, xMesai: 613.33m, kesinti: 1066.67m, brut: 4612.62m, isveren: 1141.62m, giris: "24.03.2023"),
-                P(ALV, COR, "Savaş Özcan", "Uzman", "Üretim", "Üretim ve Proses Kontrol Sorumlusu", "Üretim", r: 68000.01m, yy: 25000, brut: 142164.75m, isveren: 33764.13m, giris: "02.04.2019"),
-                P(ALV, COR, "Semih Evirgen", "Yönetici", "Kalite Güvence", "Uyumluluk ve Çevre Yöneticisi", "Üretim", r: 65000.01m, brut: 96481.05m, isveren: 22914.24m, giris: "04.01.2021"),
-                P(ALV, COR, "Soner İkizoğlu", "Teknisyen", "Teknik Hizmetler", "Elektrik Teknisyeni", "Satış ve Pazarlama", r: 58500, brut: 85875.91m, isveren: 20395.53m, giris: "04.07.2024"),
-                P(ALV, COR, "Şirin Tunç", "Personel", "İdari İşler", "Servis Personeli", "Kurumsal Hizmetler", r: 32000, brut: 38866.47m, isveren: 9230.79m, giris: "24.06.2024"),
-                P(URS, URS, "Erdoğan Polat", "Uzman", "Satış", "İç Piyasa Satış Uzmanı – Emprime", "Satış ve Pazarlama", "Emekli", r: 4133.33m, yy: 7500.22m, x: 26866.67m, xPrim: 139037.06m, brut: 11968.69m, isveren: 1105.95m, giris: "31.08.2023"),
-                P(ALV, URS, "Yalçın Avcı", "Uzman", "Depo ve Sevkiyat", "Stok Kontrol Uzmanı", "Tedarik Zinciri ve Operasyonlar", r: 45000, yy: 3650.10m, mesai: 12050, kesinti: 10000, brut: 91755.84m, isveren: 21792.02m, giris: "18.10.2021"),
-                P(URS, HLD, "Ertan Yavuz", "Teknisyen", "İdari İşler", "Elektrik Teknisyeni", "Kurumsal Hizmetler", "Emekli", r: 4266.67m, x: 55733.32m, xMesai: 9600, brut: 4612.62m, isveren: 1141.62m),
-                P(URS, URS, "Ayfer Şahin", "Yönetici", "Muhasebe", "Muhasebe Yöneticisi", "Mali İşler", r: 90000, yy: 3650.10m, brut: 143225.42m, isveren: 34016.04m, giris: "01.04.2023"),
-                P(ALV, URS, "Devrim / Hale Bisren", "Yönetim Özel", "Yönetim Özel", "Yönetim Temsilcisi", "Genel Yönetim", r: 28100, x: 286900, brut: 34668.66m, isveren: 8233.80m, ozelKisi: true),
-                P(URS, URS, "Azad Shirinov", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", ODEME_YOK, r: 39180.35m, brut: 49545.00m, isveren: 11766.93m),
+                P(ALV, IST, "Aksel Güler", "Yönetici", "İhracat", "İhracat Operasyon Yöneticisi", "Tedarik Zinciri ve Operasyonlar", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 85000.00m, yol: 3650.10m, avans: 14000.00m, bes: 4120.00m, brut: 137357.98m, isveren: 32622.52m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "01.03.2022"),
+                P(ALV, HLD, "Alev Özavşar Eren", "Yönetim Özel", "Yönetim Özel", "Yönetim Temsilcisi", "Genel Yönetim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. X-NET \"ALEV ÖZAVŞAR\" (Selvi), R-NET \"ALEV ÖZAVŞAR EREN\" (ALV Kimya); aynı kişi olduğu teyit edilmeli.", r: 60000.01m, x: 201209.12m, bes: 2505.00m, brut: 83507.76m, isveren: 19833.09m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "19.03.2020", dk: "D90", da: "Üst Yönetim Departmanı", sicil: "R-001", sgkNo: "3401202004885"),
+                P(ALV, COR, "Arslan Çoşkun", "Personel", "İdari İşler", "Temizlik Görevlisi", "Kurumsal Hizmetler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Mesai: bordro 2,776.08 / Personel Kazanç 1,866.67 farklı; Personel Kazanç kullanıldı.", r: 35000.01m, mesai: 1866.67m, brut: 46104.12m, isveren: 10949.73m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "23.03.2019"),
+                P(ALV, COR, "Aslan Huseynov", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Ödeme Yapılmıyor", r: 39180.35m, brut: 49545.00m, isveren: 11766.93m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m),
+                P(ALV, URS, "Berk Yenilmez", "Uzman", "Üretim", "Üretim Planlama Uzmanı", "Üretim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 65000.00m, yol: 3650.10m, brut: 104726.76m, isveren: 24872.61m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "01.07.2025"),
+                P(URS, URS, "Ayşegül Zent Ula", "Uzman", "Cari İşler", "Cari Hesap Uzmanı", "Mali İşler", "Emekli", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 3,946.05 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 4266.67m, x: 46733.33m, yol: 3650.10m, brut: 8558.67m, isveren: 2118.27m, primGun: 4.00m, normalGun: 4.00m, haftaSonuGun: 0.00m, giris: "11.12.2023"),
+                P(ALV, URS, "Burak Sergen Ada", "Uzman", "İdari İşler", "İdari İşler Uzmanı", "Kurumsal Hizmetler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Mesai: bordro 5,408.62 / Personel Kazanç 3,866.67 farklı; Personel Kazanç kullanıldı.", r: 40000.00m, mesai: 3866.67m, brut: 55118.35m, isveren: 13090.60m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "27.07.2026"),
+                P(ALV, COR, "Burhan Evvel", "Personel", "İdari İşler", "Temizlik Görevlisi", "Kurumsal Hizmetler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 35000.01m, brut: 43328.04m, isveren: 10290.41m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "30.11.2020"),
+                P(ALV, URS, "Burhan Gün", "Personel", "İdari İşler", "Sevkiyat Şoförü", "Kurumsal Hizmetler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 46000.00m, bes: 2033.00m, brut: 67771.76m, isveren: 16095.79m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "29.11.2021"),
+                P(ALV, URS, "Dilber Güney", "Yönetici", "İnsan Kaynakları", "Bordro ve Özlük İşleri Yöneticisi", "Kurumsal Hizmetler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 80000.00m, yol: 3650.10m, avans: 13000.00m, bes: 3876.00m, brut: 129200.18m, isveren: 30685.05m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "23.11.2020"),
+                P(ALV, IST, "Dilek Güden", "Yönetici", "Muhasebe", "Muhasebe Yöneticisi", "Mali İşler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 90000.00m, yol: 3650.10m, brut: 143225.42m, isveren: 34016.04m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "01.09.2022"),
+                P(ALV, URS, "Berkan Özkan", "Müdür", "İhracat", "İhracat Müdürü", "Satış ve Pazarlama", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 97801.60m, x: 0.01m, yol: 3650.10m, primX: 66793.28m, brut: 157711.98m, isveren: 37456.59m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "01.08.2022"),
+                P(ALV, URS, "Efe Akçakale", "Uzman Yardımcısı", "Teknik Hizmetler", "Teknik Servis Personeli", "Satış ve Pazarlama", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,428.37 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 35000.00m, yemek: 7500.22m, yol: 3650.10m, bes: 1525.00m, sgkDisi: 7500.22m, brut: 58344.31m, isveren: 12075.46m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "24.06.2024"),
+                P(ALV, COR, "Emre Can Yavuz", "Uzman", "Üretim", "Otomasyon Uzmanı", "Üretim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 54000.01m, kira: 9100.00m, bes: 2801.00m, brut: 93381.07m, isveren: 22177.99m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "18.10.2021"),
+                P(ALV, URS, "Erman Kaval", "Uzman", "Yurtdışı Şube", "Yurtdışı Şube - Genel Müdür", "Satış ve Pazarlama", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 28100.00m, bes: 1040.00m, brut: 34668.66m, isveren: 8233.80m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "01.02.2021", ozelKisi: true, dk: "D60", da: "Satış Departmanı", sicil: "R-395", sgkNo: "2601200610125"),
+                P(ALV, IST, "Eser Şenürek", "Uzman", "Ar-Ge", "Ar-Ge Uzmanı", "Üretim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 70000.00m, yol: 3650.10m, brut: 110594.21m, isveren: 26266.13m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "11.06.2019"),
+                P(ALV, COR, "Görkem Akbulut", "Uzman", "Ar-Ge", "Ar-Ge Uzmanı", "Üretim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 47000.00m, brut: 67112.95m, isveren: 15939.33m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "04.07.2024"),
+                P(ALV, URS, "Cafer İpek", "Müdür", "Teknik Hizmetler", "İnşaat Mühendisi", "Satış ve Pazarlama", "Emekli", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Ödeme Yapılmıyor", r: 5333.33m, x: 114666.67m, brut: 5765.76m, isveren: 1427.03m, primGun: 4.00m, normalGun: 4.00m, haftaSonuGun: 0.00m, giris: "03.05.2025"),
+                P(ALV, COR, "Kamil Mahmudov", "Personel", "Üretim", "Üretim Personeli", "Üretim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 51000.01m, yol: 3650.10m, brut: 79594.54m, isveren: 18903.70m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m),
+                P(ALV, URS, "Mustafa Budak", "Uzman", "İhracat", "İhracat Operasyon Uzmanı", "Tedarik Zinciri ve Operasyonlar", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 58500.00m, yol: 3650.10m, brut: 93589.02m, isveren: 22227.39m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "04.08.2025"),
+                P(ALV, URS, "Mustafa Savaş", "Uzman", "Yurtdışı Şube", "Yurtdışı Şube - Sorumlusu", "Satış ve Pazarlama", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 28100.00m, bes: 1040.00m, brut: 34668.66m, isveren: 8233.80m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "01.04.2022", ozelKisi: true, dk: "D21", da: "Finans Departmanı", sicil: "R-400", sgkNo: "3401201908589"),
+                P(ALV, IST, "Nevruz Sarıtaş", "Uzman", "Muhasebe", "Muhasebe Uzmanı", "Mali İşler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 52000.00m, yol: 3650.10m, brut: 81226.12m, isveren: 19291.21m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "25.10.2021"),
+                P(ALV, URS, "Dinçer Özdemir", "Personel", "İdari İşler", "Sevkiyat Şoförü", "Kurumsal Hizmetler", "Emekli", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 4266.67m, x: 41733.32m, yolX: 1095.03m, mesaiX: 613.33m, icra: 1066.67m, brut: 4612.62m, isveren: 1141.62m, primGun: 4.00m, normalGun: 4.00m, haftaSonuGun: 0.00m, giris: "24.03.2023"),
+                P(ALV, COR, "Savaş Özcan", "Uzman", "Üretim", "Üretim ve Proses Kontrol Sorumlusu", "Üretim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 68000.01m, kira: 25000.00m, brut: 142164.75m, isveren: 33764.13m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "02.04.2019"),
+                P(ALV, COR, "Semih Evirgen", "Yönetici", "Kalite Güvence", "Uyumluluk ve Çevre Yöneticisi", "Üretim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 65000.01m, brut: 96481.05m, isveren: 22914.24m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "04.01.2021"),
+                P(ALV, COR, "Soner İkizoğlu", "Teknisyen", "Teknik Hizmetler", "Elektrik Teknisyeni", "Satış ve Pazarlama", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 58500.00m, brut: 85875.91m, isveren: 20395.53m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "04.07.2024"),
+                P(ALV, COR, "Şirin Tunç", "Personel", "İdari İşler", "Servis Personeli", "Kurumsal Hizmetler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 32000.00m, brut: 38866.47m, isveren: 9230.79m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "24.06.2024"),
+                P(URS, URS, "Erdoğan Polat", "Uzman", "Satış", "İç Piyasa Satış Uzmanı – Emprime", "Satış ve Pazarlama", "Emekli", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 4133.33m, x: 26866.67m, yemek: 7500.22m, primX: 139037.06m, sgkDisi: 7500.22m, brut: 11968.69m, isveren: 1105.95m, primGun: 4.00m, normalGun: 4.00m, haftaSonuGun: 0.00m, giris: "31.08.2023"),
+                P(ALV, URS, "Yalçın Avcı", "Uzman", "Depo ve Sevkiyat", "Stok Kontrol Uzmanı", "Tedarik Zinciri ve Operasyonlar", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı. Mesai: bordro 19,660.30 / Personel Kazanç 12,050.00 farklı; Personel Kazanç kullanıldı.", r: 45000.00m, yol: 3650.10m, mesai: 12050.00m, avans: 10000.00m, brut: 91755.84m, isveren: 21792.02m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "18.10.2021"),
+                P(URS, HLD, "Ertan Yavuz", "Teknisyen", "İdari İşler", "Elektrik Teknisyeni", "Kurumsal Hizmetler", "Emekli", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 4266.67m, x: 55733.32m, mesaiX: 9600.00m, brut: 4612.62m, isveren: 1141.62m, primGun: 4.00m, normalGun: 4.00m, haftaSonuGun: 0.00m, giris: "30.03.2023"),
+                P(URS, URS, "Ayfer Şahin", "Yönetici", "Muhasebe", "Muhasebe Yöneticisi", "Mali İşler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 90000.00m, yol: 3650.10m, brut: 143225.42m, isveren: 34016.04m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "01.04.2023"),
+                P(ALV, URS, "Devrim / Hale Bisren", "Yönetim Özel", "Yönetim Özel", "Yönetim Temsilcisi", "Genel Yönetim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. X-NET Devrim Bisren (Selvi), R-NET ve bordro Hale Bisren (ALV Kimya) ait; iki kişi tek satırda.", r: 28100.00m, x: 286900.00m, brut: 34668.66m, isveren: 8233.80m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, ozelKisi: true, dk: "D90", da: "Üst Yönetim Departmanı", sicil: "R-398", sgkNo: "3501201256042"),
+                P(URS, URS, "Azad Shirinov", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Ödeme Yapılmıyor", r: 39180.35m, brut: 49545.00m, isveren: 11766.93m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m),
                 // Cüneyt Arda Ceylan: kaynak tabloda ALV Kimya (7.000) + Uras Kimya (46.666,68) + Uras Holding (4.666,67) olarak üç satırdı; kullanıcı isteğiyle (1 Kas 2026) tek satırda toplandı: R-Net 58.333,35 · Brüt Masraflar 24.554,82 · İş Veren 19.685,93
-                P(URS, HLD, "Cüneyt Arda Ceylan", "Yönetici", "Hukuk", "Avukat", "Kurumsal Hizmetler", r: 58333.35m, brut: 82888.17m, isveren: 19685.93m, giris: "21.03.2019"),
-                P(URS, URS, "Elman Abbaslı", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", ODEME_YOK, r: 39180.35m, brut: 49545.00m, isveren: 11766.93m),
-                P(URS, URS, "Elmin Jabbarov", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", ODEME_YOK, r: 39180.35m, brut: 49545.00m, isveren: 11766.93m),
-                P(ALV, URS, "İsmail Duman", "Personel", "İdari İşler", "Sevkiyat Şoförü", "Kurumsal Hizmetler", "Emekli", r: 4266.67m, x: 41733.33m, brut: 4612.62m, isveren: 1141.62m, giris: "23.01.2024"),
-                P(URS, "URS Makine", "Joao Paulo Araujo Fernandes", "Genel Müdür", "Üst Yönetim", "Genel Müdür", "Genel Yönetim", r: 67156.80m, x: 208143.20m, brut: 100000, isveren: 23750, giris: "11.02.2023"),
-                P(URS, URS, "Medine Rozykulova", "Yönetim Özel", "Yönetim Özel", "Ev Çalışanı", "Genel Yönetim", "", ODEME_YOK, r: 28500, x: 63804, xyy: 5000, kesinti: 1121, brut: 37378.15m, isveren: 8877.31m, ozelKisi: true),
-                P(URS, URS, "Mehman Babayev", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", ODEME_YOK, r: 39180.35m, brut: 49545.00m, isveren: 11766.93m),
-                P(URS, URS, "Murad Hudaybergenov", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", ODEME_YOK, r: 39180.35m, brut: 49545.00m, isveren: 11766.93m),
-                P(SLV, "Asia", "Mesut Akıncı", "Uzman", "Satış", "İç Piyasa Satış Uzmanı", "Satış ve Pazarlama", "", ODEME_YOK, x: 15000, giris: "16.02.2022"),
-                P(URS, URS, "Rahman Babazade", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", ODEME_YOK, r: 39180.35m, brut: 49545.00m, isveren: 11766.93m),
-                P(URS, URS, "Ramin Musayev", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", ODEME_YOK, r: 39180.35m, brut: 49545.00m, isveren: 11766.93m),
-                P(SLV, SLV, "Murat Özavşar", "Yönetim Özel", "Yönetim Özel", "Yönetim Temsilcisi", "Genel Yönetim", "", ODEME_YOK, x: 277000, ozelKisi: true),
-                P(URS, URS, "Tural Abbasov", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", ODEME_YOK, r: 39180.35m, brut: 49545.00m, isveren: 11766.93m),
-                P(URS, URS, "Vu Thi Thuy Ha", "Kıdemli Uzman", "Satınalma", "Satınalma Kıdemli Uzmanı", "Tedarik Zinciri ve Operasyonlar", r: 46930.78m, x: 63189.22m, brut: 67000, isveren: 15912.50m, giris: "08.03.2023"),
-                P(AVP, URS, "Ahmet Özkan", "Uzman", "Finans", "Finans Uzmanı", "Mali İşler", r: 75000, yy: 3650.10m, kesinti: 3631, brut: 121042.36m, isveren: 28747.56m, giris: "02.10.2024"),
-                P(AVP, URS, "Bahar Seyrekoğlu", "Uzman Yardımcısı", "İdari İşler", "Danışma Personeli", "Kurumsal Hizmetler", r: 40000, yy: 3650.10m, mesai: 4533.33m, kesinti: 2066, brut: 68868.37m, isveren: 16356.24m, giris: "04.07.2023"),
-                P(AVP, URS, "Berk Berberoğlu", "Uzman", "Finans", "Finans Uzmanı", "Mali İşler", r: 65000, yy: 3650.10m, kesinti: 8141, brut: 104726.76m, isveren: 24872.61m, giris: "25.09.2023"),
-                P(AVP, URS, "Burak Kaya", "Personel", "İdari İşler", "Finans Ulaşım", "Kurumsal Hizmetler", r: 53000, yy: 3650.10m, kesinti: 15854, brut: 85148.01m, isveren: 20222.65m, giris: "01.07.2025"),
-                P(AVP, URS, "Can Gürsel", "Uzman", "Depo ve Sevkiyat", "Sevkiyat Uzmanı", "Tedarik Zinciri ve Operasyonlar", r: 37000, yy: 3650.10m, kesinti: 1629, brut: 54305.34m, isveren: 12897.52m, giris: "15.08.2022"),
-                P(AVP, URS, "Eda Bozkurt", "Uzman", "Satınalma", "İthalat Uzmanı", "Tedarik Zinciri ve Operasyonlar", r: 67000, yy: 3650.10m, kesinti: 3239, brut: 107989.87m, isveren: 25647.60m, giris: "09.05.2022"),
-                P(AVP, URS, "Emrah Ateş", "Uzman", "Depo ve Sevkiyat", "Sevkiyat Uzmanı", "Tedarik Zinciri ve Operasyonlar", r: 50000, yy: 3650.10m, mesai: 833.33m, kesinti: 2448, brut: 81612.97m, isveren: 19383.08m, giris: "01.06.2022"),
-                P(AVP, URS, "Emre Keskin", "Uzman", "Teknik Hizmetler", "Teknik Servis Renk Uzmanı", "Satış ve Pazarlama", r: 70000, yy: 7500.22m, kesinti: 3207, brut: 114429.43m, isveren: 25395.69m, giris: "21.03.2019"),
-                P(AVP, URS, "Ezgi Demir", "Kıdemli Uzman", "Kalite Kontrol", "Kalite Kontrol Kıdemli Uzmanı", "Üretim", r: 52000, yy: 3650.10m, mesai: 3293.33m, kesinti: 2666, brut: 88889.71m, isveren: 21111.31m, giris: "07.05.2019"),
-                P(AVP, URS, "Hacı Mustafa Korkmaz", "Uzman", "Ar-Ge", "Ar-Ge Uzmanı", "Üretim", r: 55000, yy: 3650.10m, kesinti: 2652, brut: 88411.14m, isveren: 20997.66m, giris: "04.07.2022"),
-                P(AVP, URS, "Hakan Haydut", "Uzman", "Muhasebe", "Muhasebe Uzmanı", "Mali İşler", r: 55000, yy: 3650.10m, kesinti: 2652, brut: 88411.14m, isveren: 20997.66m, giris: "22.07.2024"),
-                P(AVP, URS, "İdil Akel", "Uzman", "İnsan Kaynakları", "İnsan Kaynakları Uzmanı", "Kurumsal Hizmetler", r: 55000, yy: 3650.10m, kesinti: 2652, brut: 88411.14m, isveren: 20997.66m, giris: "16.06.2025"),
-                P(AVP, URS, "Melike Ural Kaya", "Uzman", "Cari İşler", "Cari Hesap Uzmanı", "Mali İşler", r: 50000, yy: 3650.10m, kesinti: 2088, brut: 69610.83m, isveren: 16532.58m, giris: "07.11.2022"),
-                P(AVP, URS, "Mustafa Özdeniz", "Uzman", "Teknik Hizmetler", "Teknik Servis Personeli", "Satış ve Pazarlama", r: 60000, yy: 7500.22m, kesinti: 17718, brut: 98113.82m, isveren: 21520.73m, giris: "21.03.2019"),
-                P(AVP, URS, "Olgun Küskü", "Uzman", "Kalite Kontrol", "Kalite Kontrol Uzmanı", "Üretim", r: 40500, yy: 3650.10m, mesai: 1890, kesinti: 2035, brut: 67837.15m, isveren: 16111.32m, giris: "19.08.2020"),
-                P(AVP, URS, "Ömer Kantar", "Uzman", "Teknik Hizmetler", "Teknik Servis Personeli", "Satış ve Pazarlama", r: 60000, yy: 7500.22m, kesinti: 2718, brut: 98113.82m, isveren: 21520.73m, giris: "04.12.2020"),
-                P(AVP, URS, "Ömer Yıldırım", "Uzman", "Teknik Hizmetler", "Teknik Servis Personeli", "Satış ve Pazarlama", r: 60000, yy: 7500.22m, kesinti: 2718, brut: 98113.82m, isveren: 21520.73m, giris: "05.10.2020"),
-                P(AVP, URS, "Özge İsen", "Kıdemli Uzman", "Üst Yönetim", "Proje Kıdemli Uzmanı", "Genel Yönetim", r: 60000, kesinti: 2718, brut: 90613.60m, isveren: 21520.73m, giris: "24.11.2023"),
-                P(ALV, URS, "Mustafa Ulaş Erikli", "Uzman", "Depo ve Sevkiyat", "Sevkiyat Uzmanı", "Tedarik Zinciri ve Operasyonlar", "Emekli", r: 4133.33m, yy: 3650.10m, x: 38866.67m, xMesai: 7740, brut: 8414.52m, isveren: 2082.60m, giris: "20.02.2023"),
-                P(AVP, URS, "Serkan Genç", "Yönetici", "Satınalma", "Satınalma Yöneticisi", "Tedarik Zinciri ve Operasyonlar", r: 85000, yy: 3650.10m, kesinti: 4120, brut: 137357.98m, isveren: 32622.52m, giris: "24.01.2023"),
-                P(AVP, URS, "Yeşim Karakütük", "Personel", "İdari İşler", "Temizlik Görevlisi", "Kurumsal Hizmetler", r: 35000, yy: 3650.10m, kesinti: 1525, brut: 50844.09m, isveren: 12075.46m, giris: "18.11.2024"),
-                P(SLV, SLV, "Beyza Gizem Zazoğlu", "Uzman", "Muhasebe", "Muhasebe Uzmanı", "Mali İşler", r: 68000, yy: 3650.10m, brut: 107331.08m, isveren: 25491.14m, giris: "28.08.2024"),
-                P(SLV, SLV, "Birol Şeker", "Uzman", "Depo ve Sevkiyat", "Mal Kabul Uzmanı", "Tedarik Zinciri ve Operasyonlar", r: 52000.01m, yy: 3650.10m, brut: 81226.12m, isveren: 19291.21m, giris: "18.05.2019"),
-                P(SLV, SLV, "Seda Saraç", "Personel", "İdari İşler", "Servis Personeli", "Kurumsal Hizmetler", r: 30000, yy: 3650.10m, brut: 41332.70m, isveren: 9816.52m),
-                P(URS, URS, "Müjgan Yetgin", "Uzman", "Satış", "İç Piyasa Satış Uzmanı – Emprime", "Satış ve Pazarlama", "Emekli", r: 4133.33m, yy: 7500.22m, x: 26866.67m, xPrim: 50308.64m, brut: 11968.69m, isveren: 1105.95m, giris: "15.04.2022"),
-                P(ALV, URS, "Neslihan Uludağ", "Direktör", "Üst Yönetim", "YK Üyesi", "Genel Yönetim", "Emekli", r: 5333.33m, x: 384666.67m, brut: 5765.76m, isveren: 1427.03m, giris: "29.03.2023"),
-                P("Alv Filo", URS, "Nükhet Özavşar", "Yönetim Özel", "Yönetim Özel", "Yönetim Temsilcisi", "Genel Yönetim", "", ODEME_YOK, r: 180000, x: 470000, kesinti: 45000, brut: 318366.47m, isveren: 70601.63m, ozelKisi: true),
-                P(ALV, COR, "Özgür Pamir", "Direktör", "Üretim", "Dijital Üretim Direktörü", "Üretim", r: 100000.01m, x: 140000, brut: 153585.69m, isveren: 36476.60m, giris: "03.08.2016"),
-                P(ALV, URS, "Rabiye Doğan", "Personel", "İdari İşler", "Temizlik Görevlisi", "Kurumsal Hizmetler", "Emekli", r: 4266.67m, yy: 3650.10m, x: 30733.33m, brut: 8558.67m, isveren: 2118.27m, giris: "22.01.2024"),
-                P(URS, URS, "Refik Polat", "Yönetici", "Depo ve Sevkiyat", "Depo Yöneticisi", "Tedarik Zinciri ve Operasyonlar", "Emekli", r: 4133.33m, x: 70866.67m, xMesai: 23083.33m, brut: 4468.47m, isveren: 1105.95m, giris: "29.03.2023"),
-                P(ALV, COR, "Selçuk Mert", "Müdür", "Üretim", "Üretim Müdürü", "Üretim", "Emekli", r: 5333.34m, x: 129666.67m, brut: 5765.76m, isveren: 1427.03m, giris: "06.09.2024"),
-                P(AVP, URS, "Serhat Mutlu", "Uzman", "Satış", "İç Piyasa Satış Uzmanı – Dijital", "Satış ve Pazarlama", r: 60000, yy: 7500.22m, x: 0.01m, xPrim: 41397.86m, kesinti: 2718, brut: 98113.82m, isveren: 21520.73m, giris: "21.03.2019"),
-                P(AVP, URS, "Sevgi Kaya", "Müdür", "İhracat", "İhracat Müdürü", "Satış ve Pazarlama", r: 122252, yy: 3500.10m, x: 0.01m, xPrim: 14906, brut: 197892.16m, isveren: 46999.38m, giris: "19.11.2022"),
-                P(ALV, COR, "Ümit Özdemir", "Uzman", "Depo ve Sevkiyat", "Sevkiyat Uzmanı", "Tedarik Zinciri ve Operasyonlar", "Emekli", r: 4266.67m, x: 50733.33m, brut: 4612.62m, isveren: 1141.62m, giris: "20.11.2024"),
-                P(ALV, URS, "Yusuf Öztürk", "Uzman", "Satış", "İç Piyasa Satış Uzmanı – Emprime", "Satış ve Pazarlama", r: 31000, yy: 7500.22m, x: 0.01m, xPrim: 48120.57m, brut: 46481.73m, isveren: 9258.11m, giris: "20.08.2022"),
-                P(ALV, URS, "Zahit Ercan", "Personel", "İdari İşler", "Temizlik Görevlisi", "Kurumsal Hizmetler", "Emekli", r: 4266.67m, yy: 3650.10m, x: 35733.32m, brut: 8558.67m, isveren: 2118.27m, giris: "01.09.2021"),
-                P(SLV, SLV, "Orazgül Jumayeva", "Yönetim Özel", "Yönetim Özel", "Ev Çalışanı", "Genel Yönetim", x: 63804, xyy: 2000, ozelKisi: true)
+                P(URS, HLD, "Cüneyt Arda Ceylan", "Yönetici", "Hukuk", "Avukat", "Kurumsal Hizmetler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Üç firmadan bordro: gün ve tutarlar toplandı; kümülatif matrah boş bırakıldı.", r: 58333.35m, brut: 82888.17m, isveren: 19685.93m, primGun: 25.00m, normalGun: 25.00m, haftaSonuGun: 0.00m, giris: "21.03.2019"),
+                P(URS, URS, "Elman Abbaslı", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Ödeme Yapılmıyor", r: 39180.35m, brut: 49545.00m, isveren: 11766.93m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m),
+                P(URS, URS, "Elmin Jabbarov", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Ödeme Yapılmıyor", r: 39180.35m, brut: 49545.00m, isveren: 11766.93m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m),
+                P(ALV, URS, "İsmail Duman", "Personel", "İdari İşler", "Sevkiyat Şoförü", "Kurumsal Hizmetler", "Emekli", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 4266.67m, x: 41733.33m, brut: 4612.62m, isveren: 1141.62m, primGun: 4.00m, normalGun: 4.00m, haftaSonuGun: 0.00m, giris: "23.01.2024"),
+                P(URS, "URS Makine", "Joao Paulo Araujo Fernandes", "Genel Müdür", "Üst Yönetim", "Genel Müdür", "Genel Yönetim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 67156.80m, x: 211001.50m, brut: 100000.00m, isveren: 23750.00m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "11.02.2023"),
+                P(URS, "Diğer", "Medine Rozykulova", "Yönetim Özel", "Yönetim Özel", "Ev Çalışanı", "Genel Yönetim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 28500.00m, x: 63571.04m, yolX: 5000.00m, bes: 1121.00m, brut: 37378.15m, isveren: 8877.31m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "26.09.2025", ozelKisi: true, dk: "D90", da: "Üst Yönetim Departmanı", sicil: "R-608", sgkNo: "3402201501787"),
+                P(URS, URS, "Mehman Babayev", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Ödeme Yapılmıyor", r: 39180.35m, brut: 49545.00m, isveren: 11766.93m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m),
+                P(URS, URS, "Murad Hudaybergenov", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Ödeme Yapılmıyor", r: 39180.35m, brut: 49545.00m, isveren: 11766.93m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m),
+                P(SLV, "Asia", "Mesut Akıncı", "Uzman", "Satış", "İç Piyasa Satış Uzmanı", "Satış ve Pazarlama", "", "Bordro kaydı yok: puantaj, brüt, vergi ve SGK alanları boş; maliyet yalnızca net ödemeler kadar (alt sınır). Ödeme Yapılmıyor", x: 15000.00m, primGun: 0.00m, normalGun: 0.00m, haftaSonuGun: 0.00m, sgkYok: true, giris: "16.02.2022"),
+                P(URS, URS, "Rahman Babazade", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Ödeme Yapılmıyor", r: 39180.35m, brut: 49545.00m, isveren: 11766.93m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m),
+                P(URS, URS, "Ramin Musayev", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Ödeme Yapılmıyor", r: 39180.35m, brut: 49545.00m, isveren: 11766.93m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m),
+                P(SLV, SLV, "Murat Özavşar", "Yönetim Özel", "Yönetim Özel", "Yönetim Temsilcisi", "Genel Yönetim", "", "Bordro kaydı yok: puantaj, brüt, vergi ve SGK alanları boş; maliyet yalnızca net ödemeler kadar (alt sınır).", x: 277000.00m, primGun: 0.00m, normalGun: 0.00m, haftaSonuGun: 0.00m, sgkYok: true, giris: "06.01.2023", ozelKisi: true, dk: "D90", da: "Üst Yönetim Departmanı", sicil: "", sgkNo: ""),
+                P(URS, URS, "Tural Abbasov", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Ödeme Yapılmıyor", r: 39180.35m, brut: 49545.00m, isveren: 11766.93m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m),
+                P(URS, URS, "Vu Thi Thuy Ha", "Kıdemli Uzman", "Satınalma", "Satınalma Kıdemli Uzmanı", "Tedarik Zinciri ve Operasyonlar", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 46930.78m, x: 64330.40m, brut: 67000.00m, isveren: 15912.50m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "08.03.2023"),
+                P(AVP, URS, "Ahmet Özkan", "Uzman", "Finans", "Finans Uzmanı", "Mali İşler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 75000.00m, yol: 3650.10m, bes: 3631.00m, brut: 121042.36m, isveren: 28747.56m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "02.10.2024"),
+                P(AVP, URS, "Bahar Seyrekoğlu", "Uzman Yardımcısı", "İdari İşler", "Danışma Personeli", "Kurumsal Hizmetler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı. Mesai: bordro 7,396.40 / Personel Kazanç 4,533.33 farklı; Personel Kazanç kullanıldı.", r: 40000.00m, yol: 3650.10m, mesai: 4533.33m, bes: 2066.00m, brut: 68868.37m, isveren: 16356.24m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "04.07.2023"),
+                P(AVP, URS, "Berk Berberoğlu", "Uzman", "Finans", "Finans Uzmanı", "Mali İşler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 65000.00m, yol: 3650.10m, avans: 5000.00m, bes: 3141.00m, brut: 104726.76m, isveren: 24872.61m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "25.09.2023"),
+                P(AVP, URS, "Burak Kaya", "Personel", "İdari İşler", "Finans Ulaşım", "Kurumsal Hizmetler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 53000.00m, yol: 3650.10m, avans: 13300.00m, bes: 2554.00m, brut: 85148.01m, isveren: 20222.65m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "01.07.2025"),
+                P(AVP, URS, "Can Gürsel", "Uzman", "Depo ve Sevkiyat", "Sevkiyat Uzmanı", "Tedarik Zinciri ve Operasyonlar", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,915.26 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 37000.00m, yol: 3650.10m, bes: 1629.00m, brut: 54305.34m, isveren: 12897.52m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "15.08.2022"),
+                P(AVP, URS, "Eda Bozkurt", "Uzman", "Satınalma", "İthalat Uzmanı", "Tedarik Zinciri ve Operasyonlar", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 67000.00m, yol: 3650.10m, bes: 3239.00m, brut: 107989.87m, isveren: 25647.60m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "09.05.2022"),
+                P(AVP, URS, "Emrah Ateş", "Uzman", "Depo ve Sevkiyat", "Sevkiyat Uzmanı", "Tedarik Zinciri ve Operasyonlar", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı. Mesai: bordro 1,359.63 / Personel Kazanç 833.33 farklı; Personel Kazanç kullanıldı.", r: 50000.00m, yol: 3650.10m, mesai: 833.33m, bes: 2448.00m, brut: 81612.97m, isveren: 19383.08m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "01.06.2022"),
+                P(AVP, URS, "Emre Keskin", "Uzman", "Teknik Hizmetler", "Teknik Servis Renk Uzmanı", "Satış ve Pazarlama", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 70000.00m, yemek: 7500.22m, bes: 3207.00m, sgkDisi: 7500.22m, brut: 114429.43m, isveren: 25395.69m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "21.03.2019"),
+                P(AVP, URS, "Ezgi Demir", "Kıdemli Uzman", "Kalite Kontrol", "Kalite Kontrol Kıdemli Uzmanı", "Üretim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı. Mesai: bordro 5,373.26 / Personel Kazanç 3,293.33 farklı; Personel Kazanç kullanıldı.", r: 52000.00m, yol: 3650.10m, mesai: 3293.33m, bes: 2666.00m, brut: 88889.71m, isveren: 21111.31m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "07.05.2019"),
+                P(AVP, URS, "Hacı Mustafa Korkmaz", "Uzman", "Ar-Ge", "Ar-Ge Uzmanı", "Üretim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 55000.00m, yol: 3650.10m, bes: 2652.00m, brut: 88411.14m, isveren: 20997.66m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "04.07.2022"),
+                P(AVP, URS, "Hakan Haydut", "Uzman", "Muhasebe", "Muhasebe Uzmanı", "Mali İşler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 55000.00m, yol: 3650.10m, bes: 2652.00m, brut: 88411.14m, isveren: 20997.66m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "22.07.2024"),
+                P(AVP, URS, "İdil Akel", "Uzman", "İnsan Kaynakları", "İnsan Kaynakları Uzmanı", "Kurumsal Hizmetler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 55000.00m, yol: 3650.10m, bes: 2652.00m, brut: 88411.14m, isveren: 20997.66m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "16.06.2025"),
+                P(AVP, URS, "Melike Ural Kaya", "Uzman", "Cari İşler", "Cari Hesap Uzmanı", "Mali İşler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,428.37 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 50000.00m, yol: 3650.10m, bes: 2088.00m, brut: 69610.83m, isveren: 16532.58m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "07.11.2022"),
+                P(AVP, URS, "Mustafa Özdeniz", "Uzman", "Teknik Hizmetler", "Teknik Servis Personeli", "Satış ve Pazarlama", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 60000.00m, yemek: 7500.22m, icra: 15000.00m, bes: 2718.00m, sgkDisi: 7500.22m, brut: 98113.82m, isveren: 21520.73m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "21.03.2019"),
+                P(AVP, URS, "Olgun Küskü", "Uzman", "Kalite Kontrol", "Kalite Kontrol Uzmanı", "Üretim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı. Mesai: bordro 3,083.64 / Personel Kazanç 1,890.00 farklı; Personel Kazanç kullanıldı.", r: 40500.00m, yol: 3650.10m, mesai: 1890.00m, bes: 2035.00m, brut: 67837.15m, isveren: 16111.32m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "19.08.2020"),
+                P(AVP, URS, "Ömer Kantar", "Uzman", "Teknik Hizmetler", "Teknik Servis Personeli", "Satış ve Pazarlama", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 60000.00m, yemek: 7500.22m, bes: 2718.00m, sgkDisi: 7500.22m, brut: 98113.82m, isveren: 21520.73m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "04.12.2020"),
+                P(AVP, URS, "Ömer Yıldırım", "Uzman", "Teknik Hizmetler", "Teknik Servis Personeli", "Satış ve Pazarlama", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 60000.00m, yemek: 7500.22m, bes: 2718.00m, sgkDisi: 7500.22m, brut: 98113.82m, isveren: 21520.73m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "05.10.2020"),
+                P(AVP, URS, "Özge İsen", "Kıdemli Uzman", "Üst Yönetim", "Proje Kıdemli Uzmanı", "Genel Yönetim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 60000.00m, bes: 2718.00m, brut: 90613.60m, isveren: 21520.73m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "24.11.2023"),
+                P(ALV, URS, "Mustafa Ulaş Erikli", "Uzman", "Depo ve Sevkiyat", "Sevkiyat Uzmanı", "Tedarik Zinciri ve Operasyonlar", "Emekli", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 3,946.05 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 4133.33m, x: 38866.67m, yol: 3650.10m, mesaiX: 7740.00m, brut: 8414.52m, isveren: 2082.60m, primGun: 4.00m, normalGun: 4.00m, haftaSonuGun: 0.00m, giris: "20.02.2023"),
+                P(AVP, URS, "Serkan Genç", "Yönetici", "Satınalma", "Satınalma Yöneticisi", "Tedarik Zinciri ve Operasyonlar", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 85000.00m, yol: 3650.10m, bes: 4120.00m, brut: 137357.98m, isveren: 32622.52m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "24.01.2023"),
+                P(AVP, URS, "Yeşim Karakütük", "Personel", "İdari İşler", "Temizlik Görevlisi", "Kurumsal Hizmetler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,428.37 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 35000.00m, yol: 3650.10m, bes: 1525.00m, brut: 50844.09m, isveren: 12075.46m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "18.11.2024"),
+                P(SLV, SLV, "Beyza Gizem Zazoğlu", "Uzman", "Muhasebe", "Muhasebe Uzmanı", "Mali İşler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 68000.00m, yol: 3650.10m, hazine: 5366.55m, brut: 107331.08m, isveren: 25491.14m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "28.08.2024"),
+                P(SLV, SLV, "Birol Şeker", "Uzman", "Depo ve Sevkiyat", "Mal Kabul Uzmanı", "Tedarik Zinciri ve Operasyonlar", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 52000.01m, yol: 3650.10m, hazine: 4061.31m, brut: 81226.12m, isveren: 19291.21m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "18.05.2019"),
+                P(SLV, SLV, "Seda Saraç", "Personel", "İdari İşler", "Servis Personeli", "Kurumsal Hizmetler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,428.37 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 30000.00m, yol: 3650.10m, hazine: 2066.63m, brut: 41332.70m, isveren: 9816.52m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m),
+                P(URS, URS, "Müjgan Yetgin", "Uzman", "Satış", "İç Piyasa Satış Uzmanı – Emprime", "Satış ve Pazarlama", "Emekli", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 4133.33m, x: 26866.67m, yemek: 7500.22m, primX: 50308.64m, sgkDisi: 7500.22m, brut: 11968.69m, isveren: 1105.95m, primGun: 4.00m, normalGun: 4.00m, haftaSonuGun: 0.00m, giris: "15.04.2022"),
+                P(ALV, URS, "Neslihan Uludağ", "Direktör", "Üst Yönetim", "YK Üyesi", "Genel Yönetim", "Emekli", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 5333.33m, x: 384666.67m, brut: 5765.76m, isveren: 1427.03m, primGun: 4.00m, normalGun: 4.00m, haftaSonuGun: 0.00m, giris: "29.03.2023"),
+                P("Alv Filo", URS, "Nükhet Özavşar", "Yönetim Özel", "Yönetim Özel", "Yönetim Temsilcisi", "Genel Yönetim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 180000.00m, x: 470000.00m, icra: 45000.00m, brut: 318366.47m, isveren: 70601.63m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "11.01.2023", ozelKisi: true, dk: "D90", da: "Üst Yönetim Departmanı", sicil: "R-003", sgkNo: "3501199571976"),
+                P(ALV, COR, "Özgür Pamir", "Direktör", "Üretim", "Dijital Üretim Direktörü", "Üretim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 100000.01m, x: 140000.00m, brut: 153585.69m, isveren: 36476.60m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "03.08.2016"),
+                P(ALV, URS, "Rabiye Doğan", "Personel", "İdari İşler", "Temizlik Görevlisi", "Kurumsal Hizmetler", "Emekli", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 3,946.05 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 4266.67m, x: 30733.33m, yol: 3650.10m, brut: 8558.67m, isveren: 2118.27m, primGun: 4.00m, normalGun: 4.00m, haftaSonuGun: 0.00m, giris: "22.01.2024"),
+                P(URS, URS, "Refik Polat", "Yönetici", "Depo ve Sevkiyat", "Depo Yöneticisi", "Tedarik Zinciri ve Operasyonlar", "Emekli", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 4133.33m, x: 70866.67m, mesaiX: 23083.33m, brut: 4468.47m, isveren: 1105.95m, primGun: 4.00m, normalGun: 4.00m, haftaSonuGun: 0.00m, giris: "29.03.2023"),
+                P(ALV, COR, "Selçuk Mert", "Müdür", "Üretim", "Üretim Müdürü", "Üretim", "Emekli", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 5333.34m, x: 129666.67m, brut: 5765.76m, isveren: 1427.03m, primGun: 4.00m, normalGun: 4.00m, haftaSonuGun: 0.00m, giris: "06.09.2024"),
+                P(AVP, URS, "Serhat Mutlu", "Uzman", "Satış", "İç Piyasa Satış Uzmanı – Dijital", "Satış ve Pazarlama", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 60000.00m, x: 0.01m, yemek: 7500.22m, primX: 41397.86m, bes: 2718.00m, sgkDisi: 7500.22m, brut: 98113.82m, isveren: 21520.73m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "21.03.2019"),
+                P(AVP, URS, "Sevgi Kaya", "Müdür", "İhracat", "İhracat Müdürü", "Satış ve Pazarlama", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,710.63 / Personel Kazanç 3,500.10 farklı; Personel Kazanç kullanıldı.", r: 122252.00m, x: 0.01m, yol: 3500.10m, primX: 14906.00m, brut: 197892.16m, isveren: 46999.38m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "19.11.2022"),
+                P(ALV, COR, "Ümit Özdemir", "Uzman", "Depo ve Sevkiyat", "Sevkiyat Uzmanı", "Tedarik Zinciri ve Operasyonlar", "Emekli", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 4266.67m, x: 50733.33m, brut: 4612.62m, isveren: 1141.62m, primGun: 4.00m, normalGun: 4.00m, haftaSonuGun: 0.00m, giris: "20.11.2024"),
+                P(ALV, URS, "Yusuf Öztürk", "Uzman", "Satış", "İç Piyasa Satış Uzmanı – Emprime", "Satış ve Pazarlama", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 31000.00m, x: 0.01m, yemek: 7500.22m, primX: 48120.57m, sgkDisi: 7500.22m, brut: 46481.73m, isveren: 9258.11m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "20.08.2022"),
+                P(ALV, URS, "Zahit Ercan", "Personel", "İdari İşler", "Temizlik Görevlisi", "Kurumsal Hizmetler", "Emekli", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 3,946.05 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 4266.67m, x: 35733.32m, yol: 3650.10m, brut: 8558.67m, isveren: 2118.27m, primGun: 4.00m, normalGun: 4.00m, haftaSonuGun: 0.00m, giris: "01.09.2021"),
+                P(SLV, "Diğer", "Orazgül Jumayeva", "Yönetim Özel", "Yönetim Özel", "Ev Çalışanı", "Genel Yönetim", "", "Bordro kaydı yok: puantaj, brüt, vergi ve SGK alanları boş; maliyet yalnızca net ödemeler kadar (alt sınır).", x: 63571.04m, yolX: 2000.00m, primGun: 0.00m, normalGun: 0.00m, haftaSonuGun: 0.00m, sgkYok: true, giris: "13.08.2025", ozelKisi: true, dk: "D90", da: "Üst Yönetim Departmanı", sicil: "", sgkNo: ""),
+                P(SLV, "Diğer", "Alper Köse", "Yönetim Özel", "Yönetim Özel", "Yatırım", "Genel Yönetim", "", "Bordro kaydı yok: puantaj, brüt, vergi ve SGK alanları boş; maliyet yalnızca net ödemeler kadar (alt sınır). Kaynak kazanç/kesinti raporundan eklendi; organizasyon bilgileri kullanıcı talebine göre güncellendi.", x: 389414.91m, primGun: 0.00m, normalGun: 0.00m, haftaSonuGun: 0.00m, sgkYok: true, ozelKisi: true, dk: "D90", da: "Üst Yönetim Departmanı", sicil: "", sgkNo: ""),
+                P(AVP, URS, "Bedirhan Genç", "Kıdemli Uzman", "Kalite Güvence", "Kalite Sistem Kıdemli Uzmanı", "Üretim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 8,157.96 / Personel Kazanç 5,000.10 farklı; Personel Kazanç kullanıldı.", r: 78500.00m, yol: 5000.10m, bes: 3868.00m, brut: 128955.45m, isveren: 30626.91m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "24.11.2025", dk: "D33", da: "Kalite Kontrol Departmanı", sicil: "R-2", sgkNo: "1701201203599"),
+                P(SLV, "Diğer", "Emine Tanış", "SMMM", "Muhasebe", "Mali Müşavir", "Mali İşler", "", "Bordro kaydı yok: puantaj, brüt, vergi ve SGK alanları boş; maliyet yalnızca net ödemeler kadar (alt sınır). Kaynak kazanç/kesinti raporundan eklendi; SMMM rolüne uygun organizasyon bilgileri kullanıcı talebine göre güncellendi.", x: 4000.00m, primGun: 0.00m, normalGun: 0.00m, haftaSonuGun: 0.00m, sgkYok: true, ozelKisi: true, dk: "D90", da: "Üst Yönetim Departmanı", sicil: "", sgkNo: "")
             };
         }
     }

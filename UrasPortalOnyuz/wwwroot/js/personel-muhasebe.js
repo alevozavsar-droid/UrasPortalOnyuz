@@ -24,12 +24,12 @@
   const kucukTr = s => String(s ?? '').toLocaleLowerCase('tr-TR');
   const rozet = (d, sinif) => `<span class="pm-rz ${sinif || (/(Onaylandı|Muhasebeleştirildi|Kaydedildi|Faturalandı|Geçti|Dengeli|Güncel|Aktif|Uyumlu|^Hazır$)/.test(d) ? 'ok' : /(Bekliyor|Onaya Gönderildi|Kontrole Hazır|Simülasyon Oluşturuldu|Kısmen|Uyarı|Taslak|Kayıtsız)/.test(d) ? 'bekle' : /(İptal|Hata|Dengesiz|Değişti|Kontrol Gerekiyor|Güncelliğini Yitirdi|Pasif|Kalem Yok|Fark)/.test(d) ? 'hata' : /(Ters Kayıt)/.test(d) ? 'mavi' : 'gri')}">${esc(d || '—')}</span>`;
   const yon = (k, h, pay) => `<span class="ph-yon"><b>${esc(k)}</b><span class="ok">→</span><b>${esc(h)}</b>${pay !== undefined ? `<span class="ph-pay">%${pct(pay)}</span>` : ''}</span>`;
-  const csvIndir = (ad, satirlar) => { const t = satirlar.map(r => r.map(x => `"${String(x ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n'); const b = new Blob(['﻿' + t], { type: 'text/csv;charset=utf-8' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = ad + '_' + new Date().toISOString().slice(0, 10) + '.csv'; a.click(); };
-  /** ekrandaki tabloları CSV'ye (₺ işaretsiz) */
+  /** ekrandaki tabloları göründüğü gibi Excel'e (ortak bileşen wwwroot/js/tablo-excel.js: renkler, rozetler, birleşik başlıklar, dip toplam, dondurulmuş başlık; her tablo ayrı sayfa, ilk sayfada sekmenin KPI kutuları ve açıklaması) */
   function domExcel(ad, tablolar) {
-    const temiz = t => t.trim().replace(/\s+/g, ' ').replace('—', '').replace(/\s*₺/g, ''), rows = [];
-    tablolar.forEach(([id, bas]) => { if (!$('#' + id)) return; rows.push([bas]); rows.push($$('#' + id + ' thead th').map(t => t.textContent.trim())); $$('#' + id + ' tbody tr').forEach(tr => { if (!tr.querySelector('.na-bos') && !tr.classList.contains('detay')) rows.push($$('td', tr).map(td => temiz(td.textContent))); }); rows.push([]); });
-    csvIndir(ad, rows);
+    if (!window.TabloExcel) { mesaj('danger', 'Excel bileşeni yüklenemedi; sayfayı yenileyip tekrar deneyin.'); return; }
+    const panel = $('.na-panel.aktif'), h5 = panel ? panel.querySelector('.pm-rapor-ust h5') : null, bas = h5 ? h5.textContent.trim() : '', sayac = panel ? panel.querySelector('.pm-sayac') : null;
+    const sayfalar = tablolar.filter(([id]) => $('#' + id)).map(([id, sayfa], i) => ({ tablo: '#' + id, ad: sayfa, baslik: `Personel Muhasebe İşlemleri · ${bas || sayfa}${bas ? ' · ' + sayfa : ''}`, altBaslik: i === 0 && sayac ? sayac.textContent.trim() : '', kpi: i === 0 ? '#phKpi' : null, not: i === 0 && panel ? panel.querySelector(':scope > .pm-not') : null }));
+    window.TabloExcel.indir(ad, sayfalar).catch(e => mesaj('danger', 'Excel indirilemedi: ' + esc(e.message)));
   }
   function mesaj(tip, m) { const s = $('#naSonuc'); s.className = 'alert py-2 px-3 mb-2 alert-' + tip; s.innerHTML = m; s.style.display = 'block'; clearTimeout(mesaj.z); mesaj.z = setTimeout(() => s.style.display = 'none', 9000); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   async function post(url, veri) { const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); return r.json(); }
@@ -44,7 +44,7 @@
   const kartAdresi = kod => (V && V.kartAdresi || '/PersonelMaliyet?kod=') + encodeURIComponent(kod || '');
   /** ortak üç filtre (SGK İşvereni / Fiili Görev Yeri / Ödeme Şirketi): tüm sekmelerdeki personel satırlarına uygulanır */
   const secim = id => ($(id) || {}).value || '';
-  const kisiUyar = x => { const s = secim('#phSgk'), g = secim('#phGorevYeri'), o = secim('#phOdemeSirketi'); return (!s || x.sgkIsvereni === s) && (!g || x.fiiliGorevYeri === g) && (!o || x.odemeSirketi === o); };
+  const kisiUyar = x => { const s = secim('#phSgk'), g = secim('#phGorevYeri'), o = secim('#phOdemeSirketi'); return (!s || x.sgkIsvereni === s) && (!g || x.fiiliGorevYeri === g) && (!o || x.odemeSirketi === o || x.odemeSirketiX === o); };
   const KISI_SEKME = ['kayitlar', 'odemeler', 'hazirlik', 'yansitma'];   // personel satırı olan sekmeler; diğerlerinde ortak filtre pasif
 
   // ---- yerleşim: tek tablolu sekmelerde (data-tam) kaydırma kabı ekranın kalanını doldurur
@@ -159,8 +159,8 @@
     const grp = {}; L.forEach(x => { const k = x.odeyen + '|' + x.kanal; (grp[k] = grp[k] || { odeyen: x.odeyen, kanal: x.kanal, kisi: new Set(), tutar: 0 }); grp[k].kisi.add(x.personelSira); grp[k].tutar += Number(x.tutar) || 0; });
     const G = Object.values(grp).sort((p, q) => p.odeyen.localeCompare(q.odeyen, 'tr') || p.kanal.localeCompare(q.kanal, 'tr'));
     $('#phOdemeOzet tbody').innerHTML = G.map(g => `<tr><td><b>${esc(g.odeyen)}</b></td><td>${rozet(g.kanal, g.kanal.startsWith('Kasa') ? 'bekle' : 'ok')}</td><td class="s">${g.kisi.size}</td><td class="s hesap">${kisa(g.tutar)}</td></tr>`).join('') + (G.length ? `<tr class="toplam"><td>Toplam</td><td></td><td class="s">${new Set(L.map(x => x.personelSira)).size}</td><td class="s">${kisa(L.reduce((t, x) => t + (Number(x.tutar) || 0), 0))}</td></tr>` : '<tr><td colspan="4" class="na-bos">Kayıt yok.</td></tr>');
-    const Yk = (O.odemeYok || []).filter(x => kisiUyar(x) && (!a || kucukTr([x.adSoyad, x.sgkIsvereni, x.fiiliGorevYeri, x.odemeSirketi, x.not].join(' ')).includes(a)));
-    $('#phOdemeYok tbody').innerHTML = Yk.map(x => `<tr data-kod="${esc(x.cariKodu || '')}"><td class="ad">${esc(x.adSoyad)}</td><td>${esc(x.sgkIsvereni)}</td><td>${bos(x.fiiliGorevYeri)}</td><td>${bos(x.odemeSirketi)}</td><td class="s">${hucre(x.netR)}</td><td class="s">${hucre(x.netX)}</td><td><small>${esc(x.not || '')}</small></td></tr>`).join('') || '<tr><td colspan="7" class="na-bos">Ödeme engelleyen notu olan personel yok.</td></tr>';
+    const Yk = (O.odemeYok || []).filter(x => kisiUyar(x) && (!a || kucukTr([x.adSoyad, x.sgkIsvereni, x.fiiliGorevYeri, x.odemeSirketi, x.odemeSirketiX, x.not].join(' ')).includes(a)));
+    $('#phOdemeYok tbody').innerHTML = Yk.map(x => `<tr data-kod="${esc(x.cariKodu || '')}"><td class="ad">${esc(x.adSoyad)}</td><td>${esc(x.sgkIsvereni)}</td><td>${bos(x.fiiliGorevYeri)}</td><td><small>R: ${bos(x.odemeSirketi)}<br>X: ${bos(x.odemeSirketiX)}</small></td><td class="s">${hucre(x.netR)}</td><td class="s">${hucre(x.netX)}</td><td><small>${esc(x.not || '')}</small></td></tr>`).join('') || '<tr><td colspan="7" class="na-bos">Ödeme engelleyen notu olan personel yok.</td></tr>';
     $('#phOdemeYokSayi').textContent = `${(O.odemeYok || []).length} personel · tahakkuk var, ödeme kaydı yok`;
     $('#phOdemeSayi').textContent = `${L.length} / ${O.satirlar.length} ödeme satırı · ${O.simNo ? `${O.simNo} v${O.versiyon} · ${O.durum}` : 'simülasyon yok'} · ${V.donemAd}`;
   }
@@ -225,7 +225,7 @@
     secili.clear(); veriUygula(j); mesaj('success', esc(j.message) + (j.yeniler && j.yeniler.length ? ` <button type="button" class="btn btn-light btn-sm py-0 ms-2" id="phKayitlaraGit" style="font-size:.64rem">Kayıtları Gör</button>` : ''));
     const g = $('#phKayitlaraGit'); if (g) g.addEventListener('click', () => { $('#phKDonem').value = donem(); sekme('yansitma'); });
   });
-  $('#phHazirlikExcel').addEventListener('click', () => csvIndir('personel_yansitma_hazirlik_' + donem(), [['Dönem', 'Cari Kodu', 'Ad Soyad', 'Ünvan', 'Görev', 'Çatı Departman', 'SGK İşvereni', 'Fiili Görev Yeri', 'Ödeme Şirketi', 'Kaynak', 'Hedef', 'Pay %', 'Aylık Maliyet', 'Yansıtılacak', 'Durum'], ...HL.flatMap(a => a.hedefler.map(h => [donem(), a.cariKodu, a.adSoyad, a.unvan, a.gorev, a.catiDepartman, a.sgkIsvereni, a.fiiliGorevYeri, a.odemeSirketi || '', a.kaynakSirket, h.sirket, pct(h.pay), sayi(a.maliyet), sayi(h.tutar), a.durum]))]));
+  $('#phHazirlikExcel').addEventListener('click', () => domExcel('personel_yansitma_hazirlik_' + donem(), [['phAdayTablo', 'Yansıtma Hazırlığı']]));
   ['#phHHedef', '#phHCati', '#phHDurum'].forEach(s => $(s).addEventListener('change', hazirlikCiz));
 
   // ============================================================
@@ -235,7 +235,7 @@
   function kayitListesi() {
     const a = ara(), v = id => $(id).value;
     return (Y().kayitlar || []).filter(k => kisiUyar(k) && (!v('#phKDonem') || k.donem === v('#phKDonem')) && (!v('#phKHedef') || k.hedefSirket === v('#phKHedef')) && (!v('#phKDurum') || k.durum === v('#phKDurum'))
-      && (!a || kucukTr([k.no, k.adSoyad, k.cariKodu, k.kaynakFisNo, k.hedefFisNo, k.faturaNo, k.kaynakSirket, k.hedefSirket, k.fiiliGorevYeri, k.odemeSirketi].join(' ')).includes(a)));
+      && (!a || kucukTr([k.no, k.adSoyad, k.cariKodu, k.kaynakFisNo, k.hedefFisNo, k.faturaNo, k.kaynakSirket, k.hedefSirket, k.fiiliGorevYeri, k.odemeSirketi, k.odemeSirketiX].join(' ')).includes(a)));
   }
   function yansitmaCiz() {
     const y = Y(); KL = kayitListesi();
@@ -262,8 +262,11 @@
   }
   $('#phYKayitTablo tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-no]'); if (tr) kayitDrawer(tr.dataset.no); });
   ['#phKDonem', '#phKHedef', '#phKDurum'].forEach(s => $(s).addEventListener('change', yansitmaCiz));
-  $('#phKayitlarExcel').addEventListener('click', () => csvIndir('personel_yansitma_kayitlari', [['Yansıtma No', 'Dönem', 'Cari Kodu', 'Ad Soyad', 'Görev', 'SGK İşvereni (Kaynak)', 'Fiili Görev Yeri', 'Ödeme Şirketi', 'Hedef Şirket', 'Pay %', 'Net', 'KDV', 'Toplam', 'Kaynak Fişi', 'Hedef Fişi', 'Fatura', 'Durum', 'Oluşturan', 'Zaman'], ...KL.map(k => [k.no, k.donemAdi, k.cariKodu, k.adSoyad, k.gorev, k.kaynakSirket, k.fiiliGorevYeri || '', k.odemeSirketi || '', k.hedefSirket, pct(k.pay), sayi(k.net), sayi(k.kdv), sayi(k.toplam), k.kaynakFisNo, k.hedefFisNo, k.faturaNo || '', k.durum, k.olusturan, k.zaman])]));
-  $('#phFisExcel').addEventListener('click', () => csvIndir('personel_yansitma_fis_satirlari', [['Yansıtma No', 'Dönem', 'Şirket', 'Taraf', 'Fiş No', 'Hesap', 'Kod', 'Hesap Adı', 'Borç', 'Alacak'], ...KL.filter(k => k.durum !== 'İptal').flatMap(k => [...k.kaynakFis.map(f => [k.no, k.donemAdi, k.kaynakSirket, 'Kaynak (SGK İşvereni)', k.kaynakFisNo, f.hesap, f.kod, f.ad, sayi(f.borc), sayi(f.alacak)]), ...k.hedefFis.map(f => [k.no, k.donemAdi, k.hedefSirket, 'Hedef (Fiili Görev Yeri)', k.hedefFisNo, f.hesap, f.kod, f.ad, sayi(f.borc), sayi(f.alacak)])])]));
+  $('#phKayitlarExcel').addEventListener('click', () => domExcel('personel_yansitma_kayitlari_' + donem(), [['phYKayitTablo', 'Yansıtma Kayıtları']]));
+  // fiş satırları ekranda tablo değil (kayıt detayında): listeden kurulur, aynı Excel bileşeniyle (koyu başlık, sayılar ₺ biçimli)
+  $('#phFisExcel').addEventListener('click', () => { if (!window.TabloExcel) { mesaj('danger', 'Excel bileşeni yüklenemedi; sayfayı yenileyip tekrar deneyin.'); return; }
+    const satirlar = KL.filter(k => k.durum !== 'İptal').flatMap(k => [...k.kaynakFis.map(f => [k.no, k.donemAdi, k.kaynakSirket, 'Kaynak (SGK İşvereni)', k.kaynakFisNo, f.hesap, f.kod, f.ad, kisa(f.borc), kisa(f.alacak)]), ...k.hedefFis.map(f => [k.no, k.donemAdi, k.hedefSirket, 'Hedef (Fiili Görev Yeri)', k.hedefFisNo, f.hesap, f.kod, f.ad, kisa(f.borc), kisa(f.alacak)])]);
+    window.TabloExcel.indir('personel_yansitma_fis_satirlari_' + donem(), [{ ad: 'Fiş Satırları', baslik: 'Personel Muhasebe İşlemleri · Yansıtma Kayıtları · Fiş Satırları', altBaslik: `${satirlar.length} fiş satırı · ${KL.filter(k => k.durum !== 'İptal').length} yansıtma kaydı`, basliklar: ['Yansıtma No', 'Dönem', 'Şirket', 'Taraf', 'Fiş No', 'Hesap', 'Kod', 'Hesap Adı', 'Borç', 'Alacak'], satirlar }]).catch(e => mesaj('danger', 'Excel indirilemedi: ' + esc(e.message))); });
   function fisTablo(satirlar) { const tb = satirlar.reduce((s, f) => s + f.borc, 0), ta = satirlar.reduce((s, f) => s + f.alacak, 0); return `<table class="na-tablo ph-fis" data-dinamik="kapali"><thead><tr><th>Hesap</th><th>Kod</th><th>Hesap Adı</th><th class="s">Borç</th><th class="s">Alacak</th></tr></thead><tbody>${satirlar.map(f => `<tr><td class="kod">${esc(f.hesap)}</td><td class="kod">${esc(f.kod || '')}</td><td>${esc(f.ad)}</td><td class="s">${f.borc ? tl(f.borc) : ''}</td><td class="s">${f.alacak ? tl(f.alacak) : ''}</td></tr>`).join('')}<tr class="top"><td colspan="3">Toplam ${Math.abs(tb - ta) < 0.01 ? rozet('Borç = Alacak') : rozet('Dengesiz', 'hata')}</td><td class="s">${tl(tb)}</td><td class="s">${tl(ta)}</td></tr></tbody></table>`; }
   function kayitDrawer(no) {
     const k = (Y().kayitlar || []).find(x => x.no === no); if (!k) return;

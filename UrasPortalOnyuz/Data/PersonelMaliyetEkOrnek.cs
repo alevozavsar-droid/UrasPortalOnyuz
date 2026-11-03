@@ -5,7 +5,7 @@
 //                      yemek / yol / diğer sosyal yardım eklenir. SGK'lı gündelikçi (ana tabloda bordrolu): bordro Net-R mahsup edilir, kalan fark elden nakit X olarak ödenir ve kişinin ana tablodaki
 //                      X-Net'ine yazılır (R kısımları aynen kalır; UretimYansit her veri okumasında). SGK'sız gündelikçi: tamamı elden X, Birleşik Tablo'ya "Üretim" satırı olarak girer.
 //   Prim Ödemeleri   : Personel Maliyet Tablosu'ndaki Prim-X / Prim-R tutarlarının detayı. Dönem (ay) · tür (Ciro Primi, Tahsilat Primi, Hedef Primi, Özel Ödeme) · baz (ciro / tahsilat) × oran ya da sabit tutar.
-//                      Ekim 2026 satırlarının kişi toplamı ana tablodaki Prim-X ile birebir (Berkan Özkan 66.793,28 · Erdoğan Polat 139.037,06 · Müjgan Yetgin 50.308,64 · Serhat Mutlu 41.397,86 · Sevgi Kaya 14.906 · Yusuf Öztürk 48.120,57).
+//                      Eylül 2026 satırlarının kişi toplamı ana tablodaki Prim-X ile birebir (Berkan Özkan 66.793,28 · Erdoğan Polat 139.037,06 · Müjgan Yetgin 50.308,64 · Serhat Mutlu 41.397,86 · Sevgi Kaya 14.906 · Yusuf Öztürk 48.120,57).
 //   Sütun tanımları PmSutun ile (tip: sira | metin | ad | sayi | hesap | genel | not); ekran bu tanımdan kurulur, Dto yansımayla aynı adlı özellikleri okur.
 // Ekran: Controllers/PersonelMaliyetController.cs (Paket) + Views/PersonelMaliyet/Index.cshtml + wwwroot/js/personel-maliyet.js (ek sekmeler bölümü)
 // ============================================================
@@ -40,26 +40,28 @@ namespace WebApplication3.Data
         public decimal ToplamKazanc => HakEdis + FazlaMesaiKazanci + TatilKazanci;
         public decimal ToplamSosyal => Yemek + Yol + DigerSosyal;
         public decimal ToplamHakedis => ToplamKazanc + ToplamSosyal;
-        public decimal EldenX => Math.Max(0, BordroParametre.Yuvarla(ToplamHakedis - RMahsup));
+        public decimal EldenX => SgkLi ? 0m : Math.Max(0, BordroParametre.Yuvarla(ToplamHakedis - RMahsup));
         public decimal NetOdenen => EldenX - Kesinti;
         /// <summary>Birleşik tabloya giren ek maliyet: SGK'sız → tamamı; SGK'lı → yalnız elden X (R ve X zaten kişinin bordro satırında).</summary>
         public decimal ToplamMaliyet => SgkLi ? 0 : ToplamHakedis;
+        /// <summary>SGK'sız gündelikçinin SGK işvereni ve X ödeme şirketi: çalıştığı şirket (Uras Kimya / ALV Kimya); eşleşmezse boş.</summary>
+        public string FiiliSirket => PersonelMuhasebeOrnek.FiiliSirketAdi(FiiliGorevYeri);
     }
 
     /// <summary>Prim ödemesi satırı — Personel Maliyet Tablosu'ndaki prim tutarının detayı.</summary>
     public class PrimOdeme
     {
         public int Sira { get; set; }
-        public string Donem { get; set; }          // 2026-10
-        public string DonemAd { get; set; }        // Ekim 2026
+        public string Donem { get; set; }          // 2026-09
+        public string DonemAd { get; set; }        // Eylül 2026
         public string AdSoyad { get; set; } public string SgkIsvereni { get; set; } public string Gorev { get; set; }
         public string PrimTuru { get; set; }       // Ciro Primi | Tahsilat Primi | Hedef Primi | Özel Ödeme
         public decimal Baz { get; set; }           // ciro / tahsilat tutarı (₺)
         public decimal Oran { get; set; }          // %
         public decimal SabitTutar { get; set; }    // oran yerine sabit tutar (hedef primi, özel ödeme)
         public string Odeme { get; set; } = "X";   // X (bordro dışı) | R (bordrolu)
-        public string OdemeAyi { get; set; }       // Kasım 2026
-        public string OdemeDonem { get; set; }     // 2026-11 — primin bordroya girdiği dönem (Personel Maliyet Tablosu dönemi)
+        public string OdemeAyi { get; set; }       // Eylül 2026
+        public string OdemeDonem { get; set; }     // 2026-09 — primin bordroya girdiği dönem (Personel Maliyet Tablosu dönemi; prim ve bordro aynı ay)
         public string Aciklama { get; set; } = "";
         public decimal HesaplananPrim => SabitTutar > 0 ? SabitTutar : BordroParametre.Yuvarla(Baz * Oran / 100m);
     }
@@ -95,7 +97,17 @@ namespace WebApplication3.Data
             foreach (var p in oz) if (!d.ContainsKey(p.Key)) d[p.Key] = p.Value.GetValue(o);   // sütunu olmayan alanlar da (donem, dovizli …)
             return d;
         }
-        public static List<Dictionary<string, object>> UretimDto() { lock (Kilit) return Uretim.Select(u => Dto(u, UretimSutunlar)).ToList(); }
+        /// <summary>Üretim personeli satırları; SGK'lı gündelikçide R mahsup / elden X / net ödenen seçili dönemin bordro satırına göre hesaplanır (dönem yoksa güncel). Çağıran PersonelMaliyetOrnek.Kilit altındadır.</summary>
+        public static List<Dictionary<string, object>> UretimDto(string donem = null)
+        {
+            var liste = PersonelMaliyetOrnek.ListeDonem(donem) ?? PersonelMaliyetOrnek.Liste;
+            lock (Kilit) return Uretim.Select(u =>
+            {
+                var d = Dto(u, UretimSutunlar);
+                if (u.SgkLi) { var p = liste.FirstOrDefault(x => x.Sira == u.PersonelSira); if (p != null) { var mahsup = p.Hesap.NetRBordro; var elden = EldenX(u, mahsup); d["rMahsup"] = mahsup; d["eldenX"] = elden; d["netOdenen"] = elden - u.Kesinti; } }
+                return d;
+            }).ToList();
+        }
         public static List<Dictionary<string, object>> PrimDto() { lock (Kilit) return Primler.Select(p => Dto(p, PrimSutunlar)).ToList(); }
 
         // ---------- düzenleme (satıra tıklayınca çekmece): üretim personeli ve prim satırları; değişiklik bordro satırına, karta ve cariye yansır ----------
@@ -129,7 +141,7 @@ namespace WebApplication3.Data
             return null;
         }
         public static string UretimSil(int sira) { int ps; lock (Kilit) { var u = Uretim.FirstOrDefault(x => x.Sira == sira); if (u == null) return "Üretim personeli bulunamadı."; ps = u.PersonelSira; Uretim.Remove(u); } if (ps > 0) XSifirla(ps); return null; }
-        private static void XSifirla(int personelSira) { lock (PersonelMaliyetOrnek.Kilit) { var p = PersonelMaliyetOrnek.Liste.FirstOrDefault(x => x.Sira == personelSira); if (p != null && !p.Dovizli) p.XNet = 0; } }
+        private static void XSifirla(int personelSira) { lock (PersonelMaliyetOrnek.Kilit) foreach (var l in PersonelMaliyetOrnek.Donemler.Values) { var p = l.FirstOrDefault(x => x.Sira == personelSira); if (p != null && !p.Dovizli) p.XNet = 0; } }   // bağ koptu: tüm dönemlerde elden X sıfırlanır
         private static readonly string[] AylarTr = { "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık" };
         /// <summary>Prim satırı ekle / düzenle. Hesaplanan prim = Baz × Oran / 100 ya da sabit tutar. Kaydedilince kişinin ilgili bordro dönemindeki Prim-X / Prim (R) tutarı prim satırlarının toplamından yeniden yazılır.</summary>
         public static string PrimKaydet(PrimIstek d, out PrimOdeme kayit)
@@ -189,7 +201,8 @@ namespace WebApplication3.Data
             U(URS, "Elşad", 2200), U(URS, "Çoşkun", 2200),
             U(COR, "Reşat", 2000), U(COR, "Aslan Huseynov", 2050, true), U(COR, "Ali", 2000), U(COR, "Naim", 2000), U(COR, "Ruslan", 2100)
         };
-        /// <summary>SGK'lı gündelikçileri Personel Maliyet Tablosu'na bağlar (ad eşleşmesi), bordro Net-R'yi mahsup olarak okur ve elden X farkını kişinin güncel dönem X-Net'ine yazar. Her veri okumasında çalışır (dinamik).</summary>
+        /// <summary>SGK'lı gündelikçileri Personel Maliyet Tablosu'na bağlar (ad eşleşmesi) ve HER DÖNEMDE o dönemin bordro Net-R'sini mahsup olarak hesaplar; X-Net yazılmaz (kaynak v5_2: X-NET 0, Ödeme Yapılmıyor)
+        /// (dönem bazında yazılır). Üretim sekmesindeki R mahsup / elden X seçili döneme göre UretimDto(donem) ile gelir. Her veri okumasında çalışır (dinamik).</summary>
         public static void UretimYansit()
         {
             lock (PersonelMaliyetOrnek.Kilit)
@@ -200,44 +213,35 @@ namespace WebApplication3.Data
                     {
                         if (u.PersonelSira == -1) { var e = liste.FirstOrDefault(p => string.Equals(p.AdSoyad, u.AdSoyad, StringComparison.OrdinalIgnoreCase)); u.PersonelSira = e?.Sira ?? 0; }
                         if (u.PersonelSira <= 0) { u.RMahsup = 0; continue; }
-                        var p = liste.FirstOrDefault(x => x.Sira == u.PersonelSira); if (p == null) { u.PersonelSira = 0; u.RMahsup = 0; continue; }
-                        u.RMahsup = p.Hesap.NetRBordro;
-                        if (!p.Dovizli) p.XNet = u.EldenX;   // elden ödenen fark → X-Net (R kısmı aynen kalır; X brüte girmez)
+                        if (!liste.Any(x => x.Sira == u.PersonelSira)) { u.PersonelSira = 0; u.RMahsup = 0; continue; }
+                        foreach (var kv in PersonelMaliyetOrnek.Donemler)
+                        {
+                            var p = kv.Value.FirstOrDefault(x => x.Sira == u.PersonelSira); if (p == null) continue;   // o dönemde yok (işe giriş dönemden sonra)
+                            var mahsup = p.Hesap.NetRBordro; if (kv.Key == PersonelMaliyetOrnek.GuncelDonem) u.RMahsup = mahsup;
+                            if (!p.Dovizli) p.XNet = 0m;   // kaynak v5_2: SGK'lı gündelikçi X-NET 0 (Ödeme Yapılmıyor); hak ediş − R mahsup yalnız bilgi amaçlı
+                        }
                     }
             }
         }
+        /// <summary>Elden ödenecek X: toplam hak ediş − verilen dönemin bordro Net-R mahsubu (negatif olmaz).</summary>
+        public static decimal EldenX(UretimPersonel u, decimal mahsup) => Math.Max(0, BordroParametre.Yuvarla(u.ToplamHakedis - mahsup));
 
         private static PrimOdeme Pr(string donem, string ad, string sgk, string gorev, string tur, decimal baz = 0, decimal oran = 0, decimal sabit = 0, string aciklama = "")
         {
             int y = int.Parse(donem.Substring(0, 4)), m = int.Parse(donem.Substring(5, 2));
             string[] aylar = { "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık" };
-            int om = m == 12 ? 1 : m + 1, oy = m == 12 ? y + 1 : y;
-            return new PrimOdeme { Sira = ++_p, Donem = donem, DonemAd = aylar[m - 1] + " " + y, AdSoyad = ad, SgkIsvereni = sgk, Gorev = gorev, PrimTuru = tur, Baz = baz, Oran = oran, SabitTutar = sabit, Odeme = "X", OdemeAyi = aylar[om - 1] + " " + oy, OdemeDonem = $"{oy}-{om:00}", Aciklama = aciklama };
+            return new PrimOdeme { Sira = ++_p, Donem = donem, DonemAd = aylar[m - 1] + " " + y, AdSoyad = ad, SgkIsvereni = sgk, Gorev = gorev, PrimTuru = tur, Baz = baz, Oran = oran, SabitTutar = sabit, Odeme = "X", OdemeAyi = aylar[m - 1] + " " + y, OdemeDonem = donem, Aciklama = aciklama };
         }
-        /// <summary>Ekim 2026 satırları ana tablodaki Prim-X ile birebir; Ağustos / Eylül geçmiş dönem örneği.</summary>
+        /// <summary>Eylül 2026 prim satırları: kişi toplamı ana tablodaki Prim-X ile birebir.</summary>
         public static readonly List<PrimOdeme> Primler = new List<PrimOdeme>
         {
-            Pr("2026-08", "Berkan Özkan", "ALV Kimya", "İhracat Müdürü", "Ciro Primi", 1980500, 3, aciklama: "İhracat cirosu %3"),
-            Pr("2026-09", "Berkan Özkan", "ALV Kimya", "İhracat Müdürü", "Ciro Primi", 2104300, 3, aciklama: "İhracat cirosu %3"),
-            Pr("2026-10", "Berkan Özkan", "ALV Kimya", "İhracat Müdürü", "Ciro Primi", 2226442.67m, 3, aciklama: "İhracat cirosu %3"),
-            Pr("2026-08", "Erdoğan Polat", "Uras Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Ciro Primi", 4120000, 2, aciklama: "Emprime iç piyasa cirosu %2"),
-            Pr("2026-08", "Erdoğan Polat", "Uras Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Tahsilat Primi", 2950000, 1.5m, aciklama: "Vadesinde tahsilat %1,5"),
-            Pr("2026-09", "Erdoğan Polat", "Uras Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Ciro Primi", 4380000, 2, aciklama: "Emprime iç piyasa cirosu %2"),
-            Pr("2026-09", "Erdoğan Polat", "Uras Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Tahsilat Primi", 3105000, 1.5m, aciklama: "Vadesinde tahsilat %1,5"),
-            Pr("2026-10", "Erdoğan Polat", "Uras Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Ciro Primi", 4500000, 2, aciklama: "Emprime iç piyasa cirosu %2"),
-            Pr("2026-10", "Erdoğan Polat", "Uras Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Tahsilat Primi", 3269137.33m, 1.5m, aciklama: "Vadesinde tahsilat %1,5"),
-            Pr("2026-08", "Müjgan Yetgin", "Uras Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Tahsilat Primi", 2210000, 2, aciklama: "Tahsilat %2"),
-            Pr("2026-09", "Müjgan Yetgin", "Uras Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Tahsilat Primi", 2385000, 2, aciklama: "Tahsilat %2"),
-            Pr("2026-10", "Müjgan Yetgin", "Uras Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Tahsilat Primi", 2515432, 2, aciklama: "Tahsilat %2"),
-            Pr("2026-08", "Serhat Mutlu", "Avrupa Paper", "İç Piyasa Satış Uzmanı – Dijital", "Ciro Primi", 1480000, 2.5m, aciklama: "Dijital baskı cirosu %2,5"),
-            Pr("2026-09", "Serhat Mutlu", "Avrupa Paper", "İç Piyasa Satış Uzmanı – Dijital", "Ciro Primi", 1562000, 2.5m, aciklama: "Dijital baskı cirosu %2,5"),
-            Pr("2026-10", "Serhat Mutlu", "Avrupa Paper", "İç Piyasa Satış Uzmanı – Dijital", "Ciro Primi", 1655914.40m, 2.5m, aciklama: "Dijital baskı cirosu %2,5"),
-            Pr("2026-08", "Sevgi Kaya", "Avrupa Paper", "İhracat Müdürü", "Hedef Primi", sabit: 14906, aciklama: "Aylık ihracat hedefi sabit prim"),
+            Pr("2026-09", "Berkan Özkan", "ALV Kimya", "İhracat Müdürü", "Ciro Primi", 2226442.67m, 3, aciklama: "İhracat cirosu %3"),
+            Pr("2026-09", "Erdoğan Polat", "Uras Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Ciro Primi", 4500000, 2, aciklama: "Emprime iç piyasa cirosu %2"),
+            Pr("2026-09", "Erdoğan Polat", "Uras Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Tahsilat Primi", 3269137.33m, 1.5m, aciklama: "Vadesinde tahsilat %1,5"),
+            Pr("2026-09", "Müjgan Yetgin", "Uras Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Tahsilat Primi", 2515432, 2, aciklama: "Tahsilat %2"),
+            Pr("2026-09", "Serhat Mutlu", "Avrupa Paper", "İç Piyasa Satış Uzmanı – Dijital", "Ciro Primi", 1655914.40m, 2.5m, aciklama: "Dijital baskı cirosu %2,5"),
             Pr("2026-09", "Sevgi Kaya", "Avrupa Paper", "İhracat Müdürü", "Hedef Primi", sabit: 14906, aciklama: "Aylık ihracat hedefi sabit prim"),
-            Pr("2026-10", "Sevgi Kaya", "Avrupa Paper", "İhracat Müdürü", "Hedef Primi", sabit: 14906, aciklama: "Aylık ihracat hedefi sabit prim"),
-            Pr("2026-08", "Yusuf Öztürk", "ALV Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Ciro Primi", 1395000, 3, aciklama: "Emprime cirosu %3"),
-            Pr("2026-09", "Yusuf Öztürk", "ALV Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Ciro Primi", 1512500, 3, aciklama: "Emprime cirosu %3"),
-            Pr("2026-10", "Yusuf Öztürk", "ALV Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Ciro Primi", 1604019, 3, aciklama: "Emprime cirosu %3")
+            Pr("2026-09", "Yusuf Öztürk", "ALV Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Ciro Primi", 1604019, 3, aciklama: "Emprime cirosu %3")
         };
     }
 }

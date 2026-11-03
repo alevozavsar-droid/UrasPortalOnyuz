@@ -69,7 +69,7 @@ namespace WebApplication3.Data
         public string KaynakSirket { get; set; }      // SGK işvereni (yansıtan)
         public string HedefSirket { get; set; }       // fiili görev yeri (yansıtılan)
         public string FiiliGorevYeri { get; set; }    // kayıt anındaki fiili görev yeri (kart değeri; HedefSirket bunun hukuki şirketidir)
-        public string OdemeSirketi { get; set; }      // kayıt anındaki ödeme şirketi — Personel Muhasebe İşlemleri'nde her sekmede sütun
+        public string OdemeSirketi { get; set; } public string OdemeSirketiX { get; set; }      // kayıt anındaki ödeme şirketleri (R: Uras Power · X: fiili görev yeri şirketi) — Personel Muhasebe İşlemleri'nde her sekmede sütun
         public decimal Pay { get; set; }              // % (çok şirketli görev yerinde dağılım payı)
         public List<PyKalem> Kalemler { get; set; } = new List<PyKalem>();
         public decimal Net => Kalemler.Sum(k => k.Tutar);
@@ -118,7 +118,7 @@ namespace WebApplication3.Data
             (3, 7, "Net Ücret"), (3, 8, "Normal Çalışma Ücreti"), (3, 9, "Sosyal Güvenlik Destek Primi (SGDP) İşçi Payı"), (3, 10, "Ücretli İzin Ücreti"), (3, 11, "Toplam Brüt Ücret"), (3, 12, "Brüt Ücrete Eklenen Kira Desteği"), (3, 14, "Brüt Ücrete Eklenen Yemek Yardımı"), (3, 15, "Brüt Ücrete Eklenen Yol Yardımı"),
             (4, 1, "Genel Sağlık Sigortası İşveren Payı"), (4, 2, "İşsizlik Sigortası İşveren Payı"), (4, 3, "Kısa Vadeli Sigorta Kolları Primi"), (4, 4, "Malullük, Yaşlılık ve Ölüm Sigortası İşveren Payı"), (4, 5, "Sosyal Güvenlik Destek Primi (SGDP) İşveren Payı"), (4, 6, "SGK İşveren Payı"),
             (5, 1, "Avans Kesintisi"), (5, 2, "Bireysel Emeklilik Sistemi (BES) Kesintisi"), (5, 3, "İcra Kesintisi"), (5, 4, "İhbar Kesintisi"), (5, 5, "Özel Sigorta Kesintisi"), (5, 6, "Personel Borç Kesintisi"), (5, 7, "Personel Yakıt Kesintisi"), (5, 8, "Sendika Kesintisi"),
-            (6, 1, "Personel Prim Ödemesi"), (6, 2, "Satış Primi"), (6, 3, "Yönetim Onaylı Özel Ödemeler"),
+            (6, 1, "Personel Prim Ödemesi"), (6, 2, "Satış Primi"), (6, 3, "Yönetim Onaylı Özel Ödemeler"), (6, 4, "Kasa Tazminatı"),
             (7, 1, "Bireysel Emeklilik Sistemi (BES) Katkısı"), (7, 2, "Doğum Yardımları"), (7, 3, "Evlilik Yardımları"), (7, 4, "Kıyafet ve Üniforma"), (7, 5, "Koruyucu Ekipman"), (7, 6, "Özel Sağlık Sigortası"),
             (8, 1, "Doğum İzni Farkı"), (8, 2, "İhbar Tazminatı"), (8, 3, "İşe İade Tazminatı"), (8, 4, "Kıdem Tazminatı"), (8, 5, "Kullanılmayan Yıllık İzin Ücretleri"), (8, 6, "Rapor Farkı"),
             (9, 1, "Üretim Personeli / Gündelikçi")
@@ -143,6 +143,7 @@ namespace WebApplication3.Data
             new PyEsleme { Alan = "MaasFarki", AlanAdi = "Maaş Farkı", GiderKodu = "GDR.13.03.05" },
             new PyEsleme { Alan = "Prim", AlanAdi = "Prim", GiderKodu = "GDR.13.06.02" },
             new PyEsleme { Alan = "OzelOdeme", AlanAdi = "Özel Ödeme", GiderKodu = "GDR.13.06.03" },
+            new PyEsleme { Alan = "KasaTazminati", AlanAdi = "Kasa Tazminatı", GiderKodu = "GDR.13.06.04" },
             new PyEsleme { Alan = "ToplamYanHaklar", AlanAdi = "Toplam Yan Haklar", GiderKodu = "GDR.13.07.06" },
             new PyEsleme { Alan = "ToplamYasal", AlanAdi = "Toplam Yasal Ödemeler", GiderKodu = "GDR.13.08.04" }
         };
@@ -209,7 +210,7 @@ namespace WebApplication3.Data
         {
             "XNet" => p.XNet, "RNet" => p.RNet, "ToplamBrutMasraflar" => h.ToplamBrutMasraflar, "SgkIsverenToplam" => h.SgkIsverenToplam, "ToplamEkCalisma" => h.ToplamEkCalisma,
             "Yemek" => p.Yemek, "Yol" => p.Yol, "Servis" => p.Servis, "KiraDestegi" => p.KiraDestegi, "Egitim" => p.Egitim, "CocukYardimi" => p.CocukYardimi,
-            "MaasFarki" => p.MaasFarki, "Prim" => p.Prim, "OzelOdeme" => p.OzelOdeme, "ToplamYanHaklar" => h.ToplamYanHaklar, "ToplamYasal" => h.ToplamYasal, _ => 0m
+            "MaasFarki" => p.MaasFarki, "Prim" => p.Prim, "OzelOdeme" => p.OzelOdeme, "KasaTazminati" => p.KasaTazminati, "ToplamYanHaklar" => h.ToplamYanHaklar, "ToplamYasal" => h.ToplamYasal, _ => 0m
         };
         private static List<PyKalem> KalemleriKur(PmPersonel p)
         {
@@ -242,7 +243,7 @@ namespace WebApplication3.Data
         private static readonly List<PyKayit> _kayitlar = new List<PyKayit>();
         public static IReadOnlyList<PyKayit> Kayitlar => _kayitlar;
         private static int _sonId = 0, _sonFis = 0, _sonFatura = 0;
-        public static string DonemBugun => DateTime.Today.ToString("yyyy-MM");
+        public static string GuncelDonem => PersonelMaliyetOrnek.GuncelDonem;
         public static string DonemAdi(string donem) => DateTime.TryParseExact(donem + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var t) ? t.ToString("MMMM yyyy", Tr) : donem;
         private static bool DonemGecerli(string donem) => DateTime.TryParseExact((donem ?? "") + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
 
@@ -265,7 +266,7 @@ namespace WebApplication3.Data
                         var t = DateTime.Now; int id = ++_sonId; int fis = ++_sonFis;
                         var k = new PyKayit
                         {
-                            Id = id, No = $"PYN-{donem}-{id:0000}", Donem = donem, PersonelSira = a.Personel.Sira, CariKodu = a.Personel.CariKodu, AdSoyad = a.Personel.AdSoyad, Gorev = a.Personel.Gorev, FiiliGorevYeri = a.Personel.FiiliGorevYeri, OdemeSirketi = PersonelMuhasebeOrnek.OdemeSirketi(a.Personel),
+                            Id = id, No = $"PYN-{donem}-{id:0000}", Donem = donem, PersonelSira = a.Personel.Sira, CariKodu = a.Personel.CariKodu, AdSoyad = a.Personel.AdSoyad, Gorev = a.Personel.Gorev, FiiliGorevYeri = a.Personel.FiiliGorevYeri, OdemeSirketi = PersonelMuhasebeOrnek.OdemeSirketiR, OdemeSirketiX = PersonelMuhasebeOrnek.OdemeSirketiX(a.Personel),
                             KaynakSirket = a.KaynakSirket, HedefSirket = h.Sirket, Pay = h.Pay, KdvOrani = KdvOrani, Durum = "Kaydedildi", Olusturan = kullanici, Zaman = t,
                             KaynakFisNo = $"YGF-{donem.Replace("-", "")}-{fis:0000}", HedefFisNo = $"PGF-{donem.Replace("-", "")}-{fis:0000}",
                             Kalemler = a.Kalemler.Select(x => new PyKalem { Alan = x.Alan, AlanAdi = x.AlanAdi, AktarimTipi = x.AktarimTipi, GiderKodu = x.GiderKodu, GiderKalem = x.GiderKalem, YansitmaKodu = x.YansitmaKodu, YansitmaKalem = x.YansitmaKalem, Tutar = KalemPay(x.Tutar, h.Pay) }).ToList()
@@ -314,15 +315,15 @@ namespace WebApplication3.Data
             var adaylar = Adaylar();
             return new
             {
-                success = ok, message, yeniler, donem, donemAdi = DonemAdi(donem), bugunDonem = DonemBugun, ben,
+                success = ok, message, yeniler, donem, donemAdi = DonemAdi(donem), guncelDonem = GuncelDonem, ben,
                 kdvOrani = KdvOrani, sirketler = Sirketler,
-                donemler = kayitlar.Select(k => k.Donem).Concat(new[] { donem, DonemBugun }).Distinct().OrderByDescending(x => x).Select(x => new { kod = x, ad = DonemAdi(x) }).ToList(),
+                donemler = kayitlar.Select(k => k.Donem).Concat(new[] { donem, GuncelDonem }).Distinct().OrderByDescending(x => x).Select(x => new { kod = x, ad = DonemAdi(x) }).ToList(),
                 katalog = Katalog.Select(k => new { k.GiderKodu, k.AltGrupNo, k.AltGrup, k.KalemNo, k.Kalem, k.YansitmaKodu, k.YansitmaAltGrup, k.YansitmaKalem }).ToList(),
                 esleme = Esleme.Select(e => { var k = KatalogBul(e.GiderKodu); return new { e.Alan, e.AlanAdi, e.AktarimTipi, e.GiderKodu, giderKalem = k?.Kalem, giderAltGrup = k?.AltGrup, yansitmaKodu = k?.YansitmaKodu, yansitmaKalem = k?.YansitmaKalem }; }).ToList(),
                 adaylar = adaylar.Select(a => new
                 {
                     sira = a.Personel.Sira, cariKodu = a.Personel.CariKodu, adSoyad = a.Personel.AdSoyad, unvan = a.Personel.Unvan, gorev = a.Personel.Gorev, bolum = a.Personel.Bolum, catiDepartman = a.Personel.CatiDepartman,
-                    sgkIsvereni = a.Personel.SgkIsvereni, fiiliGorevYeri = a.Personel.FiiliGorevYeri, odemeSirketi = PersonelMuhasebeOrnek.OdemeSirketi(a.Personel), kaynakSirket = a.KaynakSirket,
+                    sgkIsvereni = a.Personel.SgkIsvereni, fiiliGorevYeri = a.Personel.FiiliGorevYeri, odemeSirketi = PersonelMuhasebeOrnek.OdemeSirketiR, odemeSirketiX = PersonelMuhasebeOrnek.OdemeSirketiX(a.Personel), kaynakSirket = a.KaynakSirket,
                     dagilim = a.Dagilim.Select(d => new { sirket = d.Sirket, pay = d.Pay }).ToList(), hedefler = a.Hedefler.Select(h => new { sirket = h.Sirket, pay = h.Pay, tutar = a.HedefNet(h.Pay), kayit = kayitlar.FirstOrDefault(k => k.Donem == donem && k.PersonelSira == a.Personel.Sira && k.HedefSirket == h.Sirket && k.Durum != "İptal")?.No }).ToList(),
                     dagilimOzel = a.DagilimOzel, maliyet = a.Maliyet, yansitilacakPay = a.YansitilacakPay, yansitilacak = a.Yansitilacak,
                     kalemler = a.Kalemler.Select(KalemDto).ToList(),
@@ -352,7 +353,7 @@ namespace WebApplication3.Data
         }
         private static object KayitDto(PyKayit k) => new
         {
-            k.Id, k.No, k.Donem, donemAdi = DonemAdi(k.Donem), k.PersonelSira, k.CariKodu, k.AdSoyad, k.Gorev, k.KaynakSirket, k.HedefSirket, sgkIsvereni = k.KaynakSirket, k.FiiliGorevYeri, k.OdemeSirketi, k.Pay, k.Net, k.KdvOrani, k.Kdv, k.Toplam, k.Durum,
+            k.Id, k.No, k.Donem, donemAdi = DonemAdi(k.Donem), k.PersonelSira, k.CariKodu, k.AdSoyad, k.Gorev, k.KaynakSirket, k.HedefSirket, sgkIsvereni = k.KaynakSirket, k.FiiliGorevYeri, k.OdemeSirketi, k.OdemeSirketiX, k.Pay, k.Net, k.KdvOrani, k.Kdv, k.Toplam, k.Durum,
             k.KaynakFisNo, k.HedefFisNo, k.FaturaNo, k.Olusturan, zaman = k.Zaman.ToString("dd.MM.yyyy HH:mm"), k.IptalNedeni, k.Gecmis, kalemler = k.Kalemler.Select(KalemDto).ToList(),
             kaynakFis = KaynakFis(k), hedefFis = HedefFis(k)
         };

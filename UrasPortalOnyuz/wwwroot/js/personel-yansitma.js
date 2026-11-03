@@ -23,7 +23,7 @@
   let V = null, L = [], K = [], secili = new Set(), acikDetay = new Set(), aktifSekme = 'hazirlik';
   function mesaj(tip, m) { const s = $('#naSonuc'); s.className = 'alert py-2 px-3 mb-2 alert-' + tip; s.innerHTML = m; s.style.display = 'block'; clearTimeout(mesaj.z); mesaj.z = setTimeout(() => s.style.display = 'none', 10000); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   async function post(url, veri) { const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); return r.json(); }
-  const donem = () => $('#pyDonem').value || V.bugunDonem;
+  const donem = () => $('#pyDonem').value || V.guncelDonem;
 
   // ---- sekmeler
   function sekme(p) {

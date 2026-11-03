@@ -2,7 +2,7 @@
 // PERSONEL MALİYET RAPORU — "Muhasebe Kayıtları" sekmesi (IT Analiz 01.11.2026: Simülasyon · Onay · Muhasebeleştirme)
 //   Akış zorunlu: VERİYİ HAZIRLA → SİMÜLASYON OLUŞTUR → KONTROL / ANALİZ → ONAYA GÖNDER → ONAYLA → MUHASEBE FİŞİ → İZLEME / TERS KAYIT. Onaysız simülasyondan gerçek fiş oluşmaz.
 //   Kaynak: seçili dönemin Personel Maliyet Tablosu satırları (PmPersonel + PmBordro). Şirketler: SGK İşvereni (tahakkuk), Fiili Görev Yeri (yansıtma), Ödeme Şirketi (net ödeme).
-//   İşlem grupları: A Bordro Tahakkuku (SGK işvereni) · B Fiili Görev Yeri Yansıtması (SGK ≠ fiili şirket; genel maliyet) · C Net Personel Ödemesi (ödeme şirketi = SGK) ·
+//   İşlem grupları: A Bordro Tahakkuku (SGK işvereni) · B Fiili Görev Yeri Yansıtması (SGK ≠ fiili şirket; genel maliyet) · C Net Personel Ödemesi (R: Uras Power, X: fiili şirket; SGK ile aynıysa) ·
 //                   D Başka Şirket Tarafından Ödeme (SGK ≠ ödeme şirketi; iki şirkette karşılıklı dengeli set) · E Ters Kayıt (muhasebeleştirilmiş fiş referanslı).
 //   Hesaplar personel satırına yazılmaz: Hesap Eşleştirme tablosundan (şirket + işlem türü + kaynak kalem + X/R + yön + karşı şirket) seçilir; eşleşme yoksa satır "[Eşleşme Yok]" hatası alır.
 //   Her tüzel şirket için ayrı fiş; her simülasyon SIM no + versiyon alır; kaynak veri imzası (snapshot) saklanır, veri değişirse "Güncelliğini Yitirdi".
@@ -90,11 +90,18 @@ namespace WebApplication3.Data
 
         // ---------- şirket eşlemesi ----------
         private static readonly Dictionary<string, string> FiiliMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["ALV Kimya İst."] = "ALV Kimya", ["ALV Kimya Çorlu"] = "ALV Kimya", ["ALV Kimya"] = "ALV Kimya", ["Uras Kimya"] = "Uras Kimya", ["Uras Holding"] = "Uras Holding", ["Selvi Kimya"] = "Selvi Kimya", ["Avrupa Paper"] = "Avrupa Paper", ["URS Makine"] = "URS Makine", ["Alv Filo"] = "Alv Filo", ["Uras Power"] = "Uras Power" };
-        /// <summary>Fiili görev yerinin tüzel şirketi; yurt dışı / lokasyon adları (Asia vb.) SGK işvereninin şirketidir (yansıtma yok).</summary>
-        public static string FiiliSirket(PmPersonel p) => FiiliMap.TryGetValue(p.FiiliGorevYeri ?? "", out var s) ? s : p.SgkIsvereni;
-        /// <summary>R (banka) net ödemelerinin tamamı varsayılan olarak Uras Power'dan yapılır (kullanıcı kuralı); kartta kişi bazında değiştirilebilir. X (elden) ödemesi SGK işvereninin kasasından.</summary>
-        public const string VarsayilanOdemeSirketi = "Uras Power";
-        public static string OdemeSirketi(PmPersonel p) => string.IsNullOrWhiteSpace(p.OdemeSirketi) ? VarsayilanOdemeSirketi : p.OdemeSirketi.Trim();
+        /// <summary>Fiili görev yerinin tüzel şirketi; eşleşmeyen yerde (boş, Diğer, yurt dışı / lokasyon adları) verilen varsayılan.</summary>
+        public static string FiiliSirketAdi(string fiiliGorevYeri, string varsayilan = "") => FiiliMap.TryGetValue(fiiliGorevYeri ?? "", out var s) ? s : varsayilan;
+        /// <summary>Fiili görev yeri → tüzel şirket eşlemesi; istemci (kart, tablo, muhasebe) aynı tabloyu kullanır.</summary>
+        public static IReadOnlyDictionary<string, string> FiiliSirketler => FiiliMap;
+        /// <summary>Yansıtma (B) ve ödeme şirketi varsayılanında fiili şirket: fiili görev yeri şirketi, yoksa SGK işvereni (yansıtma yok).</summary>
+        public static string FiiliSirket(PmPersonel p) => FiiliSirketAdi(p.FiiliGorevYeri, p.SgkIsvereni);
+        /// <summary>R (banka) net ödemesi her zaman Uras Power'dan yapılır (kullanıcı kuralı, 3 Kas 2026); elle değiştirilmez.</summary>
+        public const string OdemeSirketiR = "Uras Power";
+        /// <summary>X (elden) net ödemesi personelin fiili görev yeri şirketinden yapılır (kullanıcı kuralı, 3 Kas 2026); SGK işvereninden farklıysa iki şirket arasında D grubu set oluşur.</summary>
+        public static string OdemeSirketiX(PmPersonel p) => FiiliSirket(p);
+        /// <summary>Satırın kanalına göre ödeme şirketi: X → fiili görev yeri şirketi, R → Uras Power.</summary>
+        public static string OdemeSirketiKanal(PmPersonel p, string xr) => xr == "X" ? OdemeSirketiX(p) : OdemeSirketiR;
         private static string MasterSirket(string s) => s == "ALV Kimya" || s == "Alv Filo" ? "Alv Kimya" : s == "Selvi Kimya" ? "Selvi" : s;
         public static string DbName(string sirket) => CekAkibetOrnek.DbName(MasterSirket(sirket));
         public static bool OdemeYapilmiyor(PmPersonel p) => (p.Not ?? "").IndexOf("Ödeme Yapılmıyor", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -111,7 +118,7 @@ namespace WebApplication3.Data
             E(A, "Yasal Ödemeler", "R", "Borç", "770.06"); E(A, "SGK İşveren Payı", "R", "Borç", "770.07"); E(A, "Diğer Ek Ödemeler (R)", "R", "Borç", "770.10"); E(A, "Bordro Dışı Ödeme (X)", "X", "Borç", "770.09");
             // A — alacak (yükümlülük)
             E(A, "Net-R Bordro", "R", "Alacak", "335.01"); E(A, "Net-X Bordro", "X", "Alacak", "335.02"); E(A, "Gelir Vergisi", "R", "Alacak", "360.01"); E(A, "Damga Vergisi", "R", "Alacak", "360.02"); E(A, "SGK İşçi Payı", "R", "Alacak", "361.01"); E(A, "SGK İşveren Payı", "R", "Alacak", "361.02");
-            E(A, "Avans Kesintisi", "R", "Alacak", "196.01"); E(A, "İcra Kesintisi", "R", "Alacak", "369.01"); E(A, "Borç Kesintisi", "R", "Alacak", "136.01"); E(A, "Diğer Kesintiler", "R", "Alacak", "369.02"); E(A, "Kesinti (X)", "X", "Alacak", "196.02");
+            E(A, "Avans Kesintisi", "R", "Alacak", "196.01"); E(A, "İcra Kesintisi", "R", "Alacak", "369.01"); E(A, "Borç Kesintisi", "R", "Alacak", "136.01"); E(A, "Mazot Kesintisi", "R", "Alacak", "136.01"); E(A, "İhbar Kesintisi", "R", "Alacak", "136.01"); E(A, "Diğer Kesintiler", "R", "Alacak", "369.02"); E(A, "Kesinti (X)", "X", "Alacak", "196.02");
             // B — yansıtma
             E(B, "Grup İçi Alacak", "*", "Borç", "132.01"); E(B, "Yansıtma Geliri", "*", "Alacak", "649.01"); E(B, "Yansıtılan Personel Gideri", "*", "Borç", "770.08"); E(B, "Grup İçi Borç", "*", "Alacak", "332.01");
             // C — net ödeme
@@ -155,7 +162,7 @@ namespace WebApplication3.Data
         public static string KaynakImzasi(string donem, string kapsam)
         {
             var sb = new StringBuilder();
-            lock (PersonelMaliyetOrnek.Kilit) foreach (var p in Kaynak(donem, kapsam)) { var h = p.Hesap; sb.Append(p.Sira).Append('|').Append(h.GenelMaliyet).Append('|').Append(h.NetRBordro).Append('|').Append(h.NetXBordro).Append('|').Append(h.ToplamBrutKazanc).Append('|').Append(h.SgkIsverenToplam).Append('|').Append(p.SgkIsvereni).Append('|').Append(FiiliSirket(p)).Append('|').Append(OdemeSirketi(p)).Append('|').Append(OdemeYapilmiyor(p)).Append(';'); }
+            lock (PersonelMaliyetOrnek.Kilit) foreach (var p in Kaynak(donem, kapsam)) { var h = p.Hesap; sb.Append(p.Sira).Append('|').Append(h.GenelMaliyet).Append('|').Append(h.NetRBordro).Append('|').Append(h.NetXBordro).Append('|').Append(h.ToplamBrutKazanc).Append('|').Append(h.SgkIsverenToplam).Append('|').Append(p.SgkIsvereni).Append('|').Append(FiiliSirket(p)).Append('|').Append(OdemeSirketiR).Append('|').Append(OdemeSirketiX(p)).Append('|').Append(OdemeYapilmiyor(p)).Append(';'); }
             lock (Kilit) sb.Append("#E").Append(_eslemeVersiyon);
             using var sha = SHA256.Create(); return Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(sb.ToString()))).Substring(0, 16);
         }
@@ -181,7 +188,7 @@ namespace WebApplication3.Data
             {
                 if (tutar <= 0) return; tutar = Math.Round(tutar, 2);
                 var e = EslemeBul(f.Sirket, islem, kalem, xr, yon, donem, karsi);
-                var st = new PmhSatir { Id = ++_satirId, FisKodu = f.Kod, Sirket = f.Sirket, IslemGrubu = f.IslemGrubu, PersonelSira = p.Sira, AdSoyad = p.AdSoyad, SgkIsvereni = p.SgkIsvereni, FiiliGorevYeri = p.FiiliGorevYeri, OdemeSirketi = OdemeSirketi(p), IslemTuru = islem, XR = xr, KaynakKalem = kalem, KarsiSirket = karsi ?? "", Borc = yon == "Borç" ? tutar : 0, Alacak = yon == "Alacak" ? tutar : 0, EslemeId = e?.Id,
+                var st = new PmhSatir { Id = ++_satirId, FisKodu = f.Kod, Sirket = f.Sirket, IslemGrubu = f.IslemGrubu, PersonelSira = p.Sira, AdSoyad = p.AdSoyad, SgkIsvereni = p.SgkIsvereni, FiiliGorevYeri = p.FiiliGorevYeri, OdemeSirketi = OdemeSirketiKanal(p, xr), IslemTuru = islem, XR = xr, KaynakKalem = kalem, KarsiSirket = karsi ?? "", Borc = yon == "Borç" ? tutar : 0, Alacak = yon == "Alacak" ? tutar : 0, EslemeId = e?.Id,
                     HesapKodu = e?.HesapKodu ?? "[Eşleşme Yok]", HesapAdi = e?.HesapAdi ?? "Hesap eşleştirmesi tanımlı değil", Aciklama = $"{p.AdSoyad} · {dAd} · {islem} · {kalem}{(string.IsNullOrEmpty(karsi) ? "" : " · karşı şirket " + karsi)}{(string.IsNullOrEmpty(acik) ? "" : " · " + acik)}" };
                 if (e == null) st.Hatalar.Add($"Eksik eşleştirme: {f.Sirket} / {islem} / {kalem} / {xr} / {yon}");
                 else { if (!e.Posting) st.Hatalar.Add($"{e.HesapKodu} üst seviye hesap; posting hesabı değil"); if (e.Sirket != "*" && e.Sirket != f.Sirket) st.Hatalar.Add("Hesap başka şirketin planından"); }
@@ -190,21 +197,21 @@ namespace WebApplication3.Data
             decimal yansitma = 0, baskaOdeme = 0, genel = 0, ara = 0; int odemeYok = 0, xrHata = 0, genelHata = 0, yansitmaHata = 0;
             foreach (var p in kisiler)
             {
-                var h = p.Hesap; string sgk = p.SgkIsvereni, fiili = FiiliSirket(p), ode = OdemeSirketi(p);
+                var h = p.Hesap; string sgk = p.SgkIsvereni, fiili = FiiliSirket(p), ode = OdemeSirketiR, odeX = OdemeSirketiX(p);
                 genel += h.GenelMaliyet; ara += h.AraToplam;
                 if (Math.Abs(h.NetXBordro + h.NetRBordro - h.AraToplam) > 0.01m) xrHata++;
                 if (Math.Abs(h.AraToplam + h.ToplamBrutMasraflar + h.ToplamIsveren - h.GenelMaliyet) > 0.01m) genelHata++;
-                if (!FiiliMap.ContainsKey(p.FiiliGorevYeri ?? "") && !string.Equals(p.FiiliGorevYeri, sgk, StringComparison.OrdinalIgnoreCase) && !(p.FiiliGorevYeri ?? "").StartsWith("Asia")) yansitmaHata++;
+                if (!string.IsNullOrWhiteSpace(p.FiiliGorevYeri) && !FiiliMap.ContainsKey(p.FiiliGorevYeri) && !string.Equals(p.FiiliGorevYeri, sgk, StringComparison.OrdinalIgnoreCase) && !p.FiiliGorevYeri.StartsWith("Asia") && !string.Equals(p.FiiliGorevYeri, "Diğer", StringComparison.OrdinalIgnoreCase)) yansitmaHata++;   // fiili görev yeri boşsa veya "Diğer" ise SGK işvereni geçerlidir (yansıtma yok, hata değil)
                 // A) Bordro tahakkuku — SGK işvereni
                 var fa = Fis(sgk, "A", "Bordro Tahakkuku");
-                decimal kazanclar = h.NormalKazanc + h.HaftaSonuKazanc + h.ResmiTatilKazanc + h.BayramKazanc + h.UcretliIzinKazanc;
+                decimal kazanclar = p.SgkDetayYok ? p.RNet : (h.NormalKazanc + h.HaftaSonuKazanc + h.ResmiTatilKazanc + h.BayramKazanc + h.UcretliIzinKazanc);   // SGK / brüt detayı olmayan kişide ücret = R-Net (vergi ve SGK yok)
                 const string A = "Bordro Tahakkuku";
                 Satir(fa, p, A, "Ücret (Brüt Esas)", "R", "Borç", kazanclar, null, null); Satir(fa, p, A, "Fazla Mesai", "R", "Borç", h.ToplamEkCalisma, null, null); Satir(fa, p, A, "Sosyal Yardımlar", "R", "Borç", h.ToplamSosyal, null, null);
                 Satir(fa, p, A, "Prim ve Ek Kazançlar", "R", "Borç", h.ToplamPrim, null, null); Satir(fa, p, A, "Yan Haklar", "R", "Borç", h.ToplamYanHaklar, null, null); Satir(fa, p, A, "Yasal Ödemeler", "R", "Borç", h.ToplamYasal, null, null);
                 Satir(fa, p, A, "SGK İşveren Payı", "R", "Borç", h.SgkIsverenToplam, null, null); Satir(fa, p, A, "Diğer Ek Ödemeler (R)", "R", "Borç", p.DigerEkOdemelerR, null, null); Satir(fa, p, A, "Bordro Dışı Ödeme (X)", "X", "Borç", h.NetXBordro, null, "X-Net + X tarafı kalemler");
                 Satir(fa, p, A, "Net-R Bordro", "R", "Alacak", h.NetRBordro, null, "bankaya yatacak net"); Satir(fa, p, A, "Net-X Bordro", "X", "Alacak", h.KalanNetElden, null, "elden ödenecek net");
                 Satir(fa, p, A, "Gelir Vergisi", "R", "Alacak", h.GvTutari, null, null); Satir(fa, p, A, "Damga Vergisi", "R", "Alacak", h.DvTutari, null, null); Satir(fa, p, A, "SGK İşçi Payı", "R", "Alacak", h.SgkIsciToplam, null, null); Satir(fa, p, A, "SGK İşveren Payı", "R", "Alacak", h.SgkIsverenToplam, null, null);
-                Satir(fa, p, A, "Avans Kesintisi", "R", "Alacak", p.Avans, null, "maaştan mahsup"); Satir(fa, p, A, "İcra Kesintisi", "R", "Alacak", p.Icra, null, null); Satir(fa, p, A, "Borç Kesintisi", "R", "Alacak", p.Borc, null, null); Satir(fa, p, A, "Diğer Kesintiler", "R", "Alacak", p.Bes + p.SendikaKatkisi + p.OzelSigortaKesintisi, null, "BES / sendika / özel sigorta"); Satir(fa, p, A, "Kesinti (X)", "X", "Alacak", p.KesintilerToplamiX, null, null);
+                Satir(fa, p, A, "Avans Kesintisi", "R", "Alacak", p.Avans, null, "maaştan mahsup"); Satir(fa, p, A, "İcra Kesintisi", "R", "Alacak", p.Icra, null, null); Satir(fa, p, A, "Borç Kesintisi", "R", "Alacak", p.Borc, null, null); Satir(fa, p, A, "Diğer Kesintiler", "R", "Alacak", p.Bes + p.SendikaKatkisi + p.OzelSigortaKesintisi, null, "BES / sendika / özel sigorta"); Satir(fa, p, A, "Mazot Kesintisi", "R", "Alacak", p.MazotKesintisi, null, null); Satir(fa, p, A, "İhbar Kesintisi", "R", "Alacak", p.IhbarKesintisi, null, null); Satir(fa, p, A, "Kesinti (X)", "X", "Alacak", p.KesintilerToplamiX, null, null);
                 // B) Fiili görev yeri yansıtması — genel maliyet bazında (bileşenler ayrıca gider yazılmaz; çifte kayıt engeli)
                 if (!string.Equals(fiili, sgk, StringComparison.OrdinalIgnoreCase) && h.GenelMaliyet > 0)
                 {
@@ -212,10 +219,16 @@ namespace WebApplication3.Data
                     var fb1 = Fis(sgk, "B", "Fiili Görev Yeri Yansıtması (Yansıtan)"); Satir(fb1, p, B, "Grup İçi Alacak", xr, "Borç", h.GenelMaliyet, fiili, "genel maliyet"); Satir(fb1, p, B, "Yansıtma Geliri", xr, "Alacak", h.GenelMaliyet, fiili, "genel maliyet");
                     var fb2 = Fis(fiili, "B", "Fiili Görev Yeri Yansıtması (Yansıtılan)"); Satir(fb2, p, B, "Yansıtılan Personel Gideri", xr, "Borç", h.GenelMaliyet, sgk, "genel maliyet"); Satir(fb2, p, B, "Grup İçi Borç", xr, "Alacak", h.GenelMaliyet, sgk, "genel maliyet");
                 }
-                // C / D) Net personel ödemesi — R (banka) ödeme şirketinden (varsayılan Uras Power), X (elden) SGK işvereni kasasından; "Ödeme Yapılmıyor" notu ödeme kaydını engeller (kontrol 11)
+                // C / D) Net personel ödemesi — R (banka) Uras Power'dan, X (elden) fiili görev yeri şirketinden (SGK işvereninden farklıysa D); "Ödeme Yapılmıyor" notu ödeme kaydını engeller (kontrol 11)
                 if (OdemeYapilmiyor(p)) { odemeYok++; continue; }
                 const string C = "Net Personel Ödemesi", D = "Başka Şirket Tarafından Ödeme";
-                if (h.KalanNetElden > 0) { var fcx = Fis(sgk, "C", "Net Personel Ödemesi"); Satir(fcx, p, C, "Net-X Bordro", "X", "Borç", h.KalanNetElden, null, "personel borcu kapatma"); Satir(fcx, p, C, "Kasa", "X", "Alacak", h.KalanNetElden, null, "elden ödeme"); }
+                if (h.KalanNetElden > 0 && string.Equals(odeX, sgk, StringComparison.OrdinalIgnoreCase)) { var fcx = Fis(sgk, "C", "Net Personel Ödemesi"); Satir(fcx, p, C, "Net-X Bordro", "X", "Borç", h.KalanNetElden, null, "personel borcu kapatma"); Satir(fcx, p, C, "Kasa", "X", "Alacak", h.KalanNetElden, null, "elden ödeme"); }
+                else if (h.KalanNetElden > 0)
+                {
+                    baskaOdeme += h.KalanNetElden;
+                    var fdx1 = Fis(sgk, "D", "Başka Şirket Tarafından Ödeme (SGK İşvereni)"); Satir(fdx1, p, D, "Net-X Bordro", "X", "Borç", h.KalanNetElden, odeX, "personel borcu kapatma"); Satir(fdx1, p, D, "Grup İçi Borç", "*", "Alacak", h.KalanNetElden, odeX, "ödeme şirketine borç");
+                    var fdx2 = Fis(odeX, "D", "Başka Şirket Tarafından Ödeme (Ödeme Şirketi)"); Satir(fdx2, p, D, "Grup İçi Alacak", "*", "Borç", h.KalanNetElden, sgk, sgk + " adına elden ödeme"); Satir(fdx2, p, D, "Kasa", "X", "Alacak", h.KalanNetElden, sgk, "kasadan elden ödeme");
+                }
                 if (h.NetRBordro > 0)
                 {
                     if (string.Equals(ode, sgk, StringComparison.OrdinalIgnoreCase))
@@ -255,7 +268,7 @@ namespace WebApplication3.Data
             K(5, "Genel Maliyet Mutabakatı", "Kritik", genelHata, "Ara Toplam + Toplam Brüt Masraflar + Toplam İşveren = Genel Maliyet.", $"{genelHata} personelde genel maliyet mutabakatı tutmuyor.");
             K(6, "Yansıtma Kontrolü", "Kritik", yansitmaHata, "SGK işvereni ve fiili görev yeri şirket eşlemesi tanımlı.", $"{yansitmaHata} personelde fiili görev yeri şirkete eşlenemedi.");
             int dEksik = 0; foreach (var g in s.Fisler.Where(f => f.IslemGrubu == "D").SelectMany(f => f.Satirlar).GroupBy(x => x.PersonelSira)) { var sirketler = g.Select(x => x.Sirket).Distinct().Count(); if (sirketler < 2) dEksik++; }
-            K(7, "Ödeme Şirketi Kontrolü", "Kritik", dEksik, "SGK işvereni ≠ ödeme şirketi olan personelde iki şirket için karşılıklı set oluştu.", $"{dEksik} personelde karşı şirket kaydı eksik.");
+            K(7, "Ödeme Şirketi Kontrolü", "Kritik", dEksik, "SGK işvereni ≠ ödeme şirketi (R: Uras Power, X: fiili görev yeri şirketi) olan personelde iki şirket için karşılıklı set oluştu.", $"{dEksik} personelde karşı şirket kaydı eksik.");
             int mukerrer; lock (Kilit) mukerrer = Simulasyonlar.Count(x => x.Id != s.Id && x.Donem == s.Donem && (x.Kapsam == s.Kapsam || x.Kapsam == "*" || s.Kapsam == "*") && x.Durum == "Muhasebeleştirildi");
             K(8, "Mükerrer Kayıt", "Kritik", mukerrer, "Aynı dönem + kapsam daha önce muhasebeleştirilmemiş.", $"Aynı dönem için {mukerrer} muhasebeleştirilmiş simülasyon var (önce ters kayıt gerekir).");
             bool donemUygun = string.Compare(s.Donem, PersonelMaliyetOrnek.GuncelDonem, StringComparison.Ordinal) <= 0;
@@ -368,7 +381,7 @@ namespace WebApplication3.Data
         {
             PmhSimulasyon s; lock (Kilit) s = Simulasyonlar.Where(x => x.Donem == donem && x.Durum != "İptal").OrderByDescending(x => x.Id).FirstOrDefault() ?? Simulasyonlar.Where(x => x.Donem == donem).OrderByDescending(x => x.Id).FirstOrDefault();
             List<PmPersonel> k; lock (PersonelMaliyetOrnek.Kilit) k = Kaynak(donem, "*").Where(OdemeYapilmiyor).ToList();
-            var odemeYok = k.Select(p => new { sira = p.Sira, adSoyad = p.AdSoyad, cariKodu = p.CariKodu, sgkIsvereni = p.SgkIsvereni, fiiliGorevYeri = p.FiiliGorevYeri, odemeSirketi = OdemeSirketi(p), not = p.Not, netR = p.Hesap.NetRBordro, netX = p.Hesap.KalanNetElden }).ToList();
+            var odemeYok = k.Select(p => new { sira = p.Sira, adSoyad = p.AdSoyad, cariKodu = p.CariKodu, sgkIsvereni = p.SgkIsvereni, fiiliGorevYeri = p.FiiliGorevYeri, odemeSirketi = OdemeSirketiR, odemeSirketiX = OdemeSirketiX(p), not = p.Not, netR = p.Hesap.NetRBordro, netX = p.Hesap.KalanNetElden }).ToList();
             if (s == null) return new { simNo = (string)null, versiyon = 0, durum = "Simülasyon Yok", odenebilir = false, satirlar = new List<PmhOdeme>(), odemeYok };
             var satirlar = s.Fisler.Where(f => f.IslemGrubu == "C" || f.IslemGrubu == "D")
                 .SelectMany(f => f.Satirlar.Where(x => x.KaynakKalem == "Banka" || x.KaynakKalem == "Kasa").Select(x => new PmhOdeme
@@ -386,12 +399,12 @@ namespace WebApplication3.Data
         {
             List<PmPersonel> k; lock (PersonelMaliyetOrnek.Kilit) k = Kaynak(donem, "*").ToList();
             List<string> Sirala(IEnumerable<string> l) => l.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct().OrderBy(x => x, StringComparer.Create(Tr, true)).ToList();
-            return new { sgkIsverenleri = Sirala(k.Select(p => p.SgkIsvereni)), fiiliGorevYerleri = Sirala(k.Select(p => p.FiiliGorevYeri)), odemeSirketleri = Sirala(k.Select(OdemeSirketi)) };
+            return new { sgkIsverenleri = Sirala(k.Select(p => p.SgkIsvereni)), fiiliGorevYerleri = Sirala(k.Select(p => p.FiiliGorevYeri)), odemeSirketleri = Sirala(k.Select(p => OdemeSirketiR).Concat(k.Select(OdemeSirketiX))) };
         }
         private static object KaynakOzeti(string donem)
         {
             List<PmPersonel> k; lock (PersonelMaliyetOrnek.Kilit) k = Kaynak(donem, "*").ToList();
-            return new { personel = k.Count, genelMaliyet = Math.Round(k.Sum(p => p.Hesap.GenelMaliyet), 2), araToplam = Math.Round(k.Sum(p => p.Hesap.AraToplam), 2), yansitma = Math.Round(k.Where(p => !string.Equals(FiiliSirket(p), p.SgkIsvereni, StringComparison.OrdinalIgnoreCase)).Sum(p => p.Hesap.GenelMaliyet), 2), baskaSirket = Math.Round(k.Where(p => !string.Equals(OdemeSirketi(p), p.SgkIsvereni, StringComparison.OrdinalIgnoreCase) && !OdemeYapilmiyor(p)).Sum(p => p.Hesap.NetRBordro), 2), odemeYok = k.Count(OdemeYapilmiyor), sirketler = k.Select(p => p.SgkIsvereni).Distinct().OrderBy(x => x).ToList(), varsayilanOdemeSirketi = VarsayilanOdemeSirketi };
+            return new { personel = k.Count, genelMaliyet = Math.Round(k.Sum(p => p.Hesap.GenelMaliyet), 2), araToplam = Math.Round(k.Sum(p => p.Hesap.AraToplam), 2), yansitma = Math.Round(k.Where(p => !string.Equals(FiiliSirket(p), p.SgkIsvereni, StringComparison.OrdinalIgnoreCase)).Sum(p => p.Hesap.GenelMaliyet), 2), baskaSirket = Math.Round(k.Where(p => !OdemeYapilmiyor(p)).Sum(p => (p.Hesap.NetRBordro > 0 && !string.Equals(OdemeSirketiR, p.SgkIsvereni, StringComparison.OrdinalIgnoreCase) ? p.Hesap.NetRBordro : 0m) + (p.Hesap.KalanNetElden > 0 && !string.Equals(OdemeSirketiX(p), p.SgkIsvereni, StringComparison.OrdinalIgnoreCase) ? p.Hesap.KalanNetElden : 0m)), 2), odemeYok = k.Count(OdemeYapilmiyor), sirketler = k.Select(p => p.SgkIsvereni).Distinct().OrderBy(x => x).ToList(), varsayilanOdemeSirketi = OdemeSirketiR };
         }
     }
 }
