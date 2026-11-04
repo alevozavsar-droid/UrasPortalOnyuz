@@ -15,6 +15,8 @@ window.TabloExcel = (() => {
   const hex = s => { const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/.exec(s || ''); if (!m) return null; const a = m[4] === undefined ? 1 : parseFloat(m[4]); if (a <= 0) return null; const k = v => ('0' + Math.round(+v * a + 255 * (1 - a)).toString(16)).slice(-2); return '#' + k(m[1]) + k(m[2]) + k(m[3]); };
   const punto = px => Math.max(7, Math.round(parseFloat(px) * 0.75 + 1));   // ekran pikseli → Excel puntosu (.67rem ≈ 9 pt gövde, .58rem ≈ 8 pt başlık)
   const blokMu = d => /^(block|flex|grid|table|list-item|table-row|table-cell)$/.test(d);
+  /** başlık hücresinin tek satıra sığan doğal genişliği (ekranda sarılan başlık Excel sütununu daraltmasın; +14: sıralama oku) */
+  const dogalGenislik = el => { const r = document.createRange(); r.selectNodeContents(el); const cs = getComputedStyle(el); return r.getBoundingClientRect().width + 14 + (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0); };
   const kalin = w => w === 'bold' || w === 'bolder' || parseInt(w, 10) >= 600;
   const stil = (cs, ust) => ({ fg: hex(cs.color), b: kalin(cs.fontWeight), i: cs.fontStyle === 'italic', u: !!(ust && ust.u) || /line-through/.test(cs.textDecorationLine || cs.textDecoration || ''), pt: punto(cs.fontSize), buyuk: cs.textTransform === 'uppercase' });
   const dugmeMi = n => n.tagName === 'BUTTON' || n.classList.contains('btn') || n.classList.contains('ekyukle');
@@ -110,7 +112,7 @@ window.TabloExcel = (() => {
     });
     // sütun genişlikleri (ekran pikseli → Excel karakter birimi): son başlık satırından, yoksa gövde hücrelerinden
     const genislik = new Array(sutunSayisi).fill(0);
-    const olc = h => { if (h.cs !== 1 || yeni[h.c] < 0 || genislik[yeni[h.c]]) return; const w = h.el.getBoundingClientRect().width; if (w > 0) genislik[yeni[h.c]] = Math.round(Math.min(70, Math.max(3, w / 7 + 0.7)) * 10) / 10; };
+    const olc = h => { if (h.cs !== 1 || yeni[h.c] < 0 || genislik[yeni[h.c]]) return; const w = h.tur === 'bas' ? dogalGenislik(h.el) : h.el.getBoundingClientRect().width; if (w > 0) genislik[yeni[h.c]] = Math.round(Math.min(70, Math.max(3, w / 7 + 0.7)) * 10) / 10; };
     hucreler.filter(h => h.tur === 'bas' && h.r === sonBas).forEach(olc); hucreler.filter(h => h.tur !== 'bas').forEach(olc);
     for (let i = 0; i < sutunSayisi; i++) if (!genislik[i]) genislik[i] = 12;
     // sola sabit sütunlar (.sabit başlık hücreleri) → dondurulacak sütun sayısı
@@ -133,13 +135,20 @@ window.TabloExcel = (() => {
     if (!belge.sayfalar.length) throw new Error('Dışa aktarılacak tablo bulunamadı.');
     return belge;
   }
-  /** belgeyi sunucuya gönderir, .xlsx indirir */
-  async function indir(dosya, sayfalar) {
+  /** belgeyi sunucuya gönderir, dosyayı indirir: yol /TabloExcel/Indir (.xlsx) ya da /TabloExcel/Pdf (.pdf) */
+  async function gonder(yol, uzanti, etiket, dosya, sayfalar) {
     const belge = hazirla(dosya, sayfalar);
-    const r = await fetch('/TabloExcel/Indir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(belge) });
-    if (!r.ok) throw new Error((await r.text()) || ('Excel üretilemedi (' + r.status + ')'));
-    const b = await r.blob(), a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = dosya + '.xlsx'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    const r = await fetch(yol, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(belge) });
+    if (!r.ok) throw new Error((await r.text()) || (etiket + ' üretilemedi (' + r.status + ')'));
+    const b = await r.blob(), a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = dosya + uzanti; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     return belge;
   }
-  return { indir, hazirla, oku: tabloOku, sayiCoz };
+  const indir = (dosya, sayfalar) => gonder('/TabloExcel/Indir', '.xlsx', 'Excel', dosya, sayfalar);
+  const pdf = (dosya, sayfalar) => gonder('/TabloExcel/Pdf', '.pdf', 'PDF', dosya, sayfalar);
+  /** Excel ve PDF düğmeleri: aynı sayfa tanımı fn('xlsx') ya da fn('pdf') ile kullanılır; pdfId boşsa yalnız Excel düğmesi bağlanır */
+  function dugme(excelId, pdfId, fn) {
+    const xl = el(excelId); if (xl) xl.addEventListener('click', () => fn('xlsx'));
+    const pd = el(pdfId); if (pd) pd.addEventListener('click', () => fn('pdf'));
+  }
+  return { indir, pdf, dugme, hazirla, oku: tabloOku, sayiCoz };
 })();

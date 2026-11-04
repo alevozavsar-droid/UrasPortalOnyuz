@@ -25,12 +25,15 @@
   const rozet = (d, sinif) => `<span class="pm-rz ${sinif || (/(Onaylandı|Muhasebeleştirildi|Kaydedildi|Faturalandı|Geçti|Dengeli|Güncel|Aktif|Uyumlu|^Hazır$)/.test(d) ? 'ok' : /(Bekliyor|Onaya Gönderildi|Kontrole Hazır|Simülasyon Oluşturuldu|Kısmen|Uyarı|Taslak|Kayıtsız)/.test(d) ? 'bekle' : /(İptal|Hata|Dengesiz|Değişti|Kontrol Gerekiyor|Güncelliğini Yitirdi|Pasif|Kalem Yok|Fark)/.test(d) ? 'hata' : /(Ters Kayıt)/.test(d) ? 'mavi' : 'gri')}">${esc(d || '—')}</span>`;
   const yon = (k, h, pay) => `<span class="ph-yon"><b>${esc(k)}</b><span class="ok">→</span><b>${esc(h)}</b>${pay !== undefined ? `<span class="ph-pay">%${pct(pay)}</span>` : ''}</span>`;
   /** ekrandaki tabloları göründüğü gibi Excel'e (ortak bileşen wwwroot/js/tablo-excel.js: renkler, rozetler, birleşik başlıklar, dip toplam, dondurulmuş başlık; her tablo ayrı sayfa, ilk sayfada sekmenin KPI kutuları ve açıklaması) */
-  function domExcel(ad, tablolar) {
+  function domExcel(ad, tablolar, bicim = 'xlsx') {
     if (!window.TabloExcel) { mesaj('danger', 'Excel bileşeni yüklenemedi; sayfayı yenileyip tekrar deneyin.'); return; }
     const panel = $('.na-panel.aktif'), h5 = panel ? panel.querySelector('.pm-rapor-ust h5') : null, bas = h5 ? h5.textContent.trim() : '', sayac = panel ? panel.querySelector('.pm-sayac') : null;
     const sayfalar = tablolar.filter(([id]) => $('#' + id)).map(([id, sayfa], i) => ({ tablo: '#' + id, ad: sayfa, baslik: `Personel Muhasebe İşlemleri · ${bas || sayfa}${bas ? ' · ' + sayfa : ''}`, altBaslik: i === 0 && sayac ? sayac.textContent.trim() : '', kpi: i === 0 ? '#phKpi' : null, not: i === 0 && panel ? panel.querySelector(':scope > .pm-not') : null }));
-    window.TabloExcel.indir(ad, sayfalar).catch(e => mesaj('danger', 'Excel indirilemedi: ' + esc(e.message)));
+    const pdf = bicim === 'pdf';
+    (pdf ? window.TabloExcel.pdf : window.TabloExcel.indir)(ad, sayfalar).catch(e => mesaj('danger', (pdf ? 'PDF' : 'Excel') + ' indirilemedi: ' + esc(e.message)));
   }
+  /** Excel ve PDF düğmelerini bağlar (ortak TabloExcel.dugme): fn('xlsx') ya da fn('pdf') çağrılır */
+  const dugmeBagla = (xl, pd, fn) => { if (window.TabloExcel) window.TabloExcel.dugme(xl, pd, fn); };
   function mesaj(tip, m) { const s = $('#naSonuc'); s.className = 'alert py-2 px-3 mb-2 alert-' + tip; s.innerHTML = m; s.style.display = 'block'; clearTimeout(mesaj.z); mesaj.z = setTimeout(() => s.style.display = 'none', 9000); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   async function post(url, veri) { const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); return r.json(); }
 
@@ -225,7 +228,7 @@
     secili.clear(); veriUygula(j); mesaj('success', esc(j.message) + (j.yeniler && j.yeniler.length ? ` <button type="button" class="btn btn-light btn-sm py-0 ms-2" id="phKayitlaraGit" style="font-size:.64rem">Kayıtları Gör</button>` : ''));
     const g = $('#phKayitlaraGit'); if (g) g.addEventListener('click', () => { $('#phKDonem').value = donem(); sekme('yansitma'); });
   });
-  $('#phHazirlikExcel').addEventListener('click', () => domExcel('personel_yansitma_hazirlik_' + donem(), [['phAdayTablo', 'Yansıtma Hazırlığı']]));
+  dugmeBagla('#phHazirlikExcel', '#phHazirlikPdf', bicim => domExcel('personel_yansitma_hazirlik_' + donem(), [['phAdayTablo', 'Yansıtma Hazırlığı']], bicim));
   ['#phHHedef', '#phHCati', '#phHDurum'].forEach(s => $(s).addEventListener('change', hazirlikCiz));
 
   // ============================================================
@@ -262,11 +265,12 @@
   }
   $('#phYKayitTablo tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-no]'); if (tr) kayitDrawer(tr.dataset.no); });
   ['#phKDonem', '#phKHedef', '#phKDurum'].forEach(s => $(s).addEventListener('change', yansitmaCiz));
-  $('#phKayitlarExcel').addEventListener('click', () => domExcel('personel_yansitma_kayitlari_' + donem(), [['phYKayitTablo', 'Yansıtma Kayıtları']]));
+  dugmeBagla('#phKayitlarExcel', '#phKayitlarPdf', bicim => domExcel('personel_yansitma_kayitlari_' + donem(), [['phYKayitTablo', 'Yansıtma Kayıtları']], bicim));
   // fiş satırları ekranda tablo değil (kayıt detayında): listeden kurulur, aynı Excel bileşeniyle (koyu başlık, sayılar ₺ biçimli)
-  $('#phFisExcel').addEventListener('click', () => { if (!window.TabloExcel) { mesaj('danger', 'Excel bileşeni yüklenemedi; sayfayı yenileyip tekrar deneyin.'); return; }
+  dugmeBagla('#phFisExcel', '#phFisPdf', bicim => { if (!window.TabloExcel) { mesaj('danger', 'Excel bileşeni yüklenemedi; sayfayı yenileyip tekrar deneyin.'); return; }
     const satirlar = KL.filter(k => k.durum !== 'İptal').flatMap(k => [...k.kaynakFis.map(f => [k.no, k.donemAdi, k.kaynakSirket, 'Kaynak (SGK İşvereni)', k.kaynakFisNo, f.hesap, f.kod, f.ad, kisa(f.borc), kisa(f.alacak)]), ...k.hedefFis.map(f => [k.no, k.donemAdi, k.hedefSirket, 'Hedef (Fiili Görev Yeri)', k.hedefFisNo, f.hesap, f.kod, f.ad, kisa(f.borc), kisa(f.alacak)])]);
-    window.TabloExcel.indir('personel_yansitma_fis_satirlari_' + donem(), [{ ad: 'Fiş Satırları', baslik: 'Personel Muhasebe İşlemleri · Yansıtma Kayıtları · Fiş Satırları', altBaslik: `${satirlar.length} fiş satırı · ${KL.filter(k => k.durum !== 'İptal').length} yansıtma kaydı`, basliklar: ['Yansıtma No', 'Dönem', 'Şirket', 'Taraf', 'Fiş No', 'Hesap', 'Kod', 'Hesap Adı', 'Borç', 'Alacak'], satirlar }]).catch(e => mesaj('danger', 'Excel indirilemedi: ' + esc(e.message))); });
+    const pdf = bicim === 'pdf';
+    (pdf ? window.TabloExcel.pdf : window.TabloExcel.indir)('personel_yansitma_fis_satirlari_' + donem(), [{ ad: 'Fiş Satırları', baslik: 'Personel Muhasebe İşlemleri · Yansıtma Kayıtları · Fiş Satırları', altBaslik: `${satirlar.length} fiş satırı · ${KL.filter(k => k.durum !== 'İptal').length} yansıtma kaydı`, basliklar: ['Yansıtma No', 'Dönem', 'Şirket', 'Taraf', 'Fiş No', 'Hesap', 'Kod', 'Hesap Adı', 'Borç', 'Alacak'], satirlar }]).catch(e => mesaj('danger', (pdf ? 'PDF' : 'Excel') + ' indirilemedi: ' + esc(e.message))); });
   function fisTablo(satirlar) { const tb = satirlar.reduce((s, f) => s + f.borc, 0), ta = satirlar.reduce((s, f) => s + f.alacak, 0); return `<table class="na-tablo ph-fis" data-dinamik="kapali"><thead><tr><th>Hesap</th><th>Kod</th><th>Hesap Adı</th><th class="s">Borç</th><th class="s">Alacak</th></tr></thead><tbody>${satirlar.map(f => `<tr><td class="kod">${esc(f.hesap)}</td><td class="kod">${esc(f.kod || '')}</td><td>${esc(f.ad)}</td><td class="s">${f.borc ? tl(f.borc) : ''}</td><td class="s">${f.alacak ? tl(f.alacak) : ''}</td></tr>`).join('')}<tr class="top"><td colspan="3">Toplam ${Math.abs(tb - ta) < 0.01 ? rozet('Borç = Alacak') : rozet('Dengesiz', 'hata')}</td><td class="s">${tl(tb)}</td><td class="s">${tl(ta)}</td></tr></tbody></table>`; }
   function kayitDrawer(no) {
     const k = (Y().kayitlar || []).find(x => x.no === no); if (!k) return;
@@ -360,10 +364,10 @@
   $('#phOdemeTablo tbody').addEventListener('click', ev => { const tr = ev.target.closest('tr[data-sira]'); if (!tr) return; const o = (V.odemeler.satirlar || []).find(x => x.personelSira === +tr.dataset.sira); const k = (V.odemeler.odemeYok || []).find(x => x.sira === +tr.dataset.sira); const y = (Y().adaylar || []).find(x => x.sira === +tr.dataset.sira); const kod = (k && k.cariKodu) || (y && y.cariKodu); if (kod) window.open(kartAdresi(kod), '_blank'); else if (o) window.open('/PersonelMaliyet?sekme=tablo&donem=' + encodeURIComponent(donem()), '_blank'); });
   $('#phOdemeYok tbody').addEventListener('click', ev => { const tr = ev.target.closest('tr[data-kod]'); if (tr && tr.dataset.kod) window.open(kartAdresi(tr.dataset.kod), '_blank'); });
   ['#phOdemeSirket', '#phOdemeKanal'].forEach(s => $(s).addEventListener('change', odemeCiz));
-  $('#phKayitExcel').addEventListener('click', () => domExcel('personel_muhasebe_kayitlari_' + donem(), [['phSimTablo', 'Simülasyonlar'], ['phFisTablo', 'Fişler'], ['phSatirTablo', 'Personel Bazlı Satırlar'], ['phOzetTablo', 'Özet Kayıtlar — Muhasebeye Atılacak']]));
-  $('#phOdemeExcel').addEventListener('click', () => domExcel('personel_odemeleri_' + donem(), [['phOdemeTablo', 'Ödemeler'], ['phOdemeOzet', 'Şirket × Kanal'], ['phOdemeYok', 'Ödeme Yapılmıyor']]));
-  $('#phHesapExcel').addEventListener('click', () => domExcel('hesap_eslestirme', [['phEslemeTablo', 'Hesap Eşleştirme']]));
-  $('#phArsivExcel').addEventListener('click', () => domExcel('personel_muhasebe_fis_arsivi', [['phArsivTablo', 'Fiş Arşivi']]));
+  dugmeBagla('#phKayitExcel', '#phKayitPdf', bicim => domExcel('personel_muhasebe_kayitlari_' + donem(), [['phSimTablo', 'Simülasyonlar'], ['phFisTablo', 'Fişler'], ['phSatirTablo', 'Personel Bazlı Satırlar'], ['phOzetTablo', 'Özet Kayıtlar — Muhasebeye Atılacak']], bicim));
+  dugmeBagla('#phOdemeExcel', '#phOdemePdf', bicim => domExcel('personel_odemeleri_' + donem(), [['phOdemeTablo', 'Ödemeler'], ['phOdemeOzet', 'Şirket × Kanal'], ['phOdemeYok', 'Ödeme Yapılmıyor']], bicim));
+  dugmeBagla('#phHesapExcel', '#phHesapPdf', bicim => domExcel('hesap_eslestirme', [['phEslemeTablo', 'Hesap Eşleştirme']], bicim));
+  dugmeBagla('#phArsivExcel', '#phArsivPdf', bicim => domExcel('personel_muhasebe_fis_arsivi', [['phArsivTablo', 'Fiş Arşivi']], bicim));
   $('#phBilgi').addEventListener('click', () => { kok.classList.toggle('aciklama'); kapBoyut(); });
   window.addEventListener('resize', () => { clearTimeout(kapBoyut.z); kapBoyut.z = setTimeout(kapBoyut, 120); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden && V && ['kayitlar', 'odemeler', 'arsiv'].includes(aktifSekme)) yukle().catch(() => { /* yoksay */ }); });   // başka sekmede (raporda) adım atıldıysa geri dönünce tazele
