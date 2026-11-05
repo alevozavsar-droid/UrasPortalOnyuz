@@ -243,7 +243,7 @@ namespace WebApplication3.Data
         private static readonly List<PyKayit> _kayitlar = new List<PyKayit>();
         public static IReadOnlyList<PyKayit> Kayitlar => _kayitlar;
         private static int _sonId = 0, _sonFis = 0, _sonFatura = 0;
-        public static string GuncelDonem => PersonelMaliyetOrnek.GuncelDonem;
+        public static string GuncelDonem => PersonelMaliyetOrnek.EnYeniDonem;
         public static string DonemAdi(string donem) => DateTime.TryParseExact(donem + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var t) ? t.ToString("MMMM yyyy", Tr) : donem;
         private static bool DonemGecerli(string donem) => DateTime.TryParseExact((donem ?? "") + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
 

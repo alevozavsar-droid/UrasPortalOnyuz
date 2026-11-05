@@ -22,14 +22,18 @@ namespace WebApplication3.Data
         const double KapasiteBirim = 150;   // A4 yatay kullanılabilir genişlik ≈ 800 pt; Excel sütun birimi ≈ 5,3 pt → bir sayfa grubuna ≈ 150 birim
         static TabloPdf() { QuestPDF.Settings.License = LicenseType.Community; QuestPDF.Settings.EnableDebugging = false; }
 
-        public static byte[] Uret(TxBelge b, string hazirlayan)
+        /// <summary>PDF baytları (indirme).</summary>
+        public static byte[] Uret(TxBelge b, string hazirlayan) => Belge(b, hazirlayan).GeneratePdf();
+
+        /// <summary>Belge: PDF'e (Uret) ya da sayfa görüntüsüne çevrilebilir (önizleme ve test).</summary>
+        public static IDocument Belge(TxBelge b, string hazirlayan)
         {
             var sayfalar = (b.Sayfalar ?? new List<TxSayfa>()).ToList();
             return Document.Create(container =>
             {
                 if (sayfalar.Count == 0) { container.Page(p => { p.Size(PageSizes.A4.Landscape()); p.Margin(18); p.Content().Text(b.Dosya ?? "Rapor"); }); return; }
                 foreach (var s in sayfalar) Sayfa(container, s, b.Dosya, hazirlayan);
-            }).GeneratePdf();
+            });
         }
 
         /// <summary>Bir sayfa tanımı: sütun grupları kadar PDF sayfa dizisi (her grup kendi başlığıyla, tablo sayfalara akar).</summary>
@@ -38,6 +42,10 @@ namespace WebApplication3.Data
             var satirlar = s.Satirlar ?? new List<TxSatir>();
             int n = Math.Max(1, Math.Max(s.Genislik?.Count ?? 0, satirlar.SelectMany(r => r.H ?? new List<TxHucre>()).Select(h => h.C + Math.Max(1, h.Cs)).DefaultIfEmpty(0).Max()));
             var birim = Enumerable.Range(0, n).Select(i => s.Genislik != null && i < s.Genislik.Count ? Math.Min(80, Math.Max(3, s.Genislik[i])) : 12.0).ToList();
+            // grup başlığı (üst başlık satırı; sütun adları altta) tek sütunluksa etiketi kırılmadan sığsın: ekrandaki tek satır gibi
+            if (s.BasSatir >= 2 && satirlar.Count > 0)
+                foreach (var h in satirlar[0].H ?? new List<TxHucre>())
+                    if (h.Cs <= 1 && h.C >= 0 && h.C < n) birim[h.C] = Math.Min(80, Math.Max(birim[h.C], 0.8 * EnUzunSatir(h) + 1.5));
             int sabit = Math.Min(Math.Min(Math.Max(0, s.DondurSutun), 3), n - 1);
             var gruplar = Gruplar(n, birim, sabit);
             string bas = string.IsNullOrWhiteSpace(s.Baslik) ? (dosya ?? "Rapor") : s.Baslik;
@@ -64,8 +72,8 @@ namespace WebApplication3.Data
                         else col.Item().Table(t =>
                         {
                             t.ColumnsDefinition(cd => { foreach (var i in grup) cd.RelativeColumn((float)birim[i]); });
-                            if (basliklar.Count > 0) t.Header(h => { foreach (var sat in basliklar) Satir(sp => h.Cell().ColumnSpan(sp), sat, grup, konum, true); });
-                            foreach (var sat in govde) Satir(sp => t.Cell().ColumnSpan(sp), sat, grup, konum, false);
+                            if (basliklar.Count > 0) t.Header(h => { foreach (var sat in basliklar) Satir(sp => h.Cell().ColumnSpan(sp), sat, grup, konum, true, birim); });
+                            foreach (var sat in govde) Satir(sp => t.Cell().ColumnSpan(sp), sat, grup, konum, false, birim);
                         });
                         if (ilk && !string.IsNullOrWhiteSpace(s.Not)) col.Item().PaddingTop(4).Text(s.Not).FontSize(6.3f).FontColor(Alt);
                     });
@@ -93,7 +101,7 @@ namespace WebApplication3.Data
         }
 
         /// <summary>Bir satırı kurar: hücreler grup içindeki konumuna yerleşir (birleşik hücre ColumnSpan ile); boş konumlar boş hücre olur.</summary>
-        static void Satir(Func<uint, IContainer> hucre, TxSatir sat, List<int> grup, Dictionary<int, int> konum, bool baslik)
+        static void Satir(Func<uint, IContainer> hucre, TxSatir sat, List<int> grup, Dictionary<int, int> konum, bool baslik, List<double> birim)
         {
             var yer = new (TxHucre h, int span)[grup.Count];
             foreach (var h in sat.H ?? new List<TxHucre>())
@@ -106,19 +114,25 @@ namespace WebApplication3.Data
             {
                 int sp = Math.Min(yer[p].h != null ? Math.Max(1, yer[p].span) : 1, grup.Count - p);
                 var kap = hucre((uint)sp);
-                if (yer[p].h != null) Icerik(kap, yer[p].h, baslik); else kap = Kenar(kap, null, null, null, null);
+                if (yer[p].h != null) { double gen = 0; for (int q = p; q < p + sp; q++) gen += birim[grup[q]]; Icerik(kap, yer[p].h, baslik, gen); }   // görünen sütunlar: başlık etiketi bu genişliğe sığar
+                else kap = Kenar(kap, null, null, null, null);
                 p += sp;
             }
         }
 
         /// <summary>Hücre içeriği ve biçimi: zemin, hizalama, kenarlık, yazı (zengin metin ya da sayı / metin).</summary>
-        static void Icerik(IContainer kap, TxHucre h, bool baslik)
+        static void Icerik(IContainer kap, TxHucre h, bool baslik, double genislik = 0)
         {
-            var c = kap.PaddingHorizontal(3).PaddingVertical(1.5f).AlignMiddle();
+            // ekrandaki hizalama: başlıklar alt çizgide; gövde hücreleri ilk satırdan hizalı (çok satırlı hücre yanındakini kaydırmaz)
+            var c = (baslik ? kap.AlignBottom() : kap.AlignTop()).PaddingHorizontal(3).PaddingVertical(1.5f);
             var bg = Renk(h.Bg); if (bg != null) c = c.Background(bg);
             if (h.Hz == "r") c = c.AlignRight(); else if (h.Hz == "c") c = c.AlignCenter();
             c = Kenar(c, h.Sol, h.Ust, h.Sag, h.Alt);
             float pt = Yazi(h.Pt, baslik);
+            // başlık etiketi görünen sütun genişliğine sığmıyorsa yazı biraz küçülür (ekrandaki tek satır gibi kalır; en küçük %70)
+            float k = 1f;
+            if (baslik && genislik > 0) { double en = EnUzunSatir(h), gerekli = en * 4.3 + 6, mevcut = genislik * 5.33 - 2; if (en > 0 && gerekli > mevcut) k = (float)Math.Max(0.7, mevcut / gerekli); }
+            pt *= k;
             if (h.Z != null && h.Z.Count > 0)
             {
                 c.Text(t =>
@@ -126,7 +140,7 @@ namespace WebApplication3.Data
                     foreach (var z in h.Z)
                     {
                         if (z.Br) { t.EmptyLine(); continue; }
-                        var sp = t.Span(z.T ?? ""); sp.FontSize(Yazi(z.Pt ?? h.Pt, baslik));
+                        var sp = t.Span(z.T ?? ""); sp.FontSize(Yazi(z.Pt ?? h.Pt, baslik) * k);
                         var fg = Renk(z.Fg); if (fg != null) sp.FontColor(fg);
                         if (z.B) sp.Bold(); if (z.I) sp.Italic(); if (z.U) sp.Strikethrough();
                     }
@@ -188,6 +202,15 @@ namespace WebApplication3.Data
         }
 
         static float Yazi(double? pt, bool baslik) => pt.HasValue && pt.Value > 0 ? (float)Math.Min(7.5, Math.Max(5.5, pt.Value * 0.85)) : (baslik ? 6.4f : 6.8f);
+
+        /// <summary>Hücrenin en uzun satırının karakter sayısı (zengin metinde satır sonu ayırıcıları arasında).</summary>
+        static double EnUzunSatir(TxHucre h)
+        {
+            if (h.Z == null || h.Z.Count == 0) return (h.V ?? "").Length;
+            double en = 0, cur = 0;
+            foreach (var z in h.Z) { if (z.Br) { en = Math.Max(en, cur); cur = 0; } else cur += (z.T ?? "").Length; }
+            return Math.Max(en, cur);
+        }
 
         /// <summary>Renk kodu (#rrggbb) → geçerliyse aynen, değilse null (QuestPDF geçersiz rengi reddeder).</summary>
         static string Renk(string h) => !string.IsNullOrWhiteSpace(h) && Regex.IsMatch(h.Trim(), "^#[0-9a-fA-F]{6}$") ? h.Trim() : null;

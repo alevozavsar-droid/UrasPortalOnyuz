@@ -104,7 +104,7 @@ namespace WebApplication3.Data
         public static string OdemeSirketiKanal(PmPersonel p, string xr) => xr == "X" ? OdemeSirketiX(p) : OdemeSirketiR;
         private static string MasterSirket(string s) => s == "ALV Kimya" || s == "Alv Filo" ? "Alv Kimya" : s == "Selvi Kimya" ? "Selvi" : s;
         public static string DbName(string sirket) => CekAkibetOrnek.DbName(MasterSirket(sirket));
-        public static bool OdemeYapilmiyor(PmPersonel p) => (p.Not ?? "").IndexOf("Ödeme Yapılmıyor", StringComparison.OrdinalIgnoreCase) >= 0;
+        public static bool OdemeYapilmiyor(PmPersonel p) => !p.BankaBlokeli && (p.Not ?? "").IndexOf("Ödeme Yapılmıyor", StringComparison.OrdinalIgnoreCase) >= 0;   // bloke hesapta ödeme elden yapılır; eski not bu durumda ödemeyi engellemez
 
         // ---------- hesap eşleştirme tablosu ----------
         public static readonly List<PmhEsleme> Eslemeler = new List<PmhEsleme>();
@@ -229,17 +229,25 @@ namespace WebApplication3.Data
                     var fdx1 = Fis(sgk, "D", "Başka Şirket Tarafından Ödeme (SGK İşvereni)"); Satir(fdx1, p, D, "Net-X Bordro", "X", "Borç", h.KalanNetElden, odeX, "personel borcu kapatma"); Satir(fdx1, p, D, "Grup İçi Borç", "*", "Alacak", h.KalanNetElden, odeX, "ödeme şirketine borç");
                     var fdx2 = Fis(odeX, "D", "Başka Şirket Tarafından Ödeme (Ödeme Şirketi)"); Satir(fdx2, p, D, "Grup İçi Alacak", "*", "Borç", h.KalanNetElden, sgk, sgk + " adına elden ödeme"); Satir(fdx2, p, D, "Kasa", "X", "Alacak", h.KalanNetElden, sgk, "kasadan elden ödeme");
                 }
-                if (h.NetRBordro > 0)
+                // bloke hesap: R tutarı banka yerine elden (Kasa) ödenir; R borcu kasa ile kapanır
+                if (h.NakitRTutar > 0 && string.Equals(odeX, sgk, StringComparison.OrdinalIgnoreCase)) { var fcr = Fis(sgk, "C", "Net Personel Ödemesi"); Satir(fcr, p, C, "Net-R Bordro", "R", "Borç", h.NakitRTutar, null, "personel borcu kapatma (bloke hesap)"); Satir(fcr, p, C, "Kasa", "X", "Alacak", h.NakitRTutar, null, "elden ödeme (bloke hesap)"); }
+                else if (h.NakitRTutar > 0)
+                {
+                    baskaOdeme += h.NakitRTutar;
+                    var fdr1 = Fis(sgk, "D", "Başka Şirket Tarafından Ödeme (SGK İşvereni)"); Satir(fdr1, p, D, "Net-R Bordro", "R", "Borç", h.NakitRTutar, odeX, "personel borcu kapatma (bloke hesap)"); Satir(fdr1, p, D, "Grup İçi Borç", "*", "Alacak", h.NakitRTutar, odeX, "ödeme şirketine borç");
+                    var fdr2 = Fis(odeX, "D", "Başka Şirket Tarafından Ödeme (Ödeme Şirketi)"); Satir(fdr2, p, D, "Grup İçi Alacak", "*", "Borç", h.NakitRTutar, sgk, sgk + " adına elden ödeme"); Satir(fdr2, p, D, "Kasa", "X", "Alacak", h.NakitRTutar, sgk, "kasadan elden ödeme");
+                }
+                if (h.BankaOdeme > 0)
                 {
                     if (string.Equals(ode, sgk, StringComparison.OrdinalIgnoreCase))
                     {
-                        var fc = Fis(sgk, "C", "Net Personel Ödemesi"); Satir(fc, p, C, "Net-R Bordro", "R", "Borç", h.NetRBordro, null, "personel borcu kapatma"); Satir(fc, p, C, "Banka", "R", "Alacak", h.NetRBordro, null, "maaş hesabından ödeme");
+                        var fc = Fis(sgk, "C", "Net Personel Ödemesi"); Satir(fc, p, C, "Net-R Bordro", "R", "Borç", h.BankaOdeme, null, "personel borcu kapatma"); Satir(fc, p, C, "Banka", "R", "Alacak", h.BankaOdeme, null, "maaş hesabından ödeme");
                     }
                     else
                     {
-                        baskaOdeme += h.NetRBordro;
-                        var fd1 = Fis(sgk, "D", "Başka Şirket Tarafından Ödeme (SGK İşvereni)"); Satir(fd1, p, D, "Net-R Bordro", "R", "Borç", h.NetRBordro, ode, "personel borcu kapatma"); Satir(fd1, p, D, "Grup İçi Borç", "*", "Alacak", h.NetRBordro, ode, "ödeme şirketine borç");
-                        var fd2 = Fis(ode, "D", "Başka Şirket Tarafından Ödeme (Ödeme Şirketi)"); Satir(fd2, p, D, "Grup İçi Alacak", "*", "Borç", h.NetRBordro, sgk, sgk + " adına maaş ödemesi"); Satir(fd2, p, D, "Banka", "R", "Alacak", h.NetRBordro, sgk, "maaş hesabından ödeme");
+                        baskaOdeme += h.BankaOdeme;
+                        var fd1 = Fis(sgk, "D", "Başka Şirket Tarafından Ödeme (SGK İşvereni)"); Satir(fd1, p, D, "Net-R Bordro", "R", "Borç", h.BankaOdeme, ode, "personel borcu kapatma"); Satir(fd1, p, D, "Grup İçi Borç", "*", "Alacak", h.BankaOdeme, ode, "ödeme şirketine borç");
+                        var fd2 = Fis(ode, "D", "Başka Şirket Tarafından Ödeme (Ödeme Şirketi)"); Satir(fd2, p, D, "Grup İçi Alacak", "*", "Borç", h.BankaOdeme, sgk, sgk + " adına maaş ödemesi"); Satir(fd2, p, D, "Banka", "R", "Alacak", h.BankaOdeme, sgk, "maaş hesabından ödeme");
                     }
                 }
             }
@@ -271,7 +279,7 @@ namespace WebApplication3.Data
             K(7, "Ödeme Şirketi Kontrolü", "Kritik", dEksik, "SGK işvereni ≠ ödeme şirketi (R: Uras Power, X: fiili görev yeri şirketi) olan personelde iki şirket için karşılıklı set oluştu.", $"{dEksik} personelde karşı şirket kaydı eksik.");
             int mukerrer; lock (Kilit) mukerrer = Simulasyonlar.Count(x => x.Id != s.Id && x.Donem == s.Donem && (x.Kapsam == s.Kapsam || x.Kapsam == "*" || s.Kapsam == "*") && x.Durum == "Muhasebeleştirildi");
             K(8, "Mükerrer Kayıt", "Kritik", mukerrer, "Aynı dönem + kapsam daha önce muhasebeleştirilmemiş.", $"Aynı dönem için {mukerrer} muhasebeleştirilmiş simülasyon var (önce ters kayıt gerekir).");
-            bool donemUygun = string.Compare(s.Donem, PersonelMaliyetOrnek.GuncelDonem, StringComparison.Ordinal) <= 0;
+            bool donemUygun = string.Compare(s.Donem, PersonelMaliyetOrnek.EnYeniDonem, StringComparison.Ordinal) <= 0;
             K(9, "Dönem Kontrolü", "Kritik", donemUygun ? 0 : 1, "Muhasebe dönemi açık, belge tarihi uygun.", "Dönem henüz açılmadı (güncel dönemden sonra).");
             int acikEksik = s.Fisler.SelectMany(f => f.Satirlar).Count(x => string.IsNullOrWhiteSpace(x.Aciklama) || !x.Aciklama.Contains(x.AdSoyad));
             K(10, "Açıklama Standardı", "Uyarı", acikEksik, "Fiş açıklamaları personel, dönem, işlem türü ve karşı şirketi içeriyor.", $"{acikEksik} satırda açıklama standardı eksik.");

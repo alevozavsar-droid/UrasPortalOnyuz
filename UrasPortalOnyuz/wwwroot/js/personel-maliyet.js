@@ -20,10 +20,11 @@
   const $ = (s, k) => (k || document).querySelector(s), $$ = (s, k) => Array.from((k || document).querySelectorAll(s));
   const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   const kurus = v => { const n = Math.round((Number(v) || 0) * 100) / 100; return Math.abs(n) < 0.005 ? 0 : n; };   // kayan nokta artığı (-0, 1e-13) → 0
-  const tam = v => kurus(v).toLocaleString('tr-TR', { maximumFractionDigits: 0 });   // ₺ işaretsiz (adet, gün sayısı gibi)
-  const kisa = v => tam(v) + ' ₺';   // tüm tutarlar ₺ ile
+  const kisa = v => ondalik(kurus(v), 2) + ' ₺';   // tüm tutarlar ₺ ile, virgülden sonra iki hane (9.230,79 ₺)
   const hucre = v => kurus(v) ? kisa(v) : '<span class="text-muted">—</span>';
   const ondalik = (v, b) => (Number(v) || 0).toLocaleString('tr-TR', { minimumFractionDigits: b, maximumFractionDigits: b });
+  /** dövizli maaşta X-Net (₺): KalanX → toplam − R sabit; TamamiR → 0; TamamiX → toplam (sunucu ile aynı kural) */
+  const dovizX = p => { const t = Math.round(Number(p.dovizTutar) * Number(p.kur) * 100) / 100; return p.dovizOdeme === 'TamamiR' ? 0 : p.dovizOdeme === 'TamamiX' ? t : Math.max(0, Math.round((t - Number(p.rNet || 0)) * 100) / 100); };
   const dovizli = p => !!p.doviz && Number(p.dovizTutar) > 0 && Number(p.kur) > 0;   // dövizli maaş: X-Net = Döviz Tutarı × Kur
   const dovizNot = p => `${ondalik(p.dovizTutar, 2)} ${esc(p.doviz)} × ${ondalik(p.kur, 4)}`;
   /** emekli / engelli rozeti (ana tablodaki E · ♿ ile aynı; tüm sekmelerde ad yanında) */
@@ -71,10 +72,17 @@
   const panelBaslik = p => { const h = $(`.na-panel[data-p="${p}"] .pm-rapor-ust h5`); if (h) return h.textContent.trim(); const b = $(`#pmSekmeler button[data-p="${p}"]`); return b ? b.textContent.replace(/\d+\s*$/, '').trim() : ''; };
 
   // ---- sekmeler
+  /** genel arama (#pmAra) ana listeyi süzer; sekmenin yeşil şeridinin sağına taşınır. Listeyi süzmeyen sekmelerde (Prim, Üretim, Muhasebe) gizlenir: onların kendi arama kutusu yoksa arama da yoktur */
+  const GENEL_ARAMALI = ['tablo', 'ozel', 'ozet', 'zam', 'karsilastirma', 'ekcalisma', 'kesinti', 'birlesim', 'cikis', 'odeme'];
+  function genelAramaYerlestir(p, panel) {
+    const kutu = $('#pmAra'), yuva = GENEL_ARAMALI.includes(p) ? $(`.na-panel[data-p="${panel}"] .ayar`) : null;
+    if (yuva) yuva.prepend(kutu);
+    kutu.style.display = yuva ? '' : 'none';
+  }
   function sekme(p) {
     aktifSekme = p; const sek = p === 'karsilastirma' ? 'zam' : p; $$('#pmSekmeler button').forEach(b => b.classList.toggle('aktif', b.dataset.p === sek));
     if (V) yerFiltreModu(p === 'cikis');   // senaryoda Görev Yeri = İstanbul / Çorlu
-    const panel = p === 'ozel' ? 'tablo' : p; $$('#pm > .na-panel').forEach(x => x.classList.toggle('aktif', x.dataset.p === panel));
+    const panel = p === 'ozel' ? 'tablo' : p; genelAramaYerlestir(p, panel); $$('#pm > .na-panel').forEach(x => x.classList.toggle('aktif', x.dataset.p === panel));
     const kendiKpi = $(`[data-kpi="${panel}"]`);   // sekmenin KPI kutuları filtrenin üstünde, genel şeridin yerinde; diğer sekmelerin kutuları gizli
     $$('[data-kpi]').forEach(k => { k.style.display = k === kendiKpi ? '' : 'none'; });
     $('#pmKpi').style.display = (p === 'karsilastirma' || p === 'birlesim' || kendiKpi) ? 'none' : '';   // kendi KPI kutusu olan sekmede genel şerit gizlenir; Birleşik'te KPI kutusu yok
@@ -98,8 +106,8 @@
     const tarife = k => { let v = 0, alt = 0; for (const [ust, oran] of P.dilimler) { if (k <= alt) break; v += (Math.min(k, ust) - alt) * oran; alt = ust; } return v; };
     const aylikGv = (m, a) => m <= 0 ? 0 : tarife(m * a) - tarife(m * (a - 1));
     const istisna = R(aylikGv(P.asgariGvMatrahi, ay)), asgDamga = P.asgariDamga;
-    const xNet = dovizli(p) ? R(n('dovizTutar') * n('kur')) : n('xNet');   // dövizli maaşta X-Net ₺ karşılığı
-    p.xNet = xNet; p.xNet2 = xNet; p.toplamNet = xNet + n('rNet');
+    let rNetE = n('rNet'), xNet = n('xNet'); if (dovizli(p)) { const toplam = R(n('dovizTutar') * n('kur')), od = p.dovizOdeme || ''; if (od === 'TamamiR') { rNetE = toplam; xNet = 0; } else if (od === 'TamamiX') { rNetE = 0; xNet = toplam; } else { xNet = Math.max(0, R(toplam - n('rNet'))); } }   // dövizli maaşta X-Net ₺ karşılığı
+    p.xNet = xNet; p.xNet2 = xNet; p.toplamNet = xNet + rNetE;
     // grup toplamları (bordrodaki ekler)
     p.toplamEkCalisma = n('fazlaMesai') + n('bayramCalisma') + n('geceFarki') + n('pazarCalisma') + n('resmiTatilCalisma');
     p.toplamSosyal = n('yemek') + n('yol') + n('servis') + n('kiraDestegi') + n('egitim') + n('cocukYardimi');
@@ -111,7 +119,7 @@
     const net = b => { const isci = Math.min(b, tavan) * isciOran; const gv = Math.max(0, aylikGv(b - isci, ay) - istisna); const dv = Math.max(0, b * P.damga - asgDamga); return b - isci - gv - dv; };
     let brut = 0;
     if (kaynak) brut = R(Math.max(0, n('brutKaynak') - ekler));
-    else if (n('rNet') > 0) { let lo = 0, hi = n('rNet') * 3 + 50000; for (let i = 0; i < 80; i++) { const mid = (lo + hi) / 2; if (net(mid) < n('rNet')) lo = mid; else hi = mid; } brut = R(hi); }
+    else if (rNetE > 0) { let lo = 0, hi = rNetE * 3 + 50000; for (let i = 0; i < 80; i++) { const mid = (lo + hi) / 2; if (net(mid) < rNetE) lo = mid; else hi = mid; } brut = R(hi); }
     const gunluk = brut / 30;
     p.brutUcret = brut; p.gunluk = R(gunluk);
     // 2) puantaj kazançları
@@ -129,7 +137,7 @@
     // 6) gelir vergisi
     p.gvMatrahi = R(Math.max(0, p.toplamBrutKazanc - p.toplamYasal - p.sgkIsciToplam));
     p.kumulatifMatrah = R(p.gvMatrahi * ay); p.asgariIstisna = p.gvMatrahi > 0 ? istisna : 0; p.asgariKumulatifMatrah = R(P.asgariGvMatrahi * ay);
-    if (kaynak) { p.gvTutari = Math.max(0, R(p.toplamBrutKazanc - (n('rNet') + ekler) - p.sgkIsciToplam - p.dvTutari)); p.hesaplananGv = R(p.gvTutari + p.asgariIstisna + n('gvIndirimleri') + n('ozelSigortaIndirimi')); }
+    if (kaynak) { p.gvTutari = Math.max(0, R(p.toplamBrutKazanc - (rNetE + ekler) - p.sgkIsciToplam - p.dvTutari)); p.hesaplananGv = R(p.gvTutari + p.asgariIstisna + n('gvIndirimleri') + n('ozelSigortaIndirimi')); }
     else { p.hesaplananGv = R(aylikGv(p.gvMatrahi, ay)); p.gvTutari = Math.max(0, R(p.hesaplananGv - p.asgariIstisna - n('gvIndirimleri') - n('ozelSigortaIndirimi'))); }
     // 7) SGK işveren
     p.isvIssizlik = emekli ? 0 : R(p.sgkMatrahi * P.isvIssizlik); p.isvMyo = emekli ? 0 : R(p.sgkMatrahi * P.isvMyo); p.isvGss = emekli ? 0 : R(p.sgkMatrahi * P.isvGss); p.isvSgdp = emekli ? R(p.sgkMatrahi * P.isvSgdp) : 0;
@@ -142,13 +150,14 @@
     } else p.sgkIsverenToplam = p.isvIssizlik + p.isvMyo + p.isvGss + p.isvSgdp + p.kvsk - p.hazineIndirimi;
     // 8) ödeme özeti ve maliyet (R bordrolu, X bordro dışı)
     // banka = anlaşılan net R-Net + R ek ödemeler − kesintiler (brütten türetilmez)
-    p.rNet2 = n('rNet'); p.kesintilerToplami = n('avans') + n('icra') + n('borc') + n('ozelSigortaKesintisi') + n('sendikaKatkisi') + n('bes') + n('mazotKesintisi') + n('ihbarKesintisi'); p.digerEkR = R(ekler + n('digerEkOdemelerR')); p.kalanNetBanka = R(n('rNet') + p.digerEkR - p.kesintilerToplami);
+    p.rNet2 = rNetE; p.kesintilerToplami = n('avans') + n('icra') + n('borc') + n('ozelSigortaKesintisi') + n('sendikaKatkisi') + n('bes') + n('mazotKesintisi') + n('ihbarKesintisi'); p.digerEkR = R(ekler + n('digerEkOdemelerR')); p.kalanNetBanka = R(rNetE + p.digerEkR - p.kesintilerToplami);
     p.toplamEkCalismaX = n('fazlaMesaiX'); p.toplamSosyalX = n('yemekX') + n('yolX'); p.toplamPrimX = n('primX');   // X tarafı grup toplamları: brüt ve vergiye girmez
     p.digerEkOdemelerX = p.toplamEkCalismaX + p.toplamSosyalX + p.toplamPrimX;
     p.netRBordro = p.kalanNetBanka; p.netXBordro = xNet + p.digerEkOdemelerX; p.kalanNetElden = R(p.netXBordro - n('kesintilerToplamiX'));
     p.odemeSirketiR = p.netRBordro > 0 ? V.odemeSirketi.r : ''; p.odemeSirketiX = p.kalanNetElden > 0 ? fiiliSirket(p) : '';   // ödeme şirketi otomatik: R Uras Power, X fiili görev yeri şirketi
     p.araToplam = p.netXBordro + p.netRBordro; p.toplamBrutMasraflar = R(p.toplamBrutKazanc - p.kalanNetBanka); p.toplamIsveren = p.sgkIsverenToplam;
     p.genelMaliyet = R(p.araToplam + p.toplamBrutMasraflar + p.toplamIsveren);
+    p.bankaOdeme = p.bankaBlokeli ? 0 : p.kalanNetBanka; p.nakitR = p.bankaBlokeli ? p.kalanNetBanka : 0; p.eldenOdeme = R(p.kalanNetElden + p.nakitR);   // bloke hesap: R tutarı elden (ödeme kanalı; maliyet değişmez)
     return p;
   }
   /** taslakta tutar / gün / özel durum değiştiyse kaynak tablo değerleri düşer (sunucu da kayıtta aynı şekilde siler) */
@@ -201,6 +210,16 @@
   }
   /** sunucu yanıtındaki güncel veriyi alır ve ekranı tazeler */
   function veriGuncelle(j) { ['personel', 'sonKayit', 'sgkIsverenleri', 'gorevYerleri', 'catiDepartmanlar', 'bolumler', 'unvanlar', 'gorevler', 'ozelDurumlar', 'durumlar', 'sutunlar', 'parametre', 'ekSutunlar', 'uretim', 'primler', 'donem', 'donemAd', 'donemler', 'ekCalisma', 'kesinti', 'muhasebe'].forEach(k => { if (j[k] !== undefined) V[k] = j[k]; }); sutunlariKur(); listeleriDoldur(); donemKur(); ekKur(); kayitBilgi(); ciz(); }
+  /** yeni bordro dönemi (ör. 2026-10): güncel dönemin kopyası; kesinti taksitleri o aya göre yazılır; oluşunca seçili dönem olur */
+  async function yeniBordro() {
+    if (duzenleme && !window.confirm('Kaydedilmemiş değişiklikler var. Yeni bordro oluşturulursa kaybolur, devam edilsin mi?')) return;
+    const ay = window.prompt('Yeni bordro dönemi (yyyy-aa, örn. 2026-10):', '2026-10'); if (!ay) return;
+    const kurOku = (s, v) => Number(String(window.prompt(s, v) || '').replace(',', '.'));
+    const eur = kurOku('EUR kuru (₺, güncel):', '55.6306'), usd = kurOku('USD kuru (₺, güncel):', '48.9008');
+    if (!(eur > 0) || !(usd > 0)) { mesaj('danger', 'EUR ve USD kuru sayı olarak girilmeli.'); return; }
+    try { const r = await fetch('/PersonelMaliyet/DonemOlustur', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ donem: ay.trim(), kurlar: { EUR: eur, USD: usd } }) }); const j = await r.json(); if (!j.success) { mesaj('danger', esc(j.message)); return; } if (duzenleme) modDegis(false); veriGuncelle(j); mesaj('success', esc(j.message)); }
+    catch (e) { mesaj('danger', 'Yeni bordro oluşturulamadı: ' + esc(e.message)); }
+  }
   // ---- dönem (ay) seçimi: seçilen ayın verisi sunucudan yüklenir; kayıt / ekle / sil seçili döneme işlenir
   function donemKur() {
     const sel = $('#pmDonem'); sel.innerHTML = (V.donemler || []).map(d => `<option value="${esc(d.kod)}">${esc(d.ad)}${d.guncel ? ' (Güncel)' : ''}</option>`).join(''); sel.value = V.donem;
@@ -235,6 +254,7 @@
     const top = k => toplam(L, k);
     $('#pmToplam').innerHTML = SUTUN.map(s => { const dk = `data-k="${s.anahtar}"`; if (s.tip === 'sira') return `<td ${dk}>Toplam</td>`; if (s.tip === 'ad') return `<td ${dk}>${L.length} Personel</td>`; if (s.tip === 'rx') return `<td class="s rx" ${dk}>${rxHucre(top(s.anahtar), top(s.anahtar + 'X'), kisa, true)}</td>`; if (s.tip === 'sayi' || s.tip === 'hesap') return `<td class="s" ${dk}>${kisa(top(s.anahtar))}</td>`; if (s.tip === 'genel') return `<td class="s genel" ${dk}>${kisa(top(s.anahtar))}</td>`; return `<td ${dk}></td>`; }).join('');
     const nufus = kapsam === 'ozel' ? V.personel.filter(p => p.ozel).length : V.personel.length + (V.uretim || []).filter(u => !u.sgkLi).length;   // ana tablo: bordrolu + özel + SGK'sız üretim (gizlenenler de sayılır)
+    $('#pmTabloBaslik').textContent = `${V.donemAd || ''} ${kapsam === 'ozel' ? 'Özel Kişiler' : 'Personel Maliyet Tablosu'}`;
     $('#pmSayi').textContent = `${L.length} / ${nufus} ${kapsam === 'ozel' ? 'özel kişi' : 'personel'} · ${V.donemAd || ''} · aylık ₺${duzenleme ? ` · ${Object.keys(taslak).length} satırda değişiklik var, Kaydet ile saklanır` : ''}`;
   }
 
@@ -321,7 +341,16 @@
     const satirlar = [...basSatirlar, ...Array.from(tablo.tBodies).flatMap(b => Array.from(b.rows)), ...(tablo.tFoot ? Array.from(tablo.tFoot.rows) : [])];
     satirlar.forEach(tr => { let i = 0, bekle = false; for (const td of tr.cells) { if (kesim.has(i)) bekle = true; if (bekle && i > 0 && !td.classList.contains('gizli')) { td.classList.add('grupBas'); bekle = false; } i += td.colSpan || 1; } });
   }
-  const sabitleHepsi = () => requestAnimationFrame(() => { kapBoyut(); $$('.na-panel.aktif table.pm-ozet').forEach(bolmeCiz); $$('.na-panel.aktif table.pm-excel').forEach(t => { bolmeCiz(t); sabitle(t); }); });
+  /** sütun genişliği (başlıklar en çok iki satır, alt satır üst satırdan uzun ya da eşit): başlığın iki satıra sığdığı içerik genişliği tablo-hizala.js ile aynı kırılımdan gelir; Sıra 40 px, diğerleri en az 104 px */
+  function baslikGenislik(tablo) {
+    if (!tablo.tHead || !tablo.tHead.rows.length) return;
+    const son = tablo.tHead.rows[tablo.tHead.rows.length - 1];
+    Array.from(son.cells).filter(th => th.colSpan <= 1).forEach(th => {
+      const b = window.tabloBaslik.bilgi(th);
+      th.style.minWidth = Math.max(th.cellIndex === 0 ? 40 : 104, Math.ceil(b.icerik + b.kutu + 3)) + 'px';
+    });
+  }
+  const sabitleHepsi = () => requestAnimationFrame(() => { kapBoyut(); $$('.na-panel.aktif table.pm-ozet, .na-panel.aktif table.pm-excel').forEach(baslikGenislik); $$('.na-panel.aktif table.pm-ozet').forEach(bolmeCiz); $$('.na-panel.aktif table.pm-excel').forEach(t => { bolmeCiz(t); sabitle(t); }); });
   /** "0 ₺ Sütunları Gizle": listedeki tüm satırlarda sıfır olan sayısal sütunlar (rx'te R ve X birlikte) gizlenir; grup başlıklarının colspan'ı daralır */
   function sifirGizle(tablo, sutunlar, satirlar, acik, gruplar) {
     const sifir = s => acik && ['sayi', 'rx', 'gun', 'hesap', 'genel'].includes(s.tip) && !satirlar.some(p => Number(p[s.anahtar]) || (s.tip === 'rx' && Number(p[s.anahtar + 'X'])));
@@ -391,9 +420,9 @@
     const tutar = p => Number(p.genelMaliyet) || 0, toplamTutar = LO.reduce((s, p) => s + tutar(p), 0), cikanTutar = LO.filter(cikacak).reduce((s, p) => s + tutar(p), 0);
     LO.forEach(p => { const d = p.catiDepartman || '—', g = p.gorev || '—', c = cikacak(p) ? 1 : 0, t = tutar(p), ct = c ? t : 0; const a = dep[d] || (dep[d] = { ad: d, n: 0, c: 0, m: 0, mc: 0 }); a.n++; a.c += c; a.m += t; a.mc += ct; const b = gor[d + '|' + g] || (gor[d + '|' + g] = { d, g, n: 0, c: 0, m: 0, mc: 0 }); b.n++; b.c += c; b.m += t; b.mc += ct; });
     const depS = Object.values(dep).sort((a, b) => b.n - a.n || a.ad.localeCompare(b.ad, 'tr-TR')), gorS = Object.values(gor).sort((a, b) => dep[b.d].n - dep[a.d].n || b.n - a.n || a.g.localeCompare(b.g, 'tr-TR'));
-    const para = (m, mc) => `<td class="s">${ondalik(m, 0)}</td><td class="s">${mc ? ondalik(mc, 0) : '—'}</td><td class="s">${ondalik(m - mc, 0)}</td>`;
-    $('#pmDepTablo tbody').innerHTML = depS.map(a => `<tr><td>${esc(a.ad)}</td><td class="s">${a.n}</td><td class="s">${a.c || '—'}</td><td class="s">${a.n - a.c}</td>${para(a.m, a.mc)}</tr>`).join('') + `<tr class="toplam"><td>Toplam</td><td class="s">${LO.length}</td><td class="s">${cikanSay || '—'}</td><td class="s">${LO.length - cikanSay}</td>${para(toplamTutar, cikanTutar)}</tr>`;
-    $('#pmDepGorevTablo tbody').innerHTML = gorS.map(b => `<tr><td>${esc(b.d)}</td><td>${esc(b.g)}</td><td class="s">${b.n}</td><td class="s">${b.c || '—'}</td><td class="s">${b.n - b.c}</td>${para(b.m, b.mc)}</tr>`).join('') + `<tr class="toplam"><td>Toplam</td><td></td><td class="s">${LO.length}</td><td class="s">${cikanSay || '—'}</td><td class="s">${LO.length - cikanSay}</td>${para(toplamTutar, cikanTutar)}</tr>`;
+    const para = (m, mc) => `<td class="s">${ondalik(m, 2)}</td><td class="s">${mc ? ondalik(mc, 2) : '—'}</td><td class="s">${ondalik(m - mc, 2)}</td>`;
+    $('#pmDepTablo tbody').innerHTML = depS.map(a => `<tr><td>${esc(a.ad)}</td><td class="s sayac">${a.n}</td><td class="s sayac">${a.c || '—'}</td><td class="s sayac">${a.n - a.c}</td>${para(a.m, a.mc)}</tr>`).join('') + `<tr class="toplam"><td>Toplam</td><td class="s sayac">${LO.length}</td><td class="s sayac">${cikanSay || '—'}</td><td class="s sayac">${LO.length - cikanSay}</td>${para(toplamTutar, cikanTutar)}</tr>`;
+    $('#pmDepGorevTablo tbody').innerHTML = gorS.map(b => `<tr><td>${esc(b.d)}</td><td>${esc(b.g)}</td><td class="s sayac">${b.n}</td><td class="s sayac">${b.c || '—'}</td><td class="s sayac">${b.n - b.c}</td>${para(b.m, b.mc)}</tr>`).join('') + `<tr class="toplam"><td>Toplam</td><td></td><td class="s sayac">${LO.length}</td><td class="s sayac">${cikanSay || '—'}</td><td class="s sayac">${LO.length - cikanSay}</td>${para(toplamTutar, cikanTutar)}</tr>`;
     $('#pmZamOzetTablo tbody').innerHTML = zamSenaryo.map(s => { const o = zamOzet(s); return `<tr><td><b>${esc(s.ad)}</b></td><td class="s">${ondalik(s.r, 1)}</td><td class="s">${ondalik(s.x, 1)}</td><td class="s">${kisa(o.netA)}</td><td class="s">${kisa(o.gA)}</td><td class="s">${kurus(o.gA) ? zamYuzde(o.gA, o.gM) : '—'}</td><td class="s">${kisa(o.gA * 12)}</td></tr>`; }).join('') || '<tr><td colspan="7" class="na-bos">Kayıtlı zam senaryosu yok.</td></tr>';
     sabitleHepsi();
   }
@@ -481,7 +510,7 @@
   function kartDoviz() {
     const d = kartOku(), x = $('#pmk_xNet'), not = $('#pmKartDoviz'); if (!x) return;
     const dv = dovizli(d); x.readOnly = dv; x.classList.toggle('ro', dv);
-    if (dv) { x.value = Math.round(d.dovizTutar * d.kur * 100) / 100; not.innerHTML = `<i class="fas fa-coins me-1"></i>₺ karşılığı: <b>${kisa(d.dovizTutar * d.kur)}</b> (${dovizNot(d)}) → X-Net`; }
+    if (dv) { x.value = dovizX(d); not.innerHTML = `<i class="fas fa-coins me-1"></i>₺ karşılığı: <b>${kisa(d.dovizTutar * d.kur)}</b> (${dovizNot(d)}) → X-Net`; }
     else not.innerHTML = d.doviz ? '<span class="text-danger">Döviz Tutarı ve Kur sıfırdan büyük olmalıdır.</span>' : '<span class="text-muted">Maaş ₺ ödeniyorsa boş bırakın.</span>';
   }
   /** kart özeti: tutarlar değişmediyse kaynak tablo değerleriyle (tablodaki satırla aynı), değiştiyse modelle */
@@ -585,7 +614,7 @@
   const bordroSatir = (p, kaynak) => { const n = k => Number(p[k]) || 0; return { kaynak, adSoyad: p.adSoyad, gorev: p.gorev, isveren: p.sgkIsvereni, gorevYeri: p.fiiliGorevYeri, kidemYil: p.kidemYil, brut: n('toplamBrutKazanc'), netToplam: n('rNet') + n('xNet'), rNet: p.rNet, xNet: p.xNet,
     yol: n('yol'), yolX: n('yolX'), yemek: n('yemek'), yemekX: n('yemekX'), mesai: n('toplamEkCalisma'), mesaiX: n('toplamEkCalismaX'), prim: n('toplamPrim'), primX: n('toplamPrimX'), digerTop: n('digerEkR'), digerTopX: n('digerEkOdemelerX'),
     diger: n('toplamSosyal') - n('yemek') - n('yol') + n('toplamYanHaklar') + n('toplamYasal') + n('digerEkOdemelerR'),
-    kesinti: n('kesintilerToplami'), kesintiX: n('kesintilerToplamiX'), netOdenen: n('netRBordro') + n('kalanNetElden'), netOdenenR: n('netRBordro'), netOdenenX: n('kalanNetElden'), araToplam: n('araToplam'), brutTam: n('toplamBrutMasraflar'),
+    kesinti: n('kesintilerToplami'), kesintiX: n('kesintilerToplamiX'), netOdenen: n('bankaOdeme') + n('eldenOdeme'), netOdenenR: n('bankaOdeme'), netOdenenX: n('eldenOdeme'), araToplam: n('araToplam'), brutTam: n('toplamBrutMasraflar'),
     toplamBrutMasraflar: n('toplamBrutMasraflar') - n('kesintilerToplami'), toplamIsveren: p.toplamIsveren, genelMaliyet: p.genelMaliyet, not: p.not, sira0: p.sira }; };
   function birlesimListe(kaynakSecim) {
     const kaynak = kaynakSecim !== undefined ? kaynakSecim : $('#pmBirlesimKaynak').value, rows = [];
@@ -731,7 +760,7 @@
       : [['#0f172a', 'Personel Sayısı', K.personel || 0, 'kaynak: Personel Maliyet Tablosu (aktif)'], ['#dc2626', 'Genel Maliyet', kisa(K.genelMaliyet), 'toplam personel maliyeti'], ['#0f766e', 'Ara Toplam', kisa(K.araToplam), 'fiili net ödeme'], ['#7c3aed', 'Yansıtma Gereken', kisa(K.yansitma), 'SGK işvereni ≠ fiili görev yeri'], ['#1d4ed8', 'Başka Şirket Tarafından Ödenen', kisa(K.baskaSirket), 'SGK işv. ≠ ödeme şirketi (R/X ayrı)'], ['#b45309', 'Ödeme Yapılmıyor Notu', K.odemeYok || 0, 'ödeme kaydı üretilmeyecek personel']];
     $('#pmMhKpi').innerHTML = kpi.map(k => `<div style="--k:${k[0]}"><div class="l">${k[1]}</div><div class="v">${k[2]}</div><div class="s">${k[3]}</div></div>`).join('');
     // simülasyon listesi
-    $('#pmMhSimTablo tbody').innerHTML = M.simulasyonlar.map(x => `<tr data-id="${x.id}" class="${s && x.id === s.id ? 'secili' : ''}"><td><b>${esc(x.no)}</b></td><td>v${x.versiyon}</td><td>${esc(x.donemAd)}</td><td>${esc(x.kapsamAd)}</td><td class="s">${x.personelSayisi}</td><td class="s">${x.fisSayisi}</td><td class="s">${x.satirSayisi}</td><td class="s">${kisa(x.toplamBorc)}</td><td class="s">${kisa(x.toplamAlacak)}</td><td>${rozet(x.durum, x.durum === 'Kontrol Gerekiyor' || x.durum === 'Güncelliğini Yitirdi' ? 'hata' : x.durum === 'İptal' ? 'gri' : undefined)}</td><td>${esc(x.olusturan)}<small class="alt">${esc(x.olusturma)}</small></td><td>${x.onayaGonderen ? esc(x.onayaGonderen) + `<small class="alt">${esc(x.onayaGonderme)}</small>` : '—'}</td><td>${x.onaylayan ? esc(x.onaylayan) + `<small class="alt">${esc(x.onayTarihi)}</small>` : '—'}</td><td>${x.muhasebelestiren ? esc(x.muhasebelestiren) + `<small class="alt">${esc(x.muhasebeTarihi)}</small>` : '—'}</td><td>${x.guncel ? rozet('Güncel') : rozet('Veri Değişti', 'hata')}</td></tr>`).join('') || `<tr><td colspan="15" class="na-bos">Bu dönem için simülasyon yok (kapsamda aktif personel bulunamadı).</td></tr>`;
+    $('#pmMhSimTablo tbody').innerHTML = M.simulasyonlar.map(x => `<tr data-id="${x.id}" class="${s && x.id === s.id ? 'secili' : ''}"><td><b>${esc(x.no)}</b></td><td>v${x.versiyon}</td><td>${esc(x.donemAd)}</td><td>${esc(x.kapsamAd)}</td><td class="s sayac">${x.personelSayisi}</td><td class="s sayac">${x.fisSayisi}</td><td class="s sayac">${x.satirSayisi}</td><td class="s">${kisa(x.toplamBorc)}</td><td class="s">${kisa(x.toplamAlacak)}</td><td>${rozet(x.durum, x.durum === 'Kontrol Gerekiyor' || x.durum === 'Güncelliğini Yitirdi' ? 'hata' : x.durum === 'İptal' ? 'gri' : undefined)}</td><td>${esc(x.olusturan)}<small class="alt">${esc(x.olusturma)}</small></td><td>${x.onayaGonderen ? esc(x.onayaGonderen) + `<small class="alt">${esc(x.onayaGonderme)}</small>` : '—'}</td><td>${x.onaylayan ? esc(x.onaylayan) + `<small class="alt">${esc(x.onayTarihi)}</small>` : '—'}</td><td>${x.muhasebelestiren ? esc(x.muhasebelestiren) + `<small class="alt">${esc(x.muhasebeTarihi)}</small>` : '—'}</td><td>${x.guncel ? rozet('Güncel') : rozet('Veri Değişti', 'hata')}</td></tr>`).join('') || `<tr><td colspan="15" class="na-bos">Bu dönem için simülasyon yok (kapsamda aktif personel bulunamadı).</td></tr>`;
     mhSeciliCiz(s); mhEslemeCiz(M);
     $('#pmMhSayi').textContent = `${M.simulasyonlar.length} simülasyon · ${V.donemAd} · ${M.eslemeler.length} hesap eşleştirmesi (v${M.eslemeVersiyonu}) · kullanıcı ${esc(M.kullanici)} (${M.yetkili ? 'onay yetkili' : 'onay yetkisi yok'})`;
 
@@ -905,14 +934,14 @@
   let odemeAraBagli = false;
   function odemeSakla() { try { localStorage.pmOdemeDurum = JSON.stringify(odemeSecim); } catch (e) { /* yoksay */ } }
   /** varsayılan: kayıttaki "Ödeme Yapılmıyor" notu olan kişi ödenmez; tarayıcıdaki seçim varsayılanı değiştirir */
-  const odemeVarsayilan = r => (r.not || '').includes('Ödeme Yapılmıyor') ? 'odenmeyecek' : 'odenecek';
+  const odemeVarsayilan = r => { const b = r.kaynak === 'Üretim' ? null : bul(r.sira0); return !(b && b.bankaBlokeli) && (r.not || '').includes('Ödeme Yapılmıyor') ? 'odenmeyecek' : 'odenecek'; };   // bloke hesapta (R elden ödenir) eski not ödemeyi engellemez
   const odemeDurum = r => odemeSecim[cikisAnahtar(r)] || odemeVarsayilan(r);
   /** banka = Net-R Bordro (bankaya yatacak); elden = Kalan Net Tutar (Elden); SGK'sız gündelikçi tamamı elden */
   function odemeTutar(r) {
     const p = r.kaynak === 'Üretim' ? null : bul(r.sira0);
-    if (!p) return { rNet: 0, digerR: 0, kesR: 0, kalanBanka: 0, banka: 0, xNet: Number(r.xNet) || 0, digerX: (Number(r.yolX) || 0) + (Number(r.yemekX) || 0) + (Number(r.mesaiX) || 0) + (Number(r.primX) || 0), kesX: Number(r.kesintiX) || 0, elden: Number(r.netOdenen) || 0 };
+    if (!p) return { rNet: 0, digerR: 0, kesR: 0, kalanBanka: 0, banka: 0, xNet: Number(r.xNet) || 0, digerX: (Number(r.yolX) || 0) + (Number(r.yemekX) || 0) + (Number(r.mesaiX) || 0) + (Number(r.primX) || 0), kesX: Number(r.kesintiX) || 0, elden: Number(r.netOdenen) || 0, nakitR: 0 };
     const n = k => Number(p[k]) || 0;
-    return { rNet: n('rNet2'), digerR: n('digerEkR'), kesR: n('kesintilerToplami'), kalanBanka: n('kalanNetBanka'), banka: n('netRBordro'), xNet: n('xNet2'), digerX: n('digerEkOdemelerX'), kesX: n('kesintilerToplamiX'), elden: n('kalanNetElden') };
+    return { rNet: n('rNet2'), digerR: n('digerEkR'), kesR: n('kesintilerToplami'), kalanBanka: n('bankaOdeme'), banka: n('bankaOdeme'), xNet: n('xNet2'), digerX: n('digerEkOdemelerX'), kesX: n('kesintilerToplamiX'), elden: n('eldenOdeme'), nakitR: n('nakitR') };
   }
   function odemeCiz() {
     if (!odemeAraBagli) {
@@ -923,11 +952,11 @@
     }
     $('#pmOdemeBaslik').textContent = `${V.donemAd} Ödeme Planı`;
     const ara = ($('#pmOdemeAra').value || '').toLocaleLowerCase('tr-TR'), goster = { odenecek: $('#pmOdemeDurumOde').checked, odenmeyecek: $('#pmOdemeDurumOdmz').checked };
-    const tum = birlesimListe('').map(r => { const t = odemeTutar(r), k = cikisAnahtar(r), odenecek = odemeDurum(r) === 'odenecek', cik = cikisSecim.has(k), h = cikisHesap(r), g = v => odenecek ? v : 0; return { r, k, odenecek, cik, rNet: g(t.rNet), digerR: g(t.digerR), kesR: g(t.kesR), kalanBanka: g(t.kalanBanka), banka: g(t.banka), xNet: g(t.xNet), digerX: g(t.digerX), kesX: g(t.kesX), elden: g(t.elden), cikis: cik ? h.cikis : 0, tutarTum: t.banka + t.elden }; });
+    const tum = birlesimListe('').map(r => { const t = odemeTutar(r), k = cikisAnahtar(r), odenecek = odemeDurum(r) === 'odenecek', cik = cikisSecim.has(k), h = cikisHesap(r), g = v => odenecek ? v : 0; return { r, k, odenecek, cik, rNet: g(t.rNet), digerR: g(t.digerR), kesR: g(t.kesR), kalanBanka: g(t.kalanBanka), banka: g(t.banka), xNet: g(t.xNet), digerX: g(t.digerX), kesX: g(t.kesX), elden: g(t.elden), cikis: cik ? h.cikis : 0, tutarTum: t.banka + t.elden, bloke: t.nakitR > 0 }; });
     tum.forEach(s => { s.toplam = s.banka + s.elden; });
     const L2 = tum.filter(s => (s.odenecek ? goster.odenecek : goster.odenmeyecek) && (!ara || [s.r.adSoyad, s.r.isveren, s.r.gorevYeri, s.r.gorev].join(' ').toLocaleLowerCase('tr-TR').includes(ara)));
     const top = (l, k) => l.reduce((s, x) => s + (Number(x[k]) || 0), 0);
-    $('#pmOdemeTablo tbody').innerHTML = L2.map((s, i) => `<tr class="${s.cik ? 'cikacak' : ''}${s.odenecek ? '' : ' odenmez'}" data-k="${esc(s.k)}"><td class="kucuk">${i + 1}</td><td class="kaynak k-${s.r.kaynak === 'Üretim' ? 'uretim' : s.r.kaynak === 'Özel' ? 'ozel' : 'bordro'}">${esc(s.r.kaynak)}</td><td class="ad">${adOz(s.r.adSoyad, s.r.sira0)}</td><td>${lokasyon(s.r.gorevYeri)}</td><td class="s">${hucre(s.rNet)}</td><td class="s">${hucre(s.digerR)}</td><td class="s">${hucre(s.kesR)}</td><td class="s">${hucre(s.kalanBanka)}</td><td class="s">${hucre(s.xNet)}</td><td class="s">${hucre(s.digerX)}</td><td class="s">${hucre(s.kesX)}</td><td class="s">${hucre(s.elden)}</td><td class="s hesap">${hucre(s.toplam)}</td><td><select class="form-select pmOdemeDurum" data-k="${esc(s.k)}" aria-label="Ödeme · ${esc(s.r.adSoyad)}"><option value="odenecek" ${s.odenecek ? 'selected' : ''}>Ödenecek</option><option value="odenmeyecek" ${s.odenecek ? '' : 'selected'}>Ödenmeyecek</option></select></td></tr>`).join('') || '<tr><td colspan="14" class="na-bos">Filtreye uyan kişi yok.</td></tr>';
+    $('#pmOdemeTablo tbody').innerHTML = L2.map((s, i) => `<tr class="${s.cik ? 'cikacak' : ''}${s.odenecek ? '' : ' odenmez'}" data-k="${esc(s.k)}"><td class="kucuk">${i + 1}</td><td class="kaynak k-${s.r.kaynak === 'Üretim' ? 'uretim' : s.r.kaynak === 'Özel' ? 'ozel' : 'bordro'}">${esc(s.r.kaynak)}</td><td class="ad">${adOz(s.r.adSoyad, s.r.sira0)}${s.bloke ? ' <span class="pm-rz mavi" title="Banka hesabı blokeli: R tutarı elden ödenir">R → elden</span>' : ''}</td><td>${lokasyon(s.r.gorevYeri)}</td><td class="s">${hucre(s.rNet)}</td><td class="s">${hucre(s.digerR)}</td><td class="s">${hucre(s.kesR)}</td><td class="s">${hucre(s.kalanBanka)}</td><td class="s">${hucre(s.xNet)}</td><td class="s">${hucre(s.digerX)}</td><td class="s">${hucre(s.kesX)}</td><td class="s">${hucre(s.elden)}</td><td class="s hesap">${hucre(s.toplam)}</td><td><select class="form-select pmOdemeDurum" data-k="${esc(s.k)}" aria-label="Ödeme · ${esc(s.r.adSoyad)}"><option value="odenecek" ${s.odenecek ? 'selected' : ''}>Ödenecek</option><option value="odenmeyecek" ${s.odenecek ? '' : 'selected'}>Ödenmeyecek</option></select></td></tr>`).join('') || '<tr><td colspan="14" class="na-bos">Filtreye uyan kişi yok.</td></tr>';
     $('#pmOdemeTablo tfoot tr').innerHTML = `<td>Toplam</td><td>${L2.length} kişi</td><td></td><td></td><td class="s">${kisa(top(L2, 'rNet'))}</td><td class="s">${kisa(top(L2, 'digerR'))}</td><td class="s">${kisa(top(L2, 'kesR'))}</td><td class="s">${kisa(top(L2, 'kalanBanka'))}</td><td class="s">${kisa(top(L2, 'xNet'))}</td><td class="s">${kisa(top(L2, 'digerX'))}</td><td class="s">${kisa(top(L2, 'kesX'))}</td><td class="s">${kisa(top(L2, 'elden'))}</td><td class="s">${kisa(top(L2, 'toplam'))}</td><td>${L2.filter(s => s.odenecek).length} ödenecek</td>`;
     const ode = tum.filter(s => s.odenecek), odmz = tum.filter(s => !s.odenecek), cik = tum.filter(s => s.cik);
     const banka = top(ode, 'banka'), elden = top(ode, 'elden'), cikis = top(cik, 'cikis');
@@ -958,11 +987,11 @@
   function zamOku() {
     try {
       const a = JSON.parse(localStorage.pmZamAyar || 'null');
-      if (a) return { r: zamSayi(a.r), x: zamSayi(a.x), ayni: a.ayni !== false, kisi: a.kisi || {} };
+      if (a) return { r: zamSayi(a.r), x: zamSayi(a.x), ayni: a.ayni !== false, kisi: a.kisi || {}, dovizGizle: a.dovizGizle !== false };
       const t = zamSayi(localStorage.pmZamToplu), kisi = {};   // önceki sürüm: tek oran hem R hem X'e uygulanırdı
       Object.entries(JSON.parse(localStorage.pmZamKisi || '{}') || {}).forEach(([k, v]) => { kisi[k] = { r: zamSayi(v), x: zamSayi(v) }; });
-      return { r: t, x: t, ayni: true, kisi };
-    } catch (e) { return { r: 0, x: 0, ayni: true, kisi: {} }; }
+      return { r: t, x: t, ayni: true, kisi, dovizGizle: true };
+    } catch (e) { return { r: 0, x: 0, ayni: true, kisi: {}, dovizGizle: true }; }
   }
   let zamAyar = zamOku(), zamAcik = '', zamSon = [], zamCekK = null;   // zamAcik: kayıtlı senaryo yeni sekmede açıldıysa adı; zamSon: ekrandaki satırlar; zamCekK: kişi kartında açık kişinin anahtarı
   const zamAyarSakla = () => { try { localStorage.pmZamAyar = JSON.stringify(zamAyar); } catch (e) { /* yoksay */ } };
@@ -970,7 +999,7 @@
   const zamAyarKaydet = () => { zamAyarSakla(); zamCiz(); };
   const zamAnahtar = p => p.uSira ? 'u' + p.uSira : String(p.sira);
   /** ekrandaki zam ayarı: X, aynı oran açıksa R'ye eşit; kişi bazlı değerler ve gizleme durumu */
-  const zamAyarOku = () => ({ r: zamAyar.r, x: zamAyar.ayni ? zamAyar.r : zamAyar.x, ayni: zamAyar.ayni, kisi: zamAyar.kisi, gizle: { uretim: gizle.uretim, ozel: gizle.ozel } });
+  const zamAyarOku = () => ({ r: zamAyar.r, x: zamAyar.ayni ? zamAyar.r : zamAyar.x, ayni: zamAyar.ayni, kisi: zamAyar.kisi, gizle: { uretim: gizle.uretim, ozel: gizle.ozel }, dovizGizle: zamAyar.dovizGizle !== false });
   /** kişinin uygulanan oranları (%) ve X-Net tutarı (₺; girilmediyse undefined): kişi bazlı değer varsa o, yoksa toplu oran */
   const zamOranlar = (p, a) => { const o = (a.kisi || {})[zamAnahtar(p)] || {}; return { r: o.r === undefined ? a.r : zamSayi(o.r), x: o.x === undefined ? a.x : zamSayi(o.x), xTl: o.xTl === undefined ? undefined : zamSayi(o.xTl) }; };
   const kaynakAd = p => p.uSira ? 'Üretim' : p.ozel ? 'Özel' : 'Bordro';
@@ -991,7 +1020,7 @@
   }
   /** zam satırları: a ayarındaki görünen kişiler (kapsam ve gizleme dahil), mevcut değerler ve zam farkları */
   function zamSatirlari(a) {
-    return tumListe(false, a.gizle).map(etkin).map(p => {
+    return tumListe(false, a.gizle).map(etkin).filter(p => !(a.dovizGizle !== false && dovizli(p))).map(p => {
       const o = zamOranlar(p, a), n = k => Number(p[k]) || 0, u = p.uSira ? (V.uretim || []).find(x => x.sira === p.uSira) : null;
       const m = { rNet: n('rNet'), xNet: n('xNet'), ekR: n('digerEkR'), ekX: n('digerEkOdemelerX'), kalan: n('netRBordro'), netX: n('netXBordro'), brutMas: n('toplamBrutMasraflar'), isv: n('toplamIsveren'), genel: n('genelMaliyet') };
       return { p, oran: o, kisi: (a.kisi || {})[zamAnahtar(p)] !== undefined, m, d: u ? zamUretim(u, 1 + o.x / 100, o.xTl, m.xNet) : zamBordro(p, 1 + o.r / 100, 1 + o.x / 100, o.xTl) };
@@ -1201,14 +1230,14 @@
   }
   /** kayıtlı senaryoyu zam ayarına yükler; açılışta bu tarayıcının kayıtlı ayarı değişmez, düzenlenirse yeniden kaydedilir */
   function zamSenaryoYukle(s) {
-    zamAyar = { r: zamSayi(s.r), x: zamSayi(s.x), ayni: s.ayni !== false, kisi: JSON.parse(JSON.stringify(s.kisi || {})) };
+    zamAyar = { r: zamSayi(s.r), x: zamSayi(s.x), ayni: s.ayni !== false, kisi: JSON.parse(JSON.stringify(s.kisi || {})), dovizGizle: s.dovizGizle !== false };
     if (zamAyar.ayni) zamAyar.x = zamAyar.r;
     zamAcik = s.ad; $('#pmZamAd').value = s.ad;
     gizle.uretim = !!(s.gizle && s.gizle.uretim); gizle.ozel = !!(s.gizle && s.gizle.ozel);
     $$('.pm-gizle').forEach(c => { c.checked = gizle[c.dataset.g]; });
   }
   /** toplu oran alanlarını ve "R ve X aynı oran" kutusunu zam ayarıyla eşitler */
-  function zamUiYaz() { $('#pmZamOranR').value = zamAyar.r; $('#pmZamOranX').value = zamAyar.x; $('#pmZamAyni').checked = zamAyar.ayni; $('#pmZamOranX').disabled = zamAyar.ayni; }
+  function zamUiYaz() { $('#pmZamOranR').value = zamAyar.r; $('#pmZamOranX').value = zamAyar.x; $('#pmZamAyni').checked = zamAyar.ayni; $('#pmZamOranX').disabled = zamAyar.ayni; $('#pmZamDoviz').checked = zamAyar.dovizGizle !== false; }
   /** kayıtlı senaryo yeni sekmede açılır (Zam Senaryosu, o senaryonun ayarıyla) */
   function zamSenaryoAc(id) {
     const u = new URL(location.href); u.searchParams.set('sekme', 'zam'); u.searchParams.set('senaryo', String(id));
@@ -1335,6 +1364,7 @@
   fetch('/PersonelMaliyet/Veri' + (kok.dataset.donem ? '?donem=' + encodeURIComponent(kok.dataset.donem) : '')).then(r => r.json()).then(v => {
     V = v; sutunlariKur(); listeleriDoldur(); ekKur(); donemKur();
     $('#pmDonem').addEventListener('change', donemDegis);
+    $('#pmYeniBordro').addEventListener('click', yeniBordro);
     $('#pmSifirGizle').addEventListener('change', ciz);
     // Üretim Personeli / Özel Kişiler Gizle: tek ortak durum; her anahtar tüm sekmelerde senkron olur ve görünen sekme yeniden çizilir
     $$('.pm-gizle').forEach(c => { c.checked = false; c.addEventListener('change', () => { gizle[c.dataset.g] = c.checked; $$('.pm-gizle').forEach(d => { d.checked = gizle[d.dataset.g]; }); ciz(); }); });
@@ -1343,6 +1373,7 @@
     $('#pmZamOranX').addEventListener('input', () => { zamAyar.x = zamSayi($('#pmZamOranX').value); zamAyarKaydet(); });
     $('#pmZamAyni').addEventListener('change', () => { zamAyar.ayni = $('#pmZamAyni').checked; if (zamAyar.ayni) zamAyar.x = zamAyar.r; zamUiYaz(); zamAyarKaydet(); });
     $('#pmZamTemizle').addEventListener('click', () => { zamAyar.kisi = {}; zamAyarKaydet(); });
+    $('#pmZamDoviz').addEventListener('change', () => { zamAyar.dovizGizle = $('#pmZamDoviz').checked; zamAyarKaydet(); });
     $('#pmZamTablo tbody').addEventListener('change', ev => {
       const i = ev.target.closest('input.zam-kisi'); if (!i) return;
       const k = i.dataset.zk, o = zamAyar.kisi[k] || {};

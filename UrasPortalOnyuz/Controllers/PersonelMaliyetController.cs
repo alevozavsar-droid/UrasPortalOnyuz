@@ -50,6 +50,22 @@ namespace WebApplication3.Controllers
             lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"{d.Satirlar.Count} personel satırı kaydedildi.", null, d.Donem));
         }
 
+        /// <summary>Yeni bordro dönemi oluşturur (güncel dönemin kopyası; kesinti taksitleri yeni aya göre yazılır). Gövde: { donem: "yyyy-aa" }</summary>
+        [HttpPost, IgnoreAntiforgeryToken]
+        public IActionResult DonemOlustur([FromBody] DonemIstek d)
+        {
+            try
+            {
+                lock (PersonelMaliyetOrnek.Kilit)
+                {
+                    var liste = PersonelMaliyetOrnek.DonemOlustur(d?.Donem, d?.Kurlar, out bool yeni);
+                    if (yeni) PersonelKesintiOrnek.KesintileriDonemYansit(d.Donem);
+                    return Json(Paket(true, $"{PersonelMaliyetOrnek.DonemAd(d.Donem)} bordrosu {(yeni ? "oluşturuldu" : "zaten var")} ({liste.Count} kişi).", null, d.Donem));
+                }
+            }
+            catch (ArgumentException ex) { return Json(new { success = false, message = ex.Message }); }
+        }
+
         /// <summary>Yeni personel kartı açar. Gövde: PmDuzenleme (sıra yok sayılır).</summary>
         [HttpPost, IgnoreAntiforgeryToken]
         public IActionResult Ekle([FromBody] PmDuzenleme d)
@@ -69,6 +85,7 @@ namespace WebApplication3.Controllers
             lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"Sıra {d.Sira} silindi.", null, d.Donem));
         }
         public class KaydetIstek { public List<PmDuzenleme> Satirlar { get; set; } public string Donem { get; set; } }
+        public class DonemIstek { public string Donem { get; set; } public Dictionary<string, decimal> Kurlar { get; set; } }
         public class SilIstek { public int Sira { get; set; } public string Donem { get; set; } }
 
         // ---- Diğer Kesintiler sekmesi: kesinti / icra planı (PDF ekiyle), ek yükleme ve indirme (Data/PersonelKesintiOrnek.cs)
@@ -140,16 +157,16 @@ namespace WebApplication3.Controllers
         private object PaketIc(bool ok, string message, int? yeniSira, string donem) => new
         {
             success = ok, message, yeniSira, yil = DateTime.Today.Year, kaynak = PersonelMaliyetOrnek.Kaynak, ben = Ben(),
-            donem = PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.GuncelDonem, donemAd = PersonelMaliyetOrnek.DonemAd(PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.GuncelDonem), donemler = PersonelMaliyetOrnek.DonemPaketi,
+            donem = PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.EnYeniDonem, donemAd = PersonelMaliyetOrnek.DonemAd(PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.EnYeniDonem), donemler = PersonelMaliyetOrnek.DonemPaketi,
             sonKayit = PersonelMaliyetOrnek.SonKayit.HasValue ? new { kisi = PersonelMaliyetOrnek.SonKayit.Value.Kisi, tarih = PersonelMaliyetOrnek.SonKayit.Value.Tarih.ToString("dd.MM.yyyy HH:mm") } : null,
             sutunlar = PersonelMaliyetOrnek.SutunPaketi, parametre = BordroParametre.Paket, odemeSirketi = new { r = PersonelMuhasebeOrnek.OdemeSirketiR, fili = PersonelMuhasebeOrnek.FiiliSirketler },
             sgkIsverenleri = PersonelMaliyetOrnek.SgkIsverenleri, gorevYerleri = PersonelMaliyetOrnek.GorevYerleri, catiDepartmanlar = PersonelMaliyetOrnek.CatiDepartmanlar,
             bolumler = PersonelMaliyetOrnek.Bolumler, unvanlar = PersonelMaliyetOrnek.Unvanlar, gorevler = PersonelMaliyetOrnek.Gorevler, ozelDurumlar = PersonelMaliyetOrnek.OzelDurumlar, durumlar = PersonelMaliyetOrnek.Durumlar, paraBirimleri = PersonelMaliyetOrnek.ParaBirimleri,
             personel = (PersonelMaliyetOrnek.ListeDonem(donem) ?? PersonelMaliyetOrnek.Liste).OrderBy(p => p.Sira).Select(PersonelMaliyetOrnek.Dto).ToList(),   // seçili dönem; kilit içinde maddeleştir: serileştirme action döndükten sonra çalışır, ertelenmiş sorgu kilitsiz gezilirdi
-            ekSutunlar = PersonelMaliyetEkOrnek.SutunPaketi, uretim = PersonelMaliyetEkOrnek.UretimDto(PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.GuncelDonem), primler = PersonelMaliyetEkOrnek.PrimDto(),   // ek sekmeler (Data/PersonelMaliyetEkOrnek.cs); üretim R mahsup / elden X seçili döneme göre; özel kişiler personel listesinde ozel = true
-            ekCalisma = PersonelKesintiOrnek.EkCalismaPaketi(PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.GuncelDonem),   // Ek Çalışmalar: mesai talepleri (Data/PersonelKesintiOrnek.cs)
-            kesinti = PersonelKesintiOrnek.KesintiPaketi(PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.GuncelDonem),       // Diğer Kesintiler: şahsi avanslar, kesinti planları, ekler
-            muhasebe = PersonelMuhasebeOrnek.Paket(PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.GuncelDonem, Ben(), Yetki())   // Muhasebe Kayıtları: simülasyonlar, hesap eşleştirme, yetki (Data/PersonelMuhasebeOrnek.cs)
+            ekSutunlar = PersonelMaliyetEkOrnek.SutunPaketi, uretim = PersonelMaliyetEkOrnek.UretimDto(PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.EnYeniDonem), primler = PersonelMaliyetEkOrnek.PrimDto(),   // ek sekmeler (Data/PersonelMaliyetEkOrnek.cs); üretim R mahsup / elden X seçili döneme göre; özel kişiler personel listesinde ozel = true
+            ekCalisma = PersonelKesintiOrnek.EkCalismaPaketi(PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.EnYeniDonem),   // Ek Çalışmalar: mesai talepleri (Data/PersonelKesintiOrnek.cs)
+            kesinti = PersonelKesintiOrnek.KesintiPaketi(PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.EnYeniDonem),       // Diğer Kesintiler: şahsi avanslar, kesinti planları, ekler
+            muhasebe = PersonelMuhasebeOrnek.Paket(PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.EnYeniDonem, Ben(), Yetki())   // Muhasebe Kayıtları: simülasyonlar, hesap eşleştirme, yetki (Data/PersonelMuhasebeOrnek.cs)
         };
     }
 }

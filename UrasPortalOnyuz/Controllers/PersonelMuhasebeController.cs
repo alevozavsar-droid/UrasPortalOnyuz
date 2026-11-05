@@ -22,7 +22,7 @@ namespace WebApplication3.Controllers
         private string Ben() => OrnekVeri.KullaniciAdi(User?.Identity?.Name ?? "");
         private string Yetki() => OrnekVeri.Kullanicilar.FirstOrDefault(k => string.Equals(k.Kod, User?.Identity?.Name ?? "", StringComparison.OrdinalIgnoreCase)).Yetki ?? "";
         public static readonly string[] Sekmeler = { "kayitlar", "odemeler", "hazirlik", "yansitma", "esleme", "hesap", "arsiv" };
-        private static string Donem(string d) => PersonelMaliyetOrnek.ListeDonem(d) != null ? d : PersonelMaliyetOrnek.GuncelDonem;
+        private static string Donem(string d) => PersonelMaliyetOrnek.ListeDonem(d) != null ? d : PersonelMaliyetOrnek.EnYeniDonem;
 
         public IActionResult Index(string sekme, string donem)
         {

@@ -231,6 +231,14 @@ namespace WebApplication3.Data
                 foreach (var kv in PersonelMaliyetOrnek.Donemler)
                     foreach (var tur in TurSutun) PersonelMaliyetOrnek.KesintiAyarla(kv.Key, personelSira, tur.Value, planlar.Where(k => k.Tur == tur.Key).Sum(k => k.DonemTaksiti(kv.Key)));
         }
+        /// <summary>Yeni oluşturulan dönemin kesinti sütunlarını yalnız o döneme göre plan taksitleriyle doldurur (diğer dönemler değişmez).</summary>
+        public static void KesintileriDonemYansit(string donem)
+        {
+            List<PkKesinti> tum; lock (Kilit) tum = Kesintiler.ToList();
+            lock (PersonelMaliyetOrnek.Kilit)
+                foreach (var p in PersonelMaliyetOrnek.ListeDonem(donem) ?? new List<PmPersonel>())
+                    foreach (var tur in TurSutun) PersonelMaliyetOrnek.KesintiAyarla(donem, p.Sira, tur.Value, tum.Where(k => k.PersonelSira == p.Sira && k.Tur == tur.Key).Sum(k => k.DonemTaksiti(donem)));
+        }
         public static string EkYukle(int kesintiId, string ad, string tip, byte[] veri, string kisi)
         {
             Hazirla(); if (veri == null || veri.Length == 0) return "Dosya boş.";
