@@ -229,7 +229,15 @@ namespace WebApplication3.Data
             List<PkKesinti> planlar; lock (Kilit) planlar = Kesintiler.Where(k => k.PersonelSira == personelSira).ToList();
             lock (PersonelMaliyetOrnek.Kilit)
                 foreach (var kv in PersonelMaliyetOrnek.Donemler)
-                    foreach (var tur in TurSutun) PersonelMaliyetOrnek.KesintiAyarla(kv.Key, personelSira, tur.Value, planlar.Where(k => k.Tur == tur.Key).Sum(k => k.DonemTaksiti(kv.Key)));
+                {
+                    bool dosyadan = kv.Key == PersonelMaliyetEkimOrnek.Donem;   // Ekim kesintileri dosyadan gelir: plan düzenlemesi yalnız planı olan türü (icra, avans) günceller, plansız BES vb. ezilmez (5 Kas 2026)
+                    foreach (var tur in TurSutun)
+                    {
+                        var turPlanlari = planlar.Where(k => k.Tur == tur.Key).ToList();
+                        if (dosyadan && turPlanlari.Count == 0) continue;
+                        PersonelMaliyetOrnek.KesintiAyarla(kv.Key, personelSira, tur.Value, turPlanlari.Sum(k => k.DonemTaksiti(kv.Key)));
+                    }
+                }
         }
         /// <summary>Yeni oluşturulan dönemin kesinti sütunlarını yalnız o döneme göre plan taksitleriyle doldurur (diğer dönemler değişmez).</summary>
         public static void KesintileriDonemYansit(string donem)
@@ -254,8 +262,22 @@ namespace WebApplication3.Data
         {
             List<PmPersonel> liste; lock (PersonelMaliyetOrnek.Kilit) liste = PersonelMaliyetOrnek.Liste.Where(p => p.Durum == "Aktif").OrderBy(p => p.Sira).ToList();
             string donem = PersonelMaliyetOrnek.GuncelDonem;
+            MesaiTalepleriniTohumla(donem, liste);
+            KesintiPlanlariniTohumla(donem, liste);
+        }
+        private static readonly HashSet<string> _mesaiTohumlanan = new HashSet<string>();
+        /// <summary>Yeni bordro dönemi (5 Kas 2026): dönem listesindeki Fazla Mesai (R + X) tutarlarını karşılayan örnek mesai talepleri üretir (Eylül tohumuyla aynı kural); dönem başına bir kez. Ek Çalışmalar sekmesi bordroyla birebir kalır.</summary>
+        public static void MesaiTalepleriniTohumla(string donem)
+        {
+            Hazirla();
+            List<PmPersonel> liste; lock (PersonelMaliyetOrnek.Kilit) liste = (PersonelMaliyetOrnek.ListeDonem(donem) ?? new List<PmPersonel>()).Where(p => p.Durum == "Aktif").OrderBy(p => p.Sira).ToList();
+            MesaiTalepleriniTohumla(donem, liste);
+        }
+        /// <summary>Mesai talepleri: Fazla Mesai (R + X) tutarını fiili saat × saat ücreti × 1,5 ile karşılayan hafta içi talepler (bordro dönemi), PDKS + puantaj işlenmiş.</summary>
+        private static void MesaiTalepleriniTohumla(string donem, List<PmPersonel> liste)
+        {
+            if (string.IsNullOrEmpty(donem) || donem.Length != 7 || !_mesaiTohumlanan.Add(donem)) return;
             int ay = int.Parse(donem.Substring(5, 2)), yil = int.Parse(donem.Substring(0, 4));
-            // --- mesai talepleri: Fazla Mesai (R + X) tutarını fiili saat × saat ücreti × 1,5 ile karşılayan hafta içi talepler (bordro dönemi), PDKS + puantaj işlenmiş
             var projeler = new[] { "Ay sonu kapanış", "Sevkiyat yoğunluğu", "Hat 2 bakım", "İhracat yüklemesi", "Stok sayımı", "Dolum hattı arıza", "Fuar hazırlığı", "Yıl sonu planlama" };
             foreach (var p in liste)
             {
@@ -276,7 +298,10 @@ namespace WebApplication3.Data
                     _tohumSayac++;
                 }
             }
-            // --- kesintiler: Avans ≥ 10.000 → şahsi avans talebi + mahsup planı · İcra → icra dosyası (örnek PDF) · Borç → borç planı
+        }
+        /// <summary>Kesintiler (yalnız Eylül tohumu): Avans ≥ 10.000 → şahsi avans talebi + mahsup planı · İcra → icra dosyası (örnek PDF) · Borç → borç planı.</summary>
+        private static void KesintiPlanlariniTohumla(string donem, List<PmPersonel> liste)
+        {
             foreach (var p in liste)
             {
                 if (p.Avans > 0)

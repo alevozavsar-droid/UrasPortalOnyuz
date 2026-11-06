@@ -28,7 +28,7 @@ namespace WebApplication3.Controllers
         {
             ViewData["Title"] = "Personel Maliyet Raporu";
             ViewBag.Yil = DateTime.Today.Year;
-            ViewBag.Kaynak = PersonelMaliyetOrnek.Kaynak;
+            ViewBag.Kaynak = PersonelMaliyetOrnek.KaynakDonem(null);
             ViewBag.Gruplar = PersonelMaliyetOrnek.SutunGruplari;
             return View();
         }
@@ -59,11 +59,22 @@ namespace WebApplication3.Controllers
                 lock (PersonelMaliyetOrnek.Kilit)
                 {
                     var liste = PersonelMaliyetOrnek.DonemOlustur(d?.Donem, d?.Kurlar, out bool yeni);
-                    if (yeni) PersonelKesintiOrnek.KesintileriDonemYansit(d.Donem);
+                    if (yeni && d.Donem != PersonelMaliyetEkimOrnek.Donem) PersonelKesintiOrnek.KesintileriDonemYansit(d.Donem);   // Ekim dosyadan kurulur: kesinti sütunları dosyadaki değerlerdir (plansız BES vb. sıfırlanmaz)
+                    if (yeni) { PersonelMaliyetEkOrnek.PrimleriDonemdenTuret(d.Donem); PersonelKesintiOrnek.MesaiTalepleriniTohumla(d.Donem); }   // Prim Ödemeleri ve Ek Çalışmalar sekmeleri yeni dönemin bordro tutarlarıyla birebir (5 Kas 2026)
                     return Json(Paket(true, $"{PersonelMaliyetOrnek.DonemAd(d.Donem)} bordrosu {(yeni ? "oluşturuldu" : "zaten var")} ({liste.Count} kişi).", null, d.Donem));
                 }
             }
             catch (ArgumentException ex) { return Json(new { success = false, message = ex.Message }); }
+        }
+
+        public class TesvikIstek { public string Sirket { get; set; } public string Kod { get; set; } public bool Secili { get; set; } public string Donem { get; set; } }
+        /// <summary>Şirket Teşvik ve İndirimleri: şirketin bir teşvikten faydalanma seçimi (seçili değilse muaf / faydalanamıyor); tüm dönemlerin hesabına yansır. Gövde: { sirket, kod, secili, donem }</summary>
+        [HttpPost, IgnoreAntiforgeryToken]
+        public IActionResult TesvikKaydet([FromBody] TesvikIstek d)
+        {
+            string hata = PersonelTesvikOrnek.Kaydet(d?.Sirket, d?.Kod, d?.Secili ?? false);
+            if (hata != null) return Json(new { success = false, message = hata });
+            lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"{d.Sirket} · {d.Kod}: {(d.Secili ? "faydalanıyor" : "muaf / faydalanamıyor")} olarak kaydedildi; hesaplar yenilendi.", null, d.Donem));
         }
 
         /// <summary>Yeni personel kartı açar. Gövde: PmDuzenleme (sıra yok sayılır).</summary>
@@ -154,19 +165,24 @@ namespace WebApplication3.Controllers
         }
 
         private object Paket(bool ok, string message, int? yeniSira, string donem) { PersonelMaliyetEkOrnek.UretimYansit(); return PaketIc(ok, message, yeniSira, donem); }   // gündelikçi R mahsubu / elden X önce ana tabloya yazılır
-        private object PaketIc(bool ok, string message, int? yeniSira, string donem) => new
+        private object PaketIc(bool ok, string message, int? yeniSira, string donem)
         {
-            success = ok, message, yeniSira, yil = DateTime.Today.Year, kaynak = PersonelMaliyetOrnek.Kaynak, ben = Ben(),
-            donem = PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.EnYeniDonem, donemAd = PersonelMaliyetOrnek.DonemAd(PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.EnYeniDonem), donemler = PersonelMaliyetOrnek.DonemPaketi,
-            sonKayit = PersonelMaliyetOrnek.SonKayit.HasValue ? new { kisi = PersonelMaliyetOrnek.SonKayit.Value.Kisi, tarih = PersonelMaliyetOrnek.SonKayit.Value.Tarih.ToString("dd.MM.yyyy HH:mm") } : null,
-            sutunlar = PersonelMaliyetOrnek.SutunPaketi, parametre = BordroParametre.Paket, odemeSirketi = new { r = PersonelMuhasebeOrnek.OdemeSirketiR, fili = PersonelMuhasebeOrnek.FiiliSirketler },
-            sgkIsverenleri = PersonelMaliyetOrnek.SgkIsverenleri, gorevYerleri = PersonelMaliyetOrnek.GorevYerleri, catiDepartmanlar = PersonelMaliyetOrnek.CatiDepartmanlar,
-            bolumler = PersonelMaliyetOrnek.Bolumler, unvanlar = PersonelMaliyetOrnek.Unvanlar, gorevler = PersonelMaliyetOrnek.Gorevler, ozelDurumlar = PersonelMaliyetOrnek.OzelDurumlar, durumlar = PersonelMaliyetOrnek.Durumlar, paraBirimleri = PersonelMaliyetOrnek.ParaBirimleri,
-            personel = (PersonelMaliyetOrnek.ListeDonem(donem) ?? PersonelMaliyetOrnek.Liste).OrderBy(p => p.Sira).Select(PersonelMaliyetOrnek.Dto).ToList(),   // seçili dönem; kilit içinde maddeleştir: serileştirme action döndükten sonra çalışır, ertelenmiş sorgu kilitsiz gezilirdi
-            ekSutunlar = PersonelMaliyetEkOrnek.SutunPaketi, uretim = PersonelMaliyetEkOrnek.UretimDto(PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.EnYeniDonem), primler = PersonelMaliyetEkOrnek.PrimDto(),   // ek sekmeler (Data/PersonelMaliyetEkOrnek.cs); üretim R mahsup / elden X seçili döneme göre; özel kişiler personel listesinde ozel = true
-            ekCalisma = PersonelKesintiOrnek.EkCalismaPaketi(PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.EnYeniDonem),   // Ek Çalışmalar: mesai talepleri (Data/PersonelKesintiOrnek.cs)
-            kesinti = PersonelKesintiOrnek.KesintiPaketi(PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.EnYeniDonem),       // Diğer Kesintiler: şahsi avanslar, kesinti planları, ekler
-            muhasebe = PersonelMuhasebeOrnek.Paket(PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.EnYeniDonem, Ben(), Yetki())   // Muhasebe Kayıtları: simülasyonlar, hesap eşleştirme, yetki (Data/PersonelMuhasebeOrnek.cs)
-        };
+            string etkin = PersonelMaliyetOrnek.ListeDonem(donem) != null ? donem : PersonelMaliyetOrnek.EnYeniDonem;   // istenen dönem yoksa en yeni dönem; etiket, kişi listesi ve ek sekmeler hep aynı dönemden (5 Kas 2026: önce dönemsiz istekte kişi listesi Eylül'e düşüyordu)
+            return new
+            {
+                success = ok, message, yeniSira, yil = DateTime.Today.Year, kaynak = PersonelMaliyetOrnek.KaynakDonem(etkin), ben = Ben(),
+                donem = etkin, donemAd = PersonelMaliyetOrnek.DonemAd(etkin), donemler = PersonelMaliyetOrnek.DonemPaketi,
+                sonKayit = PersonelMaliyetOrnek.SonKayit.HasValue ? new { kisi = PersonelMaliyetOrnek.SonKayit.Value.Kisi, tarih = PersonelMaliyetOrnek.SonKayit.Value.Tarih.ToString("dd.MM.yyyy HH:mm") } : null,
+                sutunlar = PersonelMaliyetOrnek.SutunPaketi, parametre = BordroParametre.Paket, odemeSirketi = new { r = PersonelMuhasebeOrnek.OdemeSirketiR, fili = PersonelMuhasebeOrnek.FiiliSirketler },
+                sgkIsverenleri = PersonelMaliyetOrnek.SgkIsverenleri, gorevYerleri = PersonelMaliyetOrnek.GorevYerleri, catiDepartmanlar = PersonelMaliyetOrnek.CatiDepartmanlar,
+                bolumler = PersonelMaliyetOrnek.Bolumler, unvanlar = PersonelMaliyetOrnek.Unvanlar, gorevler = PersonelMaliyetOrnek.Gorevler, ozelDurumlar = PersonelMaliyetOrnek.OzelDurumlar, durumlar = PersonelMaliyetOrnek.Durumlar, paraBirimleri = PersonelMaliyetOrnek.ParaBirimleri,
+                personel = PersonelMaliyetOrnek.ListeDonem(etkin).OrderBy(p => p.Sira).Select(PersonelMaliyetOrnek.Dto).ToList(),   // seçili dönem; kilit içinde maddeleştir: serileştirme action döndükten sonra çalışır, ertelenmiş sorgu kilitsiz gezilirdi
+                tesvik = PersonelTesvikOrnek.Paket(),   // Şirket Teşvik ve İndirimleri: katalog, şirket seçimleri, istemci hesabı için oranlar (Data/PersonelTesvikOrnek.cs)
+                ekSutunlar = PersonelMaliyetEkOrnek.SutunPaketi, uretim = PersonelMaliyetEkOrnek.UretimDto(etkin), primler = PersonelMaliyetEkOrnek.PrimDto(),   // ek sekmeler (Data/PersonelMaliyetEkOrnek.cs); üretim R mahsup / elden X seçili döneme göre; özel kişiler personel listesinde ozel = true
+                ekCalisma = PersonelKesintiOrnek.EkCalismaPaketi(etkin),   // Ek Çalışmalar: mesai talepleri (Data/PersonelKesintiOrnek.cs)
+                kesinti = PersonelKesintiOrnek.KesintiPaketi(etkin),       // Diğer Kesintiler: şahsi avanslar, kesinti planları, ekler
+                muhasebe = PersonelMuhasebeOrnek.Paket(etkin, Ben(), Yetki())   // Muhasebe Kayıtları: simülasyonlar, hesap eşleştirme, yetki (Data/PersonelMuhasebeOrnek.cs)
+            };
+        }
     }
 }

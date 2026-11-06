@@ -243,5 +243,22 @@ namespace WebApplication3.Data
             Pr("2026-09", "Sevgi Kaya", "Avrupa Paper", "İhracat Müdürü", "Hedef Primi", sabit: 14906, aciklama: "Aylık ihracat hedefi sabit prim"),
             Pr("2026-09", "Yusuf Öztürk", "ALV Kimya", "İç Piyasa Satış Uzmanı – Emprime", "Ciro Primi", 1604019, 3, aciklama: "Emprime cirosu %3")
         };
+        /// <summary>Yeni bordro dönemi (5 Kas 2026): dönemde Prim-X / Prim-R tutarı olan ve o dönemde prim satırı bulunmayan her kişi için sabit tutarlı bir prim satırı açar; Prim Ödemeleri sekmesi ve Prim Uyum tablosu bordroyla birebir kalır. Tür ve baz kaynakta olmadığından "Hedef Primi" + sabit tutar yazılır. PrimX bordroda zaten yazılı olduğundan PrimYansit çağrılmaz.</summary>
+        public static void PrimleriDonemdenTuret(string donem)
+        {
+            if (string.IsNullOrEmpty(donem) || donem.Length != 7) return;
+            List<PmPersonel> liste; lock (PersonelMaliyetOrnek.Kilit) liste = (PersonelMaliyetOrnek.ListeDonem(donem) ?? new List<PmPersonel>()).Where(p => p.Durum == "Aktif").OrderBy(p => p.Sira).ToList();
+            string donemAd = AylarTr[int.Parse(donem.Substring(5, 2)) - 1] + " " + donem.Substring(0, 4), kaynak = PersonelMaliyetOrnek.KaynakDonem(donem);
+            lock (Kilit)
+                foreach (var p in liste)
+                {
+                    if (Primler.Any(t => t.OdemeDonem == donem && t.AdSoyad == p.AdSoyad)) continue;
+                    foreach (var (odeme, tutar) in new[] { ("X", p.PrimX), ("R", p.Prim) })
+                    {
+                        if (tutar <= 0) continue;
+                        Primler.Add(new PrimOdeme { Sira = ++_p, Donem = donem, DonemAd = donemAd, AdSoyad = p.AdSoyad, SgkIsvereni = p.SgkIsvereni, Gorev = p.Gorev, PrimTuru = "Hedef Primi", SabitTutar = tutar, Odeme = odeme, OdemeAyi = donemAd, OdemeDonem = donem, Aciklama = "Bordro kaynağındaki Prim-" + odeme + " tutarı (" + kaynak + "); prim türü ve baz kaynakta yok." });
+                    }
+                }
+        }
     }
 }

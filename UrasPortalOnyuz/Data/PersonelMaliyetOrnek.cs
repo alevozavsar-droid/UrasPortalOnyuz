@@ -81,13 +81,15 @@ namespace WebApplication3.Data
         public decimal NetXBordro { get; set; } public decimal NetRBordro { get; set; } public decimal AraToplam { get; set; } public decimal ToplamBrutMasraflar { get; set; } public decimal ToplamIsveren { get; set; } public decimal GenelMaliyet { get; set; }
         /// <summary>Ödeme kanalı (maliyet değişmez): BankaOdeme = banka transferi (blokeli kişide 0); NakitRTutar = blokeli kişinin R tutarı (icra ve kesintiler düşülmüş), elden ödenir; EldenOdeme = Kalan Net (Elden) + NakitRTutar.</summary>
         public decimal BankaOdeme { get; set; } public decimal NakitRTutar { get; set; } public decimal EldenOdeme { get; set; }
+        /// <summary>Şirket Teşvik ve İndirimleri (5 Kas 2026): seçime göre teşvik indirimi; Toplam İşveren brüt kalır, "Teşvik Sonrası İşveren" = işveren − teşvik, "Genel Maliyet (Teşvik Sonrası)" = genel maliyet − teşvik.</summary>
+        public decimal TesvikIndirimi { get; set; } public decimal IsverenNet { get; set; } public decimal GenelMaliyetTesvik { get; set; }
 
         public static PmBordro Hesapla(PmPersonel p)
         {
             var R = (Func<decimal, decimal>)BordroParametre.Yuvarla;
             bool emekli = p.OzelDurum == "Emekli"; int ay = BordroParametre.Ay; decimal tavan = BordroParametre.SgkTavan;
             decimal isciOran = emekli ? BordroParametre.IsciSgdp : BordroParametre.IsciIssizlik + BordroParametre.IsciMyo + BordroParametre.IsciGss;
-            decimal istisna = BordroParametre.AsgariIstisna(ay), asgDamga = BordroParametre.AsgariDamga;
+            decimal istisna = PersonelTesvikOrnek.Uygulanir(p.SgkIsvereni, PersonelTesvikOrnek.GvIstisna) ? BordroParametre.AsgariIstisna(ay) : 0m, asgDamga = PersonelTesvikOrnek.Uygulanir(p.SgkIsvereni, PersonelTesvikOrnek.DvIstisna) ? BordroParametre.AsgariDamga : 0m;   // istisnalar şirket seçimine bağlı (Şirket Teşvik ve İndirimleri sekmesi)
             // dövizli maaş (4 Kas 2026): toplam ₺ = döviz tutarı × kur; "KalanX": R sabit, kalanı X (bordro dışı); "TamamiR" / "TamamiX": tamamı R ya da X
             decimal rNet = p.RNet, xNet = p.XNet;
             if (p.Dovizli)
@@ -128,6 +130,7 @@ namespace WebApplication3.Data
             // 3) brüt kazanç ve SGK matrahı
             h.ToplamBrutKazanc = sgkYok ? 0 : kazanclar + ekler;
             h.SgkMatrahi = sgkYok ? 0 : Math.Min(kazanclar + h.ToplamEkCalisma + h.ToplamPrim + (h.ToplamSosyal - p.Servis - p.SgkDisi), tavan);   // yol yardımı ve servis SGK matrahı dışında (kaynak tabloyla aynı)
+            h.TesvikIndirimi = sgkYok ? 0m : PersonelTesvikOrnek.Indirim(p, h.SgkMatrahi, emekli);   // şirketin faydalandığı teşvikler (seçime göre); Toplam İşveren brüt kalır, teşvik ayrı sütunlarda düşülür
             // 4) SGK işçi
             h.IsciIssizlik = emekli ? 0 : R(h.SgkMatrahi * BordroParametre.IsciIssizlik); h.IsciMyo = emekli ? 0 : R(h.SgkMatrahi * BordroParametre.IsciMyo);
             h.IsciGss = emekli ? 0 : R(h.SgkMatrahi * BordroParametre.IsciGss); h.IsciSgdp = emekli ? R(h.SgkMatrahi * BordroParametre.IsciSgdp) : 0;
@@ -159,7 +162,7 @@ namespace WebApplication3.Data
                 decimal fark = z - (h.IsvIssizlik + h.IsvMyo + h.IsvGss + h.IsvSgdp + h.Kvsk); if (emekli) h.IsvSgdp += fark; else h.IsvMyo += fark;
                 h.SgkIsverenToplam = z;
             }
-            else h.SgkIsverenToplam = h.IsvIssizlik + h.IsvMyo + h.IsvGss + h.IsvSgdp + h.Kvsk - h.HazineIndirimi;
+            else { h.HazineIndirimi = h.TesvikIndirimi; h.SgkIsverenToplam = h.IsvIssizlik + h.IsvMyo + h.IsvGss + h.IsvSgdp + h.Kvsk; }   // kaynak yoksa: işveren toplamı brüt (resmi bordro gibi), indirim = seçime göre teşvik (önce sabit 4 puan hazine düşülüyordu)
             // 8) ödeme özeti ve maliyet (R bordrolu, X bordro dışı)
             // banka = anlaşılan net R-Net + R ek ödemeler (ekler) + Ek Ödemeler Toplam-R − kesintiler; brütten türetilmez (kaynak KALAN NET TUTAR (BANKA))
             h.RNet2 = rNet; h.KesintilerToplami = p.Avans + p.Icra + p.Borc + p.OzelSigortaKesintisi + p.SendikaKatkisi + p.Bes + p.MazotKesintisi + p.IhbarKesintisi;
@@ -170,6 +173,7 @@ namespace WebApplication3.Data
             h.BankaOdeme = p.BankaBlokeli ? 0m : h.NetRBordro; h.NakitRTutar = p.BankaBlokeli ? h.NetRBordro : 0m; h.EldenOdeme = R(h.KalanNetElden + h.NakitRTutar);
             h.AraToplam = h.NetXBordro + h.NetRBordro; h.ToplamBrutMasraflar = sgkYok ? 0 : R(h.ToplamBrutKazanc - h.KalanNetBanka); h.ToplamIsveren = h.SgkIsverenToplam;
             h.GenelMaliyet = R(h.AraToplam + h.ToplamBrutMasraflar + h.ToplamIsveren);
+            h.IsverenNet = R(h.SgkIsverenToplam - h.TesvikIndirimi); h.GenelMaliyetTesvik = R(h.GenelMaliyet - h.TesvikIndirimi);   // teşvik sonrası (şirket seçimine göre)
             return h;
         }
     }
@@ -264,6 +268,9 @@ namespace WebApplication3.Data
         /// <summary>Kaydın ait olduğu dönem (yyyy-MM); boşsa güncel dönem.</summary>
         public string Donem { get; set; }
         public string Not { get; set; }
+        /// <summary>Rapor parametreleri (Personel Cari Kartı sekmesi, 5 Kas 2026): gönderilmeyen alan (null) değişmez. Kaynak brüt / işveren 0 = model hesaplar.</summary>
+        public bool? BankaBlokeli { get; set; } public bool? SgkDetayYok { get; set; } public bool? OdemeYapilmiyor { get; set; }
+        public string DovizOdeme { get; set; } public decimal? SgkDisi { get; set; } public decimal? BrutKaynak { get; set; } public decimal? IsverenKaynak { get; set; } public decimal? HazineKaynak { get; set; }
     }
 
     /// <summary>Tablo sütunu: başlık, JSON anahtarı (camelCase), tip ve düzenleme listesi.
@@ -281,6 +288,8 @@ namespace WebApplication3.Data
     {
         public static readonly object Kilit = new object();
         public static readonly string Kaynak = "Personel Maliyet Raporu 2026-09 (DUZELTILMIS_v5_2)";
+        /// <summary>Dönemin kaynak etiketi (ekranda "Kaynak"): istenen dönem yoksa en yeni dönem; Ekim 2026 dosyadan, diğerleri Eylül tablosundan.</summary>
+        public static string KaynakDonem(string donem) => (ListeDonem(donem) != null ? donem : EnYeniDonem) == PersonelMaliyetEkimOrnek.Donem ? PersonelMaliyetEkimOrnek.Kaynak : Kaynak;
         public static (string Kisi, DateTime Tarih)? SonKayit { get; private set; }
         private static readonly CultureInfo Tr = new CultureInfo("tr-TR");
 
@@ -300,11 +309,11 @@ namespace WebApplication3.Data
             ("Gelir Vergisi", new[] { S("Gelir Vergisi Matrahı", "gvMatrahi", "hesap"), S("Kümülatif Vergi Matrahı", "kumulatifMatrah", "hesap"), S("Hesaplanan Gelir Vergisi", "hesaplananGv", "hesap"), S("Asgari Ücret Vergi İstisnası", "asgariIstisna", "hesap"), S("Gelir Vergisi İndirimleri", "gvIndirimleri", "sayi"), S("Özel Sigorta İndirimi", "ozelSigortaIndirimi", "sayi"), S("Gelir Vergisi Tutarı", "gvTutari", "hesap"), S("Asgari Ücret Kümülatif Matrahı", "asgariKumulatifMatrah", "hesap") }),
             ("Damga Vergisi", new[] { S("Damga Vergisi Matrahı", "damgaMatrahi", "hesap"), S("Asgari Ücret Damga Vergisi", "asgariDamga", "hesap"), S("Damga Vergisi Tutarı", "dvTutari", "hesap") }),
             ("SGK İşçi Payları", new[] { S("İşsizlik Sigortası Primi (İşçi)", "isciIssizlik", "hesap"), S("Malullük, Yaşlılık ve Ölüm Primi (İşçi)", "isciMyo", "hesap"), S("Genel Sağlık Sigortası Primi (İşçi)", "isciGss", "hesap"), S("SGDP Primi (İşçi)", "isciSgdp", "hesap"), S("SGK İşçi Toplam Prim", "sgkIsciToplam", "hesap") }),
-            ("İşveren Payları", new[] { S("İşsizlik Sigortası Primi (İşveren)", "isvIssizlik", "hesap"), S("Malullük, Yaşlılık ve Ölüm Primi (İşveren)", "isvMyo", "hesap"), S("Genel Sağlık Sigortası Primi (İşveren)", "isvGss", "hesap"), S("SGDP Primi (İşveren)", "isvSgdp", "hesap"), S("Kısa Vadeli Sigorta Kolu Primi", "kvsk", "hesap"), S("İstihdam Hazine İndirimi", "hazineIndirimi", "hesap"), S("SGK İşveren Toplam Prim", "sgkIsverenToplam", "hesap") }),
+            ("İşveren Payları", new[] { S("İşsizlik Sigortası Primi (İşveren)", "isvIssizlik", "hesap"), S("Malullük, Yaşlılık ve Ölüm Primi (İşveren)", "isvMyo", "hesap"), S("Genel Sağlık Sigortası Primi (İşveren)", "isvGss", "hesap"), S("SGDP Primi (İşveren)", "isvSgdp", "hesap"), S("Kısa Vadeli Sigorta Kolu Primi", "kvsk", "hesap"), S("İstihdam Hazine İndirimi", "hazineIndirimi", "hesap"), S("Teşvik İndirimi (Şirket Seçimi)", "tesvikIndirimi", "hesap"), S("SGK İşveren Toplam Prim", "sgkIsverenToplam", "hesap"), S("Teşvik Sonrası İşveren", "isverenNet", "hesap") }),
             ("Diğer Kesintiler", new[] { S("Avans", "avans", "sayi"), S("İcra", "icra", "sayi"), S("Borç", "borc", "sayi"), S("Özel Sigorta Kesintisi", "ozelSigortaKesintisi", "sayi"), S("Sendika Katkısı", "sendikaKatkisi", "sayi"), S("Bireysel Emeklilik Sistemi", "bes", "sayi"), S("Mazot Kesintisi", "mazotKesintisi", "sayi"), S("İhbar Kesintisi", "ihbarKesintisi", "sayi") }),
             ("Ödeme Özeti-R", new[] { S("R-Net", "rNet2", "hesap"), S("Ek Ödemeler Toplam-R", "digerEkR", "hesap"), S("Kesintiler Toplamı-R", "kesintilerToplami", "hesap"), S("Kalan Net Tutar (Banka)", "kalanNetBanka", "hesap") }),
             ("Ödeme Özeti-X", new[] { S("X-Net", "xNet2", "hesap"), S("Ek Ödemeler Toplam-X", "digerEkOdemelerX", "hesap"), S("Kesintiler Toplamı-X", "kesintilerToplamiX", "sayi"), S("Kalan Net Tutar (Elden)", "kalanNetElden", "hesap") }),
-            ("Maliyet ve Not", new[] { S("Net-X Bordro", "netXBordro", "hesap"), S("Net-R Bordro", "netRBordro", "hesap"), S("Ara Toplam", "araToplam", "hesap"), S("Toplam Brüt Masraflar", "toplamBrutMasraflar", "hesap"), S("Toplam İşveren", "toplamIsveren", "hesap"), S("Genel Maliyet", "genelMaliyet", "genel"), S("Not", "not", "not") }),
+            ("Maliyet ve Not", new[] { S("Net-X Bordro", "netXBordro", "hesap"), S("Net-R Bordro", "netRBordro", "hesap"), S("Ara Toplam", "araToplam", "hesap"), S("Toplam Brüt Masraflar", "toplamBrutMasraflar", "hesap"), S("Toplam İşveren", "toplamIsveren", "hesap"), S("Genel Maliyet", "genelMaliyet", "genel"), S("Genel Maliyet (Teşvik Sonrası)", "genelMaliyetTesvik", "hesap"), S("Not", "not", "not") }),
             ("Kart", new[] { S("Personel Kartı", "kart", "kart") })
         };
         public static IEnumerable<PmSutun> TumSutunlar => SutunGruplari.SelectMany(g => g.Sutunlar);
@@ -335,7 +344,7 @@ namespace WebApplication3.Data
         }
         /// <summary>Banka hesabı blokeli kişiler (4 Kas 2026): Cafer İpek ve Nükhet Özavşar; R tutarları elden ödenir.</summary>
         private static readonly string[] BankaBlokeliKisiler = { "Cafer İpek", "Nükhet Özavşar" };
-        /// <summary>Yeni bordro dönemi (ör. 2026-10): güncel dönemin kopyası; kesinti taksitleri çağıran tarafından o aya göre yazılır. Dönem zaten varsa dokunulmaz (yeni = false).</summary>
+        /// <summary>Yeni bordro dönemi: Ekim 2026 dosyadan kurulur (PersonelMaliyetEkimOrnek); diğer dönemler güncel dönemin kopyasıdır. Kesinti taksitleri çağıran tarafından o aya göre yazılır. Dönem zaten varsa dokunulmaz (yeni = false).</summary>
         public static List<PmPersonel> DonemOlustur(string donem, Dictionary<string, decimal> kurlar, out bool yeni)
         {
             if (string.IsNullOrEmpty(donem) || !System.Text.RegularExpressions.Regex.IsMatch(donem, @"^\d{4}-(0[1-9]|1[0-2])$")) throw new ArgumentException("Dönem yyyy-aa biçiminde olmalı (örn. 2026-10).");
@@ -347,39 +356,144 @@ namespace WebApplication3.Data
                 decimal eur = kurlar != null && kurlar.TryGetValue("EUR", out var e) ? e : 0m;
                 decimal usd = kurlar != null && kurlar.TryGetValue("USD", out var u) ? u : 0m;
                 if (eur <= 0 || usd <= 0) throw new ArgumentException("Yeni bordro için EUR ve USD kuru (₺) girilmeli.");
-                var liste = Donemler[GuncelDonem].Where(p => !(DonemdeYok.TryGetValue(donem, out var yok) && yok.Contains(p.AdSoyad))).Select(p => p.Kopya()).ToList();
+                var liste = donem == PersonelMaliyetEkimOrnek.Donem ? EkimListesi() : Donemler[GuncelDonem].Select(p => p.Kopya()).ToList();
                 foreach (var p in liste)
                 {
                     var d = Array.Find(DovizliDuzen, x => x.Ad == p.AdSoyad);
                     if (d.Ad == null) continue;
                     decimal yeniKur = d.Pb == "EUR" ? eur : usd;
                     p.Doviz = d.Pb; p.DovizTutar = d.Tutar; p.Kur = yeniKur; p.DovizOdeme = d.Odeme; p.RNet = d.SabitR; p.XNet = 0m;
-                    if (d.Odeme == PmPersonel.DovizTamamiR)
-                    {   // R ₺ kura göre değişir: kaynak brüt ve işveren tutarı kur oranında ölçeklenir (kur aynıysa Eylül maliyeti aynen kalır)
+                    if (d.Odeme == PmPersonel.DovizTamamiR && donem != PersonelMaliyetEkimOrnek.Donem)
+                    {   // R ₺ kura göre değişir: kaynak brüt ve işveren tutarı kur oranında ölçeklenir (kur aynıysa Eylül maliyeti aynen kalır); Ekim'de brüt resmi bordrodan geldiği için ölçeklenmez
                         decimal f = yeniKur / (d.Pb == "EUR" ? EylulEur : EylulUsd);
                         if (p.BrutKaynak.HasValue) p.BrutKaynak = Math.Round(p.BrutKaynak.Value * f, 2);
                         if (p.IsverenKaynak.HasValue) p.IsverenKaynak = Math.Round(p.IsverenKaynak.Value * f, 2);
                     }
                 }
+                int donemAy = int.Parse(donem.Substring(5, 2));
+                foreach (var p in liste.Where(x => x.BrutKaynak == null)) TuretilmisKaynak(p, donemAy);   // brütü olmayanlar: brütleştirme kaynak değer olur (vergi artık; fiş dengesi kaynaklı kişiler gibi tutar)
                 Donemler[donem] = liste;
                 return liste;
             }
+        }
+        /// <summary>Kaynak brütü olmayan kişi için brütü R-Net ve ekler üzerinden bulur: SGK, damga ve gelir vergisi matrahı ekler dahil hesaplanır, bordro neti = R-Net + ekler olacak şekilde brüt çözülür. Sonuç kaynaklı kişiyle aynı yoldan işlenir (vergi artık, fiş dengesi tutar); İş Veren hazine indirimi düşülmez (rapor gibi).</summary>
+        private static void TuretilmisKaynak(PmPersonel p, int ay)
+        {
+            var h0 = p.Hesap;
+            if (h0.RNet2 <= 0) return;
+            decimal ekler = h0.ToplamEkCalisma + h0.ToplamSosyal + h0.ToplamPrim + h0.ToplamYanHaklar + h0.ToplamYasal;
+            decimal hedef = h0.RNet2 + ekler, lo = 0, hi = h0.RNet2 * 3 + 50000m;
+            for (int i = 0; i < 80; i++)
+            {
+                decimal orta = (lo + hi) / 2;
+                if (BrutTamNet(p, orta + ekler, ay) < hedef) lo = orta; else hi = orta;
+            }
+            p.BrutKaynak = BordroParametre.Yuvarla(hi + ekler); p.IsverenKaynak = null;
+            var h = p.Hesap;
+            p.IsverenKaynak = h.SgkIsverenToplam + h.HazineIndirimi;
+        }
+        /// <summary>Verilen toplam brüt (ekler dahil) için bordro neti: brüt − SGK işçi − gelir vergisi (bordro ayının kümülatif dilimi, asgari istisna düşülmüş) − damga. Brütleştirme bunu kullanır.</summary>
+        private static decimal BrutTamNet(PmPersonel p, decimal toplamBrut, int ay)
+        {
+            var t = p.Kopya(); t.BrutKaynak = toplamBrut; t.IsverenKaynak = null;
+            var h = t.Hesap;
+            decimal istisna = h.GvMatrahi > 0 ? BordroParametre.AsgariIstisna(ay) : 0m;
+            decimal gv = Math.Max(0, BordroParametre.Yuvarla(BordroParametre.AylikGv(h.GvMatrahi, ay) - istisna - p.GvIndirimleri - p.OzelSigortaIndirimi));
+            return h.ToplamBrutKazanc - h.SgkIsciToplam - gv - h.DvTutari;
         }
         /// <summary>Eylül 2026 kaynak kurları (R ve X tutarlarından): USD 48,9008 (Sevgi, Berkan, Orazgül) · EUR 55,6306 (Vu Thi, Joao yaklaşık).</summary>
         private const decimal EylulEur = 55.6306m, EylulUsd = 48.9008m;
         /// <summary>Dövizli maaş düzeni (kullanıcı, 4 Kas 2026): Joao ve Vu Thi R sabit + kalanı X; Sevgi ve Berkan tamamı R; Orazgül tamamı X. Kur yeni bordro girdisidir.</summary>
         private static readonly (string Ad, string Pb, decimal Tutar, string Odeme, decimal SabitR)[] DovizliDuzen =
         {
-            ("Joao Paulo Araujo Fernandes", "EUR", 5000m, PmPersonel.DovizKalanX, 67157m),
-            ("Vu Thi Thuy Ha", "EUR", 2000m, PmPersonel.DovizKalanX, 46931m),
+            ("Joao Paulo Araujo Fernandes", "EUR", 5000m, PmPersonel.DovizKalanX, 67156.80m),
+            ("Vu Thi Thuy Ha", "EUR", 2000m, PmPersonel.DovizKalanX, 46930.78m),
             ("Orazgül Jumayeva", "USD", 1300m, PmPersonel.DovizTamamiX, 0m),
             ("Sevgi Kaya", "USD", 2500m, PmPersonel.DovizTamamiR, 0m),
             ("Berkan Özkan", "USD", 2000m, PmPersonel.DovizTamamiR, 0m),
         };
-        /// <summary>Dönemde yok (kullanıcı, 4 Kas 2026): Ekim 2026 bordrosuna alınmaz.</summary>
-        private static readonly Dictionary<string, string[]> DonemdeYok = new Dictionary<string, string[]> { ["2026-10"] = new[] { "Emine Tanış", "Medine Rozykulova" } };
+        /// <summary>Ekim 2026 bordrosu dosyadan kurulur (personel_kazanc_birlesik_2.xlsx, 5 Kas 2026): satır tutarları, ek ödemeler ve kesintiler dosyadan gelir; kimlik ve notlar Eylül kaydından ad (ve SGK) eşleşmesiyle alınır. Kaynak brüt ve işveren yalnız girdiler Eylül ile aynıysa korunur (aynı girdi, aynı brüt); değişen kişide model brütü R-Net'ten hesaplar. İcra Eylül ile aynı taşınır (kullanıcı kararı); "Ödeme Yapılmıyor" notu taşınmaz (dosyada yok); bloke hesap kuralı (Cafer İpek, Nükhet Özavşar) korunur. Dosyada olmayan Eylül kaydı (Alper Köse, işten ayrıldı) silinmez, Ekim tutarları sıfırlanır.</summary>
+        private static List<PmPersonel> EkimListesi()
+        {
+            var baz = Donemler[GuncelDonem];
+            var satirlar = PersonelMaliyetEkimOrnek.Satirlar;
+            var kullanilan = new HashSet<PmPersonel>();
+            var bagli = new PmPersonel[satirlar.Length];
+            for (int i = 0; i < satirlar.Length; i++)   // 1. geçiş: ad ve SGK işvereni birlikte
+            {
+                if (satirlar[i].Sgk == null) continue;
+                bagli[i] = baz.FirstOrDefault(x => !kullanilan.Contains(x) && AnahtarEsit(x.AdSoyad, satirlar[i].Ad) && AnahtarEsit(x.SgkIsvereni, satirlar[i].Sgk));
+                if (bagli[i] != null) kullanilan.Add(bagli[i]);
+            }
+            for (int i = 0; i < satirlar.Length; i++)   // 2. geçiş: yalnız ad (SGK'sız satır ya da aynı kişinin ikinci işvereni)
+            {
+                if (bagli[i] != null) continue;
+                bagli[i] = baz.FirstOrDefault(x => !kullanilan.Contains(x) && AnahtarEsit(x.AdSoyad, satirlar[i].Ad));
+                if (bagli[i] != null) kullanilan.Add(bagli[i]);
+            }
+            int sira = Donemler.Values.SelectMany(l => l).Select(x => x.Sira).DefaultIfEmpty(0).Max();
+            var liste = new List<PmPersonel>(); var kullanilanBordro = new HashSet<EkimBordroSatir>();
+            for (int i = 0; i < satirlar.Length; i++)
+            {
+                var s = satirlar[i]; var b = bagli[i];
+                var kimlik = baz.FirstOrDefault(x => AnahtarEsit(x.AdSoyad, s.Ad));   // aynı kişinin Eylül kaydı (ikinci işveren satırında da kimlik buradan)
+                PmPersonel p;
+                if (b != null) p = b.Kopya();
+                else p = new PmPersonel { Sira = ++sira, AdSoyad = kimlik?.AdSoyad ?? s.Ad, FiiliGorevYeri = s.Sgk ?? "", Unvan = kimlik?.Unvan ?? "", Bolum = kimlik?.Bolum ?? "", Gorev = kimlik?.Gorev ?? "", CatiDepartman = kimlik?.CatiDepartman ?? "", IseGiris = kimlik?.IseGiris, OzelDurum = kimlik?.OzelDurum ?? "" };
+                if (s.Sgk != null) p.SgkIsvereni = s.Sgk;
+                decimal icra = p.Icra;   // dosyada İcra kolonu yok; kullanıcı (5 Kas 2026): "icralar Eylül ile aynı" → Eylül icra taksiti Ekim'de de kesilir (banka tutarı dosyadan bu kadar düşük kalır)
+                TutarlariSifirla(p); p.Icra = icra;
+                p.Not = System.Text.RegularExpressions.Regex.Replace(p.Not ?? "", @"\s*Ödeme Yapılmıyor\.?", "").Trim();   // Eylül kaynağının "Ödeme Yapılmıyor" işareti dosyada yok (gündelikçi R'si Banka sütununda, Mesut Akıncı X'i "X ten"de): Ekim'de ödeme engellenmez
+                p.RNet = s.RNet; p.MaasFarki = s.MaasFarki; p.Prim = s.Prim; p.Yol = s.Yol; p.Yemek = s.Yemek; p.YillikIzinOdemesi = s.YillikIzin; p.FazlaMesai = s.Mesai; p.KidemTazminati = s.Kidem; p.IhbarTazminati = s.Ihbar;
+                p.KiraDestegi = s.Kira; p.CocukYardimi = s.Cocuk; p.KasaTazminati = s.Kasa;
+                p.Avans = s.Avans; p.Borc = s.Borc; p.OzelSigortaKesintisi = s.OzelSigorta; p.Bes = s.Bes;
+                p.XNet = s.XNet; p.PrimX = s.PrimX; p.YolX = s.YolX; p.YemekX = s.YemekX; p.FazlaMesaiX = s.MesaiX;
+                p.SgkDisi = Math.Min(s.Yemek, 7500.22m);   // yemek istisnası (rapor 2026-09 ile aynı tutar)
+                p.BankaBlokeli = Array.IndexOf(BankaBlokeliKisiler, p.AdSoyad) >= 0;
+                bool dovizli = Array.Exists(DovizliDuzen, d => d.Ad == p.AdSoyad);   // dövizli R kurla değişir; onun dışındaki girdiler aynıysa brüt aynıdır
+                bool ayniGirdi = b != null && AnahtarEsit(b.SgkIsvereni, p.SgkIsvereni) && (dovizli || b.RNet == s.RNet) && b.MaasFarki == s.MaasFarki && b.Prim == s.Prim && b.Yol == s.Yol && b.Yemek == s.Yemek
+                    && b.YillikIzinOdemesi == s.YillikIzin && b.FazlaMesai == s.Mesai && b.KidemTazminati == s.Kidem && b.IhbarTazminati == s.Ihbar && b.KiraDestegi == s.Kira && b.CocukYardimi == s.Cocuk && b.KasaTazminati == s.Kasa;
+                if (!ayniGirdi) { p.BrutKaynak = null; p.IsverenKaynak = null; }
+                var rb = ResmiBordro(p.AdSoyad, p.SgkIsvereni, kullanilanBordro);
+                if (rb != null)
+                {   // resmi Ekim bordrosu (5 Kas 2026, 6 şirket): brüt, işveren, hazine indirimi ve prim günü kaynak değer; net ve ek kalemler kazanç dosyasından kalır (Eylül kuralı) → GV artık olarak bulunur, brüt − net resmi bordroyla aynı
+                    p.BrutKaynak = rb.Brut; p.IsverenKaynak = rb.Isveren; p.HazineKaynak = rb.Hazine;
+                    p.PrimGun = rb.PrimGun; p.NormalGun = rb.PrimGun; p.HaftaSonuGun = 0m; p.ResmiTatilGun = 0m; p.BayramGun = 0m; p.UcretliIzinGun = 0m;   // resmi bordroda normal çalışma günü = prim günü, hafta sonu / tatil / izin 0
+                }
+                liste.Add(p);
+            }
+            foreach (var x in baz.Where(y => !kullanilan.Contains(y)))
+            {
+                var p = x.Kopya(); TutarlariSifirla(p); p.Icra = 0m; p.SgkDisi = 0m; p.BrutKaynak = null; p.IsverenKaynak = null;
+                liste.Add(p);
+            }
+            return liste;
+        }
+        /// <summary>Kişinin resmi Ekim bordrosu satırı (ad + SGK işvereni; aynı kişi birden fazla işverende ayrı satır); bulunamazsa null.</summary>
+        private static EkimBordroSatir ResmiBordro(string ad, string sgk, HashSet<EkimBordroSatir> kullanilan)
+        {
+            var r = Array.Find(PersonelMaliyetEkimBordro.Satirlar, x => !kullanilan.Contains(x) && AnahtarEsit(x.Ad, ad) && AnahtarEsit(x.Sgk, sgk));
+            if (r != null) kullanilan.Add(r);
+            return r;
+        }
+        /// <summary>Girilen tutar alanlarını sıfırlar (gün, kimlik ve HazineKaynak'a dokunmaz).</summary>
+        private static void TutarlariSifirla(PmPersonel p)
+        {
+            p.RNet = p.XNet = p.Icra = 0m;
+            p.MaasFarki = p.Prim = p.Yol = p.Yemek = p.YillikIzinOdemesi = p.FazlaMesai = p.KidemTazminati = p.IhbarTazminati = 0m;
+            p.KiraDestegi = p.CocukYardimi = p.KasaTazminati = p.Servis = p.Egitim = p.OzelOdeme = 0m;
+            p.BayramCalisma = p.GeceFarki = p.PazarCalisma = p.ResmiTatilCalisma = 0m;
+            p.OzelSaglik = p.Kiyafet = p.KoruyucuEkipman = p.DogumYardimi = p.EvlilikYardimi = p.IseIade = p.RaporFarki = p.DogumIzni = 0m;
+            p.GvIndirimleri = p.OzelSigortaIndirimi = 0m;
+            p.Avans = p.Borc = p.OzelSigortaKesintisi = p.SendikaKatkisi = p.Bes = p.MazotKesintisi = p.IhbarKesintisi = p.DigerEkOdemelerR = 0m;
+            p.YemekX = p.YolX = p.FazlaMesaiX = p.PrimX = p.KesintilerToplamiX = 0m;
+        }
+        /// <summary>Ad ve işveren karşılaştırması: büyük-küçük harf, Türkçe i/ı/İ, boşluk ve eğik çizgi farkı yok sayılır (Excel "DEVRİM/HALE BİSREN" = "Devrim / Hale Bisren").</summary>
+        private static bool AnahtarEsit(string a, string b) => Anahtar(a) == Anahtar(b);
+        private static string Anahtar(string s) => new string((s ?? "").Replace('İ', 'i').Replace('I', 'i').Replace('ı', 'i').ToLowerInvariant().Where(c => !char.IsWhiteSpace(c) && c != '/').ToArray());
         private static readonly StringComparer TrSira = StringComparer.Create(new CultureInfo("tr-TR"), true);
-        private static string[] Ayrik(Func<PmPersonel, string> f) => Liste.Select(f).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x, TrSira).ToArray();
+        /// <summary>Filtre ve öneri listeleri: yüklü tüm dönemlerdeki kişilerden (Ekim'de Eylül'de olmayan SGK işvereni / görev yeri de seçilebilsin).</summary>
+        private static string[] Ayrik(Func<PmPersonel, string> f) => Donemler.Values.SelectMany(l => l).Select(f).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x, TrSira).ToArray();
         public static string[] SgkIsverenleri => Ayrik(p => p.SgkIsvereni);
         public static string[] GorevYerleri => Ayrik(p => p.FiiliGorevYeri);
         public static string[] CatiDepartmanlar => Ayrik(p => p.CatiDepartman);
@@ -406,6 +520,7 @@ namespace WebApplication3.Data
             var h = p.Hesap;
             var d = new Dictionary<string, object> { ["sira"] = p.Sira, ["cariKodu"] = p.CariKodu, ["durum"] = p.Durum, ["tcKimlik"] = p.TcKimlik, ["telefon"] = p.Telefon, ["eposta"] = p.Eposta, ["kidemYil"] = p.KidemYil, ["brutUcret"] = h.BrutUcret, ["gunluk"] = h.Gunluk,
                 ["brutKaynak"] = p.BrutKaynak, ["isverenKaynak"] = p.IsverenKaynak, ["bankaBlokeli"] = p.BankaBlokeli, ["bankaOdeme"] = h.BankaOdeme, ["nakitR"] = h.NakitRTutar, ["eldenOdeme"] = h.EldenOdeme, ["dovizOdeme"] = p.DovizOdeme,
+                ["sgkDisi"] = p.SgkDisi, ["sgkDetayYok"] = p.SgkDetayYok, ["hazineKaynak"] = p.HazineKaynak, ["odemeYapilmiyor"] = (p.Not ?? "").IndexOf(ODEME_YOK, StringComparison.OrdinalIgnoreCase) >= 0,   // Personel Cari Kartı parametreleri
                 ["xNet"] = h.XNetTl, ["xNetGirilen"] = p.XNet, ["doviz"] = p.Doviz, ["dovizTutar"] = p.DovizTutar, ["kur"] = p.Kur, ["ozel"] = p.Ozel, ["odemeSirketiR"] = h.NetRBordro > 0 ? PersonelMuhasebeOrnek.OdemeSirketiR : "", ["odemeSirketiX"] = h.KalanNetElden > 0 ? PersonelMuhasebeOrnek.OdemeSirketiX(p) : "",   // xNet ekranda ₺ karşılığı (dövizli maaşta tutar × kur)
                 ["iseGiris"] = p.IseGiris?.ToString("yyyy-MM-dd"), ["iseGirisTr"] = p.IseGiris?.ToString("dd.MM.yyyy"), ["ayrilisTarihi"] = p.AyrilisTarihi?.ToString("yyyy-MM-dd"), ["ayrilisTr"] = p.AyrilisTarihi?.ToString("dd.MM.yyyy") };
             foreach (var k in TumSutunlar.Where(s => s.Tip != "kart").SelectMany(s => s.Tip == "rx" ? s.GirdiAnahtarlari : new[] { s.Anahtar }))
@@ -445,6 +560,9 @@ namespace WebApplication3.Data
             if (dv.Length > 0 && !ParaBirimleri.Contains(dv)) return $"{kim}: Para Birimi yalnız {string.Join(" / ", ParaBirimleri)} olabilir.";
             if (dv.Length > 0 && (d.DovizTutar <= 0 || d.Kur <= 0)) return $"{kim}: dövizli maaşta Döviz Tutarı ve Kur sıfırdan büyük olmalıdır.";
             if (d.DovizTutar < 0 || d.Kur < 0) return $"{kim}: Döviz Tutarı ve Kur negatif olamaz.";
+            string dvo = Temiz(d.DovizOdeme);
+            if (dvo.Length > 0 && dvo != PmPersonel.DovizKalanX && dvo != PmPersonel.DovizTamamiR && dvo != PmPersonel.DovizTamamiX) return $"{kim}: döviz ödeme düzeni yalnız KalanX / TamamiR / TamamiX olabilir.";
+            if ((d.SgkDisi ?? 0) < 0 || (d.BrutKaynak ?? 0) < 0 || (d.IsverenKaynak ?? 0) < 0 || (d.HazineKaynak ?? 0) < 0) return $"{kim}: rapor parametreleri (yemek istisnası, kaynak brüt / işveren / hazine) negatif olamaz.";
             foreach (var pi in DuzenlemeSayisal)
             {
                 decimal v = (decimal)pi.GetValue(d); string anahtar = char.ToLowerInvariant(pi.Name[0]) + pi.Name.Substring(1);
@@ -470,6 +588,20 @@ namespace WebApplication3.Data
             p.Ozel = d.Ozel;   // özel kişi bayrağı: ekran mevcut değeri geri gönderir (yeni kartta açıldığı sekmeye göre)
             p.Not = Temiz(d.Not);
             if (hesapDegisti) { p.BrutKaynak = null; p.IsverenKaynak = null; }   // kaynak tablo değerleri artık geçerli değil; model hesaplar
+            // rapor parametreleri (Personel Cari Kartı sekmesi): yalnız gönderilen alanlar değişir; kaynak brüt / işveren açıkça girilirse model yerine o değer (0 = model hesaplar)
+            if (d.BankaBlokeli.HasValue) p.BankaBlokeli = d.BankaBlokeli.Value;
+            if (d.SgkDetayYok.HasValue) p.SgkDetayYok = d.SgkDetayYok.Value;
+            if (d.DovizOdeme != null) p.DovizOdeme = Temiz(d.DovizOdeme);
+            if (d.SgkDisi.HasValue) p.SgkDisi = d.SgkDisi.Value;
+            if (d.BrutKaynak.HasValue) p.BrutKaynak = d.BrutKaynak.Value > 0 ? d.BrutKaynak.Value : (decimal?)null;
+            if (d.IsverenKaynak.HasValue) p.IsverenKaynak = d.IsverenKaynak.Value > 0 ? d.IsverenKaynak.Value : (decimal?)null;
+            if (d.HazineKaynak.HasValue) p.HazineKaynak = d.HazineKaynak.Value;
+            if (d.OdemeYapilmiyor.HasValue)
+            {   // "Ödeme Yapılmıyor" işareti notta taşınır (muhasebe ödeme kaydını ve Ödeme sekmesi varsayılanını belirler)
+                bool var = (p.Not ?? "").IndexOf(ODEME_YOK, StringComparison.OrdinalIgnoreCase) >= 0;
+                if (d.OdemeYapilmiyor.Value && !var) p.Not = ((p.Not ?? "") + " " + ODEME_YOK).Trim();
+                else if (!d.OdemeYapilmiyor.Value && var) p.Not = System.Text.RegularExpressions.Regex.Replace(p.Not, @"\s*Ödeme Yapılmıyor\.?", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+            }
         }
 
         /// <summary>Düzenlenen satırları uygular (önce hepsi doğrulanır); hata metni döner (null = başarılı).</summary>
