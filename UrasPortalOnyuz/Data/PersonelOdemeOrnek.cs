@@ -22,6 +22,8 @@ namespace WebApplication3.Data
     }
     /// <summary>Ekrandan gelen giriş (ve kalıcı günlük satırı): Sil = true kaydı kaldırır.</summary>
     public class PoIstek { public string Donem { get; set; } public string Anahtar { get; set; } public decimal? OdenenBanka { get; set; } public decimal? OdenenElden { get; set; } public string BankaTarih { get; set; } public string EldenTarih { get; set; } public string Not { get; set; } public bool Sil { get; set; } }
+    /// <summary>Toplu giriş: "Aynı Tutar Ödendi" (satır ya da tümü) — planlanan tutarlar ödenen olarak yazılır; kalıcı günlük tipi "odemeToplu".</summary>
+    public class PoTopluIstek { public string Donem { get; set; } public List<PoIstek> Satirlar { get; set; } }
 
     public static class PersonelOdemeOrnek
     {
@@ -54,6 +56,14 @@ namespace WebApplication3.Data
                 k.BankaTarih = bt; k.EldenTarih = et; k.Not = (d.Not ?? "").Trim(); k.Kullanici = kisi ?? ""; k.Zaman = DateTime.Now;
                 kayit = k; return null;
             }
+        }
+        /// <summary>Toplu kayıt (9 Kas 2026, "teker teker aynı olanları manuel yazmayayım"): satırlar tek tek Kaydet'ten geçer (Sil = true satırı kaldırır); dönem satırda yoksa istekten alınır. Hata metni (varsa) döner, diğer satırlar yine kaydedilir.</summary>
+        public static string TopluKaydet(PoTopluIstek d, string kisi, out int kaydedilen)
+        {
+            kaydedilen = 0; if (d == null || d.Satirlar == null || d.Satirlar.Count == 0) return "Kaydedilecek satır yok.";
+            var hatalar = new List<string>();
+            foreach (var s in d.Satirlar) { if (s == null) continue; if (string.IsNullOrWhiteSpace(s.Donem)) s.Donem = d.Donem; var h = Kaydet(s, kisi, out _); if (h == null) kaydedilen++; else hatalar.Add($"{s.Anahtar}: {h}"); }
+            return hatalar.Count == 0 ? null : $"{kaydedilen} satır kaydedildi; {hatalar.Count} satır kaydedilemedi: {string.Join(" · ", hatalar.Take(3))}{(hatalar.Count > 3 ? " …" : "")}";
         }
         /// <summary>Dönemin gerçekleşen ödemeleri (ekran paketi).</summary>
         public static object Paket(string donem) { lock (Kilit) return _liste.Where(x => x.Donem == donem).Select(x => new { x.Anahtar, x.OdenenBanka, x.OdenenElden, x.BankaTarih, x.EldenTarih, x.Not, x.Kullanici, zaman = x.Zaman.ToString("yyyy-MM-dd HH:mm") }).ToList(); }
