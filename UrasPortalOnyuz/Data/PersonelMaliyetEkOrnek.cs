@@ -1,7 +1,9 @@
 // ============================================================
 // PERSONEL MALİYET RAPORU — ek sekmeler (Üretim Personeli · Prim Ödemeleri). Özel Kişiler sekmesi ayrı liste değildir: PmPersonel.Ozel = true satırlar aynı bordro modeliyle
 //   Personel Maliyet Tablosu'nun yapısında gösterilir (PersonelMaliyetOrnek). Birleşik Tablo ekranda Bordro (Ozel = false) + Özel (Ozel = true) + Üretim satırlarından kurulur.
-//   Üretim Personeli : gündelikçi üretim personeli ("Gündelikçi Ücretleri 2026 - 20.10.2026"): günlük ücret × çalışılan gün = hak ediş; fazla mesai saat × (günlük / 7,5) × 1,5; tatil günü × günlük × 2;
+//   Üretim Personeli : gündelikçi üretim personeli ("Gündelikçi Ücretleri 2026 – 09.11.2026" Excel'i; adlar bu listedeki gibi, 9 Kas 2026): günlük ücret × çalışılan gün = hak ediş; fazla mesai saat × (günlük / 7,5) × 1,5; tatil günü × günlük × 2;
+//                      SGK'sız gündelikçinin de Konsolide İK Paneli'nde kişi kaydı vardır (9 Kas 2026, "bu kişilerin de hepsinin personel carileri ve dosyaları olsun"): bordro dışı kayıt (SgkDetayYok, Özel Durum Gündelikçi, D30, cari kodu 335.901…;
+//                      GundelikciKisileriTamamla) → Personel Carileri, Personel Dosyası, kişi kartı, Ödeme Planı; tutarları UretimYansit her okumada Üretim satırından yazar (günlük × gün + tatil + diğer → X-Net, mesai → Fazla Mesai-X, yemek / yol / kira → X).
 //                      yemek / yol / kira / diğer sosyal yardım eklenir. SGK'lı gündelikçi (ana tabloda bordrolu): bordro Net-R mahsup edilir, kalan fark elden nakit X olarak ödenir ve kişinin ana
 //                      tablodaki X-Net'ine yazılır (MahsupFarki; 9 Kas 2026 kullanıcı onayı, önce kaynak v5_2 gereği 0'dı); R kısımları resmi bordrodan gelir ve sabittir; UretimYansit her veri okumasında. TEK KAYNAK (9 Kas 2026, "tüm sekmeler senkronize olmalı … Kamil Mahmudov yol
 //                      ücreti sadece bir tarafta yazıyor"): SGK'lı gündelikçinin yemek, yol, kira ve fazla mesaisi seçili dönemin bordro kaydından okunur (R + X; BordroKalemleri); Üretim satırından
@@ -26,8 +28,10 @@ namespace WebApplication3.Data
     {
         public int Sira { get; set; }
         public string FiiliGorevYeri { get; set; } public string AdSoyad { get; set; } public string Gorev { get; set; } public string Vardiya { get; set; }
-        /// <summary>Bordrolu (SGK'lı) ise Personel Maliyet Tablosu'ndaki sıra; 0 = SGK'sız gündelikçi.</summary>
+        /// <summary>Konsolide İK Paneli'ndeki kişi kaydının sırası (cari kodu 335.xxx): bordrolu (SGK'lı) gündelikçide bordro satırı, SGK'sız gündelikçide bordro dışı kayıt (335.9xx; 9 Kas 2026). 0 = kişi kaydı henüz yok, -1 = tohumda ada göre bağlanacak.</summary>
         public int PersonelSira { get; set; }
+        /// <summary>Bağlı kişi kaydı (en yeni dönemde) bordro dışı (SgkDetayYok): SGK'sız gündelikçi — tamamı elden X, R mahsubu yok. UretimYansit yazar.</summary>
+        public bool BordroDisi { get; set; }
         public decimal GunlukUcret { get; set; } public decimal CalisilanGun { get; set; } public decimal GunlukSaat { get; set; } = 7.5m;
         public decimal FazlaMesaiSaat { get; set; } public decimal TatilGun { get; set; }
         /// <summary>Yemek / Yol: SGK'sız gündelikçide satırdan girilir; SGK'lı gündelikçide tek kaynak bordro kaydıdır (R + X; UretimYansit güncel dönemden yazar, UretimDto seçili dönemden okur), satırdan girilen toplam bordro kaydına X olarak yazılır (R sabit).</summary>
@@ -38,7 +42,7 @@ namespace WebApplication3.Data
         /// <summary>Bordrodan bankaya yatan R net (Net-R Bordro); UretimYansit ile ana tablodan okunur.</summary>
         public decimal RMahsup { get; set; }
         // ---- hesaplanan
-        public bool SgkLi => PersonelSira > 0;
+        public bool SgkLi => PersonelSira > 0 && !BordroDisi;
         public string SgkDurumu => SgkLi ? "SGK'lı (R mahsup)" : "SGK'sız (tamamı X)";
         public decimal SaatUcreti => GunlukSaat > 0 ? Math.Round(GunlukUcret / GunlukSaat, 2) : 0;
         public decimal HakEdis => BordroParametre.Yuvarla(GunlukUcret * CalisilanGun);
@@ -113,17 +117,18 @@ namespace WebApplication3.Data
                 var d = Dto(u, UretimSutunlar);
                 // Yemek / Yol / Kira sütunları R üstte / X altta (9 Kas 2026, kullanıcı: "Elmin Jabbarov ve Kamil Mahmudov kiralar X"): SGK'sız gündelikçide tamamı X (R 0); SGK'lıda bordro kaydının R ve X'i
                 d["yemek"] = 0m; d["yemekX"] = u.Yemek; d["yol"] = 0m; d["yolX"] = u.Yol; d["kira"] = 0m; d["kiraX"] = u.Kira;
-                if (u.SgkLi)
-                {
-                    var p = liste.FirstOrDefault(x => x.Sira == u.PersonelSira);
-                    if (p != null)
-                    {   // seçili dönemin bordrosu (tek kaynak): R mahsup = Net-R; yemek / yol / kira / fazla mesai = bordro kaydı R + X (R resmi bordro, sabit); kira mahsupla netleştirilmez, elden X'e eklenir
-                        var b = BordroKalemleri(p);
-                        decimal mahsup = p.Hesap.NetRBordro, kazanc = u.HakEdis + b.Mesai + u.TatilKazanci, sosyal = b.Yemek + b.Yol + b.Kira + u.DigerSosyal, hakedis = kazanc + sosyal, elden = MahsupFarki(u, p) + b.Kira;   // fark kişinin X-Net'inde, kira Kira Desteği-X'te
-                        d["rMahsup"] = mahsup; d["yemek"] = p.Yemek; d["yemekX"] = p.YemekX; d["yol"] = p.Yol; d["yolX"] = p.YolX; d["kira"] = p.KiraDestegi; d["kiraX"] = p.KiraDestegiX; d["fazlaMesaiKazanci"] = b.Mesai; d["fazlaMesaiSaat"] = u.SaatUcreti > 0 ? Math.Round(b.Mesai / (u.SaatUcreti * 1.5m), 2) : 0m;   // saat: bordro mesai tutarından türetilir (gösterim)
-                        d["toplamKazanc"] = kazanc; d["toplamSosyal"] = sosyal; d["toplamHakedis"] = hakedis; d["eldenX"] = elden; d["netOdenen"] = elden - u.Kesinti;
-                    }
+                // SGK durumu seçili döneme göre (9 Kas 2026): o dönemde bordro kaydı varsa SGK'lı (R mahsup); bordro dışı kayıt ya da o dönemde kayıt yoksa SGK'sız gösterim (tamamı X) — ör. Kamran Cabbarov Eylül'de SGK'sız, Ekim'de bordrolu
+                var p = u.PersonelSira > 0 ? liste.FirstOrDefault(x => x.Sira == u.PersonelSira) : null;
+                bool sgkli = p != null && !p.SgkDetayYok;
+                d["sgkLi"] = sgkli; d["sgkDurumu"] = sgkli ? "SGK'lı (R mahsup)" : "SGK'sız (tamamı X)";
+                if (sgkli)
+                {   // seçili dönemin bordrosu (tek kaynak): R mahsup = Net-R; yemek / yol / kira / fazla mesai = bordro kaydı R + X (R resmi bordro, sabit); kira mahsupla netleştirilmez, elden X'e eklenir
+                    var b = BordroKalemleri(p);
+                    decimal mahsup = p.Hesap.NetRBordro, kazanc = u.HakEdis + b.Mesai + u.TatilKazanci, sosyal = b.Yemek + b.Yol + b.Kira + u.DigerSosyal, hakedis = kazanc + sosyal, elden = MahsupFarki(u, p) + b.Kira;   // fark kişinin X-Net'inde, kira Kira Desteği-X'te
+                    d["rMahsup"] = mahsup; d["yemek"] = p.Yemek; d["yemekX"] = p.YemekX; d["yol"] = p.Yol; d["yolX"] = p.YolX; d["kira"] = p.KiraDestegi; d["kiraX"] = p.KiraDestegiX; d["fazlaMesaiKazanci"] = b.Mesai; d["fazlaMesaiSaat"] = u.SaatUcreti > 0 ? Math.Round(b.Mesai / (u.SaatUcreti * 1.5m), 2) : 0m;   // saat: bordro mesai tutarından türetilir (gösterim)
+                    d["toplamKazanc"] = kazanc; d["toplamSosyal"] = sosyal; d["toplamHakedis"] = hakedis; d["eldenX"] = elden; d["netOdenen"] = elden - u.Kesinti; d["toplamMaliyet"] = 0m;
                 }
+                else { d["rMahsup"] = 0m; d["eldenX"] = u.ToplamHakedis; d["netOdenen"] = u.ToplamHakedis - u.Kesinti; d["toplamMaliyet"] = u.ToplamHakedis; }   // SGK'sız (bu dönemde): tamamı elden X
                 return d;
             }).ToList();
         }
@@ -166,6 +171,7 @@ namespace WebApplication3.Data
             }
             if (bordro != null) lock (PersonelMaliyetOrnek.Kilit) { bordro.YemekX = yemekX; bordro.YolX = yolX; bordro.KiraDestegiX = kiraX; }   // bordro kaydı (X tarafı): brüt, SGK ve vergiye girmez; ana tablo, kişi kartı, Birleşik ve Ödeme aynı anda değişir
             if (eskiPersonel > 0 && eskiPersonel != kayit.PersonelSira) XSifirla(eskiPersonel);   // bağ koptu: eski kişinin elden X'i sıfırlanır
+            if (kayit.PersonelSira == 0) GundelikciKisileriTamamla();   // kişi kaydı olmayan (SGK'sız) satır: bordro dışı kişi kaydı açılır → cari, dosya, kart (9 Kas 2026)
             UretimYansit();
             return null;
         }
@@ -179,7 +185,8 @@ namespace WebApplication3.Data
         /// <summary>SGK'lı gündelikçinin bordro kaydından gelen kalemler (tek kaynak): yemek, yol, kira ve fazla mesai = R + X (R resmi bordro, sabit; fark X). Üretim satırı bunları gösterir, formdan girilen toplam → X = toplam − R.</summary>
         public static (decimal Yemek, decimal Yol, decimal Kira, decimal Mesai) BordroKalemleri(PmPersonel p) => (p.Yemek + p.YemekX, p.Yol + p.YolX, p.KiraDestegi + p.KiraDestegiX, p.FazlaMesai + p.FazlaMesaiX);
         public static string UretimSil(int sira) { int ps; lock (Kilit) { var u = Uretim.FirstOrDefault(x => x.Sira == sira); if (u == null) return "Üretim personeli bulunamadı."; ps = u.PersonelSira; Uretim.Remove(u); } if (ps > 0) XSifirla(ps); return null; }
-        private static void XSifirla(int personelSira) { lock (PersonelMaliyetOrnek.Kilit) foreach (var l in PersonelMaliyetOrnek.Donemler.Values) { var p = l.FirstOrDefault(x => x.Sira == personelSira); if (p != null && !p.Dovizli) p.XNet = 0; } }   // bağ koptu: tüm dönemlerde elden X sıfırlanır
+        /// <summary>Bağ koptu / satır silindi: tüm dönemlerde elden X sıfırlanır; bordro dışı gündelikçi kaydında Üretim'den yazılan X kalemleri (mesai, yemek, yol, kira, kesinti) de sıfırlanır (kişi kaydı kalır; silmek kullanıcı kararı).</summary>
+        private static void XSifirla(int personelSira) { lock (PersonelMaliyetOrnek.Kilit) foreach (var l in PersonelMaliyetOrnek.Donemler.Values) { var p = l.FirstOrDefault(x => x.Sira == personelSira); if (p == null || p.Dovizli) continue; p.XNet = 0; if (p.SgkDetayYok && p.OzelDurum == "Gündelikçi") p.FazlaMesaiX = p.YemekX = p.YolX = p.KiraDestegiX = p.KesintilerToplamiX = 0; } }
         private static readonly string[] AylarTr = { "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık" };
         /// <summary>Prim satırı ekle / düzenle. Hesaplanan prim = Baz × Oran / 100 ya da sabit tutar. Kaydedilince kişinin ilgili bordro dönemindeki Prim-X / Prim (R) tutarı prim satırlarının toplamından yeniden yazılır.</summary>
         public static string PrimKaydet(PrimIstek d, out PrimOdeme kayit)
@@ -224,23 +231,30 @@ namespace WebApplication3.Data
 
         // ---- örnek veri
         private const string COR = "ALV Kimya Çorlu", URS = "Uras Kimya";
+        private const string LISTE_ADI = "Gündelikçi Ücretleri 2026 – 09.11.2026", G_EMIN = "Uras Kimya - Emin", G_DEPO = "Depo - Refik", G_PLASTIK = "Plastik - Rahman", G_CORLU = "Çorlu";
         private static int _u, _p;
-        /// <summary>Gündelik Ücretleri 2026 (20.10.2026) listesinden: günlük ücret; çalışılan gün varsayılan 26 (listede yok — sekmeden düzeltilir). sgkli = true → Personel Maliyet Tablosu'ndaki aynı adlı kişiye bağlanır (R mahsup).</summary>
-        private static UretimPersonel U(string yer, string ad, decimal gunluk, bool sgkli = false, decimal gun = 26, string gorev = "Üretim Personeli", string vardiya = "Gündüz", string not = null)
-            => new UretimPersonel { Sira = ++_u, FiiliGorevYeri = yer, AdSoyad = ad, Gorev = gorev, Vardiya = vardiya, GunlukUcret = gunluk, CalisilanGun = gun, PersonelSira = sgkli ? -1 : 0, Not = not ?? (sgkli ? "SGK'lı gündelikçi: bordro R neti mahsup edilir, fark elden X" : "SGK'sız gündelikçi: tamamı elden X") };
-        /// <summary>"Gündelikçi Ücretleri 2026 - 20.10.2026" (kullanıcı PDF'i, 9 Kas 2026'da aynı adlı Excel ile doğrulandı): Uras Kimya 17 (gruplar: Uras Kimya - Emin, Depo - Refik, Plastik - Rahman), Alv Kimya Çorlu 6 kişi. Adı tam verilen 10 kişi SGK'lı (ana tabloda bordrolu).
-        /// Kamil Mahmudov (ALV Kimya Çorlu, bordrolu üretim personeli) kullanıcı isteğiyle (6 Kas 2026, "üretim personeli listende eksik") SGK'lı gündelikçi olarak eklendi; günlük ücreti Excel'de 1.700 ₺ (9 Kas 2026). Çalışılan gün 30 varsayıldı: bordro R-Net 51.000,01 = 30 × 1.700;
-        /// yol (3.650,10) ve fazla mesai (3.910) bordro kaydından gelir, hak ediş bankadan ödenen Net-R 58.560,11 ile birebir → elden yalnız kira 23.520 ₺.</summary>
+        /// <summary>Gündelikçi Ücretleri 2026 listesinden: günlük ücret; çalışılan gün varsayılan 26 (listede yok — sekmeden düzeltilir). sgkli = true → Konsolide İK Paneli'ndeki aynı adlı bordrolu kişiye bağlanır (R mahsup); grup = listedeki sütun başlığı (nota yazılır).</summary>
+        private static UretimPersonel U(string yer, string ad, decimal gunluk, bool sgkli = false, decimal gun = 26, string gorev = "Üretim Personeli", string vardiya = "Gündüz", string not = null, string grup = null)
+            => new UretimPersonel { Sira = ++_u, FiiliGorevYeri = yer, AdSoyad = ad, Gorev = gorev, Vardiya = vardiya, GunlukUcret = gunluk, CalisilanGun = gun, PersonelSira = sgkli ? -1 : 0,
+                Not = (not ?? (sgkli ? "SGK'lı gündelikçi: bordro R neti mahsup edilir, fark elden X" : "SGK'sız gündelikçi: tamamı elden X")) + (grup != null ? $" · {LISTE_ADI}: {grup}" : "") };
+        /// <summary>"Gündelikçi Ücretleri 2026 – 09.11.2026" (kullanıcı Excel'i, 9 Kas 2026; adlar listedeki gibi ad-soyad): Uras Kimya 16 (Uras Kimya - Emin 7, Depo - Refik 4, Plastik - Rahman 5) + Alv Kimya Çorlu 6 = 22 kişi; günlük ücretler 20.10.2026 listesiyle aynı.
+        /// Adı bordroda olan 11 kişi SGK'lı (bordrolu; R mahsup): Kamran Cabbarov (önceki listede "Kamuran") 26 Ekim 2026'dan itibaren Uras Kimya bordrosunda — Ekim'de SGK'lı, Eylül'de SGK'sız (bordro dışı dönem kopyası). Elman Abbaslı 09.11.2026 listesinde yok;
+        /// Ekim 2026 bordrosunda olduğundan satırı korundu (ayrıldıysa Durum İşten Ayrıldı yapılır). SGK'sız 11 kişi bordro dışı kişi kaydıyla (335.9xx) panelde, Personel Carileri'nde ve Personel Dosyası'nda yer alır (GundelikciKisileriTamamla).
+        /// Kamil Mahmudov (ALV Kimya Çorlu, bordrolu üretim personeli) kullanıcı isteğiyle (6 Kas 2026) SGK'lı gündelikçi; günlük 1.700 ₺, çalışılan gün 30 varsayıldı (bordro R-Net 51.000,01 = 30 × 1.700); yol ve fazla mesai bordro kaydından → elden yalnız kira 23.520 ₺.</summary>
         public static readonly List<UretimPersonel> Uretim = new List<UretimPersonel>
         {
-            U(URS, "Muharrem", 2200), U(URS, "Ali Askerov", 2200), U(URS, "Mehman Babayev", 2500, true),
-            U(URS, "Azad Shirinov", 2200, true), U(URS, "Ramin Musayev", 2500, true), U(URS, "Rahman Babazade", 2600, true),
-            U(URS, "Elmin Jabbarov", 3500, true), U(URS, "Tural Abbasov", 2400, true), U(URS, "Savalan", 2300),
-            U(URS, "Sinan", 2200), U(URS, "Elman Abbaslı", 2200, true), U(URS, "Murad Hudaybergenov", 2200, true),
-            U(URS, "Kamuran", 2400), U(URS, "Araz", 2200), U(URS, "Ayhan", 2300),
-            U(URS, "Elşad", 2200), U(URS, "Çoşkun", 2200),
-            U(COR, "Reşat", 2000), U(COR, "Aslan Huseynov", 2050, true), U(COR, "Ali", 2000), U(COR, "Naim", 2000), U(COR, "Ruslan", 2100),
-            U(COR, "Kamil Mahmudov", 1700, true, gun: 30, not: "SGK'lı gündelikçi: bordro R neti mahsup edilir, fark elden X. Günlük 1.700 ₺ (Gündelikçi Ücretleri 2026 – 20.10.2026); çalışılan gün 30 varsayıldı (bordro R-Net 51.000,01 = 30 × 1.700). Yol ve fazla mesai bordro kaydından.")
+            // Uras Kimya - Emin
+            U(URS, "Muharrem Abdullayev", 2200, grup: G_EMIN), U(URS, "Azad Shirinov", 2200, true, grup: G_EMIN), U(URS, "Elmin Jabbarov", 3500, true, grup: G_EMIN), U(URS, "Sinan Cabbarzade", 2200, grup: G_EMIN),
+            U(URS, "Kamran Cabbarov", 2400, true, not: "SGK'lı gündelikçi: 26 Ekim 2026'dan itibaren Uras Kimya bordrosunda (Ekim bordrosu 6 prim günü, Net-R 8.422,65); hak edişten bordro R neti mahsup edilir, fark elden X. Eylül 2026'da SGK'sız (tamamı elden X). 20.10.2026 listesinde \"Kamuran\".", grup: G_EMIN),
+            U(URS, "Elşad Necefov", 2200, grup: G_EMIN), U(URS, "Çoşkun Cabbarzade", 2200, grup: G_EMIN),
+            // Depo - Refik
+            U(URS, "Ali Askerov", 2200, grup: G_DEPO), U(URS, "Ramin Musayev", 2500, true, grup: G_DEPO), U(URS, "Tural Abbasov", 2400, true, grup: G_DEPO), U(URS, "Araz Nagiyev", 2200, grup: G_DEPO),
+            U(URS, "Elman Abbaslı", 2200, true, not: "SGK'lı gündelikçi: bordro R neti mahsup edilir, fark elden X. 09.11.2026 tarihli gündelikçi listesinde yer almıyor (20.10.2026 listesinde Depo - Refik); Ekim 2026 bordrosunda olduğundan satır korundu — ayrıldıysa kişi kartından Durum: İşten Ayrıldı yapın."),
+            // Plastik - Rahman
+            U(URS, "Mehman Babayev", 2500, true, grup: G_PLASTIK), U(URS, "Rahman Babazade", 2600, true, grup: G_PLASTIK), U(URS, "Savalan Ağazade", 2300, grup: G_PLASTIK), U(URS, "Murad Hudaybergenov", 2200, true, grup: G_PLASTIK), U(URS, "Ayhan Musayev", 2300, grup: G_PLASTIK),
+            // Çorlu
+            U(COR, "Reşat Aliyev", 2000, grup: G_CORLU), U(COR, "Aslan Hüseynov", 2050, true, grup: G_CORLU), U(COR, "Ali Mahmudov", 2000, grup: G_CORLU), U(COR, "Naim Şoev", 2000, grup: G_CORLU), U(COR, "Ruslan Hüseynov", 2100, grup: G_CORLU),
+            U(COR, "Kamil Mahmudov", 1700, true, gun: 30, not: "SGK'lı gündelikçi: bordro R neti mahsup edilir, fark elden X. Günlük 1.700 ₺; çalışılan gün 30 varsayıldı (bordro R-Net 51.000,01 = 30 × 1.700). Yol ve fazla mesai bordro kaydından.", grup: G_CORLU)
         };
         /// <summary>SGK'lı gündelikçileri Personel Maliyet Tablosu'na bağlar (ad eşleşmesi) ve HER DÖNEMDE o dönemin bordro Net-R'sini mahsup olarak hesaplar; kalan fark (MahsupFarki) kişinin o dönemdeki
         /// X-Net'ine yazılır (9 Kas 2026, kullanıcı onayı "evet"; önce kaynak v5_2 gereği 0 tutuluyordu — "kalan kısım mahsup edilerek elden alınıyor"). Kira ayrıca Kira Desteği-X'tedir.
@@ -249,21 +263,85 @@ namespace WebApplication3.Data
         {
             lock (PersonelMaliyetOrnek.Kilit)
             {
-                var liste = PersonelMaliyetOrnek.Liste;
+                var donemler = PersonelMaliyetOrnek.Donemler;
+                var sirali = donemler.Keys.OrderByDescending(k => k, StringComparer.Ordinal).ToList();   // en yeni dönem önce: bağ ve SGK durumu en yeni kayda göre (kişi yalnız sonraki dönemde olabilir; Kamran Cabbarov Ekim 2026)
                 lock (Kilit)
                     foreach (var u in Uretim)
                     {
-                        if (u.PersonelSira == -1) { var e = liste.FirstOrDefault(p => string.Equals(p.AdSoyad, u.AdSoyad, StringComparison.OrdinalIgnoreCase)); u.PersonelSira = e?.Sira ?? 0; }
-                        if (u.PersonelSira <= 0) { u.RMahsup = 0; continue; }
-                        if (!liste.Any(x => x.Sira == u.PersonelSira)) { u.PersonelSira = 0; u.RMahsup = 0; continue; }
-                        foreach (var kv in PersonelMaliyetOrnek.Donemler)
+                        if (u.PersonelSira == -1) { var e = KisiBulAd(u.AdSoyad, sirali, donemler); if (e == null) { u.RMahsup = 0; u.BordroDisi = false; continue; } u.PersonelSira = e.Sira; }   // tohum: ada göre; kişi henüz yoksa (dönem sonra kurulur) bekler
+                        if (u.PersonelSira <= 0) { u.RMahsup = 0; u.BordroDisi = false; continue; }
+                        var guncel = KisiBul(u.PersonelSira, sirali, donemler);
+                        if (guncel == null) { u.PersonelSira = 0; u.RMahsup = 0; u.BordroDisi = false; continue; }   // kişi kaydı silinmiş: bağ kopar (yeni kayıt GundelikciKisileriTamamla ile açılır)
+                        u.BordroDisi = guncel.SgkDetayYok;
+                        if (u.BordroDisi) u.RMahsup = 0;
+                        else { var b = BordroKalemleri(guncel); u.RMahsup = guncel.Hesap.NetRBordro; u.Yemek = b.Yemek; u.Yol = b.Yol; u.Kira = b.Kira; }   // SGK'lı: yemek / yol / kira bordro kaydı R + X (tek kaynak); seçili dönem için UretimDto(donem) yeniden okur
+                        foreach (var kv in donemler)
                         {
-                            var p = kv.Value.FirstOrDefault(x => x.Sira == u.PersonelSira); if (p == null) continue;   // o dönemde yok (işe giriş dönemden sonra)
-                            var mahsup = p.Hesap.NetRBordro; if (kv.Key == PersonelMaliyetOrnek.GuncelDonem) { var b = BordroKalemleri(p); u.RMahsup = mahsup; u.Yemek = b.Yemek; u.Yol = b.Yol; u.Kira = b.Kira; }   // yemek / yol / kira: bordro kaydı R + X (tek kaynak); seçili dönem için UretimDto(donem) yeniden okur
-                            if (!p.Dovizli) p.XNet = MahsupFarki(u, p);   // elden mahsup farkı → X-Net (9 Kas 2026); kartta girilen X-Net bu kişilerde her okumada buradan yeniden yazılır
+                            var p = kv.Value.FirstOrDefault(x => x.Sira == u.PersonelSira); if (p == null || p.Dovizli) continue;   // o dönemde yok
+                            if (p.SgkDetayYok)
+                            {   // bordro dışı dönem (SGK'sız gündelikçi): Üretim satırı tek kaynak → tamamı X: hak ediş + tatil + diğer sosyal → X-Net, mesai → Fazla Mesai-X, yemek / yol / kira → X, avans / kesinti → Kesintiler Toplamı-X
+                                p.XNet = BordroParametre.Yuvarla(u.HakEdis + u.TatilKazanci + u.DigerSosyal); p.FazlaMesaiX = u.FazlaMesaiKazanci; p.YemekX = u.Yemek; p.YolX = u.Yol; p.KiraDestegiX = u.Kira; p.KesintilerToplamiX = u.Kesinti;
+                                p.RNet = 0; p.Yemek = 0; p.Yol = 0; p.KiraDestegi = 0; p.FazlaMesai = 0;
+                            }
+                            else p.XNet = MahsupFarki(u, p);   // bordrolu dönem: elden mahsup farkı → X-Net (9 Kas 2026); kartta girilen X-Net bu kişilerde her okumada buradan yeniden yazılır
                         }
                     }
             }
+        }
+        private static PmPersonel KisiBul(int sira, List<string> sirali, SortedDictionary<string, List<PmPersonel>> d) { foreach (var k in sirali) { var p = d[k].FirstOrDefault(x => x.Sira == sira); if (p != null) return p; } return null; }
+        private static PmPersonel KisiBulAd(string ad, List<string> sirali, SortedDictionary<string, List<PmPersonel>> d) { foreach (var k in sirali) { var p = d[k].FirstOrDefault(x => string.Equals(x.AdSoyad, ad, StringComparison.OrdinalIgnoreCase)); if (p != null) return p; } return null; }
+
+        /// <summary>SGK'sız gündelikçi kişi kayıtlarının sıra aralığı (cari kodu 335.901…). Bordrolu / özel kişilerin sırası bu aralığa girmez: yeni kişi sırası aralığın altından verilir (PersonelMaliyetOrnek.YeniSira),
+        /// böylece kalıcı günlük yeniden yüklenirken (Ekim 2026 dönemi günlükten kurulur) sıralar değişmez.</summary>
+        public const int GundelikciSiraBasi = 900;
+        /// <summary>SGK'sız gündelikçilere Konsolide İK Paneli kişi kaydı (9 Kas 2026, kullanıcı: "bu kişilerin de hepsinin personel carileri ve dosyaları olsun"): kişi kaydı olmayan (PersonelSira 0) her Üretim satırı için TÜM dönemlerde
+        /// bordro dışı kayıt açılır (SgkDetayYok, Ozel = false, Özel Durum Gündelikçi, Üretim / Üretim Personeli / D30, SGK işvereni = fiili şirket, cari kodu 335.9xx) → Personel Carileri, Personel Dosyası, kişi kartı, Ödeme Planı (elden X), Özet;
+        /// tutarlar UretimYansit ile Üretim satırından yazılır. Aynı adlı bordro dışı kayıt varsa ona bağlanır (aynı adlı bordrolu kişi varsa bağ Üretim formundan seçilir). Bağlı (SGK'lı) gündelikçinin kaydı olmayan dönemine bordro dışı kopya
+        /// açılır (Kamran Cabbarov Eylül 2026: o ay SGK'sız çalıştı); bağlı kişide Özel Durum boşsa Gündelikçi yazılır. Tohumdan sonra (OrnekIsinma, kalıcı günlükten ÖNCE), yeni dönem kurulunca (DonemKur) ve yeni Üretim satırı kaydedilince çalışır; idempotent.</summary>
+        public static void GundelikciKisileriTamamla()
+        {
+            lock (PersonelMaliyetOrnek.Kilit)
+            {
+                var donemler = PersonelMaliyetOrnek.Donemler; if (donemler.Count == 0) return;
+                var sirali = donemler.Keys.OrderByDescending(k => k, StringComparer.Ordinal).ToList();
+                lock (Kilit)
+                    foreach (var u in Uretim)
+                    {
+                        if (u.PersonelSira == -1) { var e = KisiBulAd(u.AdSoyad, sirali, donemler); if (e == null) continue; u.PersonelSira = e.Sira; }   // SGK'lı tohum satırı: bordrolu kişi henüz kurulmadıysa (Ekim günlükten gelir) bekler, kayıt AÇILMAZ
+                        if (u.PersonelSira == 0)
+                        {
+                            var mevcut = KisiBulAd(u.AdSoyad, sirali, donemler);
+                            if (mevcut != null && mevcut.SgkDetayYok) u.PersonelSira = mevcut.Sira;
+                            else if (mevcut == null)
+                            {
+                                int sira = Math.Max(GundelikciSiraBasi, donemler.Values.SelectMany(l => l).Select(x => x.Sira).DefaultIfEmpty(0).Max()) + 1;
+                                foreach (var kv in donemler) kv.Value.Add(YeniGundelikciKaydi(u, sira, null, kv.Key));
+                                u.PersonelSira = sira;
+                            }
+                            else continue;   // aynı adlı bordrolu kişi var: SGK'lı bağ kullanıcı kararıdır (Üretim formundan seçilir)
+                        }
+                        var ornek = KisiBul(u.PersonelSira, sirali, donemler); if (ornek == null) continue;
+                        foreach (var kv in donemler) if (!kv.Value.Any(x => x.Sira == u.PersonelSira)) kv.Value.Add(YeniGundelikciKaydi(u, u.PersonelSira, ornek, kv.Key));   // kaydı olmayan dönem: bordro dışı kopya (o ay SGK'sız)
+                        foreach (var kv in donemler) foreach (var p in kv.Value.Where(x => x.Sira == u.PersonelSira && string.IsNullOrWhiteSpace(x.OzelDurum))) p.OzelDurum = "Gündelikçi";
+                    }
+            }
+        }
+        /// <summary>Bordro dışı gündelikçi kişi kaydı: ornek verilirse kimlik ondan kopyalanır (kaydı olmayan dönem), yoksa Üretim satırından kurulur; tutarlar sıfır (UretimYansit yazar), SGK / brüt detayı yok.</summary>
+        private static PmPersonel YeniGundelikciKaydi(UretimPersonel u, int sira, PmPersonel ornek, string donem)
+        {
+            string sirket = string.IsNullOrEmpty(u.FiiliSirket) ? u.FiiliGorevYeri : u.FiiliSirket;
+            PmPersonel p;
+            if (ornek != null) { p = ornek.Kopya(); PersonelMaliyetOrnek.TutarlariSifirla(p); p.Not = ((p.Not ?? "") + $" {PersonelMaliyetOrnek.DonemAd(donem)} döneminde bordro kaydı yok: SGK'sız gündelikçi (tutarlar Üretim Personeli satırından, tamamı elden X).").Trim(); }
+            else p = new PmPersonel
+            {
+                AdSoyad = u.AdSoyad, SgkIsvereni = sirket, FiiliGorevYeri = u.FiiliGorevYeri, Unvan = "Personel", Bolum = "Üretim", Gorev = string.IsNullOrWhiteSpace(u.Gorev) ? "Üretim Personeli" : u.Gorev, CatiDepartman = "Üretim",
+                DepartmanKodu = "D30", DepartmanAciklamasi = "Üretim Departmanı", OzelDurum = "Gündelikçi", SicilNo = "", SgkNo = "",
+                Not = "SGK'sız gündelikçi (bordro dışı kişi kaydı, 9 Kas 2026): tutarlar Üretim Personeli satırından gelir (günlük ücret × gün + mesai + tatil + yemek + yol + kira, tamamı elden X) ve her okumada oradan yazılır; kartta girilen tutar korunmaz." + (string.IsNullOrEmpty(u.Not) ? "" : " " + u.Not)
+            };
+            p.Sira = sira; p.SgkDetayYok = true; p.Ozel = false; p.BankaBlokeli = false; p.OzelDurum = "Gündelikçi";
+            p.PrimGun = 0; p.NormalGun = 0; p.HaftaSonuGun = 0; p.ResmiTatilGun = 0; p.BayramGun = 0; p.UcretliIzinGun = 0;
+            p.BrutKaynak = null; p.IsverenKaynak = null; p.HazineKaynak = 0; p.SgkDisi = 0;
+            return p;
         }
         /// <summary>Elden mahsup farkı (SGK'lı gündelikçi): hak ediş (günlük × gün) + bordro fazla mesaisi (R + X) + tatil kazancı + yemek + yol (bordro R + X) + diğer sosyal − bordro Net-R; negatif olmaz.
         /// Kişinin o dönemdeki X-Net'i budur (UretimYansit); Üretim sekmesindeki Elden Ödenecek (X) = fark + kira (kira ayrıca Kira Desteği-X'te, mahsupla netleştirilmez).</summary>

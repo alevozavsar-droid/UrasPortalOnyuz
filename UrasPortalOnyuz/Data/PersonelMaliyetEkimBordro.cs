@@ -22,7 +22,7 @@ namespace WebApplication3.Data
             B("ALV Kimya", "Aksel Güler", 137357.98m, 32622.52m, 0m, 30m, 137357.98m, 27312.33m, 791.85m, 20603.7m, 88650.1m, 0m),
             B("ALV Kimya", "Alev Özavşar Eren", 88323.25m, 20976.77m, 0m, 30m, 88323.25m, 14655.09m, 419.68m, 13248.48m, 60000m, 0m),
             B("ALV Kimya", "Arslan Çoşkun", 44022.06m, 10455.24m, 0m, 30m, 44022.06m, 1868.65m, 83.43m, 6603.31m, 35466.67m, 0m),
-            B("ALV Kimya", "Aslan Huseynov", 49545m, 11766.93m, 0m, 30m, 49545m, 4286.83m, 125.35m, 7431.75m, 37701.07m, 0m),
+            B("ALV Kimya", "Aslan Hüseynov", 49545m, 11766.93m, 0m, 30m, 49545m, 4286.83m, 125.35m, 7431.75m, 37701.07m, 0m),
             B("ALV Kimya", "Berk Yenilmez", 104726.76m, 24872.61m, 0m, 30m, 104726.76m, 19823.47m, 544.18m, 15709.01m, 68650.1m, 0m),
             B("ALV Kimya", "Berkan Özkan", 157879.11m, 37496.3m, 0m, 30m, 157879.11m, 30618.16m, 947.6m, 23681.86m, 102631.49m, 0m),
             B("ALV Kimya", "Burak Sergen Ada", 53778.56m, 12772.41m, 0m, 30m, 53778.56m, 3114.29m, 157.48m, 8066.79m, 42440m, 0m),

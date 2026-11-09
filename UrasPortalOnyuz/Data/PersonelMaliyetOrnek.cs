@@ -346,6 +346,9 @@ namespace WebApplication3.Data
         /// <summary>Eylül 2026 bordro listesi (Personel Maliyet Raporu 2026-09). Diğer ekranlar (yansıtma, muhasebe) bunu kullanır.</summary>
         public static List<PmPersonel> Liste => Donemler[GuncelDonem];
         public static List<PmPersonel> ListeDonem(string donem) => !string.IsNullOrEmpty(donem) && Donemler.TryGetValue(donem, out var l) ? l : null;
+        /// <summary>Yeni kişi sırası (cari kodu 335.xxx): bordrolu / özel kişilerin en büyük sırası + 1. SGK'sız gündelikçi kayıtlarının 900+ aralığı (PersonelMaliyetEkOrnek.GundelikciSiraBasi) sayılmaz — bu kayıtlar tohumdan sonra, kalıcı günlükten önce açıldığından
+        /// günlükteki Ekim 2026 kişilerinin (88–93) ve sonraki eklemelerin sırası değişmez.</summary>
+        public static int YeniSira() => Donemler.Values.SelectMany(l => l).Select(x => x.Sira).Where(s => s < PersonelMaliyetEkOrnek.GundelikciSiraBasi).DefaultIfEmpty(0).Max() + 1;
         /// <summary>En yeni dönem: dönem verileri açılırken otomatik seçilir ve "güncel" sayılır (4 Kas 2026).</summary>
         public static string EnYeniDonem => Donemler.Keys.Aggregate((a, b) => string.CompareOrdinal(a, b) >= 0 ? a : b);
         private static readonly string[] AyAdlari = { "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık" };
@@ -380,7 +383,7 @@ namespace WebApplication3.Data
             {
                 var liste = DonemOlustur(donem, kurlar, out yeni);
                 if (yeni && donem != PersonelMaliyetEkimOrnek.Donem) PersonelKesintiOrnek.KesintileriDonemYansit(donem);   // Ekim dosyadan kurulur: kesinti sütunları dosyadaki değerlerdir (plansız BES vb. sıfırlanmaz)
-                if (yeni) { PersonelMaliyetEkOrnek.PrimleriDonemdenTuret(donem); PersonelKesintiOrnek.MesaiTalepleriniTohumla(donem); }   // Prim Ödemeleri ve Ek Çalışmalar sekmeleri yeni dönemin bordro tutarlarıyla birebir (5 Kas 2026)
+                if (yeni) { PersonelMaliyetEkOrnek.PrimleriDonemdenTuret(donem); PersonelKesintiOrnek.MesaiTalepleriniTohumla(donem); PersonelMaliyetEkOrnek.GundelikciKisileriTamamla(); }   // Prim Ödemeleri ve Ek Çalışmalar sekmeleri yeni dönemin bordro tutarlarıyla birebir (5 Kas 2026); gündelikçi kişi kayıtları / bordro dışı dönem kopyaları (9 Kas 2026)
                 return liste;
             }
         }
@@ -476,7 +479,7 @@ namespace WebApplication3.Data
                 bagli[i] = baz.FirstOrDefault(x => !kullanilan.Contains(x) && AnahtarEsit(x.AdSoyad, satirlar[i].Ad));
                 if (bagli[i] != null) kullanilan.Add(bagli[i]);
             }
-            int sira = Donemler.Values.SelectMany(l => l).Select(x => x.Sira).DefaultIfEmpty(0).Max();
+            int sira = YeniSira() - 1;   // yeni kişi sırası: SGK'sız gündelikçi kayıtlarının 900+ aralığı sayılmaz (Büşra 88, Dilanur 89, Kamran 90 … günlükle aynı)
             var liste = new List<PmPersonel>(); var kullanilanBordro = new HashSet<EkimBordroSatir>();
             for (int i = 0; i < satirlar.Length; i++)
             {
@@ -522,7 +525,7 @@ namespace WebApplication3.Data
             return r;
         }
         /// <summary>Girilen tutar alanlarını sıfırlar (gün, kimlik ve HazineKaynak'a dokunmaz).</summary>
-        private static void TutarlariSifirla(PmPersonel p)
+        public static void TutarlariSifirla(PmPersonel p)
         {
             p.RNet = p.XNet = p.Icra = 0m;
             p.MaasFarki = p.Prim = p.Yol = p.Yemek = p.YillikIzinOdemesi = p.FazlaMesai = p.KidemTazminati = p.IhbarTazminati = 0m;
@@ -685,7 +688,7 @@ namespace WebApplication3.Data
             lock (Kilit)
             {
                 if (liste.Any(x => x.Durum == "Aktif" && AyniKisi(x, Temiz(d.AdSoyad), Temiz(d.SgkIsvereni)))) return $"{Temiz(d.AdSoyad)} adlı aktif bir personel {Temiz(d.SgkIsvereni)} işvereninde zaten var.";
-                var p = new PmPersonel { Sira = Donemler.Values.SelectMany(l => l).Select(x => x.Sira).DefaultIfEmpty(0).Max() + 1 };   // sıra (cari kodu) tüm dönemlerde tekil
+                var p = new PmPersonel { Sira = YeniSira() };   // sıra (cari kodu) tüm dönemlerde tekil; 900+ gündelikçi aralığı sayılmaz
                 Uygula(p, d); liste.Add(p); kayit = p; SonKayit = (kisi, DateTime.Now);
             }
             return null;
@@ -747,7 +750,7 @@ namespace WebApplication3.Data
                 P(ALV, IST, "Aksel Güler", "Yönetici", "İhracat", "İhracat Operasyon Yöneticisi", "Tedarik Zinciri ve Operasyonlar", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 85000.00m, yol: 3650.10m, avans: 14000.00m, bes: 4120.00m, brut: 137357.98m, isveren: 32622.52m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "01.03.2022"),
                 P(ALV, HLD, "Alev Özavşar Eren", "Yönetim Özel", "Yönetim Özel", "Yönetim Temsilcisi", "Genel Yönetim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. X-NET \"ALEV ÖZAVŞAR\" (Selvi), R-NET \"ALEV ÖZAVŞAR EREN\" (ALV Kimya); aynı kişi olduğu teyit edilmeli.", r: 60000.01m, x: 201209.12m, bes: 2505.00m, brut: 83507.76m, isveren: 19833.09m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "19.03.2020", dk: "D90", da: "Üst Yönetim Departmanı", sicil: "R-001", sgkNo: "3401202004885"),
                 P(ALV, COR, "Arslan Çoşkun", "Personel", "İdari İşler", "Temizlik Görevlisi", "Kurumsal Hizmetler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Mesai: bordro 2,776.08 / Personel Kazanç 1,866.67 farklı; Personel Kazanç kullanıldı.", r: 35000.01m, mesai: 1866.67m, brut: 46104.12m, isveren: 10949.73m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "23.03.2019"),
-                P(ALV, COR, "Aslan Huseynov", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Ödeme Yapılmıyor", r: 39180.35m, brut: 49545.00m, isveren: 11766.93m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m),
+                P(ALV, COR, "Aslan Hüseynov", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Ödeme Yapılmıyor", r: 39180.35m, brut: 49545.00m, isveren: 11766.93m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m),
                 P(ALV, URS, "Berk Yenilmez", "Uzman", "Üretim", "Üretim Planlama Uzmanı", "Üretim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 65000.00m, yol: 3650.10m, brut: 104726.76m, isveren: 24872.61m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "01.07.2025"),
                 P(URS, URS, "Ayşegül Zent Ula", "Uzman", "Cari İşler", "Cari Hesap Uzmanı", "Mali İşler", "Emekli", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 3,946.05 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 4266.67m, x: 46733.33m, yol: 3650.10m, brut: 8558.67m, isveren: 2118.27m, primGun: 4.00m, normalGun: 4.00m, haftaSonuGun: 0.00m, giris: "11.12.2023"),
                 P(ALV, URS, "Burak Sergen Ada", "Uzman", "İdari İşler", "İdari İşler Uzmanı", "Kurumsal Hizmetler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Mesai: bordro 5,408.62 / Personel Kazanç 3,866.67 farklı; Personel Kazanç kullanıldı.", r: 40000.00m, mesai: 3866.67m, brut: 55118.35m, isveren: 13090.60m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "27.07.2026"),

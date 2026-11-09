@@ -1,6 +1,7 @@
 // ============================================================
 // KASA NAKİT AKIŞI — modern ekran betiği (Views/Rapor79/Index.cshtml; veri /Rapor79/Veri; kaynak Data/NakitAkisOrnek.cs + CekAkibetOrnek.cs + TalimatOrnek.cs + MakbuzOrnek.cs + MuhasebeOrnek.cs + Mahsup / Temlik / Yansıtma / Nakit Avans modülleri)
 // Sekmeler ödeme yöntemine göre; her sekmede yalnız o yöntemin sütunları (KOL). Her sekmede: planlanan ödeme tarihi, son ödeme tarihi, belge no (tıklanınca belge detayı), fatura sahibi ve ödeyen şirket ayrı sütun.
+// Tümü sekmesi (9 Kas 2026): eski 23 sütunlu görünümün tüm başlıkları ayrı sütun (İşlem Tipi, Kaynak Firma, Belge Tarihi, Satınalmacı, Ürün / Hizmet, PB, Anlaşılan Kur, döviz Tutar, Toplam Ödenen, Ödenen PB, Mutabakat, Son Mutabakat Tarihi, Dekont); tablo ağırlık toplamı kadar en az genişlik alır (yatay kaydırma).
 // Üst kartlar tıklanınca filtre (ödenen, kalan, bu hafta, geciken, onay bekleyen, mükerrer, avans). Satır içi düzenleme (.kn-alan → AlanKaydet), çekmece (tüm alanlar + işlem çubuğu: tablodaki her işlem çekmeceden de yapılır).
 // Satır seçimi (.kn-sec) → "Seçilenlerden Talimat Oluştur" (TalimatOlustur; Talimatlar sekmesi). Çek / Senet: portföy görünümü (SecilebilirBelgeler) → BelgePlanla, "Planla ve Dolaşımı Planla" ile dolaşım modalı sırayla açılır;
 // dolaşım modalı (DolasimOner / DolasimSimule / DolasimKaydet / DolasimAdim / DolasimIptal). Plansız çek çıkışı (Çek Akıbeti'nden) GMY onayı satırı olarak düşer (CekCikisOnay).
@@ -53,7 +54,7 @@
   };
   const kisiUyar = r => !F.satinalmaci || r.satinalmaci === F.satinalmaci || r.talepEden === F.satinalmaci;
   const satirlar = () => V.odemeler.filter(r => (!F.durum || r.durum === F.durum) && kisiUyar(r) && (!F.kpi || !KPI_F[F.kpi] || KPI_F[F.kpi](r)) && aramaUyar(r));
-  const aramaUyar = r => { const a = F.ara.trim().toLocaleLowerCase('tr-TR'); return !a || [r.kurum, r.faturaNo, r.urun, r.notlar, r.cekNolar, r.sirket, r.faturaSahibi, r.odeyenSirket, r.talimatNo, r.avansNo, r.belgeTipi, r.yontem, r.durum, r.onay?.durum, r.onay?.onaylayan, r.makbuz?.no, r.yevmiyeNo, r.grupIci?.no, r.grupIci?.karsi, r.alanlar?.dekontNo, r.alanlar?.aliciIban, r.alanlar?.aliciBanka, r.alanlar?.kasa, r.grupIciBelge?.no, r.ibraz?.belgeNo, r.kurBilgi?.kaynak, String(r.docEntry)].join(' ').toLocaleLowerCase('tr-TR').includes(a); };
+  const aramaUyar = r => { const a = F.ara.trim().toLocaleLowerCase('tr-TR'); return !a || [r.kurum, r.faturaNo, r.urun, r.notlar, r.cekNolar, r.sirket, r.faturaSahibi, r.odeyenSirket, r.talimatNo, r.avansNo, r.belgeTipi, r.yontem, r.durum, r.islemTipi, r.satinalmaci, r.mutabakat, r.onay?.durum, r.onay?.onaylayan, r.makbuz?.no, r.yevmiyeNo, r.grupIci?.no, r.grupIci?.karsi, r.alanlar?.dekontNo, r.alanlar?.aliciIban, r.alanlar?.aliciBanka, r.alanlar?.kasa, r.grupIciBelge?.no, r.ibraz?.belgeNo, r.kurBilgi?.kaynak, String(r.docEntry)].join(' ').toLocaleLowerCase('tr-TR').includes(a); };
   const satirBul = d => V.odemeler.find(r => r.docEntry === d);
   const satirYerlestir = row => { if (!row) return; const i = V.odemeler.findIndex(r => r.docEntry === row.docEntry); if (i >= 0) V.odemeler[i] = row; else V.odemeler.push(row); };
   const satirKaldir = d => { V.odemeler = V.odemeler.filter(r => r.docEntry !== d); };
@@ -118,8 +119,10 @@
   // ---------- sütunlar (sekmeye göre): [başlık, genişlik ağırlığı]; sabit tablo düzeni → tek ekrana sığar
   const K = (ad, w) => ({ ad, w });
   const C_SEC = K('', 22), C_SIRA = K('Sıra', 26), C_PLAN = K('Planlanan Ödeme Tarihi', 90), C_SON = K('Son Ödeme Tarihi', 80), C_BELGE = K('Belge No · Belge Tipi', 96), C_KURUM = K('Ödenecek Cari · Ürün / Hizmet', 136), C_FS = K('Fatura Sahibi', 84), C_OD = K('Ödeyen Şirket', 84), C_TL = K('Tutar (₺) · Belge Oranı', 114), C_DURUM = K('Ödeme Durumu', 94), C_ODENME = K('Ödenme Tarihi', 72), C_ODENEN = K('Ödenen Tutar', 84), C_NOT = K('Not', 90), C_TALIMAT = K('Talimat', 76), C_ISLEM = K('', 26);
+  // Tümü sekmesi (9 Kas 2026): eski görünümün tüm başlıkları ayrı sütun (İşlem Tipi, Kaynak Firma, Belge Tarihi, Satınalmacı, Ürün / Hizmet, PB, Anlaşılan Kur, döviz Tutar, Toplam Ödenen, Ödenen PB, Mutabakat, Son Mutabakat Tarihi, Dekont) + yeni raporun sütunları (Son Ödeme, Fatura Sahibi, Ödeyen Şirket, Talimat).
+  // Ağırlıklar piksel: toplam tablonun en küçük genişliği (cizTablo → min-width); dar ekranda yatay kayar, geniş ekranda %100 dolar.
   const KOL = {
-    tumu: [C_SEC, C_SIRA, C_PLAN, C_SON, C_BELGE, C_KURUM, C_FS, C_OD, K('Ödeme Yöntemi', 78), C_TL, C_DURUM, C_ODENME, C_ODENEN, C_TALIMAT, C_NOT, C_ISLEM],
+    tumu: [K('', 26), K('Sıra', 28), K('İşlem Tipi', 38), K('Kaynak Firma', 78), K('Belge No · Belge Tipi', 92), K('Belge Tarihi', 72), K('Planlanan Ödeme Tarihi', 92), K('Son Ödeme Tarihi', 72), K('Kurum (Ödenecek Cari)', 130), K('Satınalmacı', 76), K('Ürün / Hizmet', 100), K('Fatura Sahibi', 76), K('Ödeyen Şirket', 76), K('PB', 28), K('Anlaşılan Kur', 70), K('Tutar', 92), K('Tutar (₺)', 96), K('Ödeme Yöntemi', 92), K('Ödenme Tarihi', 72), K('Toplam Ödenen', 92), K('Ödenen PB', 40), K('Ödeme Durumu', 88), K('Mutabakat', 72), K('Son Mutabakat Tarihi', 84), K('Dekont', 46), K('Talimat', 66), K('Not', 110), K('', 34)],
     nakit: [C_SEC, C_SIRA, C_PLAN, C_SON, C_BELGE, C_KURUM, C_FS, C_OD, C_TL, K('Kasa', 92), K('Makbuz No · Muhasebe Fişi', 98), K('Nakit Onayı', 104), C_DURUM, C_ODENME, C_TALIMAT, C_ISLEM],
     havale: [C_SEC, C_SIRA, C_PLAN, C_SON, C_BELGE, C_KURUM, C_FS, C_OD, C_TL, K('Banka Hesabımız', 104), K('Alıcı IBAN · Banka · Hesap Adı', 144), K('Dekont No', 72), C_DURUM, C_ODENME, C_TALIMAT, C_ISLEM],
     kredi: [C_SEC, C_SIRA, C_PLAN, C_SON, C_BELGE, C_KURUM, C_FS, C_OD, C_TL, K('Kart', 118), K('Taksit', 70), K('Ekstre Dönemi', 86), C_DURUM, C_ODENME, C_TALIMAT, C_ISLEM],
@@ -162,7 +165,32 @@
     const odenme = `<td>${tarih(r.odenme)}</td>`, odenen = `<td class="para" title="${odenenDoviz ? esc(`${para(r.odenen)} ${r.odenenPB} × ${r.kur} (${r.kurBilgi?.kaynak || 'kur'}${r.kurBilgi?.tarih ? ' ' + tarih(r.kurBilgi.tarih) : ''}) = ${para(r.odenenTL ?? r.odenen * r.kur)} ₺`) : ''}">${r.odenen ? `${para(r.odenenTL ?? r.odenen)} ₺${odenenDoviz ? `<small>${para(r.odenen)} ${esc(r.odenenPB)} · ${esc(String(r.kur))}${r.kurBilgi?.kaynak ? ' ' + esc(r.kurBilgi.kaynak.replace('TCMB ', 'TCMB ').replace('Döviz ', '')) : ''}</small>` : ''}` : '—'}</td>`;
     const talimat = `<td>${r.talimat ? talimatRozet(r.talimat) : bos}</td>`;
     const not = `<td class="sol not" title="${esc(r.notlar || '')}">${esc(r.notlar || '')}</td>`, islem = `<td><button type="button" class="btn btn-light btn-sm py-0 px-1 border kn-ac" title="Detay / düzenle / işlemler"><i class="fas fa-pen"></i></button></td>`;
-    if (p === 'tumu') return [sec, sira, plan, son, belge, kurum, fs, od, `<td>${yontemRozet(r.yontem)}${o ? '<small>' + onayRozet(o) + '</small>' : ''}</td>`, tl, durum, odenme, odenen, talimat, not, islem];
+    if (p === 'tumu') {
+      // eski görünümün başlıkları ayrı sütun: işlem tipi, kaynak firma, belge tarihi, satınalmacı, ürün / hizmet, PB, anlaşılan kur, döviz tutar, ödenen PB, mutabakat + tarihi, dekont
+      const islemTipi = `<td title="İşlem tipi: ${esc(r.islemTipi || '—')}">${r.islemTipi ? `<b>${esc(r.islemTipi)}</b>` : bos}</td>`;
+      const kaynak = `<td class="sol" title="Kaynak firma (kaydın şirketi): ${esc(r.sirket)} · ${esc(r.dbName)}">${esc(r.sirket)}</td>`;
+      const belgeTarihi = `<td title="Belge tarihi${r.belgeTarihi ? ' ' + tarih(r.belgeTarihi) : ' girilmemiş'}">${tarih(r.belgeTarihi)}</td>`;
+      const kurumSade = av ? kurum : `<td class="sol kurum" title="${esc(r.kurum)}">${esc(r.kurum)}</td>`;
+      const satin = `<td class="sol" title="Satınalma temsilcisi: ${esc(r.satinalmaci || '—')}${r.talepEden ? ' · talep eden: ' + esc(r.talepEden) : ''}">${r.satinalmaci ? esc(r.satinalmaci) : bos}</td>`;
+      const urun = `<td class="sol" title="${esc(r.urun || '')}">${r.urun ? esc(r.urun) : bos}</td>`;
+      const pb = `<td title="Para birimi ${esc(r.pb || 'TRY')}">${esc(pbAd(r.pb))}</td>`;
+      const dovizli = r.pb && r.pb !== 'TRY';
+      // kur: üstte anlaşılan / uygulanan kur, altta kısa kaynak (TCMB Alış · Anlaşmalı …); kur günü ve ayrıntı başlıkta
+      const kurKaynak = r.kurBilgi && r.kurBilgi.kaynak ? r.kurBilgi.kaynak.replace('TCMB Döviz ', 'TCMB ').replace('Döviz ', '') : '';
+      const kur = `<td class="para" title="${dovizli ? esc((r.kurBilgi && r.kurBilgi.ozet) || ('Kur ' + r.kur)) + (r.kurBilgi && r.kurBilgi.tarih ? ' · kur günü ' + tarih(r.kurBilgi.tarih) : '') : 'TL ödeme: kur uygulanmaz'}">${dovizli ? Number(r.kur).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + (kurKaynak ? `<small>${esc(kurKaynak)}</small>` : '') : bos}</td>`;
+      const tutarDoviz = `<td class="para" title="Belge para biriminde tutar: ${esc(para(r.tutar) + ' ' + (r.pb || 'TRY'))}">${para(r.tutar)} ${esc(pbAd(r.pb))}${kf}</td>`;
+      const tlSade = `<td class="para" title="${esc(para(r.tutarTL))} ₺${pl.faturaTutari ? ' · belge ' + para(pl.faturaTutari) + ' ' + esc(pbAd(r.pb)) + ' · bu satır %' + (pl.oran ?? 100) + (pl.kalan != null ? ' · kalan ' + para(pl.kalan) : '') : ''}">${para(r.tutarTL)} ₺${oranYazi && (pl.oran ?? 100) !== 100 ? `<small>belge oranı ${oranYazi}</small>` : ''}</td>`;
+      const yontem = `<td>${yontemRozet(r.yontem)}${o ? '<small>' + onayRozet(o) + '</small>' : ''}</td>`;
+      // toplam ödenen: TL karşılığı üstte, dövizli ödemede altta yalnız döviz tutarı (kur ve PB kendi sütunlarında)
+      const toplamOdenen = `<td class="para" title="${odenenDoviz ? esc(`${para(r.odenen)} ${r.odenenPB} × ${r.kur} = ${para(r.odenenTL ?? r.odenen * r.kur)} ₺`) : r.odenen ? esc(para(r.odenenTL ?? r.odenen) + ' ₺') : 'Ödeme yapılmadı'}">${r.odenen ? `${para(r.odenenTL ?? r.odenen)} ₺${odenenDoviz ? `<small>${para(r.odenen)} ${esc(pbAd(r.odenenPB))}</small>` : ''}` : '—'}</td>`;
+      const odenenPb = `<td title="Ödenen tutarın para birimi">${r.odenen ? esc(pbAd(r.odenenPB || 'TRY')) : bos}</td>`;
+      const durumSade = `<td><select class="kn-alan kn-durum" data-alan="U_Durum">${V.durumlar.map(d => `<option ${d === r.durum ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select></td>`;
+      const mutabakat = `<td><span class="kn-mutabakat ${r.mutabakat === 'Mutabık' ? 'ok' : r.mutabakat ? 'hata' : 'yok'}" title="Mutabakat durumu${r.mutabakatTarihi ? ' · son mutabakat ' + tarih(r.mutabakatTarihi) : ''}">${esc(r.mutabakat || 'Mutabakat Yok')}</span></td>`;
+      const mutTarih = `<td title="Son mutabakat tarihi${r.mutabakatTarihi ? '' : ': mutabakat yapılmamış'}">${tarih(r.mutabakatTarihi)}</td>`;
+      const dk = r.dekontlar || [], dosyali = dk.filter(d => d.dosyaVar), dkBaslik = dk.map(d => (d.tur || 'Dekont') + ': ' + d.ad).join(' · ');
+      const dekont = `<td title="${dk.length ? esc(dkBaslik) + (dosyali.length === 1 ? ' · tıkla: dosyayı aç' : ' · tıkla: çekmece › Ekler') : 'Ek yok · çekmece › Ekler bölümünden yüklenir'}">${dk.length ? (dosyali.length === 1 ? `<a href="${esc(dosyali[0].yol)}" target="_blank" class="fw-bold"><i class="fas fa-paperclip"></i> ${dk.length} ek</a>` : `<a class="kn-ac fw-bold"><i class="fas fa-paperclip"></i> ${dk.length} ek</a>`) : bos}</td>`;
+      return [sec, sira, islemTipi, kaynak, belge, belgeTarihi, plan, son, kurumSade, satin, urun, fs, od, pb, kur, tutarDoviz, tlSade, yontem, odenme, toplamOdenen, odenenPb, durumSade, mutabakat, mutTarih, dekont, talimat, not, islem];
+    }
     if (p === 'nakit') {
       const onayHucre = `<td class="sol wrap">${o ? onayRozet(o) : '<span class="kn-onay bekliyor">Onay Bekliyor</span>'}${o && o.onaylayan ? `<small>${esc(o.onaylayan)} · ${esc((o.tarih || '').slice(0, 10))}</small>` : ''}${r.durum !== 'ÖDENDİ' && (!o || o.durum !== 'Onaylandı') ? ` <button type="button" class="btn btn-primary btn-sm py-0 px-1 kn-onay-ac" style="font-size:.6rem" title="Onaycı: ${esc((V.onaycilar?.nakit || []).join(' / '))}"><i class="fas fa-user-check"></i> Onayla / Reddet</button>` : ''}${r.durum !== 'ÖDENDİ' && o && o.durum === 'Onaylandı' ? ` <button type="button" class="btn btn-success btn-sm py-0 px-1 kn-makbuz-ac" style="font-size:.6rem" title="Kasa tediye makbuzu kes: satır ödenir, muhasebe fişi atılır"><i class="fas fa-receipt"></i> Makbuz Kes</button>` : ''}</td>`;
       const imzali = (r.dekontlar || []).some(d => d.tur === 'İmzalı Makbuz') ? ' <span class="kn-ek-tur imzali" title="İmzalı makbuz kopyası rapor sayfasına yüklendi (çekmece › Ekler)">imzalı</span>' : '';
@@ -196,6 +224,12 @@
     const R0 = p === 'tumu' ? L : L.filter(r => r.yontem === SEKME[p]);
     const R = [...R0.filter(r => r.durum !== 'ÖDENDİ'), ...R0.filter(r => r.durum === 'ÖDENDİ').sort((a, b) => (a.odenme || '').localeCompare(b.odenme || '') || a.docEntry - b.docEntry)];
     const kol = KOL[p], topW = kol.reduce((s, k) => s + k.w, 0);
+    // Tümü: 28 sütun; ağırlıklar piksel → tablo en az ağırlık toplamı kadar (dar ekranda yatay kaydırma, geniş ekranda %100).
+    // tablo-hizala.js iki satırlı başlık için tabloyu otomatik düzene geçirir; otomatik düzende tek satırlık (nowrap) uzun not / ürün / kurum sütunu tabloyu
+    // 3.600 px'e taşırdığından gövde hücreleri sütun ağırlığına sabitlenir (min = max = ağırlık; taşan metin … ile kısalır, tamamı hücre başlığında; iki satırlı başlık daha geniş
+    // istiyorsa sütun ona göre açılır). Toplam satırı ve boş-liste satırı (colspan) dışarıda; geniş ekranda tablo %100'e yayılır.
+    t.style.minWidth = p === 'tumu' ? topW + 'px' : '';
+    if (p === 'tumu' && !$('#knKolStil')) { const st = document.createElement('style'); st.id = 'knKolStil'; st.textContent = kol.map((k, i) => `#knTablo-tumu tbody td:not([colspan]):nth-child(${i + 1}){min-width:${k.w}px;max-width:${k.w}px}`).join(''); document.head.appendChild(st); }
     let cg = t.querySelector('colgroup'); if (!cg) { cg = document.createElement('colgroup'); t.insertBefore(cg, t.tHead); }
     cg.innerHTML = kol.map(k => `<col style="width:${(k.w / topW * 100).toFixed(2)}%">`).join('');
     t.tHead.innerHTML = '<tr>' + kol.map((k, i) => i === 0 ? `<th><input type="checkbox" class="form-check-input kn-sec-hepsi" title="Tümünü seç"></th>` : `<th class="${/Tutar|Toplam|Ödenen/.test(k.ad) && !/Çek No|Senet No/.test(k.ad) ? 's' : ''}" title="${esc(k.ad)}">${esc(k.ad)}</th>`).join('') + '</tr>';

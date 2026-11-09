@@ -30,6 +30,7 @@ namespace WebApplication3.Data
                 D("Ödeme Talepleri", () => { var _ = OdemeTalepOrnek.Listele(null, false); });
                 D("Tahsilat / Ödeme", () => { var _ = TahsilatOrnek.Tahsilatlar; var __ = TahsilatOrnek.Odemeler; });
                 D("Finekra", () => { var _ = FinekraOrnek.GunlukListesi(null); });
+                D("Gündelikçi kişi kayıtları", PersonelMaliyetEkOrnek.GundelikciKisileriTamamla);   // SGK'sız gündelikçilere bordro dışı kişi kaydı (335.9xx; 9 Kas 2026) — kalıcı günlükten ÖNCE: günlükteki kişi sıraları (Ekim 88–93) değişmez
                 D("Personel Maliyet kalıcı günlüğü", PersonelMaliyetKalici.Yukle);   // tohumdan sonra: kullanıcı girişleri ve "Yeni Bordro" dönemleri aynı sırayla yeniden uygulanır (6 Kas 2026)
                 Console.WriteLine($"[Isınma] örnek veriler tohumlandı · {sw.ElapsedMilliseconds} ms" + (hata > 0 ? $" · {hata} uyarı" : ""));
             }

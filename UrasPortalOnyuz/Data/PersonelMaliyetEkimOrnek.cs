@@ -29,7 +29,7 @@ namespace WebApplication3.Data
             K("ALV Kimya", "Aksel Güler", r: 85000m, yol: 3650.1m, avans: 14000m, bes: 4120m),
             K("ALV Kimya", "Alev Özavşar Eren", r: 60000.01m, bes: 2649m, x: 180359.48m),
             K("ALV Kimya", "Arslan Çoşkun", r: 35000.01m, mesai: 466.67m),
-            K("ALV Kimya", "Aslan Huseynov", r: 37701.07m),
+            K("ALV Kimya", "Aslan Hüseynov", r: 37701.07m),   // ad 09.11.2026 gündelikçi listesindeki gibi (resmi bordroda ASLAN HUSEYNOV; kimlik eşleşmesi harf katlamalı)
             K("Uras Kimya", "Ayfer Şahin", r: 90000m, yol: 3650.1m),
             K("ALV Kimya", "Berkan Özkan", r: 99346.4m, yol: 3285.09m, x: 0.01m, primX: 41134m),
             K("Uras Kimya", "Azad Shirinov", r: 37701.07m),
