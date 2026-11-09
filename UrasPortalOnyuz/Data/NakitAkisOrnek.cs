@@ -136,6 +136,48 @@ namespace WebApplication3.Data
             }
         }
 
+        // ---------- KREDİ TAKSİDİ (Kredi Yapılandırma Raporu; Data/KrediYapilandirmaOrnek.cs, 9 Kas 2026): kredi / taksit başına TEK satır (U_KrediTaksit = "KRD-001|003"), Havale / EFT, İşlem Tipi R ----------
+        public static NakitAkisViewModel KrediSatiri(string anahtar) { Tohumla(); lock (Kilit) return _odemeler.Values.SelectMany(l => l).FirstOrDefault(m => m.U_KrediTaksit == anahtar); }
+        public static List<NakitAkisViewModel> KrediSatirlari(string onEk) { Tohumla(); lock (Kilit) return _odemeler.Values.SelectMany(l => l).Where(m => !string.IsNullOrEmpty(m.U_KrediTaksit) && m.U_KrediTaksit.StartsWith(onEk)).ToList(); }
+        /// <summary>Kredi taksidi satırı yazar: yoksa ekler (Havale / EFT, Planlandı), varsa ödenmemişse banka / tutar / tarih / açıklamayı günceller, ödenmişse dokunmaz. islem = eklendi | güncellendi | ödenmiş.</summary>
+        public static (NakitAkisViewModel satir, string islem) KrediTaksitiYaz(string dbName, string anahtar, string banka, string urun, string belgeNo, decimal tutar, DateTime plan, string not, string kullanici)
+        {
+            Tohumla();
+            lock (Kilit)
+            {
+                if (!_odemeler.ContainsKey(dbName)) _odemeler[dbName] = new List<NakitAkisViewModel>();
+                var m = _odemeler.Values.SelectMany(l => l).FirstOrDefault(x => x.U_KrediTaksit == anahtar);
+                if (m != null)
+                {
+                    if (m.U_Durum == "ÖDENDİ") return (m, "ödenmiş");
+                    bool degisti = (m.U_Tutar ?? 0) != tutar || m.U_PlanlananTarih != plan || m.U_Kurum != banka;
+                    m.U_Kurum = banka; m.U_UrunHizmet = urun; m.U_FaturaSiparisNo = belgeNo; m.U_Tutar = tutar; m.U_TutarTL = tutar; m.U_FaturaTutari = tutar; m.U_PlanlananTarih = plan; m.U_SonOdemeTarihi = plan; m.U_Notlar = not;
+                    if (degisti) Log(dbName, m.DocEntry, "Güncelleme", $"Kredi taksidi güncellendi · {banka} · {belgeNo} · {tutar.ToString("N2", Tr)} TRY · plan {plan:dd.MM.yyyy}", kullanici);
+                    return (m, "güncellendi");
+                }
+                m = new NakitAkisViewModel
+                {
+                    DocEntry = ++_sonDocEntry, U_KaynakFirma = dbName, U_FaturaSahibi = SirketAdi(dbName), U_OdeyenSirket = SirketAdi(dbName), U_KrediTaksit = anahtar, U_Kurum = banka, U_UrunHizmet = urun, U_OdemeYontemi = "Havale / EFT",
+                    U_ParaBirimi = "TRY", U_Kur = 1, U_OdenenTutarPB = "TRY", U_Tutar = tutar, U_TutarTL = tutar, U_FaturaTutari = tutar, U_PlanlananTarih = plan, U_SonOdemeTarihi = plan, BelgeTarihi = DateTime.Today,
+                    U_BagliBelgeTipi = "Kredi Taksidi", U_KayitTipi = "Kredi Taksidi", U_FaturaSiparisNo = belgeNo, U_IslemTipi = "R", U_Durum = "Planlandı", U_EskiDurum = "Planlandı", U_Notlar = not, U_TalepEden = kullanici ?? "", U_Satinalmaci = "",
+                    U_AliciBanka = banka, U_AliciHesapAdi = banka + " · kredi taksit tahsilat hesabı"
+                };
+                m.DocNum = m.DocEntry; m.U_Sira = _odemeler[dbName].Count + 1; _odemeler[dbName].Add(m);
+                Log(dbName, m.DocEntry, "Ekleme", $"Kredi Yapılandırma Raporu: {banka} · {belgeNo} · Havale / EFT · {tutar.ToString("N2", Tr)} TRY · plan {plan:dd.MM.yyyy}", kullanici);
+                return (m, "eklendi");
+            }
+        }
+        /// <summary>Kredi taksidi satırını kaldırır (ödenmişse kaldırmaz, null döner).</summary>
+        public static NakitAkisViewModel KrediTaksitiKaldir(string anahtar, string kullanici)
+        {
+            Tohumla();
+            lock (Kilit)
+            {
+                foreach (var kv in _odemeler) { var m = kv.Value.FirstOrDefault(x => x.U_KrediTaksit == anahtar); if (m == null) continue; if (m.U_Durum == "ÖDENDİ") return null; kv.Value.Remove(m); Log(kv.Key, m.DocEntry, "Silme", $"Kredi taksidi kaldırıldı: {m.U_Kurum} · {m.U_FaturaSiparisNo} · {(m.U_Tutar ?? 0).ToString("N2", Tr)} TRY", kullanici); return m; }
+                return null;
+            }
+        }
+
         // ---------- NAKİT AVANS senkronu: onaylanan avanslar otomatik satır olur; ödenince avans modülünde teslim edilmiş sayılır (Bekleyen Ödemeler listesinden düşer) ----------
         static string AvansSirketi(NakitAvans a) => a.Sirket == "URS Makina" ? "URS Makine" : a.Sirket;
         public static void AvanslariSenkronla()

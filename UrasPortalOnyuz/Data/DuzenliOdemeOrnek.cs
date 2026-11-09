@@ -36,6 +36,8 @@ namespace WebApplication3.Data
         public string ButceKalem { get; set; } = "";
         /// <summary>Ay bazında planlanan portföy çekleri / senetleri (hangi aya kadar, ne kadarlık çek planlandı).</summary>
         public List<DuzenliCekPlani> CekPlanlari { get; set; } = new List<DuzenliCekPlani>();
+        /// <summary>Dış kaynak akıtır (Kredi Yapılandırma Raporu taksitleri, 9 Kas 2026): aylık otomatik akış bu kayıt için kapalı; Kasa Nakit Akışı satırları kaynak ekrandan yazılır ve AkisBagla ile aya bağlanır.</summary>
+        public bool DisAkis { get; set; }
     }
 
     public static class DuzenliOdemeOrnek
@@ -46,7 +48,7 @@ namespace WebApplication3.Data
         static int _sonId; static bool _tohumlandi;
         public const string Sorumlu = "Serkan Genç";
         public static readonly string[] OdemeSekilleri = { "Nakit", "Çek", "Nakit / Çek", "Havale / EFT" };
-        public static readonly string[] Kategoriler = { "Enerji", "Hizmet", "Malzeme", "Kira", "Abonelik", "Diğer" };
+        public static readonly string[] Kategoriler = { "Enerji", "Hizmet", "Malzeme", "Kira", "Abonelik", "Kredi", "Diğer" };   // Kredi (9 Kas 2026): Kredi Yapılandırma Raporu taksitleri
         /// <summary>Çek planı kullanımı: Tahsil (bankaya tahsile verilir, ödeme nakit / havale) | Ciro (tedarikçiye verilir).</summary>
         public static readonly string[] Kullanimlar = { "Tahsil", "Ciro" };
         /// <summary>Çek planı ufku: bugünden kaç ay ileriye çek planlanabilir.</summary>
@@ -58,6 +60,7 @@ namespace WebApplication3.Data
         public static string KalemOner(string kategori, string urun)
         {
             string u = (urun ?? "").ToLower(Tr);
+            if (kategori == "Kredi" || u.Contains("kredi taksidi")) return "SG-12";   // Finansman: Kredi Faiz ve Banka Komisyonları
             if (u.Contains("elektrik")) return "GG-01"; if (u.Contains("doğalgaz") || u.Contains("buhar")) return "GG-02";
             if (u.Contains("damacana") || u.Contains("kırtasiye") || u.Contains("ofis")) return "GG-10";
             if (u.Contains("motorin") || u.Contains("yakıt") || u.Contains("akaryakıt") || u.Contains("nakliye")) return "TZ-09";
@@ -142,7 +145,7 @@ namespace WebApplication3.Data
             lock (Kilit)
             {
                 var kapsam = _liste.Where(d => d.Durum == "Aktif" && (string.IsNullOrEmpty(dbName) || d.DbName == dbName) && (id == null || d.Id == id)).ToList();
-                adaylar = kapsam.Where(d => !d.Akislar.Any(a => a.Ay == ay)).ToList(); atlanan = kapsam.Count - adaylar.Count;
+                adaylar = kapsam.Where(d => !d.DisAkis && !d.Akislar.Any(a => a.Ay == ay)).ToList(); atlanan = kapsam.Count - adaylar.Count;   // DisAkis: satırları kaynak ekran yazar (Kredi Yapılandırma Raporu)
             }
             var bugun = DateTime.Today; int eklenen = 0;
             foreach (var d in adaylar)
@@ -179,7 +182,7 @@ namespace WebApplication3.Data
         /// <summary>Panel her açılışta: bu ay için akmamış aktif kayıtları tamamlar (ay başı otomatik işinin karşılığı).</summary>
         public static (int eklenen, string mesaj) OtomatikAkit(string kullanici) { var r = Akit(BuAy, kullanici, null, null, false, true); return (r.eklenen, r.eklenen > 0 ? r.mesaj : ""); }
 
-        public static (bool ok, string mesaj, DuzenliOdeme d) Kaydet(int id, string tedarikci, string urunHizmet, string sirket, string odemeSekli, string kategori, int gun, decimal aylikTutar, string not, string kullanici, string butceKalem = null)
+        public static (bool ok, string mesaj, DuzenliOdeme d) Kaydet(int id, string tedarikci, string urunHizmet, string sirket, string odemeSekli, string kategori, int gun, decimal aylikTutar, string not, string kullanici, string butceKalem = null, bool? disAkis = null)
         {
             Tohumla();
             tedarikci = (tedarikci ?? "").Trim(); urunHizmet = (urunHizmet ?? "").Trim(); sirket = (sirket ?? "").Trim();
@@ -204,9 +207,21 @@ namespace WebApplication3.Data
                     Log(d, "Güncelleme", degisen.Count == 0 ? "Değişiklik yok" : string.Join(" · ", degisen) + " · bir sonraki akışta geçerli", kullanici);
                 }
                 d.Tedarikci = tedarikci; d.UrunHizmet = urunHizmet; d.Sirket = sirket; d.DbName = CekAkibetOrnek.DbName(sirket); d.OdemeSekli = odemeSekli; d.Kategori = kategori; d.Gun = gun; d.AylikTutar = aylikTutar; d.Not = (not ?? "").Trim();
+                if (disAkis.HasValue) d.DisAkis = disAkis.Value;
                 // bütçe kalemi: verildiyse (geçerli kod) o; yoksa kategori / ürüne göre otomatik öneri (düzenli ödeme bütçeye otomatik gelir)
                 if (!string.IsNullOrEmpty(butceKalem) && ButceOrnek.KalemBul(butceKalem) != null) d.ButceKalem = butceKalem; else if (string.IsNullOrEmpty(d.ButceKalem) || ButceOrnek.KalemBul(d.ButceKalem) == null) d.ButceKalem = KalemOner(kategori, urunHizmet);
                 return (true, (id > 0 ? $"{d.No} güncellendi" : $"{d.No} eklendi") + "; bu aya henüz akmadıysa \"Bu Ayı Akıt\" ile nakit akışa alınır.", d);
+            }
+        }
+        /// <summary>Dış kaynaktan (Kredi Yapılandırma Raporu) açılmış Kasa Nakit Akışı satırını kaydın o ayına bağlar: ay akmış sayılır (Akit ikinci satır açmaz), panelde ayın satırı ve durumu görünür; varsa günceller.</summary>
+        public static void AkisBagla(int id, string ay, NakitAkisViewModel m, string kullanici)
+        {
+            var d = Bul(id); if (d == null || m == null || !AyGecerli(ay)) return;
+            lock (Kilit)
+            {
+                var a = d.Akislar.FirstOrDefault(x => x.Ay == ay);
+                if (a == null) { d.Akislar.Add(new DuzenliAkis { Ay = ay, DocEntry = m.DocEntry, DbName = m.U_KaynakFirma, Zaman = DateTime.Now, Kullanici = kullanici ?? "", Tutar = m.U_TutarTL ?? m.U_Tutar ?? 0, Yontem = m.U_OdemeYontemi, PlanlananTarih = m.U_PlanlananTarih ?? DateTime.Today }); Log(d, "Dış Akış Bağlandı", $"{AyAdi(ay)} · Kasa Nakit Akışı #{m.DocEntry} · {(m.U_TutarTL ?? 0).ToString("N2", Tr)} ₺ (Kredi Yapılandırma Raporu)", kullanici); }
+                else { a.DocEntry = m.DocEntry; a.DbName = m.U_KaynakFirma; a.Tutar = m.U_TutarTL ?? m.U_Tutar ?? 0; a.Yontem = m.U_OdemeYontemi; a.PlanlananTarih = m.U_PlanlananTarih ?? a.PlanlananTarih; }
             }
         }
         public static (bool ok, string mesaj, DuzenliOdeme d) DurumDegistir(int id, string durum, string kullanici)

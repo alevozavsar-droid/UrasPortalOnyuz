@@ -73,6 +73,7 @@ namespace WebApplication3.Data
             ("Rapor7C", "Index", "fas fa-chart-line", "Ürün Hammadde Ekstresi", null),
             ("Rapor77", "Index", "fas fa-chart-line", "Ürün Hammadde (Ambalaj)", null),
             ("Rapor79", "Index", "fas fa-chart-line", "Kasa Nakit Akışı", null),
+            ("KrediYapilandirma", "Index", "fas fa-building-columns", "Kredi Yapılandırma Raporu", null),   // 9 Kas 2026: banka kredisi yapılandırmaları (öncesi / sonrası, teminat, taksit takvimi → Kasa Nakit Akışı ve Planlı Ödemeler)
             ("Rapor80", "Index", "fas fa-chart-line", "Zimmet Takip Raporu", null),
             ("Rapor81", "Index", "fas fa-chart-line", "Satış Analiz Dashboard", null),
             ("Rapor82", "Index", "fas fa-chart-line", "Aktarım Robotu Kontrol Paneli-URS", null),
