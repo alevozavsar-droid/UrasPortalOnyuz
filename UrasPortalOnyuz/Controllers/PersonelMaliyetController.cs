@@ -26,7 +26,7 @@ namespace WebApplication3.Controllers
 
         public IActionResult Index()
         {
-            ViewData["Title"] = "Personel Maliyet Raporu";
+            ViewData["Title"] = "Konsolide İK Paneli";   // 6 Kas 2026: eski adı Personel Maliyet Raporu (adres ve sekmeler aynı)
             ViewBag.Yil = DateTime.Today.Year;
             ViewBag.Kaynak = PersonelMaliyetOrnek.KaynakDonem(null);
             ViewBag.Gruplar = PersonelMaliyetOrnek.SutunGruplari;
@@ -47,6 +47,7 @@ namespace WebApplication3.Controllers
             if (d == null || d.Satirlar == null) return Json(new { success = false, message = "Veri yok." });
             string hata = PersonelMaliyetOrnek.Kaydet(d.Satirlar, Ben(), d.Donem);
             if (hata != null) return Json(new { success = false, message = hata });
+            PersonelMaliyetKalici.Yaz("kaydet", d, Ben());   // kalıcı günlük (6 Kas 2026): yeniden başlatınca aynı sırayla uygulanır
             lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"{d.Satirlar.Count} personel satırı kaydedildi.", null, d.Donem));
         }
 
@@ -56,13 +57,9 @@ namespace WebApplication3.Controllers
         {
             try
             {
-                lock (PersonelMaliyetOrnek.Kilit)
-                {
-                    var liste = PersonelMaliyetOrnek.DonemOlustur(d?.Donem, d?.Kurlar, out bool yeni);
-                    if (yeni && d.Donem != PersonelMaliyetEkimOrnek.Donem) PersonelKesintiOrnek.KesintileriDonemYansit(d.Donem);   // Ekim dosyadan kurulur: kesinti sütunları dosyadaki değerlerdir (plansız BES vb. sıfırlanmaz)
-                    if (yeni) { PersonelMaliyetEkOrnek.PrimleriDonemdenTuret(d.Donem); PersonelKesintiOrnek.MesaiTalepleriniTohumla(d.Donem); }   // Prim Ödemeleri ve Ek Çalışmalar sekmeleri yeni dönemin bordro tutarlarıyla birebir (5 Kas 2026)
-                    return Json(Paket(true, $"{PersonelMaliyetOrnek.DonemAd(d.Donem)} bordrosu {(yeni ? "oluşturuldu" : "zaten var")} ({liste.Count} kişi).", null, d.Donem));
-                }
+                var liste = PersonelMaliyetOrnek.DonemKur(d?.Donem, d?.Kurlar, out bool yeni);   // dönem + kesinti taksitleri + prim satırları + mesai talepleri (kalıcı günlük aynı yolu yeniden uygular)
+                if (yeni) PersonelMaliyetKalici.Yaz("donem", d, Ben());
+                lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"{PersonelMaliyetOrnek.DonemAd(d.Donem)} bordrosu {(yeni ? "oluşturuldu" : "zaten var")} ({liste.Count} kişi).", null, d.Donem));
             }
             catch (ArgumentException ex) { return Json(new { success = false, message = ex.Message }); }
         }
@@ -74,6 +71,7 @@ namespace WebApplication3.Controllers
         {
             string hata = PersonelTesvikOrnek.Kaydet(d?.Sirket, d?.Kod, d?.Secili ?? false);
             if (hata != null) return Json(new { success = false, message = hata });
+            PersonelMaliyetKalici.Yaz("tesvik", d, Ben());
             lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"{d.Sirket} · {d.Kod}: {(d.Secili ? "faydalanıyor" : "muaf / faydalanamıyor")} olarak kaydedildi; hesaplar yenilendi.", null, d.Donem));
         }
 
@@ -83,6 +81,7 @@ namespace WebApplication3.Controllers
         {
             string hata = PersonelMaliyetOrnek.Ekle(d, Ben(), out var p, d?.Donem);
             if (hata != null) return Json(new { success = false, message = hata });
+            PersonelMaliyetKalici.Yaz("ekle", d, Ben());
             lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"{p.AdSoyad} eklendi (sıra {p.Sira}, cari kodu {p.CariKodu}).", p.Sira, d.Donem));
         }
 
@@ -93,6 +92,7 @@ namespace WebApplication3.Controllers
             if (d == null) return Json(new { success = false, message = "Veri yok." });
             string hata = PersonelMaliyetOrnek.Sil(d.Sira, Ben(), d.Donem);
             if (hata != null) return Json(new { success = false, message = hata });
+            PersonelMaliyetKalici.Yaz("sil", d, Ben());
             lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"Sıra {d.Sira} silindi.", null, d.Donem));
         }
         public class KaydetIstek { public List<PmDuzenleme> Satirlar { get; set; } public string Donem { get; set; } }
@@ -108,6 +108,7 @@ namespace WebApplication3.Controllers
             if (dosya != null && dosya.Length > 0) { if (dosya.Length > 8 * 1024 * 1024) return Json(new { success = false, message = "Dosya 8 MB'tan büyük olamaz." }); using var ms = new MemoryStream(); dosya.CopyTo(ms); ek = (dosya.FileName, dosya.ContentType, ms.ToArray()); }
             string hata = PersonelKesintiOrnek.KesintiEkle(personelSira, tur, kaynak, icraDairesi, alacakli, dosyaNo, toplam, taksit, baslangic, aciklama, Ben(), ek, out var k);
             if (hata != null) return Json(new { success = false, message = hata });
+            PersonelMaliyetKalici.Yaz("kesintiEkle", new { personelSira, tur, kaynak, icraDairesi, alacakli, dosyaNo, toplam, taksit, baslangic, aciklama }, Ben());   // ek dosyası kalıcı değil
             lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"{k.AdSoyad} için {k.Tur} planı eklendi: {k.TaksitSayisi} taksit, {PersonelMaliyetOrnek.DonemAd(k.BaslangicDonem)} – {PersonelMaliyetOrnek.DonemAd(k.BitisDonem)}.", null, donem));
         }
         [HttpPost, IgnoreAntiforgeryToken, RequestSizeLimit(10 * 1024 * 1024)]
@@ -121,12 +122,12 @@ namespace WebApplication3.Controllers
         }
         // ---- sekmelerde satır düzenleme (çekmece): üretim personeli, prim satırları, kesinti planları — kaydedilince bordro satırı / kart / cari güncellenir
         public class SilIstek2 { public int Id { get; set; } public string Donem { get; set; } }
-        [HttpPost, IgnoreAntiforgeryToken] public IActionResult UretimKaydet([FromBody] PersonelMaliyetEkOrnek.UretimIstek d) { string h = PersonelMaliyetEkOrnek.UretimKaydet(d, out var u); if (h != null) return Json(new { success = false, message = h }); lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"{u.AdSoyad} kaydedildi (üretim personeli).", null, d?.Donem)); }
-        [HttpPost, IgnoreAntiforgeryToken] public IActionResult UretimSil([FromBody] SilIstek2 d) { string h = PersonelMaliyetEkOrnek.UretimSil(d?.Id ?? 0); if (h != null) return Json(new { success = false, message = h }); lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, "Üretim personeli silindi.", null, d?.Donem)); }
-        [HttpPost, IgnoreAntiforgeryToken] public IActionResult PrimKaydet([FromBody] PersonelMaliyetEkOrnek.PrimIstek d) { string h = PersonelMaliyetEkOrnek.PrimKaydet(d, out var r); if (h != null) return Json(new { success = false, message = h }); lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"{r.AdSoyad} · {r.DonemAd} · {r.PrimTuru}: {r.HesaplananPrim.ToString("N2", Tr)} ₺ kaydedildi; {PersonelMaliyetOrnek.DonemAd(r.OdemeDonem)} bordrosundaki Prim-{r.Odeme} güncellendi.", null, d?.BordroDonem)); }
-        [HttpPost, IgnoreAntiforgeryToken] public IActionResult PrimSil([FromBody] SilIstek2 d) { string h = PersonelMaliyetEkOrnek.PrimSil(d?.Id ?? 0); if (h != null) return Json(new { success = false, message = h }); lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, "Prim satırı silindi; bordro primi güncellendi.", null, d?.Donem)); }
-        [HttpPost, IgnoreAntiforgeryToken] public IActionResult KesintiGuncelle([FromBody] PersonelKesintiOrnek.KesintiIstek d) { string h = PersonelKesintiOrnek.KesintiGuncelle(d, Ben(), out var k); if (h != null) return Json(new { success = false, message = h }); lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"{k.AdSoyad} · {k.Tur} planı güncellendi: {k.TaksitSayisi} taksit, {PersonelMaliyetOrnek.DonemAd(k.BaslangicDonem)} – {PersonelMaliyetOrnek.DonemAd(k.BitisDonem)}; bordro kesinti sütunu yenilendi.", null, d?.Donem)); }
-        [HttpPost, IgnoreAntiforgeryToken] public IActionResult KesintiSil([FromBody] SilIstek2 d) { string h = PersonelKesintiOrnek.KesintiSil(d?.Id ?? 0); if (h != null) return Json(new { success = false, message = h }); lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, "Kesinti planı silindi; bordro kesinti sütunu yenilendi.", null, d?.Donem)); }
+        [HttpPost, IgnoreAntiforgeryToken] public IActionResult UretimKaydet([FromBody] PersonelMaliyetEkOrnek.UretimIstek d) { string h = PersonelMaliyetEkOrnek.UretimKaydet(d, out var u); if (h != null) return Json(new { success = false, message = h }); PersonelMaliyetKalici.Yaz("uretim", d, Ben()); lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"{u.AdSoyad} kaydedildi (üretim personeli).", null, d?.Donem)); }
+        [HttpPost, IgnoreAntiforgeryToken] public IActionResult UretimSil([FromBody] SilIstek2 d) { string h = PersonelMaliyetEkOrnek.UretimSil(d?.Id ?? 0); if (h != null) return Json(new { success = false, message = h }); PersonelMaliyetKalici.Yaz("uretimSil", d, Ben()); lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, "Üretim personeli silindi.", null, d?.Donem)); }
+        [HttpPost, IgnoreAntiforgeryToken] public IActionResult PrimKaydet([FromBody] PersonelMaliyetEkOrnek.PrimIstek d) { string h = PersonelMaliyetEkOrnek.PrimKaydet(d, out var r); if (h != null) return Json(new { success = false, message = h }); PersonelMaliyetKalici.Yaz("prim", d, Ben()); lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"{r.AdSoyad} · {r.DonemAd} · {r.PrimTuru}: {r.HesaplananPrim.ToString("N2", Tr)} ₺ kaydedildi; {PersonelMaliyetOrnek.DonemAd(r.OdemeDonem)} bordrosundaki Prim-{r.Odeme} güncellendi.", null, d?.BordroDonem)); }
+        [HttpPost, IgnoreAntiforgeryToken] public IActionResult PrimSil([FromBody] SilIstek2 d) { string h = PersonelMaliyetEkOrnek.PrimSil(d?.Id ?? 0); if (h != null) return Json(new { success = false, message = h }); PersonelMaliyetKalici.Yaz("primSil", d, Ben()); lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, "Prim satırı silindi; bordro primi güncellendi.", null, d?.Donem)); }
+        [HttpPost, IgnoreAntiforgeryToken] public IActionResult KesintiGuncelle([FromBody] PersonelKesintiOrnek.KesintiIstek d) { string h = PersonelKesintiOrnek.KesintiGuncelle(d, Ben(), out var k); if (h != null) return Json(new { success = false, message = h }); PersonelMaliyetKalici.Yaz("kesinti", d, Ben()); lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"{k.AdSoyad} · {k.Tur} planı güncellendi: {k.TaksitSayisi} taksit, {PersonelMaliyetOrnek.DonemAd(k.BaslangicDonem)} – {PersonelMaliyetOrnek.DonemAd(k.BitisDonem)}; bordro kesinti sütunu yenilendi.", null, d?.Donem)); }
+        [HttpPost, IgnoreAntiforgeryToken] public IActionResult KesintiSil([FromBody] SilIstek2 d) { string h = PersonelKesintiOrnek.KesintiSil(d?.Id ?? 0); if (h != null) return Json(new { success = false, message = h }); PersonelMaliyetKalici.Yaz("kesintiSil", d, Ben()); lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, "Kesinti planı silindi; bordro kesinti sütunu yenilendi.", null, d?.Donem)); }
 
         // ---- Muhasebe Kayıtları sekmesi: simülasyon → kontrol → onay → muhasebeleştirme → ters kayıt; hesap eşleştirme (Data/PersonelMuhasebeOrnek.cs)
         public class SimuleIstek { public string Donem { get; set; } public string Kapsam { get; set; } }
@@ -138,6 +139,7 @@ namespace WebApplication3.Controllers
             if (d == null) return Json(new { success = false, message = "Veri yok." });
             string hata = PersonelMuhasebeOrnek.Olustur(d.Donem, d.Kapsam, Ben(), out var s);
             if (hata != null) return Json(new { success = false, message = hata });
+            PersonelMaliyetKalici.Yaz("muhasebeSimule", d, Ben(), Yetki());
             lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"{s.No} v{s.Versiyon} oluşturuldu: {s.PersonelSayisi} personel, {s.Fisler.Count} fiş, {s.Fisler.Sum(f => f.Satirlar.Count)} satır · {s.Durum}. Gerçek fiş atılmadı.", null, d.Donem));
         }
         [HttpPost, IgnoreAntiforgeryToken]
@@ -146,6 +148,7 @@ namespace WebApplication3.Controllers
             if (d == null) return Json(new { success = false, message = "Veri yok." });
             string hata = PersonelMuhasebeOrnek.Islem(d.Id, d.Islem, d.Not, Ben(), Yetki(), out var s);
             if (hata != null) return Json(new { success = false, message = hata });
+            PersonelMaliyetKalici.Yaz("muhasebeIslem", d, Ben(), Yetki());
             string m = d.Islem == "onayaGonder" ? $"{s.No} v{s.Versiyon} onaya gönderildi." : d.Islem == "onayla" ? $"{s.No} v{s.Versiyon} onaylandı; içerik kilitlendi." : d.Islem == "muhasebelestir" ? $"{s.No} muhasebeleştirildi: {string.Join(", ", s.Fisler.Select(f => f.MuhasebeFisNo))}." : d.Islem == "tersKayit" ? $"{s.No} için ters kayıt oluşturuldu: {string.Join(", ", s.Fisler.Select(f => f.TersFisNo))}." : $"{s.No} iptal edildi.";
             lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, m, null, d.Donem));
         }
@@ -155,6 +158,7 @@ namespace WebApplication3.Controllers
             if (d == null) return Json(new { success = false, message = "Veri yok." });
             string hata = PersonelMuhasebeOrnek.EslemeKaydet(d.Id, d.Sirket, d.KarsiSirket, d.IslemTuru, d.KaynakKalem, d.XR, d.Yon, d.HesapKodu, d.Varsayilan, d.GecerlilikBas, d.GecerlilikBit, d.Aktif, Ben(), out var e);
             if (hata != null) return Json(new { success = false, message = hata });
+            PersonelMaliyetKalici.Yaz("muhasebeEsleme", d, Ben(), Yetki());
             lock (PersonelMaliyetOrnek.Kilit) return Json(Paket(true, $"Hesap eşleştirmesi kaydedildi: {e.IslemTuru} / {e.KaynakKalem} / {e.XR} / {e.Yon} → {e.HesapKodu} {e.HesapAdi}. Açık simülasyonlar güncelliğini yitirdi; yeniden simülasyon gerekir.", null, d.Donem));
         }
         [HttpGet]

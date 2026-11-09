@@ -71,6 +71,8 @@ namespace WebApplication3
                 e.MapControllerRoute("default", "{controller=Home}/{action=Index}/{id?}");
             });
 
+            // Personel Maliyet kalıcı günlüğü (6 Kas 2026): kullanıcı girişleri App_Data/personel-maliyet-kayit.jsonl'a yazılır, açılışta yeniden uygulanır (Data/PersonelMaliyetKalici.cs)
+            Data.PersonelMaliyetKalici.Dizin = Environment.GetEnvironmentVariable("PM_KALICI_DIZIN") ?? env.ContentRootPath;
             // Örnek veri ısınması: bellek içi örnek listeler dinlemeye başlamadan tek iş parçacığında tohumlanır (eşzamanlı ilk isteklerde iç içe tohumlama kilit sırası çakışması → kilitlenme önlenir; Data/OrnekIsinma.cs)
             Data.OrnekIsinma.Calistir();
         }

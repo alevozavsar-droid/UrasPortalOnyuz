@@ -54,7 +54,7 @@ namespace WebApplication3.Controllers
             string hata = PersonelMuhasebeOrnek.Islem(d.Id, d.Islem, d.Not, Ben(), Yetki(), out var s);
             if (hata != null) return Json(new { success = false, message = hata });
             string m = d.Islem == "onayaGonder" ? $"{s.No} v{s.Versiyon} onaya gönderildi." : d.Islem == "onayla" ? $"{s.No} v{s.Versiyon} onaylandı; içerik kilitlendi." : d.Islem == "muhasebelestir" ? $"{s.No} muhasebeleştirildi: {string.Join(", ", s.Fisler.Select(f => f.MuhasebeFisNo))}." : d.Islem == "tersKayit" ? $"{s.No} için ters kayıt oluşturuldu: {string.Join(", ", s.Fisler.Select(f => f.TersFisNo))}." : $"{s.No} iptal edildi.";
-            return Json(Paket(d.Donem ?? s.Donem, true, m + " Personel Maliyet Raporu › Muhasebe Kayıtları sekmesi de güncellendi."));
+            return Json(Paket(d.Donem ?? s.Donem, true, m + " Konsolide İK Paneli › Muhasebe Kayıtları sekmesi de güncellendi."));
         }
         [HttpPost, IgnoreAntiforgeryToken]
         public IActionResult Esleme([FromBody] PersonelMaliyetController.EslemeIstek d)

@@ -214,7 +214,13 @@ namespace WebApplication3.Data
         public static NaKisi Yonetici(NaKisi k) => NakitAvansOrnek.Yonetici(k);
         public static NaKisi Direktor(NaKisi k) => NakitAvansOrnek.Personel.First(p => p.Unvan == "Genel Müdür Yardımcısı");
         public static NaKisi IkUzmani() => NakitAvansOrnek.Personel.First(p => p.Rol == "İK");
-        public static int KidemYil(NaKisi k) { var g = IseGiris.TryGetValue(k.PersonelNo, out var d) ? d : DateTime.Today.AddYears(-1); int y = DateTime.Today.Year - g.Year; if (g.AddYears(y) > DateTime.Today) y--; return y; }
+        /// <summary>İşe giriş: Konsolide İK Paneli kişisinde (cari kodu 335.xxx) panel kaydından (9 Kas 2026; kıdem ve yıllık izin hak edişi oradan türer); örnek kullanıcılarda IseGiris sözlüğünden, yoksa 1 yıl önce.</summary>
+        public static DateTime IseGirisTarihi(NaKisi k)
+        {
+            if (PersonelKesintiOrnek.PmKisiMi(k)) { var p = IkPersonelMaster.Bul(k.PersonelNo); return p?.IseGiris != null ? p.IseGiris.Value.Date : DateTime.Today; }   // panelde işe giriş yoksa kıdem 0 (hak ediş uydurulmaz; tarih kişi kartına girilince hesaplanır)
+            return IseGiris.TryGetValue(k.PersonelNo ?? "", out var d) ? d : DateTime.Today.AddYears(-1);
+        }
+        public static int KidemYil(NaKisi k) { var g = IseGirisTarihi(k); int y = DateTime.Today.Year - g.Year; if (g.AddYears(y) > DateTime.Today) y--; return Math.Max(0, y); }
         /// <summary>4857 m.53: 1–5 yıl 14, 5–15 yıl 20, 15+ yıl 26 gün; 1 yılı doldurmayan hak etmez; 18 yaş altı / 50 yaş üstü en az 20 (örnekte uygulanmadı).</summary>
         public static decimal YillikHak(int kidem) => kidem < 1 ? 0 : kidem < 5 ? 14 : kidem < 15 ? 20 : 26;
 
@@ -231,7 +237,7 @@ namespace WebApplication3.Data
         // ---------- Bakiye (canlı hesap) ----------
         public static IzBakiye Bakiye(NaKisi k, int? haricId = null)
         {
-            var b = new IzBakiye { Kisi = k, IseGiris = IseGiris.TryGetValue(k.PersonelNo, out var g) ? g : DateTime.Today.AddYears(-1), KidemYil = KidemYil(k) };
+            var b = new IzBakiye { Kisi = k, IseGiris = IseGirisTarihi(k), KidemYil = KidemYil(k) };
             b.HakEdis = YillikHak(b.KidemYil); b.Devir = Devirler.TryGetValue(k.PersonelNo, out var d) ? d : 0;
             b.SonrakiHakEdis = b.IseGiris.AddYears(b.KidemYil + 1); b.SonrakiHakEdisGun = YillikHak(b.KidemYil + 1);
             if (b.Devir > 0) b.Hareketler.Add(new IzBakiyeHareketi { Tarih = new DateTime(DateTime.Today.Year, 1, 1), Tur = "Devir", Gun = b.Devir, Ref = (DateTime.Today.Year - 1).ToString(), Aciklama = "Önceki yıldan devreden" });
@@ -253,7 +259,8 @@ namespace WebApplication3.Data
         // ---------- Kurallar ----------
         public static List<IzinTalebi> Cakisanlar(NaKisi k, DateTime b, DateTime e, int? haricId = null) => Talepler.Where(t => t.Kullanan.PersonelNo == k.PersonelNo && t.Id != haricId && !t.Iptal && t.TalepDurumu != "Reddedildi" && t.Baslangic.Date <= e.Date && t.Bitis.Date >= b.Date).ToList();
         public static List<IzinTalebi> DepartmanIzinlileri(NaKisi k, DateTime b, DateTime e, int? haricId = null) => Talepler.Where(t => t.Kullanan.PersonelNo != k.PersonelNo && t.Kullanan.Departman == k.Departman && t.Kullanan.Sirket == k.Sirket && t.Id != haricId && !t.Iptal && t.Onaylandi && t.Baslangic.Date <= e.Date && t.Bitis.Date >= b.Date).ToList();
-        public static int DepartmanMevcudu(NaKisi k) => NakitAvansOrnek.Personel.Count(p => p.Departman == k.Departman && p.Sirket == k.Sirket && p.Aktif);
+        /// <summary>Departman mevcudu: Konsolide İK Paneli kişisinde panel listesinden (aynı bölüm + şirket, aktif); örnek kullanıcıda örnek listeden.</summary>
+        public static int DepartmanMevcudu(NaKisi k) => PersonelKesintiOrnek.PmKisiMi(k) ? IkPersonelMaster.NaKisiler().Count(p => p.Departman == k.Departman && p.Sirket == k.Sirket && p.Aktif) : NakitAvansOrnek.Personel.Count(p => p.Departman == k.Departman && p.Sirket == k.Sirket && p.Aktif);
 
         public static List<IzOnay> OnayAkisiOlustur(IzinTalebi a, DateTime t, out List<string> uyarilar)
         {
@@ -450,24 +457,27 @@ namespace WebApplication3.Data
             var a4 = T("Ali Veli", "Ali Veli", "MAZERET", 8, 8, "Çocuğun okul veli toplantısı (öğleden sonra)", "Kerem Aksoy", 1, "Öğleden Sonra");
             var a5 = T("Ali Veli", "Ali Veli", "YILLIK", -40, -38, "Uzatılmış hafta sonu", "Kerem Aksoy", 48); { var adim = a5.Onaylar.First(x => x.Durum == "Onay Bekliyor"); adim.Durum = "Reddedildi"; adim.Tarih = a5.Tarih.AddHours(2); adim.Not = "Sunucu geçişi haftası; başka tarih önerin."; foreach (var o in a5.Onaylar.Where(o => o.Durum == "Pasif")) o.Durum = "İptal"; Hareket(a5, adim.Tarih.Value, "Yönetici Onayı — reddedildi (" + adim.Not + ")", adim.Kisi); }
             var a6 = T("Ali Veli", "Ali Veli", "YILLIK", 40, 53, "Yılbaşı öncesi uzun tatil", "Kerem Aksoy", 2, "Yok", "Antalya"); { var adim = a6.Onaylar.First(x => x.Durum == "Onay Bekliyor"); adim.Durum = "Revizyon"; adim.Tarih = a6.Tarih.AddHours(5); adim.Not = "10 iş gününü aşıyor; ikiye bölerek planlayın."; Hareket(a6, adim.Tarih.Value, "Yönetici Onayı — revizyona gönderildi (" + adim.Not + ")", adim.Kisi); }
-            // Bugün izinde olanlar (takvim): Tolga Yaman yıllık, Esra Kaya raporlu (belge geldi), Gizem Tan raporlu (belge bekleniyor)
-            var a7 = T("Tolga Yaman", "Tolga Yaman", "YILLIK", -2, 4, "Aile ziyareti", "Gizem Tan", 12, "Yok", "İzmir"); Onayla(a7); Pdks(a7, false);
-            var a8 = T("Derya Şen", "Esra Kaya", "HASTALIK", -1, 2, "Grip, 4 gün istirahat", null, 1); Onayla(a8); a8.SgkRaporNo = "SGK-" + (400000 + a8.Id * 13); a8.BelgeAlindi = true; IslenenIslemler.Add("SGK-" + a8.Id); Hareket(a8, a8.Tarih.AddHours(6), $"SGK e-rapor bildirimi alındı ({a8.SgkRaporNo}); belge şartı karşılandı", "SGK"); Pdks(a8, false);
-            var a9 = T("Gizem Tan", "Gizem Tan", "HASTALIK", -3, -1, "Diş operasyonu", null, 3); Onayla(a9); Pdks(a9);
+            // Konsolide İK Paneli kişileri (9 Kas 2026, "İnsan Kaynakları alt menüsündeki tüm raporlar Konsolide İK Paneli ile senkronize olmalı"): örnek izinler panelin bordrolu, aktif personelinden
+            // (özel kişi ve gündelikçi dışı; güncel dönem listesinde olanlar) sıraya göre belirli konumlardan seçilir — deterministik, ad yazılmaz. Yalnız yıllık / mazeret / ücretsiz / idari türler:
+            // gerçek personel için sağlık, doğum, evlilik gibi kişisel durum uydurulmaz. Önceki örnekler (Tolga Yaman, Esra Kaya … örnek kullanıcılar) kaldırıldı; Ali Veli (it02, oturum kullanıcısı) örnekleri yukarıda durur.
+            var M = IkPersonelMaster.Aktifler().Where(p => !p.Ozel && p.OzelDurum != "Gündelikçi" && !string.IsNullOrEmpty(p.Gorev) && PersonelMaliyetOrnek.Liste.Any(x => x.Sira == p.Sira)).Select(p => p.CariKodu).ToList();
+            string Pk(int i) => M.Count == 0 ? "Ali Veli" : M[i % M.Count];
+            // Bugün izinde olanlar (takvim): yıllık izin (başladı), mazeret (yarım gün)
+            var a7 = T(Pk(5), Pk(5), "YILLIK", -2, 4, "Yıllık izin", Pk(6), 12, "Yok", "İzmir"); Onayla(a7); Pdks(a7, false);
+            var a8 = T(Pk(11), Pk(11), "MAZERET", 0, 0, "Resmi kurum işlemi (öğleden sonra)", null, 1, "Öğleden Sonra"); Onayla(a8);
+            var a9 = T(Pk(17), Pk(17), "YILLIK", -3, -1, "Kısa tatil", null, 3); Onayla(a9); Pdks(a9);
             // Ücretsiz izin: direktör onayı bekliyor
-            var a10 = T("Mert Doğan", "Mert Doğan", "UCRETSIZ", 20, 34, "Yurt dışı aile işleri", "Ertan Yavuz", 2); Onayla(a10, 1);
-            // Babalık izni: belge bekleniyor, İK'da
-            var a11 = T("Ertan Yavuz", "Ertan Yavuz", "BABALIK", -8, -2, "Doğum", "Yasin Sezgin", 9); Onayla(a11); Pdks(a11);
-            // Departman doluluğu: Bilgi Teknolojileri'nde Kerem Aksoy aynı tarihlerde izinli → Ali Veli'nin a3'ü ile çakışan onaylı yönetici izni
-            var a12 = T("Kerem Aksoy", "Kerem Aksoy", "YILLIK", 16, 18, "Kısa tatil", "Ali Veli", 6); Onayla(a12);
+            var a10 = T(Pk(23), Pk(23), "UCRETSIZ", 20, 34, "Yurt dışı aile işleri", Pk(24), 2); Onayla(a10, 1);
+            // İdari izin (yönetim kararı), tamamlandı
+            var a11 = T(Pk(29), Pk(29), "IDARI", -8, -8, "İdari izin (yönetim kararı)", null, 9); Onayla(a11); Pdks(a11); Puantaj(a11);
+            // Yaklaşan onaylı izinler (Yaklaşan İzinler kartı ve takvim)
+            var a12 = T(Pk(35), Pk(35), "YILLIK", 16, 18, "Kısa tatil", Pk(36), 6); Onayla(a12);
             // Erken dönüş örneği
-            var a13 = T("Canan Su", "Canan Su", "YILLIK", -15, -9, "Tatil", null, 20); Onayla(a13); Pdks(a13, true, 3); Puantaj(a13);
-            // Evlilik izni, gelecek hafta, İK onayı yok (yalnızca yönetici) → onaylı
-            var a14 = T("Hülya Er", "Hülya Er", "EVLILIK", 9, 11, "Evlilik", null, 5); Onayla(a14); a14.BelgeAlindi = true;
-            // Onay bekleyen: Yasin Sezgin'e gelen Ertan yıllık talebi
-            var a15 = T("Ertan Yavuz", "Ertan Yavuz", "YILLIK", 30, 36, "Memleket ziyareti", "Yasin Sezgin", 1, "Yok", "Trabzon");
-            // Süt izni (planlı, tamamlanmış)
-            var a16 = T("Derya Şen", "Nazlı Erdem", "SUT", -12, -12, "Süt izni (yarım gün)", null, 14, "Öğleden Sonra"); Onayla(a16); Pdks(a16); Puantaj(a16);
+            var a13 = T(Pk(41), Pk(41), "YILLIK", -15, -9, "Tatil", null, 20); Onayla(a13); Pdks(a13, true, 3); Puantaj(a13);
+            var a14 = T(Pk(47), Pk(47), "YILLIK", 9, 11, "Aile ziyareti", null, 5); Onayla(a14);
+            // Onay bekleyen yıllık talepler
+            var a15 = T(Pk(53), Pk(53), "YILLIK", 30, 36, "Memleket ziyareti", Pk(54), 1, "Yok", "Trabzon");
+            var a16 = T(Pk(59), Pk(59), "YILLIK", 45, 49, "Yıl sonu izni", null, 1);
         }
     }
 }

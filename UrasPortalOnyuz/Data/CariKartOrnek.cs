@@ -39,6 +39,8 @@ namespace WebApplication3.Data
         public List<CariLimitLog> LimitGecmisi { get; set; } = new List<CariLimitLog>();
         /// <summary>Kart üzerinde doğrudan yapılan düzeltmelerin günlüğü (talep akışı dışı; CariKartOrnek.KartDuzenle). En yeni başta.</summary>
         public List<YnAudit> Degisiklikler { get; set; } = new List<YnAudit>();
+        /// <summary>Personel carisi (335.xxx): kartın üretildiği Konsolide İK Paneli kaydı (CariKartOrnek.PersonelKartlari); diğer tiplerde null.</summary>
+        public PmPersonel Personel { get; set; }
     }
     /// <summary>Kredi limiti değişiklik kaydı.</summary>
     public class CariLimitLog { public DateTime Zaman { get; set; } public string Kullanici { get; set; } public string Eski { get; set; } public string Yeni { get; set; } public string Not { get; set; } = ""; }
@@ -173,7 +175,29 @@ namespace WebApplication3.Data
         private static readonly List<CariKart> _kartlar = new List<CariKart>(); private static readonly List<CariTalep> _talepler = new List<CariTalep>(); private static bool _tohumlandi; private static int _sonTalep = 0;
         public static List<CariKart> Kartlar { get { Tohumla(); return _kartlar; } }
         public static List<CariTalep> Talepler { get { Tohumla(); return _talepler; } }
-        public static CariKart KartBul(string kod) => Kartlar.FirstOrDefault(k => string.Equals(k.Kod, kod, StringComparison.OrdinalIgnoreCase));
+        public static CariKart KartBul(string kod) => Kartlar.FirstOrDefault(k => string.Equals(k.Kod, kod, StringComparison.OrdinalIgnoreCase)) ?? ((kod ?? "").StartsWith("335.") ? PersonelKartlari().FirstOrDefault(k => string.Equals(k.Kod, kod, StringComparison.OrdinalIgnoreCase)) : null);
+        /// <summary>PERSONEL CARİLERİ (9 Kas 2026, kullanıcı: "Personel Carileri'ndeki bilgileri direkt Konsolide İK Paneli'nden çek, senkronize olsun"): 335.xxx kartları tohumlanmaz,
+        /// Konsolide İK Paneli kişilerinden (IkPersonelMaster.Kisiler; cari kodu = kişi sırası) her okumada üretilir. Kimlik / iletişim orada değişir; burada düzenlenmez (denetleyici 335 kartına yazmayı reddeder).
+        /// Şirket = SGK işvereni (335 hesabını tutan şirket), Şehir fiili görev yerinden, işten ayrılan kişi elle pasif, Not'ta görev · bölüm · görev yeri · işe giriş.</summary>
+        public static List<CariKart> PersonelKartlari()
+        {
+            var l = new List<CariKart>();
+            foreach (var p in IkPersonelMaster.Kisiler())
+            {
+                bool ayrildi = p.Durum != "Aktif";
+                var k = new CariKart
+                {
+                    Kod = p.CariKodu, KisaAd = p.AdSoyad, KisaltmaliUnvan = p.AdSoyad, ResmiUnvan = p.AdSoyad, VergiNo = p.TcKimlik ?? "", VergiDairesi = "", KartTipi = "Personel Carileri", Bolge = "Yurtiçi", Ulke = "Türkiye", Sehir = IkPersonelMaster.Il(p.FiiliGorevYeri),
+                    Sinif = "Personel", IliskiDurumu = "Grup Dışı", Rol = "Diğer", Yetkili = p.AdSoyad, Telefon = p.Telefon ?? "", Eposta = p.Eposta ?? "", VadeSarti = "", Sirket = p.SgkIsvereni, OlusturmaTarihi = p.IseGiris ?? DateTime.Today, Olusturan = "Konsolide İK Paneli", Personel = p,
+                    Not = $"{p.Gorev} · {p.Bolum} · {p.FiiliGorevYeri}{(p.IseGiris.HasValue ? $" · işe giriş {p.IseGiris:dd.MM.yyyy}" : "")}{(p.Ozel ? " · Özel Kişi" : "")}{(ayrildi ? $" · {p.Durum}{(p.AyrilisTarihi.HasValue ? $" {p.AyrilisTarihi:dd.MM.yyyy}" : "")}" : "")}. Konsolide İK Paneli kaydı; kimlik ve iletişim orada değişir.".Trim()
+                };
+                if (ayrildi) { k.ElleDurum = "Pasif"; k.ElleDurumKim = "Konsolide İK Paneli"; k.ElleDurumZaman = p.AyrilisTarihi ?? DateTime.Today; }
+                l.Add(k);
+            }
+            return l;
+        }
+        /// <summary>Tohumlanan kartlar + Konsolide İK Paneli'nden üretilen personel carileri (Cari Bilgileri ve Personel Carileri ekranlarının listesi).</summary>
+        public static List<CariKart> TumKartlar() => Kartlar.Concat(PersonelKartlari()).ToList();
         public static CariTalep TalepBul(string no) => Talepler.FirstOrDefault(t => string.Equals(t.No, no, StringComparison.OrdinalIgnoreCase));
         private static void Log(CariTalep t, DateTime z, string k, string alan, string eski, string yeni, string kaynak = "Ekran", string gerekce = null) => t.Audit.Add(new YnAudit { Zaman = z, Kullanici = k, Alan = alan, Eski = eski ?? "", Yeni = yeni ?? "", Kaynak = kaynak, Gerekce = gerekce ?? "" });
         /// <summary>KART DEĞİŞİKLİK GÜNLÜĞÜ: kart açılışı, doğrudan düzenleme, durum (elle pasif) ve kredi limiti değişiklikleri tek günlükte (CariKart.Degisiklikler, en yeni başta). Kaynak: "Kart Açılışı" | "Kart Düzenleme" | "Durum" | "Kredi Limiti".</summary>
@@ -183,7 +207,7 @@ namespace WebApplication3.Data
             int i = 0; while (i < k.Degisiklikler.Count && k.Degisiklikler[i].Zaman > z) i++; k.Degisiklikler.Insert(i, a);
         }
         /// <summary>Kart tipi ön ekine göre sıradaki benzersiz cari kodu (ör. 120.031).</summary>
-        public static string YeniKod(string tip) { var on = KodOnEkleri.TryGetValue(tip ?? "", out var p) ? p : "199"; int n = Kartlar.Where(k => k.Kod.StartsWith(on + ".")).Select(k => int.TryParse(k.Kod.Substring(on.Length + 1), out var x) ? x : 0).DefaultIfEmpty(0).Max() + 1; return $"{on}.{n:000}"; }
+        public static string YeniKod(string tip) { var on = KodOnEkleri.TryGetValue(tip ?? "", out var p) ? p : "199"; int n = (on == "335" ? TumKartlar() : Kartlar).Where(k => k.Kod.StartsWith(on + ".")).Select(k => int.TryParse(k.Kod.Substring(on.Length + 1), out var x) ? x : 0).DefaultIfEmpty(0).Max() + 1; return $"{on}.{n:000}"; }
 
         // =====================================================================
         // DOĞRULAMA (§4, §7, §13)
@@ -445,6 +469,11 @@ namespace WebApplication3.Data
         public static (DateTime Tarih, string Kaynak) SonHareket(CariKart k)
         {
             var bugun = DateTime.Today;
+            if (k.KartTipi == "Personel Carileri")
+            {   // personel carisi: son hareket = en yeni bordro dönemi (Konsolide İK Paneli); durum bordroya göre Aktif, işten ayrılan elle pasif
+                var dn = PersonelMaliyetOrnek.EnYeniDonem; var son = new DateTime(int.Parse(dn.Substring(0, 4)), int.Parse(dn.Substring(5, 2)), 1).AddMonths(1).AddDays(-1); if (son > bugun) son = bugun;
+                return (son, "Bordro " + PersonelMaliyetOrnek.DonemAd(dn));
+            }
             var en = (Tarih: k.OlusturmaTarihi == default ? bugun : k.OlusturmaTarihi.Date, Kaynak: k.OlusturmaTarihi == default ? "Taslak Kart" : "Kart Açılışı");
             void G(DateTime? t, string kaynak) { if (t.HasValue && t.Value.Date > en.Tarih && t.Value.Date <= bugun) en = (t.Value.Date, kaynak); }
             if (!string.IsNullOrEmpty(k.Kod) && k.KartTipi == "Müşteri")
@@ -526,7 +555,7 @@ namespace WebApplication3.Data
                 K("102.002", "Yapı Kredi Leasing", "Yapı Kredi Finansal Kiralama A.O.", "9370012345", "Büyük Mükellefler", "Finansal Kuruluşlar", "Yurtiçi", "Türkiye", "İstanbul", "Leasing", "Grup Dışı", "Diğer", "", "Portföy Yöneticisi", "0212 336 60 00", "leasing@ykb.com", "", "Uras Kimya", 400, "");
                 K("360.001", "Gebze Vergi Dairesi", "Gebze Vergi Dairesi Müdürlüğü", "", "", "Resmi Kurumlar", "Yurtiçi", "Türkiye", "Kocaeli", "Vergi Dairesi", "Grup Dışı", "Diğer", "", "", "0262 642 00 00", "", "", "Uras Kimya", 700, "");
                 K("360.002", "SGK Gebze", "Sosyal Güvenlik Kurumu Gebze Merkezi", "", "", "Resmi Kurumlar", "Yurtiçi", "Türkiye", "Kocaeli", "SGK", "Grup Dışı", "Diğer", "", "", "0262 643 00 00", "", "", "Uras Kimya", 700, "");
-                K("335.001", "Ali Veli (Avans)", "Ali Veli — Personel Avans Carisi", "12345678901", "", "Personel Carileri", "Yurtiçi", "Türkiye", "Kocaeli", "Personel Avans", "Grup Dışı", "Diğer", "", "Ali Veli", "0532 111 22 33", "ali.veli@uraskimya.com", "", "Uras Kimya", 300, "");
+                // Personel Carileri (335.xxx) tohumlanmaz: Konsolide İK Paneli kişilerinden her okumada üretilir (PersonelKartlari; 9 Kas 2026). Önceki örnek "335.001 Ali Veli (Avans)" kaldırıldı.
                 // ---- Kart değişiklik günlüğü (örnek): her kartın açılış kaydı + dinamik limit tanımları + birkaç doğrudan düzenleme ve durum kaydı
                 foreach (var k in _kartlar) { Gunluk(k, k.OlusturmaTarihi.AddHours(9), k.Olusturan, "Kart Açılışı", "", $"{k.KartTipi} kartı açıldı · {k.Sinif} · {k.Faaliyetler.Count} faaliyet satırı", "Kart Açılışı", "ERP cari açılışı"); if (k.LimitTuru == "Dinamik" && k.LimitZaman != null) Gunluk(k, k.LimitZaman.Value, k.LimitKim, "Kredi Limiti", "Yok", LimitOzet(k), "Kredi Limiti", k.LimitNot); }
                 void GD(string kod, int gunOnce, string kim, string alan, string eski, string yeni, string gerekce = "", string kaynak = "Kart Düzenleme") { var k = _kartlar.First(x => x.Kod == kod); Gunluk(k, b.AddDays(-gunOnce).AddHours(10 + gunOnce % 7), kim, alan, eski, yeni, kaynak, gerekce); }

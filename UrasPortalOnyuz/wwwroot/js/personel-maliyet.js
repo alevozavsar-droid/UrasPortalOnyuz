@@ -4,7 +4,7 @@
 //   Tipler: sira · metin · ad · tarih · secim · sayi (girilen tutar) · rx (R üstte / X altta) · gun (girilen gün) · hesap (hesaplanan) · genel (genel maliyet) · not · kart
 // Özel Kişiler sekmesi: aynı tablo paneli "kapsam = ozel" ile (p.ozel = true satırlar; düzenleme, kart, Excel aynen). Ana tablo (kapsam bordro) bordrolu, özel ve SGK'sız üretim satırlarını birlikte gösterir; "Özel Kişiler Gizle" / "Üretim Personeli Gizle" ile ayrılır. Üretim satırları salt okunur, tıklayınca üretim düzenlemesi açılır.
 // Ek sekmeler (salt okunur, V.ekSutunlar + V.uretim / V.primler): Üretim Personeli (SGK'sız, saat / gün bazlı X) · Prim Ödemeleri (ana tablodaki primin detayı + kişi bazında uyum) ·
-//   Birleşik Tablo (Bordro + Özel + Üretim; net kalemler, Toplam Brüt Masraflar, Toplam İşveren, Genel Maliyet). "0 ₺ Sütunları Gizle" anahtarı tüm tablolarda.
+//   Birleşik Tablo (Bordro + Özel + Üretim; net kalemler, Toplam Brüt Masraflar, Toplam İşveren, Genel Maliyet). "0 ₺ Sütunları Gizle" anahtarı tüm tablolarda. Kira sütunu (R / X, Mesai'nin solunda; 6 Kas 2026) ve "Çoklu Satırları Birleştir" anahtarı (aynı kişinin satırları tek satırda, yalnız bu sekmede).
 //   Üretim Personeli / Özel Kişiler Gizle: kişi içeren tüm sekmelerde tek ortak durum (sayılar ve toplamlar sekmeler arasında uyumlu). Zam Senaryosu: toplu ve kişi bazlı R / X zam oranları; mevcut ve zamlı ara toplam ve genel maliyet; senaryolar kaydedilir ve Senaryo Karşılaştırması sayfasında yan yana görünür (veri değişmez).
 // Ortak: filtreler (durum, SGK işvereni, fiili görev yeri, çatı departman, bölüm, unvan, özel durum, arama), KPI kutuları.
 // Sekme "Personel Maliyet Tablosu": Düzenle modunda kimlik bilgileri (liste + serbest yazım), günler ve girilen tutarlar satır bazında değiştirilir; hesaplanan sütunlar
@@ -73,7 +73,8 @@
 
   // ---- sekmeler
   /** genel arama (#pmAra) ana listeyi süzer; sekmenin yeşil şeridinin sağına taşınır. Listeyi süzmeyen sekmelerde (Prim, Üretim, Muhasebe) gizlenir: onların kendi arama kutusu yoksa arama da yoktur */
-  const GENEL_ARAMALI = ['tablo', 'ozel', 'ozet', 'zam', 'karsilastirma', 'ekcalisma', 'kesinti', 'birlesim', 'cikis', 'odeme', 'cari'];
+  const GENEL_ARAMALI = ['tablo', 'ozel', 'ozet', 'zam', 'karsilastirma', 'ekcalisma', 'kesinti', 'birlesim', 'cikis', 'odeme', 'cari', 'ozelrapor'];
+  const VARSAYILAN_SEKME = 'cari';   // panel bu sekmeyle açılır (kullanıcı, 6 Kas 2026: "Konsolide İK Paneli'ni açmak istediğimizde bu sayfa ile açılsın"); adreste ?sekme yoksa bu, görünümdeki varsayılan da aynı
   function genelAramaYerlestir(p, panel) {
     const kutu = $('#pmAra'), yuva = GENEL_ARAMALI.includes(p) ? $(`.na-panel[data-p="${panel}"] .ayar`) : null;
     if (yuva) yuva.prepend(kutu);
@@ -85,14 +86,14 @@
     const panel = p === 'ozel' ? 'tablo' : p; genelAramaYerlestir(p, panel); $$('#pm > .na-panel').forEach(x => x.classList.toggle('aktif', x.dataset.p === panel));
     const kendiKpi = $(`[data-kpi="${panel}"]`);   // sekmenin KPI kutuları filtrenin üstünde, genel şeridin yerinde; diğer sekmelerin kutuları gizli
     $$('[data-kpi]').forEach(k => { k.style.display = k === kendiKpi ? '' : 'none'; });
-    $('#pmKpi').style.display = (p === 'karsilastirma' || p === 'birlesim' || kendiKpi) ? 'none' : '';   // kendi KPI kutusu olan sekmede genel şerit gizlenir; Birleşik'te KPI kutusu yok
+    $('#pmKpi').style.display = (p === 'karsilastirma' || p === 'birlesim' || p === 'ozelrapor' || kendiKpi) ? 'none' : '';   // kendi KPI kutusu olan sekmede genel şerit gizlenir; Birleşik ve Özel Rapor'da KPI kutusu yok
     if (p === 'tablo' || p === 'ozel') {   // Özel Kişiler: aynı tablo paneli, kapsam = ozel (p.ozel = true satırlar)
       const yeni = p === 'ozel' ? 'ozel' : 'bordro';   // şerit başlığı yok (sekme adıyla aynıydı); kapsam ve dönem sayaçta (#pmSayi)
       if (yeni !== kapsam) { kapsam = yeni; if (duzenleme) modDegis(false); else if (V) ciz(); }
     }
-    if (V && p === 'cari') cariCiz(); else if (V && p === 'tesvik') tesvikCiz(); else if (V && p === 'ozet') cizOzet(); else if (V && EK[p]) ekCiz(p); else if (V && p === 'ekcalisma') ekCalismaCiz(); else if (V && p === 'kesinti') kesintiCiz(); else if (V && p === 'muhasebe') { muhasebeCiz(); mhTazele(); } else if (V && p === 'cikis') cikisCiz(); else if (V && p === 'odeme') odemeCiz(); else if (V && p === 'zam') zamCiz(); else if (V && p === 'karsilastirma') zamKarsCiz();
+    if (V && p === 'cari') cariCiz(); else if (V && p === 'ozelrapor') ozelRaporCiz(); else if (V && p === 'tesvik') tesvikCiz(); else if (V && p === 'ozet') cizOzet(); else if (V && EK[p]) ekCiz(p); else if (V && p === 'ekcalisma') ekCalismaCiz(); else if (V && p === 'kesinti') kesintiCiz(); else if (V && p === 'muhasebe') { muhasebeCiz(); mhTazele(); } else if (V && p === 'cikis') cikisCiz(); else if (V && p === 'odeme') odemeCiz(); else if (V && p === 'zam') zamCiz(); else if (V && p === 'karsilastirma') zamKarsCiz();
     if (V) sabitleHepsi();
-    try { const u = new URL(location.href); if (p === 'tablo') u.searchParams.delete('sekme'); else u.searchParams.set('sekme', p); history.replaceState(null, '', u); } catch (e) { /* çerçeve içinde yoksay */ }
+    try { const u = new URL(location.href); if (p === VARSAYILAN_SEKME) u.searchParams.delete('sekme'); else u.searchParams.set('sekme', p); history.replaceState(null, '', u); } catch (e) { /* çerçeve içinde yoksay */ }
   }
 
   // ---- bordro hesabı (sunucudaki PmBordro.Hesapla ile aynı kural ve aynı parametreler). R = bordrolu ücret, X = bordro dışı ödeme.
@@ -161,7 +162,7 @@
     // 8) ödeme özeti ve maliyet (R bordrolu, X bordro dışı)
     // banka = anlaşılan net R-Net + R ek ödemeler − kesintiler (brütten türetilmez)
     p.rNet2 = rNetE; p.kesintilerToplami = n('avans') + n('icra') + n('borc') + n('ozelSigortaKesintisi') + n('sendikaKatkisi') + n('bes') + n('mazotKesintisi') + n('ihbarKesintisi'); p.digerEkR = R(ekler + n('digerEkOdemelerR')); p.kalanNetBanka = R(rNetE + p.digerEkR - p.kesintilerToplami);
-    p.toplamEkCalismaX = n('fazlaMesaiX'); p.toplamSosyalX = n('yemekX') + n('yolX'); p.toplamPrimX = n('primX');   // X tarafı grup toplamları: brüt ve vergiye girmez
+    p.toplamEkCalismaX = n('fazlaMesaiX'); p.toplamSosyalX = n('yemekX') + n('yolX') + n('kiraDestegiX'); p.toplamPrimX = n('primX');   // X tarafı grup toplamları: brüt ve vergiye girmez (Kira Desteği-X dahil, 6 Kas 2026)
     p.digerEkOdemelerX = p.toplamEkCalismaX + p.toplamSosyalX + p.toplamPrimX;
     p.netRBordro = p.kalanNetBanka; p.netXBordro = xNet + p.digerEkOdemelerX; p.kalanNetElden = R(p.netXBordro - n('kesintilerToplamiX'));
     p.odemeSirketiR = p.netRBordro > 0 ? V.odemeSirketi.r : ''; p.odemeSirketiX = p.kalanNetElden > 0 ? fiiliSirket(p) : '';   // ödeme şirketi otomatik: R Uras Power, X fiili görev yeri şirketi
@@ -194,8 +195,8 @@
   }
   /** SGK'sız üretim personeli → Personel Maliyet Tablosu satırı (Özet ve Birleşik ile aynı tanım): tamamı X tarafı; hak ediş + tatil kazancı, fazla mesai, yemek, yol ve diğer sosyal X ek ödemesi; genel maliyet = toplam hak ediş */
   const uretimAnaSatir = u => { const n = k => Number(u[k]) || 0, hak = n('hakEdis') + n('tatilKazanci'), mesai = n('fazlaMesaiKazanci'), sosyal = n('toplamSosyal');
-    return { kaynak: 'Üretim', uSira: u.sira, sira: -u.sira, adSoyad: u.adSoyad, unvan: 'Gündelikçi', gorev: u.gorev, not: u.not, sgkIsvereni: u.fiiliSirket, odemeSirketiR: '', odemeSirketiX: u.fiiliSirket, durum: 'Aktif', fiiliGorevYeri: u.fiiliGorevYeri, catiDepartman: 'Üretim', bolum: 'Üretim', ozelDurum: 'Gündelikçi',
-      xNet: hak, xNet2: hak, toplamNet: hak, yolX: n('yol'), yemekX: n('yemek'), fazlaMesaiX: mesai, toplamEkCalismaX: mesai, toplamSosyalX: sosyal, digerEkOdemelerX: mesai + sosyal, kesintilerToplamiX: n('kesinti'), kalanNetElden: n('netOdenen'), netXBordro: hak + mesai + sosyal, araToplam: hak + mesai + sosyal, genelMaliyet: n('toplamMaliyet') }; };
+    return { kaynak: 'Üretim', uSira: u.sira, sira: -u.sira, adSoyad: u.adSoyad, unvan: 'Gündelikçi', gorev: u.gorev, not: u.not, sgkIsvereni: u.fiiliSirket, odemeSirketiR: '', odemeSirketiX: u.fiiliSirket, durum: 'Aktif', fiiliGorevYeri: u.fiiliGorevYeri, catiDepartman: 'Üretim', bolum: 'Üretim', ozelDurum: 'Gündelikçi', departmanKodu: 'D30', departmanAciklamasi: 'Üretim Departmanı',   // gündelikçi kimlik düzeni (6 Kas 2026): 23 kişide aynı
+      xNet: hak, xNet2: hak, toplamNet: hak, yolX: n('yolX'), yemekX: n('yemekX'), kiraDestegiX: n('kiraX'), fazlaMesaiX: mesai, toplamEkCalismaX: mesai, toplamSosyalX: sosyal, digerEkOdemelerX: mesai + sosyal, kesintilerToplamiX: n('kesinti'), kalanNetElden: n('netOdenen'), netXBordro: hak + mesai + sosyal, araToplam: hak + mesai + sosyal, genelMaliyet: n('toplamMaliyet') }; };   // yemek / yol / kira üretim satırında R üstte / X altta gelir; SGK'sızda tamamı X alanında (9 Kas 2026)
   /** SGK'sız üretim personeli kayıtları (ana filtrelerle aynı yüklem; SGK'lı gündelikçi bordroda sayılır) */
   const uretimKayit = durumYoksay => { const uygun = filtreYuklem(durumYoksay); return (V.uretim || []).filter(u => !u.sgkLi && uygun(uretimAnaSatir(u))); };
   /** tüm kişiler: bordrolu, Özel Kişiler ve SGK'sız Üretim Personeli; gizleme anahtarı açık grup çıkar (Personel Maliyet Tablosu, Zam Senaryosu) */
@@ -309,7 +310,7 @@
     dipToplam(); sifirGizle($('#pmTablo'), SUTUN, L, $('#pmSifirGizle').checked, V.sutunlar);
     $$('.pm-ana-gizle').forEach(e => { e.style.display = kapsam === 'ozel' ? 'none' : ''; });   // Özel Kişiler sekmesinde ana tablo anahtarları yok
     if (duzenleme) $$('#pmTablo .gir').forEach(i => i.addEventListener('input', () => { const s = +i.dataset.sira, a = i.dataset.alan; taslak[s] = taslak[s] || {}; taslak[s][a] = GIRIS.includes(a) ? (Number(i.value) || 0) : i.value; satirGuncelle(s, GIRIS.includes(a) || a === 'ozelDurum' || a === 'fiiliGorevYeri'); }));
-    if (aktifSekme === 'ozet') cizOzet(); else if (EK[aktifSekme]) ekCiz(aktifSekme); else if (aktifSekme === 'ekcalisma') ekCalismaCiz(); else if (aktifSekme === 'kesinti') kesintiCiz(); else if (aktifSekme === 'muhasebe') muhasebeCiz(); else if (aktifSekme === 'cikis') cikisCiz(); else if (aktifSekme === 'odeme') odemeCiz(); else if (aktifSekme === 'zam') zamCiz(); else if (aktifSekme === 'karsilastirma') zamKarsCiz();
+    if (aktifSekme === 'ozet') cizOzet(); else if (aktifSekme === 'ozelrapor') ozelRaporCiz(); else if (EK[aktifSekme]) ekCiz(aktifSekme); else if (aktifSekme === 'ekcalisma') ekCalismaCiz(); else if (aktifSekme === 'kesinti') kesintiCiz(); else if (aktifSekme === 'muhasebe') muhasebeCiz(); else if (aktifSekme === 'cikis') cikisCiz(); else if (aktifSekme === 'odeme') odemeCiz(); else if (aktifSekme === 'zam') zamCiz(); else if (aktifSekme === 'karsilastirma') zamKarsCiz();
     sabitleHepsi();
   }
   /** Sola sabit sütunlar: Sıra'dan Adı-Soyadı'na kadar olan hücreler yatay kaydırmada yerinde kalır (başlık satırları zaten dikeyde yapışkan). Her çizimden sonra çağrılır; genişlikler ölçülüp left değerleri yazılır. */
@@ -381,7 +382,7 @@
   function grupla(l, anahtar) { const m = {}; l.forEach(p => { const k = kirilimDeger(p, anahtar); const o = m[k] || (m[k] = { ad: k, n: 0 }); o.n++; KALEM.forEach(([f, , x]) => { o[f] = (o[f] || 0) + (Number(p[f]) || 0); if (x) o[x] = (o[x] || 0) + (Number(p[x]) || 0); }); }); return m; }
   /** özet raporu kapsamının parçaları (ana filtrelerle): bordro = Personel Maliyet Tablosu, ozel = Özel Kişiler, uretim = Üretim Personeli'nin SGK'sız gündelikçileri (tamamı elden X), sgkli = Üretim'deki SGK'lı gündelikçiler (bilgi: bordro satırında sayılır, ayrıca eklenmez) */
   function ozetParcalar() {
-    const uretim = gizle.uretim ? [] : uretimKayit(false).map(u => ({ kaynak: 'Üretim', sira: -u.sira, adSoyad: u.adSoyad, unvan: 'Gündelikçi', gorev: u.gorev, sgkIsvereni: u.fiiliSirket, fiiliGorevYeri: u.fiiliGorevYeri, catiDepartman: 'Üretim', bolum: 'Üretim', ozelDurum: 'Gündelikçi', kidemYil: null,
+    const uretim = gizle.uretim ? [] : uretimKayit(false).map(u => ({ kaynak: 'Üretim', sira: -u.sira, adSoyad: u.adSoyad, unvan: 'Gündelikçi', gorev: u.gorev, sgkIsvereni: u.fiiliSirket, fiiliGorevYeri: u.fiiliGorevYeri, catiDepartman: 'Üretim', bolum: 'Üretim', ozelDurum: 'Gündelikçi', departmanKodu: 'D30', departmanAciklamasi: 'Üretim Departmanı', kidemYil: null,
       xNet: (Number(u.hakEdis) || 0) + (Number(u.tatilKazanci) || 0), rNet: 0, toplamNet: (Number(u.hakEdis) || 0) + (Number(u.tatilKazanci) || 0), toplamEkCalisma: 0, toplamEkCalismaX: Number(u.fazlaMesaiKazanci) || 0, toplamSosyal: 0, toplamSosyalX: Number(u.toplamSosyal) || 0, toplamPrim: 0, toplamPrimX: 0, toplamYanHaklar: 0, toplamYasal: 0, toplamBrutKazanc: 0, sgkIsciToplam: 0, gvTutari: 0, dvTutari: 0, sgkIsverenToplam: 0, toplamBrutMasraflar: 0, digerEkOdemelerX: 0, digerEkOdemelerR: 0, kesintilerToplami: 0, kesintilerToplamiX: Number(u.kesinti) || 0, genelMaliyet: Number(u.toplamMaliyet) || 0 }));
     const bordro = liste(false, false).map(etkin).map(p => ({ ...p, kaynak: 'Bordro' })), ozel = gizle.ozel ? [] : liste(false, true).map(etkin).map(p => ({ ...p, kaynak: 'Özel' }));
     const sgkli = (V.uretim || []).filter(u => u.sgkLi).map(u => ({ u, p: bordro.find(p => p.sira === u.personelSira) })).filter(x => x.p);   // filtreye giren bordro satırıyla eşleşenler
@@ -398,7 +399,7 @@
     $('#pmMutabakat tbody').innerHTML = satir('tablo', 'Personel Maliyet Tablosu', P.bordro, `Bordrolu personel · sekmenin dip toplamıyla aynı${sg.length ? ` · ${sg.length} SGK'lı gündelikçi bu satırlarda (R mahsup; X-Net 0)` : ''}`)
       + satir('ozel', 'Özel Kişiler', P.ozel, gizle.ozel ? 'Gizli (Özel Kişiler Gizle açık) · toplama girmez' : 'Özel Kişiler sekmesinin dip toplamıyla aynı · Personel Maliyet Tablosu\'nda da yer alır')
       + satir('uretim', 'Üretim Personeli (SGK\'sız)', P.uretim, gizle.uretim ? 'Gizli (Üretim Personeli Gizle açık) · toplama girmez' : 'Üretim Personeli sekmesinde "SGK\'sız (tamamı X)" satırları · R-Net yok, hak ediş elden X')
-      + (sg.length ? satir('uretim', 'SGK\'lı Gündelikçi (Bilgi)', sg, `Üretim sekmesinde hak ediş ${kisa(hakedis)} − bordro Net-R mahsup ${kisa(mahsup)} = elden X ${kisa(elden)} → Personel Maliyet Tablosu satırının X-Net'ine yazıldı; yukarıda sayıldı, ayrıca eklenmez`, 'bilgi') : '')
+      + (sg.length ? satir('uretim', 'SGK\'lı Gündelikçi (Bilgi)', sg, `Üretim sekmesinde hak ediş ${kisa(hakedis)} − bordro Net-R mahsup ${kisa(mahsup)} = elden X ${kisa(elden)} (bilgi; X-Net kaynakla birebir 0, yemek / yol / kira bordro satırında tek kaynak); yukarıda sayıldı, ayrıca eklenmez`, 'bilgi') : '')
       + `<tr class="toplam"><td>Toplam (Kırılım)</td><td class="s">${LO.length}</td><td class="s">${kisa(top(LO, 'xNet'))}</td><td class="s">${kisa(top(LO, 'rNet'))}</td><td class="s">${kisa(top(LO, 'toplamNet'))}</td><td class="s">${kisa(top(LO, 'genelMaliyet'))}</td><td>${fark ? '<span class="pm-rz hata">Fark Var</span>' : '<span class="pm-rz ok">Mutabık</span>'} ${mukerrer.length ? `<span class="pm-rz hata">Mükerrer: ${esc([...new Set(mukerrer)].join(', '))}</span>` : '<span class="pm-rz gri">Mükerrer Yok</span>'} <small class="text-muted">${parca} = ${P.bordro.length} + ${P.ozel.length} + ${P.uretim.length}</small></td></tr>`;
   }
   function cizOzet() {
@@ -417,7 +418,7 @@
     $('#pmMatris thead').innerHTML = `<tr><th>SGK İşvereni</th>${catilar.map(c => `<th class="s">${esc(c)}</th>`).join('')}<th class="s">Toplam</th></tr>`;
     const h = l => l.length ? `<span class="n">${l.length}</span><small>${kisa(toplam(l, 'genelMaliyet'))}</small>` : '<span class="text-muted">—</span>';
     $('#pmMatris tbody').innerHTML = sgkler.map(s => { const ls = LO.filter(p => p.sgkIsvereni === s); return `<tr><td data-sgk="${esc(s)}"><b>${esc(s)}</b></td>${catilar.map(c => `<td class="s" data-sgk="${esc(s)}" data-cati="${esc(c)}">${h(ls.filter(p => p.catiDepartman === c))}</td>`).join('')}<td class="s" data-sgk="${esc(s)}">${h(ls)}</td></tr>`; }).join('') + `<tr class="toplam"><td>Toplam</td>${catilar.map(c => `<td class="s" data-cati="${esc(c)}">${h(LO.filter(p => p.catiDepartman === c))}</td>`).join('')}<td class="s">${h(LO)}</td></tr>`;
-    const kal = [['R-Net Ücret (Bordro)', toplam(LO, 'rNet')], ['X-Net Ücret (Bordro Dışı)', toplam(LO, 'xNet')], ['Ek Ödemeler Toplam-R (Yol, Yemek, Mesai, Prim + diğer)', toplam(LO, 'digerEkR')], ['Ek Ödemeler Toplam-X (Yol, Yemek, Mesai, Prim)', toplam(LO, 'digerEkOdemelerX')], ['Vergi ve SGK İşçi Payları', toplam(LO, 'toplamBrutMasraflar') - toplam(LO, 'kesintilerToplami')], ['SGK İşveren Payı', toplam(LO, 'sgkIsverenToplam')]];
+    const kal = [['R-Net Ücret (Bordro)', toplam(LO, 'rNet')], ['X-Net Ücret (Bordro Dışı)', toplam(LO, 'xNet')], ['Ek Ödemeler Toplam-R (Yol, Yemek, Mesai, Prim + diğer)', toplam(LO, 'digerEkR')], ['Ek Ödemeler Toplam-X (Yol, Yemek, Kira, Mesai, Prim)', toplam(LO, 'digerEkOdemelerX')], ['Vergi ve SGK İşçi Payları', toplam(LO, 'toplamBrutMasraflar') - toplam(LO, 'kesintilerToplami')], ['SGK İşveren Payı', toplam(LO, 'sgkIsverenToplam')]];
             const maks = Math.max(1, ...kal.map(x => x[1]));
     $('#pmKalemler').innerHTML = kal.map(([ad, v]) => `<div class="pm-bar"><span>${esc(ad)}</span><span class="b"><i style="width:${v ? Math.max(1.5, v / maks * 100) : 0}%"></i></span><span class="v">${v ? kisa(v) : '—'} <small>${v ? '%' + pct(v, genel) : ''}</small></span></div>`).join('');
     const dag = (id, anahtar, sira) => { const g = grupla(LO, anahtar); const ks = sira ? sira.filter(x => g[x]) : Object.keys(g).sort((a, b) => g[b].genelMaliyet - g[a].genelMaliyet); const r = o => `<tr data-anahtar="${anahtar}" data-deger="${esc(o.ad)}"><td>${esc(o.ad)}</td><td class="s">${o.n}</td><td class="s">${kisa(o.genelMaliyet)}</td><td class="s">${kisa(o.n ? o.genelMaliyet / o.n : 0)}</td></tr>`;
@@ -447,7 +448,7 @@
   // ---- tablo düzenleme / toplu kayıt
   function modDegis(ac) { duzenleme = ac; if (!ac) taslak = {}; $('#pmDuzenle').style.display = ac ? 'none' : ''; $('#pmKaydet').style.display = ac ? '' : 'none'; $('#pmVazgec').style.display = ac ? '' : 'none'; ciz(); }
   async function kaydet() {
-    const satirlar = Object.keys(taslak).map(s => satirVeri({ ...bul(+s), ...taslak[s] }));
+    const satirlar = Object.keys(taslak).map(s => ({ ...satirVeri({ ...bul(+s), ...taslak[s] }), degisen: Object.keys(taslak[s]) }));   // degisen: kalıcı günlük yalnız bu alanları geri yazar (6 Kas 2026)
     if (!satirlar.length) { mesaj('info', 'Değişiklik yok.'); return; }
     const j = await post('/PersonelMaliyet/Kaydet', { satirlar, donem: V.donem });
     if (!j.success) { mesaj('danger', esc(j.message)); return; }
@@ -534,9 +535,21 @@
   /** kart özeti: tutarlar değişmediyse kaynak tablo değerleriyle (tablodaki satırla aynı), değiştiyse modelle */
   /** kart özeti: kartta kaynak brüt değiştirildiyse o değer; değişmediyse ve tutarlar aynıysa kayıttaki kaynak değerler (tablodaki satırla aynı), tutar değiştiyse model */
   function kartOzet() { const k = kartSira ? bul(kartSira) : null, d = kartOku(), p = hesapla({ ...(k || {}), ...d, ...(k && !kartDegisti && d.brutKaynak === undefined ? { brutKaynak: k.brutKaynak, isverenKaynak: k.isverenKaynak } : {}) }); $('#pmKartOzet').innerHTML = [['Toplam Net', p.toplamNet], ['Toplam Brüt Kazanç', p.toplamBrutKazanc], ['Vergi ve İşçi Payları', p.toplamBrutMasraflar], ['SGK İşveren', p.sgkIsverenToplam], ['Genel Maliyet', p.genelMaliyet]].map(([l, v], i) => `<div class="${i === 4 ? 'genel' : ''}"><span>${l}</span><b>${kisa(v)}</b></div>`).join(''); }
+  /** kalıcı günlük için karttaki değişen alanlar (6 Kas 2026): sayılar yaklaşık, seçimler mantıksal, metinler kırpılmış karşılaştırılır; yalnız değiştiğinde gönderilen kaynak alanları daima dahil */
+  function degisenAlanlar(d, p) {
+    if (!p) return undefined;
+    return Object.keys(d).filter(k => {
+      if (k === 'sira' || k === 'donem' || k === 'degisen') return false;
+      if (['sgkDisi', 'brutKaynak', 'isverenKaynak', 'hazineKaynak'].includes(k)) return true;
+      const a = d[k], b = p[k];
+      if (typeof a === 'boolean') return a !== !!b;
+      if (typeof a === 'number') return Math.abs(a - (Number(b) || 0)) > 0.0001;
+      return String(a ?? '').trim() !== String(b ?? '').trim();
+    });
+  }
   async function kartKaydet() {
     const d = kartOku(), sira = kartSira, eskiDurum = sira ? (bul(sira).durum || 'Aktif') : null;
-    d.donem = V.donem;
+    d.donem = V.donem; if (sira) d.degisen = degisenAlanlar(d, bul(sira));
     const j = sira ? await post('/PersonelMaliyet/Kaydet', { satirlar: [d], donem: V.donem }) : await post('/PersonelMaliyet/Ekle', d);
     if (!j.success) {
       const h = $('#pmKartHata'); h.textContent = j.message; h.style.display = 'block'; $('#pmKart').scrollTo({ top: 0, behavior: 'smooth' });   // hata yapışkan başlığın altında; kaydırılmış çekmecede görünür kalsın
@@ -553,7 +566,7 @@
   // ---- excel (tablo): ekrandaki tablo göründüğü gibi (grup başlıkları, R üstte / X altta, gizli sütunlar hariç, dip toplam, KPI, açıklama)
   function excel(bicim = 'xlsx') {
     const ozel = kapsam === 'ozel', ad = ozel ? 'Özel Kişiler' : 'Personel Maliyet Tablosu';
-    tabloExcel(ozel ? 'ozel_kisiler' : 'personel_maliyet_tablosu', [{ tablo: '#pmTablo', ad, baslik: `Personel Maliyet Raporu · ${ad} · ${V.donemAd || ''}`, altBaslik: $('#pmSayi').textContent.trim(), kpi: '#pmKpi', not: '.na-panel[data-p="tablo"] .pm-not' }], bicim);
+    tabloExcel(ozel ? 'ozel_kisiler' : 'personel_maliyet_tablosu', [{ tablo: '#pmTablo', ad, baslik: `Konsolide İK Paneli · ${ad} · ${V.donemAd || ''}`, altBaslik: $('#pmSayi').textContent.trim(), kpi: '#pmKpi', not: '.na-panel[data-p="tablo"] .pm-not' }], bicim);
   }
 
   // ============================================================
@@ -565,13 +578,13 @@
     { ad: 'SGK İşvereni / Ödeyen', anahtar: 'isveren', tip: 'metin', gosterme: true }, { ad: 'Görev Yeri', anahtar: 'gorevYeri', tip: 'metin' },
     { ad: 'Net Toplam', anahtar: 'netToplam', tip: 'hesap' }, { ad: 'R-Net', anahtar: 'rNet', tip: 'sayi' }, { ad: 'X-Net', anahtar: 'xNet', tip: 'sayi' },
     // R üstte (bordrolu) / X altta (bordro dışı): ana tablodaki Yol, Yemek, Fazla Mesai, Prim ve Kesintiler Toplamı R / X değerleriyle birebir; toplanmaz (toplanırsa rakamlar yanıltır)
-    { ad: 'Yol', anahtar: 'yol', tip: 'rx' }, { ad: 'Yemek', anahtar: 'yemek', tip: 'rx' }, { ad: 'Mesai', anahtar: 'mesai', tip: 'rx' }, { ad: 'Prim', anahtar: 'prim', tip: 'rx' }, { ad: 'Ek Ödemeler Toplam', anahtar: 'digerTop', tip: 'rx', otoGizle: true },   // otoGizle: tamamı sıfırsa sütun gelmez; dolu olduğu dönemde görünür
+    { ad: 'Yol', anahtar: 'yol', tip: 'rx' }, { ad: 'Yemek', anahtar: 'yemek', tip: 'rx' }, { ad: 'Kira', anahtar: 'kira', tip: 'rx' }, { ad: 'Mesai', anahtar: 'mesai', tip: 'rx' }, { ad: 'Prim', anahtar: 'prim', tip: 'rx' }, { ad: 'Ek Ödemeler Toplam', anahtar: 'digerTop', tip: 'rx', otoGizle: true },   // otoGizle: tamamı sıfırsa sütun gelmez; dolu olduğu dönemde görünür
     { ad: 'Kesintiler', anahtar: 'kesinti', tip: 'rx' }, { ad: 'Net Ödenen R', anahtar: 'netOdenenR', tip: 'hesap' }, { ad: 'Net Ödenen X', anahtar: 'netOdenenX', tip: 'hesap' }, { ad: 'Net Ödenen Toplam', anahtar: 'netOdenen', tip: 'hesap' }, { ad: 'Toplam Brüt Masraflar', anahtar: 'toplamBrutMasraflar', tip: 'hesap' }, { ad: 'Toplam İşveren', anahtar: 'toplamIsveren', tip: 'hesap' }, { ad: 'Genel Maliyet', anahtar: 'genelMaliyet', tip: 'genel' }, { ad: 'Not', anahtar: 'not', tip: 'not' }
   ];
   const EK = {
-    uretim: { tablo: '#pmUretimTablo', sayi: '#pmUretimSayi', sifir: '#pmUretimSifir', ara: '#pmUretimAra', birim: 'Personel', sutun: () => V.ekSutunlar.uretim, liste: () => { const y = $('#pmUretimYer').value; return V.uretim.filter(p => !y || p.fiiliGorevYeri === y); } },
+    uretim: { tablo: '#pmUretimTablo', sayi: '#pmUretimSayi', sifir: '#pmUretimSifir', ara: '#pmUretimAra', birim: 'Personel', sutun: () => V.ekSutunlar.uretim, liste: () => { const y = $('#pmUretimYer').value, sgkli = $('#pmUretimSgkli').checked, sgksiz = $('#pmUretimSgksiz').checked; return V.uretim.filter(p => (!y || p.fiiliGorevYeri === y) && (p.sgkLi ? sgkli : sgksiz)); } },   // SGK'lı / SGK'sız anahtarları (6 Kas 2026): ikisi de açıkken tümü
     prim: { tablo: '#pmPrimTablo', sayi: '#pmPrimSayi', ara: '#pmPrimAra', birim: 'Prim Satırı', sutun: () => V.ekSutunlar.prim, liste: () => { const d = $('#pmPrimDonem').value; return V.primler.filter(p => (!d || d === 'yil' || p.donem === d) && !gizliKaynak(kayitKaynak(0, p.adSoyad))); } },
-    birlesim: { tablo: '#pmBirlesimTablo', sayi: '#pmBirlesimSayi', sifir: '#pmBirlesimSifir', ara: '#pmBirlesimAra', birim: 'Kişi', sutun: () => BIRLESIM_SUTUN, liste: birlesimListe },
+    birlesim: { tablo: '#pmBirlesimTablo', sayi: '#pmBirlesimSayi', sifir: '#pmBirlesimSifir', ara: '#pmBirlesimAra', birim: 'Kişi', sutun: () => BIRLESIM_SUTUN, liste: () => birlesimListe(undefined, $('#pmBirlesimTek').checked) },   // Çoklu Satırları Birleştir anahtarı yalnız burada
     cari: { tablo: '#pmCariTablo', sayi: '#pmCariSayi', ara: '#pmAra', birim: 'Kişi', sutun: () => CARI_SUTUN, liste: cariListe }   // Personel Cari Kartı: genel arama şeritte (GENEL_ARAMALI)
   };
   const ekSayisal = s => ['sayi', 'hesap', 'genel', 'gun', 'rx'].includes(s.tip);
@@ -580,7 +593,7 @@
     const k = s.anahtar, v = p[k], dk = `data-k="${k}"`;
     switch (s.tip) {
       case 'sira': return `<td class="kucuk" ${dk}>${satirNo}</td>`;   // listedeki satır numarası (dinamik)
-      case 'ad': return `<td class="ad" ${dk}>${adOz(v, p.sira0 || p.personelSira)}</td>`;
+      case 'ad': return `<td class="ad" ${dk}>${adOz(v, p.sira0 || p.personelSira)}${p.satirSayisi > 1 ? ` <small class="text-muted" title="${esc(p.satirlar)}">${p.satirSayisi} satır</small>` : ''}</td>`;   // birleştirilmiş kişi: satır sayısı (işverenler ipucunda)
       case 'kaynak': return `<td class="kaynak k-${v === 'Üretim' ? 'uretim' : v === 'Özel' ? 'ozel' : 'bordro'}" ${dk}>${esc(v)}</td>`;
       case 'gun': return `<td class="s" ${dk}>${k === 'oran' ? (Number(v) ? '% ' + ondalik(v, 2) : '<span class="text-muted">—</span>') : k === 'kur' ? (Number(v) ? ondalik(v, 4) : '<span class="text-muted">—</span>') : k === 'dovizTutar' ? (Number(v) ? ondalik(v, 2) + ' ' + esc(p.doviz || '') : '<span class="text-muted">—</span>') : gunFmt(v)}</td>`;
       case 'sayi': return `<td class="s" ${dk}>${hucre(v)}</td>`;
@@ -602,7 +615,9 @@
     const top = k => toplam(L2, k), sayilmaz = ['oran', 'kur', 'dovizTutar', 'saatUcreti', 'gunlukSaat', 'gunlukUcret'];
     $('tfoot tr', t).innerHTML = S.map(s => { const dk = `data-k="${s.anahtar}"`; if (s.tip === 'sira') return `<td ${dk}>Toplam</td>`; if (s.tip === 'ad') return `<td ${dk}>${L2.length} ${E.birim}</td>`; if (s.tip === 'gun') return `<td class="s" ${dk}>${sayilmaz.includes(s.anahtar) ? '' : gunFmt(top(s.anahtar))}</td>`; if (s.tip === 'rx') return `<td class="s rx" ${dk}>${rxHucre(top(s.anahtar), top(s.anahtar + 'X'), kisa, true)}</td>`; if (s.tip === 'sayi' || s.tip === 'hesap') return `<td class="s" ${dk}>${sayilmaz.includes(s.anahtar) ? '' : kisa(top(s.anahtar))}</td>`; if (s.tip === 'genel') return `<td class="s genel" ${dk}>${kisa(top(s.anahtar))}</td>`; return `<td ${dk}></td>`; }).join('');
     const gizli = E.sifir ? sifirGizle(t, S, L2, $(E.sifir).checked) : 0;
-    $(E.sayi).textContent = `${L2.length} ${E.birim.toLocaleLowerCase('tr-TR')} · aylık tutarlar ₺${gizli ? ` · ${gizli} sıfır sütun gizli` : ''}`;
+    const tekBilgi = ad === 'birlesim' && $('#pmBirlesimTek').checked ? (() => { const b = L2.filter(p => p.satirSayisi > 1); return b.length ? ` · ${b.length} kişinin ${b.reduce((t, p) => t + p.satirSayisi, 0)} satırı birleştirildi` : ' · çoklu satırı olan kişi yok'; })() : '';
+    const sgkBilgi = ad === 'uretim' ? ` · ${L2.filter(p => p.sgkLi).length} SGK'lı · ${L2.filter(p => !p.sgkLi).length} SGK'sız` : '';
+    $(E.sayi).textContent = `${L2.length} ${E.birim.toLocaleLowerCase('tr-TR')} · aylık tutarlar ₺${gizli ? ` · ${gizli} sıfır sütun gizli` : ''}${tekBilgi}${sgkBilgi}`;
     if (ad === 'prim') primUyum(L2);
     E.son = { S, L: L2 }; sabitleHepsi();
   }
@@ -610,9 +625,9 @@
   function ekExcel(ad, bicim = 'xlsx') {
     const E = EK[ad]; if (!E.son) ekCiz(ad);
     const sayfa = { uretim: 'Üretim Personeli', prim: 'Prim Satırları', birlesim: 'Birleşik Tablo', cari: 'Personel Cari Kartı' }[ad], bas = panelBaslik(ad) || sayfa;
-    const sayfalar = [{ tablo: E.tablo, ad: sayfa, baslik: `Personel Maliyet Raporu · ${bas}`, altBaslik: $(E.sayi).textContent.trim(), not: `.na-panel[data-p="${ad}"] .pm-not` }];
-    if (ad === 'prim') sayfalar.push({ tablo: '#pmPrimUyum', ad: 'Prim Uyumu', baslik: `Personel Maliyet Raporu · ${bas} · Kişi Bazında Dönem Toplamı ↔ Personel Maliyet Tablosu` });
-    if (ad === 'cari') sayfalar.push({ tablo: '#pmParamTablo', ad: 'Genel Parametreler', baslik: 'Personel Maliyet Raporu · Genel Bordro Parametreleri' });
+    const sayfalar = [{ tablo: E.tablo, ad: sayfa, baslik: `Konsolide İK Paneli · ${bas}`, altBaslik: $(E.sayi).textContent.trim(), not: `.na-panel[data-p="${ad}"] .pm-not` }];
+    if (ad === 'prim') sayfalar.push({ tablo: '#pmPrimUyum', ad: 'Prim Uyumu', baslik: `Konsolide İK Paneli · ${bas} · Kişi Bazında Dönem Toplamı ↔ Personel Maliyet Tablosu` });
+    if (ad === 'cari') sayfalar.push({ tablo: '#pmParamTablo', ad: 'Genel Parametreler', baslik: 'Konsolide İK Paneli · Genel Bordro Parametreleri' });
     tabloExcel('personel_maliyet_' + ad, sayfalar, bicim);
   }
   /** prim: dönem listesi (en yeni önce) + yıllık */
@@ -632,22 +647,38 @@
       + (rows.length ? `<tr class="toplam"><td>Toplam · ${rows.length} kişi</td><td class="s rx">${rxHucre(rows.reduce((s, o) => s + o.r, 0), rows.reduce((s, o) => s + o.x, 0), kisa, true)}</td><td class="s rx">${bordroGoster ? rxHucre(rows.reduce((s, o) => s + tablo(o.ad).r, 0), rows.reduce((s, o) => s + tablo(o.ad).x, 0), kisa, true) : ''}</td><td></td></tr>` : '<tr><td colspan="4" class="na-bos">Kayıt yok.</td></tr>');
   }
   /** birleşim: Bordro + Özel (aynı bordro modeli; ana sekme filtreleriyle) + Üretim; prim kişinin satırında. Toplam Brüt Masraflar burada vergi + SGK işçi (kesintiler ayrı sütun) */
-  /** birleşik satır: Yol / Yemek / Mesai / Prim / Kesintiler R (anahtar) ve X (anahtar + 'X') ayrı — ana tablodaki R / X değerleriyle birebir, toplanmaz */
+  /** birleşik satır: Yol / Yemek / Kira / Mesai / Prim / Kesintiler R (anahtar) ve X (anahtar + 'X') ayrı — ana tablodaki R / X değerleriyle birebir, toplanmaz. Kira: R = bordrodaki Kira Desteği, X = bordro dışı kira desteği (kiraDestegiX; dövizli destek bordro kuruyla ₺) */
   const bordroSatir = (p, kaynak) => { const n = k => Number(p[k]) || 0; return { kaynak, adSoyad: p.adSoyad, gorev: p.gorev, catiDepartman: p.catiDepartman, isveren: p.sgkIsvereni, gorevYeri: p.fiiliGorevYeri, kidemYil: p.kidemYil, brut: n('toplamBrutKazanc'), netToplam: n('rNet') + n('xNet'), rNet: p.rNet, xNet: p.xNet,
-    yol: n('yol'), yolX: n('yolX'), yemek: n('yemek'), yemekX: n('yemekX'), mesai: n('toplamEkCalisma'), mesaiX: n('toplamEkCalismaX'), prim: n('toplamPrim'), primX: n('toplamPrimX'), digerTop: n('digerEkR'), digerTopX: n('digerEkOdemelerX'),
+    yol: n('yol'), yolX: n('yolX'), yemek: n('yemek'), yemekX: n('yemekX'), kira: n('kiraDestegi'), kiraX: n('kiraDestegiX'), mesai: n('toplamEkCalisma'), mesaiX: n('toplamEkCalismaX'), prim: n('toplamPrim'), primX: n('toplamPrimX'), digerTop: n('digerEkR'), digerTopX: n('digerEkOdemelerX'),
     diger: n('toplamSosyal') - n('yemek') - n('yol') + n('toplamYanHaklar') + n('toplamYasal') + n('digerEkOdemelerR'),
     kesinti: n('kesintilerToplami'), kesintiX: n('kesintilerToplamiX'), netOdenen: n('bankaOdeme') + n('eldenOdeme'), netOdenenR: n('bankaOdeme'), netOdenenX: n('eldenOdeme'), araToplam: n('araToplam'), brutTam: n('toplamBrutMasraflar'),
     toplamBrutMasraflar: n('toplamBrutMasraflar') - n('kesintilerToplami'), toplamIsveren: p.toplamIsveren, genelMaliyet: p.genelMaliyet, not: p.not, sira0: p.sira }; };
-  function birlesimListe(kaynakSecim) {
+  function birlesimListe(kaynakSecim, tekSatir) {
     const kaynak = kaynakSecim !== undefined ? kaynakSecim : $('#pmBirlesimKaynak').value, rows = [];
     if (!kaynak || kaynak === 'Bordro') liste(false, false).map(etkin).forEach(p => rows.push(bordroSatir(p, 'Bordro')));
     if ((!kaynak || kaynak === 'Özel') && !gizle.ozel) liste(false, true).map(etkin).forEach(p => rows.push(bordroSatir(p, 'Özel')));
     // SGK'lı gündelikçiler zaten bordro satırında (R + elden X); birleşime yalnız SGK'sız gündelikçiler ayrı satır olarak girer
     // ana tablonun filtreleri ve gizleme anahtarları üretim satırlarına da aynen uygulanır
     if ((!kaynak || kaynak === 'Üretim') && !gizle.uretim) uretimKayit(false).forEach(p => rows.push({ kaynak: 'Üretim', uSira: p.sira, adSoyad: p.adSoyad, gorev: p.gorev, catiDepartman: 'Üretim', isveren: p.fiiliSirket, gorevYeri: p.fiiliGorevYeri, netToplam: (Number(p.hakEdis) || 0) + (Number(p.tatilKazanci) || 0), rNet: 0, xNet: (Number(p.hakEdis) || 0) + (Number(p.tatilKazanci) || 0),
-      yol: 0, yolX: p.yol, yemek: 0, yemekX: p.yemek, mesai: 0, mesaiX: p.fazlaMesaiKazanci, prim: 0, primX: 0, diger: p.digerSosyal, digerTop: 0, digerTopX: (Number(p.yol) || 0) + (Number(p.yemek) || 0) + (Number(p.fazlaMesaiKazanci) || 0) + (Number(p.digerSosyal) || 0), kesinti: 0, kesintiX: p.kesinti, netOdenen: p.netOdenen, netOdenenR: 0, netOdenenX: p.netOdenen, toplamBrutMasraflar: 0, brutTam: 0, araToplam: uretimAnaSatir(p).araToplam, toplamIsveren: 0, genelMaliyet: p.toplamMaliyet, not: p.not }));   // SGK'sız gündelikçi: tamamı X tarafı
-    rows.forEach((r, i) => r.sira = i + 1);
-    return rows;
+      yol: 0, yolX: Number(p.yolX) || 0, yemek: 0, yemekX: Number(p.yemekX) || 0, kira: 0, kiraX: Number(p.kiraX) || 0, mesai: 0, mesaiX: p.fazlaMesaiKazanci, prim: 0, primX: 0, diger: p.digerSosyal, digerTop: 0, digerTopX: (Number(p.yolX) || 0) + (Number(p.yemekX) || 0) + (Number(p.kiraX) || 0) + (Number(p.fazlaMesaiKazanci) || 0) + (Number(p.digerSosyal) || 0), kesinti: 0, kesintiX: p.kesinti, netOdenen: p.netOdenen, netOdenenR: 0, netOdenenX: p.netOdenen, toplamBrutMasraflar: 0, brutTam: 0, araToplam: uretimAnaSatir(p).araToplam, toplamIsveren: 0, genelMaliyet: p.toplamMaliyet, not: p.not }));   // SGK'sız gündelikçi: tamamı X tarafı
+    const sonuc = tekSatir ? birlesimTeklestir(rows) : rows;   // "Çoklu Satırları Birleştir" yalnız Birleşik Tablo'dan açık gelir; İşten Çıkış ve Ödeme Planı satır bazında kalır
+    sonuc.forEach((r, i) => r.sira = i + 1);
+    return sonuc;
+  }
+  /** Çoklu Satırları Birleştir (6 Kas 2026): aynı kaynaktaki aynı kişinin satırları (ör. Cüneyt Arda Ceylan, 4 SGK işvereni) tek satırda toplanır — tutarlar toplanır, işveren / görev yeri / görev / not ayrık değerlerle birleşir, kart ilk kaydı açar (sira0 ilk satırın) */
+  const BIRLESIM_TOPLANAN = ['brut', 'netToplam', 'rNet', 'xNet', 'yol', 'yolX', 'yemek', 'yemekX', 'kira', 'kiraX', 'mesai', 'mesaiX', 'prim', 'primX', 'digerTop', 'digerTopX', 'diger', 'kesinti', 'kesintiX', 'netOdenen', 'netOdenenR', 'netOdenenX', 'araToplam', 'brutTam', 'toplamBrutMasraflar', 'toplamIsveren', 'genelMaliyet'];
+  function birlesimTeklestir(rows) {
+    const anahtar = r => r.kaynak + '|' + (r.adSoyad || '').toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ').trim(), grup = new Map();
+    rows.forEach(r => { const k = anahtar(r); if (grup.has(k)) grup.get(k).push(r); else grup.set(k, [r]); });
+    return [...grup.values()].map(g => {
+      if (g.length === 1) return g[0];
+      const b = { ...g[0] }, ayrik = f => [...new Set(g.map(f).filter(Boolean))];
+      BIRLESIM_TOPLANAN.forEach(k => { b[k] = Math.round(g.reduce((s, r) => s + (Number(r[k]) || 0), 0) * 100) / 100; });
+      b.isveren = ayrik(r => r.isveren).join(' / '); b.gorevYeri = ayrik(r => r.gorevYeri).join(' / '); b.gorev = ayrik(r => r.gorev).join(' / '); b.not = ayrik(r => r.not).join(' · ');
+      b.kidemYil = g.map(r => r.kidemYil).find(v => v !== null && v !== undefined);
+      b.satirSayisi = g.length; b.satirlar = g.map(r => r.isveren || r.gorevYeri || '').join(', ');
+      return b;
+    });
   }
   function ekKur() {
     $('#pmUretimYer').innerHTML = '<option value="">Tüm Görev Yerleri</option>' + [...new Set(V.uretim.map(p => p.fiiliGorevYeri))].map(y => `<option value="${esc(y)}">${esc(y)}</option>`).join('');
@@ -952,19 +983,29 @@
     ], r, d => post('/PersonelMaliyet/PrimKaydet', { ...d, sira: r.sira, bordroDonem: V.donem }), sira ? () => post('/PersonelMaliyet/PrimSil', { id: sira, donem: V.donem }) : null,
       d => { const h = d.sabitTutar > 0 ? d.sabitTutar : d.baz * d.oran / 100; return `Hesaplanan prim: <b>${kisa(h)}</b> · ${d.donem ? esc(sonrakiAy(d.donem)) : '—'} bordrosundaki Prim-${esc(d.odeme)} tutarı prim satırlarının toplamından yeniden yazılır${d.odeme === 'R' ? ' (R primi brüte girer; kaynak tablo değerleri düşer, model yeniden hesaplar)' : ''}.`; });
   }
-  /** gündelikçi üretim personeli: günlük ücret × gün; SGK'lı ise bordro Net-R mahsup edilir, fark elden X olarak kişinin X-Net'ine yazılır */
+  /** gündelikçi üretim personeli: günlük ücret × gün; SGK'lı ise bordro Net-R mahsup edilir, fark elden X. TEK KAYNAK (9 Kas 2026): SGK'lı gündelikçide yemek / yol / kira bordro kaydının R + X toplamıdır —
+   *  formdan girilen toplam bordro kaydına yazılır (R resmi bordro, sabit; fazlası X; R'nin altı hata), fazla mesai bordro kaydından (Ek Çalışmalar / kişi kartı) gelir ve burada değiştirilmez */
+  const n0 = v => Number(v) || 0;
+  const bordroMesai = p => n0(p.fazlaMesai) + n0(p.fazlaMesaiX);
   function uretimDuzenle(sira) {
-    const u = sira ? (V.uretim || []).find(x => x.sira === sira) : { sira: 0, fiiliGorevYeri: '', adSoyad: '', gorev: 'Üretim Personeli', vardiya: 'Gündüz', personelSira: 0, gunlukUcret: 2200, calisilanGun: 26, gunlukSaat: 7.5, fazlaMesaiSaat: 0, tatilGun: 0, yemek: 0, yol: 0, digerSosyal: 0, kesinti: 0, rMahsup: 0, not: '' };
+    const u = sira ? (V.uretim || []).find(x => x.sira === sira) : { sira: 0, fiiliGorevYeri: '', adSoyad: '', gorev: 'Üretim Personeli', vardiya: 'Gündüz', personelSira: 0, gunlukUcret: 2200, calisilanGun: 26, gunlukSaat: 7.5, fazlaMesaiSaat: 0, tatilGun: 0, yemek: 0, yol: 0, kira: 0, digerSosyal: 0, kesinti: 0, rMahsup: 0, not: '' };
     if (!u) return;
     const bordrolu = [['0', 'SGK\'sız gündelikçi (tamamı elden X)']].concat(V.personel.filter(p => (p.durum || 'Aktif') === 'Aktif' && !p.ozel).sort((a, b) => a.adSoyad.localeCompare(b.adSoyad, 'tr')).map(p => [String(p.sira), `${p.adSoyad} · ${p.cariKodu} · Net-R ${kisa(p.netRBordro)}`]));
+    const p0 = u.personelSira > 0 ? bul(u.personelSira) : null;   // SGK'lı: etiketlerde bordro R kısmı (sabit)
+    const rEtiket = (ad, r) => p0 ? `${ad} ₺ (toplam · bordro R ${kisa(r)} sabit, fazlası X)` : `${ad} ₺`;
+    const top = k => n0(u[k]) + n0(u[k + 'X']);   // tabloda R üstte / X altta; formda toplam girilir (SGK'lıda sunucu R'yi sabit tutar, farkı X yazar; SGK'sızda tamamı X)
+    const veri = { ...u, yemek: top('yemek'), yol: top('yol'), kira: top('kira'), ...(p0 ? { fazlaMesaiBordro: `${kisa(bordroMesai(p0))} (R ${kisa(p0.fazlaMesai)} + X ${kisa(p0.fazlaMesaiX)})` } : {}) };
     duzenleKart(`<i class="fas fa-industry me-1"></i>${sira ? 'Gündelikçi · ' + esc(u.adSoyad) : 'Yeni Gündelikçi Üretim Personeli'}`, [
       { k: 'adSoyad', ad: 'Adı-Soyadı', tip: 'text', zorunlu: true }, { k: 'fiiliGorevYeri', ad: 'Fiili Görev Yeri', tip: 'text', zorunlu: true, liste: 'dlYer' }, { k: 'gorev', ad: 'Görev', tip: 'text' },
       { k: 'vardiya', ad: 'Vardiya', tip: 'select', secenekler: (V.ekSutunlar && V.ekSutunlar.vardiyalar) || ['Gündüz', 'Akşam', 'Gece'] }, { k: 'personelSira', ad: 'Bordrolu Personel (SGK\'lı · R Mahsup)', tip: 'select', secenekler: bordrolu, sinif: 'g2' },
       { k: 'gunlukUcret', ad: 'Günlük Ücret ₺', tip: 'number' }, { k: 'calisilanGun', ad: 'Çalışılan Gün', tip: 'number', adim: '0.5' }, { k: 'gunlukSaat', ad: 'Günlük Saat', tip: 'number', adim: '0.5' },
-      { k: 'fazlaMesaiSaat', ad: 'Fazla Mesai (Saat, ×1,5)', tip: 'number', adim: '0.5' }, { k: 'tatilGun', ad: 'Tatil (Gün, ×2)', tip: 'number', adim: '0.5' }, { k: 'kesinti', ad: 'Avans / Kesinti ₺', tip: 'number' },
-      { k: 'yemek', ad: 'Yemek ₺', tip: 'number' }, { k: 'yol', ad: 'Yol ₺', tip: 'number' }, { k: 'digerSosyal', ad: 'Diğer Sosyal Yardım ₺', tip: 'number' }, { k: 'not', ad: 'Not', tip: 'textarea' }
-    ], u, d => post('/PersonelMaliyet/UretimKaydet', { ...d, sira: u.sira, personelSira: +d.personelSira || 0, donem: V.donem }), sira ? () => post('/PersonelMaliyet/UretimSil', { id: sira, donem: V.donem }) : null,
-      d => { const su = d.gunlukSaat > 0 ? d.gunlukUcret / d.gunlukSaat : 0, h = d.gunlukUcret * d.calisilanGun, fm = d.fazlaMesaiSaat * su * 1.5, t = d.tatilGun * d.gunlukUcret * 2, top = h + fm + t + d.yemek + d.yol + d.digerSosyal; const p = +d.personelSira ? bul(+d.personelSira) : null; const r = p ? (Number(p.netRBordro) || 0) : 0, x = Math.max(0, top - r); return `Hak ediş ${kisa(h)} · mesai ${kisa(fm)} · tatil ${kisa(t)} · <b>toplam hak ediş ${kisa(top)}</b>${p ? ` · bordro Net-R mahsup ${kisa(r)} → <b>elden X ${kisa(x)}</b> (${esc(p.adSoyad)} X-Net'ine yazılır, R kısmı aynen kalır)` : ` · SGK'sız: tamamı elden X ${kisa(top)}`} · net ödenen ${kisa(x - d.kesinti)}.`; });
+      p0 ? { k: 'fazlaMesaiBordro', ad: 'Fazla Mesai ₺ (bordro kaydından; Ek Çalışmalar / kişi kartı)', tip: 'salt' } : { k: 'fazlaMesaiSaat', ad: 'Fazla Mesai (Saat, ×1,5)', tip: 'number', adim: '0.5' }, { k: 'tatilGun', ad: 'Tatil (Gün, ×2)', tip: 'number', adim: '0.5' }, { k: 'kesinti', ad: 'Avans / Kesinti ₺', tip: 'number' },
+      { k: 'yemek', ad: rEtiket('Yemek', p0 && p0.yemek), tip: 'number' }, { k: 'yol', ad: rEtiket('Yol', p0 && p0.yol), tip: 'number' }, { k: 'kira', ad: p0 ? rEtiket('Kira', p0.kiraDestegi) : 'Kira ₺ (X)', tip: 'number' }, { k: 'digerSosyal', ad: 'Diğer Sosyal Yardım ₺', tip: 'number' }, { k: 'not', ad: 'Not', tip: 'textarea' }
+    ], veri, d => post('/PersonelMaliyet/UretimKaydet', { ...d, sira: u.sira, personelSira: +d.personelSira || 0, donem: V.donem }), sira ? () => post('/PersonelMaliyet/UretimSil', { id: sira, donem: V.donem }) : null,
+      d => { const p = +d.personelSira ? bul(+d.personelSira) : null; const su = d.gunlukSaat > 0 ? d.gunlukUcret / d.gunlukSaat : 0, h = d.gunlukUcret * d.calisilanGun, fm = p ? bordroMesai(p) : d.fazlaMesaiSaat * su * 1.5, t = d.tatilGun * d.gunlukUcret * 2;
+        const kira = n0(d.kira), top = h + fm + t + d.yemek + d.yol + kira + d.digerSosyal, r = p ? n0(p.netRBordro) : 0, x = p ? Math.max(0, top - kira - r) + kira : top;
+        const dusuk = p ? [['Yemek', d.yemek, n0(p.yemek)], ['Yol', d.yol, n0(p.yol)], ['Kira', kira, n0(p.kiraDestegi)]].filter(([, v, rr]) => v < rr - 0.005) : [];
+        return `Hak ediş ${kisa(h)} · mesai ${kisa(fm)}${p ? ' (bordro R + X)' : ''} · tatil ${kisa(t)} · yemek ${kisa(d.yemek)} · yol ${kisa(d.yol)} · kira ${kisa(kira)} · <b>toplam hak ediş ${kisa(top)}</b>${p ? ` · bordro Net-R mahsup ${kisa(r)} → <b>elden X ${kisa(x)}</b> (kira mahsup dışı). Yemek, yol ve kira ${esc(p.adSoyad)} bordro kaydına yazılır: R kısmı (resmi bordro) sabit kalır, girilen toplamın R'yi aşan kısmı X olur; Personel Maliyet Tablosu, kişi kartı ve Üretim aynı değeri gösterir` : ` · SGK'sız: tamamı elden X ${kisa(top)}`} · net ödenen ${kisa(x - d.kesinti)}.${dusuk.length ? `<br><span class="text-danger">${dusuk.map(([a, v, rr]) => `${a} ${kisa(v)} bordro R tutarının (${kisa(rr)}) altına inemez`).join(' · ')}.</span>` : ''}`; });
   }
   /** kesinti / icra planı: taksit, toplam, ödenen, başlangıç; kişinin tüm dönemlerdeki ilgili kesinti sütunu plan toplamına eşitlenir */
   function planDuzenle(id) {
@@ -998,7 +1039,7 @@
     const L2 = tum.filter(r => (!kaynak || r.kaynak === kaynak) && (!yalniz || cikisSecim.has(cikisAnahtar(r))) && (!ara || [r.adSoyad, r.gorev, r.isveren, r.gorevYeri, lokasyonAd(r.gorevYeri)].join(' ').toLocaleLowerCase('tr-TR').includes(ara)));
     // satır bağı: Ara Toplam + Toplam Brüt Masraflar + Toplam İşveren = Aylık Genel Maliyet (ana tablodaki Ara Toplam ve Toplam Brüt Masraflar ile birebir; kesintiler bu tabloda ayrı gösterilmez)
     // Net Toplam ve Ek Ödemeler hücrelerinde R üstte / X altta (ana tablo ile aynı gösterim; toplanmış tek rakam yanıltır)
-    const ekOdemeR = r => ['yol', 'yemek', 'mesai', 'prim', 'diger'].reduce((s, k) => s + (Number(r[k]) || 0), 0), ekOdemeX = r => ['yolX', 'yemekX', 'mesaiX', 'primX'].reduce((s, k) => s + (Number(r[k]) || 0), 0);
+    const ekOdemeR = r => ['yol', 'yemek', 'mesai', 'prim', 'diger'].reduce((s, k) => s + (Number(r[k]) || 0), 0), ekOdemeX = r => ['yolX', 'yemekX', 'kiraX', 'mesaiX', 'primX'].reduce((s, k) => s + (Number(r[k]) || 0), 0);
     $('#pmCikisTablo tbody').innerHTML = L2.map((r, i) => { const k = cikisAnahtar(r), sec = cikisSecim.has(k), h = cikisHesap(r); return `<tr class="${sec ? 'cikacak' : ''}" data-k="${esc(k)}" data-kaynak="${esc(r.kaynak)}" data-sira0="${r.sira0 ?? ''}" data-usira="${r.uSira ?? ''}"><td class="kucuk">${i + 1}</td><td class="kaynak k-${r.kaynak === 'Üretim' ? 'uretim' : r.kaynak === 'Özel' ? 'ozel' : 'bordro'}">${esc(r.kaynak)}</td><td class="ad">${adOz(r.adSoyad, r.sira0)}</td><td>${esc(r.gorev || '')}</td><td>${lokasyon(r.gorevYeri)}</td><td class="s">${r.kidemYil === null || r.kidemYil === undefined ? '—' : ondalik(r.kidemYil, 1)}</td><td class="s rx" data-k="netToplam">${rxHucre(Number(r.rNet) || 0, Number(r.xNet) || 0)}</td><td class="s rx" data-k="ekOdeme">${rxHucre(ekOdemeR(r), ekOdemeX(r))}</td><td class="s" data-k="araToplam">${hucre(r.araToplam)}</td><td class="s" data-k="toplamBrutMasraflar">${hucre(r.brutTam)}</td><td class="s" data-k="toplamIsveren">${hucre(r.toplamIsveren)}</td><td class="s hesap" data-k="genelMaliyet">${hucre(r.genelMaliyet)}</td><td class="s">${hucre(h.yillik)}</td><td class="s">${hucre(h.kidem)}</td><td class="s">${hucre(h.ihbar)}</td><td class="s hesap">${hucre(h.cikis)}</td><td><select class="form-select pmCikisSec ${sec ? 'cikacak' : ''}" data-k="${esc(k)}" aria-label="Senaryo · ${esc(r.adSoyad)}"><option value="kal" ${sec ? '' : 'selected'}>Kalıyor</option><option value="cik" ${sec ? 'selected' : ''}>İşten Çıkacak</option></select></td></tr>`; }).join('') || '<tr><td colspan="17" class="na-bos">Filtreye uyan kişi yok.</td></tr>';
     const secili = tum.filter(r => cikisSecim.has(cikisAnahtar(r))), top = (l, k) => l.reduce((s, r) => s + (Number(r[k]) || 0), 0), topH = (l, k) => l.reduce((s, r) => s + cikisHesap(r)[k], 0);
     const mevcut = top(tum, 'genelMaliyet'), cikan = top(secili, 'genelMaliyet'), kalan = mevcut - cikan, cikisMaliyet = topH(secili, 'cikis');
@@ -1038,7 +1079,7 @@
   /** banka = Net-R Bordro (bankaya yatacak); elden = Kalan Net Tutar (Elden); SGK'sız gündelikçi tamamı elden */
   function odemeTutar(r) {
     const p = r.kaynak === 'Üretim' ? null : bul(r.sira0);
-    if (!p) return { rNet: 0, digerR: 0, kesR: 0, kalanBanka: 0, banka: 0, xNet: Number(r.xNet) || 0, digerX: (Number(r.yolX) || 0) + (Number(r.yemekX) || 0) + (Number(r.mesaiX) || 0) + (Number(r.primX) || 0), kesX: Number(r.kesintiX) || 0, elden: Number(r.netOdenen) || 0, nakitR: 0 };
+    if (!p) return { rNet: 0, digerR: 0, kesR: 0, kalanBanka: 0, banka: 0, xNet: Number(r.xNet) || 0, digerX: (Number(r.yolX) || 0) + (Number(r.yemekX) || 0) + (Number(r.kiraX) || 0) + (Number(r.mesaiX) || 0) + (Number(r.primX) || 0), kesX: Number(r.kesintiX) || 0, elden: Number(r.netOdenen) || 0, nakitR: 0 };
     const n = k => Number(p[k]) || 0;
     return { rNet: n('rNet2'), digerR: n('digerEkR'), kesR: n('kesintilerToplami'), kalanBanka: n('bankaOdeme'), banka: n('bankaOdeme'), xNet: n('xNet2'), digerX: n('digerEkOdemelerX'), kesX: n('kesintilerToplamiX'), elden: n('eldenOdeme'), nakitR: n('nakitR') };
   }
@@ -1046,7 +1087,7 @@
     if (!odemeAraBagli) {
       $('#pmOdemeAra').addEventListener('input', odemeCiz);
       $$('#pmOdemeDurumOde, #pmOdemeDurumOdmz').forEach(c => c.addEventListener('change', odemeCiz));
-      dugmeBagla('#pmOdemeExcel', '#pmOdemePdf', bicim => tabloExcel('odeme_plani', [{ tablo: '#pmOdemeTablo', ad: 'Ödeme Planı', baslik: `Personel Maliyet Raporu · Ödeme Planı · ${V.donemAd || ''}`, altBaslik: $('#pmOdemeSayi').textContent.trim(), kpi: '#pmOdemeKpi', not: '.na-panel[data-p="odeme"] .pm-not' }], bicim));
+      dugmeBagla('#pmOdemeExcel', '#pmOdemePdf', bicim => tabloExcel('odeme_plani', [{ tablo: '#pmOdemeTablo', ad: 'Ödeme Planı', baslik: `Konsolide İK Paneli · Ödeme Planı · ${V.donemAd || ''}`, altBaslik: $('#pmOdemeSayi').textContent.trim(), kpi: '#pmOdemeKpi', not: '.na-panel[data-p="odeme"] .pm-not' }], bicim));
       odemeAraBagli = true;
     }
     $('#pmOdemeBaslik').textContent = `${V.donemAd} Ödeme Planı`;
@@ -1306,9 +1347,9 @@
       + `<tfoot><tr>${zamXlsSatir(null, T, S.length).map((x, j) => `<td class="${sayisal[j] ? 's' : ''}">${esc(x)}</td>`).join('')}</tr></tfoot>`;
     const ozet = document.createElement('table');
     ozet.innerHTML = `<thead><tr><th>Gösterge</th><th>Tutar</th><th>Ayrıntı</th></tr></thead><tbody>${zamOzetSatirlari(S, zamAyarOku(), T).map(s => `<tr><td>${esc(s.ad)}</td><td>${esc(zamOzetMetin(s.tutar))}</td><td>${esc(s.ayrinti)}</td></tr>`).join('')}</tbody>`;
-    tabloExcel('zam_senaryosu', [{ tablo: tb, ad: 'Zam Senaryosu', baslik: `Personel Maliyet Raporu · Zam Senaryosu · ${V.donemAd || ''}`, altBaslik: $('#pmZamSayi').textContent.trim(), not: '.na-panel[data-p="zam"] .pm-not' },
-      { tablo: '#pmZamKaynak', ad: 'Kaynak Bazında', baslik: 'Personel Maliyet Raporu · Zam Senaryosu · Kaynak Bazında' },
-      { tablo: ozet, ad: 'Zam Özeti', baslik: 'Personel Maliyet Raporu · Zam Senaryosu · Özet' }], bicim);
+    tabloExcel('zam_senaryosu', [{ tablo: tb, ad: 'Zam Senaryosu', baslik: `Konsolide İK Paneli · Zam Senaryosu · ${V.donemAd || ''}`, altBaslik: $('#pmZamSayi').textContent.trim(), not: '.na-panel[data-p="zam"] .pm-not' },
+      { tablo: '#pmZamKaynak', ad: 'Kaynak Bazında', baslik: 'Konsolide İK Paneli · Zam Senaryosu · Kaynak Bazında' },
+      { tablo: ozet, ad: 'Zam Özeti', baslik: 'Konsolide İK Paneli · Zam Senaryosu · Özet' }], bicim);
   }
 
   // ---- kayıtlı senaryolar (bu tarayıcıda) ve Senaryo Karşılaştırması (?sekme=karsilastirma)
@@ -1381,7 +1422,7 @@
     const tb = document.createElement('table');
     tb.innerHTML = `<thead><tr>${SEN_SUTUN.map(c => `<th class="${c.s ? 's' : ''}">${esc(c.ad)}</th>`).join('')}</tr></thead>`
       + `<tbody>${satirlar.map(({ s, o }) => `<tr>${senDegerler(s, o).map((x, j) => `<td class="${SEN_SUTUN[j].s ? 's' : ''}">${esc(x)}</td>`).join('')}</tr>`).join('')}</tbody>`;
-    tabloExcel('zam_karsilastirma', [{ tablo: tb, ad: 'Zam Karşılaştırma', baslik: `Personel Maliyet Raporu · Zam Senaryoları Karşılaştırma · ${V.donemAd || ''}`, altBaslik: $('#pmSenSayi').textContent.trim(), not: '.na-panel[data-p="karsilastirma"] .pm-not' }], bicim);
+    tabloExcel('zam_karsilastirma', [{ tablo: tb, ad: 'Zam Karşılaştırma', baslik: `Konsolide İK Paneli · Zam Senaryoları Karşılaştırma · ${V.donemAd || ''}`, altBaslik: $('#pmSenSayi').textContent.trim(), not: '.na-panel[data-p="karsilastirma"] .pm-not' }], bicim);
   }
 
   /** birleşik tablo satırı: bordro / özel kişi → personel kartı; üretim → üretim düzenleme */
@@ -1393,11 +1434,88 @@
   /** ekrandaki tabloları göründüğü gibi Excel'e: her tablo ayrı sayfa; ilk sayfada sekmenin KPI kutuları, sayacı ve açıklaması */
   function domExcel(ad, tablolar, bicim = 'xlsx') {
     const panel = $('.na-panel.aktif'), p = panel ? panel.dataset.p : '', bas = panelBaslik(p), mini = panel ? panel.querySelector('.na-mini') : null;
-    tabloExcel(ad, tablolar.filter(([id]) => $('#' + id)).map(([id, sayfa], i) => ({ tablo: '#' + id, ad: sayfa, baslik: `Personel Maliyet Raporu · ${bas || sayfa}${bas ? ' · ' + sayfa : ''}`, altBaslik: i === 0 && mini ? mini.textContent.trim() : '', kpi: i === 0 && p ? $(`[data-kpi="${p}"]`) : null, not: i === 0 && panel ? panel.querySelector(':scope > .pm-not') : null })), bicim);
+    tabloExcel(ad, tablolar.filter(([id]) => $('#' + id)).map(([id, sayfa], i) => ({ tablo: '#' + id, ad: sayfa, baslik: `Konsolide İK Paneli · ${bas || sayfa}${bas ? ' · ' + sayfa : ''}`, altBaslik: i === 0 && mini ? mini.textContent.trim() : '', kpi: i === 0 && p ? $(`[data-kpi="${p}"]`) : null, not: i === 0 && panel ? panel.querySelector(':scope > .pm-not') : null })), bicim);
   }
 
   // ============================================================
-  // SIRALAMA — sütun başlığına tıklayınca artan (küçükten büyüğe, A → Z), tekrar tıklayınca azalan (Z → A), üçüncüde varsayılan sıra; Personel Maliyet Raporu'nun tüm tablolarında
+  // ÖZEL RAPOR (6 Kas 2026, "yönetim genel maliyet 80.000 ₺ ve üzeri kişileri listele diyor … sütunları biz belirleyelim"): sütun seçimi + koşullar (hepsi birlikte sağlanır) ile anlık liste.
+  //   Kapsam tumListe: bordrolu + özel + SGK'sız üretim (ana filtreler, genel arama ve gizleme anahtarları geçerli); hücreler ana tabloyla aynı (hucreHtml), dip toplam;
+  //   kayıtlı raporlar ve son ayar tarayıcıda (localStorage.pmOzelRaporlar / pmOzelRaporAyar). Veri değişmez; her çizimde güncel V'den kurulur (senkron).
+  // ============================================================
+  const OR_SABIT = ['sira', 'adSoyad'];
+  const OR_VARSAYILAN = ['sgkIsvereni', 'fiiliGorevYeri', 'gorev', 'sgkDurumu', 'rNet', 'xNet', 'toplamNet', 'toplamBrutMasraflar', 'toplamIsveren', 'genelMaliyet'];
+  /** rapora özgü ek alanlar (ana tabloda sütunu yok; 6 Kas 2026 "SGK Durumu Var / Yok seçebilelim"): SGK Durumu — Var: bordrolu (SGK'lı gündelikçi dahil), Yok: SGK detayı olmayan kişi (sgkDetayYok) ve SGK'sız gündelikçi; Kaynak — Bordro / Özel / Üretim */
+  const OR_EK = [{ ad: 'SGK Durumu', anahtar: 'sgkDurumu', tip: 'metin', secenek: ['Var', 'Yok'] }, { ad: 'Kaynak', anahtar: 'kaynak', tip: 'metin', secenek: ['Bordro', 'Özel', 'Üretim'] }];
+  const orEkAlan = p => ({ ...p, kaynak: p.kaynak || (p.ozel ? 'Özel' : 'Bordro'), sgkDurumu: p.kaynak === 'Üretim' || p.sgkDetayYok ? 'Yok' : 'Var' });
+  const orEtiket = k => ETIKET[k] || (OR_EK.find(e => e.anahtar === k) || {}).ad || k;
+  /** koşul değeri listeden seçilen alanlar: ek alanlar, özel durum, durum ve kimlik listeleri (V'deki ayrık değerler); diğerleri serbest metin / sayı */
+  const orSecenek = k => { const e = OR_EK.find(x => x.anahtar === k); if (e) return e.secenek; const l = { ozelDurum: V.ozelDurumlar, durum: V.durumlar, sgkIsvereni: V.sgkIsverenleri, fiiliGorevYeri: V.gorevYerleri, catiDepartman: V.catiDepartmanlar, bolum: V.bolumler, unvan: V.unvanlar, gorev: V.gorevler }[k]; return Array.isArray(l) && l.length ? l : null; };
+  const OR_OP = [['>=', '≥'], ['>', '>'], ['=', '='], ['!=', '≠'], ['<', '<'], ['<=', '≤'], ['icerir', 'içerir'], ['icermez', 'içermez'], ['bos', 'boş'], ['dolu', 'dolu']];
+  let orAyar = { sutunlar: OR_VARSAYILAN.slice(), kosullar: [{ a: 'genelMaliyet', o: '>=', v: '' }], ad: '', sgk: '' };   // sgk: şeritteki SGK Durumu seçimi ('' Hepsi | Var | Yok), koşullardan bağımsız
+  try { const k = JSON.parse(localStorage.pmOzelRaporAyar || 'null'); if (k && Array.isArray(k.sutunlar)) orAyar = { sutunlar: k.sutunlar, kosullar: Array.isArray(k.kosullar) ? k.kosullar : [], ad: k.ad || '', sgk: k.sgk || '' }; } catch (e) { /* yoksay */ }
+  let orKayitli = []; try { orKayitli = JSON.parse(localStorage.pmOzelRaporlar || '[]') || []; } catch (e) { /* yoksay */ }
+  const orSakla = () => { try { localStorage.pmOzelRaporAyar = JSON.stringify(orAyar); localStorage.pmOzelRaporlar = JSON.stringify(orKayitli); } catch (e) { /* yoksay */ } };
+  /** koşul değeri: 80.000 · 80000 · 60.000,50 · 12.5 (virgül varsa Türkçe biçim; yalnız binlik noktalar varsa atılır) */
+  const orSayi = v => { const t = String(v ?? '').replace(/[₺%\s]/g, ''); if (!t) return NaN; const n = Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : (/^-?\d{1,3}(\.\d{3})+$/.test(t) ? t.replace(/\./g, '') : t)); return isNaN(n) ? NaN : n; };
+  const orSutunlar = () => SUTUN.filter(s => s.tip !== 'kart').concat(OR_EK);
+  const orGrup = k => { if (OR_EK.some(e => e.anahtar === k)) return 'Ek Alanlar'; const g = (V.sutunlar || []).find(x => x.sutunlar.some(s => s.anahtar === k)); return g ? g.grup : ''; };
+  /** koşul alanları: tüm sütunlar (Sıra ve Kart hariç); R / X sütununun R ve X değeri ayrı alan */
+  const orAlanlar = () => { const l = []; orSutunlar().forEach(s => { if (s.tip === 'sira') return; l.push({ k: s.anahtar, ad: s.ad + (s.tip === 'rx' ? ' (R)' : ''), sayisal: ekSayisal(s) }); if (s.tip === 'rx') l.push({ k: s.anahtar + 'X', ad: s.ad + ' (X)', sayisal: true }); }); return l; };
+  const orSayisalMi = k => { const a = orAlanlar().find(x => x.k === k); return !!a && a.sayisal; };
+  function orKosulUyar(p, c) {
+    if (!c || !c.a || !c.o) return true;
+    const sayisal = orSayisalMi(c.a), ham = p[c.a];
+    if (c.o === 'bos') return sayisal ? !kurus(ham) : !String(ham ?? '').trim();
+    if (c.o === 'dolu') return sayisal ? !!kurus(ham) : !!String(ham ?? '').trim();
+    if (c.v === undefined || c.v === null || String(c.v).trim() === '') return true;   // değeri girilmemiş koşul süzmez
+    if (sayisal) {
+      const x = Number(ham) || 0, y = orSayi(c.v); if (isNaN(y)) return true;
+      switch (c.o) { case '>=': return x >= y; case '>': return x > y; case '=': return Math.abs(x - y) < 0.005; case '!=': return Math.abs(x - y) >= 0.005; case '<': return x < y; case '<=': return x <= y; case 'icerir': return String(x).includes(String(c.v)); case 'icermez': return !String(x).includes(String(c.v)); default: return true; }
+    }
+    const s = String(ham ?? '').toLocaleLowerCase('tr-TR').trim(), v = String(c.v).toLocaleLowerCase('tr-TR').trim(), f = s.localeCompare(v, 'tr');
+    switch (c.o) { case '=': return s === v; case '!=': return s !== v; case 'icerir': return s.includes(v); case 'icermez': return !s.includes(v); case '>=': return f >= 0; case '>': return f > 0; case '<': return f < 0; case '<=': return f <= 0; default: return true; }
+  }
+  const orKosulMetni = () => orAyar.kosullar.filter(c => c.a && c.o && (c.o === 'bos' || c.o === 'dolu' || String(c.v ?? '').trim() !== '')).map(c => `${orEtiket(c.a)} ${(OR_OP.find(o => o[0] === c.o) || [c.o, c.o])[1]}${c.o === 'bos' || c.o === 'dolu' ? '' : ' ' + c.v}`).join(' · ');
+  function orSutunCiz() {
+    const sec = new Set(orAyar.sutunlar), yonga = s => `<label class="pm-or-sutun ${sec.has(s.anahtar) ? 'secili' : ''}"><input type="checkbox" value="${esc(s.anahtar)}" ${sec.has(s.anahtar) ? 'checked' : ''}> ${esc(s.ad)}</label>`;
+    $('#pmOrSutunlar').innerHTML = (V.sutunlar || []).map(g => { const l = g.sutunlar.filter(s => s.tip !== 'kart' && !OR_SABIT.includes(s.anahtar)); return l.length ? `<div class="pm-or-grup"><b>${esc(g.grup)}</b>${l.map(yonga).join('')}</div>` : ''; }).join('')
+      + `<div class="pm-or-grup"><b>Ek Alanlar</b>${OR_EK.map(yonga).join('')}</div>`;
+  }
+  function orKosulCiz() {
+    const alanlar = orAlanlar();
+    $('#pmOrKosullar').innerHTML = orAyar.kosullar.map((c, i) => {
+      const sec = orSecenek(c.a);   // listeli alanda değer açılır kutudan seçilir (SGK Durumu Var / Yok, Kaynak, Özel Durumu, Durum, işveren, görev yeri, çatı, bölüm, unvan, görev)
+      const deger = sec ? `<select class="form-select orV" aria-label="Değer"><option value="">Hepsi</option>${sec.map(v => `<option value="${esc(v)}" ${String(c.v ?? '') === String(v) ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>` : `<input class="form-control orV" placeholder="değer (ör. 80.000)" value="${esc(c.v ?? '')}" aria-label="Değer">`;
+      return `<div class="pm-or-kosul" data-i="${i}"><select class="form-select orA" aria-label="Alan">${alanlar.map(a => `<option value="${esc(a.k)}" ${a.k === c.a ? 'selected' : ''}>${esc(a.ad)}</option>`).join('')}</select><select class="form-select orO" aria-label="Karşılaştırma">${OR_OP.map(o => `<option value="${o[0]}" ${o[0] === c.o ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>${deger}<button type="button" class="btn btn-light btn-sm py-0 orSil" title="Koşulu kaldır"><i class="fas fa-xmark"></i></button></div>`;
+    }).join('') || '<div class="text-muted" style="font-size:.7rem">Koşul yok: tüm kişiler listelenir.</div>';
+  }
+  function ozelRaporCiz() {
+    $('#pmOrBaslik').textContent = `${V.donemAd || ''} Özel Rapor${orAyar.ad ? ' · ' + orAyar.ad : ''}`;
+    const S = orSutunlar().filter(s => OR_SABIT.includes(s.anahtar) || orAyar.sutunlar.includes(s.anahtar));
+    const tum = tumListe(false).map(etkin).map(orEkAlan), L2 = tum.filter(p => (!orAyar.sgk || p.sgkDurumu === orAyar.sgk) && orAyar.kosullar.every(c => orKosulUyar(p, c)));   // şerit SGK seçimi + koşullar
+    const t = $('#pmOrTablo'), dz = duzenleme; duzenleme = false;   // hücreler ana tabloyla aynı biçimde; düzenleme modunda bile salt okunur
+    try {
+      $('thead tr', t).innerHTML = S.map(s => `<th class="${ekSayisal(s) ? 's' : ''}" data-k="${s.anahtar}" title="${esc(orGrup(s.anahtar))}">${esc(s.ad)}</th>`).join('');
+      $('tbody', t).innerHTML = L2.map((p, i) => `<tr data-sira="${p.sira}"${p.uSira ? ` data-usira="${p.uSira}"` : ''}>${S.map(s => hucreHtml(p, s, false, i + 1)).join('')}</tr>`).join('') || `<tr><td colspan="${S.length}" class="na-bos">Koşullara uyan kişi yok.</td></tr>`;
+    } finally { duzenleme = dz; }
+    const top = k => toplam(L2, k), sayilmaz = ['oran', 'kur', 'dovizTutar'];
+    $('tfoot tr', t).innerHTML = S.map(s => { const dk = `data-k="${s.anahtar}"`; if (s.tip === 'sira') return `<td ${dk}>Toplam</td>`; if (s.tip === 'ad') return `<td ${dk}>${L2.length} Kişi</td>`; if (s.tip === 'rx') return `<td class="s rx" ${dk}>${rxHucre(top(s.anahtar), top(s.anahtar + 'X'), kisa, true)}</td>`; if (s.tip === 'gun') return `<td class="s" ${dk}>${sayilmaz.includes(s.anahtar) ? '' : gunFmt(top(s.anahtar))}</td>`; if (s.tip === 'sayi' || s.tip === 'hesap') return `<td class="s" ${dk}>${sayilmaz.includes(s.anahtar) ? '' : kisa(top(s.anahtar))}</td>`; if (s.tip === 'genel') return `<td class="s genel" ${dk}>${kisa(top(s.anahtar))}</td>`; return `<td ${dk}></td>`; }).join('');
+    const km = orKosulMetni();
+    $('#pmOrSayi').textContent = `${L2.length} / ${tum.length} kişi · ${S.length} sütun · SGK: ${orAyar.sgk || 'Hepsi'} · ${km ? 'koşul: ' + km : 'koşul yok'} · ${V.donemAd || ''} · aylık tutarlar ₺`;
+    orKayitliDoldur(); orSakla(); sabitleHepsi();
+  }
+  function orKayitliDoldur() { const sel = $('#pmOrKayitli'), v = sel.value; sel.innerHTML = '<option value="">Kayıtlı Raporlar</option>' + orKayitli.map((r, i) => `<option value="${i}">${esc(r.ad)}</option>`).join(''); sel.value = [...sel.options].some(o => o.value === v) ? v : ''; }
+  function orKaydet() {
+    const ad = ($('#pmOrAd').value || '').trim(); if (!ad) { mesaj('warning', 'Rapor adı girin.'); $('#pmOrAd').focus(); return; }
+    const r = { ad, sutunlar: orAyar.sutunlar.slice(), kosullar: orAyar.kosullar.map(c => ({ ...c })), sgk: orAyar.sgk || '' }, i = orKayitli.findIndex(x => x.ad.toLocaleLowerCase('tr-TR') === ad.toLocaleLowerCase('tr-TR'));
+    if (i >= 0) orKayitli[i] = r; else orKayitli.push(r);
+    orAyar.ad = ad; orSakla(); orKayitliDoldur(); $('#pmOrKayitli').value = String(i >= 0 ? i : orKayitli.length - 1); ozelRaporCiz(); mesaj('success', `"${esc(ad)}" raporu kaydedildi (bu tarayıcıda).`);
+  }
+  function orYukle(i) { const r = orKayitli[i]; if (!r) return; orAyar = { sutunlar: r.sutunlar.slice(), kosullar: r.kosullar.map(c => ({ ...c })), ad: r.ad, sgk: r.sgk || '' }; $('#pmOrAd').value = r.ad; $('#pmOrSgk').value = orAyar.sgk; orSutunCiz(); orKosulCiz(); ozelRaporCiz(); }
+  function orSil() { const sel = $('#pmOrKayitli'), i = +sel.value; if (sel.value === '' || !orKayitli[i]) { mesaj('info', 'Silinecek kayıtlı raporu seçin.'); return; } const ad = orKayitli[i].ad; orKayitli.splice(i, 1); if (orAyar.ad === ad) orAyar.ad = ''; orSakla(); sel.value = ''; orKayitliDoldur(); ozelRaporCiz(); mesaj('success', `"${esc(ad)}" silindi.`); }
+
+  // ============================================================
+  // SIRALAMA — sütun başlığına tıklayınca artan (küçükten büyüğe, A → Z), tekrar tıklayınca azalan (Z → A), üçüncüde varsayılan sıra; Konsolide İK Paneli'nin tüm tablolarında
   //   Hücre anahtarı: girdi değeri; R üstte / X altta hücrenin toplamı; mevcut / zamlı hücrede zamlı değer; tarih (gg.aa.yyyy) kronolojik; Türkçe biçimli sayı (1.234,5 ₺, % 9,8); boş hücre her yönde sona.
   //   Yalnız satır düğümleri yeniden dizilir (veri değişmez). Sekme yeniden çizilince sütun ve yön korunur; tablo kimliği: id ya da sekme ve tablo sırası.
   // ============================================================
@@ -1499,7 +1617,28 @@
     if (yeniSenaryo) zamSenaryoYukle(yeniSenaryo);
     zamUiYaz();
     Object.keys(EK).forEach(ad => { const E = EK[ad]; [E.ara, E.sifir].filter(Boolean).forEach(s => { $(s).addEventListener('input', () => ekCiz(ad)); $(s).addEventListener('change', () => ekCiz(ad)); }); });
-    ['#pmUretimYer', '#pmPrimDonem', '#pmBirlesimKaynak'].forEach(s => $(s).addEventListener('change', () => ekCiz(s === '#pmUretimYer' ? 'uretim' : s === '#pmPrimDonem' ? 'prim' : 'birlesim')));
+    const ekFiltre = { '#pmUretimYer': 'uretim', '#pmUretimSgkli': 'uretim', '#pmUretimSgksiz': 'uretim', '#pmPrimDonem': 'prim', '#pmBirlesimKaynak': 'birlesim', '#pmBirlesimTek': 'birlesim' };   // ek sekme filtreleri → sekmeyi yeniden çiz
+    Object.keys(ekFiltre).forEach(s => $(s).addEventListener('change', () => ekCiz(ekFiltre[s])));
+    // Özel Rapor: sütun seçimi, koşullar, kayıtlı raporlar (tarayıcıda), Excel / PDF, satır → kart
+    orSutunCiz(); orKosulCiz(); $('#pmOrAd').value = orAyar.ad || ''; $('#pmOrSgk').value = orAyar.sgk || '';
+    $('#pmOrSgk').addEventListener('change', () => { orAyar.sgk = $('#pmOrSgk').value; ozelRaporCiz(); });   // şerit: SGK Durumu Hepsi / Var / Yok
+    $('#pmOrSutunlar').addEventListener('change', ev => { const c = ev.target.closest('input[type=checkbox]'); if (!c) return; if (c.checked) { if (!orAyar.sutunlar.includes(c.value)) orAyar.sutunlar.push(c.value); } else orAyar.sutunlar = orAyar.sutunlar.filter(x => x !== c.value); c.closest('label').classList.toggle('secili', c.checked); ozelRaporCiz(); });
+    $('#pmOrSutunSifirla').addEventListener('click', ev => { ev.preventDefault(); orAyar.sutunlar = OR_VARSAYILAN.slice(); orSutunCiz(); ozelRaporCiz(); });
+    const orKosulOku = r => { const c = orAyar.kosullar[+r.dataset.i]; if (!c) return; c.a = r.querySelector('.orA').value; c.o = r.querySelector('.orO').value; c.v = r.querySelector('.orV').value.trim(); ozelRaporCiz(); };
+    $('#pmOrKosullar').addEventListener('change', ev => {
+      const r = ev.target.closest('.pm-or-kosul'); if (!r) return; const c = orAyar.kosullar[+r.dataset.i]; if (!c) return;
+      if (ev.target.classList.contains('orA') && ev.target.value !== c.a) { c.a = ev.target.value; c.v = ''; if (orSecenek(c.a)) c.o = '='; orKosulCiz(); ozelRaporCiz(); return; }   // alan değişince değer kutusu alana göre (liste / metin) yeniden kurulur
+      orKosulOku(r);
+    });
+    $('#pmOrKosullar').addEventListener('input', ev => { const r = ev.target.classList.contains('orV') ? ev.target.closest('.pm-or-kosul') : null; if (r) orKosulOku(r); });
+    $('#pmOrKosullar').addEventListener('click', ev => { const b = ev.target.closest('.orSil'); if (!b) return; orAyar.kosullar.splice(+b.closest('.pm-or-kosul').dataset.i, 1); orKosulCiz(); ozelRaporCiz(); });
+    $('#pmOrKosulEkle').addEventListener('click', () => { orAyar.kosullar.push({ a: 'genelMaliyet', o: '>=', v: '' }); orKosulCiz(); ozelRaporCiz(); const son = $$('#pmOrKosullar .orV').pop(); if (son) son.focus(); });
+    $('#pmOrAyarAc').addEventListener('change', () => { $('#pmOrAyar').style.display = $('#pmOrAyarAc').checked ? '' : 'none'; sabitleHepsi(); });
+    $('#pmOrKaydet').addEventListener('click', orKaydet); $('#pmOrAd').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); orKaydet(); } });
+    $('#pmOrKayitli').addEventListener('change', () => { const v = $('#pmOrKayitli').value; if (v !== '') orYukle(+v); });
+    $('#pmOrSil').addEventListener('click', orSil);
+    dugmeBagla('#pmOrExcel', '#pmOrPdf', bicim => tabloExcel('ozel_rapor', [{ tablo: '#pmOrTablo', ad: 'Özel Rapor', baslik: `Konsolide İK Paneli · ${$('#pmOrBaslik').textContent.trim()}`, altBaslik: $('#pmOrSayi').textContent.trim(), not: '.na-panel[data-p="ozelrapor"] .pm-not' }], bicim));
+    $('#pmOrTablo tbody').addEventListener('click', ev => { if (etkilesim(ev)) return; const tr = ev.target.closest('tr[data-sira]'); if (!tr) return; if (tr.dataset.usira) uretimDuzenle(+tr.dataset.usira); else kisiKartAc(+tr.dataset.sira); });
     // Ek Çalışmalar / Diğer Kesintiler
     ['#pmEkAra', '#pmEkDurum'].forEach(s => { $(s).addEventListener('input', ekCalismaCiz); $(s).addEventListener('change', ekCalismaCiz); });
     ['#pmKesAra', '#pmKesTur'].forEach(s => { $(s).addEventListener('input', kesintiCiz); $(s).addEventListener('change', kesintiCiz); });
@@ -1571,7 +1710,8 @@
     $('#pmBilgi').addEventListener('click', () => { kok.classList.toggle('aciklama'); kapBoyut(); });
     $$('.pm-rapor-ust').forEach(u => { const h = u.querySelector('h5'), a = u.querySelector('.alt:not(#pmOzetKapsam)'); if (h && a) h.title = a.textContent.trim(); });
     window.addEventListener('resize', () => { clearTimeout(kapBoyut.z); kapBoyut.z = setTimeout(sabitleHepsi, 120); });
-    kayitBilgi(); ciz(); sekme(kok.dataset.baslangic || 'tablo'); window.NA_HAZIR = true;
+    kayitBilgi(); ciz(); sekme(kok.dataset.baslangic || VARSAYILAN_SEKME); window.NA_HAZIR = true;   // açılış sekmesi: Personel Cari Kartı (6 Kas 2026)
+    const kisiP = +new URLSearchParams(location.search).get('kisi'); if (kisiP && bul(kisiP)) kartAc(kisiP);   // ?kisi=<sıra> (9 Kas 2026): Personel Carileri / Personel Dosyası'ndan gelen bağlantı kişi kartını açar
     const kod = kok.dataset.kod; if (kod) { const p = V.personel.find(x => x.cariKodu === kod); if (p) { if (!!p.ozel !== (kapsam === 'ozel')) sekme(p.ozel ? 'ozel' : 'tablo'); kartAc(p.sira); } }
   }).catch(e => mesaj('danger', 'Veri yüklenemedi: ' + esc(e.message)));
 })();

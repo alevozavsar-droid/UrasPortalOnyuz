@@ -24,19 +24,21 @@
     if (window.portalSekmeAc) { e.preventDefault(); window.portalSekmeAc(a.dataset.sekme || a.textContent.trim(), href); }
   });
 
-  // ---- Yaklaşan izinler ----
-  const izinler = [
-    ['Serdar Sabri Aydın', 'Operasyon', 'Yıllık izin', '16 - 22 Eyl', 5, 'Bugün', 'red'],
-    ['Ayşegül Zenit Ula', 'Finans - Tahsilat', 'Yıllık izin', '18 - 19 Eyl', 2, '2 gün sonra', 'amber'],
-    ['Berkan Özkan', 'İhracat', 'Mazeret izni', '22 Eyl', 1, '6 gün sonra', ''],
-    ['Melike Ural Kaya', 'Finans - Tahsilat', 'Yıllık izin', '28 Eyl - 9 Eki', 10, '12 gün sonra', ''],
-    ['Özge İsen', 'Proje Yönetimi', 'Yıllık izin', '5 - 7 Eki', 3, '19 gün sonra', ''],
-    ['Bedirhan Genç', 'Kalite Sistem', 'Rapor', '8 Eki', 1, '22 gün sonra', ''],
-    ['Ahmet Özkan', 'Mali İşler', 'Yıllık izin', '12 - 16 Eki', 5, '26 gün sonra', ''],
-    ['Sevgi Kaya', 'Satış', 'Yıllık izin', '26 - 30 Eki', 5, '40 gün sonra', '']
-  ];
-  $('#ghIzinOzet').textContent = `Bu hafta ${izinler.filter(i => i[6]).length} kişi izinde`;
-  $('#ghYaklasanIzin').innerHTML = izinler.map(([ad, birim, tur, aralik, gun, ne, cls], i) => `<div class="satir" style="padding:5px 0"><span class="av ${renk(i)}" style="width:28px;height:28px;font-size:10.5px">${esc(bas(ad))}</span><div class="grow"><div class="t"><a href="#">${esc(ad)}</a></div><div class="s">${esc(birim)} · ${esc(tur)}</div></div><div class="r"><div><b>${esc(aralik)}</b> · ${gun} gün</div><div style="margin-top:2px"><span class="tag ${cls}${cls === 'red' ? ' dot' : ''}">${esc(ne)}</span></div></div></div>`).join('');
+  // ---- Yaklaşan izinler: CANLI (9 Kas 2026) — /IkTalep/IzinVeri: onaylı, iptal edilmemiş, bitişi geçmemiş izinler; kişiler Konsolide İK Paneli'nden (İnsan Kaynakları ekranlarıyla aynı veri) ----
+  const AY = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+  const gunAy = iso => { const d = new Date(iso + 'T00:00:00'); return `${d.getDate()} ${AY[d.getMonth()]}`; };
+  const aralik = (b, e) => { const db = new Date(b + 'T00:00:00'), de = new Date(e + 'T00:00:00'); return b === e ? gunAy(b) : db.getMonth() === de.getMonth() ? `${db.getDate()} - ${gunAy(e)}` : `${gunAy(b)} - ${gunAy(e)}`; };
+  const izinCiz = izinler => {
+    $('#ghIzinOzet').textContent = `Bu hafta ${izinler.filter(i => i.hafta).length} kişi izinde`;
+    $('#ghYaklasanIzin').innerHTML = izinler.map((i, n) => `<div class="satir" style="padding:5px 0"><span class="av ${renk(n)}" style="width:28px;height:28px;font-size:10.5px">${esc(bas(i.ad))}</span><div class="grow"><div class="t"><a href="/IkTalep/IzinTakip" data-sekme="İzin Takip Raporu">${esc(i.ad)}</a></div><div class="s">${esc(i.birim)} · ${esc(i.tur)}</div></div><div class="r"><div><b>${esc(i.aralik)}</b> · ${i.gun} gün</div><div style="margin-top:2px"><span class="tag ${i.cls}${i.cls === 'red' ? ' dot' : ''}">${esc(i.ne)}</span></div></div></div>`).join('') || '<div class="empty">Yaklaşan onaylı izin yok.</div>';
+  };
+  fetch('/IkTalep/IzinVeri', { credentials: 'same-origin' }).then(r => r.json()).then(j => {
+    const bugun = new Date(); bugun.setHours(0, 0, 0, 0); const gunMs = 86400000, hafta = new Date(bugun.getTime() + 7 * gunMs);
+    const l = (j.talepler || []).filter(t => t.onaylandi && !t.iptal && t.bitisIso && new Date(t.bitisIso + 'T00:00:00') >= bugun)
+      .sort((a, b) => a.baslangicIso.localeCompare(b.baslangicIso)).slice(0, 8)
+      .map(t => { const b0 = new Date(t.baslangicIso + 'T00:00:00'), fark = Math.round((b0 - bugun) / gunMs); return { ad: (t.kullanan || {}).adSoyad || '', birim: (t.kullanan || {}).departman || '', tur: t.turAdi || '', aralik: aralik(t.baslangicIso, t.bitisIso), gun: Number(t.isGunu) || 0, ne: fark <= 0 ? 'Bugün' : fark === 1 ? 'Yarın' : `${fark} gün sonra`, cls: fark <= 0 ? 'red' : fark <= 3 ? 'amber' : '', hafta: b0 < hafta }; });
+    izinCiz(l);
+  }).catch(() => { $('#ghIzinOzet').textContent = ''; $('#ghYaklasanIzin').innerHTML = '<div class="empty">İzin verisi alınamadı.</div>'; });
 
   // ---- Yaklaşan doğum günleri ----
   const dogum = [['Dinçer Özdemir', 'Yarın'], ['Savaş Özcan', '19 Eyl'], ['Bedirhan Genç', '22 Eyl'], ['Ramin Musayev', '4 Eki'], ['Mesut Akıncı', '6 Eki'], ['İnanç Bozkurt', '6 Eki'],

@@ -16,7 +16,7 @@
   const PARA = /^-?(\d{1,3}(\.\d{3})+|\d+)(,\d+)?\s*(₺|\$|€|£|%)?$/;   // işaretli tutar: 190.100,00 ₺ · 12 %
   const BASLAYAN = /^-?(\d{1,3}(\.\d{3})+|\d+)(,\d+)?\s*(₺|\$|€|£)/;    // tutar + alt satır: 190.100,00 ₺ 16.000 $ ×40,19
   const TARIH = /\d{2}\.\d{2}\.\d{4}/;
-  const SAYAC = /^(Sıra|No|#|Ver\.?|Dönem|Oran)$|\(Gün\)|Çalışılan Gün|Prim Gün|Saat$|\(sa\)|\bKur\b|Oran %|%\s*\(|^%|Çarpan|^Pay|\(Yıl\)|Adet|Kişi|Personel|Sicil|Satır|Versiyon|Güncel|Numara|Kimlik|IBAN|\bNo\b/i;
+  const SAYAC = /^(Sıra|No|#|Ver\.?|Dönem|Oran)$|\(Gün\)|Çalışılan Gün|Prim Gün|Saat$|\(Saat\)|\(sa\)|\bKur\b|Oran %|%\s*\(|^%|Çarpan|^Pay|\(Yıl\)|Adet|Kişi|Personel|Sicil|Satır|Versiyon|Güncel|Numara|Kimlik|IBAN|\bNo\b/i;   // "(Saat)" (9 Kas 2026): Fazla Mesai (Saat) sütunu sayaçtır, ₺ almaz
   const BOS = ['', '—', '-'];
   const PAY = 3;   // başlık sütununa eklenen pay (px): yazı tipi ölçüsündeki küçük farkları karşılar
   /** hücrenin tek dolu metin düğümü (renkli span içinde de olabilir); birden çok metin varsa null */

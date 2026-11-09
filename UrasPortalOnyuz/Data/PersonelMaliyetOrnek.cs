@@ -4,7 +4,7 @@
 // Kişi ve rakamlar: "Personel Maliyet Raporu 2026-09" (DUZELTILMIS_v5_2), 87 kişi. 13 SGK'sız üretim (X) kişisi rapor dışıdır ve Üretim Personeli'nde kalır.
 //   Özel Kişiler (Ozel = true, 9 kişi; Alper Köse 30.09.2026'da İşten Ayrıldı, Aktif sayıda yer almaz): Alper Köse, Devrim / Hale Bisren, Emine Tanış, Erman Kaval, Medine Rozykulova, Murat Özavşar, Mustafa Savaş, Nükhet Özavşar, Orazgül Jumayeva.
 //   Kalan 78 kişi Personel Maliyet Tablosu'nda bordrolu (Alev Özavşar Eren ve Bedirhan Genç dahil). Brüt ve SGK bilgisi raporda olmayanlarda (Emine Tanış, Murat Özavşar, Orazgül Jumayeva, Mesut Akıncı) brüt ve SGK hesaplanmaz (SgkDetayYok).
-//   Sütun eşlemesi: 2026 R-NET → RNet · 2026 X-NET → XNet · YEMEK-R / X → Yemek / YemekX · YOL-R / X → Yol / YolX · FAZLA MESAİ-R / X → FazlaMesai / X · PRİM-R / X → Prim / X · KİRA DESTEĞİ → KiraDestegi · AVANS, İCRA, BORÇ, BES, ÖZEL SİGORTA KESİNTİSİ, SENDİKA KATKISI → kesinti sütunları · DİĞER EK ÖDEMELER-R → DigerEkOdemelerR · KESİNTİLER TOPLAMI-X → KesintilerToplamiX · İSTİHDAM HAZİNE İNDİRİMİ → HazineKaynak (yalnız gösterim)
+//   Sütun eşlemesi: 2026 R-NET → RNet · 2026 X-NET → XNet · YEMEK-R / X → Yemek / YemekX · YOL-R / X → Yol / YolX · FAZLA MESAİ-R / X → FazlaMesai / X · PRİM-R / X → Prim / X · KİRA DESTEĞİ → KiraDestegi (X tarafı KiraDestegiX: kira destekleri KiraDestegiYaz ile her döneme yazılır, dövizli olan kurla; 6 Kas 2026) · AVANS, İCRA, BORÇ, BES, ÖZEL SİGORTA KESİNTİSİ, SENDİKA KATKISI → kesinti sütunları · DİĞER EK ÖDEMELER-R → DigerEkOdemelerR · KESİNTİLER TOPLAMI-X → KesintilerToplamiX · İSTİHDAM HAZİNE İNDİRİMİ → HazineKaynak (yalnız gösterim)
 //   TOPLAM BRÜT KAZANÇ → BrutKaynak · TOPLAM İŞVEREN → IsverenKaynak (satır düzenlenince silinir, model yeniden hesaplar) · ÖZEL DURUMU → Emekli / Gündelikçi · NOT → Not ("Ödeme Yapılmıyor" ödeme kaydını engeller)
 // Hesaplanan alanlar (BordroParametre ile; kaynak değer varsa ona bağlanır):
 //   Brüt: kaynakta Toplam Brüt Kazanç; gün toplamına bölünerek günlük ücret ve kazanç kalemleri çıkar (kazançlar toplamı brüte eşit kalır).
@@ -73,7 +73,7 @@ namespace WebApplication3.Data
         public decimal IsciIssizlik { get; set; } public decimal IsciMyo { get; set; } public decimal IsciGss { get; set; } public decimal IsciSgdp { get; set; } public decimal SgkIsciToplam { get; set; }
         public decimal IsvIssizlik { get; set; } public decimal IsvMyo { get; set; } public decimal IsvGss { get; set; } public decimal IsvSgdp { get; set; } public decimal Kvsk { get; set; } public decimal HazineIndirimi { get; set; } public decimal SgkIsverenToplam { get; set; }
         public decimal RNet2 { get; set; } public decimal KesintilerToplami { get; set; } public decimal KalanNetBanka { get; set; } public decimal DigerEkR { get; set; }
-        /// <summary>X tarafı grup toplamları (rx sütunlarının alt satırları) ve bunların toplamı Ek Ödemeler Toplam-X (= Fazla Mesai-X + Yemek-X + Yol-X + Prim-X).</summary>
+        /// <summary>X tarafı grup toplamları (rx sütunlarının alt satırları) ve bunların toplamı Ek Ödemeler Toplam-X (= Fazla Mesai-X + Yemek-X + Yol-X + Kira Desteği-X + Prim-X).</summary>
         public decimal ToplamEkCalismaX { get; set; } public decimal ToplamSosyalX { get; set; } public decimal ToplamPrimX { get; set; } public decimal DigerEkOdemelerX { get; set; }
         /// <summary>X-Net'in ₺ karşılığı (dövizli maaşta Döviz Tutarı × Kur, yoksa girilen X-Net) · Ödeme Özeti-X: X-Net, Ek Ödemeler Toplam-X, Kesintiler Toplamı-X (girilir), Kalan Net Tutar (Elden) = Net-X Bordro − Kesintiler Toplamı-X.</summary>
         public decimal XNetTl { get; set; } public decimal XNet2 { get; set; } public decimal KalanNetElden { get; set; }
@@ -167,7 +167,7 @@ namespace WebApplication3.Data
             // banka = anlaşılan net R-Net + R ek ödemeler (ekler) + Ek Ödemeler Toplam-R − kesintiler; brütten türetilmez (kaynak KALAN NET TUTAR (BANKA))
             h.RNet2 = rNet; h.KesintilerToplami = p.Avans + p.Icra + p.Borc + p.OzelSigortaKesintisi + p.SendikaKatkisi + p.Bes + p.MazotKesintisi + p.IhbarKesintisi;
             h.DigerEkR = R(ekler + p.DigerEkOdemelerR); h.KalanNetBanka = R(rNet + h.DigerEkR - h.KesintilerToplami);
-            h.ToplamEkCalismaX = p.FazlaMesaiX; h.ToplamSosyalX = p.YemekX + p.YolX; h.ToplamPrimX = p.PrimX; h.DigerEkOdemelerX = h.ToplamEkCalismaX + h.ToplamSosyalX + h.ToplamPrimX;
+            h.ToplamEkCalismaX = p.FazlaMesaiX; h.ToplamSosyalX = p.YemekX + p.YolX + p.KiraDestegiX; h.ToplamPrimX = p.PrimX; h.DigerEkOdemelerX = h.ToplamEkCalismaX + h.ToplamSosyalX + h.ToplamPrimX;   // Kira Desteği-X (6 Kas 2026): bordro dışı kira desteği de X ek ödemesi
             h.NetRBordro = h.KalanNetBanka; h.NetXBordro = xNet + h.DigerEkOdemelerX; h.KalanNetElden = R(h.NetXBordro - p.KesintilerToplamiX);   // X kesintisi maliyeti düşürmez, elden ödenen tutarı azaltır
             // ödeme kanalı (banka / elden): maliyet satırları (Ara Toplam, Genel Maliyet) bu kanaldan etkilenmez
             h.BankaOdeme = p.BankaBlokeli ? 0m : h.NetRBordro; h.NakitRTutar = p.BankaBlokeli ? h.NetRBordro : 0m; h.EldenOdeme = R(h.KalanNetElden + h.NakitRTutar);
@@ -214,8 +214,8 @@ namespace WebApplication3.Data
         public decimal Avans { get; set; } public decimal Icra { get; set; } public decimal Borc { get; set; } public decimal OzelSigortaKesintisi { get; set; } public decimal SendikaKatkisi { get; set; } public decimal Bes { get; set; }
         public decimal DigerEkOdemelerR { get; set; }
         public decimal KasaTazminati { get; set; } public decimal MazotKesintisi { get; set; } public decimal IhbarKesintisi { get; set; }
-        /// <summary>X (bordro dışı) tarafı ödenen kalemler; tabloda aynı kalemin R değerinin altında gösterilir (rx sütunu). Brüt ve vergiye girmez, Net-X Bordro'ya eklenir. Kesintiler Toplamı-X elden ödenen tutardan düşülür.</summary>
-        public decimal YemekX { get; set; } public decimal YolX { get; set; } public decimal FazlaMesaiX { get; set; } public decimal PrimX { get; set; } public decimal KesintilerToplamiX { get; set; }
+        /// <summary>X (bordro dışı) tarafı ödenen kalemler; tabloda aynı kalemin R değerinin altında gösterilir (rx sütunu). Brüt ve vergiye girmez, Net-X Bordro'ya eklenir. Kesintiler Toplamı-X elden ödenen tutardan düşülür. KiraDestegiX (6 Kas 2026): bordro dışı kira desteği (Joao Paulo 500 € / ay dönem kuruyla ₺, Devrim / Hale Bisren 45.000 ₺; KiraDestekleri).</summary>
+        public decimal YemekX { get; set; } public decimal YolX { get; set; } public decimal FazlaMesaiX { get; set; } public decimal PrimX { get; set; } public decimal KiraDestegiX { get; set; } public decimal KesintilerToplamiX { get; set; }
         /// <summary>Dövizli maaş (kartta girilir): Para Birimi (USD / EUR / GBP; boş = ₺), aylık Döviz Tutarı ve Kur (1 birim = ? ₺). Doluysa X-Net = Döviz Tutarı × Kur.</summary>
         public string Doviz { get; set; } = ""; public decimal DovizTutar { get; set; } public decimal Kur { get; set; }
         public bool Dovizli => !string.IsNullOrEmpty(Doviz) && DovizTutar > 0 && Kur > 0;
@@ -261,7 +261,7 @@ namespace WebApplication3.Data
         public decimal GvIndirimleri { get; set; } public decimal OzelSigortaIndirimi { get; set; }
         public decimal Avans { get; set; } public decimal Icra { get; set; } public decimal Borc { get; set; } public decimal OzelSigortaKesintisi { get; set; } public decimal SendikaKatkisi { get; set; } public decimal Bes { get; set; }
         public decimal DigerEkOdemelerR { get; set; }
-        public decimal YemekX { get; set; } public decimal YolX { get; set; } public decimal FazlaMesaiX { get; set; } public decimal PrimX { get; set; } public decimal KesintilerToplamiX { get; set; }
+        public decimal YemekX { get; set; } public decimal YolX { get; set; } public decimal FazlaMesaiX { get; set; } public decimal PrimX { get; set; } public decimal KiraDestegiX { get; set; } public decimal KesintilerToplamiX { get; set; }
         public decimal KasaTazminati { get; set; } public decimal MazotKesintisi { get; set; } public decimal IhbarKesintisi { get; set; }
         public string Doviz { get; set; } public decimal DovizTutar { get; set; } public decimal Kur { get; set; }
         public bool Ozel { get; set; }
@@ -271,6 +271,21 @@ namespace WebApplication3.Data
         /// <summary>Rapor parametreleri (Personel Cari Kartı sekmesi, 5 Kas 2026): gönderilmeyen alan (null) değişmez. Kaynak brüt / işveren 0 = model hesaplar.</summary>
         public bool? BankaBlokeli { get; set; } public bool? SgkDetayYok { get; set; } public bool? OdemeYapilmiyor { get; set; }
         public string DovizOdeme { get; set; } public decimal? SgkDisi { get; set; } public decimal? BrutKaynak { get; set; } public decimal? IsverenKaynak { get; set; } public decimal? HazineKaynak { get; set; }
+        /// <summary>Ekranın bildirdiği değişen alanlar (camelCase; kalıcı günlük için, 6 Kas 2026): uygulamada kullanılmaz, yeniden yüklemede yalnız bu alanlar mevcut kaydın üzerine yazılır.</summary>
+        public List<string> Degisen { get; set; }
+        /// <summary>Mevcut kaydın düzenleme görüntüsü (kalıcı günlük; aynı adlı ve aynı türdeki alanlar kopyalanır, tarihler yyyy-MM-dd). Yalnız değiştiğinde gönderilen rapor parametreleri (bloke, SGK detayı, ödeme yapılmıyor, yemek istisnası, kaynak brüt / işveren / hazine) null kalır = değişmez.</summary>
+        public static PmDuzenleme Of(PmPersonel p)
+        {
+            var d = new PmDuzenleme();
+            foreach (var dp in typeof(PmDuzenleme).GetProperties())
+            {
+                if (!dp.CanWrite || dp.Name == "Degisen" || dp.Name == "Donem" || dp.Name == "BrutKaynak" || dp.Name == "IsverenKaynak") continue;
+                var pp = typeof(PmPersonel).GetProperty(dp.Name); if (pp == null) continue;
+                if (dp.PropertyType == pp.PropertyType) dp.SetValue(d, pp.GetValue(p));
+                else if (dp.PropertyType == typeof(string) && pp.PropertyType == typeof(DateTime?)) dp.SetValue(d, ((DateTime?)pp.GetValue(p))?.ToString("yyyy-MM-dd"));
+            }
+            return d;
+        }
     }
 
     /// <summary>Tablo sütunu: başlık, JSON anahtarı (camelCase), tip ve düzenleme listesi.
@@ -301,7 +316,7 @@ namespace WebApplication3.Data
             ("Net Ücret", new[] { S("R-Net", "rNet", "sayi"), S("X-Net", "xNet", "sayi"), S("Toplam Net", "toplamNet", "hesap") }),
             ("Puantaj ve Çalışma Kazançları", new[] { S("Prim Gün", "primGun", "gun"), S("Normal Çalışma (Gün)", "normalGun", "gun"), S("Normal Çalışma Kazancı", "normalKazanc", "hesap"), S("Hafta Sonu (Gün)", "haftaSonuGun", "gun"), S("Hafta Sonu Kazancı", "haftaSonuKazanc", "hesap"), S("Resmî Tatil (Gün)", "resmiTatilGun", "gun"), S("Resmî Tatil Kazancı", "resmiTatilKazanc", "hesap"), S("Bayram Tatili (Gün)", "bayramGun", "gun"), S("Bayram Tatili Kazancı", "bayramKazanc", "hesap"), S("Ücretli İzin (Gün)", "ucretliIzinGun", "gun"), S("Ücretli İzin Kazancı", "ucretliIzinKazanc", "hesap") }),
             ("Ek Çalışmalar", new[] { S("Fazla Mesai", "fazlaMesai", "rx"), S("Bayram", "bayramCalisma", "sayi"), S("Gece Farkı", "geceFarki", "sayi"), S("Pazar", "pazarCalisma", "sayi"), S("Resmi Tatil", "resmiTatilCalisma", "sayi"), S("Toplam Ek Çalışma-R", "toplamEkCalisma", "hesap"), S("Toplam Ek Çalışma-X", "toplamEkCalismaX", "hesap") }),
-            ("Sosyal Yardımlar", new[] { S("Yemek", "yemek", "rx"), S("Yol", "yol", "rx"), S("Servis", "servis", "sayi"), S("Kira Desteği", "kiraDestegi", "sayi"), S("Eğitim", "egitim", "sayi"), S("Çocuk Yardımı", "cocukYardimi", "sayi"), S("Toplam Sosyal Yardımlar-R", "toplamSosyal", "hesap"), S("Toplam Sosyal Yardımlar-X", "toplamSosyalX", "hesap") }),
+            ("Sosyal Yardımlar", new[] { S("Yemek", "yemek", "rx"), S("Yol", "yol", "rx"), S("Servis", "servis", "sayi"), S("Kira Desteği", "kiraDestegi", "rx"), S("Eğitim", "egitim", "sayi"), S("Çocuk Yardımı", "cocukYardimi", "sayi"), S("Toplam Sosyal Yardımlar-R", "toplamSosyal", "hesap"), S("Toplam Sosyal Yardımlar-X", "toplamSosyalX", "hesap") }),
             ("Prim ve Ek Kazançlar", new[] { S("Maaş Farkı", "maasFarki", "sayi"), S("Prim", "prim", "rx"), S("Özel Ödeme", "ozelOdeme", "sayi"), S("Kasa Tazminatı", "kasaTazminati", "sayi"), S("Toplam Prim-R", "toplamPrim", "hesap"), S("Toplam Prim-X", "toplamPrimX", "hesap") }),
             ("Yan Haklar", new[] { S("Özel Sağlık", "ozelSaglik", "sayi"), S("Kıyafet", "kiyafet", "sayi"), S("Koruyucu Ekipman", "koruyucuEkipman", "sayi"), S("Doğum Yardımı", "dogumYardimi", "sayi"), S("Evlilik Yardımı", "evlilikYardimi", "sayi"), S("Toplam Yan Haklar", "toplamYanHaklar", "hesap") }),
             ("Yasal Ödemeler", new[] { S("Kıdem Tazminatı", "kidemTazminati", "sayi"), S("İhbar Tazminatı", "ihbarTazminati", "sayi"), S("İşe İade", "iseIade", "sayi"), S("Yıllık İzin Ödemesi", "yillikIzinOdemesi", "sayi"), S("Rapor Farkı", "raporFarki", "sayi"), S("Doğum İzni", "dogumIzni", "sayi"), S("Toplam Yasal Ödemeler", "toplamYasal", "hesap") }),
@@ -340,10 +355,34 @@ namespace WebApplication3.Data
         {
             var guncel = Tohumla();
             foreach (var p in guncel) p.BankaBlokeli = Array.IndexOf(BankaBlokeliKisiler, p.AdSoyad) >= 0;
+            KiraDestegiYaz(guncel, EylulEur, EylulUsd);   // Eylül'de de kira destekleri (6 Kas 2026: Paulo 500 € Eylül kaynak kuruyla 27.815,30 ₺; Devrim / Hale Bisren 45.000 ₺)
             return new SortedDictionary<string, List<PmPersonel>> { [GuncelDonem] = guncel };
+        }
+        /// <summary>Kira desteklerini (KiraDestekleri) listeye yazar: kişinin ilk satırına tutar × dönem kuru (₺ olan aynen; KiraDestegiX) ve nota kısa açıklama; ad eşleşmesi AnahtarEsit ile (büyük-küçük harf, boşluk, eğik çizgi farkı yok).</summary>
+        private static void KiraDestegiYaz(List<PmPersonel> liste, decimal eur, decimal usd)
+        {
+            var verildi = new HashSet<string>();
+            foreach (var p in liste)
+            {
+                var k = Array.Find(KiraDestekleri, x => AnahtarEsit(x.Ad, p.AdSoyad));
+                if (k.Ad == null || !verildi.Add(k.Ad)) continue;
+                p.KiraDestegiX = Math.Round(k.Tutar * (k.Pb == "EUR" ? eur : k.Pb == "USD" ? usd : 1m), 2);
+                if ((p.Not ?? "").IndexOf("Kira desteği", StringComparison.OrdinalIgnoreCase) < 0) p.Not = ((p.Not ?? "") + " " + KiraNotu(k.Tutar, k.Pb)).Trim();
+            }
         }
         /// <summary>Banka hesabı blokeli kişiler (4 Kas 2026): Cafer İpek ve Nükhet Özavşar; R tutarları elden ödenir.</summary>
         private static readonly string[] BankaBlokeliKisiler = { "Cafer İpek", "Nükhet Özavşar" };
+        /// <summary>Yeni bordro dönemi ve eşlikçileri (kesinti taksitleri, prim satırları, mesai talepleri): denetleyicinin "Yeni Bordro" ucu ve kalıcı günlüğün yeniden yüklemesi aynı yolu kullanır (6 Kas 2026).</summary>
+        public static List<PmPersonel> DonemKur(string donem, Dictionary<string, decimal> kurlar, out bool yeni)
+        {
+            lock (Kilit)
+            {
+                var liste = DonemOlustur(donem, kurlar, out yeni);
+                if (yeni && donem != PersonelMaliyetEkimOrnek.Donem) PersonelKesintiOrnek.KesintileriDonemYansit(donem);   // Ekim dosyadan kurulur: kesinti sütunları dosyadaki değerlerdir (plansız BES vb. sıfırlanmaz)
+                if (yeni) { PersonelMaliyetEkOrnek.PrimleriDonemdenTuret(donem); PersonelKesintiOrnek.MesaiTalepleriniTohumla(donem); }   // Prim Ödemeleri ve Ek Çalışmalar sekmeleri yeni dönemin bordro tutarlarıyla birebir (5 Kas 2026)
+                return liste;
+            }
+        }
         /// <summary>Yeni bordro dönemi: Ekim 2026 dosyadan kurulur (PersonelMaliyetEkimOrnek); diğer dönemler güncel dönemin kopyasıdır. Kesinti taksitleri çağıran tarafından o aya göre yazılır. Dönem zaten varsa dokunulmaz (yeni = false).</summary>
         public static List<PmPersonel> DonemOlustur(string donem, Dictionary<string, decimal> kurlar, out bool yeni)
         {
@@ -370,6 +409,7 @@ namespace WebApplication3.Data
                         if (p.IsverenKaynak.HasValue) p.IsverenKaynak = Math.Round(p.IsverenKaynak.Value * f, 2);
                     }
                 }
+                KiraDestegiYaz(liste, eur, usd);   // kira destekleri (6 Kas 2026): X (bordro dışı) kalem; dövizli olan yeni bordro kuruyla ₺ (Ekim 2026: Paulo 27.826,95), ₺ olan aynen (Devrim / Hale 45.000)
                 int donemAy = int.Parse(donem.Substring(5, 2));
                 foreach (var p in liste.Where(x => x.BrutKaynak == null)) TuretilmisKaynak(p, donemAy);   // brütü olmayanlar: brütleştirme kaynak değer olur (vergi artık; fiş dengesi kaynaklı kişiler gibi tutar)
                 Donemler[donem] = liste;
@@ -412,6 +452,9 @@ namespace WebApplication3.Data
             ("Sevgi Kaya", "USD", 2500m, PmPersonel.DovizTamamiR, 0m),
             ("Berkan Özkan", "USD", 2000m, PmPersonel.DovizTamamiR, 0m),
         };
+        /// <summary>Bordro dışı kira destekleri (kullanıcı, 6 Kas 2026): X kalemdir (KiraDestegiX), her dönemde yazılır; dövizli olan o dönemin kuruyla ₺'ye çevrilir, ₺ olan aynen. Joao Paulo Araujo Fernandes 500 € / ay (Eylül 2026: 500 × 55,6306 = 27.815,30 ₺; Ekim 2026: 500 × 55,6539 = 27.826,95 ₺); Devrim / Hale Bisren 45.000 ₺ / ay ("x ten kira 45.000₺"); Kamil Mahmudov 23.520 ₺ ve Elmin Jabbarov 25.400 ₺ / ay ("X ten alınan kira bedelleri"; SGK'lı gündelikçiler, R mahsubu değişmez). Birleşik Personel Maliyeti'nde Kira sütununun X satırı; elden ödemeye ve genel maliyete girer, brüt ve SGK'ya girmez.</summary>
+        private static readonly (string Ad, string Pb, decimal Tutar)[] KiraDestekleri = { ("Joao Paulo Araujo Fernandes", "EUR", 500m), ("Devrim / Hale Bisren", "TL", 45000m), ("Kamil Mahmudov", "TL", 23520m), ("Elmin Jabbarov", "TL", 25400m) };
+        private static string KiraNotu(decimal tutar, string pb) => $"Kira desteği {tutar.ToString("N0", Tr)} {(pb == "EUR" ? "€" : pb == "USD" ? "$" : "₺")} / ay (X, bordro dışı).";
         /// <summary>Ekim 2026 bordrosu dosyadan kurulur (personel_kazanc_birlesik_2.xlsx, 5 Kas 2026): satır tutarları, ek ödemeler ve kesintiler dosyadan gelir; kimlik ve notlar Eylül kaydından ad (ve SGK) eşleşmesiyle alınır. Kaynak brüt ve işveren yalnız girdiler Eylül ile aynıysa korunur (aynı girdi, aynı brüt); değişen kişide model brütü R-Net'ten hesaplar. İcra Eylül ile aynı taşınır (kullanıcı kararı); "Ödeme Yapılmıyor" notu taşınmaz (dosyada yok); bloke hesap kuralı (Cafer İpek, Nükhet Özavşar) korunur. Dosyada olmayan Eylül kaydı (Alper Köse, işten ayrıldı) silinmez, Ekim tutarları sıfırlanır.</summary>
         private static List<PmPersonel> EkimListesi()
         {
@@ -486,7 +529,7 @@ namespace WebApplication3.Data
             p.OzelSaglik = p.Kiyafet = p.KoruyucuEkipman = p.DogumYardimi = p.EvlilikYardimi = p.IseIade = p.RaporFarki = p.DogumIzni = 0m;
             p.GvIndirimleri = p.OzelSigortaIndirimi = 0m;
             p.Avans = p.Borc = p.OzelSigortaKesintisi = p.SendikaKatkisi = p.Bes = p.MazotKesintisi = p.IhbarKesintisi = p.DigerEkOdemelerR = 0m;
-            p.YemekX = p.YolX = p.FazlaMesaiX = p.PrimX = p.KesintilerToplamiX = 0m;
+            p.YemekX = p.YolX = p.FazlaMesaiX = p.PrimX = p.KiraDestegiX = p.KesintilerToplamiX = 0m;
         }
         /// <summary>Ad ve işveren karşılaştırması: büyük-küçük harf, Türkçe i/ı/İ, boşluk ve eğik çizgi farkı yok sayılır (Excel "DEVRİM/HALE BİSREN" = "Devrim / Hale Bisren").</summary>
         private static bool AnahtarEsit(string a, string b) => Anahtar(a) == Anahtar(b);
@@ -715,7 +758,7 @@ namespace WebApplication3.Data
                 P(ALV, IST, "Eser Şenürek", "Uzman", "Ar-Ge", "Ar-Ge Uzmanı", "Üretim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 70000.00m, yol: 3650.10m, brut: 110594.21m, isveren: 26266.13m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "11.06.2019"),
                 P(ALV, COR, "Görkem Akbulut", "Uzman", "Ar-Ge", "Ar-Ge Uzmanı", "Üretim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 47000.00m, brut: 67112.95m, isveren: 15939.33m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "04.07.2024"),
                 P(ALV, URS, "Cafer İpek", "Müdür", "Teknik Hizmetler", "İnşaat Mühendisi", "Satış ve Pazarlama", "Emekli", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Ödeme Yapılmıyor", r: 5333.33m, x: 114666.67m, brut: 5765.76m, isveren: 1427.03m, primGun: 4.00m, normalGun: 4.00m, haftaSonuGun: 0.00m, giris: "03.05.2025"),
-                P(ALV, COR, "Kamil Mahmudov", "Personel", "Üretim", "Üretim Personeli", "Üretim", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 51000.01m, yol: 3650.10m, brut: 79594.54m, isveren: 18903.70m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m),
+                P(ALV, COR, "Kamil Mahmudov", "Personel", "Üretim", "Üretim Personeli", "Üretim", "Gündelikçi", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 51000.01m, yol: 3650.10m, brut: 79594.54m, isveren: 18903.70m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m),
                 P(ALV, URS, "Mustafa Budak", "Uzman", "İhracat", "İhracat Operasyon Uzmanı", "Tedarik Zinciri ve Operasyonlar", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 58500.00m, yol: 3650.10m, brut: 93589.02m, isveren: 22227.39m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "04.08.2025"),
                 P(ALV, URS, "Mustafa Savaş", "Uzman", "Yurtdışı Şube", "Yurtdışı Şube - Sorumlusu", "Satış ve Pazarlama", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi.", r: 28100.00m, bes: 1040.00m, brut: 34668.66m, isveren: 8233.80m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "01.04.2022", ozelKisi: true, dk: "D21", da: "Finans Departmanı", sicil: "R-400", sgkNo: "3401201908589"),
                 P(ALV, IST, "Nevruz Sarıtaş", "Uzman", "Muhasebe", "Muhasebe Uzmanı", "Mali İşler", "", "Bordro ve Personel Kazanç raporu ile kontrol edildi. Yol: bordro 5,955.35 / Personel Kazanç 3,650.10 farklı; Personel Kazanç kullanıldı.", r: 52000.00m, yol: 3650.10m, brut: 81226.12m, isveren: 19291.21m, primGun: 30.00m, normalGun: 30.00m, haftaSonuGun: 0.00m, giris: "25.10.2021"),

@@ -258,6 +258,7 @@ namespace WebApplication3.Data
             ("IkTalep", "IzinTakvim", "fas fa-calendar-days", "Ekip İzin Takvimi", "İK ve İdari İşler"),
             ("IkTalep", "IzinOnay", "fas fa-clipboard-check", "İzin Onay Bekleyenler", "İK ve İdari İşler"),
             ("IkTalep", "IzinTakip", "fas fa-calendar-check", "İzin Takip Raporu", "İK ve İdari İşler"),
+            ("CariKart", "Personel", "fas fa-id-badge", "Personel Carileri", "İK ve İdari İşler"),   // 9 Kas 2026: 335 personel carileri Konsolide İK Paneli kişilerinden canlı (Data/IkPersonelMaster.cs); önce Rapor120 (Cari Bilgileri) açılıyordu
             ("GrupIci", "Yansitma", "fas fa-right-left", "Yansıtma İşlemleri", "Mali İşler"),
             ("GrupIci", "Mahsup", "fas fa-scale-balanced", "Mahsup İşlemleri", "Mali İşler"),
             ("GrupIci", "Temlik", "fas fa-file-contract", "Temlik İşlemleri", "Mali İşler"),

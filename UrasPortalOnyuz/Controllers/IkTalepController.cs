@@ -62,10 +62,12 @@ namespace WebApplication3.Controllers
         public IActionResult TmVeri(string kod)
         {
             var m = TalepMotoru.Modul(kod); if (m == null) return Json(new { success = false, message = "Modül yok." });
+            var ben = Ben();
             lock (TalepMotoru.Kilit)
             {
                 var l = TalepMotoru.Talepler.Where(t => t.ModulKod == m.Kod).ToList();
-                return Json(new { ben = Kisi(Ben()), personel = NakitAvansOrnek.Personel.Select(Kisi), sirketler = OrnekVeri.Sirketler.Select(s => s.Display).Distinct(), modul = TmModulDto(m), kpiler = m.Kpiler(l), talepler = l.OrderByDescending(t => t.Id).Select(TmDto) });
+                var personel = m.Kod == "MESAI" ? IkPersonel(ben) : NakitAvansOrnek.Personel;   // Mesai (bordroya bağlı; Mesai Takip Raporu İnsan Kaynakları'nda): personel listesi Konsolide İK Paneli'nden (9 Kas 2026)
+                return Json(new { ben = Kisi(ben), personel = personel.Select(Kisi), sirketler = OrnekVeri.Sirketler.Select(s => s.Display).Distinct(), modul = TmModulDto(m), kpiler = m.Kpiler(l), talepler = l.OrderByDescending(t => t.Id).Select(TmDto) });
             }
         }
 
@@ -168,13 +170,14 @@ namespace WebApplication3.Controllers
         [HttpGet]
         public IActionResult IzinVeri()
         {
+            var ben = Ben(); var P = IkPersonel(ben);   // personel listesi ve bakiyeler Konsolide İK Paneli kişilerinden (9 Kas 2026; Ekip İzin Takvimi, İzin Takip Raporu)
             lock (IzinOrnek.Kilit)
                 return Json(new
                 {
-                    ben = Kisi(Ben()), personel = NakitAvansOrnek.Personel.Select(Kisi),
+                    ben = Kisi(ben), personel = P.Select(Kisi),
                     turler = IzinOrnek.Turler, yarimGun = new[] { "Yok", "Sabah", "Öğleden Sonra" },
                     tatiller = IzinOrnek.Tatiller.Select(t => new { Tarih = t.Key.ToString("yyyy-MM-dd"), Ad = t.Value }),
-                    bakiyeler = NakitAvansOrnek.Personel.Select(p => BakiyeDto(IzinOrnek.Bakiye(p))),
+                    bakiyeler = P.Select(p => BakiyeDto(IzinOrnek.Bakiye(p))),
                     politika = IzinOrnek.BakiyePolitikasi, dolulukEsigi = IzinOrnek.DolulukEsigi, uzunIzinEsigi = IzinOrnek.UzunIzinEsigi, devirUstSinir = IzinOrnek.DevirUstSinir,
                     talepler = IzinOrnek.Talepler.OrderByDescending(t => t.Id).Select(IzDto)
                 });
@@ -278,6 +281,9 @@ namespace WebApplication3.Controllers
         public IActionResult AvansTakip() { ViewData["Title"] = "Nakit Avans Takip Raporu"; ViewBag.Sekme = "takip"; ViewBag.No = ""; return View("Avans"); }
 
         private NaKisi Ben() => NakitAvansOrnek.KisiBul(User?.Identity?.Name) ?? NakitAvansOrnek.Personel[0];
+        /// <summary>İK ekranlarının personel listesi (9 Kas 2026, "İnsan Kaynakları alt menüsündeki tüm raporlar Konsolide İK Paneli ile senkronize olmalı"): Konsolide İK Paneli kişileri (Data/IkPersonelMaster.cs; cari kodu 335.xxx);
+        /// oturumdaki kullanıcı listede yoksa (örnek kullanıcı) talep açabilsin diye başa eklenir.</summary>
+        private static List<NaKisi> IkPersonel(NaKisi ben) { var l = IkPersonelMaster.NaKisiler(); if (ben != null && !l.Any(p => p.PersonelNo == ben.PersonelNo)) l.Insert(0, ben); return l; }
 
         /// <summary>Şahsi (maaş) avansında gizlilik: kişi adı, kullanıcı ve konu maskelenir (NakitAvansOrnek.SahsiMi); şirket masrafı avansında ayrıntı açıktır.</summary>
         private static object Kisi(NaKisi k) => Kisi(k, false);
