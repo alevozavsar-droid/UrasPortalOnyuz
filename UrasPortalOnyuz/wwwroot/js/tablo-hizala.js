@@ -16,7 +16,7 @@
   const PARA = /^-?(\d{1,3}(\.\d{3})+|\d+)(,\d+)?\s*(₺|\$|€|£|%)?$/;   // işaretli tutar: 190.100,00 ₺ · 12 %
   const BASLAYAN = /^-?(\d{1,3}(\.\d{3})+|\d+)(,\d+)?\s*(₺|\$|€|£)/;    // tutar + alt satır: 190.100,00 ₺ 16.000 $ ×40,19
   const TARIH = /\d{2}\.\d{2}\.\d{4}/;
-  const SAYAC = /^(Sıra|No|#|Ver\.?|Dönem|Oran)$|\(Gün\)|Çalışılan Gün|Prim Gün|Saat$|\(Saat\)|\(sa\)|\bKur\b|Oran %|%\s*\(|^%|Çarpan|^Pay|\(Yıl\)|Adet|Kişi|Personel|Sicil|Satır|Versiyon|Güncel|Numara|Kimlik|IBAN|\bNo\b/i;   // "(Saat)" (9 Kas 2026): Fazla Mesai (Saat) sütunu sayaçtır, ₺ almaz
+  const SAYAC = /^(Sıra|No|#|Ver\.?|Dönem|Oran)$|\(Gün\)|Çalışılan Gün|Prim Gün|Saat$|\(Saat\)|\(sa\)|\bKur\b|Oran %|%\s*\(|^%|Çarpan|^Pay|\(Yıl\)|\(Ay\)|Ödemesiz Ay|Taksit Sayısı|Taksit Adedi|Geciken Taksit|Ödenen Taksit|Taksit No|Adet|Kişi|Personel|Sicil|Satır|Versiyon|Güncel|Numara|Kimlik|IBAN|\bNo\b/i;   // "(Saat)" (9 Kas 2026): Fazla Mesai (Saat) sayaçtır; "(Ay)", Ödemesiz Ay, Taksit Sayısı / Adedi / No, Geciken / Ödenen Taksit (Kredi Raporu) ₺ almaz
   const BOS = ['', '—', '-'];
   const PAY = 3;   // başlık sütununa eklenen pay (px): yazı tipi ölçüsündeki küçük farkları karşılar
   /** hücrenin tek dolu metin düğümü (renkli span içinde de olabilir); birden çok metin varsa null */

@@ -136,7 +136,7 @@ namespace WebApplication3.Data
             }
         }
 
-        // ---------- KREDİ TAKSİDİ (Kredi Yapılandırma Raporu; Data/KrediYapilandirmaOrnek.cs, 9 Kas 2026): kredi / taksit başına TEK satır (U_KrediTaksit = "KRD-001|003"), Havale / EFT, İşlem Tipi R ----------
+        // ---------- KREDİ TAKSİDİ (Kredi Raporu; Data/KrediYapilandirmaOrnek.cs, 9 Kas 2026): kredi / taksit başına TEK satır (U_KrediTaksit = "KRD-001|003"), Havale / EFT, İşlem Tipi R ----------
         public static NakitAkisViewModel KrediSatiri(string anahtar) { Tohumla(); lock (Kilit) return _odemeler.Values.SelectMany(l => l).FirstOrDefault(m => m.U_KrediTaksit == anahtar); }
         public static List<NakitAkisViewModel> KrediSatirlari(string onEk) { Tohumla(); lock (Kilit) return _odemeler.Values.SelectMany(l => l).Where(m => !string.IsNullOrEmpty(m.U_KrediTaksit) && m.U_KrediTaksit.StartsWith(onEk)).ToList(); }
         /// <summary>Kredi taksidi satırı yazar: yoksa ekler (Havale / EFT, Planlandı), varsa ödenmemişse banka / tutar / tarih / açıklamayı günceller, ödenmişse dokunmaz. islem = eklendi | güncellendi | ödenmiş.</summary>
@@ -163,7 +163,7 @@ namespace WebApplication3.Data
                     U_AliciBanka = banka, U_AliciHesapAdi = banka + " · kredi taksit tahsilat hesabı"
                 };
                 m.DocNum = m.DocEntry; m.U_Sira = _odemeler[dbName].Count + 1; _odemeler[dbName].Add(m);
-                Log(dbName, m.DocEntry, "Ekleme", $"Kredi Yapılandırma Raporu: {banka} · {belgeNo} · Havale / EFT · {tutar.ToString("N2", Tr)} TRY · plan {plan:dd.MM.yyyy}", kullanici);
+                Log(dbName, m.DocEntry, "Ekleme", $"Kredi Raporu: {banka} · {belgeNo} · Havale / EFT · {tutar.ToString("N2", Tr)} TRY · plan {plan:dd.MM.yyyy}", kullanici);
                 return (m, "eklendi");
             }
         }
