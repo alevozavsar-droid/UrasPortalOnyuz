@@ -1,7 +1,7 @@
 // ============================================================
 // KASA NAKİT AKIŞI — modern ekran betiği (Views/Rapor79/Index.cshtml; veri /Rapor79/Veri; kaynak Data/NakitAkisOrnek.cs + CekAkibetOrnek.cs + TalimatOrnek.cs + MakbuzOrnek.cs + MuhasebeOrnek.cs + Mahsup / Temlik / Yansıtma / Nakit Avans modülleri)
 // Sekmeler ödeme yöntemine göre; her sekmede yalnız o yöntemin sütunları (KOL). Her sekmede: planlanan ödeme tarihi, son ödeme tarihi, belge no (tıklanınca belge detayı), fatura sahibi ve ödeyen şirket ayrı sütun.
-// Tümü sekmesi (9 Kas 2026): eski 23 sütunlu görünümün tüm başlıkları ayrı sütun (İşlem Tipi, Kaynak Firma, Belge Tarihi, Satınalmacı, Ürün / Hizmet, PB, Anlaşılan Kur, döviz Tutar, Toplam Ödenen, Ödenen PB, Mutabakat, Son Mutabakat Tarihi, Dekont); tablo ağırlık toplamı kadar en az genişlik alır (yatay kaydırma).
+// Tümü sekmesi (9 Kas 2026): eski 23 sütunlu görünümün başlıkları ayrı sütun (İşlem Tipi, Belge Tarihi, Satınalmacı, Ürün / Hizmet, PB, Anlaşılan Kur, döviz Tutar, Toplam Ödenen, Ödenen PB, Mutabakat, Son Mutabakat Tarihi, Dekont; Kaynak Firma yok — Fatura Sahibi ile aynı bilgi); tablo ağırlık toplamı kadar en az genişlik alır (yatay kaydırma).
 // Üst kartlar tıklanınca filtre (ödenen, kalan, bu hafta, geciken, onay bekleyen, mükerrer, avans). Satır içi düzenleme (.kn-alan → AlanKaydet), çekmece (tüm alanlar + işlem çubuğu: tablodaki her işlem çekmeceden de yapılır).
 // Satır seçimi (.kn-sec) → "Seçilenlerden Talimat Oluştur" (TalimatOlustur; Talimatlar sekmesi). Çek / Senet: portföy görünümü (SecilebilirBelgeler) → BelgePlanla, "Planla ve Dolaşımı Planla" ile dolaşım modalı sırayla açılır;
 // dolaşım modalı (DolasimOner / DolasimSimule / DolasimKaydet / DolasimAdim / DolasimIptal). Plansız çek çıkışı (Çek Akıbeti'nden) GMY onayı satırı olarak düşer (CekCikisOnay).
@@ -86,7 +86,7 @@
   function ciz() {
     if (!V) return; if (typeof talepRozet === 'function') talepRozet();
     const L = satirlar();
-    $('#knKapsam').textContent = `${F.sirket ? sirketAdi(F.sirket) : 'Tüm Şirketler (Konsolide)'} · ${tarih(F.bas)} – ${tarih(F.bit)} · ${L.length} kayıt${F.kpi ? ' · kart filtresi açık' : ''}`;
+    const kapsam = $('#knKapsam'); kapsam.textContent = `${F.sirket ? sirketAdi(F.sirket) : 'Tüm Şirketler (Konsolide)'} · ${tarih(F.bas)} – ${tarih(F.bit)} · ${L.length} kayıt${F.kpi ? ' · kart filtresi açık' : ''}`; kapsam.title = kapsam.textContent;   // sekme çubuğunun sağ ucu; dar ekranda kısalır, tamamı ipucunda
     kpi();
     const p = aktifSekme();
     if (p === 'bakiye') cizBakiye(); else if (p === 'gunluk') cizGunluk(); else if (p === 'talimat') cizTalimatlar(); else if (p === 'aylik') cizAylik(); else cizTablo(p, L);
@@ -119,10 +119,10 @@
   // ---------- sütunlar (sekmeye göre): [başlık, genişlik ağırlığı]; sabit tablo düzeni → tek ekrana sığar
   const K = (ad, w) => ({ ad, w });
   const C_SEC = K('', 22), C_SIRA = K('Sıra', 26), C_PLAN = K('Planlanan Ödeme Tarihi', 90), C_SON = K('Son Ödeme Tarihi', 80), C_BELGE = K('Belge No · Belge Tipi', 96), C_KURUM = K('Ödenecek Cari · Ürün / Hizmet', 136), C_FS = K('Fatura Sahibi', 84), C_OD = K('Ödeyen Şirket', 84), C_TL = K('Tutar (₺) · Belge Oranı', 114), C_DURUM = K('Ödeme Durumu', 94), C_ODENME = K('Ödenme Tarihi', 72), C_ODENEN = K('Ödenen Tutar', 84), C_NOT = K('Not', 90), C_TALIMAT = K('Talimat', 76), C_ISLEM = K('', 26);
-  // Tümü sekmesi (9 Kas 2026): eski görünümün tüm başlıkları ayrı sütun (İşlem Tipi, Kaynak Firma, Belge Tarihi, Satınalmacı, Ürün / Hizmet, PB, Anlaşılan Kur, döviz Tutar, Toplam Ödenen, Ödenen PB, Mutabakat, Son Mutabakat Tarihi, Dekont) + yeni raporun sütunları (Son Ödeme, Fatura Sahibi, Ödeyen Şirket, Talimat).
+  // Tümü sekmesi (9 Kas 2026): eski görünümün başlıkları ayrı sütun (İşlem Tipi, Belge Tarihi, Satınalmacı, Ürün / Hizmet, PB, Anlaşılan Kur, döviz Tutar, Toplam Ödenen, Ödenen PB, Mutabakat, Son Mutabakat Tarihi, Dekont) + yeni raporun sütunları (Son Ödeme, Fatura Sahibi, Ödeyen Şirket, Talimat). Kaynak Firma yok: Fatura Sahibi ile aynı bilgi (kullanıcı).
   // Ağırlıklar piksel: toplam tablonun en küçük genişliği (cizTablo → min-width); dar ekranda yatay kayar, geniş ekranda %100 dolar.
   const KOL = {
-    tumu: [K('', 26), K('Sıra', 28), K('İşlem Tipi', 38), K('Kaynak Firma', 78), K('Belge No · Belge Tipi', 92), K('Belge Tarihi', 72), K('Planlanan Ödeme Tarihi', 92), K('Son Ödeme Tarihi', 72), K('Kurum (Ödenecek Cari)', 130), K('Satınalmacı', 76), K('Ürün / Hizmet', 100), K('Fatura Sahibi', 76), K('Ödeyen Şirket', 76), K('PB', 28), K('Anlaşılan Kur', 70), K('Tutar', 92), K('Tutar (₺)', 96), K('Ödeme Yöntemi', 92), K('Ödenme Tarihi', 72), K('Toplam Ödenen', 92), K('Ödenen PB', 40), K('Ödeme Durumu', 88), K('Mutabakat', 72), K('Son Mutabakat Tarihi', 84), K('Dekont', 46), K('Talimat', 66), K('Not', 110), K('', 34)],
+    tumu: [K('', 26), K('Sıra', 28), K('İşlem Tipi', 38), K('Belge No · Belge Tipi', 92), K('Belge Tarihi', 72), K('Planlanan Ödeme Tarihi', 92), K('Son Ödeme Tarihi', 72), K('Kurum (Ödenecek Cari)', 130), K('Satınalmacı', 76), K('Ürün / Hizmet', 100), K('Fatura Sahibi', 76), K('Ödeyen Şirket', 76), K('PB', 28), K('Anlaşılan Kur', 70), K('Tutar', 92), K('Tutar (₺)', 96), K('Ödeme Yöntemi', 92), K('Ödenme Tarihi', 72), K('Toplam Ödenen', 92), K('Ödenen PB', 40), K('Ödeme Durumu', 88), K('Mutabakat', 72), K('Son Mutabakat Tarihi', 84), K('Dekont', 46), K('Talimat', 66), K('Not', 110), K('', 34)],
     nakit: [C_SEC, C_SIRA, C_PLAN, C_SON, C_BELGE, C_KURUM, C_FS, C_OD, C_TL, K('Kasa', 92), K('Makbuz No · Muhasebe Fişi', 98), K('Nakit Onayı', 104), C_DURUM, C_ODENME, C_TALIMAT, C_ISLEM],
     havale: [C_SEC, C_SIRA, C_PLAN, C_SON, C_BELGE, C_KURUM, C_FS, C_OD, C_TL, K('Banka Hesabımız', 104), K('Alıcı IBAN · Banka · Hesap Adı', 144), K('Dekont No', 72), C_DURUM, C_ODENME, C_TALIMAT, C_ISLEM],
     kredi: [C_SEC, C_SIRA, C_PLAN, C_SON, C_BELGE, C_KURUM, C_FS, C_OD, C_TL, K('Kart', 118), K('Taksit', 70), K('Ekstre Dönemi', 86), C_DURUM, C_ODENME, C_TALIMAT, C_ISLEM],
@@ -166,9 +166,9 @@
     const talimat = `<td>${r.talimat ? talimatRozet(r.talimat) : bos}</td>`;
     const not = `<td class="sol not" title="${esc(r.notlar || '')}">${esc(r.notlar || '')}</td>`, islem = `<td><button type="button" class="btn btn-light btn-sm py-0 px-1 border kn-ac" title="Detay / düzenle / işlemler"><i class="fas fa-pen"></i></button></td>`;
     if (p === 'tumu') {
-      // eski görünümün başlıkları ayrı sütun: işlem tipi, kaynak firma, belge tarihi, satınalmacı, ürün / hizmet, PB, anlaşılan kur, döviz tutar, ödenen PB, mutabakat + tarihi, dekont
+      // eski görünümün başlıkları ayrı sütun: işlem tipi, belge tarihi, satınalmacı, ürün / hizmet, PB, anlaşılan kur, döviz tutar, ödenen PB, mutabakat + tarihi, dekont
+      // Kaynak Firma sütunu yok (9 Kas 2026, kullanıcı: "Fatura Sahibi ve Kaynak Firma aynı şey"): kaydın şirketi Fatura Sahibi sütununda; dbName başlıkta
       const islemTipi = `<td title="İşlem tipi: ${esc(r.islemTipi || '—')}">${r.islemTipi ? `<b>${esc(r.islemTipi)}</b>` : bos}</td>`;
-      const kaynak = `<td class="sol" title="Kaynak firma (kaydın şirketi): ${esc(r.sirket)} · ${esc(r.dbName)}">${esc(r.sirket)}</td>`;
       const belgeTarihi = `<td title="Belge tarihi${r.belgeTarihi ? ' ' + tarih(r.belgeTarihi) : ' girilmemiş'}">${tarih(r.belgeTarihi)}</td>`;
       const kurumSade = av ? kurum : `<td class="sol kurum" title="${esc(r.kurum)}">${esc(r.kurum)}</td>`;
       const satin = `<td class="sol" title="Satınalma temsilcisi: ${esc(r.satinalmaci || '—')}${r.talepEden ? ' · talep eden: ' + esc(r.talepEden) : ''}">${r.satinalmaci ? esc(r.satinalmaci) : bos}</td>`;
@@ -189,7 +189,7 @@
       const mutTarih = `<td title="Son mutabakat tarihi${r.mutabakatTarihi ? '' : ': mutabakat yapılmamış'}">${tarih(r.mutabakatTarihi)}</td>`;
       const dk = r.dekontlar || [], dosyali = dk.filter(d => d.dosyaVar), dkBaslik = dk.map(d => (d.tur || 'Dekont') + ': ' + d.ad).join(' · ');
       const dekont = `<td title="${dk.length ? esc(dkBaslik) + (dosyali.length === 1 ? ' · tıkla: dosyayı aç' : ' · tıkla: çekmece › Ekler') : 'Ek yok · çekmece › Ekler bölümünden yüklenir'}">${dk.length ? (dosyali.length === 1 ? `<a href="${esc(dosyali[0].yol)}" target="_blank" class="fw-bold"><i class="fas fa-paperclip"></i> ${dk.length} ek</a>` : `<a class="kn-ac fw-bold"><i class="fas fa-paperclip"></i> ${dk.length} ek</a>`) : bos}</td>`;
-      return [sec, sira, islemTipi, kaynak, belge, belgeTarihi, plan, son, kurumSade, satin, urun, fs, od, pb, kur, tutarDoviz, tlSade, yontem, odenme, toplamOdenen, odenenPb, durumSade, mutabakat, mutTarih, dekont, talimat, not, islem];
+      return [sec, sira, islemTipi, belge, belgeTarihi, plan, son, kurumSade, satin, urun, fs, od, pb, kur, tutarDoviz, tlSade, yontem, odenme, toplamOdenen, odenenPb, durumSade, mutabakat, mutTarih, dekont, talimat, not, islem];
     }
     if (p === 'nakit') {
       const onayHucre = `<td class="sol wrap">${o ? onayRozet(o) : '<span class="kn-onay bekliyor">Onay Bekliyor</span>'}${o && o.onaylayan ? `<small>${esc(o.onaylayan)} · ${esc((o.tarih || '').slice(0, 10))}</small>` : ''}${r.durum !== 'ÖDENDİ' && (!o || o.durum !== 'Onaylandı') ? ` <button type="button" class="btn btn-primary btn-sm py-0 px-1 kn-onay-ac" style="font-size:.6rem" title="Onaycı: ${esc((V.onaycilar?.nakit || []).join(' / '))}"><i class="fas fa-user-check"></i> Onayla / Reddet</button>` : ''}${r.durum !== 'ÖDENDİ' && o && o.durum === 'Onaylandı' ? ` <button type="button" class="btn btn-success btn-sm py-0 px-1 kn-makbuz-ac" style="font-size:.6rem" title="Kasa tediye makbuzu kes: satır ödenir, muhasebe fişi atılır"><i class="fas fa-receipt"></i> Makbuz Kes</button>` : ''}</td>`;
@@ -347,7 +347,7 @@
   $$('#knSekmeler button').forEach(b => b.addEventListener('click', () => sekme(b.dataset.p)));
   $('#knSirket').addEventListener('change', () => { F.sirket = $('#knSirket').value; yukle(); });
   $('#knBas').addEventListener('change', () => { F.bas = $('#knBas').value; yukle(); }); $('#knBit').addEventListener('change', () => { F.bit = $('#knBit').value; yukle(); });
-  $$('.kn-hizli button').forEach(b => b.addEventListener('click', () => { const d = new Date(); const bit = new Date(); bit.setDate(bit.getDate() + +b.dataset.gun); F.bas = d.toISOString().slice(0, 10); F.bit = bit.toISOString().slice(0, 10); $('#knBas').value = F.bas; $('#knBit').value = F.bit; yukle(); }));
+  $$('.kn-hizli button[data-gun]').forEach(b => b.addEventListener('click', () => { const d = new Date(); const bit = new Date(); bit.setDate(bit.getDate() + +b.dataset.gun); F.bas = d.toISOString().slice(0, 10); F.bit = bit.toISOString().slice(0, 10); $('#knBas').value = F.bas; $('#knBit').value = F.bit; yukle(); }));
   $('#knDurum').addEventListener('change', () => { F.durum = $('#knDurum').value; ciz(); }); $('#knSatinalmaci').addEventListener('change', () => { F.satinalmaci = $('#knSatinalmaci').value; ciz(); });
   $('#knAra').addEventListener('input', () => { F.ara = $('#knAra').value; ciz(); });
   $('#knTemizle').addEventListener('click', () => { F.durum = ''; F.satinalmaci = ''; F.ara = ''; F.kpi = ''; $('#knDurum').value = ''; $('#knSatinalmaci').value = ''; $('#knAra').value = ''; ciz(); });

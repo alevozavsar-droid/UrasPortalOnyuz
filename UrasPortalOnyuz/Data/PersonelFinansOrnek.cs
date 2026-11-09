@@ -2,8 +2,9 @@
 // ŞİRKET BAZINDA TOPLU PERSONEL ÖDEMESİ → KASA NAKİT AKIŞI (9 Kas 2026, kullanıcı: "doğrudan ödemeyi toplu olarak finansa göndereceğiz; fiili çalışma yerine göre yansıtmalar yapılıyor ya,
 //   buna göre firma firma görebilelim: ALV Kimya R ödeme şu kadar, X ödeme şu kadar … buradan da Kasa Nakit Akışı'na toplu olarak gönderebilelim")
 //   Konsolide İK Paneli › Ödeme Planı › "Şirket Bazında Toplu Ödeme" kartı: ödenecek satırlar ekranda fiili görev yeri şirketine göre toplanır (Ödenecek / Ödenmeyecek seçimi tarayıcıda olduğundan
-//   toplamlar istemciden gelir), şirket başına Kasa Nakit Akışı'na iki satır gönderilir: R (banka) → Havale / EFT, İşlem Tipi R · X (elden) → Nakit, İşlem Tipi X (nakit onayı: NakitAkisOrnek.NakitOnaycilari).
-//   Aynı dönem / şirket / kanal için TEK satır (NakitAkisViewModel.U_PersonelOdeme = "2026-10|ALV Kimya|R"): yeniden gönderince ödenmemiş satırın tutarı güncellenir, ödenmişe dokunulmaz,
+//   toplamlar istemciden gelir), şirket başına Kasa Nakit Akışı'na üç satır gönderilir: R (banka) → Havale / EFT, İşlem Tipi R · X (elden, gündelikçi dışı) → Nakit, İşlem Tipi X (nakit onayı: NakitAkisOrnek.NakitOnaycilari)
+//   · UX (üretim personeli / gündelikçi elden; 9 Kas 2026 "üretim personeli X ödemesi ayrı gün olabiliyor") → Nakit, İşlem Tipi X, kendi planlanan tarihi (PlanTarihUretim).
+//   Aynı dönem / şirket / kanal için TEK satır (NakitAkisViewModel.U_PersonelOdeme = "2026-10|ALV Kimya|R" / "…|UX"): yeniden gönderince ödenmemiş satırın tutarı güncellenir, ödenmişe dokunulmaz,
 //   tutarı 0'a düşen kanalın ödenmemiş satırı kaldırılır. "Geri Al" dönemin ödenmemiş satırlarını kaldırır. Kalıcı günlük tipleri "finansGonder" / "finansGeriAl" (PersonelMaliyetKalici).
 //   Şirket eşlemesi: Personel Maliyet adları → Kasa Nakit Akışı şirketleri (ALV Kimya → Alv Kimya, Selvi Kimya → Selvi); Alv Filo ve Uras Power Kasa Nakit Akışı'nda tanımlı değil → gönderilmez, ekranda uyarı.
 // ============================================================
@@ -14,8 +15,10 @@ using System.Linq;
 
 namespace WebApplication3.Data
 {
-    public class PfSatir { public string Sirket { get; set; } public int Kisi { get; set; } public decimal Banka { get; set; } public decimal Elden { get; set; } }
-    public class PfIstek { public string Donem { get; set; } public string PlanTarih { get; set; } public List<PfSatir> Satirlar { get; set; } }
+    /// <summary>Şirket satırı: Banka = R (Havale / EFT), Elden = gündelikçi dışı X (Nakit), Uretim = üretim personeli (gündelikçi) elden X (Nakit, ayrı tarih; 9 Kas 2026); KisiUretim = gündelikçi sayısı.</summary>
+    public class PfSatir { public string Sirket { get; set; } public int Kisi { get; set; } public int KisiUretim { get; set; } public decimal Banka { get; set; } public decimal Elden { get; set; } public decimal Uretim { get; set; } }
+    /// <summary>PlanTarih: R ve X satırlarının planlanan tarihi; PlanTarihUretim: üretim personeli X satırının tarihi (boşsa PlanTarih).</summary>
+    public class PfIstek { public string Donem { get; set; } public string PlanTarih { get; set; } public string PlanTarihUretim { get; set; } public List<PfSatir> Satirlar { get; set; } }
     public class PfSonuc { public string Sirket { get; set; } public string Kanal { get; set; } public string Islem { get; set; } public int DocEntry { get; set; } public decimal Tutar { get; set; } public string Durum { get; set; } public string Onay { get; set; } public string Db { get; set; } public string Mesaj { get; set; } }
 
     public static class PersonelFinansOrnek
@@ -33,20 +36,26 @@ namespace WebApplication3.Data
             if (string.IsNullOrWhiteSpace(d.Donem) || d.Donem.Length != 7) return "Dönem AAAA-AA biçiminde olmalıdır.";
             DateTime plan = DateTime.Today;
             if (!string.IsNullOrWhiteSpace(d.PlanTarih) && !DateTime.TryParseExact(d.PlanTarih.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out plan)) return "Planlanan ödeme tarihi geçersiz (yyyy-aa-gg).";
+            DateTime planUretim = plan;   // üretim personeli (gündelikçi) elden ödemesi ayrı günde olabilir (9 Kas 2026)
+            if (!string.IsNullOrWhiteSpace(d.PlanTarihUretim) && !DateTime.TryParseExact(d.PlanTarihUretim.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out planUretim)) return "Üretim personeli ödeme tarihi geçersiz (yyyy-aa-gg).";
             string donemAd = PersonelMaliyetOrnek.DonemAd(d.Donem);
             foreach (var s in d.Satirlar)
             {
                 if (s == null || string.IsNullOrWhiteSpace(s.Sirket)) continue;
                 var kasa = KasaSirketi(s.Sirket);
-                if (kasa == null) { if (s.Banka > 0 || s.Elden > 0) sonuc.Add(new PfSonuc { Sirket = s.Sirket, Kanal = "", Islem = "gönderilmedi", Mesaj = "Kasa Nakit Akışı'nda şirket tanımlı değil" }); continue; }
+                if (kasa == null) { if (s.Banka > 0 || s.Elden > 0 || s.Uretim > 0) sonuc.Add(new PfSonuc { Sirket = s.Sirket, Kanal = "", Islem = "gönderilmedi", Mesaj = "Kasa Nakit Akışı'nda şirket tanımlı değil" }); continue; }
                 var db = CekAkibetOrnek.DbName(kasa);
-                foreach (var (kanal, tutar, yontem) in new[] { ("R", s.Banka, "Havale / EFT"), ("X", s.Elden, "Nakit") })
+                // kanal: R banka (Havale / EFT) · X elden (Nakit) · UX üretim personeli elden (Nakit, kendi planlanan tarihi); İşlem Tipi R / X
+                foreach (var (kanal, tutar, yontem, tarih, kisi) in new[] { ("R", s.Banka, "Havale / EFT", plan, s.Kisi - s.KisiUretim), ("X", s.Elden, "Nakit", plan, s.Kisi - s.KisiUretim), ("UX", s.Uretim, "Nakit", planUretim, s.KisiUretim) })
                 {
                     var anahtar = Anahtar(d.Donem, s.Sirket, kanal);
                     if (tutar <= 0) { var k = NakitAkisOrnek.PersonelOdemesiKaldir(anahtar, kullanici); if (k != null) sonuc.Add(new PfSonuc { Sirket = s.Sirket, Kanal = kanal, Islem = "kaldırıldı", DocEntry = k.DocEntry, Db = db, Mesaj = "tutar 0; ödenmemiş satır kaldırıldı" }); continue; }
-                    string kurum = $"Personel Maaş Ödemesi · {donemAd} · {(kanal == "R" ? "Banka (R)" : "Elden (X)")}";
-                    string urun = $"{s.Kisi} personel · {(kanal == "R" ? "R-Net + ek ödemeler − kesintiler, bankaya" : "X-Net + ek ödemeler − kesintiler, elden")} · fiili görev yeri {s.Sirket} (Konsolide İK Paneli › Ödeme Planı)";
-                    var (m, islem) = NakitAkisOrnek.PersonelOdemesiYaz(db, anahtar, kurum, urun, yontem, kanal, BordroParametre.Yuvarla(tutar), plan, $"Konsolide İK Paneli · {donemAd} toplu personel ödemesi · {s.Kisi} kişi · {s.Sirket}", kullanici);
+                    int n = kanal == "R" ? s.Kisi : Math.Max(0, kisi);   // R: bordrolu gündelikçinin R'si de bankadan → tüm kişiler; X: gündelikçi dışı; UX: gündelikçiler
+                    string kurum = kanal == "R" ? $"Personel Maaş Ödemesi · {donemAd} · Banka (R)" : kanal == "X" ? $"Personel Maaş Ödemesi · {donemAd} · Elden (X)" : $"Üretim Personeli Ödemesi · {donemAd} · Elden (X)";
+                    string urun = kanal == "R" ? $"{n} personel · R-Net + ek ödemeler − kesintiler, bankaya · fiili görev yeri {s.Sirket} (Konsolide İK Paneli › Ödeme Planı)"
+                        : kanal == "X" ? $"{n} personel · X-Net + ek ödemeler − kesintiler, elden · fiili görev yeri {s.Sirket} (Konsolide İK Paneli › Ödeme Planı)"
+                        : $"{n} gündelikçi üretim personeli · günlük ücret × gün (SGK'lıda bordro Net-R mahsubundan kalan fark + kira), elden · fiili görev yeri {s.Sirket} (Konsolide İK Paneli › Üretim Personeli / Ödeme Planı)";
+                    var (m, islem) = NakitAkisOrnek.PersonelOdemesiYaz(db, anahtar, kurum, urun, yontem, kanal == "R" ? "R" : "X", BordroParametre.Yuvarla(tutar), tarih, $"Konsolide İK Paneli · {donemAd} {(kanal == "UX" ? "üretim personeli (gündelikçi) elden ödemesi" : "toplu personel ödemesi")} · {n} kişi · {s.Sirket}", kullanici);
                     sonuc.Add(new PfSonuc { Sirket = s.Sirket, Kanal = kanal, Islem = islem, DocEntry = m.DocEntry, Tutar = m.U_Tutar ?? 0, Durum = m.U_Durum, Onay = m.U_OnayDurumu, Db = db, Mesaj = islem == "ödenmiş" ? "satır ödenmiş; tutar değiştirilmedi" : "" });
                 }
             }
