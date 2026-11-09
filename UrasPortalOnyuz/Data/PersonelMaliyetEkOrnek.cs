@@ -2,8 +2,8 @@
 // PERSONEL MALİYET RAPORU — ek sekmeler (Üretim Personeli · Prim Ödemeleri). Özel Kişiler sekmesi ayrı liste değildir: PmPersonel.Ozel = true satırlar aynı bordro modeliyle
 //   Personel Maliyet Tablosu'nun yapısında gösterilir (PersonelMaliyetOrnek). Birleşik Tablo ekranda Bordro (Ozel = false) + Özel (Ozel = true) + Üretim satırlarından kurulur.
 //   Üretim Personeli : gündelikçi üretim personeli ("Gündelikçi Ücretleri 2026 - 20.10.2026"): günlük ücret × çalışılan gün = hak ediş; fazla mesai saat × (günlük / 7,5) × 1,5; tatil günü × günlük × 2;
-//                      yemek / yol / kira / diğer sosyal yardım eklenir. SGK'lı gündelikçi (ana tabloda bordrolu): bordro Net-R mahsup edilir, kalan fark elden nakit X olarak gösterilir (R kısımları
-//                      resmi bordrodan gelir ve sabittir; X-Net kaynakla birebir 0, UretimYansit her veri okumasında). TEK KAYNAK (9 Kas 2026, "tüm sekmeler senkronize olmalı … Kamil Mahmudov yol
+//                      yemek / yol / kira / diğer sosyal yardım eklenir. SGK'lı gündelikçi (ana tabloda bordrolu): bordro Net-R mahsup edilir, kalan fark elden nakit X olarak ödenir ve kişinin ana
+//                      tablodaki X-Net'ine yazılır (MahsupFarki; 9 Kas 2026 kullanıcı onayı, önce kaynak v5_2 gereği 0'dı); R kısımları resmi bordrodan gelir ve sabittir; UretimYansit her veri okumasında. TEK KAYNAK (9 Kas 2026, "tüm sekmeler senkronize olmalı … Kamil Mahmudov yol
 //                      ücreti sadece bir tarafta yazıyor"): SGK'lı gündelikçinin yemek, yol, kira ve fazla mesaisi seçili dönemin bordro kaydından okunur (R + X; BordroKalemleri); Üretim satırından
 //                      girilen yemek / yol / kira toplamı bordro kaydına yazılır (R aynen kalır, fazlası X; R'nin altı hata) → Personel Maliyet Tablosu, kişi kartı ve Üretim aynı değeri gösterir.
 //                      SGK'sız gündelikçi: tamamı elden X, Birleşik Tablo'ya "Üretim" satırı olarak girer.
@@ -119,7 +119,7 @@ namespace WebApplication3.Data
                     if (p != null)
                     {   // seçili dönemin bordrosu (tek kaynak): R mahsup = Net-R; yemek / yol / kira / fazla mesai = bordro kaydı R + X (R resmi bordro, sabit); kira mahsupla netleştirilmez, elden X'e eklenir
                         var b = BordroKalemleri(p);
-                        decimal mahsup = p.Hesap.NetRBordro, kazanc = u.HakEdis + b.Mesai + u.TatilKazanci, sosyal = b.Yemek + b.Yol + b.Kira + u.DigerSosyal, hakedis = kazanc + sosyal, elden = EldenX(kazanc, b.Yemek + b.Yol + u.DigerSosyal, mahsup, b.Kira);
+                        decimal mahsup = p.Hesap.NetRBordro, kazanc = u.HakEdis + b.Mesai + u.TatilKazanci, sosyal = b.Yemek + b.Yol + b.Kira + u.DigerSosyal, hakedis = kazanc + sosyal, elden = MahsupFarki(u, p) + b.Kira;   // fark kişinin X-Net'inde, kira Kira Desteği-X'te
                         d["rMahsup"] = mahsup; d["yemek"] = p.Yemek; d["yemekX"] = p.YemekX; d["yol"] = p.Yol; d["yolX"] = p.YolX; d["kira"] = p.KiraDestegi; d["kiraX"] = p.KiraDestegiX; d["fazlaMesaiKazanci"] = b.Mesai; d["fazlaMesaiSaat"] = u.SaatUcreti > 0 ? Math.Round(b.Mesai / (u.SaatUcreti * 1.5m), 2) : 0m;   // saat: bordro mesai tutarından türetilir (gösterim)
                         d["toplamKazanc"] = kazanc; d["toplamSosyal"] = sosyal; d["toplamHakedis"] = hakedis; d["eldenX"] = elden; d["netOdenen"] = elden - u.Kesinti;
                     }
@@ -242,8 +242,9 @@ namespace WebApplication3.Data
             U(COR, "Reşat", 2000), U(COR, "Aslan Huseynov", 2050, true), U(COR, "Ali", 2000), U(COR, "Naim", 2000), U(COR, "Ruslan", 2100),
             U(COR, "Kamil Mahmudov", 1700, true, gun: 30, not: "SGK'lı gündelikçi: bordro R neti mahsup edilir, fark elden X. Günlük 1.700 ₺ (Gündelikçi Ücretleri 2026 – 20.10.2026); çalışılan gün 30 varsayıldı (bordro R-Net 51.000,01 = 30 × 1.700). Yol ve fazla mesai bordro kaydından.")
         };
-        /// <summary>SGK'lı gündelikçileri Personel Maliyet Tablosu'na bağlar (ad eşleşmesi) ve HER DÖNEMDE o dönemin bordro Net-R'sini mahsup olarak hesaplar; X-Net yazılmaz (kaynak v5_2: X-NET 0, Ödeme Yapılmıyor)
-        /// (dönem bazında yazılır). Üretim sekmesindeki R mahsup / elden X seçili döneme göre UretimDto(donem) ile gelir. Her veri okumasında çalışır (dinamik).</summary>
+        /// <summary>SGK'lı gündelikçileri Personel Maliyet Tablosu'na bağlar (ad eşleşmesi) ve HER DÖNEMDE o dönemin bordro Net-R'sini mahsup olarak hesaplar; kalan fark (MahsupFarki) kişinin o dönemdeki
+        /// X-Net'ine yazılır (9 Kas 2026, kullanıcı onayı "evet"; önce kaynak v5_2 gereği 0 tutuluyordu — "kalan kısım mahsup edilerek elden alınıyor"). Kira ayrıca Kira Desteği-X'tedir.
+        /// Üretim sekmesindeki R mahsup / elden X seçili döneme göre UretimDto(donem) ile gelir. Her veri okumasında çalışır (dinamik).</summary>
         public static void UretimYansit()
         {
             lock (PersonelMaliyetOrnek.Kilit)
@@ -259,10 +260,17 @@ namespace WebApplication3.Data
                         {
                             var p = kv.Value.FirstOrDefault(x => x.Sira == u.PersonelSira); if (p == null) continue;   // o dönemde yok (işe giriş dönemden sonra)
                             var mahsup = p.Hesap.NetRBordro; if (kv.Key == PersonelMaliyetOrnek.GuncelDonem) { var b = BordroKalemleri(p); u.RMahsup = mahsup; u.Yemek = b.Yemek; u.Yol = b.Yol; u.Kira = b.Kira; }   // yemek / yol / kira: bordro kaydı R + X (tek kaynak); seçili dönem için UretimDto(donem) yeniden okur
-                            if (!p.Dovizli) p.XNet = 0m;   // kaynak v5_2: SGK'lı gündelikçi X-NET 0 (Ödeme Yapılmıyor); hak ediş − R mahsup yalnız bilgi amaçlı
+                            if (!p.Dovizli) p.XNet = MahsupFarki(u, p);   // elden mahsup farkı → X-Net (9 Kas 2026); kartta girilen X-Net bu kişilerde her okumada buradan yeniden yazılır
                         }
                     }
             }
+        }
+        /// <summary>Elden mahsup farkı (SGK'lı gündelikçi): hak ediş (günlük × gün) + bordro fazla mesaisi (R + X) + tatil kazancı + yemek + yol (bordro R + X) + diğer sosyal − bordro Net-R; negatif olmaz.
+        /// Kişinin o dönemdeki X-Net'i budur (UretimYansit); Üretim sekmesindeki Elden Ödenecek (X) = fark + kira (kira ayrıca Kira Desteği-X'te, mahsupla netleştirilmez).</summary>
+        public static decimal MahsupFarki(UretimPersonel u, PmPersonel p)
+        {
+            var b = BordroKalemleri(p);
+            return Math.Max(0, BordroParametre.Yuvarla(u.HakEdis + b.Mesai + u.TatilKazanci + b.Yemek + b.Yol + u.DigerSosyal - p.Hesap.NetRBordro));
         }
         /// <summary>Elden ödenecek X (SGK'lı gündelikçi): (kazançlar + yemek + yol + diğer sosyal) − verilen dönemin bordro Net-R mahsubu (negatif olmaz) + kira (X'ten ödenen kira mahsupla netleştirilmez; 9 Kas 2026).</summary>
         public static decimal EldenX(decimal kazanc, decimal mahsuplananSosyal, decimal mahsup, decimal kira) => Math.Max(0, BordroParametre.Yuvarla(kazanc + mahsuplananSosyal - mahsup)) + kira;

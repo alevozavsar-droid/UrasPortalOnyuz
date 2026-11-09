@@ -93,6 +93,49 @@ namespace WebApplication3.Data
         /// <summary>Dış modüller (Talimat) için günlük kaydı.</summary>
         public static void Gunluge(string dbName, int docEntry, string tip, string aciklama, string kullanici) { Tohumla(); lock (Kilit) Log(dbName, docEntry, tip, aciklama, kullanici); }
 
+        // ---------- PERSONEL MAAŞ ÖDEMESİ (Konsolide İK Paneli › Ödeme Planı › "Kasa Nakit Akışı'na Gönder"; Data/PersonelFinansOrnek.cs, 9 Kas 2026): dönem / şirket / kanal başına TEK satır (U_PersonelOdeme anahtarı) ----------
+        public static NakitAkisViewModel PersonelSatiri(string anahtar) { Tohumla(); lock (Kilit) return _odemeler.Values.SelectMany(l => l).FirstOrDefault(m => m.U_PersonelOdeme == anahtar); }
+        public static List<NakitAkisViewModel> PersonelSatirlari(string onEk) { Tohumla(); lock (Kilit) return _odemeler.Values.SelectMany(l => l).Where(m => !string.IsNullOrEmpty(m.U_PersonelOdeme) && m.U_PersonelOdeme.StartsWith(onEk)).ToList(); }
+        /// <summary>Toplu personel ödemesi satırı yazar: yoksa ekler (R → Havale / EFT, X → Nakit: nakit onayı bekler), varsa ödenmemişse tutar / tarih / notu günceller, ödenmişse dokunmaz. islem = eklendi | güncellendi | ödenmiş.</summary>
+        public static (NakitAkisViewModel satir, string islem) PersonelOdemesiYaz(string dbName, string anahtar, string kurum, string urun, string yontem, string xr, decimal tutar, DateTime plan, string not, string kullanici)
+        {
+            Tohumla();
+            lock (Kilit)
+            {
+                if (!_odemeler.ContainsKey(dbName)) _odemeler[dbName] = new List<NakitAkisViewModel>();
+                var m = _odemeler.Values.SelectMany(l => l).FirstOrDefault(x => x.U_PersonelOdeme == anahtar);
+                if (m != null)
+                {
+                    if (m.U_Durum == "ÖDENDİ") return (m, "ödenmiş");
+                    bool degisti = (m.U_Tutar ?? 0) != tutar || m.U_PlanlananTarih != plan;
+                    m.U_Tutar = tutar; m.U_TutarTL = tutar; m.U_FaturaTutari = tutar; m.U_PlanlananTarih = plan; m.U_SonOdemeTarihi = plan; m.U_Notlar = not; m.U_UrunHizmet = urun;
+                    if (degisti) Log(dbName, m.DocEntry, "Güncelleme", $"Toplu personel ödemesi güncellendi · {kurum} · {tutar.ToString("N2", Tr)} TRY · plan {plan:dd.MM.yyyy}", kullanici);
+                    return (m, "güncellendi");
+                }
+                m = new NakitAkisViewModel
+                {
+                    DocEntry = ++_sonDocEntry, U_KaynakFirma = dbName, U_FaturaSahibi = SirketAdi(dbName), U_OdeyenSirket = SirketAdi(dbName), U_PersonelOdeme = anahtar, U_Kurum = kurum, U_UrunHizmet = urun, U_OdemeYontemi = yontem,
+                    U_ParaBirimi = "TRY", U_Kur = 1, U_OdenenTutarPB = "TRY", U_Tutar = tutar, U_TutarTL = tutar, U_FaturaTutari = tutar, U_PlanlananTarih = plan, U_SonOdemeTarihi = plan, BelgeTarihi = DateTime.Today,
+                    U_BagliBelgeTipi = "Personel Ödemesi", U_KayitTipi = "Personel Ödemesi", U_FaturaSiparisNo = anahtar, U_IslemTipi = xr, U_Durum = "Planlandı", U_EskiDurum = "Planlandı", U_Notlar = not, U_TalepEden = kullanici ?? "", U_Satinalmaci = ""
+                };
+                m.DocNum = m.DocEntry;
+                if (yontem == "Nakit") { m.U_OnayDurumu = "Onay Bekliyor"; m.U_Kasa = Kasalar[0]; m.U_TeslimAlan = "Personel (bordro listesi)"; } else m.U_AliciHesapAdi = "Personel maaş hesapları (toplu banka talimatı)";
+                m.U_Sira = _odemeler[dbName].Count + 1; _odemeler[dbName].Add(m);
+                Log(dbName, m.DocEntry, yontem == "Nakit" ? "Nakit Talebi" : "Ekleme", $"Konsolide İK Paneli › Ödeme Planı: {kurum} · {yontem} · {tutar.ToString("N2", Tr)} TRY · plan {plan:dd.MM.yyyy}" + (yontem == "Nakit" ? $" · onay bekliyor ({string.Join(" / ", NakitOnaycilari)})" : ""), kullanici);
+                return (m, "eklendi");
+            }
+        }
+        /// <summary>Toplu personel ödemesi satırını kaldırır (ödenmişse kaldırmaz, null döner).</summary>
+        public static NakitAkisViewModel PersonelOdemesiKaldir(string anahtar, string kullanici)
+        {
+            Tohumla();
+            lock (Kilit)
+            {
+                foreach (var kv in _odemeler) { var m = kv.Value.FirstOrDefault(x => x.U_PersonelOdeme == anahtar); if (m == null) continue; if (m.U_Durum == "ÖDENDİ") return null; kv.Value.Remove(m); Log(kv.Key, m.DocEntry, "Silme", $"Toplu personel ödemesi kaldırıldı: {m.U_Kurum} · {(m.U_Tutar ?? 0).ToString("N2", Tr)} TRY", kullanici); return m; }
+                return null;
+            }
+        }
+
         // ---------- NAKİT AVANS senkronu: onaylanan avanslar otomatik satır olur; ödenince avans modülünde teslim edilmiş sayılır (Bekleyen Ödemeler listesinden düşer) ----------
         static string AvansSirketi(NakitAvans a) => a.Sirket == "URS Makina" ? "URS Makine" : a.Sirket;
         public static void AvanslariSenkronla()

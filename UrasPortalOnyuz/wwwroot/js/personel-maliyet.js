@@ -221,7 +221,7 @@
     dl('#dlSgk', V.sgkIsverenleri); dl('#dlYer', V.gorevYerleri); dl('#dlUnvan', V.unvanlar); dl('#dlBolum', V.bolumler); dl('#dlCati', V.catiDepartmanlar); dl('#dlGorev', V.gorevler || []);
   }
   /** sunucu yanıtındaki güncel veriyi alır ve ekranı tazeler */
-  function veriGuncelle(j) { ['personel', 'sonKayit', 'sgkIsverenleri', 'gorevYerleri', 'catiDepartmanlar', 'bolumler', 'unvanlar', 'gorevler', 'ozelDurumlar', 'durumlar', 'sutunlar', 'parametre', 'ekSutunlar', 'uretim', 'primler', 'donem', 'donemAd', 'donemler', 'ekCalisma', 'kesinti', 'muhasebe', 'tesvik'].forEach(k => { if (j[k] !== undefined) V[k] = j[k]; }); sutunlariKur(); listeleriDoldur(); donemKur(); ekKur(); kayitBilgi(); ciz(); }
+  function veriGuncelle(j) { ['personel', 'sonKayit', 'sgkIsverenleri', 'gorevYerleri', 'catiDepartmanlar', 'bolumler', 'unvanlar', 'gorevler', 'ozelDurumlar', 'durumlar', 'sutunlar', 'parametre', 'ekSutunlar', 'uretim', 'primler', 'donem', 'donemAd', 'donemler', 'ekCalisma', 'kesinti', 'muhasebe', 'tesvik', 'odemeler', 'finans'].forEach(k => { if (j[k] !== undefined) V[k] = j[k]; }); sutunlariKur(); listeleriDoldur(); donemKur(); ekKur(); kayitBilgi(); ciz(); }
   /** yeni bordro dönemi (ör. 2026-10): güncel dönemin kopyası; kesinti taksitleri o aya göre yazılır; oluşunca seçili dönem olur */
   async function yeniBordro() {
     if (duzenleme && !window.confirm('Kaydedilmemiş değişiklikler var. Yeni bordro oluşturulursa kaybolur, devam edilsin mi?')) return;
@@ -333,7 +333,8 @@
   /** bölme standardı (tüm rapor sekmeleri): listedeki sütunların (son başlık satırındaki ad) başında 2 px açık gri çizgi; başlık, gövde ve toplamda aynı konum. Ana tablo ile Kırılım kendi grup bölmelerini kullanır. */
   const BOLME = {
     pmZamTablo: ['Zam % (R / X)', 'Net Mevcut', 'Ek Ödemeler Toplam', 'Ara Toplam', 'Genel Maliyet'], pmZamKaynak: ['Mevcut Genel Maliyet'], pmZamOzetTablo: ['Toplu R %', 'Net Artışı'],
-    pmOdemeTablo: ['R-Net', 'X-Net', 'Toplam Ödeme'],
+    pmOdemeTablo: ['R-Net', 'X-Net', 'Toplam Ödeme', 'Ödenen (Banka)', 'Ödeme Durumu'],
+    pmFinansTablo: ['Bankadan Ödenecek (R)', 'Kasa Nakit Akışı · Banka (R)'],
     pmEkOzet: ['Saat Ücreti', 'Toplam Ek Çalışma', 'Talep (Adet)', 'Taleplerden Hesaplanan'], pmMesaiTablo: ['Planlanan (sa)', 'Karşılık', 'Gerçekleşme (PDKS)'],
     pmKesOzet: ['Avans', 'Kesintiler-R', 'Kalan Net (Banka)'], pmAvansTablo: ['Tutar', 'Talep Tarihi', 'Kasa Ödemesi', 'Nakit Akış (Finans)'], pmPlanTablo: ['Toplam', 'Başlangıç', 'Ekler'],
     pmUretimTablo: ['Günlük Ücret', 'Yemek', 'Toplam Hak Ediş', 'Not'],
@@ -396,10 +397,10 @@
     const sg = P.sgkli.map(x => x.p), hakedis = P.sgkli.reduce((s, x) => s + (Number(x.u.toplamHakedis) || 0), 0), mahsup = P.sgkli.reduce((s, x) => s + (Number(x.u.rMahsup) || 0), 0), elden = P.sgkli.reduce((s, x) => s + (Number(x.u.eldenX) || 0), 0);
     const parca = P.bordro.length + P.ozel.length + P.uretim.length, fark = ['xNet', 'rNet', 'toplamNet', 'genelMaliyet'].some(k => Math.abs(top(LO, k) - top(P.bordro, k) - top(P.ozel, k) - top(P.uretim, k)) > 1) || parca !== LO.length;
     const adlar = LO.map(p => p.adSoyad.toLocaleLowerCase('tr-TR').trim()), mukerrer = adlar.filter((a, i) => adlar.indexOf(a) !== i);
-    $('#pmMutabakat tbody').innerHTML = satir('tablo', 'Personel Maliyet Tablosu', P.bordro, `Bordrolu personel · sekmenin dip toplamıyla aynı${sg.length ? ` · ${sg.length} SGK'lı gündelikçi bu satırlarda (R mahsup; X-Net 0)` : ''}`)
+    $('#pmMutabakat tbody').innerHTML = satir('tablo', 'Personel Maliyet Tablosu', P.bordro, `Bordrolu personel · sekmenin dip toplamıyla aynı${sg.length ? ` · ${sg.length} SGK'lı gündelikçi bu satırlarda (R mahsup; elden fark X-Net'te)` : ''}`)
       + satir('ozel', 'Özel Kişiler', P.ozel, gizle.ozel ? 'Gizli (Özel Kişiler Gizle açık) · toplama girmez' : 'Özel Kişiler sekmesinin dip toplamıyla aynı · Personel Maliyet Tablosu\'nda da yer alır')
       + satir('uretim', 'Üretim Personeli (SGK\'sız)', P.uretim, gizle.uretim ? 'Gizli (Üretim Personeli Gizle açık) · toplama girmez' : 'Üretim Personeli sekmesinde "SGK\'sız (tamamı X)" satırları · R-Net yok, hak ediş elden X')
-      + (sg.length ? satir('uretim', 'SGK\'lı Gündelikçi (Bilgi)', sg, `Üretim sekmesinde hak ediş ${kisa(hakedis)} − bordro Net-R mahsup ${kisa(mahsup)} = elden X ${kisa(elden)} (bilgi; X-Net kaynakla birebir 0, yemek / yol / kira bordro satırında tek kaynak); yukarıda sayıldı, ayrıca eklenmez`, 'bilgi') : '')
+      + (sg.length ? satir('uretim', 'SGK\'lı Gündelikçi (Bilgi)', sg, `Üretim sekmesinde hak ediş ${kisa(hakedis)} − bordro Net-R mahsup ${kisa(mahsup)} = elden X ${kisa(elden)} → fark bordro satırının X-Net'ine, kira Kira Desteği-X'e yazıldı (yukarıda sayıldı, ayrıca eklenmez)`, 'bilgi') : '')
       + `<tr class="toplam"><td>Toplam (Kırılım)</td><td class="s">${LO.length}</td><td class="s">${kisa(top(LO, 'xNet'))}</td><td class="s">${kisa(top(LO, 'rNet'))}</td><td class="s">${kisa(top(LO, 'toplamNet'))}</td><td class="s">${kisa(top(LO, 'genelMaliyet'))}</td><td>${fark ? '<span class="pm-rz hata">Fark Var</span>' : '<span class="pm-rz ok">Mutabık</span>'} ${mukerrer.length ? `<span class="pm-rz hata">Mükerrer: ${esc([...new Set(mukerrer)].join(', '))}</span>` : '<span class="pm-rz gri">Mükerrer Yok</span>'} <small class="text-muted">${parca} = ${P.bordro.length} + ${P.ozel.length} + ${P.uretim.length}</small></td></tr>`;
   }
   function cizOzet() {
@@ -957,7 +958,7 @@
       if (a.tip === 'select') return `<div class="${a.sinif || ''}">${lb}<select class="form-select" id="${id}" data-k="${a.k}" ${z}>${(a.secenekler || []).map(o => { const [ov, ol] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(ov)}" ${String(v ?? '') === String(ov) ? 'selected' : ''}>${esc(ol)}</option>`; }).join('')}</select></div>`;
       if (a.tip === 'textarea') return `<div class="g3">${lb}<textarea class="form-control" id="${id}" data-k="${a.k}" rows="2" maxlength="300">${esc(v ?? '')}</textarea></div>`;
       if (a.tip === 'salt') return `<div class="${a.sinif || ''}"><label>${esc(a.ad)}</label><input class="form-control ro" value="${esc(v ?? '')}" readonly></div>`;
-      return `<div class="${a.sinif || ''}">${lb}<input class="form-control" id="${id}" data-k="${a.k}" type="${a.tip === 'number' ? 'number' : a.tip === 'month' ? 'month' : 'text'}" ${a.tip === 'number' ? `min="0" step="${a.adim || '0.01'}"` : ''} ${a.liste ? `list="${a.liste}"` : ''} value="${esc(v ?? (a.tip === 'number' ? 0 : ''))}" ${z} ${a.ph ? `placeholder="${esc(a.ph)}"` : ''} ${a.maxlength ? `maxlength="${a.maxlength}"` : ''}></div>`;
+      return `<div class="${a.sinif || ''}">${lb}<input class="form-control" id="${id}" data-k="${a.k}" type="${a.tip === 'number' ? 'number' : a.tip === 'month' ? 'month' : a.tip === 'date' ? 'date' : 'text'}" ${a.tip === 'number' ? `min="0" step="${a.adim || '0.01'}"` : ''} ${a.liste ? `list="${a.liste}"` : ''} value="${esc(v ?? (a.tip === 'number' ? 0 : ''))}" ${z} ${a.ph ? `placeholder="${esc(a.ph)}"` : ''} ${a.maxlength ? `maxlength="${a.maxlength}"` : ''}></div>`;
     };
     $('#pmTalepBaslik').innerHTML = baslik;
     $('#pmTalepAksiyon').innerHTML = `<button type="button" class="btn btn-warning btn-sm py-0" id="pmdKaydet"><i class="fas fa-floppy-disk me-1"></i>Kaydet</button>${sil ? '<button type="button" class="btn btn-light btn-sm py-0" id="pmdSil" style="color:#b91c1c"><i class="fas fa-trash me-1"></i>Sil</button>' : ''}<button type="button" class="btn btn-light btn-sm py-0" id="pmdVazgec">Vazgeç</button>`;
@@ -1005,7 +1006,7 @@
       d => { const p = +d.personelSira ? bul(+d.personelSira) : null; const su = d.gunlukSaat > 0 ? d.gunlukUcret / d.gunlukSaat : 0, h = d.gunlukUcret * d.calisilanGun, fm = p ? bordroMesai(p) : d.fazlaMesaiSaat * su * 1.5, t = d.tatilGun * d.gunlukUcret * 2;
         const kira = n0(d.kira), top = h + fm + t + d.yemek + d.yol + kira + d.digerSosyal, r = p ? n0(p.netRBordro) : 0, x = p ? Math.max(0, top - kira - r) + kira : top;
         const dusuk = p ? [['Yemek', d.yemek, n0(p.yemek)], ['Yol', d.yol, n0(p.yol)], ['Kira', kira, n0(p.kiraDestegi)]].filter(([, v, rr]) => v < rr - 0.005) : [];
-        return `Hak ediş ${kisa(h)} · mesai ${kisa(fm)}${p ? ' (bordro R + X)' : ''} · tatil ${kisa(t)} · yemek ${kisa(d.yemek)} · yol ${kisa(d.yol)} · kira ${kisa(kira)} · <b>toplam hak ediş ${kisa(top)}</b>${p ? ` · bordro Net-R mahsup ${kisa(r)} → <b>elden X ${kisa(x)}</b> (kira mahsup dışı). Yemek, yol ve kira ${esc(p.adSoyad)} bordro kaydına yazılır: R kısmı (resmi bordro) sabit kalır, girilen toplamın R'yi aşan kısmı X olur; Personel Maliyet Tablosu, kişi kartı ve Üretim aynı değeri gösterir` : ` · SGK'sız: tamamı elden X ${kisa(top)}`} · net ödenen ${kisa(x - d.kesinti)}.${dusuk.length ? `<br><span class="text-danger">${dusuk.map(([a, v, rr]) => `${a} ${kisa(v)} bordro R tutarının (${kisa(rr)}) altına inemez`).join(' · ')}.</span>` : ''}`; });
+        return `Hak ediş ${kisa(h)} · mesai ${kisa(fm)}${p ? ' (bordro R + X)' : ''} · tatil ${kisa(t)} · yemek ${kisa(d.yemek)} · yol ${kisa(d.yol)} · kira ${kisa(kira)} · <b>toplam hak ediş ${kisa(top)}</b>${p ? ` · bordro Net-R mahsup ${kisa(r)} → <b>elden X ${kisa(x)}</b> (fark ${kisa(x - kira)} kişinin X-Net'ine, kira Kira Desteği-X'e yazılır). Yemek, yol ve kira ${esc(p.adSoyad)} bordro kaydına yazılır: R kısmı (resmi bordro) sabit kalır, girilen toplamın R'yi aşan kısmı X olur; Personel Maliyet Tablosu, kişi kartı ve Üretim aynı değeri gösterir` : ` · SGK'sız: tamamı elden X ${kisa(top)}`} · net ödenen ${kisa(x - d.kesinti)}.${dusuk.length ? `<br><span class="text-danger">${dusuk.map(([a, v, rr]) => `${a} ${kisa(v)} bordro R tutarının (${kisa(rr)}) altına inemez`).join(' · ')}.</span>` : ''}`; });
   }
   /** kesinti / icra planı: taksit, toplam, ödenen, başlangıç; kişinin tüm dönemlerdeki ilgili kesinti sütunu plan toplamına eşitlenir */
   function planDuzenle(id) {
@@ -1071,7 +1072,23 @@
   // ÖDEME PLANI — ödenecek / ödenmeyecek seçimiyle bankadan ve elden ödenecek tutarlar, finans ihtiyacı (planlama; muhasebe kayıtlarını değiştirmez). İşten Çıkış Senaryosu işaretleri buraya yansımaz (senaryo kendi sekmesine özeldir)
   // ============================================================
   let odemeSecim = {}; try { odemeSecim = JSON.parse(localStorage.pmOdemeDurum || '{}') || {}; } catch (e) { /* yoksay */ }
-  let odemeAraBagli = false;
+  let odemeAraBagli = false, odemeSatirlar = [];   // odemeSatirlar: son çizimdeki satırlar (gerçekleşen ödeme girişi için)
+  /** GERÇEKLEŞEN ÖDEME GİRİŞİ (9 Kas 2026, "aynı rakam mı ödendi … farklı rakam ödendiyse manuel girebileyim"): planlanan banka / elden tutarın karşısına fiilen ödenen tutar, tarih ve not;
+   *  "Planlanan Tutarları Yaz" aynı tutar ödendiyse doldurur; boş alan = girilmedi (null), 0 = ödenmedi. Kayıt sunucuda, dönem bazında, kalıcı (odeme günlüğü) */
+  function odemeGirisAc(k) {
+    const s = odemeSatirlar.find(x => x.k === k); if (!s) return;
+    const o = s.od || {}, bosNull = id => { const e = $('#pmd_' + id); const v = e ? String(e.value).trim() : ''; return v === '' ? null : (Number(v) || 0); }, isaret = f => (f > 0 ? '+' : '') + kisa(f);
+    const veri = { planBanka: kisa(s.banka), planElden: kisa(s.elden), odenenBanka: o.odenenBanka != null ? Number(o.odenenBanka) : '', odenenElden: o.odenenElden != null ? Number(o.odenenElden) : '', bankaTarih: o.bankaTarih || '', eldenTarih: o.eldenTarih || '', not: o.not || '' };
+    duzenleKart(`<i class="fas fa-hand-holding-dollar me-1"></i>Gerçekleşen Ödeme · ${esc(s.r.adSoyad)} · ${esc(V.donemAd || '')}`, [
+      { k: 'planBanka', ad: 'Planlanan (Banka)', tip: 'salt' }, { k: 'odenenBanka', ad: 'Ödenen (Banka) ₺', tip: 'number' }, { k: 'bankaTarih', ad: 'Banka Ödeme Tarihi', tip: 'date' },
+      { k: 'planElden', ad: 'Planlanan (Elden)', tip: 'salt' }, { k: 'odenenElden', ad: 'Ödenen (Elden) ₺', tip: 'number' }, { k: 'eldenTarih', ad: 'Elden Ödeme Tarihi', tip: 'date' },
+      { k: 'not', ad: 'Not (farkın nedeni vb.)', tip: 'textarea' }
+    ], veri, d => post('/PersonelMaliyet/OdemeKaydet', { donem: V.donem, anahtar: k, odenenBanka: bosNull('odenenBanka'), odenenElden: bosNull('odenenElden'), bankaTarih: d.bankaTarih, eldenTarih: d.eldenTarih, not: d.not }), s.od ? () => post('/PersonelMaliyet/OdemeKaydet', { donem: V.donem, anahtar: k, sil: true }) : null,
+      () => { const b = bosNull('odenenBanka'), e = bosNull('odenenElden'); if (b == null && e == null) return 'Fiilen ödenen tutarları girin; planlananla aynı ödendiyse <b>Planlanan Tutarları Yaz</b> düğmesini kullanın. Boş alan "girilmedi", 0 "ödenmedi" demektir.'; const fb = (b || 0) - s.banka, fe = (e || 0) - s.elden, f = fb + fe; return `Banka: ödenen ${kisa(b || 0)} − planlanan ${kisa(s.banka)} = <b>${isaret(fb)}</b> · Elden: ödenen ${kisa(e || 0)} − planlanan ${kisa(s.elden)} = <b>${isaret(fe)}</b> · toplam fark <b>${isaret(f)}</b> → <b>${Math.abs(f) < 0.005 ? 'Tam Ödendi' : f < 0 ? 'Eksik Ödendi' : 'Fazla Ödendi'}</b>.`; });
+    const hb = document.createElement('button'); hb.type = 'button'; hb.className = 'btn btn-light btn-sm py-0'; hb.id = 'pmdPlanYaz'; hb.title = 'Bankadan ve elden planlanan tutarlar aynen ödendiyse'; hb.innerHTML = '<i class="fas fa-equals me-1"></i>Planlanan Tutarları Yaz';
+    hb.addEventListener('click', () => { const b = $('#pmd_odenenBanka'), e = $('#pmd_odenenElden'); b.value = s.banka.toFixed(2); e.value = s.elden.toFixed(2); b.dispatchEvent(new Event('input', { bubbles: true })); });
+    $('#pmTalepAksiyon').prepend(hb);
+  }
   function odemeSakla() { try { localStorage.pmOdemeDurum = JSON.stringify(odemeSecim); } catch (e) { /* yoksay */ } }
   /** varsayılan: kayıttaki "Ödeme Yapılmıyor" notu olan kişi ödenmez; tarayıcıdaki seçim varsayılanı değiştirir */
   const odemeVarsayilan = r => { const b = r.kaynak === 'Üretim' ? null : bul(r.sira0); return !(b && b.bankaBlokeli) && (r.not || '').includes('Ödeme Yapılmıyor') ? 'odenmeyecek' : 'odenecek'; };   // bloke hesapta (R elden ödenir) eski not ödemeyi engellemez
@@ -1087,29 +1104,85 @@
     if (!odemeAraBagli) {
       $('#pmOdemeAra').addEventListener('input', odemeCiz);
       $$('#pmOdemeDurumOde, #pmOdemeDurumOdmz').forEach(c => c.addEventListener('change', odemeCiz));
-      dugmeBagla('#pmOdemeExcel', '#pmOdemePdf', bicim => tabloExcel('odeme_plani', [{ tablo: '#pmOdemeTablo', ad: 'Ödeme Planı', baslik: `Konsolide İK Paneli · Ödeme Planı · ${V.donemAd || ''}`, altBaslik: $('#pmOdemeSayi').textContent.trim(), kpi: '#pmOdemeKpi', not: '.na-panel[data-p="odeme"] .pm-not' }], bicim));
+      dugmeBagla('#pmOdemeExcel', '#pmOdemePdf', bicim => tabloExcel('odeme_plani', [{ tablo: '#pmOdemeTablo', ad: 'Ödeme Planı', baslik: `Konsolide İK Paneli · Ödeme Planı · ${V.donemAd || ''}`, altBaslik: $('#pmOdemeSayi').textContent.trim(), kpi: '#pmOdemeKpi', not: '.na-panel[data-p="odeme"] .pm-not' }, { tablo: '#pmFinansTablo', ad: 'Şirket Bazında Ödeme', baslik: `Konsolide İK Paneli · Şirket Bazında Toplu Ödeme · ${V.donemAd || ''}`, altBaslik: $('#pmFinansSayi').textContent.trim() }], bicim));
       odemeAraBagli = true;
     }
     $('#pmOdemeBaslik').textContent = `${V.donemAd} Ödeme Planı`;
     const ara = ($('#pmOdemeAra').value || '').toLocaleLowerCase('tr-TR'), goster = { odenecek: $('#pmOdemeDurumOde').checked, odenmeyecek: $('#pmOdemeDurumOdmz').checked };
     const tum = birlesimListe('').map(r => { const t = odemeTutar(r), k = cikisAnahtar(r), odenecek = odemeDurum(r) === 'odenecek', g = v => odenecek ? v : 0; return { r, k, odenecek, rNet: g(t.rNet), digerR: g(t.digerR), kesR: g(t.kesR), kalanBanka: g(t.kalanBanka), banka: g(t.banka), xNet: g(t.xNet), digerX: g(t.digerX), kesX: g(t.kesX), elden: g(t.elden), tutarTum: t.banka + t.elden, bloke: t.nakitR > 0 }; });
     tum.forEach(s => { s.toplam = s.banka + s.elden; });
+    // gerçekleşen ödeme (9 Kas 2026): sunucudaki kayıt (V.odemeler, dönem bazında) → ödenen banka / elden, fark = ödenen − planlanan, durum
+    const OD = {}; (V.odemeler || []).forEach(o => { OD[o.anahtar] = o; });
+    tum.forEach(s => {
+      const o = OD[s.k] || null, ob = o && o.odenenBanka != null ? Number(o.odenenBanka) : null, oe = o && o.odenenElden != null ? Number(o.odenenElden) : null;
+      s.od = o; s.odBanka = ob; s.odElden = oe; s.odVar = ob != null || oe != null; s.farkBanka = ob == null ? null : ob - s.banka; s.farkElden = oe == null ? null : oe - s.elden;
+      const topOd = (ob || 0) + (oe || 0), fark = topOd - s.toplam; s.odToplam = s.odVar ? topOd : null; s.odFark = s.odVar ? fark : null;
+      s.odDurum = !s.odVar ? (s.odenecek ? 'Girilmedi' : '—') : Math.abs(fark) < 0.005 ? 'Tam Ödendi' : fark < 0 ? 'Eksik Ödendi' : 'Fazla Ödendi';
+    });
+    odemeSatirlar = tum;
+    const odH = v => v == null ? '<span class="text-muted">—</span>' : hucre(v), isaret = f => (f > 0 ? '+' : '') + kisa(f);
+    const farkH = f => f == null ? '<span class="text-muted">—</span>' : Math.abs(f) < 0.005 ? '<span class="pm-rz ok">0,00 ₺</span>' : `<span class="${f < 0 ? 'text-danger' : 'text-primary'} fw-bold">${isaret(f)}</span>`;
+    const durumRz = s => s.odDurum === 'Tam Ödendi' ? '<span class="pm-rz ok">Tam Ödendi</span>' : s.odDurum === 'Eksik Ödendi' ? '<span class="pm-rz hata">Eksik Ödendi</span>' : s.odDurum === 'Fazla Ödendi' ? '<span class="pm-rz mavi">Fazla Ödendi</span>' : s.odDurum === 'Girilmedi' ? '<span class="pm-rz gri">Girilmedi</span>' : '<span class="text-muted">—</span>';
+    const tarihKisa = t => t ? String(t).slice(0, 10).split('-').reverse().join('.') : '';
     const L2 = tum.filter(s => (s.odenecek ? goster.odenecek : goster.odenmeyecek) && (!ara || [s.r.adSoyad, s.r.isveren, s.r.gorevYeri, s.r.gorev].join(' ').toLocaleLowerCase('tr-TR').includes(ara)));
     const top = (l, k) => l.reduce((s, x) => s + (Number(x[k]) || 0), 0);
-    $('#pmOdemeTablo tbody').innerHTML = L2.map((s, i) => `<tr class="${s.odenecek ? '' : 'odenmez'}" data-k="${esc(s.k)}"><td class="kucuk">${i + 1}</td><td class="kaynak k-${s.r.kaynak === 'Üretim' ? 'uretim' : s.r.kaynak === 'Özel' ? 'ozel' : 'bordro'}">${esc(s.r.kaynak)}</td><td class="ad">${adOz(s.r.adSoyad, s.r.sira0)}${s.bloke ? ' <span class="pm-rz mavi" title="Banka hesabı blokeli: R tutarı elden ödenir">R → elden</span>' : ''}</td><td>${lokasyon(s.r.gorevYeri)}</td><td class="s">${hucre(s.rNet)}</td><td class="s">${hucre(s.digerR)}</td><td class="s">${hucre(s.kesR)}</td><td class="s">${hucre(s.kalanBanka)}</td><td class="s">${hucre(s.xNet)}</td><td class="s">${hucre(s.digerX)}</td><td class="s">${hucre(s.kesX)}</td><td class="s">${hucre(s.elden)}</td><td class="s hesap">${hucre(s.toplam)}</td><td><select class="form-select pmOdemeDurum" data-k="${esc(s.k)}" aria-label="Ödeme · ${esc(s.r.adSoyad)}"><option value="odenecek" ${s.odenecek ? 'selected' : ''}>Ödenecek</option><option value="odenmeyecek" ${s.odenecek ? '' : 'selected'}>Ödenmeyecek</option></select></td></tr>`).join('') || '<tr><td colspan="14" class="na-bos">Filtreye uyan kişi yok.</td></tr>';
-    $('#pmOdemeTablo tfoot tr').innerHTML = `<td>Toplam</td><td>${L2.length} kişi</td><td></td><td></td><td class="s">${kisa(top(L2, 'rNet'))}</td><td class="s">${kisa(top(L2, 'digerR'))}</td><td class="s">${kisa(top(L2, 'kesR'))}</td><td class="s">${kisa(top(L2, 'kalanBanka'))}</td><td class="s">${kisa(top(L2, 'xNet'))}</td><td class="s">${kisa(top(L2, 'digerX'))}</td><td class="s">${kisa(top(L2, 'kesX'))}</td><td class="s">${kisa(top(L2, 'elden'))}</td><td class="s">${kisa(top(L2, 'toplam'))}</td><td>${L2.filter(s => s.odenecek).length} ödenecek</td>`;
+    $('#pmOdemeTablo tbody').innerHTML = L2.map((s, i) => `<tr class="${s.odenecek ? '' : 'odenmez'}" data-k="${esc(s.k)}"><td class="kucuk">${i + 1}</td><td class="kaynak k-${s.r.kaynak === 'Üretim' ? 'uretim' : s.r.kaynak === 'Özel' ? 'ozel' : 'bordro'}">${esc(s.r.kaynak)}</td><td class="ad">${adOz(s.r.adSoyad, s.r.sira0)}${s.bloke ? ' <span class="pm-rz mavi" title="Banka hesabı blokeli: R tutarı elden ödenir">R → elden</span>' : ''}</td><td>${lokasyon(s.r.gorevYeri)}</td><td class="s">${hucre(s.rNet)}</td><td class="s">${hucre(s.digerR)}</td><td class="s">${hucre(s.kesR)}</td><td class="s">${hucre(s.kalanBanka)}</td><td class="s">${hucre(s.xNet)}</td><td class="s">${hucre(s.digerX)}</td><td class="s">${hucre(s.kesX)}</td><td class="s">${hucre(s.elden)}</td><td class="s hesap">${hucre(s.toplam)}</td><td class="s od-gir" title="Tıklayın: fiilen ödenen tutarı girin">${odH(s.odBanka)}${s.od && s.od.bankaTarih ? `<small class="alt">${esc(tarihKisa(s.od.bankaTarih))}</small>` : ''}</td><td class="s od-gir" title="Tıklayın: fiilen ödenen tutarı girin">${odH(s.odElden)}${s.od && s.od.eldenTarih ? `<small class="alt">${esc(tarihKisa(s.od.eldenTarih))}</small>` : ''}</td><td class="s od-gir">${farkH(s.farkBanka)}</td><td class="s od-gir">${farkH(s.farkElden)}</td><td class="od-gir">${durumRz(s)}${s.od && s.od.not ? `<small class="alt">${esc(s.od.not)}</small>` : ''}</td><td><select class="form-select pmOdemeDurum" data-k="${esc(s.k)}" aria-label="Ödeme · ${esc(s.r.adSoyad)}"><option value="odenecek" ${s.odenecek ? 'selected' : ''}>Ödenecek</option><option value="odenmeyecek" ${s.odenecek ? '' : 'selected'}>Ödenmeyecek</option></select></td></tr>`).join('') || '<tr><td colspan="19" class="na-bos">Filtreye uyan kişi yok.</td></tr>';
+    $('#pmOdemeTablo tfoot tr').innerHTML = `<td>Toplam</td><td>${L2.length} kişi</td><td></td><td></td><td class="s">${kisa(top(L2, 'rNet'))}</td><td class="s">${kisa(top(L2, 'digerR'))}</td><td class="s">${kisa(top(L2, 'kesR'))}</td><td class="s">${kisa(top(L2, 'kalanBanka'))}</td><td class="s">${kisa(top(L2, 'xNet'))}</td><td class="s">${kisa(top(L2, 'digerX'))}</td><td class="s">${kisa(top(L2, 'kesX'))}</td><td class="s">${kisa(top(L2, 'elden'))}</td><td class="s">${kisa(top(L2, 'toplam'))}</td><td class="s">${kisa(top(L2, 'odBanka'))}</td><td class="s">${kisa(top(L2, 'odElden'))}</td><td class="s">${farkH(L2.some(s => s.farkBanka != null) ? top(L2, 'farkBanka') : null)}</td><td class="s">${farkH(L2.some(s => s.farkElden != null) ? top(L2, 'farkElden') : null)}</td><td><small>${L2.filter(s => s.odDurum === 'Tam Ödendi').length} tam · ${L2.filter(s => s.odDurum === 'Eksik Ödendi').length} eksik · ${L2.filter(s => s.odDurum === 'Fazla Ödendi').length} fazla · ${L2.filter(s => s.odDurum === 'Girilmedi').length} girilmedi</small></td><td>${L2.filter(s => s.odenecek).length} ödenecek</td>`;
     const ode = tum.filter(s => s.odenecek), odmz = tum.filter(s => !s.odenecek);
     const banka = top(ode, 'banka'), elden = top(ode, 'elden');
+    const odeGir = ode.filter(s => s.odVar), odenen = top(odeGir, 'odToplam'), odFark = odenen - top(odeGir, 'toplam');   // gerçekleşen: yalnız ödeme girilen ödenecek satırlar
     const kpi = [['#0f172a', 'Ödenecek Kişi', `${ode.length} / ${tum.length}`, `ödenmeyecek ${odmz.length}`],
       ['#0f766e', 'Bankadan Ödenecek (Maaş)', kisa(banka), 'R net · Net-R Bordro'],
       ['#b45309', 'Elden Ödenecek (Maaş)', kisa(elden), 'X net · Kalan Net Tutar (Elden)'],
       ['#dc2626', 'Finans İhtiyacı', kisa(banka + elden), `bankadan ${kisa(banka)} · elden ${kisa(elden)}`],
-      ['#64748b', 'Ödenmeyecek Tutar', kisa(top(odmz, 'tutarTum')), 'seçimle ödenmeyen net maaş']];
+      ['#64748b', 'Ödenmeyecek Tutar', kisa(top(odmz, 'tutarTum')), 'seçimle ödenmeyen net maaş'],
+      ['#15803d', 'Gerçekleşen Ödeme', kisa(odenen), `${odeGir.length} / ${ode.length} kişi girildi · banka ${kisa(top(odeGir, 'odBanka'))} · elden ${kisa(top(odeGir, 'odElden'))}`],
+      [odFark < -0.005 ? '#dc2626' : odFark > 0.005 ? '#2563eb' : '#64748b', 'Ödeme Farkı (Ödenen − Planlanan)', odeGir.length ? isaret(odFark) : '—', `${ode.filter(s => s.odDurum === 'Tam Ödendi').length} tam · ${ode.filter(s => s.odDurum === 'Eksik Ödendi').length} eksik · ${ode.filter(s => s.odDurum === 'Fazla Ödendi').length} fazla · ${ode.length - odeGir.length} girilmedi`]];
     $('#pmOdemeKpi').innerHTML = kpi.map(k => `<div style="--k:${k[0]}"><div class="l">${k[1]}</div><div class="v">${k[2]}</div><div class="s">${esc(k[3])}</div></div>`).join('');
     $('#pmOdemeSayi').textContent = `${L2.length} / ${tum.length} kişi · ${V.donemAd} · tutarlar ₺ · seçimler tarayıcıda saklanır`;
 
     $$('#pmOdemeTablo .pmOdemeDurum').forEach(c => c.addEventListener('change', () => { odemeSecim[c.dataset.k] = c.value; odemeSakla(); odemeCiz(); }));
+    finansCiz(ode);
     sabitleHepsi();
+  }
+  // ---- ŞİRKET BAZINDA TOPLU ÖDEME → KASA NAKİT AKIŞI (9 Kas 2026, "firma firma görebilelim: ALV Kimya R ödeme şu kadar, X ödeme şu kadar … Kasa Nakit Akışı'na toplu gönderelim"):
+  //      ödenecek satırlar fiili görev yeri şirketine göre (yansıtma esası) toplanır; sunucu şirket başına R (Havale / EFT) ve X (Nakit) satırı yazar (Data/PersonelFinansOrnek.cs); durum V.finans
+  let finansBagli = false, finansListe = [];
+  const KASA_SIRKETLER = ['Uras Kimya', 'Selvi Kimya', 'Selvi', 'Avrupa Paper', 'ALV Kimya', 'Alv Kimya', 'Daf Kimya', 'URS Makine', 'URS Makina', 'Uras Holding'];   // Kasa Nakit Akışı şirketleri (CekAkibetOrnek.Sirketler eşlemesi)
+  const kasaYok = s => !KASA_SIRKETLER.some(k => k.toLocaleLowerCase('tr-TR') === String(s || '').toLocaleLowerCase('tr-TR'));
+  const finansSirket = r => r.kaynak === 'Üretim' ? (r.isveren || '—') : ((bul(r.sira0) || {}).fiiliSirket || r.isveren || '—');   // satırın fiili görev yeri şirketi (sunucu DTO fiiliSirket; üretim satırında isveren)
+  const isoBugun = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const trTarih = s => s ? String(s).slice(0, 10).split('-').reverse().join('.') : '';
+  function finansSatirlar(ode) { const m = new Map(); ode.forEach(s => { const ad = finansSirket(s.r); const g = m.get(ad) || { sirket: ad, kisi: 0, banka: 0, elden: 0 }; g.kisi++; g.banka += s.banka; g.elden += s.elden; m.set(ad, g); }); return [...m.values()].sort((a, b) => a.sirket.localeCompare(b.sirket, 'tr')); }
+  function finansCiz(ode) {
+    const t = $('#pmFinansTablo'); if (!t) return;
+    if (!finansBagli) { finansBagli = true; const ti = $('#pmFinansTarih'); if (ti && !ti.value) ti.value = isoBugun(); $('#pmFinansGonder').addEventListener('click', finansGonder); $('#pmFinansGeriAl').addEventListener('click', finansGeriAl); const git = $('#pmFinansGit'); if (git) git.addEventListener('click', () => $('#pmFinansBaslik').scrollIntoView({ behavior: 'smooth', block: 'start' })); }   // şeritteki kısayol: tabloya kaydır (href="#…" <base href> yüzünden köke gider, düğme kullanılır)
+    const F = {}; (V.finans || []).forEach(f => { F[f.anahtar] = f; });
+    const L = finansListe = finansSatirlar(ode);
+    const durumH = (sirket, kanal, tutar) => { const f = F[`${V.donem}|${sirket}|${kanal}`]; if (!f) return tutar > 0 ? (kasaYok(sirket) ? '<span class="pm-rz hata" title="Kasa Nakit Akışı\'nda şirket tanımlı değil">Gönderilemez</span>' : '<span class="pm-rz gri">Gönderilmedi</span>') : '<span class="text-muted">—</span>';
+      const degisti = Math.abs((Number(f.tutar) || 0) - tutar) > 0.005, rz = f.durum === 'ÖDENDİ' ? 'ok' : f.onay === 'Onay Bekliyor' ? 'gri' : 'mavi', ad = f.durum === 'ÖDENDİ' ? 'Ödendi' : f.onay === 'Onay Bekliyor' ? 'Nakit Onayı Bekliyor' : f.durum;
+      return `<a href="/Rapor79?sirket=${encodeURIComponent(f.db)}" target="_blank" rel="noopener" title="Kasa Nakit Akışı · ${esc(f.kasaSirket || '')} · satır #${f.docEntry} · ${esc(f.yontem || '')}">#${f.docEntry}</a> <span class="pm-rz ${rz}">${esc(ad)}</span><small class="alt">${kisa(f.tutar)}${f.plan ? ' · plan ' + trTarih(f.plan) : ''}${f.durum === 'ÖDENDİ' && f.odenme ? ' · ödendi ' + trTarih(f.odenme) : ''}${degisti ? ' · <span class="text-danger fw-bold">tutar değişti, yeniden gönderin</span>' : ''}</small>`; };
+    $('tbody', t).innerHTML = L.map(g => `<tr><td><b>${esc(g.sirket)}</b>${kasaYok(g.sirket) ? ' <small class="alt text-danger">Kasa Nakit Akışı\'nda tanımlı değil</small>' : ''}</td><td class="s">${g.kisi}</td><td class="s">${hucre(g.banka)}</td><td class="s">${hucre(g.elden)}</td><td class="s hesap">${hucre(g.banka + g.elden)}</td><td>${durumH(g.sirket, 'R', g.banka)}</td><td>${durumH(g.sirket, 'X', g.elden)}</td></tr>`).join('') || '<tr><td colspan="7" class="na-bos">Ödenecek satır yok.</td></tr>';
+    const tb = L.reduce((s, g) => s + g.banka, 0), te = L.reduce((s, g) => s + g.elden, 0), G = (V.finans || []).filter(f => (f.anahtar || '').startsWith(V.donem + '|'));
+    $('tfoot tr', t).innerHTML = `<td>Toplam · ${L.length} şirket</td><td class="s">${L.reduce((s, g) => s + g.kisi, 0)}</td><td class="s">${kisa(tb)}</td><td class="s">${kisa(te)}</td><td class="s">${kisa(tb + te)}</td><td colspan="2"><small>${G.length} satır Kasa Nakit Akışı'nda · ${G.filter(f => f.durum === 'ÖDENDİ').length} ödendi · ${G.filter(f => f.onay === 'Onay Bekliyor').length} nakit onayı bekliyor · gönderilen toplam ${kisa(G.reduce((s, f) => s + (Number(f.tutar) || 0), 0))}</small></td>`;
+    $('#pmFinansSayi').textContent = `${L.length} şirket · ${V.donemAd} · yalnız "Ödenecek" satırlar · R bankadan Havale / EFT (İşlem Tipi R) · X elden Nakit (İşlem Tipi X, nakit onayı gerekir) · aynı dönem / şirket / kanal tek satır`;
+  }
+  async function finansGonder() {
+    const L = finansListe.filter(g => !kasaYok(g.sirket) && (g.banka > 0 || g.elden > 0)), yok = finansListe.filter(g => kasaYok(g.sirket) && (g.banka > 0 || g.elden > 0));
+    if (!L.length) { mesaj('warning', 'Gönderilecek ödenecek satır yok.'); return; }
+    const tarih = $('#pmFinansTarih').value || isoBugun();
+    if (!window.confirm(`${V.donemAd} için ${L.length} şirketin toplu personel ödemesi Kasa Nakit Akışı'na gönderilsin mi?\n\nBankadan (R): ${kisa(L.reduce((s, g) => s + g.banka, 0))}\nElden (X): ${kisa(L.reduce((s, g) => s + g.elden, 0))}\nPlanlanan tarih: ${trTarih(tarih)}${yok.length ? `\n\nKasa Nakit Akışı'nda tanımlı olmayan şirketler gönderilmez: ${yok.map(g => g.sirket).join(', ')}` : ''}`)) return;
+    const j = await post('/PersonelMaliyet/FinansGonder', { donem: V.donem, planTarih: tarih, satirlar: finansListe.map(g => ({ sirket: g.sirket, kisi: g.kisi, banka: Math.round(g.banka * 100) / 100, elden: Math.round(g.elden * 100) / 100 })) });
+    if (!j.success) { mesaj('danger', esc(j.message)); return; }
+    veriGuncelle(j); mesaj('success', esc(j.message));
+  }
+  async function finansGeriAl() {
+    const G = (V.finans || []).filter(f => (f.anahtar || '').startsWith(V.donem + '|') && f.durum !== 'ÖDENDİ');
+    if (!G.length) { mesaj('warning', 'Bu dönem için Kasa Nakit Akışı\'nda kaldırılacak ödenmemiş satır yok.'); return; }
+    if (!window.confirm(`${V.donemAd} için Kasa Nakit Akışı'ndaki ${G.length} ödenmemiş toplu personel ödemesi satırı kaldırılsın mı? (Ödenmiş satırlar kalır.)`)) return;
+    const j = await post('/PersonelMaliyet/FinansGeriAl', { donem: V.donem });
+    if (!j.success) { mesaj('danger', esc(j.message)); return; }
+    veriGuncelle(j); mesaj('success', esc(j.message));
   }
 
   // ============================================================
@@ -1665,7 +1738,7 @@
     ['#pmEkOzet tbody', '#pmKesOzet tbody'].forEach(s => $(s).addEventListener('click', ev => { if (etkilesim(ev)) return; const tr = ev.target.closest('tr[data-sira]'); if (tr) kisiKartAc(+tr.dataset.sira); }));
     $('#pmPrimUyum tbody').addEventListener('click', ev => { const tr = ev.target.closest('tr[data-ad]'); if (tr) kisiKartAc(0, tr.dataset.ad); });
     $('#pmCikisTablo tbody').addEventListener('click', ev => { if (etkilesim(ev)) return; const tr = ev.target.closest('tr[data-k]'); if (!tr) return; if (tr.dataset.kaynak === 'Üretim') uretimDuzenle(+tr.dataset.usira); else kisiKartAc(+tr.dataset.sira0); });
-    $('#pmOdemeTablo tbody').addEventListener('click', ev => { if (etkilesim(ev)) return; const tr = ev.target.closest('tr[data-k]'); if (!tr) return; const i = tr.dataset.k.indexOf(':'); const kaynak = tr.dataset.k.slice(0, i), id = +tr.dataset.k.slice(i + 1); if (kaynak === 'Üretim') uretimDuzenle(id); else kisiKartAc(id); });   // ödeme satırı → kişi kartı (üretim → üretim düzenleme); Ödeme Durumu seçimi hariç (5 Kas 2026)
+    $('#pmOdemeTablo tbody').addEventListener('click', ev => { if (etkilesim(ev)) return; const tr = ev.target.closest('tr[data-k]'); if (!tr) return; if (ev.target.closest('td.od-gir')) { odemeGirisAc(tr.dataset.k); return; } const i = tr.dataset.k.indexOf(':'); const kaynak = tr.dataset.k.slice(0, i), id = +tr.dataset.k.slice(i + 1); if (kaynak === 'Üretim') uretimDuzenle(id); else kisiKartAc(id); });   // ödeme satırı → kişi kartı (üretim → üretim düzenleme); Ödeme Durumu seçimi hariç (5 Kas 2026)
     // Personel Cari Kartı ve Şirket Teşvikleri sekmeleri (5 Kas 2026)
     $('#pmCariTablo tbody').addEventListener('click', ev => { if (etkilesim(ev)) return; const tr = ev.target.closest('tr[data-sira0]'); if (tr && tr.dataset.sira0) kisiKartAc(+tr.dataset.sira0); });
     $('#pmCariEkle').addEventListener('click', () => kartAc(0));

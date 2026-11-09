@@ -89,6 +89,7 @@ namespace FinansRaporlama.Controllers
         public string U_OdeyenSirket { get; set; } = "";     // ödemeyi fiilen yapan şirket (banka / kasa / çek portföyü); fatura sahibinden farklı olabilir (grup içi çek dolaşımı)
         public string U_AvansNo { get; set; } = "";          // Nakit Avans modülü talep no (NA-2026-000146): onaylanan avans otomatik satır olur, ödenince avans teslim edilmiş sayılır
         public string U_TalimatNo { get; set; } = "";        // Ödeme talimatı no (TLM-2026-0001; Data/TalimatOrnek.cs)
+        public string U_PersonelOdeme { get; set; } = "";    // Konsolide İK Paneli › Ödeme Planı toplu personel maaş ödemesi anahtarı ("2026-10|ALV Kimya|R"; Data/PersonelFinansOrnek.cs, 9 Kas 2026): aynı dönem / şirket / kanal tek satır
         public DateTime? U_SonOdemeTarihi { get; set; }      // belgenin son ödeme (vade) tarihi; planlanan ödeme tarihinden ayrı izlenir
         public decimal? U_FaturaTutari { get; set; }         // bağlı belgenin toplam tutarı (belge para biriminde): kısmi ödeme / taksitte satır tutarı bunun bir oranıdır (%70 + %30 …)
         public int? U_UstDocEntry { get; set; }              // kısmi ödeme / taksit: aynı belgenin ilk satırı (kardeş satırlar birlikte izlenir)

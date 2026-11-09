@@ -7,7 +7,7 @@
 //   Satır kaydında (Kaydet) ekranın gönderdiği "degisen" alan listesi varsa yalnız o alanlar mevcut kaydın üzerine yazılır; tohum verisi sonradan kodla
 //   değişmişse (kimlik, resmi bordro tutarları) diğer alanlar korunur.
 //   Kapsam: Kaydet · Ekle · Sil · DonemOlustur · TesvikKaydet · UretimKaydet / UretimSil · PrimKaydet / PrimSil · KesintiEkle (ek dosyası hariç) / KesintiGuncelle / KesintiSil ·
-//           MuhasebeSimule / MuhasebeIslem / MuhasebeEsleme · Kimlik (Personel Dosyası'ndan telefon / e-posta / işe giriş; IkPersonelMaster.KimlikYaz, 9 Kas 2026). Kesinti planı ek dosyaları (PDF) kalıcı değildir; Zam / İşten Çıkış / Ödeme / Özel Rapor seçimleri zaten tarayıcıda saklanır.
+//           MuhasebeSimule / MuhasebeIslem / MuhasebeEsleme · Kimlik (Personel Dosyası'ndan telefon / e-posta / işe giriş; IkPersonelMaster.KimlikYaz, 9 Kas 2026) · Odeme (Ödeme Planı gerçekleşen ödeme; PersonelOdemeOrnek). Kesinti planı ek dosyaları (PDF) kalıcı değildir; Zam / İşten Çıkış / Ödeme / Özel Rapor seçimleri zaten tarayıcıda saklanır.
 //   Dosya yeri: içerik kökü (Startup: env.ContentRootPath; PM_KALICI_DIZIN ortam değişkeniyle değiştirilebilir) altında App_Data; git'e girmez (.gitignore).
 // ============================================================
 using System;
@@ -100,6 +100,9 @@ namespace WebApplication3.Data
                 case "muhasebeIslem": { var d = Al<MuhasebeIslemKaydi>(v); Hata(PersonelMuhasebeOrnek.Islem(d.Id, d.Islem, d.Not, kisi, k.Yetki ?? "", out _)); break; }
                 case "muhasebeEsleme": { var d = Al<EslemeKaydi>(v); Hata(PersonelMuhasebeOrnek.EslemeKaydet(d.Id, d.Sirket, d.KarsiSirket, d.IslemTuru, d.KaynakKalem, d.XR, d.Yon, d.HesapKodu, d.Varsayilan, d.GecerlilikBas, d.GecerlilikBit, d.Aktif, kisi, out _)); break; }
                 case "kimlik": { var d = Al<IkPersonelMaster.KimlikIstek>(v); Hata(IkPersonelMaster.KimlikYaz(d, kisi)); break; }   // Personel Dosyası'ndan telefon / e-posta / işe giriş (9 Kas 2026): kişinin tüm dönem kayıtlarına
+                case "odeme": { var d = Al<PoIstek>(v); Hata(PersonelOdemeOrnek.Kaydet(d, kisi, out _)); break; }   // Ödeme Planı gerçekleşen ödeme (9 Kas 2026)
+                case "finansGonder": { var d = Al<PfIstek>(v); Hata(PersonelFinansOrnek.Gonder(d, kisi, out _)); break; }   // şirket bazında toplu ödeme → Kasa Nakit Akışı (9 Kas 2026)
+                case "finansGeriAl": { var d = Al<Controllers.PersonelMaliyetController.FinansGeriIstek>(v); PersonelFinansOrnek.GeriAl(d.Donem, kisi); break; }
                 default: throw new InvalidOperationException("bilinmeyen kayıt türü: " + k.Tip);
             }
         }
