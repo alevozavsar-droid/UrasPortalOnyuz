@@ -356,6 +356,7 @@ namespace WebApplication3.Data
             var guncel = Tohumla();
             foreach (var p in guncel) p.BankaBlokeli = Array.IndexOf(BankaBlokeliKisiler, p.AdSoyad) >= 0;
             KiraDestegiYaz(guncel, EylulEur, EylulUsd);   // Eylül'de de kira destekleri (6 Kas 2026: Paulo 500 € Eylül kaynak kuruyla 27.815,30 ₺; Devrim / Hale Bisren 45.000 ₺)
+            PersonelKimlikBordro.Tamamla(guncel);   // resmi bordro kimliği (9 Kas 2026): sicil / SGK no bordrodan, boş departman kodu / açıklaması panel düzeninden (Data/PersonelKimlikBordro.cs)
             return new SortedDictionary<string, List<PmPersonel>> { [GuncelDonem] = guncel };
         }
         /// <summary>Kira desteklerini (KiraDestekleri) listeye yazar: kişinin ilk satırına tutar × dönem kuru (₺ olan aynen; KiraDestegiX) ve nota kısa açıklama; ad eşleşmesi AnahtarEsit ile (büyük-küçük harf, boşluk, eğik çizgi farkı yok).</summary>
@@ -410,6 +411,7 @@ namespace WebApplication3.Data
                     }
                 }
                 KiraDestegiYaz(liste, eur, usd);   // kira destekleri (6 Kas 2026): X (bordro dışı) kalem; dövizli olan yeni bordro kuruyla ₺ (Ekim 2026: Paulo 27.826,95), ₺ olan aynen (Devrim / Hale 45.000)
+                PersonelKimlikBordro.Tamamla(liste);   // resmi bordro kimliği (9 Kas 2026): sicil / SGK no, boş departman kodu / açıklaması, Ekim'de işe girenlerin bölüm / çatı / işe giriş varsayımı (Data/PersonelKimlikBordro.cs)
                 int donemAy = int.Parse(donem.Substring(5, 2));
                 foreach (var p in liste.Where(x => x.BrutKaynak == null)) TuretilmisKaynak(p, donemAy);   // brütü olmayanlar: brütleştirme kaynak değer olur (vergi artık; fiş dengesi kaynaklı kişiler gibi tutar)
                 Donemler[donem] = liste;
@@ -707,6 +709,8 @@ namespace WebApplication3.Data
             ["İdari İşler"] = "D10", ["Muhasebe"] = "D20", ["Finans"] = "D21", ["Cari İşler"] = "D22", ["Üretim"] = "D30", ["Ar-Ge"] = "D31", ["Kalite Güvence"] = "D32", ["Kalite Kontrol"] = "D33",
             ["Teknik Hizmetler"] = "D40", ["Depo ve Sevkiyat"] = "D50", ["Satınalma"] = "D51", ["Satış"] = "D60", ["İhracat"] = "D61", ["Yurtdışı Şube"] = "D62", ["İnsan Kaynakları"] = "D70", ["Hukuk"] = "D80", ["Üst Yönetim"] = "D90", ["Yönetim Özel"] = "D91"
         };
+        /// <summary>Bölüm → panel departman kodu (D-düzeni; bilinmeyen bölüm D00). Resmi bordro kimliği tamamlanırken boş departman kodu buradan (Data/PersonelKimlikBordro.cs).</summary>
+        public static string DepartmanKoduBul(string bolum) => BolumKodu.TryGetValue(bolum ?? "", out var k) ? k : "D00";
         private static readonly Dictionary<string, string> SgkKisaltma = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["ALV Kimya"] = "ALV", ["Uras Kimya"] = "URS", ["Selvi Kimya"] = "SLV", ["Uras Holding"] = "HLD", ["Avrupa Paper"] = "AVP", ["Alv Filo"] = "FLO"
