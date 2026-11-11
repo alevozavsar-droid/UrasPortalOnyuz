@@ -124,7 +124,7 @@ namespace WebApplication3.Data
         public static readonly string[] OdemeDurumlari = { "Açık", "Ödendi", "Yapılandırıldı" };
         public static readonly string[] Statuler = { "Adi Alacak", "İmtiyazlı / Rüçhanlı Alacak", "Belirsiz" };
         public static readonly string[] Nitelikler = { "Asaleten", "Kefaleten" };
-        public static readonly string[] SozlesmeTurleri = { "Genel Kredi Sözleşmesi", "Finansal Kiralama Sözleşmesi", "Kredi Sözleşmesi", "Diğer" };
+        public static readonly string[] SozlesmeTurleri = { "Genel Kredi Sözleşmesi", "Finansal Kiralama Sözleşmesi", "Kredi Sözleşmesi", "Yapılandırma Protokolü", "Diğer" };   // 11 Kas 2026: yapılandırma protokolü de sözleşme sicilinde
         public static readonly string[] HesapNitelikleri = { "Nakdi", "Gayrinakdi", "Tenzil", "Masraf" };
         public static readonly string[] FaizDonemleri = { "Yıllık", "Aylık" };
         public static readonly string[] TahsilatKanallari = { "Çek", "Havale / EFT", "Şube", "Mevduat Rehni", "Teminat Çeki", "Haricen", "Diğer" };
