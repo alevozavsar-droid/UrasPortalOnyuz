@@ -8,6 +8,7 @@
 //     Kırılım <br class="bsk"> ile yapılır; başlık metni değişmez.
 //   Tutar sütunlarındaki düz sayılara ₺ eklenir; sayaç (Sıra, Gün, Adet, Kişi …) ve kimlik (Sicil, SGK Numarası …) sütunları işaretsiz kalır. Dövizli tutarlar kendi işaretini ekran betiğinde taşır.
 //   Tablo her yeniden çizildiğinde (gövde ya da başlık değişince) hizalanır; ekran betiklerine dokunmaz.
+//   data-dikey="orta" olan tabloda (Kredi Raporu, 11 Kas 2026) her hücre dikeyde de ortalanır (başlık dahil).
 // ============================================================
 (() => {
   'use strict';
@@ -92,11 +93,12 @@
   /** tablonun her hücresini ortalar; gövdede ilk satır taban çizgisine, başlıkta alt çizgiye hizalar; tutar sütunlarındaki düz sayılara ₺ ekler */
   function hizala(tablo) {
     const thead = tablo.tHead;
+    const dikeyOrta = tablo.dataset.dikey === 'orta';   // 11 Kas 2026 (Kredi Raporu: "hem satır hem sütun ortala"): başlık ve gövde hücreleri dikeyde de ortada; öbür raporlarda ilk satır taban çizgisi
     for (const tr of tablo.rows) {
       const basta = tr.parentNode === thead;
       for (const c of tr.cells) {
         c.style.setProperty('text-align', 'center', 'important');
-        c.style.setProperty('vertical-align', basta ? 'bottom' : 'baseline', 'important');
+        c.style.setProperty('vertical-align', dikeyOrta ? 'middle' : basta ? 'bottom' : 'baseline', 'important');
       }
     }
     const bas = thead && thead.rows.length ? thead.rows[thead.rows.length - 1] : null;

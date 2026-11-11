@@ -1,9 +1,14 @@
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
-    string sekme = (string)ViewBag.Sekme ?? "krediler";
-    // iki küme: kredi sekmeleri (öncesi ↔ sonrası, takvim, aylık yük) | teminat ve belge sekmeleri (rehin · ipotek takibi, teminat çekleri, belgeler); "rehin" ilk küme sonrası ayraçla başlar
-    var sekmeler = new[] { ("krediler", "Krediler · Öncesi ↔ Sonrası", "fa-table-list"), ("oncesi", "Yapılandırma Öncesi", "fa-clock-rotate-left"), ("sonrasi", "Yapılandırma Sonrası", "fa-file-signature"), ("takvim", "Taksit Takvimi", "fa-calendar-days"), ("aylik", "Aylık Nakit Yükü", "fa-chart-column"),
-        ("rehin", "Rehin · İpotek Takibi", "fa-house-lock"), ("cekler", "Teminat Çekleri", "fa-money-check-dollar"), ("belgeler", "Belgeler · Sözleşme / GKS", "fa-file-pdf") };
+    string sekme = (string)ViewBag.Sekme ?? "ozet";
+    // üç küme: kredi sekmeleri (öncesi ↔ sonrası, takvim, aylık yük) | teminat ve belge sekmeleri (rehin · ipotek takibi, teminat çekleri, belgeler) | konkordato (alacaklı bankalar, sözleşmeler · kefiller, mühlet tarihi bakiyeleri, tahsilatlar, teminat mektupları; 10 Kas 2026); "rehin" ve "konkordato" ayraçla başlar
+    var sekmeler = new[] { ("ozet", "Özet", "fa-chart-pie"), ("krediler", "Krediler · Öncesi ↔ Sonrası", "fa-table-list"), ("oncesi", "Yapılandırma Öncesi", "fa-clock-rotate-left"), ("sonrasi", "Yapılandırma Sonrası", "fa-file-signature"), ("takvim", "Taksit Takvimi", "fa-calendar-days"), ("aylik", "Aylık Nakit Yükü", "fa-chart-column"), ("borclar", "Banka Borç Dökümü", "fa-file-invoice-dollar"),
+        ("rehin", "Rehin · İpotek Takibi", "fa-house-lock"), ("cekler", "Teminat Çekleri", "fa-money-check-dollar"), ("belgeler", "Belgeler · Sözleşme / GKS", "fa-file-pdf"),
+        ("konkordato", "Konkordato · Alacaklı Bankalar", "fa-scale-balanced"), ("sozlesmeler", "Kredi Sözleşmeleri · Kefiller", "fa-file-contract"), ("hesaplar", "Mühlet Tarihi Bakiyeleri", "fa-list-ol"), ("tahsilatlar", "Mühlet Sonrası Tahsilatlar", "fa-hand-holding-dollar"), ("mektuplar", "Teminat Mektupları", "fa-envelope-open-text"),
+        ("kontrol", "Banka Kontrol Listesi", "fa-list-check") };   // 11 Kas 2026: banka × şirket veri kontrol listesi (tüm bilgiler yüklendiyse OK)
+    var grupIlk = new[] { "krediler", "rehin", "konkordato" };
+    // Özet sekmesi (10 Kas 2026, "Kredi Raporu'na bir özet sekmesi hazırla"): açılış sekmesi; dava dosyası şeridi + alacaklı bankalar özeti (ana tablo kyTablo-ozet) + borçlu şirketler, teminat · rehin · gayrinakdi, yapılandırma, tahsilat kanalları, süreç takvimi tabloları
+    var ozetTablolar = new[] { ("ozetSirket", "Borçlu Şirketler", "fa-building"), ("ozetTeminat", "Teminat · Rehin · Gayrinakdi", "fa-house-lock"), ("ozetKredi", "Yapılandırma Durumu", "fa-file-signature"), ("ozetTahsilat", "Mühlet Sonrası Tahsilat Kanalları", "fa-hand-holding-dollar"), ("ozetTakvim", "Süreç Takvimi", "fa-calendar-days") };
 }
 @*
     KREDİ RAPORU (9 Kas 2026) — Mali İşler › Finans › Krediler ve Finansman. Veri /KrediYapilandirma/Veri (Data/KrediYapilandirmaOrnek.cs, App_Data/kredi-yapilandirma.json kalıcı; belgeler App_Data/kredi-belgeler),
@@ -11,7 +16,15 @@
     Taksitler Kasa Nakit Akışı'na Havale / EFT satırı (belge no "KRD-001 · 03/36") ve Planlı Düzenli Ödemeler'e "Kredi" kaydı olarak akar.
     9 Kas 2026 ("sözleşmelerin PDF'ini taratıp yükleyelim, GKS'leri yükleyelim, eski kredilerin rehin ve ipotek takibi, teminata verilen çekler"): Rehin · İpotek Takibi (kredi teminatları + eski krediler için bağımsız kayıt, durum Aktif / Fek Bekliyor / Fek Edildi / Paraya Çevrildi),
     Teminat Çekleri (bankaya teminat verilen müşteri çek / senetleri, durum ve iade), Belgeler (sözleşme, protokol, GKS, ipotek, rehin, teminat mektubu, çek, ödeme planı, ekspertiz, fek yazısı — PDF / JPG / PNG; krediye, çeke ya da rehin kaydına bağlı).
-    Derin bağlantı: /KrediYapilandirma?sekme=takvim|rehin|cekler|belgeler
+    10 Kas 2026 ("Bakırköy 2. ATM bilirkişi raporundaki tüm detaylar kredi raporunda olmalı"): KONKORDATO kümesi (Data/KonkordatoOrnek.cs, App_Data/konkordato.json; ilk açılışta Data/Tohum/konkordato-bilirkisi-2026-02.json):
+    Alacaklı Bankalar (banka × borçlu: kat ihtarı / tebliğ / temerrüt, geçici mühlet tarihi nakdi alacak, itibar edilen tutar, tazmin, tahsilat, bakiye, rapor tanzim tarihi faiz hesabı, gayrinakdi çek taahhüt, rehin ve alacak statüsü, hukuki değerlendirme; dava dosyası şeridi),
+    Kredi Sözleşmeleri · Kefiller, Mühlet Tarihi Bakiyeleri (kredi hesap satırları), Mühlet Sonrası Tahsilatlar, Teminat Mektupları; ipotekler Rehin · İpotek Takibi'nde (yevmiye, malik türü, alacak statüsü).
+    11 Kas 2026 ("Kredi Raporuna Emlak Katılım Bankasına ait bu borçları da ekle, Alv Kimya ve Daf Kimya'ya ait"; EMLAK_KATILIM_BORÇ.xlsx): BANKA BORÇ DÖKÜMÜ sekmesi (kredi kümesinin son sekmesi): taksit bazlı güncel borç
+    (vade, taksit türü, detay türü, ek no, döviz, ana para, tahsil edilmiş, kalan ana para, kâr, BSMV, borç / taksit tutarı, tahsil tutarı, gecikme cezası, toplam borç ₺) + üstte Firma × Döviz Özeti kartı (dosyanın ÖZET sayfası).
+    Kredi kaydı değildir (nakit akışa yazmaz); tohum Data/Tohum/emlak-katilim-borc-2026-11.json; dökümde olmayan sütun "Dökümde Yok" rozetiyle gösterilir.
+    11 Kas 2026 (Emlak Katılım Borç Ödeme Protokolü 10.11.2026): kredi kaydında para birimi + kur, diğer borçlular, PROTOKOL ÖDEME PLANI (tarih + tutar satırları, Peşinat / Taksit; anüite yerine); Firma × Döviz Özeti'nde "Yapılandırma Güncel" sütunu (hücreye tıklayınca düzenlenir);
+    Rehin · İpotek durumlarına "Tesis Bekliyor" (protokolde taahhüt edilen, henüz tescil edilmemiş ipotek).
+    Derin bağlantı: /KrediYapilandirma?sekme=takvim|borclar|rehin|cekler|belgeler|konkordato|sozlesmeler|hesaplar|tahsilatlar|mektuplar
 *@
 @section Styles {
 <link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
@@ -30,14 +43,17 @@
     #ky .na-sekme button.ky-grup-ilk { margin-left: 10px; } #ky .na-sekme button.ky-grup-ilk::before { content: ''; position: absolute; left: -6px; top: 22%; height: 56%; border-left: 1px solid #cbd5e1; }
     #ky .na-sekme .ky-kapsam { margin-left: auto; flex: 1 1 0; min-width: 0; text-align: right; align-self: center; font-size: .64rem; font-weight: 600; color: #64748b; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     /* tablolar: sıkı yazı, stun çizgileri, iki satırlı hücreler */
-    #ky .ky-tablo { font-size: .68rem; } #ky .ky-tablo th { font-size: .56rem; padding: 4px 5px; white-space: normal; line-height: 1.15; vertical-align: bottom; position: sticky; top: 0; z-index: 2; background: #f8fafc; box-shadow: 0 1px 0 #e2e8f0; }
+    #ky .ky-tablo { font-size: .68rem; } #ky .ky-tablo th { font-size: .56rem; padding: 4px 5px; white-space: normal; line-height: 1.15; vertical-align: middle; text-align: center; position: sticky; top: 0; z-index: 2; background: #f8fafc; box-shadow: 0 1px 0 #e2e8f0; }
     #ky .ky-tablo thead tr.grup th { top: 0; font-size: .54rem; letter-spacing: .04em; background: #eef2ff; color: #3730a3; border-bottom: 1px solid #c7d2fe; } #ky .ky-tablo thead tr.grup + tr th { top: 21px; }
-    #ky .ky-tablo td { padding: 3px 5px; white-space: nowrap; vertical-align: middle; } #ky .ky-tablo td small { display: block; font-size: .58rem; color: #64748b; font-weight: 500; line-height: 1.1; }
+    #ky .ky-tablo td { padding: 3px 5px; white-space: nowrap; vertical-align: middle; text-align: center; }   /* 11 Kas 2026: her hücre yatay + dikey ortada (tablo-hizala data-dikey="orta") */ #ky .ky-tablo td small { display: block; font-size: .58rem; color: #64748b; font-weight: 500; line-height: 1.1; }
     #ky .ky-tablo td.ad { font-weight: 700; color: #0f172a; } #ky .ky-tablo td.para { font-variant-numeric: tabular-nums; font-weight: 700; } #ky .ky-tablo td.genel { font-weight: 800; color: #1e3a8a; }
     #ky .ky-tablo td.metin { white-space: normal; min-width: 140px; max-width: 260px; }
+    /* 11 Kas 2026: not / açıklama hücresi en çok 2 satır (satır yüksekliğini büyütmesin); tıklayınca tamamı açılır */
+    #ky .ky-tablo td.metin .ky-not { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; line-height: 1.2; }
+    #ky .ky-tablo td.metin.acik .ky-not { display: block; -webkit-line-clamp: unset; overflow: visible; } #ky .ky-tablo td.metin.genis { min-width: 320px; max-width: 620px; }
     #ky table.na-tablo th, #ky table.na-tablo td { border-right: 1px solid #cbd5e1; } #ky table.na-tablo th:last-child, #ky table.na-tablo td:last-child { border-right: 0; }
     #ky .ky-tablo tfoot td { font-weight: 800; background: #f1f5f9; border-top: 2px solid #cbd5e1; }
-    #ky .ky-tablo tr.ornek td { background: #fffbeb; } #ky .ky-tablo tr.odendi td { color: #166534; } #ky .ky-tablo tr.gecikti td { background: #fef2f2; } #ky .ky-tablo tr.soluk td { color: #94a3b8; } #ky .ky-tablo tr.soluk td.ad, #ky .ky-tablo tr.soluk td.para { color: #94a3b8; }
+    #ky .ky-tablo tr.ornek td { background: #fffbeb; } #ky .ky-tablo tr.odendi td { color: #166534; background: #f0fdf4; }   /* ödendi: yeşil satır (11 Kas 2026: konkordato kayıtlarında banka "ödendi" bildirimi) */ #ky .ky-tablo tr.gecikti td { background: #fef2f2; } #ky .ky-tablo tr.soluk td { color: #94a3b8; } #ky .ky-tablo tr.soluk td.ad, #ky .ky-tablo tr.soluk td.para { color: #94a3b8; }
     .ky-rz { display: inline-block; font-size: .56rem; font-weight: 800; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
     .ky-rz.ok { background: #dcfce7; color: #166534; } .ky-rz.hata { background: #fee2e2; color: #991b1b; } .ky-rz.bekle { background: #fef3c7; color: #92400e; } .ky-rz.mavi { background: #dbeafe; color: #1e40af; } .ky-rz.gri { background: #f1f5f9; color: #475569; } .ky-rz.ornek { background: #fde68a; color: #78350f; } .ky-rz.mor { background: #ede9fe; color: #5b21b6; }
     .ky-fark.art { color: #b91c1c; font-weight: 700; } .ky-fark.az { color: #166534; font-weight: 700; }
@@ -54,6 +70,20 @@
     .ky-onizleme { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; padding: 8px 10px; } .ky-onizleme div { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 8px; } .ky-onizleme .l { font-size: .54rem; font-weight: 800; text-transform: uppercase; color: #64748b; } .ky-onizleme .v { font-size: .82rem; font-weight: 800; color: #0f172a; } .ky-onizleme .s { font-size: .6rem; color: #64748b; }
     .ky-teminat { width: 100%; font-size: .7rem; } .ky-teminat th { font-size: .56rem; font-weight: 700; color: #64748b; text-transform: uppercase; padding: 2px 4px; text-align: left; white-space: nowrap; } .ky-teminat td { padding: 2px 3px; } .ky-teminat .form-control, .ky-teminat .form-select { font-size: .7rem; padding: 1px 5px; height: 25px; }
     .ky-dosya-liste { font-size: .64rem; color: #475569; margin-top: 4px; } .ky-dosya-liste li { line-height: 1.3; }
+    /* konkordato (10 Kas 2026): dava dosyası şeridi, alacak formu bölümleri, faiz dönemi / kefil satırları */
+    .ky-dosya-serit { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px 12px; margin-bottom: 6px; font-size: .66rem; color: #334155; }
+    .ky-dosya-serit b { color: #0f172a; } .ky-dosya-serit .l { font-size: .54rem; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: #64748b; margin-right: 3px; } .ky-dosya-serit .btn { font-size: .6rem; padding: 0 7px; margin-left: auto; }
+    .ky-bolum.konk > .b { background: #f5f3ff; color: #5b21b6; } .ky-bolum.kat > .b { background: #fff1f2; color: #9f1239; } .ky-bolum.muhlet > .b { background: #ecfeff; color: #155e75; } .ky-bolum.rapor > .b { background: #ecfdf5; color: #065f46; }
+    .ky-faiz { width: 100%; font-size: .7rem; } .ky-faiz th { font-size: .56rem; font-weight: 700; color: #64748b; text-transform: uppercase; padding: 2px 4px; text-align: left; white-space: nowrap; } .ky-faiz td { padding: 2px 3px; } .ky-faiz .form-control, .ky-faiz .form-select { font-size: .7rem; padding: 1px 5px; height: 25px; } .ky-faiz td.h { font-size: .6rem; color: #64748b; white-space: nowrap; }
+    #ky .ky-tablo td.kefil { white-space: normal; min-width: 220px; max-width: 340px; font-size: .62rem; line-height: 1.25; } #ky .ky-tablo td.kefil .d { color: #1d4ed8; font-weight: 700; }
+    #ky .ky-tablo tr.kefaleten td { background: #fafaf9; } #ky .ky-tablo tr.kefaleten td.ad { color: #78350f; }
+    .ky-konk-bag:empty { display: none; }
+    /* özet sekmesi (10 Kas 2026): iki sütunlu kart ızgarası, ana tablo tam genişlik */
+    .ky-ozet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .ky-ozet-grid .na-kart { margin-bottom: 0; } .ky-ozet-genis { grid-column: 1 / -1; }
+    .ky-ozet-grid .table-responsive { max-height: 46vh; } .ky-ozet-genis .table-responsive { max-height: 52vh; }
+    #ky .ky-tablo td.ozet-ad { font-weight: 700; color: #0f172a; white-space: normal; min-width: 160px; } #ky .ky-tablo td.ozet-ad small { font-weight: 500; }
+    #ky .ky-tablo tr.ozet-tik td { cursor: pointer; } #ky .ky-tablo tr.ozet-tik:hover td { background: #f1f5f9; }
+    @@media (max-width: 1300px) { .ky-ozet-grid { grid-template-columns: 1fr; } }
     @@media (max-width: 1100px) { .ky-bolum > .g { grid-template-columns: repeat(2, 1fr); } .ky-onizleme { grid-template-columns: repeat(3, 1fr); } }
 </style>
 }
@@ -61,7 +91,7 @@
 <div class="container-fluid py-3 na ky" id="ky" data-sekme="@sekme">
     <div class="na-ust">
         <h4><span class="rt-ikon"><i class="fas fa-building-columns"></i></span>Kredi Raporu</h4>
-        <span class="ky-pill" title="Zamanında ödenemeyen banka kredilerinin yapılandırması: yapılandırma öncesi kredi bilgileri, sonrası (yeni anapara, faiz, vade, taksit, peşinat), taksit takvimi; rehin · ipotek takibi (eski krediler dahil), bankaya teminat verilen çekler ve taranmış sözleşme / GKS / ipotek belgeleri"><i class="fas fa-arrows-left-right me-1"></i>Öncesi ↔ Sonrası · Taksit Takvimi · Rehin · İpotek · Teminat Çekleri · Belgeler</span>
+        <span class="ky-pill" title="Zamanında ödenemeyen banka kredilerinin yapılandırması: yapılandırma öncesi kredi bilgileri, sonrası (yeni anapara, faiz, vade, taksit, peşinat), taksit takvimi; bankaların taksit bazlı güncel borç dökümü (Emlak Katılım · Alv Kimya / Daf Kimya); rehin · ipotek takibi (eski krediler dahil), bankaya teminat verilen çekler, taranmış sözleşme / GKS / ipotek belgeleri; konkordato alacaklı bankaları (bilirkişi raporu: kat ihtarı, geçici mühlet ve rapor tarihi alacakları, sözleşmeler · kefiller, hesap bakiyeleri, tahsilatlar, teminat mektupları)"><i class="fas fa-arrows-left-right me-1"></i>Öncesi ↔ Sonrası · Taksit Takvimi · Borç Dökümü · Rehin · İpotek · Teminat Çekleri · Belgeler · Konkordato</span>
         <a class="ky-pill" href="/Rapor79?sekme=havale" target="_blank" rel="noopener" title="Taksitler Kasa Nakit Akışı'na Havale / EFT satırı olarak akar"><i class="fas fa-money-bill-transfer me-1"></i>Kasa Nakit Akışı <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:.56rem"></i></a>
         <a class="ky-pill" href="/Rapor123?sekme=duzenli" target="_blank" rel="noopener" title="Her kredi Planlı Düzenli Ödemeler'de Kredi kategorisiyle izlenir"><i class="fas fa-repeat me-1"></i>Planlı Düzenli Ödemeler <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:.56rem"></i></a>
         <span class="ky-pill" id="kyKalici" title="Kayıtlar sunucuda saklanır (App_Data/kredi-yapilandirma.json; belgeler App_Data/kredi-belgeler); yeniden başlatınca korunur"><i class="fas fa-database me-1"></i>Kalıcı Kayıt</span>
@@ -77,28 +107,63 @@
         <div><label for="kyS">Şirket</label><select class="form-select" id="kyS"><option value="">Tümü</option></select></div>
         <div><label for="kyB">Banka</label><select class="form-select" id="kyB"><option value="">Tümü</option></select></div>
         <div><label for="kyD" id="kyDEtiket">Durum</label><select class="form-select" id="kyD"><option value="">Tümü</option></select></div>
-        <div><label for="kyAra">Ara</label><input class="form-control" id="kyAra" placeholder="Kredi no, banka, şube, protokol, tapu, malik, çek no, keşideci, belge adı, not…"></div>
+        <div><label for="kyAra">Ara</label><input class="form-control" id="kyAra" placeholder="Kredi no, banka, şube, protokol, ek no, tapu, malik, çek no, keşideci, belge adı, not…"></div>
         <div><label>&nbsp;</label><button type="button" class="btn btn-light border" id="kyTemizle"><i class="fas fa-eraser me-1"></i>Temizle</button></div>
     </div></div></div>
 
     <div class="na-kpi" id="kyKpi" data-dinamik="kapali"></div>
 
     <div class="na-sekme" id="kySekmeler" data-dinamik="kapali">
-        @foreach (var s in sekmeler) { <button type="button" data-p="@s.Item1" class="@(s.Item1 == "rehin" ? "ky-grup-ilk" : null)"><i class="fas @s.Item3 me-1"></i>@s.Item2</button> }
+        @foreach (var s in sekmeler) { <button type="button" data-p="@s.Item1" class="@(grupIlk.Contains(s.Item1) ? "ky-grup-ilk" : null)"><i class="fas @s.Item3 me-1"></i>@s.Item2</button> }
         <span class="ky-kapsam" id="kyKapsam" title="Filtreye uyan kayıt · şirket · banka"></span>
     </div>
 
-    @foreach (var s in sekmeler)
+    @* ===== Özet sekmesi: şerit + ana tablo + beş yardımcı tablo (ızgara) ===== *@
+    <div class="na-panel" data-p="ozet">
+        <div class="ky-dosya-serit" id="kyDosyaSerit-ozet" data-dinamik="kapali"></div>
+        <div class="ky-ozet-grid">
+            <div class="na-kart ky-ozet-genis">
+                <div class="na-kart-b"><span><i class="fas fa-building-columns me-1"></i>Alacaklı Bankalar Özeti</span><span class="d-flex gap-2 align-items-center flex-wrap"><span class="not" id="kyNot-ozet"></span></span></div>
+                <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ky-tablo" id="kyTablo-ozet" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+            </div>
+            @foreach (var o in ozetTablolar)
+            {
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas @o.Item3 me-1"></i>@o.Item2</span><span class="not" id="kyNot-@o.Item1"></span></div>
+                    <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ky-tablo" id="kyTablo-@o.Item1" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+                </div>
+            }
+        </div>
+        <div class="ky-not" id="kyAciklama-ozet"></div>
+    </div>
+
+    @foreach (var s in sekmeler.Where(x => x.Item1 != "ozet"))
     {
         <div class="na-panel" data-p="@s.Item1">
+            @if (s.Item1 == "konkordato") { <div class="ky-dosya-serit" id="kyDosyaSerit" data-dinamik="kapali"></div> }
+            @if (s.Item1 == "borclar")
+            {
+                @* Firma × Döviz Özeti: dosyanın ÖZET sayfası (filtreye uyan satırlardan hesaplanır) *@
+                <div class="na-kart">
+                    <div class="na-kart-b"><span><i class="fas fa-table-cells-large me-1"></i>Firma × Döviz Özeti</span><span class="not" id="kyNot-borcOzet"></span></div>
+                    <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ky-tablo" id="kyTablo-borcOzet" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+                </div>
+            }
             <div class="na-kart">
                 <div class="na-kart-b"><span><i class="fas @s.Item3 me-1"></i>@s.Item2</span><span class="d-flex gap-2 align-items-center flex-wrap"><span class="not" id="kyNot-@s.Item1"></span>
                     @if (s.Item1 == "takvim") { <select class="form-select" id="kyTakvimKredi" title="Takvimi tek krediye daralt"><option value="">Tüm Krediler</option></select> }
                     @if (s.Item1 == "rehin") { <button type="button" class="btn btn-light border" id="kyRehinEkle" title="Yapılandırma kaydı olmayan eski kredinin rehin / ipoteğini bağımsız kayıt olarak ekle"><i class="fas fa-plus me-1"></i>Rehin / İpotek Ekle</button> }
                     @if (s.Item1 == "cekler") { <button type="button" class="btn btn-light border" id="kyCekEkle" title="Bankaya teminat olarak verilen müşteri çeki / senedi ekle"><i class="fas fa-plus me-1"></i>Teminat Çeki Ekle</button> }
+                    @if (s.Item1 == "borclar") { <button type="button" class="btn btn-light border" id="kyBorcEkle" title="Banka dökümüne taksit / masraf borç satırı ekle (kredi kaydı değildir; nakit akışa yazmaz)"><i class="fas fa-plus me-1"></i>Borç Satırı Ekle</button> }
                     @if (s.Item1 == "belgeler") { <span id="kyBelgeBag"></span><select class="form-select" id="kyBelgeKredi" title="Belgeleri tek krediye daralt"><option value="">Tüm Krediler</option></select><button type="button" class="btn btn-light border" id="kyBelgeYukle2"><i class="fas fa-file-arrow-up me-1"></i>Belge Yükle</button> }
+                    @if (s.Item1 == "konkordato") { <span class="ky-konk-bag" id="kyKonkBag-konkordato"></span><button type="button" class="btn btn-light border" id="kyKonkDosya" title="Mahkeme, dosya no, davacılar, geçici mühlet ve rapor tarihleri, kur"><i class="fas fa-gavel me-1"></i>Dava Dosyası</button><button type="button" class="btn btn-light border ky-konk-ekle" data-tip="alacak" title="Banka × borçlu alacak kaydı ekle"><i class="fas fa-plus me-1"></i>Alacak Kaydı Ekle</button> }
+                    @if (s.Item1 == "sozlesmeler") { <span class="ky-konk-bag" id="kyKonkBag-sozlesmeler"></span><button type="button" class="btn btn-light border ky-konk-ekle" data-tip="sozlesme" title="Genel kredi sözleşmesi / finansal kiralama sözleşmesi ve kefilleri ekle"><i class="fas fa-plus me-1"></i>Sözleşme Ekle</button> }
+                    @if (s.Item1 == "hesaplar") { <span class="ky-konk-bag" id="kyKonkBag-hesaplar"></span><button type="button" class="btn btn-light border ky-konk-ekle" data-tip="hesap" title="Geçici mühlet tarihi itibariyle kredi / hesap bakiye satırı ekle"><i class="fas fa-plus me-1"></i>Hesap Satırı Ekle</button> }
+                    @if (s.Item1 == "tahsilatlar") { <span class="ky-konk-bag" id="kyKonkBag-tahsilatlar"></span><button type="button" class="btn btn-light border ky-konk-ekle" data-tip="tahsilat" title="Geçici mühlet sonrası tahsilat ekle"><i class="fas fa-plus me-1"></i>Tahsilat Ekle</button> }
+                    @if (s.Item1 == "kontrol") { <span class="text-muted" style="font-size:.64rem">Bekliyor → Eksik → OK · işaret ve not kalıcıdır, sayılar kayıtlardan canlı</span> }
+                    @if (s.Item1 == "mektuplar") { <span class="ky-konk-bag" id="kyKonkBag-mektuplar"></span><button type="button" class="btn btn-light border ky-konk-ekle" data-tip="mektup" title="Teminat mektubu ekle"><i class="fas fa-plus me-1"></i>Teminat Mektubu Ekle</button> }
                 </span></div>
-                <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:70vh"><table class="na-tablo ky-tablo" id="kyTablo-@s.Item1" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+                <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:70vh"><table class="na-tablo ky-tablo" id="kyTablo-@s.Item1" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
             </div>
             <div class="ky-not" id="kyAciklama-@s.Item1"></div>
         </div>
@@ -120,7 +185,7 @@
 </div>
 
 @section Scripts {
-<script src="/js/tablo-hizala.js?v=12"></script>
+<script src="/js/tablo-hizala.js?v=13"></script>
 <script src="/js/tablo-excel.js?v=3"></script>
-<script src="/js/kredi-yapilandirma.js?v=3"></script>
+<script src="/js/kredi-yapilandirma.js?v=26"></script>
 }

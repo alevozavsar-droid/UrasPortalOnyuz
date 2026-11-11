@@ -12,12 +12,15 @@ namespace WebApplication3.Controllers
     /// KREDİ RAPORU (9 Kas 2026) — Mali İşler › Finans › Krediler ve Finansman. Veri Data/KrediYapilandirmaOrnek.cs (App_Data/kredi-yapilandirma.json kalıcı, belgeler App_Data/kredi-belgeler),
     /// görünüm Views/KrediYapilandirma/Index.cshtml, betik wwwroot/js/kredi-yapilandirma.js. Yapılandırma öncesi / sonrası kredi bilgileri, peşinat, taksit takvimi (Kasa Nakit Akışı + Planlı Düzenli Ödemeler),
     /// rehin · ipotek takibi (kredi teminatları + eski krediler için bağımsız kayıtlar), teminata verilen çekler, belgeler (sözleşme / GKS / ipotek PDF'leri). ?sekme=krediler|oncesi|sonrasi|takvim|aylik|rehin|cekler|belgeler
+    /// Konkordato kümesi (10 Kas 2026, Data/KonkordatoOrnek.cs, App_Data/konkordato.json; Bakırköy 2. ATM 2024/894 E. bilirkişi raporu tohumu): ?sekme=konkordato|sozlesmeler|hesaplar|tahsilatlar|mektuplar
+    /// Banka Borç Dökümü (11 Kas 2026, Emlak Katılım · Alv Kimya / Daf Kimya taksit bazlı güncel borç; tohum Data/Tohum/emlak-katilim-borc-2026-11.json; kredi kaydı değildir, nakit akışa yazmaz): ?sekme=borclar
     /// </summary>
     [Authorize]
     [Route("[controller]")]
     public class KrediYapilandirmaController : Controller
     {
         string Kullanici => OrnekVeri.KullaniciAdi(User?.Identity?.Name ?? "");
+        static string P(decimal? v) => (v ?? 0).ToString("N2", System.Globalization.CultureInfo.GetCultureInfo("tr-TR"));   // mesajlarda Türkçe sayı biçimi
         public class IdIstek { public int Id { get; set; } }
         public class AktarIstek { public int Id { get; set; } public bool Aktar { get; set; } = true; }
         static object Paket() => KrediYapilandirmaOrnek.Paket();
@@ -26,7 +29,7 @@ namespace WebApplication3.Controllers
         public IActionResult Index(string sekme)
         {
             ViewData["Title"] = "Kredi Raporu";
-            ViewBag.Sekme = string.IsNullOrEmpty(sekme) ? "krediler" : sekme;
+            ViewBag.Sekme = string.IsNullOrEmpty(sekme) ? "ozet" : sekme;   // açılış: Özet (10 Kas 2026)
             OrnekDoldurucu.Hazirla(this);
             return View("Index");
         }
@@ -80,6 +83,26 @@ namespace WebApplication3.Controllers
             var h = KrediYapilandirmaOrnek.CekSil(d?.Id ?? 0);
             return Json(new { success = h == null, message = h ?? "Teminat çeki kaydı silindi.", veri = h == null ? Paket() : null });
         }
+        // ---------- banka borç dökümü (11 Kas 2026: Emlak Katılım · Alv Kimya / Daf Kimya taksit dökümü; kredi kaydı değildir, nakit akışa yazmaz) ----------
+        [HttpPost("BorcKaydet"), IgnoreAntiforgeryToken]
+        public IActionResult BorcKaydet([FromBody] BorcIstek d)
+        {
+            var h = KrediYapilandirmaOrnek.BorcKaydet(d, Kullanici, out var b);
+            return Json(new { success = h == null, message = h ?? $"Borç satırı {(d?.Id > 0 ? "güncellendi" : "eklendi")}: {b?.Sirket} · {b?.Banka} · {b?.Vade:dd.MM.yyyy}{(string.IsNullOrEmpty(b?.EkNo) ? "" : " · Ek No " + b.EkNo)}.", id = b?.Id, veri = h == null ? Paket() : null });
+        }
+        [HttpPost("BorcSil"), IgnoreAntiforgeryToken]
+        public IActionResult BorcSil([FromBody] IdIstek d)
+        {
+            var h = KrediYapilandirmaOrnek.BorcSil(d?.Id ?? 0);
+            return Json(new { success = h == null, message = h ?? "Borç satırı silindi.", veri = h == null ? Paket() : null });
+        }
+        /// <summary>Firma × döviz özetinin Yapılandırma Güncel tutarı (11 Kas 2026; ÖZET sayfası): firma + banka + döviz anahtarıyla; tutar boşsa satır silinir.</summary>
+        [HttpPost("BorcOzetKaydet"), IgnoreAntiforgeryToken]
+        public IActionResult BorcOzetKaydet([FromBody] BorcOzetSatiri d)
+        {
+            var h = KrediYapilandirmaOrnek.BorcOzetKaydet(d, Kullanici, out var o);
+            return Json(new { success = h == null, message = h ?? (o == null ? "Yapılandırma güncel tutarı kaldırıldı." : $"Yapılandırma güncel tutarı kaydedildi: {o.Sirket} · {o.PB} · {P(o.YapilandirmaGuncel)}."), veri = h == null ? Paket() : null });
+        }
         // ---------- belgeler (sözleşme, GKS, ipotek, çek fotokopisi …) ----------
         /// <summary>Çok parçalı yükleme: dosya (PDF / JPG / PNG, en çok 20 MB) + tur, baslik, krediId, cekId, teminatId, sirket, banka, tarih, aciklama.</summary>
         [HttpPost("BelgeYukle"), IgnoreAntiforgeryToken, RequestSizeLimit(25 * 1024 * 1024)]
@@ -107,5 +130,63 @@ namespace WebApplication3.Controllers
             var h = KrediYapilandirmaOrnek.BelgeSil(d?.Id ?? 0, Kullanici);
             return Json(new { success = h == null, message = h ?? "Belge silindi.", veri = h == null ? Paket() : null });
         }
+
+        // ---------- konkordato · alacaklı bankalar (10 Kas 2026; Data/KonkordatoOrnek.cs, App_Data/konkordato.json) ----------
+        [HttpPost("KonkordatoDosya"), IgnoreAntiforgeryToken]
+        public IActionResult KonkordatoDosya([FromBody] KonkordatoDosya d)
+        {
+            var h = KonkordatoOrnek.DosyaKaydet(d, Kullanici);
+            return Json(new { success = h == null, message = h ?? $"Konkordato dosyası kaydedildi: {d?.Mahkeme} {d?.DosyaNo}.", veri = h == null ? Paket() : null });
+        }
+        [HttpPost("KontrolKaydet"), IgnoreAntiforgeryToken]   // banka × şirket veri kontrol listesi (11 Kas 2026)
+        public IActionResult KontrolKaydet([FromBody] KonkordatoKontrol d)
+        {
+            var h = KonkordatoOrnek.KontrolKaydet(d, Kullanici, out var k);
+            return Json(new { success = h == null, message = h ?? $"Kontrol işareti kaydedildi: {k?.Banka} × {k?.Sirket} · {k?.Durum}.", veri = h == null ? Paket() : null });
+        }
+        [HttpPost("AlacakKaydet"), IgnoreAntiforgeryToken]
+        public IActionResult AlacakKaydet([FromBody] KonkordatoAlacak d)
+        {
+            var h = KonkordatoOrnek.AlacakKaydet(d, Kullanici, out var a);
+            return Json(new { success = h == null, message = h ?? $"Alacak kaydı {(d?.Id > 0 ? "güncellendi" : "eklendi")}: {a?.Banka} · {a?.Borclu} · mühlet bakiyesi {P(a == null ? 0 : KonkordatoOrnek.Bakiye(a))} ₺.", id = a?.Id, veri = h == null ? Paket() : null });
+        }
+        [HttpPost("AlacakSil"), IgnoreAntiforgeryToken]
+        public IActionResult AlacakSil([FromBody] IdIstek d)
+        {
+            var h = KonkordatoOrnek.AlacakSil(d?.Id ?? 0, out var ozet);
+            return Json(new { success = h == null, message = h ?? ozet, veri = h == null ? Paket() : null });
+        }
+        [HttpPost("SozlesmeKaydet"), IgnoreAntiforgeryToken]
+        public IActionResult SozlesmeKaydet([FromBody] KonkordatoSozlesme d)
+        {
+            var h = KonkordatoOrnek.SozlesmeKaydet(d, Kullanici, out var s);
+            return Json(new { success = h == null, message = h ?? $"Sözleşme {(d?.Id > 0 ? "güncellendi" : "eklendi")}: {s?.Banka} · {s?.Borclu} · {s?.Tur} {P(s?.Tutar)} {s?.PB} · {s?.Kefiller?.Count ?? 0} kefil.", id = s?.Id, veri = h == null ? Paket() : null });
+        }
+        [HttpPost("SozlesmeSil"), IgnoreAntiforgeryToken]
+        public IActionResult SozlesmeSil([FromBody] IdIstek d) { var h = KonkordatoOrnek.SozlesmeSil(d?.Id ?? 0); return Json(new { success = h == null, message = h ?? "Sözleşme kaydı silindi.", veri = h == null ? Paket() : null }); }
+        [HttpPost("HesapKaydet"), IgnoreAntiforgeryToken]
+        public IActionResult HesapKaydet([FromBody] KonkordatoHesap d)
+        {
+            var h = KonkordatoOrnek.HesapKaydet(d, Kullanici, out var x);
+            return Json(new { success = h == null, message = h ?? $"Hesap satırı {(d?.Id > 0 ? "güncellendi" : "eklendi")}: {x?.Banka} · {x?.KrediNo} {x?.Tur} · bakiye {P(x?.Bakiye)} ₺.", id = x?.Id, veri = h == null ? Paket() : null });
+        }
+        [HttpPost("HesapSil"), IgnoreAntiforgeryToken]
+        public IActionResult HesapSil([FromBody] IdIstek d) { var h = KonkordatoOrnek.HesapSil(d?.Id ?? 0); return Json(new { success = h == null, message = h ?? "Hesap satırı silindi.", veri = h == null ? Paket() : null }); }
+        [HttpPost("TahsilatKaydet"), IgnoreAntiforgeryToken]
+        public IActionResult TahsilatKaydet([FromBody] KonkordatoTahsilat d)
+        {
+            var h = KonkordatoOrnek.TahsilatKaydet(d, Kullanici, out var x);
+            return Json(new { success = h == null, message = h ?? $"Tahsilat {(d?.Id > 0 ? "güncellendi" : "eklendi")}: {x?.Banka} · {x?.Kanal} {x?.CekNo} · {P(x?.Tutar)} {x?.PB}{(x?.Mahsup == true ? "" : " (mahsup edilmedi)")}.", id = x?.Id, veri = h == null ? Paket() : null });
+        }
+        [HttpPost("TahsilatSil"), IgnoreAntiforgeryToken]
+        public IActionResult TahsilatSil([FromBody] IdIstek d) { var h = KonkordatoOrnek.TahsilatSil(d?.Id ?? 0); return Json(new { success = h == null, message = h ?? "Tahsilat kaydı silindi.", veri = h == null ? Paket() : null }); }
+        [HttpPost("MektupKaydet"), IgnoreAntiforgeryToken]
+        public IActionResult MektupKaydet([FromBody] KonkordatoMektup d)
+        {
+            var h = KonkordatoOrnek.MektupKaydet(d, Kullanici, out var x);
+            return Json(new { success = h == null, message = h ?? $"Teminat mektubu {(d?.Id > 0 ? "güncellendi" : "eklendi")}: {x?.Banka} · {x?.MektupNo} · {x?.Durum} {P(x?.TazminBedeli)} ₺.", id = x?.Id, veri = h == null ? Paket() : null });
+        }
+        [HttpPost("MektupSil"), IgnoreAntiforgeryToken]
+        public IActionResult MektupSil([FromBody] IdIstek d) { var h = KonkordatoOrnek.MektupSil(d?.Id ?? 0); return Json(new { success = h == null, message = h ?? "Teminat mektubu kaydı silindi.", veri = h == null ? Paket() : null }); }
     }
 }

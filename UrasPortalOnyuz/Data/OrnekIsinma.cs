@@ -27,6 +27,7 @@ namespace WebApplication3.Data
                 D("Kasa Nakit Akışı", () => { foreach (var s in CekAkibetOrnek.Sirketler) NakitAkisOrnek.Odemeler(s.DbName); });   // düzenli ödemeler + çek planları da burada tohumlanır
                 D("Planlı Düzenli Ödemeler", () => { var _ = DuzenliOdemeOrnek.Listele(); });
                 D("Kredi Yapılandırma", KrediYapilandirmaOrnek.Yukle);   // kalıcı kredi kayıtları (App_Data/kredi-yapilandirma.json) + taksit satırları Kasa Nakit Akışı ve düzenli ödemelere (9 Kas 2026); Kasa ve Düzenli tohumundan SONRA
+                D("Konkordato", KonkordatoOrnek.Yukle);   // Kredi Raporu konkordato kümesi (App_Data/konkordato.json; ilk açılışta bilirkişi raporu tohumu, ipotekler Rehin · İpotek Takibi'ne) — Kredi Yapılandırma'dan SONRA (10 Kas 2026)
                 D("Nakit Avans", () => { var _ = NakitAvansOrnek.Talepler.Count; });
                 D("Ödeme Talepleri", () => { var _ = OdemeTalepOrnek.Listele(null, false); });
                 D("Tahsilat / Ödeme", () => { var _ = TahsilatOrnek.Tahsilatlar; var __ = TahsilatOrnek.Odemeler; });

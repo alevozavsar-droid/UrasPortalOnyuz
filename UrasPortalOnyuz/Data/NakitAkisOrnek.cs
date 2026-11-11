@@ -139,10 +139,11 @@ namespace WebApplication3.Data
         // ---------- KREDİ TAKSİDİ (Kredi Raporu; Data/KrediYapilandirmaOrnek.cs, 9 Kas 2026): kredi / taksit başına TEK satır (U_KrediTaksit = "KRD-001|003"), Havale / EFT, İşlem Tipi R ----------
         public static NakitAkisViewModel KrediSatiri(string anahtar) { Tohumla(); lock (Kilit) return _odemeler.Values.SelectMany(l => l).FirstOrDefault(m => m.U_KrediTaksit == anahtar); }
         public static List<NakitAkisViewModel> KrediSatirlari(string onEk) { Tohumla(); lock (Kilit) return _odemeler.Values.SelectMany(l => l).Where(m => !string.IsNullOrEmpty(m.U_KrediTaksit) && m.U_KrediTaksit.StartsWith(onEk)).ToList(); }
-        /// <summary>Kredi taksidi satırı yazar: yoksa ekler (Havale / EFT, Planlandı), varsa ödenmemişse banka / tutar / tarih / açıklamayı günceller, ödenmişse dokunmaz. islem = eklendi | güncellendi | ödenmiş.</summary>
-        public static (NakitAkisViewModel satir, string islem) KrediTaksitiYaz(string dbName, string anahtar, string banka, string urun, string belgeNo, decimal tutar, DateTime plan, string not, string kullanici)
+        /// <summary>Kredi taksidi satırı yazar: yoksa ekler (Havale / EFT, Planlandı), varsa ödenmemişse banka / tutar / tarih / açıklamayı günceller, ödenmişse dokunmaz. islem = eklendi | güncellendi | ödenmiş.
+        /// pb / kur (11 Kas 2026): dövizli kredide tutar kayıt para biriminde, TL karşılığı tutar × kur.</summary>
+        public static (NakitAkisViewModel satir, string islem) KrediTaksitiYaz(string dbName, string anahtar, string banka, string urun, string belgeNo, decimal tutar, DateTime plan, string not, string kullanici, string pb = "TRY", decimal kur = 1m)
         {
-            Tohumla();
+            Tohumla(); if (string.IsNullOrEmpty(pb) || pb == "TL") pb = "TRY"; if (pb == "TRY" || kur <= 0) kur = pb == "TRY" ? 1m : (Kurlar.TryGetValue(pb, out var kk) ? kk : 1m); decimal tutarTl = Math.Round(tutar * kur, 2);
             lock (Kilit)
             {
                 if (!_odemeler.ContainsKey(dbName)) _odemeler[dbName] = new List<NakitAkisViewModel>();
@@ -150,20 +151,20 @@ namespace WebApplication3.Data
                 if (m != null)
                 {
                     if (m.U_Durum == "ÖDENDİ") return (m, "ödenmiş");
-                    bool degisti = (m.U_Tutar ?? 0) != tutar || m.U_PlanlananTarih != plan || m.U_Kurum != banka;
-                    m.U_Kurum = banka; m.U_UrunHizmet = urun; m.U_FaturaSiparisNo = belgeNo; m.U_Tutar = tutar; m.U_TutarTL = tutar; m.U_FaturaTutari = tutar; m.U_PlanlananTarih = plan; m.U_SonOdemeTarihi = plan; m.U_Notlar = not;
-                    if (degisti) Log(dbName, m.DocEntry, "Güncelleme", $"Kredi taksidi güncellendi · {banka} · {belgeNo} · {tutar.ToString("N2", Tr)} TRY · plan {plan:dd.MM.yyyy}", kullanici);
+                    bool degisti = (m.U_Tutar ?? 0) != tutar || m.U_PlanlananTarih != plan || m.U_Kurum != banka || m.U_ParaBirimi != pb || (m.U_Kur ?? 1) != kur;
+                    m.U_Kurum = banka; m.U_UrunHizmet = urun; m.U_FaturaSiparisNo = belgeNo; m.U_ParaBirimi = pb; m.U_Kur = kur; m.U_OdenenTutarPB = pb; m.U_Tutar = tutar; m.U_TutarTL = tutarTl; m.U_FaturaTutari = tutar; m.U_PlanlananTarih = plan; m.U_SonOdemeTarihi = plan; m.U_Notlar = not;
+                    if (degisti) Log(dbName, m.DocEntry, "Güncelleme", $"Kredi taksidi güncellendi · {banka} · {belgeNo} · {tutar.ToString("N2", Tr)} {pb} · plan {plan:dd.MM.yyyy}", kullanici);
                     return (m, "güncellendi");
                 }
                 m = new NakitAkisViewModel
                 {
                     DocEntry = ++_sonDocEntry, U_KaynakFirma = dbName, U_FaturaSahibi = SirketAdi(dbName), U_OdeyenSirket = SirketAdi(dbName), U_KrediTaksit = anahtar, U_Kurum = banka, U_UrunHizmet = urun, U_OdemeYontemi = "Havale / EFT",
-                    U_ParaBirimi = "TRY", U_Kur = 1, U_OdenenTutarPB = "TRY", U_Tutar = tutar, U_TutarTL = tutar, U_FaturaTutari = tutar, U_PlanlananTarih = plan, U_SonOdemeTarihi = plan, BelgeTarihi = DateTime.Today,
+                    U_ParaBirimi = pb, U_Kur = kur, U_OdenenTutarPB = pb, U_Tutar = tutar, U_TutarTL = tutarTl, U_FaturaTutari = tutar, U_PlanlananTarih = plan, U_SonOdemeTarihi = plan, BelgeTarihi = DateTime.Today,
                     U_BagliBelgeTipi = "Kredi Taksidi", U_KayitTipi = "Kredi Taksidi", U_FaturaSiparisNo = belgeNo, U_IslemTipi = "R", U_Durum = "Planlandı", U_EskiDurum = "Planlandı", U_Notlar = not, U_TalepEden = kullanici ?? "", U_Satinalmaci = "",
                     U_AliciBanka = banka, U_AliciHesapAdi = banka + " · kredi taksit tahsilat hesabı"
                 };
                 m.DocNum = m.DocEntry; m.U_Sira = _odemeler[dbName].Count + 1; _odemeler[dbName].Add(m);
-                Log(dbName, m.DocEntry, "Ekleme", $"Kredi Raporu: {banka} · {belgeNo} · Havale / EFT · {tutar.ToString("N2", Tr)} TRY · plan {plan:dd.MM.yyyy}", kullanici);
+                Log(dbName, m.DocEntry, "Ekleme", $"Kredi Raporu: {banka} · {belgeNo} · Havale / EFT · {tutar.ToString("N2", Tr)} {pb} · plan {plan:dd.MM.yyyy}", kullanici);
                 return (m, "eklendi");
             }
         }
