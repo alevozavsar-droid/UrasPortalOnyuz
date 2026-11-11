@@ -1,0 +1,126 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string sekme = (string)ViewBag.Sekme ?? "ozet";
+    // üç küme: özet | ihracat tarafı (satışlar, beyanname / İBKB dosyaları) | finans tarafı (banka tahsilatları, İBKB belgeleri) | analiz (müşteri, vade, DAB)
+    var sekmeler = new[] { ("ozet", "Özet", "fa-chart-pie"), ("satis", "İhracat Satışları", "fa-ship"), ("liste", "Beyanname / İBKB Dosyaları", "fa-table-list"), ("tahsilat", "Banka Tahsilatları (Açık)", "fa-building-columns"), ("tamamlanan", "Tamamlanan Tahsilatlar", "fa-circle-check"), ("belgeler", "İBKB Belgeleri", "fa-file-signature"), ("musteri", "Müşteri Bazlı", "fa-address-card"), ("vade", "Vade Takibi", "fa-hourglass-half"), ("dab", "DAB Bağlantıları", "fa-link") };
+    var grupIlk = new[] { "satis", "tahsilat", "musteri" };
+}
+@*
+    İHRACAT FİNANSAL TAKİBİ (11 Kas 2026) — Mali İşler › Finans › Döviz ve Dış Ticaret Finansmanı; Yurtdışı Satış › İhracat Operasyon Takibi (iki menüde de doğrudan açılır).
+    "İhracat Tahsilat Raporu" + "İBKB Beyanname Takibi" tek, konsolide (tüm şirketler), dinamik rapor: İhracat Satışları (Yurtdışı Satış Siparişi'nden canlı) · Beyanname / İBKB Dosyaları (Excel tohumu + ekran)
+    · Banka Tahsilatları (bankadan gelen döviz girişi → hangi ihracat dosyası / GÇB ile eşleşecek; seçimde "İBKB oluşturulsun mu?") · İBKB Belgeleri (bankaya verilecek basılabilir form /IhracatFinans/Belge/{id})
+    · Müşteri Bazlı · Vade Takibi · DAB Bağlantıları. Veri /IhracatFinans/Veri (Data/IbkbOrnek.cs, App_Data/ibkb.json). Betik wwwroot/js/ihracat-finans.js; ortak stil nakit-avans.css; hücreler yatay + dikey ortada; Excel ortak TabloExcel.
+    Derin bağlantı: /IhracatFinans?sekme=satis | liste | tahsilat | belgeler | musteri | vade | dab (eski /Ibkb buraya yönlenir)
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<style>
+    .na.ib2 { --na-k: #0f766e; }
+    #ibkb .na-ust { margin-bottom: 6px; } #ibkb .na-kpi { margin-bottom: 6px; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 5px; } #ibkb .na-kart { margin-bottom: 6px; } #ibkb .na-kart-b { padding: 4px 12px; }
+    #ibKpi > div.ib-kpi { cursor: pointer; transition: box-shadow .15s; } #ibKpi > div.ib-kpi:hover { box-shadow: 0 2px 8px rgba(15, 118, 110, .25); border-color: var(--k); }
+    #ibKpi > div.ib-kpi.acik { border-color: var(--k); background: #f0fdfa; } #ibKpi > div.ib-kpi.acik .s { white-space: normal; overflow: visible; text-overflow: clip; }
+    .ib2-pill { font-size: .66rem; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 2px 8px; } a.ib2-pill { text-decoration: none; } a.ib2-pill:hover { background: #ccfbf1; color: #134e4a; border-color: #99f6e4; }
+    .ib2-filtre { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1.8fr auto; gap: 6px 8px; align-items: end; }
+    .ib2-filtre label { display: block; font-size: .58rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; }
+    .ib2-filtre .form-control, .ib2-filtre .form-select { font-size: .72rem; padding: 3px 7px; height: 28px; } .ib2-filtre .btn { font-size: .64rem; padding: 3px 9px; }
+    @@media (max-width: 1200px) { .ib2-filtre { grid-template-columns: repeat(3, minmax(0, 1fr)); } #ibkb .na-kpi { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    #ibkb .na-sekme button.ib2-grup-ilk { margin-left: 10px; position: relative; } #ibkb .na-sekme button.ib2-grup-ilk::before { content: ''; position: absolute; left: -6px; top: 22%; height: 56%; border-left: 1px solid #cbd5e1; }
+    #ibkb .na-sekme .ib2-kapsam { margin-left: auto; flex: 1 1 0; min-width: 0; text-align: right; align-self: center; font-size: .64rem; font-weight: 600; color: #64748b; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #ibkb .ib2-tablo { font-size: .68rem; } #ibkb .ib2-tablo th { font-size: .56rem; padding: 4px 5px; white-space: normal; line-height: 1.15; vertical-align: middle; text-align: center; position: sticky; top: 0; z-index: 2; background: #f8fafc; box-shadow: 0 1px 0 #e2e8f0; }
+    #ibkb .ib2-tablo td { padding: 3px 5px; white-space: nowrap; vertical-align: middle; text-align: center; } #ibkb .ib2-tablo td small { display: block; font-size: .58rem; color: #64748b; font-weight: 500; line-height: 1.1; }
+    #ibkb .ib2-tablo td.ad { font-weight: 700; color: #0f172a; } #ibkb .ib2-tablo td.para { font-variant-numeric: tabular-nums; font-weight: 700; } #ibkb .ib2-tablo td.genel { font-weight: 800; color: #134e4a; }
+    #ibkb .ib2-tablo td.metin { white-space: normal; min-width: 140px; max-width: 260px; }
+    #ibkb .ib2-tablo td.metin .ib2-not { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; line-height: 1.2; }
+    #ibkb .ib2-tablo td.metin.acik .ib2-not { display: block; -webkit-line-clamp: unset; overflow: visible; }
+    #ibkb .ib2-tablo tfoot td { font-weight: 800; background: #f1f5f9; border-top: 2px solid #cbd5e1; }
+    #ibkb .ib2-tablo tr.kapandi td { color: #166534; background: #f0fdf4; } #ibkb .ib2-tablo tr.gecti td { background: #fef2f2; } #ibkb .ib2-tablo tr.yakin td { background: #fffbeb; } #ibkb .ib2-tablo tr.soluk td { color: #94a3b8; } #ibkb .ib2-tablo tr.eslesmedi td { background: #fff7ed; }
+    #ibkb .ib2-tablo tr.tik td { cursor: pointer; } #ibkb .ib2-tablo tr.tik:hover td { background: #f0fdfa; }
+    .ib2-rz { display: inline-block; font-size: .56rem; font-weight: 800; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+    .ib2-rz.ok { background: #dcfce7; color: #166534; } .ib2-rz.hata { background: #fee2e2; color: #991b1b; } .ib2-rz.bekle { background: #fef3c7; color: #92400e; } .ib2-rz.mavi { background: #dbeafe; color: #1e40af; } .ib2-rz.gri { background: #f1f5f9; color: #475569; } .ib2-rz.mor { background: #ede9fe; color: #5b21b6; } .ib2-rz.teal { background: #ccfbf1; color: #134e4a; }
+    .ib2-tablo .btn { font-size: .6rem; padding: 0 5px; }
+    .ib2-aciklama { font-size: .64rem; color: #64748b; margin: 4px 0 8px; }
+    .ib2-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 10px; } .ib2-form label { display: block; font-size: .58rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; }
+    .ib2-form .form-control, .ib2-form .form-select { font-size: .74rem; padding: 3px 7px; height: 29px; } .ib2-form .g2 { grid-column: span 2; } .ib2-form .g3 { grid-column: span 3; } .ib2-form .g4 { grid-column: span 4; } .ib2-form textarea.form-control { height: auto; }
+    .ib2-bolum { border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; } .ib2-bolum > .b { background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 4px 10px; font-size: .66rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #475569; border-radius: 8px 8px 0 0; display: flex; justify-content: space-between; align-items: center; } .ib2-bolum > .g { padding: 8px 10px; }
+    .ib2-dab { width: 100%; font-size: .7rem; } .ib2-dab th { font-size: .56rem; font-weight: 700; color: #64748b; text-transform: uppercase; padding: 2px 4px; text-align: left; white-space: nowrap; } .ib2-dab td { padding: 2px 3px; } .ib2-dab .form-control, .ib2-dab .form-select { font-size: .7rem; padding: 1px 5px; height: 25px; }
+    .ib2-onizle { font-size: .7rem; color: #334155; background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 8px; padding: 6px 10px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 10px; } .ib2-onizle b { color: #134e4a; }
+    /* eşleştirme: aday dosya listesi */
+    .ib2-aday { width: 100%; font-size: .68rem; border-collapse: collapse; } .ib2-aday th { font-size: .56rem; text-transform: uppercase; color: #64748b; padding: 3px 5px; border-bottom: 1px solid #e2e8f0; text-align: left; } .ib2-aday td { padding: 3px 5px; border-bottom: 1px solid #f1f5f9; }
+    .ib2-aday tr.sec td { background: #ccfbf1; } .ib2-aday tr:hover td { background: #f0fdfa; cursor: pointer; } .ib2-aday .skor { font-size: .56rem; font-weight: 800; color: #0f766e; }
+    .ib2-tahsilat-ozet { font-size: .72rem; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; } .ib2-tahsilat-ozet b { color: #9a3412; }
+</style>
+}
+
+<div class="container-fluid py-3 na ib2" id="ibkb" data-sekme="@sekme">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-file-shield"></i></span>İhracat Finansal Takibi</h4>
+        <span class="ib2-pill" title="İhracat satışı → gümrük beyannamesi (GÇB) → bankadan gelen bedel (tahsilat) → DAB / İBKB belgesi: tüm şirketler tek raporda; gereken, getirilen, kalan bedel, 180 gün vade"><i class="fas fa-arrows-left-right me-1"></i>Satış → Beyanname → Tahsilat → İBKB · Konsolide</span>
+        <a class="ib2-pill" href="/Rapor94/Ihracat" target="_blank" rel="noopener" title="Yurtdışı Satış Siparişi (İhracat Satışları sekmesinin kaynağı)"><i class="fas fa-ship me-1"></i>Yurtdışı Satış Siparişi <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:.56rem"></i></a>
+        <a class="ib2-pill" href="/IhracatBelge?sekme=liste" target="_blank" rel="noopener" title="İhracat Belge Gönderim Takibi (akreditif, vesaik, kargo)"><i class="fas fa-file-export me-1"></i>İhracat Belge Gönderim <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:.56rem"></i></a>
+        <a class="ib2-pill" href="/CariKart/Musteri" target="_blank" rel="noopener" title="Yurtdışı müşteri cari kartları"><i class="fas fa-address-card me-1"></i>Müşteri Cari Kartları <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:.56rem"></i></a>
+        <span class="ib2-pill" id="ibKalici" title="Kayıtlar sunucuda saklanır (App_Data/ibkb.json); yeniden başlatınca korunur. Beyanname listeleri ihracat departmanının IMKB_LISTELERI.xlsx dosyasından (11.11.2026)"><i class="fas fa-database me-1"></i>Kalıcı Kayıt</span>
+        <div class="sag">
+            <button type="button" class="btn btn-primary btn-sm" id="ibYeni" style="font-size:.7rem"><i class="fas fa-plus me-1"></i>İhracat Dosyası Ekle</button>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="ibTahsilatYeni" style="font-size:.7rem" title="Bankadan gelen ihracat tahsilatını (döviz girişi) elle gir; banka / ERP entegrasyonu bağlanınca otomatik gelir"><i class="fas fa-money-bill-transfer me-1"></i>Banka Tahsilatı Ekle</button>
+            <button type="button" class="btn btn-light btn-sm border" id="ibExcel" style="font-size:.7rem" title="Açık sekmedeki tabloyu göründüğü gibi Excel'e indirir"><i class="fas fa-file-excel me-1"></i>Excel</button>
+        </div>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+
+    <div class="na-kart"><div class="na-kart-g"><div class="ib2-filtre">
+        <div><label for="ibS">Şirket</label><select class="form-select" id="ibS"><option value="">Tümü</option></select></div>
+        <div><label for="ibY">Yıl</label><select class="form-select" id="ibY"><option value="">Tümü</option></select></div>
+        <div><label for="ibD" id="ibDEtiket">DAB / İBKB Durumu</label><select class="form-select" id="ibD"><option value="">Tümü</option></select></div>
+        <div><label for="ibT">Takip Durumu</label><select class="form-select" id="ibT"><option value="">Tümü</option></select></div>
+        <div><label for="ibV">Döviz</label><select class="form-select" id="ibV"><option value="">Tümü</option></select></div>
+        <div><label for="ibAra">Ara</label><input class="form-control" id="ibAra" placeholder="Dosya no, fatura, müşteri, müşteri kodu, GÇB no, banka, referans, belge no, not…"></div>
+        <div><label>&nbsp;</label><button type="button" class="btn btn-light border" id="ibTemizle"><i class="fas fa-eraser me-1"></i>Temizle</button></div>
+    </div></div></div>
+
+    <div class="na-kpi" id="ibKpi" data-dinamik="kapali"></div>
+
+    <div class="na-sekme" id="ibSekmeler" data-dinamik="kapali">
+        @foreach (var s in sekmeler) { <button type="button" data-p="@s.Item1" class="@(grupIlk.Contains(s.Item1) ? "ib2-grup-ilk" : null)"><i class="fas @s.Item3 me-1"></i>@s.Item2</button> }
+        <span class="ib2-kapsam" id="ibKapsam"></span>
+    </div>
+
+    @* Özet: dört tablo *@
+    <div class="na-panel" data-p="ozet">
+        <div class="row g-2">
+            <div class="col-lg-6">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-building me-1"></i>Şirket × Yıl</span><span class="not" id="ibNot-ozetSirket"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ib2-tablo" id="ibTablo-ozetSirket" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-coins me-1"></i>Döviz Bazında Bedel</span><span class="not" id="ibNot-ozetDoviz"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ib2-tablo" id="ibTablo-ozetDoviz" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            </div>
+            <div class="col-lg-6">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-chart-pie me-1"></i>DAB / İBKB, Takip ve Tahsilat Durumu</span><span class="not" id="ibNot-ozetDurum"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ib2-tablo" id="ibTablo-ozetDurum" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-days me-1"></i>Aylık Dosya Akışı</span><span class="not" id="ibNot-ozetAy"></span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:44vh"><table class="na-tablo ib2-tablo" id="ibTablo-ozetAy" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            </div>
+        </div>
+        <div class="ib2-aciklama" id="ibAciklama-ozet"></div>
+    </div>
+
+    @foreach (var s in sekmeler.Where(x => x.Item1 != "ozet"))
+    {
+        <div class="na-panel" data-p="@s.Item1">
+            @if (s.Item1 == "tahsilat") { <div class="ib2-tahsilat-ozet" id="ibTahsilatOzet"></div> }
+            <div class="na-kart">
+                <div class="na-kart-b"><span><i class="fas @s.Item3 me-1"></i>@s.Item2</span><span class="not" id="ibNot-@s.Item1"></span></div>
+                <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:70vh"><table class="na-tablo ib2-tablo" id="ibTablo-@s.Item1" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+            </div>
+            <div class="ib2-aciklama" id="ibAciklama-@s.Item1"></div>
+        </div>
+    }
+
+    @* Dosya ekle / düzenle · banka tahsilatı · eşleştirme · belge durumu modalı (içerik betikten) *@
+    <div class="modal fade" id="ibModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header py-2"><h6 class="modal-title" id="ibMBaslik">İhracat Dosyası</h6><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button></div>
+        <div class="modal-body" id="ibMGovde"></div>
+        <div class="modal-footer py-1"><span class="me-auto text-muted" style="font-size:.64rem" id="ibMNot"></span><button type="button" class="btn btn-light btn-sm border" data-bs-dismiss="modal">Vazgeç</button><button type="button" class="btn btn-primary btn-sm" id="ibMKaydet"><i class="fas fa-floppy-disk me-1"></i>Kaydet</button></div>
+    </div></div></div>
+</div>
+
+@section Scripts {
+<script src="/js/tablo-hizala.js?v=14"></script>
+<script src="/js/tablo-excel.js?v=3"></script>
+<script src="/js/ihracat-finans.js?v=3"></script>
+}

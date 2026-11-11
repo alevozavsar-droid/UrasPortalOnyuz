@@ -57,7 +57,6 @@ namespace WebApplication3.Data
             ("Rapor66", "Index", "fas fa-shopping-bag", "Hammadde Fiyat Raporu", null),
             ("Rapor67", "Index", "fas fa-shopping-bag", "KDV Durum Raporu", null),
             ("Rapor65", "Index", "fas fa-shopping-bag", "Cari Bakiye Raporu", null),
-            ("Rapor68", "Index", "fas fa-shopping-bag", "İhracat Tahsilat Raporu", null),
             ("Rapor69", "Index", "fas fa-shopping-bag", "İthalat Ödeme Raporu", null),
             ("Rapor70", "Index", "fas fa-shopping-bag", "Mizan Karşılaştırma", null),
             ("Rapor71", "Index2", "fas fa-money-check-alt", "Muhasebe Çek Akıbeti Raporu", null),
@@ -185,7 +184,7 @@ namespace WebApplication3.Data
             ("Rapor165", "Index", "fas fa-table-list", "Gider / Gelir Kodu Talep Onayı", null),
             ("Rapor166", "Index", "fas fa-table-list", "Fatura İnceleme", null),
             ("Rapor167", "Index", "fas fa-table-list", "Gider Onay Ekranı", null),
-            ("Rapor168", "Index", "fas fa-table-list", "İBKB Beyanname Takibi", null),
+            ("IhracatFinans", "Index", "fas fa-file-shield", "İhracat Finansal Takibi", null),   // 11 Kas 2026: İhracat Tahsilat Raporu (Rapor68) + İBKB Beyanname Takibi (Rapor168) birleşik gerçek kayıtlı ekran
             ("Rapor169", "Index", "fas fa-table-list", "Taslak Faturalar", null),
             ("Rapor170", "Index", "fas fa-table-list", "Gider / Gelir Analizi", null),
             ("Rapor171", "Index", "fas fa-table-list", "Yansıtma Faturası", null),
