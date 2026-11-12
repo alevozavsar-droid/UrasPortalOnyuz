@@ -54,7 +54,33 @@ namespace WebApplication3.Data
         public decimal Anapara { get; set; } public string PB { get; set; } = "TRY"; public decimal Kur { get; set; } public DateTime? FaizBaslangic { get; set; }
         public decimal IslemisFaiz { get; set; } public decimal Komisyon { get; set; } public decimal Bsmv { get; set; } public decimal Kdv { get; set; } public decimal TemerrutFaizi { get; set; }
         public decimal BakiyeDoviz { get; set; } public decimal Bakiye { get; set; } public string Not { get; set; } = ""; public string Kaynak { get; set; } = "";
+        /// <summary>12 Kas 2026: bankanın Proje Geri Ödeme Planı Formu'ndaki bilgiler + taksit takvimi (ödendi / ödenmedi satır satır); PDF'ten tohumla gelir, taksit durumu ekranda değiştirilir. Ekran formu bu alanı göndermez; HesapKaydet dokunmaz.</summary>
+        public KonkordatoPlan Plan { get; set; }
     }
+    /// <summary>Proje Geri Ödeme Planı Formu (Emlak Katılım): üst bilgiler (müşteri / proje no, ürün, finansman ve borçlandırma tutarı, döviz, proje kuru, taksit sayısı, ortalama vade, vergi, aylık kâr / yıllık maliyet / gecikme oranı, komisyon, toplam taksit, masraflar, toplam maliyet),
+    /// kullandırım satırı (Proje Ödeme Bilgileri) ve taksitler (Geri Ödeme Bilgileri). Tutarlar taksit para birimindedir (hesap satırının PB'si); Komisyon ve KullandirimTutari kendi para biriminde (KomisyonPB / KullandirimPB).</summary>
+    public class KonkordatoPlan
+    {
+        public string MusteriNo { get; set; } = ""; public string ProjeNo { get; set; } = ""; public string Urun { get; set; } = "";
+        public decimal FinansmanTutari { get; set; } public string FinansmanPB { get; set; } = "TRY"; public decimal BorclandirmaTutari { get; set; } public string BorclanmaDovizi { get; set; } = ""; public decimal ProjeKuru { get; set; }
+        public int TaksitSayisi { get; set; } public int OrtalamaVade { get; set; } public decimal Vergi { get; set; }
+        public decimal AylikKarOrani { get; set; } public decimal YillikMaliyetOrani { get; set; } public decimal GecikmeOrani { get; set; } public decimal Komisyon { get; set; } public string KomisyonPB { get; set; } = "TRY"; public decimal ToplamTaksit { get; set; }
+        public decimal Ekspertiz { get; set; } public decimal IpotekMasrafi { get; set; } public decimal KgfKomisyon { get; set; } public decimal DdkKomisyon { get; set; } public decimal ToplamMaliyet { get; set; }
+        public DateTime? PlanTarihi { get; set; } public DateTime? KullandirimTarihi { get; set; } public string OdemeTipi { get; set; } = ""; public decimal KullandirimTutari { get; set; } public string KullandirimPB { get; set; } = "TRY"; public decimal BorclanmaKuru { get; set; } public decimal TLTutar { get; set; }
+        public string Kaynak { get; set; } = ""; public string Not { get; set; } = "";
+        public List<KonkordatoTaksit> Taksitler { get; set; } = new List<KonkordatoTaksit>();
+    }
+    /// <summary>Plan taksiti: formdaki satır (sıra, vade, taksit tutarı, ana para, kâr, BSMV, KKDF, KDV, kalan ana para, tür) + ödeme durumu (Ödendi / Ödenmedi / Kısmi Ödendi; tarih, ödenen tutar, not; kim ne zaman işaretledi).</summary>
+    public class KonkordatoTaksit
+    {
+        public int Sira { get; set; } public DateTime? Vade { get; set; } public decimal Tutar { get; set; } public decimal AnaPara { get; set; } public decimal Kar { get; set; } public decimal Bsmv { get; set; } public decimal Kkdf { get; set; } public decimal Kdv { get; set; } public decimal KalanAnapara { get; set; } public string Tur { get; set; } = "Normal";
+        public string Durum { get; set; } = "Ödenmedi"; public DateTime? OdemeTarihi { get; set; } public decimal OdenenTutar { get; set; } public string Not { get; set; } = ""; public string Guncelleyen { get; set; } = ""; public DateTime? Guncelleme { get; set; }
+    }
+    /// <summary>Ekrandan taksit durumu isteği (12 Kas 2026).</summary>
+    public class KonkordatoTaksitIstek { public int HesapId { get; set; } public int Sira { get; set; } public string Durum { get; set; } public DateTime? OdemeTarihi { get; set; } public decimal OdenenTutar { get; set; } public string Not { get; set; } }
+    /// <summary>Ödeme planı tohumu (Data/Tohum/emlak-katilim-odeme-planlari-2026-11.json): banka × borçlu × kredi no ile hesap satırına bağlanır.</summary>
+    public class KonkordatoPlanTohum { public int Surum { get; set; } public string Kaynak { get; set; } = ""; public List<KonkordatoPlanTohumSatir> Planlar { get; set; } = new List<KonkordatoPlanTohumSatir>(); }
+    public class KonkordatoPlanTohumSatir { public string Banka { get; set; } = ""; public string Borclu { get; set; } = ""; public string KrediNo { get; set; } = ""; public KonkordatoPlan Plan { get; set; } }
     /// <summary>Geçici mühlet tarihinden sonra bankaya ulaşan tahsilat (çek, havale, şube, mevduat rehni, teminat çeki, haricen); Mahsup = alacağa mahsup edildi.</summary>
     public class KonkordatoTahsilat
     {
@@ -105,6 +131,8 @@ namespace WebApplication3.Data
     public class KonkordatoDepo
     {
         public KonkordatoDosya Dosya { get; set; } = new KonkordatoDosya(); public int TohumSurumu { get; set; }
+        /// <summary>Uygulanan ödeme planı tohumu sürümü (12 Kas 2026).</summary>
+        public int PlanTohumSurumu { get; set; }
         public List<KonkordatoKontrol> Kontroller { get; set; } = new List<KonkordatoKontrol>();
         public List<KonkordatoAlacak> Alacaklar { get; set; } = new List<KonkordatoAlacak>(); public List<KonkordatoSozlesme> Sozlesmeler { get; set; } = new List<KonkordatoSozlesme>(); public List<KonkordatoHesap> Hesaplar { get; set; } = new List<KonkordatoHesap>();
         public List<KonkordatoTahsilat> Tahsilatlar { get; set; } = new List<KonkordatoTahsilat>(); public List<KonkordatoMektup> Mektuplar { get; set; } = new List<KonkordatoMektup>();
@@ -130,6 +158,11 @@ namespace WebApplication3.Data
         public static readonly string[] TahsilatKanallari = { "Çek", "Havale / EFT", "Şube", "Mevduat Rehni", "Teminat Çeki", "Haricen", "Diğer" };
         public static readonly string[] MektupDurumlari = { "Tazmin Edildi", "Devam Ediyor", "İade Edildi", "Değerlendirme Dışı" };
         public static readonly string[] KontrolDurumlari = { "Bekliyor", "Eksik", "OK" };   // banka × şirket veri kontrol listesi (11 Kas 2026)
+        public static readonly string[] TaksitDurumlari = { "Ödendi", "Ödenmedi", "Kısmi Ödendi" };   // ödeme planı taksitleri (12 Kas 2026)
+        /// <summary>Şirket bazında konkordato başlangıç (dava) tarihleri: ALV Kimya 01.11.2024; DAF Kimya / ALV Filo 04.11.2024 (Bakırköy 3. ATM 2024/873); Avrupa Paper / Uras Holding / Uras Kimya / URS Makine 05.11.2024 (Bakırköy 2. ATM 2024/894). Ödeme planında "başlangıca kadar vadesi gelen taksit" için (12 Kas 2026).</summary>
+        public static readonly Dictionary<string, string> KonkordatoBaslangiclari = new Dictionary<string, string> { ["Alv Kimya"] = "2024-11-01", ["ALV Kimya"] = "2024-11-01", ["ALV Filo"] = "2024-11-04", ["Daf Kimya"] = "2024-11-04", ["DAF Kimya"] = "2024-11-04", ["Avrupa Paper"] = "2024-11-05", ["Uras Holding"] = "2024-11-05", ["Uras Kimya"] = "2024-11-05", ["URS Makine"] = "2024-11-05" };
+        const int PlanTohumSurum = 1;   // 1: Emlak Katılım 14 proje geri ödeme planı (Alv 8, Daf 2, Avrupa Paper 4), taksit durumu 11.11.2026 dökümünden (12 Kas 2026)
+        public static string PlanTohumDosya => string.IsNullOrEmpty(PersonelMaliyetKalici.Dizin) ? null : Path.Combine(PersonelMaliyetKalici.Dizin, "Data", "Tohum", "emlak-katilim-odeme-planlari-2026-11.json");
         public static readonly string[] FaizTurleri = { "Akdi Faiz", "Temerrüt Faizi", "BSMV", "Tazmin Bedeli", "Diğer" };
         public static readonly string[] TebligYontemleri = { "E-Tebligat", "Noter", "Elden", "Diğer" };
         public static readonly string[] ParaBirimleri = { "TRY", "USD", "EUR", "GBP" };
@@ -156,6 +189,7 @@ namespace WebApplication3.Data
                 }
                 Normallestir();
                 if (_depo.TohumSurumu < TohumSurum) TohumUygula();
+                if (_depo.PlanTohumSurumu < PlanTohumSurum) PlanTohumUygula();   // ödeme planları (12 Kas 2026)
                 Console.WriteLine($"[Konkordato] {_depo.Alacaklar.Count} alacak kaydı, {_depo.Sozlesmeler.Count} sözleşme, {_depo.Hesaplar.Count} hesap satırı, {_depo.Tahsilatlar.Count} tahsilat, {_depo.Mektuplar.Count} teminat mektubu" + (dosya != null ? $" · {dosya}" : " (kalıcılık kapalı)"));
             }
         }
@@ -360,6 +394,60 @@ namespace WebApplication3.Data
             return null;
         }
         public static string HesapSil(int id) { Yukle(); lock (Kilit) { var x = _depo.Hesaplar.FirstOrDefault(y => y.Id == id); if (x == null) return "Kayıt bulunamadı."; _depo.Hesaplar.Remove(x); Yaz(); } return null; }
+        // ---------- ödeme planı (12 Kas 2026, "PDF'te görülen tüm detayları da ekle, taksit taksit ödendi / ödenmedi satır satır") ----------
+        /// <summary>Plan tohumu: banka × borçlu × kredi no ile hesap satırı bulunur (aynı numaralı birden çok satırda kredi tutarı olan / masraf olmayan önce); planı dolu satır ezilmez. Yukle() kilidi içinde çağrılır.</summary>
+        static void PlanTohumUygula()
+        {
+            var yol = PlanTohumDosya; if (yol == null || !File.Exists(yol)) { Console.WriteLine("[Konkordato] ödeme planı tohumu yok: " + yol); return; }
+            try
+            {
+                var t = JsonSerializer.Deserialize<KonkordatoPlanTohum>(File.ReadAllText(yol), Secenek); if (t == null) return; int n = 0, yok = 0, atla = 0;
+                foreach (var s in t.Planlar ?? new List<KonkordatoPlanTohumSatir>())
+                {
+                    if (s.Plan == null) continue;
+                    var h = _depo.Hesaplar.Where(x => x.Banka == Temiz(s.Banka) && x.Borclu == Temiz(s.Borclu) && x.KrediNo == Temiz(s.KrediNo)).OrderByDescending(x => x.KrediTutari).ThenBy(x => x.Nitelik == "Masraf" || (x.Tur ?? "").Contains("Masraf")).ThenBy(x => x.Id).FirstOrDefault();
+                    if (h == null) { yok++; Console.WriteLine($"[Konkordato] ödeme planı için hesap satırı yok: {s.Banka} · {s.Borclu} · {s.KrediNo}"); continue; }
+                    if (h.Plan != null && h.Plan.Taksitler != null && h.Plan.Taksitler.Count > 0) { atla++; continue; }
+                    s.Plan.Taksitler ??= new List<KonkordatoTaksit>();
+                    foreach (var x in s.Plan.Taksitler) { x.Durum = Sec(x.Durum, TaksitDurumlari, "Ödenmedi"); if (string.IsNullOrWhiteSpace(x.Tur)) x.Tur = "Normal"; x.Not ??= ""; }
+                    if (string.IsNullOrWhiteSpace(s.Plan.Kaynak)) s.Plan.Kaynak = t.Kaynak ?? ""; s.Plan.Not ??= "";
+                    h.Plan = s.Plan; n++;
+                }
+                _depo.PlanTohumSurumu = PlanTohumSurum; Yaz();
+                Console.WriteLine($"[Konkordato] ödeme planı tohumu uygulandı (sürüm {PlanTohumSurum}): {n} plan bağlandı, {atla} dolu satır atlandı, {yok} eşleşmeyen · {Path.GetFileName(yol)}");
+            }
+            catch (Exception ex) { Console.WriteLine("[Konkordato] ödeme planı tohumu uygulanamadı: " + ex.Message); }
+        }
+        /// <summary>Taksit durumunu işaretler (Ödendi / Ödenmedi / Kısmi Ödendi; tarih, ödenen tutar, not). Kısmi Ödendi'de ödenen tutar zorunlu; Ödendi'de boş bırakılan ödenen tutar taksit tutarı sayılır.</summary>
+        public static string TaksitDurum(KonkordatoTaksitIstek d, string kullanici, out KonkordatoHesap hesap, out KonkordatoTaksit taksit)
+        {
+            hesap = null; taksit = null; if (d == null) return "Veri yok."; Yukle();
+            lock (Kilit)
+            {
+                var h = _depo.Hesaplar.FirstOrDefault(x => x.Id == d.HesapId); if (h == null) return "Hesap satırı bulunamadı.";
+                var t = h.Plan?.Taksitler?.FirstOrDefault(x => x.Sira == d.Sira); if (t == null) return "Taksit bulunamadı.";
+                string durum = Sec(d.Durum, TaksitDurumlari, null); if (durum == null) return "Durum Ödendi, Ödenmedi ya da Kısmi Ödendi olmalıdır.";
+                if (durum == "Kısmi Ödendi" && d.OdenenTutar <= 0) return "Kısmi ödemede ödenen tutar girilmelidir.";
+                if (d.OdenenTutar < 0 || d.OdenenTutar > t.Tutar + 0.005m) return "Ödenen tutar taksit tutarını aşamaz.";
+                t.Durum = durum; t.OdemeTarihi = durum == "Ödenmedi" ? null : d.OdemeTarihi?.Date; t.OdenenTutar = durum == "Ödenmedi" ? 0 : durum == "Ödendi" ? (d.OdenenTutar > 0 ? R2(d.OdenenTutar) : t.Tutar) : R2(d.OdenenTutar);
+                if (d.Not != null) t.Not = Temiz(d.Not); t.Guncelleyen = kullanici ?? ""; t.Guncelleme = DateTime.Now;
+                Yaz(); hesap = h; taksit = t;
+            }
+            return null;
+        }
+        /// <summary>Planın ekran paketi: alanlar + taksitler + özet (ödenen / açık taksit sayısı ve tutarı).</summary>
+        static object PlanDto(KonkordatoPlan p)
+        {
+            if (p == null) return null; var T = (p.Taksitler ?? new List<KonkordatoTaksit>()).OrderBy(t => t.Sira).ToList();
+            decimal odenen = T.Sum(t => t.Durum == "Ödendi" ? (t.OdenenTutar > 0 ? t.OdenenTutar : t.Tutar) : t.Durum == "Kısmi Ödendi" ? t.OdenenTutar : 0), toplam = T.Sum(t => t.Tutar);
+            return new
+            {
+                p.MusteriNo, p.ProjeNo, p.Urun, p.FinansmanTutari, p.FinansmanPB, p.BorclandirmaTutari, p.BorclanmaDovizi, p.ProjeKuru, p.TaksitSayisi, p.OrtalamaVade, p.Vergi, p.AylikKarOrani, p.YillikMaliyetOrani, p.GecikmeOrani, p.Komisyon, p.KomisyonPB, p.ToplamTaksit, p.Ekspertiz, p.IpotekMasrafi, p.KgfKomisyon, p.DdkKomisyon, p.ToplamMaliyet,
+                planTarihi = D(p.PlanTarihi), kullandirimTarihi = D(p.KullandirimTarihi), p.OdemeTipi, p.KullandirimTutari, p.KullandirimPB, p.BorclanmaKuru, p.TLTutar, p.Kaynak, p.Not,
+                taksitler = T.Select(t => new { t.Sira, vade = D(t.Vade), t.Tutar, t.AnaPara, t.Kar, t.Bsmv, t.Kkdf, t.Kdv, t.KalanAnapara, t.Tur, t.Durum, odemeTarihi = D(t.OdemeTarihi), t.OdenenTutar, t.Not, t.Guncelleyen, guncelleme = t.Guncelleme?.ToString("yyyy-MM-dd HH:mm") }).ToList(),
+                ozet = new { taksit = T.Count, odendi = T.Count(t => t.Durum == "Ödendi"), kismi = T.Count(t => t.Durum == "Kısmi Ödendi"), acik = T.Count(t => t.Durum == "Ödenmedi"), odenen = R2(odenen), toplam = R2(toplam), kalan = R2(toplam - odenen), odenenAnapara = R2(T.Where(t => t.Durum == "Ödendi").Sum(t => t.AnaPara)), acikAnapara = R2(T.Where(t => t.Durum != "Ödendi").Sum(t => t.AnaPara)) }
+            };
+        }
         public static string TahsilatKaydet(KonkordatoTahsilat d, string kullanici, out KonkordatoTahsilat kayit)
         {
             kayit = null; if (d == null) return "Veri yok."; Yukle();
@@ -423,10 +511,11 @@ namespace WebApplication3.Data
                 return new
                 {
                     dosya = new { ds.Mahkeme, ds.DosyaNo, ds.DavaTuru, davaTarihi = D(ds.DavaTarihi), ds.Davali, ds.Davacilar, ds.Vekil, araKararTarihi = D(ds.AraKararTarihi), ds.AraKararNot, geciciMuhletTarihi = D(ds.GeciciMuhletTarihi), ds.GeciciMuhletAy, raporTarihi = D(ds.RaporTarihi), ds.Bilirkisi, ds.BilirkisiUnvan, kurTarihi = D(ds.KurTarihi), ds.UsdKur, ds.EurKur, ds.Not },
+                    konkordatoBaslangic = KonkordatoBaslangiclari,
                     durumlar = Durumlar, odemeDurumlari = OdemeDurumlari, statuler = Statuler, nitelikler = Nitelikler, sozlesmeTurleri = SozlesmeTurleri, hesapNitelikleri = HesapNitelikleri, faizDonemTurleri = FaizDonemleri, tahsilatKanallari = TahsilatKanallari, mektupDurumlari = MektupDurumlari, faizTurleri = FaizTurleri, tebligYontemleri = TebligYontemleri, paraBirimleri = ParaBirimleri, borclular,
                     alacaklar = A.Select(Alacak).ToList(),
                     sozlesmeler = _depo.Sozlesmeler.OrderBy(s => s.Banka, StringComparer.Create(Tr, false)).ThenBy(s => s.Tarih).Select(s => new { s.Id, s.AlacakId, s.Banka, s.Borclu, s.Tur, s.SozlesmeNo, tarih = D(s.Tarih), s.Tutar, s.PB, kefiller = s.Kefiller.Select(k => new { k.Ad, k.Limit, k.Davaci }).ToList(), kefilToplam = s.Kefiller.Sum(k => k.Limit), davaciKefil = s.Kefiller.Count(k => k.Davaci), s.Not, s.Kaynak }).ToList(),
-                    hesaplar = _depo.Hesaplar.OrderBy(h => h.Banka, StringComparer.Create(Tr, false)).ThenBy(h => h.Borclu).ThenBy(h => h.Sira).ThenBy(h => h.Id).Select(h => new { h.Id, h.AlacakId, h.Banka, h.Borclu, h.Sira, h.KrediNo, h.Tur, h.Nitelik, h.FaizOrani, h.FaizDonemi, h.GecikmeOrani, h.KrediTutari, odenenAnapara = h.KrediTutari > 0 ? R2(h.KrediTutari - h.Anapara) : 0m, h.Anapara, h.PB, h.Kur, faizBaslangic = D(h.FaizBaslangic), h.IslemisFaiz, h.Komisyon, h.Bsmv, h.Kdv, h.TemerrutFaizi, h.BakiyeDoviz, h.Bakiye, h.Not, h.Kaynak }).ToList(),
+                    hesaplar = _depo.Hesaplar.OrderBy(h => h.Banka, StringComparer.Create(Tr, false)).ThenBy(h => h.Borclu).ThenBy(h => h.Sira).ThenBy(h => h.Id).Select(h => new { h.Id, h.AlacakId, h.Banka, h.Borclu, h.Sira, h.KrediNo, h.Tur, h.Nitelik, h.FaizOrani, h.FaizDonemi, h.GecikmeOrani, h.KrediTutari, odenenAnapara = h.KrediTutari > 0 ? R2(h.KrediTutari - h.Anapara) : 0m, h.Anapara, h.PB, h.Kur, faizBaslangic = D(h.FaizBaslangic), h.IslemisFaiz, h.Komisyon, h.Bsmv, h.Kdv, h.TemerrutFaizi, h.BakiyeDoviz, h.Bakiye, h.Not, h.Kaynak, plan = PlanDto(h.Plan) }).ToList(), taksitDurumlari = TaksitDurumlari,
                     tahsilatlar = _depo.Tahsilatlar.OrderBy(t => t.Tarih ?? t.Valor ?? t.Vade).ThenBy(t => t.Id).Select(t => new { t.Id, t.AlacakId, t.Banka, t.Borclu, tarih = D(t.Tarih), vade = D(t.Vade), valor = D(t.Valor), t.Kanal, t.CekNo, t.CekBankasi, t.Odeyen, t.Firma, t.Tutar, t.PB, t.Mahsup, t.Aciklama, t.Kaynak }).ToList(),
                     mektuplar = _depo.Mektuplar.OrderBy(m => m.Banka, StringComparer.Create(Tr, false)).ThenBy(m => m.TazminTarihi).ThenBy(m => m.Id).Select(m => new { m.Id, m.AlacakId, m.Banka, m.Borclu, m.MektupNo, m.KkbNo, verilis = D(m.Verilis), gecerlilik = D(m.Gecerlilik), m.Tutar, m.PB, m.Kur, tazminTarihi = D(m.TazminTarihi), m.TazminBedeli, m.Durum, m.Muhatap, m.Konu, m.Sayfa, m.Not, m.Kaynak }).ToList(),
                     kontroller = (_depo.Kontroller ?? new List<KonkordatoKontrol>()).Select(k => new { k.Banka, k.Sirket, k.Durum, k.Not, tarih = k.Tarih.HasValue ? k.Tarih.Value.ToString("yyyy-MM-dd HH:mm") : null, k.Kullanici }).ToList(), kontrolDurumlari = KontrolDurumlari,   // banka × şirket veri kontrol listesi (11 Kas 2026)

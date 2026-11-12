@@ -172,6 +172,12 @@ namespace WebApplication3.Controllers
         }
         [HttpPost("HesapSil"), IgnoreAntiforgeryToken]
         public IActionResult HesapSil([FromBody] IdIstek d) { var h = KonkordatoOrnek.HesapSil(d?.Id ?? 0); return Json(new { success = h == null, message = h ?? "Hesap satırı silindi.", veri = h == null ? Paket() : null }); }
+        [HttpPost("TaksitDurum"), IgnoreAntiforgeryToken]   // ödeme planı taksiti ödendi / ödenmedi (12 Kas 2026)
+        public IActionResult TaksitDurum([FromBody] KonkordatoTaksitIstek d)
+        {
+            var h = KonkordatoOrnek.TaksitDurum(d, Kullanici, out var x, out var t);
+            return Json(new { success = h == null, message = h ?? $"{x?.KrediNo} · {t?.Sira}. taksit ({t?.Vade:dd.MM.yyyy}) {t?.Durum}{(t?.OdemeTarihi != null ? " · " + t.OdemeTarihi.Value.ToString("dd.MM.yyyy") : "")}{(t?.Durum == "Kısmi Ödendi" ? " · " + P(t.OdenenTutar) : "")}.", veri = h == null ? Paket() : null });
+        }
         [HttpPost("TahsilatKaydet"), IgnoreAntiforgeryToken]
         public IActionResult TahsilatKaydet([FromBody] KonkordatoTahsilat d)
         {
