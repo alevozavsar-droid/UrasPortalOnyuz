@@ -21,10 +21,10 @@ namespace WebApplication3.Controllers
         private static string P(decimal? v) => (v ?? 0).ToString("N2", Tr);
 
         [HttpGet(""), HttpGet("Index")]
-        public IActionResult Index(string sekme)
+        public IActionResult Index(string sekme, int gorev = 0)
         {
             ViewData["Title"] = "İhracat Finansal Takibi";
-            ViewBag.Sekme = sekme ?? "ozet";
+            ViewBag.Sekme = gorev > 0 ? "bakiye" : sekme ?? "ozet"; ViewBag.Gorev = gorev;   // ?gorev=ID: e-posta / portal mesajındaki bağlantı; görev penceresi açılır
             return View();
         }
 
@@ -78,6 +78,93 @@ namespace WebApplication3.Controllers
         {
             var h = IbkbOrnek.BelgeDurum(d, Kullanici);
             return Json(new { success = h == null, message = h ?? "İBKB belgesi güncellendi.", veri = h == null ? IbkbOrnek.Paket() : null });
+        }
+        /// <summary>İhracat cari bakiyesi kontrol işareti (Cari Bakiyeler sekmesi; 11 Kas 2026).</summary>
+        [HttpPost("BakiyeKontrolKaydet"), IgnoreAntiforgeryToken]
+        public IActionResult BakiyeKontrolKaydet([FromBody] IbkbBakiyeKontrolIstek d)
+        {
+            var h = IbkbOrnek.BakiyeKontrolKaydet(d, Kullanici, out var k, out var g);
+            return Json(new { success = h == null, message = h ?? $"Bakiye kontrolü kaydedildi: {k?.CariKodu} · {k?.Durum}." + (g == null ? "" : $" Düzeltme görevi {g.Atanan} kişisine atandı (#{g.Id}){(g.Bildirim == "" ? "" : " · " + g.Bildirim)}."), gorev = g == null ? null : GorevKisa(g), veri = h == null ? IbkbOrnek.Paket() : null });
+        }
+        static object GorevKisa(IbkbGorev g) { var e = IbkbOrnek.GorevEposta(g); return new { g.Id, g.Atanan, g.AtananEposta, g.Durum, konu = e.Konu, govde = e.Govde }; }
+        /// <summary>Cari bakiye düzeltme görevi akışı (12 Kas 2026): ata · guncelle · duzeltildi · onayla · iade · iptal.</summary>
+        [HttpPost("GorevKaydet"), IgnoreAntiforgeryToken]
+        public IActionResult GorevKaydet([FromBody] IbkbGorevIstek d)
+        {
+            var h = IbkbOrnek.GorevKaydet(d, Kullanici, out var g);
+            string islem = (d?.Islem ?? "").ToLowerInvariant();
+            string m = islem == "duzeltildi" ? "Görev Düzeltildi olarak işaretlendi; muhasebe onayı bekliyor." : islem == "onayla" ? "Düzeltme onaylandı; görev kapandı." : islem == "iade" ? "Görev iade edildi; atanan kişi yeniden düzeltecek." : islem == "iptal" ? "Görev iptal edildi." : islem == "guncelle" ? "Görev güncellendi." : $"Düzeltme görevi {g?.Atanan} kişisine atandı (#{g?.Id})";
+            return Json(new { success = h == null, message = h ?? m + (g != null && g.Bildirim != "" && (islem == "ata" || islem == "" || islem == "guncelle" || islem == "iade") ? " · " + g.Bildirim : ""), gorev = g == null ? null : GorevKisa(g), veri = h == null ? IbkbOrnek.Paket() : null });
+        }
+        /// <summary>Müşteriye mutabakat gönderimi (E-posta / WhatsApp; bakiye ya da ekstre); id > 0 ise yanıt (Mutabık / İtirazlı).</summary>
+        [HttpPost("CariGonderim"), IgnoreAntiforgeryToken]
+        public IActionResult CariGonderim([FromBody] CariGonderimIstek d)
+        {
+            var h = IbkbOrnek.CariGonderimKaydet(d, Kullanici, out var g);
+            return Json(new { success = h == null, message = h ?? (d?.Id > 0 ? $"Mutabakat yanıtı işlendi: {g?.Durum}." : $"Mutabakat gönderimi kaydedildi: {g?.Kanal} · {g?.Icerik} · {g?.Alici}{(string.IsNullOrEmpty(g?.MtBelgeNo) ? "" : " · " + g.MtBelgeNo)}."), id = g?.Id, veri = h == null ? IbkbOrnek.Paket() : null });
+        }
+        /// <summary>Müşteriye gönderilen ekstre bağlantısı: jetonla açılır (portal girişi istemez); döviz bazında bakiye, hareketler, açık ihracat dosyaları. Yazdır → PDF.</summary>
+        [HttpGet("CariEkstre"), AllowAnonymous]
+        public IActionResult CariEkstre(string kod, string t)
+        {
+            if (string.IsNullOrEmpty(kod) || (User?.Identity?.IsAuthenticated != true && !string.Equals(t, IbkbOrnek.EkstreJeton(kod), System.StringComparison.OrdinalIgnoreCase))) return NotFound("Ekstre bağlantısı geçersiz.");
+            var c = MutabakatOrnek.Bul(kod); if (c == null) return NotFound("Cari bulunamadı.");
+            ViewData["Title"] = (c.Kart?.KisaAd ?? kod) + " · Cari Hesap Ekstresi";
+            ViewBag.Dosyalar = IbkbOrnek.CariDosyalar(kod, c.Kart);
+            ViewBag.Gonderimler = IbkbOrnek.CariGonderimler(kod);
+            ViewBag.Sirket = string.IsNullOrEmpty(c.Kart?.Sirket) ? null : SatisSiparisOrnek.SirketBul(c.Kart.Sirket);
+            return View(c);
+        }
+        // ---------- yurtdışı şube carileri (11 Kas 2026)
+        [HttpPost("SubeKaydet"), IgnoreAntiforgeryToken]
+        public IActionResult SubeKaydet([FromBody] SubeIstek d)
+        {
+            var h = IbkbOrnek.SubeKaydet(d, Kullanici, out var s);
+            return Json(new { success = h == null, message = h ?? $"Şube {(d?.Id > 0 ? "güncellendi" : "eklendi")}: {s?.Kod} · {s?.Sube} · bakiye {P(s == null ? 0 : IbkbOrnek.SubeBakiye(s))} {s?.ParaBirimi}.", id = s?.Id, veri = h == null ? IbkbOrnek.Paket() : null });
+        }
+        [HttpPost("SubeSil"), IgnoreAntiforgeryToken]
+        public IActionResult SubeSil([FromBody] IdIstek d)
+        {
+            var h = IbkbOrnek.SubeSil(d?.Id ?? 0);
+            return Json(new { success = h == null, message = h ?? "Şube silindi.", veri = h == null ? IbkbOrnek.Paket() : null });
+        }
+        /// <summary>Şube yıl satırı kalemleri (12 Kas 2026): tutara tıklayınca açılan detay; ekle / düzenle / sil / yıl satırını kalem toplamıyla eşitle.</summary>
+        [HttpPost("SubeKalemKaydet"), IgnoreAntiforgeryToken]
+        public IActionResult SubeKalemKaydet([FromBody] SubeKalemIstek d)
+        {
+            var h = IbkbOrnek.SubeKalemKaydet(d, Kullanici, out var s);
+            return Json(new { success = h == null, message = h ?? $"Kalem {(d?.Id > 0 ? "güncellendi" : "eklendi")}: {d?.Yil} · {P(d?.Tutar)} {s?.ParaBirimi} · {d?.BelgeNo}.", veri = h == null ? IbkbOrnek.Paket() : null });
+        }
+        public class KalemSilIstek { public int SubeId { get; set; } public int Id { get; set; } }
+        [HttpPost("SubeKalemSil"), IgnoreAntiforgeryToken]
+        public IActionResult SubeKalemSil([FromBody] KalemSilIstek d)
+        {
+            var h = IbkbOrnek.SubeKalemSil(d?.SubeId ?? 0, d?.Id ?? 0);
+            return Json(new { success = h == null, message = h ?? "Kalem silindi.", veri = h == null ? IbkbOrnek.Paket() : null });
+        }
+        public class EsitleIstek { public int SubeId { get; set; } public string Yil { get; set; } public string Alan { get; set; } }
+        [HttpPost("SubeYilEsitle"), IgnoreAntiforgeryToken]
+        public IActionResult SubeYilEsitle([FromBody] EsitleIstek d)
+        {
+            var h = IbkbOrnek.SubeYilEsitle(d?.SubeId ?? 0, d?.Yil, d?.Alan, Kullanici, out var yeni);
+            return Json(new { success = h == null, message = h ?? $"Yıl satırı kalem toplamıyla eşitlendi: {d?.Yil} · {P(yeni)}.", veri = h == null ? IbkbOrnek.Paket() : null });
+        }
+        /// <summary>Şubeye ekstre / mutabakat gönderimi kaydı (E-posta ya da WhatsApp); id > 0 ise yanıt / durum güncelleme.</summary>
+        [HttpPost("SubeGonderim"), IgnoreAntiforgeryToken]
+        public IActionResult SubeGonderim([FromBody] SubeGonderimIstek d)
+        {
+            var h = IbkbOrnek.SubeGonderimKaydet(d, Kullanici, out var g);
+            return Json(new { success = h == null, message = h ?? (d?.Id > 0 ? $"Gönderim durumu güncellendi: {g?.Durum}." : $"Ekstre gönderimi kaydedildi: {g?.Kanal} · {g?.Alici} · {g?.Donem}."), id = g?.Id, veri = h == null ? IbkbOrnek.Paket() : null });
+        }
+        /// <summary>Şube ekstresi / mutabakat mektubu (basılabilir; e-postaya PDF olarak eklenir).</summary>
+        [HttpGet("SubeEkstre/{id:int}")]
+        public IActionResult SubeEkstre(int id)
+        {
+            var s = IbkbOrnek.SubeBul(id); if (s == null) return NotFound("Şube bulunamadı.");
+            ViewData["Title"] = s.Sube + " · Şube Ekstresi";
+            ViewBag.Gonderimler = IbkbOrnek.SubeGonderimler(id);
+            ViewBag.Sirket = string.IsNullOrEmpty(s.Sirket) ? null : SatisSiparisOrnek.SirketBul(s.Sirket);
+            return View(s);
         }
         [HttpPost("BelgeSil"), IgnoreAntiforgeryToken]
         public IActionResult BelgeSil([FromBody] IdIstek d)

@@ -1,0 +1,75 @@
+@model WebApplication3.Data.SubeCari
+@{
+    Layout = null;
+    var sirket = (WebApplication3.Data.SsSirket)ViewBag.Sirket;
+    var gonderimler = (List<WebApplication3.Data.SubeGonderim>)ViewBag.Gonderimler ?? new List<WebApplication3.Data.SubeGonderim>();
+    var tr = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
+    string pb = Model.ParaBirimi == "USD" ? "$" : Model.ParaBirimi == "EUR" ? "€" : Model.ParaBirimi == "GBP" ? "£" : Model.ParaBirimi;
+    string P(decimal v) => v.ToString("N2", tr) + " " + pb;
+    string S(string s) => string.IsNullOrWhiteSpace(s) ? "—" : s;
+    var yillar = WebApplication3.Data.IbkbOrnek.SubeYillarSirali(Model);
+    var bakiye = WebApplication3.Data.IbkbOrnek.SubeBakiye(Model);
+    bool gercekVar = yillar.Any(y => y.GercekMalBedeli > 0), iadeVar = yillar.Any(y => y.IadeFaturasi != 0), komVar = yillar.Any(y => y.Komisyon != 0), nakVar = yillar.Any(y => y.Nakliye != 0), digVar = yillar.Any(y => y.Diger != 0), duzVar = yillar.Any(y => y.Duzeltme != 0), serVar = yillar.Any(y => y.Sermaye != 0);
+    decimal devir = 0;
+}
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <title>@ViewData["Title"]</title>
+    @* ŞUBE EKSTRESİ / MUTABAKAT MEKTUBU (11 Kas 2026): yurtdışı şube carisinin yıl bazında satış · ödeme · bakiye dökümü; e-posta / WhatsApp gönderiminde bağlantı olarak gider, tarayıcıdan PDF alınır. Veri Data/IbkbOrnek.cs (SubeCari). *@
+    <style>
+        body { font-family: Arial, "Segoe UI", sans-serif; font-size: 10.5pt; color: #0f172a; margin: 0; background: #e2e8f0; }
+        .sayfa { width: 297mm; min-height: 210mm; margin: 10mm auto; background: #fff; padding: 12mm 14mm; box-sizing: border-box; box-shadow: 0 2px 12px rgba(0,0,0,.15); }
+        .ust { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #4338ca; padding-bottom: 8px; margin-bottom: 12px; }
+        .ust h1 { font-size: 15pt; margin: 0 0 4px; color: #312e81; letter-spacing: .04em; } .ust .alt { font-size: 9pt; color: #475569; }
+        .ust .no { text-align: right; font-size: 9.5pt; } .ust .no b { font-size: 12pt; color: #4338ca; display: block; }
+        h2 { font-size: 10pt; text-transform: uppercase; letter-spacing: .06em; color: #4338ca; border-bottom: 1px solid #c7d2fe; margin: 12px 0 6px; padding-bottom: 2px; }
+        table.b { width: 100%; border-collapse: collapse; font-size: 9.5pt; } table.b td { padding: 3px 6px; border: 1px solid #cbd5e1; vertical-align: top; } table.b td.l { width: 22%; background: #f8fafc; font-weight: 700; color: #334155; }
+        table.y { width: 100%; border-collapse: collapse; font-size: 9pt; } table.y th { background: #eef2ff; color: #312e81; font-size: 8pt; text-transform: uppercase; padding: 4px 5px; border: 1px solid #c7d2fe; text-align: center; } table.y td { padding: 3px 5px; border: 1px solid #cbd5e1; text-align: right; font-variant-numeric: tabular-nums; } table.y td:first-child { text-align: center; font-weight: 700; } table.y td.not { text-align: left; font-size: 8pt; color: #64748b; }
+        table.y tr.toplam td { font-weight: 800; background: #f1f5f9; } .eksi { color: #b91c1c; } .arti { color: #15803d; }
+        .bakiye { font-size: 13pt; font-weight: 800; color: #312e81; margin: 10px 0; }
+        .metin { font-size: 9.5pt; line-height: 1.45; text-align: justify; margin: 8px 0; }
+        .imza { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 22px; font-size: 9.5pt; } .imza > div { border-top: 1px solid #334155; padding-top: 6px; min-height: 60px; } .imza b { display: block; }
+        .not { font-size: 8.5pt; color: #64748b; margin-top: 14px; border-top: 1px dashed #cbd5e1; padding-top: 6px; }
+        .araclar { position: fixed; top: 8px; right: 8px; display: flex; gap: 6px; } .araclar button, .araclar a { font: 600 10pt Arial, sans-serif; padding: 6px 12px; border-radius: 6px; border: 1px solid #4338ca; background: #4338ca; color: #fff; cursor: pointer; text-decoration: none; } .araclar a { background: #fff; color: #4338ca; }
+        @@media print { body { background: #fff; } .sayfa { margin: 0; box-shadow: none; width: auto; min-height: auto; padding: 10mm 12mm; } .araclar { display: none; } @@page { size: A4 landscape; margin: 8mm; } }
+    </style>
+</head>
+<body>
+    <div class="araclar"><button type="button" onclick="window.print()">Yazdır / PDF</button><a href="/IhracatFinans?sekme=sube">Rapora Dön</a></div>
+    <div class="sayfa">
+        <div class="ust">
+            <div><h1>ŞUBE CARİ HESAP EKSTRESİ · MUTABAKAT</h1><div class="alt">@S(sirket?.Unvan ?? (string.IsNullOrEmpty(Model.Sirket) ? "Uras Grubu" : Model.Sirket))@if (sirket != null) { <span> · @sirket.Adres · Vergi No @sirket.VergiNo</span> }</div></div>
+            <div class="no"><b>@Model.Kod · @Model.Sube</b>Tarih: @DateTime.Today.ToString("dd.MM.yyyy")<br />Para birimi: @Model.ParaBirimi</div>
+        </div>
+        <div class="metin">Sayın <b>@Model.Sube</b> (@Model.Ulke) yetkilisi,<br />Şirketimiz ile şubeniz arasındaki cari hesabın yıl bazında dökümü aşağıdadır. Lütfen kayıtlarınızla karşılaştırıp mutabık olduğunuzu ya da itirazınızı bildiriniz. Bakiye eksi ise şube şirketimize borçludur; artı ise şirketimiz şubeye borçludur.</div>
+
+        <h2>1. Şube Bilgileri</h2>
+        <table class="b"><tr><td class="l">Şube</td><td>@Model.Sube · @Model.Ulke</td><td class="l">Grup Şirketi</td><td>@S(Model.Sirket)</td></tr><tr><td class="l">Ürün Grubu</td><td>@S(Model.UrunGrubu)</td><td class="l">Satış Temsilcisi</td><td>@S(Model.Temsilci)@if (!string.IsNullOrEmpty(Model.Sorumlu)) { <span> · şube sorumlusu @Model.Sorumlu</span> }</td></tr><tr><td class="l">E-posta</td><td>@S(Model.Eposta)</td><td class="l">Telefon (WhatsApp)</td><td>@S(Model.Telefon)</td></tr></table>
+
+        <h2>2. Yıl Bazında Hesap Dökümü (@Model.ParaBirimi)</h2>
+        <table class="y">
+            <thead><tr><th>Yıl</th>@if (serVar) { <th>Sermaye</th> }<th>Resmi Fatura</th>@if (gercekVar) { <th>Gerçek Mal Bedeli</th> }@if (iadeVar) { <th>İade Faturası</th> }@if (komVar) { <th>Komisyon</th> }<th>Resmi Ödeme</th><th>Diğer Ödeme</th>@if (nakVar) { <th>Nakliye</th> }@if (digVar) { <th>Diğer</th> }@if (duzVar) { <th>Düzeltme</th> }<th>Toplam Ödeme</th><th>Ödeme − Satış</th><th>Devir</th><th>Not</th></tr></thead>
+            <tbody>
+            @foreach (var y in yillar)
+            {
+                var f = WebApplication3.Data.IbkbOrnek.SubeFark(y); devir += f;
+                <tr><td>@y.Yil</td>@if (serVar) { <td>@P(y.Sermaye)</td> }<td>@P(y.ResmiFatura)</td>@if (gercekVar) { <td>@P(y.GercekMalBedeli)</td> }@if (iadeVar) { <td>@P(y.IadeFaturasi)</td> }@if (komVar) { <td>@P(y.Komisyon)</td> }<td>@P(y.ResmiOdeme)</td><td>@P(y.DigerOdeme)</td>@if (nakVar) { <td>@P(y.Nakliye)</td> }@if (digVar) { <td>@P(y.Diger)</td> }@if (duzVar) { <td>@P(y.Duzeltme)</td> }<td>@P(WebApplication3.Data.IbkbOrnek.SubeToplamOdeme(y))</td><td class="@(f < 0 ? "eksi" : f > 0 ? "arti" : "")">@P(f)</td><td class="@(devir < 0 ? "eksi" : devir > 0 ? "arti" : "")">@P(devir)</td><td class="not">@y.Not</td></tr>
+            }
+            @if (yillar.Count == 0) { <tr><td colspan="20" style="text-align:center;color:#64748b">Yıl satırı girilmemiş.</td></tr> }
+            </tbody>
+            @if (yillar.Count > 0)
+            {
+                <tfoot><tr class="toplam"><td>Toplam</td>@if (serVar) { <td>@P(yillar.Sum(y => y.Sermaye))</td> }<td>@P(yillar.Sum(y => y.ResmiFatura))</td>@if (gercekVar) { <td>@P(yillar.Sum(y => y.GercekMalBedeli))</td> }@if (iadeVar) { <td>@P(yillar.Sum(y => y.IadeFaturasi))</td> }@if (komVar) { <td>@P(yillar.Sum(y => y.Komisyon))</td> }<td>@P(yillar.Sum(y => y.ResmiOdeme))</td><td>@P(yillar.Sum(y => y.DigerOdeme))</td>@if (nakVar) { <td>@P(yillar.Sum(y => y.Nakliye))</td> }@if (digVar) { <td>@P(yillar.Sum(y => y.Diger))</td> }@if (duzVar) { <td>@P(yillar.Sum(y => y.Duzeltme))</td> }<td>@P(yillar.Sum(WebApplication3.Data.IbkbOrnek.SubeToplamOdeme))</td><td class="@(bakiye < 0 ? "eksi" : bakiye > 0 ? "arti" : "")">@P(bakiye)</td><td class="@(bakiye < 0 ? "eksi" : bakiye > 0 ? "arti" : "")">@P(bakiye)</td><td></td></tr></tfoot>
+            }
+        </table>
+        <div class="bakiye">Bakiye (@DateTime.Today.ToString("dd.MM.yyyy")): <span class="@(bakiye < 0 ? "eksi" : bakiye > 0 ? "arti" : "")">@P(bakiye)</span> · @(bakiye < 0 ? "şube şirketimize borçlu" : bakiye > 0 ? "şirketimiz şubeye borçlu" : "bakiye sıfır")</div>
+        <div class="metin">Ödeme − Satış = Sermaye + Toplam Ödeme + Düzeltme − Satış Esası (Satış Esası: gerçek mal bedeli girilmişse o, yoksa resmi fatura − iade faturası). Toplam Ödeme = resmi ödeme + diğer ödeme + nakliye + diğer + komisyon. Devir yıllar boyunca birikimlidir.</div>
+        @if (!string.IsNullOrWhiteSpace(Model.Not)) { <div class="metin"><b>Not:</b> @Model.Not</div> }
+
+        <div class="imza"><div><b>@S(sirket?.Unvan ?? (string.IsNullOrEmpty(Model.Sirket) ? "Uras Grubu" : Model.Sirket))</b>Kaşe · Yetkili İmza<br /><br />Satış Temsilcisi: @S(Model.Temsilci)</div><div><b>@Model.Sube Şubesi</b>Mutabıkız / İtirazımız vardır (açıklayınız) · Kaşe · İmza · Tarih</div></div>
+        <div class="not">Bu ekstre İhracat Finansal Takibi › Şube Bakiyeleri (Uras Portal) ekranından üretilmiştir · @DateTime.Now.ToString("dd.MM.yyyy HH:mm") · kaynak @S(Model.Kaynak).@if (gonderimler.Count > 0) { <span> Önceki gönderimler: @string.Join(" · ", gonderimler.Take(5).Select(g => g.Tarih.ToString("dd.MM.yyyy") + " " + g.Kanal + " (" + g.Durum + ")"))</span> }</div>
+    </div>
+</body>
+</html>

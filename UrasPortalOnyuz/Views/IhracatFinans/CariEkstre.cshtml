@@ -1,0 +1,106 @@
+@model WebApplication3.Data.MtCari
+@{
+    Layout = null;
+    var k = Model.Kart; var sirket = (WebApplication3.Data.SsSirket)ViewBag.Sirket;
+    var dosyalar = (List<WebApplication3.Data.IbkbDosya>)ViewBag.Dosyalar ?? new List<WebApplication3.Data.IbkbDosya>();
+    var gonderimler = (List<WebApplication3.Data.CariGonderim>)ViewBag.Gonderimler ?? new List<WebApplication3.Data.CariGonderim>();
+    var tr = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
+    string P(decimal v) => v.ToString("N2", tr);
+    string S(string s) => string.IsNullOrWhiteSpace(s) ? "—" : s;
+    string Sm(string pb) => pb == "USD" ? "$" : pb == "EUR" ? "€" : pb == "GBP" ? "£" : pb == "TL" || pb == "TRY" ? "₺" : pb;
+    var dovizler = Model.Dovizler.Where(d => d.Net != 0 || d.AcikFaturaAdet > 0).OrderBy(d => d.ParaBirimi == "TL").ThenBy(d => d.ParaBirimi).ToList();
+    var acikDosyalar = dosyalar.Where(d => WebApplication3.Data.IbkbOrnek.KalanGercek(d) > 0.005m).ToList();
+    string unvan = sirket?.Unvan ?? k?.Sirket ?? "Uras Grubu";
+}
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex" />
+    <title>@ViewData["Title"]</title>
+    @* MÜŞTERİ CARİ HESAP EKSTRESİ / MUTABAKAT (12 Kas 2026): Cari Bakiyeler (Mizan) sekmesinden e-posta / WhatsApp ile gönderilen ekstre bağlantısı; jetonla açılır (portal girişi istemez), tarayıcıdan PDF.
+       Döviz bazında bakiye + hareketler (Cari Mutabakat Yönetimi kaynağı) + açık ihracat dosyaları (İBKB). Veri Data/MutabakatOrnek.cs + Data/IbkbOrnek.cs. *@
+    <style>
+        body { font-family: Arial, "Segoe UI", sans-serif; font-size: 10.5pt; color: #0f172a; margin: 0; background: #e2e8f0; }
+        .sayfa { width: 210mm; min-height: 297mm; margin: 10mm auto; background: #fff; padding: 12mm 14mm; box-sizing: border-box; box-shadow: 0 2px 12px rgba(0,0,0,.15); }
+        .ust { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f766e; padding-bottom: 8px; margin-bottom: 12px; }
+        .ust h1 { font-size: 14pt; margin: 0 0 4px; color: #134e4a; letter-spacing: .04em; } .ust .alt { font-size: 9pt; color: #475569; }
+        .ust .no { text-align: right; font-size: 9.5pt; } .ust .no b { font-size: 12pt; color: #0f766e; display: block; }
+        h2 { font-size: 10pt; text-transform: uppercase; letter-spacing: .06em; color: #0f766e; border-bottom: 1px solid #99f6e4; margin: 12px 0 6px; padding-bottom: 2px; }
+        table.b { width: 100%; border-collapse: collapse; font-size: 9.5pt; } table.b td { padding: 3px 6px; border: 1px solid #cbd5e1; vertical-align: top; } table.b td.l { width: 22%; background: #f8fafc; font-weight: 700; color: #334155; }
+        table.y { width: 100%; border-collapse: collapse; font-size: 9pt; } table.y th { background: #f0fdfa; color: #134e4a; font-size: 8pt; text-transform: uppercase; padding: 4px 5px; border: 1px solid #99f6e4; text-align: center; } table.y td { padding: 3px 5px; border: 1px solid #cbd5e1; text-align: right; font-variant-numeric: tabular-nums; } table.y td.m { text-align: left; } table.y td.o { text-align: center; }
+        table.y tr.toplam td { font-weight: 800; background: #f1f5f9; } .eksi { color: #b91c1c; } .arti { color: #15803d; }
+        .bakiye { font-size: 12pt; font-weight: 800; color: #134e4a; margin: 10px 0; }
+        .metin { font-size: 9.5pt; line-height: 1.45; text-align: justify; margin: 8px 0; }
+        .imza { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 22px; font-size: 9.5pt; } .imza > div { border-top: 1px solid #334155; padding-top: 6px; min-height: 60px; } .imza b { display: block; }
+        .not { font-size: 8.5pt; color: #64748b; margin-top: 14px; border-top: 1px dashed #cbd5e1; padding-top: 6px; }
+        .araclar { position: fixed; top: 8px; right: 8px; display: flex; gap: 6px; } .araclar button { font: 600 10pt Arial, sans-serif; padding: 6px 12px; border-radius: 6px; border: 1px solid #0f766e; background: #0f766e; color: #fff; cursor: pointer; }
+        @@media print { body { background: #fff; } .sayfa { margin: 0; box-shadow: none; width: auto; min-height: auto; padding: 10mm 12mm; } .araclar { display: none; } @@page { size: A4 portrait; margin: 8mm; } }
+    </style>
+</head>
+<body>
+    <div class="araclar"><button type="button" onclick="window.print()">Yazdır / PDF</button></div>
+    <div class="sayfa">
+        <div class="ust">
+            <div><h1>CARİ HESAP EKSTRESİ · MUTABAKAT</h1><div class="alt">@unvan@if (sirket != null) { <span> · @sirket.Adres · Vergi No @sirket.VergiNo</span> }</div></div>
+            <div class="no"><b>@Model.CariKodu</b>Tarih: @DateTime.Today.ToString("dd.MM.yyyy")<br />Bakiye zamanı: @(Model.BakiyeZamani?.ToString("dd.MM.yyyy HH:mm") ?? DateTime.Now.ToString("dd.MM.yyyy HH:mm"))</div>
+        </div>
+        <div class="metin">Sayın <b>@S(k?.ResmiUnvan ?? k?.KisaAd)</b> yetkilisi,<br />@unvan nezdindeki cari hesabınızın @DateTime.Today.ToString("dd.MM.yyyy") tarihi itibarıyla dökümü aşağıdadır. Lütfen kayıtlarınızla karşılaştırıp mutabık olduğunuzu ya da itirazınızı (fark açıklamasıyla) bildiriniz. Bakiye artı ise firmanız şirketimize borçludur; eksi ise şirketimiz firmanıza borçludur.</div>
+
+        <h2>1. Cari Bilgileri</h2>
+        <table class="b"><tr><td class="l">Cari Kodu</td><td>@Model.CariKodu</td><td class="l">Ülke</td><td>@S(k?.Ulke)</td></tr><tr><td class="l">Unvan</td><td>@S(k?.ResmiUnvan)</td><td class="l">Kısa Ad</td><td>@S(k?.KisaAd)</td></tr><tr><td class="l">Şirketimiz</td><td>@unvan</td><td class="l">Vade Şartı</td><td>@S(k?.VadeSarti)</td></tr></table>
+
+        <h2>2. Döviz Bazında Bakiye</h2>
+        <table class="y">
+            <thead><tr><th>Döviz</th><th>Borç</th><th>Alacak</th><th>Net Bakiye</th><th>Yön</th><th>Açık Fatura</th><th>Açık Fatura Tutarı</th><th>En Eski Açık Fatura</th></tr></thead>
+            <tbody>
+            @foreach (var d in dovizler)
+            {
+                <tr><td class="o"><b>@d.ParaBirimi</b></td><td>@P(d.Borc)</td><td>@P(d.Alacak)</td><td class="@(d.Net > 0 ? "arti" : d.Net < 0 ? "eksi" : "")"><b>@P(d.Net) @Sm(d.ParaBirimi)</b></td><td class="o">@(d.Net > 0 ? "Firmanız borçlu" : d.Net < 0 ? "Şirketimiz borçlu" : "Sıfır")</td><td class="o">@(d.AcikFaturaAdet == 0 ? "—" : d.AcikFaturaAdet.ToString())</td><td>@(d.AcikFaturaAdet == 0 ? "—" : P(d.AcikFaturaTutar) + " " + Sm(d.ParaBirimi))</td><td class="o">@(d.EnEskiAcikFatura?.ToString("dd.MM.yyyy") ?? "—")@(d.BakiyeYasi.HasValue ? $" ({d.BakiyeYasi} gün)" : "")</td></tr>
+            }
+            @if (dovizler.Count == 0) { <tr><td colspan="8" class="o" style="color:#64748b">Bakiye yok.</td></tr> }
+            </tbody>
+        </table>
+        <div class="bakiye">Bakiye (@DateTime.Today.ToString("dd.MM.yyyy")): @(dovizler.Count == 0 ? "0,00" : string.Join(" · ", dovizler.Select(d => P(d.Net) + " " + Sm(d.ParaBirimi))))</div>
+
+        @foreach (var d in dovizler.Where(x => Model.Hareketler.Any(h => h.ParaBirimi == x.ParaBirimi)))
+        {
+            var hareketler = Model.Hareketler.Where(h => h.ParaBirimi == d.ParaBirimi).OrderBy(h => h.Tarih).ThenBy(h => h.Id).ToList();
+            <h2>3. Hesap Hareketleri · @d.ParaBirimi (@hareketler.First().Tarih.ToString("dd.MM.yyyy") – @hareketler.Last().Tarih.ToString("dd.MM.yyyy"))</h2>
+            <table class="y">
+                <thead><tr><th>Tarih</th><th>Belge</th><th>Belge No</th><th>Açıklama</th><th>Borç</th><th>Alacak</th><th>Bakiye</th><th>Vade</th><th>Durum</th></tr></thead>
+                <tbody>
+                @foreach (var h in hareketler)
+                {
+                    <tr><td class="o">@h.Tarih.ToString("dd.MM.yyyy")</td><td class="o">@h.BelgeTipi</td><td class="o">@h.BelgeNo</td><td class="m">@h.Aciklama</td><td>@(h.Borc == 0 ? "" : P(h.Borc))</td><td>@(h.Alacak == 0 ? "" : P(h.Alacak))</td><td>@P(h.Bakiye)</td><td class="o">@(h.Vade?.ToString("dd.MM.yyyy") ?? "")</td><td class="o">@h.KapamaDurumu@(h.BelgeTipi == "Fatura" && h.Kalan > 0.005m ? $" · kalan {P(h.Kalan)}" : "")</td></tr>
+                }
+                </tbody>
+                <tfoot><tr class="toplam"><td colspan="4" class="m">Toplam · @hareketler.Count hareket</td><td>@P(d.Borc)</td><td>@P(d.Alacak)</td><td class="@(d.Net > 0 ? "arti" : d.Net < 0 ? "eksi" : "")">@P(d.Net)</td><td colspan="2"></td></tr></tfoot>
+            </table>
+        }
+
+        @if (acikDosyalar.Count > 0)
+        {
+            <h2>4. Açık İhracat Dosyaları (Bedeli Beklenen Faturalar)</h2>
+            <table class="y">
+                <thead><tr><th>Yıl</th><th>Dosya No</th><th>Fatura No</th><th>Beyanname No</th><th>Fiili İhraç</th><th>Fatura Tutarı</th><th>Tahsil Edilen</th><th>Kalan</th></tr></thead>
+                <tbody>
+                @foreach (var d in acikDosyalar)
+                {
+                    <tr><td class="o">@d.Yil</td><td class="o">@d.DosyaNo</td><td class="o">@S(d.FaturaNo)</td><td class="o">@S(d.BeyannameNo)</td><td class="o">@(d.Baslangic?.ToString("dd.MM.yyyy") ?? "—")</td><td>@P(WebApplication3.Data.IbkbOrnek.GercekBedelEtkin(d)) @Sm(d.Doviz)</td><td>@P(WebApplication3.Data.IbkbOrnek.Getirilen(d)) @Sm(d.Doviz)</td><td class="eksi"><b>@P(WebApplication3.Data.IbkbOrnek.KalanGercek(d)) @Sm(d.Doviz)</b></td></tr>
+                }
+                </tbody>
+                <tfoot>
+                @foreach (var g in acikDosyalar.GroupBy(d => d.Doviz))
+                {
+                    <tr class="toplam"><td colspan="5" class="m">Toplam · @g.Count() dosya · @g.Key</td><td>@P(g.Sum(WebApplication3.Data.IbkbOrnek.GercekBedelEtkin)) @Sm(g.Key)</td><td>@P(g.Sum(WebApplication3.Data.IbkbOrnek.Getirilen)) @Sm(g.Key)</td><td class="eksi">@P(g.Sum(WebApplication3.Data.IbkbOrnek.KalanGercek)) @Sm(g.Key)</td></tr>
+                }
+                </tfoot>
+            </table>
+        }
+
+        <div class="imza"><div><b>@unvan</b>Kaşe · Yetkili İmza<br /><br />Muhasebe</div><div><b>@S(k?.KisaAd)</b>Mutabıkız / İtirazımız vardır (açıklayınız) · Kaşe · İmza · Tarih</div></div>
+        <div class="not">Bu ekstre @DateTime.Now.ToString("dd.MM.yyyy HH:mm") itibarıyla muhasebe kayıtlarından üretilmiştir (İhracat Finansal Takibi › Cari Bakiyeler).@if (gonderimler.Count > 0) { <span> Önceki gönderimler: @string.Join(" · ", gonderimler.Take(5).Select(g => g.Tarih.ToString("dd.MM.yyyy") + " " + g.Kanal + " (" + g.Durum + ")"))</span> }</div>
+    </div>
+</body>
+</html>
