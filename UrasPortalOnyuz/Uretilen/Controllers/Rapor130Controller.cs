@@ -1,5 +1,5 @@
-﻿// KASA NAKİT AKIŞI GÖRÜNÜM — "Ödeme Takibim" (/Rapor130; Mali İşler › Finans › Nakit Akışı ve Likidite › Kasa Nakit Akışı Görünüm)
-// Amaç: Kasa Nakit Akışı'nı herkes görmez; satın almacılar ve ödeme talebi açan kişiler YALNIZ KENDİ ödemelerinin sürecini izler
+﻿// KASA NAKİT AKIŞI GÖRÜNÜM — "Ödeme Takibim" (/Rapor130; Mali İşler › Finans › Nakit Akışı ve Likidite › Nakit Akış Planlama Görünüm)
+// Amaç: Nakit Akış Planlama'yı herkes görmez; satın almacılar ve ödeme talebi açan kişiler YALNIZ KENDİ ödemelerinin sürecini izler
 // (talep → onay → nakit akışa planlandı → talimat / çek / nakit onayı → ödendi → dekont / makbuz). Kasa / banka bakiyeleri, diğer kişilerin ödemeleri ve toplamlar görünmez.
 // Veri: Data/NakitAkisOrnek.cs (satırlar: U_TalepEden ya da U_Satinalmaci = kişi; Ödeme Talebi modülünden gelen satırlar), Data/OdemeTalepOrnek.cs (kişinin talepleri).
 // Ekran: Views/Rapor130/Index.cshtml · betik: wwwroot/js/odeme-takibim.js. Görünüm kişisi: giriş yapan kullanıcı (örnekte kişi seçilebilir).
@@ -26,7 +26,7 @@ namespace WebApplication3.Controllers
         [HttpGet("")]
         public IActionResult Index(string kisi)
         {
-            ViewData["Title"] = "Kasa Nakit Akışı Görünüm"; ViewBag.Kisi = kisi ?? ""; ViewBag.Ben = Kullanici;
+            ViewData["Title"] = "Nakit Akış Planlama Görünüm"; ViewBag.Kisi = kisi ?? ""; ViewBag.Ben = Kullanici;
             return View("Index");
         }
 

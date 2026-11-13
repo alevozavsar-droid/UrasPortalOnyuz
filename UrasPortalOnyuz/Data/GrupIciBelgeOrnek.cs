@@ -10,7 +10,7 @@ namespace WebApplication3.Data
     /// Fatura sahibi ≠ ödeyen şirket olan her ödemede otomatik oluşan grup içi belge (Mahsup ya da Temlik). Ödeme gerçekleşince iki şirkette muhasebe fişi atılır:
     /// ödeyen (B) fişi ödeme fişidir (MuhasebeOrnek.OdemeFisi: 132 İştiraklerden Alacaklar ya da — B'nin A'ya borcu varsa, mahsup — 332 borç / 102 · 100 · 101 alacak);
     /// fatura sahibi (A) fişi burada atılır: 320 Satıcılar borç / 132 (B'den alacağı mahsup edildiyse) ya da 332 İştiraklere Borçlar alacak. Grup içi bakiye (CekAkibetOrnek.GrupBakiyeleri) güncellenir.
-    /// Kasa Nakit Akışı › Mahsup / Temlik sekmelerinde listelenir; yazdırılabilir belge /Rapor79/GrupIciBelge?no=. Kilit sırası: NakitAkis → GrupIciBelge → CekAkibet → Muhasebe.
+    /// Nakit Akış Planlama › Mahsup / Temlik sekmelerinde listelenir; yazdırılabilir belge /Rapor79/GrupIciBelge?no=. Kilit sırası: NakitAkis → GrupIciBelge → CekAkibet → Muhasebe.
     /// </summary>
     public class GrupIciBelge
     {
@@ -32,7 +32,7 @@ namespace WebApplication3.Data
         static readonly CultureInfo Tr = CultureInfo.GetCultureInfo("tr-TR");
         static readonly List<GrupIciBelge> _belgeler = new List<GrupIciBelge>();
         static int _sonId;
-        public static readonly string[] Turler = { "Mahsup", "Temlik", "Yansıtma" };   // 13 Kas 2026: Yansıtma da seçilebilir (Kasa Nakit Akışı › Grup İçi İşlemler sekmesi) — ödeyen şirket tutarı yansıtma faturasıyla fatura sahibine yansıtır; fatura sahibi fişi temlikteki gibi 320 borç / 332 alacak
+        public static readonly string[] Turler = { "Mahsup", "Temlik", "Yansıtma" };   // 13 Kas 2026: Yansıtma da seçilebilir (Nakit Akış Planlama › Grup İçi İşlemler sekmesi) — ödeyen şirket tutarı yansıtma faturasıyla fatura sahibine yansıtır; fatura sahibi fişi temlikteki gibi 320 borç / 332 alacak
 
         public static List<GrupIciBelge> Listele(string dbName, string tur = null) { lock (Kilit) return _belgeler.Where(b => (string.IsNullOrEmpty(dbName) || b.FaturaSahibiDb == dbName || b.OdeyenDb == dbName || b.KaynakDb == dbName) && (string.IsNullOrEmpty(tur) || b.Tur == tur)).OrderByDescending(b => b.Tarih).ThenByDescending(b => b.Id).ToList(); }
         public static GrupIciBelge Bul(string no) { lock (Kilit) return _belgeler.FirstOrDefault(b => string.Equals(b.No, no, StringComparison.OrdinalIgnoreCase)); }

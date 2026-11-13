@@ -8,7 +8,7 @@ namespace WebApplication3.Data
 {
     /// <summary>
     /// Finekra (banka entegrasyonu) hareketi: bankadan otomatik akan satır. Konsolide Finansal Takip Paneli › Finekra sekmesinde onaylanıp cari / hesap seçilince
-    /// muhasebe fişi atılır (giriş: 102 borç / cari alacak; çıkış: cari borç / 102 alacak). Her hareket Kasa Nakit Akışı satırıyla eşlenir (otomatik: tutar ± 1 ₺, tarih ± 7 gün;
+    /// muhasebe fişi atılır (giriş: 102 borç / cari alacak; çıkış: cari borç / 102 alacak). Her hareket Nakit Akış Planlama satırıyla eşlenir (otomatik: tutar ± 1 ₺, tarih ± 7 gün;
     /// elle: aday seçimi); nakit akışta karşılığı olmayan çıkış "Nakit Akışa Gönder" ile ÖDENDİ satır olarak açılır. Bellek içi; uygulama yeniden başlayınca tohumlanır.
     /// </summary>
     public class BankaHareketi
@@ -22,7 +22,7 @@ namespace WebApplication3.Data
         public string Onaylayan { get; set; } = ""; public DateTime? OnayTarihi { get; set; } public string OnayNotu { get; set; } = "";
         public string CariKod { get; set; } = ""; public string CariAd { get; set; } = ""; public string KarsiHesap { get; set; } = ""; public string YevmiyeNo { get; set; } = "";
         public string BelgeTipi { get; set; } = ""; public string BelgeNo { get; set; } = "";   // SAP kaydında "hangi faturaya istinaden": Fatura / Sipariş / Cari Bakiye · belge no (öneri nakit akış satırından ya da açık faturalardan tutar eşleşmesiyle)
-        public string TalimatNo { get; set; } = "";                                            // talimattan otomatik akan hareket (Kasa Nakit Akışı › Talimat → Bankaya İletildi)
+        public string TalimatNo { get; set; } = "";                                            // talimattan otomatik akan hareket (Nakit Akış Planlama › Talimat → Bankaya İletildi)
         public int? NakitAkisDocEntry { get; set; } public string NakitAkisDb { get; set; } = ""; public string Eslesme { get; set; } = "";   // Otomatik | Elle | Nakit Akışa Gönderildi | ""
         public string EslesmeNotu { get; set; } = ""; public DateTime AkisZamani { get; set; } public string Kaynak { get; set; } = "Finekra API";
         public List<TalimatGunluk> Gunluk { get; set; } = new List<TalimatGunluk>();
@@ -39,7 +39,7 @@ namespace WebApplication3.Data
         static readonly List<BankaHareketi> _hareketler = new List<BankaHareketi>();
         static readonly List<FinekraGunluk> _gunluk = new List<FinekraGunluk>();
         public static readonly Dictionary<string, HareketOnay> HareketOnaylari = new Dictionary<string, HareketOnay>();
-        /// <summary>Kasa hareketi ↔ Kasa Nakit Akışı satırı eşleşmesi (Takip Paneli › Kasa › "Nakit Akışa Ekle" ile açılan satırlar): anahtar DbKey|KASA|IslemNo → (dbName, docEntry). Eşlenen nakit akış satırı Kasa sekmesinde ikinci kez listelenmez.</summary>
+        /// <summary>Kasa hareketi ↔ Nakit Akış Planlama satırı eşleşmesi (Takip Paneli › Kasa › "Nakit Akışa Ekle" ile açılan satırlar): anahtar DbKey|KASA|IslemNo → (dbName, docEntry). Eşlenen nakit akış satırı Kasa sekmesinde ikinci kez listelenmez.</summary>
         public static readonly Dictionary<string, (string dbName, int docEntry)> KasaEslesmeleri = new Dictionary<string, (string dbName, int docEntry)>();
         static int _sonId; static bool _tohumlandi; static DateTime _sonAkis;
         static int Seed(string s) => s.Aggregate(37, (a, ch) => unchecked(a * 31 + ch));
@@ -198,7 +198,7 @@ namespace WebApplication3.Data
             return (true, $"{h.No} SAP'ye işlendi: {cariAd} · {karsiHesap} {HesapAdi(karsiHesap)}" + (belgeNo == "" ? "" : $" · {belgeTipi} {belgeNo}") + $" · {string.Join(" · ", ek)}.", h);
         }
         /// <summary>
-        /// Talimattan otomatik banka hareketi: Kasa Nakit Akışı'nda hazırlanan Havale / EFT talimatı bankaya iletilince (ya da gerçekleşince) her satır için bankadan akmış gibi
+        /// Talimattan otomatik banka hareketi: Nakit Akış Planlama'da hazırlanan Havale / EFT talimatı bankaya iletilince (ya da gerçekleşince) her satır için bankadan akmış gibi
         /// "Çıkış" hareketi açılır; satırla eşleşik gelir (Otomatik), onay bekler — Takip Paneli'nde cari / fatura önerisiyle SAP kaydı atılır. Aynı satır için ikinci hareket açılmaz.
         /// </summary>
         public static List<BankaHareketi> TalimattanAkit(OdemeTalimati t, string kullanici)
@@ -248,11 +248,11 @@ namespace WebApplication3.Data
             if (!enIyiVar) { var yakin = sirali.Where(x => h.Tutar > 0 && Math.Abs(x.fark) <= Math.Max(1m, h.Tutar * 0.01m)).OrderBy(x => Math.Abs(x.fark)).FirstOrDefault(); if (yakin.no != null) { enIyi = yakin; enIyiVar = true; } }
             return sirali.Select(x => (object)new { tip = x.tip, no = x.no, tarih = x.tarih, sonOdeme = x.sonOdeme, tutar = x.tutar, pb = x.pb, kalanTL = x.kalan, kaynak = x.kaynak, fark = x.fark, oneri = enIyiVar && x.no == enIyi.no && x.kaynak == enIyi.kaynak, cari = kurum }).ToList();
         }
-        /// <summary>Nakit akışta karşılığı olmayan çıkış → Kasa Nakit Akışı'nda ÖDENDİ havale satırı (banka bilgileri, dekont = hareket no); fiş zaten atıldıysa numarası taşınır.</summary>
+        /// <summary>Nakit akışta karşılığı olmayan çıkış → Nakit Akış Planlama'da ÖDENDİ havale satırı (banka bilgileri, dekont = hareket no); fiş zaten atıldıysa numarası taşınır.</summary>
         public static (bool ok, string mesaj, BankaHareketi h, NakitAkisViewModel satir) NakitAkisaGonder(int id, string kullanici)
         {
             var h = Bul(id); if (h == null) return (false, "Hareket bulunamadı.", null, null);
-            if (h.Giris) return (false, $"{h.No} tahsilat (giriş) hareketi: Kasa Nakit Akışı ödeme planıdır, giriş satırı açılmaz. Hareketi onaylayıp müşteri carisine (120) kaydedin.", h, null);
+            if (h.Giris) return (false, $"{h.No} tahsilat (giriş) hareketi: Nakit Akış Planlama ödeme planıdır, giriş satırı açılmaz. Hareketi onaylayıp müşteri carisine (120) kaydedin.", h, null);
             if (h.NakitAkisDocEntry != null) return (false, $"{h.No} zaten nakit akış #{h.NakitAkisDocEntry} ile eşleşmiş.", h, null);
             var hesaplar = NakitAkisOrnek.BankaHesaplari; var hesap = hesaplar.FirstOrDefault(x => x.StartsWith(h.Banka + " ")) ?? hesaplar[0];
             bool virman = h.IslemTuru == "Virman"; // hesaplar arası aktarım: nakit akışa "Diğer" satırı olarak gider (karşı taraf şirketin kendi banka hesabı)
@@ -266,8 +266,8 @@ namespace WebApplication3.Data
             // fiş: hareket onaylıysa numarası taşınır; onaylı değilse fiş Takip Paneli onayında (cari / hesap seçilince) atılıp satıra yazılır
             var m = NakitAkisOrnek.BankaHareketindenEkle(h.DbName, gelen, h.Tarih, h.YevmiyeNo, kullanici, h.Durum == "Onaylandı");
             string fisNotu = string.IsNullOrEmpty(m.U_YevmiyeNo) ? " · fiş onayda atılır" : " · fiş " + m.U_YevmiyeNo;
-            lock (Kilit) { h.NakitAkisDocEntry = m.DocEntry; h.NakitAkisDb = h.DbName; h.Eslesme = "Nakit Akışa Gönderildi"; h.EslesmeNotu = $"bu hareketten açıldı (#{m.DocEntry})"; if (string.IsNullOrEmpty(h.YevmiyeNo)) h.YevmiyeNo = m.U_YevmiyeNo ?? ""; Log(h, "Nakit Akışa Gönderildi", $"Kasa Nakit Akışı #{m.DocEntry} · {m.U_Kurum} · {h.Tutar.ToString("N2", Tr)} ₺ · ÖDENDİ{fisNotu}", kullanici); }
-            return (true, $"{h.No} nakit akışa gönderildi: Kasa Nakit Akışı #{m.DocEntry} ({m.U_Kurum}, {h.Tutar.ToString("N2", Tr)} ₺, ÖDENDİ){fisNotu}.", h, m);
+            lock (Kilit) { h.NakitAkisDocEntry = m.DocEntry; h.NakitAkisDb = h.DbName; h.Eslesme = "Nakit Akışa Gönderildi"; h.EslesmeNotu = $"bu hareketten açıldı (#{m.DocEntry})"; if (string.IsNullOrEmpty(h.YevmiyeNo)) h.YevmiyeNo = m.U_YevmiyeNo ?? ""; Log(h, "Nakit Akışa Gönderildi", $"Nakit Akış Planlama #{m.DocEntry} · {m.U_Kurum} · {h.Tutar.ToString("N2", Tr)} ₺ · ÖDENDİ{fisNotu}", kullanici); }
+            return (true, $"{h.No} nakit akışa gönderildi: Nakit Akış Planlama #{m.DocEntry} ({m.U_Kurum}, {h.Tutar.ToString("N2", Tr)} ₺, ÖDENDİ){fisNotu}.", h, m);
         }
         /// <summary>Elle eşleştirme: seçilen nakit akış satırına bağlanır; hareket onaylıysa satır ÖDENDİ olur.</summary>
         public static (bool ok, string mesaj, BankaHareketi h) Eslestir(int id, string dbName, int docEntry, string kullanici)

@@ -29,7 +29,7 @@ namespace WebApplication3.Data
         public static readonly string[] AnaAlanlar = { "U_Durum", "U_PlanlananTarih", "U_Kurum", "U_UrunHizmet", "U_Tutar", "U_ParaBirimi", "U_Kur", "U_OdemeYontemi", "U_OdenmeTarihi", "U_OdenenTutar", "U_OdenenTutarPB", "U_Notlar", "U_Satinalmaci", "U_MutabakatDurumu", "U_FaturaSiparisNo", "U_IslemTipi", "U_BagliBelgeTipi", "MuafiyetSebebi", "U_FaturaSahibi", "U_OdeyenSirket", "U_SonOdemeTarihi", "U_FaturaTutari", "U_TeslimAlan", "U_TalepEden", "U_KurKaynagi", "U_KurTarihi", "U_KurNotu", "U_KurFarkiFaturasi", "U_GrupIciTur", "U_Oncelik" };
         /// <summary>Nakit ödeme onaycıları: nakit, ancak bu kişilerden biri onaylarsa verilebilir (talep → onay → makbuz).</summary>
         public static readonly string[] NakitOnaycilari = { "Alev Özavşar", "Neslihan Uludağ", "Özge İsen" };
-        /// <summary>Plansız çek çıkışı onaycısı (GMY): Kasa Nakit Akışı'nda planlanmamış hiçbir çek, onaylanmadan şirketten çıkmaz.</summary>
+        /// <summary>Plansız çek çıkışı onaycısı (GMY): Nakit Akış Planlama'da planlanmamış hiçbir çek, onaylanmadan şirketten çıkmaz.</summary>
         public static readonly string[] CekCikisOnaycilari = { "Alev Özavşar" };
         public static readonly string[] BelgeTipleri = { "Fatura", "Sipariş", "Cari Bakiye", "Resmi Ödeme", "Avans", "Mahsup", "Temlik", "Yansıtma", "Diğer" };   // Resmi Ödeme: vergi, SGK, gümrük, harç (muhasebeden gelen); Diğer: kira vb.
         public static readonly string[] Satinalmacilar = { "Tolga Yaman", "Gizem Tan", "Canan Su", "Mert Doğan" };
@@ -88,12 +88,12 @@ namespace WebApplication3.Data
         public static List<NakitAkisViewModel> Odemeler(string dbName) { Tohumla(); AvanslariSenkronla(); List<NakitAkisViewModel> l; lock (Kilit) l = (_odemeler.TryGetValue(dbName, out var x) ? x : new List<NakitAkisViewModel>()).ToList(); foreach (var m in l) BelgeleriDoldur(m); return l; }
         public static NakitAkisViewModel Bul(string dbName, int docEntry) { Tohumla(); AvanslariSenkronla(); lock (Kilit) return _odemeler.TryGetValue(dbName, out var l) ? l.FirstOrDefault(m => m.DocEntry == docEntry) : null; }
         public static NakitAkisViewModel Bul(int docEntry) { Tohumla(); lock (Kilit) return _odemeler.Values.SelectMany(l => l).FirstOrDefault(m => m.DocEntry == docEntry); }
-        /// <summary>Nakit avansın Kasa Nakit Akışı satırı (finans konsolide senkronu; Personel Maliyet › Diğer Kesintiler).</summary>
+        /// <summary>Nakit avansın Nakit Akış Planlama satırı (finans konsolide senkronu; Personel Maliyet › Diğer Kesintiler).</summary>
         public static NakitAkisViewModel AvansSatiri(string avansNo) { Tohumla(); AvanslariSenkronla(); lock (Kilit) return _odemeler.Values.SelectMany(l => l).FirstOrDefault(m => m.U_AvansNo == avansNo); }
         /// <summary>Dış modüller (Talimat) için günlük kaydı.</summary>
         public static void Gunluge(string dbName, int docEntry, string tip, string aciklama, string kullanici) { Tohumla(); lock (Kilit) Log(dbName, docEntry, tip, aciklama, kullanici); }
 
-        // ---------- PERSONEL MAAŞ ÖDEMESİ (Konsolide İK Paneli › Ödeme Planı › "Kasa Nakit Akışı'na Gönder"; Data/PersonelFinansOrnek.cs, 9 Kas 2026): dönem / şirket / kanal başına TEK satır (U_PersonelOdeme anahtarı) ----------
+        // ---------- PERSONEL MAAŞ ÖDEMESİ (Konsolide İK Paneli › Ödeme Planı › "Nakit Akış Planlama'ya Gönder"; Data/PersonelFinansOrnek.cs, 9 Kas 2026): dönem / şirket / kanal başına TEK satır (U_PersonelOdeme anahtarı) ----------
         public static NakitAkisViewModel PersonelSatiri(string anahtar) { Tohumla(); lock (Kilit) return _odemeler.Values.SelectMany(l => l).FirstOrDefault(m => m.U_PersonelOdeme == anahtar); }
         public static List<NakitAkisViewModel> PersonelSatirlari(string onEk) { Tohumla(); lock (Kilit) return _odemeler.Values.SelectMany(l => l).Where(m => !string.IsNullOrEmpty(m.U_PersonelOdeme) && m.U_PersonelOdeme.StartsWith(onEk)).ToList(); }
         /// <summary>Toplu personel ödemesi satırı yazar: yoksa ekler (R → Havale / EFT, X → Nakit: nakit onayı bekler), varsa ödenmemişse tutar / tarih / notu günceller, ödenmişse dokunmaz. islem = eklendi | güncellendi | ödenmiş.</summary>
@@ -547,7 +547,7 @@ namespace WebApplication3.Data
         }
         /// <summary>
         /// Ekrandan çek / senet ibrazı ("Çeki Ver / İbraz Et"): satırdaki planlı belgeler tedarikçiye ciro edilir (ciro bordrosu) ya da bankaya tahsile verilir; dolaşım planı olan belgede kalan adımlar
-        /// gerçekleştirilir; satır ÖDENDİ olur, muhasebe fişleri atılır. Satır Kasa Nakit Akışı'nda planlı olduğundan GMY onayı gerekmez (plansız çıkış kuralı Çek Akıbeti tarafındadır).
+        /// gerçekleştirilir; satır ÖDENDİ olur, muhasebe fişleri atılır. Satır Nakit Akış Planlama'da planlı olduğundan GMY onayı gerekmez (plansız çıkış kuralı Çek Akıbeti tarafındadır).
         /// </summary>
         public static (bool ok, string mesaj) CekIbrazEt(string dbName, int docEntry, string tur, string ibrazYeri, DateTime? tarih, string teslimAlan, string belgeNo, string not, string kullanici, bool simOnay = false)
         {
@@ -716,8 +716,8 @@ namespace WebApplication3.Data
             }
         }
 
-        // ---------- PLANSIZ ÇEK ÇIKIŞI KONTROLÜ: Çek Akıbeti'nden Kasa Nakit Akışı'nda planlanmamış bir çek çıkarılmak istenirse çıkış yapılmaz, GMY onayına düşer ----------
-        /// <summary>Çek Akıbeti Raporu işlem türü değişikliği: çıkış türü (ciro, bankaya tahsil, teminat, konkordato-tedarikçi) ve belge planlı değilse Kasa Nakit Akışı'na "Özel Onay" satırı açılır; planlıysa çıkış işlenir.</summary>
+        // ---------- PLANSIZ ÇEK ÇIKIŞI KONTROLÜ: Çek Akıbeti'nden Nakit Akış Planlama'da planlanmamış bir çek çıkarılmak istenirse çıkış yapılmaz, GMY onayına düşer ----------
+        /// <summary>Çek Akıbeti Raporu işlem türü değişikliği: çıkış türü (ciro, bankaya tahsil, teminat, konkordato-tedarikçi) ve belge planlı değilse Nakit Akış Planlama'ya "Özel Onay" satırı açılır; planlıysa çıkış işlenir.</summary>
         public static (bool ok, string mesaj, bool onayaDustu, int? docEntry) CekCikisKontrollu(int cekDocEntry, string kodVeyaAd, string ibrazYeri, string ibrazBelgeNo, string kullanici, string konum = null)
         {
             Tohumla();
@@ -728,9 +728,9 @@ namespace WebApplication3.Data
             if (cikis && k.PlanDocEntry == null && k.Dolasim.Count == 0)
             {
                 var m = CekCikisTalebi(k, ad + (string.IsNullOrEmpty(konum) ? "" : " · " + konum), ibrazYeri, ibrazBelgeNo, kullanici);
-                return (true, $"DİKKAT: {k.No} Kasa Nakit Akışı'nda planlanmamış; çıkış ({ad}{(string.IsNullOrEmpty(konum) ? "" : " · " + konum)}{(string.IsNullOrEmpty(ibrazYeri) ? "" : " → " + ibrazYeri)}) yapılmadı, GMY onayına düştü (Kasa Nakit Akışı #{m.DocEntry}, {string.Join(" / ", CekCikisOnaycilari)}). Onaylanınca çıkış işlenir.", true, m.DocEntry);
+                return (true, $"DİKKAT: {k.No} Nakit Akış Planlama'da planlanmamış; çıkış ({ad}{(string.IsNullOrEmpty(konum) ? "" : " · " + konum)}{(string.IsNullOrEmpty(ibrazYeri) ? "" : " → " + ibrazYeri)}) yapılmadı, GMY onayına düştü (Nakit Akış Planlama #{m.DocEntry}, {string.Join(" / ", CekCikisOnaycilari)}). Onaylanınca çıkış işlenir.", true, m.DocEntry);
             }
-            if (cikis && k.PlanDocEntry != null) { var plan = Bul(k.PlanDocEntry.Value); if (plan != null && !string.IsNullOrEmpty(plan.U_CikisTalebi) && plan.U_OnayDurumu != "Onaylandı") return (false, $"{k.No} için çıkış talebi GMY onayı bekliyor (Kasa Nakit Akışı #{plan.DocEntry}); onaylanmadan çıkış yapılamaz.", true, plan.DocEntry); }
+            if (cikis && k.PlanDocEntry != null) { var plan = Bul(k.PlanDocEntry.Value); if (plan != null && !string.IsNullOrEmpty(plan.U_CikisTalebi) && plan.U_OnayDurumu != "Onaylandı") return (false, $"{k.No} için çıkış talebi GMY onayı bekliyor (Nakit Akış Planlama #{plan.DocEntry}); onaylanmadan çıkış yapılamaz.", true, plan.DocEntry); }
             var r = CekAkibetOrnek.IslemTuruDegistir(cekDocEntry, ad, ibrazYeri, ibrazBelgeNo, kullanici, konum);
             return (r.ok, r.mesaj, false, k.PlanDocEntry);
         }
@@ -754,7 +754,7 @@ namespace WebApplication3.Data
                 };
                 _odemeler[db].Add(m);
                 CekAkibetOrnek.Planla(k.DocEntry, kurum, m.DocEntry, k.Sirket, kullanici); BelgeleriDoldur(m);
-                Log(db, m.DocEntry, "Çek Çıkış Talebi", $"{k.No} · {k.Tutar.ToString("N2", Tr)} TL · {islemTuru}{(string.IsNullOrEmpty(ibrazYeri) ? "" : " → " + ibrazYeri)} · Kasa Nakit Akışı'nda planlanmamıştı; GMY onayı bekliyor", kullanici);
+                Log(db, m.DocEntry, "Çek Çıkış Talebi", $"{k.No} · {k.Tutar.ToString("N2", Tr)} TL · {islemTuru}{(string.IsNullOrEmpty(ibrazYeri) ? "" : " → " + ibrazYeri)} · Nakit Akış Planlama'da planlanmamıştı; GMY onayı bekliyor", kullanici);
                 return m;
             }
         }
@@ -868,15 +868,20 @@ namespace WebApplication3.Data
         /// (deterministik: muhasebe kullanıcısı yükler, satınalma temsilcisi / finans onaylar) ve <c>ornek = true</c> ile işaretlenir. Canlıda bu alanlar belge kaydından (oluşturan / onaylayan) okunacak.
         /// </summary>
         /// <summary>
-        /// Satırın kaynağı (13 Kas 2026: "bu satır nereden geldi — Kasa Nakit Akışı mı, planlanan ödemelerden mi, ibrazdan mı"; "ibrazdan veya gerçekleşen ödemelerden de kayıt gelebilir"):
+        /// Satırın kaynağı (13 Kas 2026: "bu satır nereden geldi — Nakit Akış Planlama mı, planlanan ödemelerden mi, ibrazdan mı"; "ibrazdan veya gerçekleşen ödemelerden de kayıt gelebilir"):
         /// İbraz = Çek Akıbeti'nden plansız çıkış talebi ya da oradan gönderilen çek / senet · Gerçekleşen Ödemeler = Yapılan Ödemeler › Yeni Ödeme, Takip Paneli gün içi ödemesi, banka hareketi (ÖDENDİ olarak gelir).
         /// Satırı oluşturan yer <c>U_Kaynak</c> yazdıysa o;
         /// yazmadıysa alanlardan türetilir — çek çıkış talebi → İbraz (Çek Akıbeti) · kayıt tipi Düzenli Ödeme → Planlı Düzenli Ödemeler · personel ödeme anahtarı → Personel Ödemesi (İK) ·
-        /// kredi taksit anahtarı → Kredi Raporu · avans no → Nakit Avans · Finekra → Banka Hareketi · Mahsup / Temlik / Yansıtma → Grup İçi Modül · kalanlar → Kasa Nakit Akışı (ekrandan / tohum).
+        /// kredi taksit anahtarı → Kredi Raporu · avans no → Nakit Avans · Finekra → Banka Hareketi · Mahsup / Temlik / Yansıtma → Grup İçi Modül · kalanlar → Nakit Akış Planlama (ekrandan / tohum).
         /// </summary>
         public static string KaynakAdi(NakitAkisViewModel m)
         {
-            if (m == null) return ""; if (!string.IsNullOrEmpty(m.U_Kaynak)) return m.U_Kaynak; string n = m.U_Notlar ?? "";
+            if (m == null) return ""; if (string.IsNullOrEmpty(m.U_Kaynak)) m.U_Kaynak = KaynakTuret(m);   // ilk okunuşta sabitlenir: not sonradan değişse de kaynak değişmez
+            return m.U_Kaynak;
+        }
+        static string KaynakTuret(NakitAkisViewModel m)
+        {
+            string n = m.U_Notlar ?? "";
             if (!string.IsNullOrEmpty(m.U_CikisTalebi) || n.StartsWith("Çek Akıbeti'nden plansız çıkış")) return "İbraz";
             if (n.StartsWith("Çek Akıbeti'nden gönderildi")) return "İbraz";
             if (m.U_KayitTipi == "Düzenli Ödeme") return "Planlı Ödemeler";
@@ -889,6 +894,30 @@ namespace WebApplication3.Data
             if (n.StartsWith("Takip Paneli'nden eklendi")) return "Takip Paneli";
             if (m.U_OdemeYontemi == "Mahsup" || m.U_OdemeYontemi == "Temlik" || m.U_OdemeYontemi == "Yansıtma") return "Grup İçi Modül";
             return "Nakit Akış";
+        }
+        /// <summary>
+        /// Özel Onay kuralı (sunucu denetimi, 13 Kas 2026): Özel Onay Modu kapalıyken bir kayıt ancak Mutabık, muafiyetli ya da Özel Onay durumundaysa ÖDENDİ yapılabilir.
+        /// Satır içi durum kutusu ve çekmece Kaydet aynı kuraldan geçer; talimat / makbuz / ibraz gibi ödeme akışları bu kuralın dışındadır. Engel yoksa null döner.
+        /// </summary>
+        public static string OdendiEngeli(string simdikiDurum, string mutabakat, string muafiyet, bool ozelOnay) =>
+            ozelOnay || simdikiDurum == "ÖDENDİ" || simdikiDurum == "Özel Onay" || mutabakat == "Mutabık" || !string.IsNullOrEmpty(muafiyet) ? null
+            : "Durumu ÖDENDİ yapabilmek için mutabakat Mutabık olmalı. Mutabakatı yapılamayan işlemde muafiyet seçin, kaydı Özel Onay durumuna alın ya da Özel Onay Modu'nu açın.";
+        /// <summary>
+        /// Öncelik çakışması (13 Kas 2026): bir temsilcinin açık satırına verilen öncelik aynı temsilcide başka bir açık satırda varsa o satır (ve zincirleme sonrakiler) bir sıra aşağı kayar —
+        /// "araya ekleme". Temsilci şirketler arası tek sıra kullanır. Değişen satırlar döner (ekran onları da tazeler).
+        /// </summary>
+        public static List<NakitAkisViewModel> OncelikKaydir(string dbName, int docEntry)
+        {
+            Tohumla(); var degisen = new List<NakitAkisViewModel>();
+            lock (Kilit)
+            {
+                var m = _odemeler.TryGetValue(dbName, out var l) ? l.FirstOrDefault(x => x.DocEntry == docEntry) : null; if (m?.U_Oncelik == null) return degisen;
+                string temsilci = m.U_Satinalmaci ?? "";
+                var adaylar = _odemeler.Values.SelectMany(x => x).Where(x => x != m && x.U_Durum != "ÖDENDİ" && x.U_Oncelik != null && (x.U_Satinalmaci ?? "") == temsilci).ToList();
+                int n = m.U_Oncelik.Value; var carpan = adaylar.FirstOrDefault(x => x.U_Oncelik == n);
+                while (carpan != null && n < 99) { n++; var sonraki = adaylar.FirstOrDefault(x => x != carpan && !degisen.Contains(x) && x.U_Oncelik == n); carpan.U_Oncelik = n; degisen.Add(carpan); carpan = sonraki; }
+            }
+            return degisen;
         }
         public static object BelgeSureci(string dbName, NakitAkisViewModel m)
         {
@@ -973,7 +1002,7 @@ namespace WebApplication3.Data
             var temsilciler = cariler.SelectMany(x => x.temsilciler).Concat(talepListe.Select(t => t.TalepEden)).Distinct().OrderBy(x => x, StringComparer.Create(Tr, false)).ToList();
             return new { sirket, cariler, kendiAdet = cariler.Count(x => x.kendi), toplam = cariler.Sum(x => x.toplam), gecmis = cariler.Sum(x => x.gecmis), gelecek = cariler.Sum(x => x.gelecek), adet = cariler.Sum(x => x.adet), talepler, talepOnayli = talepListe.Count(t => t.Durum == "Onaylandı"), talepBekleyen = talepListe.Count(t => t.Durum == "Onay Bekliyor"), temsilciler, departmanlar = OdemeTalepOrnek.Departmanlar };
         }
-        /// <summary>Çekmecede "Belge Seç": carinin açık faturaları / siparişleri (deterministik örnek; Kasa Nakit Akışı'ndaki satırlarla eşleşen belgeler "planlanan" ile gelir) ya da cari bakiyesi.</summary>
+        /// <summary>Çekmecede "Belge Seç": carinin açık faturaları / siparişleri (deterministik örnek; Nakit Akış Planlama'daki satırlarla eşleşen belgeler "planlanan" ile gelir) ya da cari bakiyesi.</summary>
         public static object CariBelgeler(string dbName, string kurum, string tip)
         {
             Tohumla(); var rnd = new Random(Seed("cari|" + dbName + "|" + kurum)); var liste = new List<object>();
@@ -1110,25 +1139,25 @@ namespace WebApplication3.Data
             }
         }
         /// <summary>
-        /// Çek Akıbeti / Takip Paneli'nden "Nakit Akışa Gönder": portföydeki belge için Kasa Nakit Akışı'nda çek / senet ödeme satırı açılır ve belge satıra planlanır
+        /// Çek Akıbeti / Takip Paneli'nden "Nakit Akışa Gönder": portföydeki belge için Nakit Akış Planlama'da çek / senet ödeme satırı açılır ve belge satıra planlanır
         /// (Çek Akıbeti: Planlandı, planlanan tedarikçi = kurum). Planlanan tarih boşsa belge vadesi; belge tipi boşsa Cari Bakiye.
         /// </summary>
         public static (bool ok, string mesaj, NakitAkisViewModel satir) CekIcinSatirAc(int cekDocEntry, string tedarikci, DateTime? planTarih, string belgeTipi, string belgeNo, string urunHizmet, string kullanici)
         {
             Tohumla(); var k = CekAkibetOrnek.Bul(cekDocEntry); if (k == null) return (false, "Belge bulunamadı.", null);
-            if (!k.Secilebilir) return (false, $"{k.No} nakit akışa gönderilemez: işlem türü {k.IslemTuru}" + (k.PlanDocEntry != null ? $" (Kasa Nakit Akışı #{k.PlanDocEntry})" : "") + (k.UygunlukNedeni != "" && k.UygunlukNedeni != k.IslemTuru ? $" · {k.UygunlukNedeni}" : "") + ".", null);
+            if (!k.Secilebilir) return (false, $"{k.No} nakit akışa gönderilemez: işlem türü {k.IslemTuru}" + (k.PlanDocEntry != null ? $" (Nakit Akış Planlama #{k.PlanDocEntry})" : "") + (k.UygunlukNedeni != "" && k.UygunlukNedeni != k.IslemTuru ? $" · {k.UygunlukNedeni}" : "") + ".", null);
             if (string.IsNullOrWhiteSpace(tedarikci)) return (false, "Ödenecek tedarikçi (cari) girin.", null);
             belgeTipi = string.IsNullOrWhiteSpace(belgeTipi) ? "Cari Bakiye" : belgeTipi.Trim(); if (!BelgeTipleri.Contains(belgeTipi)) belgeTipi = "Cari Bakiye";
             var gelen = new NakitAkisViewModel { U_Kurum = tedarikci.Trim(), U_UrunHizmet = string.IsNullOrWhiteSpace(urunHizmet) ? $"{k.Belge} ile ödeme · {k.No}" : urunHizmet.Trim(), U_OdemeYontemi = k.Belge, U_BagliBelgeTipi = belgeTipi, U_FaturaSiparisNo = belgeTipi == "Cari Bakiye" ? "" : (belgeNo ?? "").Trim(), U_PlanlananTarih = (planTarih ?? k.Vade).Date, U_SonOdemeTarihi = (planTarih ?? k.Vade).Date, U_Tutar = k.Tutar, U_ParaBirimi = "TRY", U_Kur = 1, U_TutarTL = k.Tutar, U_IslemTipi = k.IslemTipi, U_TalepEden = kullanici ?? "", U_FaturaSahibi = k.Sirket, U_OdeyenSirket = k.Sirket, U_Kaynak = "İbraz", U_Notlar = $"Çek Akıbeti'nden gönderildi ({k.No} · {k.Musteri} · vade {k.Vade:dd.MM.yyyy})", U_Satinalmaci = "" };
             var m = Ekle(k.DbName, gelen, kullanici);
             var r = BelgePlanla(k.DbName, m.DocEntry, new[] { k.DocEntry }, kullanici);
             if (!r.ok) { Sil(k.DbName, m.DocEntry, kullanici); return (false, r.mesaj, null); }
-            return (true, $"{k.No} Kasa Nakit Akışı'na gönderildi: #{m.DocEntry} {m.U_Kurum} · {k.Tutar.ToString("N2", Tr)} ₺ · planlanan {m.U_PlanlananTarih:dd.MM.yyyy} (Planlandı). Çek Akıbeti'nde işlem türü \"Planlandı\" oldu; talimatla ya da \"Tedarikçiye Çık\" ile ciro edilir.", m);
+            return (true, $"{k.No} Nakit Akış Planlama'ya gönderildi: #{m.DocEntry} {m.U_Kurum} · {k.Tutar.ToString("N2", Tr)} ₺ · planlanan {m.U_PlanlananTarih:dd.MM.yyyy} (Planlandı). Çek Akıbeti'nde işlem türü \"Planlandı\" oldu; talimatla ya da \"Tedarikçiye Çık\" ile ciro edilir.", m);
         }
-        /// <summary>Değişim sayacı için: Kasa Nakit Akışı günlük kayıt sayısı (Çek Akıbeti listesi bu sayaç değişince kendini tazeler).</summary>
+        /// <summary>Değişim sayacı için: Nakit Akış Planlama günlük kayıt sayısı (Çek Akıbeti listesi bu sayaç değişince kendini tazeler).</summary>
         public static int LogSayisi { get { Tohumla(); lock (Kilit) return _gunluk.Count; } }
         /// <summary>
-        /// Çek Akıbeti › Planlanan Tedarikçi hücresi — Kasa Nakit Akışı ile bütünleşik: belge planlıysa plan satırının kurumu da değişir; planlı değilse ve belge uygunsa tedarikçi için çek / senet satırı açılıp belge planlanır;
+        /// Çek Akıbeti › Planlanan Tedarikçi hücresi — Nakit Akış Planlama ile bütünleşik: belge planlıysa plan satırının kurumu da değişir; planlı değilse ve belge uygunsa tedarikçi için çek / senet satırı açılıp belge planlanır;
         /// tedarikçi silinirse belge plan satırından çıkarılır (Planlandı → Portföyde). Uygun olmayan belgede yalnız bilgi alanı güncellenir (satır açılmaz).
         /// </summary>
         public static (bool ok, string mesaj, NakitAkisViewModel satir) PlanTedarikciDegistir(int cekDocEntry, string tedarikci, string kullanici)
@@ -1139,18 +1168,18 @@ namespace WebApplication3.Data
             {
                 NakitAkisViewModel m; lock (Kilit) m = _odemeler.TryGetValue(k.DbName, out var l) ? l.FirstOrDefault(x => x.DocEntry == k.PlanDocEntry.Value) : null;
                 if (m == null) { var r0 = CekAkibetOrnek.PlanlananTedarikciDegistir(cekDocEntry, tedarikci, kullanici); return (r0.ok, r0.mesaj, null); }
-                if (tedarikci == "") { var r1 = BelgePlanKaldir(k.DbName, m.DocEntry, cekDocEntry, kullanici); return (r1.ok, r1.ok ? $"{k.No} Kasa Nakit Akışı #{m.DocEntry} satırından çıkarıldı; portföye döndü." : r1.mesaj, r1.satir); }
-                if (m.U_Durum == "ÖDENDİ") return (false, $"Kasa Nakit Akışı #{m.DocEntry} ödenmiş; planlanan tedarikçi değiştirilemez.", m);
+                if (tedarikci == "") { var r1 = BelgePlanKaldir(k.DbName, m.DocEntry, cekDocEntry, kullanici); return (r1.ok, r1.ok ? $"{k.No} Nakit Akış Planlama #{m.DocEntry} satırından çıkarıldı; portföye döndü." : r1.mesaj, r1.satir); }
+                if (m.U_Durum == "ÖDENDİ") return (false, $"Nakit Akış Planlama #{m.DocEntry} ödenmiş; planlanan tedarikçi değiştirilemez.", m);
                 lock (Kilit) { string eski = m.U_Kurum; m.U_Kurum = tedarikci; Log(k.DbName, m.DocEntry, "Güncelleme", $"Planlanan tedarikçi (Çek Akıbeti): {eski} → {tedarikci}", kullanici); }
                 CekAkibetOrnek.PlanlananTedarikciDegistir(cekDocEntry, tedarikci, kullanici);
-                return (true, $"{k.No}: planlanan tedarikçi {tedarikci}; Kasa Nakit Akışı #{m.DocEntry} satırının kurumu da güncellendi.", m);
+                return (true, $"{k.No}: planlanan tedarikçi {tedarikci}; Nakit Akış Planlama #{m.DocEntry} satırının kurumu da güncellendi.", m);
             }
             if (tedarikci != "" && k.Secilebilir) { var r2 = CekIcinSatirAc(cekDocEntry, tedarikci, null, null, null, null, kullanici); return (r2.ok, r2.mesaj, r2.satir); }
             var r3 = CekAkibetOrnek.PlanlananTedarikciDegistir(cekDocEntry, tedarikci, kullanici);
-            return (r3.ok, r3.ok && tedarikci != "" ? $"{k.No}: planlanan tedarikçi {tedarikci} yazıldı; belge uygun olmadığı ({k.UygunlukNedeni}) için Kasa Nakit Akışı satırı açılmadı." : r3.mesaj, null);
+            return (r3.ok, r3.ok && tedarikci != "" ? $"{k.No}: planlanan tedarikçi {tedarikci} yazıldı; belge uygun olmadığı ({k.UygunlukNedeni}) için Nakit Akış Planlama satırı açılmadı." : r3.mesaj, null);
         }
         /// <summary>
-        /// Belgeyi tedarikçiye çıkar (ciro) ya da bankaya tahsile verir — Çek Akıbeti ve Takip Paneli'ndeki tek düğme. Kasa Nakit Akışı'nda planlı belge: plan satırı üzerinden ibraz (CekIbrazEt; satır ÖDENDİ, fiş atılır);
+        /// Belgeyi tedarikçiye çıkar (ciro) ya da bankaya tahsile verir — Çek Akıbeti ve Takip Paneli'ndeki tek düğme. Nakit Akış Planlama'da planlı belge: plan satırı üzerinden ibraz (CekIbrazEt; satır ÖDENDİ, fiş atılır);
         /// planlanmamış belge: çıkış işlenmez, GMY onayına düşer (CekCikisKontrollu). İbraz yeri boşsa planlanan tedarikçi.
         /// </summary>
         public static (bool ok, string mesaj, bool onayaDustu, int? docEntry) CekCikisYap(int cekDocEntry, string tur, string ibrazYeri, string belgeNo, string not, string kullanici)
@@ -1164,9 +1193,9 @@ namespace WebApplication3.Data
                 var plan = Bul(k.PlanDocEntry.Value);
                 if (plan != null)
                 {
-                    if (!string.IsNullOrEmpty(plan.U_CikisTalebi) && plan.U_OnayDurumu != "Onaylandı") return (false, $"{k.No} için çıkış talebi GMY onayı bekliyor (Kasa Nakit Akışı #{plan.DocEntry}); onaylanmadan çıkış yapılamaz.", true, plan.DocEntry);
+                    if (!string.IsNullOrEmpty(plan.U_CikisTalebi) && plan.U_OnayDurumu != "Onaylandı") return (false, $"{k.No} için çıkış talebi GMY onayı bekliyor (Nakit Akış Planlama #{plan.DocEntry}); onaylanmadan çıkış yapılamaz.", true, plan.DocEntry);
                     if (!bankaya && string.IsNullOrEmpty(yer)) yer = plan.U_Kurum;
-                    if (!bankaya && !CekAkibetOrnek.AyniMi(yer, plan.U_Kurum)) return (false, $"DİKKAT: {k.No} Kasa Nakit Akışı'nda {plan.U_Kurum} için planlı; {yer} tedarikçisine çıkış plana aykırı olur. Önce planı (#{plan.DocEntry}) düzeltin ya da planlanan tedarikçiye çıkın.", false, plan.DocEntry);
+                    if (!bankaya && !CekAkibetOrnek.AyniMi(yer, plan.U_Kurum)) return (false, $"DİKKAT: {k.No} Nakit Akış Planlama'da {plan.U_Kurum} için planlı; {yer} tedarikçisine çıkış plana aykırı olur. Önce planı (#{plan.DocEntry}) düzeltin ya da planlanan tedarikçiye çıkın.", false, plan.DocEntry);
                     var r = CekIbrazEt(plan.U_KaynakFirma, plan.DocEntry, bankaya ? "Bankaya Tahsile Ver" : "Tedarikçiye Ciro", yer, DateTime.Today, null, belgeNo, not, kullanici, true);
                     return (r.ok, r.mesaj, false, plan.DocEntry);
                 }
@@ -1316,6 +1345,6 @@ namespace WebApplication3.Data
         }
     }
 
-    /// <summary>Kasa Nakit Akışı satır / sistem günlüğü (GetRowLogs, GetSistemLoglari).</summary>
+    /// <summary>Nakit Akış Planlama satır / sistem günlüğü (GetRowLogs, GetSistemLoglari).</summary>
     public class NakitAkisLog { public int LogId { get; set; } public DateTime IslemTarihi { get; set; } public string Kullanici { get; set; } public string DbName { get; set; } public int DocEntry { get; set; } public string IslemTipi { get; set; } public string Aciklama { get; set; } }
 }

@@ -6,7 +6,7 @@ using FinansRaporlama.Controllers;
 
 namespace WebApplication3.Data
 {
-    /// <summary>Departmanlardan gelen ödeme talebi: fatura, sipariş, muhasebeden gelen vergi / SGK / gümrük ödemesi, kira … — Kasa Nakit Akışı › Yeni Ödeme › Departman Talepleri sekmesinde seçilip doğrudan satır olur.</summary>
+    /// <summary>Departmanlardan gelen ödeme talebi: fatura, sipariş, muhasebeden gelen vergi / SGK / gümrük ödemesi, kira … — Nakit Akış Planlama › Yeni Ödeme › Departman Talepleri sekmesinde seçilip doğrudan satır olur.</summary>
     public class OdemeTalebi
     {
         public int Id { get; set; } public string No { get; set; } public DateTime Tarih { get; set; } public string DbName { get; set; } public string Sirket { get; set; }
@@ -23,7 +23,7 @@ namespace WebApplication3.Data
         public decimal Net => Math.Max(0, Tutar - MahsupTutari);
         public decimal TutarTL => Math.Round(Tutar * (NakitAkisOrnek.Kurlar.TryGetValue(PB, out var k) ? k : 1m), 2);
         public decimal NetTL => Math.Round(Net * (NakitAkisOrnek.Kurlar.TryGetValue(PB, out var k) ? k : 1m), 2);
-        /// <summary>Kasa Nakit Akışı belge tipi karşılığı (Vergi / SGK / Gümrük → Resmi Ödeme, Kira → Diğer).</summary>
+        /// <summary>Nakit Akış Planlama belge tipi karşılığı (Vergi / SGK / Gümrük → Resmi Ödeme, Kira → Diğer).</summary>
         public string NakitAkisBelgeTipi => BelgeTipi == "Fatura" || BelgeTipi == "Sipariş" || BelgeTipi == "Cari Bakiye" ? BelgeTipi : BelgeTipi == "Vergi" || BelgeTipi == "SGK" || BelgeTipi == "Gümrük" ? "Resmi Ödeme" : "Diğer";
     }
 
@@ -99,7 +99,7 @@ namespace WebApplication3.Data
                 }
         }
 
-        /// <summary>Talebi Kasa Nakit Akışı satırı yapar (doğrudan ekleme): kurum, belge tipi / no, tutar, son ödeme, önerilen yöntem, talep eden; nakit yöntemde satır onaya düşer.</summary>
+        /// <summary>Talebi Nakit Akış Planlama satırı yapar (doğrudan ekleme): kurum, belge tipi / no, tutar, son ödeme, önerilen yöntem, talep eden; nakit yöntemde satır onaya düşer.</summary>
         public static (bool ok, string mesaj, NakitAkisViewModel satir) NakitAkisaAl(string no, string kullanici)
         {
             var t = Bul(no); if (t == null) return (false, "Ödeme talebi bulunamadı.", null);
@@ -125,8 +125,8 @@ namespace WebApplication3.Data
                 {
                     var z = TalepModulleri.OlayZamani ?? DateTime.Now;
                     a.Ek["nakitAkisNo"] = $"#{satir.DocEntry} · {NakitAkisOrnek.SirketAdi(t.DbName)}"; a.Ek["alinmaTarihi"] = z.ToString("dd.MM.yyyy HH:mm", Tr);
-                    TalepMotoru.Hareket(a, z, $"Kasa Nakit Akışı: talep nakit akışa alındı (#{satir.DocEntry} · {satir.U_Durum} · {satir.U_OdemeYontemi}) — {kullanici}", "Kasa Nakit Akışı");
-                    TalepMotoru.Log(a, z, "ÖT_EVENT", "CASHFLOW_DOC", "", satir.DocEntry.ToString(), kullanici ?? "", "Event", "Kasa Nakit Akışı"); a.SonSenkron = z;
+                    TalepMotoru.Hareket(a, z, $"Nakit Akış Planlama: talep nakit akışa alındı (#{satir.DocEntry} · {satir.U_Durum} · {satir.U_OdemeYontemi}) — {kullanici}", "Nakit Akış Planlama");
+                    TalepMotoru.Log(a, z, "ÖT_EVENT", "CASHFLOW_DOC", "", satir.DocEntry.ToString(), kullanici ?? "", "Event", "Nakit Akış Planlama"); a.SonSenkron = z;
                 }
             }
             return (true, $"{t.No} nakit akışa alındı (#{satir.DocEntry}): {t.Kurum} · {t.Net.ToString("N2", Tr)} {t.PB}" + (t.MahsupTutari > 0 ? $" (mahsup {t.MahsupTutari.ToString("N2", Tr)} düşüldü)" : "") + $" · {t.YontemOnerisi}" + (t.YontemOnerisi == "Nakit" ? " · nakit onayı bekliyor" : "") + ".", satir);

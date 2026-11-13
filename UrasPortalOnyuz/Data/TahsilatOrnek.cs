@@ -9,7 +9,7 @@
 //     "Taslak Kaydet" → cariye işlenmez, listede Taslak olarak durur, istenen zaman "İşleme Al" ile aynı kayıttan işlenir (ibraz).
 //   • Basit fatura kesme: kur farkı / vade farkı için tek tıkla KDV'li fark faturası (KFF / VFF). PDF / Excel: Controllers/TahsilatController.cs + Data/DisaAktar.cs
 //   • ÖDEME (Yapılan Ödemeler › Yeni Ödeme, Controllers/OdemeController.cs): AYNI MOTOR, YÖN TERS — cari tedarikçiyse kayıt Tur = "Ödeme" (ÖD-…): açık ALIŞ faturaları (alacak) FIFO kapanır,
-//     işlenince cari hesabına BORÇ (Ödeme / Çek / Senet) yazılır, her ödeme satırı şirketin Kasa Nakit Akışı'na ÖDENDİ satır olarak düşer (Data/NakitAkisOrnek.cs) ve Yapılan Ödemeler listesinde görünür.
+//     işlenince cari hesabına BORÇ (Ödeme / Çek / Senet) yazılır, her ödeme satırı şirketin Nakit Akış Planlama'ya ÖDENDİ satır olarak düşer (Data/NakitAkisOrnek.cs) ve Yapılan Ödemeler listesinde görünür.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -26,7 +26,7 @@ namespace WebApplication3.Data
         public string BelgeNo { get; set; } = ""; public string Banka { get; set; } = ""; public string Pb { get; set; } = "TL"; public decimal Kur { get; set; } = 1; public bool KurElle { get; set; }
         public decimal Tutar { get; set; } public decimal TutarTl => Math.Round(Tutar * Kur, 2); public string Not { get; set; } = "";
         public string HareketNo { get; set; } = "";   // işlenince Cari Mutabakat hareket belge no
-        public int? NakitAkisDocEntry { get; set; } public string NakitAkisDb { get; set; } = "";   // ödemede: işlenince açılan Kasa Nakit Akışı satırı (ÖDENDİ)
+        public int? NakitAkisDocEntry { get; set; } public string NakitAkisDb { get; set; } = "";   // ödemede: işlenince açılan Nakit Akış Planlama satırı (ÖDENDİ)
         public bool Nakit => Yontem == "Nakit"; public bool Vadeli => Yontem == "Çek" || Yontem == "Senet";
     }
     /// <summary>Fatura ↔ ödeme satırı eşleşmesi (simülasyon / dağıtım).</summary>
@@ -95,7 +95,7 @@ namespace WebApplication3.Data
         /// <summary>Tedarikçiye yapılan ödemeler (ÖD-…; Yapılan Ödemeler › Yeni Ödeme).</summary>
         public static List<TahsilatKaydi> Odemeler { get { Tohumla(); lock (Kilit) return _tahsilatlar.Where(t => t.Odeme).OrderByDescending(t => t.Zaman).ToList(); } }
         public static bool TedarikciMi(string kod) => CariKartOrnek.KartBul(kod ?? "")?.KartTipi == "Tedarikçi";
-        /// <summary>İşlenmiş ödeme satırının Kasa Nakit Akışı bağlantısı (satır çekmecesi).</summary>
+        /// <summary>İşlenmiş ödeme satırının Nakit Akış Planlama bağlantısı (satır çekmecesi).</summary>
         public static string NakitAkisLink(TahsilatSatir s) => s.NakitAkisDocEntry == null ? "" : $"/Rapor79?sirket={s.NakitAkisDb}&sekme={(s.Yontem == "Nakit" ? "nakit" : s.Yontem == "Çek" ? "cek" : s.Yontem == "Senet" ? "senet" : s.Yontem == "Havale / EFT" ? "havale" : "kredi")}&doc={s.NakitAkisDocEntry}";
         public static List<FarkFaturasi> Faturalar { get { Tohumla(); lock (Kilit) return _faturalar.OrderByDescending(f => f.Zaman).ToList(); } }
         public static TahsilatKaydi TahsilatBul(string no) { Tohumla(); lock (Kilit) return _tahsilatlar.FirstOrDefault(t => t.No == no); }
@@ -196,7 +196,7 @@ namespace WebApplication3.Data
         }
         /// <summary>
         /// Taslak kaydı cariye işler (ibraz): satır başına Cari Mutabakat hareketi, fatura kalanları düşer, avans eşleşmemiş tahsilat / ödeme olarak kalır. Hata metni ya da null.
-        /// Tahsilat → alacak (Tahsilat / Çek / Senet); Ödeme → BORÇ (Ödeme / Çek / Senet) ve her satır için Kasa Nakit Akışı'na ÖDENDİ satır (NakitAkisaYaz).
+        /// Tahsilat → alacak (Tahsilat / Çek / Senet); Ödeme → BORÇ (Ödeme / Çek / Senet) ve her satır için Nakit Akış Planlama'ya ÖDENDİ satır (NakitAkisaYaz).
         /// </summary>
         public static string IslemeAl(string no, string kullanici, DateTime? simdi = null)
         {
@@ -223,7 +223,7 @@ namespace WebApplication3.Data
             return null;
         }
         /// <summary>
-        /// İşlenen ÖDEMENİN her satırını şirketin Kasa Nakit Akışı'na ÖDENDİ satır olarak yazar (Takip Paneli'nden "Ödeme Ekle" ile aynı yol): yöntem, belge / dekont no, banka hesabı, kapatılan fatura, kur;
+        /// İşlenen ÖDEMENİN her satırını şirketin Nakit Akış Planlama'ya ÖDENDİ satır olarak yazar (Takip Paneli'nden "Ödeme Ekle" ile aynı yol): yöntem, belge / dekont no, banka hesabı, kapatılan fatura, kur;
         /// nakit satırda makbuz; çek / senette planlanan tarih = vade. Satıra DocEntry yazılır (çekmecede bağlantı). Hata nakit akışı bozmasın diye satır satır yutulur.
         /// </summary>
         private static void NakitAkisaYaz(TahsilatKaydi t, CariKart k, string kullanici)

@@ -52,7 +52,7 @@ namespace WebApplication3.Controllers
                     cekDurumlari = ButceOrnek.CekDurumlari,
                     // vadeli müşteri çekleri: vade ayına göre; bütçede "Kullanılabilir Çek" (Portföyde + Tahsilde + Tahsil Edildi)
                     cekler = ButceOrnek.Cekler.Select(c => new { c.Sirket, c.No, c.MusteriKod, c.Musteri, c.Banka, vade = c.Vade.ToString("dd.MM.yyyy"), yil = c.Vade.Year, ay = c.Vade.Month, c.Tutar, c.Durum, kullanilabilir = c.Kullanilabilir, tahsilBankasi = c.TahsilBankasi }),
-                    // planlı düzenli ödemeler OTOMATİK bütçeye gelir (Data/DuzenliOdemeOrnek.cs › ButceKatki): kayıt bütçe kalemine eşlenir; aylık plan (aktif kayıtların aylık tutarı), ödenen (Kasa Nakit Akışı ÖDENDİ satırları)
+                    // planlı düzenli ödemeler OTOMATİK bütçeye gelir (Data/DuzenliOdemeOrnek.cs › ButceKatki): kayıt bütçe kalemine eşlenir; aylık plan (aktif kayıtların aylık tutarı), ödenen (Nakit Akış Planlama ÖDENDİ satırları)
                     duzenli = DuzenliOdemeOrnek.ButceKatki(ButceOrnek.Yillar)
                 });
             }

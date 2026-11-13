@@ -215,7 +215,7 @@ namespace WebApplication3.Data
                   Kpi("Yeni Talepler", "Taleplerim", "Bekleyen Talepler", "Sonuçlanan Talepler"),
                   U("yeni-talep", "Yeni Talep",
                     G("satin-alma", "Satın Alma", R("Satınalma Talebi")),
-                    // Ödeme talebi: birime göre cari kapsamı (satın alma → temsilcisi olduğu tedarikçiler, idari işler → temsilcisi olduğu cariler, muhasebe / finans → resmi kurum ve finansal kuruluşlar); onaylanınca Kasa Nakit Akışı › Departman Talepleri (Data/OdemeTalebiModulu.cs)
+                    // Ödeme talebi: birime göre cari kapsamı (satın alma → temsilcisi olduğu tedarikçiler, idari işler → temsilcisi olduğu cariler, muhasebe / finans → resmi kurum ve finansal kuruluşlar); onaylanınca Nakit Akış Planlama › Departman Talepleri (Data/OdemeTalebiModulu.cs)
                     G("odeme", "Ödeme Talebi", R("Ödeme Talebi", "OdemeTalebi", "Index"), R("Ödeme Talebi Takip Raporu", "OdemeTalebi", "Takip")),
                     // Cari kart açılış talepleri (Cari Kart ve Faaliyet Eşleştirme şartnamesi; Controllers/CariKartController.cs)
                     G("tedarikci", "Tedarikçi", R("Tedarikçi Talep Formu", "CariKart", "TedarikciTalep")),
@@ -249,11 +249,11 @@ namespace WebApplication3.Data
                     // 29 Eki 2026: Kasa / Banka Bakiye Raporu, Nakit Akışı (Ödeme Bekleyenler) ve Nakit Akışı (Ödenenler) menüden kaldırıldı; adları "(Kaldırıldı)" rozetiyle listede kalır (X)
                     G("nakit-banka", "Nakit ve Banka Yönetimi", X("Kasa / Banka Bakiye Raporu", "Kasa ve banka bakiyeleri Konsolide Finansal Takip Paneli › Bakiyeler sekmesinde şirket şirket izlenir.", "Konsolide Finansal Takip Paneli › Bakiyeler", "/Rapor123?sekme=bakiye"), R("Finekra Hareketler"), R("İhracat Finekra Hareketler"), X("Banka ve Finans Kuruluşları", "Banka ve finans kuruluşu carileri Cari Bilgileri ekranında (Müşteri / Tedarikçi Cari Kartları birleşik görünümü) izlenir.", "Cari Bilgileri", "/Rapor120")),
                     // 28 Eki 2026: "Konsolide Günlük Finansal Hareketler" adı "Konsolide Finansal Hareketler" oldu (ekran aynı: Konsolide Finansal Takip Paneli, Rapor123)
-                    G("nakit-akisi-likidite", "Nakit Akışı ve Likidite", R("Kasa Nakit Akışı"), R("Kasa Nakit Akışı Görünüm"), R("Konsolide Finansal Hareketler"),
-                        X("Nakit Akışı (Ödeme Bekleyenler)", "Ödeme bekleyen satırlar Kasa Nakit Akışı'nda (planlanan tarihe göre üstte; Talepler ve Yeni Ödeme ile birlikte).", "Kasa Nakit Akışı", "/Rapor79"),
-                        X("Nakit Akışı (Ödenenler)", "Ödenen satırlar Kasa Nakit Akışı'nda (ödenme tarihine göre altta) ve Konsolide Finansal Takip Paneli › Tümü sekmesinde izlenir.", "Kasa Nakit Akışı", "/Rapor79")),
+                    G("nakit-akisi-likidite", "Nakit Akışı ve Likidite", R("Nakit Akış Planlama"), R("Nakit Akış Planlama Görünüm"), R("Konsolide Finansal Hareketler"),
+                        X("Nakit Akışı (Ödeme Bekleyenler)", "Ödeme bekleyen satırlar Nakit Akış Planlama'da (planlanan tarihe göre üstte; Talepler ve Yeni Ödeme ile birlikte).", "Nakit Akış Planlama", "/Rapor79"),
+                        X("Nakit Akışı (Ödenenler)", "Ödenen satırlar Nakit Akış Planlama'da (ödenme tarihine göre altta) ve Konsolide Finansal Takip Paneli › Tümü sekmesinde izlenir.", "Nakit Akış Planlama", "/Rapor79")),
                     G("odeme-yonetimi", "Ödeme Yönetimi", R("Ödeme Talebi", "OdemeTalebi", "Index"), R("Planlı Ödemeler"), R("Yapılan Ödemeler"), R("İthalat Ödeme Raporu"), R("Nakit Avans — Bekleyen Ödemeler"), R("Nakit Avans Takip Raporu")),
-                    // 9 Kas 2026: Kredi Raporu — yapılandırma öncesi / sonrası kredi bilgileri, teminatlar (ipotek …), taksit takvimi; taksitler Kasa Nakit Akışı ve Planlı Ödemeler'e akar (Data/KrediYapilandirmaOrnek.cs)
+                    // 9 Kas 2026: Kredi Raporu — yapılandırma öncesi / sonrası kredi bilgileri, teminatlar (ipotek …), taksit takvimi; taksitler Nakit Akış Planlama ve Planlı Ödemeler'e akar (Data/KrediYapilandirmaOrnek.cs)
                     G("krediler-finansman", "Krediler ve Finansman", R("Kredi Raporu", "KrediYapilandirma", "Index")),
                     G("finansal-araclar", "Finansal Araçlar", R("Vade Tarihine Göre Çek ve Senet Özeti", "CekOzet", "Index"), R("Çek Akıbeti Raporu"), R("Çek Akıbeti Kontrol Raporu"), R("Çek Konsolide Raporu"), R("Çek Konsolide Kontrol Raporu"), R("Çek Ekstre Raporu"), R("Günlük Çek Nakit Tahsilat"), R("İbraz (Çek Depositi)"), R("Vadeli Çek İbrazı"), R("Tahsilat İbraz Çek Bordrosu"), R("Grup İçi Çek Devirleri")),   // Muhasebe Çek Akıbeti Raporu ve Muhasebe Çek İbraz Kontrolü 28 Eki 2026'da Muhasebe › Çek ve Senet Muhasebesi'ne taşındı
                     // 11 Kas 2026: İhracat Tahsilat Raporu + İBKB Beyanname Takibi → İHRACAT FİNANSAL TAKİBİ (tek, konsolide, dinamik; Controllers/IhracatFinansController.cs, Data/IbkbOrnek.cs); eski adlar "(Kaldırıldı)" rozetiyle

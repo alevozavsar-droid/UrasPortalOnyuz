@@ -8,7 +8,7 @@ namespace WebApplication3.Data
 {
     /// <summary>Yevmiye fişi satırı (tek düzen hesap planı kodu + adı, borç / alacak TL).</summary>
     public class YevmiyeSatiri { public string HesapKodu { get; set; } public string HesapAdi { get; set; } public decimal Borc { get; set; } public decimal Alacak { get; set; } public string Aciklama { get; set; } = ""; }
-    /// <summary>Ödeme muhasebe fişi: Kasa Nakit Akışı'ndan makbuz kesilince, talimat gerçekleşince ya da çek ciro / ibraz adımı gerçekleşince otomatik atılır.</summary>
+    /// <summary>Ödeme muhasebe fişi: Nakit Akış Planlama'dan makbuz kesilince, talimat gerçekleşince ya da çek ciro / ibraz adımı gerçekleşince otomatik atılır.</summary>
     public class YevmiyeFisi
     {
         public int Id { get; set; } public string No { get; set; } public DateTime Tarih { get; set; } public string DbName { get; set; } public string Sirket { get; set; }
@@ -18,7 +18,7 @@ namespace WebApplication3.Data
     }
 
     /// <summary>
-    /// Bellek içi muhasebe fişleri (ön yüz örneği). Kasa Nakit Akışı ödemeleri (Data/NakitAkisOrnek.cs) ÖDENDİ olunca yönteme ve karşı tarafa göre fiş üretilir:
+    /// Bellek içi muhasebe fişleri (ön yüz örneği). Nakit Akış Planlama ödemeleri (Data/NakitAkisOrnek.cs) ÖDENDİ olunca yönteme ve karşı tarafa göre fiş üretilir:
     /// tedarikçi 320 Satıcılar, grup şirketi 332 İştiraklere Borçlar, nakit avans 196 Personel Avansları borç; karşılığı yönteme göre 100 Kasa / 102 Bankalar / 300 Kredi Kartı /
     /// 101 Alınan Çekler / 121 Alacak Senetleri / 120 Alıcılar (mahsup, temlik, yansıtma). Grup içi çek dolaşım adımlarında ciro eden ve alan şirket için ayrı fiş.
     /// Kilit sırası: diğer modüller → Muhasebe (yaprak; Muhasebe başka kilide girmez).

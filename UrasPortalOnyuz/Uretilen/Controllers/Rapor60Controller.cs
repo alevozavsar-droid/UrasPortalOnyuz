@@ -1,5 +1,5 @@
 ﻿// ÇEK EKSTRE RAPORU — Mali İşler › Finans › Finansal Araçlar › Çek Ekstre Raporu (/Rapor60?checkNum=…)
-// Veri: Data/CekAkibetOrnek.cs (Çek Akıbeti kayıtları, günlük ve dolaşım hareketleri) — Kasa Nakit Akışı planı, Takip Paneli ibrazı, imzalı ibraz belgesi ve Çek Akıbeti ile AYNI KAYIT.
+// Veri: Data/CekAkibetOrnek.cs (Çek Akıbeti kayıtları, günlük ve dolaşım hareketleri) — Nakit Akış Planlama planı, Takip Paneli ibrazı, imzalı ibraz belgesi ve Çek Akıbeti ile AYNI KAYIT.
 // Seçilen belge için: ana kart (tutar, kimden geldi, keşideci, banka, vade, güncel konum), "serüven" (zaman çizelgesi), hareket tablosu (portföye giriş → planlandı → ciro / ibraz → tahsil …),
 // imzalı ibraz belgesi (Görüntüle / Dosya Yükle: Data/CekAkibetOrnek.cs › IbrazBelgesiBagla). Görünüm: Views/Rapor60/Index.cshtml (eski ERP ekstre düzeni korunur).
 using System;
@@ -42,13 +42,13 @@ namespace WebApplication3.Controllers
                     ViewBag.KritikUyari = k.IbrazBelgeImzali
                         ? $"<div class='alert alert-success py-2 shadow-sm border-0'><i class='fas fa-file-signature me-2'></i><b>İmzalı ibraz / ciro belgesi yüklü:</b> <a href='{k.IbrazBelgeYolu}' target='_blank'>{System.Net.WebUtility.HtmlEncode(k.IbrazBelgeDosya)}</a> · {k.IbrazBelgeYukleme:dd.MM.yyyy HH:mm} {System.Net.WebUtility.HtmlEncode(k.IbrazBelgeYukleyen)}" + (k.IbrazBelgeNo != "" ? $" · belge {System.Net.WebUtility.HtmlEncode(k.IbrazBelgeNo)}" : "") + "</div>"
                         : k.IbrazYeri != "" ? $"<div class='alert alert-warning py-2 shadow-sm border-0'><i class='fas fa-file-signature me-2'></i><b>İmzalı ibraz belgesi bekleniyor:</b> belge {System.Net.WebUtility.HtmlEncode(k.IbrazTuru)} → {System.Net.WebUtility.HtmlEncode(k.IbrazYeri)} ({k.IbrazTarihi:dd.MM.yyyy}, {System.Net.WebUtility.HtmlEncode(k.IbrazBelgeNo)}); imzalı nüshayı buradan <b>Dosya Yükle</b> ile ya da Konsolide Finansal Takip Paneli › Çek sekmesinden yükleyin. <a href='/Rapor123/IbrazBelgesi?cekDocEntry={k.DocEntry}' target='_blank'>Belge PDF'ini yeniden oluştur</a></div>"
-                        : k.IslemTuru == "Planlandı" ? $"<div class='alert alert-info py-2 shadow-sm border-0'><i class='fas fa-clipboard-check me-2'></i><b>Kasa Nakit Akışı'nda planlı</b> → {System.Net.WebUtility.HtmlEncode(k.PlanlananTedarikci)}" + (k.PlanDocEntry != null ? $" · satır #{k.PlanDocEntry}" : "") + $". Çıkış ve imzalı belge: <a href='/Rapor123?sekme=cek&sirket={k.DbName}' target='_blank'>Konsolide Finansal Takip Paneli › Çek</a> · <a href='/Rapor123/IbrazBelgesi?cekDocEntry={k.DocEntry}' target='_blank'>Ciro bordrosu PDF'i oluştur</a></div>" : null;
+                        : k.IslemTuru == "Planlandı" ? $"<div class='alert alert-info py-2 shadow-sm border-0'><i class='fas fa-clipboard-check me-2'></i><b>Nakit Akış Planlama'da planlı</b> → {System.Net.WebUtility.HtmlEncode(k.PlanlananTedarikci)}" + (k.PlanDocEntry != null ? $" · satır #{k.PlanDocEntry}" : "") + $". Çıkış ve imzalı belge: <a href='/Rapor123?sekme=cek&sirket={k.DbName}' target='_blank'>Konsolide Finansal Takip Paneli › Çek</a> · <a href='/Rapor123/IbrazBelgesi?cekDocEntry={k.DocEntry}' target='_blank'>Ciro bordrosu PDF'i oluştur</a></div>" : null;
                 }
             }
             return View("Index", model);
         }
 
-        /// <summary>İmzalı ibraz / ciro belgesi (ya da belge görüntüsü) yükleme: Çek Akıbeti kaydına bağlanır; plan satırı varsa Kasa Nakit Akışı ekine de yazılır.</summary>
+        /// <summary>İmzalı ibraz / ciro belgesi (ya da belge görüntüsü) yükleme: Çek Akıbeti kaydına bağlanır; plan satırı varsa Nakit Akış Planlama ekine de yazılır.</summary>
         [HttpPost("DosyaYukle")]
         public IActionResult DosyaYukle(IFormFile belgeDosyasi, string checkNum, string db)
         {
@@ -93,7 +93,7 @@ namespace WebApplication3.Controllers
                 sb.Append($"<div class='story-item'><span class='story-icon'><i class='fas {ikon}'></i></span><b>{H(h.IbrazTarihi)}</b> · <b>{H(h.CekIslemTuru)}</b>{(string.IsNullOrEmpty(h.CekKimeVerildi) ? "" : " → " + H(h.CekKimeVerildi))} <span class='text-muted'>{H(h.HareketDurumu)}</span> <small class='text-muted'>({H(h.IslemiYapan)})</small></div>");
             }
             string son = k.IbrazBelgeImzali ? $"<div class='story-item'><span class='story-icon'><i class='fas fa-file-signature text-success'></i></span><b>İmzalı ibraz belgesi:</b> <a href='{k.IbrazBelgeYolu}' target='_blank'>{H(k.IbrazBelgeDosya)}</a></div>" : k.IbrazYeri != "" ? "<div class='story-item'><span class='story-icon'><i class='fas fa-file-signature text-warning'></i></span><b>İmzalı ibraz belgesi bekleniyor</b> — Dosya Yükle ile ekleyin.</div>" : "";
-            sb.Append(son).Append("</div>").Append($"<div class='small text-muted mt-2'>Kaynak: Çek Akıbeti kaydı #{k.DocEntry} · güncel akıbet <b>{H(k.IslemTuru)}</b> · konum {H(k.KonumDurumu)} · vade durumu {H(k.VadeDurumu)}" + (k.PlanDocEntry != null ? $" · Kasa Nakit Akışı #{k.PlanDocEntry}" : "") + "</div>");
+            sb.Append(son).Append("</div>").Append($"<div class='small text-muted mt-2'>Kaynak: Çek Akıbeti kaydı #{k.DocEntry} · güncel akıbet <b>{H(k.IslemTuru)}</b> · konum {H(k.KonumDurumu)} · vade durumu {H(k.VadeDurumu)}" + (k.PlanDocEntry != null ? $" · Nakit Akış Planlama #{k.PlanDocEntry}" : "") + "</div>");
             return sb.ToString();
         }
     }

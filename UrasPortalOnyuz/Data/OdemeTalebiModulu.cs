@@ -1,6 +1,6 @@
 // ============================================================
 // ÖDEME TALEBİ MODÜLÜ — Talep › Yeni Talep › Ödeme Talebi (talep motoru: Data/TalepMotoru.cs; ekran Views/IkTalep/Modul.cshtml + js/talep-modulu.js;
-// sayfa Controllers/OdemeTalebiController.cs; veri uçları IkTalep/Tm*). Onaylanan talep Kasa Nakit Akışı › Yeni Ödeme › Departman Talepleri'ne
+// sayfa Controllers/OdemeTalebiController.cs; veri uçları IkTalep/Tm*). Onaylanan talep Nakit Akış Planlama › Yeni Ödeme › Departman Talepleri'ne
 // (Data/OdemeTalepOrnek.cs) düşer; finans "Ekle" deyince nakit akış satırı olur, ödeme gerçekleşince talepte "Ödendi" görünür.
 //
 // CARİ KAPSAMI (kim hangi cariye ödeme talebi açabilir):
@@ -111,9 +111,9 @@ namespace WebApplication3.Data
             var m = new TmModul
             {
                 Kod = Kod, Ad = "Ödeme Talebi", NoOnEk = "ÖT", Ikon = "fa-money-bill-transfer", Renk = "#0f766e",
-                Aciklama = "Birimlerin ödeme talebi: satın alma satınalmacısı olduğu tedarikçiler, idari işler temsilcisi olduğu cariler, muhasebe ve finans konularına göre resmi kurumlar ve finansal kuruluşlar için talep açar. Onaylanan talep Kasa Nakit Akışı › Yeni Ödeme › Departman Talepleri'ne düşer; finans nakit akışa alır, ödeme gerçekleşince talepte görünür.",
-                AkisOzeti = "Talep → (Yönetici) → (Direktör) → Finans → Kasa Nakit Akışı (Departman Talepleri) → Nakit Akış Satırı → Ödeme",
-                KullananEtiket = "Talep eden personel (birim ve cari kapsamı bu kişiye göre)", Durum2Ad = "Nakit Akış Durumu (Finans)", Durum3Ad = "Ödeme Durumu (Kasa Nakit Akışı)",
+                Aciklama = "Birimlerin ödeme talebi: satın alma satınalmacısı olduğu tedarikçiler, idari işler temsilcisi olduğu cariler, muhasebe ve finans konularına göre resmi kurumlar ve finansal kuruluşlar için talep açar. Onaylanan talep Nakit Akış Planlama › Yeni Ödeme › Departman Talepleri'ne düşer; finans nakit akışa alır, ödeme gerçekleşince talepte görünür.",
+                AkisOzeti = "Talep → (Yönetici) → (Direktör) → Finans → Nakit Akış Planlama (Departman Talepleri) → Nakit Akış Satırı → Ödeme",
+                KullananEtiket = "Talep eden personel (birim ve cari kapsamı bu kişiye göre)", Durum2Ad = "Nakit Akış Durumu (Finans)", Durum3Ad = "Ödeme Durumu (Nakit Akış Planlama)",
                 Turler = { T("FATURA", "Tedarikçi Faturası", "Y,F", "Tedarikçi faturasının ödenmesi; açık fatura listesinden seçilebilir."), T("SIPARIS", "Sipariş Avansı / Ön Ödeme", "Y,F", "Sipariş öncesi avans ya da peşin ödeme indirimi için ön ödeme."), T("BAKIYE", "Cari Bakiye Ödemesi", "Y,F", "Carinin açık bakiyesine toplu ödeme."),
                            T("RESMI", "Vergi / SGK / Resmi Ödeme", "F", "Beyanname, prim, gümrük ve harç ödemeleri (muhasebe hazırlar, finans onaylar)."), T("FINANSAL", "Kredi / Kart / Banka / Sigorta", "F,D", "Kredi taksidi, kart ekstresi, banka masrafı, leasing, sigorta primi; Direktör onayı eklenir."), T("KIRA", "Kira / Aidat / Abonelik", "D,F", "Kira, aidat ve abonelik ödemeleri; Direktör ve Finans onayı."), T("DIGER", "Diğer Ödeme", "Y,F", "Listedekilere girmeyen ödemeler.") },
                 Alanlar = { A("sirket", "Ödeyen Şirket (Fatura Sahibi)", "select", true, 3, SirketAdlari, vars: "@kullanan.sirket"),
@@ -124,13 +124,13 @@ namespace WebApplication3.Data
                             A("tutar", "Tutar", "number", true, 2), A("pb", "Para Birimi", "select", true, 2, ParaBirimleri, vars: "TRY"), A("sonOdeme", "Son Ödeme Tarihi", "date", true, 2),
                             A("yontem", "Önerilen Ödeme Yöntemi", "select", true, 3, Yontemler, vars: "Havale / EFT"), A("oncelik", "Öncelik", "select", true, 3, Oncelikler, vars: "Normal"),
                             A("aciklama", "Açıklama / Gerekçe", "textarea", true, 12, ipucu: "Ne için ödeniyor; sipariş, sözleşme ya da beyanname referansı") },
-                Olaylar = { O("NakitAkisaAlindi", "NakitAkisaAlindi — Finans talebi nakit akışa aldı", "Kasa Nakit Akışı", "Kasa Nakit Akışı › Yeni Ödeme › Departman Talepleri'nde \"Ekle\": talep nakit akış satırı olur (nakit yöntemde satır onaya düşer)."),
-                            O("Odendi", "Odendi — Ödeme gerçekleşti", "Kasa Nakit Akışı", "Nakit akış satırı ÖDENDİ oldu (talimat gerçekleşti / dekont).", "dekontNo|Dekont No|text") },
+                Olaylar = { O("NakitAkisaAlindi", "NakitAkisaAlindi — Finans talebi nakit akışa aldı", "Nakit Akış Planlama", "Nakit Akış Planlama › Yeni Ödeme › Departman Talepleri'nde \"Ekle\": talep nakit akış satırı olur (nakit yöntemde satır onaya düşer)."),
+                            O("Odendi", "Odendi — Ödeme gerçekleşti", "Nakit Akış Planlama", "Nakit akış satırı ÖDENDİ oldu (talimat gerçekleşti / dekont).", "dekontNo|Dekont No|text") },
                 HesapEtiketler = { ["tutarTL"] = "TL Karşılığı", ["cariKod"] = "Cari Kodu", ["kartTipi"] = "Cari Tipi", ["vadeSarti"] = "Cari Vade Şartı", ["kapsam"] = "Cari Kapsamı", ["onayci"] = "Birim Onaycısı" },
                 EkEtiketler = { ["nakitAkisNo"] = "Nakit Akış Kaydı", ["alinmaTarihi"] = "Nakit Akışa Alınma", ["odemeTarihi"] = "Ödeme Tarihi", ["dekontNo"] = "Dekont No", ["odenenTutar"] = "Ödenen Tutar" },
                 Parametreler = { ["direktorEsik"] = "500000", ["acilGun"] = "3", ["vadeUyariGun"] = "7" },
                 ParametreEtiketler = { ["direktorEsik"] = "Bu TL tutarı aşan talepte Direktör onayı", ["acilGun"] = "Son ödemeye bu kadar gün kalmışsa acil uyarısı", ["vadeUyariGun"] = "Son ödeme bu kadar günden yakınsa vade uyarısı" },
-                Kurallar = { "Cari kapsamı talep eden kişinin birimine göre süzülür: satın alma satınalmacısı olduğu tedarikçiler, idari işler temsilcisi olduğu cariler, muhasebe / finans resmi kurumlar ve finansal kuruluşlar; yönetici tüm cariler.", "Konu listesi birime göredir; belge tipi ve cari tipi talep türüyle uyumlu olmalıdır (ör. Vergi / SGK türünde resmi kurum).", "Aynı cari + belge no ile açık talep varsa mükerrer sayılır; nakit akışta planlı aynı belge uyarı verir.", "Eşiği aşan TL tutarda Direktör onayı eklenir; nakit yöntemde GMY nakit onayı Kasa Nakit Akışı'nda alınır.", "Onaylanan talep Kasa Nakit Akışı › Departman Talepleri'ne düşer; nakit akışa alınma ve ödeme bilgisi oradan gelir, elle girilmez." },
+                Kurallar = { "Cari kapsamı talep eden kişinin birimine göre süzülür: satın alma satınalmacısı olduğu tedarikçiler, idari işler temsilcisi olduğu cariler, muhasebe / finans resmi kurumlar ve finansal kuruluşlar; yönetici tüm cariler.", "Konu listesi birime göredir; belge tipi ve cari tipi talep türüyle uyumlu olmalıdır (ör. Vergi / SGK türünde resmi kurum).", "Aynı cari + belge no ile açık talep varsa mükerrer sayılır; nakit akışta planlı aynı belge uyarı verir.", "Eşiği aşan TL tutarda Direktör onayı eklenir; nakit yöntemde GMY nakit onayı Nakit Akış Planlama'da alınır.", "Onaylanan talep Nakit Akış Planlama › Departman Talepleri'ne düşer; nakit akışa alınma ve ödeme bilgisi oradan gelir, elle girilmez." },
                 TakipSutunlar = { ("Talep No", "no"), ("Talep Eden", "kullanan"), ("Birim", "departman"), ("Tür", "tur"), ("Şirket", "d.sirket"), ("Cari", "d.cari"), ("Konu", "d.konu"), ("Belge", "d.belgeTipi"), ("Belge No", "d.belgeNo"), ("Tutar", "d.tutar"), ("PB", "d.pb"), ("TL Karşılığı (TL)", "h.tutarTL"), ("Son Ödeme", "d.sonOdeme"), ("Yöntem", "d.yontem"), ("Öncelik", "d.oncelik"), ("Talep Durumu", "talepDurumu"), ("Nakit Akış", "durum2"), ("Ödeme", "durum3"), ("Nakit Akış Kaydı", "e.nakitAkisNo"), ("Yönetici", "onay.Yönetici Onayı"), ("Finans", "onay.Finans Onayı") },
                 MasterCanli = MasterCanli
             };
@@ -162,7 +162,7 @@ namespace WebApplication3.Data
                 if (belgeNo != "")
                 {
                     if (TalepMotoru.Talepler.Any(t => t.ModulKod == Kod && t.Id != a.Id && !t.Iptal && t.TalepDurumu != "Reddedildi" && string.Equals(t.V("cari"), cari, StringComparison.OrdinalIgnoreCase) && string.Equals(t.V("belgeNo"), belgeNo, StringComparison.OrdinalIgnoreCase))) { s.Hata = $"{cari} · {belgeNo} için açık ödeme talebi zaten var (mükerrer)."; return s; }
-                    if (OdemeTalepOrnek.Listele(null).Any(t => t.No != a.No && string.Equals(t.Kurum, cari, StringComparison.OrdinalIgnoreCase) && string.Equals(t.BelgeNo, belgeNo, StringComparison.OrdinalIgnoreCase))) s.Uyarilar.Add($"{belgeNo} için departman talebi zaten Kasa Nakit Akışı'nda bekliyor.");
+                    if (OdemeTalepOrnek.Listele(null).Any(t => t.No != a.No && string.Equals(t.Kurum, cari, StringComparison.OrdinalIgnoreCase) && string.Equals(t.BelgeNo, belgeNo, StringComparison.OrdinalIgnoreCase))) s.Uyarilar.Add($"{belgeNo} için departman talebi zaten Nakit Akış Planlama'da bekliyor.");
                     if (CekAkibetOrnek.Sirketler.Any(x => NakitAkisOrnek.Odemeler(x.DbName).Any(o => o.U_Durum != "ÖDENDİ" && string.Equals(o.U_FaturaSiparisNo, belgeNo, StringComparison.OrdinalIgnoreCase)))) s.Uyarilar.Add($"{belgeNo} nakit akışta zaten planlı görünüyor; mükerrer ödeme kontrolü yapın.");
                 }
                 int gun = (sonOdeme.Value.Date - DateTime.Today).Days;
@@ -170,7 +170,7 @@ namespace WebApplication3.Data
                 else if (gun <= m2.P("acilGun") && a.V("oncelik") == "Normal") s.Uyarilar.Add($"Son ödemeye {gun} gün var; öncelik Acil olmalı.");
                 else if (gun <= m2.P("vadeUyariGun")) s.Uyarilar.Add($"Son ödemeye {gun} gün var; finans planlaması için erken iletin.");
                 if (tl > m2.P("direktorEsik")) { s.EkAdimlar.Add("D"); s.Uyarilar.Add($"TL karşılığı {N(tl, 0)} TL, {N(m2.P("direktorEsik"), 0)} TL eşiğini aşıyor: Direktör onayı eklendi."); }
-                if (a.V("yontem") == "Nakit") s.Uyarilar.Add("Nakit ödeme: Kasa Nakit Akışı'nda GMY nakit onayı ve kasa tediye makbuzu gerekir.");
+                if (a.V("yontem") == "Nakit") s.Uyarilar.Add("Nakit ödeme: Nakit Akış Planlama'da GMY nakit onayı ve kasa tediye makbuzu gerekir.");
                 if (a.V("yontem") == "Çek" || a.V("yontem") == "Senet") s.Uyarilar.Add("Çek / senet ödemesi: finans portföyden belge planlar; vade son ödeme tarihine yakın seçilir.");
                 return s;
             };
@@ -201,7 +201,7 @@ namespace WebApplication3.Data
                             NakitAkisOrnek.OdendiIsaretle(t.DbName, r.DocEntry, "Ödeme talebi " + a.No, "Finans (olay)"); if (G(g, "dekontNo") != "") NakitAkisOrnek.AlanKaydet(t.DbName, r.DocEntry, "U_DekontNo", G(g, "dekontNo"), "Finans (olay)");
                             var simdi = TalepModulleri.OlayZamani ?? DateTime.Now;
                             a.Ek["odemeTarihi"] = simdi.ToString("dd.MM.yyyy", Tr); a.Ek["odenenTutar"] = $"{N(r.U_OdenenTutar ?? r.U_Tutar ?? 0)} {r.U_OdenenTutarPB ?? r.U_ParaBirimi}"; if (G(g, "dekontNo") != "") a.Ek["dekontNo"] = G(g, "dekontNo");
-                            TalepMotoru.Hareket(a, simdi, $"Kasa Nakit Akışı: #{r.DocEntry} ödendi ({a.Ek["odenenTutar"]}, {r.U_OdemeYontemi})", "Kasa Nakit Akışı"); TalepMotoru.Log(a, simdi, "ÖT_EVENT", "PAYMENT", "", a.Ek["odenenTutar"], "Sistem", "Event", "Kasa Nakit Akışı");
+                            TalepMotoru.Hareket(a, simdi, $"Nakit Akış Planlama: #{r.DocEntry} ödendi ({a.Ek["odenenTutar"]}, {r.U_OdemeYontemi})", "Nakit Akış Planlama"); TalepMotoru.Log(a, simdi, "ÖT_EVENT", "PAYMENT", "", a.Ek["odenenTutar"], "Sistem", "Event", "Nakit Akış Planlama");
                             return null;
                         }
                 }
@@ -233,7 +233,7 @@ namespace WebApplication3.Data
             return m;
         }
 
-        /// <summary>Örnek kayıtlar (talep motoru tohumu): her birimden bir talep; onaylı olanlar Kasa Nakit Akışı › Departman Talepleri'nde görünür.</summary>
+        /// <summary>Örnek kayıtlar (talep motoru tohumu): her birimden bir talep; onaylı olanlar Nakit Akış Planlama › Departman Talepleri'nde görünür.</summary>
         public static void Tohum()
         {
             var bugun = DateTime.Today;

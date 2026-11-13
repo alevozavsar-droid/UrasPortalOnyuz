@@ -515,25 +515,25 @@ return default;
 
         public DateTime? CekVadeTarihi { get; set; }
         public string CekNumarasi { get; set; }
-        // --- çek plan ↔ ibraz kontrolü (Data/CekAkibetOrnek.cs; elle yazılmış Rapor123Controller doldurur): Kasa Nakit Akışı'nda planlanan tedarikçi, gerçek ibraz / ciro bilgisi ve karşılaştırma
+        // --- çek plan ↔ ibraz kontrolü (Data/CekAkibetOrnek.cs; elle yazılmış Rapor123Controller doldurur): Nakit Akış Planlama'da planlanan tedarikçi, gerçek ibraz / ciro bilgisi ve karşılaştırma
         public int? CekDocEntry { get; set; }
         public string CekBelge { get; set; }             // Çek | Senet
         public string PlanlananTedarikci { get; set; }
         public DateTime? PlanlamaTarihi { get; set; }
-        public string PlanKaynak { get; set; }           // "Kasa Nakit Akışı #1234" / planlayan
+        public string PlanKaynak { get; set; }           // "Nakit Akış Planlama #1234" / planlayan
         public string IbrazYeri { get; set; }
         public string IbrazTuru { get; set; }            // Ciro | Bankaya İbraz | Teminat
         public DateTime? IbrazTarihi { get; set; }
         public string IbrazBelgeNo { get; set; }
         public string PlanKontrol { get; set; }          // Uyumlu | Farklı | İbraz Bekliyor | Plansız İbraz | —
-        // --- satır kaynağı (Takip Paneli "Satır Kaynağı · İşlem" sütunu): satır hangi kayıttan üretildi — Kasa Nakit Akışı (nakit ödeme / plan), Kasa Fişi (elden ödeme / tahsilat), Çek Akıbeti (portföy girişi / ciro / ibraz), Dolaşım Planı (adım)
+        // --- satır kaynağı (Takip Paneli "Satır Kaynağı · İşlem" sütunu): satır hangi kayıttan üretildi — Nakit Akış Planlama (nakit ödeme / plan), Kasa Fişi (elden ödeme / tahsilat), Çek Akıbeti (portföy girişi / ciro / ibraz), Dolaşım Planı (adım)
         public string Kaynak { get; set; }               // Title Case rozet metni, ör. "Kasa Fişi · Elden Ödeme"
         public string KaynakDetay { get; set; }          // belge / numara / tarih açıklaması
         public string Referans { get; set; }             // "Referans · No" sütunu: makbuz / fiş / ciro bordrosu / ibraz belge no
         public string IslemTuruAdi { get; set; }         // "İşlem Türü" sütunu (Title Case): Nakit Ödeme | Elden Ödeme | Nakit Tahsilat | Portföye Giriş | Tedarikçiye Ciro | Bankaya İbraz | Grup İçi Ciro | Plan Adımı | Plan
         public decimal? DovizTutar { get; set; }         // dövizli işlem: döviz tutarı (Borc / Alacak TL karşılığıdır), ParaBirimi döviz kodu
         public decimal? Kur { get; set; }
-        // --- Kredi · Banka Kartı sekmesi (HesapTipi KART, IslemNo = Kasa Nakit Akışı DocEntry): kart, taksit, ekstre dönemi, Finekra kart ekstresi ödemesiyle eşleşme
+        // --- Kredi · Banka Kartı sekmesi (HesapTipi KART, IslemNo = Nakit Akış Planlama DocEntry): kart, taksit, ekstre dönemi, Finekra kart ekstresi ödemesiyle eşleşme
         public string Kart { get; set; }
         public string Taksit { get; set; }
         public string EkstreDonemi { get; set; }

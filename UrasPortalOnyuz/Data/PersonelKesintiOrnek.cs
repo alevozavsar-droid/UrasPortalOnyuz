@@ -1,8 +1,8 @@
 // ============================================================
-// PERSONEL MALİYET RAPORU — "Ek Çalışmalar" ve "Diğer Kesintiler" sekmeleri (dinamik: talep modüllerinden ve Kasa Nakit Akışı'ndan okunur)
+// PERSONEL MALİYET RAPORU — "Ek Çalışmalar" ve "Diğer Kesintiler" sekmeleri (dinamik: talep modüllerinden ve Nakit Akış Planlama'dan okunur)
 //   Ek Çalışmalar   : Mesai talepleri (Data/TalepMotoru.cs, modül MESAI) — kim mesai yapmış, kim onaylamış, ne zaman; PDKS gerçekleşmesi, puantaj aktarımı ve
 //                     taleplerden hesaplanan tutar (fiili saat × saat ücreti × çarpan) ↔ Personel Maliyet Tablosu'ndaki Fazla Mesai (R + X) karşılaştırması.
-//   Diğer Kesintiler: Şahsi (maaş) avans talepleri (Data/NakitAvansOrnek.cs) — onay adımları, kasa ödemesi, Kasa Nakit Akışı (finans konsolide) senkron satırı;
+//   Diğer Kesintiler: Şahsi (maaş) avans talepleri (Data/NakitAvansOrnek.cs) — onay adımları, kasa ödemesi, Nakit Akış Planlama (finans konsolide) senkron satırı;
 //                     kesinti planları (PkKesinti: avans mahsubu, icra, borç, BES …) — toplam, aylık taksit, ödenen / kalan, başlangıç ve bitiş dönemi ("ne zamana kadar"), PDF ekleri (icra dosyası).
 //   Personel eşlemesi: Personel Maliyet Tablosu kişileri talep modüllerinde NaKisi olarak tanınır (PersonelNo = cari kodu 335.xxx; NakitAvansOrnek.KisiBul bu listeye de bakar).
 //   Tohum: Eylül 2026 dönemi için Fazla Mesai (R / X) olan kişilere mesai talepleri; kesintisi olanlar için şahsi avans + mahsup planı, iki örnek icra dosyası, borç planları.

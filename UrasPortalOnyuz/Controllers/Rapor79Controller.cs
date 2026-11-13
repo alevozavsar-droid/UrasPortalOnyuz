@@ -28,7 +28,7 @@ namespace WebApplication3.Controllers
         [HttpGet(""), HttpGet("Index")]
         public IActionResult Index(string sirket, string bas, string bit, string sekme, DateTime? startDate, DateTime? endDate)
         {
-            ViewData["Title"] = "Kasa Nakit Akışı";
+            ViewData["Title"] = "Nakit Akış Planlama";
             ViewBag.Sirketler = NakitAkisOrnek.Sirketler.Select(s => new KeyValuePair<string, string>(s.DbName, s.Ad)).ToList();
             ViewBag.VarsayilanSirket = NakitAkisOrnek.Sirketler.Any(s => s.DbName == sirket) ? sirket : "";   // 13 Kas 2026: şirket verilmediyse Tümü (Konsolide) açılır (eskiden URASKIMYA); doğrudan bağlantı ?sirket=… ile gelir
             ViewBag.Bas = (startDate ?? (DateTime.TryParse(bas, CultureInfo.InvariantCulture, DateTimeStyles.None, out var b1) ? b1 : DateTime.Today.AddDays(-30))).ToString("yyyy-MM-dd");
@@ -164,30 +164,46 @@ namespace WebApplication3.Controllers
             cekDocEntry = k.DocEntry, no = k.No, belge = k.Belge, tip = k.IslemTipi, banka = k.Banka, asilBorclu = k.AsilBorclu, kimdenGeldi = k.Musteri, vade = k.Vade.ToString("yyyy-MM-dd"), tutar = k.Tutar, pb = k.PB, akibet = k.IslemTuru, ibrazYeri = k.IbrazYeri, kontrol = k.Kontrol, planlananTedarikci = k.PlanlananTedarikci,
             sahip = k.Sirket, kaynakSirket = k.KaynakSirket, dolasim = k.DolasimOzeti, gerceklesen = k.GerceklesenAdim, adimToplam = k.Dolasim.Count, adimlar = k.Dolasim.Select(a => new { a.Sira, a.Eden, a.Alan, a.Tur, planTarih = a.PlanTarih.ToString("yyyy-MM-dd"), a.Durum, gercekTarih = a.GercekTarih?.ToString("yyyy-MM-dd"), a.BelgeNo, a.KapananBakiye, a.YeniBorc, a.Not })
         };
-        public class AlanIstek { public string DbName { get; set; } public int DocEntry { get; set; } public string Alan { get; set; } public string Deger { get; set; } }
+        public class AlanIstek { public string DbName { get; set; } public int DocEntry { get; set; } public string Alan { get; set; } public string Deger { get; set; } public bool OzelOnay { get; set; } }
         /// <summary>Satır içi düzenleme: ana alan (durum, tarih, tutar, kurum …) ya da yöntem alanı.</summary>
         [HttpPost("AlanKaydet")]
         public IActionResult AlanKaydet([FromBody] AlanIstek istek)
         {
             if (istek == null) return Json(new { success = false, message = "Veri yok." });
-            var r = NakitAkisOrnek.AlanKaydet(Db(istek.DbName), istek.DocEntry, istek.Alan, istek.Deger, Kullanici); var m = NakitAkisOrnek.Bul(Db(istek.DbName), istek.DocEntry); if (m != null) NakitAkisOrnek.BelgeleriDoldur(m);
-            return Json(new { success = r.ok, message = r.mesaj, row = m == null ? null : SatirJson(m) });
+            string db = Db(istek.DbName); var once = NakitAkisOrnek.Bul(db, istek.DocEntry); string iz = NakitAkisKalici.Iz(once);
+            // Özel Onay kuralı sunucuda da denetlenir (ekran denetimi atlatılamasın): ÖDENDİ için Mutabık / muafiyet / Özel Onay durumu ya da Özel Onay Modu
+            if (once != null && istek.Alan == "U_Durum" && istek.Deger == "ÖDENDİ") { var engel = NakitAkisOrnek.OdendiEngeli(once.U_Durum, once.U_MutabakatDurumu, once.MuafiyetSebebi, istek.OzelOnay); if (engel != null) { NakitAkisOrnek.BelgeleriDoldur(once); return Json(new { success = false, message = engel, row = SatirJson(once) }); } }
+            var r = NakitAkisOrnek.AlanKaydet(db, istek.DocEntry, istek.Alan, istek.Deger, Kullanici); var m = NakitAkisOrnek.Bul(db, istek.DocEntry); if (m != null) NakitAkisOrnek.BelgeleriDoldur(m);
+            List<object> rows = null;
+            if (r.ok)
+            {
+                NakitAkisKalici.Yaz("alan", db, istek.DocEntry, iz, new { alan = istek.Alan, deger = istek.Deger }, Kullanici);
+                if (istek.Alan == "U_Oncelik") rows = NakitAkisOrnek.OncelikKaydir(db, istek.DocEntry).Select(x => { NakitAkisOrnek.BelgeleriDoldur(x); return SatirJson(x); }).ToList();   // aynı temsilcide çakışan öncelikler bir sıra kayar
+            }
+            return Json(new { success = r.ok, message = r.mesaj, row = m == null ? null : SatirJson(m), rows });
         }
         /// <summary>Çekmece: satırın tüm alanları (JSON gövde NakitAkisViewModel; dbName sorgu).</summary>
         [HttpPost("SatirKaydet")]
-        public IActionResult SatirKaydet([FromBody] NakitAkisViewModel model, [FromQuery] string dbName)
+        public IActionResult SatirKaydet([FromBody] NakitAkisViewModel model, [FromQuery] string dbName, [FromQuery] bool ozelOnay = false)
         {
             if (model == null) return Json(new { success = false, message = "Veri yok." });
+            var once = NakitAkisOrnek.Bul(Db(dbName), model.DocEntry); string iz = NakitAkisKalici.Iz(once);
+            if (once != null && model.U_Durum == "ÖDENDİ" && once.U_Durum != "ÖDENDİ") { var engel = NakitAkisOrnek.OdendiEngeli(once.U_Durum, model.U_MutabakatDurumu ?? once.U_MutabakatDurumu, model.MuafiyetSebebi ?? once.MuafiyetSebebi, ozelOnay); if (engel != null) return Json(new { success = false, message = engel }); }
+            var gunlukModel = System.Text.Json.JsonSerializer.SerializeToElement(model);
             var mk = MukerrerCevabi(Db(dbName), model); if (mk != null) return mk;
             bool ok = NakitAkisOrnek.Guncelle(Db(dbName), model, Kullanici); var m = NakitAkisOrnek.Bul(Db(dbName), model.DocEntry); if (m != null) NakitAkisOrnek.BelgeleriDoldur(m);
+            if (ok) NakitAkisKalici.Yaz("kaydet", Db(dbName), model.DocEntry, iz, gunlukModel, Kullanici);
             return Json(new { success = ok, message = ok ? "Kaydedildi." : "Satır bulunamadı.", row = m == null ? null : SatirJson(m) });
         }
         [HttpPost("SatirEkle")]
-        public IActionResult SatirEkle([FromBody] NakitAkisViewModel model, [FromQuery] string dbName)
+        public IActionResult SatirEkle([FromBody] NakitAkisViewModel model, [FromQuery] string dbName, [FromQuery] bool ozelOnay = false)
         {
             if (model == null) return Json(new { success = false, message = "Veri yok." });
+            if (model.U_Durum == "ÖDENDİ") { var engel = NakitAkisOrnek.OdendiEngeli("", model.U_MutabakatDurumu, model.MuafiyetSebebi, ozelOnay); if (engel != null) return Json(new { success = false, message = "Yeni kayıt doğrudan ÖDENDİ açılamaz. " + engel }); }
+            var gunlukModel = System.Text.Json.JsonSerializer.SerializeToElement(model);
             var mk = MukerrerCevabi(Db(dbName), model); if (mk != null) return mk;
             var m = NakitAkisOrnek.Ekle(Db(dbName), model, Kullanici); NakitAkisOrnek.BelgeleriDoldur(m);
+            NakitAkisKalici.Yaz("ekle", Db(dbName), m.DocEntry, null, gunlukModel, Kullanici);
             return Json(new { success = true, message = m.U_OdemeYontemi == "Nakit" ? $"Nakit ödeme talebi açıldı (#{m.DocEntry}); onay bekliyor: {string.Join(" / ", NakitAkisOrnek.NakitOnaycilari)}." : $"Ödeme kaydı eklendi (#{m.DocEntry}).", row = SatirJson(m) });
         }
         /// <summary>Kayıt öncesi mükerrer kontrolü: aynı belge + tutar ya da aynı cari + tutar + tarih varsa kayıt durdurulur; kullanıcı onaylarsa (MukerrerKontrolEdildi = 1) kaydedilir.</summary>
@@ -205,7 +221,9 @@ namespace WebApplication3.Controllers
         public IActionResult NakitOnay([FromBody] OnayIstek istek)
         {
             if (istek == null) return Json(new { success = false, message = "Veri yok." });
+            string izOnay = NakitAkisKalici.Iz(NakitAkisOrnek.Bul(Db(istek.DbName), istek.DocEntry));
             var r = istek.Karar == "Reddet" ? NakitAkisOrnek.NakitReddet(Db(istek.DbName), istek.DocEntry, istek.Onaylayan, istek.Not, Kullanici) : NakitAkisOrnek.NakitOnayla(Db(istek.DbName), istek.DocEntry, istek.Onaylayan, istek.Not, Kullanici);
+            if (r.ok) NakitAkisKalici.Yaz("nakitOnay", Db(istek.DbName), istek.DocEntry, izOnay, new { karar = istek.Karar, onaylayan = istek.Onaylayan, not = istek.Not }, Kullanici);
             var m = NakitAkisOrnek.Bul(Db(istek.DbName), istek.DocEntry); if (m != null) NakitAkisOrnek.BelgeleriDoldur(m);
             return Json(new { success = r.ok, message = r.mesaj, row = m == null ? null : SatirJson(m) });
         }
@@ -295,7 +313,9 @@ namespace WebApplication3.Controllers
         public IActionResult DekontEkle([FromBody] DekontIstek istek)
         {
             if (istek == null) return Json(new { success = false, message = "Veri yok." });
+            string izEk = NakitAkisKalici.Iz(NakitAkisOrnek.Bul(Db(istek.DbName), istek.DocEntry));
             var r = NakitAkisOrnek.EkEkle(Db(istek.DbName), istek.DocEntry, istek.Ad, istek.Tur ?? "Dekont", istek.Aciklama, null, null, Kullanici); if (r.satir != null) NakitAkisOrnek.BelgeleriDoldur(r.satir);
+            if (r.ok) NakitAkisKalici.Yaz("ek", Db(istek.DbName), istek.DocEntry, izEk, new { ad = istek.Ad, tur = istek.Tur ?? "Dekont", aciklama = istek.Aciklama }, Kullanici);
             return Json(new { success = r.ok, message = r.mesaj, row = r.satir == null ? null : SatirJson(r.satir) });
         }
         /// <summary>Ek yükleme (çekmece / Talimatlar sekmesi): dekont, imzalı makbuz, imzalı talimat, ciro bordrosu, çek fotokopisi — dosya bellek içinde tutulur, Ek / TalimatEk ile açılır.</summary>
@@ -305,7 +325,9 @@ namespace WebApplication3.Controllers
             byte[] veri = null; string ad = dosya?.FileName;
             if (dosya != null && dosya.Length > 0) { if (dosya.Length > 8_000_000) return Json(new { success = false, message = "Dosya 8 MB'ı aşamaz." }); using (var ms = new MemoryStream()) { dosya.CopyTo(ms); veri = ms.ToArray(); } }
             if (!string.IsNullOrEmpty(talimatNo)) { var rt = TalimatOrnek.EkEkle(talimatNo, ad, tur, aciklama, dosya?.ContentType, veri, Kullanici); return Json(new { success = rt.ok, message = rt.mesaj, talimat = rt.talimat == null ? null : TalimatJson(rt.talimat) }); }
+            string izYukle = NakitAkisKalici.Iz(NakitAkisOrnek.Bul(Db(dbName), docEntry));
             var r = NakitAkisOrnek.EkEkle(Db(dbName), docEntry, ad, tur, aciklama, dosya?.ContentType, veri, Kullanici); if (r.satir != null) NakitAkisOrnek.BelgeleriDoldur(r.satir);
+            if (r.ok) NakitAkisKalici.Yaz("ek", Db(dbName), docEntry, izYukle, new { ad = r.satir.DekontListesi.Last().DosyaAdi, tur = r.satir.DekontListesi.Last().Tur, aciklama, icerikTipi = dosya?.ContentType, dosya = NakitAkisKalici.EkSakla(veri, ad) }, Kullanici);   // dosya App_Data/kasa-nakit-ekler altında saklanır: yeniden başlatmada geri gelir
             return Json(new { success = r.ok, message = r.mesaj, row = r.satir == null ? null : SatirJson(r.satir) });
         }
         [HttpGet("Ek")]
@@ -346,6 +368,7 @@ namespace WebApplication3.Controllers
         {
             if (istek == null) return Json(new { success = false, message = "Veri yok." });
             var r = NakitAkisOrnek.GrupIciTurDegistir(Db(istek.DbName), istek.DocEntry, istek.Tur, Kullanici); var m = NakitAkisOrnek.Bul(Db(istek.DbName), istek.DocEntry); if (m != null) NakitAkisOrnek.BelgeleriDoldur(m);
+            if (r.ok && m != null) NakitAkisKalici.Yaz("grupTur", Db(istek.DbName), istek.DocEntry, NakitAkisKalici.Iz(m), new { deger = istek.Tur }, Kullanici);
             return Json(new { success = r.ok, message = r.mesaj, row = m == null ? null : SatirJson(m), belgeler = GrupIciBelgeOrnek.Listele(null).Select(GrupIciBelgeOrnek.Json).ToList() });
         }
         [HttpGet("GrupIciBelgeVeri")] public IActionResult GrupIciBelgeVeri(string no) { var b = GrupIciBelgeOrnek.Bul(no); return Json(b == null ? new { success = false, message = "Belge bulunamadı." } : (object)new { success = true, belge = GrupIciBelgeOrnek.Json(b), faturaSahibiFisi = MuhasebeOrnek.Json(MuhasebeOrnek.Bul(b.FaturaSahibiFisNo)), odeyenFisi = MuhasebeOrnek.Json(MuhasebeOrnek.Bul(b.OdeyenFisNo)) }); }
@@ -358,7 +381,32 @@ namespace WebApplication3.Controllers
             return View("GrupIciBelge", b);
         }
         [HttpPost("SilJson")]
-        public IActionResult SilJson([FromBody] GrupIciIstek istek) => Json(new { success = istek != null && NakitAkisOrnek.Sil(Db(istek.DbName), istek.DocEntry, Kullanici) });
+        public IActionResult SilJson([FromBody] GrupIciIstek istek)
+        {
+            if (istek == null) return Json(new { success = false });
+            string iz = NakitAkisKalici.Iz(NakitAkisOrnek.Bul(Db(istek.DbName), istek.DocEntry)); bool ok = NakitAkisOrnek.Sil(Db(istek.DbName), istek.DocEntry, Kullanici);
+            if (ok) NakitAkisKalici.Yaz("sil", Db(istek.DbName), istek.DocEntry, iz, null, Kullanici);
+            return Json(new { success = ok });
+        }
+        public class OncelikSiraIstek { public List<NakitAkisKalici.SiraSatiri> Satirlar { get; set; } }
+        /// <summary>
+        /// Öncelik Planı sekmesi (13 Kas 2026): temsilci kendi açık satırlarını sürükleyip sıralar; ekran yeni sırayı (1, 2, 3 …; boş = önceliksiz) toplu gönderir. Değişen satırlar döner; günlüğe yazılır.
+        /// </summary>
+        [HttpPost("OncelikSirala")]
+        public IActionResult OncelikSirala([FromBody] OncelikSiraIstek istek)
+        {
+            if (istek?.Satirlar == null || istek.Satirlar.Count == 0) return Json(new { success = false, message = "Veri yok." });
+            var rows = new List<object>(); var gunluk = new List<object>();
+            foreach (var s in istek.Satirlar)
+            {
+                if (s.Oncelik != null && (s.Oncelik < 1 || s.Oncelik > 99)) continue;
+                var m = NakitAkisOrnek.Bul(Db(s.DbName), s.DocEntry); if (m == null || m.U_Durum == "ÖDENDİ" || m.U_Oncelik == s.Oncelik) continue;
+                lock (NakitAkisOrnek.Kilit) m.U_Oncelik = s.Oncelik;
+                gunluk.Add(new { dbName = Db(s.DbName), docEntry = s.DocEntry, oncelik = s.Oncelik, iz = NakitAkisKalici.Iz(m) }); NakitAkisOrnek.BelgeleriDoldur(m); rows.Add(SatirJson(m));
+            }
+            if (gunluk.Count > 0) { NakitAkisKalici.Yaz("oncelikSira", "", 0, null, new { satirlar = gunluk }, Kullanici); NakitAkisOrnek.Gunluge(Db(istek.Satirlar[0].DbName), istek.Satirlar[0].DocEntry, "Öncelik", $"Öncelik planı yeniden sıralandı: {gunluk.Count} satır", Kullanici); }
+            return Json(new { success = true, message = $"{gunluk.Count} satırın önceliği güncellendi.", rows });
+        }
 
         [HttpGet("ExportExcel")] public IActionResult ExportExcel(DateTime? startDate, DateTime? endDate, string viewRole) => Content("Ön yüz örneğinde Excel üretimi yok.", "text/plain; charset=utf-8");
 
@@ -527,14 +575,16 @@ namespace WebApplication3.Controllers
         [HttpPost("MuafiyetKaydet")]
         public IActionResult MuafiyetKaydet([FromBody] MuafiyetIstek model)
         {
-            var m = model == null ? null : NakitAkisOrnek.Bul(Db(model.DbName), model.DocEntry); if (m != null) m.MuafiyetSebebi = model.Sebep ?? "";
+            var m = model == null ? null : NakitAkisOrnek.Bul(Db(model.DbName), model.DocEntry); if (m != null) { m.MuafiyetSebebi = model.Sebep ?? ""; NakitAkisKalici.Yaz("muafiyet", Db(model.DbName), model.DocEntry, NakitAkisKalici.Iz(m), new { deger = m.MuafiyetSebebi }, Kullanici); }
             return Json(new { success = m != null, sebep = m?.MuafiyetSebebi ?? "" });
         }
         [HttpPost("UploadDekont")]
         public IActionResult UploadDekont(IFormFile dekontDosya, string dbName, int docEntry, string secilenMail, string dekontAciklama = null)
         {
             byte[] veri = null; if (dekontDosya != null && dekontDosya.Length > 0 && dekontDosya.Length <= 8_000_000) { using (var ms = new MemoryStream()) { dekontDosya.CopyTo(ms); veri = ms.ToArray(); } }
+            string izDk = NakitAkisKalici.Iz(NakitAkisOrnek.Bul(Db(dbName), docEntry));
             var r = NakitAkisOrnek.EkEkle(Db(dbName), docEntry, dekontDosya?.FileName ?? $"dekont_{docEntry}.pdf", "Dekont", dekontAciklama, dekontDosya?.ContentType, veri, Kullanici);
+            if (r.ok) NakitAkisKalici.Yaz("ek", Db(dbName), docEntry, izDk, new { ad = dekontDosya?.FileName ?? $"dekont_{docEntry}.pdf", tur = "Dekont", aciklama = dekontAciklama, icerikTipi = dekontDosya?.ContentType, dosya = NakitAkisKalici.EkSakla(veri, dekontDosya?.FileName) }, Kullanici);
             if (!r.ok) return Json(new { success = false, message = r.mesaj });
             var e = r.satir.DekontListesi.Last();
             return Json(new { success = true, message = r.mesaj + (string.IsNullOrEmpty(secilenMail) ? "" : $" E-posta: {secilenMail}"), filePath = e.DosyaYolu });

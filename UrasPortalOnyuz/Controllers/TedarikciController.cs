@@ -11,7 +11,7 @@ namespace WebApplication3.Controllers
 {
     /// <summary>
     /// Tedarikçi raporları uçları: Tedarikçi Fatura ve Ödeme Takip (Rapor52; Views/Rapor52/Index.cshtml, js/tedarikci-takip.js) ve Tedarikçi Konsolide Ödeme Takip (Rapor53; js/tedarikci-konsolide.js).
-    /// Veri: tedarikçi cari kartları (ortak süzgeç), Cari Mutabakat alış faturaları / ödemeleri / verilen çekler, Kasa Nakit Akışı planlı ödemeleri (Data/NakitAkisOrnek.cs; tedarikçi adıyla eşlenir), kredi limiti ve risk.
+    /// Veri: tedarikçi cari kartları (ortak süzgeç), Cari Mutabakat alış faturaları / ödemeleri / verilen çekler, Nakit Akış Planlama planlı ödemeleri (Data/NakitAkisOrnek.cs; tedarikçi adıyla eşlenir), kredi limiti ve risk.
     /// </summary>
     [Authorize]
     public class TedarikciController : Controller
@@ -22,7 +22,7 @@ namespace WebApplication3.Controllers
         private static string N2(decimal v) => v.ToString("N2", Tr);
         private static decimal KurTl(string pb) => TahsilatOrnek.TlMi(pb) ? 1m : (MutabakatOrnek.Kurlar.TryGetValue(pb, out var x) ? x : 1m);
         static List<CariKart> Tedarikciler() => CariKartOrnek.Kartlar.Where(k => k.KartTipi == "Tedarikçi").OrderBy(k => k.Kod).ToList();
-        /// <summary>Kasa Nakit Akışı'ndaki (tüm grup şirketleri) ödenmemiş / ödenmiş planlı ödemeler; tedarikçi adı kartla eşlenir.</summary>
+        /// <summary>Nakit Akış Planlama'daki (tüm grup şirketleri) ödenmemiş / ödenmiş planlı ödemeler; tedarikçi adı kartla eşlenir.</summary>
         static List<(string Db, string Sirket, Rapor79Controller_NakitAkis m)> NakitAkis()
         {
             var l = new List<(string, string, Rapor79Controller_NakitAkis)>();
@@ -58,7 +58,7 @@ namespace WebApplication3.Controllers
             }).ToList();
             return Json(new { success = true, ben = Ben(), bugun = bugun.ToString("yyyy-MM-dd"), secenekler = CariSuzgec.Secenekler(), sirketler = CekAkibetOrnek.Sirketler.Select(s => new { ad = s.Ad, db = s.DbName }), satirlar, planlar = planListe, odemeler = TahsilatOrnek.Tahsilatlar.Count });
         }
-        /// <summary>Tedarikçi detayı: alış faturaları (açık / kapalı, ödeme eşleşmesi), ödemeler ve verilen çekler, eşleşmemiş ödemeler, Kasa Nakit Akışı planlı ödemeleri, günlük.</summary>
+        /// <summary>Tedarikçi detayı: alış faturaları (açık / kapalı, ödeme eşleşmesi), ödemeler ve verilen çekler, eşleşmemiş ödemeler, Nakit Akış Planlama planlı ödemeleri, günlük.</summary>
         [HttpGet]
         public IActionResult Detay(string kod, int ay = 12)
         {

@@ -1,6 +1,6 @@
 ﻿// PLANLI ÖDEMELER — Mali İşler › Finans › Ödeme Yönetimi › Planlı Ödemeler (/PlanliOdemeler)
 // Konsolide Finansal Takip Paneli › Düzenli Ödemeler sekmesiyle AYNI VERİ ve AYNI TASARIM: Data/DuzenliOdemeOrnek.cs (aylık ödeme takvim listesi — tedarikçi, ürün / hizmet, şirket,
-// ödeme şekli, ödeme günü, ortalama aylık tutar, kategori). Her ay aktif her kayıt için o ayın ödeme gününe planlanmış bir Kasa Nakit Akışı satırı açılır; burada ya da panelde yapılan
+// ödeme şekli, ödeme günü, ortalama aylık tutar, kategori). Her ay aktif her kayıt için o ayın ödeme gününe planlanmış bir Nakit Akış Planlama satırı açılır; burada ya da panelde yapılan
 // kayıt / düzenleme / pasif / akıt işlemleri iki ekranda da anında görünür (tek liste, bellek içi). Ekran: Views/PlanliOdeme/Index.cshtml · betik: wwwroot/js/planli-odeme.js
 // (Eski "hatırlatma e-postası + taksit planı" ekranı kaldırıldı; Uretilen/Services/PlanliOdeme* dosyaları kullanılmıyor.)
 using System;
@@ -81,7 +81,7 @@ namespace WebApplication3.Controllers
             return Json(new { success = r.ok, message = r.mesaj, kayit = r.d == null ? null : DuzenliOdemeOrnek.Json(r.d) });
         }
 
-        /// <summary>Bir ayın (bu ay / gelecek ay) akmamış aktif kayıtlarını — ya da tek kaydı — Kasa Nakit Akışı'na akıtır (aynı aya akmış olanlar atlanır).</summary>
+        /// <summary>Bir ayın (bu ay / gelecek ay) akmamış aktif kayıtlarını — ya da tek kaydı — Nakit Akış Planlama'ya akıtır (aynı aya akmış olanlar atlanır).</summary>
         [HttpPost("Akit")]
         public IActionResult Akit([FromBody] Istek i)
         {

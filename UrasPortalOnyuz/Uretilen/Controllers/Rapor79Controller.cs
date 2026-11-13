@@ -75,7 +75,7 @@ namespace FinansRaporlama.Controllers
 
         public List<DekontKaydi> DekontListesi { get; set; } = new List<DekontKaydi>();
 
-        // --- ödeme yöntemine özel alanlar (Kasa Nakit Akışı yöntem sekmeleri; elle yazılmış Controllers/Rapor79Controller.cs + Data/NakitAkisOrnek.cs) ---
+        // --- ödeme yöntemine özel alanlar (Nakit Akış Planlama yöntem sekmeleri; elle yazılmış Controllers/Rapor79Controller.cs + Data/NakitAkisOrnek.cs) ---
         public string U_CekDocEntryler { get; set; } = "";      // seçilen çek / senet kayıtları: Data/CekAkibetOrnek.cs DocEntry'leri, virgülle
         public string U_CekNolar { get; set; } = "";            // seçilen belge numaraları (görünüm / not)
         public List<NakitAkisBelge> Belgeler { get; set; } = new List<NakitAkisBelge>();   // seçilen belgelerin güncel akıbeti (okuma anında Çek Akıbeti kaydından doldurulur)
@@ -96,11 +96,11 @@ namespace FinansRaporlama.Controllers
         public int? U_UstDocEntry { get; set; }              // kısmi ödeme / taksit: aynı belgenin ilk satırı (kardeş satırlar birlikte izlenir)
         public string U_OnayDurumu { get; set; } = "";       // "" | Onay Bekliyor | Onaylandı | Reddedildi — nakit ödeme talebi onayı (Alev Özavşar / Neslihan Uludağ / Özge İsen) ve plansız çek çıkış talebi (GMY onayı)
         public string U_Onaylayan { get; set; } = ""; public DateTime? U_OnayTarihi { get; set; } public string U_OnayNotu { get; set; } = "";
-        public string U_CikisTalebi { get; set; } = "";      // Çek Akıbeti'nden Kasa Nakit Akışı'nda planlanmadan yapılmak istenen çıkış (Ciro Edildi / Bankaya Tahsile Verildi …): onaylanmadan çek çıkmaz
+        public string U_CikisTalebi { get; set; } = "";      // Çek Akıbeti'nden Nakit Akış Planlama'da planlanmadan yapılmak istenen çıkış (Ciro Edildi / Bankaya Tahsile Verildi …): onaylanmadan çek çıkmaz
         public string U_CikisIbrazYeri { get; set; } = ""; public string U_CikisBelgeNo { get; set; } = ""; public string U_CikisTalepEden { get; set; } = "";
         public string U_YevmiyeNo { get; set; } = "";        // ödemenin muhasebe fişi (Data/MuhasebeOrnek.cs; makbuz / talimat gerçekleşince otomatik)
-        public int? U_Oncelik { get; set; }                  // ödeme önceliği (13 Kas 2026): temsilci kendi planlanan satırlarını 1, 2, 3 … diye sıralar; Kasa Nakit Akışı'nda Öncelik sütunu (satır içi seçim, süzgeç, sıralama)
-        public string U_Kaynak { get; set; } = "";         // satırın geldiği yer (13 Kas 2026, "bu satır nereden geldi"): Ödeme Talebi | Takip Paneli | Banka Hareketi (Finekra) | İbraz (Çek Akıbeti) | Çek Akıbeti …; boşsa NakitAkisOrnek.KaynakAdi alanlardan türetir (Planlı Düzenli Ödemeler, Personel Ödemesi, Kredi Raporu, Nakit Avans, Grup İçi Modül, Kasa Nakit Akışı)
+        public int? U_Oncelik { get; set; }                  // ödeme önceliği (13 Kas 2026): temsilci kendi planlanan satırlarını 1, 2, 3 … diye sıralar; Nakit Akış Planlama'da Öncelik sütunu (satır içi seçim, süzgeç, sıralama)
+        public string U_Kaynak { get; set; } = "";         // satırın geldiği yer (13 Kas 2026, "bu satır nereden geldi"): Ödeme Talebi | Takip Paneli | Banka Hareketi (Finekra) | İbraz (Çek Akıbeti) | Çek Akıbeti …; boşsa NakitAkisOrnek.KaynakAdi alanlardan türetir (Planlı Düzenli Ödemeler, Personel Ödemesi, Kredi Raporu, Nakit Avans, Grup İçi Modül, Nakit Akış Planlama)
         public bool GrupIciTurSecildi { get; set; }          // fatura sahibi ≠ ödeyen satırında grup içi işlem türü (Mahsup / Temlik / Yansıtma) kullanıcı tarafından seçildi mi (Grup İçi İşlemler sekmesi); seçilmediyse varsayılan Mahsup
         public string U_TalepEden { get; set; } = "";        // ödemeyi talep eden (satınalmacı / kaydı açan / avans kullanan — şahsi avansta ad gizlenir / çek çıkış talebini yapan); fatura sahibinin altında gösterilir
         public string U_AliciBanka { get; set; } = ""; public string U_AliciHesapAdi { get; set; } = "";   // Havale / EFT: alıcı banka ve hesap adı (IBAN ile birlikte banka talimatına yazılır; Data/NakitAkisOrnek.cs TedarikciBanka)
@@ -113,7 +113,7 @@ namespace FinansRaporlama.Controllers
         public string U_IbrazBelgeNo { get; set; } = ""; public DateTime? U_IbrazTarihi { get; set; }   // çek / senet ibrazı (ciro bordrosu / bankaya ibraz) — ekrandan "Çeki Ver / İbraz Et"
     }
 
-    /// <summary>Kasa Nakit Akışı satırına seçilen çek / senet (Data/CekAkibetOrnek.cs kaydının anlık görünümü): akıbet ve plan ↔ ibraz kontrolü ile.</summary>
+    /// <summary>Nakit Akış Planlama satırına seçilen çek / senet (Data/CekAkibetOrnek.cs kaydının anlık görünümü): akıbet ve plan ↔ ibraz kontrolü ile.</summary>
     public class NakitAkisBelge
     {
         public int CekDocEntry { get; set; } public string No { get; set; } public string Belge { get; set; } public string Banka { get; set; } public string AsilBorclu { get; set; } public string KimdenGeldi { get; set; }
@@ -190,7 +190,7 @@ namespace FinansRaporlama.Controllers
         public string Aciklama { get; set; }
         public string Yukleyen { get; set; }
         public DateTime Tarih { get; set; }
-        public string Tur { get; set; } = "Dekont";          // Dekont | İmzalı Makbuz | İmzalı Talimat | Ciro Bordrosu | Çek Fotokopisi | Diğer (Kasa Nakit Akışı ekleri)
+        public string Tur { get; set; } = "Dekont";          // Dekont | İmzalı Makbuz | İmzalı Talimat | Ciro Bordrosu | Çek Fotokopisi | Diğer (Nakit Akış Planlama ekleri)
         public string IcerikTipi { get; set; } = "";         // yüklenen dosyanın MIME tipi; Veri bellek içi (uygulama yeniden başlayınca silinir)
         public byte[] Veri { get; set; }
         public long Boyut { get; set; }

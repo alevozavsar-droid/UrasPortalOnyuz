@@ -1,28 +1,28 @@
 // ============================================================
 // KREDİ YAPILANDIRMA RAPORU (9 Kas 2026, kullanıcı: "banka kredileri zamanında ödenmediği için yeni yapılandırmalar yapıyoruz … yapılandırma öncesi kredi bilgileri, yapılandırma sonrası,
-//   ipotek vs. detayları girilebilsin; aylık taksit Kasa Nakit Akışı ve Planlı Ödemelere akmalı")
+//   ipotek vs. detayları girilebilsin; aylık taksit Nakit Akış Planlama ve Planlı Ödemelere akmalı")
 //   Ekran: Controllers/KrediYapilandirmaController.cs + Views/KrediYapilandirma/Index.cshtml + wwwroot/js/kredi-yapilandirma.js (Mali İşler › Finans › Krediler ve Finansman).
-//   Kayıt: şirket (Kasa Nakit Akışı şirketleri), banka / şube, kredi no, tür; YAPILANDIRMA ÖNCESİ (kullanım tarihi, anapara, faiz, vade, taksit, kalan anapara / vade, son ödeme, geciken taksit
+//   Kayıt: şirket (Nakit Akış Planlama şirketleri), banka / şube, kredi no, tür; YAPILANDIRMA ÖNCESİ (kullanım tarihi, anapara, faiz, vade, taksit, kalan anapara / vade, son ödeme, geciken taksit
 //   adedi ve tutarı, gecikme faizi, masraf, önceki durum) ve SONRASI (yapılandırma tarihi, protokol no, yeni anapara, yeni faiz, BSMV, yeni vade, ödemesiz ay, yeni taksit — boşsa anüite ile
 //   hesaplanır —, ilk taksit tarihi, ödenen taksit, durum), TEMİNATLAR (ipotek: tapu bilgisi, derece, tutar, ekspertiz, malik; kefalet, rehin, teminat mektubu …), not.
 //   Taksit takvimi: ödemesiz aylarda faiz anaparaya eklenir, sonra eşit taksit; aylık oran = yıllık faiz / 12 × (1 + BSMV); son taksit kalanı kapatır.
-//   Peşinat (9 Kas 2026, "peşinat ödemesi oluyor"): protokolde peşin ödenen tutar; taksitlendirilen yeni anaparanın dışında, toplam geri ödemeye girer; Kasa Nakit Akışı'na "KRD-001 · Peşinat" satırı (anahtar "KRD-001|P"), ödendi işaretiyle ÖDENDİ.
-//   Akış: NakitAkisaAktar açıkken her taksit Kasa Nakit Akışı'na Havale / EFT satırı olarak yazılır (NakitAkisOrnek.KrediTaksitiYaz; anahtar "KRD-001|003"; ödenen taksitler ÖDENDİ) ve kredi
+//   Peşinat (9 Kas 2026, "peşinat ödemesi oluyor"): protokolde peşin ödenen tutar; taksitlendirilen yeni anaparanın dışında, toplam geri ödemeye girer; Nakit Akış Planlama'ya "KRD-001 · Peşinat" satırı (anahtar "KRD-001|P"), ödendi işaretiyle ÖDENDİ.
+//   Akış: NakitAkisaAktar açıkken her taksit Nakit Akış Planlama'ya Havale / EFT satırı olarak yazılır (NakitAkisOrnek.KrediTaksitiYaz; anahtar "KRD-001|003"; ödenen taksitler ÖDENDİ) ve kredi
 //   Planlı Düzenli Ödemeler'e "Kredi" kategorisiyle kaydedilir (DuzenliOdemeOrnek; aylık otomatik akış kapalı (DisAkis) — taksit satırları buradan gelir, aylar AkisBagla ile bağlanır).
 //   Yapılandırma değişince satırlar güncellenir, fazlası kaldırılır (ödenmişe dokunulmaz); kayıt silinince ödenmemiş satırlar kaldırılır, düzenli ödeme pasife alınır.
 //   Kalıcılık: App_Data/kredi-yapilandirma.json (PersonelMaliyetKalici.Dizin; git dışı; kök KrediDepo: krediler + bağımsız rehin / ipotek kayıtları + teminat çekleri + belgeler; eski düz dizi tanınır).
 //   ÖRNEK KAYIT YOK (10 Kas 2026, kullanıcı: "sen hiç örnek koyma, gerçek doğru verileri koyalım"): dosya yoksa boş başlar; tüm kayıtlar gerçek veridir (Ornek alanı yalnız eski dosyalarla uyum için kalır).
 //   Belgeler (9 Kas 2026, "sözleşmelerin PDF'ini taratıp yükleyelim, GKS'leri yükleyelim … teminata verilen çekler"): sözleşme / protokol / GKS / ipotek / rehin / teminat mektubu / çek / ekspertiz / fek yazısı PDF-JPG-PNG, App_Data/kredi-belgeler altında;
 //   krediye, teminat çekine ya da rehin kaydına bağlanabilir. Rehin · İpotek Takibi: kredi teminatları (Durum / tesis / fek) + eski krediler için bağımsız kayıtlar. Teminat Çekleri: bankaya teminat verilen müşteri çek / senetleri, durum ve iade takibi.
-//   Kasa Nakit Akışı satırlarının ödendi durumu bellek içidir (Kasa modülü kalıcı değil); açılışta satırlar yeniden yazılır, ödenen taksit sayısı kayıttan gelir.
+//   Nakit Akış Planlama satırlarının ödendi durumu bellek içidir (Kasa modülü kalıcı değil); açılışta satırlar yeniden yazılır, ödenen taksit sayısı kayıttan gelir.
 //   BANKA BORÇ DÖKÜMÜ (11 Kas 2026, kullanıcı: "Kredi Raporuna Emlak Katılım Bankasına ait bu borçları da ekle, Alv Kimya ve Daf Kimya'ya ait"; EMLAK_KATILIM_BORÇ.xlsx): taksit bazlı güncel borç dökümü
-//   (BankaBorcSatiri; yapılandırma ÖNCESİ borç). Kredi kaydı DEĞİLDİR: Kasa Nakit Akışı / Planlı Düzenli Ödemeler'e satır yazmaz (yapılandırma protokolü imzalanınca kredi kaydı ayrıca girilir).
+//   (BankaBorcSatiri; yapılandırma ÖNCESİ borç). Kredi kaydı DEĞİLDİR: Nakit Akış Planlama / Planlı Düzenli Ödemeler'e satır yazmaz (yapılandırma protokolü imzalanınca kredi kaydı ayrıca girilir).
 //   Tohum Data/Tohum/emlak-katilim-borc-2026-11.json (Alv Kimya 42 + Daf Kimya 8 satır; BorcTohumSurumu bayrağıyla bir kez uygulanır, silinen satır geri gelmez). Boş (null) tutar = dökümde o sütun yok:
 //   Daf Kimya dökümünde kalan ana para, gecikme cezası ve toplam borç sütunları yoktur (uydurulmaz; ekranda "Dökümde Yok"). Toplamlar dosyanın ÖZET sayfasıyla aynıdır
 //   (ana para ₺ 28.875.065,28 · tahsil tutarı ₺ 54.133.370,11; Alv Kimya toplam borç ₺ 46.236.533,23 = kalan ana para 21.711.813,11 + gecikme cezası 24.524.720,12; kâr ve BSMV bu toplamda yoktur).
 //   PROTOKOL ÖDEME PLANI · DÖVİZ (11 Kas 2026, kullanıcı: "Emlak Katılım … güncel bakiye, ana para, yapılandırma ödeme detayı, ipotek tapusu ekte; tüm yapılandırma detaylarını Kredi Raporunda güncelle"; Borç Ödeme Protokolü 10.11.2026):
 //   banka protokolü ödeme tablosu (tarih + tutar) verdiğinde anüite hesabı yerine OdemePlani satırları kullanılır (Tur Peşinat | Taksit; tutarlar ferileriyle protokol tutarıdır, faiz / anapara ayrımı yapılmaz, Faiz 0 yazılır).
-//   Kayıt para birimi PB (TRY / USD / EUR / GBP; tüm tutarlar bu birimde), Kur = TL karşılığı için (0 → NakitAkisOrnek.Kurlar); Kasa Nakit Akışı satırları kayıt para birimiyle ve kurla yazılır (U_Tutar PB, U_TutarTL = tutar × kur).
+//   Kayıt para birimi PB (TRY / USD / EUR / GBP; tüm tutarlar bu birimde), Kur = TL karşılığı için (0 → NakitAkisOrnek.Kurlar); Nakit Akış Planlama satırları kayıt para birimiyle ve kurla yazılır (U_Tutar PB, U_TutarTL = tutar × kur).
 //   Borclular = protokoldeki diğer müşterek / müteselsil borçlular (bilgi). Peşinat satırları "KRD-001|P", "KRD-001|P2" … anahtarlarıyla; taksitler "KRD-001|001" …
 //   Borç dökümü ÖZET sayfasının "Yapılandırma Güncel" sütunu (EMLAK_KATILIM_BORÇ_2.xlsx; BorcOzetSatiri, tohum sürüm 2): firma × döviz bazında protokolle yapılandırılan güncel tutar (Alv Kimya TL = 67.785.685,35 − Daf Kimya 7.896.836,88 dosyadaki formül; USD 22.869,60; Daf Kimya 7.896.836,88).
 // ============================================================
@@ -142,13 +142,13 @@ namespace WebApplication3.Data
         // ---- yapılandırma sonrası
         public DateTime? YapilandirmaTarihi { get; set; } public string ProtokolNo { get; set; } = ""; public decimal YeniAnapara { get; set; } public decimal YeniFaizOrani { get; set; } public decimal BsmvOrani { get; set; } = 5m;
         public int YeniVade { get; set; } public int OdemesizAy { get; set; } public decimal YeniTaksit { get; set; } public DateTime? IlkTaksitTarihi { get; set; } public int OdenenTaksit { get; set; } public string Durum { get; set; } = "Yapılandırıldı";
-        /// <summary>Peşinat (9 Kas 2026, "peşinat ödemesi oluyor"): protokolde peşin ödenen tutar; taksitlendirilen yeni anaparanın dışındadır, toplam geri ödemeye girer, Kasa Nakit Akışı'na ayrı satır ("KRD-001 · Peşinat") olarak yazılır. Tarih boşsa yapılandırma tarihi.</summary>
+        /// <summary>Peşinat (9 Kas 2026, "peşinat ödemesi oluyor"): protokolde peşin ödenen tutar; taksitlendirilen yeni anaparanın dışındadır, toplam geri ödemeye girer, Nakit Akış Planlama'ya ayrı satır ("KRD-001 · Peşinat") olarak yazılır. Tarih boşsa yapılandırma tarihi.</summary>
         public decimal Pesinat { get; set; } public DateTime? PesinatTarihi { get; set; } public bool PesinatOdendi { get; set; }
         /// <summary>Para birimi ve kur (11 Kas 2026): tüm tutarlar PB'de (TRY / USD / EUR / GBP); Kur = TL karşılığı (0 → NakitAkisOrnek.Kurlar). Borclular = protokoldeki diğer müşterek / müteselsil borçlular. OdemePlani = banka protokolünün ödeme tablosu (varsa anüite yerine).</summary>
         public string PB { get; set; } = "TRY"; public decimal Kur { get; set; } public string Borclular { get; set; } = ""; public List<ProtokolOdeme> OdemePlani { get; set; } = new List<ProtokolOdeme>();
         public List<KrediTeminat> Teminatlar { get; set; } = new List<KrediTeminat>();
         public string Not { get; set; } = "";
-        /// <summary>Taksitler Kasa Nakit Akışı'na satır olarak yazılır ve kredi Planlı Düzenli Ödemeler'de izlenir.</summary>
+        /// <summary>Taksitler Nakit Akış Planlama'ya satır olarak yazılır ve kredi Planlı Düzenli Ödemeler'de izlenir.</summary>
         public bool NakitAkisaAktar { get; set; } = true;
         public bool Ornek { get; set; }
         public int DuzenliOdemeId { get; set; } public string DuzenliOdemeNo { get; set; } = "";
@@ -219,7 +219,7 @@ namespace WebApplication3.Data
         public static bool PlanVar(KrediKaydi k) => k.OdemePlani != null && k.OdemePlani.Count > 0;
         static IEnumerable<ProtokolOdeme> PlanTaksit(KrediKaydi k) => (k.OdemePlani ?? new List<ProtokolOdeme>()).Where(p => p.Tur != "Peşinat");
         static IEnumerable<ProtokolOdeme> PlanPesinat(KrediKaydi k) => (k.OdemePlani ?? new List<ProtokolOdeme>()).Where(p => p.Tur == "Peşinat");
-        /// <summary>Uygulanan kur: kayıttaki kur, yoksa Kasa Nakit Akışı kur tablosu (TRY = 1).</summary>
+        /// <summary>Uygulanan kur: kayıttaki kur, yoksa Nakit Akış Planlama kur tablosu (TRY = 1).</summary>
         public static decimal KurUyg(KrediKaydi k) => (k.PB ?? "TRY") == "TRY" ? 1m : k.Kur > 0 ? k.Kur : (NakitAkisOrnek.Kurlar.TryGetValue(k.PB, out var x) ? x : 1m);
         /// <summary>Peşinat toplamı: plan varsa Peşinat satırlarının toplamı, yoksa tek peşinat alanı.</summary>
         public static decimal PesinatToplam(KrediKaydi k) => PlanVar(k) ? R2(PlanPesinat(k).Sum(p => p.Tutar)) : k.Pesinat;
@@ -269,7 +269,7 @@ namespace WebApplication3.Data
         // ---------- liste ve kalıcılık ----------
         public static List<KrediKaydi> Liste() { Yukle(); lock (Kilit) return _liste.OrderBy(k => k.Id).ToList(); }
         public static KrediKaydi Bul(int id) { Yukle(); lock (Kilit) return _liste.FirstOrDefault(k => k.Id == id); }
-        /// <summary>Açılışta (OrnekIsinma, Kasa Nakit Akışı ve Planlı Düzenli Ödemeler tohumlandıktan sonra): dosya okunur (yoksa boş; örnek kayıt üretilmez); her kayıt için akış satırları yeniden yazılır.</summary>
+        /// <summary>Açılışta (OrnekIsinma, Nakit Akış Planlama ve Planlı Düzenli Ödemeler tohumlandıktan sonra): dosya okunur (yoksa boş; örnek kayıt üretilmez); her kayıt için akış satırları yeniden yazılır.</summary>
         public static void Yukle()
         {
             List<KrediKaydi> l;
@@ -314,7 +314,7 @@ namespace WebApplication3.Data
             kayit = null; ozet = ""; if (d == null) return "Veri yok.";
             Yukle();
             string sirket = Temiz(d.Sirket), banka = Temiz(d.Banka);
-            if (!CekAkibetOrnek.Sirketler.Any(s => s.Ad == sirket)) return "Şirket seçilmelidir (Kasa Nakit Akışı şirketleri).";
+            if (!CekAkibetOrnek.Sirketler.Any(s => s.Ad == sirket)) return "Şirket seçilmelidir (Nakit Akış Planlama şirketleri).";
             if (banka == "") return "Banka zorunludur.";
             if (d.Anapara < 0 || d.KalanAnapara < 0 || d.Taksit < 0 || d.GecikenTutar < 0 || d.GecikmeFaizi < 0 || d.Masraf < 0 || d.YeniAnapara < 0 || d.YeniTaksit < 0 || d.Pesinat < 0 || d.Kar < 0 || d.Bsmv < 0) return "Tutarlar negatif olamaz.";
             if (d.FaizOrani < 0 || d.FaizOrani > 300 || d.YeniFaizOrani < 0 || d.YeniFaizOrani > 300 || d.BsmvOrani < 0 || d.BsmvOrani > 100) return "Faiz / BSMV oranı geçersiz.";
@@ -378,17 +378,17 @@ namespace WebApplication3.Data
             int kal = 0, odenmis = 0;
             foreach (var m in NakitAkisOrnek.KrediSatirlari(k.No + "|")) { if (NakitAkisOrnek.KrediTaksitiKaldir(m.U_KrediTaksit, kullanici) != null) kal++; else odenmis++; }
             if (k.DuzenliOdemeId > 0) DuzenliOdemeOrnek.DurumDegistir(k.DuzenliOdemeId, "Pasif", kullanici);
-            ozet = $"{k.No} silindi; Kasa Nakit Akışı'ndan {kal} ödenmemiş taksit satırı kaldırıldı" + (odenmis > 0 ? $", {odenmis} ödenmiş satır kaldı" : "") + (k.DuzenliOdemeId > 0 ? $"; düzenli ödeme {k.DuzenliOdemeNo} pasife alındı" : "") + ".";
+            ozet = $"{k.No} silindi; Nakit Akış Planlama'dan {kal} ödenmemiş taksit satırı kaldırıldı" + (odenmis > 0 ? $", {odenmis} ödenmiş satır kaldı" : "") + (k.DuzenliOdemeId > 0 ? $"; düzenli ödeme {k.DuzenliOdemeNo} pasife alındı" : "") + ".";
             return null;
         }
         public static string AktarDegistir(int id, bool aktar, string kullanici, out string ozet)
         {
             ozet = ""; var k = Bul(id); if (k == null) return "Kayıt bulunamadı.";
-            lock (Kilit) { k.NakitAkisaAktar = aktar; k.Ornek = false; Log(k, aktar ? "Nakit Akışa Aktarım Açıldı" : "Nakit Akışa Aktarım Kapatıldı", aktar ? "taksitler Kasa Nakit Akışı ve Planlı Ödemeler'e yazılır" : "ödenmemiş taksit satırları kaldırılır, düzenli ödeme pasife alınır", kullanici); Yaz(); }
+            lock (Kilit) { k.NakitAkisaAktar = aktar; k.Ornek = false; Log(k, aktar ? "Nakit Akışa Aktarım Açıldı" : "Nakit Akışa Aktarım Kapatıldı", aktar ? "taksitler Nakit Akış Planlama ve Planlı Ödemeler'e yazılır" : "ödenmemiş taksit satırları kaldırılır, düzenli ödeme pasife alınır", kullanici); Yaz(); }
             var s = Senkron(k, kullanici); ozet = $"{k.No}: {SenkronOzet(k, s)}"; return null;
         }
 
-        // ---------- Kasa Nakit Akışı ve Planlı Düzenli Ödemeler ----------
+        // ---------- Nakit Akış Planlama ve Planlı Düzenli Ödemeler ----------
         /// <summary>Peşinat tarihi: girilen peşinat tarihi, yoksa yapılandırma tarihi, yoksa bugün.</summary>
         public static DateTime PesinatTarih(KrediKaydi k) => k.PesinatTarihi ?? k.YapilandirmaTarihi ?? DateTime.Today;
         /// <summary>Peşinat + taksit satırlarını yazar / günceller / fazlasını kaldırır ve düzenli ödeme kaydını eşler. Kilit dışında çağrılır (NakitAkis ve Duzenli kendi kilitlerini alır).</summary>
@@ -426,7 +426,7 @@ namespace WebApplication3.Data
         {
             if (!k.NakitAkisaAktar) return "Nakit akışa aktarım kapalı" + (s.kaldirildi > 0 ? $"; {s.kaldirildi} ödenmemiş satır kaldırıldı" : "") + ".";
             if (k.Durum == "İptal" || k.Durum == "Teklif Aşamasında") return $"Durum \"{k.Durum}\": taksitler nakit akışa yazılmaz" + (s.kaldirildi > 0 ? $"; {s.kaldirildi} satır kaldırıldı" : "") + ".";
-            return $"Kasa Nakit Akışı: {s.eklendi} taksit satırı eklendi, {s.guncellendi} güncellendi, {s.kaldirildi} kaldırıldı" + (s.odenmis > 0 ? $", {s.odenmis} ödenmiş satır değişmedi" : "") + (k.DuzenliOdemeNo != "" ? $" · Planlı Düzenli Ödemeler: {k.DuzenliOdemeNo}" : "") + ".";
+            return $"Nakit Akış Planlama: {s.eklendi} taksit satırı eklendi, {s.guncellendi} güncellendi, {s.kaldirildi} kaldırıldı" + (s.odenmis > 0 ? $", {s.odenmis} ödenmiş satır değişmedi" : "") + (k.DuzenliOdemeNo != "" ? $" · Planlı Düzenli Ödemeler: {k.DuzenliOdemeNo}" : "") + ".";
         }
         /// <summary>Planlı Düzenli Ödemeler kaydı: banka = tedarikçi, "Kredi" kategorisi, Havale / EFT, ilk taksit günü, taksit tutarı; aylık otomatik akış kapalı (DisAkis), taksit ayları Kasa satırlarına bağlanır. Taksit yoksa pasif.</summary>
         static void DuzenliSenkron(KrediKaydi k, List<KrediTaksit> taksitler, string kullanici)
@@ -434,7 +434,7 @@ namespace WebApplication3.Data
             if (taksitler.Count == 0) { if (k.DuzenliOdemeId > 0) DuzenliOdemeOrnek.DurumDegistir(k.DuzenliOdemeId, "Pasif", kullanici); return; }
             var ilk = taksitler[0]; int gun = Math.Max(1, Math.Min(28, ilk.Tarih.Day)); string pb = string.IsNullOrEmpty(k.PB) ? "TRY" : k.PB; decimal kur = KurUyg(k);
             string urun = $"Kredi Taksidi · {(k.KrediNo != "" ? k.KrediNo : k.KrediTuru)} ({k.No})";
-            string not = $"Kredi Raporu {k.No}: {taksitler.Count} taksit, ilk {ilk.Tarih:dd.MM.yyyy}, son {taksitler[taksitler.Count - 1].Tarih:dd.MM.yyyy}; taksit satırları rapordan Kasa Nakit Akışı'na yazılır (aylık otomatik akış bu kayıt için kapalı)" + (pb != "TRY" ? $"; taksit {ilk.Tutar.ToString("N2", Tr)} {pb} × kur {kur.ToString("N4", Tr)} = TL karşılığı" : "");
+            string not = $"Kredi Raporu {k.No}: {taksitler.Count} taksit, ilk {ilk.Tarih:dd.MM.yyyy}, son {taksitler[taksitler.Count - 1].Tarih:dd.MM.yyyy}; taksit satırları rapordan Nakit Akış Planlama'ya yazılır (aylık otomatik akış bu kayıt için kapalı)" + (pb != "TRY" ? $"; taksit {ilk.Tutar.ToString("N2", Tr)} {pb} × kur {kur.ToString("N4", Tr)} = TL karşılığı" : "");
             var r = DuzenliOdemeOrnek.Kaydet(k.DuzenliOdemeId, k.Banka, urun, k.Sirket, "Havale / EFT", "Kredi", gun, R2(ilk.Tutar * kur), not, kullanici, "SG-12", true);
             if (!r.ok || r.d == null) { if (k.DuzenliOdemeId > 0 && r.d == null) { lock (Kilit) { k.DuzenliOdemeId = 0; k.DuzenliOdemeNo = ""; } } return; }
             bool degisti = false; lock (Kilit) { if (k.DuzenliOdemeId != r.d.Id || k.DuzenliOdemeNo != r.d.No) { k.DuzenliOdemeId = r.d.Id; k.DuzenliOdemeNo = r.d.No; degisti = true; } if (degisti) Yaz(); }

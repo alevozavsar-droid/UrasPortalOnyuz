@@ -1,5 +1,5 @@
 // ============================================================
-// BELGE GÖRÜNTÜSÜ (PDF) — Kasa Nakit Akışı › belge no tıklanınca açılan pencerenin sağ yanı (13 Kas 2026: "fatura numarasına tıkladığımda hem kayıt detaylarını hem de fatura PDF görüntüsünü göreyim").
+// BELGE GÖRÜNTÜSÜ (PDF) — Nakit Akış Planlama › belge no tıklanınca açılan pencerenin sağ yanı (13 Kas 2026: "fatura numarasına tıkladığımda hem kayıt detaylarını hem de fatura PDF görüntüsünü göreyim").
 //   Satıra belge aslı ("Fatura" eki) yüklendiyse /Rapor79/FaturaPdf onu döndürür; yüklenmediyse bu sınıf sistem kaydından (NakitAkisOrnek.BelgeDetay: başlık, kalemler, toplamlar, süreç)
 //   A4 dikey bir belge görüntüsü üretir (QuestPDF, Community lisansı). Görüntünün altında "sistem kaydından üretilmiştir, belge aslı değildir" notu yer alır.
 //   Fatura / Sipariş: kalem tablosu + KDV + genel toplam · Cari Bakiye: açık kalemler dökümü · Mahsup / Temlik / Yansıtma / Avans: tek kalemli belge özeti.
@@ -103,7 +103,7 @@ namespace WebApplication3.Data
                 p.Footer().Column(f =>
                 {
                     f.Item().LineHorizontal(1).LineColor(Cizgi);
-                    f.Item().PaddingTop(4).Text($"Bu görüntü Kasa Nakit Akışı kaydından üretilmiştir; belge aslı değildir. Belge aslı yüklendiğinde bu pencerede o gösterilir. · {sirket} · kayıt #{docEntry} · {DateTime.Now.ToString("dd.MM.yyyy HH:mm", Tr)}").FontSize(7).FontColor(Gri);
+                    f.Item().PaddingTop(4).Text($"Bu görüntü Nakit Akış Planlama kaydından üretilmiştir; belge aslı değildir. Belge aslı yüklendiğinde bu pencerede o gösterilir. · {sirket} · kayıt #{docEntry} · {DateTime.Now.ToString("dd.MM.yyyy HH:mm", Tr)}").FontSize(7).FontColor(Gri);
                 });
             })).GeneratePdf();
         }

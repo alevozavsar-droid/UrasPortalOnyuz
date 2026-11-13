@@ -95,7 +95,7 @@ namespace FinansRaporlama.Controllers
         [Authorize]
         public IActionResult Index()
  {
-            // 29 Eki 2026: "Nakit Akışı (Ödeme Bekleyenler)" menüden kaldırıldı; ödeme bekleyen satırlar Kasa Nakit Akışı'nda (Data/KurumsalMenu.cs › X)
+            // 29 Eki 2026: "Nakit Akışı (Ödeme Bekleyenler)" menüden kaldırıldı; ödeme bekleyen satırlar Nakit Akış Planlama'da (Data/KurumsalMenu.cs › X)
             return Redirect("/Rapor79");
 }
 

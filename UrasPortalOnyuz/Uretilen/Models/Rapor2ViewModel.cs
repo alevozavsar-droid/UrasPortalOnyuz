@@ -62,10 +62,10 @@ namespace WebApplication3.Models
         public string DolasimSiradaki { get; set; }         // "Grup İçi Ciro → Alv Kimya (05.11.2026)"
         public List<Rapor2DolasimAdim> DolasimAdimlar { get; set; } = new List<Rapor2DolasimAdim>();
         public string Kontrol { get; set; }                 // Uyumlu | Farklı | İbraz Bekliyor | Plansız İbraz | ""
-        public string Kaynak { get; set; }                  // Kasa Nakit Akışı · Plan | Çek Akıbeti · Portföy Girişi | Çek Akıbeti · Ciro | Dolaşım Planı · Gerçekleşen Adım …
+        public string Kaynak { get; set; }                  // Nakit Akış Planlama · Plan | Çek Akıbeti · Portföy Girişi | Çek Akıbeti · Ciro | Dolaşım Planı · Gerçekleşen Adım …
         public string KaynakDetay { get; set; }
         public string SatirIslem { get; set; }              // portfoy (Nakit Akışa Ekle / İbraz Et) | planli (Tedarikçiye Çık) | gmy (onay bekliyor) | yok (işlem gerekmez)
-        public int? PlanDocEntry { get; set; }              // Kasa Nakit Akışı ödeme satırı
+        public int? PlanDocEntry { get; set; }              // Nakit Akış Planlama ödeme satırı
         public string PlanDurum { get; set; }
         public string PlanTalimat { get; set; }
         public string PlanLink { get; set; }

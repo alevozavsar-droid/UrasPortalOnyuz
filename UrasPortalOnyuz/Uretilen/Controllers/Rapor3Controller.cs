@@ -35,7 +35,7 @@ namespace FinansRaporlama.Controllers
 
         public IActionResult Index(int pageNumber = 1, int pageSize = InitialPageSize)
  {
-            // 29 Eki 2026: "Nakit Akışı (Ödenenler)" menüden kaldırıldı; ödenen satırlar Kasa Nakit Akışı'nda (Data/KurumsalMenu.cs › X)
+            // 29 Eki 2026: "Nakit Akışı (Ödenenler)" menüden kaldırıldı; ödenen satırlar Nakit Akış Planlama'da (Data/KurumsalMenu.cs › X)
             return Redirect("/Rapor79");
 }
 

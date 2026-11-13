@@ -10,9 +10,9 @@ using WebApplication3.Data;
 namespace WebApplication3.Controllers
 {
     /// <summary>
-    /// KONSOLİDE FİNANSAL TAKİP PANELİ (Rapor123) — Kasa Nakit Akışı tasarım dilinde modern ekran (Views/Rapor123/Index.cshtml + wwwroot/js/takip-paneli.js; veri /Rapor123/Veri).
+    /// KONSOLİDE FİNANSAL TAKİP PANELİ (Rapor123) — Nakit Akış Planlama tasarım dilinde modern ekran (Views/Rapor123/Index.cshtml + wwwroot/js/takip-paneli.js; veri /Rapor123/Veri).
     /// KASA / BANKA hareketleri Data/NakitAkisOrnek.cs ödemelerinden, ÇEK hareketleri Data/CekAkibetOrnek.cs kayıtlarından (plan ↔ ibraz kontrolü), Finekra sekmesi bankadan otomatik akan
-    /// hareketler (Data/FinekraOrnek.cs): onay + cari / hesap seçimi → muhasebe fişi; her hareket Kasa Nakit Akışı ile eşlenir, nakit akışta olmayan çıkış "Nakit Akışa Gönder" ile satır olur.
+    /// hareketler (Data/FinekraOrnek.cs): onay + cari / hesap seçimi → muhasebe fişi; her hareket Nakit Akış Planlama ile eşlenir, nakit akışta olmayan çıkış "Nakit Akışa Gönder" ile satır olur.
     /// Eski (ana projedeki) görünüm /Rapor123/Eski. Üretilmiş sürüm Uretilen/Controllers/Rapor123Controller.cs içinde #if ile kapalı (R123_* model sınıfları orada).
     /// </summary>
     [Authorize]
@@ -94,7 +94,7 @@ namespace WebApplication3.Controllers
             {
                 string dbName = CekAkibetOrnek.DbName(h.Sirket), anahtar = $"{h.DbKey}|{h.HesapTipi}|{h.IslemNo}"; bool nakitAkistan = (h.HesapTipi == "KASA" || h.HesapTipi == "BANKA" || h.HesapTipi == "KART" || h.HesapTipi == "GRUPICI") && h.IslemNo < 90000;
                 fnkMap.TryGetValue(dbName + "|" + h.IslemNo, out var f);
-                // Kasa Nakit Akışı eşleşmesi: satır nakit akış ödemesinden üretildiyse kendisi; elden ödenmiş kasa çıkışı panelden "Nakit Akışa Ekle" ile eklendiyse eşlenen satır (KasaEslesmeleri)
+                // Nakit Akış Planlama eşleşmesi: satır nakit akış ödemesinden üretildiyse kendisi; elden ödenmiş kasa çıkışı panelden "Nakit Akışa Ekle" ile eklendiyse eşlenen satır (KasaEslesmeleri)
                 int? naDoc = nakitAkistan ? h.IslemNo : (int?)null; string naDb = dbName, naEslesme = nakitAkistan ? "Nakit Akış Ödemesi" : null;
                 if (naDoc == null && h.HesapTipi == "KASA" && FinekraOrnek.KasaEslesmeleri.TryGetValue(anahtar, out var ke)) { naDoc = ke.docEntry; naDb = ke.dbName; naEslesme = "Panelden Eklendi"; }
                 var naSatir = naDoc != null ? NakitAkisOrnek.Bul(naDb, naDoc.Value) : null;
@@ -115,11 +115,11 @@ namespace WebApplication3.Controllers
                         ibrazBelgeOneri = k == null ? "" : CekAkibetOrnek.IbrazBelgeNoOner(k), ibrazBelgeImzali = k?.IbrazBelgeImzali ?? false, ibrazBelgeYolu = k?.IbrazBelgeYolu ?? "", ibrazBelgeDosya = k?.IbrazBelgeDosya ?? "", ibrazBelgeYukleme = k?.IbrazBelgeYukleme?.ToString("yyyy-MM-dd HH:mm"), ibrazBelgeYukleyen = k?.IbrazBelgeYukleyen ?? "",
                         durum = k?.IslemTuru, portfoyde = k?.Portfoyde ?? false, secilebilir = k?.Secilebilir ?? false, kullanim = k?.KullanimDurumu, sahip = k?.Sirket, sahipDb = k?.DbName, musteri = k?.Musteri, banka = k?.Banka, tutar = k?.Tutar, dolasim = k?.DolasimOzeti ?? "",
                         planDocEntry = k?.PlanDocEntry, planDb = plan?.U_KaynakFirma, planDurum = plan?.U_Durum, planTalimat = plan?.U_TalimatNo ?? "", cikisTalebi = plan?.U_CikisTalebi ?? "", planOnay = plan?.U_OnayDurumu ?? "", planLink = plan == null ? null : OdemeLink(plan),
-                        // Dolaşım sütunu: Kasa Nakit Akışı dolaşım planı adımları (eden → alan, tür, durum, tarih)
+                        // Dolaşım sütunu: Nakit Akış Planlama dolaşım planı adımları (eden → alan, tür, durum, tarih)
                         dolasimAdimlar = k == null ? null : k.Dolasim.Select(a => new { sira = a.Sira, eden = a.Eden, alan = a.Alan, tur = a.Tur, durum = a.Durum, tarih = (a.GercekTarih ?? a.PlanTarih).ToString("yyyy-MM-dd"), belgeNo = a.BelgeNo ?? "" }).ToList()
                     } : null,
                     // satır kaynağı: üreticide yazılır; panelden eklenip eşlenen kasa fişi satırında eklenen nakit akış satırı da yazılır
-                    kaynak = h.Kaynak ?? "", kaynakDetay = (h.KaynakDetay ?? "") + (naEslesme == "Panelden Eklendi" ? $" · panelden Kasa Nakit Akışı #{naDoc} eklendi" : ""),
+                    kaynak = h.Kaynak ?? "", kaynakDetay = (h.KaynakDetay ?? "") + (naEslesme == "Panelden Eklendi" ? $" · panelden Nakit Akış Planlama #{naDoc} eklendi" : ""),
                     // Kredi · Banka Kartı sekmesi: kart, taksit, ekstre dönemi, Finekra kart ekstresi ödemesi eşleşmesi
                     kart = h.HesapTipi == "KART" ? new { kart = h.Kart, taksit = h.Taksit, ekstreDonemi = h.EkstreDonemi, ekstreDurumu = h.EkstreDurumu, ekstreFnkId = h.EkstreFnkId, ekstreFnkNo = h.EkstreFnkNo ?? "" } : null,
                     // Temlik · Mahsup · Yansıtma sekmesi: ödeyen ≠ fatura sahibi; grup içi belge / bağlı modül kaydı ve kontrol
@@ -298,13 +298,13 @@ namespace WebApplication3.Controllers
         /// <summary>SAP kaydı için belge adayları ("hangi faturaya istinaden"): eşleşmiş nakit akış satırının belgesi + carinin açık faturaları / siparişleri, tutar yakınlığına göre; en iyi aday öneri.</summary>
         [HttpGet("FinekraFaturalar")] public IActionResult FinekraFaturalar(int id, string cari) => Json(new { success = true, data = FinekraOrnek.FaturaAdaylari(id, cari) });
 
-        // ---------- Kasa Nakit Akışı ile senkron işlemler: eksik ödeme ekleme, çeki nakit akışa gönderme, planlı çeki tedarikçiye çıkarma ----------
-        /// <summary>Kasa Nakit Akışı derin bağlantısı: şirket, yöntem sekmesi ve satır (çekmece açılır).</summary>
+        // ---------- Nakit Akış Planlama ile senkron işlemler: eksik ödeme ekleme, çeki nakit akışa gönderme, planlı çeki tedarikçiye çıkarma ----------
+        /// <summary>Nakit Akış Planlama derin bağlantısı: şirket, yöntem sekmesi ve satır (çekmece açılır).</summary>
         static string OdemeLink(NakitAkisViewModel m) => $"/Rapor79?sirket={m.U_KaynakFirma}&sekme={YontemSekme(m.U_OdemeYontemi)}&doc={m.DocEntry}";
         static string YontemSekme(string y) => y == "Nakit" ? "nakit" : y == "Çek" ? "cek" : y == "Senet" ? "senet" : y == "Havale / EFT" ? "havale" : y == "Kredi Kartı / Banka Kartı" ? "kredi" : y == "Mahsup" ? "mahsup" : y == "Temlik" ? "temlik" : y == "Yansıtma" ? "yansitma" : "diger";
         public class OdemeIstek { public string DbName { get; set; } public string Kurum { get; set; } public string Yontem { get; set; } public decimal Tutar { get; set; } public string PB { get; set; } public string PlanlananTarih { get; set; } public string BelgeTipi { get; set; } public string BelgeNo { get; set; } public string UrunHizmet { get; set; } public bool Odendi { get; set; } public string DekontNo { get; set; } public string Kasa { get; set; } public string BankaHesabi { get; set; } public int CekDocEntry { get; set; } public string Not { get; set; } public string IslemTipi { get; set; } public string KaynakKey { get; set; } }
         /// <summary>
-        /// Eksik ödeme ekleme (gün içinde yapılmış ama nakit akışta olmayan ödeme ya da yeni plan): Kasa Nakit Akışı'na satır açılır; "ödendi" işaretliyse ÖDENDİ olur (fiş atılır, dekont / makbuz yazılır).
+        /// Eksik ödeme ekleme (gün içinde yapılmış ama nakit akışta olmayan ödeme ya da yeni plan): Nakit Akış Planlama'ya satır açılır; "ödendi" işaretliyse ÖDENDİ olur (fiş atılır, dekont / makbuz yazılır).
         /// Çek / senet seçildiyse belge satıra planlanır (Çek Akıbeti: Planlandı). Nakit satırı ödenmemişse GMY nakit onayına düşer.
         /// </summary>
         [HttpPost("OdemeEkle")]
@@ -332,7 +332,7 @@ namespace WebApplication3.Controllers
             var m = NakitAkisOrnek.Ekle(s.DbName, gelen, Kullanici);
             if (yontem == "Havale / EFT" && !string.IsNullOrEmpty(i.BankaHesabi)) NakitAkisOrnek.AlanKaydet(s.DbName, m.DocEntry, "U_BankaHesabi", i.BankaHesabi, Kullanici);
             var ek = new List<string>();
-            // Kasa sekmesindeki nakit akışta olmayan kasa çıkışından açıldıysa: açılan satır o hareketle eşlenir (Kasa Nakit Akışı Eşleşmesi sütunu "Var" olur, satır ikinci kez listelenmez)
+            // Kasa sekmesindeki nakit akışta olmayan kasa çıkışından açıldıysa: açılan satır o hareketle eşlenir (Nakit Akış Planlama Eşleşmesi sütunu "Var" olur, satır ikinci kez listelenmez)
             bool kasadan = !string.IsNullOrEmpty(i.KaynakKey) && i.KaynakKey.Contains("|KASA|");
             if (kasadan) { lock (FinekraOrnek.Kilit) FinekraOrnek.KasaEslesmeleri[i.KaynakKey] = (s.DbName, m.DocEntry); ek.Add($"kasa hareketi #{i.KaynakKey.Split('|').Last()} ile eşlendi"); }
             if (i.Odendi)
@@ -345,11 +345,11 @@ namespace WebApplication3.Controllers
             else if (yontem == "Nakit") ek.Add($"nakit onayı bekliyor ({string.Join(" / ", NakitAkisOrnek.NakitOnaycilari)})");
             else ek.Add("Planlandı; talimatla ödenir");
             FinekraOrnek.GunlukEkle(s.Ad, $"Nakit Akış #{m.DocEntry}", i.Odendi ? "Ödeme Eklendi (Ödendi)" : "Ödeme Eklendi", $"{m.U_Kurum} · {yontem} · {m.U_TutarTL:N2} ₺ · {string.Join(" · ", ek)}", Kullanici);
-            return Json(new { success = true, message = $"Kasa Nakit Akışı #{m.DocEntry} açıldı: {m.U_Kurum} · {yontem} · {(m.U_TutarTL ?? 0).ToString("N2", Tr)} ₺ · {string.Join(" · ", ek)}.", satir = new { docEntry = m.DocEntry, dbName = s.DbName, link = OdemeLink(m) } });
+            return Json(new { success = true, message = $"Nakit Akış Planlama #{m.DocEntry} açıldı: {m.U_Kurum} · {yontem} · {(m.U_TutarTL ?? 0).ToString("N2", Tr)} ₺ · {string.Join(" · ", ek)}.", satir = new { docEntry = m.DocEntry, dbName = s.DbName, link = OdemeLink(m) } });
         }
         /// <summary>
         /// "Ödeme Ekle" penceresi › Portföy ve Planlı Çek / Senet: tüm grup şirketlerinin (ya da seçilen şirketin) portföydeki çek / senetleri — kimden geldi, banka, vade (kalan gün), tutar, kullanım durumu,
-        /// Çek Akıbeti işlem türü (Portföyde / Planlandı …), planlanan tedarikçi ve Kasa Nakit Akışı plan satırı (durum, talimat, onay, bağlantı), dolaşım özeti. Satırdan "Bu Belgeyle Öde", "Planla", "İbraz / Ciro".
+        /// Çek Akıbeti işlem türü (Portföyde / Planlandı …), planlanan tedarikçi ve Nakit Akış Planlama plan satırı (durum, talimat, onay, bağlantı), dolaşım özeti. Satırdan "Bu Belgeyle Öde", "Planla", "İbraz / Ciro".
         /// </summary>
         [HttpGet("PortfoyCekler")]
         public IActionResult PortfoyCekler(string sirket)
@@ -367,7 +367,7 @@ namespace WebApplication3.Controllers
             return Json(new { success = true, bugun = bugun.ToString("yyyy-MM-dd"), data = l, ozet = new { portfoy = l.Count, portfoyTutar = l.Sum(x => x.tutar), planli = l.Count(x => x.planli), planliTutar = l.Where(x => x.planli).Sum(x => x.tutar), plansiz = l.Count(x => !x.planli && x.secilebilir), plansizTutar = l.Where(x => !x.planli && x.secilebilir).Sum(x => x.tutar), vadesiGecmis = l.Count(x => x.gun < 0), buHafta = l.Count(x => x.gun >= 0 && x.gun <= 7), buHaftaTutar = l.Where(x => x.gun >= 0 && x.gun <= 7).Sum(x => x.tutar), uygunDegil = l.Count(x => !x.secilebilir) } });
         }
         public class CekIstek { public int CekDocEntry { get; set; } public string Tedarikci { get; set; } public string PlanlananTarih { get; set; } public string BelgeTipi { get; set; } public string BelgeNo { get; set; } public string UrunHizmet { get; set; } public string Tur { get; set; } public string IbrazYeri { get; set; } public string Not { get; set; } }
-        /// <summary>Çek sekmesi › "Nakit Akışa Gönder": portföydeki belge için Kasa Nakit Akışı'nda çek / senet satırı açılır ve belge planlanır.</summary>
+        /// <summary>Çek sekmesi › "Nakit Akışa Gönder": portföydeki belge için Nakit Akış Planlama'da çek / senet satırı açılır ve belge planlanır.</summary>
         [HttpPost("CekNakitAkisaGonder")]
         public IActionResult CekNakitAkisaGonder([FromBody] CekIstek i)
         {
@@ -387,8 +387,8 @@ namespace WebApplication3.Controllers
             var plan = r.docEntry != null ? NakitAkisOrnek.Bul(r.docEntry.Value) : null;
             return Json(new { success = r.ok, message = r.mesaj, onayaDustu = r.onayaDustu, satir = plan == null ? null : new { docEntry = plan.DocEntry, dbName = plan.U_KaynakFirma, link = OdemeLink(plan) } });
         }
-        // ---------- İBRAZ / CİRO BELGESİ: PDF oluştur (imzalatmak için) → imzalı belgeyi yükle (Çek Akıbeti, Çek Ekstre, Kasa Nakit Akışı entegre) ----------
-        /// <summary>Çek / senet ciro bordrosu ya da bankaya ibraz belgesi PDF'i: belge bilgileri, planlanan tedarikçi, Kasa Nakit Akışı satırı, dolaşım, teslim eden / teslim alan imza alanları. Belge no çıkışta üretilecek numarayla aynıdır.</summary>
+        // ---------- İBRAZ / CİRO BELGESİ: PDF oluştur (imzalatmak için) → imzalı belgeyi yükle (Çek Akıbeti, Çek Ekstre, Nakit Akış Planlama entegre) ----------
+        /// <summary>Çek / senet ciro bordrosu ya da bankaya ibraz belgesi PDF'i: belge bilgileri, planlanan tedarikçi, Nakit Akış Planlama satırı, dolaşım, teslim eden / teslim alan imza alanları. Belge no çıkışta üretilecek numarayla aynıdır.</summary>
         [HttpGet("IbrazBelgesi")]
         public IActionResult IbrazBelgesi(int cekDocEntry, string tur, string yer, string belgeNo)
         {
@@ -400,15 +400,15 @@ namespace WebApplication3.Controllers
             b.Ozet.Add(("Belge", $"{k.Belge} {k.No}")); b.Ozet.Add(("Tutar", $"{k.Tutar.ToString("N2", Tr)} {k.PB}")); b.Ozet.Add(("Vade", k.Vade.ToString("dd.MM.yyyy"))); b.Ozet.Add((bankaya ? "Tahsil Bankası" : "Teslim Alan Tedarikçi", hedef)); b.Ozet.Add(("İşlem Tipi", k.IslemTipi)); b.Ozet.Add(("Akıbet", k.IslemTuru));
             var bl = new DaBlok { Baslik = "Belge Bilgileri", Kolonlar = new List<string> { "Alan", "Değer" }, Sag = new List<bool> { false, false } };
             bl.Satirlar.Add(new[] { "Belge Türü · No", $"{k.Belge} · {k.No}" }); bl.Satirlar.Add(new[] { "Keşideci (Asıl Borçlu)", k.AsilBorclu ?? "" }); bl.Satirlar.Add(new[] { "Kimden Geldi (Ciro Eden)", k.Musteri ?? "" }); bl.Satirlar.Add(new[] { "Banka · Şube", $"{k.Banka} · {k.Sube}" }); bl.Satirlar.Add(new[] { "Vade", k.Vade.ToString("dd.MM.yyyy") }); bl.Satirlar.Add(new[] { "Tutar", $"{k.Tutar.ToString("N2", Tr)} {k.PB}" });
-            bl.Satirlar.Add(new[] { "Portföy Şirketi", sirket }); bl.Satirlar.Add(new[] { "Planlanan Tedarikçi", k.PlanlananTedarikci == "" ? "—" : k.PlanlananTedarikci }); bl.Satirlar.Add(new[] { "Kasa Nakit Akışı Satırı", plan == null ? "—" : $"#{plan.DocEntry} · {plan.U_Kurum} · {plan.U_BagliBelgeTipi} {plan.U_FaturaSiparisNo} · planlanan {plan.U_PlanlananTarih:dd.MM.yyyy} · {plan.U_Durum}" + (string.IsNullOrEmpty(plan.U_TalimatNo) ? "" : " · talimat " + plan.U_TalimatNo) });
+            bl.Satirlar.Add(new[] { "Portföy Şirketi", sirket }); bl.Satirlar.Add(new[] { "Planlanan Tedarikçi", k.PlanlananTedarikci == "" ? "—" : k.PlanlananTedarikci }); bl.Satirlar.Add(new[] { "Nakit Akış Planlama Satırı", plan == null ? "—" : $"#{plan.DocEntry} · {plan.U_Kurum} · {plan.U_BagliBelgeTipi} {plan.U_FaturaSiparisNo} · planlanan {plan.U_PlanlananTarih:dd.MM.yyyy} · {plan.U_Durum}" + (string.IsNullOrEmpty(plan.U_TalimatNo) ? "" : " · talimat " + plan.U_TalimatNo) });
             if (k.Dolasim.Count > 0) bl.Satirlar.Add(new[] { "Dolaşım Planı", k.DolasimOzeti });
             bl.Satirlar.Add(new[] { bankaya ? "İbraz Türü" : "Çıkış Türü", bankaya ? "Bankaya tahsile verme (vadesinde tahsil)" : "Tedarikçiye ciro (kapatılan borç: nakit akış satırı)" }); bl.Satirlar.Add(new[] { "Belge No", no }); b.Bloklar.Add(bl);
             var im = new DaBlok { Baslik = "Teslim · İmza", Kolonlar = new List<string> { "Teslim Eden (" + sirket + ")", bankaya ? "Teslim Alan (Banka)" : "Teslim Alan (Tedarikçi)" }, Sag = new List<bool> { false, false } };
             im.Satirlar.Add(new[] { "Ad Soyad: ______________________________", "Ad Soyad: ______________________________" }); im.Satirlar.Add(new[] { "Görev: ________________________________", "Görev / Ünvan: _________________________" }); im.Satirlar.Add(new[] { "Tarih: ____ / ____ / ________", "Tarih: ____ / ____ / ________" }); im.Satirlar.Add(new[] { "İmza · Kaşe:", "İmza · Kaşe:" }); im.Satirlar.Add(new[] { " ", " " }); im.Satirlar.Add(new[] { " ", " " });
-            im.Not = $"Bu belge iki nüsha düzenlenir; biri {(bankaya ? "bankada" : "tedarikçide")}, imzalı nüsha taranıp portala yüklenir (Konsolide Finansal Takip Paneli › Çek › İmzalı Belgeyi Yükle). Yüklenen belge Çek Akıbeti Raporu, Çek Ekstre Raporu ve Kasa Nakit Akışı satırında görünür. Belge no {no}; çıkış işlendiğinde Çek Akıbeti'ne bu numarayla yazılır."; b.Bloklar.Add(im);
+            im.Not = $"Bu belge iki nüsha düzenlenir; biri {(bankaya ? "bankada" : "tedarikçide")}, imzalı nüsha taranıp portala yüklenir (Konsolide Finansal Takip Paneli › Çek › İmzalı Belgeyi Yükle). Yüklenen belge Çek Akıbeti Raporu, Çek Ekstre Raporu ve Nakit Akış Planlama satırında görünür. Belge no {no}; çıkış işlendiğinde Çek Akıbeti'ne bu numarayla yazılır."; b.Bloklar.Add(im);
             return File(DisaAktar.Pdf(b), "application/pdf", $"{(bankaya ? "IbrazBelgesi" : "CiroBordrosu")}_{k.No}_{no}.pdf");
         }
-        /// <summary>İmzalı ibraz / ciro belgesini yükler; istenirse aynı adımda çıkışı da işler (planlı belge: tedarikçiye ciro / bankaya tahsil). Belge Çek Akıbeti kaydına bağlanır, plan satırı varsa Kasa Nakit Akışı ekine de yazılır.</summary>
+        /// <summary>İmzalı ibraz / ciro belgesini yükler; istenirse aynı adımda çıkışı da işler (planlı belge: tedarikçiye ciro / bankaya tahsil). Belge Çek Akıbeti kaydına bağlanır, plan satırı varsa Nakit Akış Planlama ekine de yazılır.</summary>
         [HttpPost("IbrazBelgesiYukle")]
         public IActionResult IbrazBelgesiYukle(Microsoft.AspNetCore.Http.IFormFile dosya, int cekDocEntry, string belgeNo, string not, bool ibrazEt, string tur, string yer)
         {
@@ -428,8 +428,8 @@ namespace WebApplication3.Controllers
             if (dosya != null)
             {
                 var b = CekAkibetOrnek.IbrazBelgesiBagla(cekDocEntry, ad, dosya.ContentType, veri, Kullanici, not); if (!b.ok) return Json(new { success = false, message = b.mesaj }); mesajlar.Add(b.mesaj);
-                // plan satırı varsa Kasa Nakit Akışı ekine de yazılır (satır çekmecesi › Ekler: Ciro Bordrosu)
-                if (k.PlanDocEntry != null) { var plan = NakitAkisOrnek.Bul(k.PlanDocEntry.Value); if (plan != null) { var e = NakitAkisOrnek.EkEkle(plan.U_KaynakFirma, plan.DocEntry, ad, "Ciro Bordrosu", $"İmzalı ibraz belgesi · {k.No} · {(string.IsNullOrEmpty(k.IbrazBelgeNo) ? belgeNo : k.IbrazBelgeNo)}", dosya.ContentType, veri, Kullanici); if (e.ok) mesajlar.Add($"Kasa Nakit Akışı #{plan.DocEntry} ekine yazıldı."); } }
+                // plan satırı varsa Nakit Akış Planlama ekine de yazılır (satır çekmecesi › Ekler: Ciro Bordrosu)
+                if (k.PlanDocEntry != null) { var plan = NakitAkisOrnek.Bul(k.PlanDocEntry.Value); if (plan != null) { var e = NakitAkisOrnek.EkEkle(plan.U_KaynakFirma, plan.DocEntry, ad, "Ciro Bordrosu", $"İmzalı ibraz belgesi · {k.No} · {(string.IsNullOrEmpty(k.IbrazBelgeNo) ? belgeNo : k.IbrazBelgeNo)}", dosya.ContentType, veri, Kullanici); if (e.ok) mesajlar.Add($"Nakit Akış Planlama #{plan.DocEntry} ekine yazıldı."); } }
                 FinekraOrnek.GunlukEkle(k.Sirket, k.No, "İmzalı İbraz Belgesi", $"{ad} yüklendi" + (k.IbrazYeri != "" ? $" · {k.IbrazTuru} → {k.IbrazYeri}" : ""), Kullanici);
             }
             k = CekAkibetOrnek.Bul(cekDocEntry);
@@ -443,7 +443,7 @@ namespace WebApplication3.Controllers
             if (k.IbrazBelgeVeri == null) return Content($"{k.IbrazBelgeDosya}: ön yüz örneğinde dosya içeriği yok.", "text/plain; charset=utf-8");
             return File(k.IbrazBelgeVeri, string.IsNullOrEmpty(k.IbrazBelgeTip) ? "application/octet-stream" : k.IbrazBelgeTip, k.IbrazBelgeDosya);
         }
-        /// <summary>Nakit akışta karşılığı olmayan banka çıkışı → Kasa Nakit Akışı'nda ÖDENDİ satır.</summary>
+        /// <summary>Nakit akışta karşılığı olmayan banka çıkışı → Nakit Akış Planlama'da ÖDENDİ satır.</summary>
         [HttpPost("FinekraNakitAkisaGonder")]
         public IActionResult FinekraNakitAkisaGonder([FromBody] FinekraIstek istek) { if (istek == null) return Json(new { success = false, message = "Veri yok." }); var r = FinekraOrnek.NakitAkisaGonder(istek.Id, Kullanici); return Json(new { success = r.ok, message = r.mesaj, hareket = FinekraOrnek.Json(r.h), satir = r.satir == null ? null : new { docEntry = r.satir.DocEntry, dbName = r.satir.U_KaynakFirma, link = $"/Rapor79?sirket={r.satir.U_KaynakFirma}&sekme=havale" } }); }
         [HttpPost("FinekraEslestir")]
@@ -465,13 +465,13 @@ namespace WebApplication3.Controllers
         /// <summary>
         /// Hareketin muhasebe fişi: nakit akış satırından gelen kasa çıkışı → satırın fişi (U_YevmiyeNo); elden ödenmiş kasa çıkışı → kasa tediye fişi; nakit tahsilat → kasa tahsil fişi;
         /// çek portföy girişi → çek giriş fişi (101 / 120); ciro / ibraz → plan satırının fişi ya da ciro / ibraz fişi (MuhasebeOrnek.CiroFisiTaslak); dolaşım adımı → adımda atılan fiş (kaynak + belge no ile bulunur).
-        /// Plan satırları (PLAN adımı, Kasa Nakit Akışı planı) ve teminat için fiş yoktur. Örnek fişler ilk istendiğinde üretilir ve hareket anahtarıyla saklanır (mükerrer üretilmez).
+        /// Plan satırları (PLAN adımı, Nakit Akış Planlama planı) ve teminat için fiş yoktur. Örnek fişler ilk istendiğinde üretilir ve hareket anahtarıyla saklanır (mükerrer üretilmez).
         /// </summary>
         static string HareketFisi(R123_HareketViewModel h, string anahtar, NakitAkisViewModel naSatir, CekKaydi k)
         {
             if (naSatir != null && !string.IsNullOrEmpty(naSatir.U_YevmiyeNo)) return naSatir.U_YevmiyeNo;
             string kaynak = h.Kaynak ?? "";
-            if (kaynak == "Kasa Nakit Akışı · Plan" || kaynak == "Çek Akıbeti · Plan" || kaynak == "Dolaşım Planı · Planlı Adım" || kaynak == "Çek Akıbeti · Teminat") return null;
+            if (kaynak == "Nakit Akış Planlama · Plan" || kaynak == "Çek Akıbeti · Plan" || kaynak == "Dolaşım Planı · Planlı Adım" || kaynak == "Çek Akıbeti · Teminat") return null;
             lock (FisKilit)
             {
                 if (HareketFisleri.TryGetValue(anahtar, out var mevcut)) return mevcut;
@@ -532,8 +532,8 @@ namespace WebApplication3.Controllers
             foreach (var h in hepsi) if (FinekraOrnek.HareketOnaylari.TryGetValue($"{h.DbKey}|{h.HesapTipi}|{h.IslemNo}", out var o)) { h.OnayDurumu = o.Durum; h.OnaylayanKullaniciAdi = o.Durum == "" ? null : o.Kullanici; h.OnayTarihi = o.Durum == "" ? (DateTime?)null : o.Tarih; if (!string.IsNullOrEmpty(o.Not)) { h.NotBasligi = o.Durum == "EKSİK" ? "Eksik / kontrol" : "Not"; h.NotIcerigi = o.Not; } }
             return hepsi;
         }
-        // ---------- Kredi · Banka Kartı ve Temlik · Mahsup · Yansıtma sekmeleri: Kasa Nakit Akışı satırlarından (HesapTipi KART / GRUPICI, IslemNo = DocEntry → satır fişi, nakit akış bağlantısı ve onay ortak akıştan) ----------
-        /// <summary>Kredi · Banka Kartı: Kasa Nakit Akışı'nda kartla ödenen (ÖDENDİ) ve planlı kart satırları; Finekra'daki kart ekstresi ödemesiyle eşlenir (kart bankası, hareket tarihinden sonraki ilk ekstre).</summary>
+        // ---------- Kredi · Banka Kartı ve Temlik · Mahsup · Yansıtma sekmeleri: Nakit Akış Planlama satırlarından (HesapTipi KART / GRUPICI, IslemNo = DocEntry → satır fişi, nakit akış bağlantısı ve onay ortak akıştan) ----------
+        /// <summary>Kredi · Banka Kartı: Nakit Akış Planlama'da kartla ödenen (ÖDENDİ) ve planlı kart satırları; Finekra'daki kart ekstresi ödemesiyle eşlenir (kart bankası, hareket tarihinden sonraki ilk ekstre).</summary>
         static IEnumerable<R123_HareketViewModel> Kart((string Ad, string DbName, string DbKey) s, DateTime bas, DateTime bit)
         {
             var ekstreler = FinekraOrnek.Listele(s.DbName, bas.AddDays(-45), bit.AddDays(45)).Where(h => h.IslemTuru == "Kredi Kartı Ekstresi").OrderBy(h => h.Tarih).ToList();
@@ -545,7 +545,7 @@ namespace WebApplication3.Controllers
                 h.KasaKodu = "300.01.001"; h.KasaAdi = h.Kart; h.KarsiHesapKodu = "320"; h.KarsiHesapAdi = m.U_Kurum; h.Alacak = m.U_TutarTL ?? 0; h.IslemYonu = "Çıkış";
                 h.Aciklama = $"{m.U_UrunHizmet}{(string.IsNullOrEmpty(m.U_FaturaSiparisNo) ? "" : $" · {m.U_BagliBelgeTipi} {m.U_FaturaSiparisNo}")}";
                 h.IslemTuruAdi = h.Taksit == "Tek Çekim" ? "Kart · Tek Çekim" : "Kart · " + h.Taksit; h.Referans = !string.IsNullOrEmpty(m.U_DekontNo) ? m.U_DekontNo : (m.U_TalimatNo ?? "");
-                h.Kaynak = odendi ? "Kasa Nakit Akışı · Kart Ödemesi" : "Kasa Nakit Akışı · Plan"; h.KaynakDetay = $"kart ödemesi #{m.DocEntry} · {m.U_Durum} · {h.Kart} · {h.Taksit} · ekstre {h.EkstreDonemi}";
+                h.Kaynak = odendi ? "Nakit Akış Planlama · Kart Ödemesi" : "Nakit Akış Planlama · Plan"; h.KaynakDetay = $"kart ödemesi #{m.DocEntry} · {m.U_Durum} · {h.Kart} · {h.Taksit} · ekstre {h.EkstreDonemi}";
                 if (!odendi) { h.OnayDurumu = null; h.OnaylayanKullaniciAdi = null; h.OnayTarihi = null; }
                 if (!string.IsNullOrEmpty(m.U_ParaBirimi) && m.U_ParaBirimi != "TRY") { h.ParaBirimi = m.U_ParaBirimi; h.DovizTutar = m.U_Tutar; h.Kur = m.U_Kur; }
                 // ekstre eşleşmesi: kartın bankası geçen, hareket tarihinden sonraki ilk kart ekstresi ödemesi (Finekra); yoksa ödenmiş satırda sonraki ilk ekstre
@@ -555,7 +555,7 @@ namespace WebApplication3.Controllers
                 yield return h;
             }
         }
-        /// <summary>Temlik · Mahsup · Yansıtma: ödeyen şirket ≠ fatura sahibi olan Kasa Nakit Akışı satırları (otomatik grup içi Mahsup / Temlik belgesi, Data/GrupIciBelgeOrnek.cs) ve yöntemi Mahsup / Temlik / Yansıtma olan satırlar (bağlı modül kaydı). Şirket = ödeyen (satırın şirketi).</summary>
+        /// <summary>Temlik · Mahsup · Yansıtma: ödeyen şirket ≠ fatura sahibi olan Nakit Akış Planlama satırları (otomatik grup içi Mahsup / Temlik belgesi, Data/GrupIciBelgeOrnek.cs) ve yöntemi Mahsup / Temlik / Yansıtma olan satırlar (bağlı modül kaydı). Şirket = ödeyen (satırın şirketi).</summary>
         static IEnumerable<R123_HareketViewModel> GrupIci((string Ad, string DbName, string DbKey) s, DateTime bas, DateTime bit)
         {
             foreach (var m in NakitAkisOrnek.Odemeler(s.DbName))
@@ -574,7 +574,7 @@ namespace WebApplication3.Controllers
                 if (b != null) { h.GrupBelgeNo = b.No; h.GrupBelgeDurum = b.Durum; h.GrupSekil = string.IsNullOrEmpty(b.MahsupSekli) ? GrupIciBelgeOrnek.Sekil(b) : b.MahsupSekli; h.GrupBelgeLink = "/Rapor79/GrupIciBelge?no=" + Uri.EscapeDataString(b.No); h.FaturaSahibiFisNo = b.FaturaSahibiFisNo ?? ""; h.OdeyenFisNo = b.OdeyenFisNo ?? ""; }
                 h.GrupKontrol = modul ? (h.GrupKayitNo == "" ? "Kayıt Bağlı Değil" : "Kayıt Bağlı") : b == null ? "Belge Yok" : b.Durum == "Muhasebeleşti" ? "Muhasebeleşti" : b.Durum == "İptal" ? "Belge İptal" : "Belge Hazır";
                 h.Referans = modul ? h.GrupKayitNo : (b?.No ?? m.U_GrupIciNo ?? "");
-                h.Kaynak = modul ? $"{tur} Modülü" : "Kasa Nakit Akışı · Adına Ödeme";
+                h.Kaynak = modul ? $"{tur} Modülü" : "Nakit Akış Planlama · Adına Ödeme";
                 h.KaynakDetay = modul ? $"{m.U_OdemeYontemi} ödemesi #{m.DocEntry} · {m.U_Durum}{(h.GrupKayitNo == "" ? " · kayıt bağlı değil" : " · kayıt " + h.GrupKayitNo)}" : $"ödeme #{m.DocEntry} · {m.U_Durum} · {h.Odeyen}, {h.FaturaSahibi} adına ödüyor{(b == null ? " · grup içi belge yok" : $" · {b.No} {b.Durum}")}";
                 if (!odendi) { h.OnayDurumu = null; h.OnaylayanKullaniciAdi = null; h.OnayTarihi = null; }
                 if (!string.IsNullOrEmpty(m.U_ParaBirimi) && m.U_ParaBirimi != "TRY") { h.ParaBirimi = m.U_ParaBirimi; h.DovizTutar = m.U_Tutar; h.Kur = m.U_Kur; }
@@ -599,7 +599,7 @@ namespace WebApplication3.Controllers
                     h.KarsiHesapKodu = t.CariKodu; h.KarsiHesapAdi = t.CariAd; if (od) { h.Alacak = sat.TutarTl; h.IslemYonu = "Çıkış"; } else { h.Borc = sat.TutarTl; h.IslemYonu = "Giriş"; }
                     if (!TahsilatOrnek.TlMi(t.ParaBirimi)) { h.ParaBirimi = t.ParaBirimi; h.DovizTutar = sat.Tutar; h.Kur = sat.Kur; }
                     h.Aciklama = $"{(od ? "Tedarikçi ödemesi" : "Müşteri tahsilatı")} · {sat.Yontem}{(string.IsNullOrEmpty(sat.Banka) ? "" : " · " + sat.Banka)} · {(t.Mod == "Manuel" ? "manuel fatura seçimi" : "otomatik (FIFO)")}{(dag.Count > 0 ? " · " + string.Join(", ", dag.Select(d => d.BelgeNo).Distinct()) : "")}{(avans > 0.005m ? $" · avans {avans.ToString("N2", Tr)} {t.ParaBirimi}" : "")}{(dag.Sum(d => d.VadeFarki) > 0 ? $" · vade farkı {dag.Sum(d => d.VadeFarki).ToString("N0", Tr)} ₺" : "")}{(dag.Sum(d => d.KurFarki) != 0 ? $" · kur farkı {dag.Sum(d => d.KurFarki).ToString("N0", Tr)} ₺" : "")}";
-                    h.Kaynak = (od ? "Ödeme Ekranı · " : "Tahsilat Ekranı · ") + (t.Mod == "Manuel" ? "Manuel" : "Otomatik"); h.KaynakDetay = $"{t.No}/{sat.Sira} · {sat.Yontem} · {t.IslemeAlan} {t.IslemeZamani:dd.MM.yyyy HH:mm}" + (sat.NakitAkisDocEntry != null ? $" · Kasa Nakit Akışı #{sat.NakitAkisDocEntry} (ÖDENDİ)" : "") + (string.IsNullOrEmpty(t.KurFarkiFaturaNo) ? "" : $" · {t.KurFarkiFaturaNo}") + (string.IsNullOrEmpty(t.VadeFarkiFaturaNo) ? "" : $" · {t.VadeFarkiFaturaNo}");
+                    h.Kaynak = (od ? "Ödeme Ekranı · " : "Tahsilat Ekranı · ") + (t.Mod == "Manuel" ? "Manuel" : "Otomatik"); h.KaynakDetay = $"{t.No}/{sat.Sira} · {sat.Yontem} · {t.IslemeAlan} {t.IslemeZamani:dd.MM.yyyy HH:mm}" + (sat.NakitAkisDocEntry != null ? $" · Nakit Akış Planlama #{sat.NakitAkisDocEntry} (ÖDENDİ)" : "") + (string.IsNullOrEmpty(t.KurFarkiFaturaNo) ? "" : $" · {t.KurFarkiFaturaNo}") + (string.IsNullOrEmpty(t.VadeFarkiFaturaNo) ? "" : $" · {t.VadeFarkiFaturaNo}");
                     h.Referans = t.No; h.IslemTuruAdi = od ? (kasa ? "Nakit Ödeme" : banka ? "Tedarikçi Ödemesi" : sat.Yontem + " Çıkışı") : (kasa ? "Nakit Tahsilat" : banka ? "Müşteri Tahsilatı" : sat.Yontem + " Girişi"); h.OnaylayanKullaniciAdi = t.IslemeAlan; h.OnayTarihi = t.IslemeZamani;
                     if (!banka && !kasa) { h.CekVadeTarihi = sat.Tarih; h.CekNumarasi = string.IsNullOrEmpty(sat.BelgeNo) ? t.No : sat.BelgeNo; h.CekBelge = sat.Yontem; h.PlanKontrol = "—"; if (od) { h.IbrazYeri = t.CariAd; h.IbrazTuru = "Verilen " + sat.Yontem; h.IbrazTarihi = t.Tarih; h.IbrazBelgeNo = sat.BelgeNo; } }
                     yield return h;
@@ -618,11 +618,11 @@ namespace WebApplication3.Controllers
             // panelden "Nakit Akışa Ekle" ile açılıp kasa hareketiyle eşlenen satırlar burada ikinci kez üretilmez (eşleşen hareket satırı "Var" gösterir)
             var eslenen = new HashSet<int>(FinekraOrnek.KasaEslesmeleri.Values.Where(v => v.dbName == s.DbName).Select(v => v.docEntry));
             foreach (var m in NakitAkisOrnek.Odemeler(s.DbName).Where(m => m.U_OdemeYontemi == "Nakit" && m.U_Durum == "ÖDENDİ" && m.U_OdenmeTarihi >= bas && m.U_OdenmeTarihi <= bit && !eslenen.Contains(m.DocEntry)))
-            { var h = Temel(s, "KASA", m.DocEntry, m.U_OdenmeTarihi.Value, m.U_IslemTipi == "R" ? "R" : "X"); h.KasaKodu = "100.01.001"; h.KasaAdi = m.U_Kasa; h.KarsiHesapKodu = "320"; h.KarsiHesapAdi = m.U_Kurum; h.Alacak = m.U_OdenenTutar ?? m.U_TutarTL ?? 0; h.IslemYonu = "Çıkış"; h.Aciklama = $"{m.U_UrunHizmet} · makbuz {m.U_MakbuzNo} · teslim alan {m.U_TeslimAlan}"; h.Kaynak = "Kasa Nakit Akışı"; h.KaynakDetay = $"nakit ödeme #{m.DocEntry} · ÖDENDİ · makbuz {m.U_MakbuzNo}"; h.Referans = m.U_MakbuzNo ?? ""; h.IslemTuruAdi = "Nakit Ödeme";
+            { var h = Temel(s, "KASA", m.DocEntry, m.U_OdenmeTarihi.Value, m.U_IslemTipi == "R" ? "R" : "X"); h.KasaKodu = "100.01.001"; h.KasaAdi = m.U_Kasa; h.KarsiHesapKodu = "320"; h.KarsiHesapAdi = m.U_Kurum; h.Alacak = m.U_OdenenTutar ?? m.U_TutarTL ?? 0; h.IslemYonu = "Çıkış"; h.Aciklama = $"{m.U_UrunHizmet} · makbuz {m.U_MakbuzNo} · teslim alan {m.U_TeslimAlan}"; h.Kaynak = "Nakit Akış Planlama"; h.KaynakDetay = $"nakit ödeme #{m.DocEntry} · ÖDENDİ · makbuz {m.U_MakbuzNo}"; h.Referans = m.U_MakbuzNo ?? ""; h.IslemTuruAdi = "Nakit Ödeme";
                 // dövizli ödeme: tutar TL karşılığı, döviz tutarı ve kur ayrıca (hücrede alt satır)
                 if (!string.IsNullOrEmpty(m.U_ParaBirimi) && m.U_ParaBirimi != "TRY") { h.ParaBirimi = m.U_ParaBirimi; h.DovizTutar = m.U_Tutar; h.Kur = m.U_Kur; h.Alacak = m.U_TutarTL ?? h.Alacak; }
                 yield return h; }
-            // elden ödenmiş masraflar: kasadan çıkmış ama Kasa Nakit Akışı'nda satırı yok → sütunda "Yok" + "Nakit Akışa Ekle" (IslemNo 93000+: nakit akış ödemesi değil)
+            // elden ödenmiş masraflar: kasadan çıkmış ama Nakit Akış Planlama'da satırı yok → sütunda "Yok" + "Nakit Akışa Ekle" (IslemNo 93000+: nakit akış ödemesi değil)
             var rndM = new Random(Seed("kasa-masraf|" + s.DbName)); decimal olcekM = ButceOrnek.Olcek.TryGetValue(s.Ad, out var om) ? om : 0.3m;
             for (int i = 0; i < 3 + (int)(4 * olcekM); i++)
             {
@@ -646,7 +646,7 @@ namespace WebApplication3.Controllers
         static IEnumerable<R123_HareketViewModel> Banka((string Ad, string DbName, string DbKey) s, DateTime bas, DateTime bit)
         {
             foreach (var m in NakitAkisOrnek.Odemeler(s.DbName).Where(m => m.U_OdemeYontemi == "Havale / EFT" && m.U_Durum == "ÖDENDİ" && m.U_OdenmeTarihi >= bas && m.U_OdenmeTarihi <= bit))
-            { var h = Temel(s, "BANKA", m.DocEntry, m.U_OdenmeTarihi.Value, m.U_IslemTipi == "R" ? "R" : "X"); var banka = (m.U_BankaHesabi ?? "Ziraat Bankası").Split(" · ")[0]; h.KasaKodu = "102.01." + (Array.IndexOf(NakitAkisOrnek.BankaHesaplari, m.U_BankaHesabi) + 1).ToString("000"); h.KasaAdi = banka; h.KarsiHesapKodu = "320"; h.KarsiHesapAdi = m.U_Kurum; h.Alacak = m.U_OdenenTutar.HasValue && (m.U_OdenenTutarPB ?? "TRY") == "TRY" ? m.U_OdenenTutar.Value : m.U_TutarTL ?? 0; h.ParaBirimi = "TRY"; h.IslemYonu = "Çıkış"; h.Aciklama = $"{m.U_UrunHizmet} · {m.U_FaturaSiparisNo} · dekont {m.U_DekontNo} · alıcı IBAN {m.U_AliciIban}"; h.Kaynak = "Kasa Nakit Akışı"; h.KaynakDetay = $"havale #{m.DocEntry} · ÖDENDİ · dekont {m.U_DekontNo}"; if (m.DekontListesi.Count == 0 && m.DocEntry % 7 == 0) { h.OnayDurumu = ""; h.OnaylayanKullaniciAdi = null; h.OnayTarihi = null; } yield return h; }
+            { var h = Temel(s, "BANKA", m.DocEntry, m.U_OdenmeTarihi.Value, m.U_IslemTipi == "R" ? "R" : "X"); var banka = (m.U_BankaHesabi ?? "Ziraat Bankası").Split(" · ")[0]; h.KasaKodu = "102.01." + (Array.IndexOf(NakitAkisOrnek.BankaHesaplari, m.U_BankaHesabi) + 1).ToString("000"); h.KasaAdi = banka; h.KarsiHesapKodu = "320"; h.KarsiHesapAdi = m.U_Kurum; h.Alacak = m.U_OdenenTutar.HasValue && (m.U_OdenenTutarPB ?? "TRY") == "TRY" ? m.U_OdenenTutar.Value : m.U_TutarTL ?? 0; h.ParaBirimi = "TRY"; h.IslemYonu = "Çıkış"; h.Aciklama = $"{m.U_UrunHizmet} · {m.U_FaturaSiparisNo} · dekont {m.U_DekontNo} · alıcı IBAN {m.U_AliciIban}"; h.Kaynak = "Nakit Akış Planlama"; h.KaynakDetay = $"havale #{m.DocEntry} · ÖDENDİ · dekont {m.U_DekontNo}"; if (m.DekontListesi.Count == 0 && m.DocEntry % 7 == 0) { h.OnayDurumu = ""; h.OnaylayanKullaniciAdi = null; h.OnayTarihi = null; } yield return h; }
             foreach (var k in CekAkibetOrnek.Kayitlar.Where(k => k.Sirket == s.Ad && k.IslemTuru == "Bankadan Tahsil Edildi" && k.Vade >= bas && k.Vade <= bit))
             { var h = Temel(s, "BANKA", k.DocEntry * 10 + 3, k.Vade, k.DocEntry % 4 == 0 ? "R" : "X"); h.KasaKodu = k.IbrazYeri == "Halk Bankası" ? "102.01.002" : "102.01.001"; h.KasaAdi = k.IbrazYeri; h.KarsiHesapKodu = k.MusteriKod; h.KarsiHesapAdi = k.Musteri; h.Borc = k.Tutar; h.IslemYonu = "Giriş"; h.Aciklama = $"{k.Belge} tahsilatı {k.No} · tahsilat {k.TahsilatBelgeNo}"; h.CekNumarasi = k.No; h.CekVadeTarihi = k.Vade; h.Kaynak = "Çek Akıbeti · Bankadan Tahsil"; h.KaynakDetay = $"{k.No} · tahsilat {k.TahsilatBelgeNo}"; yield return h; }
             var rnd = new Random(Seed("banka|" + s.DbName)); var musteriler = CariKartOrnek.Kartlar.Where(k => k.KartTipi == "Müşteri" && k.Sirket == s.Ad).ToList(); if (musteriler.Count == 0) musteriler = CariKartOrnek.Kartlar.Where(k => k.KartTipi == "Müşteri").ToList();
@@ -658,7 +658,7 @@ namespace WebApplication3.Controllers
             }
         }
         /// <summary>Çek: portföye giriş (giriş) ve ibraz / ciro (çıkış) hareketleri; her satırda plan ↔ ibraz kontrolü. Planı, girişi ya da çıkışı aralıkta olan belgeler listelenir.
-        /// Grup içi dolaşım (Kasa Nakit Akışı › Dolaşım Planı): gerçekleşen her adım eden şirkette çıkış, alan şirkette giriş satırı; planlı (gerçekleşmemiş) adımlar onay bekleyen "PLAN" satırı.</summary>
+        /// Grup içi dolaşım (Nakit Akış Planlama › Dolaşım Planı): gerçekleşen her adım eden şirkette çıkış, alan şirkette giriş satırı; planlı (gerçekleşmemiş) adımlar onay bekleyen "PLAN" satırı.</summary>
         static IEnumerable<R123_HareketViewModel> Cek((string Ad, string DbName, string DbKey) s, DateTime bas, DateTime bit)
         {
             foreach (var h in CekAkibetOrnek.Hareketler.Where(h => (h.Eden == s.Ad || h.Alan == s.Ad) && h.Tarih.Date >= bas && h.Tarih.Date <= bit))
@@ -678,7 +678,7 @@ namespace WebApplication3.Controllers
                     r.KasaKodu = k.Belge == "Senet" ? "121.01.001" : "101.01.001"; r.KasaAdi = k.Belge == "Senet" ? "Alınan Senetler" : "Alınan Çekler"; r.KarsiHesapKodu = a.Tur == "Grup İçi Ciro" ? "131/331" : a.Tur == "Bankaya İbraz" ? "102.01" : "320"; r.KarsiHesapAdi = cikis ? a.Alan : a.Eden;
                     if (cikis) r.Alacak = k.Tutar; else r.Borc = k.Tutar; r.IslemYonu = cikis ? "Çıkış" : "Giriş"; r.ParaBirimi = "TRY"; r.OnayDurumu = ""; r.OnaylayanKullaniciAdi = null; r.OnayTarihi = null;
                     r.Aciklama = $"PLAN · {a.Tur} · {a.Eden} → {a.Alan} · adım {a.Sira}/{k.Dolasim.Count} · {a.Not}"; r.PlanKontrol = "İbraz Bekliyor"; r.IbrazYeri = ""; r.IbrazTuru = ""; r.IbrazBelgeNo = "";
-                    r.Kaynak = "Dolaşım Planı · Planlı Adım"; r.KaynakDetay = $"{a.Tur} · adım {a.Sira}/{k.Dolasim.Count} · plan {a.PlanTarih:dd.MM.yyyy}" + (k.PlanDocEntry != null ? $" · Kasa Nakit Akışı #{k.PlanDocEntry}" : ""); r.Referans = $"Plan adım {a.Sira}"; r.IslemTuruAdi = "Plan Adımı";
+                    r.Kaynak = "Dolaşım Planı · Planlı Adım"; r.KaynakDetay = $"{a.Tur} · adım {a.Sira}/{k.Dolasim.Count} · plan {a.PlanTarih:dd.MM.yyyy}" + (k.PlanDocEntry != null ? $" · Nakit Akış Planlama #{k.PlanDocEntry}" : ""); r.Referans = $"Plan adım {a.Sira}"; r.IslemTuruAdi = "Plan Adımı";
                     yield return r;
                 }
             foreach (var k in CekAkibetOrnek.Kayitlar.Where(k => k.Sirket == s.Ad))
@@ -690,10 +690,10 @@ namespace WebApplication3.Controllers
                 {
                     var g = Temel(s, "CEK", k.DocEntry * 10 + 1, girisAralikta ? k.PortfoyGiris : k.PlanlamaTarihi.Value.Date, tip); Doldur(g, k);
                     g.KasaKodu = k.Belge == "Senet" ? "121.01.001" : "101.01.001"; g.KasaAdi = k.Belge == "Senet" ? "Alınan Senetler" : "Alınan Çekler"; g.KarsiHesapKodu = k.MusteriKod; g.KarsiHesapAdi = k.Musteri; g.Borc = k.Tutar; g.IslemYonu = "Giriş";
-                    g.Aciklama = (girisAralikta ? "Portföye giriş" : "Kasa Nakit Akışı planı") + $" · {k.Belge} {k.No}" + (k.IslemTuru == "Planlandı" ? $" · PLANLANDI → {k.PlanlananTedarikci}" : "");
-                    // kaynak: portföye giriş Çek Akıbeti kaydından; yalnız planı aralıkta olan belge Kasa Nakit Akışı plan satırından (plan satırı yoksa Çek Akıbeti'nden planlandı)
+                    g.Aciklama = (girisAralikta ? "Portföye giriş" : "Nakit Akış Planlama planı") + $" · {k.Belge} {k.No}" + (k.IslemTuru == "Planlandı" ? $" · PLANLANDI → {k.PlanlananTedarikci}" : "");
+                    // kaynak: portföye giriş Çek Akıbeti kaydından; yalnız planı aralıkta olan belge Nakit Akış Planlama plan satırından (plan satırı yoksa Çek Akıbeti'nden planlandı)
                     if (girisAralikta) { g.Kaynak = "Çek Akıbeti · Portföy Girişi"; g.KaynakDetay = $"{k.Musteri} · giriş {k.PortfoyGiris:dd.MM.yyyy} · {k.Banka}"; }
-                    else if (k.PlanDocEntry != null) { g.Kaynak = "Kasa Nakit Akışı · Plan"; g.KaynakDetay = $"#{k.PlanDocEntry} · {k.PlanlananTedarikci} · {k.PlanlamaTarihi:dd.MM.yyyy}" + (k.Planlayan != "" ? " · " + k.Planlayan : ""); }
+                    else if (k.PlanDocEntry != null) { g.Kaynak = "Nakit Akış Planlama · Plan"; g.KaynakDetay = $"#{k.PlanDocEntry} · {k.PlanlananTedarikci} · {k.PlanlamaTarihi:dd.MM.yyyy}" + (k.Planlayan != "" ? " · " + k.Planlayan : ""); }
                     else { g.Kaynak = "Çek Akıbeti · Plan"; g.KaynakDetay = $"{k.PlanlananTedarikci} · {k.PlanlamaTarihi:dd.MM.yyyy} · nakit akış satırı yok"; }
                     g.Referans = girisAralikta ? $"Akıbet #{k.DocEntry}" : k.PlanDocEntry != null ? $"Nakit Akış #{k.PlanDocEntry}" : $"Akıbet #{k.DocEntry}"; g.IslemTuruAdi = girisAralikta ? "Portföye Giriş" : "Plan";
                     if (k.Kontrol == "Farklı") { g.OnayDurumu = "EKSİK"; g.NotBasligi = "Plana aykırı çıkış"; g.NotIcerigi = $"Plan: {k.PlanlananTedarikci} · Çıkış: {k.IbrazYeri}"; g.OnaylayanKullaniciAdi = null; g.OnayTarihi = null; }
@@ -705,9 +705,9 @@ namespace WebApplication3.Controllers
                     c.KasaKodu = k.Belge == "Senet" ? "121.01.001" : "101.01.001"; c.KasaAdi = k.Belge == "Senet" ? "Alınan Senetler" : "Alınan Çekler"; c.KarsiHesapKodu = k.IbrazTuru == "Ciro" ? "320" : "102.01"; c.KarsiHesapAdi = k.IbrazYeri; c.Alacak = k.Tutar; c.IslemYonu = "Çıkış";
                     c.Aciklama = $"{k.IbrazTuru} · {k.IslemTuru} · belge {k.IbrazBelgeNo}" + (k.TahsilatBelgeNo != "" ? $" · tahsilat {k.TahsilatBelgeNo}" : "") + (k.Kontrol == "Farklı" ? " · PLANA AYKIRI" : "");
                     c.Kaynak = k.IbrazTuru == "Bankaya İbraz" ? "Çek Akıbeti · Bankaya İbraz" : k.IbrazTuru == "Teminat" ? "Çek Akıbeti · Teminat" : k.IbrazTuru == "İade" ? "Çek Akıbeti · İade" : "Çek Akıbeti · Ciro";
-                    c.KaynakDetay = $"{k.IbrazBelgeNo} · {k.IbrazTarihi:dd.MM.yyyy} · {k.IslemTuru}" + (k.PlanDocEntry != null ? $" · plan Kasa Nakit Akışı #{k.PlanDocEntry}" : k.Kontrol == "Plansız İbraz" ? " · plansız" : "");
+                    c.KaynakDetay = $"{k.IbrazBelgeNo} · {k.IbrazTarihi:dd.MM.yyyy} · {k.IslemTuru}" + (k.PlanDocEntry != null ? $" · plan Nakit Akış Planlama #{k.PlanDocEntry}" : k.Kontrol == "Plansız İbraz" ? " · plansız" : "");
                     c.Referans = k.IbrazBelgeNo; c.IslemTuruAdi = k.IbrazTuru == "Ciro" ? "Tedarikçiye Ciro" : k.IbrazTuru;
-                    if (k.Kontrol == "Farklı") { c.OnayDurumu = "EKSİK"; c.NotBasligi = "Plana aykırı çıkış"; c.NotIcerigi = $"Kasa Nakit Akışı planı {k.PlanlananTedarikci} iken {k.IbrazYeri} yerine çıktı"; c.OnaylayanKullaniciAdi = null; c.OnayTarihi = null; }
+                    if (k.Kontrol == "Farklı") { c.OnayDurumu = "EKSİK"; c.NotBasligi = "Plana aykırı çıkış"; c.NotIcerigi = $"Nakit Akış Planlama planı {k.PlanlananTedarikci} iken {k.IbrazYeri} yerine çıktı"; c.OnaylayanKullaniciAdi = null; c.OnayTarihi = null; }
                     else if (k.Kontrol == "Plansız İbraz" && k.IbrazTuru == "Ciro") { c.OnayDurumu = ""; c.OnaylayanKullaniciAdi = null; c.OnayTarihi = null; }
                     yield return c;
                 }
@@ -716,7 +716,7 @@ namespace WebApplication3.Controllers
         static void Doldur(R123_HareketViewModel h, CekKaydi k)
         {
             h.CekNumarasi = k.No; h.CekVadeTarihi = k.Vade; h.CekDocEntry = k.DocEntry; h.CekBelge = k.Belge; h.PlanlananTedarikci = k.PlanlananTedarikci; h.PlanlamaTarihi = k.PlanlamaTarihi;
-            h.PlanKaynak = k.PlanlananTedarikci == "" ? "" : (k.PlanDocEntry != null ? $"Kasa Nakit Akışı #{k.PlanDocEntry}" : "Çek Akıbeti") + (k.Planlayan != "" ? " · " + k.Planlayan : "");
+            h.PlanKaynak = k.PlanlananTedarikci == "" ? "" : (k.PlanDocEntry != null ? $"Nakit Akış Planlama #{k.PlanDocEntry}" : "Çek Akıbeti") + (k.Planlayan != "" ? " · " + k.Planlayan : "");
             h.IbrazYeri = k.IbrazYeri; h.IbrazTuru = k.IbrazTuru; h.IbrazTarihi = k.IbrazTarihi; h.IbrazBelgeNo = k.IbrazBelgeNo; h.PlanKontrol = k.Kontrol;
         }
 
@@ -733,7 +733,7 @@ namespace WebApplication3.Controllers
         [HttpGet("EksikBildirimleriGetir")]
         public IActionResult EksikBildirimleriGetir(string bolum, string sirketDb)
         {
-            var farkli = CekAkibetOrnek.Kayitlar.Where(k => k.Kontrol == "Farklı").Take(8).Select((k, i) => new EksikBildirimViewModel { Id = i + 1, Bolum = "Finans", Sirket = k.Sirket, GonderenKullanici = "Kerem Aksoy", Baslik = $"{k.No} plana aykırı çıktı", Aciklama = $"Kasa Nakit Akışı planı {k.PlanlananTedarikci}; belge {k.IbrazYeri} yerine {k.IbrazTuru.ToLower(Tr)} edildi ({k.IbrazTarihi:dd.MM.yyyy}).", Maddeler = new List<string> { "Ciro / ibraz belgesini kontrol et", "Kasa Nakit Akışı planını düzelt" }, Durum = "Bekliyor", KayitTarihi = (k.IbrazTarihi ?? DateTime.Today).ToString("dd.MM.yyyy"), TamamlanmaTarihi = "" }).ToList();
+            var farkli = CekAkibetOrnek.Kayitlar.Where(k => k.Kontrol == "Farklı").Take(8).Select((k, i) => new EksikBildirimViewModel { Id = i + 1, Bolum = "Finans", Sirket = k.Sirket, GonderenKullanici = "Kerem Aksoy", Baslik = $"{k.No} plana aykırı çıktı", Aciklama = $"Nakit Akış Planlama planı {k.PlanlananTedarikci}; belge {k.IbrazYeri} yerine {k.IbrazTuru.ToLower(Tr)} edildi ({k.IbrazTarihi:dd.MM.yyyy}).", Maddeler = new List<string> { "Ciro / ibraz belgesini kontrol et", "Nakit Akış Planlama planını düzelt" }, Durum = "Bekliyor", KayitTarihi = (k.IbrazTarihi ?? DateTime.Today).ToString("dd.MM.yyyy"), TamamlanmaTarihi = "" }).ToList();
             return Json(new { success = true, data = farkli });
         }
         [HttpPost("EksikBildirimTamamla/{id}")] public IActionResult EksikBildirimTamamla(int id) => Json(new { success = true, message = "Bildirim tamamlandı olarak işaretlendi (ön yüz örneği)." });

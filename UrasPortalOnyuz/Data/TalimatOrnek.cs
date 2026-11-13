@@ -6,7 +6,7 @@ using FinansRaporlama.Controllers;
 
 namespace WebApplication3.Data
 {
-    /// <summary>Talimat satırı: bir Kasa Nakit Akışı ödeme kaydı (fatura sahibi ve ödeyen şirket ayrı; çek / senet belgeleri ve dolaşım özeti ile).</summary>
+    /// <summary>Talimat satırı: bir Nakit Akış Planlama ödeme kaydı (fatura sahibi ve ödeyen şirket ayrı; çek / senet belgeleri ve dolaşım özeti ile).</summary>
     public class TalimatSatiri
     {
         public int DocEntry { get; set; } public string DbName { get; set; } public string FaturaSahibi { get; set; } public string OdeyenSirket { get; set; } public string Kurum { get; set; } public string FaturaNo { get; set; } public string Aciklama { get; set; }
@@ -18,7 +18,7 @@ namespace WebApplication3.Data
     public class TalimatGunluk { public DateTime Tarih { get; set; } public string Kullanici { get; set; } public string Islem { get; set; } public string Aciklama { get; set; } }
 
     /// <summary>
-    /// ÖDEME TALİMATI — Kasa Nakit Akışı'ndan seçilen satırlardan, ödeyen şirket + ödeme yöntemi bazında hazırlanır (ana projedeki PaymentInstructionDocument /
+    /// ÖDEME TALİMATI — Nakit Akış Planlama'dan seçilen satırlardan, ödeyen şirket + ödeme yöntemi bazında hazırlanır (ana projedeki PaymentInstructionDocument /
     /// SupplierPaymentDocument / QuickTransferDocument içerikleriyle aynı dil: "Şubeniz nezdinde bulunan … hesabımızdan aşağıda bulunan işlemlerin yapılmasını rica ederiz").
     /// Durum akışı: Hazırlandı → Onaylandı → Bankaya İletildi / Teslim Edildi → Gerçekleşti (satırlar ÖDENDİ, çekler dolaşım planına göre ciro / ibraz, avanslar teslim) | İptal.
     /// </summary>

@@ -81,8 +81,8 @@ namespace WebApplication3.Controllers
             if (h != null) return Json(new { success = false, message = h });
             return Json(new { success = true, message = i.Isle ? $"{k.No} kaydedildi ve cari hesabına işlendi: {N2(k.Tutar)} {k.ParaBirimi} ({k.Yontem}) · {k.Dagitim.Select(d => d.BelgeNo).Distinct().Count()} fatura{(k.Avans > 0.005m ? $", {N2(k.Avans)} {k.ParaBirimi} {(OdemeMi ? "tedarikçiye" : "bakiyeye")} avans" : "")}{(k.VadeFarki > 0 ? $" · vade farkı {Tl(k.VadeFarki)}" : "")}{(k.KurFarki != 0 ? $" · kur farkı {Tl(k.KurFarki)}" : "")}.{NakitAkisNotu(k)}" : $"{k.No} TASLAK olarak kaydedildi ({N2(k.Tutar)} {k.ParaBirimi}, {k.Yontem}); cariye işlenmedi. {ListeAdi} sekmesinden \"İşleme Al\" ile istediğiniz zaman işlenir.", tahsilat = TahsilatDto(k) });
         }
-        /// <summary>Ödemede: işlenince açılan Kasa Nakit Akışı satırlarının notu.</summary>
-        static string NakitAkisNotu(TahsilatKaydi k) { var l = k.Satirlar.Where(s => s.NakitAkisDocEntry != null).ToList(); return l.Count == 0 ? "" : $" Kasa Nakit Akışı'na ÖDENDİ satır{(l.Count > 1 ? "ları" : "ı")} açıldı: {string.Join(", ", l.Select(s => "#" + s.NakitAkisDocEntry))}; Ödeme Listesi'nde görünür."; }
+        /// <summary>Ödemede: işlenince açılan Nakit Akış Planlama satırlarının notu.</summary>
+        static string NakitAkisNotu(TahsilatKaydi k) { var l = k.Satirlar.Where(s => s.NakitAkisDocEntry != null).ToList(); return l.Count == 0 ? "" : $" Nakit Akış Planlama'ya ÖDENDİ satır{(l.Count > 1 ? "ları" : "ı")} açıldı: {string.Join(", ", l.Select(s => "#" + s.NakitAkisDocEntry))}; Ödeme Listesi'nde görünür."; }
         [HttpPost]
         public IActionResult IslemeAl([FromBody] NoIstek i) { var h = TahsilatOrnek.IslemeAl(i?.No, Ben().AdSoyad); var t = TahsilatOrnek.TahsilatBul(i?.No); return Json(new { success = h == null, message = h ?? $"{t.No} cari hesabına işlendi: {t.Satirlar.Count} ödeme satırı, {t.Dagitim.Select(d => d.BelgeNo).Distinct().Count()} fatura{(t.Avans > 0.005m ? $", {N2(t.Avans)} {t.ParaBirimi} avans" : "")}.{NakitAkisNotu(t)}", tahsilat = TahsilatDto(t) }); }
         [HttpPost]

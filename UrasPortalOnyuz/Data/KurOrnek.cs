@@ -8,7 +8,7 @@ namespace WebApplication3.Data
     /// <summary>
     /// TCMB günlük kur serisi (ön yüz örneği): bugünkü baz kurlar NakitAkisOrnek.Kurlar; geçmiş günler deterministik (TL'nin zaman içinde değer kaybı + küçük dalgalanma),
     /// hafta sonu / tatilde bir önceki iş günü kuru; ileri tarihler bugünkü kurla "tahmini" döner (çek tahsil günü kuru vade gelince kesinleşir).
-    /// Kasa Nakit Akışı dövizli ödemelerde kur kaynağı (U_KurKaynagi) TCMB türlerinden biriyse kur buradan otomatik gelir; anlaşmalı / fatura kurunda elle yazılır.
+    /// Nakit Akış Planlama dövizli ödemelerde kur kaynağı (U_KurKaynagi) TCMB türlerinden biriyse kur buradan otomatik gelir; anlaşmalı / fatura kurunda elle yazılır.
     /// </summary>
     public static class KurOrnek
     {

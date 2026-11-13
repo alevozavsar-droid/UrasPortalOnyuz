@@ -184,12 +184,12 @@
       <tr class="genel"><td class="ad">Kullanılabilir Çek</td>${C.map(c => `<td class="s">${c.adet ? kisa(c.kullanilabilir) : bos}</td>`).join('')}<td class="s yil">${kisa(CT.kullanilabilir)}</td><td class="s"></td></tr>
       <tr class="oran"><td class="ad">Bütçe Karşılama %</td>${C.map((c, i) => `<td class="s">${T.butce[i] ? pct(c.kullanilabilir / T.butce[i]) : bos}</td>`).join('')}<td class="s yil">${pct(TO.yillik ? CT.kullanilabilir / TO.yillik : 0)}</td><td class="s"></td></tr>
       <tr><td class="ad">Gider Sonrası Kalan</td>${C.map((c, i) => `<td class="s">${c.adet ? kalanHtml(kalan(i)) : bos}</td>`).join('')}<td class="s yil" title="YTD: kullanılabilir çek − gerçekleşen">${kalanHtml(ytdKalan)}</td><td class="s"></td></tr>`;
-    // düzenli ödemeler bloğu (otomatik): aktif planlı düzenli ödemelerin aylık planı, Kasa Nakit Akışı'nda ödenen ve toplam gider bütçesi içindeki payı
+    // düzenli ödemeler bloğu (otomatik): aktif planlı düzenli ödemelerin aylık planı, Nakit Akış Planlama'da ödenen ve toplam gider bütçesi içindeki payı
     const DK = V.kalemler.map(k => dzKatki(k.kod, F.sirket, y)).reduce((a, t) => { for (let i = 0; i < 12; i++) { a.plan[i] += t.plan[i]; a.odenen[i] += t.odenen[i]; } a.n += t.kayitlar.length; return a; }, { plan: new Array(12).fill(0), odenen: new Array(12).fill(0), n: 0 });
     const dzYillik = DK.plan.reduce((s, v) => s + v, 0), dzOdenen = DK.odenen.reduce((s, v) => s + v, 0);
     const dzBlok = `<tr class="grp"><td class="ad">Düzenli Ödemeler · Otomatik</td><td colspan="12" style="text-transform:none;font-weight:600">planlı düzenli ödemeler bütçe kalemlerine otomatik gelir (Planlı Ödemeler / Takip Paneli › Düzenli Ödemeler)</td><td class="s">${DK.n} kayıt</td><td class="s"></td></tr>
       <tr class="r"><td class="ad">Planlı Düzenli Ödeme</td>${DK.plan.map(v => `<td class="s">${v ? kisa(v) : bos}</td>`).join('')}<td class="s yil">${kisa(dzYillik)}</td><td class="s"></td></tr>
-      <tr><td class="ad">Ödenen (Kasa Nakit Akışı)</td>${DK.odenen.map(v => `<td class="s">${v ? kisa(v) : bos}</td>`).join('')}<td class="s yil">${kisa(dzOdenen)}</td><td class="s">${pct(dzYillik ? dzOdenen / dzYillik : 0)}</td></tr>
+      <tr><td class="ad">Ödenen (Nakit Akış Planlama)</td>${DK.odenen.map(v => `<td class="s">${v ? kisa(v) : bos}</td>`).join('')}<td class="s yil">${kisa(dzOdenen)}</td><td class="s">${pct(dzYillik ? dzOdenen / dzYillik : 0)}</td></tr>
       <tr class="oran"><td class="ad">Toplam Gider Bütçesi İçindeki Pay %</td>${DK.plan.map((v, i) => `<td class="s">${T.butce[i] && v ? pct(v / T.butce[i]) : bos}</td>`).join('')}<td class="s yil">${pct(TO.yillik ? dzYillik / TO.yillik : 0)}</td><td class="s"></td></tr>
       <tr class="ara"><td colspan="15"></td></tr>`;
     $('#btAylik tbody').innerHTML = G.map(g => blok(g.ad, g.t, g.o)).join('') + blok('TOPLAM GİDER', T, TO, 'genel') + dzBlok + cekBlok;
@@ -262,7 +262,7 @@
       { l: 'Aylık Düzenli Yük', v: kisa(aylik), s: 'aktif kayıtların ort. aylık tutarı', k: '#0369a1' },
       { l: `Yıllık Plan · ${y}`, v: kisa(yillik), s: `eşlenen kalemlerin yıllık bütçesi ${kisa(butceYillik)} · pay ${pct(butceYillik ? yillik / butceYillik : 0)}`, k: '#1d4ed8' },
       { l: `${ayAd} Planı`, v: kisa(T.plan[F.ay - 1]), s: `kalem bütçesi ${kisa(T.butce[F.ay - 1])} · pay ${pct(T.butce[F.ay - 1] ? T.plan[F.ay - 1] / T.butce[F.ay - 1] : 0)}`, k: '#0f766e' },
-      { l: `YTD Ödenen (${n} Ay)`, v: kisa(odenenYtd), s: `plan ${kisa(planYtd)} · Kasa Nakit Akışı ÖDENDİ`, k: '#15803d' },
+      { l: `YTD Ödenen (${n} Ay)`, v: kisa(odenenYtd), s: `plan ${kisa(planYtd)} · Nakit Akış Planlama ÖDENDİ`, k: '#15803d' },
       { l: 'Çek Planlı Kayıt', v: String(cekli.length), s: cekli.length ? `${kisa(cekli.reduce((s, d) => s + d.toplamPlanlanan, 0))} ₺ çek planlandı` : 'Planlı Ödemeler ekranında çek planlanır', k: '#7c3aed' }
     ].map(k => `<div style="--k:${k.k}"><div class="l">${esc(k.l)}</div><div class="v">${k.v}</div><div class="s">${esc(k.s)}</div></div>`).join('');
     const t = $('#btDzTablo');

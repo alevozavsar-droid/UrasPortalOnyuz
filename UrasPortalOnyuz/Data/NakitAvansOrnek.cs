@@ -274,7 +274,7 @@ namespace WebApplication3.Data
         public static NaKisi Yonetici(NaKisi k) => (PersonelKesintiOrnek.PmKisiMi(k) ? PersonelKesintiOrnek.Yonetici(k) : null) ?? Personel.FirstOrDefault(p => p.Rol == "Yönetici" && p.Departman == k.Departman && p.Sirket == k.Sirket) ?? Personel.FirstOrDefault(p => p.Rol == "Yönetici" && p.Departman == k.Departman) ?? Personel.First(p => p.Rol == "Yönetici");
         public static NaKisi UstYonetim(NaKisi k) => (PersonelKesintiOrnek.PmKisiMi(k) ? PersonelKesintiOrnek.UstYonetim() : null) ?? Personel.FirstOrDefault(p => p.Rol == "Üst Yönetim" && p.Unvan == "CFO") ?? Personel.First(p => p.Rol == "Üst Yönetim");
         public static NaKisi Finans() => Personel.First(p => p.Rol == "Finans" && p.Unvan.Contains("Müdür"));
-        /// <summary>Şahsi (maaş / kişisel ihtiyaç) avansı: şirket masrafı değildir; Kasa Nakit Akışı gibi ortak ekranlarda personel adı gizlenir (gizlilik).</summary>
+        /// <summary>Şahsi (maaş / kişisel ihtiyaç) avansı: şirket masrafı değildir; Nakit Akış Planlama gibi ortak ekranlarda personel adı gizlenir (gizlilik).</summary>
         public static bool SahsiMi(NakitAvans a) => a != null && ((a.TalepTuru ?? "").Contains("Şahsi") || (a.TalepTuru ?? "").Contains("Maaş") || (a.TalepTuru ?? "").Contains("Kişisel"));
 
         // ---------- Onay matrisi (§8) ----------
@@ -658,7 +658,7 @@ namespace WebApplication3.Data
             OnaylaHepsi(a12, 2, 3);
             Odeme(a12, 12000, 1);
 
-            // 13) Şahsi avans (maaş avansı): şirket masrafı değil — onaylı, ödeme bekliyor; Kasa Nakit Akışı'nda personel adı gizlenir
+            // 13) Şahsi avans (maaş avansı): şirket masrafı değil — onaylı, ödeme bekliyor; Nakit Akış Planlama'da personel adı gizlenir
             var a13 = T("Pınar Ak", "Pınar Ak", 15000, "TL", "Maaş avansı (şahsi ihtiyaç)", "Kişisel ihtiyaç; maaştan mahsup edilecek.", "13 - Diğer", "Faturasız", new[] { "Makbuz" }, "Normal", 2, 1, 30);
             a13.TalepTuru = "Şahsi Avans (Maaş)";
             OnaylaHepsi(a13, 3, 2);

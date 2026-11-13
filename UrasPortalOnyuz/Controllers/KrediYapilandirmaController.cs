@@ -10,7 +10,7 @@ namespace WebApplication3.Controllers
 {
     /// <summary>
     /// KREDİ RAPORU (9 Kas 2026) — Mali İşler › Finans › Krediler ve Finansman. Veri Data/KrediYapilandirmaOrnek.cs (App_Data/kredi-yapilandirma.json kalıcı, belgeler App_Data/kredi-belgeler),
-    /// görünüm Views/KrediYapilandirma/Index.cshtml, betik wwwroot/js/kredi-yapilandirma.js. Yapılandırma öncesi / sonrası kredi bilgileri, peşinat, taksit takvimi (Kasa Nakit Akışı + Planlı Düzenli Ödemeler),
+    /// görünüm Views/KrediYapilandirma/Index.cshtml, betik wwwroot/js/kredi-yapilandirma.js. Yapılandırma öncesi / sonrası kredi bilgileri, peşinat, taksit takvimi (Nakit Akış Planlama + Planlı Düzenli Ödemeler),
     /// rehin · ipotek takibi (kredi teminatları + eski krediler için bağımsız kayıtlar), teminata verilen çekler, belgeler (sözleşme / GKS / ipotek PDF'leri). ?sekme=krediler|oncesi|sonrasi|takvim|aylik|rehin|cekler|belgeler
     /// Konkordato kümesi (10 Kas 2026, Data/KonkordatoOrnek.cs, App_Data/konkordato.json; Bakırköy 2. ATM 2024/894 E. bilirkişi raporu tohumu): ?sekme=konkordato|sozlesmeler|hesaplar|tahsilatlar|mektuplar
     /// Banka Borç Dökümü (11 Kas 2026, Emlak Katılım · Alv Kimya / Daf Kimya taksit bazlı güncel borç; tohum Data/Tohum/emlak-katilim-borc-2026-11.json; kredi kaydı değildir, nakit akışa yazmaz): ?sekme=borclar
@@ -36,7 +36,7 @@ namespace WebApplication3.Controllers
         [HttpGet("Veri")]
         public IActionResult Veri() => Json(Paket());
 
-        /// <summary>Kredi ekle / düzenle: kaydeder, taksit satırlarını Kasa Nakit Akışı'na ve düzenli ödeme kaydına eşler; tüm paket döner.</summary>
+        /// <summary>Kredi ekle / düzenle: kaydeder, taksit satırlarını Nakit Akış Planlama'ya ve düzenli ödeme kaydına eşler; tüm paket döner.</summary>
         [HttpPost("Kaydet"), IgnoreAntiforgeryToken]
         public IActionResult Kaydet([FromBody] KrediIstek d)
         {

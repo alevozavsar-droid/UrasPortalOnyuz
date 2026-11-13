@@ -11,8 +11,8 @@ using WebApplication3.Models;
 namespace WebApplication3.Controllers
 {
     /// <summary>
-    /// ÇEK AKIBETİ RAPORU (Rapor2 › Index2, adres /CekAkibeti) — elle yazılmış; veri Data/CekAkibetOrnek.cs (Kasa Nakit Akışı ve Konsolide Finansal Takip Paneli ile ortak).
-    /// Kasa Nakit Akışı'nda satıra seçilen belge burada "Planlandı" işlem türüyle ve planlanan tedarikçiyle görünür; ibraz / ciro bilgisi plana karşı kontrol edilir (açıklama sütunu + ibraz detayı).
+    /// ÇEK AKIBETİ RAPORU (Rapor2 › Index2, adres /CekAkibeti) — elle yazılmış; veri Data/CekAkibetOrnek.cs (Nakit Akış Planlama ve Konsolide Finansal Takip Paneli ile ortak).
+    /// Nakit Akış Planlama'da satıra seçilen belge burada "Planlandı" işlem türüyle ve planlanan tedarikçiyle görünür; ibraz / ciro bilgisi plana karşı kontrol edilir (açıklama sütunu + ibraz detayı).
     /// Üretilmiş sürüm Uretilen/Controllers/Rapor2Controller.cs içinde #if ile kapalı. Görünüm ana projeden (Views/Rapor2/Index2.cshtml; küçük eklemeler: Planlananlar kartı, kayıtla işlem türü güncelleme).
     /// </summary>
     [Authorize]
@@ -26,7 +26,7 @@ namespace WebApplication3.Controllers
         /// <summary>Şirketin portföyündeki belgeler + grup içi dolaşımla bu şirketten geçip ciro edilmiş belgeler (şirket açısından "Ciro Edildi"); vade yılına göre süzülür (yil = "all" → hepsi).</summary>
         static List<Rapor2ViewModel> Liste(string sirket, string yil, out List<string> yillar, out string secilen)
         {
-            NakitAkisOrnek.Odemeler(CekAkibetOrnek.DbName(sirket));   // Kasa Nakit Akışı örnek verisi (plan satırları, dolaşım planları) listeden önce tohumlanır
+            NakitAkisOrnek.Odemeler(CekAkibetOrnek.DbName(sirket));   // Nakit Akış Planlama örnek verisi (plan satırları, dolaşım planları) listeden önce tohumlanır
             var hepsi = CekAkibetOrnek.Kayitlar.Where(k => k.Sirket == sirket || k.Dolasim.Any(a => a.Durum == "Gerçekleşti" && a.Eden == sirket)).ToList();
             yillar = hepsi.Select(k => k.Vade.Year).Distinct().OrderByDescending(y => y).Select(y => y.ToString()).ToList();
             string s = !string.IsNullOrEmpty(yil) && yil != "all" ? yil : DateTime.Today.Year.ToString(); secilen = s;
@@ -43,7 +43,7 @@ namespace WebApplication3.Controllers
             OrnekDoldurucu.Hazirla(this);
             return View("Index2", liste);
         }
-        /// <summary>Dinamik tazeleme: Kasa Nakit Akışı / Takip Paneli'nde belge planlanıp ibraz edilince (sürüm sayacı değişince) ekran listeyi sayfa yenilemeden buradan çeker.</summary>
+        /// <summary>Dinamik tazeleme: Nakit Akış Planlama / Takip Paneli'nde belge planlanıp ibraz edilince (sürüm sayacı değişince) ekran listeyi sayfa yenilemeden buradan çeker.</summary>
         [HttpGet("Veri")]
         public IActionResult Veri(string yil = null) { string sirket = Sirket(); var liste = Liste(sirket, yil, out _, out var secilen); return Content(Newtonsoft.Json.JsonConvert.SerializeObject(new { success = true, sirket, yil = secilen, surum = Surum(), satirlar = liste }, JsonAyar), "application/json; charset=utf-8"); }
         static int Surum() => CekAkibetOrnek.Gunluk.Count + CekAkibetOrnek.Hareketler.Count + NakitAkisOrnek.LogSayisi;
@@ -54,7 +54,7 @@ namespace WebApplication3.Controllers
         /// </summary>
         static Rapor2ViewModel Satir(CekKaydi k)
         {
-            string aciklama = k.IslemTuru == "Planlandı" ? $"Kasa Nakit Akışı #{k.PlanDocEntry} · {k.PlanlananTedarikci} için planlandı" + (k.PlanlamaTarihi != null ? $" ({k.PlanlamaTarihi:dd.MM.yyyy}, {k.Planlayan})" : "")
+            string aciklama = k.IslemTuru == "Planlandı" ? $"Nakit Akış Planlama #{k.PlanDocEntry} · {k.PlanlananTedarikci} için planlandı" + (k.PlanlamaTarihi != null ? $" ({k.PlanlamaTarihi:dd.MM.yyyy}, {k.Planlayan})" : "")
                 : k.IbrazYeri != "" ? $"{k.IbrazTuru}: {k.IbrazYeri}" + (k.Kontrol == "Farklı" ? $" · DİKKAT: plan {k.PlanlananTedarikci} (farklı)" : k.Kontrol == "Uyumlu" ? " · plana uygun" : k.Kontrol == "Plansız İbraz" ? " · plansız" : "") : "";
             if (CekAkibetOrnek.IslemTuruAciklamalari.TryGetValue(k.IslemTuru, out var tanim)) aciklama = tanim + (aciklama == "" ? "" : " · " + aciklama);
             if (k.Dolasim.Count > 0) aciklama = $"Grup içi dolaşım {k.GerceklesenAdim}/{k.Dolasim.Count}: {k.DolasimOzeti}" + (k.Sirket != k.KaynakSirket ? $" · şu an {k.Sirket} portföyünde" : "") + " · " + aciklama;
@@ -87,11 +87,11 @@ namespace WebApplication3.Controllers
             if (k.IbrazYeri != "")
             {
                 m.Kaynak = k.IbrazTuru == "Bankaya İbraz" ? "Çek Akıbeti · Bankaya İbraz" : k.IbrazTuru == "Teminat" ? "Çek Akıbeti · Teminat" : k.IbrazTuru == "İade" ? "Çek Akıbeti · İade" : "Çek Akıbeti · Ciro";
-                m.KaynakDetay = $"{k.IbrazBelgeNo} · {k.IbrazTarihi:dd.MM.yyyy} · {k.IslemTuru}" + (k.PlanDocEntry != null ? $" · plan Kasa Nakit Akışı #{k.PlanDocEntry}" : k.Kontrol == "Plansız İbraz" ? " · plansız" : ""); m.SatirIslem = "yok";
+                m.KaynakDetay = $"{k.IbrazBelgeNo} · {k.IbrazTarihi:dd.MM.yyyy} · {k.IslemTuru}" + (k.PlanDocEntry != null ? $" · plan Nakit Akış Planlama #{k.PlanDocEntry}" : k.Kontrol == "Plansız İbraz" ? " · plansız" : ""); m.SatirIslem = "yok";
             }
             else if (k.IslemTuru == "Planlandı")
             {
-                if (k.PlanDocEntry != null) { m.Kaynak = "Kasa Nakit Akışı · Plan"; m.KaynakDetay = $"#{k.PlanDocEntry} · {k.PlanlananTedarikci} · {k.PlanlamaTarihi:dd.MM.yyyy}" + (k.Planlayan != "" ? " · " + k.Planlayan : ""); }
+                if (k.PlanDocEntry != null) { m.Kaynak = "Nakit Akış Planlama · Plan"; m.KaynakDetay = $"#{k.PlanDocEntry} · {k.PlanlananTedarikci} · {k.PlanlamaTarihi:dd.MM.yyyy}" + (k.Planlayan != "" ? " · " + k.Planlayan : ""); }
                 else { m.Kaynak = "Çek Akıbeti · Plan"; m.KaynakDetay = $"{k.PlanlananTedarikci} · {k.PlanlamaTarihi:dd.MM.yyyy} · nakit akış satırı yok"; }
                 m.SatirIslem = gmy ? "gmy" : "planli";
             }
@@ -125,16 +125,16 @@ namespace WebApplication3.Controllers
 <tr><th class='text-muted'>Keşideci / Kimden Geldi</th><td>{Html(k.AsilBorclu)} / {Html(k.Musteri)}</td></tr>
 <tr><th class='text-muted'>Vade · Tutar</th><td>{k.Vade:dd.MM.yyyy} · {k.Tutar.ToString("N2", Tr)} {Html(k.PB)}</td></tr>
 <tr><th class='text-muted'>İşlem Türü</th><td>{Html(k.IslemTuru)}</td></tr>
-<tr><th class='text-muted'>Kasa Nakit Akışı Planı</th><td>{(k.PlanlananTedarikci == "" ? "<span class='text-muted'>plan yok</span>" : Html(k.PlanlananTedarikci) + (k.PlanDocEntry != null ? $" · kayıt #{k.PlanDocEntry}" : "") + (k.PlanlamaTarihi != null ? $" · {k.PlanlamaTarihi:dd.MM.yyyy} {Html(k.Planlayan)}" : ""))}</td></tr>
+<tr><th class='text-muted'>Nakit Akış Planlama Planı</th><td>{(k.PlanlananTedarikci == "" ? "<span class='text-muted'>plan yok</span>" : Html(k.PlanlananTedarikci) + (k.PlanDocEntry != null ? $" · kayıt #{k.PlanDocEntry}" : "") + (k.PlanlamaTarihi != null ? $" · {k.PlanlamaTarihi:dd.MM.yyyy} {Html(k.Planlayan)}" : ""))}</td></tr>
 <tr><th class='text-muted'>İbraz / Ciro</th><td>{(k.IbrazYeri == "" ? "<span class='text-muted'>henüz çıkış yok</span>" : Html(k.IbrazTuru) + ": " + Html(k.IbrazYeri) + (k.IbrazTarihi != null ? $" · {k.IbrazTarihi:dd.MM.yyyy}" : "") + (k.IbrazBelgeNo != "" ? " · belge " + Html(k.IbrazBelgeNo) : "") + (k.TahsilatBelgeNo != "" ? " · tahsilat " + Html(k.TahsilatBelgeNo) : ""))}</td></tr>
 <tr><th class='text-muted'>Plan ↔ İbraz Kontrolü</th><td>{kontrolRozet}</td></tr>
 <tr><th class='text-muted'>İmzalı İbraz Belgesi</th><td>{(k.IbrazBelgeImzali ? $"<a href='{Html(k.IbrazBelgeYolu)}' target='_blank'><i class='fas fa-file-signature me-1'></i>{Html(k.IbrazBelgeDosya)}</a> · {k.IbrazBelgeYukleme:dd.MM.yyyy HH:mm} {Html(k.IbrazBelgeYukleyen)}" : (k.IbrazYeri == "" ? "<span class='text-muted'>çıkış öncesi: Takip Paneli › Çek › İbraz Et penceresinden belge PDF'i oluşturulur</span>" : "<span class='text-warning'>yüklenmedi — Konsolide Finansal Takip Paneli › Çek › İmzalı Belgeyi Yükle</span>"))}</td></tr></tbody></table>
-<div class='small text-muted'>Kaynak: Kasa Nakit Akışı (Rapor79) › Çek / Senet sekmesi · Konsolide Finansal Takip Paneli › Çek: plana aykırı çıkışlar.</div></div>";
+<div class='small text-muted'>Kaynak: Nakit Akış Planlama (Rapor79) › Çek / Senet sekmesi · Konsolide Finansal Takip Paneli › Çek: plana aykırı çıkışlar.</div></div>";
         }
-        /// <summary>Çek kaydı değişim sayacı: Kasa Nakit Akışı'nda plan / ibraz yapılıp bu sekmeye dönülünce sayfa kendini tazeler (Index2.cshtml visibilitychange).</summary>
+        /// <summary>Çek kaydı değişim sayacı: Nakit Akış Planlama'da plan / ibraz yapılıp bu sekmeye dönülünce sayfa kendini tazeler (Index2.cshtml visibilitychange).</summary>
         [HttpGet("Versiyon")] public IActionResult Versiyon() => Json(new { v = Surum() });
 
-        // ---------- DURUM ÖZETİ · SENKRON (Kasa Nakit Akışı ↔ Çek Akıbeti ↔ Takip Paneli) ----------
+        // ---------- DURUM ÖZETİ · SENKRON (Nakit Akış Planlama ↔ Çek Akıbeti ↔ Takip Paneli) ----------
         static string OdemeLink(NakitAkisViewModel m) => $"/Rapor79?sirket={m.U_KaynakFirma}&sekme={(m.U_OdemeYontemi == "Senet" ? "senet" : m.U_OdemeYontemi == "Çek" ? "cek" : m.U_OdemeYontemi == "Nakit" ? "nakit" : m.U_OdemeYontemi == "Havale / EFT" ? "havale" : "tumu")}&doc={m.DocEntry}";
         /// <summary>
         /// Durum Özeti paneli: şirketin portföyü (X / R, kullanılabilir / planlı), vadesi gelen planlı belgeler (plan satırı, talimat, çıkış düğmesi), GMY onayı bekleyen plansız çıkış talepleri,
@@ -164,7 +164,7 @@ namespace WebApplication3.Controllers
             });
         }
         public class CekIslemIstek { public int DocEntry { get; set; } public string Tedarikci { get; set; } public string PlanlananTarih { get; set; } public string BelgeTipi { get; set; } public string BelgeNo { get; set; } public string UrunHizmet { get; set; } public string Tur { get; set; } public string IbrazYeri { get; set; } public string Not { get; set; } }
-        /// <summary>Detay penceresi › "Kasa Nakit Akışı'na Gönder": portföydeki belge için nakit akışta çek / senet satırı açılır, belge planlanır (Planlandı).</summary>
+        /// <summary>Detay penceresi › "Nakit Akış Planlama'ya Gönder": portföydeki belge için nakit akışta çek / senet satırı açılır, belge planlanır (Planlandı).</summary>
         [HttpPost("NakitAkisaGonder")]
         public IActionResult NakitAkisaGonder([FromBody] CekIslemIstek i)
         {
@@ -208,7 +208,7 @@ namespace WebApplication3.Controllers
         public class DocEntryIslemIstek { public int DocEntry { get; set; } public string NewCheckTransactionType { get; set; } public string Konum { get; set; } public string IbrazYeri { get; set; } public string IbrazBelgeNo { get; set; } }
         /// <summary>
         /// İşlem türü (+ konum, ibraz yeri, belge no) değişikliği: standart akış kayıt üzerinde işler (konum / hareket / vade durumu / uygunluk otomatik), güncel satır JSON olarak döner (ekran satırı yeniden çizilir).
-        /// Kasa Nakit Akışı'nda planlanmamış belge için çıkış türleri uygulanmaz; GMY onayına düşer (NakitAkisOrnek.CekCikisKontrollu).
+        /// Nakit Akış Planlama'da planlanmamış belge için çıkış türleri uygulanmaz; GMY onayına düşer (NakitAkisOrnek.CekCikisKontrollu).
         /// </summary>
         [HttpPost("UpdateCheckTransactionTypeByDocEntry")]
         public IActionResult UpdateCheckTransactionTypeByDocEntry([FromBody] DocEntryIslemIstek model)
@@ -222,7 +222,7 @@ namespace WebApplication3.Controllers
         public IActionResult IslemTurleri() => Json(CekAkibetOrnek.IslemTurleri.Select(t => new { kod = t.Kod, ad = t.Ad, aciklama = CekAkibetOrnek.IslemTuruAciklamalari.TryGetValue(t.Ad, out var a) ? a : "", konumlar = CekAkibetOrnek.KonumSecenekleri(t.Ad) }));
         public class PlanlananTedarikciIstek { public int DocEntry { get; set; } public string NewPlannedSupplier { get; set; } }
         [HttpPost("UpdatePlannedSupplier")]
-        /// <summary>Planlanan Tedarikçi — Kasa Nakit Akışı ile bütünleşik (NakitAkisOrnek.PlanTedarikciDegistir): plan satırının kurumu değişir / satır açılır / belge satırdan çıkar; güncel satır JSON döner.</summary>
+        /// <summary>Planlanan Tedarikçi — Nakit Akış Planlama ile bütünleşik (NakitAkisOrnek.PlanTedarikciDegistir): plan satırının kurumu değişir / satır açılır / belge satırdan çıkar; güncel satır JSON döner.</summary>
         public IActionResult UpdatePlannedSupplier([FromBody] PlanlananTedarikciIstek model)
         {
             var r = NakitAkisOrnek.PlanTedarikciDegistir(model?.DocEntry ?? 0, model?.NewPlannedSupplier, Kullanici);

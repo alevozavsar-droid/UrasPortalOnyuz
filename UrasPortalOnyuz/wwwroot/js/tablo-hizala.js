@@ -1,5 +1,5 @@
 // ============================================================
-// TABLO HİZALAMA (ortak) — Konsolide Finansal Takip Paneli, Kasa Nakit Akışı, Personel Maliyet Raporu, Bütçe Raporu.
+// TABLO HİZALAMA (ortak) — Konsolide Finansal Takip Paneli, Nakit Akış Planlama, Personel Maliyet Raporu, Bütçe Raporu.
 //   Her hücre ortada, başlık ile gövde aynı (kullanıcı kararı: "tüm raporlarda ortaya hizalanacak her şey").
 //   Gövde satır hizası: her hücrenin İLK satırı aynı taban çizgisinde; çok satırlı hücre ile tek satırlı komşusu kaymaz.
 //   Başlıklar alt çizgide hizalanır: tek satırlı ile çok satırlı başlık aynı alt çizgiye oturur ("biri yukarıda biri aşağıda olmasın").
@@ -102,7 +102,7 @@
         c.style.setProperty('vertical-align', dikeyOrta ? 'middle' : basta ? 'bottom' : 'baseline', 'important');
       }
     }
-    // süzgeç satırı (tr.suzgec: Kasa Nakit Akışı başlık altı arama kutuları, 13 Kas 2026) başlık sayılmaz: sütun adları bir üstündeki satırdadır
+    // süzgeç satırı (tr.suzgec: Nakit Akış Planlama başlık altı arama kutuları, 13 Kas 2026) başlık sayılmaz: sütun adları bir üstündeki satırdadır
     const basSatirlari = thead ? Array.from(thead.rows).filter(r => !r.classList.contains('suzgec')) : [];
     const bas = basSatirlari.length ? basSatirlari[basSatirlari.length - 1] : null;
     if (!bas) return;

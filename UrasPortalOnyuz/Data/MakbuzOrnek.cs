@@ -6,7 +6,7 @@ using FinansRaporlama.Controllers;
 
 namespace WebApplication3.Data
 {
-    /// <summary>Kasa tediye makbuzu: onaylı nakit ödeme Kasa Nakit Akışı'ndan kesilir; satır ÖDENDİ olur, muhasebe fişi (Data/MuhasebeOrnek.cs) otomatik atılır, avans ise modülde teslim edilmiş sayılır.</summary>
+    /// <summary>Kasa tediye makbuzu: onaylı nakit ödeme Nakit Akış Planlama'dan kesilir; satır ÖDENDİ olur, muhasebe fişi (Data/MuhasebeOrnek.cs) otomatik atılır, avans ise modülde teslim edilmiş sayılır.</summary>
     public class KasaMakbuzu
     {
         public int Id { get; set; } public string No { get; set; } public DateTime Tarih { get; set; } public string DbName { get; set; } public string Sirket { get; set; } public string Kasa { get; set; } = "";

@@ -71,8 +71,8 @@ namespace WebApplication3.Data
             ("Rapor152", "Index", "fas fa-people-arrows text-danger", "Grup İçi Satış (Uras > Selvi > Müşteri)", null),
             ("Rapor7C", "Index", "fas fa-chart-line", "Ürün Hammadde Ekstresi", null),
             ("Rapor77", "Index", "fas fa-chart-line", "Ürün Hammadde (Ambalaj)", null),
-            ("Rapor79", "Index", "fas fa-chart-line", "Kasa Nakit Akışı", null),
-            ("KrediYapilandirma", "Index", "fas fa-building-columns", "Kredi Raporu", null),   // 9 Kas 2026: banka kredisi yapılandırmaları (öncesi / sonrası, teminat, taksit takvimi → Kasa Nakit Akışı ve Planlı Ödemeler)
+            ("Rapor79", "Index", "fas fa-chart-line", "Nakit Akış Planlama", null),
+            ("KrediYapilandirma", "Index", "fas fa-building-columns", "Kredi Raporu", null),   // 9 Kas 2026: banka kredisi yapılandırmaları (öncesi / sonrası, teminat, taksit takvimi → Nakit Akış Planlama ve Planlı Ödemeler)
             ("Rapor80", "Index", "fas fa-chart-line", "Zimmet Takip Raporu", null),
             ("Rapor81", "Index", "fas fa-chart-line", "Satış Analiz Dashboard", null),
             ("Rapor82", "Index", "fas fa-chart-line", "Aktarım Robotu Kontrol Paneli-URS", null),
@@ -125,7 +125,7 @@ namespace WebApplication3.Data
             ("Rapor149", "Index", "fas fa-calendar-check text-danger", "Vadeli Çek İbrazı", null),
             ("Rapor173", "Index", "fas fa-boxes-stacked", "Toplu Kalem Ana Verisi Güncelleme", null),
             ("Mesaj", "Index", "fas fa-comment-dots text-primary", "Mesajlar", null),
-            ("Rapor130", "Index", "fas fa-money-check-alt text-danger", "Kasa Nakit Akışı Görünüm", null),
+            ("Rapor130", "Index", "fas fa-money-check-alt text-danger", "Nakit Akış Planlama Görünüm", null),
             ("Rapor131", "Index", "fas fa-money-check-alt text-danger", "Satınalma Siparişi", null),
             ("Rapor132", "Index", "fas fa-money-check-alt text-danger", "Tahsilat İbraz Çek Bordrosu", null),
             ("Rapor120", "Index", "fas fa-address-book", "Cari Bilgileri", null),

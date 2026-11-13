@@ -1,7 +1,7 @@
 // ============================================================
 // PLANLI DÜZENLİ ÖDEMELER — Konsolide Finansal Takip Paneli › Düzenli Ödemeler sekmesi (Views/Rapor123/Index.cshtml, js/takip-paneli.js, Rapor123Controller Duzenli*)
 // Kaynak: "AYLIK ÖDEME TAKVİM LİSTESİ 2026" (Serkan Genç — düzenli ödemeler listesi): tedarikçi, ürün / hizmet, şirket, ödeme şekli, ortalama aylık tutar.
-// Her ay otomatik: aktif her kayıt için o ayın ödeme gününe planlanmış bir Kasa Nakit Akışı satırı açılır (Data/NakitAkisOrnek.cs › Ekle; kayıt tipi
+// Her ay otomatik: aktif her kayıt için o ayın ödeme gününe planlanmış bir Nakit Akış Planlama satırı açılır (Data/NakitAkisOrnek.cs › Ekle; kayıt tipi
 // "Düzenli Ödeme", belge no "DÖ-xxx · AAAA-AA", talep eden Serkan Genç). Aynı kayıt aynı aya iki kez akmaz. Geçmiş aylar tohumda ödenmiş olarak üretilir;
 // bu ayın günü geçen ödemeleri ödenmiş, kalanlar planlı; gelecek ay "Gelecek Ayı Planla" ile ya da ay başında otomatik akar (panel her açılışta eksikleri tamamlar).
 // Kilit sırası: NakitAkis → Duzenli (tohum) ve Duzenli kilidi tutulurken NakitAkisOrnek çağrılmaz (Akit: adaylar kilitte toplanır, satırlar kilit dışında açılır).
@@ -16,7 +16,7 @@ namespace WebApplication3.Data
 {
     public class DuzenliAkis { public string Ay { get; set; } public int DocEntry { get; set; } public string DbName { get; set; } public DateTime Zaman { get; set; } public string Kullanici { get; set; } public decimal Tutar { get; set; } public string Yontem { get; set; } public DateTime PlanlananTarih { get; set; } }
     /// <summary>
-    /// Bir ayın düzenli ödemesi için planlanan portföy müşteri çeki / senedi (Data/CekAkibetOrnek.cs). Kullanım: "Ciro" = belge tedarikçiye verilir (ödeme şekli çek; Kasa Nakit Akışı satırının belgesi olur),
+    /// Bir ayın düzenli ödemesi için planlanan portföy müşteri çeki / senedi (Data/CekAkibetOrnek.cs). Kullanım: "Ciro" = belge tedarikçiye verilir (ödeme şekli çek; Nakit Akış Planlama satırının belgesi olur),
     /// "Tahsil" = belge vadesinde bankaya tahsile verilir, ödeme nakit / havale yapılır (örn. maaş: o tarihe uygun vadeli çek planlanır, çek tahsil edilince bankadan maaş ödenir).
     /// </summary>
     public class DuzenliCekPlani { public string Ay { get; set; } public int CekDocEntry { get; set; } public string CekNo { get; set; } public string Belge { get; set; } = "Çek"; public string CekSirket { get; set; } public decimal Tutar { get; set; } public DateTime Vade { get; set; } public string Kullanim { get; set; } = "Tahsil"; public DateTime Zaman { get; set; } public string Kullanici { get; set; } = ""; }
@@ -36,7 +36,7 @@ namespace WebApplication3.Data
         public string ButceKalem { get; set; } = "";
         /// <summary>Ay bazında planlanan portföy çekleri / senetleri (hangi aya kadar, ne kadarlık çek planlandı).</summary>
         public List<DuzenliCekPlani> CekPlanlari { get; set; } = new List<DuzenliCekPlani>();
-        /// <summary>Dış kaynak akıtır (Kredi Raporu taksitleri, 9 Kas 2026): aylık otomatik akış bu kayıt için kapalı; Kasa Nakit Akışı satırları kaynak ekrandan yazılır ve AkisBagla ile aya bağlanır.</summary>
+        /// <summary>Dış kaynak akıtır (Kredi Raporu taksitleri, 9 Kas 2026): aylık otomatik akış bu kayıt için kapalı; Nakit Akış Planlama satırları kaynak ekrandan yazılır ve AkisBagla ile aya bağlanır.</summary>
         public bool DisAkis { get; set; }
     }
 
@@ -136,7 +136,7 @@ namespace WebApplication3.Data
         public static List<DuzenliOdeme> Listele(string dbName = null) { Tohumla(); lock (Kilit) return _liste.Where(d => string.IsNullOrEmpty(dbName) || d.DbName == dbName).OrderBy(d => d.Sirket, StringComparer.Create(Tr, false)).ThenBy(d => d.Gun).ThenBy(d => d.Id).ToList(); }
         public static DuzenliOdeme Bul(int id) { Tohumla(); lock (Kilit) return _liste.FirstOrDefault(d => d.Id == id); }
 
-        /// <summary>Bir ayın düzenli ödemelerini Kasa Nakit Akışı'na akıtır (aktif kayıtlar; o aya akmış olanlar atlanır). odenmisSay: geçmiş ay tohumu — satır ödendi. panelGunlugu: panel günlüğüne de yaz (tohumda kapalı: kilit sırası).</summary>
+        /// <summary>Bir ayın düzenli ödemelerini Nakit Akış Planlama'ya akıtır (aktif kayıtlar; o aya akmış olanlar atlanır). odenmisSay: geçmiş ay tohumu — satır ödendi. panelGunlugu: panel günlüğüne de yaz (tohumda kapalı: kilit sırası).</summary>
         public static (bool ok, string mesaj, int eklenen, int atlanan) Akit(string ay, string kullanici, string dbName = null, int? id = null, bool odenmisSay = false, bool panelGunlugu = true, bool uzak = false)
         {
             Tohumla(); if (!AyCoz(ay, out var ayBas)) return (false, "Ay AAAA-AA biçiminde olmalı.", 0, 0);
@@ -159,7 +159,7 @@ namespace WebApplication3.Data
                     U_Notlar = $"Planlı düzenli ödeme {d.No} ({d.Kategori}) · her ay otomatik nakit akışa akar · ort. aylık {d.AylikTutar.ToString("N0", Tr)} ₺ · sorumlu {d.Sorumlu}" + (d.OdemeSekli == "Nakit / Çek" ? " · nakit ya da çek" : "") + (string.IsNullOrEmpty(d.Not) ? "" : " · " + d.Not)
                 };
                 var m = NakitAkisOrnek.Ekle(d.DbName, gelen, kullanici);
-                // o ay için önceden planlanmış çekler satıra bağlanır: Ciro → satırın belgesi olur (Kasa Nakit Akışı çek satırı); Tahsil → bilgi bağı (belge bankaya tahsile verilir, ödeme nakit / havale)
+                // o ay için önceden planlanmış çekler satıra bağlanır: Ciro → satırın belgesi olur (Nakit Akış Planlama çek satırı); Tahsil → bilgi bağı (belge bankaya tahsile verilir, ödeme nakit / havale)
                 List<DuzenliCekPlani> planlar; lock (Kilit) planlar = d.CekPlanlari.Where(p => p.Ay == ay).ToList();
                 foreach (var p in planlar)
                 {
@@ -172,11 +172,11 @@ namespace WebApplication3.Data
                 }
                 bool odendi = odenmisSay || (ay == BuAy && tarih < bugun);
                 if (odendi) { NakitAkisOrnek.OdendiIsaretle(d.DbName, m.DocEntry, "Düzenli ödeme " + d.No, kullanici, true, tarih); if (yontem == "Nakit") NakitAkisOrnek.AlanKaydet(d.DbName, m.DocEntry, "U_MakbuzNo", $"KT-{tarih:yyMM}-{d.Id:000}", kullanici); }
-                lock (Kilit) { d.Akislar.Add(new DuzenliAkis { Ay = ay, DocEntry = m.DocEntry, DbName = d.DbName, Zaman = DateTime.Now, Kullanici = kullanici ?? "", Tutar = d.AylikTutar, Yontem = yontem, PlanlananTarih = tarih }); Log(d, "Nakit Akışa Aktı", $"{AyAdi(ay)} · Kasa Nakit Akışı #{m.DocEntry} · {yontem} · {d.AylikTutar.ToString("N2", Tr)} ₺ · planlanan {tarih:dd.MM.yyyy}" + (odendi ? " · ödendi" : ""), kullanici); }
-                if (panelGunlugu) FinekraOrnek.GunlukEkle(d.Sirket, d.No, "Düzenli Ödeme Aktı", $"{d.Tedarikci} · {d.UrunHizmet} · {AyAdi(ay)} · Kasa Nakit Akışı #{m.DocEntry} · {d.AylikTutar.ToString("N2", Tr)} ₺ · {yontem}", kullanici);
+                lock (Kilit) { d.Akislar.Add(new DuzenliAkis { Ay = ay, DocEntry = m.DocEntry, DbName = d.DbName, Zaman = DateTime.Now, Kullanici = kullanici ?? "", Tutar = d.AylikTutar, Yontem = yontem, PlanlananTarih = tarih }); Log(d, "Nakit Akışa Aktı", $"{AyAdi(ay)} · Nakit Akış Planlama #{m.DocEntry} · {yontem} · {d.AylikTutar.ToString("N2", Tr)} ₺ · planlanan {tarih:dd.MM.yyyy}" + (odendi ? " · ödendi" : ""), kullanici); }
+                if (panelGunlugu) FinekraOrnek.GunlukEkle(d.Sirket, d.No, "Düzenli Ödeme Aktı", $"{d.Tedarikci} · {d.UrunHizmet} · {AyAdi(ay)} · Nakit Akış Planlama #{m.DocEntry} · {d.AylikTutar.ToString("N2", Tr)} ₺ · {yontem}", kullanici);
                 eklenen++;
             }
-            string mesaj = eklenen == 0 ? (atlanan > 0 ? $"{AyAdi(ay)} için {atlanan} düzenli ödeme zaten nakit akışta; yeni satır açılmadı." : "Akıtılacak aktif düzenli ödeme yok.") : $"{AyAdi(ay)}: {eklenen} düzenli ödeme Kasa Nakit Akışı'na aktı" + (atlanan > 0 ? $" ({atlanan} zaten akmıştı)" : "") + ".";
+            string mesaj = eklenen == 0 ? (atlanan > 0 ? $"{AyAdi(ay)} için {atlanan} düzenli ödeme zaten nakit akışta; yeni satır açılmadı." : "Akıtılacak aktif düzenli ödeme yok.") : $"{AyAdi(ay)}: {eklenen} düzenli ödeme Nakit Akış Planlama'ya aktı" + (atlanan > 0 ? $" ({atlanan} zaten akmıştı)" : "") + ".";
             return (true, mesaj, eklenen, atlanan);
         }
         /// <summary>Panel her açılışta: bu ay için akmamış aktif kayıtları tamamlar (ay başı otomatik işinin karşılığı).</summary>
@@ -213,14 +213,14 @@ namespace WebApplication3.Data
                 return (true, (id > 0 ? $"{d.No} güncellendi" : $"{d.No} eklendi") + "; bu aya henüz akmadıysa \"Bu Ayı Akıt\" ile nakit akışa alınır.", d);
             }
         }
-        /// <summary>Dış kaynaktan (Kredi Raporu) açılmış Kasa Nakit Akışı satırını kaydın o ayına bağlar: ay akmış sayılır (Akit ikinci satır açmaz), panelde ayın satırı ve durumu görünür; varsa günceller.</summary>
+        /// <summary>Dış kaynaktan (Kredi Raporu) açılmış Nakit Akış Planlama satırını kaydın o ayına bağlar: ay akmış sayılır (Akit ikinci satır açmaz), panelde ayın satırı ve durumu görünür; varsa günceller.</summary>
         public static void AkisBagla(int id, string ay, NakitAkisViewModel m, string kullanici)
         {
             var d = Bul(id); if (d == null || m == null || !AyGecerli(ay)) return;
             lock (Kilit)
             {
                 var a = d.Akislar.FirstOrDefault(x => x.Ay == ay);
-                if (a == null) { d.Akislar.Add(new DuzenliAkis { Ay = ay, DocEntry = m.DocEntry, DbName = m.U_KaynakFirma, Zaman = DateTime.Now, Kullanici = kullanici ?? "", Tutar = m.U_TutarTL ?? m.U_Tutar ?? 0, Yontem = m.U_OdemeYontemi, PlanlananTarih = m.U_PlanlananTarih ?? DateTime.Today }); Log(d, "Dış Akış Bağlandı", $"{AyAdi(ay)} · Kasa Nakit Akışı #{m.DocEntry} · {(m.U_TutarTL ?? 0).ToString("N2", Tr)} ₺ (Kredi Raporu)", kullanici); }
+                if (a == null) { d.Akislar.Add(new DuzenliAkis { Ay = ay, DocEntry = m.DocEntry, DbName = m.U_KaynakFirma, Zaman = DateTime.Now, Kullanici = kullanici ?? "", Tutar = m.U_TutarTL ?? m.U_Tutar ?? 0, Yontem = m.U_OdemeYontemi, PlanlananTarih = m.U_PlanlananTarih ?? DateTime.Today }); Log(d, "Dış Akış Bağlandı", $"{AyAdi(ay)} · Nakit Akış Planlama #{m.DocEntry} · {(m.U_TutarTL ?? 0).ToString("N2", Tr)} ₺ (Kredi Raporu)", kullanici); }
                 else { a.DocEntry = m.DocEntry; a.DbName = m.U_KaynakFirma; a.Tutar = m.U_TutarTL ?? m.U_Tutar ?? 0; a.Yontem = m.U_OdemeYontemi; a.PlanlananTarih = m.U_PlanlananTarih ?? a.PlanlananTarih; }
             }
         }
@@ -278,7 +278,7 @@ namespace WebApplication3.Data
             return b;
         }
         /// <summary>
-        /// Bir ayın düzenli ödemesi için portföyden çek / senet planlar. Ciro: o ayın Kasa Nakit Akışı satırı yoksa şimdi açılır (en fazla CekPlanUfku ay ileri) ve belge satıra bağlanır (Çek Akıbeti: Planlandı → tedarikçi);
+        /// Bir ayın düzenli ödemesi için portföyden çek / senet planlar. Ciro: o ayın Nakit Akış Planlama satırı yoksa şimdi açılır (en fazla CekPlanUfku ay ileri) ve belge satıra bağlanır (Çek Akıbeti: Planlandı → tedarikçi);
         /// Tahsil: belge Çek Akıbeti'nde "Planlandı (Tahsil → …)" olur, vadesinde bankaya tahsile verilir, ödeme nakit / havale yapılır. Aynı belge iki plana giremez (Secilebilir kuralı).
         /// </summary>
         public static (bool ok, string mesaj, DuzenliOdeme d) CekPlanla(int id, string ay, IEnumerable<int> cekler, string kullanim, string kullanici)
@@ -310,10 +310,10 @@ namespace WebApplication3.Data
             decimal planlanan; lock (Kilit) planlanan = d.CekPlanlari.Where(p => p.Ay == ay).Sum(p => p.Tutar);
             if (eklenen.Count > 0) try { FinekraOrnek.GunlukEkle(d.Sirket, d.No, "Düzenli Ödeme Çek Planı", $"{etiket} · {string.Join(", ", eklenen)} · planlanan {planlanan.ToString("N2", Tr)} ₺ / ihtiyaç {d.AylikTutar.ToString("N2", Tr)} ₺ · {(kullanim == "Ciro" ? "ciro" : "tahsil")}", kullanici); } catch { }
             string mesaj = eklenen.Count == 0 ? "Çek planlanamadı: " + string.Join(" · ", hatalar)
-                : $"{AyAdi(ay)} için {eklenen.Count} belge planlandı ({string.Join(", ", eklenen)}) · planlanan {planlanan.ToString("N0", Tr)} ₺ / ihtiyaç {d.AylikTutar.ToString("N0", Tr)} ₺ ({(d.AylikTutar > 0 ? Math.Round(planlanan / d.AylikTutar * 100) : 0)}%) · {(kullanim == "Ciro" ? "tedarikçiye ciro edilecek; Kasa Nakit Akışı satırına bağlandı" : "vadesinde bankaya tahsile verilecek; ödeme nakit / havale")}" + (hatalar.Count > 0 ? " · " + string.Join(" · ", hatalar) : "");
+                : $"{AyAdi(ay)} için {eklenen.Count} belge planlandı ({string.Join(", ", eklenen)}) · planlanan {planlanan.ToString("N0", Tr)} ₺ / ihtiyaç {d.AylikTutar.ToString("N0", Tr)} ₺ ({(d.AylikTutar > 0 ? Math.Round(planlanan / d.AylikTutar * 100) : 0)}%) · {(kullanim == "Ciro" ? "tedarikçiye ciro edilecek; Nakit Akış Planlama satırına bağlandı" : "vadesinde bankaya tahsile verilecek; ödeme nakit / havale")}" + (hatalar.Count > 0 ? " · " + string.Join(" · ", hatalar) : "");
             return (eklenen.Count > 0, mesaj, d);
         }
-        /// <summary>Çek planından belge çıkarır: belge portföye döner (Planlandı → Portföyde); ciro planında Kasa Nakit Akışı satırından da çıkar.</summary>
+        /// <summary>Çek planından belge çıkarır: belge portföye döner (Planlandı → Portföyde); ciro planında Nakit Akış Planlama satırından da çıkar.</summary>
         public static (bool ok, string mesaj, DuzenliOdeme d) CekPlanKaldir(int id, string ay, int cekDocEntry, string kullanici)
         {
             var d = Bul(id); if (d == null) return (false, "Kayıt bulunamadı.", null);
@@ -332,7 +332,7 @@ namespace WebApplication3.Data
             return (true, sonuc, d);
         }
         /// <summary>
-        /// Bütçe Raporu'na otomatik katkı (Data/ButceOrnek.cs kalemleri): şirket × yıl × kalem için 12 aylık PLAN (aktif kayıtların aylık tutarı; akmış aylarda Kasa Nakit Akışı satır tutarı) ve ÖDENEN (ÖDENDİ satırlar);
+        /// Bütçe Raporu'na otomatik katkı (Data/ButceOrnek.cs kalemleri): şirket × yıl × kalem için 12 aylık PLAN (aktif kayıtların aylık tutarı; akmış aylarda Nakit Akış Planlama satır tutarı) ve ÖDENEN (ÖDENDİ satırlar);
         /// kayıt listesi (kalem eşlemesi, çek planı özeti). Kayıt tarihi öncesi aylara plan yazılmaz.
         /// </summary>
         public static object ButceKatki(IEnumerable<int> yillar)

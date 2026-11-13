@@ -7,7 +7,7 @@ namespace WebApplication3.Controllers
     /// <summary>
     /// Talep › Yeni Talep › Ödeme Talebi: birimlerin ödeme talebi ekranı (talep motoru modülü Data/OdemeTalebiModulu.cs; görünüm Views/IkTalep/Modul.cshtml +
     /// js/talep-modulu.js; veri uçları IkTalep/Tm*). Cari kapsamı talep eden kişinin birimine göre: satın alma satınalmacısı olduğu tedarikçiler, idari işler
-    /// temsilcisi olduğu cariler, muhasebe / finans resmi kurumlar ve finansal kuruluşlar. Onaylanan talep Kasa Nakit Akışı › Departman Talepleri'ne düşer.
+    /// temsilcisi olduğu cariler, muhasebe / finans resmi kurumlar ve finansal kuruluşlar. Onaylanan talep Nakit Akış Planlama › Departman Talepleri'ne düşer.
     /// </summary>
     [Authorize]
     public class OdemeTalebiController : Controller
