@@ -261,7 +261,7 @@ namespace WebApplication3.Data
             {
                 U_Kurum = kurum, U_UrunHizmet = BaslikDuzelt(h.Aciklama), U_OdemeYontemi = "Havale / EFT", U_BagliBelgeTipi = belgeTipi, U_KayitTipi = belgeTipi == "Cari Bakiye" ? "Bakiye" : belgeTipi, U_PlanlananTarih = h.Tarih.Date, U_SonOdemeTarihi = h.Tarih.Date,
                 U_Tutar = h.PB == "TRY" ? h.Tutar : h.DovizTutar, U_ParaBirimi = h.PB, U_Kur = h.PB == "TRY" ? 1 : h.Kur, U_TutarTL = h.Tutar, U_KurKaynagi = h.PB == "TRY" ? "" : (KurOrnek.Kaynaklar.Contains(h.KurKaynagi) ? h.KurKaynagi : "TCMB Döviz Alış"), U_KurTarihi = h.PB == "TRY" ? null : h.KurTarihi, U_IslemTipi = "X", U_TalepEden = "Finekra · banka hareketi", U_FaturaSahibi = h.Sirket, U_OdeyenSirket = h.Sirket,
-                U_Notlar = $"Banka hareketinden alındı ({h.No} · {h.Banka} · ref {h.Referans}) · {h.IslemTuru}", U_BankaHesabi = hesap, U_DekontNo = h.No, U_AliciIban = h.KarsiIban, U_AliciHesapAdi = h.KarsiAd, U_Satinalmaci = ""
+                U_Kaynak = "Gerçekleşen Ödemeler", U_Notlar = $"Banka hareketinden alındı ({h.No} · {h.Banka} · ref {h.Referans}) · {h.IslemTuru}", U_BankaHesabi = hesap, U_DekontNo = h.No, U_AliciIban = h.KarsiIban, U_AliciHesapAdi = h.KarsiAd, U_Satinalmaci = ""
             };
             // fiş: hareket onaylıysa numarası taşınır; onaylı değilse fiş Takip Paneli onayında (cari / hesap seçilince) atılıp satıra yazılır
             var m = NakitAkisOrnek.BankaHareketindenEkle(h.DbName, gelen, h.Tarih, h.YevmiyeNo, kullanici, h.Durum == "Onaylandı");

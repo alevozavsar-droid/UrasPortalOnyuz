@@ -112,7 +112,7 @@ namespace WebApplication3.Data
                 U_SonOdemeTarihi = t.SonOdeme, U_PlanlananTarih = t.SonOdeme < bugun ? bugun : t.SonOdeme, U_Tutar = t.Net, U_ParaBirimi = t.PB, U_Kur = NakitAkisOrnek.Kurlar.TryGetValue(t.PB, out var k) ? k : 1m, U_TutarTL = t.NetTL, U_FaturaTutari = t.Tutar,
                 U_TalepEden = t.TalepEden, U_IslemTipi = "X", U_Satinalmaci = t.Departman == "Satınalma" || t.Departman == "Satın Alma" ? t.TalepEden : "", U_Durum = t.Durum == "Onaylandı" ? "Planlandı" : "Bekliyor",
                 U_MutabakatDurumu = t.Mutabakat == "Mutabık" || t.Mutabakat == "Mutabık Değil" ? t.Mutabakat : "", SonMutabakatTarihi = t.MutabakatTarihi,
-                U_Notlar = $"Departman talebi {t.No} · {t.Departman} · {t.BelgeTipi}" + (t.Oncelik != "Normal" ? " · " + t.Oncelik : "") + (t.Durum == "Onaylandı" ? $" · onay {t.Onaylayan}" : " · departman onayı bekliyor") + (t.MahsupTutari > 0 ? $" · mahsup {t.MahsupTutari.ToString("N2", Tr)} {t.PB} düşüldü ({t.MahsupAciklama})" : "") + (t.Mutabakat != "Mutabakat Yok" ? " · mutabakat: " + t.Mutabakat : "")
+                U_Kaynak = "Ödeme Talebi", U_Notlar = $"Departman talebi {t.No} · {t.Departman} · {t.BelgeTipi}" + (t.Oncelik != "Normal" ? " · " + t.Oncelik : "") + (t.Durum == "Onaylandı" ? $" · onay {t.Onaylayan}" : " · departman onayı bekliyor") + (t.MahsupTutari > 0 ? $" · mahsup {t.MahsupTutari.ToString("N2", Tr)} {t.PB} düşüldü ({t.MahsupAciklama})" : "") + (t.Mutabakat != "Mutabakat Yok" ? " · mutabakat: " + t.Mutabakat : "")
             };
             var satir = NakitAkisOrnek.Ekle(t.DbName, m, kullanici);
             lock (Kilit) { t.Durum = "Nakit Akışa Alındı"; t.NakitAkisDocEntry = satir.DocEntry; t.AlinmaZamani = DateTime.Now; t.Alan = kullanici ?? ""; }

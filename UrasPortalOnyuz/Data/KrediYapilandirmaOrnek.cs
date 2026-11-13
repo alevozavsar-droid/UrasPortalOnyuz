@@ -403,7 +403,7 @@ namespace WebApplication3.Data
                 foreach (var p in pesinatlar)
                 {   // peşinat: protokol tarihinde tek seferlik Havale / EFT satırı (anahtar "KRD-001|P"; birden çok peşinatta "KRD-001|P2" …)
                     string anahtar = p.No == 1 ? $"{k.No}|P" : $"{k.No}|P{p.No}"; anahtarlar.Add(anahtar); string sira = pesinatlar.Count > 1 ? $" {p.No}/{pesinatlar.Count}" : "";
-                    var (m, islem) = NakitAkisOrnek.KrediTaksitiYaz(db, anahtar, k.Banka, $"Kredi yapılandırma peşinatı{sira} · {k.KrediTuru}{(k.KrediNo != "" ? " · kredi no " + k.KrediNo : "")} · taksitlendirilen anapara {k.YeniAnapara.ToString("N2", Tr)} {pbs}{(p.Aciklama != "" ? " · " + p.Aciklama : "")}", $"{k.No} · Peşinat{(pesinatlar.Count > 1 ? " " + p.No : "")}", p.Tutar, p.Tarih, protokol + " · peşin ödeme, taksitlerin dışında", kullanici, pb, kur);
+                    var (m, islem) = NakitAkisOrnek.KrediTaksitiYaz(db, anahtar, k.Banka, $"Kredi Peşinatı{sira} · {k.KrediTuru}", $"{k.No} · Peşinat{(pesinatlar.Count > 1 ? " " + p.No : "")}", p.Tutar, p.Tarih, $"{k.No} · peşin ödeme", kullanici, pb, kur);   // 13 Kas 2026 ("açıklama çok uzun, sadeleştir"): ürün / hizmet ve not kısa; ayrıntı (kredi no, protokol, anapara) Kredi Raporu'nda
                     if (islem == "eklendi") e++; else if (islem == "güncellendi") g++; else od++;
                     if (p.Odendi && m.U_Durum != "ÖDENDİ") NakitAkisOrnek.OdendiIsaretle(db, m.DocEntry, "Kredi peşinatı " + k.No, kullanici, false, p.Tarih);
                 }
@@ -412,8 +412,8 @@ namespace WebApplication3.Data
                 {
                     string anahtar = $"{k.No}|{t.No:000}"; anahtarlar.Add(anahtar);
                     string belgeNo = $"{k.No} · {t.No:00}/{taksitler.Count:00}";
-                    string urun = $"Kredi yapılandırma taksidi {t.No}/{taksitler.Count} · {k.KrediTuru}{(k.KrediNo != "" ? " · kredi no " + k.KrediNo : "")} · " + (plan ? "protokol ödeme planı" + (t.Aciklama != "" ? " · " + t.Aciklama : "") : $"anapara {t.Anapara.ToString("N2", Tr)} + faiz {t.Faiz.ToString("N2", Tr)}");
-                    string not = $"{protokol} · taksit sonrası kalan anapara {t.Kalan.ToString("N2", Tr)} {pbs}";
+                    string urun = $"Kredi Taksidi {t.No}/{taksitler.Count} · {k.KrediTuru}";   // sade: ayrıntı (kredi no, ödeme planı açıklaması, anapara + faiz) Kredi Raporu'nda
+                    string not = $"{k.No} · kalan anapara {t.Kalan.ToString("N2", Tr)} {pbs}";
                     var (m, islem) = NakitAkisOrnek.KrediTaksitiYaz(db, anahtar, k.Banka, urun, belgeNo, t.Tutar, t.Tarih, not, kullanici, pb, kur);
                     if (islem == "eklendi") e++; else if (islem == "güncellendi") g++; else od++;
                     if (t.Odendi && m.U_Durum != "ÖDENDİ") NakitAkisOrnek.OdendiIsaretle(db, m.DocEntry, "Kredi taksidi " + k.No, kullanici, false, t.Tarih);

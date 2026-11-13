@@ -327,7 +327,7 @@ namespace WebApplication3.Controllers
             {
                 U_Kurum = i.Kurum.Trim(), U_UrunHizmet = string.IsNullOrWhiteSpace(i.UrunHizmet) ? (belgeTipi == "Cari Bakiye" ? "Cari bakiye ödemesi" : belgeTipi + " ödemesi") : i.UrunHizmet.Trim(), U_OdemeYontemi = yontem, U_BagliBelgeTipi = belgeTipi, U_FaturaSiparisNo = belgeTipi == "Cari Bakiye" ? "" : (i.BelgeNo ?? "").Trim(),
                 U_PlanlananTarih = tarih, U_SonOdemeTarihi = tarih, U_Tutar = i.Tutar, U_ParaBirimi = pb, U_Kur = kur, U_TutarTL = Math.Round(i.Tutar * kur, 2), U_IslemTipi = i.IslemTipi == "R" ? "R" : "X", U_TalepEden = Kullanici, U_Kasa = yontem == "Nakit" ? (string.IsNullOrEmpty(i.Kasa) ? NakitAkisOrnek.Kasalar[0] : i.Kasa) : "",
-                U_Notlar = "Takip Paneli'nden eklendi" + (i.Odendi ? " (gün içi ödeme; nakit akışta eksikti)" : "") + (string.IsNullOrWhiteSpace(i.Not) ? "" : " · " + i.Not.Trim()), U_Satinalmaci = "", U_FaturaSahibi = s.Ad, U_OdeyenSirket = s.Ad
+                U_Kaynak = i.Odendi ? "Gerçekleşen Ödemeler" : "Takip Paneli", U_Notlar = "Takip Paneli'nden eklendi" + (i.Odendi ? " (gün içi ödeme; nakit akışta eksikti)" : "") + (string.IsNullOrWhiteSpace(i.Not) ? "" : " · " + i.Not.Trim()), U_Satinalmaci = "", U_FaturaSahibi = s.Ad, U_OdeyenSirket = s.Ad
             };
             var m = NakitAkisOrnek.Ekle(s.DbName, gelen, Kullanici);
             if (yontem == "Havale / EFT" && !string.IsNullOrEmpty(i.BankaHesabi)) NakitAkisOrnek.AlanKaydet(s.DbName, m.DocEntry, "U_BankaHesabi", i.BankaHesabi, Kullanici);

@@ -6,7 +6,7 @@
     var fsBilgi = WebApplication3.Data.TalimatOrnek.SirketBilgisi.TryGetValue(Model.FaturaSahibiDb ?? "", out var b1) ? b1 : (Unvan: Model.FaturaSahibi, Adres: "", Web: "", Komiserler: new string[0]);
     var odBilgi = WebApplication3.Data.TalimatOrnek.SirketBilgisi.TryGetValue(Model.OdeyenDb ?? "", out var b2) ? b2 : (Unvan: Model.Odeyen, Adres: "", Web: "", Komiserler: new string[0]);
     var fsFis = ViewBag.FaturaSahibiFisi as WebApplication3.Data.YevmiyeFisi; var odFis = ViewBag.OdeyenFisi as WebApplication3.Data.YevmiyeFisi;
-    string pbAd = Model.PB == "TRY" ? "TL" : Model.PB; bool temlik = Model.Tur == "Temlik";
+    string pbAd = Model.PB == "TRY" ? "TL" : Model.PB; bool temlik = Model.Tur == "Temlik", yansitma = Model.Tur == "Yansıtma";
 }
 @*
     GRUP İÇİ MAHSUP / TEMLİK BELGESİ — yazdırılabilir (Kasa Nakit Akışı: fatura sahibi ≠ ödeyen şirket olan ödemelerde otomatik; Data/GrupIciBelgeOrnek.cs).
@@ -36,7 +36,7 @@
     </style>
 </head>
 <body>
-    <div class="arac"><button type="button" onclick="window.print()">Yazdır / PDF</button><a href="/Rapor79?sekme=@(temlik ? "temlik" : "mahsup")">Kasa Nakit Akışı › @Model.Tur</a><span style="font-size:9pt;color:#64748b;align-self:center">Ön yüz örneği: belge bellek içi kayıttan üretilir; fişler ödeme gerçekleşince otomatik atılır.</span></div>
+    <div class="arac"><button type="button" onclick="window.print()">Yazdır / PDF</button><a href="/Rapor79">Kasa Nakit Akışı</a><span style="font-size:9pt;color:#64748b;align-self:center">Ön yüz örneği: belge bellek içi kayıttan üretilir; fişler ödeme gerçekleşince otomatik atılır.</span></div>
     <div class="sayfa">
         <div class="ust">
             <div class="logo">URAS<small>HOLDING</small></div>
@@ -52,13 +52,17 @@
             <div><b>Ödeme Yöntemi</b>@Model.Yontem</div>
             <div><b>Kaynak Kayıt</b>Kasa Nakit Akışı #@Model.KaynakDocEntry</div>
             <div><b>Açıklama</b>@Model.Aciklama</div>
-            <div><b>İşlem Şekli</b>@(string.IsNullOrEmpty(Model.MahsupSekli) ? (temlik ? "Temlik" : "Mahsup") : Model.MahsupSekli)</div>
+            <div><b>İşlem Şekli</b>@(string.IsNullOrEmpty(Model.MahsupSekli) ? (temlik ? "Temlik" : yansitma ? "Yansıtma" : "Mahsup") : Model.MahsupSekli)</div>
         </div>
-        <div class="tutar"><span>@(temlik ? "TEMLİK TUTARI" : "MAHSUP TUTARI")</span><span class="r">@Model.Tutar.ToString("N2", tr) @pbAd@(Model.PB != "TRY" ? " = " + Model.TutarTL.ToString("N2", tr) + " TL (kur " + Model.Kur.ToString("N4", tr) + ")" : "")</span></div>
+        <div class="tutar"><span>@(temlik ? "TEMLİK TUTARI" : yansitma ? "YANSITMA TUTARI" : "MAHSUP TUTARI")</span><span class="r">@Model.Tutar.ToString("N2", tr) @pbAd@(Model.PB != "TRY" ? " = " + Model.TutarTL.ToString("N2", tr) + " TL (kur " + Model.Kur.ToString("N4", tr) + ")" : "")</span></div>
         <div class="metin">
             @if (temlik)
             {
                 <text><b>@odBilgi.Unvan</b>, <b>@fsBilgi.Unvan</b>'nin <b>@Model.Kurum</b>'a olan @(string.IsNullOrEmpty(Model.BelgeNo) ? "" : Model.BelgeNo + " nolu ")borcunu @Model.Yontem ile öder; bu tutar kadar alacak hakkı temlik yoluyla @odBilgi.Unvan'ye geçer ve @fsBilgi.Unvan defterinde 332 İştiraklere Borçlar hesabında @odBilgi.Unvan'ye borç olarak izlenir. Grup içi bakiye otomatik güncellenir.</text>
+            }
+            else if (yansitma)
+            {
+                <text><b>@odBilgi.Unvan</b>, <b>@fsBilgi.Unvan</b> adına <b>@Model.Kurum</b>'a @(string.IsNullOrEmpty(Model.BelgeNo) ? "" : Model.BelgeNo + " nolu belge için ")@Model.Yontem ile ödeme yapar ve bu tutarı yansıtma faturasıyla @fsBilgi.Unvan'ye yansıtır; @fsBilgi.Unvan defterinde 332 İştiraklere Borçlar hesabında @odBilgi.Unvan'ye borç olarak izlenir. Grup içi bakiye otomatik güncellenir.</text>
             }
             else
             {

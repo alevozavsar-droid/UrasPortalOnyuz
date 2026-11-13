@@ -23,7 +23,7 @@ namespace WebApplication3.Data
         public string Olusturan { get; set; } = ""; public DateTime OlusturmaZamani { get; set; } public DateTime? MuhasebeTarihi { get; set; }
         public string FaturaSahibiFisNo { get; set; } = ""; public string OdeyenFisNo { get; set; } = ""; public string MahsupSekli { get; set; } = "";   // "Karşılıklı bakiyeden mahsup" | "Grup içi borç" | "Temlik"
         public List<TalimatGunluk> Gunluk { get; set; } = new List<TalimatGunluk>();
-        public string Baslik => Tur == "Temlik" ? "Grup İçi Temlik Belgesi" : "Grup İçi Mahsup Belgesi";
+        public string Baslik => Tur == "Temlik" ? "Grup İçi Temlik Belgesi" : Tur == "Yansıtma" ? "Grup İçi Yansıtma Belgesi" : "Grup İçi Mahsup Belgesi";
     }
 
     public static class GrupIciBelgeOrnek
@@ -32,7 +32,7 @@ namespace WebApplication3.Data
         static readonly CultureInfo Tr = CultureInfo.GetCultureInfo("tr-TR");
         static readonly List<GrupIciBelge> _belgeler = new List<GrupIciBelge>();
         static int _sonId;
-        public static readonly string[] Turler = { "Mahsup", "Temlik" };
+        public static readonly string[] Turler = { "Mahsup", "Temlik", "Yansıtma" };   // 13 Kas 2026: Yansıtma da seçilebilir (Kasa Nakit Akışı › Grup İçi İşlemler sekmesi) — ödeyen şirket tutarı yansıtma faturasıyla fatura sahibine yansıtır; fatura sahibi fişi temlikteki gibi 320 borç / 332 alacak
 
         public static List<GrupIciBelge> Listele(string dbName, string tur = null) { lock (Kilit) return _belgeler.Where(b => (string.IsNullOrEmpty(dbName) || b.FaturaSahibiDb == dbName || b.OdeyenDb == dbName || b.KaynakDb == dbName) && (string.IsNullOrEmpty(tur) || b.Tur == tur)).OrderByDescending(b => b.Tarih).ThenByDescending(b => b.Id).ToList(); }
         public static GrupIciBelge Bul(string no) { lock (Kilit) return _belgeler.FirstOrDefault(b => string.Equals(b.No, no, StringComparison.OrdinalIgnoreCase)); }
@@ -60,7 +60,7 @@ namespace WebApplication3.Data
                 if (b != null && b.Durum == "Muhasebeleşti") { m.U_GrupIciNo = b.No; m.U_GrupIciTur = b.Tur; return b; }   // muhasebeleşmiş belge değişmez
                 if (b != null && b.Tur != tur) { b.Durum = "İptal"; b.Gunluk.Add(new TalimatGunluk { Tarih = DateTime.Now, Kullanici = kullanici ?? "", Islem = "İptal", Aciklama = $"Belge türü {b.Tur} → {tur}; yeni belge açıldı" }); b = null; }
                 bool yeni = b == null;
-                if (yeni) b = new GrupIciBelge { Id = ++_sonId, No = $"{(tur == "Temlik" ? "GİT" : "GİM")}-{DateTime.Today.Year}-{_sonId:0000}", Tur = tur, Tarih = DateTime.Now, Olusturan = kullanici ?? "", OlusturmaZamani = DateTime.Now, KaynakDb = m.U_KaynakFirma, KaynakDocEntry = m.DocEntry };
+                if (yeni) b = new GrupIciBelge { Id = ++_sonId, No = $"{(tur == "Temlik" ? "GİT" : tur == "Yansıtma" ? "GİY" : "GİM")}-{DateTime.Today.Year}-{_sonId:0000}", Tur = tur, Tarih = DateTime.Now, Olusturan = kullanici ?? "", OlusturmaZamani = DateTime.Now, KaynakDb = m.U_KaynakFirma, KaynakDocEntry = m.DocEntry };
                 b.FaturaSahibi = m.U_FaturaSahibi; b.FaturaSahibiDb = CekAkibetOrnek.DbName(m.U_FaturaSahibi); b.Odeyen = m.U_OdeyenSirket; b.OdeyenDb = CekAkibetOrnek.DbName(m.U_OdeyenSirket);
                 b.Kurum = m.U_Kurum ?? ""; b.BelgeTipi = m.U_BagliBelgeTipi ?? ""; b.BelgeNo = m.U_FaturaSiparisNo ?? ""; b.Aciklama = m.U_UrunHizmet ?? ""; b.Yontem = m.U_OdemeYontemi ?? "";
                 b.Tutar = m.U_Tutar ?? 0; b.PB = m.U_ParaBirimi ?? "TRY"; b.Kur = m.U_Kur ?? 1; b.TutarTL = m.U_TutarTL ?? Math.Round(b.Tutar * b.Kur, 2);
@@ -73,7 +73,7 @@ namespace WebApplication3.Data
         }
         /// <summary>Mahsupta karşılıklı bakiye varsa (ödeyenin fatura sahibine borcu ≥ tutar) borçtan düşülür; yoksa fatura sahibi ödeyene borçlanır. Temlikte her zaman borçlanma.</summary>
         public static bool KarsilikliMahsup(NakitAkisViewModel m) => m.U_GrupIciTur == "Mahsup" && CekAkibetOrnek.GrupBakiye(m.U_OdeyenSirket, m.U_FaturaSahibi) >= (m.U_TutarTL ?? 0) && (m.U_TutarTL ?? 0) > 0;
-        public static string Sekil(GrupIciBelge b) => b.Tur == "Temlik" ? "Temlik: fatura sahibinin tedarikçi borcu ödeyen şirkete devredilir (332)" : CekAkibetOrnek.GrupBakiye(b.Odeyen, b.FaturaSahibi) >= b.TutarTL ? "Mahsup: ödeyenin fatura sahibine olan borcundan düşülür (132 / 332 karşılıklı kapanır)" : "Mahsup: karşılıklı bakiye yok, fatura sahibi ödeyene borçlanır (332)";
+        public static string Sekil(GrupIciBelge b) => b.Tur == "Temlik" ? "Temlik: fatura sahibinin tedarikçi borcu ödeyen şirkete devredilir (332)" : b.Tur == "Yansıtma" ? "Yansıtma: ödeyen şirket tutarı yansıtma faturasıyla fatura sahibine yansıtır (332)" : CekAkibetOrnek.GrupBakiye(b.Odeyen, b.FaturaSahibi) >= b.TutarTL ? "Mahsup: ödeyenin fatura sahibine olan borcundan düşülür (132 / 332 karşılıklı kapanır)" : "Mahsup: karşılıklı bakiye yok, fatura sahibi ödeyene borçlanır (332)";
 
         /// <summary>Fatura sahibi fişinin taslağı (simülasyon / kayıt): 320 (tedarikçi grup şirketiyse 332) borç · 132 (karşılıklı mahsup) ya da 332 alacak; grup içi bakiye etkisi.</summary>
         public static (MuhasebeOrnek.FisTaslagi fis, string sekil, string bakiyeEtkisi, bool karsilikli, decimal tl) FisTaslagi(NakitAkisViewModel m, GrupIciBelge b = null)
@@ -87,10 +87,10 @@ namespace WebApplication3.Data
             {
                 new YevmiyeSatiri { HesapKodu = tedarikciGrup ? "332" : "320", HesapAdi = MuhasebeOrnek.HesapPlani[tedarikciGrup ? "332" : "320"], Borc = tl, Alacak = 0, Aciklama = $"{kurum} · {belge} · {od} tarafından ödendi ({yontem})" },
                 karsilikli ? new YevmiyeSatiri { HesapKodu = "132", HesapAdi = MuhasebeOrnek.HesapPlani["132"], Borc = 0, Alacak = tl, Aciklama = $"{od} şirketinden alacaktan mahsup · {no}" }
-                           : new YevmiyeSatiri { HesapKodu = "332", HesapAdi = MuhasebeOrnek.HesapPlani["332"], Borc = 0, Alacak = tl, Aciklama = (tur == "Temlik" ? "Temlik: borç " + od + " şirketine devredildi · " : "Grup içi borç: " + od + " · ") + no }
+                           : new YevmiyeSatiri { HesapKodu = "332", HesapAdi = MuhasebeOrnek.HesapPlani["332"], Borc = 0, Alacak = tl, Aciklama = (tur == "Temlik" ? "Temlik: borç " + od + " şirketine devredildi · " : tur == "Yansıtma" ? "Yansıtma faturası: " + od + " · " : "Grup içi borç: " + od + " · ") + no }
             };
-            var fis = new MuhasebeOrnek.FisTaslagi { DbName = CekAkibetOrnek.DbName(fs), Kaynak = $"{tur} {no}", Aciklama = $"{od}, {fs} adına {kurum} ödemesi · {belge} · {(tur == "Temlik" ? "Grup İçi Temlik Belgesi" : "Grup İçi Mahsup Belgesi")}", Satirlar = satirlar };
-            string sekil = tur == "Temlik" ? "Temlik" : karsilikli ? "Karşılıklı bakiyeden mahsup" : "Grup içi borç";
+            var fis = new MuhasebeOrnek.FisTaslagi { DbName = CekAkibetOrnek.DbName(fs), Kaynak = $"{tur} {no}", Aciklama = $"{od}, {fs} adına {kurum} ödemesi · {belge} · {(tur == "Temlik" ? "Grup İçi Temlik Belgesi" : tur == "Yansıtma" ? "Grup İçi Yansıtma Belgesi" : "Grup İçi Mahsup Belgesi")}", Satirlar = satirlar };
+            string sekil = tur == "Temlik" ? "Temlik" : tur == "Yansıtma" ? "Yansıtma" : karsilikli ? "Karşılıklı bakiyeden mahsup" : "Grup içi borç";
             string etki = karsilikli ? $"{od} → {fs} grup içi borcu {tl.ToString("N2", Tr)} ₺ azalır" : $"{fs} → {od} grup içi borcu {tl.ToString("N2", Tr)} ₺ artar";
             return (fis, sekil, etki, karsilikli, tl);
         }
@@ -115,9 +115,9 @@ namespace WebApplication3.Data
         /// <summary>Hazır belgenin türü değiştirilir (Mahsup ↔ Temlik); muhasebeleşmiş belge değişmez.</summary>
         public static (bool ok, string mesaj) TurDegistir(NakitAkisViewModel m, string tur, string kullanici)
         {
-            if (!Turler.Contains(tur ?? "")) return (false, "Tür Mahsup ya da Temlik olmalı.");
+            if (!Turler.Contains(tur ?? "")) return (false, "Tür Mahsup, Temlik ya da Yansıtma olmalı.");
             var b = BulSatir(m.DocEntry); if (b != null && b.Durum == "Muhasebeleşti") return (false, $"{b.No} muhasebeleşmiş; türü değiştirilemez.");
-            m.U_GrupIciTur = tur; var y = Senkron(m, kullanici);
+            m.U_GrupIciTur = tur; m.GrupIciTurSecildi = true; var y = Senkron(m, kullanici);
             return (true, y == null ? "Grup içi belge gerekmiyor (fatura sahibi = ödeyen)." : $"{y.No} · {y.Baslik} hazırlandı; ödeme gerçekleşince iki şirkette fiş atılır.");
         }
         public static object Json(GrupIciBelge b) => b == null ? null : new

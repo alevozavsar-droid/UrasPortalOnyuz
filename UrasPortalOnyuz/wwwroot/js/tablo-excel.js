@@ -90,7 +90,7 @@ window.TabloExcel = (() => {
     if (!tablo) return null;
     const gizli = e => getComputedStyle(e).display === 'none';
     const bolumler = []; if (tablo.tHead) bolumler.push(['bas', tablo.tHead]); for (const b of tablo.tBodies) bolumler.push(['govde', b]); if (tablo.tFoot) bolumler.push(['dip', tablo.tFoot]);
-    const satirlar = []; bolumler.forEach(([tur, b]) => { for (const tr of b.rows) { if (gizli(tr)) continue; if (tur === 'govde' && (tr.querySelector('.na-bos') || tr.classList.contains('detay'))) continue; satirlar.push({ tur, tr }); } });
+    const satirlar = []; bolumler.forEach(([tur, b]) => { for (const tr of b.rows) { if (gizli(tr) || tr.classList.contains('suzgec')) continue; if (tur === 'govde' && (tr.querySelector('.na-bos') || tr.classList.contains('detay'))) continue; satirlar.push({ tur, tr }); } });
     // ızgara: colspan / rowspan açılır, gizli hücreler (0 ₺ sütunları) atlanır
     const grid = [], hucreler = [];
     satirlar.forEach((s, r) => { grid[r] = grid[r] || []; let c = 0; for (const td of s.tr.children) { if (gizli(td)) continue; while (grid[r][c]) c++; const h = { el: td, r, c, cs: Math.max(1, td.colSpan || 1), rs: Math.max(1, td.rowSpan || 1), tur: s.tur }; hucreler.push(h); for (let i = 0; i < h.rs; i++) { grid[r + i] = grid[r + i] || []; for (let j = 0; j < h.cs; j++) grid[r + i][c + j] = h; } c += h.cs; } });

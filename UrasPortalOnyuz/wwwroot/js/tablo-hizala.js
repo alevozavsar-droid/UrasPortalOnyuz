@@ -102,7 +102,9 @@
         c.style.setProperty('vertical-align', dikeyOrta ? 'middle' : basta ? 'bottom' : 'baseline', 'important');
       }
     }
-    const bas = thead && thead.rows.length ? thead.rows[thead.rows.length - 1] : null;
+    // süzgeç satırı (tr.suzgec: Kasa Nakit Akışı başlık altı arama kutuları, 13 Kas 2026) başlık sayılmaz: sütun adları bir üstündeki satırdadır
+    const basSatirlari = thead ? Array.from(thead.rows).filter(r => !r.classList.contains('suzgec')) : [];
+    const bas = basSatirlari.length ? basSatirlari[basSatirlari.length - 1] : null;
     if (!bas) return;
     baslikDuzeni(bas);
     // mantıksal sütun: colspan'lı hücre kapladığı sütunların hepsinde yer alır (toplam satırı fiziksel değil, mantıksal sütuna bağlanır)

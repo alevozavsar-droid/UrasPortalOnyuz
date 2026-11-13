@@ -4,8 +4,8 @@
     string varsayilan = (string)ViewBag.VarsayilanSirket ?? "";
     string bas = (string)ViewBag.Bas, bit = (string)ViewBag.Bit, sekme = (string)ViewBag.Sekme ?? "tumu";
     // sekme adları tam (9 Kas 2026, "Havale/EFT yazabiliriz … aralıkları düzenleyelim"): Item2 panel kart başlığında da kullanılır ("Havale / EFT Ödemeleri", "Mahsup Modülü")
-    var sekmeler = new[] { ("tumu", "Tümü", "fa-list"), ("nakit", "Nakit", "fa-money-bill-wave"), ("cek", "Çek", "fa-money-check-alt"), ("senet", "Senet", "fa-file-signature"), ("havale", "Havale / EFT", "fa-building-columns"), ("kredi", "Kredi / Banka Kartı", "fa-credit-card"), ("mahsup", "Mahsup", "fa-right-left"), ("temlik", "Temlik", "fa-handshake"), ("yansitma", "Yansıtma", "fa-share-nodes"), ("diger", "Diğer", "fa-ellipsis"), ("talimat", "Talimatlar", "fa-file-contract"), ("aylik", "Aylık Ödeme · Çek Vade", "fa-calendar-days"), ("bakiye", "Banka / Kasa Bakiyesi", "fa-vault"), ("gunluk", "İşlem Günlüğü", "fa-clock-rotate-left") };
-    var ozelSekmeler = new[] { "talimat", "aylik", "bakiye", "gunluk" };
+    var sekmeler = new[] { ("tumu", "Tümü", "fa-list"), ("nakit", "Nakit", "fa-money-bill-wave"), ("cek", "Çek", "fa-money-check-alt"), ("senet", "Senet", "fa-file-signature"), ("havale", "Havale / EFT", "fa-building-columns"), ("kredi", "Kredi / Banka Kartı", "fa-credit-card"), ("ozet", "Özet", "fa-chart-pie"), ("talimat", "Talimatlar", "fa-file-contract"), ("aylik", "Aylık Ödeme · Çek Vade", "fa-calendar-days"), ("bakiye", "Banka / Kasa Bakiyesi", "fa-vault"), ("gunluk", "İşlem Günlüğü", "fa-clock-rotate-left") };
+    var ozelSekmeler = new[] { "ozet", "talimat", "aylik", "bakiye", "gunluk" };
 }
 @*
     KASA NAKİT AKIŞI (Rapor79) — modern görünüm. Veri /Rapor79/Veri (Data/NakitAkisOrnek.cs ödeme planı + Data/CekAkibetOrnek.cs çek kaydı + Mahsup / Temlik / Yansıtma modülleri),
@@ -24,7 +24,9 @@
     #kn .na-panel .table-responsive { overflow: visible !important; }
     .table-container:has(#kn) { overflow: visible !important; }   /* kabuktaki rapor kutusu (overflow:auto) yapışkan başlığı kırıyordu; betik de kapsayıcıyı aynı şekilde açar */
     #kn .na-panel > .na-kart > .na-kart-b { position: sticky; top: var(--kn-sabit-ust, 0px); z-index: 7; }
-    #kn .na-panel .kn-tablo thead th { position: sticky; top: calc(var(--kn-sabit-ust, 0px) + var(--kn-kartb, 31px)); z-index: 6; background: #f8fafc; box-shadow: 0 1px 0 #e2e8f0; }
+    /* 13 Kas 2026: başlık bölümü (thead) bütün olarak yapışır → başlık satırı + süzgeç satırı birlikte üstte kalır; hücreler tek tek yapışmaz */
+    #kn .na-panel .kn-tablo thead { position: sticky; top: calc(var(--kn-sabit-ust, 0px) + var(--kn-kartb, 31px)); z-index: 6; }
+    #kn .na-panel .kn-tablo thead th { position: static; background: #f8fafc; box-shadow: 0 1px 0 #e2e8f0; }
     /* stun çizgileri (tüm sekmeler): sütunlar arası ince dikey çizgi; başlık ve gövde aynı renk, son sütunda çizgi yok */
     #kn table.na-tablo th, #kn table.na-tablo td, #kn table.table th, #kn table.table td { border-right: 1px solid #cbd5e1; }
     #kn table.na-tablo th:last-child, #kn table.na-tablo td:last-child, #kn table.table th:last-child, #kn table.table td:last-child { border-right: 0; }
@@ -145,23 +147,262 @@
     .kn-liste { font-size: .72rem; } .kn-liste .satir { display: flex; gap: 8px; padding: 4px 0; border-bottom: 1px dashed #e2e8f0; align-items: center; } .kn-liste .satir:last-child { border-bottom: 0; }
     .kn-modal .table { font-size: .7rem; } .kn-modal .table td, .kn-modal .table th { padding: 4px 6px; white-space: nowrap; }
     .kn-gunluk td { font-size: .68rem; }
+
+    /* ===== 13 Kas 2026 — eski görünümün tasarımı (kullanıcı görseli): beyaz üst şerit, hap biçimli yöntem sekmeleri (sayılı), büyük harf başlık + sıralama oku,
+       başlık altında süzgeç satırı, satır rengi duruma göre (Planlandı mavi · Planlandı + Mutabık / muafiyet sarı · Ödendi yeşil · Gecikti kırmızı · Özel Onay mor),
+       sarılan Kurum / Ürün / Not, zemine karışan satır içi alanlar. Bilgi eksilmez: KPI kartları, tüm sekmeler ve sütunlar yerinde. ===== */
+    .na.kn { --na-k: #1d4ed8; }
+    #kn .kn-ust { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 7px 12px; box-shadow: 0 1px 3px rgba(15,23,42,.06); gap: 6px 8px; }
+    /* üst şerit iki satır: 1. satır başlık + doğrudan yönlendirmeler, 2. satır işlem düğmeleri ve seçim toplamları */
+    #kn .kn-ust { display: block; }
+    #kn .kn-ust-satir { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; } #kn .kn-ust-satir + .kn-ust-satir { margin-top: 7px; padding-top: 7px; border-top: 1px solid #f1f5f9; }
+    #kn .kn-ust-satir .sag { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    #kn .kn-baslik { margin-right: 6px; }
+    #kn .kn-baslik h4 { font-size: 1rem; line-height: 1.15; white-space: nowrap; } #kn .kn-baslik .kn-donem { font-size: .64rem; color: #64748b; white-space: nowrap; margin-top: 1px; }
+    #kn .kn-ust .btn { font-size: .68rem; padding: 4px 10px; font-weight: 700; border-radius: 8px; white-space: nowrap; }
+    #kn .kn-ust .sag { gap: 6px; }
+    .kn-kutu { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 3px 10px; font-size: .66rem; font-weight: 700; color: #475569; background: #fff; white-space: nowrap; }
+    .kn-kutu i { color: #94a3b8; } .kn-kutu b { font-size: .78rem; color: #b45309; font-variant-numeric: tabular-nums; }
+    .kn-ozel { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #fecaca; background: #fff5f5; color: #b91c1c; border-radius: 999px; padding: 3px 12px 3px 8px; font-size: .66rem; font-weight: 800; cursor: pointer; margin: 0; white-space: nowrap; }
+    .kn-ozel input { margin: 0; cursor: pointer; } .kn-ozel.acik { background: #dc2626; border-color: #dc2626; color: #fff; }
+    #kn .kn-filtre-kart { border-radius: 12px; box-shadow: 0 1px 3px rgba(15,23,42,.05); }
+    #kn .kn-filtre .form-control, #kn .kn-filtre .form-select { border-radius: 8px; height: 30px; } #kn .kn-hizli button { border-radius: 8px; font-weight: 700; padding: 4px 10px; font-size: .66rem; }
+    /* yöntem şeridi */
+    #kn .na-sekme { border-bottom: 0; align-items: center; gap: 4px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 5px 10px; box-shadow: 0 1px 3px rgba(15,23,42,.05); }
+    #kn .na-sekme .kn-kapsam { display: none !important; }   /* 13 Kas 2026 (kullanıcı: "Uras Kimya 136 kayıt yazısını kaldır"): şirket + kayıt sayısı şeritte gösterilmez (şirket filtrede, sayı Tümü sekmesinde); öğe Excel alt başlığı için DOM'da kalır */
+    #kn .na-sekme .kn-kapsam-eski { margin: 0 4px 0 0; flex: 0 0 auto; text-align: left; font-size: .66rem; color: #64748b; padding: 0; overflow: visible; }
+    #kn .na-sekme .kn-kapsam b { font-size: .86rem; font-weight: 800; color: #0f172a; text-transform: uppercase; margin-right: 6px; letter-spacing: .01em; }
+    #kn .na-sekme .kn-yontem-etiket { font-size: .58rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; margin: 0 2px 0 0; white-space: nowrap; }
+    #kn .na-sekme button { border: 1px solid #e2e8f0; border-radius: 999px; background: #fff; padding: 3px 10px; margin: 0; color: #475569; font-size: .68rem; line-height: 1.3; }
+    #kn .na-sekme button:hover { border-color: #93c5fd; color: #1d4ed8; }
+    #kn .na-sekme button.aktif { background: #2563eb; border-color: #2563eb; color: #fff; }
+    #kn .na-sekme button .n { font-size: .58rem; background: #f1f5f9; border-radius: 999px; padding: 0 5px; margin-left: 4px; color: #64748b; font-weight: 700; } #kn .na-sekme button .n:empty { display: none; }
+    #kn .na-sekme button.aktif .n { background: rgba(255,255,255,.25); color: #fff; }
+    #kn .na-sekme button.sifir:not(.aktif) { color: #94a3b8; }
+    #kn .na-sekme button.kn-ozel-ilk { margin-left: 8px; border-left: 1px solid #e2e8f0; padding-left: 10px; }
+    #kn .na-kpi > div.aktif { background: #eff6ff; }
+    /* ödeme tabloları */
+    #kn .kn-odeme { font-size: .69rem; color: #0f172a; }
+    #kn .kn-odeme thead th { text-transform: uppercase; font-weight: 800; color: #334155; letter-spacing: .02em; background: #fff; font-size: .57rem; padding: 6px 5px; }
+    #kn .kn-odeme thead th.sira { cursor: pointer; user-select: none; } #kn .kn-odeme thead th.sira:hover { color: #1d4ed8; }
+    /* sıralama oku zemin resmi: sütun genişliğine ve başlık ölçümüne (tablo-hizala) katılmaz → sütunlar dar kalır */
+    #kn .kn-odeme thead th.sira { background-repeat: no-repeat; background-position: right 1px top 3px; background-size: 6px 9px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 9'%3E%3Cpath d='M3 0l3 3.5H0zM3 9L0 5.5h6z' fill='%2394a3b8'/%3E%3C/svg%3E"); }
+    #kn .kn-odeme thead th.sira.art { color: #1d4ed8; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 9'%3E%3Cpath d='M3 0l3 3.5H0z' fill='%231d4ed8'/%3E%3Cpath d='M3 9L0 5.5h6z' fill='%23e2e8f0'/%3E%3C/svg%3E"); }
+    #kn .kn-odeme thead th.sira.azl { color: #1d4ed8; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 9'%3E%3Cpath d='M3 0l3 3.5H0z' fill='%23e2e8f0'/%3E%3Cpath d='M3 9L0 5.5h6z' fill='%231d4ed8'/%3E%3C/svg%3E"); }
+    /* Tümü: 27 sütun tek sayfaya sığsın → sıkı yazı ve dolgu; .dar (ekran daha da dar) bir kademe daha küçük */
+    #kn table.kn-odeme thead th { font-size: .52rem; padding: 5px 3px; letter-spacing: 0; }
+    #kn table.kn-odeme tbody td { font-size: .64rem; padding: 6px 3px; }
+    #kn table.kn-odeme tbody td.kurum, #kn table.kn-odeme tbody td.urun, #kn table.kn-odeme tbody td.not { font-size: .58rem; }
+    #kn table.kn-odeme tbody td small { font-size: .54rem; } #kn table.kn-odeme .kn-belge-link { font-size: .6rem; }
+    #kn table.kn-odeme tbody .kn-alan { font-size: .62rem; padding: 2px 1px; } #kn table.kn-odeme tbody input.kn-tarih { font-size: .6rem; padding: 2px 0; }
+    #kn table.kn-odeme .kn-yontem { font-size: .54rem; padding: 1px 4px; }
+    #kn table.kn-odeme.dar tbody td { font-size: .62rem; padding: 6px 2px; } #kn table.kn-odeme.dar thead th { font-size: .5rem; padding: 5px 2px; }
+    #kn .kn-odeme thead tr.suzgec th { padding: 3px 3px; background: #f8fafc; text-transform: none; letter-spacing: 0; box-shadow: 0 1px 0 #cbd5e1; }
+    /* width:0 + min-width:%100 → kutu hücreyi doldurur ama sütunu genişletmez (seçeneklerin en uzunu sütun genişliğine katılmaz) */
+    #kn .kn-odeme thead tr.suzgec input, #kn .kn-odeme thead tr.suzgec select { width: 0; min-width: 100%; height: 22px; font-size: .6rem; font-weight: 500; color: #334155; border: 1px solid #e2e8f0; border-radius: 6px; padding: 1px 4px; background: #fff; text-align: center; text-overflow: ellipsis; }
+    #kn .kn-odeme thead tr.suzgec .dolu { border-color: #2563eb; background: #eff6ff; font-weight: 700; }
+    #kn .kn-odeme tbody td { font-weight: 600; padding: 7px 5px; border-bottom: 1px solid #fff; white-space: normal; line-height: 1.2; }   /* hücre metni kısalmaz, sarılır (firma adı, satınalmacı …) */
+    #kn .kn-odeme tbody td.para, #kn .kn-odeme tbody td .kn-belge-link, #kn .kn-odeme tbody td .rt-durum { white-space: nowrap; }
+    #kn .kn-odeme tbody td.kurum, #kn .kn-odeme tbody td.urun, #kn .kn-odeme tbody td.not { white-space: normal; line-height: 1.2; overflow-wrap: anywhere; font-size: .62rem; }
+    #kn .kn-odeme tbody td.kurum { text-transform: uppercase; }
+    #kn .kn-odeme tbody .kn-yontem { white-space: normal; line-height: 1.15; }
+    #kn .kn-odeme tr.planli td { background: #cfe2ff; } #kn .kn-odeme tr.planli.hazir td { background: #fff3cd; }
+    #kn .kn-odeme tr.odendi td { background: #d1e7dd; } #kn .kn-odeme tr.gecikti td { background: #f8d7da; } #kn .kn-odeme tr.ozel td { background: #e2d9f3; }
+    #kn .kn-odeme tr.tik:hover td { filter: brightness(.97); background-image: none; }
+    #kn .kn-odeme tr.secili td { box-shadow: inset 0 2px 0 #2563eb, inset 0 -2px 0 #2563eb; }
+    #kn .kn-odeme tr.toplam td { border-top: 2px solid #1d4ed8; white-space: normal; }
+    #kn .kn-odeme tbody .kn-alan { background: transparent; border-color: transparent; font-weight: 700; color: #0f172a; text-align: center; text-align-last: center; }
+    #kn .kn-odeme tbody .kn-alan:hover { border-color: #94a3b8; background: rgba(255,255,255,.6); } #kn .kn-odeme tbody .kn-alan:focus { background: #fff; border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.15); }
+    #kn .kn-odeme .kn-sec[data-engel] { opacity: .55; }
+    .kn-muaf { display: block; width: 100%; min-width: 0; margin-top: 2px; height: 18px; font-size: .54rem; padding: 0 2px; border: 1px dashed #cbd5e1; border-radius: 4px; background: transparent; color: #94a3b8; text-align: center; text-align-last: center; text-overflow: ellipsis; }
+    /* yöntem sekmeleri Tümü'nün bütün sütunlarını + kendi sütunlarını taşır (13 Kas 2026): daralan hücrede metin kelime içinden de sarılır, rozet ve düğmeler alt satıra iner; .cokdar = en sıkı ölçek */
+    #kn table.kn-odeme tbody td { overflow-wrap: anywhere; }
+    #kn table.kn-odeme tbody td.para, #kn table.kn-odeme tbody td .kn-belge-link { overflow-wrap: normal; }
+    #kn table.kn-odeme tbody td .na-bs, #kn table.kn-odeme tbody td .kn-talimat-rozet, #kn table.kn-odeme tbody td .kn-onay, #kn table.kn-odeme tbody td .kn-oran { white-space: normal; }
+    #kn table.kn-odeme tbody td .yb { white-space: normal; overflow: visible; }
+    #kn table.kn-odeme tbody td .btn { white-space: normal; line-height: 1.1; font-size: .56rem !important; padding: 1px 4px; }
+    #kn table.kn-odeme.cokdar tbody td { font-size: .6rem; padding: 6px 2px; } #kn table.kn-odeme.cokdar tbody td small { font-size: .52rem; } #kn table.kn-odeme.cokdar thead th { font-size: .48rem; padding: 5px 1px; }
+    #kn table.kn-odeme.cokdar tbody td .rt-durum { white-space: normal; line-height: 1.15; }
+    #kn table.kn-odeme.cokdar tbody .kn-alan { font-size: .58rem; padding: 2px 0; } #kn table.kn-odeme.cokdar .kn-dz-a { font-size: .56rem; padding: 1px 2px; }
+    /* belge penceresi (belge no tıklanınca): solda kayıt detayı, sağda belge görüntüsü (PDF) */
+    #knBelgeDetayModal .kdt-genis { max-width: min(1760px, 97vw); }
+    #knBelgeDetayModal .kdt-govde { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 12px; padding: 10px 12px; height: calc(100vh - 150px); overflow: hidden; }
+    #knBelgeDetayModal .kdt-sol { overflow: auto; padding-right: 4px; min-height: 0; }
+    #knBelgeDetayModal .kdt-sag { display: flex; flex-direction: column; min-height: 0; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #f8fafc; }
+    #knBelgeDetayModal .kdt-pdf-arac { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-bottom: 1px solid #e2e8f0; background: #fff; } #knBelgeDetayModal .kdt-pdf-arac .btn { font-size: .66rem; padding: 2px 8px; font-weight: 700; }
+    #knBelgeDetayModal .kdt-pdf-etiket { font-size: .66rem; font-weight: 700; color: #475569; } #knBelgeDetayModal .kdt-pdf-etiket.asil { color: #166534; }
+    #knBelgeDetayModal #kdtPdf { flex: 1 1 auto; width: 100%; min-height: 0; border: 0; background: #fff; }
+    .main-content #knBelgeDetayModal .kdt-govde, .main-content #knBelgeDetayModal .kdt-sol, .main-content #knBelgeDetayModal .kdt-sag { max-height: calc(100vh - 150px) !important; }   /* kabuğun "div:has(table) → height:auto" kuralı bölmeleri uzatmasın */
+    .main-content #knBelgeDetayModal .kdt-govde { height: calc(100vh - 150px) !important; overflow: hidden !important; } .main-content #knBelgeDetayModal .kdt-sol { overflow: auto !important; height: 100% !important; }
+    .kdt-surec { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
+    .kdt-surec > div { border: 1px solid #e2e8f0; border-left: 3px solid var(--k, #94a3b8); border-radius: 8px; padding: 5px 8px; background: #fff; min-width: 0; }
+    .kdt-surec .l { font-size: .56rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #64748b; } .kdt-surec .v { font-size: .78rem; font-weight: 800; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .kdt-surec .s { font-size: .6rem; color: #64748b; }
+    .kdt-surec .ornek { display: inline-block; font-size: .5rem; font-weight: 800; padding: 0 4px; border-radius: 3px; background: #fef3c7; color: #92400e; vertical-align: middle; margin-left: 4px; }
+    @@media (max-width: 1100px) { #knBelgeDetayModal .kdt-govde { grid-template-columns: 1fr; height: auto; overflow: auto; } #knBelgeDetayModal #kdtPdf { height: 70vh; } }
+    /* çoklu seçim kutusu (üst filtreler + başlık altı liste süzgeçleri): düğme seçim özetini yazar, liste gövdeye eklenir (tablo kırpmasın) */
+    #kn .kn-cs { text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+    #kn .kn-cs.dolu { border-color: #2563eb; background-color: #eff6ff; font-weight: 700; color: #1d4ed8; } #kn .kn-cs.acik { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.15); }
+    #kn .kn-odeme thead tr.suzgec .kn-suz-cs { width: 0; min-width: 100%; height: 22px; font-size: .6rem; font-weight: 500; color: #334155; border: 1px solid #e2e8f0; border-radius: 6px; padding: 1px 14px 1px 4px; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2364748b' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 4px center / 8px 5px; text-align: center; }
+    #kn .kn-odeme thead tr.suzgec .kn-suz-cs.dolu { border-color: #2563eb; background-color: #eff6ff; font-weight: 700; color: #1d4ed8; }
+    .kn-cs-pop { position: fixed; z-index: 1085; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; box-shadow: 0 10px 28px rgba(15,23,42,.18); max-width: 340px; font-size: .74rem; overflow: hidden; }
+    .kn-cs-pop .ust { display: flex; align-items: center; gap: 10px; padding: 5px 9px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; font-size: .64rem; font-weight: 700; }
+    .kn-cs-pop .ust a { color: #1d4ed8; cursor: pointer; text-decoration: none; white-space: nowrap; } .kn-cs-pop .ust a:hover { text-decoration: underline; } .kn-cs-pop .ust .say { margin-left: auto; color: #64748b; font-weight: 600; white-space: nowrap; }
+    .kn-cs-pop .liste { max-height: 300px; overflow: auto; padding: 4px 0; }
+    .kn-cs-pop label { display: flex; align-items: center; gap: 7px; padding: 3px 10px; margin: 0; cursor: pointer; white-space: nowrap; } .kn-cs-pop label:hover { background: #eff6ff; } .kn-cs-pop label input { margin: 0; flex: none; }
+    /* Planlanan · Son Ödeme Tarihi tek sütun: üstte planlanan (düzenlenir), altta son ödeme */
+    .kn-son { display: block; font-size: .56rem; font-weight: 700; color: #475569; line-height: 1.1; margin-top: 1px; white-space: nowrap; } .kn-son i { font-style: normal; font-weight: 600; color: #94a3b8; font-size: .5rem; text-transform: uppercase; letter-spacing: .03em; } .kn-son.gec { color: #b91c1c; } .kn-son.gec i { color: #dc2626; }
+    /* Planlanan · Son Ödeme Tarihi hücresi: iki satır aynı düzende — PLN tarih (düzenlenir) / SON tarih */
+    #kn .kn-ps { display: flex; align-items: center; justify-content: flex-start; gap: 4px; white-space: nowrap; line-height: 1.15; width: 112px; margin: 0 auto; }   /* iki satır aynı genişlikte ve aynı x'ten başlar → tarihler alt alta hizalı */
+    #kn .kn-ps > i { font-style: normal; font-size: .5rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: .03em; width: 18px; text-align: right; flex: none; }
+    #kn .kn-ps > b { font-size: .62rem; font-weight: 700; color: #0f172a; width: 90px; text-align: left; padding-left: 3px; font-variant-numeric: tabular-nums; box-sizing: border-box; }
+    #kn .kn-ps input.kn-tarih { width: 90px; flex: none; height: 20px; font-size: .62rem !important; font-weight: 700; padding: 0 0 0 2px !important; text-align: left; text-align-last: left; }
+    #kn .kn-ps.gec > b { color: #b91c1c; } #kn .kn-ps.gec > i { color: #dc2626; }
+    #kn .kn-odeme tbody select.kn-onc { font-weight: 800; text-align: center; text-align-last: center; padding: 2px 0; } #kn .kn-odeme tbody select.kn-onc.dolu { background: #fff; border-color: var(--kn-lacivert, #1e3a8a); color: var(--kn-lacivert, #1e3a8a); }
+    /* Grup İçi İşlemler: işlem türü seçimi (Mahsup / Temlik / Yansıtma) */
+    .kn-gtur { width: 100%; min-width: 0; height: 22px; font-size: .62rem; font-weight: 800; border-radius: 6px; padding: 1px 2px; border: 1px solid #94a3b8; background: #fff; color: #0f172a; text-align: center; text-align-last: center; }
+    .kn-gtur.secilmedi { border: 1.5px dashed #dc2626; background: #fef2f2; color: #b91c1c; } .kn-gtur.secili { border-color: #16a34a; background: #f0fdf4; color: #166534; } .kn-gtur:disabled { opacity: .7; }
+    .kn-kes { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden; }   /* uzun not / ürün en çok 5 satır; tamamı ipucunda ve çekmecede */
+    /* Dolaşım sütunu (Çek / Senet): belge no + adım adım yol; gerçekleşen yeşil, planlı sarı, sıradaki adım kalın çerçeveli */
+    .kn-dz { display: block; text-decoration: none; color: inherit; line-height: 1.15; } a.kn-dz { cursor: pointer; } a.kn-dz:hover .kn-dz-a { border-color: #2563eb; }
+    .kn-dz-b { display: block; font-size: .56rem; font-weight: 800; color: #1d4ed8; margin-bottom: 1px; }
+    .kn-dz-a { display: block; font-size: .6rem; font-weight: 700; color: #334155; background: rgba(255,255,255,.75); border: 1px solid #e2e8f0; border-radius: 5px; padding: 1px 4px; margin: 1px 0; text-align: left; white-space: normal; }
+    .kn-dz-a i { font-size: .5rem; color: #94a3b8; } .kn-dz-a small { display: block; font-size: .52rem !important; font-weight: 600; color: #64748b; }
+    .kn-dz-a.ok { background: #dcfce7; border-color: #86efac; color: #166534; } .kn-dz-a.ok i, .kn-dz-a.ok small { color: #15803d; }
+    .kn-dz-a.plan { background: #fffbeb; border-color: #fde68a; color: #92400e; } .kn-dz-a.plan small { color: #a16207; } .kn-dz-a.sirada { border-color: #f59e0b; box-shadow: inset 2px 0 0 #f59e0b; }
+    #kn .kn-odeme td .yb:has(.kn-dz) { white-space: normal; overflow: visible; margin-bottom: 3px; }
+    .kn-dk { display: flex; gap: 4px; align-items: center; justify-content: center; margin-top: 2px; font-size: .6rem; white-space: nowrap; } #kn .kn-dk .kn-dekont-yukle { width: 26px; max-width: 26px; height: 18px; flex: none; }
+    #kn .kn-odeme td small.kn-doviz { font-size: .56rem; color: #64748b; white-space: nowrap; font-weight: 600; } #kn .kn-odeme td small.kn-doviz b { font-weight: 800; color: #0f172a; }
+    .kn-mut-tarih { display: block; font-size: .6rem; font-weight: 700; color: #0f172a; line-height: 1.15; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .kn-muaf.dolu { border-style: solid; border-color: #f59e0b; background: #fffbeb; color: #92400e; font-weight: 800; }
+    #kn .kn-dekont-yukle { display: inline-flex; align-items: center; justify-content: center; width: 100%; max-width: 52px; height: 20px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; color: #334155; font-size: .6rem; padding: 0; }
+    #kn .kn-dekont-yukle:hover { border-color: #2563eb; color: #1d4ed8; }
+    #kn .kn-satir-islem { display: inline-flex; gap: 6px; align-items: center; } #kn .kn-satir-islem a { cursor: pointer; font-size: .7rem; }
+    #kn .kn-satir-islem .kn-ac { color: #2563eb; } #kn .kn-satir-islem .kn-sil { color: #dc2626; }
+    .kn-sutun-liste { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; font-size: .74rem; } .kn-sutun-liste label { display: flex; gap: 6px; align-items: center; cursor: pointer; margin: 0; }
+    /* ===== 13 Kas 2026 — KURUMSAL STANDART ("ikonları standartlaştır, biri çok büyük biri çok küçük, rengarenk olmasın, kurumsal şık"):
+       tek rozet ölçüsü · tek düğme ölçüsü · tek ikon ölçüsü; ana renk lacivert, yazı koyu gri; renk yalnız anlam taşıyan yerde (durum rozetinin küçük noktası: yeşil tamam · sarı bekliyor · kırmızı sorun · lacivert bilgi).
+       Bu blok stilin en sonunda durur ve yukarıdaki dağınık rozet / düğme renklerini ezer. ===== */
+    #kn { --kn-lacivert: #1e3a8a; --kn-yazi: #0f172a; --kn-soluk: #64748b; --kn-cizgi: #cbd5e1; --kn-ok: #15803d; --kn-bekle: #b45309; --kn-hata: #b91c1c; }
+    .na.kn { --na-k: #1e3a8a; }
+    /* --- rozetler: hepsi aynı ölçü, beyaz zemin, ince çerçeve --- */
+    #kn .rt-durum, #kn .kn-yontem, #kn .na-bs, #kn .kn-onay, #kn .kn-oran, #kn .kn-avans, #kn .kn-mukerrer, #kn .kn-kf, #kn .kn-ek-tur, #kn .kn-talimat-rozet {
+        display: inline-flex; align-items: center; gap: 4px; font-size: .56rem !important; font-weight: 700 !important; line-height: 1.25 !important; padding: 1px 6px !important; margin: 1px 0; border-radius: 4px !important;
+        border: 1px solid var(--kn-cizgi) !important; background: #fff !important; color: #334155 !important; box-shadow: none !important; text-transform: none !important; letter-spacing: 0 !important; white-space: normal; vertical-align: middle; min-height: 0 !important; text-align: left; }
+    #kn .rt-durum, #kn .kn-yontem, #kn .na-bs, #kn .kn-onay, #kn .kn-oran, #kn .kn-avans, #kn .kn-mukerrer, #kn .kn-ek-tur { overflow-wrap: normal !important; word-break: keep-all; white-space: normal !important; }   /* rozet metni kelime ortasından bölünmez, sığmazsa alt satıra iner */
+    /* tür rozetleri (ödeme yöntemi, oran, ek türü, talimat no …): açık gri zemin, renksiz */
+    #kn .kn-yontem, #kn .kn-oran, #kn .kn-kf, #kn .kn-ek-tur, #kn .kn-talimat-rozet { background: #f1f5f9 !important; border-color: #e2e8f0 !important; color: var(--kn-yazi) !important; }
+    #kn .kn-talimat-rozet { color: var(--kn-lacivert) !important; }
+    /* durum rozetleri: solda 6 px durum noktası */
+    #kn .rt-durum::before, #kn .na-bs::before, #kn .kn-onay::before, #kn .kn-avans::before, #kn .kn-mukerrer::before { content: "" !important; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #94a3b8; flex: none; position: static; margin: 0; }
+    #kn .rt-durum.rt-ok::before, #kn .kn-onay.onayli::before, #kn .na-bs.kn-kontrol-uyumlu::before { background: var(--kn-ok); }
+    #kn .rt-durum.rt-bekle::before, #kn .kn-onay.bekliyor::before, #kn .kn-onay.gmy::before, #kn .na-bs.kn-kontrol-bekliyor::before, #kn .kn-avans::before { background: #d97706; }
+    #kn .rt-durum.rt-hata::before, #kn .kn-onay.red::before, #kn .na-bs.kn-kontrol-farkli::before, #kn .kn-mukerrer::before { background: #dc2626; }
+    #kn .rt-durum.rt-bilgi::before, #kn .na-bs.kn-kontrol-plansiz::before { background: var(--kn-lacivert); }
+    #kn .rt-durum.rt-hata, #kn .kn-mukerrer, #kn .na-bs.kn-kontrol-farkli, #kn .kn-onay.red { border-color: #fca5a5 !important; color: var(--kn-hata) !important; }
+    /* --- hücre içi düğmeler: hepsi aynı ölçü, beyaz zemin, lacivert yazı; üstüne gelince lacivert dolar --- */
+    #kn .kn-tablo td .btn, #kn .kn-dekont-yukle { display: inline-flex !important; align-items: center; justify-content: center; gap: 4px; width: auto; max-width: 100%; min-height: 20px; height: auto; font-size: .58rem !important; font-weight: 700 !important; line-height: 1.1 !important;
+        padding: 2px 6px !important; margin: 1px 0; border-radius: 5px !important; border: 1px solid var(--kn-cizgi) !important; background: #fff !important; color: var(--kn-lacivert) !important; box-shadow: none !important; text-decoration: none !important; white-space: normal; vertical-align: middle; }
+    #kn .kn-tablo td .btn:hover:not(:disabled), #kn .kn-dekont-yukle:hover { background: var(--kn-lacivert) !important; border-color: var(--kn-lacivert) !important; color: #fff !important; }
+    #kn .kn-tablo td .btn i, #kn .kn-dekont-yukle i { font-size: .6rem !important; margin: 0 !important; color: inherit !important; }
+    #kn .kn-tablo td .btn:disabled { opacity: .4; }
+    #kn .kn-tablo td .btn.text-danger { border-color: transparent !important; background: transparent !important; color: #94a3b8 !important; padding: 2px 4px !important; }   /* kaldır (×) düğmeleri: soluk, üstüne gelince kırmızı */
+    #kn .kn-tablo td .btn.text-danger:hover:not(:disabled) { background: #fee2e2 !important; border-color: #fca5a5 !important; color: var(--kn-hata) !important; }
+    #kn .kn-dk .kn-dekont-yukle, #kn .kn-dekont-yukle { width: 26px; max-width: 26px; padding: 2px 0 !important; }
+    /* --- satır işlem ikonları ve bağlantılar: tek ölçü --- */
+    #kn .kn-satir-islem { gap: 8px; } #kn .kn-satir-islem a { font-size: .74rem; line-height: 1; } #kn .kn-satir-islem .kn-ac { color: var(--kn-lacivert); } #kn .kn-satir-islem .kn-sil { color: #94a3b8; } #kn .kn-satir-islem .kn-sil:hover { color: var(--kn-hata); }
+    #kn .kn-belge-link, #kn .kn-tablo td a:not(.btn):not(.kn-sil) { color: var(--kn-lacivert); } #kn .kn-tablo td a .fas, #kn .kn-tablo td a .far { font-size: .62rem; }
+    #kn .kn-tablo td .text-primary { color: var(--kn-lacivert) !important; }
+    /* --- seçim kutuları (işlem türü, muafiyet): sade çerçeve; eksik olan sarı çerçeveyle belirtilir --- */
+    #kn .kn-gtur { border: 1px solid var(--kn-cizgi); background: #fff; color: var(--kn-yazi); font-size: .6rem; font-weight: 700; height: 22px; }
+    #kn .kn-gtur.secilmedi { border: 1px solid #d97706; background: #fffbeb; color: var(--kn-yazi); } #kn .kn-gtur.secili { border-color: var(--kn-cizgi); background: #fff; color: var(--kn-yazi); }
+    #kn .kn-gtur + small { color: var(--kn-soluk); } #kn .kn-gtur.secilmedi + small { color: var(--kn-bekle) !important; font-weight: 700 !important; }
+    #kn .kn-muaf { border: 1px solid #e2e8f0; border-radius: 4px; color: var(--kn-soluk); background: rgba(255,255,255,.6); } #kn .kn-muaf.dolu { border-color: var(--kn-lacivert); background: #fff; color: var(--kn-yazi); font-weight: 700; }
+    /* --- dolaşım adımları: beyaz kutu, solda ince durum çizgisi --- */
+    #kn .kn-dz-b { color: var(--kn-lacivert); }
+    #kn .kn-dz-a, #kn .kn-dz-a.ok, #kn .kn-dz-a.plan { background: #fff; border: 1px solid #e2e8f0; border-left: 3px solid #cbd5e1; color: var(--kn-yazi); box-shadow: none; }
+    #kn .kn-dz-a small, #kn .kn-dz-a.ok small, #kn .kn-dz-a.plan small { color: var(--kn-soluk); } #kn .kn-dz-a i, #kn .kn-dz-a.ok i { color: #94a3b8; }
+    #kn .kn-dz-a.ok { border-left-color: #16a34a; } #kn .kn-dz-a.ok small i { color: #16a34a; } #kn .kn-dz-a.sirada { border-left-color: var(--kn-lacivert); border-color: #bfdbfe #bfdbfe #bfdbfe var(--kn-lacivert); }
+    /* --- üst şerit, sekmeler, kart başlığı düğmeleri: tek yükseklik, beyaz zemin, lacivert ikon; yalnız ana işlem (Getir, Yeni Ödeme Ekle, Talimat Oluştur) dolu lacivert --- */
+    #kn .kn-ust .rt-ikon { background: var(--kn-lacivert) !important; }
+    #kn .kn-ust .btn, #kn .kn-ust .kn-kutu, #kn .kn-ust .kn-pill, #kn .kn-ust .kn-ozel { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px !important; font-size: .68rem !important; font-weight: 700; line-height: 1; border-radius: 8px !important;
+        border: 1px solid var(--kn-cizgi) !important; background: #fff !important; color: var(--kn-yazi) !important; white-space: nowrap; text-decoration: none; box-shadow: none !important; margin: 0; }
+    #kn .kn-ust .btn i, #kn .kn-ust .kn-kutu i, #kn .kn-ust .kn-pill i { font-size: .72rem !important; color: var(--kn-lacivert) !important; margin: 0 !important; }
+    #kn .kn-ust .btn:hover, #kn .kn-ust a.kn-pill:hover, #kn .kn-ust .kn-pill[data-git]:hover, #kn .kn-ust .kn-pill[data-url]:hover { border-color: var(--kn-lacivert) !important; color: var(--kn-lacivert) !important; background: #f8fafc !important; }
+    #kn .kn-ust #knGetir { background: var(--kn-lacivert) !important; border-color: var(--kn-lacivert) !important; color: #fff !important; } #kn .kn-ust #knGetir i { color: #fff !important; } #kn .kn-ust #knGetir:hover { background: #172554 !important; color: #fff !important; }
+    #kn .kn-ust .kn-kutu b { color: var(--kn-yazi); font-size: .76rem; } #kn .kn-ust .badge { background: var(--kn-lacivert) !important; color: #fff !important; font-size: .58rem !important; border-radius: 999px; padding: 2px 6px; }
+    #kn .kn-ust .kn-ozel.acik { background: var(--kn-hata) !important; border-color: var(--kn-hata) !important; color: #fff !important; }
+    #kn .na-sekme button { color: var(--kn-yazi); } #kn .na-sekme button i { color: var(--kn-soluk); } #kn .na-sekme button:hover { border-color: var(--kn-lacivert); color: var(--kn-lacivert); }
+    #kn .na-sekme button.aktif { background: var(--kn-lacivert); border-color: var(--kn-lacivert); color: #fff; } #kn .na-sekme button.aktif i { color: #fff; }
+    #kn .na-kart-b .btn { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px !important; font-size: .62rem !important; font-weight: 700; line-height: 1; border-radius: 6px !important; border: 1px solid var(--kn-cizgi) !important; background: #fff !important; color: var(--kn-lacivert) !important; box-shadow: none !important; white-space: nowrap; }
+    #kn .na-kart-b .btn i { font-size: .62rem !important; color: inherit !important; margin: 0 !important; }
+    #kn .na-kart-b .btn.kn-yeni-ac, #kn .na-kart-b .btn.kn-talimat-olustur.btn-success { background: var(--kn-lacivert) !important; border-color: var(--kn-lacivert) !important; color: #fff !important; }
+    #kn .na-kart-b .btn:hover { border-color: var(--kn-lacivert) !important; background: #eff6ff !important; color: var(--kn-lacivert) !important; } #kn .na-kart-b .btn.kn-yeni-ac:hover { background: #172554 !important; color: #fff !important; }
+    #kn .na-kart-b > span > i, #kn .na-kart-b > span:first-child i { color: var(--kn-lacivert); }
+    /* --- üst kartlar: hepsi lacivert çizgi; yalnız uyarı kartları renkli (Geciken · Mükerrer kırmızı, Onay Bekleyen sarı) --- */
+    #kn .na-kpi > div { --k: #1e3a8a !important; } #kn .na-kpi > div[data-kpi="geciken"], #kn .na-kpi > div[data-kpi="mukerrer"] { --k: #b91c1c !important; } #kn .na-kpi > div[data-kpi="onay"] { --k: #d97706 !important; }
+    #kn .kn-grup > div { --k: #1e3a8a !important; }
+    #kn .kn-odeme tr.toplam td { border-top-color: var(--kn-lacivert); }
+    #kn .kn-odeme thead th.sira.art, #kn .kn-odeme thead th.sira.azl, #kn .kn-odeme thead th.sira:hover { color: var(--kn-lacivert); }
+    /* Özet sekmesi: kutucuklar 5'li iki sıra ve daha okunaklı; dağılım tabloları sade */
+    #kn .na-kpi.kn-ozet-kpi { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-bottom: 0; }
+    #kn .na-kpi.kn-ozet-kpi > div { padding: 9px 12px; } #kn .na-kpi.kn-ozet-kpi .l { font-size: .62rem; } #kn .na-kpi.kn-ozet-kpi .v { font-size: 1.15rem; } #kn .na-kpi.kn-ozet-kpi .s { font-size: .66rem; }
+    #kn .kn-ozet-tablo { table-layout: auto; font-size: .74rem; } #kn .kn-ozet-tablo td { padding: 6px 8px; white-space: nowrap; } #kn .kn-ozet-tablo tr.tik:hover td { background: #eff6ff; } #kn .kn-ozet-tablo tr.toplam td { font-weight: 800; background: #f8fafc; border-top: 2px solid var(--kn-lacivert); }
+    .kn-kpi-filtre { display: inline-flex; align-items: center; gap: 5px; font-size: .62rem; font-weight: 700; text-transform: none; letter-spacing: 0; color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 1px 8px; cursor: pointer; text-decoration: none; } .kn-kpi-filtre:hover { background: #fef3c7; color: #92400e; }
+    /* ===== 13 Kas 2026 — DİKEY YER KAZANIMI ("sayfanın yarısını kullanamıyoruz, daha verimli kullan"): üst şerit, filtre, sekme şeridi ve tablo başlığı sıkıştırıldı; kart başlığı satırı kalktı
+       (işlem düğmeleri sekme şeridinin sağında); filtre etiketleri kutuların solunda; satır dolguları yarıya indi → tablo sayfanın çok daha üstünden başlar ve ekrana daha çok satır sığar ===== */
+    #kn.container-fluid { padding-top: 4px !important; padding-bottom: 4px !important; }
+    #kn .kn-ust { padding: 5px 10px; margin-bottom: 4px; } #kn .kn-ust-satir { gap: 4px 6px; } #kn .kn-ust-satir + .kn-ust-satir { margin-top: 4px; padding-top: 0; border-top: 0; }
+    #kn .kn-ust .btn, #kn .kn-ust .kn-kutu, #kn .kn-ust .kn-pill, #kn .kn-ust .kn-ozel { height: 24px; font-size: .64rem !important; padding: 0 8px !important; border-radius: 7px !important; }
+    #kn .kn-ust .btn i, #kn .kn-ust .kn-kutu i, #kn .kn-ust .kn-pill i { font-size: .66rem !important; } #kn .kn-ust .kn-kutu b { font-size: .7rem; }
+    #kn .kn-baslik { display: flex; align-items: baseline; gap: 8px; margin-right: 4px; } #kn .kn-baslik h4 { font-size: .92rem; } #kn .kn-baslik .kn-donem { margin: 0; }
+    #kn .kn-ust .rt-ikon { width: 24px; height: 24px; font-size: .7rem; }
+    #kn .na-kart { margin-bottom: 4px; } #kn .kn-filtre-kart .na-kart-g { padding: 4px 10px; }
+    #kn .kn-filtre { gap: 4px 10px; align-items: center; grid-template-columns: 1.25fr .95fr .95fr .9fr 1.2fr 1.5fr auto; }
+    #kn .kn-filtre > div { display: flex; align-items: center; gap: 5px; min-width: 0; } #kn .kn-filtre label { margin: 0; white-space: nowrap; flex: none; font-size: .54rem; }
+    #kn .kn-filtre .form-control, #kn .kn-filtre .form-select { height: 26px; flex: 1 1 auto; min-width: 0; font-size: .7rem; padding: 2px 7px; } #kn .kn-filtre .kn-hizli button { padding: 2px 8px; height: 26px; }
+    #kn .na-sekme { padding: 3px 8px; margin-bottom: 4px; gap: 3px; } #kn .na-sekme button[data-p] { padding: 2px 9px; }
+    #kn .kn-sekme-islem { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+    #kn .na-sekme .kn-sekme-islem .btn { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; margin: 0; font-size: .62rem; font-weight: 700; line-height: 1; border-radius: 6px; border: 1px solid var(--kn-cizgi); background: #fff; color: var(--kn-lacivert); white-space: nowrap; box-shadow: none; }
+    #kn .na-sekme .kn-sekme-islem .btn i { display: inline-block !important; font-size: .62rem; margin: 0 !important; color: inherit; opacity: 1; }
+    #kn .na-sekme .kn-sekme-islem .btn:hover { border-color: var(--kn-lacivert); background: #eff6ff; color: var(--kn-lacivert); }
+    #kn .na-sekme .kn-sekme-islem .btn.kn-yeni-ac, #kn .na-sekme .kn-sekme-islem .btn.kn-talimat-olustur.secili { background: var(--kn-lacivert); border-color: var(--kn-lacivert); color: #fff; } #kn .na-sekme .kn-sekme-islem .btn.kn-yeni-ac:hover { background: #172554; color: #fff; }
+    #kn table.kn-odeme thead th { padding: 3px 3px; } #kn .kn-odeme thead tr.suzgec th { padding: 2px 2px; } #kn .kn-odeme thead tr.suzgec input, #kn .kn-odeme thead tr.suzgec .kn-suz-cs { height: 20px; }
+    #kn table.kn-odeme tbody td, #kn table.kn-odeme.dar tbody td, #kn table.kn-odeme.cokdar tbody td { padding-top: 2px; padding-bottom: 2px; }
+    #kn .kn-odeme tbody .kn-alan { height: 20px; } #kn .kn-muaf { height: 15px; font-size: .5rem; margin-top: 1px; } #kn .kn-dk { margin-top: 1px; } #kn .kn-dk .kn-dekont-yukle, #kn .kn-dekont-yukle { height: 16px; min-height: 16px; padding: 0 !important; }
+    #kn .kn-ps input.kn-tarih { height: 17px; } #kn .kn-ps { line-height: 1.05; }
+    /* seçim kutusu + sıra no tek hücre (altlı üstlü) */
+    #kn .kn-no { display: block; font-size: .56rem; font-weight: 700; color: #64748b; line-height: 1; margin-top: 2px; font-variant-numeric: tabular-nums; }
+    #kn .kn-odeme tbody td:first-child { padding-left: 2px; padding-right: 2px; }
+    /* sabit seçenekli kutular: yazı sola yaslı ve ok için yer ayrılır → seçenek adı kısalmadan görünür */
+    #kn .kn-odeme tbody select.kn-alan { padding-right: 14px; text-overflow: clip; }
+    #koTablo td { font-size: .7rem; } #knOdenenModal .form-label { font-size: .58rem; font-weight: 700; color: #64748b; text-transform: uppercase; }
 </style>
 }
 
-<div class="container-fluid py-3 na kn" id="kn" data-sirket="@varsayilan" data-bas="@bas" data-bit="@bit" data-sekme="@sekme">
-    <div class="na-ust">
-        <h4><span class="rt-ikon"><i class="fas fa-money-bill-transfer"></i></span>Kasa Nakit Akışı</h4>
-        @* üst satır tek satırda kalsın (9 Kas 2026): şirket rozeti kaldırıldı (filtre hemen altta), rozet metinleri kısa, ayrıntı ipucunda *@
-        <a class="kn-pill" href="/CekAkibeti" title="Çek Akıbeti Raporu'na git: burada planlanan / ibraz edilen çek ve senetler orada planlanan tedarikçi, Planlandı, kime verildi ve uygunluk olarak görünür"><i class="fas fa-money-check-alt me-1"></i>Çek · Senet → Çek Akıbeti <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:.56rem"></i></a>
-        <span class="kn-pill" data-git="mahsup|#knTablo-mahsup" title="Mahsup / Temlik / Yansıtma sekmeleri: grup içi modül kayıtlarına bağlı (tıkla: Mahsup sekmesi)"><i class="fas fa-share-nodes me-1"></i>Grup İçi: Mahsup · Temlik · Yansıtma</span>
-        <span class="kn-pill" data-url="/Rapor123?hesapTipi=CEK" data-baslik="Konsolide Finansal Takip Paneli" title="Konsolide Finansal Takip Paneli: plana aykırı çıkan çekler (plan kontrolü)"><i class="fas fa-clipboard-check me-1"></i>Takip Paneli</span>
-        <div class="sag">
-            <button type="button" class="btn btn-primary btn-sm" id="knYeni" style="font-size:.7rem"><i class="fas fa-plus me-1"></i>Yeni Ödeme</button>
-            <button type="button" class="btn btn-warning btn-sm" id="knTalepler" style="font-size:.7rem" title="Ödeme Talebi modülünden gelen departman talepleri: onay bekleyenler ve onaylananlar; onaylanan talep 'Ekle' ile Kasa Nakit Akışı satırı olur"><i class="fas fa-inbox me-1"></i>Talepler <span class="badge bg-dark ms-1" id="knTalepN" style="font-size:.6rem">0</span></button>
-            <button type="button" class="btn btn-light btn-sm border" id="knExcel" style="font-size:.7rem"><i class="fas fa-file-excel me-1"></i>Excel</button>
-            <a class="btn btn-light btn-sm border" href="/Rapor79/Eski" style="font-size:.7rem" title="Ana projedeki 23 sütunlu görünüm"><i class="fas fa-table me-1"></i>Eski Görünüm</a>
+<div class="container-fluid py-1 na kn" id="kn" data-sirket="@varsayilan" data-bas="@bas" data-bit="@bit" data-sekme="@sekme">
+    @* üst şerit (13 Kas 2026): beyaz kart, iki satır — 1. satır: başlık + "Ödeme Planı · dönem" ve hemen sağında doğrudan yönlendirmeler (Çek Akıbeti, Grup İçi Raporu, Takip Paneli);
+       2. satır: Getir, Özel Onay Modu, Seçili Ödeme / Seçili Kasa · Banka toplamları, Excel · Ödenenler · Sistem Logları · Sütunlar; sağda Talepler ve Onay Kuralları. Eski Görünüm düğmesi kaldırıldı (kullanıcı). *@
+    <div class="na-ust kn-ust">
+        <div class="kn-ust-satir">
+            <div class="kn-baslik"><h4><span class="rt-ikon"><i class="fas fa-money-bill-transfer"></i></span>Kasa Nakit Akışı</h4><div class="kn-donem" id="knAltBaslik">Ödeme Planı</div></div>
+            <a class="kn-pill" href="/CekAkibeti" title="Çek Akıbeti Raporu'na git: burada planlanan / ibraz edilen çek ve senetler orada planlanan tedarikçi, Planlandı, kime verildi ve uygunluk olarak görünür"><i class="fas fa-money-check-alt me-1"></i>Çek · Senet → Çek Akıbeti <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:.56rem"></i></a>
+            <a class="kn-pill" href="/GrupIci/Rapor" title="Grup İçi Özel Finansal İşlemler Raporu'na git: Mahsup · Temlik · Yansıtma modülleri (bu ödemeler Kasa Nakit Akışı'nda Tümü sekmesinde; grup içi işlem türü satır çekmecesinden seçilir)"><i class="fas fa-share-nodes me-1"></i>Grup İçi: Mahsup · Temlik · Yansıtma <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:.56rem"></i></a>
+            <a class="kn-pill" href="/Rapor123?hesapTipi=CEK" title="Konsolide Finansal Takip Paneli'ne git: plana aykırı çıkan çekler (plan kontrolü)"><i class="fas fa-clipboard-check me-1"></i>Takip Paneli <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:.56rem"></i></a>
         </div>
-        <span class="kn-pill" title="Onay kuralları: nakit ödeme talebi, onaycılardan biri (Alev Özavşar / Neslihan Uludağ / Özge İsen) onaylamadan ödenmez; onaylı nakit için buradan kasa tediye makbuzu kesilir, muhasebe fişi otomatik atılır. Kasa Nakit Akışı'nda planlanmamış hiçbir çek, GMY onayı olmadan şirketten çıkmaz (Çek Akıbeti'nden çıkış denemesi buraya onaya düşer)."><i class="fas fa-user-check me-1"></i>Onay Kuralları</span>
+        <div class="kn-ust-satir">
+            <button type="button" class="btn btn-primary btn-sm" id="knGetir" title="Veriyi yeniden getir (şirket ve tarih aralığına göre)"><i class="fas fa-rotate me-1"></i>Getir</button>
+            <label class="kn-ozel" id="knOzelKap" title="Açıkken mutabakat durumuna bakılmaksızın kayıt ÖDENDİ yapılabilir. Kapalıyken ÖDENDİ için Mutabık, muafiyet ya da Özel Onay durumu gerekir."><input type="checkbox" class="form-check-input" id="knOzelOnay" /><span>Özel Onay Modu</span></label>
+            <span class="kn-kutu" title="Tabloda işaretli satırların TL toplamı"><i class="fas fa-calculator"></i>Seçili Ödeme (TL) <b id="knSeciliOdeme">₺0,00</b></span>
+            <span class="kn-kutu" title="Banka / Kasa Bakiyesi sekmesinde işaretli hesapların TL toplamı (tıkla: sekmeye git)" id="knSeciliKasaKap" style="cursor:pointer"><i class="fas fa-piggy-bank"></i>Seçili Kasa / Banka (TL) <b id="knSeciliKasa">₺0,00</b></span>
+            <button type="button" class="btn btn-light btn-sm border" id="knExcel" title="Ekrandaki tabloyu göründüğü gibi Excel'e aktar"><i class="fas fa-file-excel me-1 text-success"></i>Excel</button>
+            <button type="button" class="btn btn-light btn-sm border" id="knOdenenler" title="Ödenenler listesi: tarih aralığına göre tüm şirketlerde ÖDENDİ kayıtlar"><i class="fas fa-check-double me-1 text-primary"></i>Ödenenler</button>
+            <button type="button" class="btn btn-light btn-sm border" id="knLoglar" title="Sistem logları: İşlem Günlüğü sekmesi"><i class="fas fa-list-alt me-1"></i>Sistem Logları</button>
+            <button type="button" class="btn btn-light btn-sm border" id="knSutunlar" title="Görmek istediğiniz sütunları seçin (bu tarayıcıda saklanır)"><i class="fas fa-columns me-1"></i>Sütunlar</button>
+            <div class="sag">
+                <button type="button" class="btn btn-warning btn-sm" id="knTalepler" style="font-size:.7rem" title="Ödeme Talebi modülünden gelen departman talepleri: onay bekleyenler ve onaylananlar; onaylanan talep 'Ekle' ile Kasa Nakit Akışı satırı olur"><i class="fas fa-inbox me-1"></i>Talepler <span class="badge bg-dark ms-1" id="knTalepN" style="font-size:.6rem">0</span></button>
+                <span class="kn-pill" title="Onay kuralları: nakit ödeme talebi, onaycılardan biri (Alev Özavşar / Neslihan Uludağ / Özge İsen) onaylamadan ödenmez; onaylı nakit için buradan kasa tediye makbuzu kesilir, muhasebe fişi otomatik atılır. Kasa Nakit Akışı'nda planlanmamış hiçbir çek, GMY onayı olmadan şirketten çıkmaz (Çek Akıbeti'nden çıkış denemesi buraya onaya düşer)."><i class="fas fa-user-check me-1"></i>Onay Kuralları</span>
+            </div>
+        </div>
     </div>
     <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
 
@@ -169,42 +410,55 @@
     <div class="na-kart kn-filtre-kart">
         <div class="na-kart-g">
             <div class="kn-filtre">
-                <div><label>Şirket</label><select class="form-select" id="knSirket"><option value="">Tümü (Konsolide)</option>@foreach (var s in sirketler) { <option value="@s.Key" selected="@(s.Key == varsayilan)">@s.Value</option> }</select></div>
+                <div><label>Şirket</label><button type="button" class="form-select kn-cs" id="knSirket" title="Bir ya da birden çok şirket seçin (örneğin Uras Kimya ve Alv Kimya birlikte)">Tümü (Konsolide)</button></div>
                 <div><label>Başlangıç</label><input type="date" class="form-control" id="knBas" value="@bas" /></div>
                 <div><label>Bitiş</label><input type="date" class="form-control" id="knBit" value="@bit" /></div>
-                <div><label>Durum</label><select class="form-select" id="knDurum"><option value="">Tümü</option></select></div>
-                <div><label>Temsilci / Talep Eden</label><select class="form-select" id="knSatinalmaci" title="Satınalma temsilcisi ya da ödemeyi talep eden kişiye göre süz"><option value="">Tümü</option></select></div>
+                <div><label>Durum</label><button type="button" class="form-select kn-cs" id="knDurum" title="Bir ya da birden çok durum seçin">Tümü</button></div>
+                <div><label>Temsilci / Talep Eden</label><button type="button" class="form-select kn-cs" id="knSatinalmaci" title="Satınalma temsilcisi ya da ödemeyi talep eden kişiye göre süz (birden çok kişi seçilebilir)">Tümü</button></div>
                 <div><label>Ara</label><input class="form-control" id="knAra" placeholder="Kurum, belge no, ürün, not, çek no…" /></div>
-                <div><label>Hızlı Dönem · Filtre</label><div class="kn-hizli"><button type="button" class="btn btn-light border" data-gun="7">Bu Hafta</button><button type="button" class="btn btn-light border" data-gun="30">30 Gün</button><button type="button" class="btn btn-light border" data-gun="90">90 Gün</button><button type="button" class="btn btn-light border" id="knTemizle" title="Durum, temsilci, arama ve üst kart filtresini temizle"><i class="fas fa-eraser me-1"></i>Temizle</button></div></div>
+                <div><label>Hızlı Dönem · Süzgeç</label><div class="kn-hizli"><button type="button" class="btn btn-light border" data-gun="7">Bu Hafta</button><button type="button" class="btn btn-light border" data-gun="30">30 Gün</button><button type="button" class="btn btn-light border" data-gun="90">90 Gün</button><button type="button" class="btn btn-light border" id="knTemizle" title="Durum, temsilci, arama ve üst kart filtresini temizle"><i class="fas fa-eraser me-1"></i>Temizle</button></div></div>
             </div>
         </div>
     </div>
 
-    <div class="na-kpi" id="knKpi" data-dinamik="kapali"></div>
+    @* 13 Kas 2026: üstteki kutucuk satırı kaldırıldı (yer kaplıyordu); kutucuklar Özet sekmesinde (#knKpi) *@
 
+    @* yöntem şeridi (13 Kas 2026, eski görünüm): solda şirket + kayıt sayısı, "Ödeme Yöntemi" etiketi, hap biçimli sekmeler (yöntem sekmelerinde kayıt sayısı) *@
     <div class="na-sekme" id="knSekmeler" data-dinamik="kapali">
-        @foreach (var s in sekmeler) { <button type="button" data-p="@s.Item1" class="@(s.Item1 == ozelSekmeler[0] ? "kn-ozel-ilk" : null)"><i class="fas @s.Item3 me-1"></i>@s.Item2</button> }
         <span class="kn-kapsam" id="knKapsam" title="Seçili şirket · tarih aralığı · filtreye uyan kayıt sayısı"></span>
+        @foreach (var s in sekmeler) { <button type="button" data-p="@s.Item1" class="@(s.Item1 == ozelSekmeler[0] ? "kn-ozel-ilk" : null)"><i class="fas @s.Item3 me-1"></i>@s.Item2@if (!ozelSekmeler.Contains(s.Item1)) { <span class="n"></span> }</button> }
+        <span class="kn-sekme-islem" id="knSekmeIslem"><span id="knKpiRozet"></span><button type="button" class="btn kn-toplu-dekont" title="İşaretli satırların hepsine aynı dekont dosyasını yükle"><i class="fas fa-file-upload"></i>Toplu Dekont</button><button type="button" class="btn kn-cek-ekle" title="Çek / senet ödemesi ekle: kayıt açılır, portföyden belge seçilir"><i class="fas fa-money-check-alt"></i>Çek / Senet Ekle</button><button type="button" class="btn kn-talimat-olustur" title="Seçili satırlardan ödeme talimatı hazırla (ödeyen şirket + yöntem bazında)"><i class="fas fa-file-contract"></i>Talimat Oluştur</button><button type="button" class="btn kn-yeni-ac" title="Yeni ödeme kaydı aç"><i class="fas fa-plus"></i>Yeni Ödeme Ekle</button></span>
     </div>
 
     @foreach (var s in sekmeler.Where(x => !ozelSekmeler.Contains(x.Item1)))
     {
         <div class="na-panel" data-p="@s.Item1">
-            @if (s.Item1 == "mahsup" || s.Item1 == "temlik" || s.Item1 == "yansitma")
+            @if (s.Item1 == "grupici")
             {
-                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-share-nodes me-1"></i>Grup İçi Özel Finansal İşlemler · @s.Item2 Modülü (Canlı)</span><span class="not" id="knGrupNot-@s.Item1"></span></div><div class="na-kart-g"><div class="kn-grup" id="knGrup-@s.Item1"></div></div></div>
-                @if (s.Item1 == "mahsup" || s.Item1 == "temlik")
-                {
-                    @* fatura sahibi ≠ ödeyen şirket olan ödemelerde otomatik oluşan grup içi belgeler (Data/GrupIciBelgeOrnek.cs): ödeme gerçekleşince iki şirkette fiş *@
-                    <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-file-signature me-1"></i>Otomatik Grup İçi @s.Item2 Belgeleri · Fatura Sahibi ≠ Ödeyen Şirket</span><span class="not" id="knGibNot-@s.Item1"></span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:34vh"><table class="na-tablo kn-tablo" id="knGib-@s.Item1" data-dinamik="kapali"><thead><tr><th>Belge No</th><th>Tarih</th><th>Fatura Sahibi</th><th>Ödeyen Şirket</th><th>Ödenecek Cari · Belge</th><th>Yöntem</th><th class="s">Tutar (₺)</th><th>İşlem Şekli</th><th>Durum</th><th>Fişler (Fatura Sahibi · Ödeyen)</th><th>Kaynak</th><th></th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
-                }
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-share-nodes me-1"></i>Grup İçi Özet · Fatura Sahibi ≠ Ödeyen Şirket · Mahsup / Temlik / Yansıtma Modülleri (Canlı)</span><span class="not" id="knGrupNot-@s.Item1"></span></div><div class="na-kart-g"><div class="kn-grup" id="knGrup-@s.Item1"></div></div></div>
             }
             <div class="na-kart">
-                <div class="na-kart-b"><span><i class="fas @s.Item3 me-1"></i>@(s.Item1 == "tumu" ? "Ödeme Listesi · Tüm Yöntemler" : s.Item2 + " Ödemeleri")</span><span class="d-flex gap-2 align-items-center flex-wrap"><span class="not" id="knNot-@s.Item1"></span><button type="button" class="btn btn-primary btn-sm py-0 kn-talimat-olustur" data-p="@s.Item1" style="font-size:.64rem" title="Seçili satırlardan ödeme talimatı hazırla (ödeyen şirket + yöntem bazında)"><i class="fas fa-file-contract me-1"></i>Seçilenlerden Talimat Oluştur</button></span></div>
-                <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:68vh"><table class="na-tablo kn-tablo" id="knTablo-@s.Item1" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+                @* 13 Kas 2026 ("sayfanın yarısını kullanamıyoruz"): kart başlığı satırı kaldırıldı; işlem düğmeleri (Toplu Dekont, Çek / Senet Ekle, Talimat Oluştur, Yeni Ödeme Ekle) sekme şeridinin sağında *@
+                <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:68vh"><table class="na-tablo kn-tablo kn-odeme" id="knTablo-@s.Item1" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
             </div>
+            @if (s.Item1 == "grupici")
+            {
+                    @* fatura sahibi ≠ ödeyen şirket olan ödemelerde otomatik oluşan grup içi belgeler (Data/GrupIciBelgeOrnek.cs): ödeme gerçekleşince iki şirkette fiş *@
+                    <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-file-signature me-1"></i>Otomatik Grup İçi Belgeler (Mahsup · Temlik · Yansıtma) · Fatura Sahibi ≠ Ödeyen Şirket</span><span class="not" id="knGibNot-@s.Item1"></span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:40vh"><table class="na-tablo kn-tablo" id="knGib-@s.Item1" data-dinamik="kapali"><thead><tr><th>Tür</th><th>Belge No</th><th>Tarih</th><th>Fatura Sahibi</th><th>Ödeyen Şirket</th><th>Ödenecek Cari · Belge</th><th>Yöntem</th><th class="s">Tutar (₺)</th><th>İşlem Şekli</th><th>Durum</th><th>Fişler (Fatura Sahibi · Ödeyen)</th><th>Kaynak</th><th></th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            }
         </div>
     }
+    @* ===== Özet sekmesi (13 Kas 2026: "çok yer kaplıyor, kaldır; özet için bir sekme ekle, tüm bilgileri özet sekmesine ekle"): üstteki kutucuklar buraya taşındı (tıklanınca o kayıtlar Tümü sekmesinde listelenir);
+       altında yönteme, duruma ve şirkete göre dağılım. Filtreler (şirket, tarih, durum, temsilci, arama) özete de uygulanır. ===== *@
+    <div class="na-panel" data-p="ozet">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-chart-pie me-1"></i>Özet · Ödeme Planı</span><span class="not" id="knOzetNot"></span></div><div class="na-kart-g"><div class="na-kpi kn-ozet-kpi" id="knKpi" data-dinamik="kapali"></div></div></div>
+        <div class="row g-2">
+            <div class="col-xl-4 col-lg-6"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-layer-group me-1"></i>Ödeme Yöntemine Göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo kn-tablo kn-ozet-tablo" id="knOzetYontem" data-dinamik="kapali" data-dikey="orta"><thead><tr><th>Ödeme Yöntemi</th><th class="s">Kayıt</th><th class="s">Toplam (₺)</th><th class="s">Ödenen (₺)</th><th class="s">Kalan (₺)</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div></div>
+            <div class="col-xl-2 col-lg-6"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>Duruma Göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo kn-tablo kn-ozet-tablo" id="knOzetDurum" data-dinamik="kapali" data-dikey="orta"><thead><tr><th>Durum</th><th class="s">Kayıt</th><th class="s">Tutar (₺)</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div></div>
+            <div class="col-xl-3 col-lg-6"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-building me-1"></i>Şirkete Göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo kn-tablo kn-ozet-tablo" id="knOzetSirket" data-dinamik="kapali" data-dikey="orta"><thead><tr><th>Şirket</th><th class="s">Kayıt</th><th class="s">Toplam (₺)</th><th class="s">Kalan (₺)</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div></div>
+            <div class="col-xl-3 col-lg-6"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-diagram-project me-1"></i>Kaynağa Göre (Satır Nereden Geldi)</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo kn-tablo kn-ozet-tablo" id="knOzetKaynak" data-dinamik="kapali" data-dikey="orta"><thead><tr><th>Kaynak</th><th class="s">Kayıt</th><th class="s">Toplam (₺)</th><th class="s">Kalan (₺)</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div></div>
+        </div>
+    </div>
     <div class="na-panel" data-p="talimat">
         <div class="na-kart">
             <div class="na-kart-b"><span><i class="fas fa-file-contract me-1"></i>Ödeme Talimatları</span><span class="not" id="knTalimatNot">yöntem sekmelerinde satır seçip "Seçilenlerden Talimat Oluştur" · durum akışı: Hazırlandı → Onaylandı → Bankaya İletildi / Teslim Edildi → Gerçekleşti</span></div>
@@ -239,7 +493,7 @@
     </div>
     <div class="na-panel" data-p="bakiye">
         <div class="row g-2">
-            <div class="col-lg-7"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-vault me-1"></i>Banka · Kasa · Portföy Bakiyeleri</span><span class="not" id="knBakiyeNot"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo kn-tablo" id="knBakiye" data-dinamik="kapali"><thead><tr><th>Şirket</th><th>Banka / Kasa</th><th>Detay</th><th>PB</th><th class="s">Tutar</th><th class="s">Tutar (₺)</th><th>Güncelleme</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div></div>
+            <div class="col-lg-7"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-vault me-1"></i>Banka · Kasa · Portföy Bakiyeleri</span><span class="not" id="knBakiyeNot"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo kn-tablo" id="knBakiye" data-dinamik="kapali"><thead><tr><th title="İşaretli hesapların TL toplamı üst şeritte: Seçili Kasa / Banka (TL)"></th><th>Şirket</th><th>Banka / Kasa</th><th>Detay</th><th>PB</th><th class="s">Tutar</th><th class="s">Tutar (₺)</th><th>Güncelleme</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div></div>
             <div class="col-lg-5"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-chart-line me-1"></i>Para Birimine Göre Projeksiyon</span><span class="not">mevcut − bekleyen ödeme (ÖDENDİ hariç)</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo kn-tablo" id="knProjeksiyon" data-dinamik="kapali"><thead><tr><th>PB</th><th>Kaynak</th><th class="s">Mevcut</th><th class="s">Bekleyen Ödeme</th><th class="s">Kalan</th></tr></thead><tbody></tbody></table></div></div></div>
 </div>
         </div>
@@ -247,6 +501,32 @@
     <div class="na-panel" data-p="gunluk">
         <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>İşlem Günlüğü</span><span class="not" id="knGunlukNot"></span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:68vh"><table class="na-tablo kn-tablo kn-gunluk" id="knGunluk" data-dinamik="kapali"><thead><tr><th>Zaman</th><th>Kullanıcı</th><th>Şirket</th><th>Kayıt</th><th>İşlem</th><th>Açıklama</th></tr></thead><tbody></tbody></table></div></div></div>
     </div>
+
+    @* ===== gizli dosya seçiciler: satır dekontu / toplu dekont ===== *@
+    <input type="file" id="knSatirDosya" accept=".pdf,.jpg,.jpeg,.png" style="display:none" />
+    <input type="file" id="knTopluDosya" accept=".pdf,.jpg,.jpeg,.png" style="display:none" />
+
+    @* ===== Ödenenler listesi (tüm şirketler, ödenme tarihine göre) ===== *@
+    <div class="modal fade kn-modal" id="knOdenenModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header py-2"><h6 class="modal-title mb-0" style="font-size:.84rem"><i class="fas fa-check-double me-2 text-primary"></i>Ödenenler Listesi</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <div class="d-flex gap-2 align-items-end flex-wrap mb-2" style="font-size:.7rem">
+                <div><label class="form-label mb-0">Başlangıç</label><input type="date" class="form-control form-control-sm" id="kdnBas" /></div>
+                <div><label class="form-label mb-0">Bitiş</label><input type="date" class="form-control form-control-sm" id="kdnBit" /></div>
+                <div style="flex:1;min-width:200px"><label class="form-label mb-0">Ara</label><input class="form-control form-control-sm" id="kdnAra" placeholder="Kurum, ürün / hizmet, belge no…" /></div>
+                <button type="button" class="btn btn-primary btn-sm" id="kdnGetir"><i class="fas fa-search me-1"></i>Filtrele</button>
+                <span class="text-muted ms-auto" id="kdnNot"></span>
+            </div>
+            <div class="table-responsive"><table class="na-tablo" id="kdnTablo" data-dinamik="kapali" data-dikey="orta"><thead><tr><th>Firma</th><th>Ödenme Tarihi</th><th>Kurum</th><th>Ürün / Hizmet</th><th>Belge No</th><th class="s">Tutar</th><th>PB</th><th>Kur</th><th class="s">Tutar (₺)</th><th class="s">Ödenen Tutar</th><th>Ödeme Yöntemi</th><th>Dekont</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>
+        </div>
+    </div></div></div>
+
+    @* ===== Sütunlar: etkin sekmenin tablosunda görünecek sütunlar ===== *@
+    <div class="modal fade kn-modal" id="knSutunModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header py-2"><h6 class="modal-title mb-0" style="font-size:.84rem"><i class="fas fa-columns me-2 text-primary"></i>Görünecek Sütunlar · <span id="ksuSekme"></span></h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body"><div class="kn-sutun-liste" id="ksuListe"></div></div>
+        <div class="modal-footer py-2"><button type="button" class="btn btn-light btn-sm border me-auto" id="ksuHepsi"><i class="fas fa-rotate-left me-1"></i>Tümünü Göster</button><button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Vazgeç</button><button type="button" class="btn btn-primary btn-sm" id="ksuUygula"><i class="fas fa-check me-1"></i>Uygula</button></div>
+    </div></div></div>
 
     @* ===== çekmece: satır detayı / düzenleme / yeni kayıt ===== *@
     <div class="kn-perde" id="knPerde"></div>
@@ -278,14 +558,23 @@
     </div></div></div>
 
     @* ===== belge detayı (fatura / sipariş / cari bakiye / avans): başlık, kalemler, ödeme planı (kısmi ödeme oranları), mükerrer uyarıları ===== *@
-    <div class="modal fade kn-modal" id="knBelgeDetayModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+    <div class="modal fade kn-modal" id="knBelgeDetayModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl kdt-genis"><div class="modal-content">
         <div class="modal-header py-2"><h6 class="modal-title mb-0" style="font-size:.84rem"><i class="fas fa-file-invoice me-2 text-primary"></i><span id="kdtBaslik">Belge Detayı</span> <span class="kn-pill ms-2" id="kdtKurum"></span></h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-        <div class="modal-body">
+        @* 13 Kas 2026: iki bölme — solda kayıt detayı (süreç: talep eden / sisteme yükleyen / onaylayan, başlık, kalemler, ödeme planı), sağda belge görüntüsü (yüklenen belge aslı ya da sistem kaydından üretilen PDF: /Rapor79/FaturaPdf) *@
+        <div class="modal-body kdt-govde">
+          <div class="kdt-sol">
+            <div class="kdt-surec" id="kdtSurec"></div>
             <div class="na-ustbilgi mb-2" id="kdtBilgi"></div>
             <div id="kdtUyari"></div>
             <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-list me-1"></i>Belge Kalemleri</span><span class="not" id="kdtKalemNot"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo kn-kalem" id="kdtKalemler"><thead><tr><th>Kod</th><th>Kalem</th><th class="s">Miktar</th><th>Birim</th><th class="s">Birim Fiyat</th><th class="s">Tutar</th><th class="s">KDV</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
             <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-percent me-1"></i>Ödeme Planı · Bu Belgenin Satırları</span><span class="not" id="kdtPlanNot">belge tutarı sabit; satırlar oran ve tutar olarak izlenir, toplam belge tutarını aşamaz</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo kn-kalem" id="kdtPlan"><thead><tr><th>Kayıt</th><th>Şirket</th><th>Planlanan Ödeme</th><th class="s">Tutar</th><th class="s">Oran</th><th>Yöntem</th><th>Durum</th><th>Ödenme</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
             <div class="na-kart" id="kdtCariKart" style="display:none"><div class="na-kart-b"><span><i class="fas fa-scale-balanced me-1"></i>Cari Bakiye · Açık Kalemler</span><span class="not" id="kdtCariNot"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo kn-kalem" id="kdtCari"><thead><tr><th>Belge</th><th>No</th><th>Tarih</th><th>Vade</th><th class="s">Tutar</th><th class="s">Ödenen</th><th class="s">Kalan</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+          </div>
+          <div class="kdt-sag">
+            <div class="kdt-pdf-arac"><span class="kdt-pdf-etiket" id="kdtPdfEtiket"></span><span class="ms-auto d-flex gap-1"><button type="button" class="btn btn-light btn-sm border" id="kdtPdfYukle" title="Belge aslını (fatura PDF / tarama) bu satıra yükle; yüklenince pencere onu gösterir, yükleyen ve tarih kayda geçer"><i class="fas fa-file-upload me-1 text-primary"></i>Belge Aslını Yükle</button><a class="btn btn-light btn-sm border" id="kdtPdfAc" target="_blank" title="Belge görüntüsünü yeni sekmede aç / yazdır"><i class="fas fa-arrow-up-right-from-square me-1"></i>Yeni Sekmede Aç</a></span></div>
+            <iframe id="kdtPdf" title="Belge görüntüsü"></iframe>
+            <input type="file" id="kdtPdfDosya" accept=".pdf,.jpg,.jpeg,.png" style="display:none" />
+          </div>
         </div>
         <div class="modal-footer py-2"><span class="me-auto text-muted" style="font-size:.68rem" id="kdtOzet"></span><a class="btn btn-light btn-sm border" id="kdtModul" target="_blank" style="display:none"><i class="fas fa-arrow-up-right-from-square me-1"></i>Modülde Aç</a><button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Kapat</button></div>
     </div></div></div>
@@ -419,6 +708,7 @@
 </div>
 
 @section Scripts {
-<script src="/js/tablo-hizala.js?v=12"></script>
-<script src="/js/kasa-nakit.js?v=30"></script>
+<script src="/js/tablo-hizala.js?v=16"></script>
+<script src="/js/tablo-excel.js?v=16"></script>
+<script src="/js/kasa-nakit.js?v=63"></script>
 }

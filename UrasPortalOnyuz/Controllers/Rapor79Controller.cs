@@ -30,7 +30,7 @@ namespace WebApplication3.Controllers
         {
             ViewData["Title"] = "Kasa Nakit Akışı";
             ViewBag.Sirketler = NakitAkisOrnek.Sirketler.Select(s => new KeyValuePair<string, string>(s.DbName, s.Ad)).ToList();
-            ViewBag.VarsayilanSirket = NakitAkisOrnek.Sirketler.Any(s => s.DbName == sirket) ? sirket : sirket == "" || sirket == "tumu" || sirket == "konsolide" ? "" : "URASKIMYA";
+            ViewBag.VarsayilanSirket = NakitAkisOrnek.Sirketler.Any(s => s.DbName == sirket) ? sirket : "";   // 13 Kas 2026: şirket verilmediyse Tümü (Konsolide) açılır (eskiden URASKIMYA); doğrudan bağlantı ?sirket=… ile gelir
             ViewBag.Bas = (startDate ?? (DateTime.TryParse(bas, CultureInfo.InvariantCulture, DateTimeStyles.None, out var b1) ? b1 : DateTime.Today.AddDays(-30))).ToString("yyyy-MM-dd");
             ViewBag.Bit = (endDate ?? (DateTime.TryParse(bit, CultureInfo.InvariantCulture, DateTimeStyles.None, out var b2) ? b2 : DateTime.Today.AddDays(60))).ToString("yyyy-MM-dd");
             ViewBag.Sekme = sekme ?? "tumu";
@@ -245,6 +245,21 @@ namespace WebApplication3.Controllers
             return Json(new { success = r.ok, message = r.mesaj, rows = r.satirlar?.Select(m => { NakitAkisOrnek.BelgeleriDoldur(m); return SatirJson(m); }).ToList() });
         }
         /// <summary>Belge no tıklanınca: fatura / sipariş başlığı, kalemler, ödeme planı (kısmi ödemeler, oranlar), mükerrer uyarıları; Cari Bakiye satırında açık kalemler.</summary>
+        /// <summary>
+        /// Belge görüntüsü (belge no tıklanınca açılan pencerenin sağ yanı): satıra belge aslı ("Fatura" eki) yüklendiyse o dosya, yüklenmediyse sistem kaydından üretilen PDF (Data/FaturaGoruntu.cs).
+        /// Tarayıcıda gömülü açılır (inline); Türkçe karakterli dosya adı RFC 5987 ile.
+        /// </summary>
+        [HttpGet("FaturaPdf")]
+        public IActionResult FaturaPdf(string dbName, int docEntry)
+        {
+            var m = NakitAkisOrnek.Bul(Db(dbName), docEntry); if (m == null) return NotFound("Satır bulunamadı.");
+            var ek = NakitAkisOrnek.FaturaEki(m); byte[] veri; string ad, tip;
+            if (ek != null) { veri = ek.Veri; ad = ek.DosyaAdi; tip = string.IsNullOrEmpty(ek.IcerikTipi) ? "application/pdf" : ek.IcerikTipi; }
+            else { veri = FaturaGoruntu.Uret(NakitAkisOrnek.BelgeDetay(Db(dbName), docEntry)); ad = $"belge_{(string.IsNullOrEmpty(m.U_FaturaSiparisNo) ? docEntry.ToString() : m.U_FaturaSiparisNo)}.pdf"; tip = "application/pdf"; }
+            var cd = new Microsoft.Net.Http.Headers.ContentDispositionHeaderValue("inline"); cd.SetHttpFileName(ad);
+            Response.Headers[Microsoft.Net.Http.Headers.HeaderNames.ContentDisposition] = cd.ToString();
+            return File(veri, tip);
+        }
         [HttpGet("BelgeDetay")] public IActionResult BelgeDetay(string dbName, int docEntry) { var d = NakitAkisOrnek.BelgeDetay(Db(dbName), docEntry); return Json(d == null ? new { success = false, message = "Satır bulunamadı." } : (object)new { success = true, belge = d }); }
         /// <summary>Çekmecede "Belge Seç": carinin açık faturaları / siparişleri ve cari bakiyesi (satır fatura ya da siparişten değil cari bakiyeden de açılabilir).</summary>
         [HttpGet("CariBelgeler")] public IActionResult CariBelgeler(string dbName, string kurum, string tip) => Json(new { success = true, veri = NakitAkisOrnek.CariBelgeler(Db(dbName), kurum ?? "", tip ?? "") });
@@ -426,7 +441,7 @@ namespace WebApplication3.Controllers
             cikis = string.IsNullOrEmpty(m.U_CikisTalebi) ? null : new { islem = m.U_CikisTalebi, ibrazYeri = m.U_CikisIbrazYeri, belgeNo = m.U_CikisBelgeNo, talepEden = m.U_CikisTalepEden },
             yevmiye = string.IsNullOrEmpty(m.U_YevmiyeNo) ? null : MuhasebeOrnek.Json(MuhasebeOrnek.Bul(m.U_YevmiyeNo)), yevmiyeNo = m.U_YevmiyeNo,
             kurBilgi = m.U_ParaBirimi == "TRY" || string.IsNullOrEmpty(m.U_ParaBirimi) ? null : new { kaynak = m.U_KurKaynagi, tarih = m.U_KurTarihi?.ToString("yyyy-MM-dd"), not = m.U_KurNotu, kurFarki = m.U_KurFarkiFaturasi, tcmb = KurOrnek.TcmbKaynagi(m.U_KurKaynagi), ozet = KurOrnek.Ozet(m.U_ParaBirimi, m.U_KurTarihi, m.U_KurKaynagi, m.U_Kur) },
-            grupIciTur = m.U_GrupIciTur, grupIciGerekli = GrupIciBelgeOrnek.Gerekli(m), grupIciBelge = GrupIciBelgeOrnek.Json(GrupIciBelgeOrnek.BulSatir(m.DocEntry)),
+            kaynak = NakitAkisOrnek.KaynakAdi(m), oncelik = m.U_Oncelik, grupIciTur = m.U_GrupIciTur, grupIciTurSecildi = m.GrupIciTurSecildi, grupIciGerekli = GrupIciBelgeOrnek.Gerekli(m), grupIciBelge = GrupIciBelgeOrnek.Json(GrupIciBelgeOrnek.BulSatir(m.DocEntry)),
             ibraz = string.IsNullOrEmpty(m.U_IbrazBelgeNo) ? null : new { belgeNo = m.U_IbrazBelgeNo, tarih = m.U_IbrazTarihi?.ToString("yyyy-MM-dd") },
             makbuz = string.IsNullOrEmpty(m.U_MakbuzNo) ? null : new { no = m.U_MakbuzNo, link = MakbuzOrnek.Bul(m.U_MakbuzNo) != null ? "/Rapor79/Makbuz?no=" + Uri.EscapeDataString(m.U_MakbuzNo) : (string)null },
             talimat = string.IsNullOrEmpty(m.U_TalimatNo) ? null : (TalimatOrnek.Bul(m.U_TalimatNo) is OdemeTalimati tt ? new { no = tt.No, durum = tt.Durum, baslik = tt.Baslik, link = "/Rapor79/Talimat?no=" + Uri.EscapeDataString(tt.No) } : null),

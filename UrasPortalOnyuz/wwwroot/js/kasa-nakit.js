@@ -30,8 +30,17 @@
   const modalAc = el => bootstrap.Modal.getOrCreateInstance(el).show();
   const SEKME = { tumu: '', nakit: 'Nakit', cek: 'Çek', senet: 'Senet', havale: 'Havale / EFT', kredi: 'Kredi Kartı / Banka Kartı', mahsup: 'Mahsup', temlik: 'Temlik', yansitma: 'Yansıtma', diger: 'Diğer' };
   const YKEY = y => Object.keys(SEKME).find(k => SEKME[k] === y) || 'diger';
+  // Grup İçi İşlemler sekmesi (13 Kas 2026: "üçe bölmeye gerek yok"): fatura sahibi ≠ ödeyen şirket olan her ödeme (otomatik grup içi belge) + yöntemi Mahsup / Temlik / Yansıtma olan modül satırları tek sekmede; Diğer sekmesi kaldırıldı (satırları Tümü'nde)
+  const GRUP_YONTEM = ['Mahsup', 'Temlik', 'Yansıtma'];
+  const grupIciMi = r => !!(r.grupIciGerekli || r.grupIciBelge || GRUP_YONTEM.includes(r.yontem));
+  const sekmeSatir = (p, L) => p === 'tumu' ? L : p === 'grupici' ? L.filter(grupIciMi) : L.filter(r => r.yontem === SEKME[p]);
+  const sekmeAd = p => p === 'tumu' ? 'Tümü' : p === 'grupici' ? 'Grup İçi İşlemler' : SEKME[p];
   const yontemRozet = y => `<span class="kn-yontem ${YKEY(y)}">${esc(y === 'Kredi Kartı / Banka Kartı' ? 'Kredi / Banka Kartı' : y || '—')}</span>`;
   const DURUM_SINIF = { 'ÖDENDİ': 'odendi', 'Gecikti': 'gecikti', 'Özel Onay': 'ozel', 'Planlandı': 'planli', 'Bekliyor': '' };
+  // satır rengi (13 Kas 2026, eski görünüm): Planlandı mavi; Planlandı + Mutabık ya da muafiyetli (ödemeye hazır) sarı; Ödendi yeşil, Gecikti kırmızı, Özel Onay mor
+  const satirSinif = r => r.durum === 'Planlandı' && (r.mutabakat === 'Mutabık' || r.muafiyet) ? 'planli hazir' : (DURUM_SINIF[r.durum] || '');
+  // mutabakat muafiyeti: mutabakatı yapılamayan işlemler (değerler eski görünümle aynı; ekranda Title Case)
+  const MUAF = [['Vergi ödemesi', 'Vergi'], ['Kontör / Yakıt / Sertifika', 'Kontör / Yakıt'], ['Fatura (Elektrik/Su/Doğalgaz)', 'Fatura'], ['Diğer', 'Diğer']];   // kutuda kısa ad (sütuna sığar); tam ad ipucunda
   const durumRozet = d => rozet(d, d === 'ÖDENDİ' ? 'ok' : d === 'Gecikti' ? 'hata' : d === 'Planlandı' ? 'bilgi' : d === 'Özel Onay' ? 'notr' : 'bekle');
   const kontrolRozet = (k, x) => k === 'Uyumlu' ? '<span class="na-bs kn-kontrol-uyumlu" title="Planlanan tedarikçiye çıktı">Uyumlu</span>' : k === 'Farklı' ? `<span class="na-bs kn-kontrol-farkli" title="DİKKAT: plan ${esc(x?.planlananTedarikci)}, çıkış ${esc(x?.ibrazYeri)}">FARKLI → ${esc(x?.ibrazYeri)}</span>` : k === 'İbraz Bekliyor' ? '<span class="na-bs kn-kontrol-bekliyor">İbraz Bekliyor</span>' : k === 'Plansız İbraz' ? '<span class="na-bs kn-kontrol-plansiz">Plansız İbraz</span>' : '';
   const akibetRozet = a => rozet(a || '—', a === 'Planlandı' ? 'bilgi' : a === 'Ciro Edildi' ? 'notr' : (a || '').includes('Tahsil') ? 'ok' : a === 'Karşılıksız' ? 'hata' : 'bekle');
@@ -43,7 +52,11 @@
   const mukerrerRozet = r => mukerrerVar(r) ? `<span class="kn-mukerrer kn-belge-detay" title="${esc(r.plan.uyarilar.map(u => u.tip + ': ' + u.aciklama).join(' · '))}">MÜKERRER?</span>` : '';
   const onayBekliyor = r => r.onay && r.onay.durum === 'Onay Bekliyor';
 
-  let V = null, F = { sirket: kok.dataset.sirket || '', bas: kok.dataset.bas, bit: kok.dataset.bit, durum: '', satinalmaci: '', ara: '', kpi: '' }, acik = null;
+  // açılışta şirket: her zaman Tümü (Konsolide) — 13 Kas 2026 ("ilk açıldığında otomatik bu gelsin, Uras gelmesin; kişi isterse kendi seçsin"). Yalnız başka ekrandan gelen doğrudan bağlantı (?sirket=URASKIMYA …)
+  // o şirketle açar; sayfa yenilenince ya da geri / ileri ile dönülünce yine Tümü. Seçilen şirket adrese yazılmaz (aşağıda adresten de silinir).
+  const ilkSirket = (() => { try { const u = new URLSearchParams(location.search).get('sirket'), nav = (performance.getEntriesByType('navigation')[0] || {}).type; return u && !['tumu', 'konsolide'].includes(u) && (!nav || nav === 'navigate') ? (kok.dataset.sirket || '') : ''; } catch (e) { return ''; } })();
+  try { const u = new URL(location.href); if (u.searchParams.has('sirket')) { u.searchParams.delete('sirket'); history.replaceState(null, '', u); } } catch (e) { }
+  let V = null, F = { sirket: ilkSirket, sirketler: ilkSirket ? [ilkSirket] : [], bas: kok.dataset.bas, bit: kok.dataset.bit, durumlar: [], kisiler: [], ara: '', kpi: '' }, acik = null;
   const aktifSekme = () => ($('#knSekmeler button.aktif') || {}).dataset?.p || 'tumu';
   const bugun = () => V ? V.bugun : new Date().toISOString().slice(0, 10);
   const haftaSonu = () => { const h = new Date(bugun()); h.setDate(h.getDate() + 7); return h.toISOString().slice(0, 10); };
@@ -52,11 +65,16 @@
     odenen: r => r.durum === 'ÖDENDİ', kalan: r => r.durum !== 'ÖDENDİ', hafta: r => r.durum !== 'ÖDENDİ' && r.planlanan && r.planlanan >= bugun() && r.planlanan <= haftaSonu(), geciken: gecikmis,
     onay: onayBekliyor, mukerrer: mukerrerVar, avans: r => !!r.avansNo, talimatli: r => !!r.talimatNo && r.durum !== 'ÖDENDİ'
   };
-  const kisiUyar = r => !F.satinalmaci || r.satinalmaci === F.satinalmaci || r.talepEden === F.satinalmaci;
-  const satirlar = () => V.odemeler.filter(r => (!F.durum || r.durum === F.durum) && kisiUyar(r) && (!F.kpi || !KPI_F[F.kpi] || KPI_F[F.kpi](r)) && aramaUyar(r));
-  const aramaUyar = r => { const a = F.ara.trim().toLocaleLowerCase('tr-TR'); return !a || [r.kurum, r.faturaNo, r.urun, r.notlar, r.cekNolar, r.sirket, r.faturaSahibi, r.odeyenSirket, r.talimatNo, r.avansNo, r.belgeTipi, r.yontem, r.durum, r.islemTipi, r.satinalmaci, r.mutabakat, r.onay?.durum, r.onay?.onaylayan, r.makbuz?.no, r.yevmiyeNo, r.grupIci?.no, r.grupIci?.karsi, r.alanlar?.dekontNo, r.alanlar?.aliciIban, r.alanlar?.aliciBanka, r.alanlar?.kasa, r.grupIciBelge?.no, r.ibraz?.belgeNo, r.kurBilgi?.kaynak, String(r.docEntry)].join(' ').toLocaleLowerCase('tr-TR').includes(a); };
+  // çoklu seçim filtreleri: şirket (2+ seçiliyse istemcide; tek şirket sunucudan gelir), durum, temsilci / talep eden
+  const kisiUyar = r => !F.kisiler.length || F.kisiler.includes(r.satinalmaci) || F.kisiler.includes(r.talepEden);
+  const durumUyar = r => !F.durumlar.length || F.durumlar.includes(r.durum), sirketUyar = db => F.sirketler.length < 2 || F.sirketler.includes(db);
+  const temelUyar = r => sirketUyar(r.dbName) && durumUyar(r) && kisiUyar(r) && aramaUyar(r);
+  const satirlar = () => V.odemeler.filter(r => temelUyar(r) && (!F.kpi || !KPI_F[F.kpi] || KPI_F[F.kpi](r)));
+  const aramaUyar = r => { const a = F.ara.trim().toLocaleLowerCase('tr-TR'); return !a || [r.kurum, r.faturaNo, r.urun, r.notlar, r.cekNolar, r.sirket, r.faturaSahibi, r.odeyenSirket, r.talimatNo, r.avansNo, r.belgeTipi, r.yontem, r.durum, r.islemTipi, r.satinalmaci, r.mutabakat, r.onay?.durum, r.onay?.onaylayan, r.makbuz?.no, r.yevmiyeNo, r.kaynak, r.grupIci?.no, r.grupIci?.karsi, r.alanlar?.dekontNo, r.alanlar?.aliciIban, r.alanlar?.aliciBanka, r.alanlar?.kasa, r.grupIciBelge?.no, r.ibraz?.belgeNo, r.kurBilgi?.kaynak, String(r.docEntry)].join(' ').toLocaleLowerCase('tr-TR').includes(a); };
   const satirBul = d => V.odemeler.find(r => r.docEntry === d);
-  const satirYerlestir = row => { if (!row) return; const i = V.odemeler.findIndex(r => r.docEntry === row.docEntry); if (i >= 0) V.odemeler[i] = row; else V.odemeler.push(row); };
+  // kaynak adları ekranda kısa: Kasa Nakit Akışı → Nakit Akış, Planlı Düzenli Ödemeler → Planlı Ödemeler (13 Kas 2026)
+  const KAYNAK_AD = { 'Kasa Nakit Akışı': 'Nakit Akış', 'Planlı Düzenli Ödemeler': 'Planlı Ödemeler', 'İbraz (Çek Akıbeti)': 'İbraz', 'Çek Akıbeti': 'İbraz', 'Banka Hareketi (Finekra)': 'Gerçekleşen Ödemeler' }, kaynakDuzelt = row => { if (row) row.kaynak = KAYNAK_AD[row.kaynak] || row.kaynak || 'Nakit Akış'; return row; };
+  const satirYerlestir = row => { if (!row) return; kaynakDuzelt(row); const i = V.odemeler.findIndex(r => r.docEntry === row.docEntry); if (i >= 0) V.odemeler[i] = row; else V.odemeler.push(row); };
   const satirKaldir = d => { V.odemeler = V.odemeler.filter(r => r.docEntry !== d); };
   const sirketAdi = db => (V.sirketler.find(x => x.dbName === db) || {}).ad || db;
   const dSirketler = () => (V.grupSirketleri || V.sirketler.map(s => s.ad));
@@ -66,11 +84,11 @@
     if (!sessiz) $('#knKapsam').textContent = 'yükleniyor…';
     let r; try { r = await getJ(`/Rapor79/Veri?sirket=${encodeURIComponent(F.sirket)}&bas=${F.bas}&bit=${F.bit}`); } catch (e) { mesaj('danger', 'Veri yüklenemedi.'); return; }
     if (!r.success) { mesaj('danger', 'Veri yüklenemedi.'); return; }
-    V = r; A.veri = null;
-    const d = $('#knDurum'), mevcutD = d.value; d.innerHTML = '<option value="">Tümü</option>' + V.durumlar.map(x => `<option>${esc(x)}</option>`).join(''); d.value = mevcutD;
-    // Temsilci / Talep Eden: satınalma temsilcileri + satırlardaki talep edenler
-    const kisiler = [...new Set([...V.satinalmacilar, ...V.odemeler.map(r => r.talepEden)])].filter(Boolean).sort((a, b) => a.localeCompare(b, 'tr'));
-    const s = $('#knSatinalmaci'), mevcutS = s.value; s.innerHTML = '<option value="">Tümü</option>' + kisiler.map(x => `<option>${esc(x)}</option>`).join(''); s.value = mevcutS;
+    V = r; A.veri = null; V.odemeler.forEach(kaynakDuzelt);
+    // filtre seçenekleri (çoklu seçim kutuları): şirket, durum, temsilci / talep eden (satınalma temsilcileri + satırlardaki talep edenler)
+    SECENEK.sirket = V.sirketler.map(s => ({ v: s.dbName, ad: s.ad })); SECENEK.durum = V.durumlar.map(x => ({ v: x, ad: x }));
+    SECENEK.kisi = [...new Set([...V.satinalmacilar, ...V.odemeler.map(r => r.talepEden)])].filter(Boolean).sort((a, b) => a.localeCompare(b, 'tr')).map(x => ({ v: x, ad: x }));
+    csEtiketler();
     ciz();
   }
   // sabit başlıklar için üst boşluk: sayfanın üstünde sabit duran çubukların (top-header, sabit araç çubuğu) alt kenarı + kart başlığı yüksekliği
@@ -80,25 +98,34 @@
     let ust = 0; const band = 220;
     for (const e of document.querySelectorAll('.top-header, .toolbar-container, .rt-cubuk, [class*="sticky"]')) { if (kok.contains(e)) continue; const cs = getComputedStyle(e); if (cs.position !== 'sticky' && cs.position !== 'fixed') continue; const r = e.getBoundingClientRect(); if (r.width < 300 || r.top < -5 || r.top > band || r.height === 0) continue; ust = Math.max(ust, r.bottom); }
     kok.style.setProperty('--kn-sabit-ust', Math.round(ust) + 'px');
-    const kb = $('.na-panel.aktif > .na-kart > .na-kart-b'); if (kb) kok.style.setProperty('--kn-kartb', kb.offsetHeight + 'px');
+    const kb = $('.na-panel.aktif > .na-kart > .na-kart-b'); kok.style.setProperty('--kn-kartb', (kb ? kb.offsetHeight : 0) + 'px');
   }
   window.addEventListener('resize', sabitUstOlc);
+  // pencere / menü genişliği değişince Tümü tablosunun sütun ölçeği yeniden hesaplanır
+  let boyutZ = 0, sonKartW = 0;
+  const olcekYenile = () => { clearTimeout(boyutZ); boyutZ = setTimeout(() => { if (!V || !KOL[aktifSekme()]) return; const k = $('#knTablo-' + aktifSekme()).closest('.na-kart'); if (k && Math.abs(k.clientWidth - sonKartW) > 8) { sonKartW = k.clientWidth; Object.keys(PAY).forEach(x => { delete PAY[x]; delete PAY_N[x]; }); ciz(); } }, 200); };
+  window.addEventListener('resize', olcekYenile);
+  if (window.ResizeObserver) new ResizeObserver(olcekYenile).observe(kok);
   function ciz() {
     if (!V) return; if (typeof talepRozet === 'function') talepRozet();
     const L = satirlar();
-    const kapsam = $('#knKapsam'); kapsam.textContent = `${F.sirket ? sirketAdi(F.sirket) : 'Tüm Şirketler (Konsolide)'} · ${tarih(F.bas)} – ${tarih(F.bit)} · ${L.length} kayıt${F.kpi ? ' · kart filtresi açık' : ''}`; kapsam.title = kapsam.textContent;   // sekme çubuğunun sağ ucu; dar ekranda kısalır, tamamı ipucunda
+    // yöntem şeridinin sol ucu: şirket + kayıt sayısı; dönem üst şeritte başlığın altında; yöntem sekmelerinde filtreye uyan kayıt sayısı
+    const kapsam = $('#knKapsam'); kapsam.innerHTML = `<b>${esc(F.sirket ? sirketAdi(F.sirket) : 'Tüm Şirketler')}</b>${L.length} kayıt${F.kpi ? ' · kart filtresi açık' : ''}`; kapsam.title = `${F.sirket ? sirketAdi(F.sirket) : 'Tüm Şirketler (Konsolide)'} · ${tarih(F.bas)} – ${tarih(F.bit)} · ${L.length} kayıt`;
+    $('#knAltBaslik').textContent = `Ödeme Planı · ${tarih(F.bas)} – ${tarih(F.bit)}`;
+    $$('#knSekmeler button').forEach(b => { const n = b.querySelector('.n'); if (!n) return; const s = sekmeSatir(b.dataset.p, L).length; n.textContent = s; b.classList.toggle('sifir', !s); });
     kpi();
     const p = aktifSekme();
-    if (p === 'bakiye') cizBakiye(); else if (p === 'gunluk') cizGunluk(); else if (p === 'talimat') cizTalimatlar(); else if (p === 'aylik') cizAylik(); else cizTablo(p, L);
-    if (p === 'mahsup' || p === 'temlik' || p === 'yansitma') cizGrupOzet(p);
-    if (p === 'mahsup' || p === 'temlik') cizGib(p);
-    if (window.scrollY < 5) sabitUstOlc(); else { const kb = $('.na-panel.aktif > .na-kart > .na-kart-b'); if (kb) kok.style.setProperty('--kn-kartb', kb.offsetHeight + 'px'); }
+    if (!KOL[p]) $('#knSeciliOdeme').textContent = '₺0,00';
+    $('#knSekmeIslem').style.display = KOL[p] ? '' : 'none';   // işlem düğmeleri (Toplu Dekont, Çek / Senet Ekle, Talimat Oluştur, Yeni Ödeme Ekle) yalnız ödeme sekmelerinde
+    if (p === 'ozet') cizOzet(); else if (p === 'bakiye') cizBakiye(); else if (p === 'gunluk') cizGunluk(); else if (p === 'talimat') cizTalimatlar(); else if (p === 'aylik') cizAylik(); else cizTablo(p, L);
+    if (p === 'grupici') { cizGrupOzet(); cizGib(); }
+    if (window.scrollY < 5) sabitUstOlc(); else { const kb = $('.na-panel.aktif > .na-kart > .na-kart-b'); kok.style.setProperty('--kn-kartb', (kb ? kb.offsetHeight : 0) + 'px'); }
   }
   // üst kartlar: temel filtreler (durum / satınalmacı / arama) uygulanmış küme üzerinden; tıklanan kart ek filtre olur
   function kpi() {
-    const T = V.odemeler.filter(r => (!F.durum || r.durum === F.durum) && kisiUyar(r) && aramaUyar(r));
+    const T = V.odemeler.filter(temelUyar);
     const odenmemis = T.filter(r => r.durum !== 'ÖDENDİ'), odenen = T.filter(KPI_F.odenen), hafta = T.filter(KPI_F.hafta), geciken = T.filter(KPI_F.geciken), onay = T.filter(KPI_F.onay), muk = T.filter(KPI_F.mukerrer), av = T.filter(KPI_F.avans);
-    const tl = l => l.reduce((s, r) => s + r.tutarTL, 0), B = V.bakiyeler, nakit = B.filter(b => b.bankaKasa === 'BANKA' || b.bankaKasa === 'KASA').reduce((s, b) => s + b.tutarTL, 0), portfoy = B.filter(b => b.bankaKasa.includes('PORTFÖY')).reduce((s, b) => s + b.tutarTL, 0);
+    const tl = l => l.reduce((s, r) => s + r.tutarTL, 0), B = V.bakiyeler.filter(b => sirketUyar(b.dbName)), nakit = B.filter(b => b.bankaKasa === 'BANKA' || b.bankaKasa === 'KASA').reduce((s, b) => s + b.tutarTL, 0), portfoy = B.filter(b => b.bankaKasa.includes('PORTFÖY')).reduce((s, b) => s + b.tutarTL, 0);
     const portX = B.filter(b => b.bankaKasa.includes('PORTFÖY') && b.bankaKasa.includes('(X)')).reduce((s, b) => s + b.tutarTL, 0), portR = B.filter(b => b.bankaKasa.includes('PORTFÖY') && b.bankaKasa.includes('(R)')).reduce((s, b) => s + b.tutarTL, 0);
     const cekBekleyen = odenmemis.filter(r => r.yontem === 'Çek' || r.yontem === 'Senet');
     const K = [
@@ -116,36 +143,82 @@
     $('#knKpi').innerHTML = K.map(k => `<div class="${k.f !== undefined && k.f === F.kpi && k.f ? 'aktif' : ''}" style="--k:${k.k}" ${k.f !== undefined ? `data-kpi="${k.f}"` : `data-p="${k.p}"`} title="${k.f ? 'Tıkla: bu karta göre filtrele / kaldır' : k.p ? 'Sekmeye git' : 'Kart filtresini kaldır'}"><div class="l">${esc(k.l)}</div><div class="v">${k.v}</div><div class="s">${esc(k.s)}</div></div>`).join('');
   }
 
+  // ---------- ÖZET sekmesi (13 Kas 2026): üstteki kutucuklar buraya taşındı (kpi()); altında yönteme / duruma / şirkete göre dağılım. Temel filtreler (şirket, tarih, durum, temsilci, arama) uygulanır.
+  const KPI_AD = { odenen: 'Ödenen', kalan: 'Kalan Ödenecek', hafta: 'Bu Hafta Vadesi Gelen', geciken: 'Geciken', onay: 'Onay Bekleyen', mukerrer: 'Mükerrer Uyarısı', avans: 'Avans Satırları', talimatli: 'Talimatta' };
+  function cizOzet() {
+    const T = V.odemeler.filter(temelUyar), odendi = r => r.durum === 'ÖDENDİ', tl = l => l.reduce((s, r) => s + r.tutarTL, 0);
+    const grupla = (anahtar, sira) => { const m = new Map(); T.forEach(r => { const k = anahtar(r) || '—'; (m.get(k) || m.set(k, []).get(k)).push(r); }); const l = [...m.entries()]; return sira ? l.sort((a, b) => sira(a[0]) - sira(b[0]) || a[0].localeCompare(b[0], 'tr')) : l.sort((a, b) => tl(b[1]) - tl(a[1])); };
+    const yontemSira = y => { const i = Object.values(SEKME).indexOf(y); return i < 0 ? 99 : i; }, durumSira = d => { const i = (V.durumlar || []).indexOf(d); return i < 0 ? 99 : i; };
+    const Y = grupla(r => r.yontem, yontemSira), D = grupla(r => r.durum, durumSira), S = grupla(r => r.sirket), Kay = grupla(r => r.kaynak || 'Nakit Akış');
+    { const tk = $('#knOzetKaynak'); if (tk) { tk.tBodies[0].innerHTML = Kay.length ? Kay.map(([k, l]) => `<tr><td><span class="kn-ek-tur">${esc(k)}</span></td><td class="para sayac">${l.length}</td><td class="para">${para(tl(l))} ₺</td><td class="para">${para(tl(l.filter(r => !odendi(r))))} ₺</td></tr>`).join('') : '<tr><td colspan="4" class="na-bos text-center">Kayıt yok.</td></tr>'; tk.tFoot.innerHTML = Kay.length ? `<tr class="toplam"><td>TOPLAM</td><td class="para sayac">${T.length}</td><td class="para">${para(tl(T))} ₺</td><td class="para">${para(tl(T.filter(r => !odendi(r))))} ₺</td></tr>` : ''; } }
+    $('#knOzetYontem tbody').innerHTML = Y.length ? Y.map(([k, l]) => { const p = YKEY(k), sekmeVar = !!$(`#knSekmeler button[data-p="${p}"]`) && SEKME[p] === k; return `<tr class="${sekmeVar ? 'tik' : ''}" ${sekmeVar ? `data-sekme="${p}" title="${esc(k)} sekmesini aç"` : `title="Bu yöntemin ayrı sekmesi yok; kayıtlar Tümü sekmesinde"`}><td>${yontemRozet(k)}</td><td class="para sayac">${l.length}</td><td class="para">${para(tl(l))} ₺</td><td class="para">${para(tl(l.filter(odendi)))} ₺</td><td class="para">${para(tl(l.filter(r => !odendi(r))))} ₺</td></tr>`; }).join('') : '<tr><td colspan="5" class="na-bos text-center">Kayıt yok.</td></tr>';
+    $('#knOzetYontem tfoot').innerHTML = Y.length ? `<tr class="toplam"><td>TOPLAM</td><td class="para sayac">${T.length}</td><td class="para">${para(tl(T))} ₺</td><td class="para">${para(tl(T.filter(odendi)))} ₺</td><td class="para">${para(tl(T.filter(r => !odendi(r))))} ₺</td></tr>` : '';
+    $('#knOzetDurum tbody').innerHTML = D.length ? D.map(([k, l]) => `<tr><td>${durumRozet(k)}</td><td class="para sayac">${l.length}</td><td class="para">${para(tl(l))} ₺</td></tr>`).join('') : '<tr><td colspan="3" class="na-bos text-center">Kayıt yok.</td></tr>';
+    $('#knOzetDurum tfoot').innerHTML = D.length ? `<tr class="toplam"><td>TOPLAM</td><td class="para sayac">${T.length}</td><td class="para">${para(tl(T))} ₺</td></tr>` : '';
+    $('#knOzetSirket tbody').innerHTML = S.length ? S.map(([k, l]) => `<tr><td class="fw-bold">${esc(k)}</td><td class="para sayac">${l.length}</td><td class="para">${para(tl(l))} ₺</td><td class="para">${para(tl(l.filter(r => !odendi(r))))} ₺</td></tr>`).join('') : '<tr><td colspan="4" class="na-bos text-center">Kayıt yok.</td></tr>';
+    $('#knOzetSirket tfoot').innerHTML = S.length ? `<tr class="toplam"><td>TOPLAM</td><td class="para sayac">${T.length}</td><td class="para">${para(tl(T))} ₺</td><td class="para">${para(tl(T.filter(r => !odendi(r))))} ₺</td></tr>` : '';
+    $('#knOzetNot').textContent = `${F.sirketler.length ? F.sirketler.map(sirketAdi).join(', ') : 'Tüm Şirketler (Konsolide)'} · ${tarih(F.bas)} – ${tarih(F.bit)} · kutuya tıkla: o kayıtlar Tümü sekmesinde listelenir`;
+  }
+  kok.addEventListener('click', e => { const tr = e.target.closest('#knOzetYontem tr[data-sekme]'); if (tr) sekme(tr.dataset.sekme); });
+  // özet kartı filtresi açıkken tablo kartının başlığında rozet: tıklayınca filtre kalkar
+  kok.addEventListener('click', e => { if (e.target.closest('.kn-kpi-filtre')) { F.kpi = ''; ciz(); } });
   // ---------- sütunlar (sekmeye göre): [başlık, genişlik ağırlığı]; sabit tablo düzeni → tek ekrana sığar
   const K = (ad, w) => ({ ad, w });
-  const C_SEC = K('', 22), C_SIRA = K('Sıra', 26), C_PLAN = K('Planlanan Ödeme Tarihi', 90), C_SON = K('Son Ödeme Tarihi', 80), C_BELGE = K('Belge No · Belge Tipi', 96), C_KURUM = K('Ödenecek Cari · Ürün / Hizmet', 136), C_FS = K('Fatura Sahibi', 84), C_OD = K('Ödeyen Şirket', 84), C_TL = K('Tutar (₺) · Belge Oranı', 114), C_DURUM = K('Ödeme Durumu', 94), C_ODENME = K('Ödenme Tarihi', 72), C_ODENEN = K('Ödenen Tutar', 84), C_NOT = K('Not', 90), C_TALIMAT = K('Talimat', 76), C_ISLEM = K('', 26);
-  // Tümü sekmesi (9 Kas 2026): eski görünümün başlıkları ayrı sütun (İşlem Tipi, Belge Tarihi, Satınalmacı, Ürün / Hizmet, PB, Anlaşılan Kur, döviz Tutar, Toplam Ödenen, Ödenen PB, Mutabakat, Son Mutabakat Tarihi, Dekont) + yeni raporun sütunları (Son Ödeme, Fatura Sahibi, Ödeyen Şirket, Talimat). Kaynak Firma yok: Fatura Sahibi ile aynı bilgi (kullanıcı).
-  // Ağırlıklar piksel: toplam tablonun en küçük genişliği (cizTablo → min-width); dar ekranda yatay kayar, geniş ekranda %100 dolar.
+  // 13 Kas 2026 ("Tüm Yöntemler kısmındaki bilgiler sekmelerde de olsun … sekmeye tıkladığımda tüm bilgileri görebilmeliyim"): her yöntem sekmesi Tümü sekmesinin BÜTÜN sütunlarını taşır;
+  // yalnız "Ödeme Yöntemi" sütununun yerinde o yöntemin özel sütunları durur (Nakit: kasa / makbuz / onay · Havale: banka / IBAN / dekont no · Kart · Çek / Senet: belge, vade, dolaşım, akıbet, işlem · Mahsup / Temlik / Yansıtma: modül kaydı).
+  // Sıra (eski görünüm): #, İşlem Tipi, Fatura Sahibi, Ödeyen Şirket, Belge No … ; Mutabakat hücresinde son mutabakat tarihi + muafiyet, Dekont hücresinde yükleme, son sütunda düzenle / sil.
+  // Ağırlıklar piksel: cizTablo kart genişliğine göre ölçekler (KOL_SABIT sütunları ölçüsünü korur, öbürleri daralır ve metni sarılır) → menüler gizliyken 1920 px ekranda tek sayfa.
+  const KOL_ON = [K('', 26), K('Kaynak', 100), K('İşlem Tipi', 38), K('Fatura Sahibi', 74), K('Ödeyen Şirket', 70), K('Belge No · Tipi · Tarihi', 96), K('Planlanan · Son Ödeme Tarihi', 120), K('Kurum (Ödenecek Cari)', 114), K('Temsilci', 76), K('Öncelik', 46), K('Ürün / Hizmet', 160), K('Döviz Tutarı · Kur', 100), K('Tutar (₺)', 94)];
+  const KOL_SON = [K('Ödenme Tarihi · Dekont', 74), K('Ödenen Döviz · Kur', 92), K('Ödenen (₺)', 90), K('Durum', 80), K('Mutabakat', 88), K('Talimat', 56), K('Not', 110), K('', 36)];
+  const kolon = (...ozel) => [...KOL_ON, ...ozel, ...KOL_SON];
+  const belgeKol = ad => [K(`${ad} No · Keşideci`, 100), K(`${ad} Vadesi · ${ad} Tutarı`, 76), K('Dolaşım', 150), K('Akıbet · Plan Kontrolü', 84), K('Belge İşlemi · İbraz · GMY Onayı', 100)];
   const KOL = {
-    tumu: [K('', 26), K('Sıra', 28), K('İşlem Tipi', 38), K('Belge No · Belge Tipi', 92), K('Belge Tarihi', 72), K('Planlanan Ödeme Tarihi', 92), K('Son Ödeme Tarihi', 72), K('Kurum (Ödenecek Cari)', 130), K('Satınalmacı', 76), K('Ürün / Hizmet', 100), K('Fatura Sahibi', 76), K('Ödeyen Şirket', 76), K('PB', 28), K('Anlaşılan Kur', 70), K('Tutar', 92), K('Tutar (₺)', 96), K('Ödeme Yöntemi', 92), K('Ödenme Tarihi', 72), K('Toplam Ödenen', 92), K('Ödenen PB', 40), K('Ödeme Durumu', 88), K('Mutabakat', 72), K('Son Mutabakat Tarihi', 84), K('Dekont', 46), K('Talimat', 66), K('Not', 110), K('', 34)],
-    nakit: [C_SEC, C_SIRA, C_PLAN, C_SON, C_BELGE, C_KURUM, C_FS, C_OD, C_TL, K('Kasa', 92), K('Makbuz No · Muhasebe Fişi', 98), K('Nakit Onayı', 104), C_DURUM, C_ODENME, C_TALIMAT, C_ISLEM],
-    havale: [C_SEC, C_SIRA, C_PLAN, C_SON, C_BELGE, C_KURUM, C_FS, C_OD, C_TL, K('Banka Hesabımız', 104), K('Alıcı IBAN · Banka · Hesap Adı', 144), K('Dekont No', 72), C_DURUM, C_ODENME, C_TALIMAT, C_ISLEM],
-    kredi: [C_SEC, C_SIRA, C_PLAN, C_SON, C_BELGE, C_KURUM, C_FS, C_OD, C_TL, K('Kart', 118), K('Taksit', 70), K('Ekstre Dönemi', 86), C_DURUM, C_ODENME, C_TALIMAT, C_ISLEM],
-    cek: [C_SEC, C_SIRA, C_PLAN, C_SON, C_BELGE, K('Ödenecek Cari · Ürün / Hizmet', 126), C_FS, C_OD, K('Tutar (₺)', 94), C_DURUM, K('Çek No · Keşideci', 118), K('Çek Vadesi · Çek Tutarı', 88), K('Akıbet · Plan Kontrolü · Dolaşım', 140), K('Belge İşlemi · İbraz · GMY Onayı', 120), C_TALIMAT, C_ISLEM],
-    senet: [C_SEC, C_SIRA, C_PLAN, C_SON, C_BELGE, K('Ödenecek Cari · Ürün / Hizmet', 126), C_FS, C_OD, K('Tutar (₺)', 94), C_DURUM, K('Senet No · Keşideci', 118), K('Senet Vadesi · Senet Tutarı', 88), K('Akıbet · Plan Kontrolü · Dolaşım', 140), K('Belge İşlemi · İbraz · GMY Onayı', 120), C_TALIMAT, C_ISLEM],
-    mahsup: [C_SEC, C_SIRA, C_PLAN, C_SON, K('Mahsup No (Modül Kaydı)', 90), K('Ödenecek Cari · Ürün / Hizmet', 136), C_FS, C_OD, C_TL, C_DURUM, K('Mahsup Türü · Taraflar', 150), K('Mahsup Tutarı', 90), K('Mahsup Durumu · Muhasebe', 120), K('Kontrol', 80), K('Kayıt Bağı', 86), C_TALIMAT, C_ISLEM],
-    temlik: [C_SEC, C_SIRA, C_PLAN, C_SON, K('Temlik No (Modül Kaydı)', 90), K('Ödenecek Cari · Ürün / Hizmet', 136), C_FS, C_OD, C_TL, C_DURUM, K('Temlik Türü · İlk Eden → Nihai Alan', 150), K('Temlik Tutarı', 90), K('Temlik Durumu · İmza · Muhasebe', 120), K('Kontrol', 80), K('Kayıt Bağı', 86), C_TALIMAT, C_ISLEM],
-    yansitma: [C_SEC, C_SIRA, C_PLAN, C_SON, K('Yansıtma No (Modül Kaydı)', 90), K('Ödenecek Cari · Ürün / Hizmet', 136), C_FS, C_OD, C_TL, C_DURUM, K('Tür · Yansıtan → Yansıtılan', 150), K('Genel Toplam', 90), K('Durum · Fatura / Entegrasyon', 120), K('Kontrol', 80), K('Kayıt Bağı', 86), C_TALIMAT, C_ISLEM],
-    diger: [C_SEC, C_SIRA, C_PLAN, C_SON, C_BELGE, C_KURUM, C_FS, C_OD, C_TL, K('İşlem Tipi', 56), C_DURUM, C_ODENME, C_ODENEN, C_TALIMAT, C_NOT, C_ISLEM]
+    tumu: kolon(K('Ödeme Yöntemi', 76)),
+    nakit: kolon(K('Kasa', 68), K('Makbuz No · Muhasebe Fişi', 90), K('Nakit Onayı', 100)),
+    havale: kolon(K('Banka Hesabımız', 116), K('Alıcı IBAN · Banka · Hesap Adı', 130), K('Dekont No', 66)),
+    kredi: kolon(K('Kart', 112), K('Taksit', 74), K('Ekstre Dönemi', 80)),
+    // Dolaşım (13 Kas 2026): belgenin planlanan yolu adım adım; ibraz penceresi planın son adımını hazır getirir ve kilitler
+    cek: kolon(...belgeKol('Çek')),
+    senet: kolon(...belgeKol('Senet')),
+    // Grup İçi İşlemler (13 Kas 2026): Mahsup / Temlik / Yansıtma tek sekmede; fatura sahibi ≠ ödeyen şirket olan ödeme buraya otomatik düşer, İşlem Türü sütunundan Mahsup / Temlik / Yansıtma seçilir
+    grupici: kolon(K('Ödeme Yöntemi', 72), K('İşlem Türü', 84), K('Belge / Kayıt No', 80), K('Taraflar · İşlem Şekli', 116), K('İşlem Tutarı', 74), K('İşlem Durumu · Muhasebe', 92), K('Kayıt Bağı', 70))
   };
+  // sabit seçenekli sütunlarda (13 Kas 2026: "sabit seçenek olan sütunları sığacak şekilde tasarla, Merkez / Fabrika yaz") kutuda kısa ad görünür, tam değer ipucunda ve kayıtta:
+  // Merkez Kasa → Merkez · Ziraat Bankası · TR33 … 0123 45 → Ziraat · 2345 · Garanti Bonus **** 4512 → Garanti · 4512; sütun genişlikleri en uzun kısa ada göre sabit (KOL_SABIT)
+  const bankaKisa = b => { const k = String(b || '').replace(/ Bankası$/, ''); return k.length < 4 ? String(b || '') : k; };
+  const KISA = { kasa: x => String(x).replace(/ Kasa(sı)?$/, ''), hesap: x => { const [b, iban] = String(x).split(' · '); return bankaKisa(b) + ' · ' + (iban || '').replace(/\s/g, '').slice(-4); }, kart: x => { const [ad, son] = String(x).split(/\s*\*+\s*/); const w = ad.split(' '); return (w[1] === 'Bankası' ? w[0] + ' ' + w[1] : w[0]) + (son ? ' · ' + son : ''); } };
   const alan = (r, ad, deger, tip, secenekler, kisaGoster) => tip === 'select' ? `<select class="kn-alan" data-alan="${ad}" title="${esc(deger || '')}"><option value="">—</option>${secenekler.map(o => `<option value="${esc(o)}" ${o === deger ? 'selected' : ''}>${esc(kisaGoster ? kisaGoster(o) : o)}</option>`).join('')}</select>` : `<input type="text" class="kn-alan" data-alan="${ad}" value="${esc(deger)}" title="${esc(deger || '')}" placeholder="…">`;
   const yigin = (liste, fn) => liste.length ? liste.map(x => `<span class="yb">${fn(x)}</span>`).join('') : bos;
   const belgeEtiket = r => r.belgeTipi === 'Cari Bakiye' || (!r.faturaNo && r.belgeTipi !== 'Avans') ? 'Cari Bakiye' : (r.faturaNo || r.avansNo || '—');
   // çek / senet satırında ekrandan ibraz: ödenmemiş, çıkış talebi olmayan, planlı (ya da dolaşımı bitmemiş) belgesi olan satır
   const ibrazUygun = r => (r.yontem === 'Çek' || r.yontem === 'Senet') && r.durum !== 'ÖDENDİ' && !r.cikis && (r.belgeler || []).some(x => !belgeCikmis(x) || (x.adimToplam > 0 && x.gerceklesen < x.adimToplam));
+  // Dolaşım hücresi (Çek / Senet sekmeleri): belgenin planlanan yolu. Plan varsa: ilk sahip → her adımın alanı (gerçekleşen yeşil, planlı sarı; son durak kalın) + "n/m adım · son adım";
+  // plan yoksa: portföy sahibi → ödenecek cari (doğrudan ciro) + Dolaşım Planla; belge çıkmışsa akıbet → ibraz yeri. Zincire tıklayınca dolaşım planı penceresi açılır (adım gerçekleştir / planı değiştir).
+  const adimOku = (a, k) => a[k] ?? a[k.charAt(0).toLowerCase() + k.slice(1)];
+  const planSonAdim = x => { const ad = (x.adimlar || []).filter(a => adimOku(a, 'Tur') !== 'Grup İçi Ciro'); return ad.length ? ad[ad.length - 1] : null; };
+  function dolasimZinciri(r, x) {
+    // adım adım: her adım kendi satırında "n. Eden → Alan" + altında tür · durum / tarih; gerçekleşen yeşil ✓, sıradaki (ilk planlı) vurgulu
+    const ad = x.adimlar || [], bas = `<span class="kn-dz-b">${esc(x.no)}</span>`;
+    const satir = (n, eden, alan, tur, durum, sinif) => `<span class="kn-dz-a ${sinif}"><b>${n}.</b> ${esc(eden)} <i class="fas fa-arrow-right"></i> ${esc(alan)}<small>${esc(tur)} · ${durum}</small></span>`;
+    if (ad.length) {
+      const ilkPlan = ad.find(a => adimOku(a, 'Durum') !== 'Gerçekleşti');
+      const z = ad.map(a => { const g = adimOku(a, 'Durum') === 'Gerçekleşti', tur = adimOku(a, 'Tur'); return satir(adimOku(a, 'Sira'), adimOku(a, 'Eden'), adimOku(a, 'Alan') || (tur === 'Bankaya İbraz' ? 'Banka (Tahsil)' : '—'), tur, g ? `<i class="fas fa-check"></i> ${tarih(adimOku(a, 'GercekTarih'))}${adimOku(a, 'BelgeNo') ? ' · ' + esc(adimOku(a, 'BelgeNo')) : ''}` : `plan ${tarih(adimOku(a, 'PlanTarih'))}`, g ? 'ok' : a === ilkPlan ? 'plan sirada' : 'plan'); }).join('');
+      return `<a class="kn-dz kn-dolasim-ac" data-cek="${x.cekDocEntry}" title="Dolaşım planı: ${esc(x.dolasim || '')} · ${x.gerceklesen}/${x.adimToplam} adım gerçekleşti · tıkla: planı aç, adım gerçekleştir">${bas}${z}</a>`;
+    }
+    if (belgeCikmis(x)) return `<span class="kn-dz">${bas}${satir(1, x.kaynakSirket || x.sahip || r.odeyenSirket, x.ibrazYeri || '—', x.akibet, '<i class="fas fa-check"></i> plansız (doğrudan)', 'ok')}</span>`;
+    const baska = x.sahip && x.sahip !== r.odeyenSirket;
+    return `<a class="kn-dz kn-dolasim-ac" data-cek="${x.cekDocEntry}" title="Dolaşım planı yok: ibrazda belge ${esc(x.sahip || r.odeyenSirket)} portföyünden doğrudan çıkar · tıkla: grup içi dolaşım planı kur">${bas}${satir(1, x.sahip || r.odeyenSirket, x.planlananTedarikci || r.kurum, 'Doğrudan Ciro', baska ? '<b class="text-danger">başka portföy: dolaşım planlayın</b>' : 'plan yok · tıkla: planla', 'plan sirada')}</a>`;
+  }
   function hucreler(r, p, no) {
     const a = r.alanlar || {}, g = r.grupIci, b = r.belgeler || [], av = r.avans, pl = r.plan || {}, o = r.onay;
     const cikmis = b.filter(belgeCikmis), belgesiz = (r.yontem === 'Çek' || r.yontem === 'Senet') && !b.length;
     const secTitle = r.durum === 'ÖDENDİ' ? 'disabled title="Ödendi"' : r.talimat && r.talimat.durum !== 'İptal' && r.talimat.durum !== 'Gerçekleşti' ? `disabled title="${esc(r.talimat.no)} talimatında (${esc(r.talimat.durum)})"` : r.cikis ? 'disabled title="Çek çıkış talebi: GMY onayı ile işlenir, talimata girmez"' : cikmis.length ? `disabled title="Belge plan dışı çıkmış: ${esc(cikmis.map(x => x.no + ' ' + x.akibet + (x.ibrazYeri ? ' → ' + x.ibrazYeri : '')).join(', '))} · Takip Paneli'nde kontrol edin"` : belgesiz ? `disabled title="Talimat için önce portföyden ${esc(r.yontem.toLocaleLowerCase('tr-TR'))} seçin"` : r.yontem === 'Nakit' && (!o || o.durum !== 'Onaylandı') ? 'disabled title="Nakit ödeme onaylanmadan talimata alınmaz"' : 'title="Talimat için seç"';
-    const sec = `<td><input type="checkbox" class="kn-sec form-check-input" ${secTitle}></td>`;
+    // 13 Kas 2026: kutucuk her satırda işaretlenebilir (Seçili Ödeme toplamı, toplu dekont); talimata alınamayan satır data-engel taşır, talimat hazırlanırken ayıklanır
+    const sec = `<td class="sayac"><input type="checkbox" class="kn-sec form-check-input" ${secTitle.replace(/^disabled /, 'data-engel="1" ')}><span class="kn-no" title="Sekme içi sıra · kayıt #${r.docEntry}">${no ?? r.sira ?? ''}</span></td>`;   // seçim kutusu üstte, sıra no altında (13 Kas 2026: "birleştir altlı üstlü")
     const sira = `<td title="Sekme içi sıra · kayıt #${r.docEntry}">${no ?? r.sira ?? ''}</td>`, plan = `<td><input type="date" class="kn-alan kn-tarih" data-alan="U_PlanlananTarih" value="${r.planlanan || ''}" title="Planlanan ödeme tarihi"></td>`;
     const son = `<td class="${r.sonOdeme && r.sonOdeme < bugun() && r.durum !== 'ÖDENDİ' ? 'gec' : ''}" title="${r.sonOdeme ? 'Son ödeme tarihi ' + tarih(r.sonOdeme) + (r.sonOdeme < bugun() && r.durum !== 'ÖDENDİ' ? ' · vadesi geçti' : '') : 'Son ödeme tarihi girilmemiş'}">${tarih(r.sonOdeme)}</td>`;
-    const belge = `<td class="sol" title="${esc(r.belgeTipi || '')} ${esc(r.faturaNo || '')} · tıkla: belge detayı">${r.belgeTipi === 'Cari Bakiye' || (!r.faturaNo && !r.avansNo) ? `<a class="kn-belge-link kn-belge-detay">Cari Bakiye</a>` : `<a class="kn-belge-link kn-belge-detay">${esc(r.faturaNo || r.avansNo)}</a>`}${mukerrerRozet(r) ? ' ' + mukerrerRozet(r) : ''}<small>${esc(r.belgeTipi || '')}${pl.taksit ? ' · taksit ' + esc(pl.taksit) : ''}</small></td>`;
+    // belge no · belge tipi · belge tarihi tek hücrede (13 Kas 2026: "belge tarihi bilgisini belge no belge tipinin altına ekle")
+    const belge = `<td class="sol" data-k="${esc(r.faturaNo || r.avansNo || 'Cari Bakiye')} ${esc(r.belgeTipi || '')} ${r.belgeTarihi ? tarih(r.belgeTarihi) : ''}" title="${esc(r.belgeTipi || '')} ${esc(r.faturaNo || '')}${r.belgeTarihi ? ' · belge tarihi ' + tarih(r.belgeTarihi) : ''} · tıkla: belge detayı">${r.belgeTipi === 'Cari Bakiye' || (!r.faturaNo && !r.avansNo) ? `<a class="kn-belge-link kn-belge-detay">Cari Bakiye</a>` : `<a class="kn-belge-link kn-belge-detay">${esc(r.faturaNo || r.avansNo)}</a>`}${mukerrerRozet(r) ? ' ' + mukerrerRozet(r) : ''}<small>${esc(r.belgeTipi || '')}${pl.taksit ? ' · taksit ' + esc(pl.taksit) : ''}</small><span class="kn-son" title="Belge tarihi"><i>tarih</i> ${tarih(r.belgeTarihi)}</span></td>`;
     // avans satırında konu yazılmaz (çekmecede görünür): alt satır yalnız avans no
     // avans satırı sığacak şekilde: üst satır kısa ad ("Nakit Avans" / "Şahsi Avans") + rozet, alt satır departman · avans no; konu yalnız çekmecede
     const avDep = av ? ((r.kurum || '').split(' · ')[1] || av.departman || '') : '';
@@ -164,15 +237,15 @@
     const odenenDoviz = r.odenen && r.odenenPB && r.odenenPB !== 'TRY';
     const odenme = `<td>${tarih(r.odenme)}</td>`, odenen = `<td class="para" title="${odenenDoviz ? esc(`${para(r.odenen)} ${r.odenenPB} × ${r.kur} (${r.kurBilgi?.kaynak || 'kur'}${r.kurBilgi?.tarih ? ' ' + tarih(r.kurBilgi.tarih) : ''}) = ${para(r.odenenTL ?? r.odenen * r.kur)} ₺`) : ''}">${r.odenen ? `${para(r.odenenTL ?? r.odenen)} ₺${odenenDoviz ? `<small>${para(r.odenen)} ${esc(r.odenenPB)} · ${esc(String(r.kur))}${r.kurBilgi?.kaynak ? ' ' + esc(r.kurBilgi.kaynak.replace('TCMB ', 'TCMB ').replace('Döviz ', '')) : ''}</small>` : ''}` : '—'}</td>`;
     const talimat = `<td>${r.talimat ? talimatRozet(r.talimat) : bos}</td>`;
-    const not = `<td class="sol not" title="${esc(r.notlar || '')}">${esc(r.notlar || '')}</td>`, islem = `<td><button type="button" class="btn btn-light btn-sm py-0 px-1 border kn-ac" title="Detay / düzenle / işlemler"><i class="fas fa-pen"></i></button></td>`;
-    if (p === 'tumu') {
+    const not = `<td class="sol not" title="${esc(r.notlar || '')}"><div class="kn-kes">${esc(r.notlar || '')}</div></td>`, islem = `<td><button type="button" class="btn btn-light btn-sm py-0 px-1 border kn-ac" title="Detay / düzenle / işlemler"><i class="fas fa-pen"></i></button></td>`;
+    // ---- ortak sütunlar (13 Kas 2026): Tümü sekmesinin bütün sütunları her yöntem sekmesinde de çizilir (ON … yönteme özel sütunlar … SON)
       // eski görünümün başlıkları ayrı sütun: işlem tipi, belge tarihi, satınalmacı, ürün / hizmet, PB, anlaşılan kur, döviz tutar, ödenen PB, mutabakat + tarihi, dekont
       // Kaynak Firma sütunu yok (9 Kas 2026, kullanıcı: "Fatura Sahibi ve Kaynak Firma aynı şey"): kaydın şirketi Fatura Sahibi sütununda; dbName başlıkta
       const islemTipi = `<td title="İşlem tipi: ${esc(r.islemTipi || '—')}">${r.islemTipi ? `<b>${esc(r.islemTipi)}</b>` : bos}</td>`;
       const belgeTarihi = `<td title="Belge tarihi${r.belgeTarihi ? ' ' + tarih(r.belgeTarihi) : ' girilmemiş'}">${tarih(r.belgeTarihi)}</td>`;
       const kurumSade = av ? kurum : `<td class="sol kurum" title="${esc(r.kurum)}">${esc(r.kurum)}</td>`;
       const satin = `<td class="sol" title="Satınalma temsilcisi: ${esc(r.satinalmaci || '—')}${r.talepEden ? ' · talep eden: ' + esc(r.talepEden) : ''}">${r.satinalmaci ? esc(r.satinalmaci) : bos}</td>`;
-      const urun = `<td class="sol" title="${esc(r.urun || '')}">${r.urun ? esc(r.urun) : bos}</td>`;
+      const urun = `<td class="sol urun" title="${esc(r.urun || '')}">${r.urun ? `<div class="kn-kes">${esc(r.urun)}</div>` : bos}</td>`;
       const pb = `<td title="Para birimi ${esc(r.pb || 'TRY')}">${esc(pbAd(r.pb))}</td>`;
       const dovizli = r.pb && r.pb !== 'TRY';
       // kur: üstte anlaşılan / uygulanan kur, altta kısa kaynak (TCMB Alış · Anlaşmalı …); kur günü ve ayrıntı başlıkta
@@ -180,89 +253,198 @@
       const kur = `<td class="para" title="${dovizli ? esc((r.kurBilgi && r.kurBilgi.ozet) || ('Kur ' + r.kur)) + (r.kurBilgi && r.kurBilgi.tarih ? ' · kur günü ' + tarih(r.kurBilgi.tarih) : '') : 'TL ödeme: kur uygulanmaz'}">${dovizli ? Number(r.kur).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + (kurKaynak ? `<small>${esc(kurKaynak)}</small>` : '') : bos}</td>`;
       const tutarDoviz = `<td class="para" title="Belge para biriminde tutar: ${esc(para(r.tutar) + ' ' + (r.pb || 'TRY'))}">${para(r.tutar)} ${esc(pbAd(r.pb))}${kf}</td>`;
       const tlSade = `<td class="para" title="${esc(para(r.tutarTL))} ₺${pl.faturaTutari ? ' · belge ' + para(pl.faturaTutari) + ' ' + esc(pbAd(r.pb)) + ' · bu satır %' + (pl.oran ?? 100) + (pl.kalan != null ? ' · kalan ' + para(pl.kalan) : '') : ''}">${para(r.tutarTL)} ₺${oranYazi && (pl.oran ?? 100) !== 100 ? `<small>belge oranı ${oranYazi}</small>` : ''}</td>`;
-      const yontem = `<td>${yontemRozet(r.yontem)}${o ? '<small>' + onayRozet(o) + '</small>' : ''}</td>`;
+      const yontem = `<td data-k="${esc(r.yontem || '')}">${yontemRozet(r.yontem)}${o && (o.durum === 'Reddedildi' || (o.tip === 'cekCikis' && o.durum !== 'Onaylandı')) ? '<small>' + onayRozet(o) + '</small>' : ''}</td>`;   // "Onaylandı" rozeti yazılmaz (13 Kas 2026: Planlandı durumu onayı zaten anlatır); Onay Bekliyor / Reddedildi / GMY uyarıları kalır
       // toplam ödenen: TL karşılığı üstte, dövizli ödemede altta yalnız döviz tutarı (kur ve PB kendi sütunlarında)
       const toplamOdenen = `<td class="para" title="${odenenDoviz ? esc(`${para(r.odenen)} ${r.odenenPB} × ${r.kur} = ${para(r.odenenTL ?? r.odenen * r.kur)} ₺`) : r.odenen ? esc(para(r.odenenTL ?? r.odenen) + ' ₺') : 'Ödeme yapılmadı'}">${r.odenen ? `${para(r.odenenTL ?? r.odenen)} ₺${odenenDoviz ? `<small>${para(r.odenen)} ${esc(pbAd(r.odenenPB))}</small>` : ''}` : '—'}</td>`;
       const odenenPb = `<td title="Ödenen tutarın para birimi">${r.odenen ? esc(pbAd(r.odenenPB || 'TRY')) : bos}</td>`;
       const durumSade = `<td><select class="kn-alan kn-durum" data-alan="U_Durum">${V.durumlar.map(d => `<option ${d === r.durum ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select></td>`;
-      const mutabakat = `<td><span class="kn-mutabakat ${r.mutabakat === 'Mutabık' ? 'ok' : r.mutabakat ? 'hata' : 'yok'}" title="Mutabakat durumu${r.mutabakatTarihi ? ' · son mutabakat ' + tarih(r.mutabakatTarihi) : ''}">${esc(r.mutabakat || 'Mutabakat Yok')}</span></td>`;
+      const mutabakat = `<td data-k="${esc(r.mutabakat || 'Mutabakat Yok')}"><span class="kn-mutabakat ${r.mutabakat === 'Mutabık' ? 'ok' : r.mutabakat ? 'hata' : 'yok'}" title="Mutabakat durumu${r.mutabakatTarihi ? ' · son mutabakat ' + tarih(r.mutabakatTarihi) : ''}">${esc(r.mutabakat || 'Mutabakat Yok')}</span>${r.mutabakatTarihi ? `<span class="kn-mut-tarih" title="Son mutabakat tarihi">${tarih(r.mutabakatTarihi)}</span>` : ''}<select class="kn-muaf ${r.muafiyet ? 'dolu' : ''}" title="Mutabakatı yapılamayan işlemler için muafiyet${r.muafiyet ? ': ' + esc(r.muafiyet) : ''} (muafiyetli kayıt mutabık gibi ödemeye hazırdır)"><option value="">Muafiyet Yok</option>${MUAF.map(([v, ad]) => `<option value="${esc(v)}" title="${esc(v)}" ${v === r.muafiyet ? 'selected' : ''}>${esc(ad)}</option>`).join('')}${r.muafiyet && !MUAF.some(m => m[0] === r.muafiyet) ? `<option selected>${esc(r.muafiyet)}</option>` : ''}</select></td>`;
       const mutTarih = `<td title="Son mutabakat tarihi${r.mutabakatTarihi ? '' : ': mutabakat yapılmamış'}">${tarih(r.mutabakatTarihi)}</td>`;
       const dk = r.dekontlar || [], dosyali = dk.filter(d => d.dosyaVar), dkBaslik = dk.map(d => (d.tur || 'Dekont') + ': ' + d.ad).join(' · ');
-      const dekont = `<td title="${dk.length ? esc(dkBaslik) + (dosyali.length === 1 ? ' · tıkla: dosyayı aç' : ' · tıkla: çekmece › Ekler') : 'Ek yok · çekmece › Ekler bölümünden yüklenir'}">${dk.length ? (dosyali.length === 1 ? `<a href="${esc(dosyali[0].yol)}" target="_blank" class="fw-bold"><i class="fas fa-paperclip"></i> ${dk.length} ek</a>` : `<a class="kn-ac fw-bold"><i class="fas fa-paperclip"></i> ${dk.length} ek</a>`) : bos}</td>`;
-      return [sec, sira, islemTipi, belge, belgeTarihi, plan, son, kurumSade, satin, urun, fs, od, pb, kur, tutarDoviz, tlSade, yontem, odenme, toplamOdenen, odenenPb, durumSade, mutabakat, mutTarih, dekont, talimat, not, islem];
-    }
+      // dekont: ek varsa bağlantı (tek dosya doğrudan açılır), her satırda yükleme düğmesi (dosya seç → Dekont olarak eklenir)
+      const dekont = `<td data-k="${dk.length ? 'Var' : 'Yok'}" title="${dk.length ? esc(dkBaslik) + (dosyali.length === 1 ? ' · tıkla: dosyayı aç' : ' · tıkla: çekmece › Ekler') : 'Ek yok · düğme: dekont yükle'}">${dk.length ? (dosyali.length === 1 ? `<a href="${esc(dosyali[0].yol)}" target="_blank" class="fw-bold d-block"><i class="fas fa-paperclip"></i> ${dk.length} ek</a>` : `<a class="kn-ac fw-bold d-block"><i class="fas fa-paperclip"></i> ${dk.length} ek</a>`) : ''}<button type="button" class="kn-dekont-yukle" title="Bu satıra dekont yükle (PDF / görüntü)"><i class="fas fa-upload"></i></button></td>`;
+      // Ödenme Tarihi + Dekont tek sütun (13 Kas 2026: "ödeme tarihi ve dekont sütununu birleştir"): üstte ödenme tarihi, altında ek bağlantısı (tek dosya doğrudan açılır) ve dekont yükleme düğmesi; süzgeçte "dekont var" / "dekont yok" yazılabilir
+      const dkBag = dk.length ? (dosyali.length === 1 ? `<a href="${esc(dosyali[0].yol)}" target="_blank" class="fw-bold" title="${esc(dkBaslik)} · tıkla: dosyayı aç"><i class="fas fa-paperclip"></i> ${dk.length}</a>` : `<a class="kn-ac fw-bold" title="${esc(dkBaslik)} · tıkla: çekmece › Ekler"><i class="fas fa-paperclip"></i> ${dk.length}</a>`) : '';
+      const odenmeDekont = `<td data-k="${r.odenme ? tarih(r.odenme) : ''} Dekont ${dk.length ? 'Var' : 'Yok'}" title="Ödenme tarihi${r.odenme ? ' ' + tarih(r.odenme) : ': ödenmedi'} · ${dk.length ? dk.length + ' ek (' + esc(dkBaslik) + ')' : 'dekont yok'}">${tarih(r.odenme)}<span class="kn-dk">${dkBag}<button type="button" class="kn-dekont-yukle" title="Bu satıra dekont yükle (PDF / görüntü)"><i class="fas fa-upload"></i></button></span></td>`;
+      // Toplam Ödenen + Ödenen PB tek sütun (13 Kas 2026: "ödenen (₺) - döviz - kur aynı mantıkta birleştir"): üstte ödenen TL; dövizli ödemede altında döviz tutarı ve "kur …" (kur kaynağı satır çekmecesinde)
+      const odenenTek = `<td class="para" data-k="${r.odenen ? para(r.odenenTL ?? r.odenen) + ' ₺ ' + esc(r.odenenPB || 'TRY') + (odenenDoviz ? ' ' + para(r.odenen) + ' ' + esc(pbAd(r.odenenPB)) + ' kur ' + r.kur : '') : ''}" title="${r.odenen ? esc(para(r.odenenTL ?? r.odenen)) + ' ₺' + (odenenDoviz ? ' = ' + esc(para(r.odenen) + ' ' + r.odenenPB) + ' × ' + esc(String(r.kur)) + (r.kurBilgi && r.kurBilgi.kaynak ? ' (' + esc(r.kurBilgi.kaynak) + ')' : '') : '') : 'Ödeme yapılmadı'}">${r.odenen ? `${para(r.odenenTL ?? r.odenen)} ₺${odenenDoviz ? `<small class="kn-doviz"><b>${para(r.odenen)} ${esc(pbAd(r.odenenPB))}</b></small><small class="kn-doviz">kur <b>${Number(r.kur).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</b></small>` : ''}` : '—'}</td>`;
+      // Ödenen iki sütun (13 Kas 2026: "ödenen kısmında da Döviz Tutarı - Kur ve Ödenen (₺) şeklinde 2 sütun"): Ödenen Döviz · Kur (dövizli ödemede döviz tutarı + kur; TL ödemede —) ve Ödenen (₺)
+      const odenenDovizH = odenenDoviz ? `<td class="para" data-k="${para(r.odenen)} ${esc(pbAd(r.odenenPB))} ${esc(r.odenenPB)} kur ${r.kur}" title="${esc(para(r.odenen) + ' ' + r.odenenPB)} × ${esc(String(r.kur))} = ${esc(para(r.odenenTL ?? r.odenen * r.kur))} ₺${r.kurBilgi && r.kurBilgi.kaynak ? ' · ' + esc(r.kurBilgi.kaynak) : ''}">${para(r.odenen)} ${esc(pbAd(r.odenenPB))}<small class="kn-doviz">kur <b>${Number(r.kur).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</b></small></td>` : `<td data-k="${r.odenen ? 'TL' : ''}" title="${r.odenen ? 'TL ödeme: döviz ve kur yok' : 'Ödeme yapılmadı'}">${bos}</td>`;
+      const odenenTlH = `<td class="para" data-k="${r.odenen ? para(r.odenenTL ?? r.odenen) + ' ₺' : ''}" title="${r.odenen ? esc(para(r.odenenTL ?? r.odenen)) + ' ₺ ödendi' : 'Ödeme yapılmadı'}">${r.odenen ? para(r.odenenTL ?? r.odenen) + ' ₺' : '—'}</td>`;
+      // Öncelik (13 Kas 2026): temsilci kendi planlanan satırlarını 1, 2, 3 … diye sıralar; süzgeçten birden çok öncelik seçilebilir (ör. 1 ve 2), başlığa tıklayınca önceliğe göre sıralanır. Ödenmiş satırda değişmez.
+      const oncN = r.oncelik ? +r.oncelik : 0, oncSec = [...new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, oncN].filter(Boolean))].sort((a, b) => a - b);
+      const oncelikH = `<td data-k="${oncN || ''}" title="Ödeme önceliği${oncN ? ': ' + oncN : ': verilmedi'}${r.satinalmaci ? ' · temsilci ' + esc(r.satinalmaci) : ''} (1 = en öncelikli)">${r.durum === 'ÖDENDİ' ? (oncN ? `<b>${oncN}</b>` : bos) : `<select class="kn-alan kn-onc ${oncN ? 'dolu' : ''}" data-alan="U_Oncelik"><option value="">—</option>${oncSec.map(n => `<option value="${n}" ${n === oncN ? 'selected' : ''}>${n}</option>`).join('')}</select>`}</td>`;
+      const islemSil = `<td><span class="kn-satir-islem"><a class="kn-ac" title="Detay / düzenle / işlemler"><i class="fas fa-pen-to-square"></i></a><a class="kn-sil" title="Satırı sil"><i class="fas fa-xmark"></i></a></span></td>`;
+      // Planlanan + Son Ödeme Tarihi tek sütun (13 Kas 2026): üstte planlanan tarih (düzenlenir), altında "son" + son ödeme tarihi (geçmişse kırmızı); sıralama planlanan tarihe göre
+      // PB + Anlaşılan Kur + Tutar + Tutar (₺) önce tek sütuna indirildi ("başlıkları maksimum verimlilikte kullanalım"), karışık bulununca iki sütuna ayrıldı (aşağıda dovizH / tlH);
+      // belge oranı (%100 değilse) en altta. Sıralama TL tutarına göre; süzgeçte "EUR", "USD", "€" ya da tutar yazılabilir. Dip toplam bu sütunun altında.
+      const kurYazi = dovizli ? Number(r.kur).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '';
+      // 13 Kas 2026 ("çok karıştı, geliştir; gerekirse 2 sütuna böl"): tutar iki net sütun — "Döviz Tutarı · Kur": dövizli ödemede üstte döviz tutarı, altında "kur 47,1374 · TCMB Alış" (TL ödemede —);
+      // "Tutar (₺)": yalnız TL karşılığı (belge oranı %100 değilse altında). Dip toplam Tutar (₺) sütununun altında.
+      const dovizH = dovizli ? `<td class="para" data-k="${para(r.tutar)} ${esc(pbAd(r.pb))} ${esc(r.pb)} kur ${kurYazi} ${esc(kurKaynak)}" title="${esc(para(r.tutar) + ' ' + r.pb)} × ${esc(kurYazi)} = ${esc(para(r.tutarTL))} ₺${r.kurBilgi ? ' · ' + esc(r.kurBilgi.kaynak || '') + (r.kurBilgi.tarih ? ' · kur günü ' + tarih(r.kurBilgi.tarih) : '') + (r.kurBilgi.kurFarki ? ' · kur farkı faturası: ' + esc(r.kurBilgi.kurFarki) : '') + (r.kurBilgi.not ? ' · ' + esc(r.kurBilgi.not) : '') : ''}">${para(r.tutar)} ${esc(pbAd(r.pb))}<small class="kn-doviz">kur <b>${kurYazi}</b>${kf}</small></td>` : `<td data-k="TL" title="TL ödeme: döviz ve kur yok">${bos}</td>`;
+      const tlH = `<td class="para" data-k="${para(r.tutarTL)} ₺" title="${esc(para(r.tutarTL))} ₺${pl.faturaTutari ? ' · belge ' + para(pl.faturaTutari) + ' ' + esc(pbAd(r.pb)) + ' · bu satır %' + (pl.oran ?? 100) + (pl.kalan != null ? ' · kalan ' + para(pl.kalan) : '') : ''}">${para(r.tutarTL)} ₺${oranYazi && (pl.oran ?? 100) !== 100 ? `<small>belge oranı ${oranYazi}</small>` : ''}</td>`;
+      // Kaynak (13 Kas 2026: "bu satır nereden geldi"): Kasa Nakit Akışı (ekrandan) · Planlı Düzenli Ödemeler · İbraz (Çek Akıbeti) · Ödeme Talebi · Nakit Avans · Personel Ödemesi (İK) · Kredi Raporu · Banka Hareketi · Takip Paneli · Grup İçi Modül
+      const kaynakH = `<td data-k="${esc(r.kaynak || 'Nakit Akış')}" title="Satırın geldiği yer: ${esc(r.kaynak || 'Nakit Akış')}${/^(İbraz|Gerçekleşen Ödemeler|Takip Paneli|Ödeme Talebi)$/.test(r.kaynak || '') && r.notlar ? ' · ' + esc(String(r.notlar).slice(0, 140)) : ''}"><span class="kn-ek-tur">${esc(r.kaynak || 'Nakit Akış')}</span></td>`;
+      const sonGec = r.sonOdeme && r.sonOdeme < bugun() && r.durum !== 'ÖDENDİ';
+      const planSon = `<td data-k="${r.planlanan ? tarih(r.planlanan) : ''} ${r.sonOdeme ? tarih(r.sonOdeme) : ''}" title="Planlanan ödeme tarihi${r.planlanan ? ' ' + tarih(r.planlanan) : ' girilmemiş'} · son ödeme tarihi${r.sonOdeme ? ' ' + tarih(r.sonOdeme) + (sonGec ? ' (vadesi geçti)' : '') : ' girilmemiş'}"><span class="kn-ps"><i>pln</i><input type="date" class="kn-alan kn-tarih" data-alan="U_PlanlananTarih" value="${r.planlanan || ''}" title="Planlanan ödeme tarihi (düzenlenebilir)"></span><span class="kn-ps ${sonGec ? 'gec' : ''}" title="Son ödeme tarihi${sonGec ? ' · vadesi geçti' : ''}"><i>son</i><b>${tarih(r.sonOdeme)}</b></span></td>`;   // iki satır aynı düzende: PLN tarih / SON tarih
+      const ON = [sec, kaynakH, islemTipi, fs, od, belge, planSon, kurumSade, satin, oncelikH, urun, dovizH, tlH], SON = [odenmeDekont, odenenDovizH, odenenTlH, durumSade, mutabakat, talimat, not, islemSil];   // son mutabakat tarihi ayrı sütun değil, Mutabakat hücresinde durumun hemen altında
+    if (p === 'tumu') return [...ON, yontem, ...SON];
     if (p === 'nakit') {
-      const onayHucre = `<td class="sol wrap">${o ? onayRozet(o) : '<span class="kn-onay bekliyor">Onay Bekliyor</span>'}${o && o.onaylayan ? `<small>${esc(o.onaylayan)} · ${esc((o.tarih || '').slice(0, 10))}</small>` : ''}${r.durum !== 'ÖDENDİ' && (!o || o.durum !== 'Onaylandı') ? ` <button type="button" class="btn btn-primary btn-sm py-0 px-1 kn-onay-ac" style="font-size:.6rem" title="Onaycı: ${esc((V.onaycilar?.nakit || []).join(' / '))}"><i class="fas fa-user-check"></i> Onayla / Reddet</button>` : ''}${r.durum !== 'ÖDENDİ' && o && o.durum === 'Onaylandı' ? ` <button type="button" class="btn btn-success btn-sm py-0 px-1 kn-makbuz-ac" style="font-size:.6rem" title="Kasa tediye makbuzu kes: satır ödenir, muhasebe fişi atılır"><i class="fas fa-receipt"></i> Makbuz Kes</button>` : ''}</td>`;
+      const onayHucre = `<td class="sol wrap">${o && o.durum === 'Reddedildi' ? onayRozet(o) : ''}${o && o.onaylayan ? `<small>${esc(o.onaylayan)} · ${esc((o.tarih || '').slice(0, 10))}</small>` : ''}${r.durum !== 'ÖDENDİ' && (!o || o.durum !== 'Onaylandı') ? ` <button type="button" class="btn btn-primary btn-sm py-0 px-1 kn-onay-ac" style="font-size:.6rem" title="Onaycı: ${esc((V.onaycilar?.nakit || []).join(' / '))}"><i class="fas fa-user-check"></i> Onayla / Reddet</button>` : ''}${r.durum !== 'ÖDENDİ' && o && o.durum === 'Onaylandı' ? ` <button type="button" class="btn btn-success btn-sm py-0 px-1 kn-makbuz-ac" style="font-size:.6rem" title="Kasa tediye makbuzu kes: satır ödenir, muhasebe fişi atılır"><i class="fas fa-receipt"></i> Makbuz Kes</button>` : ''}</td>`;
       const imzali = (r.dekontlar || []).some(d => d.tur === 'İmzalı Makbuz') ? ' <span class="kn-ek-tur imzali" title="İmzalı makbuz kopyası rapor sayfasına yüklendi (çekmece › Ekler)">imzalı</span>' : '';
       const makbuz = `<td class="sol" title="${r.makbuz ? 'Makbuz ' + esc(r.makbuz.no) : ''}${r.yevmiyeNo ? ' · muhasebe fişi ' + esc(r.yevmiyeNo) : ''}${a.teslimAlan ? ' · teslim alan ' + esc(a.teslimAlan) : ''}">${r.makbuz ? (r.makbuz.link ? `<a href="${esc(r.makbuz.link)}" target="_blank" class="fw-bold" title="Makbuzu yazdır">${esc(r.makbuz.no)}</a>` : `<b>${esc(r.makbuz.no)}</b>`) : bos}${imzali}<small>${r.yevmiyeNo ? esc(r.yevmiyeNo) : (a.teslimAlan ? 'teslim: ' + esc(a.teslimAlan) : '')}</small></td>`;
-      return [sec, sira, plan, son, belge, kurum, fs, od, tl, `<td>${alan(r, 'U_Kasa', a.kasa, 'select', V.kasalar)}</td>`, makbuz, onayHucre, durum, odenme, talimat, islem];
+      return [...ON, `<td>${alan(r, 'U_Kasa', a.kasa, 'select', V.kasalar, KISA.kasa)}</td>`, makbuz, onayHucre, ...SON];
     }
-    if (p === 'havale') return [sec, sira, plan, son, belge, kurum, fs, od, tl, `<td>${alan(r, 'U_BankaHesabi', a.bankaHesabi, 'select', V.bankaHesaplari, x => x.split(' · ')[0] + ' · ' + (x.split(' · ')[1] || '').slice(-7))}</td>`, `<td class="sol" title="${esc([a.aliciBanka, a.aliciIban, a.aliciHesapAdi].filter(Boolean).join(' · '))} · çekmecede Cari Karttan Getir">${alan(r, 'U_AliciIban', a.aliciIban)}<small>${esc([a.aliciBanka, a.aliciHesapAdi].filter(Boolean).join(' · ') || 'banka bilgisi yok')}</small></td>`, `<td class="sol">${alan(r, 'U_DekontNo', a.dekontNo)}${(r.dekontlar || []).length ? `<small><i class="fas fa-paperclip"></i> ${r.dekontlar.length} ek</small>` : ''}</td>`, durum, odenme, talimat, islem];
-    if (p === 'kredi') return [sec, sira, plan, son, belge, kurum, fs, od, tl, `<td>${alan(r, 'U_Kart', a.kart, 'select', V.kartlar)}</td>`, `<td>${alan(r, 'U_Taksit', a.taksit, 'select', V.taksitler)}</td>`, `<td>${alan(r, 'U_EkstreDonemi', a.ekstreDonemi)}</td>`, durum, odenme, talimat, islem];
+    if (p === 'havale') return [...ON, `<td>${alan(r, 'U_BankaHesabi', a.bankaHesabi, 'select', V.bankaHesaplari, KISA.hesap)}</td>`, `<td class="sol" title="${esc([a.aliciBanka, a.aliciIban, a.aliciHesapAdi].filter(Boolean).join(' · '))} · çekmecede Cari Karttan Getir">${alan(r, 'U_AliciIban', a.aliciIban)}<small>${esc([a.aliciBanka, a.aliciHesapAdi].filter(Boolean).join(' · ') || 'banka bilgisi yok')}</small></td>`, `<td class="sol">${alan(r, 'U_DekontNo', a.dekontNo)}${(r.dekontlar || []).length ? `<small><i class="fas fa-paperclip"></i> ${r.dekontlar.length} ek</small>` : ''}</td>`, ...SON];
+    if (p === 'kredi') return [...ON, `<td>${alan(r, 'U_Kart', a.kart, 'select', V.kartlar, KISA.kart)}</td>`, `<td>${alan(r, 'U_Taksit', a.taksit, 'select', V.taksitler)}</td>`, `<td>${alan(r, 'U_EkstreDonemi', a.ekstreDonemi)}</td>`, ...SON];
     if (p === 'cek' || p === 'senet') {
       const cikisHucre = r.cikis ? `<span class="yb">${onayRozet(o)}<small>${esc(r.cikis.islem)}${r.cikis.ibrazYeri ? ' → ' + esc(r.cikis.ibrazYeri) : ''} · talep ${esc(r.cikis.talepEden)}</small>${o && o.durum === 'Onay Bekliyor' ? `<button type="button" class="btn btn-danger btn-sm py-0 px-1 kn-cikis-onay" style="font-size:.6rem" title="GMY (${esc((V.onaycilar?.cekCikis || []).join(' / '))}) onaylarsa çıkış işlenir, reddederse belge portföyde kalır"><i class="fas fa-shield-halved"></i> GMY Onayı</button>` : ''}</span>` : '';
-      return [sec, sira, plan, son, belge, kurum, fs, od, `<td class="para" title="${esc(para(r.tutar) + ' ' + (r.pb || ''))}">${para(r.tutarTL)}</td>`, durum,
-        `<td class="sol">${yigin(b, x => `<span title="${esc(x.banka)}${x.sube ? ' / ' + esc(x.sube) : ''} · keşideci ${esc(x.asilBorclu)}"><b>${esc(x.no)}</b>${x.tip ? ` <span class="kn-oran" title="İşlem tipi ${esc(x.tip)}">${esc(x.tip)}</span>` : ''}${x.sahip && x.sahip !== r.odeyenSirket ? ` <small class="d-inline text-primary">(${esc(x.sahip)} portföyü)</small>` : ''}<small>${esc(x.asilBorclu)}${x.kimdenGeldi && x.kimdenGeldi !== x.asilBorclu ? ' · ' + esc(x.kimdenGeldi) : ''}</small></span>`)}</td>`,
+      return [...ON,
+        `<td class="sol wrap">${yigin(b, x => `<span title="${esc(x.banka)}${x.sube ? ' / ' + esc(x.sube) : ''} · keşideci ${esc(x.asilBorclu)}"><b>${esc(x.no)}</b>${x.tip ? ` <span class="kn-oran" title="İşlem tipi ${esc(x.tip)}">${esc(x.tip)}</span>` : ''}${x.sahip && x.sahip !== r.odeyenSirket ? ` <small class="d-inline text-primary">(${esc(x.sahip)} portföyü)</small>` : ''}<small>${esc(x.asilBorclu)}${x.kimdenGeldi && x.kimdenGeldi !== x.asilBorclu ? ' · ' + esc(x.kimdenGeldi) : ''}</small></span>`)}</td>`,
         `<td class="para">${yigin(b, x => `${tarih(x.vade)}<small class="fw-bold text-dark">${para(x.tutar)}</small>`)}</td>`,
-        `<td class="sol wrap">${yigin(b, x => akibetRozet(x.akibet) + ' ' + kontrolRozet(x.kontrol, x) + (x.dolasim ? `<span class="kn-dolasim d-block" title="Grup içi dolaşım planı: ${esc(x.dolasim)} · ${x.gerceklesen}/${x.adimToplam} adım gerçekleşti"><i class="fas fa-route"></i> ${esc(x.dolasim)} (${x.gerceklesen}/${x.adimToplam})</span>` : ''))}</td>`,
-        `<td class="sol wrap">${cikisHucre}${r.cikis ? '' : b.map(x => `<span class="yb">${belgeCikmis(x) && !x.adimToplam ? `<span class="text-muted" title="Belge çıkmış (${esc(x.akibet)}${x.ibrazYeri ? ' → ' + esc(x.ibrazYeri) : ''}); işlem yapılamaz">${esc(x.akibet)}${r.ibraz ? ' · ' + esc(r.ibraz.belgeNo) : ''}</span>` : `<button type="button" class="btn btn-link btn-sm p-0 kn-dolasim-ac" data-cek="${x.cekDocEntry}" title="${x.adimToplam ? 'Dolaşım planı: ' + esc(x.dolasim) + ' (' + x.gerceklesen + '/' + x.adimToplam + ' adım) · adım gerçekleştir' : 'Grup içi dolaşım planı kur ve uygunluk simülasyonunu gör'}"><i class="fas fa-route"></i> Dolaşım</button> <button type="button" class="btn btn-link btn-sm p-0 text-danger kn-belge-kaldir" data-cek="${x.cekDocEntry}" ${x.akibet !== 'Planlandı' || x.gerceklesen > 0 ? 'disabled' : ''} title="Planı kaldır: belge portföye döner"><i class="fas fa-times"></i></button>`}</span>`).join('')}${r.durum === 'ÖDENDİ' || r.cikis ? '' : `<span class="yb"><button type="button" class="btn btn-primary btn-sm py-0 px-1 kn-belge-sec" style="font-size:.62rem" title="Portföydeki belgeleri gör ve seç (vade, tutar, banka süzgeçleri; başka grup şirketinin portföyü)"><i class="fas fa-plus"></i> ${b.length ? 'Ekle' : 'Belge Seç'}</button>${ibrazUygun(r) ? ` <button type="button" class="btn btn-success btn-sm py-0 px-1 kn-ibraz-ac" style="font-size:.62rem" title="Çeki tedarikçiye ver (ciro) ya da bankaya tahsile ver: belge çıkar, satır ödenir, muhasebe fişleri atılır"><i class="fas fa-money-check-dollar"></i> ${r.yontem === 'Senet' ? 'Senedi Ver' : 'Çeki Ver / İbraz'}</button>` : ''}</span>`}</td>`, talimat, islem];
+        `<td class="sol wrap">${b.length ? b.map(x => `<span class="yb">${dolasimZinciri(r, x)}</span>`).join('') : bos}</td>`,
+        `<td class="sol wrap">${yigin(b, x => akibetRozet(x.akibet) + ' ' + kontrolRozet(x.kontrol, x))}</td>`,
+        `<td class="sol wrap">${cikisHucre}${r.cikis ? '' : b.map(x => `<span class="yb">${belgeCikmis(x) && !x.adimToplam ? `<span class="text-muted" title="Belge çıkmış (${esc(x.akibet)}${x.ibrazYeri ? ' → ' + esc(x.ibrazYeri) : ''}); işlem yapılamaz">${esc(x.akibet)}${r.ibraz ? ' · ' + esc(r.ibraz.belgeNo) : ''}</span>` : `<button type="button" class="btn btn-link btn-sm p-0 text-danger kn-belge-kaldir" data-cek="${x.cekDocEntry}" ${x.akibet !== 'Planlandı' || x.gerceklesen > 0 ? 'disabled' : ''} title="${esc(x.no)} planını kaldır: belge portföye döner"><i class="fas fa-times"></i> ${esc(x.no)}</button>`}</span>`).join('')}${r.durum === 'ÖDENDİ' || r.cikis ? '' : `<span class="yb"><button type="button" class="btn btn-primary btn-sm py-0 px-1 kn-belge-sec" style="font-size:.62rem" title="Portföydeki belgeleri gör ve seç (vade, tutar, banka süzgeçleri; başka grup şirketinin portföyü)"><i class="fas fa-plus"></i> ${b.length ? 'Ekle' : 'Belge Seç'}</button>${ibrazUygun(r) ? ` <button type="button" class="btn btn-success btn-sm py-0 px-1 kn-ibraz-ac" style="font-size:.62rem" title="Çeki tedarikçiye ver (ciro) ya da bankaya tahsile ver: belge çıkar, satır ödenir, muhasebe fişleri atılır"><i class="fas fa-money-check-dollar"></i> ${r.yontem === 'Senet' ? 'Senedi Ver' : 'Çeki Ver / İbraz'}</button>` : ''}</span>`}</td>`, ...SON];
     }
-    if (p === 'mahsup' || p === 'temlik' || p === 'yansitma') {
-      const kayit = g ? `<td class="sol"><a href="${esc(g.link)}" target="_blank" class="fw-bold" title="${esc(g.tur)} kaydını modülde aç">${esc(g.no)}</a><small>${g.bulundu === false ? '<span class="text-danger">kayıt bulunamadı</span>' : tarih(g.tarih)}</small></td>` : `<td class="sol">${bos}<small>kayıt bağlanmadı</small></td>`;
-      const tur = g ? `<td class="sol" title="${esc(g.baslik || '')} · ${esc(g.taraflar || '')}">${esc(g.baslik || '')}<small>${esc(g.taraflar || '')}</small></td>` : `<td class="sol">${bos}</td>`;
-      const mtutar = `<td class="para">${g ? para(g.tutar) + (g.pb && g.pb !== 'TRY' ? `<small>${esc(pbAd(g.pb))}</small>` : '') : '—'}</td>`;
-      const mdurum = g ? `<td class="sol" title="${esc(g.durum || '')} · ${esc((p === 'temlik' && g.imza ? 'imza ' + g.imza + ' · ' : '') + (g.muhasebe || ''))}">${modulRozet(g.durum)}<small>${esc((p === 'temlik' && g.imza ? 'imza ' + g.imza + ' · ' : '') + (g.muhasebe || ''))}</small></td>` : `<td>${bos}</td>`;
-      const kontrol = `<td>${g && g.kontrol ? rozet(g.kontrol, /Uyumlu|UYUMLU/.test(g.kontrol) ? 'ok' : 'hata') : bos}</td>`;
-      const aksiyon = `<td class="sol"><button type="button" class="btn btn-primary btn-sm py-0 px-1 kn-grup-sec" data-tur="${SEKME[p]}" style="font-size:.62rem" title="${g ? 'Kaydı değiştir' : 'Modülden kayıt bağla'}"><i class="fas fa-link"></i> ${g ? 'Değiştir' : 'Kayıt Seç'}</button>${g ? ` <button type="button" class="btn btn-link btn-sm p-0 text-danger kn-grup-kaldir" title="Kayıt bağını kaldır"><i class="fas fa-times"></i></button>` : ''}</td>`;
-      return [sec, sira, plan, son, kayit, kurum, fs, od, tl, durum, tur, mtutar, mdurum, kontrol, aksiyon, talimat, islem];
+    if (p === 'grupici') {
+      // Grup İçi İşlemler: (a) fatura sahibi ≠ ödeyen satırı → tür burada seçilir (Mahsup / Temlik / Yansıtma), otomatik grup içi belge o türde hazırlanır; (b) yöntemi Mahsup / Temlik / Yansıtma olan satır → modül kaydına bağlanır
+      const modul = GRUP_YONTEM.includes(r.yontem), gb = r.grupIciBelge, kilit = gb && gb.durum === 'Muhasebeleşti';
+      let turH, kayit, taraf, mtutar, mdurum, bag;
+      if (modul) {
+        turH = `<td data-k="${esc(r.yontem)}">${yontemRozet(r.yontem)}<small>modül kaydı</small></td>`;
+        kayit = g ? `<td class="sol"><a href="${esc(g.link)}" target="_blank" class="fw-bold" title="${esc(g.tur)} kaydını modülde aç">${esc(g.no)}</a><small>${g.bulundu === false ? '<span class="text-danger">kayıt bulunamadı</span>' : tarih(g.tarih)}</small></td>` : `<td class="sol">${bos}<small>kayıt bağlanmadı</small></td>`;
+        taraf = g ? `<td class="sol" title="${esc(g.baslik || '')} · ${esc(g.taraflar || '')}">${esc(g.baslik || '')}<small>${esc(g.taraflar || '')}</small></td>` : `<td class="sol">${bos}</td>`;
+        mtutar = `<td class="para">${g ? para(g.tutar) + ' ' + esc(pbAd(g.pb)) : '—'}</td>`;
+        const ek = (r.yontem === 'Temlik' && g && g.imza ? 'imza ' + g.imza + ' · ' : '') + ((g && g.muhasebe) || '');
+        mdurum = g ? `<td class="sol" title="${esc(g.durum || '')} · ${esc(ek)}">${modulRozet(g.durum)}${g.kontrol ? ' ' + rozet(g.kontrol, /Uyumlu|UYUMLU/.test(g.kontrol) ? 'ok' : 'hata') : ''}<small>${esc(ek)}</small></td>` : `<td>${bos}</td>`;
+        bag = `<td class="sol"><button type="button" class="btn btn-primary btn-sm py-0 px-1 kn-grup-sec" data-tur="${esc(r.yontem)}" title="${g ? 'Kaydı değiştir' : 'Modülden kayıt bağla'}"><i class="fas fa-link"></i> ${g ? 'Değiştir' : 'Kayıt Seç'}</button>${g ? ` <button type="button" class="btn btn-link btn-sm p-0 text-danger kn-grup-kaldir" title="Kayıt bağını kaldır"><i class="fas fa-times"></i></button>` : ''}</td>`;
+      } else {
+        const tur = (gb && gb.tur) || r.grupIciTur || 'Mahsup', secildi = !!r.grupIciTurSecildi || kilit;
+        turH = `<td data-k="${esc(secildi ? tur : 'Tür Seçilmedi')}"><select class="kn-gtur ${secildi ? 'secili' : 'secilmedi'}" ${kilit ? 'disabled' : ''} title="${kilit ? 'Muhasebeleşmiş belgenin türü değiştirilemez' : 'Fatura sahibi ≠ ödeyen şirket: yapılacak grup içi işlemi seçin'}">${GRUP_YONTEM.map(t => `<option ${t === tur ? 'selected' : ''}>${t}</option>`).join('')}</select><small class="${secildi ? '' : 'text-danger fw-bold'}">${kilit ? 'muhasebeleşti' : secildi ? 'seçildi' : 'tür seçilmedi (varsayılan)'}</small></td>`;
+        kayit = gb ? `<td class="sol"><a href="${esc(gb.link)}" target="_blank" class="fw-bold" title="${esc(gb.baslik)} · yazdırılabilir belge">${esc(gb.no)}</a><small>${tarih(gb.tarih)}</small></td>` : `<td class="sol">${bos}<small>kaydedilince oluşur</small></td>`;
+        taraf = `<td class="sol" title="${esc(r.odeyenSirket)}, ${esc(r.faturaSahibi)} adına ödüyor${gb ? ' · ' + esc(gb.sekil || '') : ''}"><b>${esc(r.odeyenSirket)}</b> → ${esc(r.faturaSahibi)}<small>${esc(gb ? gb.sekil || '' : 'ödeyen → fatura sahibi')}</small></td>`;
+        mtutar = `<td class="para">${para(gb ? gb.tutarTL : r.tutarTL)} ₺</td>`;
+        mdurum = gb ? `<td class="sol" title="${esc(gb.durum)}${gb.faturaSahibiFisNo ? ' · fatura sahibi fişi ' + esc(gb.faturaSahibiFisNo) : ''}">${modulRozet(gb.durum)}<small>${gb.faturaSahibiFisNo ? esc(gb.faturaSahibiFisNo) : 'ödeme gerçekleşince fiş'}</small></td>` : `<td>${bos}</td>`;
+        bag = `<td>${gb ? `<a class="btn btn-light btn-sm py-0 px-1 border" href="${esc(gb.link)}" target="_blank" title="Grup içi belgeyi yazdır"><i class="fas fa-print"></i> Belge</a>` : bos}</td>`;
+      }
+      return [...ON, yontem, turH, kayit, taraf, mtutar, mdurum, bag, ...SON];
     }
-    return [sec, sira, plan, son, belge, kurum, fs, od, tl, `<td>${esc(r.islemTipi || '')}</td>`, durum, odenme, odenen, talimat, not, islem];
+    return [...ON, ...SON];
   }
   function cizTablo(p, L) {
     const t = $('#knTablo-' + p); if (!t) return;
     // ödenmemişler planlanan tarihe göre üstte; ödenenler ödenme tarihine göre en altta
-    const R0 = p === 'tumu' ? L : L.filter(r => r.yontem === SEKME[p]);
+    const R0 = sekmeSatir(p, L);
     const R = [...R0.filter(r => r.durum !== 'ÖDENDİ'), ...R0.filter(r => r.durum === 'ÖDENDİ').sort((a, b) => (a.odenme || '').localeCompare(b.odenme || '') || a.docEntry - b.docEntry)];
-    const kol = KOL[p], topW = kol.reduce((s, k) => s + k.w, 0);
+    // Grup İçi İşlemler: türü seçilmemiş (fatura sahibi ≠ ödeyen) satırlar en üstte, sonra türü seçilmiş otomatik satırlar, sonra modül kayıtları
+    if (p === 'grupici') { const sira = r => GRUP_YONTEM.includes(r.yontem) ? 2 : r.grupIciTurSecildi || (r.grupIciBelge && r.grupIciBelge.durum === 'Muhasebeleşti') ? 1 : 0; R.sort((a, b) => sira(a) - sira(b)); }
+    // Sütunlar penceresinde gizlenen sütunlar hiç çizilmez (adı olmayan seçim / işlem sütunları her zaman görünür)
+    const gz = gizliOku(p), gor = KOL[p].map(k => !k.ad || !gz.has(k.ad)), kol = KOL[p].filter((k, i) => gor[i]), topW = kol.reduce((s, k) => s + k.w, 0);
     // Tümü: 28 sütun; ağırlıklar piksel → tablo en az ağırlık toplamı kadar (dar ekranda yatay kaydırma, geniş ekranda %100).
     // tablo-hizala.js iki satırlı başlık için tabloyu otomatik düzene geçirir; otomatik düzende tek satırlık (nowrap) uzun not / ürün / kurum sütunu tabloyu
     // 3.600 px'e taşırdığından gövde hücreleri sütun ağırlığına sabitlenir (min = max = ağırlık; taşan metin … ile kısalır, tamamı hücre başlığında; iki satırlı başlık daha geniş
     // istiyorsa sütun ona göre açılır). Toplam satırı ve boş-liste satırı (colspan) dışarıda; geniş ekranda tablo %100'e yayılır.
-    t.style.minWidth = p === 'tumu' ? topW + 'px' : '';
-    if (p === 'tumu' && !$('#knKolStil')) { const st = document.createElement('style'); st.id = 'knKolStil'; st.textContent = kol.map((k, i) => `#knTablo-tumu tbody td:not([colspan]):nth-child(${i + 1}){min-width:${k.w}px;max-width:${k.w}px}`).join(''); document.head.appendChild(st); }
+    // tek sayfaya sığdırma: kart genişliği ağırlık toplamından darsa ağırlıklar oranla küçülür (en çok % 10; yazı da bir kademe küçülür: .dar); daha da darsa yatay kaydırma
+    // tarih, belge no, tutar, durum ve satınalmacı sütunları (KOL_SABIT) ölçüsünü korur (içerik kısalmasın); kalan sütunlar (firma, kurum, ürün, not … metni sarılır) en çok % 25 daralır
+    const kart = t.closest('.na-kart'), alan0 = kart ? kart.clientWidth : 0, sabitMi = k => !k.ad || KOL_SABIT.test(k.ad), sabitW = kol.filter(sabitMi).reduce((s, k) => s + k.w, 0);
+    const f = alan0 && topW > sabitW ? Math.max(.5, Math.min(1, (alan0 - (PAY[p] || 30) - sabitW) / (topW - sabitW))) : 1, olcek = k => Math.floor(k.w * (sabitMi(k) ? 1 : f));   // 30 px: iki satırlı başlıkların sütuna eklediği pay; yöntem sekmeleri daha çok sütun taşır → % 62'ye kadar daralır
+    t.style.minWidth = kol.reduce((s, k) => s + olcek(k), 0) + 'px'; t.classList.toggle('dar', f < .97); t.classList.toggle('cokdar', f < .8);
+    { let st = $('#knKolStil-' + p); if (!st) { st = document.createElement('style'); st.id = 'knKolStil-' + p; document.head.appendChild(st); } st.textContent = kol.map((k, i) => { const w = olcek(k); return `#knTablo-${p} tbody td:not([colspan]):nth-child(${i + 1}),#knTablo-${p} thead tr.suzgec th:nth-child(${i + 1}){min-width:${w}px;max-width:${w}px}`; }).join(''); }
     let cg = t.querySelector('colgroup'); if (!cg) { cg = document.createElement('colgroup'); t.insertBefore(cg, t.tHead); }
     cg.innerHTML = kol.map(k => `<col style="width:${(k.w / topW * 100).toFixed(2)}%">`).join('');
-    t.tHead.innerHTML = '<tr>' + kol.map((k, i) => i === 0 ? `<th><input type="checkbox" class="form-check-input kn-sec-hepsi" title="Tümünü seç"></th>` : `<th class="${/Tutar|Toplam|Ödenen/.test(k.ad) && !/Çek No|Senet No/.test(k.ad) ? 's' : ''}" title="${esc(k.ad)}">${esc(k.ad)}</th>`).join('') + '</tr>';
-    t.tBodies[0].innerHTML = R.length ? R.map((r, i) => `<tr class="tik ${DURUM_SINIF[r.durum] || ''}" data-doc="${r.docEntry}" data-db="${esc(r.dbName)}">${hucreler(r, p, i + 1).join('')}</tr>`).join('') : `<tr><td colspan="${kol.length}" class="na-bos text-center">Bu sekmede filtreye uyan kayıt yok.${p !== 'tumu' ? ' Yeni Ödeme ile "' + esc(SEKME[p]) + '" yöntemli kayıt açabilirsiniz.' : ''}${F.kpi ? ' Üst karttaki filtre açık.' : ''}</td></tr>`;
-    const toplam = R.reduce((s, r) => s + r.tutarTL, 0), odenen = R.filter(r => r.durum === 'ÖDENDİ').reduce((s, r) => s + r.tutarTL, 0);
-    const tlIdx = kol.findIndex(k => k.ad.startsWith('Tutar (₺)'));
-    t.tFoot.innerHTML = R.length ? `<tr class="toplam"><td colspan="${tlIdx}" class="text-end">TOPLAM (₺)</td><td class="para">${para(toplam)}</td><td colspan="${kol.length - tlIdx - 1}" class="sol">ödenen ${para(odenen)} · kalan ${para(toplam - odenen)} · ${R.length} kayıt</td></tr>` : '';
-    $('#knNot-' + p).textContent = '';   // kart başlığındaki bilgi satırı istenmedi (toplamlar tablo altında)
+    const secili = new Set($$('.kn-sec:checked', t).map(c => c.closest('tr').dataset.doc));   // yeniden çizimde işaretler korunur
+    t.tBodies[0].innerHTML = R.length ? R.map((r, i) => `<tr class="tik ${satirSinif(r)}" data-doc="${r.docEntry}" data-db="${esc(r.dbName)}">${hucreler(r, p, i + 1).filter((h, j) => gor[j]).join('')}</tr>`).join('') : `<tr><td colspan="${kol.length}" class="na-bos text-center">Bu sekmede filtreye uyan kayıt yok.${p === 'grupici' ? ' Fatura sahibi ile ödeyen şirketi farklı olan ödeme ya da Mahsup / Temlik / Yansıtma kaydı yok.' : p !== 'tumu' ? ' Yeni Ödeme Ekle ile "' + esc(SEKME[p]) + '" yöntemli kayıt açabilirsiniz.' : ''}${F.kpi ? ' Üst karttaki filtre açık.' : ''}</td></tr>`;
+    if (secili.size) $$('tr[data-doc]', t.tBodies[0]).forEach(tr => { if (secili.has(tr.dataset.doc)) { const c = tr.querySelector('.kn-sec'); if (c) { c.checked = true; tr.classList.add('secili'); } } });
+    // başlık: 1. satır sütun adları (tıkla: sırala ↑ / ↓ / kaldır), 2. satır süzgeç (liste sütunlarında seçim, ötekilerde metin arama); süzgeç değerleri sekmeye göre saklanır
+    const cf = CF[p] || (CF[p] = {}), sr = SIRA[p], govde = $$('tr[data-doc]', t.tBodies[0]);
+    t.tHead.innerHTML = '<tr>' + kol.map((k, i) => !k.ad ? (i === 0 ? `<th><input type="checkbox" class="form-check-input kn-sec-hepsi" title="Görünen satırların tümünü seç"></th>` : '<th></th>') : `<th class="sira ${sr && sr.ad === k.ad ? (sr.yon > 0 ? 'art' : 'azl') : ''} ${/Tutar|Toplam|Ödenen/.test(k.ad) && !/Çek No|Senet No/.test(k.ad) ? 's' : ''}" data-ad="${esc(k.ad)}" title="${esc(k.ad)} · tıkla: sırala">${esc(k.ad)}</th>`).join('') + '</tr>'
+      + '<tr class="suzgec">' + kol.map((k, i) => { if (!k.ad || k.ad === '#') return '<th></th>'; const v = cf[k.ad] || '';
+        if (SECMELI.test(k.ad)) { const sec = Array.isArray(v) ? v : (v ? [v] : []); cf[k.ad] = sec; return `<th><button type="button" class="kn-cs kn-suz-cs ${sec.length ? 'dolu' : ''}" data-ad="${esc(k.ad)}" data-bos="${olcek(k) < 56 ? '' : 'Tümü'}" title="${esc(k.ad)}: süz (birden çok seçilebilir)${sec.length ? ' · ' + esc(sec.join(', ')) : ''}">${esc(csOzet(sec, sec, olcek(k) < 56 ? '' : 'Tümü'))}</button></th>`; }
+        return `<th><input type="text" class="kn-suz ${v ? 'dolu' : ''}" data-ad="${esc(k.ad)}" value="${esc(v)}" placeholder="Ara…" title="${esc(k.ad)}: içinde ara"></th>`; }).join('') + '</tr>';
+    // kart başlığı: yalnız Özet kartı filtresi açıkken rozet (kutucuklar artık Özet sekmesinde olduğundan filtre burada görünür; tıkla: kaldır)
+    $('#knKpiRozet').innerHTML = F.kpi ? `<a class="kn-kpi-filtre" title="Özet kutucuğu filtresi açık · tıkla: filtreyi kaldır"><i class="fas fa-filter"></i>Özet filtresi: ${esc(KPI_AD[F.kpi] || F.kpi)} <i class="fas fa-xmark"></i></a>` : '';
+    suzUygula(p);
+    // başlık hizalaması (tablo-hizala) bitince tablo karttan hâlâ taşıyorsa pay büyütülür ve bir kez daha çizilir (en çok 3 deneme; ölçek alt sınırdaysa bırakılır)
+    if (kart && f > .5) requestAnimationFrame(() => requestAnimationFrame(() => { const fazla = t.offsetWidth - kart.clientWidth; if (fazla > 3 && (PAY_N[p] || 0) < 3 && aktifSekme() === p) { PAY_N[p] = (PAY_N[p] || 0) + 1; PAY[p] = (PAY[p] || 30) + fazla + 6; ciz(); } }));
+  }
+  const PAY = {}, PAY_N = {};
+  // ---------- sütun seçimi (Sütunlar) · sütun süzgeci · sıralama: ödeme tablolarının hepsinde (Tümü + yöntem sekmeleri)
+  const GIZLI = {}, CF = {}, SIRA = {};
+  // ölçüsünü koruyan sütunlar: tarih, belge no, tutar, durum, satınalmacı ve zaten çok dar olanlar (#, İşlem Tipi, PB, Ödenen PB, Dekont; adsız seçim / işlem sütunları cizTablo'da)
+  const KOL_SABIT = /^(Kasa|Kart|Taksit|Banka Hesabımız|Ekstre Dönemi|Mutabakat|Kaynak|İşlem Tipi|Belge No · Tipi · Tarihi|Planlanan · Son Ödeme Tarihi|Ödenme Tarihi · Dekont|Durum|Döviz Tutarı · Kur|Tutar \(₺\)|Ödenen Döviz · Kur|Ödenen \(₺\)|İşlem Tutarı|İşlem Türü|Kayıt Bağı|Ödeme Yöntemi|Çek Vadesi · Çek Tutarı|Senet Vadesi · Senet Tutarı|Temsilci|Öncelik)$/;
+  const gizliOku = p => { if (!GIZLI[p]) { try { GIZLI[p] = new Set(JSON.parse(localStorage.getItem('knGizli:' + p) || '[]')); } catch (e) { GIZLI[p] = new Set(); } } return GIZLI[p]; };
+  const SECMELI = /^(Kaynak|İşlem Tipi|Fatura Sahibi|Ödeyen Şirket|Temsilci|Öncelik|PB|Ödeme Yöntemi|Ödenen PB|Durum|Mutabakat|Dekont|Kasa|Kart|Taksit|İşlem Türü)$/;
+  // hücrenin süzgeç / sıralama anahtarı: data-k (Mutabakat, Dekont) → satır içi alanın değeri (durum, tarih, kasa …) → görünen metin
+  const hucreAnahtar = td => { if (!td) return ''; if (td.dataset.k !== undefined) return td.dataset.k; const i = td.querySelector('select.kn-alan, input.kn-alan'); if (i) return i.tagName === 'SELECT' ? (i.selectedOptions[0] ? i.selectedOptions[0].textContent.trim() : '') : i.type === 'date' ? (i.value ? tarih(i.value) : '') : i.value; return td.textContent.replace(/\s+/g, ' ').trim(); };
+  // sıralama değeri: tarih (gg.aa.yyyy) → yyyymmdd, tutar (1.234,56 …) → sayı, öteki → metin; boşlar sonda
+  const siraDeger = s => { const t = /^(\d{2})\.(\d{2})\.(\d{4})/.exec(s); if (t) return +(t[3] + t[2] + t[1]); const n = /^-?(\d{1,3}(\.\d{3})+|\d+)(,\d+)?/.exec(s); if (n) return parseFloat(n[0].replace(/\./g, '').replace(',', '.')); return s.toLocaleLowerCase('tr-TR'); };
+  function suzUygula(p) {
+    const t = $('#knTablo-' + p); if (!t || !t.tHead || t.tHead.rows.length < 2) return;
+    const cf = CF[p] || {}, ths = Array.from(t.tHead.rows[0].cells), adlar = ths.map(th => th.dataset.ad || ''), tb = t.tBodies[0];
+    let rows = $$('tr[data-doc]', tb);
+    const aktif = adlar.map((ad, i) => { const sec = SECMELI.test(ad), ham = cf[ad]; return sec ? { i, sec, set: new Set((Array.isArray(ham) ? ham : ham ? [ham] : []).map(x => x.toLocaleLowerCase('tr-TR'))) } : { i, sec, v: String(ham || '').trim().toLocaleLowerCase('tr-TR') }; }).filter(x => x.sec ? x.set.size : x.v);
+    rows.forEach(tr => { const uy = aktif.every(x => { const k = hucreAnahtar(tr.cells[x.i]).toLocaleLowerCase('tr-TR'); return x.sec ? x.set.has(k) : k.includes(x.v); }); tr.style.display = uy ? '' : 'none'; if (!uy) { const c = tr.querySelector('.kn-sec'); if (c && c.checked) { c.checked = false; tr.classList.remove('secili'); } } });
+    const sr = SIRA[p], si = sr ? adlar.indexOf(sr.ad) : -1;
+    if (si >= 0) {
+      const anahtar = new Map(rows.map(tr => [tr, siraDeger(hucreAnahtar(tr.cells[si]))]));
+      const bosMu = v => v === '' || v === '—';
+      rows = rows.slice().sort((a, b) => { const x = anahtar.get(a), y = anahtar.get(b); if (bosMu(x) || bosMu(y)) return bosMu(x) && bosMu(y) ? 0 : bosMu(x) ? 1 : -1; if (typeof x === 'number' && typeof y === 'number') return (x - y) * sr.yon; return String(x).localeCompare(String(y), 'tr', { numeric: true }) * sr.yon; });
+      rows.forEach(tr => tb.appendChild(tr));
+    }
+    let n = 0; const G = [];
+    rows.forEach(tr => { if (tr.style.display === 'none') return; n++; { const no = tr.querySelector('.kn-no'); if (no) no.textContent = n; } const r = satirBul(+tr.dataset.doc); if (r) G.push(r); });
+    // dip toplam: görünen (süzgeçten geçen) satırlar; Tutar (₺) sütunu gizliyse tek hücre
+    const toplam = G.reduce((s, r) => s + r.tutarTL, 0), odenen = G.filter(r => r.durum === 'ÖDENDİ').reduce((s, r) => s + r.tutarTL, 0), tlIdx = adlar.findIndex(a => a.startsWith('Tutar (₺)')), ozet = `ödenen ${para(odenen)} ₺ · kalan ${para(toplam - odenen)} ₺ · ${G.length} kayıt${aktif.length ? ' · sütun süzgeci açık' : ''}`;
+    t.tFoot.innerHTML = !rows.length ? '' : tlIdx > 0 ? `<tr class="toplam"><td colspan="${tlIdx}" class="text-end">TOPLAM (₺)</td><td class="para">${para(toplam)} ₺</td><td colspan="${adlar.length - tlIdx - 1}" class="sol">${ozet}</td></tr>` : `<tr class="toplam"><td colspan="${adlar.length}" class="sol">TOPLAM ${para(toplam)} ₺ · ${ozet}</td></tr>`;
     secimSayaci(t);
   }
-  function cizGrupOzet(p) {
-    const g = V.grupIci?.[p]; const kap = $('#knGrup-' + p); if (!g || !kap) return;
-    const ad = SEKME[p];
+  kok.addEventListener('input', e => { const s = e.target.closest('.kn-suz'); if (!s) return; const t = s.closest('table'), p = t.id.replace('knTablo-', ''); (CF[p] || (CF[p] = {}))[s.dataset.ad] = s.value; s.classList.toggle('dolu', !!s.value); suzUygula(p); });
+  kok.addEventListener('click', e => { const th = e.target.closest('.kn-odeme thead th.sira'); if (!th) return; const p = th.closest('table').id.replace('knTablo-', ''), ad = th.dataset.ad, s = SIRA[p]; SIRA[p] = !s || s.ad !== ad ? { ad, yon: 1 } : s.yon > 0 ? { ad, yon: -1 } : null; ciz(); });
+  // Sütunlar penceresi: etkin sekmenin tablosu; seçim tarayıcıda saklanır (knGizli:<sekme>)
+  $('#knSutunlar').addEventListener('click', () => {
+    const p = aktifSekme(); if (!KOL[p]) { mesaj('info', 'Sütun seçimi ödeme listesi sekmelerinde (Tümü ve yöntem sekmeleri) kullanılır.'); return; }
+    const gz = gizliOku(p); $('#ksuSekme').textContent = sekmeAd(p);
+    $('#ksuListe').innerHTML = KOL[p].filter(k => k.ad).map(k => `<label><input type="checkbox" class="form-check-input m-0" value="${esc(k.ad)}" ${gz.has(k.ad) ? '' : 'checked'}> ${esc(k.ad === '#' ? '# (Sıra)' : k.ad)}</label>`).join('');
+    $('#knSutunModal').dataset.p = p; modalAc($('#knSutunModal'));
+  });
+  $('#ksuHepsi').addEventListener('click', () => $$('#ksuListe input').forEach(c => c.checked = true));
+  $('#ksuUygula').addEventListener('click', () => {
+    const p = $('#knSutunModal').dataset.p, gz = new Set($$('#ksuListe input').filter(c => !c.checked).map(c => c.value)); GIZLI[p] = gz;
+    try { localStorage.setItem('knGizli:' + p, JSON.stringify([...gz])); } catch (e) { }
+    [...gz].forEach(ad => { if (CF[p]) delete CF[p][ad]; if (SIRA[p] && SIRA[p].ad === ad) SIRA[p] = null; });
+    modalKapat($('#knSutunModal')); ciz(); mesaj('info', gz.size ? `${gz.size} sütun gizlendi.` : 'Tüm sütunlar görünür.');
+  });
+  function cizGrupOzet() {
+    const kap = $('#knGrup-grupici'); if (!kap) return; const gi = V.grupIci || {};
+    const L = sekmeSatir('grupici', satirlar()), oto = L.filter(r => !GRUP_YONTEM.includes(r.yontem)), secilmemis = oto.filter(r => !r.grupIciTurSecildi && !(r.grupIciBelge && r.grupIciBelge.durum === 'Muhasebeleşti'));
+    const tl = l => l.reduce((s, r) => s + r.tutarTL, 0);
+    const modul = (p, ad) => { const g = gi[p] || {}; return { l: `${ad} Modülü`, v: `<a href="${esc(g.link || '#')}" target="_blank" style="font-size:.82rem">${g.toplam ?? 0} kayıt <i class="fas fa-arrow-up-right-from-square" style="font-size:.56rem"></i></a>`, s: esc(`${g.acik ?? 0} açık · ${kisa(g.acikTutar || 0)} ₺ · ${g.onayBekleyen ?? 0} onay bekleyen`), k: '#1d4ed8', h: true }; };
+    kap.style.gridTemplateColumns = 'repeat(5, minmax(0, 1fr))';
     kap.innerHTML = [
-      { l: `Toplam ${ad} Kaydı`, v: g.toplam, s: F.sirket ? 'bu şirketin taraf olduğu' : 'tüm şirketler', k: '#0f766e' },
-      { l: 'Açık İşlem', v: g.acik, s: kisa(g.acikTutar) + ' ₺ muhasebeleşmemiş', k: '#b45309' },
-      { l: 'Onay Bekleyen', v: g.onayBekleyen, s: p === 'temlik' ? `${g.imzaBekleyen} imza bekleyen` : p === 'yansitma' ? `${g.faturaBekleyen} fatura bekleyen` : `${g.kontrol} kontrol gerekli`, k: '#7c3aed' },
-      { l: 'Modül', v: `<a href="${esc(g.link)}" target="_blank" style="font-size:.8rem">${esc(ad)} İşlemleri <i class="fas fa-arrow-up-right-from-square"></i></a>`, s: `<a href="${esc(V.grupIci.rapor)}" target="_blank">Grup İçi Özel Finansal İşlemler Raporu</a>`, k: '#1d4ed8', h: true }
+      { l: 'Fatura Sahibi ≠ Ödeyen', v: `${oto.length} ödeme`, s: `${kisa(tl(oto))} ₺ · bu sekmeye otomatik düşer`, k: '#0f766e' },
+      { l: 'Türü Seçilmemiş', v: String(secilmemis.length), s: secilmemis.length ? `${kisa(tl(secilmemis))} ₺ · İşlem Türü sütunundan seçin` : 'hepsinin türü seçildi', k: secilmemis.length ? '#dc2626' : '#15803d' },
+      modul('mahsup', 'Mahsup'), modul('temlik', 'Temlik'), modul('yansitma', 'Yansıtma')
     ].map(k => `<div style="--k:${k.k}"><div class="l">${esc(k.l)}</div><div class="v">${k.h ? k.v : esc(String(k.v))}</div><div class="s">${k.h ? k.s : esc(k.s)}</div></div>`).join('');
-    $('#knGrupNot-' + p).textContent = 'kayıt bağlanan satırlarda kurum, tutar, durum ve kontrol modülden canlı okunur';
+    $('#knGrupNot-grupici').innerHTML = gi.rapor ? `<a href="${esc(gi.rapor)}" target="_blank">Grup İçi Özel Finansal İşlemler Raporu <i class="fas fa-arrow-up-right-from-square"></i></a>` : '';
   }
+  const BSEC = new Set();
+  const bsecToplam = () => { $('#knSeciliKasa').textContent = '₺' + para($$('#knBakiye .kn-bsec:checked').reduce((s, c) => s + (+c.dataset.tl || 0), 0)); };
+  kok.addEventListener('change', e => { const c = e.target.closest('.kn-bsec'); if (!c) return; if (c.checked) BSEC.add(c.dataset.k); else BSEC.delete(c.dataset.k); bsecToplam(); });
   function cizBakiye() {
-    const B = V.bakiyeler, t = $('#knBakiye');
-    t.tBodies[0].innerHTML = B.length ? B.map(b => `<tr><td>${esc(b.sirket)}</td><td class="sol fw-bold">${esc(b.bankaKasa)}</td><td class="sol">${esc(b.detay)}</td><td>${esc(pbAd(b.pb))}</td><td class="para">${para(b.tutar)}</td><td class="para">${para(b.tutarTL)}</td><td>${tarih(b.tarih)}</td></tr>`).join('') : '<tr><td colspan="7" class="na-bos">Bakiye yok.</td></tr>';
+    const B = V.bakiyeler.filter(b => sirketUyar(b.dbName)), t = $('#knBakiye');
+    // ilk sütun: seçim kutusu → üst şeritte Seçili Kasa / Banka (TL) toplamı (seçim yeniden çizimde korunur)
+    const bk = b => [b.dbName, b.bankaKasa, b.detay, b.pb].join('|');
+    t.tBodies[0].innerHTML = B.length ? B.map(b => `<tr><td><input type="checkbox" class="form-check-input kn-bsec" data-k="${esc(bk(b))}" data-tl="${b.tutarTL}" ${BSEC.has(bk(b)) ? 'checked' : ''} title="Seçili Kasa / Banka toplamına ekle"></td><td>${esc(b.sirket)}</td><td class="sol fw-bold">${esc(b.bankaKasa)}</td><td class="sol">${esc(b.detay)}</td><td>${esc(pbAd(b.pb))}</td><td class="para">${para(b.tutar)}</td><td class="para">${para(b.tutarTL)}</td><td>${tarih(b.tarih)}</td></tr>`).join('') : '<tr><td colspan="8" class="na-bos">Bakiye yok.</td></tr>';
+    bsecToplam();
     const nakit = B.filter(b => b.bankaKasa === 'BANKA' || b.bankaKasa === 'KASA').reduce((s, b) => s + b.tutarTL, 0), portfoy = B.filter(b => b.bankaKasa.includes('PORTFÖY')).reduce((s, b) => s + b.tutarTL, 0);
-    t.tFoot.innerHTML = `<tr class="toplam"><td colspan="5" class="text-end">BANKA + KASA</td><td class="para">${para(nakit)}</td><td></td></tr><tr class="toplam"><td colspan="5" class="text-end">ÇEK + SENET PORTFÖYÜ</td><td class="para">${para(portfoy)}</td><td></td></tr>`;
+    t.tFoot.innerHTML = `<tr class="toplam"><td colspan="6" class="text-end">BANKA + KASA</td><td class="para">${para(nakit)}</td><td></td></tr><tr class="toplam"><td colspan="6" class="text-end">ÇEK + SENET PORTFÖYÜ</td><td class="para">${para(portfoy)}</td><td></td></tr>`;
     $('#knBakiyeNot').textContent = `${B.length} satır · toplam ${para(nakit + portfoy)} ₺`;
     const L = satirlar().filter(r => r.durum !== 'ÖDENDİ'), pbler = [...new Set([...B.map(b => b.pb), ...L.map(r => r.pb)])].sort((a, b) => a === 'TRY' ? -1 : b === 'TRY' ? 1 : a.localeCompare(b));
     const nakitY = r => !['Çek', 'Senet', 'Mahsup', 'Temlik', 'Yansıtma'].includes(r.yontem);
     $('#knProjeksiyon tbody').innerHTML = pbler.map(pb => { const mb = B.filter(b => (b.bankaKasa === 'BANKA' || b.bankaKasa === 'KASA') && b.pb === pb).reduce((s, b) => s + b.tutar, 0), bn = L.filter(r => r.pb === pb && nakitY(r)).reduce((s, r) => s + r.tutar, 0), mc = B.filter(b => b.bankaKasa.includes('PORTFÖY') && b.pb === pb).reduce((s, b) => s + b.tutar, 0), bc = L.filter(r => r.pb === pb && (r.yontem === 'Çek' || r.yontem === 'Senet')).reduce((s, r) => s + r.tutar, 0); const k = v => `<td class="para ${v < 0 ? 'text-danger' : 'text-primary'}">${para(v)}</td>`; return `<tr><td rowspan="2" class="fw-bold">${esc(pbAd(pb))}</td><td class="sol">Nakit / Banka</td><td class="para">${para(mb)}</td><td class="para text-danger">${para(bn)}</td>${k(mb - bn)}</tr><tr><td class="sol">Müşteri Çekleri / Senetleri</td><td class="para">${para(mc)}</td><td class="para text-danger">${para(bc)}</td>${k(mc - bc)}</tr>`; }).join('');
   }
   function cizGunluk() {
-    const a = F.ara.trim().toLocaleLowerCase('tr-TR'); const G = V.gunluk.filter(g => !a || [g.kullanici, g.tip, g.aciklama, g.sirket, String(g.docEntry)].join(' ').toLocaleLowerCase('tr-TR').includes(a));
+    const a = F.ara.trim().toLocaleLowerCase('tr-TR'); const G = V.gunluk.filter(g => sirketUyar(g.dbName)).filter(g => !a || [g.kullanici, g.tip, g.aciklama, g.sirket, String(g.docEntry)].join(' ').toLocaleLowerCase('tr-TR').includes(a));
     $('#knGunluk tbody').innerHTML = G.length ? G.map(g => `<tr class="tik" data-doc="${g.docEntry}" data-db="${esc(g.dbName)}"><td>${esc(g.tarih)}</td><td>${esc(g.kullanici)}</td><td>${esc(g.sirket)}</td><td>#${g.docEntry}</td><td>${rozet(g.tip, /Sil|Kaldır|Hata|Red/.test(g.tip) ? 'hata' : /Ödeme|Planlandı|Bağlandı|Talimat|Avans|Onay|Makbuz|Fiş/.test(g.tip) ? 'ok' : 'bilgi')}</td><td class="sol">${esc(g.aciklama)}</td></tr>`).join('') : '<tr><td colspan="6" class="na-bos">Günlük kaydı yok.</td></tr>';
     $('#knGunlukNot').textContent = `${G.length} kayıt · son 300`;
   }
@@ -294,8 +476,9 @@
   });
   kok.addEventListener('click', e => { const b = e.target.closest('.kn-talimat-ac'); if (!b) return; e.stopPropagation(); sekme('talimat'); const tr = $(`tr.tl-satir[data-no="${b.dataset.no}"]`); if (tr) { tr.scrollIntoView({ block: 'center' }); const d = $(`tr.tl-detay[data-no="${b.dataset.no}"]`); if (d) d.style.display = ''; } });
   // talimat seçimi: kutucuk ya da ilk hücre tıklanır; "Seçilenlerden Talimat Oluştur" düğmesi seçili sayısını gösterir
-  const secimSayaci = t => { if (!t) return; const n = $$('.kn-sec:checked', t).length, p = t.id.replace('knTablo-', ''), b = $(`.kn-talimat-olustur[data-p="${p}"]`); if (b) { b.innerHTML = `<i class="fas fa-file-contract me-1"></i>Seçilenlerden Talimat Oluştur${n ? ` (${n})` : ''}`; b.classList.toggle('btn-success', n > 0); b.classList.toggle('btn-primary', n === 0); } };
-  kok.addEventListener('change', e => { const h = e.target.closest('.kn-sec-hepsi'); if (h) { $$('.kn-sec:not(:disabled)', h.closest('table')).forEach(c => { c.checked = h.checked; c.closest('tr').classList.toggle('secili', h.checked); }); secimSayaci(h.closest('table')); return; } const c = e.target.closest('.kn-sec'); if (c) { c.closest('tr').classList.toggle('secili', c.checked); secimSayaci(c.closest('table')); } });
+  // 13 Kas 2026: her satır işaretlenebilir; talimat sayacı yalnız talimata alınabilen (data-engel taşımayan) satırları sayar; üst şeritte Seçili Ödeme (TL) = işaretli satırların TL toplamı
+  const secimSayaci = t => { if (!t) return; const sec = $$('.kn-sec:checked', t), n = sec.filter(c => !c.dataset.engel).length, p = t.id.replace('knTablo-', ''), etkin = p === aktifSekme(), b = etkin ? $('#knSekmeIslem .kn-talimat-olustur') : null; if (b) { b.innerHTML = `<i class="fas fa-file-contract"></i>Talimat Oluştur${n ? ` (${n})` : ''}`; b.classList.toggle('secili', n > 0); } const td = etkin ? $('#knSekmeIslem .kn-toplu-dekont') : null; if (td) td.innerHTML = `<i class="fas fa-file-upload"></i>Toplu Dekont${sec.length ? ` (${sec.length})` : ''}`; if (t.closest('.na-panel.aktif')) $('#knSeciliOdeme').textContent = '₺' + para(sec.reduce((s, c) => s + ((satirBul(+c.closest('tr').dataset.doc) || {}).tutarTL || 0), 0)); };
+  kok.addEventListener('change', e => { const h = e.target.closest('.kn-sec-hepsi'); if (h) { $$('.kn-sec', h.closest('table')).filter(c => c.closest('tr').style.display !== 'none').forEach(c => { c.checked = h.checked; c.closest('tr').classList.toggle('secili', h.checked); }); secimSayaci(h.closest('table')); return; } const c = e.target.closest('.kn-sec'); if (c) { c.closest('tr').classList.toggle('secili', c.checked); secimSayaci(c.closest('table')); } });
   kok.addEventListener('click', e => { const td = e.target.closest('td'); if (!td || e.target.closest('input') || td !== td.parentElement.firstElementChild) return; const c = td.querySelector('.kn-sec'); if (!c) return; e.stopPropagation(); if (c.disabled) { mesaj('info', 'Bu satır talimata alınamaz: ' + esc(c.title || 'kapalı')); return; } c.checked = !c.checked; c.dispatchEvent(new Event('change', { bubbles: true })); }, true);
   // ---------- TALİMAT HAZIRLAMA PENCERESİ: seçili satırlar, dövizli satırlarda baz kur (TCMB / fatura üstü / anlaşmalı), banka hesabı / kasa
   let TLM = { satirlar: [], db: '' };
@@ -334,34 +517,157 @@
     modalKapat($('#knTalimatModal')); mesaj('success', '<i class="fas fa-file-contract me-1"></i>' + esc(d.message) + (d.talimatlar || []).map(t => ` <a href="${esc(t.link)}" target="_blank" class="ms-1"><i class="fas fa-print"></i> ${esc(t.no)} yazdır</a>`).join(''));
     await yukle(true); sekme('talimat');
   });
-  kok.addEventListener('click', e => { const b = e.target.closest('.kn-talimat-olustur'); if (!b) return; const t = $('#knTablo-' + b.dataset.p); talimatOlustur($$('.kn-sec:checked', t).map(c => +c.closest('tr').dataset.doc)); });
+  kok.addEventListener('click', e => {
+    const b = e.target.closest('.kn-talimat-olustur'); if (!b) return; const t = $('#knTablo-' + aktifSekme()), sec = $$('.kn-sec:checked', t), uygun = sec.filter(c => !c.dataset.engel), engelli = sec.length - uygun.length;
+    if (!uygun.length && engelli) { mesaj('warning', `Seçili ${engelli} satır talimata alınamaz: ${esc(sec[0].title || 'kapalı')}.`); return; }
+    talimatOlustur(uygun.map(c => +c.closest('tr').dataset.doc));
+    if (engelli) mesaj('info', `${engelli} satır talimata alınamadığı için dışarıda bırakıldı (ödenmiş, açık talimatta, belgesiz çek / senet ya da onaysız nakit).`);
+  });
 
   // ---------- sekmeler / filtreler / üst kartlar
   function sekme(p) {
+    // 13 Kas 2026 (kullanıcı: "Grup İçi İşlemler kaldır"): Grup İçi İşlemler sekmesi de kaldırıldı; Mahsup / Temlik / Yansıtma yöntemli ve fatura sahibi ≠ ödeyen satırlar yalnız Tümü sekmesinde (grup içi işlem türü ve modül kaydı satır çekmecesinden). Eski bağlantılar (sekme=mahsup / grupici …) Tümü'ne düşer; grupici kodu (KOL.grupici, hucreler dalı) sekme geri istenirse diye duruyor.
     if (!$(`#knSekmeler button[data-p="${p}"]`)) p = 'tumu';
     $$('#knSekmeler button').forEach(b => b.classList.toggle('aktif', b.dataset.p === p));
     $$('#kn > .na-panel').forEach(x => x.classList.toggle('aktif', x.dataset.p === p));
     ciz();
-    try { const u = new URL(location.href); if (p === 'tumu') u.searchParams.delete('sekme'); else u.searchParams.set('sekme', p); u.searchParams.set('sirket', F.sirket || 'tumu'); history.replaceState(null, '', u); } catch (e) { }   // sirket=tumu: yeniden yüklenince konsolide kalır
+    try { const u = new URL(location.href); if (p === 'tumu') u.searchParams.delete('sekme'); else u.searchParams.set('sekme', p); u.searchParams.delete('sirket'); history.replaceState(null, '', u); } catch (e) { }   // şirket adrese yazılmaz: yeniden yüklenince Tümü (Konsolide)
   }
-  $$('#knSekmeler button').forEach(b => b.addEventListener('click', () => sekme(b.dataset.p)));
-  $('#knSirket').addEventListener('change', () => { F.sirket = $('#knSirket').value; yukle(); });
+  $$('#knSekmeler button[data-p]').forEach(b => b.addEventListener('click', () => sekme(b.dataset.p)));
   $('#knBas').addEventListener('change', () => { F.bas = $('#knBas').value; yukle(); }); $('#knBit').addEventListener('change', () => { F.bit = $('#knBit').value; yukle(); });
   $$('.kn-hizli button[data-gun]').forEach(b => b.addEventListener('click', () => { const d = new Date(); const bit = new Date(); bit.setDate(bit.getDate() + +b.dataset.gun); F.bas = d.toISOString().slice(0, 10); F.bit = bit.toISOString().slice(0, 10); $('#knBas').value = F.bas; $('#knBit').value = F.bit; yukle(); }));
-  $('#knDurum').addEventListener('change', () => { F.durum = $('#knDurum').value; ciz(); }); $('#knSatinalmaci').addEventListener('change', () => { F.satinalmaci = $('#knSatinalmaci').value; ciz(); });
   $('#knAra').addEventListener('input', () => { F.ara = $('#knAra').value; ciz(); });
-  $('#knTemizle').addEventListener('click', () => { F.durum = ''; F.satinalmaci = ''; F.ara = ''; F.kpi = ''; $('#knDurum').value = ''; $('#knSatinalmaci').value = ''; $('#knAra').value = ''; ciz(); });
-  $('#knKpi').addEventListener('click', e => { const el = e.target.closest('[data-kpi],[data-p]'); if (!el) return; if (el.dataset.p) { sekme(el.dataset.p); return; } const f = el.dataset.kpi || ''; F.kpi = F.kpi === f ? '' : f; if (F.kpi === 'avans' && aktifSekme() !== 'nakit' && aktifSekme() !== 'tumu') sekme('nakit'); else if (F.kpi === 'onay' && !['tumu', 'nakit', 'cek', 'senet'].includes(aktifSekme())) sekme('tumu'); else ciz(); });
-  $('#knExcel').addEventListener('click', () => { const p = aktifSekme(), t = $('#knTablo-' + p) || (p === 'talimat' ? $('#knTalimatlar') : $('#knBakiye')); if (!t) return; const bas = $$('thead th', t).map(x => x.textContent.trim()); const rows = $$('tbody tr', t).filter(r => !r.querySelector('.na-bos') && !r.classList.contains('tl-detay')).map(r => $$('td', r).map(td => { const i = td.querySelector('input:not([type=checkbox]),select'); return i ? i.value : td.textContent.trim().replace(/\s+/g, ' '); })); csvIndir('kasa_nakit_akisi_' + p, bas, rows); });
+  $('#knTemizle').addEventListener('click', () => { F.durumlar = []; F.kisiler = []; F.ara = ''; F.kpi = ''; $('#knAra').value = ''; csEtiketler(); ciz(); });
+  // üst kartlar dinamik (13 Kas 2026: "mükerrer uyarısı kutucuğuna tıkladığımda o kayıtları getirsin"): filtre kartına tıklayınca o kayıtlar Tümü sekmesinde listelenir (kart yeniden tıklanınca filtre kalkar); bakiye kartları Banka / Kasa Bakiyesi sekmesini açar
+  $('#knKpi').addEventListener('click', e => {
+    const el = e.target.closest('[data-kpi],[data-p]'); if (!el) return; if (el.dataset.p) { sekme(el.dataset.p); return; }
+    const f = el.dataset.kpi || ''; F.kpi = F.kpi === f ? '' : f;
+    if (!F.kpi) { ciz(); return; }
+    Object.keys(CF).forEach(k => { CF[k] = {}; });   // sütun süzgeçleri kart sonucunu gizlemesin
+    sekme('tumu'); const n = satirlar().length, ad = (el.querySelector('.l') || {}).textContent || 'Kart';
+    mesaj(n ? 'info' : 'warning', `<i class="fas fa-filter me-1"></i><b>${esc(ad)}</b>: ${n} kayıt listelendi. Kartı yeniden tıklayınca ya da Temizle ile filtre kalkar.`);
+    const k = $('#knTablo-tumu').closest('.na-kart'); if (k) k.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
+  // ---------- ÇOKLU SEÇİM KUTUSU (13 Kas 2026: "filtrelemede birden fazla seçime onay versin, örneğin Uras ve Alv aynı anda"): üst filtreler (Şirket, Durum, Temsilci / Talep Eden) ve
+  // başlık altındaki liste süzgeçleri. Düğme (.kn-cs) seçim özetini yazar; tıklanınca gövdeye eklenen açılır listede onay kutuları çıkar (Tümünü Seç / Temizle). Seçim boşsa "Tümü".
+  const SECENEK = { sirket: [], durum: [], kisi: [] };
+  const csOzet = (sec, adlar, bos) => !sec.length ? bos : sec.length === 1 ? adlar[0] : adlar.join(', ').length <= 24 ? adlar.join(', ') : `${sec.length} seçili`;
+  const CS_UST = {
+    knSirket: { sec: () => F.sirketler, liste: () => SECENEK.sirket, bos: 'Tümü (Konsolide)', yaz: a => { F.sirketler = a; const tek = a.length === 1 ? a[0] : ''; if (tek !== F.sirket) { F.sirket = tek; yukle(); } else ciz(); } },   // tek şirket: sunucudan o şirket; hiç / birden çok: konsolide veri, seçilenler istemcide süzülür
+    knDurum: { sec: () => F.durumlar, liste: () => SECENEK.durum, bos: 'Tümü', yaz: a => { F.durumlar = a; ciz(); } },
+    knSatinalmaci: { sec: () => F.kisiler, liste: () => SECENEK.kisi, bos: 'Tümü', yaz: a => { F.kisiler = a; ciz(); } }
+  };
+  function csEtiketler() { Object.keys(CS_UST).forEach(id => { const el = $('#' + id), c = CS_UST[id]; if (!el) return; const sec = c.sec(), ad = sec.map(v => (c.liste().find(o => o.v === v) || { ad: v }).ad); el.textContent = csOzet(sec, ad, c.bos); el.classList.toggle('dolu', sec.length > 0); el.dataset.secim = ad.join(', '); }); }
+  // düğmenin ayarı: üst filtre → CS_UST; sütun süzgeci → tablo sütunundaki farklı değerler (hucreAnahtar) + CF[sekme][sütun]
+  function csAyar(dugme) {
+    if (CS_UST[dugme.id]) return CS_UST[dugme.id];
+    const t = dugme.closest('table'), p = t.id.replace('knTablo-', ''), ad = dugme.dataset.ad, i = Array.from(t.tHead.rows[0].cells).findIndex(th => th.dataset.ad === ad);
+    return {
+      sec: () => (CF[p] && Array.isArray(CF[p][ad]) ? CF[p][ad] : []), bos: 'Tümü',
+      liste: () => { const d = [...new Set($$('tr[data-doc]', t.tBodies[0]).map(tr => hucreAnahtar(tr.cells[i])))].filter(x => x && x !== '—'); (CF[p] && Array.isArray(CF[p][ad]) ? CF[p][ad] : []).forEach(x => { if (!d.includes(x)) d.push(x); }); return d.sort((a, b) => a.localeCompare(b, 'tr')).map(x => ({ v: x, ad: x })); },
+      yaz: a => { (CF[p] || (CF[p] = {}))[ad] = a; dugme.textContent = csOzet(a, a, dugme.dataset.bos ?? 'Tümü'); dugme.classList.toggle('dolu', a.length > 0); dugme.title = `${ad}: süz (birden çok seçilebilir)${a.length ? ' · ' + a.join(', ') : ''}`; suzUygula(p); }
+    };
+  }
+  let CSA = null;   // açık liste: { dugme, ayar }
+  const csPop = document.createElement('div'); csPop.className = 'kn-cs-pop'; csPop.style.display = 'none'; document.body.appendChild(csPop);
+  function csKapat() { csPop.style.display = 'none'; if (CSA) CSA.dugme.classList.remove('acik'); CSA = null; }
+  function csAc(dugme) {
+    if (CSA && CSA.dugme === dugme) { csKapat(); return; } csKapat(); if (!V) return;
+    const ayar = csAyar(dugme), liste = ayar.liste(), sec = new Set(ayar.sec()); CSA = { dugme, ayar }; dugme.classList.add('acik');
+    csPop.innerHTML = `<div class="ust"><a data-is="hepsi"><i class="fas fa-check-double me-1"></i>Tümünü Seç</a><a data-is="temizle"><i class="fas fa-eraser me-1"></i>Temizle</a><span class="say"></span></div><div class="liste">${liste.length ? liste.map((o, i) => `<label><input type="checkbox" class="form-check-input" data-i="${i}" ${sec.has(o.v) ? 'checked' : ''}><span>${esc(o.ad)}</span></label>`).join('') : '<div class="na-bos px-2">Seçenek yok.</div>'}</div>`;
+    const say = () => { const n = $$('input:checked', csPop).length; $('.say', csPop).textContent = n ? `${n} / ${liste.length} seçili` : 'hepsi (filtre yok)'; };
+    const yaz = () => { ayar.yaz($$('input:checked', csPop).map(c => liste[+c.dataset.i].v)); if (CS_UST[dugme.id]) csEtiketler(); say(); };
+    csPop.onchange = e => { if (e.target.matches('input')) yaz(); };
+    csPop.onclick = e => { const a = e.target.closest('a[data-is]'); if (!a) return; $$('input', csPop).forEach(c => c.checked = a.dataset.is === 'hepsi'); yaz(); };
+    say(); csPop.style.display = 'block';
+    const r = dugme.getBoundingClientRect(), w = Math.max(r.width, 190); csPop.style.minWidth = w + 'px';
+    csPop.style.left = Math.max(4, Math.min(r.left, innerWidth - Math.max(w, csPop.offsetWidth) - 8)) + 'px'; csPop.style.top = (r.bottom + 2 + csPop.offsetHeight > innerHeight ? Math.max(4, r.top - csPop.offsetHeight - 2) : r.bottom + 2) + 'px';
+  }
+  document.addEventListener('click', e => { const d = e.target.closest('.kn-cs'); if (d && kok.contains(d)) { e.stopPropagation(); csAc(d); return; } if (CSA && !csPop.contains(e.target)) csKapat(); });
+  window.addEventListener('scroll', e => { if (CSA && !csPop.contains(e.target)) csKapat(); }, true); window.addEventListener('resize', csKapat);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && CSA) csKapat(); });
+  // ---------- GRUP İÇİ İŞLEMLER sekmesi: tür seçimi (Mahsup / Temlik / Yansıtma) → otomatik grup içi belge o türde hazırlanır
+  kok.addEventListener('change', async e => {
+    const s = e.target.closest('.kn-gtur'); if (!s) return; const r = satirdan(s); if (!r) return;
+    const d = await post('/Rapor79/GrupIciTur', { DbName: r.dbName, DocEntry: r.docEntry, Tur: s.value }).catch(() => ({ success: false, message: 'Ağ hatası.' }));
+    if (!d.success) { mesaj('danger', esc(d.message || 'Tür değiştirilemedi.')); s.value = r.grupIciTur || 'Mahsup'; return; }
+    if (d.belgeler) V.grupIciBelgeler = d.belgeler; if (d.row) satirYerlestir(d.row); mesaj('success', '<i class="fas fa-file-signature me-1"></i>' + esc(d.message)); ciz();
+  });
+  // Excel: etkin sekmenin tablosu ekranda göründüğü gibi .xlsx (ortak TabloExcel; süzgeç satırı ve gizli satırlar dışarıda)
+  $('#knExcel').addEventListener('click', async () => {
+    const p = aktifSekme(), t = $('#knTablo-' + p) || (p === 'ozet' ? $('#knOzetYontem') : p === 'talimat' ? $('#knTalimatlar') : p === 'gunluk' ? $('#knGunluk') : p === 'aylik' ? $('#kaTablo') : $('#knBakiye')); if (!t || !window.TabloExcel) return;
+    const ad = ($(`#knSekmeler button[data-p="${p}"]`) || {}).childNodes ? Array.from($(`#knSekmeler button[data-p="${p}"]`).childNodes).filter(n => n.nodeType === 3).map(n => n.nodeValue.trim()).join('') || p : p;
+    try { await TabloExcel.indir('kasa_nakit_akisi_' + p + '_' + bugun(), p === 'ozet' ? [{ tablo: t, ad: 'Özet · Yöntem', baslik: 'Kasa Nakit Akışı · Özet · Ödeme Yöntemine Göre', altBaslik: $('#knKapsam').title, kpi: '#knKpi' }, { tablo: '#knOzetDurum', ad: 'Özet · Durum', baslik: 'Kasa Nakit Akışı · Özet · Ödeme Durumuna Göre' }, { tablo: '#knOzetSirket', ad: 'Özet · Şirket', baslik: 'Kasa Nakit Akışı · Özet · Şirkete Göre' }, { tablo: '#knOzetKaynak', ad: 'Özet · Kaynak', baslik: 'Kasa Nakit Akışı · Özet · Kaynağa Göre' }] : [{ tablo: t, ad: ad.slice(0, 28), baslik: 'Kasa Nakit Akışı · ' + ad, altBaslik: $('#knKapsam').title }]); } catch (e) { mesaj('danger', 'Excel üretilemedi: ' + esc(e.message || '')); }
+  });
+  // ---------- üst şerit: Getir · Özel Onay Modu · Sistem Logları · Seçili Kasa / Banka
+  $('#knGetir').addEventListener('click', () => yukle());
+  $('#knOzelOnay').addEventListener('change', () => { const a = $('#knOzelOnay').checked; $('#knOzelKap').classList.toggle('acik', a); mesaj(a ? 'warning' : 'info', a ? '<i class="fas fa-shield-halved me-1"></i><b>Özel Onay Modu açık</b>: mutabakat durumuna bakılmaksızın kayıt ÖDENDİ yapılabilir.' : 'Özel Onay Modu kapalı: ÖDENDİ için Mutabık, muafiyet ya da Özel Onay durumu gerekir.'); });
+  $('#knLoglar').addEventListener('click', () => { sekme('gunluk'); const t = $('#knGunluk'); if (t) t.scrollIntoView({ block: 'nearest' }); });
+  $('#knSeciliKasaKap').addEventListener('click', () => sekme('bakiye'));
+  // ---------- Ödenenler listesi (GetOdenenler: tüm şirketler, ödenme tarihine göre)
+  const alanOku = (o, ad) => o[ad] ?? o[ad[0].toLowerCase() + ad.slice(1)];
+  async function odenenlerGetir() {
+    const tb = $('#kdnTablo tbody'); tb.innerHTML = '<tr><td colspan="12" class="na-bos text-center">Yükleniyor…</td></tr>'; $('#kdnTablo tfoot').innerHTML = '';
+    const d = await getJ(`/Rapor79/GetOdenenler?start=${$('#kdnBas').value}&end=${$('#kdnBit').value}&search=${encodeURIComponent($('#kdnAra').value.trim())}`).catch(() => null);
+    if (!Array.isArray(d)) { tb.innerHTML = '<tr><td colspan="12" class="na-bos text-center text-danger">Liste alınamadı.</td></tr>'; return; }
+    const g = (x, ad) => alanOku(x, ad);
+    tb.innerHTML = d.length ? d.map(x => { const pb = g(x, 'ParaBirimi') || 'TRY', link = g(x, 'DekontLink'); return `<tr><td class="fw-bold">${esc(g(x, 'Firma'))}</td><td>${tarih(g(x, 'OdenmeTarihi'))}</td><td class="sol fw-bold">${esc(g(x, 'Kurum'))}</td><td class="sol">${esc(g(x, 'UrunHizmet') || '')}</td><td>${esc(g(x, 'FaturaSiparisNo') || '—')}</td><td class="para">${para(g(x, 'Tutar'))} ${esc(pbAd(pb))}</td><td>${esc(pbAd(pb))}</td><td class="sayac">${pb === 'TRY' || pb === 'TL' ? '—' : Number(g(x, 'Kur') || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</td><td class="para">${para(g(x, 'TutarTL'))} ₺</td><td class="para">${g(x, 'OdenenTutar') ? para(g(x, 'OdenenTutar')) + ' ' + esc(pbAd(g(x, 'OdenenTutarPB') || pb)) : '—'}</td><td>${yontemRozet(g(x, 'OdemeYontemi'))}</td><td>${link ? `<a href="${esc(link)}" target="_blank" class="fw-bold"><i class="fas fa-paperclip"></i> Dekont</a>` : bos}</td></tr>`; }).join('') : '<tr><td colspan="12" class="na-bos text-center">Bu aralıkta ödenen kayıt yok.</td></tr>';
+    $('#kdnTablo tfoot').innerHTML = d.length ? `<tr class="toplam"><td colspan="8" class="text-end fw-bold">TOPLAM (₺)</td><td class="para fw-bold">${para(d.reduce((s, x) => s + (+g(x, 'TutarTL') || 0), 0))} ₺</td><td colspan="3"></td></tr>` : '';
+    $('#kdnNot').textContent = `${d.length} ödeme · tüm şirketler`;
+  }
+  $('#knOdenenler').addEventListener('click', () => { if (!$('#kdnBas').value) { const b = new Date(bugun()); b.setDate(b.getDate() - 30); $('#kdnBas').value = b.toISOString().slice(0, 10); $('#kdnBit').value = bugun(); } modalAc($('#knOdenenModal')); odenenlerGetir(); });
+  $('#kdnGetir').addEventListener('click', odenenlerGetir); $('#kdnAra').addEventListener('keydown', e => { if (e.key === 'Enter') odenenlerGetir(); });
+  // ---------- muafiyet (Mutabakat hücresi) · satır dekontu · toplu dekont · satır silme · Çek / Senet Ekle
+  kok.addEventListener('change', async e => {
+    const s = e.target.closest('.kn-muaf'); if (!s) return; const r = satirdan(s); if (!r) return;
+    const d = await post('/Rapor79/MuafiyetKaydet', { DbName: r.dbName, DocEntry: r.docEntry, Sebep: s.value }).catch(() => ({ success: false }));
+    if (!d.success) { mesaj('danger', 'Muafiyet kaydedilemedi.'); s.value = r.muafiyet || ''; return; }
+    r.muafiyet = d.sebep || ''; mesaj('info', r.muafiyet ? `#${r.docEntry} ${esc(r.kurum)}: mutabakat muafiyeti <b>${esc(r.muafiyet)}</b>.` : `#${r.docEntry} ${esc(r.kurum)}: muafiyet kaldırıldı.`); ciz();
+  });
+  let dekontSatir = null;
+  kok.addEventListener('click', e => { const b = e.target.closest('.kn-dekont-yukle'); if (!b) return; e.stopPropagation(); dekontSatir = satirdan(b); if (!dekontSatir) return; const f = $('#knSatirDosya'); f.value = ''; f.click(); });
+  $('#knSatirDosya').addEventListener('change', async () => {
+    const f = $('#knSatirDosya').files[0], r = dekontSatir; if (!f || !r) return;
+    const fd = new FormData(); fd.append('dosya', f); fd.append('dbName', r.dbName); fd.append('docEntry', r.docEntry); fd.append('tur', 'Dekont'); fd.append('aciklama', '');
+    const d = await fetch('/Rapor79/EkYukle', { method: 'POST', headers: { 'RequestVerificationToken': csrf }, body: fd }).then(x => x.json()).catch(() => ({ success: false, message: 'Ağ hatası.' }));
+    if (!d.success) { mesaj('danger', esc(d.message || 'Dekont yüklenemedi.')); return; } if (d.row) satirYerlestir(d.row); mesaj('success', '<i class="fas fa-paperclip me-1"></i>' + esc(d.message || 'Dekont yüklendi.')); ciz();
+  });
+  let topluSecim = [];
+  kok.addEventListener('click', e => {
+    const b = e.target.closest('.kn-toplu-dekont'); if (!b) return; const t = $('#knTablo-' + aktifSekme()); if (!t) return;
+    topluSecim = $$('.kn-sec:checked', t).map(c => satirBul(+c.closest('tr').dataset.doc)).filter(Boolean);
+    if (!topluSecim.length) { mesaj('warning', 'Toplu dekont için önce tablodan satır işaretleyin (ilk sütundaki kutular).'); return; }
+    const f = $('#knTopluDosya'); f.value = ''; f.click();
+  });
+  $('#knTopluDosya').addEventListener('change', async () => {
+    const f = $('#knTopluDosya').files[0]; if (!f || !topluSecim.length) return;
+    const grup = {}; topluSecim.forEach(r => (grup[r.dbName] = grup[r.dbName] || []).push(r.docEntry)); let n = 0, hata = '';
+    for (const db of Object.keys(grup)) {
+      const fd = new FormData(); fd.append('dekontDosya', f); fd.append('dbName', db); fd.append('docEntries', grup[db].join(','));
+      const d = await fetch('/Rapor79/UploadTopluDekont', { method: 'POST', headers: { 'RequestVerificationToken': csrf }, body: fd }).then(x => x.json()).catch(() => ({ success: false, message: 'Ağ hatası.' }));
+      if (d.success) n += grup[db].length; else hata = d.message || 'Yüklenemedi.';
+    }
+    mesaj(hata ? 'danger' : 'success', hata ? esc(hata) : `<i class="fas fa-file-upload me-1"></i>${esc(f.name)} ${n} satıra dekont olarak eklendi.`); topluSecim = []; await yukle(true);
+  });
+  kok.addEventListener('click', async e => {
+    const b = e.target.closest('.kn-sil'); if (!b) return; e.stopPropagation(); const r = satirdan(b); if (!r) return;
+    if (!confirm(`#${r.docEntry} ${r.kurum} kaydı silinsin mi? Bağlı çek / senet planları kaldırılır.`)) return;
+    const d = await post('/Rapor79/SilJson', { DbName: r.dbName, DocEntry: r.docEntry }).catch(() => ({ success: false }));
+    if (!d.success) { mesaj('danger', 'Silinemedi.'); return; } satirKaldir(r.docEntry); mesaj('info', 'Kayıt silindi.'); ciz();
+  });
+  kok.addEventListener('click', e => { if (e.target.closest('.kn-yeni-ac')) yeniAc('form'); else if (e.target.closest('.kn-cek-ekle')) yeniAc('form', aktifSekme() === 'senet' ? 'Senet' : 'Çek'); });
 
   // ---------- satır içi kayıt
   kok.addEventListener('change', async e => {
     const inp = e.target.closest('.kn-alan'); if (!inp) return; const tr = inp.closest('tr'); if (!tr) return;
+    // Özel Onay Modu kapalıyken (eski görünümün kuralı): ÖDENDİ için kayıt Mutabık, muafiyetli ya da Özel Onay durumunda olmalı
+    if (inp.dataset.alan === 'U_Durum' && inp.value === 'ÖDENDİ' && !$('#knOzelOnay').checked) { const r0 = satirBul(+tr.dataset.doc); if (r0 && r0.durum !== 'ÖDENDİ' && r0.durum !== 'Özel Onay' && r0.mutabakat !== 'Mutabık' && !r0.muafiyet) { inp.value = r0.durum; mesaj('warning', `<i class="fas fa-triangle-exclamation me-1"></i>#${r0.docEntry} ${esc(r0.kurum)}: durumu ÖDENDİ yapabilmek için mutabakat <b>Mutabık</b> olmalı. Mutabakatı yapılamayan işlemde muafiyet seçin, kaydı <b>Özel Onay</b> durumuna alın ya da üst şeritten <b>Özel Onay Modu</b>nu açın.`); return; } }
     const d = await post('/Rapor79/AlanKaydet', { DbName: tr.dataset.db, DocEntry: +tr.dataset.doc, Alan: inp.dataset.alan, Deger: inp.value }).catch(() => ({ success: false, message: 'Ağ hatası.' }));
     if (!d.success) { mesaj('danger', d.message || 'Kaydedilemedi.'); if (d.row) { satirYerlestir(d.row); ciz(); } return; }
     satirYerlestir(d.row); inp.classList.add('ok'); setTimeout(() => inp.classList.remove('ok'), 1200);
     if (d.message && d.message.length > 12) mesaj('info', esc(d.message));
-    if (inp.dataset.alan === 'U_Durum' || inp.dataset.alan === 'U_PlanlananTarih') ciz(); else kpi();
+    if (inp.dataset.alan === 'U_Oncelik' && d.row && d.row.oncelik) { const ayni = V.odemeler.filter(x => x.docEntry !== d.row.docEntry && x.durum !== 'ÖDENDİ' && +x.oncelik === +d.row.oncelik && (x.satinalmaci || '') === (d.row.satinalmaci || '')); if (ayni.length) mesaj('info', `<i class="fas fa-list-ol me-1"></i>${esc(d.row.satinalmaci || 'Temsilcisiz kayıtlar')}: öncelik <b>${d.row.oncelik}</b> olan ${ayni.length} açık kayıt daha var (${esc(ayni.slice(0, 3).map(x => x.kurum).join(', '))}${ayni.length > 3 ? ' …' : ''}).`); }
+    if (inp.dataset.alan === 'U_Durum' || inp.dataset.alan === 'U_PlanlananTarih' || inp.dataset.alan === 'U_Oncelik') ciz(); else kpi();
   });
   kok.addEventListener('click', e => {
     const tr = e.target.closest('tr.tik'); if (!tr || !kok.contains(tr) || tr.classList.contains('tl-satir')) return;
@@ -372,16 +678,27 @@
 
   // ---------- BELGE DETAYI (belge no tıklanınca): başlık, kalemler, ödeme planı, mükerrer, cari açık kalemler
   async function belgeDetayAc(r) {
+    KDT = { r }; $('#kdtSurec').innerHTML = ''; $('#kdtPdf').src = 'about:blank'; $('#kdtPdfEtiket').textContent = 'belge görüntüsü hazırlanıyor…';
     $('#kdtBaslik').textContent = 'Belge Detayı'; $('#kdtKurum').textContent = r.kurum; $('#kdtBilgi').innerHTML = '<div class="na-bos">Yükleniyor…</div>'; $('#kdtUyari').innerHTML = ''; $('#kdtKalemler tbody').innerHTML = ''; $('#kdtPlan tbody').innerHTML = ''; $('#kdtCariKart').style.display = 'none'; $('#kdtModul').style.display = 'none';
     modalAc($('#knBelgeDetayModal'));
     const d = await getJ(`/Rapor79/BelgeDetay?dbName=${encodeURIComponent(r.dbName)}&docEntry=${r.docEntry}`).catch(() => null); if (!d || !d.success) { $('#kdtBilgi').innerHTML = '<div class="na-bos text-danger">Belge detayı alınamadı.</div>'; return; }
     const b = d.belge, oz = b.ozet || {}, pb = pbAd(b.pb);
     $('#kdtBaslik').textContent = `${b.tip}${b.no ? ' ' + b.no : ''}`;
+    // süreç: kim talep etmiş · kim sisteme yüklemiş · kim onaylamış (belge onayı) · ödeme onayı / kaydı açan. Belge aslı yüklenmemişse yükleyen ve belge onayı ön yüz örneğidir ("örnek" rozeti).
+    const s = b.surec || {}, zaman = z => z ? tarih(z) + (z.length > 10 ? ' ' + z.slice(11, 16) : '') : '', orn = s.ornek ? '<span class="ornek" title="Belge aslı yüklenmedi: bu bilgi ön yüz örneğidir. Belge aslı yüklenince yükleyen ve tarih kayıttan gelir.">örnek</span>' : '';
+    const kutu = (k, l, v, alt) => `<div style="--k:${k}"><div class="l">${l}</div><div class="v" title="${esc(v || '')}">${v ? esc(v) : '—'}</div><div class="s">${alt || '&nbsp;'}</div></div>`;
+    $('#kdtSurec').innerHTML = kutu('#1d4ed8', 'Talep Eden', s.talepEden, esc(s.talepKaynak || ''))
+      + kutu('#0f766e', 'Sisteme Yükleyen' + (s.belgeli ? orn : ''), s.yukleyen, s.belgeli ? `${esc(zaman(s.yuklemeTarihi))} · ${esc(s.yuklemeKaynak || '')}` : 'belge yok (cari bakiye / modül kaydı)')
+      + kutu(s.belgeOnayDurum === 'Onaylandı' ? '#15803d' : '#b45309', 'Belgeyi Onaylayan' + (s.belgeli ? orn : ''), s.belgeOnaylayan, s.belgeli ? `${esc(s.belgeOnayDurum || '')}${s.belgeOnayTarihi ? ' · ' + esc(zaman(s.belgeOnayTarihi)) : ''}` : '')
+      + (s.odemeOnayDurum ? kutu(s.odemeOnayDurum === 'Onaylandı' ? '#15803d' : s.odemeOnayDurum === 'Reddedildi' ? '#dc2626' : '#9d174d', 'Ödeme Onayı', s.odemeOnaylayan || s.odemeOnayDurum, `${esc(s.odemeOnayDurum)}${s.odemeOnayTarihi ? ' · ' + esc(zaman(s.odemeOnayTarihi)) : ''}`) : kutu('#64748b', 'Kaydı Açan', s.kaydiAcan, s.kayitTarihi ? esc(zaman(s.kayitTarihi)) : 'günlük kaydı yok'));
+    // belge görüntüsü: yüklenen belge aslı (varsa) ya da sistem kaydından üretilen PDF
+    const pdfYol = b.pdf + '&z=' + Date.now(); $('#kdtPdf').src = pdfYol + '#navpanes=0&view=FitH'; $('#kdtPdfAc').href = b.pdf;
+    const pe = $('#kdtPdfEtiket'); pe.classList.toggle('asil', !!s.dosya); pe.innerHTML = s.dosya ? `<i class="fas fa-file-circle-check me-1"></i>Belge aslı: ${esc(s.dosya.ad)} · ${esc(s.dosya.yukleyen || '')} · ${esc(zaman(s.dosya.tarih))}` : '<i class="fas fa-file-pdf me-1"></i>Sistem kaydından üretilen görüntü (belge aslı yüklenmedi)';
     $('#kdtBilgi').innerHTML = [['Belge Tipi · No', `${b.tip}${b.no ? ' · ' + b.no : ''}${b.bagliDocEntry ? ' · kayıt ' + b.bagliDocEntry : ''}`], ['Belge Tarihi', tarih(b.tarih)], ['Son Ödeme Tarihi', tarih(b.sonOdeme)], ['Cari', b.kurum], ['Fatura Sahibi · Ödeyen', `${b.faturaSahibi} · ${b.odeyenSirket}`], ['Satınalma Temsilcisi', b.satinalmaci || '—'],
       ['Belge Tutarı', `${para(b.belgeTutari)} ${pb}${b.pb !== 'TRY' ? ' · ' + para(b.belgeTutariTL) + ' ₺ (kur ' + b.kur + ')' : ''}`], ['KDV Hariç · KDV', `${para(b.net)} · ${para(b.kdv)} ${pb}`], ['Bu Satır', `${para(r.tutar)} ${pb}${oz.oran != null ? ' · %' + oz.oran : ''}${oz.taksit ? ' · taksit ' + oz.taksit : ''}`], ['Planlanan Toplam', `${para(oz.planlanan)} ${pb}`], ['Ödenen', `${para(oz.odenen)} ${pb}`], ['Kalan (Belgeden)', oz.kalan != null ? `${para(oz.kalan)} ${pb}` : '—']].map(([l, v]) => `<div><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div></div>`).join('');
     $('#kdtUyari').innerHTML = (oz.uyarilar || []).map(u => `<div class="na-uyari kirmizi"><b>${esc(u.tip)}</b> · ${esc(u.aciklama)}${u.docEntryler?.length ? ' · diğer kayıtlar: ' + u.docEntryler.map(x => '#' + x).join(', ') : ''}</div>`).join('') || (b.tip === 'Fatura' || b.tip === 'Sipariş' ? '<div class="na-uyari mavi"><b>Mükerrer kontrolü</b> · bu belge için başka aynı tutarlı kayıt yok; planlanan toplam belge tutarını aşmıyor.</div>' : '');
-    const kal = b.kalemler || []; $('#kdtKalemler tbody').innerHTML = kal.length ? kal.map(k => `<tr><td>${esc(k.kod)}</td><td class="sol">${esc(k.ad)}</td><td class="para">${(k.miktar || 0).toLocaleString('tr-TR')}</td><td>${esc(k.birim)}</td><td class="para">${para(k.birimFiyat)}</td><td class="para">${para(k.tutar)}</td><td class="para">${para(k.kdv)}</td></tr>`).join('') : '<tr><td colspan="7" class="na-bos">Kalem yok (cari bakiye).</td></tr>';
-    $('#kdtKalemler tfoot').innerHTML = kal.length ? `<tr class="toplam"><td colspan="5" class="text-end">TOPLAM (${esc(pb)})</td><td class="para">${para(kal.reduce((s, k) => s + k.tutar, 0))}</td><td class="para">${para(kal.reduce((s, k) => s + k.kdv, 0))}</td></tr>` : ''; $('#kdtKalemNot').textContent = kal.length ? `${kal.length} kalem · ön yüz örneği (deterministik)` : '';
+    const kal = b.kalemler || []; $('#kdtKalemler tbody').innerHTML = kal.length ? kal.map(k => `<tr><td>${esc(k.kod)}</td><td class="sol">${esc(k.ad)}</td><td class="para sayac">${(k.miktar || 0).toLocaleString('tr-TR')}</td><td>${esc(k.birim)}</td><td class="para">${para(k.birimFiyat)} ${esc(pb)}</td><td class="para">${para(k.tutar)} ${esc(pb)}</td><td class="para">${para(k.kdv)} ${esc(pb)}</td></tr>`).join('') : '<tr><td colspan="7" class="na-bos">Kalem yok (cari bakiye).</td></tr>';
+    $('#kdtKalemler tfoot').innerHTML = kal.length ? `<tr class="toplam"><td colspan="5" class="text-end">TOPLAM (${esc(pb)})</td><td class="para">${para(kal.reduce((s, k) => s + k.tutar, 0))} ${esc(pb)}</td><td class="para">${para(kal.reduce((s, k) => s + k.kdv, 0))} ${esc(pb)}</td></tr>` : ''; $('#kdtKalemNot').textContent = kal.length ? `${kal.length} kalem · ön yüz örneği (deterministik)` : '';
     const planSat = [{ docEntry: r.docEntry, sirket: r.sirket, planlanan: r.planlanan, tutar: r.tutar, pb: r.pb, oran: oz.oran, durum: r.durum, yontem: r.yontem, odenme: r.odenme, bu: true }, ...(oz.kardesler || [])].sort((a, c) => (a.planlanan || '').localeCompare(c.planlanan || ''));
     $('#kdtPlan tbody').innerHTML = planSat.map(s => `<tr class="${s.bu ? 'fw-bold' : ''}"><td>#${s.docEntry}${s.bu ? ' (bu)' : ''}</td><td class="sol">${esc(s.sirket)}</td><td>${tarih(s.planlanan)}</td><td class="para">${para(s.tutar)} ${esc(pbAd(s.pb))}</td><td class="para">${s.oran != null ? '%' + s.oran : '—'}</td><td>${yontemRozet(s.yontem)}</td><td>${durumRozet(s.durum)}</td><td>${tarih(s.odenme)}</td></tr>`).join('');
     $('#kdtPlan tfoot').innerHTML = `<tr class="toplam"><td colspan="3" class="text-end">PLANLANAN TOPLAM</td><td class="para">${para(oz.planlanan)} ${esc(pb)}</td><td class="para">${oz.faturaTutari ? '%' + Math.round(oz.planlanan / oz.faturaTutari * 1000) / 10 : ''}</td><td colspan="3" class="sol">belge ${para(oz.faturaTutari)} · ödenen ${para(oz.odenen)} · kalan ${oz.kalan != null ? para(oz.kalan) : '—'}</td></tr>`;
@@ -390,6 +707,15 @@
     $('#kdtOzet').textContent = `#${r.docEntry} · ${r.sirket} · ${r.yontem} · ${r.durum}`;
   }
   kok.addEventListener('click', e => { const b = e.target.closest('.kn-belge-detay'); if (!b) return; e.stopPropagation(); const r = satirdan(b) || acik; if (r) belgeDetayAc(r); });
+  // belge aslını yükle (belge penceresi): "Fatura" türünde ek olarak satıra yazılır; pencere yenilenir ve yüklenen dosyayı gösterir
+  let KDT = { r: null };
+  $('#kdtPdfYukle').addEventListener('click', () => { if (!KDT.r) return; const f = $('#kdtPdfDosya'); f.value = ''; f.click(); });
+  $('#kdtPdfDosya').addEventListener('change', async () => {
+    const f = $('#kdtPdfDosya').files[0], r = KDT.r; if (!f || !r) return;
+    const fd = new FormData(); fd.append('dosya', f); fd.append('dbName', r.dbName); fd.append('docEntry', r.docEntry); fd.append('tur', 'Fatura'); fd.append('aciklama', 'Belge aslı');
+    const d = await fetch('/Rapor79/EkYukle', { method: 'POST', headers: { 'RequestVerificationToken': csrf }, body: fd }).then(x => x.json()).catch(() => ({ success: false, message: 'Ağ hatası.' }));
+    if (!d.success) { mesaj('danger', esc(d.message || 'Belge yüklenemedi.')); return; } if (d.row) satirYerlestir(d.row); mesaj('success', '<i class="fas fa-file-circle-check me-1"></i>' + esc(d.message || 'Belge aslı yüklendi.')); ciz(); belgeDetayAc(satirBul(r.docEntry) || r);
+  });
 
   // ---------- ONAY: nakit talebi / GMY çek çıkışı
   let O = { r: null, tip: 'nakit' };
@@ -584,8 +910,13 @@
     $('#kiBaslik').textContent = senet ? 'Senedi Ver / İbraz Et' : 'Çeki Ver / İbraz Et'; $('#kiKurum').textContent = r.kurum;
     $('#kiBilgi').innerHTML = [['Ödenecek Cari', r.kurum], ['Fatura Sahibi · Ödeyen', `${r.faturaSahibi} · ${r.odeyenSirket}`], ['Belge', `${r.belgeTipi || ''} ${r.faturaNo || ''}`], ['Tutar', `${para(r.tutarTL)} ₺${r.pb !== 'TRY' ? ' (' + para(r.tutar) + ' ' + pbAd(r.pb) + (r.kurBilgi ? ' · ' + r.kurBilgi.ozet : '') + ')' : ''}`], ['Son Ödeme · Planlanan', `${tarih(r.sonOdeme)} · ${tarih(r.planlanan)}`], ['Kur Farkı Faturası', r.kurBilgi ? (r.kurBilgi.kurFarki || '—') : 'TL ödeme (yok)']].map(([l, v]) => `<div><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div></div>`).join('');
     $('#kiBelgeler').innerHTML = b.length ? b.map(x => `<div class="satir"><b>${esc(x.no)}</b><span>${esc(x.asilBorclu)}</span><span>vade ${tarih(x.vade)}</span><span class="fw-bold">${para(x.tutar)} ₺</span>${akibetRozet(x.akibet)}${x.dolasim ? `<span class="kn-dolasim">${esc(x.dolasim)} (${x.gerceklesen}/${x.adimToplam}) · kalan adımlar gerçekleştirilir</span>` : `<span class="text-muted">${esc(x.sahip || r.odeyenSirket)} portföyünden çıkar</span>`}</div>`).join('') : '<div class="na-bos">Çıkacak belge yok.</div>';
-    const bankaya = /\(Tahsil\)/.test(r.kurum || ''); $('#kiTur').value = bankaya ? 'Bankaya Tahsile Ver' : 'Tedarikçiye Ciro';
-    $('#kiBanka').innerHTML = (V.tahsilBankalari || ['Ziraat Bankası', 'Halk Bankası']).map(x => `<option>${esc(x)}</option>`).join(''); $('#kiYer').value = (r.kurum || '').replace(/ \(Tahsil\)$/, ''); $('#kiTarih').value = bugun(); $('#kiTeslimAlan').value = r.alanlar?.teslimAlan || ''; $('#kiBelgeNo').value = ''; $('#kiNot').value = '';
+    // 13 Kas 2026: ibraz dolaşım planına göre — planı olan belgede son adımın türü ve yeri hazır gelir ve kilitlenir (değiştirmek için önce dolaşım planı değiştirilir); plansız belgede serbest
+    const planli = b.find(x => x.adimToplam > 0 && x.gerceklesen < x.adimToplam), sonA = planli ? planSonAdim(planli) : null, bankalar = V.tahsilBankalari || ['Ziraat Bankası', 'Halk Bankası'];
+    const bankaya = sonA ? adimOku(sonA, 'Tur') === 'Bankaya İbraz' : /\(Tahsil\)/.test(r.kurum || ''); $('#kiTur').value = bankaya ? 'Bankaya Tahsile Ver' : 'Tedarikçiye Ciro';
+    $('#kiBanka').innerHTML = bankalar.map(x => `<option>${esc(x)}</option>`).join(''); $('#kiYer').value = sonA && !bankaya ? (adimOku(sonA, 'Alan') || r.kurum) : (r.kurum || '').replace(/ \(Tahsil\)$/, '');
+    if (sonA && bankaya) $('#kiBanka').value = bankalar[planli.cekDocEntry % 2] || bankalar[0];
+    ['#kiTur', '#kiYer', '#kiBanka'].forEach(s => { $(s).disabled = !!planli; $(s).title = planli ? 'Dolaşım planından gelir; değiştirmek için Dolaşım sütunundan planı değiştirin' : ''; });
+    if (planli) $('#kiBelgeler').insertAdjacentHTML('beforeend', `<div class="na-uyari mavi"><i class="fas fa-route me-1"></i><b>İbraz dolaşım planına göre yapılır:</b> ${b.filter(x => x.adimToplam > 0).map(x => `${esc(x.no)}: ${(x.adimlar || []).map(a => `${adimOku(a, 'Sira')}. ${esc(adimOku(a, 'Eden'))} → ${esc(adimOku(a, 'Alan') || 'Banka')}${adimOku(a, 'Durum') === 'Gerçekleşti' ? ' ✓' : ''}`).join(' · ')}`).join(' | ')}. Kalan adımlar sırayla gerçekleştirilir.</div>`); $('#kiTarih').value = bugun(); $('#kiTeslimAlan').value = r.alanlar?.teslimAlan || ''; $('#kiBelgeNo').value = ''; $('#kiNot').value = '';
     IB.sim = null; $('#kiSimOnay').checked = false; kiTurGoster(); modalAc($('#knIbrazModal')); kiSimule();
   }
   function kiTurGoster() { const bankaya = $('#kiTur').value === 'Bankaya Tahsile Ver'; $('#kiBankaKap').style.display = bankaya ? '' : 'none'; $('#kiYerKap').style.display = bankaya ? 'none' : ''; $('#kiTeslimKap').style.display = bankaya ? 'none' : ''; $('#kiBelgeNo').placeholder = bankaya ? 'ibraz bordro no (boşsa otomatik İBZ-…)' : 'ciro bordro no (boşsa otomatik CRO-…)'; }
@@ -613,12 +944,12 @@
   kok.addEventListener('click', e => { const b = e.target.closest('.kn-ibraz-ac'); if (!b) return; e.stopPropagation(); const r = satirdan(b) || acik; if (r) ibrazAc(r); });
 
   // ---------- otomatik grup içi Mahsup / Temlik belgeleri (fatura sahibi ≠ ödeyen): Mahsup / Temlik sekmelerinde liste
-  function cizGib(p) {
-    const t = $('#knGib-' + p); if (!t) return; const tur = SEKME[p];
-    const L = (V.grupIciBelgeler || []).filter(b => b.tur === tur && (!F.sirket || b.faturaSahibiDb === F.sirket || b.odeyenDb === F.sirket || b.kaynakDb === F.sirket));
-    t.tBodies[0].innerHTML = L.length ? L.map(b => `<tr class="${b.durum === 'İptal' ? 'text-muted' : ''}"><td class="sol"><a href="${esc(b.link)}" target="_blank" class="fw-bold" title="Yazdırılabilir belge">${esc(b.no)}</a></td><td>${tarih(b.tarih)}</td><td class="sol fw-bold">${esc(b.faturaSahibi)}</td><td class="sol text-primary fw-bold">${esc(b.odeyen)}</td><td class="sol">${esc(b.kurum)}<small>${esc(b.belgeTipi)} ${esc(b.belgeNo)}</small></td><td>${yontemRozet(b.yontem)}</td><td class="para">${para(b.tutarTL)}${b.pb !== 'TRY' ? `<small>${para(b.tutar)} ${esc(b.pb)}</small>` : ''}</td><td class="sol" style="white-space:normal">${esc(b.sekil)}</td><td>${modulRozet(b.durum)}${b.muhasebeTarihi ? `<small>${esc(b.muhasebeTarihi.slice(0, 10))}</small>` : ''}</td><td class="sol" style="white-space:normal">${b.faturaSahibiFisNo ? `<b>${esc(b.faturaSahibiFisNo)}</b>` : '—'}<small style="white-space:normal">${esc(b.odeyenFisNo || (b.durum === 'Muhasebeleşti' ? 'dolaşım fişleri' : 'ödeme gerçekleşince'))}</small></td><td><a class="kn-belge-link kn-gib-satir" data-doc="${b.docEntry}" data-db="${esc(b.kaynakDb)}" title="Kaynak ödeme satırını aç">#${b.docEntry}</a></td><td><a class="btn btn-light btn-sm py-0 px-1 border" href="${esc(b.link)}" target="_blank" style="font-size:.62rem" title="Yazdır"><i class="fas fa-print"></i></a></td></tr>`).join('') : `<tr><td colspan="12" class="na-bos text-center">Fatura sahibi ≠ ödeyen şirket olan ${esc(tur.toLocaleLowerCase('tr-TR'))} belgesi yok. Bir ödemede fatura sahibi ile ödeyen şirket farklı seçilince otomatik oluşur.</td></tr>`;
-    const aktif = L.filter(b => b.durum !== 'İptal'); t.tFoot.innerHTML = aktif.length ? `<tr class="toplam"><td colspan="6" class="text-end">${aktif.length} belge · muhasebeleşen ${aktif.filter(b => b.durum === 'Muhasebeleşti').length} · hazır ${aktif.filter(b => b.durum === 'Hazırlandı').length}</td><td class="para">${para(aktif.reduce((s, b) => s + b.tutarTL, 0))}</td><td colspan="5"></td></tr>` : '';
-    $('#knGibNot-' + p).textContent = '';
+  function cizGib() {
+    const t = $('#knGib-grupici'); if (!t) return;
+    const L = (V.grupIciBelgeler || []).filter(b => !F.sirketler.length || [b.faturaSahibiDb, b.odeyenDb, b.kaynakDb].some(d => F.sirketler.includes(d)));
+    t.tBodies[0].innerHTML = L.length ? L.map(b => `<tr class="${b.durum === 'İptal' ? 'text-muted' : ''}"><td>${yontemRozet(b.tur)}</td><td class="sol"><a href="${esc(b.link)}" target="_blank" class="fw-bold" title="Yazdırılabilir belge">${esc(b.no)}</a></td><td>${tarih(b.tarih)}</td><td class="sol fw-bold">${esc(b.faturaSahibi)}</td><td class="sol text-primary fw-bold">${esc(b.odeyen)}</td><td class="sol">${esc(b.kurum)}<small>${esc(b.belgeTipi)} ${esc(b.belgeNo)}</small></td><td>${yontemRozet(b.yontem)}</td><td class="para">${para(b.tutarTL)}${b.pb !== 'TRY' ? `<small>${para(b.tutar)} ${esc(b.pb)}</small>` : ''}</td><td class="sol" style="white-space:normal">${esc(b.sekil)}</td><td>${modulRozet(b.durum)}${b.muhasebeTarihi ? `<small>${esc(b.muhasebeTarihi.slice(0, 10))}</small>` : ''}</td><td class="sol" style="white-space:normal">${b.faturaSahibiFisNo ? `<b>${esc(b.faturaSahibiFisNo)}</b>` : '—'}<small style="white-space:normal">${esc(b.odeyenFisNo || (b.durum === 'Muhasebeleşti' ? 'dolaşım fişleri' : 'ödeme gerçekleşince'))}</small></td><td><a class="kn-belge-link kn-gib-satir" data-doc="${b.docEntry}" data-db="${esc(b.kaynakDb)}" title="Kaynak ödeme satırını aç">#${b.docEntry}</a></td><td><a class="btn btn-light btn-sm py-0 px-1 border" href="${esc(b.link)}" target="_blank" style="font-size:.62rem" title="Yazdır"><i class="fas fa-print"></i></a></td></tr>`).join('') : `<tr><td colspan="13" class="na-bos text-center">Fatura sahibi ≠ ödeyen şirket olan grup içi belge yok. Bir ödemede fatura sahibi ile ödeyen şirket farklı seçilince otomatik oluşur.</td></tr>`;
+    const aktif = L.filter(b => b.durum !== 'İptal'); t.tFoot.innerHTML = aktif.length ? `<tr class="toplam"><td colspan="7" class="text-end">${aktif.length} belge · muhasebeleşen ${aktif.filter(b => b.durum === 'Muhasebeleşti').length} · hazır ${aktif.filter(b => b.durum === 'Hazırlandı').length}</td><td class="para">${para(aktif.reduce((s, b) => s + b.tutarTL, 0))}</td><td colspan="5"></td></tr>` : '';
+    $('#knGibNot-grupici').textContent = '';
   }
   kok.addEventListener('click', e => { const a = e.target.closest('.kn-gib-satir'); if (!a) return; e.stopPropagation(); satirGetirAc(+a.dataset.doc, a.dataset.db); });
 
@@ -755,7 +1086,7 @@
           ${F_ALAN('knD_aliciIban', 'Alıcı IBAN', inp('knD_aliciIban', a.aliciIban), 'kn-banka-alan g2')}
           ${F_ALAN('knD_aliciHesapAdi', 'Hesap Adı (Alıcı)', inp('knD_aliciHesapAdi', a.aliciHesapAdi), 'kn-banka-alan')}
           <div class="g4 kn-banka-alan d-flex align-items-center gap-2 flex-wrap"><button type="button" class="btn btn-light border btn-sm" id="knDBankaGetir" style="font-size:.66rem"><i class="fas fa-building-columns me-1"></i>Cari Karttan Banka Bilgisi Getir</button><span class="na-mini" id="knDBankaNot">alıcı banka · IBAN · hesap adı banka talimatına yazılır</span></div>
-          ${F_ALAN('knD_grupIciTur', 'Grup İçi Belge (Fatura Sahibi ≠ Ödeyen)', sel('knD_grupIciTur', r.grupIciTur || 'Mahsup', ['Mahsup', 'Temlik']), 'kn-gib-alan')}
+          ${F_ALAN('knD_grupIciTur', 'Grup İçi Belge (Fatura Sahibi ≠ Ödeyen)', sel('knD_grupIciTur', r.grupIciTur || 'Mahsup', GRUP_YONTEM), 'kn-gib-alan')}
           <div class="g3 kn-gib-alan na-mini" style="grid-column:span 3;align-self:end">fatura sahibi ile ödeyen şirket farklı: kaydedilince otomatik mahsup / temlik belgesi açılır; ödeme gerçekleşince iki şirkette fiş atılır, grup içi bakiye güncellenir</div>
           ${F_ALAN('knD_not', 'Not', `<textarea class="form-control" id="knD_not" rows="2">${esc(r.notlar)}</textarea>`, 'g4')}
         </div>
@@ -767,7 +1098,7 @@
       ${av ? `<div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-hand-holding-dollar me-1"></i>Nakit Avans · ${esc(av.no)} (Modülle Canlı)${av.sahsi ? ' <span class="kn-onay gmy" title="Şahsi avans: gizlilik gereği personel adı ve konu gösterilmez">Şahsi · Gizli</span>' : ''}</span><span class="not">${av.sahsi ? 'ayrıntı yalnız İK / Nakit Avans modülünde' : `<a href="${esc(av.link)}" target="_blank">modülde aç</a>`}</span></div><div class="na-kart-g"><div class="na-ustbilgi">${(av.sahsi
         ? [['Avans Türü', av.tur || 'Şahsi Avans'], ['Kullanan', 'Personel (gizli)'], ['Departman', av.departman || '—'], ['Ödeyen Şirket', av.odeyenSirket], ['Talep Durumu', av.talepDurumu], ['Ödeme Durumu', av.odemeDurumu], ['Onaylanan / Bekleyen', `${para(av.onaylanan)} / ${para(av.odemeBekleyen)} ${pbAd(av.pb)}`], ['Kapatma', av.kapatmaDurumu]]
         : [['Avans Türü', av.tur || 'Nakit Avans'], ['Kullanan', `${av.kullanan} · ${av.kullananSirket}`], ['Departman', av.departman || '—'], ['Konu', av.konu || '—'], ['Harcama Kategorisi', av.kategori || '—'], ['Ödeyen Şirket', av.odeyenSirket + (av.grupIci ? ' (grup içi · masraf ' + av.kullananSirket + ')' : '')], ['Talep Durumu', av.talepDurumu], ['Ödeme Durumu', av.odemeDurumu], ['Onaylanan / Bekleyen', `${para(av.onaylanan)} / ${para(av.odemeBekleyen)} ${pbAd(av.pb)}`], ['Kullanım Tarihi', tarih(av.kullanimTarihi)], ['Kapatma', av.kapatmaDurumu], ['Öncelik', av.oncelik || '—']]).map(([l, v]) => `<div><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div></div>`).join('')}</div><div class="na-mini">${av.sahsi ? 'Şahsi (maaş) avansı şirket masrafı değildir; gizlilik için ad ve konu gösterilmez, makbuzda teslim alan yazılır. ' : 'Şirket masrafı avansı: ayrıntılar görünür. '}Makbuz kesilince avans modülünde "teslim edildi" olayı işlenir ve Bekleyen Ödemeler listesinden düşer.</div></div></div>` : ''}
-      ${gb || r.grupIciGerekli ? `<div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-file-signature me-1"></i>Grup İçi Belge · Fatura Sahibi ≠ Ödeyen Şirket${gb ? ' · ' + esc(gb.no) : ''}</span><span class="not">${gb ? modulRozet(gb.durum) : 'kaydedilince otomatik oluşur'}</span></div><div class="na-kart-g"><div class="d-flex gap-2 align-items-end flex-wrap" style="font-size:.72rem"><div><label class="form-label mb-0">Belge Türü</label><select class="form-select form-select-sm" id="knDGibTur" style="font-size:.72rem" ${gb && gb.durum === 'Muhasebeleşti' ? 'disabled title="Muhasebeleşmiş belge değiştirilemez"' : ''}>${['Mahsup', 'Temlik'].map(t => `<option ${t === (gb ? gb.tur : (r.grupIciTur || 'Mahsup')) ? 'selected' : ''}>${t}</option>`).join('')}</select></div>${gb ? `<a class="btn btn-light border btn-sm" href="${esc(gb.link)}" target="_blank" style="font-size:.66rem"><i class="fas fa-print me-1"></i>${esc(gb.baslik)} Yazdır</a>` : ''}<span class="na-mini">Mahsup: karşılıklı grup içi bakiyeden düşülür (132 / 332) · Temlik: tedarikçi borcu ödeyen şirkete devredilir (332)</span></div>${gb ? `<div class="na-ustbilgi mt-2">${[['Fatura Sahibi → Ödeyen', `${gb.faturaSahibi} → ${gb.odeyen}`], ['İşlem Şekli', gb.sekil], ['Tutar', `${para(gb.tutarTL)} ₺`], ['Durum', gb.durum + (gb.muhasebeTarihi ? ' · ' + gb.muhasebeTarihi : '')], ['Fatura Sahibi Fişi', gb.faturaSahibiFisNo || '— (ödeme gerçekleşince)'], ['Ödeyen Fişi', gb.odeyenFisNo || (gb.durum === 'Muhasebeleşti' ? 'dolaşım fişleri' : '— (ödeme gerçekleşince)')]].map(([l, v]) => `<div><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div></div>`).join('')}</div>` : ''}</div></div>` : ''}
+      ${gb || r.grupIciGerekli ? `<div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-file-signature me-1"></i>Grup İçi Belge · Fatura Sahibi ≠ Ödeyen Şirket${gb ? ' · ' + esc(gb.no) : ''}</span><span class="not">${gb ? modulRozet(gb.durum) : 'kaydedilince otomatik oluşur'}</span></div><div class="na-kart-g"><div class="d-flex gap-2 align-items-end flex-wrap" style="font-size:.72rem"><div><label class="form-label mb-0">Belge Türü</label><select class="form-select form-select-sm" id="knDGibTur" style="font-size:.72rem" ${gb && gb.durum === 'Muhasebeleşti' ? 'disabled title="Muhasebeleşmiş belge değiştirilemez"' : ''}>${GRUP_YONTEM.map(t => `<option ${t === (gb ? gb.tur : (r.grupIciTur || 'Mahsup')) ? 'selected' : ''}>${t}</option>`).join('')}</select></div>${gb ? `<a class="btn btn-light border btn-sm" href="${esc(gb.link)}" target="_blank" style="font-size:.66rem"><i class="fas fa-print me-1"></i>${esc(gb.baslik)} Yazdır</a>` : ''}<span class="na-mini">Mahsup: karşılıklı grup içi bakiyeden düşülür (132 / 332) · Temlik: tedarikçi borcu ödeyen şirkete devredilir (332)</span></div>${gb ? `<div class="na-ustbilgi mt-2">${[['Fatura Sahibi → Ödeyen', `${gb.faturaSahibi} → ${gb.odeyen}`], ['İşlem Şekli', gb.sekil], ['Tutar', `${para(gb.tutarTL)} ₺`], ['Durum', gb.durum + (gb.muhasebeTarihi ? ' · ' + gb.muhasebeTarihi : '')], ['Fatura Sahibi Fişi', gb.faturaSahibiFisNo || '— (ödeme gerçekleşince)'], ['Ödeyen Fişi', gb.odeyenFisNo || (gb.durum === 'Muhasebeleşti' ? 'dolaşım fişleri' : '— (ödeme gerçekleşince)')]].map(([l, v]) => `<div><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div></div>`).join('')}</div>` : ''}</div></div>` : ''}
       <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-sliders me-1"></i>Yönteme Özel Bilgiler · ${esc(r.yontem)}</span><span class="not d-flex gap-1 align-items-center">${(r.yontem === 'Çek' || r.yontem === 'Senet') && r.durum !== 'ÖDENDİ' && !r.cikis ? `<button type="button" class="btn btn-primary btn-sm py-0 px-2 kn-belge-sec" style="font-size:.62rem" title="Portföyden belge ekle (başka grup şirketinin portföyü de seçilebilir)"><i class="fas fa-plus me-1"></i>Belge Ekle</button>` : 'tablodaki sekmede satır içi düzenlenir'}</span></div><div class="na-kart-g">
         ${r.yontem === 'Çek' || r.yontem === 'Senet' ? `<div class="kn-liste">${(r.belgeler || []).length ? r.belgeler.map(x => `<div class="satir" style="flex-wrap:wrap"><b>${esc(x.no)}</b><span>${esc(x.banka)}</span><span>${esc(x.asilBorclu)}</span><span>vade ${tarih(x.vade)}</span><span class="fw-bold">${para(x.tutar)} ₺</span>${akibetRozet(x.akibet)} ${kontrolRozet(x.kontrol, x)}<span class="ms-auto d-flex gap-1">${!belgeCikmis(x) || x.adimToplam ? `<button type="button" class="btn btn-light border btn-sm py-0 px-1 kn-dolasim-ac" data-cek="${x.cekDocEntry}" style="font-size:.6rem" title="Hangi şirketten nasıl çıkacak: grup içi zincir, son adım (tedarikçiye ciro / bankaya ibraz), uygunluk simülasyonu"><i class="fas fa-route"></i> Çıkış Planı</button>` : ''}${x.akibet === 'Planlandı' && !x.gerceklesen && r.durum !== 'ÖDENDİ' ? `<button type="button" class="btn btn-light border btn-sm py-0 px-1 kn-belge-degistir" data-cek="${x.cekDocEntry}" style="font-size:.6rem" title="Bu belgeyi kaldırıp portföyden başka belge seç"><i class="fas fa-right-left"></i> Değiştir</button><button type="button" class="btn btn-light border btn-sm py-0 px-1 kn-belge-kaldir" data-cek="${x.cekDocEntry}" style="font-size:.6rem" title="Planı kaldır: belge portföye döner"><i class="fas fa-times text-danger"></i> Kaldır</button>` : ''}</span><div class="w-100 kn-dolasim" title="Belgenin çıkış yolu"><i class="fas fa-route"></i> Çıkış: ${esc(x.dolasim ? x.dolasim + ' (' + x.gerceklesen + '/' + x.adimToplam + ' adım)' : (x.sahip || r.odeyenSirket) + ' → ' + (x.ibrazYeri || r.kurum) + (x.akibet === 'Planlandı' || x.akibet === 'Portföyde' ? ' · tedarikçiye ciro (planlı)' : ' · ' + x.akibet))}${x.sahip && x.sahip !== r.faturaSahibi ? ' · belge ' + esc(x.sahip) + ' portföyünde, fatura sahibi ' + esc(r.faturaSahibi) : ''}</div></div>`).join('') : '<div class="na-bos">Belge seçilmedi · "Belge Ekle" ile portföyden seçin (başka grup şirketinin portföyü de olabilir); çıkış yolu "Çıkış Planı" ile belirlenir</div>'}</div>`
         : g ? `<div class="na-ustbilgi"><div><div class="l">${esc(g.tur)} No</div><div class="v"><a href="${esc(g.link)}" target="_blank">${esc(g.no)} <i class="fas fa-arrow-up-right-from-square"></i></a></div></div><div><div class="l">Tür</div><div class="v">${esc(g.baslik || '')}</div></div><div><div class="l">Taraflar</div><div class="v">${esc(g.taraflar || '')}</div></div><div><div class="l">Tutar</div><div class="v">${para(g.tutar)} ${esc(pbAd(g.pb))}</div></div><div><div class="l">Durum</div><div class="v">${modulRozet(g.durum)}</div></div><div><div class="l">Muhasebe · Kontrol</div><div class="v">${esc(g.muhasebe || '—')} ${g.kontrol ? '· ' + esc(g.kontrol) : ''}</div></div><div style="grid-column:1/-1"><div class="l">Kayıt</div><div class="v" style="font-weight:500">${esc(g.ek || '')}</div></div></div>`
@@ -914,8 +1245,7 @@
     if (Y.veri) { Y.veri.talepler = (Y.veri.talepler || []).filter(t => t.no !== no); Y.veri.talepOnayli = Math.max(0, (Y.veri.talepOnayli || 1) - 1); } if (V && V.talepOzet) { V.talepOzet.acik = Math.max(0, V.talepOzet.acik - 1); V.talepOzet.onayli = Math.max(0, V.talepOzet.onayli - 1); }
     mesaj(row && row.yontem === 'Nakit' ? 'warning' : 'success', '<i class="fas fa-inbox me-1"></i>' + esc(d.message)); ciz(); yeniCiz();
   }
-  function yeniAc(g) { Y = { g: g || 'form', db: '', veri: null, ara: '', temsilci: '', liste: [] }; const ad = sirketAdi(F.sirket || V.sirketler[0].dbName); const p = aktifSekme(); drawerAc({ docEntry: 0, dbName: F.sirket, sirket: '', kurum: '', faturaSahibi: ad, odeyenSirket: ad, yontem: p in SEKME && SEKME[p] ? SEKME[p] : 'Havale / EFT', durum: 'Bekliyor', planlanan: bugun(), sonOdeme: '', belgeTipi: 'Fatura', pb: 'TRY', kur: 1, tutar: '', tutarTL: '', notlar: '', alanlar: {}, belgeler: [], dekontlar: [] }); }
-  $('#knYeni').addEventListener('click', () => yeniAc('form'));
+  function yeniAc(g, yontem) { if (!V) return; Y = { g: g || 'form', db: '', veri: null, ara: '', temsilci: '', liste: [] }; const ad = sirketAdi(F.sirket || V.sirketler[0].dbName); const p = aktifSekme(); drawerAc({ docEntry: 0, dbName: F.sirket, sirket: '', kurum: '', faturaSahibi: ad, odeyenSirket: ad, yontem: yontem || (p in SEKME && SEKME[p] ? SEKME[p] : 'Havale / EFT'), durum: 'Bekliyor', planlanan: bugun(), sonOdeme: '', belgeTipi: 'Fatura', pb: 'TRY', kur: 1, tutar: '', tutarTL: '', notlar: '', alanlar: {}, belgeler: [], dekontlar: [] }); }
   // "Talepler": Ödeme Talebi modülünden gelen departman talepleri (tüm şirketler) — onaylananlar "Nakit Akışa Ekle" ile satır olur; rozet = açık talep sayısı (onaylı / bekleyen)
   $('#knTalepler').addEventListener('click', () => yeniAc('talep'));
   function talepRozet() { const o = V && V.talepOzet; const b = $('#knTalepN'); if (!b || !o) return; b.textContent = o.acik; b.className = 'badge ms-1 ' + (o.onayli ? 'bg-success' : 'bg-dark'); $('#knTalepler').title = `${o.acik} açık ödeme talebi · onaylı (nakit akışa eklenebilir) ${o.onayli} · onay bekleyen ${o.bekleyen} · onaylı toplam ${para(o.onayliTutar || 0)} ₺`; }
