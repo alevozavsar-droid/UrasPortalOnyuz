@@ -201,7 +201,8 @@
       const z = ad.map(a => { const g = adimOku(a, 'Durum') === 'Gerçekleşti', tur = adimOku(a, 'Tur'); return satir(adimOku(a, 'Sira'), adimOku(a, 'Eden'), adimOku(a, 'Alan') || (tur === 'Bankaya İbraz' ? 'Banka (Tahsil)' : '—'), tur, g ? `<i class="fas fa-check"></i> ${tarih(adimOku(a, 'GercekTarih'))}${adimOku(a, 'BelgeNo') ? ' · ' + esc(adimOku(a, 'BelgeNo')) : ''}` : `plan ${tarih(adimOku(a, 'PlanTarih'))}`, g ? 'ok' : a === ilkPlan ? 'plan sirada' : 'plan'); }).join('');
       return `<a class="kn-dz kn-dolasim-ac" data-cek="${x.cekDocEntry}" title="Dolaşım planı: ${esc(x.dolasim || '')} · ${x.gerceklesen}/${x.adimToplam} adım gerçekleşti · tıkla: planı aç, adım gerçekleştir">${bas}${z}</a>`;
     }
-    if (belgeCikmis(x)) return `<span class="kn-dz">${bas}${satir(1, x.kaynakSirket || x.sahip || r.odeyenSirket, x.ibrazYeri || '—', x.akibet, '<i class="fas fa-check"></i> plansız (doğrudan)', 'ok')}</span>`;
+    // plansız çıkmış belge: yalnız "Alv Kimya → Halk Bankası" (13 Kas 2026: "uzatmaya gerek yok"); akıbet ve "plansız" bilgisi ipucunda ve Akıbet sütununda
+    if (belgeCikmis(x)) return `<span class="kn-dz" title="${esc(x.akibet || '')} · plansız (doğrudan) çıkış">${bas}<span class="kn-dz-a ok">${esc(x.kaynakSirket || x.sahip || r.odeyenSirket)} <i class="fas fa-arrow-right"></i> ${esc(x.ibrazYeri || '—')}</span></span>`;
     const baska = x.sahip && x.sahip !== r.odeyenSirket;
     return `<a class="kn-dz kn-dolasim-ac" data-cek="${x.cekDocEntry}" title="Dolaşım planı yok: ibrazda belge ${esc(x.sahip || r.odeyenSirket)} portföyünden doğrudan çıkar · tıkla: grup içi dolaşım planı kur">${bas}${satir(1, x.sahip || r.odeyenSirket, x.planlananTedarikci || r.kurum, 'Doğrudan Ciro', baska ? '<b class="text-danger">başka portföy: dolaşım planlayın</b>' : 'plan yok · tıkla: planla', 'plan sirada')}</a>`;
   }
