@@ -1,0 +1,113 @@
+﻿@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string sekme = (string)ViewBag.Sekme ?? "stok";
+    // 10 alt sekme (15 Kas 2026: Stok ve Uyum sekmesi bütün sütunlarıyla Aylık Stok Hareketleri'ne katıldı; o sekmede iki görünüm düğmesi var) (15 Kas 2026: Sayım — sayan kişi bütün sayım verilerini girer — ve Sayım Onayı — girilen sayım onaylanır, bütün sekmeler onaylı sayımı kullanır; Yönetim Özeti kaldırıldı) (14 Kas 2026: Stok ve Tüketim Uyum Raporu bu rapora katıldı): Liste (Stok Listesi · Tüketim ve Yeterlilik · Sayım ve Risk) | Uyum Kontrolü (Stok ve Uyum · Tüketim Verisi · Aylık Stok Hareketleri)
+    // | Fiili Stok Takibi · Muhasebe Stok Takibi (15 Kas 2026: Ürün Hiyerarşisi sekmesinin yeni adı + aynısının muhasebe tarafı) | Özet. Sekme adlarında sayaç yok. 15 Kas 2026: Depo · Şirket · Kırılım sekmeleri kullanıcı isteğiyle kaldırıldı (9 sekme kaldı).
+    // 16 Kas 2026: Sayım ve Sayım Onayı sekmeleri kullanıcı isteğiyle kaldırıldı ("Sayım ve Sayım Onayı kaldır"); "Ürün Ekle" Stok Listesi'ne taşındı. 8 sekme (+ Demirbaş grubunda Demirbaş Listesi).
+    var sekmeler = new[] { ("demirbas", "Demirbaş Listesi"), ("stok", "Stok Listesi"), ("tuketim", "Tüketim ve Yeterlilik"), ("sayim", "Sayım ve Risk"), ("hareket", "Aylık Stok Hareketleri"), ("belge", "Tüketim Verisi"), ("hiyerarsi", "Fiili Stok Takibi"), ("muhtakip", "Muhasebe Stok Takibi"), ("ozet", "Özet") };
+    // 16 Kas 2026: Demirbaş Listesi yalnız Demirbaş grubunda görünür; o grupta tüketim / aylık hareket / takip sekmeleri gizlenir (betik: sekmeVar). Ayraç, önündeki sekme gizliyse gizlenir (data-a).
+    var ayrac = new[] { "hareket", "hiyerarsi", "ozet" };
+}
+@*
+    KONSOLİDE STOK RAPORU (/StokRaporu, 13 Kas 2026) — "URAS Fiili ve Resmî Stok Raporu" Excel şablonunun portal karşılığı. Veri /StokRaporu/Veri (Data/StokRaporOrnek.cs),
+    betik wwwroot/js/stok-raporu.js, ortak stil wwwroot/css/konsolide-rapor.css (Konsolide Satış Raporu ile aynı kurumsal düzen) + wwwroot/css/stok-rapor.css (stok raporlarının üst bölümü: bant, grup kartları, süzgeç çubuğu, üst başlık kümeleri).
+    ANA SEKME stok grubudur (kullanıcı: "hammadde stoğu ve bitmiş ürün stoğu ayrı olursa takibi daha rahat; ambalaj ve öbür stoklar da var, A4'e kadar stok takibi"):
+      Hammadde (Hammadde + Yarı Mamul) · Bitmiş Ürün (Mamul + Ticari Mal) · Ambalaj · Diğer Stoklar (sarf, kırtasiye, yedek parça, numune, hurda) · Demirbaş (makine / ekipman, küçük demirbaş; 16 Kas 2026) · Tümü.
+    Stok ve tüketim R (resmî) / X (fark = fiili − resmî) / Fiili olarak gösterilir. Tablo üstünde kutucuk yok; özet bilgiler Özet sekmesinde.
+    GÖRÜNÜM (14 Kas 2026): sade tema (wwwroot/css/rapor-sade.css, kökte tema-sade sınıfı) — kullanıcı "mavilikleri beğenmedim" dedi ve bu raporun da aynı şekilde düzeltilmesini istedi.
+*@
+<link rel="stylesheet" href="/css/konsolide-rapor.css?v=1" />
+<link rel="stylesheet" href="/css/stok-rapor.css?v=13" />
+<link rel="stylesheet" href="/css/rapor-sade.css?v=2" />
+
+<div class="container-fluid py-2 tema-sade" id="sr" data-rapor="stok" data-sekme="@sekme">
+    @* 14 Kas 2026 (kullanıcı: "beğenmedim, rapor tasarımını değiştir"): üst bölüm yeniden tasarlandı —
+       (1) lacivert BAŞLIK BANDI: başlık, rapor tarihi, işlem düğmeleri; (2) STOK GRUBU KARTLARI: ana sekme, her kartta grubun fiili stok değeri, satır sayısı ve X farkı;
+       (3) tek satır SÜZGEÇ ÇUBUĞU: arama + en çok kullanılan dört süzgeç + "Tüm Süzgeçler" paneli; seçili süzgeçler çubukta etiket olarak görünür (✕ ile kalkar).
+       İki sıra hâlinde 18 boş kutudan oluşan eski süzgeç ızgarası kaldırıldı (kutular artık yalnız panel açılınca görünür). *@
+    <div class="st-bant">
+        <div class="st-bant-sol">
+            <span class="st-ikon"><i class="fas fa-boxes-stacked"></i></span>
+            <div><div class="st-ad">Konsolide Stok Raporu</div><div class="st-alt">Fiili ve Muhasebe Stoku · Tüketim · Sayım ve Risk · Uyum Kontrolü<span class="st-nokta">•</span>Rapor Tarihi <b id="srTarih"></b><span class="st-ornek" id="srOrnek" hidden title="Portalda gerçek stok kaynağı bağlı değil; kayıtlar örnektir">Örnek Veri</span></div></div>
+        </div>
+        <div class="st-bant-sag">
+            <label class="st-prm" title="Uyum ve stok takibi sekmeleri: aylık stok değişimi, reçete kontrolü ve stok / satış uyumu bu ayın verisiyle hesaplanır">Kontrol Ayı <select id="srAy"></select></label>
+            <label class="st-prm" title="Uyum sekmeleri: beklenen ile gerçekleşen arasındaki fark bu miktarı (stok birimi cinsinden) aşmıyorsa uyumlu sayılır">Tolerans ± <input id="srTol" inputmode="decimal" /></label>
+            <span class="st-ayrac"></span>
+            <button type="button" class="st-dgm" id="srSutunlar" title="Görmek istediğiniz sütunları seçin (bu tarayıcıda saklanır)"><i class="fas fa-columns"></i>Sütunlar</button>
+            <button type="button" class="st-dgm" id="srExcel" title="Ekrandaki tabloyu göründüğü gibi Excel'e aktar (.xlsx)"><i class="fas fa-file-excel"></i>Excel</button>
+            <button type="button" class="st-dgm ana" id="srGetir" title="Veriyi yeniden getir"><i class="fas fa-rotate"></i>Getir</button>
+        </div>
+    </div>
+    <span id="srDonemYazi" hidden></span>
+
+    <div class="st-gruplar alti" id="srGrup">
+        <button type="button" data-gr="h" title="Hammadde ve yarı mamul"><span class="ad"><i class="fas fa-flask"></i>Hammadde</span><b class="deger">—</b><small class="alt">&nbsp;</small></button>
+        <button type="button" data-gr="b" title="Mamul ve ticari mal"><span class="ad"><i class="fas fa-cubes"></i>Bitmiş Ürün</span><b class="deger">—</b><small class="alt">&nbsp;</small></button>
+        <button type="button" data-gr="a" title="Ambalaj malzemeleri"><span class="ad"><i class="fas fa-box-open"></i>Ambalaj</span><b class="deger">—</b><small class="alt">&nbsp;</small></button>
+        <button type="button" data-gr="d" title="Sarf, kırtasiye / ofis, yedek parça, numune, hurda / fire"><span class="ad"><i class="fas fa-screwdriver-wrench"></i>Diğer Stoklar</span><b class="deger">—</b><small class="alt">&nbsp;</small></button>
+        <button type="button" data-gr="m" title="Üretim makineleri, ekipman ve küçük demirbaşlar"><span class="ad"><i class="fas fa-industry"></i>Demirbaş</span><b class="deger">—</b><small class="alt">&nbsp;</small></button>
+        <button type="button" data-gr="t" title="Bütün stok grupları birlikte"><span class="ad"><i class="fas fa-layer-group"></i>Tümü (Konsolide)</span><b class="deger">—</b><small class="alt">&nbsp;</small></button>
+    </div>
+
+    <div class="st-cubuk" id="srSuz">
+        <div class="sr-ara"><i class="fas fa-magnifying-glass"></i><input type="search" id="srAra" placeholder="Stok kodu, ürün, lot, depo ara…" /></div>
+        <button type="button" class="sr-cs" data-f="sirket" data-e="Şirket" data-bos="Tümü (Konsolide)"></button>
+        <button type="button" class="sr-cs" data-f="depo" data-e="Depo"></button>
+        <button type="button" class="sr-cs" data-f="tip" data-e="Stok Tipi"></button>
+        <button type="button" class="sr-cs" data-f="mDurum" data-e="Fark Yönü (X)"></button>
+        <button type="button" class="st-tum" id="srSuzAc" title="Öbür süzgeçler: konum, mülkiyet, SKT, hareket, alım önceliği, faaliyet grubu ve ürün ağacı, onay, sorumlu"><i class="fas fa-sliders"></i>Tüm Süzgeçler<span class="say" id="srSuzSay"></span></button>
+        <span class="st-cipler" id="srCipler"></span>
+        <button type="button" class="st-temizle" id="srTemizle" title="Bütün süzgeçleri temizle"><i class="fas fa-filter-circle-xmark"></i>Temizle</button>
+        <div class="st-panel" id="srSuzPanel" hidden>
+            <div class="st-panel-b">Stok</div>
+            <div class="st-panel-g">
+                <button type="button" class="sr-cs" data-f="konum" data-e="Stok Konumu"></button>
+                <button type="button" class="sr-cs" data-f="mulkiyet" data-e="Mülkiyet"></button>
+                <button type="button" class="sr-cs" data-f="sktDurum" data-e="SKT Durumu"></button>
+                <button type="button" class="sr-cs" data-f="hDurum" data-e="Hareket Durumu"></button>
+                <button type="button" class="sr-cs" data-f="oncelik" data-e="Alım Önceliği"></button>
+                <button type="button" class="sr-cs" data-f="onay" data-e="Onay Durumu"></button>
+                <button type="button" class="sr-cs" data-f="sorumlu" data-e="Sorumlu"></button>
+            </div>
+            <div class="st-panel-b">Ürün</div>
+            <div class="st-panel-g">
+                <button type="button" class="sr-cs" data-f="anaGrup" data-e="Faaliyet Ana Grubu"></button>
+                <button type="button" class="sr-cs" data-f="fGrup" data-e="Faaliyet Grubu"></button>
+                <button type="button" class="sr-cs" data-f="sinif" data-e="Ürün Sınıfı"></button>
+                <button type="button" class="sr-cs" data-f="urunGrubu" data-e="Ürün Grubu"></button>
+                <button type="button" class="sr-cs" data-f="seri" data-e="Ürün Serisi"></button>
+                <button type="button" class="sr-cs" data-f="urun" data-e="Ürün Adı"></button>
+            </div>
+        </div>
+    </div>
+    <div class="sr-kart">
+        <div class="sr-sekme cok" id="srSekmeler" data-dinamik="kapali">
+            @foreach (var s in sekmeler) { if (ayrac.Contains(s.Item1)) { <span class="cizgi" data-a="@s.Item1"></span> } <button type="button" data-p="@s.Item1">@s.Item2</button> }
+            <span class="sr-islem" id="srIslem"></span>
+            <span class="sr-kapsam" id="srKapsam"></span>
+        </div>
+        <div id="srTabloKart">
+            <section class="sr-kap" id="srKap"><table class="sr-tablo" id="srTablo" data-dinamik="kapali"><colgroup></colgroup><thead></thead><tbody><tr><td class="bos">Yükleniyor…</td></tr></tbody><tfoot></tfoot></table></section>
+        </div>
+    </div>
+
+    <div class="sr-ozet" id="srOzet">
+        <div class="sr-kpi" id="srKpi" data-dinamik="kapali"></div>
+        <div class="sr-izgara uc">
+            <div class="sr-kutu"><div class="b"><span>Stok Tipine Göre Fiili Stok Değeri</span></div><div class="g" id="srTipDagilim"></div></div>
+            <div class="sr-kutu"><div class="b"><span>Şirkete Göre Fiili Stok Değeri</span></div><div class="g" id="srSirketDagilim"></div></div>
+            <div class="sr-kutu"><div class="b"><span>Depoya Göre Fiili Stok Değeri</span></div><div class="g" id="srDepoDagilim"></div></div>
+        </div>
+        <div class="sr-izgara uc">
+            <div class="sr-kutu"><div class="b"><span>En Büyük 10 Fark (X Değer)</span></div><div class="g p-0"><table class="sr-tablo" id="srOzetFark" data-dinamik="kapali"></table></div></div>
+            <div class="sr-kutu"><div class="b"><span>Alım Önceliği · Acil ve Kritik</span></div><div class="g p-0"><table class="sr-tablo" id="srOzetAlim" data-dinamik="kapali"></table></div></div>
+            <div class="sr-kutu"><div class="b"><span>Raf Ömrü ve Atıl Stok Riski</span></div><div class="g p-0"><table class="sr-tablo" id="srOzetRisk" data-dinamik="kapali"></table></div></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="/js/tablo-excel.js?v=16"></script>
+<script src="/js/stok-raporu.js?v=39"></script>
+}

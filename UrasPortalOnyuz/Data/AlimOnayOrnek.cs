@@ -129,6 +129,18 @@ namespace WebApplication3.Data
             ("Logo Yazılım San. ve Tic. A.Ş.", "6090021900", "IT / Lisans", new[] { ("IT-LGO-01", "ERP Yıllık Bakım ve Destek", "yıl", 245_000m, 20m) }),
             ("Arçelik Kurumsal Satış A.Ş.", "0790009180", "Demirbaş", new[] { ("DM-KLM-01", "VRF Klima Dış Ünite 28 kW", "adet", 186_000m, 20m), ("DM-LPT-02", "Dizüstü Bilgisayar i7 32GB", "adet", 58_900m, 20m) })
         };
+        /// <summary>Ambalaj kalemlerinin güncel alış fiyatı: son alış faturasındaki net birim fiyat (yoksa tedarikçi fiyat listesi) ve KDV oranı.
+        /// Müşteri Fiyat ve Kâr Oranları ekranında ambalaj maliyeti buradan otomatik gelir (Data/FiyatOrnek.cs AmbalajOto).</summary>
+        public static List<(string Kod, string Ad, string Birim, decimal Fiyat, decimal Kdv, string Tedarikci, DateTime? Tarih, string FaturaNo)> AmbalajFiyatlari()
+        {
+            var l = new List<(string, string, string, decimal, decimal, string, DateTime?, string)>();
+            foreach (var s in Sablon.Where(x => x.Kat == "Ambalaj")) foreach (var k in s.Kalemler)
+            {
+                var son = Faturalar.Where(f => f.Kalemler != null && f.Kalemler.Any(c => c.Kod == k.Kod)).OrderByDescending(f => f.Tarih).FirstOrDefault(); var c2 = son?.Kalemler.First(c => c.Kod == k.Kod);
+                l.Add((k.Kod, k.Ad, k.Birim, c2 == null ? k.Fiyat : Math.Round(c2.BirimFiyat * (1 - c2.Iskonto / 100m), 2), c2?.KdvOrani ?? k.Kdv, s.Ted, son?.Tarih, son?.FaturaNo));
+            }
+            return l;
+        }
         private static readonly string[] Sirketler = { "Uras Kimya", "Selvi", "Avrupa Paper", "Alv Kimya", "Daf Kimya", "Uras Holding" };
         private static readonly (string Ad, string Birim)[] TalepEdenler = { ("Mehmet Arslan", "Üretim"), ("Ayşe Demir", "Bakım"), ("Fatih Koç", "Depo"), ("Zeynep Uçar", "Kalite"), ("Ali Veli", "Bilgi Teknolojileri"), ("Canan Su", "İdari İşler"), ("Hakan Ayyürek", "Finans"), ("Sedef Yılmaz", "Operasyon") };
         private static readonly string[] MasrafMerkezleri = { "CC40 - Üretim", "CC41 - Bakım", "CC42 - Depo", "CC43 - Kalite", "CC10 - Bilgi Teknolojileri", "CC05 - İdari İşler", "CC20 - Finans", "CC30 - Operasyon" };

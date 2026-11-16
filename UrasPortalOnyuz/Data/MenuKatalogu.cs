@@ -1,4 +1,4 @@
-﻿// Ana projedeki menu tohumu + gorunum klasorlerinden OTOMATIK uretildi (224 ekran).
+// Ana projedeki menu tohumu + gorunum klasorlerinden OTOMATIK uretildi (224 ekran).
 using System.Collections.Generic;
 using System.Linq;
 using WebApplication3.Models;
@@ -14,6 +14,7 @@ namespace WebApplication3.Data
             ("Rapor17", "Index", "fas fa-receipt", "Konsolide Tahsilat Takip Raporu", null),
             ("Rapor20", "Index", "fas fa-chart-line", "Cari Ekstre Raporu", null),
             ("Rapor24", "Index", "fas fa-university", "Kasa Onay", null),
+            ("SatisRaporu", "Index", "fas fa-chart-column", "Konsolide Satış Raporu", null),   // 13 Kas 2026: yedi satış raporunun süzgeç, sütun ve bilgileri tek ekranda (Data/SatisRaporOrnek.cs)
             ("Rapor4", "Index", "fas fa-shopping-bag", "Satış Raporu", null),
             ("Rapor27", "Index", "fas fa-shopping-bag", "Ürün Ekstre Raporu", null),
             ("Rapor28", "Index", "fas fa-shopping-bag", "Mizan", null),
@@ -64,6 +65,7 @@ namespace WebApplication3.Data
             ("Rapor73", "Index", "fas fa-chart-line", "Günlük Çek Nakit Tahsiilat", null),
             ("Rapor74", "Index", "fas fa-chart-line", "Satış Ekstre Raporu", null),
             ("Rapor92", "Index", "fas fa-chart-line", "Alış Ekstre Raporu", null),
+            ("StokRaporu", "Index", "fas fa-boxes-stacked", "Konsolide Stok Raporu", null),   // 13 Kas 2026: fiili / resmî stok, tüketim ve yeterlilik, sayım ve risk (Data/StokRaporOrnek.cs)
             ("Rapor75", "Index", "fas fa-chart-line", "Stok Raporu", null),
             ("Rapor148", "Index", "fas fa-warehouse text-primary", "Depo Bazlı Stok Raporu", null),
             ("Rapor150", "Index", "fas fa-clipboard-check text-success", "Aylık Satış Onay Raporu", null),
@@ -381,6 +383,7 @@ namespace WebApplication3.Data
                 case "Rapor93":
                     return "Muhasebe";
 
+                case "SatisRaporu":
                 case "Rapor4":
                 case "Rapor74":
                 case "Rapor76":
@@ -410,6 +413,7 @@ namespace WebApplication3.Data
                 case "Rapor18":
                 case "Rapor106":
                 case "Rapor31":
+                case "StokRaporu":
                 case "Rapor75":
                 case "Rapor138":
                 case "Rapor139":

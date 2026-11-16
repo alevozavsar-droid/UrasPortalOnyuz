@@ -5,7 +5,8 @@
 //   Çözüm (Personel Maliyet günlüğüyle aynı kalıp): ekrandan yapılan her başarılı değişiklik App_Data/kasa-nakit-kayit.jsonl dosyasına satır satır yazılır; açılışta (OrnekIsinma,
 //   örnek veri tohumlandıktan ve öbür modüller satırlarını açtıktan sonra) aynı sırayla yeniden uygulanır. Yüklenen dosyalar App_Data/kasa-nakit-ekler altında saklanır.
 //   Kapsam: alan (satır içi / çekmece alanı: AlanKaydet) · muafiyet · kaydet (çekmece Kaydet) · ekle (Yeni Ödeme) · sil · grupTur (Mahsup / Temlik / Yansıtma) · nakitOnay ·
-//           ek (dekont, belge aslı, imzalı makbuz … dosyalı ya da dosyasız) · oncelikSira (Öncelik Planı sürükle-sırala).
+//           ek (dekont, belge aslı, imzalı makbuz … dosyalı ya da dosyasız) · oncelikSira (Öncelik Planı sürükle-sırala) ·
+//           planOnay (16 Kas 2026: Talepler › Planlı Ödemeler onayı — gerçekleşen tutar / tarih; onaylanmayan planlı ödeme ve kredi taksidi satırı raporda görünmez).
 //   Kapsam dışı (öbür modüllerin bellek içi durumuna bağlı; yeniden başlatmada sıfırlanır): talimat, makbuz, çek / senet planlama, dolaşım, ibraz, GMY çek çıkış onayı,
 //           kısmi ödeme / taksit, departman talebini akışa ekleme, modül kaydı bağlama.
 //   Güvenlik: her kayıt hedef satırın izini (kurum | tutar) taşır; yeniden uygulamada satır bulunamazsa ya da iz tutmuyorsa (tohum değişmiş, satır başka modülden gelmişti) kayıt atlanır.
@@ -43,6 +44,7 @@ namespace WebApplication3.Data
         public class EkVeri { public string Ad { get; set; } public string Tur { get; set; } public string Aciklama { get; set; } public string IcerikTipi { get; set; } public string Dosya { get; set; } }
         public class SiraSatiri { public string DbName { get; set; } public int DocEntry { get; set; } public int? Oncelik { get; set; } public string Iz { get; set; } }
         public class SiraVeri { public List<SiraSatiri> Satirlar { get; set; } }
+        public class PlanOnayVeri { public string Anahtar { get; set; } public decimal? Tutar { get; set; } public string Plan { get; set; } }
 
         /// <summary>Satırın izi: yeniden uygulamada aynı satır olduğunu doğrulamak için (kurum | tutar).</summary>
         public static string Iz(NakitAkisViewModel m) => m == null ? null : $"{m.U_Kurum}|{(m.U_Tutar ?? 0).ToString("0.##", CultureInfo.InvariantCulture)}";
@@ -107,13 +109,26 @@ namespace WebApplication3.Data
             if (k.Tip == "ekle")
             {
                 var model = Coz<NakitAkisViewModel>(k.Veri); if (model == null) return false; model.DocEntry = 0; model.DekontListesi = new List<DekontKaydi>(); model.Belgeler = new List<NakitAkisBelge>();
-                var yeni = NakitAkisOrnek.Ekle(db, model, kisi); if (yeni == null) return false; esle[k.Doc] = yeni.DocEntry; return true;
+                var yeni = NakitAkisOrnek.Ekle(db, model, kisi); if (yeni == null) return false; esle[k.Doc] = yeni.DocEntry;
+                if (k.T >= NakitAkisOrnek.TalepKuraliBaslangic) NakitAkisOrnek.TalepBeklet(db, yeni.DocEntry, kisi);   // 16 Kas 2026'dan beri elle açılan kayıt Departman Talepleri'nde onay bekler; onayı sonraki "planOnay" kaydı uygular
+                return true;
             }
             if (k.Tip == "oncelikSira")
             {
                 var v = Coz<SiraVeri>(k.Veri); int n = 0;
                 foreach (var s in v?.Satirlar ?? new List<SiraSatiri>()) { var hedef = Hedef(s.DbName ?? "", s.DocEntry, s.Iz, esle, out _); if (hedef == null) continue; hedef.U_Oncelik = s.Oncelik; n++; }
                 return n > 0;
+            }
+            if (k.Tip == "planOnay")
+            {   // Talepler › Planlı Ödemeler onayı (16 Kas 2026): satır değişmez anahtarıyla bulunur (kredi taksidi / düzenli ödeme belge no); düzenli ödemenin o ay satırı henüz açılmamışsa açılır
+                var v = Coz<PlanOnayVeri>(k.Veri); string anahtar = v?.Anahtar ?? "";
+                var hedef = NakitAkisOrnek.TalepSatiri(anahtar);
+                if (hedef == null && anahtar.StartsWith("D:")) { DuzenliOdemeOrnek.TalepSatiriAc(anahtar.Substring(2), kisi); hedef = NakitAkisOrnek.TalepSatiri(anahtar); }
+                if (hedef == null) hedef = Hedef(db, k.Doc, k.Iz, esle, out _);
+                if (hedef == null) { Console.WriteLine($"[Kalıcı] Kasa Nakit atlandı (planOnay #{k.Doc}): satır bulunamadı ({anahtar})"); return false; }
+                if (hedef.DocEntry != k.Doc) esle[k.Doc] = hedef.DocEntry;   // sonraki kayıtlar (durum, tarih …) aynı satıra uygulanır
+                DateTime? plan = DateTime.TryParseExact(v?.Plan, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var pt) ? pt : (DateTime?)null;
+                return NakitAkisOrnek.PlanliOnayla(hedef.U_KaynakFirma, hedef.DocEntry, v?.Tutar, plan, kisi, true).ok;
             }
             var m = Hedef(db, k.Doc, k.Iz, esle, out int doc); if (m == null) { Console.WriteLine($"[Kalıcı] Kasa Nakit atlandı ({k.Tip} #{k.Doc}): satır bulunamadı ya da değişmiş ({k.Iz})"); return false; }
             switch (k.Tip)

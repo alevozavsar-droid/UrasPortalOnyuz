@@ -156,7 +156,7 @@ namespace WebApplication3.Data
                     U_Kurum = d.Tedarikci, U_UrunHizmet = $"{d.UrunHizmet} · {AyAdi(ay)}", U_OdemeYontemi = yontem, U_BagliBelgeTipi = "Diğer", U_KayitTipi = "Düzenli Ödeme", U_FaturaSiparisNo = $"{d.No} · {ay}",
                     U_PlanlananTarih = tarih, U_SonOdemeTarihi = tarih, BelgeTarihi = tarih.AddDays(-5), U_Tutar = d.AylikTutar, U_ParaBirimi = "TRY", U_Kur = 1, U_TutarTL = d.AylikTutar, U_FaturaTutari = d.AylikTutar, U_IslemTipi = "X",
                     U_TalepEden = d.Sorumlu, U_Satinalmaci = "", U_FaturaSahibi = d.Sirket, U_OdeyenSirket = d.Sirket, U_Durum = "Planlandı", U_TeslimAlan = yontem == "Nakit" ? d.Tedarikci : null,
-                    U_Notlar = $"Planlı düzenli ödeme {d.No} ({d.Kategori}) · her ay otomatik nakit akışa akar · ort. aylık {d.AylikTutar.ToString("N0", Tr)} ₺ · sorumlu {d.Sorumlu}" + (d.OdemeSekli == "Nakit / Çek" ? " · nakit ya da çek" : "") + (string.IsNullOrEmpty(d.Not) ? "" : " · " + d.Not)
+                    U_Notlar = $"Planlı düzenli ödeme {d.No} ({d.Kategori}) · ort. aylık {d.AylikTutar.ToString("N0", Tr)} ₺ · sorumlu {d.Sorumlu}" + (d.OdemeSekli == "Nakit / Çek" ? " · nakit ya da çek" : "") + (string.IsNullOrEmpty(d.Not) ? "" : " · " + d.Not)
                 };
                 var m = NakitAkisOrnek.Ekle(d.DbName, gelen, kullanici);
                 // o ay için önceden planlanmış çekler satıra bağlanır: Ciro → satırın belgesi olur (Nakit Akış Planlama çek satırı); Tahsil → bilgi bağı (belge bankaya tahsile verilir, ödeme nakit / havale)
@@ -170,14 +170,24 @@ namespace WebApplication3.Data
                     }
                     catch { /* çek bağlanamazsa satır yine açılır */ }
                 }
-                bool odendi = odenmisSay || (ay == BuAy && tarih < bugun);
+                // 16 Kas 2026 ("Nakit Akış Planlama raporuna doğrudan hiçbir satır geçmesin"): satır rapora doğrudan geçmez; Talepler › Planlı Ödemeler'de onay bekler (gerçekleşen tutar girilip onaylanır).
+                // Kural tarihinden (NakitAkisOrnek.TalepKuraliBaslangic) önceki ödemeler eskisi gibi tohumlanır: geçmiş ay / günü geçen ödeme ödenmiş sayılır; kural tarihinden sonrası hiçbir zaman kendiliğinden ödenmiş olmaz.
+                bool odendi = (odenmisSay || (ay == BuAy && tarih < bugun)) && tarih < NakitAkisOrnek.TalepKuraliBaslangic;
                 if (odendi) { NakitAkisOrnek.OdendiIsaretle(d.DbName, m.DocEntry, "Düzenli ödeme " + d.No, kullanici, true, tarih); if (yontem == "Nakit") NakitAkisOrnek.AlanKaydet(d.DbName, m.DocEntry, "U_MakbuzNo", $"KT-{tarih:yyMM}-{d.Id:000}", kullanici); }
-                lock (Kilit) { d.Akislar.Add(new DuzenliAkis { Ay = ay, DocEntry = m.DocEntry, DbName = d.DbName, Zaman = DateTime.Now, Kullanici = kullanici ?? "", Tutar = d.AylikTutar, Yontem = yontem, PlanlananTarih = tarih }); Log(d, "Nakit Akışa Aktı", $"{AyAdi(ay)} · Nakit Akış Planlama #{m.DocEntry} · {yontem} · {d.AylikTutar.ToString("N2", Tr)} ₺ · planlanan {tarih:dd.MM.yyyy}" + (odendi ? " · ödendi" : ""), kullanici); }
-                if (panelGunlugu) FinekraOrnek.GunlukEkle(d.Sirket, d.No, "Düzenli Ödeme Aktı", $"{d.Tedarikci} · {d.UrunHizmet} · {AyAdi(ay)} · Nakit Akış Planlama #{m.DocEntry} · {d.AylikTutar.ToString("N2", Tr)} ₺ · {yontem}", kullanici);
+                else NakitAkisOrnek.TalepBeklet(d.DbName, m.DocEntry, kullanici);
+                lock (Kilit) { d.Akislar.Add(new DuzenliAkis { Ay = ay, DocEntry = m.DocEntry, DbName = d.DbName, Zaman = DateTime.Now, Kullanici = kullanici ?? "", Tutar = d.AylikTutar, Yontem = yontem, PlanlananTarih = tarih }); Log(d, odendi ? "Nakit Akışa Aktı" : "Talebe Düştü", $"{AyAdi(ay)} · Nakit Akış Planlama #{m.DocEntry} · {yontem} · {d.AylikTutar.ToString("N2", Tr)} ₺ · planlanan {tarih:dd.MM.yyyy}" + (odendi ? " · ödendi" : " · Talepler › Planlı Ödemeler'de onay bekliyor"), kullanici); }
+                if (panelGunlugu) FinekraOrnek.GunlukEkle(d.Sirket, d.No, "Düzenli Ödeme Talebe Düştü", $"{d.Tedarikci} · {d.UrunHizmet} · {AyAdi(ay)} · Nakit Akış Planlama › Talepler › Planlı Ödemeler #{m.DocEntry} · {d.AylikTutar.ToString("N2", Tr)} ₺ · {yontem} · onay bekliyor", kullanici);
                 eklenen++;
             }
-            string mesaj = eklenen == 0 ? (atlanan > 0 ? $"{AyAdi(ay)} için {atlanan} düzenli ödeme zaten nakit akışta; yeni satır açılmadı." : "Akıtılacak aktif düzenli ödeme yok.") : $"{AyAdi(ay)}: {eklenen} düzenli ödeme Nakit Akış Planlama'ya aktı" + (atlanan > 0 ? $" ({atlanan} zaten akmıştı)" : "") + ".";
+            string mesaj = eklenen == 0 ? (atlanan > 0 ? $"{AyAdi(ay)} için {atlanan} düzenli ödeme zaten açılmış; yeni satır açılmadı." : "Akıtılacak aktif düzenli ödeme yok.") : $"{AyAdi(ay)}: {eklenen} düzenli ödeme Nakit Akış Planlama › Talepler › Planlı Ödemeler'e düştü; onaylanınca rapora geçer" + (atlanan > 0 ? $" ({atlanan} zaten açılmıştı)" : "") + ".";
             return (true, mesaj, eklenen, atlanan);
+        }
+        /// <summary>Kalıcı günlük yeniden uygulanırken: belge no ("DÖ-001 · 2026-12") ile anılan ayın satırı henüz açılmamışsa açar (gelecek ay elle planlanıp onaylanmış olabilir).</summary>
+        public static void TalepSatiriAc(string belgeNo, string kullanici)
+        {
+            var p = (belgeNo ?? "").Split(new[] { " · " }, StringSplitOptions.None); if (p.Length != 2 || !AyGecerli(p[1])) return;
+            DuzenliOdeme d; lock (Kilit) d = _liste.FirstOrDefault(x => x.No == p[0]); if (d == null) return;
+            Akit(p[1], kullanici, null, d.Id, false, false, true);
         }
         /// <summary>Panel her açılışta: bu ay için akmamış aktif kayıtları tamamlar (ay başı otomatik işinin karşılığı).</summary>
         public static (int eklenen, string mesaj) OtomatikAkit(string kullanici) { var r = Akit(BuAy, kullanici, null, null, false, true); return (r.eklenen, r.eklenen > 0 ? r.mesaj : ""); }
@@ -234,7 +244,7 @@ namespace WebApplication3.Data
         static object AkisJson(DuzenliAkis a)
         {
             if (a == null) return null; var m = NakitAkisOrnek.Bul(a.DbName, a.DocEntry);
-            return new { a.Ay, a.DocEntry, durum = m?.U_Durum ?? "—", onay = m?.U_OnayDurumu, odenme = m?.U_OdenmeTarihi?.ToString("yyyy-MM-dd"), planlanan = (m?.U_PlanlananTarih ?? a.PlanlananTarih).ToString("yyyy-MM-dd"), tutar = m?.U_TutarTL ?? a.Tutar, yontem = m?.U_OdemeYontemi ?? a.Yontem, makbuz = m?.U_MakbuzNo, yevmiye = m?.U_YevmiyeNo, zaman = a.Zaman.ToString("yyyy-MM-dd HH:mm"), a.Kullanici, link = $"/Rapor79?sirket={a.DbName}&sekme={(a.Yontem == "Nakit" ? "nakit" : a.Yontem == "Çek" ? "cek" : "havale")}" };
+            return new { a.Ay, a.DocEntry, durum = NakitAkisOrnek.TalepBekliyor(m) ? "Onay Bekliyor" : m?.U_Durum ?? "—", onay = m?.U_OnayDurumu, odenme = m?.U_OdenmeTarihi?.ToString("yyyy-MM-dd"), planlanan = (m?.U_PlanlananTarih ?? a.PlanlananTarih).ToString("yyyy-MM-dd"), tutar = m?.U_TutarTL ?? a.Tutar, yontem = m?.U_OdemeYontemi ?? a.Yontem, makbuz = m?.U_MakbuzNo, yevmiye = m?.U_YevmiyeNo, zaman = a.Zaman.ToString("yyyy-MM-dd HH:mm"), a.Kullanici, link = $"/Rapor79?sirket={a.DbName}&sekme={(a.Yontem == "Nakit" ? "nakit" : a.Yontem == "Çek" ? "cek" : "havale")}" };
         }
         public static object Json(DuzenliOdeme d)
         {

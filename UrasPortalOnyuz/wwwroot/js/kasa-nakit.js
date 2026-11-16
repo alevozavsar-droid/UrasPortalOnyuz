@@ -73,7 +73,7 @@
   const satirBul = d => V.odemeler.find(r => r.docEntry === d);
   // kaynak adları ekranda kısa: Nakit Akış Planlama → Nakit Akış, Planlı Düzenli Ödemeler → Planlı Ödemeler (13 Kas 2026)
   const KAYNAK_AD = { 'Nakit Akış Planlama': 'Nakit Akış', 'Planlı Düzenli Ödemeler': 'Planlı Ödemeler', 'İbraz (Çek Akıbeti)': 'İbraz', 'Çek Akıbeti': 'İbraz', 'Banka Hareketi (Finekra)': 'Gerçekleşen Ödemeler' }, kaynakDuzelt = row => { if (row) row.kaynak = KAYNAK_AD[row.kaynak] || row.kaynak || 'Nakit Akış'; return row; };
-  const satirYerlestir = row => { if (!row) return; kaynakDuzelt(row); const i = V.odemeler.findIndex(r => r.docEntry === row.docEntry); if (i >= 0) V.odemeler[i] = row; else V.odemeler.push(row); };
+  const satirYerlestir = row => { if (!row) return; if (row.talepBekliyor) { satirKaldir(row.docEntry); return; }   /* onay bekleyen satır raporda gösterilmez (Yeni Ödeme Kaydı › Departman Talepleri / Planlı Ödemeler) */ kaynakDuzelt(row); const i = V.odemeler.findIndex(r => r.docEntry === row.docEntry); if (i >= 0) V.odemeler[i] = row; else V.odemeler.push(row); };
   const satirKaldir = d => { V.odemeler = V.odemeler.filter(r => r.docEntry !== d); };
   const sirketAdi = db => (V.sirketler.find(x => x.dbName === db) || {}).ad || db;
   const dSirketler = () => (V.grupSirketleri || V.sirketler.map(s => s.ad));
@@ -1158,7 +1158,10 @@
     const d = await post(`/Rapor79/${yeni ? 'SatirEkle' : 'SatirKaydet'}?dbName=${encodeURIComponent(db)}&ozelOnay=${$('#knOzelOnay').checked}`, gov).catch(() => ({ success: false, message: 'Ağ hatası.' }));
     if (!d.success && d.mukerrer) { mesaj('warning', '<i class="fas fa-triangle-exclamation me-1"></i>' + esc(d.message)); if (confirm(d.message + '\n\nYine de kaydedilsin mi?')) return drawerKaydet(true); $('#knDMesaj').textContent = 'Mükerrer uyarısı: kayıt yapılmadı.'; return; }
     if (!d.success) { $('#knDMesaj').textContent = d.message || 'Kaydedilemedi.'; return; }
-    if (yeni) { if ((!F.sirket || F.sirket === db) && (!d.row.planlanan || (d.row.planlanan >= F.bas && d.row.planlanan <= F.bit))) V.odemeler.push(d.row); mesaj(d.row.yontem === 'Nakit' ? 'warning' : 'success', esc(d.message) + (d.row.grupIciBelge ? ` <b>${esc(d.row.grupIciBelge.no)}</b> (${esc(d.row.grupIciBelge.baslik)}) otomatik açıldı.` : '')); drawerKapat(); ciz(); if (d.row.yontem) sekme(YKEY(d.row.yontem)); }
+    if (yeni) {   // 16 Kas 2026: elle açılan kayıt rapora doğrudan geçmez (talepBekliyor); Departman Talepleri'nde onaylanınca listeye girer
+      const bekler = !!d.row.talepBekliyor; if (d.talepOzet) V.talepOzet = d.talepOzet;
+      if (!bekler && (!F.sirket || F.sirket === db) && (!d.row.planlanan || (d.row.planlanan >= F.bas && d.row.planlanan <= F.bit))) V.odemeler.push(d.row);
+      mesaj(bekler ? 'info' : d.row.yontem === 'Nakit' ? 'warning' : 'success', (bekler ? '<i class="fas fa-inbox me-1"></i>' : '') + esc(d.message) + (d.row.grupIciBelge ? ` <b>${esc(d.row.grupIciBelge.no)}</b> (${esc(d.row.grupIciBelge.baslik)}) otomatik açıldı.` : '')); drawerKapat(); ciz(); if (!bekler && d.row.yontem) sekme(YKEY(d.row.yontem)); }
     else { satirYerlestir(d.row); ciz(); drawerAc(d.row); $('#knDMesaj').textContent = 'Kaydedildi.' + (d.row.grupIciBelge ? ` ${d.row.grupIciBelge.no} (${d.row.grupIciBelge.tur}) güncel.` : ''); }
     if (d.row.grupIciBelge || d.row.grupIciGerekli) yukle(true);   // Mahsup / Temlik sekmelerindeki belge listesi tazelensin
   }
@@ -1178,7 +1181,7 @@
   $('#knDKapat').addEventListener('click', drawerKapat); $('#knPerde').addEventListener('click', drawerKapat);
   // ---------- YENİ ÖDEME: elle giriş · ödenmemiş faturalar · cari bakiyeleri (Cari Mutabakat ekstresinden); cari adı → Cari Ekstre Raporu (/Rapor20?bpCode=)
   let Y = { g: 'form', db: '', veri: null, ara: '', temsilci: '', liste: [] };
-  const yeniSekmeHtml = () => `<div class="kn-yeni"><div class="btn-group btn-group-sm mb-2" id="knYeniSekme"><button type="button" class="btn btn-primary" data-g="form"><i class="fas fa-pen me-1"></i>Elle Giriş</button><button type="button" class="btn btn-outline-primary" data-g="fatura"><i class="fas fa-file-invoice me-1"></i>Ödenmemiş Faturalar</button><button type="button" class="btn btn-outline-primary" data-g="cari"><i class="fas fa-building me-1"></i>Cari Bakiyeleri</button><button type="button" class="btn btn-outline-primary" data-g="talep"><i class="fas fa-inbox me-1"></i>Departman Talepleri</button></div>
+  const yeniSekmeHtml = () => `<div class="kn-yeni"><div class="btn-group btn-group-sm mb-2" id="knYeniSekme"><button type="button" class="btn btn-primary" data-g="form"><i class="fas fa-pen me-1"></i>Elle Giriş</button><button type="button" class="btn btn-outline-primary" data-g="fatura"><i class="fas fa-file-invoice me-1"></i>Ödenmemiş Faturalar</button><button type="button" class="btn btn-outline-primary" data-g="cari"><i class="fas fa-building me-1"></i>Cari Bakiyeleri</button><button type="button" class="btn btn-outline-primary" data-g="talep"><i class="fas fa-inbox me-1"></i>Departman Talepleri</button><button type="button" class="btn btn-outline-primary" data-g="planli" title="Planlı düzenli ödemeler ve kredi taksitleri: gerçekleşen tutar girilip onaylanınca Nakit Akış Planlama'ya geçer"><i class="fas fa-calendar-check me-1"></i>Planlı Ödemeler</button></div>
     <div id="knYeniListe" style="display:none"><div class="d-flex gap-2 align-items-end mb-2 flex-wrap" style="font-size:.7rem"><div><label class="form-label mb-0" style="font-size:.58rem;font-weight:700;color:#64748b;text-transform:uppercase">Şirket</label><select id="knYeniSirket" class="form-select form-select-sm" style="min-width:150px">${V.sirketler.map(s => `<option value="${esc(s.dbName)}">${esc(s.ad)}</option>`).join('')}</select></div><div><label class="form-label mb-0" style="font-size:.58rem;font-weight:700;color:#64748b;text-transform:uppercase">Temsilci / Talep Eden</label><select id="knYeniTemsilci" class="form-select form-select-sm" style="min-width:160px"><option value="">Tümü</option></select></div><div><label class="form-label mb-0" style="font-size:.58rem;font-weight:700;color:#64748b;text-transform:uppercase">Ara</label><input id="knYeniAra" class="form-control form-control-sm" style="width:220px;font-size:.7rem;height:26px" placeholder="firma / belge no / açıklama…"></div><span class="text-muted ms-auto" id="knYeniNot"></span></div><div class="table-responsive kn-liste-kap"><table class="na-tablo kn-tablo" id="knYeniTablo" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>`;
   async function yeniYukle() {
     const db = $('#knYeniSirket').value; if (Y.veri && Y.db === db) return Y.veri;
@@ -1190,18 +1193,37 @@
   async function yeniCiz() {
     $$('#knYeniSekme button').forEach(b => { b.classList.toggle('btn-primary', b.dataset.g === Y.g); b.classList.toggle('btn-outline-primary', b.dataset.g !== Y.g); });
     const liste = $('#knYeniListe'); if (!liste) return; liste.style.display = Y.g === 'form' ? 'none' : ''; $$('#knDIc .kn-form').forEach(f => f.closest('.na-kart').style.display = Y.g === 'form' ? '' : 'none'); $('#knDrawer').classList.toggle('genis', Y.g !== 'form');
-    if (Y.g === 'form') return; const v = await yeniYukle(); if (!v) return; const q = Y.ara.trim().toLocaleLowerCase('tr-TR'), tf = Y.temsilci, t = $('#knYeniTablo');
+    [$('#knYeniSirket'), $('#knYeniTemsilci')].forEach(el => { if (el) el.parentElement.style.display = Y.g === 'planli' ? 'none' : ''; });   // Planlı Ödemeler bütün şirketleri gösterir; şirket / temsilci seçimi orada kullanılmaz
+    if (Y.g === 'form') return; if (Y.g === 'planli') { await planliCiz(); return; }
+    const v = await yeniYukle(); if (!v) return; const q = Y.ara.trim().toLocaleLowerCase('tr-TR'), tf = Y.temsilci, t = $('#knYeniTablo');
     const ekstre = c => `<a href="${esc(c.ekstre)}" target="_blank" class="kn-belge-link" title="Cari Ekstre Raporu'nda aç · temsilci: ${esc((c.temsilciler || []).join(', '))}">${esc(c.ad)}</a> <a href="${esc(c.ekstreYazdir)}" target="_blank" class="text-muted" title="Yazdırılabilir ekstre" style="font-size:.6rem"><i class="fas fa-print"></i></a><small title="Carinin kayıtlı olduğu grup şirketi">${esc(c.sirket || '')}${c.kendi ? '' : ' · grup tedarikçisi'}</small>`;
     const temsilciUyar = c => !tf || (c.temsilciler || []).includes(tf);
     if (Y.g === 'talep') {
       // Departman Talepleri (13 Kas 2026: "çok karışık, sağa sola kaydırmaya gerek olmasın"): 14 sütun yerine 10 — ilişkili bilgiler aynı hücrede alt alta (talep no + tarih, şirket + departman · talep eden,
       // ödenecek kurum + açıklama, belge tipi + no, tutar ₺ + döviz, yöntem + öncelik, durum + onaylayan); metin sarılır, tablo çekmece genişliğine sığar. Onaylılar üstte, sonra son ödeme tarihine göre.
-      const L = (v.talepler || []).filter(x => (!tf || x.talepEden === tf) && (!q || [x.kurum, x.belgeNo, x.aciklama, x.departman, x.talepEden, x.no, x.belgeTipi, x.konu].join(' ').toLocaleLowerCase('tr-TR').includes(q)))
-        .sort((a, b) => (a.durum === 'Onaylandı' ? 0 : 1) - (b.durum === 'Onaylandı' ? 0 : 1) || String(a.sonOdeme || '').localeCompare(String(b.sonOdeme || '')));
+      // 16 Kas 2026 (kullanıcının kaynak → sekme eşlemesi): Ödeme Talebi modülünün taleplerine ek olarak, Nakit Akış'a doğrudan geçmeyen kayıtlar da burada onay bekler — ekrandan elle giriş (Nakit Akış),
+      // Grup İçi Modül, Nakit Avans, Personel Ödemesi (İK), Takip Paneli. Bu kayıtlar (x.satir) "Onayla" ile rapora geçer; ekrandan açılmış olan onaylanmadan silinebilir.
+      await bekleyenYukle(); const gunFark = t0 => t0 ? Math.round((new Date(bugun()) - new Date(t0)) / 864e5) : 0;
+      const bek = (Y.bekleyen || []).map(p => ({ satir: p, no: '#' + p.docEntry, tarih: p.belgeTarihi, konu: '', sirket: p.sirket, departman: p.kaynak, talepEden: p.talepEden || '', kurum: p.kurum, aciklama: p.urun, belgeTipi: p.belgeTipi, belgeNo: p.belgeNo, sonOdeme: p.sonOdeme, gecikme: gunFark(p.sonOdeme),
+        tutar: p.tutar, tutarTL: p.tutarTL, pb: p.pb, mutabakat: p.mutabakat, yontem: p.yontem, oncelik: 'Normal', durum: 'Onay Bekliyor', kaynak: p.not || '' }));
+      const L = bek.concat(v.talepler || []).filter(x => (!tf || x.talepEden === tf) && (!q || [x.kurum, x.belgeNo, x.aciklama, x.departman, x.talepEden, x.no, x.belgeTipi, x.konu].join(' ').toLocaleLowerCase('tr-TR').includes(q)))
+        .sort((a, b) => (a.satir || a.durum === 'Onaylandı' ? 0 : 1) - (b.satir || b.durum === 'Onaylandı' ? 0 : 1) || String(a.sonOdeme || '').localeCompare(String(b.sonOdeme || '')));
       const mutRozet = m => rozet(m || 'Mutabakat Yok', m === 'Mutabık' ? 'ok' : m === 'Mutabık Değil' ? 'hata' : m === 'Bekliyor' ? 'bekle' : m === 'Gerekmez' ? 'notr' : 'bilgi');
       t.dataset.liste = 'talep';
       t.tHead.innerHTML = '<tr><th>Talep No · Tarih</th><th>Şirket · Departman</th><th>Ödenecek Kurum · Açıklama</th><th>Belge</th><th>Son Ödeme</th><th class="s">Tutar (₺)</th><th title="Ödeme öncesi cari mutabakat durumu">Mutabakat</th><th>Yöntem · Öncelik</th><th>Durum</th><th>İşlem</th></tr>';
       t.tBodies[0].innerHTML = L.length ? L.map((x, i) => { const onayli = x.durum === 'Onaylandı', dovizli = x.pb && x.pb !== 'TRY';
+        if (x.satir) { const p = x.satir, k = planliKey(p);   // Nakit Akış'a doğrudan geçmeyen kayıt: Onayla → rapora geçer
+          return `<tr data-key="${esc(k)}">
+          <td class="sol"><b>${esc(x.no)}</b><small>${tarih(x.tarih)}</small></td>
+          <td class="sol" title="${esc(x.kaynak)}"><b>${esc(x.sirket)}</b><small>${esc(x.departman)}${x.talepEden ? ' · ' + esc(x.talepEden) : ''}</small></td>
+          <td class="sol" title="${esc(x.aciklama || '')}"><b>${esc(x.kurum)}</b><small class="kn-kes kn-kes2">${esc(x.aciklama || '')}</small></td>
+          <td>${rozet(x.belgeTipi, 'notr')}<small>${esc(x.belgeNo || '')}</small></td>
+          <td class="${x.gecikme > 0 ? 'gec' : ''}">${tarih(x.sonOdeme)}<small class="${x.gecikme > 0 ? 'text-danger' : ''}">${x.gecikme > 0 ? x.gecikme + ' gün geçti' : (-x.gecikme) + ' gün kaldı'}</small></td>
+          <td class="para" title="${esc(para(x.tutar) + ' ' + (x.pb || 'TRY'))}">${para(x.tutarTL)} ₺${dovizli ? `<small>${para(x.tutar)} ${esc(pbAd(x.pb))}</small>` : ''}</td>
+          <td>${mutRozet(x.mutabakat)}</td>
+          <td>${yontemRozet(x.yontem)}<small>Normal</small></td>
+          <td>${rozet('Onay Bekliyor', 'bekle')}<small>${p.nakitOnay ? 'nakit onayı da bekliyor' : 'onaylanınca rapora geçer'}</small></td>
+          <td class="kn-talep-islem"><button type="button" class="btn yeni-talep-ekle yeni-satir-onay" data-key="${esc(k)}" title="Kaydı onayla; ${esc(x.sirket)} nakit akışına geçer"><i class="fas fa-check"></i>Onayla</button>${p.silinebilir ? `<button type="button" class="btn yeni-satir-sil" data-key="${esc(k)}" title="Onay bekleyen kaydı sil"><i class="fas fa-trash-can"></i>Sil</button>` : ''}</td></tr>`; }
         return `<tr class="tik ${onayli ? '' : 'kn-bekleyen'}" data-i="${i}">
           <td class="sol"><b>${esc(x.no)}</b>${x.talepLink ? ` <a href="${esc(x.talepLink)}" target="_blank" title="Ödeme Talebi modülünde aç"><i class="fas fa-arrow-up-right-from-square"></i></a>` : ''}<small>${tarih(x.tarih)}${x.konu ? ' · ' + esc(x.konu) : ''}</small></td>
           <td class="sol" title="${esc(x.kaynak || '')}"><b>${esc(x.sirket)}</b><small>${esc(x.departman)} · ${esc(x.talepEden)}</small></td>
@@ -1213,8 +1235,8 @@
           <td>${yontemRozet(x.yontem)}<small>${x.oncelik && x.oncelik !== 'Normal' ? rozet(x.oncelik, x.oncelik === 'Çok Acil' ? 'hata' : 'bekle') : 'Normal'}</small></td>
           <td>${rozet(x.durum, onayli ? 'ok' : 'bekle')}<small>${x.onaylayan ? esc(x.onaylayan) + (x.onayTarihi ? ' · ' + tarih(x.onayTarihi) : '') : onayli ? '' : 'onay akışında'}</small></td>
           <td class="kn-talep-islem">${onayli ? `<button type="button" class="btn yeni-talep-ekle" data-no="${esc(x.no)}" title="Onaylı talebi ${esc(x.sirket)} nakit akışına satır olarak ekle"><i class="fas fa-plus"></i>Nakit Akışa Ekle</button><button type="button" class="btn yeni-sec" data-i="${i}" title="Forma al, düzenleyip kaydet"><i class="fas fa-pen"></i>Forma Al</button>` : `<small>onaylanınca eklenebilir</small>${x.talepLink ? `<a class="btn" href="${esc(x.talepLink)}" target="_blank" title="Onay akışını Ödeme Talebi modülünde aç"><i class="fas fa-arrow-up-right-from-square"></i>Talebi Aç</a>` : ''}`}</td></tr>`; }).join('') : '<tr><td colspan="10" class="na-bos text-center">Açık ödeme talebi yok.</td></tr>';
-      t.tFoot.innerHTML = L.length ? `<tr class="toplam"><td colspan="5" class="text-end">${L.length} talep · onaylı (eklenebilir) ${L.filter(x => x.durum === 'Onaylandı').length} · onay bekleyen ${L.filter(x => x.durum !== 'Onaylandı').length} · mutabık ${L.filter(x => x.mutabakat === 'Mutabık').length}</td><td class="para">${para(L.reduce((s, x) => s + x.tutarTL, 0))} ₺</td><td colspan="4"></td></tr>` : '';
-      Y.liste = L; $('#knYeniNot').textContent = `Tüm şirketler · ${(v.talepler || []).length} açık talep · onaylı ${v.talepOnayli || 0} · onay bekleyen ${v.talepBekleyen || 0}`;
+      t.tFoot.innerHTML = L.length ? `<tr class="toplam"><td colspan="5" class="text-end">${L.length} kayıt · burada onaylanacak ${L.filter(x => x.satir).length} · onaylı talep (eklenebilir) ${L.filter(x => x.durum === 'Onaylandı').length} · modülünde onay bekleyen talep ${L.filter(x => !x.satir && x.durum !== 'Onaylandı').length} · mutabık ${L.filter(x => x.mutabakat === 'Mutabık').length}</td><td class="para">${para(L.reduce((s, x) => s + x.tutarTL, 0))} ₺</td><td colspan="4"></td></tr>` : '';
+      Y.liste = L; $('#knYeniNot').textContent = `Tüm şirketler · burada onay bekleyen ${(Y.bekleyen || []).length} kayıt · ${(v.talepler || []).length} açık talep (onaylı ${v.talepOnayli || 0} · modülünde onay bekleyen ${v.talepBekleyen || 0})`;
       return;
     }
     t.dataset.liste = Y.g;
@@ -1232,6 +1254,65 @@
       Y.liste = L; $('#knYeniNot').textContent = `${sirketAdi(Y.db)} · ${v.kendiAdet || 0} kendi carisi + grup tedarikçileri (${v.cariler.length} cari) · ${para(v.toplam)} ₺ açık · vadesi geçmiş ${para(v.gecmis)} · gelecek ${para(v.gelecek)}${tf ? ' · temsilci ' + tf : ''}`;
     }
   }
+  // ---------- Talepler › PLANLI ÖDEMELER (16 Kas 2026) ----------
+  // Kullanıcı: "planlı ödemeler de buraya düşsün, düzeltilebilsin, buradan onayla nakit akış raporuna geçsin; planlı ödemelerde ortalama bir rakam giriliyor ama gerçekleşen tutar net doğru girilmeli;
+  // Nakit Akış Planlama raporuna doğrudan hiçbir satır geçmesin; Kaynak'ta olan Kredi Raporu da planlı ödemelerden gelsin."
+  // Planlı düzenli ödeme ve kredi taksidi satırları raporda görünmez; burada (bütün şirketler) planlanan tarih ve gerçekleşen tutar düzeltilir, Onayla ile rapora geçer (/Rapor79/PlanliTalepler · PlanliOnayla).
+  // Y.planli: sunucudan gelen liste; Y.planliTaslak: satır (dbName|docEntry) → { tutar, tarih } — arama listeyi yeniden çizse de girilen değer kaybolmaz.
+  const tutarCoz = s => { s = String(s ?? '').trim().replace(/\s/g, ''); if (s === '') return NaN; if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.'); else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, ''); return /^\d+(\.\d+)?$/.test(s) ? parseFloat(s) : NaN; };
+  const planliKey = x => x.dbName + '|' + x.docEntry;
+  // onay bekleyen satırlar tek istekle gelir: Y.planli = Planlı Ödemeler sekmesi (planlı düzenli ödeme, kredi taksidi) · Y.bekleyen = Departman Talepleri sekmesi (elle giriş, grup içi, nakit avans, personel ödemesi, Takip Paneli)
+  async function bekleyenYukle() {
+    if (Y.planli) return true; const d = await getJ('/Rapor79/PlanliTalepler').catch(() => null); if (!d || !d.success) return false;
+    Y.planli = d.liste || []; Y.bekleyen = d.talep || []; Y.planliTaslak = Y.planliTaslak || {}; return true;
+  }
+  /** Departman Talepleri'nde onay bekleyen kayıt → onayla: satır Nakit Akış Planlama'ya geçer */
+  async function satirOnayla(key) {
+    const x = (Y.bekleyen || []).find(p => planliKey(p) === key); if (!x) return;
+    const d = await post('/Rapor79/PlanliOnayla', { DbName: x.dbName, DocEntry: x.docEntry }).catch(() => ({ success: false, message: 'Ağ hatası.' }));
+    if (!d.success) { mesaj('danger', esc(d.message)); if (d.message && d.message.includes('zaten onaylanmış')) { Y.planli = null; yeniCiz(); } return; }
+    const row = d.row; if (row && (!F.sirket || F.sirket === row.dbName) && (!row.planlanan || (row.planlanan >= F.bas && row.planlanan <= F.bit))) satirYerlestir(row);
+    Y.bekleyen = Y.bekleyen.filter(p => p !== x); if (V && d.talepOzet) V.talepOzet = d.talepOzet;
+    mesaj(row && row.yontem === 'Nakit' ? 'warning' : 'success', '<i class="fas fa-check me-1"></i>' + esc(d.message) + (x.nakitOnay ? ' Nakit onayı ayrıca bekliyor.' : '')); ciz(); yeniCiz();
+  }
+  /** Departman Talepleri'nde onay bekleyen, ekrandan açılmış kaydı siler (yanlış girilen kayıt onaylanmadan kaldırılabilsin) */
+  async function satirBekleyenSil(key) {
+    const x = (Y.bekleyen || []).find(p => planliKey(p) === key); if (!x || !x.silinebilir) return;
+    if (!confirm(`#${x.docEntry} · ${x.kurum} · ${para(x.tutar)} ${pbAd(x.pb)}\n\nOnay bekleyen kayıt silinsin mi?`)) return;
+    const d = await post('/Rapor79/SilJson', { DbName: x.dbName, DocEntry: x.docEntry }).catch(() => ({ success: false }));
+    if (!d.success) { mesaj('danger', 'Silinemedi.'); return; }
+    Y.bekleyen = Y.bekleyen.filter(p => p !== x); if (V && V.talepOzet) V.talepOzet.satir = Math.max(0, (V.talepOzet.satir || 1) - 1); mesaj('info', 'Onay bekleyen kayıt silindi.'); ciz(); yeniCiz();
+  }
+  async function planliCiz() {
+    const t = $('#knYeniTablo'); t.dataset.liste = 'planli';
+    if (!Y.planli) { $('#knYeniNot').textContent = 'yükleniyor…'; if (!await bekleyenYukle()) { $('#knYeniNot').textContent = 'veri alınamadı'; return; } }
+    const q = Y.ara.trim().toLocaleLowerCase('tr-TR'), L = Y.planli.filter(x => !q || [x.kurum, x.urun, x.belgeNo, x.sirket, x.kaynak, x.yontem].join(' ').toLocaleLowerCase('tr-TR').includes(q));
+    t.tHead.innerHTML = '<tr><th>Kaynak · Belge</th><th>Şirket</th><th>Ödenecek Kurum · Açıklama</th><th title="Düzeltilebilir: ödemenin nakit akışta planlanacağı gün">Planlanan Tarih</th><th>Yöntem</th><th class="s" title="Planlı ödeme kaydındaki ortalama tutar / kredi taksit tutarı">Planlanan Tutar</th><th class="s" title="Düzeltilebilir: fatura / ekstre üzerindeki gerçek tutar. Onaylanınca nakit akışa bu tutar geçer">Gerçekleşen Tutar</th><th>İşlem</th></tr>';
+    t.tBodies[0].innerHTML = L.length ? L.map(x => { const k = planliKey(x), ts = Y.planliTaslak[k] || {}, dovizli = x.pb && x.pb !== 'TRY';
+      return `<tr data-key="${esc(k)}">
+        <td class="sol">${rozet(x.kaynak, 'notr')}<small>${esc(x.belgeNo || '')}${x.kaynakLink ? ` <a href="${esc(x.kaynakLink)}" target="_blank" title="Kaynak ekranda aç"><i class="fas fa-arrow-up-right-from-square"></i></a>` : ''}</small></td>
+        <td class="sol"><b>${esc(x.sirket)}</b></td>
+        <td class="sol" title="${esc(x.not || '')}"><b>${esc(x.kurum)}</b><small class="kn-kes kn-kes2">${esc(x.urun || '')}</small></td>
+        <td class="${x.gecikme > 0 ? 'gec' : ''}"><input type="date" class="form-control form-control-sm kn-pl-tarih" value="${esc(ts.tarih !== undefined ? ts.tarih : x.planlanan || '')}"><small class="${x.gecikme > 0 ? 'text-danger' : ''}">${x.gecikme > 0 ? x.gecikme + ' gün geçti' : x.gecikme === 0 ? 'bugün' : (-x.gecikme) + ' gün kaldı'}</small></td>
+        <td>${yontemRozet(x.yontem)}</td>
+        <td class="para">${para(x.planTutar)} ${esc(pbAd(x.pb))}${dovizli ? `<small>kur ${Number(x.kur).toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</small>` : ''}</td>
+        <td class="para"><span class="kn-pl-kutu"><input type="text" inputmode="decimal" class="form-control form-control-sm kn-pl-tutar" value="${esc(ts.tutar !== undefined ? ts.tutar : para(x.tutar))}" autocomplete="off"><i>${esc(pbAd(x.pb))}</i></span></td>
+        <td class="kn-talep-islem"><button type="button" class="btn yeni-talep-ekle yeni-planli-onay" title="Tutarı ve tarihi kaydedip ${esc(x.sirket)} nakit akışına geçir"><i class="fas fa-check"></i>Onayla</button></td></tr>`; }).join('') : `<tr><td colspan="8" class="na-bos text-center">${Y.planli.length ? 'Aramaya uyan planlı ödeme yok.' : 'Onay bekleyen planlı ödeme yok.'}</td></tr>`;
+    t.tFoot.innerHTML = L.length ? `<tr class="toplam"><td colspan="5" class="text-end">${L.length} planlı ödeme onay bekliyor · tarihi geçmiş ${L.filter(x => x.gecikme > 0).length}</td><td class="para" title="TL karşılığı">${para(L.reduce((s, x) => s + x.tutarTL, 0))} ₺</td><td colspan="2"></td></tr>` : '';
+    Y.liste = L; $('#knYeniNot').textContent = `Tüm şirketler · ${Y.planli.length} planlı ödeme onay bekliyor · onaylanan Nakit Akış Planlama'ya geçer`;
+  }
+  async function planliOnayla(tr) {
+    const x = (Y.planli || []).find(p => planliKey(p) === tr.dataset.key); if (!x) return;
+    const ham = $('.kn-pl-tutar', tr).value, tutar = tutarCoz(ham), plan = $('.kn-pl-tarih', tr).value;
+    if (!isFinite(tutar) || tutar <= 0) { mesaj('danger', `${esc(x.kurum)}: gerçekleşen tutar geçersiz (${esc(ham)}). Örnek: 23.415,50`); $('.kn-pl-tutar', tr).focus(); return; }
+    if (!plan) { mesaj('danger', `${esc(x.kurum)}: planlanan tarih girilmeli.`); $('.kn-pl-tarih', tr).focus(); return; }
+    const dg = $('.yeni-planli-onay', tr); dg.disabled = true;
+    const d = await post('/Rapor79/PlanliOnayla', { DbName: x.dbName, DocEntry: x.docEntry, Tutar: tutar, Planlanan: plan }).catch(() => ({ success: false, message: 'Ağ hatası.' }));
+    if (!d.success) { dg.disabled = false; mesaj('danger', esc(d.message)); if (d.message && d.message.includes('zaten onaylanmış')) { Y.planli = null; yeniCiz(); } return; }
+    const row = d.row; if (row && (!F.sirket || F.sirket === row.dbName) && (!row.planlanan || (row.planlanan >= F.bas && row.planlanan <= F.bit))) satirYerlestir(row);
+    Y.planli = Y.planli.filter(p => p !== x); delete Y.planliTaslak[tr.dataset.key]; if (V && d.talepOzet) V.talepOzet = d.talepOzet;
+    mesaj('success', '<i class="fas fa-calendar-check me-1"></i>' + esc(d.message)); ciz(); yeniCiz();
+  }
   function yeniSec(i) {
     const set = (id, v) => { const el = $('#' + id); if (el && v != null) el.value = v; };
     const x = Y.liste[i]; if (!x) return;
@@ -1247,7 +1328,13 @@
     ySel.addEventListener('change', () => { if (dbSel) dbSel.value = ySel.value; Y.veri = null; yeniCiz(); });
     $('#knYeniAra').addEventListener('input', () => { Y.ara = $('#knYeniAra').value; yeniCiz(); });
     $('#knYeniTemsilci').addEventListener('change', () => { Y.temsilci = $('#knYeniTemsilci').value; yeniCiz(); });
+    // Planlı Ödemeler: girilen tutar / tarih taslakta tutulur (arama listeyi yeniden çizse de kaybolmaz); Enter = o satırı onayla
+    $('#knYeniTablo').addEventListener('input', e => { const i = e.target.closest('.kn-pl-tutar, .kn-pl-tarih'); if (!i) return; const k = i.closest('tr').dataset.key, ts = Y.planliTaslak[k] || (Y.planliTaslak[k] = {}); ts[i.classList.contains('kn-pl-tutar') ? 'tutar' : 'tarih'] = i.value; });
+    $('#knYeniTablo').addEventListener('keydown', e => { if (e.key !== 'Enter' || !e.target.closest('.kn-pl-tutar')) return; e.preventDefault(); planliOnayla(e.target.closest('tr')); });
     $('#knYeniTablo').addEventListener('click', async e => {
+      const po = e.target.closest('.yeni-planli-onay'); if (po) { e.stopPropagation(); await planliOnayla(po.closest('tr')); return; }
+      const so = e.target.closest('.yeni-satir-onay'); if (so) { e.stopPropagation(); so.disabled = true; await satirOnayla(so.dataset.key); return; }
+      const ss = e.target.closest('.yeni-satir-sil'); if (ss) { e.stopPropagation(); await satirBekleyenSil(ss.dataset.key); return; }
       const ek = e.target.closest('.yeni-talep-ekle'); if (ek) { e.stopPropagation(); await talepEkle(ek.dataset.no); return; }
       const b = e.target.closest('.yeni-sec'); if (b) { e.stopPropagation(); yeniSec(+b.dataset.i); return; } if (e.target.closest('a')) return; const tr = e.target.closest('tr.tik'); if (tr) yeniSec(+tr.dataset.i);
     });
@@ -1263,7 +1350,7 @@
   function yeniAc(g, yontem) { if (!V) return; Y = { g: g || 'form', db: '', veri: null, ara: '', temsilci: '', liste: [] }; const ad = sirketAdi(F.sirket || V.sirketler[0].dbName); const p = aktifSekme(); drawerAc({ docEntry: 0, dbName: F.sirket, sirket: '', kurum: '', faturaSahibi: ad, odeyenSirket: ad, yontem: yontem || (p in SEKME && SEKME[p] ? SEKME[p] : 'Havale / EFT'), durum: 'Bekliyor', planlanan: bugun(), sonOdeme: '', belgeTipi: 'Fatura', pb: 'TRY', kur: 1, tutar: '', tutarTL: '', notlar: '', alanlar: {}, belgeler: [], dekontlar: [] }); }
   // "Talepler": Ödeme Talebi modülünden gelen departman talepleri (tüm şirketler) — onaylananlar "Nakit Akışa Ekle" ile satır olur; rozet = açık talep sayısı (onaylı / bekleyen)
   $('#knTalepler').addEventListener('click', () => yeniAc('talep'));
-  function talepRozet() { const o = V && V.talepOzet; const b = $('#knTalepN'); if (!b || !o) return; b.textContent = o.acik; b.className = 'badge ms-1 ' + (o.onayli ? 'bg-success' : 'bg-dark'); $('#knTalepler').title = `${o.acik} açık ödeme talebi · onaylı (nakit akışa eklenebilir) ${o.onayli} · onay bekleyen ${o.bekleyen} · onaylı toplam ${para(o.onayliTutar || 0)} ₺`; }
+  function talepRozet() { const o = V && V.talepOzet; const b = $('#knTalepN'); if (!b || !o) return; b.textContent = o.acik + (o.planli || 0) + (o.satir || 0); b.className = 'badge ms-1 ' + (o.onayli ? 'bg-success' : 'bg-dark'); $('#knTalepler').title = `${o.acik} açık ödeme talebi · onaylı (nakit akışa eklenebilir) ${o.onayli} · onay bekleyen ${o.bekleyen} · onaylı toplam ${para(o.onayliTutar || 0)} ₺\n${o.planli || 0} planlı ödeme onay bekliyor (${para(o.planliTutar || 0)} ₺) · Planlı Ödemeler sekmesinde onaylanınca nakit akışa geçer\n${o.satir || 0} kayıt Departman Talepleri'nde onay bekliyor (${para(o.satirTutar || 0)} ₺): elle giriş, grup içi, nakit avans, personel ödemesi, Takip Paneli`; }
   kok.addEventListener('click', e => { const b = e.target.closest('.kn-ac'); if (!b) return; e.stopPropagation(); const r = satirdan(b); if (r) drawerAc(r); });
 
   // ---------- AYLIK ÖDEME · ÇEK VADE: ay ay yönteme göre ödemeler (o ay çıkan çekler vadesi ne olursa olsun) → o ayın çeklerinin vade dağılımı; çıkış ayı × vade ayı matrisi

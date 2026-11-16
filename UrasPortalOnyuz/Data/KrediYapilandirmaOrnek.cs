@@ -690,7 +690,7 @@ namespace WebApplication3.Data
             var kasa = NakitAkisOrnek.KrediSatirlari(k.No + "|").GroupBy(m => m.U_KrediTaksit).ToDictionary(g => g.Key, g => g.First());
             decimal oncesiBorc = OncesiToplam(k), taksitToplam = taksitler.Sum(t => t.Tutar), geriOdeme = taksitToplam + pesinatToplam, faiz = taksitler.Sum(t => t.Faiz);
             decimal uygulanan = taksitler.Count > 0 ? taksitler[0].Tutar : 0;
-            object KasaJson(NakitAkisViewModel m) => m == null ? null : new { docEntry = m.DocEntry, durum = m.U_Durum, odenme = D(m.U_OdenmeTarihi), db = m.U_KaynakFirma, link = $"/Rapor79?sirket={m.U_KaynakFirma}&sekme=havale" };
+            object KasaJson(NakitAkisViewModel m) => m == null ? null : new { docEntry = m.DocEntry, durum = NakitAkisOrnek.TalepBekliyor(m) ? "Onay Bekliyor" : m.U_Durum, odenme = D(m.U_OdenmeTarihi), db = m.U_KaynakFirma, link = $"/Rapor79?sirket={m.U_KaynakFirma}&sekme=havale" };
             var tl = taksitler.Select(t => { kasa.TryGetValue($"{k.No}|{t.No:000}", out var m); return new { no = t.No, tarih = D(t.Tarih), tutar = t.Tutar, anapara = t.Anapara, faiz = t.Faiz, kalan = t.Kalan, odendi = t.Odendi, aciklama = t.Aciklama ?? "", kasa = KasaJson(m) }; }).ToList();
             var pl = pesinatlar.Select(p => { kasa.TryGetValue(p.No == 1 ? $"{k.No}|P" : $"{k.No}|P{p.No}", out var m); return new { no = p.No, tarih = D(p.Tarih), tutar = p.Tutar, odendi = p.Odendi, aciklama = p.Aciklama ?? "", kasa = KasaJson(m) }; }).ToList();   // peşinat satırları (11 Kas 2026: protokolde birden çok peşin ödeme olabilir)
             kasa.TryGetValue($"{k.No}|P", out var pm);

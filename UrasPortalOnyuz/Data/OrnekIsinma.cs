@@ -13,6 +13,8 @@ namespace WebApplication3.Data
     public static class OrnekIsinma
     {
         static bool _yapildi; static readonly object Kilit = new object();
+        /// <summary>Isınma tamamlandı mı (16 Kas 2026): örnek tohum sırasında açılan satırlar Nakit Akış Planlama'da olduğu gibi kalır; ısınmadan SONRA öbür modüllerden gelen kayıt (ör. onaylanan nakit avans) onaya düşer.</summary>
+        public static bool Bitti { get; private set; }
 
         public static void Calistir()
         {
@@ -36,6 +38,7 @@ namespace WebApplication3.Data
                 D("Gündelikçi kişi kayıtları", PersonelMaliyetEkOrnek.GundelikciKisileriTamamla);   // SGK'sız gündelikçilere bordro dışı kişi kaydı (335.9xx; 9 Kas 2026) — kalıcı günlükten ÖNCE: günlükteki kişi sıraları (Ekim 88–93) değişmez
                 D("Personel Maliyet kalıcı günlüğü", PersonelMaliyetKalici.Yukle);
             D("Nakit Akış Planlama kalıcı günlüğü", NakitAkisKalici.Yukle);   // 13 Kas 2026: tohumdan ve öbür modüllerin açtığı satırlardan (düzenli ödeme, kredi taksiti, personel ödemesi, avans) sonra — ekrandan yapılan girişler aynı sırayla yeniden uygulanır   // tohumdan sonra: kullanıcı girişleri ve "Yeni Bordro" dönemleri aynı sırayla yeniden uygulanır (6 Kas 2026)
+                Bitti = true;
                 Console.WriteLine($"[Isınma] örnek veriler tohumlandı · {sw.ElapsedMilliseconds} ms" + (hata > 0 ? $" · {hata} uyarı" : ""));
             }
         }

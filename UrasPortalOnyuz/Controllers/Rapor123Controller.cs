@@ -342,8 +342,11 @@ namespace WebApplication3.Controllers
                 var m2 = NakitAkisOrnek.Bul(s.DbName, m.DocEntry); ek.Add("ÖDENDİ olarak kaydedildi" + (string.IsNullOrEmpty(m2?.U_YevmiyeNo) ? "" : $" · fiş {m2.U_YevmiyeNo}"));
                 if (yontem == "Havale / EFT") ek.Add("banka hareketi Finekra akışında gelince bu satırla otomatik eşleşir");
             }
-            else if (yontem == "Nakit") ek.Add($"nakit onayı bekliyor ({string.Join(" / ", NakitAkisOrnek.NakitOnaycilari)})");
-            else ek.Add("Planlandı; talimatla ödenir");
+            else
+            {   // 16 Kas 2026: ödenmemiş plan rapora doğrudan geçmez; Nakit Akış Planlama › Yeni Ödeme Kaydı › Departman Talepleri'nde onay bekler (gün içi ödenmiş kayıt = gerçekleşen ödeme, doğrudan geçer)
+                NakitAkisOrnek.TalepBeklet(s.DbName, m.DocEntry, Kullanici);
+                ek.Add("Nakit Akış Planlama › Departman Talepleri'nde onay bekliyor" + (yontem == "Nakit" ? $"; ayrıca nakit onayı ister ({string.Join(" / ", NakitAkisOrnek.NakitOnaycilari)})" : ""));
+            }
             FinekraOrnek.GunlukEkle(s.Ad, $"Nakit Akış #{m.DocEntry}", i.Odendi ? "Ödeme Eklendi (Ödendi)" : "Ödeme Eklendi", $"{m.U_Kurum} · {yontem} · {m.U_TutarTL:N2} ₺ · {string.Join(" · ", ek)}", Kullanici);
             return Json(new { success = true, message = $"Nakit Akış Planlama #{m.DocEntry} açıldı: {m.U_Kurum} · {yontem} · {(m.U_TutarTL ?? 0).ToString("N2", Tr)} ₺ · {string.Join(" · ", ek)}.", satir = new { docEntry = m.DocEntry, dbName = s.DbName, link = OdemeLink(m) } });
         }

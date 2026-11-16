@@ -57,7 +57,7 @@ namespace WebApplication3.Controllers
 
         // ---------- modern ekran veri ve kayıt uçları ----------
         /// <summary>"Talepler" düğmesi rozeti: tüm şirketlerdeki açık ödeme talepleri (onay bekleyen / onaylanmış, nakit akışa alınmamış).</summary>
-        static object TalepOzet() { var l = OdemeTalepOrnek.Listele(null); return new { acik = l.Count, onayli = l.Count(t => t.Durum == "Onaylandı"), bekleyen = l.Count(t => t.Durum == "Onay Bekliyor"), onayliTutar = l.Where(t => t.Durum == "Onaylandı").Sum(t => t.TutarTL) }; }
+        static object TalepOzet() { var l = OdemeTalepOrnek.Listele(null); var p = NakitAkisOrnek.PlanliBekleyenler(); return new { acik = l.Count, onayli = l.Count(t => t.Durum == "Onaylandı"), bekleyen = l.Count(t => t.Durum == "Onay Bekliyor"), onayliTutar = l.Where(t => t.Durum == "Onaylandı").Sum(t => t.TutarTL), planli = p.Count(m => NakitAkisOrnek.TalepSekmesi(m) == "planli"), planliTutar = p.Where(m => NakitAkisOrnek.TalepSekmesi(m) == "planli").Sum(m => m.U_TutarTL ?? m.U_Tutar ?? 0), satir = p.Count(m => NakitAkisOrnek.TalepSekmesi(m) == "talep"), satirTutar = p.Where(m => NakitAkisOrnek.TalepSekmesi(m) == "talep").Sum(m => m.U_TutarTL ?? m.U_Tutar ?? 0) }; }
         [HttpGet("Veri")]
         public IActionResult Veri(string sirket, string bas, string bit)
         {
@@ -202,9 +202,11 @@ namespace WebApplication3.Controllers
             if (model.U_Durum == "ÖDENDİ") { var engel = NakitAkisOrnek.OdendiEngeli("", model.U_MutabakatDurumu, model.MuafiyetSebebi, ozelOnay); if (engel != null) return Json(new { success = false, message = "Yeni kayıt doğrudan ÖDENDİ açılamaz. " + engel }); }
             var gunlukModel = System.Text.Json.JsonSerializer.SerializeToElement(model);
             var mk = MukerrerCevabi(Db(dbName), model); if (mk != null) return mk;
-            var m = NakitAkisOrnek.Ekle(Db(dbName), model, Kullanici); NakitAkisOrnek.BelgeleriDoldur(m);
+            var m = NakitAkisOrnek.Ekle(Db(dbName), model, Kullanici);
+            // 16 Kas 2026 ("Nakit Akış / Grup İçi Modül → Departman Talepleri, onayına düşsün"): ekrandan elle açılan kayıt rapora doğrudan geçmez; Yeni Ödeme Kaydı › Departman Talepleri'nde onay bekler
+            NakitAkisOrnek.TalepBeklet(Db(dbName), m.DocEntry, Kullanici); NakitAkisOrnek.BelgeleriDoldur(m);
             NakitAkisKalici.Yaz("ekle", Db(dbName), m.DocEntry, null, gunlukModel, Kullanici);
-            return Json(new { success = true, message = m.U_OdemeYontemi == "Nakit" ? $"Nakit ödeme talebi açıldı (#{m.DocEntry}); onay bekliyor: {string.Join(" / ", NakitAkisOrnek.NakitOnaycilari)}." : $"Ödeme kaydı eklendi (#{m.DocEntry}).", row = SatirJson(m) });
+            return Json(new { success = true, message = $"Ödeme kaydı Departman Talepleri'ne düştü (#{m.DocEntry} · {m.U_Kurum}); onaylanınca Nakit Akış Planlama'ya geçer." + (m.U_OdemeYontemi == "Nakit" ? $" Nakit ödeme ayrıca nakit onayı ister: {string.Join(" / ", NakitAkisOrnek.NakitOnaycilari)}." : ""), row = SatirJson(m), talepOzet = TalepOzet() });
         }
         /// <summary>Kayıt öncesi mükerrer kontrolü: aynı belge + tutar ya da aynı cari + tutar + tarih varsa kayıt durdurulur; kullanıcı onaylarsa (MukerrerKontrolEdildi = 1) kaydedilir.</summary>
         IActionResult MukerrerCevabi(string dbName, NakitAkisViewModel model)
@@ -290,6 +292,38 @@ namespace WebApplication3.Controllers
         {
             var r = OdemeTalepOrnek.NakitAkisaAl(istek?.No, Kullanici); if (r.satir != null) NakitAkisOrnek.BelgeleriDoldur(r.satir);
             return Json(new { success = r.ok, message = r.mesaj, row = r.satir == null ? null : SatirJson(r.satir), talep = OdemeTalepOrnek.Json(OdemeTalepOrnek.Bul(istek?.No)) });
+        }
+        // ---------- Talepler › Planlı Ödemeler (16 Kas 2026): planlı düzenli ödeme ve kredi taksidi satırları rapora doğrudan geçmez; burada tutar / tarih düzeltilip onaylanır ----------
+        static object PlanliJson(NakitAkisViewModel m) => new
+        {
+            docEntry = m.DocEntry, dbName = m.U_KaynakFirma, sirket = NakitAkisOrnek.SirketAdi(m.U_KaynakFirma), kaynak = NakitAkisOrnek.KaynakAdi(m), belgeNo = m.U_FaturaSiparisNo, kurum = m.U_Kurum, urun = m.U_UrunHizmet,
+            planlanan = m.U_PlanlananTarih?.ToString("yyyy-MM-dd"), gecikme = m.U_PlanlananTarih == null ? 0 : (DateTime.Today - m.U_PlanlananTarih.Value.Date).Days, yontem = m.U_OdemeYontemi,
+            pb = string.IsNullOrEmpty(m.U_ParaBirimi) ? "TRY" : m.U_ParaBirimi, kur = m.U_Kur ?? 1, tutar = m.U_Tutar ?? 0, tutarTL = m.U_TutarTL ?? m.U_Tutar ?? 0, planTutar = m.U_TalepPlanTutari ?? m.U_Tutar ?? 0, not = m.U_Notlar,
+            kaynakLink = !string.IsNullOrEmpty(m.U_KrediTaksit) ? "/KrediYapilandirma" : m.U_KayitTipi == "Düzenli Ödeme" ? "/Rapor123?sekme=duzenli" : (string)null,
+            // Departman Talepleri sekmesindeki satır için
+            belgeTarihi = m.BelgeTarihi?.ToString("yyyy-MM-dd"), sonOdeme = (m.U_SonOdemeTarihi ?? m.U_PlanlananTarih)?.ToString("yyyy-MM-dd"), belgeTipi = string.IsNullOrEmpty(m.U_BagliBelgeTipi) ? "Diğer" : m.U_BagliBelgeTipi,
+            talepEden = m.U_TalepEden, mutabakat = m.U_MutabakatDurumu, silinebilir = NakitAkisOrnek.TalepAnahtari(m) == "", nakitOnay = m.U_OdemeYontemi == "Nakit" && m.U_OnayDurumu == "Onay Bekliyor"
+        };
+        /// <summary>
+        /// Onay bekleyen satırlar (bütün şirketler): liste = Planlı Ödemeler sekmesi (planlı düzenli ödeme, kredi taksidi), talep = Departman Talepleri sekmesi (elle giriş, grup içi, nakit avans, personel ödemesi, Takip Paneli).
+        /// </summary>
+        [HttpGet("PlanliTalepler")]
+        public IActionResult PlanliTalepler()
+        {
+            var l = NakitAkisOrnek.PlanliBekleyenler();
+            return Json(new { success = true, bugun = DateTime.Today.ToString("yyyy-MM-dd"), liste = l.Where(m => NakitAkisOrnek.TalepSekmesi(m) == "planli").Select(PlanliJson).ToList(), talep = l.Where(m => NakitAkisOrnek.TalepSekmesi(m) == "talep").Select(PlanliJson).ToList() });
+        }
+        public class PlanliOnayIstek { public string DbName { get; set; } public int DocEntry { get; set; } public decimal? Tutar { get; set; } public string Planlanan { get; set; } }
+        /// <summary>Planlı ödeme talebini onaylar: gerçekleşen tutar ve planlanan tarih satıra işlenir, satır Nakit Akış Planlama raporuna geçer; kalıcı günlüğe yazılır ("planOnay").</summary>
+        [HttpPost("PlanliOnayla")]
+        public IActionResult PlanliOnayla([FromBody] PlanliOnayIstek istek)
+        {
+            if (istek == null) return Json(new { success = false, message = "Veri yok." });
+            string db = Db(istek.DbName); var once = NakitAkisOrnek.Bul(db, istek.DocEntry); string iz = NakitAkisKalici.Iz(once), anahtar = NakitAkisOrnek.TalepAnahtari(once);
+            DateTime? plan = null; if (!string.IsNullOrWhiteSpace(istek.Planlanan)) { if (!DateTime.TryParseExact(istek.Planlanan, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var pt)) return Json(new { success = false, message = "Planlanan tarih geçersiz." }); plan = pt; }
+            var r = NakitAkisOrnek.PlanliOnayla(db, istek.DocEntry, istek.Tutar, plan, Kullanici);
+            if (r.ok) { NakitAkisKalici.Yaz("planOnay", db, istek.DocEntry, iz, new { anahtar, tutar = istek.Tutar, plan = plan?.ToString("yyyy-MM-dd") }, Kullanici); NakitAkisOrnek.BelgeleriDoldur(r.satir); }
+            return Json(new { success = r.ok, message = r.mesaj, row = r.ok ? SatirJson(r.satir) : null, talepOzet = TalepOzet() });
         }
         /// <summary>Grup içi modül kayıtları (Mahsup / Temlik / Yansıtma) — seçim için, modülden canlı.</summary>
         [HttpGet("GrupIciKayitlar")] public IActionResult GrupIciKayitlar(string dbName, string tur) => Json(new { success = true, data = NakitAkisOrnek.GrupIciKayitlar(Db(dbName), tur ?? "Mahsup") });
@@ -427,8 +461,8 @@ namespace WebApplication3.Controllers
         [HttpPost("Ekle"), ValidateAntiForgeryToken]
         public IActionResult Ekle(string DbName, NakitAkisViewModel model, DateTime? startDate, DateTime? endDate)
         {
-            var m = NakitAkisOrnek.Ekle(Db(DbName), model, Kullanici);
-            TempData["Success"] = $"Ödeme kaydı eklendi: {m.U_Kurum} · {m.U_OdemeYontemi} · {m.U_Tutar:N2} {m.U_ParaBirimi} (bellek içi).";
+            var m = NakitAkisOrnek.Ekle(Db(DbName), model, Kullanici); NakitAkisOrnek.TalepBeklet(Db(DbName), m.DocEntry, Kullanici);
+            TempData["Success"] = $"Ödeme kaydı Departman Talepleri'ne düştü: {m.U_Kurum} · {m.U_OdemeYontemi} · {m.U_Tutar:N2} {m.U_ParaBirimi}; onaylanınca rapora geçer.";
             return RedirectToAction("Index", new { startDate = startDate?.ToString("yyyy-MM-dd"), endDate = endDate?.ToString("yyyy-MM-dd") });
         }
         [HttpPost("TopluGuncelle"), ValidateAntiForgeryToken]
@@ -489,7 +523,7 @@ namespace WebApplication3.Controllers
             cikis = string.IsNullOrEmpty(m.U_CikisTalebi) ? null : new { islem = m.U_CikisTalebi, ibrazYeri = m.U_CikisIbrazYeri, belgeNo = m.U_CikisBelgeNo, talepEden = m.U_CikisTalepEden },
             yevmiye = string.IsNullOrEmpty(m.U_YevmiyeNo) ? null : MuhasebeOrnek.Json(MuhasebeOrnek.Bul(m.U_YevmiyeNo)), yevmiyeNo = m.U_YevmiyeNo,
             kurBilgi = m.U_ParaBirimi == "TRY" || string.IsNullOrEmpty(m.U_ParaBirimi) ? null : new { kaynak = m.U_KurKaynagi, tarih = m.U_KurTarihi?.ToString("yyyy-MM-dd"), not = m.U_KurNotu, kurFarki = m.U_KurFarkiFaturasi, tcmb = KurOrnek.TcmbKaynagi(m.U_KurKaynagi), ozet = KurOrnek.Ozet(m.U_ParaBirimi, m.U_KurTarihi, m.U_KurKaynagi, m.U_Kur) },
-            kaynak = NakitAkisOrnek.KaynakAdi(m), oncelik = m.U_Oncelik, grupIciTur = m.U_GrupIciTur, grupIciTurSecildi = m.GrupIciTurSecildi, grupIciGerekli = GrupIciBelgeOrnek.Gerekli(m), grupIciBelge = GrupIciBelgeOrnek.Json(GrupIciBelgeOrnek.BulSatir(m.DocEntry)),
+            kaynak = NakitAkisOrnek.KaynakAdi(m), talepBekliyor = NakitAkisOrnek.TalepBekliyor(m), oncelik = m.U_Oncelik, grupIciTur = m.U_GrupIciTur, grupIciTurSecildi = m.GrupIciTurSecildi, grupIciGerekli = GrupIciBelgeOrnek.Gerekli(m), grupIciBelge = GrupIciBelgeOrnek.Json(GrupIciBelgeOrnek.BulSatir(m.DocEntry)),
             ibraz = string.IsNullOrEmpty(m.U_IbrazBelgeNo) ? null : new { belgeNo = m.U_IbrazBelgeNo, tarih = m.U_IbrazTarihi?.ToString("yyyy-MM-dd") },
             makbuz = string.IsNullOrEmpty(m.U_MakbuzNo) ? null : new { no = m.U_MakbuzNo, link = MakbuzOrnek.Bul(m.U_MakbuzNo) != null ? "/Rapor79/Makbuz?no=" + Uri.EscapeDataString(m.U_MakbuzNo) : (string)null },
             talimat = string.IsNullOrEmpty(m.U_TalimatNo) ? null : (TalimatOrnek.Bul(m.U_TalimatNo) is OdemeTalimati tt ? new { no = tt.No, durum = tt.Durum, baslik = tt.Baslik, link = "/Rapor79/Talimat?no=" + Uri.EscapeDataString(tt.No) } : null),

@@ -1,0 +1,86 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string sekme = (string)ViewBag.Sekme ?? "belge";
+    // alt sekmeler: Liste (Faturalar · Kalemler · Siparişler · Tahsilatlar) | Analiz (Müşteri · Ürün · Temsilci · Şirket · Kırılım) | Özet. Sekme adlarında sayaç yok.
+    var sekmeler = new[] { ("belge", "Faturalar"), ("kalem", "Kalemler"), ("siparis", "Siparişler"), ("tahsilat", "Tahsilatlar"), ("musteri", "Müşteri"), ("urun", "Ürün"), ("temsilci", "Temsilci"), ("sirket", "Şirket"), ("kirilim", "Kırılım"), ("ozet", "Özet") };
+    var ayrac = new[] { "musteri", "ozet" };
+}
+@*
+    KONSOLİDE SATIŞ RAPORU (/SatisRaporu, 13 Kas 2026) — yedi satış raporunun süzgeç, sütun ve bilgileri tek ekranda. Veri /SatisRaporu/Veri (Data/SatisRaporOrnek.cs),
+    betik wwwroot/js/satis-raporu.js.
+    Tasarım (13 Kas 2026, "rapor tasarımını iyileştir"): üstte tek başlık kartı — başlık, PAZAR ana sekmesi (Yurtiçi · Yurtdışı · Tümü), dönem ve işlem düğmeleri;
+    altında 9 sütunlu düzgün süzgeç ızgarası (CARİ satırı ve ÜRÜN satırı; her kutuda etiket üstte, seçim altta). Tablo kartı: üstünde alt çizgili sekmeler, başlık süzgeci + sıralama,
+    lacivert dip toplam; ekranı doldurur, yatay kaydırma yok. Müşterisi belli olan her satırda Cari Ekstre'ye git ikonu. Prim sekmesi bu rapordan kaldırıldı.
+*@
+<link rel="stylesheet" href="/css/konsolide-rapor.css?v=1" />
+
+<div class="container-fluid py-2" id="sr" data-sekme="@sekme">
+    <div class="sr-ust">
+        <div class="sr-bas">
+            <div class="sr-baslik"><h4><span class="rt-ikon"><i class="fas fa-chart-line"></i></span>Konsolide Satış Raporu</h4></div>
+            <div class="sr-pazar" id="srPazar" title="Cari Bölge: her sekmede yalnız o pazarın sütun ve süzgeçleri görünür"><button type="button" data-pz="Yurtiçi">Yurtiçi</button><button type="button" data-pz="Yurtdışı">Yurtdışı</button><button type="button" data-pz="">Tümü (Konsolide)</button></div>
+            <span id="srDonemYazi" hidden></span>
+            <div class="sr-sag">
+                <span class="sr-donem-kap"><select id="srDonem" title="Hızlı dönem"><option value="yil">Bu Yıl</option><option value="ay">Bu Ay</option><option value="gecenay">Geçen Ay</option><option value="ceyrek">Bu Çeyrek</option><option value="son12">Son 12 Ay</option><option value="gecenyil">Geçen Yıl</option><option value="tumu">Tümü</option><option value="ozel">Özel</option></select><input type="date" id="srBas" title="Başlangıç (belge tarihi)" /><span class="ayrac">–</span><input type="date" id="srBit" title="Bitiş (belge tarihi)" /></span>
+                <button type="button" class="sr-dgm" id="srTemizle" title="Bütün süzgeçleri temizle"><i class="fas fa-filter-circle-xmark"></i>Temizle</button>
+                <button type="button" class="sr-dgm" id="srSutunlar" title="Görmek istediğiniz sütunları seçin (bu tarayıcıda saklanır)"><i class="fas fa-columns"></i>Sütunlar</button>
+                <button type="button" class="sr-dgm" id="srExcel" title="Ekrandaki tabloyu göründüğü gibi Excel'e aktar (.xlsx)"><i class="fas fa-file-excel"></i>Excel</button>
+                <button type="button" class="sr-dgm ana" id="srGetir" title="Veriyi yeniden getir"><i class="fas fa-rotate"></i>Getir</button>
+            </div>
+        </div>
+        @* süzgeç ızgarası: CARİ kartı sınıflandırması ve ÜRÜN ağacı (kullanıcının verdiği alan listesi). Cari Bölge = üstteki pazar sekmesi. Listeler kademelidir:
+           bir süzgecin seçenekleri öbür süzgeçlere uyan kayıtlardan dolar. Yurtiçinde Ülke kutusu Şehir'e döner (data-yer). *@
+        <div class="sr-suzgrid" id="srSuz">
+            <span class="grp">Cari</span>
+            <button type="button" class="sr-cs" data-f="sirket" data-e="Şirket" data-bos="Tümü (Konsolide)"></button>
+            <button type="button" class="sr-cs" data-f="kartTipi" data-e="Cari Kart Tipi"></button>
+            <button type="button" class="sr-cs" data-f="ulke" data-e="Ülke" data-yer="1"></button>
+            <button type="button" class="sr-cs" data-f="grup" data-e="Cari Sınıfı"></button>
+            <button type="button" class="sr-cs" data-f="iliski" data-e="İlişki Durumu"></button>
+            <button type="button" class="sr-cs" data-f="rol" data-e="Cari Rolü"></button>
+            <button type="button" class="sr-cs" data-f="cariDurum" data-e="Durum"></button>
+            <button type="button" class="sr-cs" data-f="temsilci" data-e="Satış Temsilcisi"></button>
+            <button type="button" class="sr-cs" data-f="musteri" data-e="Müşteri"></button>
+            <span class="grp">Ürün</span>
+            <button type="button" class="sr-cs" data-f="anaGrup" data-e="Faaliyet Ana Grubu"></button>
+            <button type="button" class="sr-cs" data-f="fGrup" data-e="Faaliyet Grubu"></button>
+            <button type="button" class="sr-cs" data-f="urunSinifi" data-e="Ürün Sınıfı"></button>
+            <button type="button" class="sr-cs" data-f="urunGrubu" data-e="Ürün Grubu"></button>
+            <button type="button" class="sr-cs" data-f="urunSerisi" data-e="Ürün Serisi"></button>
+            <button type="button" class="sr-cs" data-f="kalem" data-e="Ürün Adı"></button>
+            <button type="button" class="sr-cs" data-f="tur" data-e="Belge Türü"></button>
+            <button type="button" class="sr-cs" data-f="pb" data-e="Para Birimi"></button>
+            <div class="sr-ara"><i class="fas fa-magnifying-glass"></i><input type="search" id="srAra" placeholder="Belge, müşteri, ürün ara…" /></div>
+        </div>
+    </div>
+
+    <div class="sr-kart">
+        <div class="sr-sekme" id="srSekmeler" data-dinamik="kapali">
+            @foreach (var s in sekmeler) { if (ayrac.Contains(s.Item1)) { <span class="cizgi"></span> } <button type="button" data-p="@s.Item1">@s.Item2</button> }
+            <span class="sr-islem" id="srIslem"></span>
+            <span class="sr-kapsam" id="srKapsam"></span>
+        </div>
+        <div id="srTabloKart">
+            <section class="sr-kap" id="srKap"><table class="sr-tablo" id="srTablo" data-dinamik="kapali"><colgroup></colgroup><thead></thead><tbody><tr><td class="bos">Yükleniyor…</td></tr></tbody><tfoot></tfoot></table></section>
+        </div>
+    </div>
+
+    <div class="sr-ozet" id="srOzet">
+        <div class="sr-kpi" id="srKpi" data-dinamik="kapali"></div>
+        <div class="sr-izgara">
+            <div class="sr-kutu"><div class="b"><span>Aylık Net Satış (₺)</span><span class="gosterge" id="srAylikGosterge"></span></div><div class="g" id="srAylik"></div></div>
+            <div class="sr-kutu"><div class="b"><span>Faaliyet Grubuna Göre Net Satış</span></div><div class="g" id="srGrupDagilim"></div></div>
+            <div class="sr-kutu"><div class="b"><span id="srUlkeBaslik">Ülkeye Göre Net Satış</span></div><div class="g" id="srUlkeDagilim"></div></div>
+        </div>
+        <div class="sr-izgara uc">
+            <div class="sr-kutu"><div class="b"><span>İlk 10 Müşteri</span></div><div class="g p-0"><table class="sr-tablo" id="srOzetMusteri" data-dinamik="kapali"></table></div></div>
+            <div class="sr-kutu"><div class="b"><span>İlk 10 Ürün</span></div><div class="g p-0"><table class="sr-tablo" id="srOzetUrun" data-dinamik="kapali"></table></div></div>
+            <div class="sr-kutu"><div class="b"><span>Satış Temsilcileri</span></div><div class="g p-0"><table class="sr-tablo" id="srOzetTemsilci" data-dinamik="kapali"></table></div></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="/js/tablo-excel.js?v=16"></script>
+<script src="/js/satis-raporu.js?v=15"></script>
+}

@@ -303,7 +303,7 @@ namespace WebApplication3.Data
                   U("yurtici-satis", "Yurtiçi Satış",
                     // Satış Siparişi 28 Eki 2026'da ikiye ayrıldı: Yurtiçi (/Rapor94) ve Yurtdışı / İhracat (/Rapor94/Ihracat; Yurtdışı Satış › İhracat Satış İşlemleri) — marka seçimi, tek tuşla belgeler, satışçı talepleri, yükleme tarihi / saati (Data/SatisSiparisOrnek.cs)
                     G("satis-islemleri", "Satış İşlemleri", R("Yurtiçi Satış Siparişi", "Rapor94", "Index"), R("Taslak Faturalar"), R("Satış Faturası"), R("Müşteri İade Faturası"), R("Bedelsiz Satış Raporu"), R("Grup İçi Satış (Uras > Selvi > Müşteri)")),
-                    G("satis-analizleri", "Satış Analizleri ve Performans", R("Satış Raporu"), R("Satış Ekstre Raporu"), R("Satış Analiz Raporu"), R("Satış Analiz Dashboard"), R("Satışçı Analiz Raporu"), R("Konsolide Prim Raporu"), R("Tahsilat Prim Tablosu"))),
+                    G("satis-analizleri", "Satış Analizleri ve Performans", R("Konsolide Satış Raporu", "SatisRaporu", "Index"), R("Satış Raporu"), R("Satış Ekstre Raporu"), R("Satış Analiz Raporu"), R("Satış Analiz Dashboard"), R("Satışçı Analiz Raporu"), R("Konsolide Prim Raporu"), R("Tahsilat Prim Tablosu"))),
                   U("yurtdisi-satis", "Yurtdışı Satış",
                     G("ihracat-satis", "İhracat Satış İşlemleri", R("Yurtdışı Satış Siparişi", "Rapor94", "Ihracat")),
                     // İhracat Belge Gönderim Takibi: akreditif ibrazı / vesaik / orijinal evrak gönderileri — kargo firması, takip no, ibraz son tarihi, banka sonucu (Data/IhracatBelgeOrnek.cs)
@@ -340,7 +340,7 @@ namespace WebApplication3.Data
                     G("malzeme-ana-verileri", "Malzeme Ana Verileri", R("Kalem Ana Verileri")),
                     G("mal-kabul-iade", "Mal Kabul ve İade", R("Satınalma Mal Girişi"), R("Satınalma Mal Girişi Oluştur"), R("Satınalma İade İrsaliyesi"), R("İade Edilen Malzeme Raporu")),
                     G("malzeme-hareketleri", "Malzeme Hareketleri", R("Malzeme Ekstre Raporu"), R("Ürün Ekstre Raporu")),
-                    G("stok-envanter", "Stok ve Envanter", R("Envanter Raporu"), R("Depo Bazlı Stok Raporu"), R("Stok Analiz Raporu"))),
+                    G("stok-envanter", "Stok ve Envanter", R("Konsolide Stok Raporu", "StokRaporu", "Index"), R("Envanter Raporu"), R("Depo Bazlı Stok Raporu"), R("Stok Analiz Raporu"))),
                     "\"Satınalma Mal Girişi\" kaynak listede iki ayrı ekran olduğu için iki kayıt da korunmuştur.")),
 
                 M("uretim-kalite", "Üretim ve Kalite", "uretim",

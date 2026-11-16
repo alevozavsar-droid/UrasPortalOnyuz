@@ -85,7 +85,71 @@ namespace WebApplication3.Data
         public static string SirketAdi(string dbName) => CekAkibetOrnek.SirketAdi(dbName);
 
         /// <summary>Şirketin ödeme satırları (kopya; seçilen belgelerin akıbeti Çek Akıbeti kaydından, onaylı avanslar Nakit Avans modülünden güncel okunur).</summary>
-        public static List<NakitAkisViewModel> Odemeler(string dbName) { Tohumla(); AvanslariSenkronla(); List<NakitAkisViewModel> l; lock (Kilit) l = (_odemeler.TryGetValue(dbName, out var x) ? x : new List<NakitAkisViewModel>()).ToList(); foreach (var m in l) BelgeleriDoldur(m); return l; }
+        public static List<NakitAkisViewModel> Odemeler(string dbName) { Tohumla(); AvanslariSenkronla(); List<NakitAkisViewModel> l; lock (Kilit) l = (_odemeler.TryGetValue(dbName, out var x) ? x : new List<NakitAkisViewModel>()).Where(m => !TalepBekliyor(m)).ToList(); foreach (var m in l) BelgeleriDoldur(m); return l; }
+
+        // ---------- PLANLI ÖDEME TALEPLERİ (16 Kas 2026) ----------
+        // Kullanıcı: "Talepler kısmına Planlı Ödemeler sekmesi de ekleyelim; planlı ödemeler de buraya düşsün, düzeltilebilsin, buradan onayla nakit akış raporuna geçsin — planlı ödemelerde ortalama
+        // bir rakam giriliyor ama gerçekleşen tutar net doğru girilmeli; Nakit Akış Planlama raporuna doğrudan hiçbir satır geçmesin. Kaynak'ta olan Kredi Raporu da planlı ödemelerden gelsin."
+        // Planlı düzenli ödeme (DuzenliOdemeOrnek.Akit) ve kredi taksidi (KrediTaksitiYaz) satırı yine açılır (satır numaraları ve kalıcı günlük bozulmasın diye) ama U_TalepDurumu = "Onay Bekliyor"
+        // olarak: Odemeler() bu satırları vermez → rapor, özetler, Takip Paneli, banka eşleştirme görmez. Talepler › Planlı Ödemeler'de tutar / tarih düzeltilip onaylanınca rapora geçer.
+        // Ödenmiş satır onay beklemez (geçmiş kayıt). Bul / KrediSatiri gibi tekil erişimler bekleyen satırı da bulur (kaynak ekranlar durumunu gösterebilsin).
+        public const string TalepOnayBekliyor = "Onay Bekliyor";
+        /// <summary>Bu tarihten önceki planlı düzenli ödemeler eski kuralla (günü geçince ödenmiş sayılır) tohumlanır; bu tarih ve sonrası Talepler'de onay bekler.</summary>
+        public static readonly DateTime TalepKuraliBaslangic = new DateTime(2026, 11, 16);
+        public static bool TalepBekliyor(NakitAkisViewModel m) => m != null && m.U_TalepDurumu == TalepOnayBekliyor && m.U_Durum != "ÖDENDİ";
+        /// <summary>Satırı Talepler › Planlı Ödemeler'e düşürür (ödenmişse dokunmaz).</summary>
+        public static void TalepBeklet(string dbName, int docEntry, string kullanici)
+        {
+            lock (Kilit)
+            {
+                var m = _odemeler.TryGetValue(dbName, out var l) ? l.FirstOrDefault(x => x.DocEntry == docEntry) : null; if (m == null || m.U_Durum == "ÖDENDİ" || m.U_TalepDurumu == TalepOnayBekliyor) return;
+                m.U_TalepDurumu = TalepOnayBekliyor; m.U_TalepPlanTutari = m.U_Tutar;
+                Log(dbName, docEntry, "Onay Talebi", $"{m.U_Kurum} · {(m.U_Tutar ?? 0).ToString("N2", Tr)} {m.U_ParaBirimi} · plan {m.U_PlanlananTarih:dd.MM.yyyy} · Yeni Ödeme Kaydı › {(TalepSekmesi(m) == "planli" ? "Planlı Ödemeler" : "Departman Talepleri")}'nde onay bekliyor", kullanici);
+            }
+        }
+        /// <summary>Onay bekleyen bütün satırlar (bütün şirketler; planlanan tarihe göre). Sekmesi TalepSekmesi ile ayrılır: planlı ödeme / kredi taksidi → Planlı Ödemeler, öbürleri → Departman Talepleri.</summary>
+        public static List<NakitAkisViewModel> PlanliBekleyenler() { Tohumla(); lock (Kilit) return _odemeler.Values.SelectMany(l => l).Where(TalepBekliyor).OrderBy(m => m.U_PlanlananTarih).ThenBy(m => m.DocEntry).ToList(); }
+        /// <summary>Kalıcı günlük için değişmez anahtar: kredi taksidinde "K:KRD-001|003", düzenli ödemede "D:DÖ-001 · 2026-11" (satır numarası yeniden başlatmada değişebilir).</summary>
+        public static string TalepAnahtari(NakitAkisViewModel m) => m == null ? "" : !string.IsNullOrEmpty(m.U_KrediTaksit) ? "K:" + m.U_KrediTaksit : m.U_KayitTipi == "Düzenli Ödeme" ? "D:" + m.U_FaturaSiparisNo
+            : !string.IsNullOrEmpty(m.U_PersonelOdeme) ? "P:" + m.U_PersonelOdeme : !string.IsNullOrEmpty(m.U_AvansNo) ? "A:" + m.U_AvansNo : "";
+        public static NakitAkisViewModel TalepSatiri(string anahtar)
+        {
+            if (string.IsNullOrEmpty(anahtar) || anahtar.Length < 3) return null; Tohumla(); string deger = anahtar.Substring(2);
+            lock (Kilit) return anahtar.StartsWith("K:") ? _odemeler.Values.SelectMany(l => l).FirstOrDefault(m => m.U_KrediTaksit == deger)
+                : anahtar.StartsWith("D:") ? _odemeler.Values.SelectMany(l => l).FirstOrDefault(m => m.U_KayitTipi == "Düzenli Ödeme" && m.U_FaturaSiparisNo == deger)
+                : anahtar.StartsWith("P:") ? _odemeler.Values.SelectMany(l => l).FirstOrDefault(m => m.U_PersonelOdeme == deger)
+                : anahtar.StartsWith("A:") ? _odemeler.Values.SelectMany(l => l).FirstOrDefault(m => m.U_AvansNo == deger) : null;
+        }
+        /// <summary>
+        /// Onay bekleyen satır Yeni Ödeme Kaydı penceresinin hangi sekmesine düşer (16 Kas 2026, kullanıcının verdiği eşleme): Kredi Raporu ve Planlı Ödemeler → "planli" (Planlı Ödemeler sekmesi);
+        /// Nakit Akış (ekrandan elle giriş), Grup İçi Modül, Nakit Avans ve — aynı kuralla — Personel Ödemesi (İK), Takip Paneli → "talep" (Departman Talepleri sekmesi).
+        /// Ödeme Talebi kendi modülünde onaylanıp Departman Talepleri'nden "Nakit Akışa Ekle" ile gelir. Gerçekleşen Ödemeler onaya düşmez, doğrudan geçer.
+        /// </summary>
+        public static string TalepSekmesi(NakitAkisViewModel m) => m != null && (!string.IsNullOrEmpty(m.U_KrediTaksit) || m.U_KayitTipi == "Düzenli Ödeme") ? "planli" : "talep";
+        /// <summary>
+        /// Planlı ödeme talebini onaylar: gerçekleşen tutar (satırın para biriminde) ve planlanan tarih verildiyse satıra işlenir, satır Nakit Akış Planlama raporuna geçer.
+        /// yenidenUygula: kalıcı günlükten (satır o arada ödenmiş tohumlanmış olabilir; değerler yine işlenir).
+        /// </summary>
+        public static (bool ok, string mesaj, NakitAkisViewModel satir) PlanliOnayla(string dbName, int docEntry, decimal? tutar, DateTime? plan, string kullanici, bool yenidenUygula = false)
+        {
+            Tohumla();
+            lock (Kilit)
+            {
+                var m = _odemeler.TryGetValue(dbName, out var l) ? l.FirstOrDefault(x => x.DocEntry == docEntry) : null; if (m == null) return (false, "Satır bulunamadı.", null);
+                if (m.U_TalepDurumu != TalepOnayBekliyor && !yenidenUygula) return (false, "Bu ödeme zaten onaylanmış; Nakit Akış Planlama'da.", m);
+                if (tutar.HasValue && (tutar <= 0 || tutar > 100_000_000_000m)) return (false, "Gerçekleşen tutar sıfırdan büyük olmalı.", m);
+                bool odenmis = m.U_Durum == "ÖDENDİ"; decimal eski = m.U_Tutar ?? 0; var eskiPlan = m.U_PlanlananTarih; string fark = "";
+                if (tutar.HasValue && !odenmis && Math.Round(tutar.Value, 2) != eski)
+                {
+                    decimal yeni = Math.Round(tutar.Value, 2); m.U_Tutar = yeni; m.U_TutarTL = Math.Round(yeni * (m.U_Kur ?? 1), 2); m.U_FaturaTutari = yeni;
+                    fark += $" · tutar {eski.ToString("N2", Tr)} → {yeni.ToString("N2", Tr)} {m.U_ParaBirimi}";
+                }
+                if (plan.HasValue && !odenmis && plan.Value.Date != eskiPlan?.Date) { m.U_PlanlananTarih = plan.Value.Date; fark += $" · plan {eskiPlan:dd.MM.yyyy} → {plan.Value:dd.MM.yyyy}"; }
+                m.U_TalepDurumu = "";
+                Log(dbName, docEntry, TalepSekmesi(m) == "planli" ? "Planlı Ödeme Onayı" : "Talep Onayı", $"{m.U_Kurum} · {(m.U_Tutar ?? 0).ToString("N2", Tr)} {m.U_ParaBirimi} · plan {m.U_PlanlananTarih:dd.MM.yyyy}{fark} · Nakit Akış Planlama'ya geçti", kullanici);
+                return (true, $"{m.U_Kurum} onaylandı; {SirketAdi(dbName)} nakit akışına geçti ({(m.U_TutarTL ?? 0).ToString("N2", Tr)} ₺ · plan {m.U_PlanlananTarih:dd.MM.yyyy}).", m);
+            }
+        }
         public static NakitAkisViewModel Bul(string dbName, int docEntry) { Tohumla(); AvanslariSenkronla(); lock (Kilit) return _odemeler.TryGetValue(dbName, out var l) ? l.FirstOrDefault(m => m.DocEntry == docEntry) : null; }
         public static NakitAkisViewModel Bul(int docEntry) { Tohumla(); lock (Kilit) return _odemeler.Values.SelectMany(l => l).FirstOrDefault(m => m.DocEntry == docEntry); }
         /// <summary>Nakit avansın Nakit Akış Planlama satırı (finans konsolide senkronu; Personel Maliyet › Diğer Kesintiler).</summary>
@@ -108,7 +172,7 @@ namespace WebApplication3.Data
                 {
                     if (m.U_Durum == "ÖDENDİ") return (m, "ödenmiş");
                     bool degisti = (m.U_Tutar ?? 0) != tutar || m.U_PlanlananTarih != plan;
-                    m.U_Tutar = tutar; m.U_TutarTL = tutar; m.U_FaturaTutari = tutar; m.U_PlanlananTarih = plan; m.U_SonOdemeTarihi = plan; m.U_Notlar = not; m.U_UrunHizmet = urun;
+                    m.U_Tutar = tutar; m.U_TutarTL = tutar; m.U_FaturaTutari = tutar; m.U_PlanlananTarih = plan; m.U_SonOdemeTarihi = plan; m.U_Notlar = not; m.U_UrunHizmet = urun; if (m.U_TalepDurumu == TalepOnayBekliyor) m.U_TalepPlanTutari = tutar;
                     if (degisti) Log(dbName, m.DocEntry, "Güncelleme", $"Toplu personel ödemesi güncellendi · {kurum} · {tutar.ToString("N2", Tr)} TRY · plan {plan:dd.MM.yyyy}", kullanici);
                     return (m, "güncellendi");
                 }
@@ -116,7 +180,8 @@ namespace WebApplication3.Data
                 {
                     DocEntry = ++_sonDocEntry, U_KaynakFirma = dbName, U_FaturaSahibi = SirketAdi(dbName), U_OdeyenSirket = SirketAdi(dbName), U_PersonelOdeme = anahtar, U_Kurum = kurum, U_UrunHizmet = urun, U_OdemeYontemi = yontem,
                     U_ParaBirimi = "TRY", U_Kur = 1, U_OdenenTutarPB = "TRY", U_Tutar = tutar, U_TutarTL = tutar, U_FaturaTutari = tutar, U_PlanlananTarih = plan, U_SonOdemeTarihi = plan, BelgeTarihi = DateTime.Today,
-                    U_BagliBelgeTipi = "Personel Ödemesi", U_KayitTipi = "Personel Ödemesi", U_FaturaSiparisNo = anahtar, U_IslemTipi = xr, U_Durum = "Planlandı", U_EskiDurum = "Planlandı", U_Notlar = not, U_TalepEden = kullanici ?? "", U_Satinalmaci = ""
+                    U_BagliBelgeTipi = "Personel Ödemesi", U_KayitTipi = "Personel Ödemesi", U_FaturaSiparisNo = anahtar, U_IslemTipi = xr, U_Durum = "Planlandı", U_EskiDurum = "Planlandı", U_Notlar = not, U_TalepEden = kullanici ?? "", U_Satinalmaci = "",
+                    U_TalepDurumu = TalepOnayBekliyor, U_TalepPlanTutari = tutar   // 16 Kas 2026: personel ödemesi de rapora doğrudan geçmez; Departman Talepleri'nde onay bekler
                 };
                 m.DocNum = m.DocEntry;
                 if (yontem == "Nakit") { m.U_OnayDurumu = "Onay Bekliyor"; m.U_Kasa = Kasalar[0]; m.U_TeslimAlan = "Personel (bordro listesi)"; } else m.U_AliciHesapAdi = "Personel maaş hesapları (toplu banka talimatı)";
@@ -152,7 +217,7 @@ namespace WebApplication3.Data
                 {
                     if (m.U_Durum == "ÖDENDİ") return (m, "ödenmiş");
                     bool degisti = (m.U_Tutar ?? 0) != tutar || m.U_PlanlananTarih != plan || m.U_Kurum != banka || m.U_ParaBirimi != pb || (m.U_Kur ?? 1) != kur;
-                    m.U_Kurum = banka; m.U_UrunHizmet = urun; m.U_FaturaSiparisNo = belgeNo; m.U_ParaBirimi = pb; m.U_Kur = kur; m.U_OdenenTutarPB = pb; m.U_Tutar = tutar; m.U_TutarTL = tutarTl; m.U_FaturaTutari = tutar; m.U_PlanlananTarih = plan; m.U_SonOdemeTarihi = plan; m.U_Notlar = not;
+                    m.U_Kurum = banka; m.U_UrunHizmet = urun; m.U_FaturaSiparisNo = belgeNo; m.U_ParaBirimi = pb; m.U_Kur = kur; m.U_OdenenTutarPB = pb; m.U_Tutar = tutar; m.U_TutarTL = tutarTl; m.U_FaturaTutari = tutar; m.U_PlanlananTarih = plan; m.U_SonOdemeTarihi = plan; m.U_Notlar = not; if (m.U_TalepDurumu == TalepOnayBekliyor) m.U_TalepPlanTutari = tutar;
                     if (degisti) Log(dbName, m.DocEntry, "Güncelleme", $"Kredi taksidi güncellendi · {banka} · {belgeNo} · {tutar.ToString("N2", Tr)} {pb} · plan {plan:dd.MM.yyyy}", kullanici);
                     return (m, "güncellendi");
                 }
@@ -161,10 +226,11 @@ namespace WebApplication3.Data
                     DocEntry = ++_sonDocEntry, U_KaynakFirma = dbName, U_FaturaSahibi = SirketAdi(dbName), U_OdeyenSirket = SirketAdi(dbName), U_KrediTaksit = anahtar, U_Kurum = banka, U_UrunHizmet = urun, U_OdemeYontemi = "Havale / EFT",
                     U_ParaBirimi = pb, U_Kur = kur, U_OdenenTutarPB = pb, U_Tutar = tutar, U_TutarTL = tutarTl, U_FaturaTutari = tutar, U_PlanlananTarih = plan, U_SonOdemeTarihi = plan, BelgeTarihi = DateTime.Today,
                     U_BagliBelgeTipi = "Kredi Taksidi", U_KayitTipi = "Kredi Taksidi", U_FaturaSiparisNo = belgeNo, U_IslemTipi = "R", U_Durum = "Planlandı", U_EskiDurum = "Planlandı", U_Notlar = not, U_TalepEden = kullanici ?? "", U_Satinalmaci = "",
-                    U_AliciBanka = banka, U_AliciHesapAdi = banka + " · kredi taksit tahsilat hesabı"
+                    U_AliciBanka = banka, U_AliciHesapAdi = banka + " · kredi taksit tahsilat hesabı",
+                    U_TalepDurumu = TalepOnayBekliyor, U_TalepPlanTutari = tutar   // 16 Kas 2026: kredi taksidi de Talepler › Planlı Ödemeler'de onay bekler; onaylanınca rapora geçer (ödenmiş taksit beklemez)
                 };
                 m.DocNum = m.DocEntry; m.U_Sira = _odemeler[dbName].Count + 1; _odemeler[dbName].Add(m);
-                Log(dbName, m.DocEntry, "Ekleme", $"Kredi Raporu: {banka} · {belgeNo} · Havale / EFT · {tutar.ToString("N2", Tr)} {pb} · plan {plan:dd.MM.yyyy}", kullanici);
+                Log(dbName, m.DocEntry, "Planlı Ödeme Talebi", $"Kredi Raporu: {banka} · {belgeNo} · Havale / EFT · {tutar.ToString("N2", Tr)} {pb} · plan {plan:dd.MM.yyyy} · Talepler › Planlı Ödemeler'de onay bekliyor", kullanici);
                 return (m, "eklendi");
             }
         }
@@ -209,7 +275,9 @@ namespace WebApplication3.Data
                             U_Notlar = $"{a.Oncelik} · {a.HarcamaKategorisi}" + (a.GrupIci ? " · grup içi avans (masraf " + a.Kullanan.Sirket + ")" : ""), U_Sira = _odemeler[db].Count + 1
                         };
                         if (pb != "TRY") { m.U_KurKaynagi = "TCMB Döviz Alış"; m.U_KurTarihi = plan; m.U_Kur = KurOrnek.Kur(pb, plan, m.U_KurKaynagi); m.U_TutarTL = Math.Round(a.OnaylananTutar * m.U_Kur.Value, 2); m.U_KurFarkiFaturasi = "Kesilmeyecek"; }
-                        _odemeler[db].Add(m); Log(db, m.DocEntry, "Avans", $"{a.No} onaylı avans nakit akışa alındı · {(sahsi ? "Personel (gizli · şahsi avans)" : a.Kullanan.AdSoyad)} · {(a.OnaylananTutar).ToString("N0", Tr)} {a.ParaBirimi}", "Sistem");
+                        // 16 Kas 2026 ("Nakit Avans → Departman Talepleri, onayına düşsün"): ısınmadan sonra onaylanan avans rapora doğrudan geçmez; Yeni Ödeme Kaydı › Departman Talepleri'nde onay bekler
+                        if (OrnekIsinma.Bitti) { m.U_TalepDurumu = TalepOnayBekliyor; m.U_TalepPlanTutari = m.U_Tutar; }
+                        _odemeler[db].Add(m); Log(db, m.DocEntry, "Avans", $"{a.No} onaylı avans {(OrnekIsinma.Bitti ? "Departman Talepleri'ne düştü (onay bekliyor)" : "nakit akışa alındı")} ·{(sahsi ? "Personel (gizli · şahsi avans)" : a.Kullanan.AdSoyad)} · {(a.OnaylananTutar).ToString("N0", Tr)} {a.ParaBirimi}", "Sistem");
                     }
                     if (a.OdemeBekleyen <= 0 && a.TeslimEdilen > 0)
                     {
