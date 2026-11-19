@@ -124,7 +124,7 @@
   const TH = { yeni: 'yeni', liste: 'liste', fatura: 'fatura' };   // Tahsilat giriş panellerine giden sekmeler → #th içindeki panel
   const RAPOR = ['ozet', 'cari', 'kartlar', 'acik', 'hafta', 'banka', 'aylik', 'plan', 'surec', 'vftakip', 'vade', 'kapama'];
   const q0 = new URLSearchParams(location.search);
-  let aktif = kok.dataset.sekme || (kok.dataset.no ? 'liste' : kok.dataset.kod ? 'yeni' : kok.dataset.ihracat === '1' ? 'ibOzet' : 'cari'), kirli = false, HAFTA = [], haftaSec = 0;   // ihracat kipi İhracat Özeti ile açılır
+  let aktif = kok.dataset.sekme || (kok.dataset.no ? 'liste' : kok.dataset.kod ? 'yeni' : 'cari'), kirli = false, HAFTA = [], haftaSec = 0;   // 20 Kas 2026 (kullanıcı): iki rapor da Alacak Takibi ile açılır
   // YENİ BANKA GİRİŞİ UYARISI (kullanıcı 17 Kas 2026: "Banka Tahsilatları sekmesine yeni bir ödeme düştüğünde uyarı gibi bir ikon koy ya da farklı renk; anlayalım bankaya ödeme geldiğini").
   // Görülen banka girişleri tarayıcıda tutulur (localStorage 'tkBankaGorulen'); listede olup görülmemiş giriş varsa sekme sarı + zil ikonu olur, sekme açılınca görülmüş sayılır.
   // O oturumda yeni gelenler tabloda sarı satır ve "Yeni" rozetiyle kalır. İlk kullanımda (kayıt yokken) yalnız bugünün girişleri yeni sayılır. Banka girişleri 60 saniyede bir yeniden okunur.
