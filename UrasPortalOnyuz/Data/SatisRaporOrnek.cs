@@ -90,6 +90,23 @@ namespace WebApplication3.Data
             });
         }
 
+        /// <summary>
+        /// Tek faturanın kalemleri ve başlık tutarları (19 Kas 2026: Yeni Tahsilat › Belge No tıklanınca açılan fatura detayı). Konsolide Satış Raporu ile aynı türetme
+        /// (belgeye göre deterministik; kalem toplamı = KDV'siz tutar; KFF / VFF tek hizmet kalemi). Kalem alanları: kod, ad, anaGrup, grup, birim, miktar, fiyat, tutar.
+        /// </summary>
+        public static object FaturaDetayi(CariKart k, MtHareket h)
+        {
+            string pb = TahsilatOrnek.TlMi(h.ParaBirimi) ? "TL" : h.ParaBirimi; bool yurtici = k.Bolge == "Yurtiçi", fatura = h.Borc > 0;
+            decimal kur = TahsilatOrnek.TlMi(pb) ? 1m : TahsilatOrnek.KurOto(pb, h.Tarih), kurUsd = TahsilatOrnek.KurOto("USD", h.Tarih);
+            decimal brut = fatura ? h.Borc : -h.Alacak, kdvOran = yurtici ? KdvOran : 0m, net = Math.Round(brut / (1 + kdvOran / 100m), 2);
+            bool fark = (h.BelgeNo ?? "").StartsWith("KFF-") || (h.BelgeNo ?? "").StartsWith("VFF-");
+            List<object> kalemler; string temsilci;
+            if (fark) { bool kf = h.BelgeNo.StartsWith("KFF-"); kalemler = new List<object> { new { kod = kf ? "HZM-KUR" : "HZM-VADE", ad = kf ? "Kur Farkı" : "Vade Farkı", anaGrup = "Finansal", grup = "Fark Faturaları", sinif = "Finansal", urunGrubu = "Fark Faturaları", seri = "", birim = "Adet", miktar = 1m, fiyat = net, tutar = net, maliyetTl = 0m } }; temsilci = SatisSiparisOrnek.Temsilci(k); }
+            else (kalemler, temsilci) = KalemTuret(k, h, pb, net, kur, kurUsd);
+            var s = SatisSiparisOrnek.SirketBul(k.Sirket == "Selvi" ? "Selvi Kimya" : k.Sirket);
+            return new { pb, kur, kurUsd, brut, net, kdvOran, kdv = Math.Round(brut - net, 2), yurtici, kalemler, temsilci, sirket = new { ad = s.Ad, unvan = s.Unvan, adres = s.Adres, vergiNo = s.VergiNo, depo = s.Depo } };
+        }
+
         /// <summary>Raporun tüm verisi: belgeler (fatura, iade, açık sipariş, teslimat; kalemleriyle), tahsilatlar, müşteri bakiyeleri, kurlar.</summary>
         public static object Paket()
         {

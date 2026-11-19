@@ -179,6 +179,7 @@ namespace WebApplication3.Data
         public static readonly object Kilit = new object();
         // ---------- Parametreler (§2 not, §8) ----------
         public static int AktifPasifAy = 12;          // aktif / pasif sekme kuralı (ay)
+        public static bool EskiKurFarkiSatiri = false; // eski rastgele "KF-yyyy-nnn" kur farkı satırı (19 Kas 2026'dan beri KurDegerlemeOrnek üretir)
         public static int EskiBakiyeGun = 180;        // eski bakiye uyarısı eşiği (gün)
         public static int DegerlemeRiskiGun = 365;    // yabancı para bakiyesinde değerleme riski eşiği (gün)
         public static readonly string[] Durumlar = { "Henüz Başlanmadı", "İç Kontrolde", "Kapanış Kontrolü Gerekli", "Gönderime Hazır", "Gönderildi", "Mutabık", "İtirazlı", "Yeniden Mutabakat Gerekli" };
@@ -343,7 +344,8 @@ namespace WebApplication3.Data
                 if (eskiKalem && pb == pbler[0]) KismiAc(faturalar.Where(x => x.Tarih <= bugun.AddMonths(-7) && x.Tarih >= bugun.AddMonths(-16) && x.Kalan <= 0.005m).OrderBy(x => x.Tarih).Skip(1).FirstOrDefault() ?? faturalar.FirstOrDefault(x => x.Kalan <= 0.005m));
             }
             // kur farkı satırı (döviz carilerinde dönem sonu)
-            if (doviz != null && aktif && rnd.Next(2) == 0) c.Hareketler.Add(new MtHareket { Id = ++id, Tarih = new DateTime(bugun.Year, 1, 5), ParaBirimi = "TL", BelgeTipi = "Kur Farkı", BelgeNo = $"KF-{bugun.Year}-{rnd.Next(100, 999)}", Aciklama = "Dönem sonu kur değerlemesi", Borc = musteri ? Math.Round((decimal)rnd.Next(5_000, 60_000), 2) : 0, Alacak = musteri ? 0 : Math.Round((decimal)rnd.Next(5_000, 60_000), 2), KapamaDurumu = "—" });
+            // 19 Kas 2026: rastgele kur farkı satırı kapatıldı — dönem sonu değerleme dekontları artık KurDegerlemeOrnek'ten (R dövizli açık faturalar, gerçek kur, fatura bazında kırılım)
+            if (EskiKurFarkiSatiri && doviz != null && aktif && rnd.Next(2) == 0) c.Hareketler.Add(new MtHareket { Id = ++id, Tarih = new DateTime(bugun.Year, 1, 5), ParaBirimi = "TL", BelgeTipi = "Kur Farkı", BelgeNo = $"KF-{bugun.Year}-{rnd.Next(100, 999)}", Aciklama = "Dönem sonu kur değerlemesi", Borc = musteri ? Math.Round((decimal)rnd.Next(5_000, 60_000), 2) : 0, Alacak = musteri ? 0 : Math.Round((decimal)rnd.Next(5_000, 60_000), 2), KapamaDurumu = "—" });
             // bekleyen ödeme / tahsilat ve mahsup
             if (aktif) { int b = rnd.Next(0, 3); for (int i = 0; i < b; i++) c.Bekleyenler.Add(new MtBekleyen { Tur = musteri ? "Tahsilat" : "Ödeme", Tarih = bugun.AddDays(rnd.Next(2, 40)), Tutar = Math.Round((decimal)rnd.Next(20_000, 300_000) * olcek, 2), ParaBirimi = pbler[0], Aciklama = musteri ? "Planlanan tahsilat (vade)" : "Planlı ödeme" }); c.MahsupVirmanBekleyen = rnd.Next(6) == 0 ? 1 : 0; }
             Hesapla(c);

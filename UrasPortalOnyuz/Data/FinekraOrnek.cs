@@ -129,6 +129,13 @@ namespace WebApplication3.Data
                     // 5) bankadan tahsil edilen çekler (giriş; onaylı 102 / 101)
                     foreach (var k in CekAkibetOrnek.Kayitlar.Where(k => k.Sirket == s.Ad && k.IslemTuru == "Bankadan Tahsil Edildi" && k.Vade >= bugun.AddDays(-75) && k.Vade <= bugun).OrderBy(k => k.Vade).Take(4))
                     { var h = Yeni(k.Vade, "Giriş", k.Tutar, "Çek Tahsilatı", (k.Musteri ?? "").ToUpper(Tr), $"ÇEK TAHSİLATI {k.No} {k.Banka}", k.IbrazYeri == "Halk Bankası" ? 1 : 0); h.EslesmeNotu = "çek tahsilatı: Çek Akıbeti kaydı"; Onayla(h, k.MusteriKod, k.Musteri, "101", null, h.Tarih.AddHours(2)); }
+                    // 7) YURTDIŞI müşteri döviz girişleri (19 Kas 2026 gece; İhracat Finansal Takibi › Banka Tahsilatları örnekleri): müşterisi henüz seçilmemiş EUR / USD havaleler — yalnız ilk şirkette
+                    if (s.DbName == CekAkibetOrnek.Sirketler.First().DbName)
+                    {
+                        int gi = 0;
+                        foreach (var mu in CariKartOrnek.Kartlar.Where(k => k.KartTipi == "Müşteri" && k.Bolge == "Yurtdışı").OrderBy(k => k.Kod).Take(3))
+                        { gi++; string pbY = gi == 2 ? "USD" : "EUR"; var t = bugun.AddDays(-gi * 2); var h = Yeni(t, "Giriş", 0, "Müşteri Havalesi", mu.KisaAd.ToUpper(Tr), $"{mu.KisaAd.ToUpper(Tr)} EXPORT INVOICE PAYMENT {pbY}", pbY == "USD" ? 2 : 3, pbY, (12 + gi * 7) * 1000m, null, "TCMB Döviz Alış"); h.EslesmeNotu = "ihracat tahsilatı: müşteri seçimi bekliyor"; }
+                    }
                     // 6) virman (hesaplar arası; 102 / 102)
                     { var t = bugun.AddDays(-rnd.Next(1, 20)); var h = Yeni(t, "Çıkış", Math.Round(1_500_000m * olcek / 1000) * 1000, "Virman", hesaplar[1].Split(" · ")[0] + " VADESİZ TL", "VİRMAN " + hesaplar[0].Split(" · ")[0].ToUpper(Tr) + " → " + hesaplar[1].Split(" · ")[0].ToUpper(Tr), 0); h.EslesmeNotu = "virman: nakit akış dışı"; Onayla(h, "", hesaplar[1].Split(" · ")[0] + " vadesiz", "102", null, h.Tarih.AddHours(1)); }
                 }

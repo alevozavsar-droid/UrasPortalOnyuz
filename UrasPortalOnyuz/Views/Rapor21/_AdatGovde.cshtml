@@ -1,0 +1,62 @@
+﻿@* Adat Hesaplama gövdesi (cari seçimi, faturalar, ödemeler, simülasyon): 16 Kas 2026'da Views/Rapor21/Index.cshtml'den ayrıldı; hem /Rapor21 sayfasında hem Tahsilat raporunun Adat Hesaplama sekmesinde #ad kökünün içinde gösterilir. Betik: wwwroot/js/adat.js
+   19 Kas 2026 (kullanıcı: "Adat Hesaplama'yı Yeni Tahsilat'taki mantıkla düzenle"): üst şerit tek satır (Bakiye · X / R · Vadesi Geçmiş · Son Ödeme · Son Yükleme · Ort. Gecikme · Adat Gün · Eşleşmemiş · Çek / Senet · Risk), sağa yaslı PDF / Excel hapları
+   (Otomatik Kapat · Kart · Tahsilat · Otomatik Kapatma kaldırıldı), bakiye denklemi + adat özeti TEK kutuda (12 hücre), Açık Faturalar'da Fat. Gün / Adat Gün / Tip / Fatura Bedeli / Kalan / Baz Kur, fatura dışı borç ve kapatılmamış ödeme / avans satırları (Virman), Hesap Kuralları kaldırıldı. *@
+<style>
+    .ad .ad-oran { display: flex; align-items: center; gap: 8px; font-size: .68rem; } .ad .ad-oran input { width: 70px; height: 24px; font-size: .7rem; font-weight: 800; text-align: center; }
+    .ad .ci-liste input.ic.tutar { width: 100px; font-weight: 700; } .ad .ci-liste input.ic.tarih { width: 112px; } .ad .ci-liste input.ic.no { width: 88px; } .ad .ci-liste select.ic.tip { width: 90px; } .ad .ci-liste select.ic.banka { width: 105px; } .ad #adOdemeler td, .ad #adOdemeler th { padding-left: 2px; padding-right: 2px; }
+    .ad .ci-liste tr.kapali td { background: #f8fafc; color: #94a3b8; } .ad .gec { color: #b91c1c; font-weight: 700; } .ad .erken { color: #15803d; } .ad .lehte { color: #15803d; } .ad .kirmizi { color: #b91c1c; } .ad .yesil { color: #15803d; }
+    .ad a.ad-belge { color: inherit; text-decoration: none; border-bottom: 1px dashed #94a3b8; } .ad a.ad-belge:hover { color: #0f766e; border-bottom-color: #0f766e; }
+    .ad .ci-bilgi .k.buyuk b { font-size: .78rem; } .ad .ci-bilgi { flex-wrap: nowrap; overflow: hidden; } .ad .ci-bilgi .k { white-space: nowrap; }
+    /* sağa yaslı haplar (Yeni Tahsilat ile aynı) */
+    .ad #adCariIslem { justify-content: flex-end; } .ad .ad-hap-bar { margin-left: auto; display: inline-flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+    .ad .ad-hap { display: inline-flex; align-items: center; gap: 5px; font-size: .68rem; font-weight: 700; border-radius: 999px; padding: 3px 11px; border: 1px solid #cbd5e1; background: #fff; color: #0f172a; text-decoration: none; cursor: pointer; line-height: 1.3; }
+    .ad .ad-hap.pdf { border-color: #fca5a5; color: #b91c1c; background: #fff7f7; } .ad .ad-hap.pdf.dolu { background: #dc2626; color: #fff; border-color: #dc2626; }
+    .ad .ad-hap.xls { border-color: #86efac; color: #15803d; background: #f3fdf6; } .ad .ad-hap.xls.dolu { background: #16a34a; color: #fff; border-color: #16a34a; }
+    .ad .ad-hap.koyu { background: #1e293b; color: #fff; border-color: #1e293b; } .ad .ad-hap.ana { background: #0369a1; color: #fff; border-color: #0369a1; } .ad .ad-hap:hover { filter: brightness(.96); }
+    /* tek kutu: bakiye denklemi (6) + adat özeti (6) */
+    .ad .ad-kpi { margin: 0 0 8px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 4px; background: #fff; }
+    .ad .ad-kpi > div { border: 0; border-left: 3px solid var(--k, #0369a1); border-radius: 6px; padding: 3px 6px; background: #f8fafc; min-width: 0; }
+    .ad .ad-kpi > div.ayrac { margin-left: 8px; position: relative; } .ad .ad-kpi > div.ayrac::before { content: ''; position: absolute; left: -6px; top: 4px; bottom: 4px; border-left: 2px dashed #cbd5e1; }
+    .ad .ad-kpi .l { font-size: .54rem; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ad .ad-kpi .v { font-size: .8rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.2; color: #0f172a; } .ad .ad-kpi .s { font-size: .56rem; color: #64748b; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .ad .ad-kpi .isaret { font-size: .8rem; font-weight: 900; color: #94a3b8; margin-right: 3px; vertical-align: -1px; }
+    @@media (max-width: 1500px) { .ad .ad-kpi { grid-template-columns: repeat(6, minmax(0, 1fr)); } .ad .ad-kpi > div.ayrac { margin-left: 0; } .ad .ad-kpi > div.ayrac::before { display: none; } .ad .ci-bilgi { flex-wrap: wrap; } }
+    /* fatura dışı borç · kapatılmamış ödeme / avans grupları */
+    .ad .ci-liste tr.ad-grup td { background: #f8fafc; color: #334155; font-size: .7rem; border-top: 2px solid var(--g, #e2e8f0); padding: 5px 8px; } .ad .ci-liste tr.ad-ek td { background: #fcfcfd; } .ad .ci-liste tr.ad-ek.avans td { background: #fffbeb; } .ad .ci-liste tr.ad-ek.deg td { background: #f5f3ff; }
+    .ad .rt-durum.rt-deg { background: #ede9fe; color: #5b21b6; }
+</style>
+    <div class="na-kart">
+        <div class="na-kart-b"><span><i class="fas fa-user-tie me-1"></i>Cari</span><span class="not" id="adCariSayi"></span></div>
+        <div class="na-kart-g">
+            <div class="d-flex gap-1 align-items-center mb-2 flex-wrap">
+                <select class="form-select" id="adTip" style="width:150px;font-size:.78rem;height:32px"><option value="">Müşteri + Tedarikçi</option><option>Müşteri</option><option>Tedarikçi</option></select>
+                <input class="form-control" id="adCariAra" placeholder="Kod ya da ad yazın…" style="width:240px;font-size:.78rem;height:32px" autocomplete="off">
+                <select class="form-select" id="adCari" style="flex:1;min-width:320px;font-size:.78rem;height:32px"><option value="">Cari seçiniz…</option></select>
+            </div>
+            <div class="ci-bilgi" id="adCariOzet"><span class="text-muted">Cari seçince bakiye, son ödeme / yükleme, gecikme ve adat günü burada görünür.</span></div>
+            <div class="d-flex gap-1 flex-wrap mt-1" id="adCariIslem"></div>
+        </div>
+    </div>
+    <div id="adGovde" style="display:none">
+        @* tek kutu: Açık Faturalar + Fatura Dışı Borç − Kapatılmamış Ödeme / Avans = Bakiye · Kapama Farkı · Kur Farkı | Fatura · Ödemeler · Kalan · Net Adat · VF · VF (KDV) *@
+        <div class="ad-kpi" id="adKpi"></div>
+        <div class="row g-2">
+            <div class="col-xl-7">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-file-invoice-dollar me-1"></i>Açık Faturalar <span class="n" id="adNFat">0</span></span><span class="d-flex gap-1 align-items-center"><label class="na-mini m-0" style="cursor:pointer"><input type="checkbox" id="adDinamik" class="me-1">Vadeyi ödeme koşuluna göre hesapla (<span id="adVadeGun">30</span> gün)</label><button type="button" class="btn btn-light btn-sm py-0" id="adFatHepsi" style="font-size:.62rem">Tümünü Seç</button><button type="button" class="btn btn-light btn-sm py-0" id="adFatHicbiri" style="font-size:.62rem">Kaldır</button></span></div>
+                    <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:460px"><table class="na-tablo ci-liste" id="adFaturalar" data-dinamik="kapali"><thead><tr><th class="s"><input type="checkbox" id="adFatMaster" checked></th><th>Belge No</th><th>Fatura Tarihi</th><th>Vade</th><th class="s" title="bugün − fatura tarihi (faturanın yaşı)">Fat. Gün</th><th class="s" title="bugün − vade; artı = gecikme, eksi = vadeye kalan">Adat Gün</th><th class="s">Tip</th><th class="e">Fatura Bedeli</th><th class="e">Kalan</th><th class="e" title="R faturada son muhasebe değerleme kuru (altında tarihi), X faturada fatura kuru (değerlenmez)">Baz Kur</th><th class="e" title="simülasyona giren TL tutar; düzenlenebilir">Hesap Tutarı (TL)</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            </div>
+            <div class="col-xl-5">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-money-bill-wave me-1"></i>Ödemeler / Çekler <span class="n" id="adNOde">0</span></span><span class="d-flex gap-1 flex-wrap"><button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Nakit" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Nakit</button><button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Çek" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Çek</button><button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Senet" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Senet</button><button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Havale / EFT" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Havale</button><button type="button" class="btn btn-light btn-sm py-0" id="adTaslakKaydet" style="font-size:.62rem" title="Ödeme satırlarını ve oranı bu cari için sakla"><i class="fas fa-floppy-disk me-1"></i>Taslak Kaydet</button></span></div>
+                    <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:460px"><table class="na-tablo ci-liste" id="adOdemeler" data-dinamik="kapali"><thead><tr><th class="s"></th><th>Tip</th><th>Vade / Tarih</th><th>No</th><th>Banka</th><th>Kaynak</th><th class="e">Tutar (TL)</th><th></th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            </div>
+        </div>
+        <div class="row g-2">
+            <div class="col-xl-7">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-list-ol me-1"></i>Ödeme Kapanış Simülasyonu (FIFO)</span><span class="not">vade sırası · aynı gün önce nakit · gün = ödeme − vade · VF = kapanan × oran × gün ÷ 3000</span></div>
+                    <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:460px"><table class="na-tablo ci-liste" id="adSim" data-dinamik="kapali"><thead><tr><th>Belge No</th><th>Ödeme</th><th>Ödeme Tarihi</th><th>Vade</th><th class="s">Gün</th><th class="e">Ödenen (Kapanan)</th><th class="e">Kalan Bakiye</th><th class="e">VF Tutarı</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            </div>
+            <div class="col-xl-5">
+                <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-alt me-1"></i>Aylık Adat Dağılımı</span><span class="ad-oran" title="Müşterinin vade farkı oranı (Vade Farkı Takibi'nde değiştirilir); burada yalnız bu hesaplama için değiştirebilirsiniz"><i class="fas fa-percent"></i> Aylık Vade Farkı Oranı <input class="form-control" id="adOran" inputmode="decimal" value="5"> %</span></div>
+                    <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ci-liste" id="adAylik" data-dinamik="kapali"><thead><tr><th>Vade Dönemi</th><th>Ortalama Vade</th><th class="e">Fatura Tutarı (TL)</th><th class="s">Net Gecikme</th><th class="e">Net VF Payı (TL)</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            </div>
+        </div>
+    </div>

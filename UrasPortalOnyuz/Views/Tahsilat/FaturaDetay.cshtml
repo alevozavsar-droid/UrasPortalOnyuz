@@ -1,0 +1,108 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Fatura İncelemesi";
+    string kod = (string)ViewBag.Kod ?? "", no = (string)ViewBag.No ?? "";
+}
+@*
+    FATURA İNCELEMESİ (19 Kas 2026) — Yeni Tahsilat › Açık Faturalar › Belge No tıklanınca pencerede (iframe) açılır; /Tahsilat/FaturaDetay?kod=&no= doğrudan da çalışır.
+    Düzen: Fatura İnceleme (Rapor166) ekranı — üstte başlık + rozetler + düğmeler, KPI şeridi, solda Başlık / Alıcı / Teslimat-Ödeme / Kalemler / Bağlı Tahsilatlar / Fark Faturaları, sağda e-fatura görünümü (kare kod).
+    Veri: /Tahsilat/FaturaDetayVeri (cari hesap hareketi + Konsolide Satış Raporu kalem türetmesi + Tahsilat modülü dağıtımları). Kare kod: /Tahsilat/FaturaQr (QRCoder).
+*@
+<style>
+    .fd { font-size: .72rem; color: #0f172a; padding: 8px 10px 20px; }
+    .fd .fd-ust { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; }
+    .fd .fd-ust h5 { margin: 0; font-size: .95rem; font-weight: 800; } .fd .fd-ust h5 small { font-weight: 600; color: #64748b; font-size: .72rem; }
+    .fd .bd { display: inline-block; font-size: .6rem; font-weight: 800; padding: 1px 8px; border-radius: 999px; background: #e2e8f0; color: #334155; letter-spacing: .02em; }
+    .fd .bd.ok { background: #dcfce7; color: #166534; } .fd .bd.ai { background: #fee2e2; color: #991b1b; } .fd .bd.bk { background: #fef3c7; color: #92400e; } .fd .bd.mv { background: #dbeafe; color: #1e40af; }
+    .fd .fd-btn { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; } .fd .fd-btn a, .fd .fd-btn button { font-size: .66rem; border: 1px solid #cbd5e1; background: #fff; color: #0f172a; border-radius: 8px; padding: 4px 9px; text-decoration: none; font-weight: 700; } .fd .fd-btn a.on { background: #0f766e; color: #fff; border-color: #0f766e; }
+    .fd .fd-kpi { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 8px; } .fd .fd-kpi > div { background: #fff; border: 1px solid #e2e8f0; border-left: 3px solid var(--k, #0369a1); border-radius: 10px; padding: 5px 9px; }
+    .fd .fd-kpi .l { font-size: .54rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; } .fd .fd-kpi .v { font-size: .88rem; font-weight: 800; font-variant-numeric: tabular-nums; } .fd .fd-kpi .s { font-size: .58rem; color: #64748b; }
+    .fd .fd-iki { display: grid; grid-template-columns: 1.15fr .85fr; gap: 8px; } @@media (max-width: 1200px) { .fd .fd-iki { grid-template-columns: 1fr; } .fd .fd-kpi { grid-template-columns: repeat(3, 1fr); } }
+    .fd .kart { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 8px; } .fd .kart .b { padding: 5px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 800; font-size: .68rem; display: flex; align-items: center; gap: 6px; background: #f8fafc; border-radius: 10px 10px 0 0; } .fd .kart .b .not { margin-left: auto; font-weight: 600; color: #64748b; font-size: .6rem; } .fd .kart .g { padding: 6px 10px; }
+    .fd .kv { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px 10px; } .fd .kv > div { display: flex; flex-direction: column; border-bottom: 1px dashed #e2e8f0; padding: 2px 0; } .fd .kv .k { font-size: .54rem; text-transform: uppercase; letter-spacing: .03em; color: #94a3b8; font-weight: 800; } .fd .kv .v { font-weight: 600; font-size: .7rem; } .fd .kv .v.vb { font-weight: 800; }
+    .fd table { width: 100%; border-collapse: collapse; font-size: .68rem; } .fd th { font-size: .56rem; text-transform: uppercase; letter-spacing: .03em; color: #64748b; background: #f8fafc; padding: 4px 6px; text-align: left; border-bottom: 1px solid #e2e8f0; white-space: nowrap; } .fd td { padding: 4px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    .fd .e, .fd th.e { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; } .fd .s { text-align: center; } .fd tfoot td { font-weight: 800; background: #f8fafc; border-top: 2px solid #e2e8f0; }
+    .fd .gec { color: #b91c1c; font-weight: 700; } .fd .erken { color: #15803d; } .fd .bos { padding: 14px; text-align: center; color: #94a3b8; }
+    .fd .hcode { font-family: ui-monospace, Consolas, monospace; font-size: .64rem; background: #f1f5f9; padding: 0 4px; border-radius: 4px; }
+    /* e-fatura görünümü */
+    .fd .ef { border: 1px solid #cbd5e1; background: #fff; padding: 16px 18px; font-size: .64rem; position: relative; } .fd .ef .ust { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 8px; }
+    .fd .ef .logo { display: inline-flex; align-items: center; gap: 6px; font-weight: 900; font-size: .9rem; color: #0f766e; letter-spacing: .04em; } .fd .ef .logo i { font-size: 1.1rem; }
+    .fd .ef .firma { color: #334155; line-height: 1.35; } .fd .ef .firma b { color: #0f172a; }
+    .fd .ef .qr { text-align: center; } .fd .ef .qr img { width: 118px; height: 118px; border: 1px solid #e2e8f0; padding: 3px; background: #fff; } .fd .ef .qr small { display: block; font-size: .5rem; color: #64748b; word-break: break-all; max-width: 130px; }
+    .fd .ef .kimlik { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; } .fd .ef .kimlik table td { padding: 2px 4px; border: 0; } .fd .ef .kimlik .alici { border: 1px solid #e2e8f0; padding: 6px 8px; border-radius: 6px; line-height: 1.4; }
+    .fd .ef table.kal th { background: #0f172a; color: #fff; } .fd .ef .toplam { margin-left: auto; width: 60%; margin-top: 6px; } .fd .ef .toplam td { padding: 2px 6px; } .fd .ef .toplam tr:last-child td { font-weight: 900; border-top: 2px solid #0f172a; }
+    .fd .ef .yazi { margin-top: 10px; font-size: .58rem; color: #475569; border-top: 1px dashed #cbd5e1; padding-top: 6px; line-height: 1.5; }
+    .fd .ef .damga { position: absolute; right: 20px; top: 150px; border: 2px solid #0f766e; color: #0f766e; font-weight: 900; font-size: .62rem; padding: 2px 8px; border-radius: 6px; transform: rotate(-8deg); opacity: .8; }
+    @@media print { .fd .fd-ust, .fd .fd-kpi, .fd .fd-sol { display: none !important; } .fd .fd-iki { grid-template-columns: 1fr; } }
+</style>
+<div class="fd" id="fd" data-kod="@kod" data-no="@no">
+    <div class="fd-ust" id="fdUst"><h5><i class="fas fa-file-invoice me-1"></i>Fatura İncelemesi <small>· yükleniyor…</small></h5></div>
+    <div class="fd-kpi" id="fdKpi"></div>
+    <div class="fd-iki">
+        <div class="fd-sol" id="fdSol"></div>
+        <div class="fd-sag" id="fdSag"></div>
+    </div>
+</div>
+<script>
+(() => {
+    const kok = document.getElementById('fd'), kod = kok.dataset.kod, no = kok.dataset.no;
+    const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const n2 = v => Number(v || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), n4 = v => Number(v || 0).toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }), n3 = v => Number(v || 0).toLocaleString('tr-TR', { maximumFractionDigits: 3 });
+    const tl = v => n2(v) + ' ₺', bos = v => v == null || v === '' ? '—' : v;
+    const yaziyla = (v, pb) => { const t = ['', 'BİR', 'İKİ', 'ÜÇ', 'DÖRT', 'BEŞ', 'ALTI', 'YEDİ', 'SEKİZ', 'DOKUZ'], o = ['', 'ON', 'YİRMİ', 'OTUZ', 'KIRK', 'ELLİ', 'ALTMIŞ', 'YETMİŞ', 'SEKSEN', 'DOKSAN'], b = ['', 'BİN', 'MİLYON', 'MİLYAR'];
+        const uc = n => { let s = ''; const y = Math.floor(n / 100), k = Math.floor(n % 100 / 10), bi = n % 10; if (y) s += (y === 1 ? '' : t[y]) + 'YÜZ'; if (k) s += o[k]; if (bi) s += t[bi]; return s; };
+        let n = Math.floor(Math.abs(v)), kr = Math.round((Math.abs(v) - n) * 100), s = '', i = 0; if (n === 0) s = 'SIFIR'; while (n > 0) { const p = n % 1000; if (p) s = (p === 1 && i === 1 ? '' : uc(p)) + b[i] + s; n = Math.floor(n / 1000); i++; } return `${s} ${pb === 'TL' ? 'TÜRK LİRASI' : pb}${kr ? ' ' + uc(kr) + (pb === 'TL' ? ' KURUŞ' : ' CENT') : ''}`; };
+    fetch(`/Tahsilat/FaturaDetayVeri?kod=${encodeURIComponent(kod)}&no=${encodeURIComponent(no)}`).then(r => r.json()).then(res => {
+        if (!res.success) { document.getElementById('fdUst').innerHTML = `<h5><i class="fas fa-triangle-exclamation me-1 text-danger"></i>${esc(res.message)}</h5>`; return; }
+        const b = res.baslik, c = b.cari, S = b.sirket, pb = b.pb, dov = pb !== 'TL'; const para = v => `${n2(v)} ${pb}`;
+        const durumBd = b.durum === 'Kapalı' ? '<span class="bd ok">KAPALI</span>' : b.durum === 'Kısmi Kapalı' ? '<span class="bd bk">KISMİ KAPALI</span>' : '<span class="bd ai">AÇIK</span>';
+        document.getElementById('fdUst').innerHTML = `<h5><i class="fas fa-file-invoice me-1"></i>Fatura İncelemesi · ${esc(b.no)} <small>· ${esc(c.kod)} ${esc(c.kisaAd)}</small></h5><span class="bd mv">${esc(b.tur).toLocaleUpperCase('tr-TR')}</span>${durumBd}<span class="bd">${esc(b.islemTipi)}</span>${b.gun > 0 && b.kalan > 0 ? `<span class="bd ai">${b.gun} GÜN GECİKME</span>` : ''}
+            <span class="fd-btn"><a href="#" class="on" id="fdHtml"><i class="fas fa-code me-1"></i>HTML</a><a href="#" id="fdYazdir"><i class="fas fa-print me-1"></i>Yazdır / PDF</a><a href="${esc(res.inceleme)}" target="_blank" rel="noopener" title="Fatura İnceleme ekranı (SAP belge / QNB görüntüsü)"><i class="fas fa-magnifying-glass me-1"></i>Fatura İnceleme'de Aç</a><a href="/Rapor20?bpCode=${encodeURIComponent(c.kod)}" target="_blank" rel="noopener"><i class="fas fa-file-lines me-1"></i>Cari Ekstre</a><a href="/CariKart/Musteri?kod=${encodeURIComponent(c.kod)}" target="_blank" rel="noopener"><i class="fas fa-address-card me-1"></i>Kart</a></span>`;
+        document.getElementById('fdYazdir').addEventListener('click', e => { e.preventDefault(); window.print(); }); document.getElementById('fdHtml').addEventListener('click', e => e.preventDefault());
+        const kutu = (k, l, v, s) => `<div style="--k:${k}"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
+        document.getElementById('fdKpi').innerHTML = [kutu('#0369a1', 'Fatura Toplamı', para(b.brut), dov ? `${tl(b.brutTl)} · kur ${n4(b.kur)}` : `net ${n2(b.net)} + KDV ${n2(b.kdv)}`), kutu('#15803d', 'Ödenen / Tahsil Edilen', para(b.odenen), `${res.tahsilatlar.length} bağlı tahsilat`), kutu(b.kalan > 0 ? '#dc2626' : '#15803d', 'Kalan', para(b.kalan), dov ? tl(b.kalanTl) : (b.kalan > 0 ? 'açık bakiye' : 'kapandı')),
+            kutu(b.gun > 0 ? '#dc2626' : '#15803d', 'Adat Gün', `${b.gun}`, b.gun > 0 ? 'bugün − vade · gecikme' : 'vadeye kalan'), kutu('#7c3aed', 'Fatura Günü', `${b.fatGun}`, 'bugün − fatura tarihi'), kutu('#0f766e', 'Vade', esc(b.vade), `${esc(c.vadeSarti || '—')} · ${esc(b.tarih)} tarihli`)].join('');
+        const kv = (k, v, b2) => `<div><span class="k">${k}</span><span class="v ${b2 ? 'vb' : ''}">${bos(v)}</span></div>`;
+        const kalemler = res.kalemler || []; const netTop = kalemler.reduce((a, x) => a + Number(x.tutar || 0), 0);
+        let sol = `<div class="kart"><div class="b"><i class="fas fa-file-invoice"></i>${esc(b.tur)} · Başlık<span class="not">${esc(b.senaryo)}</span></div><div class="g"><div class="kv">
+            ${kv('Belge No', '<b>' + esc(b.no) + '</b>')}${kv('e-Fatura No', esc(b.efatNo))}${kv('Belge Tarihi', esc(b.tarih))}${kv('Vade', esc(b.vade))}
+            ${kv('Para Birimi / Kur', esc(pb) + ' / ' + n4(b.kur))}${kv('Net', para(b.net))}${kv('KDV %' + Number(b.kdvOran).toLocaleString('tr-TR'), para(b.kdv))}${kv('Genel Toplam', para(b.brut) + (dov ? ' · ' + tl(b.brutTl) : ''), true)}
+            ${kv('Ödenen', para(b.odenen))}${kv('Kalan', para(b.kalan), true)}${kv('Durum', b.durum)}${kv('İşlem Tipi', esc(b.islemTipi))}
+            ${kv('Satış Temsilcisi', esc(b.temsilci))}${kv('Depo / Sevk', esc(b.depo))}${kv('Şirket', esc(S.unvan))}${kv('ETTN', '<span class="hcode">' + esc(b.ettn) + '</span>')}
+            ${kv('Açıklama', esc(b.aciklama))}</div></div></div>`;
+        sol += `<div class="kart"><div class="b"><i class="fas fa-user-tie"></i>Alıcı (Cari)<span class="not">${esc(c.sinif || '')} · ${esc(c.iliskiDurumu || '')}</span></div><div class="g"><div class="kv">
+            ${kv('Cari Kodu', '<b>' + esc(c.kod) + '</b>')}${kv('Kısa Ad', esc(c.kisaAd))}${kv('Resmi Ünvan', esc(c.resmiUnvan))}${kv('VKN / TCKN', esc(c.vergiNo))}
+            ${kv('Vergi Dairesi', esc(c.vergiDairesi))}${kv('Bölge / Ülke / Şehir', [c.bolge, c.ulke, c.sehir].filter(Boolean).map(esc).join(' · '))}${kv('Yetkili', esc(c.yetkili))}${kv('Telefon', esc(c.telefon))}${kv('E-posta', esc(c.eposta))}${kv('Vade / Ödeme Şartı', esc(c.vadeSarti))}</div></div></div>`;
+        sol += `<div class="kart"><div class="b"><i class="fas fa-boxes-stacked"></i>Kalemler (${kalemler.length})<span class="not">kalem toplamı = KDV'siz tutar</span></div><div class="g p-0" style="padding:0"><table><thead><tr><th>#</th><th>Stok Kodu</th><th>Kalem / Açıklama</th><th>Grup</th><th class="e">Miktar</th><th class="e">Birim Fiyat</th><th class="e">Tutar (${esc(pb)})</th><th class="e">KDV</th></tr></thead><tbody>
+            ${kalemler.map((x, i) => `<tr><td>${i + 1}</td><td><span class="hcode">${esc(x.kod)}</span></td><td><b>${esc(x.ad)}</b></td><td>${esc(x.anaGrup)}${x.grup ? ' › ' + esc(x.grup) : ''}</td><td class="e">${n3(x.miktar)} ${esc(x.birim)}</td><td class="e">${n4(x.fiyat)}</td><td class="e"><b>${n2(x.tutar)}</b></td><td class="e">${n2(Number(x.tutar) * Number(b.kdvOran) / 100)}</td></tr>`).join('') || '<tr><td colspan="8" class="bos">Kalem yok.</td></tr>'}
+            </tbody><tfoot><tr><td colspan="6">Net</td><td class="e">${n2(netTop)}</td><td class="e">${n2(b.kdv)}</td></tr><tr><td colspan="6">Genel Toplam</td><td class="e" colspan="2">${para(b.brut)}</td></tr></tfoot></table></div></div>`;
+        const th = res.tahsilatlar || [];
+        sol += `<div class="kart"><div class="b"><i class="fas fa-hand-holding-dollar"></i>Bağlı Tahsilatlar (${th.length})<span class="not">bu faturayı kapatan ödemeler · gün = ödeme − vade</span></div><div class="g" style="padding:0"><table><thead><tr><th>Kaynak</th><th>Belge</th><th>Tarih</th><th>Yöntem</th><th class="e">Uygulanan</th><th class="s">Gün</th><th class="e">Vade Farkı (₺)</th><th class="e">Kur Farkı (₺)</th><th class="e">Fatura Kalanı</th></tr></thead><tbody>
+            ${th.map(x => `<tr><td>${esc(x.kaynak)}</td><td><a href="${esc(x.link)}" target="_blank" rel="noopener"><b>${esc(x.no)}</b></a>${x.belge ? ' <small>' + esc(x.belge) + '</small>' : ''}</td><td>${esc(x.tarih)}</td><td>${esc(x.yontem)}</td><td class="e"><b>${n2(x.tutar)} ${esc(x.pb)}</b></td><td class="s ${x.gun > 0 ? 'gec' : 'erken'}">${x.gun}</td><td class="e ${x.vadeFarki > 0 ? 'gec' : ''}">${x.vadeFarki ? n2(x.vadeFarki) : '—'}</td><td class="e">${x.kurFarki ? n2(x.kurFarki) : '—'}</td><td class="e">${x.kalanSonra == null ? '—' : n2(x.kalanSonra)}</td></tr>`).join('') || `<tr><td colspan="9" class="bos">${b.kalan > 0 ? 'Bu faturaya henüz tahsilat uygulanmadı.' : 'Kapama kaydı bulunamadı (mahsup / iç mutabakat olabilir).'}</td></tr>`}
+            </tbody>${th.length ? `<tfoot><tr><td colspan="4">Toplam</td><td class="e">${n2(th.reduce((a, x) => a + Number(x.tutar), 0))} ${esc(pb)}</td><td></td><td class="e">${n2(th.reduce((a, x) => a + Number(x.vadeFarki || 0), 0))}</td><td class="e">${n2(th.reduce((a, x) => a + Number(x.kurFarki || 0), 0))}</td><td></td></tr></tfoot>` : ''}</table></div></div>`;
+        // kur geçmişi (19 Kas 2026): fatura kuru → muhasebe değerlemeleri (yalnız R) → ödeme kurları; kur farkı faturasının bazı son değerleme
+        const kg = res.kurGecmisi; if (kg && kg.pb !== 'TL') {
+          const sat = [`<tr><td>${esc(b.tarih)}</td><td>Fatura kuru</td><td class="e">${n4(kg.faturaKuru)}</td><td class="e">—</td><td><span class="bd">${esc(b.islemTipi)}</span></td></tr>`]
+            .concat((kg.degerlemeler || []).map(x => `<tr><td>${esc(x.tarih)}</td><td>Kur farkı <b>değerlemesi</b> · muhasebe virmanı <span class="hcode">${esc(x.dekont)}</span>${x.fisNo ? ' · fiş ' + esc(x.fisNo) : ''}</td><td class="e">${n4(x.bazKur)} → <b>${n4(x.yeniKur)}</b></td><td class="e ${x.fark > 0 ? 'gec' : 'erken'}">${n2(x.fark)} ₺</td><td>${n3(x.kalan)} ${esc(kg.pb)} değerlendi</td></tr>`))
+            .concat(th.filter(x => x.kur).map(x => `<tr><td>${esc(x.tarih)}</td><td>Ödeme kuru · ${esc(x.no)} ${x.kurFarki ? '· kur farkı <b>faturası</b>' : ''}</td><td class="e">${n4(x.bazKur || kg.faturaKuru)} → <b>${n4(x.kur)}</b></td><td class="e ${x.kurFarki > 0 ? 'gec' : ''}">${x.kurFarki ? n2(x.kurFarki) + ' ₺' : '—'}</td><td>baz: ${esc(x.bazKaynak || 'Fatura Kuru')}</td></tr>`));
+          sol += `<div class="kart"><div class="b"><i class="fas fa-arrow-trend-up"></i>Kur Geçmişi · ${esc(kg.pb)}<span class="not">${kg.degerlenir ? 'R fatura: muhasebe dönem sonu değerlemesi yapılır' : 'X fatura: muhasebe değerlemesi yapılmaz, kur farkı tahsilatta faturaya döner'} · bugün ${n4(kg.bugunKur)} · kur farkı faturası bazı: ${esc(kg.bazKaynak)} (${n4(kg.bazKur)})</span></div><div class="g" style="padding:0"><table><thead><tr><th>Tarih</th><th>Olay</th><th class="e">Kur</th><th class="e">Fark (₺)</th><th>Not</th></tr></thead><tbody>${sat.join('')}</tbody></table></div></div>`;
+        }
+        const ff = res.farkFaturalari || [];
+        if (ff.length) sol += `<div class="kart"><div class="b"><i class="fas fa-percent"></i>Bu Faturadan Doğan Fark Faturaları (${ff.length})</div><div class="g" style="padding:0"><table><thead><tr><th>Fatura</th><th>Tarih</th><th>Tür</th><th>Kaynak</th><th class="e">Bu Faturanın Payı (₺)</th><th class="e">Fatura Toplamı (₺)</th></tr></thead><tbody>${ff.map(x => `<tr><td><a href="${esc(x.link)}" target="_blank" rel="noopener"><b>${esc(x.no)}</b></a></td><td>${esc(x.tarih)}</td><td>${esc(x.tur)}</td><td>${esc(x.kaynak)}</td><td class="e">${n2(x.kalem)}</td><td class="e">${n2(x.toplam)}</td></tr>`).join('')}</tbody></table></div></div>`;
+        document.getElementById('fdSol').innerHTML = sol;
+        // e-fatura görünümü
+        const qrMetin = `${b.ettn}|${b.efatNo}|${b.tarih}|${S.vergiNo}|${c.vergiNo || ''}|${n2(b.brut)} ${pb}`;
+        document.getElementById('fdSag').innerHTML = `<div class="kart"><div class="b"><i class="fas fa-file-pdf"></i>e-Fatura Görünümü<span class="not">${esc(b.senaryo)} · ön yüz örneği</span></div><div class="g"><div class="ef">
+            <div class="damga">${b.durum === 'Kapalı' ? 'ÖDENDİ' : 'e-FATURA'}</div>
+            <div class="ust"><div><div class="logo"><i class="fas fa-flask"></i>${esc(S.ad).toLocaleUpperCase('tr-TR')}</div><div class="firma"><b>${esc(S.unvan)}</b><br>${esc(S.adres)}<br>VKN: ${esc(S.vergiNo)} · Depo: ${esc(S.depo)}<br>e-posta: muhasebe@@${esc(S.ad).toLocaleLowerCase('tr-TR').replace(/\s+/g, '')}.com.tr</div></div>
+            <div class="qr"><img alt="kare kod" src="/Tahsilat/FaturaQr?metin=${encodeURIComponent(qrMetin)}"><small>ETTN ${esc(b.ettn)}</small></div></div>
+            <div class="kimlik"><div class="alici"><b>SAYIN</b><br><b>${esc(c.resmiUnvan || c.kisaAd)}</b><br>${[c.sehir, c.ulke].filter(Boolean).map(esc).join(' / ')}<br>VKN / TCKN: ${esc(c.vergiNo || '—')} · ${esc(c.vergiDairesi || '—')}<br>${c.eposta ? 'e-posta: ' + esc(c.eposta) : ''}</div>
+            <table><tr><td>Özelleştirme No:</td><td><b>TR1.2</b></td></tr><tr><td>Senaryo:</td><td><b>${esc(b.senaryo.split(' ·')[0])}</b></td></tr><tr><td>Fatura Tipi:</td><td><b>${b.tur.includes('İade') ? 'İADE' : 'SATIŞ'}</b></td></tr><tr><td>Fatura No:</td><td><b>${esc(b.efatNo)}</b></td></tr><tr><td>Fatura Tarihi:</td><td><b>${esc(b.tarih)}</b></td></tr><tr><td>Vade Tarihi:</td><td><b>${esc(b.vade)}</b></td></tr><tr><td>Ödeme Şekli:</td><td><b>${esc(c.vadeSarti || '—')}</b></td></tr><tr><td>Para Birimi:</td><td><b>${esc(pb)}${dov ? ' · kur ' + n4(b.kur) : ''}</b></td></tr></table></div>
+            <table class="kal"><thead><tr><th>Sıra</th><th>Mal / Hizmet</th><th class="e">Miktar</th><th class="e">Birim Fiyat</th><th class="e">KDV Oranı</th><th class="e">KDV Tutarı</th><th class="e">Mal / Hizmet Tutarı</th></tr></thead><tbody>
+            ${kalemler.map((x, i) => `<tr><td>${i + 1}</td><td>${esc(x.ad)}<br><small style="color:#64748b">${esc(x.kod)}</small></td><td class="e">${n3(x.miktar)} ${esc(x.birim)}</td><td class="e">${n4(x.fiyat)} ${esc(pb)}</td><td class="e">%${Number(b.kdvOran).toLocaleString('tr-TR')}</td><td class="e">${n2(Number(x.tutar) * Number(b.kdvOran) / 100)}</td><td class="e">${n2(x.tutar)} ${esc(pb)}</td></tr>`).join('')}</tbody></table>
+            <table class="toplam"><tr><td>Mal Hizmet Toplam Tutarı</td><td class="e">${para(b.net)}</td></tr><tr><td>Toplam İskonto</td><td class="e">0,00 ${esc(pb)}</td></tr><tr><td>Hesaplanan KDV (%${Number(b.kdvOran).toLocaleString('tr-TR')})</td><td class="e">${para(b.kdv)}</td></tr><tr><td>Vergiler Dahil Toplam Tutar</td><td class="e">${para(b.brut)}</td></tr><tr><td>Ödenecek Tutar</td><td class="e">${para(b.brut)}</td></tr></table>
+            <div class="yazi"><b>Yalnız:</b> ${yaziyla(b.brut, pb)}<br>${b.aciklama ? '<b>Not:</b> ' + esc(b.aciklama) + '<br>' : ''}Bu belge ön yüz örneğidir; gerçek e-fatura görüntüsü Fatura İnceleme ekranından (QNB e-Arşiv) alınır. Belge cari hesaba ${esc(b.tarih)} tarihinde ${para(b.brut)} tutarında ${esc(b.islemTipi)} tipinde işlenmiştir.</div>
+        </div></div></div>`;
+    }).catch(e => { document.getElementById('fdUst').innerHTML = `<h5 class="text-danger">Fatura detayı alınamadı: ${esc(e.message)}</h5>`; });
+})();
+</script>

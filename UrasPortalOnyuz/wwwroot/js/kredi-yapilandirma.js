@@ -57,7 +57,13 @@
   function mesaj(tip, m) { const s = $('#naSonuc'); s.className = 'alert py-2 px-3 mb-2 alert-' + tip; s.innerHTML = m; s.style.display = 'block'; clearTimeout(mesaj.z); mesaj.z = setTimeout(() => s.style.display = 'none', 10000); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()).catch(() => ({ success: false, message: 'Ağ hatası.' }));
 
-  let V = null, F = { sirket: '', banka: '', durum: '', ara: '' }, takvimKredi = '', belgeKredi = '', belgeBag = null;   // belgeBag: { tip: 'cek' | 'teminat', id, ad } — Belgeler sekmesinde tek kayda bağlı belgeler
+  let V = null, F = { sirket: [], banka: [], durum: [], ara: '' }, takvimKredi = '', belgeKredi = '', belgeBag = null;   // belgeBag: { tip: 'cek' | 'teminat', id, ad } — Belgeler sekmesinde tek kayda bağlı belgeler
+  // 19 Kas 2026 (kullanıcı: "filtrelerde birden fazla seçime onay versin; tüm raporlarda"): süzgeçler ortak SuzgecCubuk (wwwroot/js/suzgec-cubuk.js), her değer DİZİ ([] = süzgeç yok);
+  // suzUy(k, …değerler) → kaydın değerlerinden biri seçime uyuyor mu. OPT: sekmeye göre seçenek listeleri (filtreDoldur). Durum süzgecinin adı sekmeye göre değişir (SZ.etiket).
+  const suzUy = (k, ...v) => !F[k].length || v.some(x => F[k].includes(String(x))), OPT = { sirket: [], banka: [], durum: [] };
+  const SZ = window.SuzgecCubuk.kur({ kap: $('#kyFiltre'), F, alanlar: [{ k: 'sirket', ad: 'Şirket', bos: 'Tümü (Konsolide)' }, { k: 'banka', ad: 'Banka' }, { k: 'durum', ad: 'Durum' }], hizli: ['sirket', 'banka', 'durum'], gruplar: [],
+    secenekler: k => OPT[k].map(v => ({ v: String(v) })), araYer: 'Kredi no, banka, şube, protokol, ek no, tapu, malik, çek no, keşideci, belge adı, not…',
+    degisti: k => { if (k === 'temizle') { belgeBag = null; belgeKredi = ''; konkBag = null; const bk = $('#kyBelgeKredi'); if (bk) bk.value = ''; } ciz(); } });
   let K = null, konkBag = null;   // K = V.konkordato (10 Kas 2026); konkBag: { id, ad } — konkordato sekmelerinde tek alacak kaydına bağlı satırlar
   const KREDI_SEKME = ['krediler', 'oncesi', 'sonrasi', 'takvim', 'aylik'];
   const KONK_SEKME = ['konkordato', 'sozlesmeler', 'hesaplar', 'tahsilatlar', 'mektuplar'];
@@ -79,24 +85,23 @@
     if (konkBag && !K.alacaklar.some(a => a.id === konkBag.id)) konkBag = null;
     filtreDoldur(); $('#kyKalici').style.display = V.kalici ? '' : 'none'; ciz();
   }
-  function secenekler(sel, degerler, mevcut) { const v = mevcut ?? sel.value; sel.innerHTML = '<option value="">Tümü</option>' + degerler.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join(''); sel.value = degerler.includes(v) ? v : ''; }
   const sirala = l => [...new Set(l.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
   function filtreDoldur() {
     const p = aktifSekme();
     const konkKayit = [...K.alacaklar, ...K.sozlesmeler, ...K.hesaplar, ...K.tahsilatlar, ...K.mektuplar];
-    secenekler($('#kyS'), sirala([...V.krediler.map(k => k.sirket), ...V.teminatlar.map(t => t.sirket), ...V.cekler.map(c => c.sirket), ...V.belgeler.map(b => b.sirket), ...V.borclar.map(b => b.sirket), ...konkKayit.map(x => x.borclu)]), F.sirket); F.sirket = $('#kyS').value;
-    secenekler($('#kyB'), sirala([...V.krediler.map(k => k.banka), ...V.teminatlar.map(t => t.banka), ...V.cekler.map(c => c.banka), ...V.belgeler.map(b => b.banka), ...V.borclar.map(b => b.banka), ...konkKayit.map(x => x.banka)]), F.banka); F.banka = $('#kyB').value;
+    OPT.sirket = sirala([...V.krediler.map(k => k.sirket), ...V.teminatlar.map(t => t.sirket), ...V.cekler.map(c => c.sirket), ...V.belgeler.map(b => b.sirket), ...V.borclar.map(b => b.sirket), ...konkKayit.map(x => x.borclu)]);
+    OPT.banka = sirala([...V.krediler.map(k => k.banka), ...V.teminatlar.map(t => t.banka), ...V.cekler.map(c => c.banka), ...V.belgeler.map(b => b.banka), ...V.borclar.map(b => b.banka), ...konkKayit.map(x => x.banka)]);
     // durum filtresi sekmeye göre: kredi durumu | teminat durumu | çek durumu | belge türü | konkordato: alacak durumu / sözleşme türü / hesap niteliği / tahsilat kanalı / mektup durumu
     const odemeSec = K.odemeDurumlari.map(x => 'Ödeme · ' + x);   // alacak durumu listesine ödeme durumu seçenekleri (11 Kas 2026)
     const DE = { belgeler: ['Belge Türü', V.belgeTurleri], rehin: ['Teminat Durumu', V.teminatDurumlari], cekler: ['Çek Durumu', V.cekDurumlari], borclar: ['Taksit Türü', V.borcTaksitTurleri], ozet: ['Alacak / Ödeme Durumu', [...K.durumlar, ...odemeSec]], konkordato: ['Alacak / Ödeme Durumu', [...K.durumlar, ...odemeSec]], sozlesmeler: ['Sözleşme Türü', [...K.sozlesmeTurleri, ...odemeSec]], hesaplar: ['Nitelik', [...K.hesapNitelikleri, ...odemeSec]], tahsilatlar: ['Tahsilat Kanalı', [...K.tahsilatKanallari, ...odemeSec]], mektuplar: ['Mektup Durumu', [...K.mektupDurumlari, ...odemeSec]], kontrol: ['Kontrol Durumu', K.kontrolDurumlari] }[p] || ['Durum', V.durumlar];
-    $('#kyDEtiket').textContent = DE[0]; secenekler($('#kyD'), DE[1], F.durum); F.durum = $('#kyD').value;
+    SZ.etiket('durum', DE[0]); OPT.durum = DE[1]; Object.keys(OPT).forEach(k => SZ.buda(k, OPT[k])); SZ.yaz();
     const krediSecenekleri = V.krediler.map(k => `<option value="${k.id}">${esc(k.no)} · ${esc(k.banka)} · ${esc(k.krediNo || k.krediTuru)}</option>`).join('');
     const tk = $('#kyTakvimKredi'); if (tk) { tk.innerHTML = '<option value="">Tüm Krediler</option>' + krediSecenekleri; tk.value = V.krediler.some(k => String(k.id) === takvimKredi) ? takvimKredi : ''; takvimKredi = tk.value; }
     const bk = $('#kyBelgeKredi'); if (bk) { bk.innerHTML = '<option value="">Tüm Krediler</option><option value="yok">Krediye Bağlı Olmayan</option>' + krediSecenekleri; bk.value = belgeKredi === 'yok' || V.krediler.some(k => String(k.id) === belgeKredi) ? belgeKredi : ''; belgeKredi = bk.value; }
   }
   const aramaMetni = k => [k.no, k.sirket, k.banka, k.sube, k.krediNo, k.krediTuru, k.protokolNo, k.durum, k.oncekiDurum, k.not, k.borclular, k.pb, ...(k.teminatlar || []).map(t => [t.tur, t.aciklama, t.tapuBilgisi, t.malik, t.not].join(' '))].join(' ').toLocaleLowerCase('tr-TR');
   const kucuk = s => String(s ?? '').toLocaleLowerCase('tr-TR');
-  function liste(durumUygula = true, araUygula = true) { const a = kucuk(F.ara.trim()); return V.krediler.filter(k => (!F.sirket || k.sirket === F.sirket) && (!F.banka || k.banka === F.banka) && (!durumUygula || !F.durum || k.durum === F.durum) && (!araUygula || !a || aramaMetni(k).includes(a))); }
+  function liste(durumUygula = true, araUygula = true) { const a = kucuk(F.ara.trim()); return V.krediler.filter(k => suzUy('sirket', k.sirket) && suzUy('banka', k.banka) && (!durumUygula || suzUy('durum', k.durum)) && (!araUygula || !a || aramaMetni(k).includes(a))); }
   const top = (l, f) => l.reduce((s, k) => s + n0(typeof f === 'function' ? f(k) : k[f]), 0);
   /** rehin · ipotek satırları: kredi kartındaki teminatlar (kaynak 'kredi') + bağımsız eski kredi kayıtları (kaynak 'eski'); fek bekleyenler üstte */
   function rehinListe() {
@@ -104,12 +109,12 @@
     V.krediler.forEach(k => (k.teminatlar || []).forEach(t => rows.push({ kaynak: 'kredi', k, t, sirket: k.sirket, banka: k.banka, durum: t.durum || 'Aktif', ara: [k.no, k.sirket, k.banka, k.krediNo, k.protokolNo, t.tur, t.aciklama, t.tapuBilgisi, t.derece, t.malik, t.not].join(' ') })));
     V.teminatlar.forEach(t => rows.push({ kaynak: 'eski', k: t.krediId ? krediSec(t.krediId) : null, t, sirket: t.sirket, banka: t.banka, durum: t.durum || 'Aktif', ara: [t.sirket, t.banka, t.krediRef, t.krediNo, t.tur, t.aciklama, t.tapuBilgisi, t.derece, t.malik, t.not].join(' ') }));
     const sira = d => ({ 'Fek Bekliyor': 0, 'Tesis Bekliyor': 0, 'Aktif': 1, 'Paraya Çevrildi': 2, 'Fek Edildi': 3 })[d] ?? 1;
-    return rows.filter(r => (!F.sirket || r.sirket === F.sirket) && (!F.banka || r.banka === F.banka) && (!F.durum || r.durum === F.durum) && (!a || kucuk(r.ara).includes(a))).sort((x, y) => sira(x.durum) - sira(y.durum) || x.banka.localeCompare(y.banka, 'tr'));
+    return rows.filter(r => suzUy('sirket', r.sirket) && suzUy('banka', r.banka) && suzUy('durum', r.durum) && (!a || kucuk(r.ara).includes(a))).sort((x, y) => sira(x.durum) - sira(y.durum) || x.banka.localeCompare(y.banka, 'tr'));
   }
-  function cekListe() { const a = kucuk(F.ara.trim()); return V.cekler.filter(c => (!F.sirket || c.sirket === F.sirket) && (!F.banka || c.banka === F.banka) && (!F.durum || c.durum === F.durum) && (!a || kucuk([c.sirket, c.banka, c.krediNo, c.krediRef, c.belge, c.cekNo, c.kesideci, c.cekBankasi, c.not].join(' ')).includes(a))); }
+  function cekListe() { const a = kucuk(F.ara.trim()); return V.cekler.filter(c => suzUy('sirket', c.sirket) && suzUy('banka', c.banka) && suzUy('durum', c.durum) && (!a || kucuk([c.sirket, c.banka, c.krediNo, c.krediRef, c.belge, c.cekNo, c.kesideci, c.cekBankasi, c.not].join(' ')).includes(a))); }
   function belgeListe() {
     const a = kucuk(F.ara.trim());
-    return V.belgeler.filter(b => (!F.sirket || b.sirket === F.sirket) && (!F.banka || b.banka === F.banka) && (!F.durum || b.tur === F.durum)
+    return V.belgeler.filter(b => suzUy('sirket', b.sirket) && suzUy('banka', b.banka) && suzUy('durum', b.tur)
       && (!belgeKredi || (belgeKredi === 'yok' ? !b.krediId : String(b.krediId) === belgeKredi))
       && (!belgeBag || (belgeBag.tip === 'cek' ? b.cekId === belgeBag.id : b.teminatId === belgeBag.id))
       && (!a || kucuk([b.tur, b.baslik, b.krediNo, b.sirket, b.banka, b.dosyaAdi, b.aciklama, b.yukleyen].join(' ')).includes(a)));
@@ -131,7 +136,7 @@
   function kpi(L) {
     const aktif = L.filter(k => k.durum !== 'İptal'), onceTaksit = topTl(aktif, 'taksit'), sonraTaksit = topTl(aktif, 'uygulananTaksit');   // tutarlar TL karşılığı (dövizli kredide kur)
     const geciken = topTl(aktif, 'kar') + topTl(aktif, 'bsmv') + topTl(aktif, 'gecikmeFaizi'), kasaSatir = top(L, k => k.kasaOzet.satir), kasaOdendi = top(L, k => k.kasaOzet.odendi);
-    const uy = x => (!F.sirket || x.sirket === F.sirket) && (!F.banka || x.banka === F.banka);
+    const uy = x => suzUy('sirket', x.sirket) && suzUy('banka', x.banka);
     const bagimsiz = V.teminatlar.filter(uy), bagAktif = bagimsiz.filter(t => aktifTeminat(t.durum));
     const fekBekleyen = aktif.reduce((s, k) => s + (k.teminatlar || []).filter(t => t.durum === 'Fek Bekliyor').length, 0) + bagimsiz.filter(t => t.durum === 'Fek Bekliyor').length;
     const cekler = V.cekler.filter(uy).filter(c => c.durum === 'Teminatta'), cekTl = cekler.filter(c => (c.pb || 'TRY') === 'TRY').reduce((s, c) => s + n0(c.tutar), 0), belgeN = V.belgeler.filter(uy).length;
@@ -289,7 +294,7 @@
   const alacakOdendi = id => ((alacakSec(id) || {}).odemeDurumu === 'Ödendi');
   const odendiSinif = id => alacakOdendi(id) ? ' odendi' : '';
   /** durum filtresi: alacak durumu ya da "Ödeme · Açık / Ödendi / Yapılandırıldı" (alt kayıtlarda bağlı alacağın ödeme durumu) */
-  const durumUy = (x, alan) => { if (!F.durum) return true; if (F.durum.startsWith('Ödeme · ')) { const a = x.odemeDurumu !== undefined && alan === 'durum' ? x : alacakSec(x.alacakId); return ((a || {}).odemeDurumu || 'Açık') === F.durum.slice(8); } return !alan || x[alan] === F.durum; };
+  const durumUy = (x, alan) => { if (!F.durum.length) return true; const a = x.odemeDurumu !== undefined && alan === 'durum' ? x : alacakSec(x.alacakId); return F.durum.some(fd => fd.startsWith('Ödeme · ') ? ((a || {}).odemeDurumu || 'Açık') === fd.slice(8) : (!alan || x[alan] === fd)); };
   const statuRz = s => !s ? bos : rz(s, /İmtiyazlı/.test(s) ? 'mor' : s === 'Belirsiz' ? 'gri' : 'bekle');
   const mektupDurumRz = d => rz(d || 'Tazmin Edildi', d === 'Tazmin Edildi' ? 'hata' : d === 'Devam Ediyor' ? 'mavi' : d === 'İade Edildi' ? 'ok' : 'gri');
   const kanalRz = k => rz(k || 'Diğer', k === 'Çek' ? 'mavi' : k === 'Mevduat Rehni' || k === 'Teminat Çeki' ? 'mor' : k === 'Haricen' ? 'bekle' : 'gri');
@@ -297,9 +302,9 @@
   /** konkordato satır filtresi: şirket = borçlu, banka, alacak bağı, durum alanı, arama metni */
   function konkFiltre(L, durumAlan, araF) {
     const a = kucuk(F.ara.trim());
-    return L.filter(x => (!F.sirket || x.borclu === F.sirket) && (!F.banka || x.banka === F.banka) && (!konkBag || x.alacakId === konkBag.id || (durumAlan === 'durum' && x.id === konkBag.id && x.nitelik !== undefined)) && durumUy(x, durumAlan) && (!a || kucuk(araF(x)).includes(a)));
+    return L.filter(x => suzUy('sirket', x.borclu) && suzUy('banka', x.banka) && (!konkBag || x.alacakId === konkBag.id || (durumAlan === 'durum' && x.id === konkBag.id && x.nitelik !== undefined)) && durumUy(x, durumAlan) && (!a || kucuk(araF(x)).includes(a)));
   }
-  const alacakListe = () => K.alacaklar.filter(x => (!F.sirket || x.borclu === F.sirket) && (!F.banka || x.banka === F.banka) && (!konkBag || x.id === konkBag.id) && durumUy(x, 'durum') && (!F.ara.trim() || kucuk([x.banka, x.borclu, x.nitelik, x.durum, x.alacakStatusu, x.katNoter, x.katYevmiye, x.tebligAlan, x.rehinNot, x.temerrutMaddesi, x.hukukiDegerlendirme, x.not, x.katNot, x.cekEkNo, x.odemeDurumu, x.odemeNot, x.krediNo].join(' ')).includes(kucuk(F.ara.trim()))));
+  const alacakListe = () => K.alacaklar.filter(x => suzUy('sirket', x.borclu) && suzUy('banka', x.banka) && (!konkBag || x.id === konkBag.id) && durumUy(x, 'durum') && (!F.ara.trim() || kucuk([x.banka, x.borclu, x.nitelik, x.durum, x.alacakStatusu, x.katNoter, x.katYevmiye, x.tebligAlan, x.rehinNot, x.temerrutMaddesi, x.hukukiDegerlendirme, x.not, x.katNot, x.cekEkNo, x.odemeDurumu, x.odemeNot, x.krediNo].join(' ')).includes(kucuk(F.ara.trim()))));
   const sozlesmeListe = () => konkFiltre(K.sozlesmeler, 'tur', s => [s.banka, s.borclu, s.tur, s.sozlesmeNo, s.not, ...(s.kefiller || []).map(k => k.ad)].join(' '));
   /** Mühlet tarihi hesap satırı ↔ teminat mektubu kaydı (11 Kas 2026, "tüm sekmeler senkronize"): "Teminat Mektubu Tazmini" satırı, aynı alacak kaydındaki tazmin bedeli eşit (ya da mektup no eşit) mektuba bağlanır; mektup no, muhatap, azami tutar ve tarihler mektup kaydından ekranda okunur, kopyalanmaz */
   const hesapMektup = h => { if (!/mektu[bp]/i.test(h.tur || '') && !h.krediNo) return null; const L = K.mektuplar.filter(m => m.alacakId === h.alacakId); return L.find(m => h.krediNo && m.mektupNo === h.krediNo) || L.find(m => m.durum === 'Tazmin Edildi' && Math.abs(n0(m.tazminBedeli) - n0(h.anapara)) < 0.05) || null; };
@@ -446,7 +451,7 @@
     const rd2 = e.target.closest('.ky-rehin-duzenle'); if (rd2) { e.preventDefault(); e.stopPropagation(); hbKapat(); altAc('rehin', V.teminatlar.find(x => x.id === +rd2.dataset.id)); return; }
     if (e.target.closest('#kyHBDuzenle')) { e.stopPropagation(); if (tip === 'belge') return; hbKapat(); altAc(tip, k); return; }
     if (e.target.closest('#kyHBYukle')) { e.stopPropagation(); hbKapat(); altAc('belge', null, tip === 'belge' ? { tur: k.tur, banka: k.banka || undefined, sirket: k.sirket || undefined, krediId: k.krediId || 0 } : tip === 'mektup' ? { tur: 'Teminat Mektubu', banka: k.banka, sirket: k.borclu || undefined, baslik: `Teminat Mektubu · ${k.mektupNo || k.kkbNo || ''} · ${k.borclu || ''}${k.muhatap ? ' → ' + k.muhatap : ''}` } : { tur: 'Ödeme Planı', banka: k.banka, sirket: k.borclu || undefined, baslik: `${k.tur || 'Kredi'} · ${k.krediNo} · ${k.borclu || ''}` }); return; }
-    if (e.target.closest('#kyHBBelgeler')) { e.stopPropagation(); hbKapat(); F.banka = k.banka || ''; F.sirket = (tip === 'belge' ? k.sirket : k.borclu) || ''; F.durum = ''; F.ara = (tip === 'mektup' ? k.mektupNo || k.kkbNo : tip === 'belge' ? '' : k.krediNo) || ''; $('#kyAra').value = F.ara; konkBag = null; belgeBag = null; belgeKredi = ''; const bk2 = $('#kyBelgeKredi'); if (bk2) bk2.value = ''; sekme('belgeler'); return; }
+    if (e.target.closest('#kyHBBelgeler')) { e.stopPropagation(); hbKapat(); F.banka = k.banka ? [k.banka] : []; const sk = tip === 'belge' ? k.sirket : k.borclu; F.sirket = sk ? [sk] : []; F.durum = []; F.ara = (tip === 'mektup' ? k.mektupNo || k.kkbNo : tip === 'belge' ? '' : k.krediNo) || ''; konkBag = null; belgeBag = null; belgeKredi = ''; const bk2 = $('#kyBelgeKredi'); if (bk2) bk2.value = ''; sekme('belgeler'); return; }
   });
   const hesapListe = () => konkFiltre(K.hesaplar, 'nitelik', h => { const mk = hesapMektup(h); return [h.banka, h.borclu, h.krediNo, h.tur, h.nitelik, h.pb, h.not, mk ? mk.mektupNo + ' ' + mk.muhatap : ''].join(' '); });
   const tahsilatListe = () => konkFiltre(K.tahsilatlar, 'kanal', t => [t.banka, t.borclu, t.kanal, t.cekNo, t.cekBankasi, t.odeyen, t.firma, t.aciklama].join(' '));
@@ -593,7 +598,7 @@
   // ======================================================================
   // ÖZET SEKMESİ (10 Kas 2026, "Kredi Raporu'na bir özet sekmesi hazırla"): dava dosyası şeridi + alacaklı bankalar (banka bazında birleştirilmiş sonuç tablosu) + borçlu şirketler + teminat · rehin · gayrinakdi + yapılandırma durumu + tahsilat kanalları + süreç takvimi
   // ======================================================================
-  const uyar = x => (!F.sirket || x.sirket === F.sirket || x.borclu === F.sirket) && (!F.banka || x.banka === F.banka);
+  const uyar = x => suzUy('sirket', x.sirket, x.borclu) && suzUy('banka', x.banka);
   const gitH = (metin, p, ek) => `<a href="#" class="ky-ozet-git" data-p="${p}"${ek || ''} title="Ayrıntı sekmesine geç">${metin}</a>`;
   const ayEkle = (s, n) => { if (!s) return ''; const d = new Date(s); d.setMonth(d.getMonth() + n); return d.toISOString().slice(0, 10); };
   function ozetBankalar(A) {
@@ -725,7 +730,7 @@
   // ======================================================================
   // BANKA BORÇ DÖKÜMÜ (11 Kas 2026): bankanın taksit / masraf bazlı güncel borç dökümü (V.borclar) + Firma × Döviz Özeti (ÖZET sayfası; satırlardan hesaplanır, Yapılandırma Güncel V.borcOzet'ten)
   // ======================================================================
-  const borcListe = () => { const a = kucuk(F.ara.trim()); return V.borclar.filter(b => (!F.sirket || b.sirket === F.sirket) && (!F.banka || b.banka === F.banka) && (!F.durum || b.taksitTuru === F.durum) && (!a || kucuk([b.sirket, b.banka, b.siraNo, b.taksitTuru, b.detayTuru, b.ekNo, b.pb, b.not, b.kaynak].join(' ')).includes(a))); };
+  const borcListe = () => { const a = kucuk(F.ara.trim()); return V.borclar.filter(b => suzUy('sirket', b.sirket) && suzUy('banka', b.banka) && suzUy('durum', b.taksitTuru) && (!a || kucuk([b.sirket, b.banka, b.siraNo, b.taksitTuru, b.detayTuru, b.ekNo, b.pb, b.not, b.kaynak].join(' ')).includes(a))); };
   const bN = (v, pb) => v == null ? dokumYokRz : tutarPb(v, pb);   // null = dökümde o sütun yok
   const bKalan = b => b.kalanAnaPara != null ? n0(b.kalanAnaPara) : n0(b.anaPara) - n0(b.tahsilEdilen);   // kalan ana para (Daf Kimya dökümünde sütun yok → ana para − tahsil edilmiş)
   const bKalanTl = b => b.kalanAnaParaTl != null ? n0(b.kalanAnaParaTl) : (b.pb || 'TRY') === 'TRY' ? bKalan(b) : null;
@@ -789,7 +794,7 @@
     const al = ek(K.alacaklar), so = ek(K.sozlesmeler), he = ek(K.hesaplar), ta = ek(K.tahsilatlar), me = ek(K.mektuplar), kr = es(V.krediler), te = es(V.teminatlar), ce = es(V.cekler), be = es(V.belgeler), bo = es(V.borclar);
     return { ...c, al, so, he, ta, me, kr, te, ce, be, bo, k: kontrolKaydi(c.banka, c.sirket), toplam: al.length + so.length + he.length + ta.length + me.length + kr.length + te.length + ce.length + be.length + bo.length };
   };
-  const kontrolListe = () => kontrolCiftleri().map(kontrolSatir).filter(c => (!F.banka || c.banka === F.banka) && (!F.sirket || c.sirket === F.sirket) && (!F.durum || c.k.durum === F.durum) && (!F.ara || [c.banka, c.sirket, c.k.not, c.kr.map(k => k.no).join(' ')].join(' ').toLocaleLowerCase('tr-TR').includes(F.ara.toLocaleLowerCase('tr-TR'))));
+  const kontrolListe = () => kontrolCiftleri().map(kontrolSatir).filter(c => suzUy('banka', c.banka) && suzUy('sirket', c.sirket) && suzUy('durum', c.k.durum) && (!F.ara || [c.banka, c.sirket, c.k.not, c.kr.map(k => k.no).join(' ')].join(' ').toLocaleLowerCase('tr-TR').includes(F.ara.toLocaleLowerCase('tr-TR'))));
   const kontrolRz = d => rz(d, d === 'OK' ? 'ok' : d === 'Eksik' ? 'hata' : 'bekle');
   function kpiKontrol() {
     const L = kontrolListe(), ok = L.filter(c => c.k.durum === 'OK'), ek = L.filter(c => c.k.durum === 'Eksik'), bk = L.filter(c => c.k.durum === 'Bekliyor'), S = f => L.reduce((s, c) => s + f(c), 0);
@@ -834,9 +839,7 @@
   // ---------- sekme / filtre
   function sekme(p) { if (!CIZ[p]) p = p === 'teminat' ? 'rehin' : 'ozet'; $$('#kySekmeler button').forEach(b => b.classList.toggle('aktif', b.dataset.p === p)); $$('#ky > .na-panel').forEach(x => x.classList.toggle('aktif', x.dataset.p === p)); if (V) filtreDoldur(); ciz(); }
   $('#kySekmeler').addEventListener('click', e => { const b = e.target.closest('button[data-p]'); if (b) sekme(b.dataset.p); });
-  ['#kyS', '#kyB', '#kyD'].forEach(s => $(s).addEventListener('change', () => { F.sirket = $('#kyS').value; F.banka = $('#kyB').value; F.durum = $('#kyD').value; ciz(); }));
-  $('#kyAra').addEventListener('input', () => { F.ara = $('#kyAra').value; ciz(); });
-  $('#kyTemizle').addEventListener('click', () => { F = { sirket: '', banka: '', durum: '', ara: '' }; ['#kyS', '#kyB', '#kyD', '#kyAra'].forEach(s => $(s).value = ''); belgeBag = null; belgeKredi = ''; konkBag = null; const bk = $('#kyBelgeKredi'); if (bk) bk.value = ''; ciz(); });
+  // süzgeç değişimi, arama ve Temizle ortak çubuktan gelir (SZ → degisti → ciz; Temizle belge / konkordato bağlarını da kaldırır)
   const tk = $('#kyTakvimKredi'); if (tk) tk.addEventListener('change', () => { takvimKredi = tk.value; ciz(); });
   const bk = $('#kyBelgeKredi'); if (bk) bk.addEventListener('change', () => { belgeKredi = bk.value; belgeBag = null; ciz(); });
   kok.addEventListener('click', async e => {
@@ -860,19 +863,19 @@
     const kd = e.target.closest('.ky-konk-duzenle'); if (kd) { e.preventDefault(); const tip = kd.dataset.tip, L = { alacak: K.alacaklar, sozlesme: K.sozlesmeler, hesap: K.hesaplar, tahsilat: K.tahsilatlar, mektup: K.mektuplar }[tip] || []; altAc(tip, L.find(x => x.id === +kd.dataset.id)); return; }
     const ks = e.target.closest('.ky-konk-sil'); if (ks) { const tip = ks.dataset.tip, L = { alacak: K.alacaklar, sozlesme: K.sozlesmeler, hesap: K.hesaplar, tahsilat: K.tahsilatlar, mektup: K.mektuplar }[tip] || []; altSil(tip, L.find(x => x.id === +ks.dataset.id), false); return; }
     const kg = e.target.closest('.ky-konk-git'); if (kg) { e.preventDefault(); const a = alacakSec(kg.dataset.id); konkBag = a ? { id: a.id, ad: alacakAd(a) } : null; sekme(kg.dataset.p); return; }
-    const ki = e.target.closest('.ky-konk-ipotek'); if (ki) { e.preventDefault(); const a = alacakSec(ki.dataset.id); if (a) { F.banka = a.banka; F.sirket = a.borclu || ''; F.durum = ''; } sekme('rehin'); return; }
+    const ki = e.target.closest('.ky-konk-ipotek'); if (ki) { e.preventDefault(); const a = alacakSec(ki.dataset.id); if (a) { F.banka = a.banka ? [a.banka] : []; F.sirket = a.borclu ? [a.borclu] : []; F.durum = []; } sekme('rehin'); return; }
     // banka kontrol listesi (11 Kas 2026): OK / Eksik / Bekliyor işareti ve not; sayıya tıklayınca ilgili sekme o banka × şirkete daralır
     const kk = e.target.closest('.ky-kontrol'); if (kk) { const banka = kk.dataset.banka, sirket = kk.dataset.sirket, mevcut = kontrolKaydi(banka, sirket); let durum = kk.dataset.durum, not = mevcut.not || ''; if (durum === 'not') { const n = window.prompt(`${banka} × ${sirket} · kontrol notu`, not); if (n === null) return; not = n; durum = mevcut.durum; } else if (durum === 'Eksik') { const n = window.prompt(`${banka} × ${sirket} · eksik olan nedir?`, not); if (n === null) return; not = n; } const j = await post('/KrediYapilandirma/KontrolKaydet', { banka, sirket, durum, not }); if (!j.success) { mesaj('danger', esc(j.message)); return; } veri(j.veri); mesaj('success', esc(j.message)); return; }
-    const kg2 = e.target.closest('.ky-kontrol-git'); if (kg2) { e.preventDefault(); F.banka = kg2.dataset.banka; F.sirket = kg2.dataset.sirket === '—' ? '' : kg2.dataset.sirket; F.durum = ''; konkBag = null; sekme(kg2.dataset.p); return; }
-    const ke = e.target.closest('.ky-konk-ekle'); if (ke) { altAc(ke.dataset.tip, null, konkBag ? { alacakId: konkBag.id } : (F.banka || F.sirket ? { banka: F.banka || undefined, borclu: F.sirket || undefined } : null)); return; }
+    const kg2 = e.target.closest('.ky-kontrol-git'); if (kg2) { e.preventDefault(); F.banka = kg2.dataset.banka ? [kg2.dataset.banka] : []; F.sirket = kg2.dataset.sirket === '—' || !kg2.dataset.sirket ? [] : [kg2.dataset.sirket]; F.durum = []; konkBag = null; sekme(kg2.dataset.p); return; }
+    const ke = e.target.closest('.ky-konk-ekle'); if (ke) { altAc(ke.dataset.tip, null, konkBag ? { alacakId: konkBag.id } : (F.banka.length || F.sirket.length ? { banka: F.banka[0], borclu: F.sirket[0] } : null)); return; }
     if (e.target.closest('#kyKonkDosya, .ky-konk-dosya-duzenle')) { altAc('kdosya', K.dosya && (K.dosya.dosyaNo || K.dosya.mahkeme) ? K.dosya : null); return; }
     if (e.target.closest('.ky-konk-bag-sil')) { konkBag = null; ciz(); return; }
     // özet satırları → ayrıntı sekmesi (10 Kas 2026): banka / şirket filtresiyle ya da durum filtresiyle
     const og = e.target.closest('.ky-ozet-git'); if (og) {
       e.preventDefault(); const ds = og.dataset; konkBag = null;
-      if (ds.banka !== undefined) { F.banka = ds.banka; $('#kyB').value = ds.banka; }
-      if (ds.sirket !== undefined) { F.sirket = ds.sirket; $('#kyS').value = ds.sirket; }
-      F.durum = ds.durum || ''; sekme(ds.p || 'konkordato'); if (ds.durum) { $('#kyD').value = ds.durum; F.durum = $('#kyD').value; ciz(); }
+      if (ds.banka !== undefined) F.banka = ds.banka ? [ds.banka] : [];
+      if (ds.sirket !== undefined) F.sirket = ds.sirket ? [ds.sirket] : [];
+      F.durum = ds.durum ? [ds.durum] : []; sekme(ds.p || 'konkordato');   // sekmenin seçenek listesinde olmayan durum filtreDoldur'da budanır
       return;
     }
     const rd = e.target.closest('.ky-rehin-duzenle'); if (rd) { e.preventDefault(); altAc('rehin', V.teminatlar.find(x => x.id === +rd.dataset.id)); return; }
@@ -887,9 +890,9 @@
     if (e.target.closest('#kyBelgeBagSil')) { belgeBag = null; ciz(); }
   });
   $('#kyYeni').addEventListener('click', () => formAc(null));
-  const rehinEkle = $('#kyRehinEkle'); if (rehinEkle) rehinEkle.addEventListener('click', () => altAc('rehin', null, { sirket: F.sirket || undefined, banka: F.banka || undefined }));
-  const cekEkle = $('#kyCekEkle'); if (cekEkle) cekEkle.addEventListener('click', () => altAc('cek', null, { sirket: F.sirket || undefined, banka: F.banka || undefined }));
-  const borcEkle = $('#kyBorcEkle'); if (borcEkle) borcEkle.addEventListener('click', () => altAc('borc', null, { sirket: F.sirket || undefined, banka: F.banka || undefined }));
+  const rehinEkle = $('#kyRehinEkle'); if (rehinEkle) rehinEkle.addEventListener('click', () => altAc('rehin', null, { sirket: F.sirket[0], banka: F.banka[0] }));
+  const cekEkle = $('#kyCekEkle'); if (cekEkle) cekEkle.addEventListener('click', () => altAc('cek', null, { sirket: F.sirket[0], banka: F.banka[0] }));
+  const borcEkle = $('#kyBorcEkle'); if (borcEkle) borcEkle.addEventListener('click', () => altAc('borc', null, { sirket: F.sirket[0], banka: F.banka[0] }));
   ['#kyBelgeYukle', '#kyBelgeYukle2'].forEach(s => { const b = $(s); if (b) b.addEventListener('click', () => altAc('belge', null, belgeKredi && belgeKredi !== 'yok' ? { krediId: +belgeKredi } : belgeBag ? (belgeBag.tip === 'cek' ? { cekId: belgeBag.id, tur: 'Teminat Çeki' } : { teminatId: belgeBag.id, tur: 'İpotek Belgesi' }) : null)); });
   $('#kyExcel').addEventListener('click', () => {
     const p = aktifSekme(), ad = ($(`#kySekmeler button[data-p="${p}"]`) || {}).textContent?.trim() || p;

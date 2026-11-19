@@ -31,6 +31,8 @@ namespace WebApplication3.Data
         public string Durum => ElleDurum == "Pasif" ? "Pasif" : (CariKartOrnek.SonHareket(this).Tarih >= DateTime.Today.AddDays(-365) ? "Aktif" : "Pasif");
         public string DurumKaynagi => ElleDurum == "Pasif" ? $"Elle pasif · {ElleDurumKim} {ElleDurumZaman:dd.MM.yyyy}" : (Durum == "Aktif" ? "Otomatik · son 1 yılda hareket var" : "Otomatik · 1 yıldır hareket yok");
         public string Sirket { get; set; } public DateTime OlusturmaTarihi { get; set; } public string Olusturan { get; set; } public string KaynakTalepNo { get; set; } = "";
+        /// <summary>SATIŞ DURDURMA uyarısı (Tahsilat › Vade Farkı Takibi'nden verilir; CariKartOrnek.SatisDurumuDegistir): limit aşımı / ödenmeyen vade farkı vb. nedeniyle bu müşteriye satış durdurulmuştur. Kart günlüğüne yazılır.</summary>
+        public bool SatisDurdu { get; set; } public string SatisDurdurNeden { get; set; } = ""; public string SatisDurdurKim { get; set; } = ""; public DateTime? SatisDurdurZaman { get; set; }
         public List<CariFaaliyet> Faaliyetler { get; set; } = new List<CariFaaliyet>();
         public string AnaFaaliyet => Faaliyetler.FirstOrDefault(f => f.AnaFaaliyet)?.Grup ?? "";
         /// <summary>KREDİ LİMİTİ (müşteri ve tedarikçi kartı). Tür: Yok | Manuel (elle girilen TL tutar) | Dinamik (son N ayın aylık alım ortalaması × çarpan; müşteride satış, tedarikçide alış faturalarından her seferinde yeniden hesaplanır). Tedarikçide limit, tedarikçinin tanıdığı açık hesap limitidir; kullanım ödenmemiş alış faturalarıdır. Hesap: CariKartOrnek.LimitHesapla.</summary>
@@ -367,8 +369,9 @@ namespace WebApplication3.Data
             var c = string.IsNullOrEmpty(k.Kod) ? null : MutabakatOrnek.Bul(k.Kod);
             if (c != null) { s.Bakiye = c.BakiyeTl; s.BakiyeKaynak = c.Dovizler.Count == 0 ? "" : string.Join(" · ", c.Dovizler.Where(d => d.Net != 0).Select(d => $"{d.ParaBirimi} {d.Net.ToString("N2", Tr)}")); }
             s.ToplamRisk = RiskHesapla(k).ToplamRisk;   // kullanım = toplam cari risk (açık bakiye + içerideki çek / senet + riskli çek)
+            // vade farkı / kur farkı faturaları (VFF- / KFF-) alım sayılmaz: dinamik limiti büyütmesin
             var bugun = DateTime.Today; var bas = new DateTime(bugun.Year, bugun.Month, 1).AddMonths(-(s.Ay - 1));   // içinde bulunulan ay dahil son N takvim ayı
-            for (int i = 0; i < s.Ay; i++) { var ay = bas.AddMonths(i); var fat = c == null ? new List<MtHareket>() : c.Hareketler.Where(h => h.BelgeTipi == "Fatura" && (ted ? h.Alacak : h.Borc) > 0 && h.Tarih.Year == ay.Year && h.Tarih.Month == ay.Month).ToList(); s.Aylar.Add((ay.ToString("MMMM yyyy", Tr), Math.Round(fat.Sum(h => (ted ? h.Alacak : h.Borc) * KurTl(h.ParaBirimi)), 2), fat.Count)); }
+            for (int i = 0; i < s.Ay; i++) { var ay = bas.AddMonths(i); var fat = c == null ? new List<MtHareket>() : c.Hareketler.Where(h => h.BelgeTipi == "Fatura" && (ted ? h.Alacak : h.Borc) > 0 && !TahsilatOrnek.VfDisi(h) && h.Tarih.Year == ay.Year && h.Tarih.Month == ay.Month).ToList(); s.Aylar.Add((ay.ToString("MMMM yyyy", Tr), Math.Round(fat.Sum(h => (ted ? h.Alacak : h.Borc) * KurTl(h.ParaBirimi)), 2), fat.Count)); }
             s.AlimToplam = s.Aylar.Sum(a => a.Tutar); s.AylikOrtalama = Math.Round(s.AlimToplam / s.Ay, 2);
             if (s.Tur == "Manuel") { s.Limit = k.ManuelLimit; s.Aciklama = $"Manuel limit{(string.IsNullOrEmpty(k.LimitKim) ? "" : $" · {k.LimitKim} {k.LimitZaman:dd.MM.yyyy}")}"; }
             else if (s.Tur == "Dinamik") { s.Limit = Math.Round(s.AylikOrtalama * s.Carpan / 1000m, 0) * 1000m; s.Aciklama = $"Son {s.Ay} ay alım {s.AlimToplam.ToString("N0", Tr)} ₺ → aylık ortalama {s.AylikOrtalama.ToString("N0", Tr)} ₺ × {s.Carpan.ToString("0.##", Tr)} = {s.Limit.ToString("N0", Tr)} ₺ (1.000 ₺'ye yuvarlı; her açılışta yeniden hesaplanır)"; }
@@ -407,6 +410,14 @@ namespace WebApplication3.Data
             if (r.RiskliCekAdet > 0) n.Add($"bilgi: {r.RiskliCekAdet} çek takipte ({r.RiskliCek.ToString("N0", Tr)} ₺{(r.KarsiliksizAdet > 0 ? $"; {r.KarsiliksizAdet} karşılıksız / protestolu" : "")}; toplam riske dahil, durumu değiştirmez)");
             r.Neden = n.Count == 0 ? "Vadesi geçmiş ödeme yok." : string.Join(" · ", n);
             return r;
+        }
+        /// <summary>Satış durdurma uyarısı verir / kaldırır (Tahsilat › Vade Farkı Takibi). Durdurmada neden zorunlu. Kart günlüğüne "Satış Durumu" olarak yazılır. Dönüş: hata metni ya da null.</summary>
+        public static string SatisDurumuDegistir(CariKart k, bool durdur, string neden, string kullanici)
+        {
+            if (k == null || k.KartTipi != "Müşteri") return "Satış durdurma yalnız müşteri kartlarında verilir."; neden = (neden ?? "").Trim();
+            if (durdur && neden == "") return "Satış durdurma nedeni yazın."; if (durdur == k.SatisDurdu) return durdur ? $"{k.KisaAd} için satış zaten durdurulmuş." : $"{k.KisaAd} için satış zaten açık.";
+            lock (Kilit) { var z = DateTime.Now; k.SatisDurdu = durdur; k.SatisDurdurNeden = durdur ? neden : ""; k.SatisDurdurKim = kullanici ?? ""; k.SatisDurdurZaman = z; Gunluk(k, z, kullanici, "Satış Durumu", durdur ? "Açık" : "Durduruldu", durdur ? "Durduruldu" : "Açık", "Tahsilat", neden); }
+            return null;
         }
         /// <summary>Kredi limiti tanımı: tür + (manuel tutar | dinamik ay ve çarpan). Yetki: Muhasebe / Yönetici ("limit"). Dönüş: hata metni ya da null.</summary>
         public static string LimitDegistir(CariKart k, string tur, decimal manuelLimit, int ay, decimal carpan, string not, string kullanici)
@@ -589,6 +600,11 @@ namespace WebApplication3.Data
                 var t5 = T(8, "Burcu Aydın", "Satın Alma", "Avrupa Paper", "Yeni Kart", "Fason kaplama hizmeti.", Y("Hızlı Fason", "Hızlı Fason Kaplama", "", "", "Tedarikçi", "Yurtiçi", "Türkiye", "Tekirdağ", "Fason", "Grup Dışı", "Sadece Tedarikçi", "", "Ahmet Hızlı", "0532 999 00 11", "", "Peşin", "", F("Kağıt Grubu", "Süblime Kağıt", "", true, "", "", "", "", 8)));
                 t5.Kart.VergiNo = "1230098765"; t5.Kart.VergiDairesi = "Çorlu"; OnayaGonder(t5, "Burcu Aydın", t5.Tarih.AddHours(1)); Onayla(t5, "Reddet", "Vergi levhası ve imza sirküleri eksik; belgeler tamamlanınca yeniden gönderilsin.", "Muhasebe (Cari Açılış Onayı)", "Nazlı Erdem", t5.Tarih.AddHours(30));
                 _talepler.Sort((x, y) => y.Id.CompareTo(x.Id));
+                // ---- Yurtdışı · Özel Takip müşteri örneği (kullanıcı 16 Kas 2026: "tüm cari sınıflardan örnek koy" — §5 matrisinde müşteri sınıflarından yalnız bu bileşimin örneği yoktu).
+                //      Taleplerden SONRA eklenir: talep onayıyla açılan 120.018 kodunun kaymaması için (YeniKod = en büyük kod + 1).
+                var ozelYd = K("120.019", "Tashkent Print", "Tashkent Print Tekstil LLC", "UZ301245987", "", "Müşteri", "Yurtdışı", "Özbekistan", "Taşkent", "Özel Takip", "Grup Dışı", "Sadece Müşteri", "", "Rustam Karimov", "+998 71 200 44 55", "finance@tashkentprint.uz", "Peşin", "Uras Kimya", 210, "Vadesi geçmiş bakiye nedeniyle yurtdışı özel takip; peşin çalışılır.", F("Boya Grubu", "Emprime", "Selin Kara", true, "Plastisol"));
+                ozelYd.LimitTuru = "Manuel"; ozelYd.ManuelLimit = 400_000m; ozelYd.LimitNot = "Özel takip; limit düşürüldü."; ozelYd.LimitKim = "Nazlı Erdem"; ozelYd.LimitZaman = b.AddDays(-15).AddHours(11);
+                Gunluk(ozelYd, ozelYd.OlusturmaTarihi.AddHours(9), ozelYd.Olusturan, "Kart Açılışı", "", $"{ozelYd.KartTipi} kartı açıldı · {ozelYd.Sinif} · {ozelYd.Faaliyetler.Count} faaliyet satırı", "Kart Açılışı", "ERP cari açılışı");
             }
         }
     }

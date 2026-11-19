@@ -100,6 +100,7 @@ namespace WebApplication3.Data
         public static List<Rapor20CariEkstreViewModel> CariEkstre(string kod, DateTime bas, DateTime bit)
         {
             var cari = CariBul(kod) ?? Cariler[0];
+            var mc = MutabakatOrnek.Bul(cari.CardCode); if (mc != null) return KartEkstre(mc, cari, bas, bit);   // 19 Kas 2026: CARİ_MASTER kartları gerçek cari hareketlerinden (Tahsilat raporu / Cari Kartı ile aynı kaynak)
             bool tedarikci = cari.CardCode.StartsWith("320") || cari.CardCode.StartsWith("T");   // tedarikçi: alış faturası alacak, ödeme borç yazar
             var rnd = new Random(kod.GetHashCode());
             var liste = new List<Rapor20CariEkstreViewModel>();
@@ -127,6 +128,29 @@ namespace WebApplication3.Data
             return liste;
         }
 
+        /// <summary>
+        /// CARİ_MASTER kartı için ekstre: Cari Mutabakat hareketleri (fatura, tahsilat, çek, senet, kur farkı …) — Tahsilat raporunun bakiyesiyle aynı kaynak (kullanıcı 19 Kas 2026:
+        /// "muhasebe uyumu için Cari Ekstre Raporu da uyumlu olmalı"). Devir = başlangıçtan önceki hareketlerin TL neti; döviz satırları güncel kurla TL'ye çevrilir (İşlem PB sütunlarında belge tutarı).
+        /// Dönem sonu kümülatif bakiye = carinin TL bakiyesi (Cari Kartı · Alacak Takibi › Bakiye).
+        /// </summary>
+        static List<Rapor20CariEkstreViewModel> KartEkstre(MtCari mc, CariViewModel cari, DateTime bas, DateTime bit)
+        {
+            decimal Kur(string pb) => pb == "TL" || pb == "TRY" || string.IsNullOrEmpty(pb) ? 1m : (MutabakatOrnek.Kurlar.TryGetValue(pb, out var k) ? k : 1m);
+            List<MtHareket> h; lock (MutabakatOrnek.Kilit) h = mc.Hareketler.OrderBy(x => x.Tarih).ThenBy(x => x.Id).ToList();
+            bool tedarikci = mc.Kart?.KartTipi == "Tedarikçi"; var liste = new List<Rapor20CariEkstreViewModel>(); string sirket = mc.Kart?.Sirket ?? "Uras Kimya";
+            decimal devir = Math.Round(h.Where(x => x.Tarih.Date < bas.Date).Sum(x => (x.Borc - x.Alacak) * Kur(x.ParaBirimi)), 2), bakiye = devir; int no = 0;
+            liste.Add(new Rapor20CariEkstreViewModel { IslemNo = 0, SatirNo = 0, KayitTarihi = bas, VadeTarihi = bas, MuhatapKodu = cari.CardCode, MuhatapAdi = cari.CardName, Phone1 = cari.Phone, Street = cari.Address, Aciklama = "Devir Bakiyesi", IslemTipi = "Devir", AktarimTipi = "", TRYB = devir > 0 ? devir : 0, TRYA = devir < 0 ? -devir : 0, IslemB = devir > 0 ? devir : 0, IslemA = devir < 0 ? -devir : 0, IslemPB = "TRY", Sirket = sirket, BakiyeDurumu = "Açık", TRY_KmlBky = devir, Islem_KmlBky = devir });
+            foreach (var x in h.Where(x => x.Tarih.Date >= bas.Date && x.Tarih.Date <= bit.Date))
+            {
+                decimal kur = Kur(x.ParaBirimi), b = Math.Round(x.Borc * kur, 2), a = Math.Round(x.Alacak * kur, 2); bakiye = Math.Round(bakiye + b - a, 2);
+                liste.Add(new Rapor20CariEkstreViewModel { IslemNo = ++no, SatirNo = 1, KayitTarihi = x.Tarih, VadeTarihi = x.Vade ?? x.Tarih, MuhatapKodu = cari.CardCode, MuhatapAdi = cari.CardName, Phone1 = cari.Phone, Street = cari.Address,
+                    Aciklama = $"{x.BelgeTipi} - Belge No: {x.BelgeNo}{(string.IsNullOrWhiteSpace(x.Aciklama) ? "" : " · " + x.Aciklama)}{(x.ParaBirimi != "TL" && x.ParaBirimi != "TRY" ? $" · {x.ParaBirimi} kur {kur.ToString("N4", CariKartOrnek.Tr)}" : "")}",
+                    IslemTipi = x.BelgeTipi, AktarimTipi = x.IslemTipi ?? "X", IslemPB = x.ParaBirimi == "TL" ? "TRY" : x.ParaBirimi, Sirket = sirket, TRYB = b, TRYA = a, IslemB = x.Borc, IslemA = x.Alacak, TRY_KmlBky = bakiye, Islem_KmlBky = bakiye,
+                    BakiyeDurumu = x.BelgeTipi == "Fatura" ? (x.Kalan > 0.005m ? "Açık" : "Kapalı") : (x.KapamaDurumu ?? "—"), CheckNum = x.BelgeTipi == "Çek" || x.BelgeTipi == "Senet" ? x.BelgeNo : null });
+            }
+            return liste;
+        }
+
         // ---------------- hesap planı (mizan) ----------------
         public static readonly List<HesapViewModel> HesapPlani = new List<HesapViewModel>
         {
@@ -142,14 +166,38 @@ namespace WebApplication3.Data
         };
         private static HesapViewModel H(string kod, string ad, int seviye, string ust, string postable = "N") => new HesapViewModel { HesapKodu = kod, HesapAdi = ad, Level = seviye, Levels = seviye, ParentKodu = ust, Postable = postable };
 
+        /// <summary>Müşteri carilerinin muhasebe alt hesapları (120.01.xxx): borç / alacak = muhasebe hesap ekstresi satırları (EkstreKarsilastirmaOrnek.HesapSatirlari, bütün hareketler). Aynı hesap koduna düşen cariler toplanır.</summary>
+        public static List<HesapOzeti> MusteriMizani()
+        {
+            var l = new Dictionary<string, HesapOzeti>();
+            List<MtCari> cariler; lock (MutabakatOrnek.Kilit) cariler = MutabakatOrnek.Cariler.Where(c => c.Kart != null && c.Kart.KartTipi == "Müşteri").ToList();
+            foreach (var c in cariler)
+            {
+                if (EkstreKarsilastirmaOrnek.HesapTanimsiz(c.CariKodu)) continue; string kod = EkstreKarsilastirmaOrnek.HesapKodu(c.Kart); var (b, a) = MusteriHesapToplami(c);
+                if (l.TryGetValue(kod, out var v)) { v.ToplamBorc += b; v.ToplamAlacak += a; v.ToplamBakiye = v.ToplamBorc - v.ToplamAlacak; v.HesapAdi += " · " + c.Kart.KisaAd; }
+                else l[kod] = new HesapOzeti { HesapKodu = kod, HesapAdi = c.Kart.KisaAd, ToplamBorc = b, ToplamAlacak = a, ToplamBakiye = b - a, DistinctBy = 4 };
+            }
+            return l.Values.OrderBy(x => x.HesapKodu).ToList();
+        }
+        /// <summary>Carinin muhasebe hesabındaki fiş satırlarının borç / alacak toplamı (TL), bütün hareketler.</summary>
+        public static (decimal Borc, decimal Alacak) MusteriHesapToplami(MtCari c)
+        {
+            List<MtHareket> h; lock (MutabakatOrnek.Kilit) h = c.Hareketler.ToList(); if (h.Count == 0) return (0, 0);
+            var cari = EkstreKarsilastirmaOrnek.CariSatirlari(c, h.Min(x => x.Tarih), DateTime.Today.AddYears(5)); var hesap = EkstreKarsilastirmaOrnek.HesapSatirlari(c, cari);
+            return (Math.Round(hesap.Sum(s => s.Borc), 2), Math.Round(hesap.Sum(s => s.Alacak), 2));
+        }
         public static AktarimRaporuViewModel Mizan()
         {
             var rnd = new Random(28);
             var m = new AktarimRaporuViewModel { HesapHareketleri = new List<HesapOzeti>(), DovizliHesapHareketleri = new List<HesapOzetiDovizli>() };
+            // 19 Kas 2026: 120 ALICILAR müşteri alt hesaplarıyla (120.01.xxx = Cari Ekstre / Hesap Ekstresi Mutabakatı'ndaki muhasebe hesabı; borç / alacak = o hesabın fiş satırları) — Tahsilat raporu › Muhasebe Uyumu buna bakar
+            var musteri = MusteriMizani(); decimal m120B = musteri.Sum(x => x.ToplamBorc), m120A = musteri.Sum(x => x.ToplamAlacak);
             foreach (var h in HesapPlani)
             {
                 decimal borc = Math.Round((decimal)rnd.Next(50, 900) * 1000 + rnd.Next(0, 99), 2), alacak = Math.Round((decimal)rnd.Next(50, 900) * 1000 + rnd.Next(0, 99), 2);
                 if (h.HesapKodu.StartsWith("6")) borc = Math.Round(alacak * 0.1m, 2); if (h.HesapKodu.StartsWith("7")) alacak = Math.Round(borc * 0.05m, 2);
+                if (h.HesapKodu == "120.01.001") { m.HesapHareketleri.AddRange(musteri); continue; }
+                if (h.HesapKodu == "120" || h.HesapKodu == "120.01") { borc = m120B; alacak = m120A; }
                 m.HesapHareketleri.Add(new HesapOzeti { HesapKodu = h.HesapKodu, HesapAdi = h.HesapAdi, ToplamBorc = borc, ToplamAlacak = alacak, ToplamBakiye = borc - alacak, DistinctBy = h.Level });
             }
             foreach (var pb in new[] { "USD", "EUR" })

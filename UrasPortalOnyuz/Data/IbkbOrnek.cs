@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // İBKB BEYANNAME TAKİBİ — kalıcı veri (Mali İşler › Finans › Döviz ve Dış Ticaret Finansmanı; Yurtdışı Satış › İhracat Operasyon Takibi'nde kısayol)
 // 11 Kas 2026 ("finans ve ihracat arasında dinamik bir İBKB raporu olmalı; eksikler varsa ekle, raporu geliştir"): üretilmiş Rapor168 iskeleti yerine gerçek kayıt.
 // Kaynak: ihracat departmanının IMKB_LISTELERI.xlsx dosyası (2025-URAS 186, 2026-URAS 23, 2026-SELVİ 125 dosya) → Data/Tohum/ibkb-listeleri-2026-11.json (ilk açılışta uygulanır).
@@ -74,8 +74,9 @@ namespace WebApplication3.Data
     }
     public class IbkbBelgeIstek { public int Id { get; set; } public string Durum { get; set; } public string BankaIbkbNo { get; set; } public string BankaTarihi { get; set; } public string Not { get; set; } }
     /// <summary>İhracat cari bakiyesi kontrol kaydı (11 Kas 2026, "muhasebe mizanından ihracat cari bakiyelerini getir; bakiyeler düzenli kontrol edilsin"): kullanıcı carinin bakiyesini İBKB dosyalarıyla karşılaştırıp işaretler; son kontrol 30 günü geçince "Kontrol Gecikti".</summary>
-    public class IbkbBakiyeKontrol { public int Id { get; set; } public string CariKodu { get; set; } = ""; public DateTime Tarih { get; set; } public string Kullanici { get; set; } = ""; public string Durum { get; set; } = "Uyumlu"; public string Not { get; set; } = ""; public string BakiyeOzet { get; set; } = ""; public string FarkOzet { get; set; } = ""; }
-    public class IbkbBakiyeKontrolIstek { public string CariKodu { get; set; } public string Durum { get; set; } public string Not { get; set; } public string BakiyeOzet { get; set; } public string FarkOzet { get; set; } public IbkbGorevIstek Gorev { get; set; } }
+    /// <summary>Kaynak (19 Kas 2026): "İhracat" (İhracat Finansal Takibi › Cari Bakiyeler) ya da "Tahsilat" (Tahsilat raporu › Bakiye Karşılaştırması / Muhasebe Uyumu); aynı görev motoru, ayrı listeler ve bağlantılar.</summary>
+    public class IbkbBakiyeKontrol { public int Id { get; set; } public string CariKodu { get; set; } = ""; public DateTime Tarih { get; set; } public string Kullanici { get; set; } = ""; public string Durum { get; set; } = "Uyumlu"; public string Not { get; set; } = ""; public string BakiyeOzet { get; set; } = ""; public string FarkOzet { get; set; } = ""; public string Kaynak { get; set; } = "İhracat"; }
+    public class IbkbBakiyeKontrolIstek { public string CariKodu { get; set; } public string Durum { get; set; } public string Not { get; set; } public string BakiyeOzet { get; set; } public string FarkOzet { get; set; } public IbkbGorevIstek Gorev { get; set; } public string Kaynak { get; set; } }
     /// <summary>
     /// CARİ BAKİYE DÜZELTME GÖREVİ (12 Kas 2026; kullanıcı: "Kontrol Et'te açılan kısımda düzeltmeyi yapacak kişiye atama yapabilelim, mailine düşsün, rapor sayfamızda bekleyen görevler olsun,
     /// düzelttikten sonra muhasebeci onay versin; böylece performans takibi yapılır"). Akış: Atandı → (atanan) Düzeltildi → (muhasebeci) Onaylandı ya da İade Edildi → yeniden Düzeltildi …
@@ -84,7 +85,7 @@ namespace WebApplication3.Data
     public class IbkbGorevAdim { public DateTime Tarih { get; set; } public string Kullanici { get; set; } = ""; public string Islem { get; set; } = ""; public string Not { get; set; } = ""; }
     public class IbkbGorev
     {
-        public int Id { get; set; } public string CariKodu { get; set; } = ""; public string CariAd { get; set; } = ""; public string Sirket { get; set; } = "";
+        public int Id { get; set; } public string CariKodu { get; set; } = ""; public string CariAd { get; set; } = ""; public string Sirket { get; set; } = ""; public string Kaynak { get; set; } = "İhracat";
         public string Konu { get; set; } = ""; public string Aciklama { get; set; } = ""; public string BakiyeOzet { get; set; } = ""; public string FarkOzet { get; set; } = "";
         public string Atanan { get; set; } = ""; public string AtananKod { get; set; } = ""; public string AtananEposta { get; set; } = ""; public string Atayan { get; set; } = "";
         public DateTime Tarih { get; set; } public DateTime? Termin { get; set; } public string Oncelik { get; set; } = "Normal"; public string Durum { get; set; } = "Atandı";
@@ -94,7 +95,7 @@ namespace WebApplication3.Data
         public List<IbkbGorevAdim> Gecmis { get; set; } = new List<IbkbGorevAdim>();
     }
     /// <summary>Islem: ata (yeni) · guncelle (yeniden atama / termin) · duzeltildi · onayla · iade · iptal.</summary>
-    public class IbkbGorevIstek { public int Id { get; set; } public string Islem { get; set; } public string CariKodu { get; set; } public string Konu { get; set; } public string Aciklama { get; set; } public string Atanan { get; set; } public string AtananKod { get; set; } public string AtananEposta { get; set; } public string Termin { get; set; } public string Oncelik { get; set; } public string Not { get; set; } public int GonderimId { get; set; } }
+    public class IbkbGorevIstek { public int Id { get; set; } public string Islem { get; set; } public string CariKodu { get; set; } public string Konu { get; set; } public string Aciklama { get; set; } public string Atanan { get; set; } public string AtananKod { get; set; } public string AtananEposta { get; set; } public string Termin { get; set; } public string Oncelik { get; set; } public string Not { get; set; } public int GonderimId { get; set; } public string Kaynak { get; set; } }
     /// <summary>Müşteriye mutabakat gönderimi (12 Kas 2026; "Cari Bakiyeler'den müşteriye otomatik mutabakat gönderebilelim, ekstreyi veya bakiye olarak WhatsApp veya mail"): kayıt burada + Cari Mutabakat Yönetimi günlüğünde (MtGonderim). Icerik: Bakiye | Ekstre.</summary>
     public class CariGonderim { public int Id { get; set; } public string CariKodu { get; set; } = ""; public string CariAd { get; set; } = ""; public string Kanal { get; set; } = "E-posta"; public string Icerik { get; set; } = "Bakiye"; public string Alici { get; set; } = ""; public string AliciAd { get; set; } = ""; public DateTime Tarih { get; set; } public string Kullanici { get; set; } = ""; public string Konu { get; set; } = ""; public string Mesaj { get; set; } = ""; public string BakiyeOzet { get; set; } = ""; public string Durum { get; set; } = "Gönderildi"; public DateTime? YanitTarihi { get; set; } public string Not { get; set; } = ""; public int MtGonderimId { get; set; } public string MtBelgeNo { get; set; } = ""; }
     public class CariGonderimIstek { public int Id { get; set; } public string CariKodu { get; set; } public string Kanal { get; set; } public string Icerik { get; set; } public string Alici { get; set; } public string AliciAd { get; set; } public string Konu { get; set; } public string Mesaj { get; set; } public string BakiyeOzet { get; set; } public string Durum { get; set; } public string Not { get; set; } }
@@ -136,7 +137,7 @@ namespace WebApplication3.Data
     {
         public static readonly object Kilit = new object();
         static IbkbDepo _depo = new IbkbDepo(); static bool _yuklendi;
-        public const int TohumSurum = 2;   // 2 (11 Kas 2026): Excel'deki bağlanan DAB satırları banka tahsilatı kaydı olarak da türetilir (Eşleşti)
+        public const int TohumSurum = 3;   // 2 (11 Kas 2026): Excel'deki bağlanan DAB satırları banka tahsilatı kaydı olarak da türetilir (Eşleşti) · 3 (19 Kas 2026): eşleşmiş tahsilatların bir kısmına örnek İBKB belgesi (Hazırlandı / Bankaya Gönderildi / Banka Onayladı)
         public static readonly string[] TahsilatDurumlari = { "Eşleşmedi", "Eşleşti", "İBKB Düzenlendi" };
         public static readonly string[] BelgeDurumlari = { "Hazırlandı", "Bankaya Gönderildi", "Banka Onayladı", "İptal" };
         public static readonly string[] TahsilatKaynaklari = { "Banka (Otomatik)", "Elle", "Excel (Bağlanan DAB)" };
@@ -375,7 +376,23 @@ namespace WebApplication3.Data
                         _depo.Tahsilatlar.Add(new IhracatTahsilat { Id = idT++, Sirket = d.Sirket, Banka = p.Banka ?? "", Tarih = p.Tarih, Gonderen = d.Musteri, MusteriKodu = d.MusteriKodu, Tutar = p.Tutar, Doviz = p.Doviz, Referans = p.No ?? "", Aciklama = p.Not ?? "", Kaynak = "Excel (Bağlanan DAB)", Durum = "Eşleşti", DosyaId = d.Id, EslestirmeTarihi = DateTime.Today, Eslestiren = "Excel Tohumu", Olusturma = DateTime.Today, Olusturan = "Excel Tohumu" });
                     ekT = _depo.Tahsilatlar.Count;
                 }
+                // sürüm 3 (19 Kas 2026 gece; kullanıcı: "İhracat Finansal Takibi tüm sekmelere örnek veri"): İBKB Belgeleri sekmesi boş kalmasın — eşleşmiş ilk 6 tahsilata örnek İBKB belgesi; durumlar Hazırlandı / Bankaya Gönderildi / Banka Onayladı (banka İBKB no'lu); yalnız hiç belge yokken
+                int ekB = 0;
+                if (_depo.TohumSurumu < 3 && _depo.Belgeler.Count == 0)
+                {
+                    var durumlar = new[] { "Banka Onayladı", "Banka Onayladı", "Bankaya Gönderildi", "Bankaya Gönderildi", "Hazırlandı", "Hazırlandı" }; int bi = 0;
+                    foreach (var th in _depo.Tahsilatlar.Where(x => x.Durum == "Eşleşti" && x.DosyaId > 0).OrderByDescending(x => x.Tarih).Take(6).ToList())
+                    {
+                        var x = _depo.Dosyalar.FirstOrDefault(y => y.Id == th.DosyaId); if (x == null) continue; var kart = string.IsNullOrEmpty(x.MusteriKodu) ? null : CariKartOrnek.KartBul(x.MusteriKodu);
+                        var tarih = (th.Tarih ?? DateTime.Today).AddDays(2); int yil = tarih.Year, sira = _depo.Belgeler.Count(b => b.Tarih.Year == yil) + 1; string durum = durumlar[bi++ % durumlar.Length];
+                        var belge = new IbkbBelge { Id = _depo.Belgeler.Select(b => b.Id).DefaultIfEmpty(0).Max() + 1, No = $"İBKB-{yil}-{sira:0000}", Tarih = tarih, Sirket = x.Sirket, Banka = string.IsNullOrEmpty(th.Banka) ? (x.DabBanka ?? "") : th.Banka, DosyaId = x.Id, DosyaNo = x.DosyaNo, BeyannameNo = x.BeyannameNo, FaturaNo = x.FaturaNo, MusteriKodu = x.MusteriKodu, Musteri = x.Musteri, Ulke = x.Ulke != "" ? x.Ulke : (kart?.Ulke ?? ""),
+                            BeyannameTutar = x.Tutar, BeyannameDoviz = x.Doviz, Tutar = th.Tutar, Doviz = th.Doviz, TahsilatId = th.Id, TahsilatRef = th.Referans, TahsilatTarihi = th.Tarih, FiiliIhrac = x.Baslangic, Durum = durum, Not = "Örnek belge (tohum sürüm 3)", Olusturma = tarih.AddHours(10), Olusturan = "Örnek Tohumu" };
+                        if (durum == "Banka Onayladı") { belge.BankaIbkbNo = $"{(belge.Banka.Length > 2 ? belge.Banka.Substring(0, 2).ToUpperInvariant() : "BK")}-{yil}-{100000 + belge.Id * 37}"; belge.BankaTarihi = tarih.AddDays(5); }
+                        _depo.Belgeler.Add(belge); th.Durum = "İBKB Düzenlendi"; th.IbkbBelgeId = belge.Id; ekB++;
+                    }
+                }
                 _depo.TohumSurumu = TohumSurum; Yaz();
+                if (ekB > 0) Console.WriteLine($"[İBKB] örnek İBKB belgesi: {ekB}");
                 Console.WriteLine($"[İBKB] tohum uygulandı: {ek} dosya, {ekT} tahsilat ({t.Kaynak})");
             }
             catch (Exception ex) { Console.WriteLine("[İBKB] tohum uygulanamadı: " + ex.Message); }
@@ -523,11 +540,11 @@ namespace WebApplication3.Data
             kayit = null; gorev = null; if (d == null || Temiz(d.CariKodu) == "") return "Cari kodu gerekli."; Yukle();
             lock (Kilit)
             {
-                kayit = new IbkbBakiyeKontrol { Id = _depo.BakiyeKontrolleri.Select(x => x.Id).DefaultIfEmpty(0).Max() + 1, CariKodu = Temiz(d.CariKodu), Tarih = DateTime.Now, Kullanici = kullanici ?? "", Durum = Sec(d.Durum, BakiyeKontrolDurumlari, "Uyumlu"), Not = Temiz(d.Not), BakiyeOzet = Temiz(d.BakiyeOzet), FarkOzet = Temiz(d.FarkOzet) };
+                kayit = new IbkbBakiyeKontrol { Id = _depo.BakiyeKontrolleri.Select(x => x.Id).DefaultIfEmpty(0).Max() + 1, CariKodu = Temiz(d.CariKodu), Tarih = DateTime.Now, Kullanici = kullanici ?? "", Durum = Sec(d.Durum, BakiyeKontrolDurumlari, "Uyumlu"), Not = Temiz(d.Not), BakiyeOzet = Temiz(d.BakiyeOzet), FarkOzet = Temiz(d.FarkOzet), Kaynak = KaynakSec(d.Kaynak) };
                 _depo.BakiyeKontrolleri.Add(kayit);
                 if (d.Gorev != null && Temiz(d.Gorev.Atanan) != "")
                 {   // kontrolle birlikte düzeltme görevi ataması
-                    d.Gorev.Islem = "ata"; d.Gorev.CariKodu = kayit.CariKodu; if (Temiz(d.Gorev.Aciklama) == "") d.Gorev.Aciklama = kayit.Not;
+                    d.Gorev.Islem = "ata"; d.Gorev.CariKodu = kayit.CariKodu; d.Gorev.Kaynak = kayit.Kaynak; if (Temiz(d.Gorev.Aciklama) == "") d.Gorev.Aciklama = kayit.Not;
                     var h = GorevIslem(d.Gorev, kullanici, kayit, out gorev); if (h != null) { _depo.BakiyeKontrolleri.Remove(kayit); kayit = null; return h; }
                 }
                 Yaz();
@@ -536,8 +553,20 @@ namespace WebApplication3.Data
         }
         // ---------- cari bakiye düzeltme görevleri (12 Kas 2026)
         static string Kim(string kod) => string.IsNullOrEmpty(kod) ? "" : OrnekVeri.KullaniciAdi(kod);
+        static string KaynakSec(string k) => Temiz(k) == "Tahsilat" ? "Tahsilat" : "İhracat";
         public static IbkbGorev GorevBul(int id) { Yukle(); lock (Kilit) return _depo.Gorevler.FirstOrDefault(g => g.Id == id); }
         public static bool GorevAcik(IbkbGorev g) => g.Durum == "Atandı" || g.Durum == "Düzeltildi" || g.Durum == "İade Edildi";
+        // ---------- 19 Kas 2026: Tahsilat raporu (Bakiye Karşılaştırması / Muhasebe Uyumu) aynı görev motorunu "Kaynak = Tahsilat" ile kullanır ----------
+        public static List<object> GorevlerListe(string kaynak, string kod = null) { Yukle(); lock (Kilit) return _depo.Gorevler.Where(g => KaynakSec(g.Kaynak) == KaynakSec(kaynak) && (kod == null || g.CariKodu == kod)).OrderByDescending(g => GorevAcik(g)).ThenByDescending(g => g.Tarih).Select(GorevDto).ToList(); }
+        public static IbkbGorev AcikGorev(string kod, string kaynak) { Yukle(); lock (Kilit) return _depo.Gorevler.Where(g => g.CariKodu == kod && KaynakSec(g.Kaynak) == KaynakSec(kaynak) && GorevAcik(g)).OrderByDescending(g => g.Tarih).FirstOrDefault(); }
+        public static IbkbBakiyeKontrol SonKontrol(string kod, string kaynak) { Yukle(); lock (Kilit) return _depo.BakiyeKontrolleri.Where(x => x.CariKodu == kod && KaynakSec(x.Kaynak) == KaynakSec(kaynak)).OrderByDescending(x => x.Tarih).FirstOrDefault(); }
+        public static int KontrolSayisi(string kod, string kaynak) { Yukle(); lock (Kilit) return _depo.BakiyeKontrolleri.Count(x => x.CariKodu == kod && KaynakSec(x.Kaynak) == KaynakSec(kaynak)); }
+        public static object GorevDtoVer(IbkbGorev g) => GorevDto(g);
+        /// <summary>Banka tahsilatları (bankadan gelen döviz girişi) — Tahsilat raporu › Aylık Tahsilatlar "Yurtdışı · İhracat Banka Girişi" satırı için (19 Kas 2026, iki rapor senkron).</summary>
+        public static List<(IhracatTahsilat T, string DosyaNo, string BelgeNo)> TahsilatListesi() { Yukle(); lock (Kilit) return _depo.Tahsilatlar.Select(t => (t, _depo.Dosyalar.FirstOrDefault(x => x.Id == t.DosyaId)?.DosyaNo ?? "", _depo.Belgeler.FirstOrDefault(b => b.Id == t.IbkbBelgeId)?.No ?? "")).ToList(); }
+        public static List<object> GorevKisilerListe() => GorevKisiler();
+        static string GorevLink(IbkbGorev g) => KaynakSec(g.Kaynak) == "Tahsilat" ? $"/Rapor117?sekme=cari&gorev={g.Id}" : $"/IhracatFinans/Eski?sekme=bakiye&gorev={g.Id}";   /* 19 Kas 2026: Cari Bakiyeler (Mizan) eski raporda */
+        static string GorevEkranAd(IbkbGorev g) => KaynakSec(g.Kaynak) == "Tahsilat" ? "Tahsilat Raporu · Bakiye Karşılaştırması" : "İhracat Finansal Takibi (Eski) · Cari Bakiyeler";
         public static string GorevKaydet(IbkbGorevIstek d, string kullanici, out IbkbGorev kayit)
         {
             kayit = null; if (d == null) return "Veri yok."; Yukle();
@@ -557,7 +586,7 @@ namespace WebApplication3.Data
                 {
                     Id = _depo.Gorevler.Select(x => x.Id).DefaultIfEmpty(0).Max() + 1, CariKodu = kod, CariAd = k?.KisaAd ?? kod, Sirket = k?.Sirket ?? "", Konu = Temiz(d.Konu) == "" ? $"{kod} {k?.KisaAd} · cari bakiye düzeltme" : Temiz(d.Konu), Aciklama = Temiz(d.Aciklama),
                     BakiyeOzet = ozet, FarkOzet = fark, Atanan = Temiz(d.Atanan), AtananKod = Temiz(d.AtananKod), AtananEposta = Temiz(d.AtananEposta), Atayan = kim, Tarih = simdi, Termin = Tarih(d.Termin), Oncelik = Sec(d.Oncelik, GorevOncelikleri, "Normal"), Durum = "Atandı",
-                    KontrolId = kontrol?.Id ?? 0, GonderimId = d.GonderimId
+                    KontrolId = kontrol?.Id ?? 0, GonderimId = d.GonderimId, Kaynak = KaynakSec(d.Kaynak ?? kontrol?.Kaynak)
                 };
                 g.Gecmis.Add(new IbkbGorevAdim { Tarih = simdi, Kullanici = kim, Islem = "Atandı → " + g.Atanan, Not = not });
                 g.Bildirim = GorevBildir(g, kullanici, "Yeni görev"); _depo.Gorevler.Add(g); return null;
@@ -594,7 +623,7 @@ namespace WebApplication3.Data
             {
                 try
                 {
-                    lock (OrnekVeri.Mesajlar) OrnekVeri.Mesajlar.Add(new OrnekVeri.Mesaj { Id = OrnekVeri.SonMesajId() + 1, Gonderen = string.IsNullOrEmpty(kullanici) ? "it02" : kullanici, Alici = g.AtananKod, Tarih = DateTime.Now, Metin = $"[{baslik}] {g.Konu}\n{g.Aciklama}\nBakiye: {g.BakiyeOzet} · fark: {g.FarkOzet}\nTermin: {(g.Termin.HasValue ? g.Termin.Value.ToString("dd.MM.yyyy") : "—")} · öncelik {g.Oncelik}\nGörev: /IhracatFinans?sekme=bakiye&gorev={g.Id}" });
+                    lock (OrnekVeri.Mesajlar) OrnekVeri.Mesajlar.Add(new OrnekVeri.Mesaj { Id = OrnekVeri.SonMesajId() + 1, Gonderen = string.IsNullOrEmpty(kullanici) ? "it02" : kullanici, Alici = g.AtananKod, Tarih = DateTime.Now, Metin = $"[{baslik}] {g.Konu}\n{g.Aciklama}\nBakiye: {g.BakiyeOzet} · fark: {g.FarkOzet}\nTermin: {(g.Termin.HasValue ? g.Termin.Value.ToString("dd.MM.yyyy") : "—")} · öncelik {g.Oncelik}\nGörev ({GorevEkranAd(g)}): {GorevLink(g)}" });
                     l.Add("Portal mesajı → " + g.Atanan);
                 }
                 catch (Exception ex) { Console.WriteLine("[İBKB] görev mesajı yazılamadı: " + ex.Message); }
@@ -606,7 +635,8 @@ namespace WebApplication3.Data
         public static (string Konu, string Govde) GorevEposta(IbkbGorev g)
         {
             string konu = $"[Görev] {g.Konu} · termin {(g.Termin.HasValue ? g.Termin.Value.ToString("dd.MM.yyyy") : "—")}";
-            string govde = $"Sayın {g.Atanan},\n\n{g.CariKodu} {g.CariAd}{(g.Sirket != "" ? " (" + g.Sirket + ")" : "")} carisinde bakiye düzeltme görevi size atandı.\n\nMizan bakiyesi: {g.BakiyeOzet}\nİBKB dosyalarıyla fark: {g.FarkOzet}\nYapılacak: {(g.Aciklama == "" ? "—" : g.Aciklama)}\nÖncelik: {g.Oncelik} · Termin: {(g.Termin.HasValue ? g.Termin.Value.ToString("dd.MM.yyyy") : "—")}\n\nDüzeltmeyi yaptıktan sonra görevi \"Düzeltildi\" olarak işaretleyin; muhasebe onayıyla kapanır:\n{{portal}}/IhracatFinans?sekme=bakiye&gorev={g.Id}\n\n{g.Atayan} · İhracat Finansal Takibi";
+            bool th = KaynakSec(g.Kaynak) == "Tahsilat";
+            string govde = $"Sayın {g.Atanan},\n\n{g.CariKodu} {g.CariAd}{(g.Sirket != "" ? " (" + g.Sirket + ")" : "")} carisinde bakiye düzeltme görevi size atandı.\n\n{(th ? "Cari hesap bakiyesi" : "Mizan bakiyesi")}: {g.BakiyeOzet}\n{(th ? "Muhasebe uyumu farkı (beş kaynak)" : "İBKB dosyalarıyla fark")}: {g.FarkOzet}\nYapılacak: {(g.Aciklama == "" ? "—" : g.Aciklama)}\nÖncelik: {g.Oncelik} · Termin: {(g.Termin.HasValue ? g.Termin.Value.ToString("dd.MM.yyyy") : "—")}\n\nDüzeltmeyi yaptıktan sonra görevi \"Düzeltildi\" olarak işaretleyin; muhasebe onayıyla kapanır:\n{{portal}}{GorevLink(g)}\n\n{g.Atayan} · {GorevEkranAd(g)}";
             return (konu, govde);
         }
         /// <summary>Atanabilecek kişiler: portal kullanıcıları (muhasebe / finans önde) + Konsolide İK Paneli aktif personeli (ad · bölüm · e-posta).</summary>
@@ -645,7 +675,7 @@ namespace WebApplication3.Data
         /// <summary>Kişi bazında performans: açık, onay bekleyen, onaylanan, iade, termin aşımı, ortalama düzeltme süresi (gün), zamanında %.</summary>
         static List<object> GorevPerformans()
         {
-            return _depo.Gorevler.Where(g => g.Durum != "İptal").GroupBy(g => g.Atanan).Select(gr =>
+            return _depo.Gorevler.Where(g => g.Durum != "İptal" && KaynakSec(g.Kaynak) != "Tahsilat").GroupBy(g => g.Atanan).Select(gr =>
             {
                 var l = gr.ToList(); var biten = l.Where(g => g.DuzeltmeTarihi.HasValue).ToList(); var terminli = l.Where(g => g.Termin.HasValue && (g.DuzeltmeTarihi.HasValue || GorevAcik(g))).ToList();
                 int zamaninda = terminli.Count(g => g.DuzeltmeTarihi.HasValue ? g.DuzeltmeTarihi.Value.Date <= g.Termin.Value.Date : DateTime.Today <= g.Termin.Value.Date);
@@ -714,11 +744,11 @@ namespace WebApplication3.Data
                     string pb = dv.ParaBirimi == "TL" ? "TRY" : dv.ParaBirimi; var dk = kalanPb.FirstOrDefault(x => x.pb == pb);
                     return new { pb, dv.Borc, dv.Alacak, net = dv.Net, dv.Kur, tl = dv.TlKarsiligi, dv.AcikFaturaAdet, dv.AcikFaturaTutar, enEskiAcikFatura = D(dv.EnEskiAcikFatura), dv.BakiyeYasi, dv.EskiBakiyeUyari, dosyaKalan = dk?.kalan ?? 0, fark = R2(dv.Net - (dk?.kalan ?? 0)) };
                 }).ToList();
-                var son = _depo.BakiyeKontrolleri.Where(x => x.CariKodu == c.CariKodu).OrderByDescending(x => x.Tarih).FirstOrDefault();
+                var son = _depo.BakiyeKontrolleri.Where(x => x.CariKodu == c.CariKodu && KaynakSec(x.Kaynak) != "Tahsilat").OrderByDescending(x => x.Tarih).FirstOrDefault();
                 int? gun = son == null ? (int?)null : (DateTime.Today - son.Tarih.Date).Days;
                 string kontrolDurumu = son == null ? "Kontrol Yok" : gun > BakiyeKontrolGun ? "Kontrol Gecikti" : son.Durum;
                 // düzeltme görevi (açık olan) + müşteriye mutabakat gönderimleri + ana mutabakat yetkilisi (Cari Mutabakat Yönetimi kişileri)
-                var gorevler = _depo.Gorevler.Where(g => g.CariKodu == c.CariKodu).OrderByDescending(g => g.Tarih).ToList(); var acikGorev = gorevler.FirstOrDefault(GorevAcik);
+                var gorevler = _depo.Gorevler.Where(g => g.CariKodu == c.CariKodu && KaynakSec(g.Kaynak) != "Tahsilat").OrderByDescending(g => g.Tarih).ToList(); var acikGorev = gorevler.FirstOrDefault(GorevAcik);
                 var gonderimler = _depo.CariGonderimleri.Where(g => g.CariKodu == c.CariKodu).OrderByDescending(g => g.Tarih).ToList(); var sonG = gonderimler.FirstOrDefault();
                 var yetkili = EMutabakatOrnek.AnaYetkili(c);
                 sonuc.Add(new
@@ -730,7 +760,7 @@ namespace WebApplication3.Data
                     dovizler, bakiyeTl = c.BakiyeTl, c.BakiyeYasi, enEskiAcikFatura = D(c.EnEskiAcikFatura), c.EskiBakiyeUyari, c.DegerlemeRiski, sonHareket = D(c.SonHareket), sonMutabakat = D(c.SonMutabakat), acikFaturaAdet = c.Dovizler.Sum(dv => dv.AcikFaturaAdet),
                     dosyaSayisi = dosyalar.Count, acikDosya = acik.Count, dosyaKalan = kalanPb, farkVar = dovizler.Any(dv => Math.Abs(dv.fark) > 0.005m && dv.pb != "TRY"),
                     kontrol = son == null ? null : new { son.Id, tarih = son.Tarih.ToString("yyyy-MM-dd HH:mm"), son.Kullanici, son.Durum, son.Not, son.BakiyeOzet, son.FarkOzet, gun }, kontrolDurumu,
-                    kontrolSayisi = _depo.BakiyeKontrolleri.Count(x => x.CariKodu == c.CariKodu)
+                    kontrolSayisi = _depo.BakiyeKontrolleri.Count(x => x.CariKodu == c.CariKodu && KaynakSec(x.Kaynak) != "Tahsilat")
                 });
             }
             return sonuc;
@@ -764,7 +794,7 @@ namespace WebApplication3.Data
                     tahsilatlar = _depo.Tahsilatlar.OrderByDescending(t => t.Tarih).ThenByDescending(t => t.Id).Select(t => { var dsy = L.FirstOrDefault(x => x.Id == t.DosyaId); return new { t.Id, t.Sirket, t.Banka, tarih = D(t.Tarih), t.Gonderen, t.MusteriKodu, t.Tutar, t.Doviz, t.Referans, t.Aciklama, t.Kaynak, t.Durum, t.DosyaId, dosyaNo = dsy?.DosyaNo ?? "", beyannameNo = dsy?.BeyannameNo ?? "", t.IbkbBelgeId, belgeNo = _depo.Belgeler.FirstOrDefault(b => b.Id == t.IbkbBelgeId)?.No ?? "", eslestirme = D(t.EslestirmeTarihi), t.Eslestiren, olusturma = D(t.Olusturma), t.Olusturan }; }).ToList(),
                     cariBakiyeler = CariBakiyeler(L), bakiyeKontrolDurumlari = BakiyeKontrolDurumlari, bakiyeKontrolGun = BakiyeKontrolGun, bakiyeZamani = DateTime.Now.ToString("dd.MM.yyyy HH:mm"),
                     // düzeltme görevleri + müşteri mutabakat gönderimleri (12 Kas 2026)
-                    gorevler = _depo.Gorevler.OrderByDescending(g => GorevAcik(g)).ThenByDescending(g => g.Tarih).Select(GorevDto).ToList(), gorevDurumlari = GorevDurumlari, gorevOncelikleri = GorevOncelikleri, gorevKisiler = GorevKisiler(), gorevPerformans = GorevPerformans(),
+                    gorevler = _depo.Gorevler.Where(g => KaynakSec(g.Kaynak) != "Tahsilat").OrderByDescending(g => GorevAcik(g)).ThenByDescending(g => g.Tarih).Select(GorevDto).ToList(), gorevDurumlari = GorevDurumlari, gorevOncelikleri = GorevOncelikleri, gorevKisiler = GorevKisiler(), gorevPerformans = GorevPerformans(),
                     cariGonderimler = _depo.CariGonderimleri.OrderByDescending(g => g.Tarih).Take(200).Select(CariGonderimDto).ToList(), cariIcerikler = CariIcerikler,
                     belgeler = _depo.Belgeler.OrderByDescending(b => b.Tarih).ThenByDescending(b => b.Id).Select(b => new { b.Id, b.No, tarih = D(b.Tarih), b.Sirket, b.Banka, b.DosyaId, b.DosyaNo, b.BeyannameNo, b.FaturaNo, b.MusteriKodu, b.Musteri, b.Ulke, b.BeyannameTutar, b.BeyannameDoviz, b.Tutar, b.Doviz, b.TahsilatId, b.TahsilatRef, tahsilatTarihi = D(b.TahsilatTarihi), fiiliIhrac = D(b.FiiliIhrac), b.Durum, b.BankaIbkbNo, bankaTarihi = D(b.BankaTarihi), b.Not, olusturma = b.Olusturma.ToString("yyyy-MM-dd HH:mm"), b.Olusturan }).ToList(),
                     dosyalar = L.Select(x =>

@@ -257,7 +257,8 @@ namespace WebApplication3.Data
                     G("krediler-finansman", "Krediler ve Finansman", R("Kredi Raporu", "KrediYapilandirma", "Index")),
                     G("finansal-araclar", "Finansal Araçlar", R("Vade Tarihine Göre Çek ve Senet Özeti", "CekOzet", "Index"), R("Çek Akıbeti Raporu"), R("Çek Akıbeti Kontrol Raporu"), R("Çek Konsolide Raporu"), R("Çek Konsolide Kontrol Raporu"), R("Çek Ekstre Raporu"), R("Günlük Çek Nakit Tahsilat"), R("İbraz (Çek Depositi)"), R("Vadeli Çek İbrazı"), R("Tahsilat İbraz Çek Bordrosu"), R("Grup İçi Çek Devirleri")),   // Muhasebe Çek Akıbeti Raporu ve Muhasebe Çek İbraz Kontrolü 28 Eki 2026'da Muhasebe › Çek ve Senet Muhasebesi'ne taşındı
                     // 11 Kas 2026: İhracat Tahsilat Raporu + İBKB Beyanname Takibi → İHRACAT FİNANSAL TAKİBİ (tek, konsolide, dinamik; Controllers/IhracatFinansController.cs, Data/IbkbOrnek.cs); eski adlar "(Kaldırıldı)" rozetiyle
-                    G("doviz-dis-ticaret", "Döviz ve Dış Ticaret Finansmanı", R("Kur Farkı"), R("İhracat Finansal Takibi", "IhracatFinans", "Index"),
+                    // 19 Kas 2026: İhracat Finansal Takibi = Tahsilat gövdesi (yurtdışı) + ihracat sekmeleri (tek rapor); eski sayfa "İhracat Finansal Takibi (Eski)" (/IhracatFinans/Eski: satışlar, banka tahsilatı eşleştirme, cari bakiyeler, vade takibi)
+                    G("doviz-dis-ticaret", "Döviz ve Dış Ticaret Finansmanı", R("Kur Farkı"), R("İhracat Finansal Takibi", "IhracatFinans", "Index"), R("İhracat Finansal Takibi (Eski)", "IhracatFinans", "Eski"),
                         X("İBKB Beyanname Takibi", "İhracat Finansal Takibi'ne katıldı: beyanname / İBKB dosyaları, banka tahsilatları ve İBKB belgeleri tek raporda (Beyanname / İBKB Dosyaları sekmesi).", "İhracat Finansal Takibi", "/IhracatFinans?sekme=liste"),
                         X("İhracat Tahsilat Raporu", "İhracat Finansal Takibi'ne katıldı: bankadan gelen ihracat tahsilatları Banka Tahsilatları sekmesinde ihracat dosyasıyla eşleştirilir, İBKB belgesi oradan üretilir.", "İhracat Finansal Takibi", "/IhracatFinans?sekme=tahsilat")),
                     // Bütçe Raporu: sabit giderler (personel, kira …), tedarik zinciri / hammadde ve genel giderler ayrı; bütçe – gerçekleşen – sapma (Data/ButceOrnek.cs)
@@ -307,7 +308,7 @@ namespace WebApplication3.Data
                   U("yurtdisi-satis", "Yurtdışı Satış",
                     G("ihracat-satis", "İhracat Satış İşlemleri", R("Yurtdışı Satış Siparişi", "Rapor94", "Ihracat")),
                     // İhracat Belge Gönderim Takibi: akreditif ibrazı / vesaik / orijinal evrak gönderileri — kargo firması, takip no, ibraz son tarihi, banka sonucu (Data/IhracatBelgeOrnek.cs)
-                    G("ihracat-operasyon", "İhracat Operasyon Takibi", R("İhracat Dosya Raporu"), R("İhracat Belge Gönderim Takibi", "IhracatBelge", "Index"), R("İhracat Finansal Takibi", "IhracatFinans", "Index"), R("Yurtdışı Müşteri Kartları"))),   // 11 Kas 2026: İhracat Finansal Takibi (tahsilat + İBKB birleşik) iki menüde de doğrudan açılır
+                    G("ihracat-operasyon", "İhracat Operasyon Takibi", R("İhracat Dosya Raporu"), R("İhracat Belge Gönderim Takibi", "IhracatBelge", "Index"), R("İhracat Finansal Takibi", "IhracatFinans", "Index"), R("İhracat Finansal Takibi (Eski)", "IhracatFinans", "Eski"), R("Yurtdışı Müşteri Kartları"))),   // 11 Kas 2026: İhracat Finansal Takibi (tahsilat + İBKB birleşik) iki menüde de doğrudan açılır
                   U("depo-siparis", "Depo ve Sipariş Yönetimi",
                     G("siparis-hazirlama", "Sipariş Hazırlama / Depo Süreçleri")),
                   U("sevkiyat-lojistik", "Sevkiyat ve Lojistik",

@@ -20,12 +20,24 @@ namespace WebApplication3.Controllers
         private static readonly System.Globalization.CultureInfo Tr = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
         private static string P(decimal? v) => (v ?? 0).ToString("N2", Tr);
 
+        /// <summary>
+        /// 19 Kas 2026 (kullanıcı: "iki ayrı rapor oldu, tek raporda birleştirelim"): /IhracatFinans = YENİ rapor — Tahsilat raporu gövdesi (Views/Rapor117/Index.cshtml, ihracat kipi: başlık İhracat Finansal Takibi,
+        /// bölge süzgeci Yurtdışı'na kilitli, Tahsilat'ın 16 sekmesi) + eski rapordan taşınan İhracat Özeti · Beyanname / İBKB Dosyaları · İBKB Belgeleri · Müşteri Bazlı · Şube Bakiyeleri · DAB Bağlantıları (_IhracatPaneller).
+        /// Eski rapor /IhracatFinans/Eski ("İhracat Finansal Takibi (Eski)"): İhracat Satışları, Banka Tahsilatları, Tamamlanan, Cari Bakiyeler (Mizan), Vade Takibi. ?gorev=ID bağlantıları (Cari Bakiyeler) Eski'ye gider.
+        /// </summary>
         [HttpGet(""), HttpGet("Index")]
         public IActionResult Index(string sekme, int gorev = 0)
         {
-            ViewData["Title"] = "İhracat Finansal Takibi";
-            ViewBag.Sekme = gorev > 0 ? "bakiye" : sekme ?? "ozet"; ViewBag.Gorev = gorev;   // ?gorev=ID: e-posta / portal mesajındaki bağlantı; görev penceresi açılır
-            return View();
+            if (gorev > 0) return Redirect("/IhracatFinans/Eski?sekme=bakiye&gorev=" + gorev);
+            ViewData["Title"] = "İhracat Finansal Takibi"; ViewBag.Ihracat = true; ViewBag.Kod = ""; ViewBag.No = "";
+            return View("~/Views/Rapor117/Index.cshtml");
+        }
+        [HttpGet("Eski")]
+        public IActionResult Eski(string sekme, int gorev = 0)
+        {
+            ViewData["Title"] = "İhracat Finansal Takibi (Eski)";
+            ViewBag.Sekme = gorev > 0 ? "bakiye" : sekme ?? "satis"; ViewBag.Gorev = gorev;   // ?gorev=ID: e-posta / portal mesajındaki bağlantı; görev penceresi açılır
+            return View("~/Views/IhracatFinans/Index.cshtml");
         }
 
         [HttpGet("Veri")]

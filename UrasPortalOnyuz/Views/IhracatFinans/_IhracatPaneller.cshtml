@@ -1,0 +1,84 @@
+@* İHRACAT PANELLERİ — 19 Kas 2026 (kullanıcı: "İhracat Finansal Takibi iki ayrı rapor oldu, tek raporda birleştirelim; Beyanname / İBKB Dosyaları, İBKB Belgeleri, Müşteri Bazlı, Şube Bakiyeleri, DAB Bağlantıları ve Özet'i yeni rapora taşı, eskiden kaldır").
+   Yeni İhracat Finansal Takibi = Tahsilat raporu gövdesi (Views/Rapor117/Index.cshtml, ihracat kipi: bölge Yurtdışı kilitli) + bu paneller. Kök #ibkb (ib-gomulu): kendi sekme şeridi gizli (Tahsilat şeridinin ib* sekmeleri
+   window.IhracatFinans.sekme ile seçer), kendi süzgeç çubuğu (#ibFiltre) ve KPI'ları (#ibKpi) panelin üstünde, Excel Tahsilat'ın düğmesinden (delegasyon). Betik wwwroot/js/ihracat-finans.js (iki sayfa ortak), stil wwwroot/css/ihracat-finans.css.
+   Eski rapor (/IhracatFinans/Eski) İhracat Satışları · Banka Tahsilatları (Açık) · Tamamlanan Tahsilatlar · Cari Bakiyeler (Mizan) · Vade Takibi sekmelerini taşır. *@
+@{
+    var ibSekmeler = new[] { ("ozet", "Özet", "fa-chart-pie"), ("liste", "Beyanname / İBKB Dosyaları", "fa-table-list"), ("belgeler", "İBKB Belgeleri", "fa-file-signature"), ("musteri", "Müşteri Bazlı", "fa-address-card"), ("sube", "Şube Bakiyeleri", "fa-globe"), ("dab", "DAB Bağlantıları", "fa-link") };
+    var ozetKartlar = new (string id, string ikon, string baslik, string stil)[] {
+        ("ozetSirket", "fa-building", "Şirket × Yıl · İBKB Dosyaları", null),
+        ("ozetTemsilci", "fa-user-tie", "Yıl × Satış Temsilcisi · İhracat Rakamları", "max-height:48vh"),
+        ("ozetSatis", "fa-cart-flatbed", "İhracat Satışları Özeti · Yıl × Şirket", null),
+        ("ozetDoviz", "fa-coins", "Döviz Bazında Bedel", null),
+        ("ozetUlke", "fa-earth-europe", "Ülke Bazında İhracat", "max-height:44vh"),
+        ("ozetDurum", "fa-chart-pie", "DAB / İBKB ve Takip Durumu", null),
+        ("ozetTahsilat", "fa-building-columns", "Banka Tahsilatı · İBKB Özeti · Yıl × Banka", null),
+        ("ozetSube", "fa-globe", "Yurtdışı Şube Bakiyeleri", "max-height:44vh"),
+        ("ozetGorev", "fa-list-check", "Bekleyen Görevler · Cari Düzeltme Atamaları", "max-height:40vh"),
+        ("ozetGorevPerf", "fa-ranking-star", "Düzeltme Performansı · Kişi Bazında", "max-height:36vh"),
+        ("ozetBakiye", "fa-scale-balanced", "Cari Bakiye Özeti (Mizan) · Döviz", null),
+        ("ozetAy", "fa-calendar-days", "Aylık Dosya Akışı", "max-height:44vh") };
+    var sol = new[] { "ozetSirket", "ozetTemsilci", "ozetSatis", "ozetDoviz", "ozetUlke" };
+}
+<div class="na ib2 ib-gomulu" id="ibkb" data-sekme="ozet" data-gorev="0" data-kullanici="@(User?.Identity?.Name ?? "")" data-kullanici-ad="@WebApplication3.Data.OrnekVeri.KullaniciAdi(User?.Identity?.Name ?? "")">
+    <div class="na-sekme" id="ibSekmeler" data-dinamik="kapali">
+        @foreach (var s in ibSekmeler) { <button type="button" data-p="@s.Item1"><i class="fas @s.Item3 me-1"></i>@s.Item2</button> }
+    </div>
+    @* araç satırı: ihracat süzgeçleri (Şirket · Yıl · DAB / İBKB Durumu · Takip · Döviz, çoklu seçim) + İhracat Dosyası Ekle; Banka Tahsilatı Ekle ve Excel düğmeleri betik bağı için gizli (Excel Tahsilat'ın düğmesinden) *@
+    <div class="ib2-arac">
+        <div id="ibFiltre" style="flex:1 1 auto;min-width:0"></div>
+        <button type="button" class="btn btn-primary btn-sm" id="ibYeni" title="Yeni beyanname / İBKB dosyası"><i class="fas fa-plus me-1"></i>İhracat Dosyası Ekle</button>
+        <a class="btn btn-light btn-sm border" href="/IhracatFinans/Eski?sekme=tahsilat" target="_blank" rel="noopener" title="Banka tahsilatı eşleştirme, İhracat Satışları, Cari Bakiyeler (Mizan) ve Vade Takibi eski raporda sürer"><i class="fas fa-clock-rotate-left me-1"></i>Eski Rapor</a>
+        <button type="button" id="ibTahsilatYeni" hidden></button><button type="button" id="ibExcel" hidden></button><span id="ibKalici" hidden></span>
+    </div>
+    <div class="na-kpi" id="ibKpi" data-dinamik="kapali"></div>
+
+    <div class="na-panel" data-p="ozet">
+        @* 19 Kas 2026 gece (kullanıcı: "Tahsilat Özeti'ndeki bilgileri Özet'e taşı, sekmeyi kaldır"): yurtdışı tahsilat özeti (14 kutu, bekleyen işler, temsilci, şirket) ihracat özetlerinin üstünde; tahsilat-takip.js cizOzet çizer *@
+        <div class="tk-ozet-ic">
+            <div class="na-kart-b" style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px 8px 0 0;margin-bottom:6px"><span><i class="fas fa-hand-holding-dollar me-1"></i>Yurtdışı Tahsilat Özeti</span><span class="not">kutular ve bekleyen işler bu rapordaki tahsilat sekmelerini açar</span></div>
+            @await Html.PartialAsync("~/Views/Rapor117/_TahsilatOzet.cshtml")
+        </div>
+        <div class="na-kart-b" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px 8px 0 0;margin-bottom:6px"><span><i class="fas fa-file-shield me-1"></i>İhracat Özetleri</span><span class="not">beyanname / İBKB dosyaları, satışlar, banka tahsilatı, şube, görevler</span></div>
+        <div class="row g-2">
+            @foreach (var kolon in new[] { sol, ozetKartlar.Select(k => k.id).Except(sol).ToArray() })
+            {
+                <div class="col-lg-6">
+                    @foreach (var k in ozetKartlar.Where(k => kolon.Contains(k.id)))
+                    {
+                        <div class="na-kart"><div class="na-kart-b"><span><i class="fas @k.ikon me-1"></i>@k.baslik</span><span class="not" id="ibNot-@k.id"></span></div><div class="na-kart-g p-0"><div class="table-responsive" style="@k.stil"><table class="na-tablo ib2-tablo" id="ibTablo-@k.id" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    @foreach (var s in ibSekmeler.Where(x => x.Item1 != "ozet"))
+    {
+        <div class="na-panel" data-p="@s.Item1">
+            @if (s.Item1 == "sube") { <div class="ib2-tahsilat-ozet" id="ibSubeOzet" style="background:#eef2ff;border-color:#c7d2fe"></div> }
+            <div class="na-kart">
+                <div class="na-kart-b"><span><i class="fas @s.Item3 me-1"></i>@s.Item2</span><span class="not" id="ibNot-@s.Item1"></span></div>
+                <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:@(s.Item1 == "sube" ? "46vh" : "70vh")"><table class="na-tablo ib2-tablo" id="ibTablo-@s.Item1" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+            </div>
+            @if (s.Item1 == "sube")
+            {
+                <div class="na-kart" id="ibSubeDetay" style="display:none;border-color:#a5b4fc">
+                    <div class="na-kart-b" style="background:#eef2ff"><span id="ibSubeDetayBaslik"><i class="fas fa-globe me-1"></i>Şube Detayı</span><span class="not" id="ibSubeDetayNot"></span></div>
+                    <div class="na-kart-g p-0">
+                        <div class="ib2-sube-bilgi" id="ibSubeBilgi"></div>
+                        <div class="table-responsive" style="max-height:40vh"><table class="na-tablo ib2-tablo" id="ibTablo-subeYil" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+                        <div class="na-kart-b" style="border-top:1px solid #e2e8f0"><span><i class="fas fa-paper-plane me-1"></i>Ekstre / Mutabakat Gönderimleri</span><span class="not" id="ibNot-subeGonderim"></span></div>
+                        <div class="table-responsive" style="max-height:30vh"><table class="na-tablo ib2-tablo" id="ibTablo-subeGonderim" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @* dosya ekle / düzenle · dosya incelemesi · belge durumu · şube · görev modalı (içerik betikten) *@
+    <div class="modal fade" id="ibModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header py-2"><h6 class="modal-title" id="ibMBaslik">İhracat Dosyası</h6><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button></div>
+        <div class="modal-body" id="ibMGovde"></div>
+        <div class="modal-footer py-1"><span class="me-auto text-muted" style="font-size:.64rem" id="ibMNot"></span><button type="button" class="btn btn-light btn-sm border" data-bs-dismiss="modal">Vazgeç</button><button type="button" class="btn btn-primary btn-sm" id="ibMKaydet"><i class="fas fa-floppy-disk me-1"></i>Kaydet</button></div>
+    </div></div></div>
+</div>

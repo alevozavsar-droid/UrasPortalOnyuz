@@ -1,108 +1,287 @@
 ﻿@{
-    ViewData["Title"] = "Tahsilat";
+    // 19 Kas 2026 (kullanıcı: "İhracat Finansal Takibi iki ayrı rapor oldu, tek raporda birleştirelim"): İHRACAT KİPİ — IhracatFinansController.Index bu görünümü ViewBag.Ihracat = true ile sunar:
+    //   başlık "İhracat Finansal Takibi", bölge süzgeci Yurtdışı'na kilitli (seçenekte Yurtiçi yok), Tahsilat'ın 16 sekmesi + başa ihracat sekmeleri (Özet, Beyanname / İBKB Dosyaları, İBKB Belgeleri, Müşteri Bazlı, Şube Bakiyeleri, DAB Bağlantıları;
+    //   Views/IhracatFinans/_IhracatPaneller.cshtml, ihracat-finans.js). Tahsilat'ın kendi Özet'i bu kipte "Tahsilat Özeti". Eski ihracat sayfası /IhracatFinans/Eski.
+    bool ihracat = ViewBag.Ihracat == true;
+    ViewData["Title"] = ihracat ? "İhracat Finansal Takibi" : "Tahsilat";
     Layout = "~/Views/Shared/_Layout.cshtml";
     string onKod = (string)ViewBag.Kod ?? "";
     string onNo = (string)ViewBag.No ?? "";
+    string onSekme = Context.Request.Query["sekme"].ToString();
+    // Sekmeler tek satır; adlarında sayaç yok. yeni · liste · fatura sekmeleri Tahsilat giriş panellerini (#th, tahsilat.js) gösterir; adat sekmesi Adat Hesaplama'yı (#ad, adat.js).
+    // 17 Kas 2026 (kullanıcı): "Özet sekmesini en sona al" → Özet şeridin sonunda; rapor ilk sekmeyle (Alacak Takibi) açılır.
+    // 19 Kas 2026 (kullanıcı): "yapılan tahsilatları da ekleyelim … Aylık Tahsilatlar · Yönteme Göre ve Vade Ayına Göre Alınan Çek · Senet gibi; ayrı sekmede ay ay yapılması gereken tahsilat ve gerçekleşen,
+    // ne kadar gecikmeli; kesilmesi gereken vade farkı ↔ gerçekleşen" → Aylık Tahsilatlar (aylik) ve Planlanan ↔ Gerçekleşen (plan) sekmeleri.
+    // "Vade Farkı Faturalama ile Kur Farkı / Vade Farkı Faturaları arasında ne fark var anlamadım" → adlar: Kesilecek Vade Farkı (tahsilat sırasında doğan, faturası kesilmemiş) · Kesilen Fark Faturaları (kaynağıyla).
+    // 19 Kas 2026 (kullanıcı): "Müşteri Cari Kartları sekmesini getir, filtreleme tahsilat raporundaki tarzda" → kartlar sekmesi (aynı süzgeç çubuğu)
+    // 19 Kas 2026 (kullanıcı): Yeni Tahsilat EN SOLDA (giriş ekranı; yeşil sekme); rapor açılışta yine Alacak Takibi'yle açılır (tahsilat-takip.js varsayılan sekme 'cari')
+    // 19 Kas 2026 gece (kullanıcı): "Yeni Tahsilat" şeritte sekme değil, SABİT DÜĞME — süzgeç çubuğunda Temizle'nin solunda, çubuğun gizli olduğu sekmelerde başlık sağında (her sekmede görünür; tkYeniDgm)
+    var sekmeler = new[] { ("cari", "Alacak Takibi", "fa-users"), ("kartlar", "Müşteri Cari Kartları", "fa-address-card"), ("acik", "Açık Faturalar", "fa-file-invoice"), ("hafta", "Haftalık Beklenen", "fa-calendar-week"),
+        ("banka", "Banka Tahsilatları", "fa-building-columns"), ("liste", "Tahsilatlar", "fa-list"),
+        ("aylik", "Aylık Tahsilatlar", "fa-calendar-days"), ("plan", "Planlanan ↔ Gerçekleşen", "fa-scale-balanced"),
+        ("surec", "Aylık Süreç", "fa-phone-volume"), ("vftakip", "Vade Farkı Takibi", "fa-user-clock"), /* 19 Kas 2026 gece (kullanıcı): "vade" (Gecikmeli Tahsilatlar) ayrı sekme değil — Tahsilatlar sekmesinin altında (#tkVadeKart) */ ("fatura", "Kesilen Fark Faturaları", "fa-file-invoice-dollar"), ("kapama", "Kapama Robotu", "fa-robot"), ("adat", "Adat Hesaplama", "fa-chart-line"), ("ozet", "Özet", "fa-chart-pie") };
+    // 19 Kas 2026 gece (kullanıcı: "aynı düzenlemeyi Tahsilat raporu için yap"): Tahsilat şeridi de içeriğe göre gruplu, çizgiyle ayrılmış — Özet | Alacak · Müşteri (Alacak Takibi, Müşteri Cari Kartları, Açık Faturalar, Haftalık Beklenen) | Tahsilat (Banka Tahsilatları, Tahsilatlar, Aylık Tahsilatlar, Planlanan ↔ Gerçekleşen, Aylık Süreç, Vade Farkı Takibi, Kesilen Fark Faturaları, Kapama Robotu, Adat Hesaplama); rapor yine Alacak Takibi ile açılır
+    {
+        var siraT = new[] { "ozet", "cari", "kartlar", "acik", "hafta", "banka", "liste", "aylik", "plan", "surec", "vftakip", "fatura", "kapama", "adat" };
+        sekmeler = siraT.Select(k => sekmeler.First(s => s.Item1 == k)).ToArray();
+    }
+    var grupIlk = new[] { "cari", "banka" };
+    if (ihracat)
+    {
+        var ibSek = new[] { ("ibOzet", "Özet", "fa-chart-pie"), ("ibListe", "Beyanname / İBKB Dosyaları", "fa-table-list"), ("ibBelgeler", "İBKB Belgeleri", "fa-file-signature"), ("ibMusteri", "Müşteri Bazlı", "fa-address-card"), ("ibSube", "Şube Bakiyeleri", "fa-globe"), ("ibDab", "DAB Bağlantıları", "fa-link") };
+        // 19 Kas 2026 gece (kullanıcı): İhracat Finansal Takibi'nde Vade Farkı Takibi sekmesi YOK (yurtdışında ay sonu / robot kesimi yok, vade farkı tahsilatta kesilir); Tahsilat raporunda duruyor
+        // (kullanıcı): Tahsilat Özeti sekmesi de yok — gövdesi İhracat Özeti'nin başında (_TahsilatOzet partial'ı _IhracatPaneller'de)
+        // (kullanıcı, 19 Kas gece): Yeni Tahsilat İLK sekme; sonra ihracat sekmeleri, sonra öbür tahsilat sekmeleri; rapor yine İhracat Özeti ile açılır
+        // (kullanıcı): Haftalık Beklenen de ayrı sekme değil — tabloları Planlanan ↔ Gerçekleşen'in altında
+        // (kullanıcı): şerit tek satıra sığsın → ihracat kipinde kısa sekme adları (anlam aynı; uzun ad ipucunda)
+        // (kullanıcı, sonraki istek): kısaltmalar geri alındı — sekme adları Tahsilat raporuyla aynı, yalnız "Adat Hesaplama" → "Adat"; şerit küçük yazı / ikonsuz düzenle sığar, taşarsa yatay kayar
+        var kisa = new Dictionary<string, string> { ["adat"] = "Adat" };
+        // (kullanıcı, 19 Kas gece): sekmeler içeriğe göre GRUPLU ve çizgiyle ayrılmış — Özet | Alacak · Müşteri (Alacak Takibi, Müşteri Cari Kartları, Açık Faturalar, Müşteri Bazlı) | Tahsilat (Banka Tahsilatları, Tahsilatlar, Aylık Tahsilatlar, Planlanan ↔ Gerçekleşen, Aylık Süreç, Kesilen Fark Faturaları, Kapama Robotu, Adat) | İhracat · İBKB (Beyanname / İBKB Dosyaları, İBKB Belgeleri, DAB Bağlantıları, Şube Bakiyeleri)
+        var tum = ibSek.Concat(sekmeler).Select(s => kisa.TryGetValue(s.Item1, out var k) ? (s.Item1, k, s.Item3) : s).ToList();
+        var sira = new[] { "ibOzet", "cari", "kartlar", "acik", "ibMusteri", "banka", "liste", "aylik", "plan", "surec", "fatura", "kapama", "adat", "ibListe", "ibBelgeler", "ibDab", "ibSube" };
+        sekmeler = sira.Select(k => tum.First(s => s.Item1 == k)).ToArray();
+        grupIlk = new[] { "cari", "banka", "ibListe" };
+    }
+    var tablolu = new[] { ("cari", "Alacak Takibi", "fa-users"), ("kartlar", "Müşteri Cari Kartları", "fa-address-card"), ("acik", "Açık Faturalar", "fa-file-invoice"), ("banka", "Banka Tahsilatları", "fa-building-columns"), ("vftakip", "Vade Farkı Takibi", "fa-user-clock"), ("kapama", "Kapama Robotu", "fa-robot") };
+    // 19 Kas 2026 (kullanıcı): KAPAMA ROBOTU sekmesi — süzgeç çubuğu / cari aramasıyla daraltıp toplu ya da tek cari bazında mutabakat kapama (açık ödemeleri açık faturalarla birebir + FIFO eşleştirip kapatır; KapamaOrnek)
+    // 19 Kas 2026 (kullanıcı: "ayrı sekme yerine yeni tahsilat eklerken kessek daha sağlıklı; bu sekme vadesi geciken ödeme alınıyorsa vade farkı kesilmiş / kesilmemiş sekmesi olsun"):
+    //   Yeni Tahsilat'ta gecikmeli ödeme algılanınca uyarı kutusu + "Vade Farkı Faturasını Da Kes" (varsayılan açık); "vade" sekmesi = vadesinden sonra ödeme alınan tahsilatlar, Durum: Kesildi / Kesilmedi / Fark Yok.
 }
 @*
-    TAHSİLAT — dinamik tasarım (Adat Hesaplama mantığı). Müşteri tahsilatında birden çok ödeme satırı (nakit + çek + çek + havale …) birlikte girilir; her satırda yöntem, tarih / vade, belge no, banka,
-    OTOMATİK (TCMB) ya da ELLE kur ve tutar. Faturalar OTOMATİK (FIFO) ya da MANUEL seçilir; kapanış simülasyonu her değişiklikte yeniden hesaplanır (gün, vade farkı, kur farkı, avans).
-    "Kaydet ve İşle" cari hesabına işler (Konsolide Finansal Takip Paneli'ne düşer); "Taslak Kaydet" işlemez, Tahsilatlar sekmesinden istenen zaman "İşleme Al" ile işlenir.
-    Cari bilgisi: son ödeme, son yükleme, ortalama gecikme; ekstre ve simülasyon PDF / Excel; tahsilat almadan önce "Otomatik Kapat" ile eşleşmemiş ödemeler kapatılır.
-    Veri ve kurallar: Data/TahsilatOrnek.cs · uçlar: Controllers/TahsilatController.cs · betik: wwwroot/js/tahsilat.js · süzgeç: wwwroot/js/cari-suzgec.js
+    16 Kas 2026 (ikinci istek) — VADE FARKI iki sekme: "Vade Farkı Takibi" (müşteri bazında: mizan bakiyesi, vadesi geçmiş, ay sonuna kadar vadesi gelecek, ay sonu vade farkı, kesilen vade farkı, son ödeme,
+    vade farkı sonrası ödeme / satış, limit, satış durdur, mutabakat; müşteriye tıklayınca detay penceresi #tkDetay) ve "Vade Farkı Faturalama" (tahsilat kaynaklı bekleyen vade farkları, toplu kesim).
+    Ay sonu otomatik vade farkı faturası: Data/TahsilatOrnek.cs (AySonuOtomatik). Uçlar: /Tahsilat/MusteriDetay · MusteriVadeFarki · SatisDurdur · MutabakatGonder.
+*@
+@*
+    TAHSİLAT RAPORU (/Rapor117) — 16 Kas 2026'da İhracat Finansal Takibi düzeninde yeniden kuruldu. Kullanıcı: "Tahsilat raporunu da İhracat Finansal Takibi tarzında geliştir; tahsilattaki kişi
+    tüm detayları buradan takip edebilsin, toplu vade farkı kesebilsin, banka hareketlerinden düşenleri müşteri seçimini buradan yapabilsin; Adat Hesaplama raporunu da tahsilata sekme olarak ekle."
+    Sekmeler: Özet (kutucuklar, bekleyen işler, şirket / temsilci özeti) · Alacak Takibi (müşteri bazında vade kırılımı) · Açık Faturalar · Haftalık Beklenen |
+              Banka Tahsilatları (bankadan gelen girişler, müşteri seçimi, taslak tahsilat) · Tahsilatlar · Yeni Tahsilat | Vade Farkı (toplu fatura kesimi) · Fark Faturaları | Adat Hesaplama.
+    Tahsilat girişi (Yeni Tahsilat · Tahsilatlar · Fark Faturaları) eski ekranın aynısıdır: Views/Rapor117/_TahsilatPaneller.cshtml + wwwroot/js/tahsilat.js (kök #th, kendi şeridi gizli).
+    Adat Hesaplama: Views/Rapor21/_AdatGovde.cshtml + wwwroot/js/adat.js (kök #ad); /Rapor21 adresi de çalışmaya devam eder.
+    Rapor sekmeleri: wwwroot/js/tahsilat-takip.js · veri /Tahsilat/KonsolideTakip + /Tahsilat/BankaHareketleri · işlemler /Tahsilat/BankaMusteriSec, /Tahsilat/TopluVadeFarki (Controllers/TahsilatController.cs).
+    Adres: /Rapor117?sekme=…&kod=…&no=… (kod = cari ön seçimi → Yeni Tahsilat; no = tahsilat kaydı → Tahsilatlar).
 *@
 @section Styles {
 <link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
 <link rel="stylesheet" href="/css/cari-islem.css?v=2" />
-<link rel="stylesheet" href="/css/tahsilat.css?v=3" />
+<link rel="stylesheet" href="/css/tahsilat.css?v=11" />
+<link rel="stylesheet" href="/css/suzgec-cubuk.css?v=2" />
+<link rel="stylesheet" href="/css/tahsilat-takip.css?v=40" />
+@if (ihracat) { <link rel="stylesheet" href="/css/ihracat-finans.css?v=1" /> }
 }
-<div class="container-fluid py-3 na ci th" id="th" data-kod="@onKod" data-no="@onNo">
+@{ bool gomulu = Context.Request.Query["gomulu"] == "1"; /* 19 Kas 2026: İhracat Finansal Takibi › Tahsilat Takibi · Yurtdışı sekmesi bu raporu çerçevede açar (?gomulu=1&bolge=Yurtdışı): başlık gizli, bölge kilitli */ }
+<div class="container-fluid py-3 na ci th tk @(gomulu ? "tk-gomulu" : "") @(ihracat ? "tk-ihracat" : "")" id="tk" data-sekme="@onSekme" data-kod="@onKod" data-no="@onNo" data-gorev="@Context.Request.Query["gorev"]" data-ihracat="@(ihracat ? "1" : "")" data-bolge="@(ihracat ? "Yurtdışı" : "")">
     <div class="na-ust">
-        <h4><span class="rt-ikon"><i class="fas fa-hand-holding-dollar"></i></span>Tahsilat</h4>
-        <span style="font-size:.68rem;font-weight:700;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px"><i class="fas fa-database me-1"></i>Cari Mutabakat + Cari Kartları + Takip Paneli</span>
+        @if (ihracat)
+        {
+            <h4><span class="rt-ikon"><i class="fas fa-file-shield"></i></span>İhracat Finansal Takibi</h4>
+            <span class="tk-hap" title="Yurtdışı müşteriler: Tahsilat raporunun bütün sekmeleri bölge Yurtdışı'na kilitli + Beyanname / İBKB dosyaları, İBKB belgeleri, müşteri bazlı, şube bakiyeleri, DAB bağlantıları; vade farkı yalnız tahsilat işlenirken kesilir"><i class="fas fa-earth-europe me-1"></i>Yurtdışı · Tahsilat + İhracat Takibi · Konsolide</span>
+            <a class="tk-hap" href="/Rapor94/Ihracat" target="_blank" rel="noopener" title="Yurtdışı Satış Siparişi"><i class="fas fa-ship me-1"></i>Yurtdışı Satış Siparişi</a>
+            <a class="tk-hap" href="/IhracatBelge?sekme=liste" target="_blank" rel="noopener" title="İhracat Belge Gönderim Takibi (akreditif, vesaik, kargo)"><i class="fas fa-file-export me-1"></i>İhracat Belge Gönderim</a>
+            <a class="tk-hap" href="/IhracatFinans/Eski" target="_blank" rel="noopener" title="İhracat Finansal Takibi (Eski): İhracat Satışları, Banka Tahsilatları (Açık), Tamamlanan Tahsilatlar, Cari Bakiyeler (Mizan), Vade Takibi"><i class="fas fa-clock-rotate-left me-1"></i>Eski Rapor</a>
+        }
+        else
+        {
+            <h4><span class="rt-ikon"><i class="fas fa-hand-holding-dollar"></i></span>Tahsilat</h4>
+            <span class="tk-hap"><i class="fas fa-database me-1"></i>Cari Mutabakat + Cari Kartları + Banka Hareketleri</span>
+        }
         <span class="th-kur" id="thKurlar"></span>
-        <span class="sub w-100">Bir tahsilatta <b>birden çok ödeme satırı</b> (nakit + çek + senet + havale + kart) birlikte girilir; her satırın kuru o günün TCMB kurundan <b>otomatik</b> gelir, istenirse elle yazılır. Faturalar <b>Otomatik</b> (en eski vadeliden FIFO) ya da <b>Manuel</b> (işaretlenen faturalar, istenirse tutar sınırı) seçilir; kapanış simülasyonu her değişiklikte yenilenir: gün, <b>vade farkı</b>, <b>kur farkı</b>, avans. <b>Kaydet ve İşle</b> cari hesabına işler; <b>Taslak Kaydet</b> işlemez, istenen zaman "İşleme Al" ile aynı kayıttan ibraz edilir. Ekstre ve simülasyon PDF / Excel indirilir; tahsilattan önce <b>Otomatik Kapat</b> ile eşleşmemiş ödemeler kapatılır.</span>
-    </div>
-    <div class="na-sekme" id="thSekmeler" data-dinamik="kapali">
-        <button type="button" data-p="yeni" class="aktif"><i class="fas fa-plus me-1"></i>Yeni Tahsilat</button>
-        <button type="button" data-p="liste"><i class="fas fa-list me-1"></i>Tahsilatlar <span class="n" id="thNListe">0</span> <span class="n" id="thNTaslak" title="taslak">0 taslak</span></button>
-        <button type="button" data-p="fatura"><i class="fas fa-file-invoice me-1"></i>Fark Faturaları <span class="n" id="thNFatura">0</span></button>
+        <div class="sag">
+            <a class="tk-hap" href="/Rapor20" title="Cari Ekstre Raporu"><i class="fas fa-file-invoice me-1"></i>Cari Ekstre</a>
+            <a class="tk-hap" href="/Rapor123" title="Konsolide Finansal Takip Paneli"><i class="fas fa-clipboard-check me-1"></i>Takip Paneli</a>
+            <button type="button" class="tk-dgm" id="tkExcel" title="Ekrandaki tabloyu göründüğü gibi Excel'e aktar (.xlsx)"><i class="fas fa-file-excel"></i>Excel</button>
+        </div>
     </div>
     <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
 
-    <div class="na-panel aktif" data-p="yeni">
-        <div class="row g-2">
-            <div class="col-xl-9">
-                <div class="na-kart">
-                    <div class="na-kart-b"><span><i class="fas fa-user-tie me-1"></i>Cari (Müşteri)</span><span class="not" id="thCariSayi"></span></div>
-                    <div class="na-kart-g">
-                        <div class="d-flex gap-1 align-items-center mb-2 flex-wrap">
-                            <input class="form-control" id="thCariAra" placeholder="Kod ya da ad yazın…" style="width:240px;font-size:.78rem;height:32px" autocomplete="off">
-                            <select class="form-select" id="thCari" style="flex:1;min-width:320px;font-size:.78rem;height:32px"><option value="">Cari seçiniz…</option></select>
-                        </div>
-                        <div class="ci-bilgi" id="thCariOzet"><span class="text-muted">Cari seçince bakiye, son ödeme / yükleme, gecikme ve açık faturalar burada görünür.</span></div>
-                        <div class="d-flex gap-1 flex-wrap mt-1" id="thCariIslem" style="display:none !important"></div>
-                    </div>
-                </div>
-                <div class="na-kart">
-                    <div class="na-kart-b"><span><i class="fas fa-money-bill-transfer me-1"></i>Ödeme Satırları <span class="n" id="thNSatir">0</span></span>
-                        <span class="d-flex gap-1 align-items-center flex-wrap">
-                            <span class="na-mini me-1">Tahsilat Tarihi <input type="date" class="form-control d-inline-block" id="thTarih" style="width:125px;font-size:.66rem;height:22px;padding:0 4px"></span>
-                            <span class="na-mini me-1">İşlem Tipi <select class="form-select d-inline-block" id="thTip" style="width:55px;font-size:.66rem;height:22px;padding:0 16px 0 4px"><option>X</option><option>R</option></select></span>
-                            <span class="na-mini me-1">Para Birimi <select class="form-select d-inline-block" id="thPb" style="width:70px;font-size:.66rem;height:22px;padding:0 16px 0 4px"><option>TL</option></select></span>
-                            <button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Nakit" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Nakit</button>
-                            <button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Çek" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Çek</button>
-                            <button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Senet" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Senet</button>
-                            <button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Havale / EFT" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Havale</button>
-                            <button type="button" class="btn btn-outline-primary btn-sm py-0" data-ekle="Kredi Kartı" style="font-size:.62rem"><i class="fas fa-plus me-1"></i>Kart</button>
-                            <button type="button" class="btn btn-light btn-sm py-0" id="thSatirTemizle" style="font-size:.62rem">Satırları Sil</button>
-                        </span></div>
-                    <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ci-liste" id="thSatirlar" data-dinamik="kapali"><thead><tr><th class="s">#</th><th>Yöntem</th><th>Tarih / Vade</th><th>Belge (Çek) No</th><th>Banka</th><th class="e">Kur</th><th class="s">Kur Kaynağı</th><th class="e">Tutar</th><th class="e">TL Karşılığı</th><th>Not</th><th></th></tr></thead><tbody><tr><td colspan="11" class="na-bos">Yukarıdaki düğmelerle ödeme satırı ekleyin (nakit, çek, senet, havale, kart — birlikte).</td></tr></tbody><tfoot></tfoot></table></div>
-                        <div class="na-mini px-2 pb-1"><input class="form-control d-inline-block" id="thAciklama" placeholder="Açıklama (dekont no, not…)" style="width:100%;font-size:.66rem;height:22px"></div></div>
-                </div>
-                <div class="na-kart">
-                    <div class="na-kart-b"><span><i class="fas fa-list-check me-1"></i>Açık Faturalar ve Kapanış Simülasyonu (FIFO) <span class="n" id="thNFat">0</span></span>
-                        <span class="d-flex gap-1 align-items-center">
-                            <span class="ci-mod" id="thMod"><button type="button" class="aktif" data-mod="Otomatik" title="Ödemeler tüm açık faturalara en eski vadeliden başlayarak otomatik dağıtılır"><i class="fas fa-wand-magic-sparkles me-1"></i>Otomatik (FIFO)</button><button type="button" data-mod="Manuel" title="Kapatılacak faturalar işaretlenir; istenirse faturaya tutar sınırı yazılır"><i class="fas fa-hand-pointer me-1"></i>Manuel Seçim</button></span>
-                            <button type="button" class="btn btn-light btn-sm py-0" id="thHepsi" style="font-size:.62rem"><i class="fas fa-check-double me-1"></i>Tümünü Seç</button><button type="button" class="btn btn-light btn-sm py-0" id="thHicbiri" style="font-size:.62rem">Kaldır</button>
-                            <button type="button" class="btn btn-light btn-sm py-0" id="thTutarDoldur" style="font-size:.62rem" title="Seçili faturaların kalanı kadar tek havale satırı oluşturur"><i class="fas fa-equals me-1"></i>Tutarı Faturalardan Al</button>
-                        </span></div>
-                    <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ci-liste" id="thFaturalar" data-dinamik="kapali"><thead><tr><th class="s"><input type="checkbox" id="thFatHepsi"></th><th>Belge No</th><th>Tarih</th><th>Vade</th><th class="s">Gecikme</th><th class="s">Tip</th><th class="e">Kalan</th><th class="e">Fatura Kuru</th><th class="e">Sınır (Manuel)</th><th class="e">Kapanan</th><th class="e">Kalan (Sonra)</th><th>Ödeme</th><th class="s">Gün</th><th class="e">Kur Farkı (₺)</th><th class="e">Vade Farkı (₺)</th></tr></thead><tbody><tr><td colspan="15" class="na-bos">Önce cari seçin.</td></tr></tbody><tfoot></tfoot></table></div></div>
-                </div>
-            </div>
-            <div class="col-xl-3">
-                <div class="na-kart th-sag">
-                    <div class="na-kart-b"><span><i class="fas fa-calculator me-1"></i>Hesap Özeti</span><span class="not" id="thOzetNot">otomatik</span></div>
-                    <div class="na-kart-g">
-                        <div class="ci-ozet" id="thOzet"></div>
-                        <div class="d-grid gap-1 mt-2">
-                            <button type="button" class="btn btn-primary btn-sm" id="thKaydetIsle"><i class="fas fa-floppy-disk me-1"></i>Kaydet ve İşle</button>
-                            <button type="button" class="btn btn-outline-primary btn-sm" id="thKaydetTaslak" title="Cariye işlenmez; Tahsilatlar sekmesinden İşleme Al"><i class="fas fa-file-pen me-1"></i>Taslak Kaydet (İşleme Alma)</button>
-                            <div class="d-flex gap-1"><button type="button" class="btn btn-light btn-sm flex-fill" id="thSimPdf"><i class="fas fa-file-pdf me-1"></i>Simülasyon PDF</button><button type="button" class="btn btn-light btn-sm flex-fill" id="thSimExcel"><i class="fas fa-file-excel me-1"></i>Simülasyon Excel</button></div>
-                            <div class="d-flex gap-1"><button type="button" class="btn btn-outline-primary btn-sm flex-fill" id="thKff" disabled><i class="fas fa-file-invoice me-1"></i>Kur Farkı Faturası</button><button type="button" class="btn btn-outline-primary btn-sm flex-fill" id="thVff" disabled><i class="fas fa-file-invoice me-1"></i>Vade Farkı Faturası</button></div>
-                            <button type="button" class="btn btn-light btn-sm" id="thYeni"><i class="fas fa-file me-1"></i>Yeni Tahsilat</button>
-                        </div>
-                        <div class="ci-rehber" id="thRehber"></div>
-                    </div>
-                </div>
-            </div>
+    @* Cari kart süzgeçleri (16 Kas 2026: "cari sınıfı, ilişki durumu … filtrelenebilir, dinamik olmalı"; 19 Kas 2026: "Konsolide Stok Raporu tarzında: 4 – 5 sabit filtre, sonra Tüm Süzgeçler;
+       birden fazla seçime onay versin"): ortak SuzgecCubuk (wwwroot/js/suzgec-cubuk.js) tahsilat-takip.js'te SUZ listesinden kurulur — sabit: Şirket, Bölge, İlişki Durumu, Temsilci, Cari Sınıfı;
+       öbürleri "Tüm Süzgeçler" panelinde (Cari Kart / Faaliyet / Takip grupları). Her süzgeç çoklu seçim; seçenekler diğer seçimlere uyan müşterilerden gelir (kademeli). Bütün rapor sekmelerinde aynı çubuk. *@
+    <div id="tkFiltreKart"></div>
+    @* çubuğun ek alanı: müşteri etiketi · dönem (Hızlı Dönem düğmeleri + tarih aralığı; Tahsilatlar, Kesilecek Vade Farkı, Kesilen Fark Faturaları, Aylık Tahsilatlar, Planlanan ↔ Gerçekleşen sekmelerinde) ·
+       "Dövizli Getir" (yurt dışı müşterilerde tutarlar belge para birimiyle; tüm sekmeler) · kapsam sayacı *@
+    <span id="tkEk" hidden>
+        <span class="tk-cip" id="tkCariCip" hidden title="Müşteri süzgecini kaldır"></span>
+        <span class="tk-donem" id="tkDonem" hidden><span class="e">Hızlı Dönem</span><button type="button" data-donem="bugun">Bugün</button><button type="button" data-donem="buHafta">Bu Hafta</button><button type="button" data-donem="buAy">Bu Ay</button><button type="button" data-donem="son90">Son 90 Gün</button><button type="button" data-donem="tumu">Tümü</button><input type="date" id="tkDonemBas" title="Başlangıç"><span class="ayrac">–</span><input type="date" id="tkDonemBit" title="Bitiş"></span>
+        <span class="tk-dvk">
+            <label class="tk-dv" title="Her tutarı kendi belge para birimiyle göster (EUR faturası EUR, USD faturası USD, TL faturası ₺); TL karşılığı ipucunda"><input type="checkbox" id="tkDoviz"> Dövizli Getir</label>
+            <label class="tk-dv" title="Bütün tutarları güncel USD kuruyla dolara çevirerek göster (TL, EUR hepsi $); sütun başlıkları ($) olur"><input type="checkbox" id="tkUsd"> $ PB Getir</label>
+        </span>
+        <span class="text-muted tk-kapsam" id="tkKapsam"></span>
+        <button type="button" class="tk-yeni-dgm" id="tkYeniDgm" title="Yeni tahsilat girişi (her sekmeden ulaşılır)"><i class="fas fa-plus"></i> Yeni Tahsilat</button>
+    </span>
+
+    <div class="na-sekme" id="tkSekmeler" data-dinamik="kapali">
+        @* 19 Kas 2026 (kullanıcı: "yeni tahsilat sekmesinin rengini farklı yapalım, anlaşılır olsun") → Yeni Tahsilat sekmesi yeşil dolgulu (sekme-yeni) *@
+        @foreach (var s in sekmeler) { <button type="button" data-p="@s.Item1" class="@(grupIlk.Contains(s.Item1) ? "grup-ilk" : "") @(s.Item1 == "yeni" ? "sekme-yeni" : "")"><i class="fas @s.Item3 me-1"></i>@s.Item2</button> }
+    </div>
+
+    @* Tahsilat Özeti: Views/Rapor117/_TahsilatOzet.cshtml — ihracat kipinde ayrı sekme yok, aynı gövde İhracat Özeti panelinin başında (_IhracatPaneller) *@
+    @if (!ihracat)
+    {
+        <div class="na-panel" data-p="ozet">
+            @await Html.PartialAsync("~/Views/Rapor117/_TahsilatOzet.cshtml")
+        </div>
+    }
+
+    @foreach (var s in tablolu)
+    {
+        <div class="na-panel" data-p="@s.Item1">
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas @s.Item3 me-1"></i>@s.Item2</span><span class="d-flex gap-1 align-items-center" id="tkIslem-@s.Item1"></span></div>
+                <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo" id="tkTablo-@s.Item1" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+        </div>
+    }
+
+    @* AYLIK SÜREÇ (17 Kas 2026) — kullanıcı: "Tahsilat her ayın sonunda müşteri diyaloglarını not girsin, kendi de okuyabilmeli. Süreç akışım: 2. – 3. hafta müşterileri arasın,
+       ayın son haftası ödeme yapmayanlara otomatik vade farkı robotu çalıştırılsın, seçilen 1 – 2 müşteri dışında." Üstte süreç adımları, altta müşteri listesi (arama durumu, son görüşme,
+       robot dahil / dışı) ya da görüşme notları (dönem seçimiyle okunur). Not penceresi #tkNot. Uçlar: /Tahsilat/NotKaydet · NotSil · RobotHaric · RobotCalistir. *@
+    <div class="na-panel" data-p="surec">
+        <div class="tk-adim" id="tkAdimlar"></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-phone-volume me-1"></i><span id="tkSurecBaslik">Aylık Süreç</span></span><span class="d-flex gap-1 align-items-center" id="tkIslem-surec"></span></div>
+            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo" id="tkTablo-surec" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+    </div>
+
+    @* AYLIK TAHSİLATLAR (19 Kas 2026): Nakit Akış Planlama'daki "Aylık Ödemeler (Yönteme Göre)" ve "Çek · Senet Vade Dağılımı" düzeninde — aylar sütun, yöntem satır; dönem çubuktaki Hızlı Dönem'den *@
+    <div class="na-panel" data-p="aylik">
+        @* 19 Kas 2026 (kullanıcı): Yurtiçi / Yurtdışı birleşimi — yurtdışı satırı İhracat Finansal Takibi'nin banka tahsilatlarıyla senkron (KonsolideTakip › ihracatTahsilat) *@
+        <div class="na-kart" style="border-color:#99f6e4"><div class="na-kart-b" style="background:#f0fdfa"><span><i class="fas fa-earth-europe me-1"></i>Aylık Tahsilatlar · Yurtiçi / Yurtdışı · İhracat Finansal Takibi ile Senkron</span><span class="not" id="tkAylikPazarNot"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-aylikPazar" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+        @* 19 Kas 2026 gece (kullanıcı): cari sınıfına göre ay ay tahsilat — bölge › cari sınıfı satırları, bölge ara toplamları (Tahsilat raporunda Yurtiçi / Yurtdışı ayrı; İhracat'ta yalnız Yurtdışı) *@
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-layer-group me-1"></i>Aylık Tahsilatlar · Cari Sınıfına Göre</span><span class="not" id="tkAylikSinifNot"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-aylikSinif" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+        @* 19 Kas 2026 gece (kullanıcı): satışçı bazlı tahsilat detayı — bölge › satış temsilcisi satırları ay ay *@
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-user-tie me-1"></i>Aylık Tahsilatlar · Satış Temsilcisine Göre</span><span class="not" id="tkAylikTemsilciNot"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-aylikTemsilci" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-days me-1"></i>Aylık Tahsilatlar · Yönteme Göre</span><span class="not" id="tkAylikNot"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-aylikYontem" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+        <div class="tk-iki">
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-money-check me-1"></i>Vade Ayına Göre Alınan Çek · Senet</span><span class="not">çek / senet satırları, vade ayına göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-aylikCek" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-user-pen me-1"></i>Tahsilatı Yapan Kişiye Göre</span><span class="not">işlenen tahsilatlar, tahsilat ayına göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-aylikKisi" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
         </div>
     </div>
 
-    <div class="na-panel" data-p="liste">
-        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-clock-rotate-left me-1"></i>Kaydedilen Tahsilatlar</span><span class="d-flex gap-1 align-items-center"><input class="form-control" id="thListeAra" placeholder="No, cari, yöntem, çek no…" style="width:200px;font-size:.66rem;height:24px"><select class="form-select" id="thListeDurum" style="width:auto;font-size:.66rem;height:24px;padding:0 20px 0 6px"><option value="">Tüm Durumlar</option><option>Taslak</option><option>İşlendi</option></select><button type="button" class="btn btn-light btn-sm py-0" id="thListeExcel" style="font-size:.66rem"><i class="fas fa-file-excel me-1"></i>Excel</button></span></div>
-            <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ci-liste" id="thListe" data-dinamik="kapali"><thead><tr><th>Tahsilat No</th><th>Tarih</th><th>Cari</th><th>Yöntem</th><th class="s">Tip</th><th class="e">Tutar</th><th class="e">TL</th><th class="s">Mod</th><th>Durum</th><th class="s">Fatura</th><th class="e">Avans</th><th class="e">Kur Farkı</th><th class="e">Vade Farkı</th><th>Fark Faturası</th><th>Kim</th><th></th></tr></thead><tbody></tbody></table></div></div></div>
-        <div id="thDetay"></div>
+    @* PLANLANAN ↔ GERÇEKLEŞEN (19 Kas 2026): vade ayına göre vadesi gelen ↔ zamanında / gecikmeli tahsil edilen / açık kalan; tahsilat ayına göre gerçekleşen ve ortalama gecikme; vade farkı doğan ↔ kesilen *@
+    <div class="na-panel" data-p="plan">
+        <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-scale-balanced me-1"></i>Vade Ayına Göre · Yapılması Gereken ↔ Gerçekleşen Tahsilat</span><span class="not" id="tkPlanNot"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-planVade" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+        <div class="tk-iki">
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-hand-holding-dollar me-1"></i>Tahsilat Ayına Göre · Gerçekleşen ve Gecikme</span><span class="not">ödemenin alındığı aya göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-planAy" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-percent me-1"></i>Vade Farkı · Kesilmesi Gereken ↔ Kesilen</span><span class="not">KDV hariç matrah, fatura / tahsilat ayına göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-planVf" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+        </div>
+        @if (ihracat)
+        {
+            @* 19 Kas 2026 gece (kullanıcı): İhracat Finansal Takibi'nde Haftalık Beklenen ayrı sekme değil — iki tablosu burada (_TahsilatHafta); cizHafta plan sekmesinde de çalışır *@
+            @await Html.PartialAsync("~/Views/Rapor117/_TahsilatHafta.cshtml")
+        }
     </div>
 
-    <div class="na-panel" data-p="fatura">
-        <div class="row g-2">
-            <div class="col-lg-7"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-file-invoice me-1"></i>Kur Farkı / Vade Farkı Faturaları</span><span class="not">satıra tıklayınca fatura önizlemesi</span></div>
-                <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo ci-liste" id="thFaturaListe" data-dinamik="kapali"><thead><tr><th>Fatura No</th><th>Tarih</th><th>Vade</th><th>Cari</th><th>Tür</th><th class="e">Matrah</th><th class="e">KDV</th><th class="e">Toplam</th><th>Tahsilat</th><th>Kim</th></tr></thead><tbody></tbody></table></div></div></div></div>
-            <div class="col-lg-5"><div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-print me-1"></i>Fatura Önizleme</span><button type="button" class="btn btn-light btn-sm py-0" id="thYazdir" style="font-size:.66rem"><i class="fas fa-print me-1"></i>Yazdır</button></div><div class="na-kart-g" id="thFaturaOnizle"><div class="na-bos">Listeden bir fatura seçin.</div></div></div></div>
+    @if (!ihracat)
+    {
+        <div class="na-panel" data-p="hafta">
+            @await Html.PartialAsync("~/Views/Rapor117/_TahsilatHafta.cshtml")
+        </div>
+    }
+
+    @* Tahsilat girişi: Yeni Tahsilat · Tahsilatlar · Fark Faturaları (eski ekranın panelleri; kendi şeridi gizli, üstteki şerit sürer) *@
+    <div class="na-panel" data-p="th">
+        <div class="na ci th" id="th" data-kod="@onKod" data-no="@onNo">
+            <div class="na-sekme" id="thSekmeler" data-dinamik="kapali">
+                <button type="button" data-p="yeni" class="aktif">Yeni Tahsilat</button>
+                <button type="button" data-p="liste">Tahsilatlar <span class="n" id="thNListe">0</span> <span class="n" id="thNTaslak">0 taslak</span></button>
+                <button type="button" data-p="fatura">Fark Faturaları <span class="n" id="thNFatura">0</span></button>
+            </div>
+            @await Html.PartialAsync("~/Views/Rapor117/_TahsilatPaneller.cshtml")
+            @* GECİKMELİ TAHSİLATLAR (19 Kas 2026 gece; kullanıcı: "Tahsilatlar ve Gecikmeli Tahsilatlar sekmelerini birleştir, eksik sütun / bilgi olmasın"): ayrı sekme kalktı; aynı tablo (bütün sütunlar, Kesilmiş / Kesilmemiş süzgeci,
+               seçilenlere toplu fatura kesimi) tahsilat-takip.js tarafından Tahsilatlar panelinin (#th › liste) altına taşınır ve çizilir (cizVade). Her iki raporda. *@
+            <div class="na-kart mt-2" id="tkVadeKart" style="border-color:#fecaca"><div class="na-kart-b" style="background:#fff5f5"><span><i class="fas fa-percent me-1"></i>Gecikmeli Tahsilatlar · Vade Farkı Kesilmiş / Kesilmemiş</span><span class="d-flex gap-1 align-items-center" id="tkIslem-vade"></span></div>
+                <div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo" id="tkTablo-vade" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
         </div>
     </div>
+
+    <div class="na-panel" data-p="adat">
+        <div class="na ci ad" id="ad" data-kod="@onKod">
+            @await Html.PartialAsync("~/Views/Rapor21/_AdatGovde.cshtml")
+        </div>
+    </div>
+
+    @if (ihracat)
+    {
+        @* İHRACAT SEKMELERİ (19 Kas 2026): eski rapordan taşınan Özet · Beyanname / İBKB Dosyaları · İBKB Belgeleri · Müşteri Bazlı · Şube Bakiyeleri · DAB Bağlantıları — tek panel, iç sekme ihracat-finans.js'te (ib* sekmeleri) *@
+        <div class="na-panel" data-p="ib">
+            @await Html.PartialAsync("~/Views/IhracatFinans/_IhracatPaneller.cshtml")
+        </div>
+    }
+
+    @* Banka hareketine müşteri seçimi *@
+    <div class="tk-perde" id="tkModal" hidden><div class="tk-pencere" role="dialog" aria-modal="true">
+        <div class="ust"><div><div class="ad">Müşteri Seç</div><div class="alt" id="tkMAlt"></div></div><button type="button" data-m="kapat" title="Kapat (Esc)"><i class="fas fa-xmark"></i></button></div>
+        <div class="govde"><input class="ara" id="tkMAra" placeholder="Müşteri kodu ya da adı…" autocomplete="off"><div class="liste" id="tkMListe"></div></div>
+        @* 19 Kas 2026 (kullanıcı: "banka tahsilatından müşteriyi seçince bilgiler otomatik Yeni Tahsilat'a eklensin, vade farkı mantığı orada"): varsayılan düğme Yeni Tahsilat'ta Aç — hareket (tarih, tutar, banka, dekont no) ödeme satırı olarak dolar, kapama / vade farkı / adat orada görülür, Kaydet ve İşle ile işlenir *@
+        <div class="alt-serit"><label title="Yalnız taslak: işlenmemiş tahsilat açılır, Tahsilatlar sekmesinden işleme alınır"><input type="checkbox" id="tkMTaslak"> Yalnız taslak aç</label><span class="bos"></span><span class="text-danger" id="tkMHata"></span><button type="button" class="tk-dgm" data-m="kapat">Vazgeç</button><button type="button" class="tk-dgm" id="tkMKaydet" title="Müşteriyi hareketle eşle (ve işaretliyse taslak aç)"><i class="fas fa-check"></i>Müşteriyi Seç</button><button type="button" class="tk-dgm ana" id="tkMYeni" title="Müşteriyi eşle ve hareketi Yeni Tahsilat'a ödeme satırı olarak taşı: kapama, vade farkı ve adat orada hesaplanır"><i class="fas fa-plus"></i>Yeni Tahsilat'ta Aç</button></div>
+    </div></div>
+
+    @* Müşteri detayı (Vade Farkı Takibi'nde satıra tıklayınca): içerik tahsilat-takip.js'te kurulur *@
+    @* Pencere, gövde ve kart içleri <section>: kabuğun ".main-content div:has(table) → height:auto / max-height:none" kuralı tablo içeren div'lerin yüksekliğini ezdiği için (pencere ekrandan taşıyordu). *@
+    <div class="tk-perde" id="tkDetay" hidden><section class="tk-pencere genis" role="dialog" aria-modal="true">
+        <div class="ust"><div><div class="ad" id="tkDAd"></div><div class="alt" id="tkDAlt"></div></div><button type="button" data-d="kapat" title="Kapat (Esc)"><i class="fas fa-xmark"></i></button></div>
+        <section class="govde" id="tkDGovde"></section>
+        <div class="alt-serit" id="tkDAltSerit"></div>
+    </section></div>
+
+    @* Bakiye karşılaştırma (19 Kas 2026; Alacak Takibi › Bakiye · Muhasebe Uyumu rozetine tıklayınca): kaynak bazında bakiyeler, para birimi kırılımı, bu raporun kalemleri, cari ↔ muhasebe satır farkları — /Tahsilat/BakiyeKarsilastir *@
+    <div class="tk-perde" id="tkUyum" hidden><section class="tk-pencere genis" role="dialog" aria-modal="true">
+        <div class="ust"><div><div class="ad" id="tkUAd"></div><div class="alt" id="tkUAlt"></div></div><button type="button" data-u="kapat" title="Kapat (Esc)"><i class="fas fa-xmark"></i></button></div>
+        <section class="govde" id="tkUGovde"></section>
+        <div class="alt-serit" id="tkUAltSerit"></div>
+    </section></div>
+
+    @* Genel pencere (19 Kas 2026): Kapama Robotu › eşleşme önerisi, tahsilat hareketleri (Bu Ay Alınan / Son 30 Gün / Son Ödeme tıklanınca) *@
+    <div class="tk-perde" id="tkPen" hidden><section class="tk-pencere genis" role="dialog" aria-modal="true">
+        <div class="ust"><div><div class="ad" id="tkPAd"></div><div class="alt" id="tkPAlt"></div></div><button type="button" data-p-kapat title="Kapat (Esc)"><i class="fas fa-xmark"></i></button></div>
+        <section class="govde" id="tkPGovde"></section>
+        <div class="alt-serit" id="tkPAltSerit"></div>
+    </section></div>
+
+    @* Bakiye mutabakatı · kalem kalem (19 Kas 2026; Alacak Takibi'nde Açık Toplam / Fatura Dışı Borç / Kapatılmamış Ödeme / Bakiye hücrelerine tıklayınca): Açık Faturalar + Fatura Dışı Borç − Kapatılmamış Ödeme = Bakiye *@
+    <div class="tk-perde" id="tkKalem" hidden><section class="tk-pencere genis" role="dialog" aria-modal="true">
+        <div class="ust"><div><div class="ad" id="tkKAd"></div><div class="alt" id="tkKAlt"></div></div><button type="button" data-k="kapat" title="Kapat (Esc)"><i class="fas fa-xmark"></i></button></div>
+        <section class="govde" id="tkKGovde"></section>
+        <div class="alt-serit" id="tkKAltSerit"></div>
+    </section></div>
+
+    @* MÜŞTERİ İLETİŞİMİ (19 Kas 2026; Aylık Süreç › İletişim): kanal (WhatsApp / E-posta / ikisi) × içerik (Mutabakat, Cari Ekstre, Ödeme Planı · Tahsilat Simülasyonu, Ödeme Planı · Faturalar) + mesaj → wa.me / mailto bağlantısı ve kayıt;
+       altta müşteriyle yazışma geçmişi (giden / gelen) ve "müşteri yanıtını simüle et" (gerçek WhatsApp webhook'u /Tahsilat/WhatsAppGelen ucuna bağlanır). Uçlar: IletisimGonder · WhatsAppGelen · OtoYanitAyarla · OdemePlaniPdf *@
+    <div class="tk-perde" id="tkIlt" hidden><section class="tk-pencere genis" role="dialog" aria-modal="true">
+        <div class="ust"><div><div class="ad" id="tkIAd"></div><div class="alt" id="tkIAlt"></div></div><button type="button" data-i="kapat" title="Kapat (Esc)"><i class="fas fa-xmark"></i></button></div>
+        <section class="govde" id="tkIGovde"></section>
+        <div class="alt-serit" id="tkIAltSerit"></div>
+    </section></div>
+
+    @* Cari kart penceresi (19 Kas 2026): Müşteri Cari Kartları ve Alacak Takibi satırından /CariKart/Musteri sayfası pencerede açılır (limit, risk, faaliyet, talepler burada düzenlenir); kapanınca rapor tazelenir *@
+    <div class="tk-perde" id="tkKart" hidden><section class="tk-pencere genis tk-kart" role="dialog" aria-modal="true">
+        <div class="ust"><div><div class="ad" id="tkKartAd"></div><div class="alt">Kart detayı · limit türü / manuel limit, risk, faaliyetler ve talepler buradan düzenlenir; pencere kapanınca rapor yenilenir</div></div><a class="tk-dgm" id="tkKartAc" href="#" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i>Yeni Sekmede Aç</a><button type="button" data-kart-kapat title="Kapat (Esc)"><i class="fas fa-xmark"></i></button></div>
+        <section class="govde p-0"><iframe id="tkKartIframe" title="Cari Kartı" src="about:blank"></iframe></section>
+    </section></div>
+
+    @* Görüşme notu (Aylık Süreç): yeni not + müşterinin önceki notları *@
+    <div class="tk-perde" id="tkNot" hidden><div class="tk-pencere" role="dialog" aria-modal="true">
+        <div class="ust"><div><div class="ad" id="tkNAd"></div><div class="alt" id="tkNAlt"></div></div><button type="button" data-n="kapat" title="Kapat (Esc)"><i class="fas fa-xmark"></i></button></div>
+        <div class="govde">
+            <div class="tk-nform">
+                <label>Kanal <select id="tkNKanal"></select></label>
+                <label>Görüşülen Kişi <input id="tkNKisi" autocomplete="off"></label>
+                <label>Sonuç <select id="tkNSonuc"></select></label>
+                <label>Ödeme Sözü Tarihi <input type="date" id="tkNSozTarih"></label>
+                <label>Söz Tutarı (₺) <input type="number" id="tkNSozTutar" min="0" step="0.01"></label>
+                <label class="tam">Görüşme Notu <textarea id="tkNMetin" rows="3" maxlength="2000" placeholder="Müşteriyle ne konuşuldu, ne söz verildi…"></textarea></label>
+            </div>
+            <div class="tk-nbaslik">Önceki Notlar</div>
+            <div class="tk-notlar" id="tkNListe"></div>
+        </div>
+        <div class="alt-serit"><span class="bos"></span><span class="text-danger" id="tkNHata"></span><button type="button" class="tk-dgm" data-n="kapat">Vazgeç</button><button type="button" class="tk-dgm ana" id="tkNKaydet"><i class="fas fa-floppy-disk"></i>Notu Kaydet</button></div>
+    </div></div>
 </div>
 @section Scripts {
-<script src="/js/tahsilat.js?v=7"></script>
+<script src="/js/tablo-excel.js?v=16"></script>
+<script src="/js/suzgec-cubuk.js?v=2"></script>
+<script src="/js/tahsilat-takip.js?v=59"></script>
+<script src="/js/tahsilat.js?v=31"></script>
+<script src="/js/adat.js?v=6"></script>
+@if (ihracat) { <script src="/js/tablo-hizala.js?v=14"></script><script src="/js/ihracat-finans.js?v=17"></script> }
 }
