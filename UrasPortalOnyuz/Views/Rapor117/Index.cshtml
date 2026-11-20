@@ -21,10 +21,12 @@
         ("aylik", "Aylık Tahsilatlar", "fa-calendar-days"), ("plan", "Planlanan ↔ Gerçekleşen", "fa-scale-balanced"),
         ("surec", "Aylık Süreç", "fa-phone-volume"), ("vftakip", "Vade Farkı Takibi", "fa-user-clock"), /* 19 Kas 2026 gece (kullanıcı): "vade" (Gecikmeli Tahsilatlar) ayrı sekme değil — Tahsilatlar sekmesinin altında (#tkVadeKart) */ ("fatura", "Kesilen Fark Faturaları", "fa-file-invoice-dollar"), ("kapama", "Kapama Robotu", "fa-robot"), ("adat", "Adat Hesaplama", "fa-chart-line"), ("ozet", "Özet", "fa-chart-pie"),
         // 20 Kas 2026 (kullanıcı): SATIŞ RAPORU sekmesi (X / R ayrı, ay ay; bölge ve cari sınıfı, satış temsilcisi; ihracatta ayrıca şube satışları) ve ÇEK AKIBETİ RAPORU sekmesi (aynı rapor çerçeve içinde → tek kaynak, senkron; yalnız Tahsilat raporunda)
-        ("satis", "Satış Raporu", "fa-chart-column"), ("cek", "Çek Akıbeti Raporu", "fa-money-check") };
+        ("satis", "Satış Raporu", "fa-chart-column"), ("cek", "Çek Akıbeti Raporu", "fa-money-check"),
+        // 20 Kas 2026 (kullanıcı: "Konsolide İK Paneli'nde yaptığımız gibi Özel Rapor sekmesi ekleyelim, istenilen şekilde raporlar yapılabilsin"): ÖZEL RAPOR — veri kaynağı, sütunlar, koşullar ve gruplama kullanıcıdan; her iki raporda
+        ("ozel", "Özel Rapor", "fa-filter") };
     // 19 Kas 2026 gece (kullanıcı: "aynı düzenlemeyi Tahsilat raporu için yap"): Tahsilat şeridi de içeriğe göre gruplu, çizgiyle ayrılmış — Özet | Alacak · Müşteri (Alacak Takibi, Müşteri Cari Kartları, Açık Faturalar, Haftalık Beklenen) | Tahsilat (Banka Tahsilatları, Tahsilatlar, Aylık Tahsilatlar, Planlanan ↔ Gerçekleşen, Aylık Süreç, Vade Farkı Takibi, Kesilen Fark Faturaları, Kapama Robotu, Adat Hesaplama); rapor yine Alacak Takibi ile açılır
     {
-        var siraT = new[] { "ozet", "cari", "kartlar", "acik", "hafta", "satis", "banka", "liste", "aylik", "plan", "surec", "vftakip", "fatura", "kapama", "adat", "cek" };
+        var siraT = new[] { "ozet", "cari", "kartlar", "acik", "hafta", "satis", "banka", "liste", "aylik", "plan", "surec", "vftakip", "fatura", "kapama", "adat", "cek", "ozel" };
         sekmeler = siraT.Select(k => sekmeler.First(s => s.Item1 == k)).ToArray();
     }
     var grupIlk = new[] { "cari", "banka" };
@@ -41,7 +43,7 @@
         var kisa = new Dictionary<string, string> { ["adat"] = "Adat" };
         // (kullanıcı, 19 Kas gece): sekmeler içeriğe göre GRUPLU ve çizgiyle ayrılmış — Özet | Alacak · Müşteri (Alacak Takibi, Müşteri Cari Kartları, Açık Faturalar, Müşteri Bazlı) | Tahsilat (Banka Tahsilatları, Tahsilatlar, Aylık Tahsilatlar, Planlanan ↔ Gerçekleşen, Aylık Süreç, Kesilen Fark Faturaları, Kapama Robotu, Adat) | İhracat · İBKB (Beyanname / İBKB Dosyaları, İBKB Belgeleri, DAB Bağlantıları, Şube Bakiyeleri)
         var tum = ibSek.Concat(sekmeler).Select(s => kisa.TryGetValue(s.Item1, out var k) ? (s.Item1, k, s.Item3) : s).ToList();
-        var sira = new[] { "ibOzet", "cari", "kartlar", "acik", "ibMusteri", "ibBakiye", "satis", "banka", "liste", "aylik", "plan", "surec", "fatura", "kapama", "adat", "ibSatis", "ibListe", "ibBelgeler", "ibDab", "ibTahsilat", "ibTamamlanan", "ibVade", "ibSube" };
+        var sira = new[] { "ibOzet", "cari", "kartlar", "acik", "ibMusteri", "ibBakiye", "satis", "banka", "liste", "aylik", "plan", "surec", "fatura", "kapama", "adat", "ozel", "ibSatis", "ibListe", "ibBelgeler", "ibDab", "ibTahsilat", "ibTamamlanan", "ibVade", "ibSube" };
         sekmeler = sira.Select(k => tum.First(s => s.Item1 == k)).ToArray();
         grupIlk = new[] { "cari", "banka", "ibSatis" };
     }
@@ -70,7 +72,7 @@
 <link rel="stylesheet" href="/css/cari-islem.css?v=2" />
 <link rel="stylesheet" href="/css/tahsilat.css?v=11" />
 <link rel="stylesheet" href="/css/suzgec-cubuk.css?v=2" />
-<link rel="stylesheet" href="/css/tahsilat-takip.css?v=49" />
+<link rel="stylesheet" href="/css/tahsilat-takip.css?v=50" />
 @if (ihracat) { <link rel="stylesheet" href="/css/ihracat-finans.css?v=1" /> }
 }
 @{ bool gomulu = Context.Request.Query["gomulu"] == "1"; /* 19 Kas 2026: İhracat Finansal Takibi › Tahsilat Takibi · Yurtdışı sekmesi bu raporu çerçevede açar (?gomulu=1&bolge=Yurtdışı): başlık gizli, bölge kilitli */ }
@@ -180,6 +182,29 @@
             @* Şube Bakiyeleri sekmesindeki kendi şubelerimizin yıllık satışları (kaynak ekstrelerde yalnız yıllık toplam var; aylık kırılım yok). 20 Kas 2026 (kullanıcı): satır = ÜLKE ("Boya + Kağıt olarak değil ülke bazlı ayır"); Gerçek Mal Bedeli yalnız doluysa yazılır ("boş olanları yazmana gerek yok"); kartlarda mavi / turkuaz bant yok, rakamlar koyu ("mavi renk olmamış, çok göz yoruyor") *@
             <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-earth-africa me-1"></i>Şube Satışları · Ülke Bazında · Yıllara Göre</span><span class="not" id="tkSatisSubeYilNot"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-satisSubeYil" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
         }
+    </div>
+
+    @* ÖZEL RAPOR (20 Kas 2026; kullanıcı: "İhracat Finansal Takibi ve Tahsilat raporlarına Konsolide İK Paneli'nde yaptığımız gibi Özel Rapor sekmesi ekleyelim, istenilen şekilde raporlar yapılabilsin"):
+       veri kaynağı (Müşteriler / Açık Faturalar / Satış Faturaları / Tahsilatlar), sütunlar, koşullar ve gruplama kullanıcıdan; üst çubuğun süzgeçleri burada da geçerli; kayıtlı raporlar sunucuda, herkes için ortak
+       (/Tahsilat/OzelRaporKaydet). Betik: tahsilat-takip.js › cizOzel. Excel üstteki ortak düğmeden, PDF buradan. *@
+    <div class="na-panel tk-ozel" data-p="ozel">
+        <div class="tk-or-ust" data-dinamik="kapali">
+            <label>Veri<select class="form-select" id="tkOrKaynak" aria-label="Veri kaynağı" title="Raporun satırları: müşteri, açık fatura, satış faturası ya da tahsilat"></select></label>
+            <label>Grupla<select class="form-select" id="tkOrGrup1" aria-label="Gruplama" title="Seçilen alana göre toplar: kayıt sayısı ve seçili tutar sütunlarının toplamı"></select><select class="form-select" id="tkOrGrup2" aria-label="İkinci gruplama düzeyi"></select></label>
+            <label class="tk-or-anahtar"><input type="checkbox" id="tkOrAyarAc" checked> <i class="fas fa-sliders"></i> Sütun ve Koşullar</label>
+            <span class="sag">
+                <input class="form-control" id="tkOrAd" placeholder="Rapor Adı" maxlength="60" aria-label="Rapor adı">
+                <button type="button" class="tk-dgm ana" id="tkOrKaydet" title="Raporu bu adla kaydet; raporu açan herkes Kayıtlı Raporlar listesinde görür"><i class="fas fa-floppy-disk"></i>Raporu Kaydet</button>
+                <select class="form-select" id="tkOrKayitli" aria-label="Kayıtlı raporlar"><option value="">Kayıtlı Raporlar</option></select>
+                <button type="button" class="tk-dgm" id="tkOrSil" title="Seçili kayıtlı raporu sil"><i class="fas fa-trash"></i></button>
+                <button type="button" class="tk-dgm" id="tkOrPdf" title="Ekrandaki tabloyu PDF olarak indir"><i class="fas fa-file-pdf"></i>PDF</button>
+            </span>
+        </div>
+        <div class="tk-or-ayar" id="tkOrAyar">
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-table-columns me-1"></i>Sütunlar</span><span class="not"><a href="#" id="tkOrSutunSifirla">Varsayılana Dön</a></span></div><div class="na-kart-g"><section class="tk-or-sutunlar" id="tkOrSutunlar"></section></div></div>
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-filter me-1"></i>Koşullar</span><span class="not">hepsi birlikte sağlanır</span></div><div class="na-kart-g"><section id="tkOrKosullar"></section><button type="button" class="tk-dgm" id="tkOrKosulEkle"><i class="fas fa-plus"></i>Koşul Ekle</button></div></div>
+        </div>
+        <div class="na-kart"><div class="na-kart-b"><span id="tkOrBaslik"><i class="fas fa-filter me-1"></i>Özel Rapor</span><span class="not" id="tkOrNot"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo" id="tkTablo-ozel" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
     </div>
 
     @if (!ihracat)
@@ -314,7 +339,7 @@
 @section Scripts {
 <script src="/js/tablo-excel.js?v=16"></script>
 <script src="/js/suzgec-cubuk.js?v=2"></script>
-<script src="/js/tahsilat-takip.js?v=71"></script>
+<script src="/js/tahsilat-takip.js?v=74"></script>
 <script src="/js/tahsilat.js?v=32"></script>
 <script src="/js/adat.js?v=7"></script>
 @if (ihracat) { <script src="/js/tablo-hizala.js?v=14"></script><script src="/js/ihracat-finans.js?v=21"></script> }

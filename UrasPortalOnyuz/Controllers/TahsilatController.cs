@@ -314,7 +314,7 @@ namespace WebApplication3.Controllers
                     cek = r.Cek, cekAdet = r.CekAdet, son30Tahsilat = Math.Round(tahs.Where(h => h.Tarih >= son30).Sum(h => h.Alacak * KurTl(h.ParaBirimi)), 2), son30Adet = tahs.Count(h => h.Tarih >= son30), sonTahsilat = sonTahsilat == null ? "" : Trh(sonTahsilat.Tarih), sonTahsilatTl = sonTahsilat == null ? 0 : Math.Round(sonTahsilat.Alacak * KurTl(sonTahsilat.ParaBirimi), 2),
                     limitDurum = vf.Limit.Durum, sonTahsilatIso = sonTahsilat == null ? "" : sonTahsilat.Tarih.ToString("yyyy-MM-dd"), iliski = k.IliskiDurumu, ulke = k.Ulke, yetkili = k.Yetkili, vf = vf.Dto, takip = TakipOzet(k, c, notlar, bugun, ben), uyum = UyumOzet(k, c, mizan), kalemler, cekler, satislar, fdb, odemeAcik, kart, sonFatura, kapama, kur = kurOz, uyumGorev, uyumKontrol };
             }).ToList();
-            return Json(new { success = true, temsilciUnvan = CariKartOrnek.SatisTemsilciUnvan, bugun = bugun.ToString("yyyy-MM-dd"), aySonu = aySonu.ToString("yyyy-MM-dd"), sonOtomatikAySonu = TahsilatOrnek.SonOtomatikAySonu?.ToString("yyyy-MM-dd") ?? "",
+            return Json(new { success = true, temsilciUnvan = CariKartOrnek.SatisTemsilciUnvan, ozelRaporlar = OzelRaporDto(), bugun = bugun.ToString("yyyy-MM-dd"), aySonu = aySonu.ToString("yyyy-MM-dd"), sonOtomatikAySonu = TahsilatOrnek.SonOtomatikAySonu?.ToString("yyyy-MM-dd") ?? "",
                 /* 19 Kas 2026 (kullanıcı: "Vade Farkı Takibi'nde 1–12 yaz, robot çalıştıysa / ay sonu vade farkı faturaları kesildiyse yeşil olsun"): bu yılın ayları, o dönem "Ay Sonu" kaynaklı vade farkı faturası var mı */
                 vfAylar = Enumerable.Range(1, 12).Select(m => { string dn = $"{bugun.Year}-{m:00}"; var f = tumFaturalar.Where(x => x.Tur == "Vade Farkı" && x.Kaynak == "Ay Sonu" && x.Donem == dn).ToList(); var son = new DateTime(bugun.Year, m, DateTime.DaysInMonth(bugun.Year, m)); return new { ay = m, donem = dn, ad = new DateTime(bugun.Year, m, 1).ToString("MMMM yyyy", Tr), kesildi = f.Count > 0, adet = f.Count, musteri = f.Select(x => x.CariKodu).Distinct().Count(), tutar = f.Sum(x => x.Toplam), sonTarih = f.Count == 0 ? "" : Trh(f.Max(x => x.Tarih)), gecti = son < bugun, buAy = m == bugun.Month, bas = $"{dn}-01", bit = son.ToString("yyyy-MM-dd") }; }).ToList(),
                 surec = new { donem = bugun.ToString("yyyy-MM"), donemAd = bugun.ToString("MMMM yyyy", Tr), aramaBas = aramaBas.ToString("yyyy-MM-dd"), aramaBit = aramaBit.ToString("yyyy-MM-dd"), robotBas = robotBas.ToString("yyyy-MM-dd"), asama = bugun < aramaBas ? "Ay Başı" : bugun <= aramaBit ? "Arama" : bugun < robotBas ? "Arama Sonrası" : "Robot" },
@@ -392,6 +392,25 @@ namespace WebApplication3.Controllers
             var kisi = Ben().AdSoyad; int n = 0;
             foreach (var kod in kodlar) { var k = CariKartOrnek.KartBul(kod); if (k == null) continue; var eski = TahsilatOrnek.Oran(kod); TahsilatTakipKayit.OranKaydet(kod, i.Oran); var yeni = TahsilatOrnek.Oran(kod); n++; CariKartOrnek.Gunluk(k, DateTime.Now, kisi, "Vade Farkı Oranı", $"% {eski.ToString("0.##", Tr)}", i.Oran == null || i.Oran <= 0 ? $"% {yeni.ToString("0.##", Tr)} (varsayılan)" : $"% {yeni.ToString("0.##", Tr)} (müşteriye özel)", "Tahsilat › Vade Farkı Takibi"); }
             return Json(new { success = n > 0, message = n == 0 ? "Müşteri bulunamadı." : i.Oran == null || i.Oran <= 0 ? $"{n} müşteri varsayılan orana (% {TahsilatOrnek.VadeFarkiAylikOran.ToString("0.##", Tr)}) döndü." : $"{n} müşteri için aylık vade farkı oranı % {i.Oran.Value.ToString("0.##", Tr)} kaydedildi; ay sonu kesimi, tahsilat kapaması ve adat bu oranla hesaplanır." });
+        }
+        // 20 Kas 2026 (kullanıcı: "İhracat Finansal Takibi ve Tahsilat raporlarına Konsolide İK Paneli'nde yaptığımız gibi Özel Rapor sekmesi ekleyelim, istenilen şekilde raporlar yapılabilsin"):
+        //   Özel Rapor sekmesinin KAYITLI RAPORLARI herkes için ortak (App_Data/tahsilat-takip.json); rapor = ad + sekme durumu (veri kaynağı, sütunlar, koşullar, gruplama). Veri saklanmaz: rapor açılınca güncel veriden yeniden hesaplanır.
+        static object OzelRaporDto() => TahsilatTakipKayit.OzelRaporlar().Select(r => new { ad = r.Ad, ayar = r.Ayar, kullanici = r.Kullanici, zaman = Zmn(r.Zaman) }).ToList();
+        public class OzelRaporIstek { public string Ad { get; set; } public string Ayar { get; set; } }
+        [HttpPost]
+        public IActionResult OzelRaporKaydet([FromBody] OzelRaporIstek i)
+        {
+            string ad = (i?.Ad ?? "").Trim(); if (ad == "") return Json(new { success = false, message = "Rapor adı girin." }); if (ad.Length > 60) ad = ad.Substring(0, 60);
+            string ayar = i.Ayar ?? ""; if (ayar.Length == 0 || ayar.Length > 20000) return Json(new { success = false, message = "Rapor ayarı okunamadı." });
+            try { using var _ = System.Text.Json.JsonDocument.Parse(ayar); } catch { return Json(new { success = false, message = "Rapor ayarı geçersiz." }); }
+            TahsilatTakipKayit.OzelRaporKaydet(ad, ayar, Ben().AdSoyad);
+            return Json(new { success = true, message = $"\"{ad}\" raporu kaydedildi; raporu açan herkes Kayıtlı Raporlar listesinde görür.", ozelRaporlar = OzelRaporDto() });
+        }
+        [HttpPost]
+        public IActionResult OzelRaporSil([FromBody] OzelRaporIstek i)
+        {
+            string ad = (i?.Ad ?? "").Trim(); bool ok = ad != "" && TahsilatTakipKayit.OzelRaporSil(ad);
+            return Json(new { success = ok, message = ok ? $"\"{ad}\" raporu silindi." : "Rapor bulunamadı.", ozelRaporlar = OzelRaporDto() });
         }
         public class SatisDurdurIstek { public string Kod { get; set; } public bool Durdur { get; set; } public string Neden { get; set; } }
         static bool OdemeHareketi(MtHareket h) => (h.BelgeTipi == "Tahsilat" || h.BelgeTipi == "Çek" || h.BelgeTipi == "Senet") && h.Alacak > 0;

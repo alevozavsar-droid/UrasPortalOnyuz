@@ -97,7 +97,14 @@ namespace WebApplication3.Data
         }
         class Depo_ { public int SonId { get; set; } public List<Not> Notlar { get; set; } = new List<Not>(); public List<Haric> Haricler { get; set; } = new List<Haric>(); public List<Iletisim> Iletisimler { get; set; } = new List<Iletisim>(); public List<Talep> Talepler { get; set; } = new List<Talep>(); public bool OtoYanit { get; set; } = true;
             /// <summary>Müşteriye özel aylık vade farkı oranı (%); yoksa TahsilatOrnek.VadeFarkiAylikOran (19 Kas 2026: Vade Farkı Takibi › VF Oranı sütunu).</summary>
-            public Dictionary<string, decimal> Oranlar { get; set; } = new Dictionary<string, decimal>(); }
+            public Dictionary<string, decimal> Oranlar { get; set; } = new Dictionary<string, decimal>();
+            /// <summary>Tahsilat / İhracat Finansal Takibi › Özel Rapor sekmesinin kayıtlı raporları (20 Kas 2026): herkes için ortak; Ayar = sekmenin durumu (JSON: veri kaynağı, sütunlar, koşullar, gruplama).</summary>
+            public List<OzelRapor> OzelRaporlar { get; set; } = new List<OzelRapor>(); }
+        public class OzelRapor { public string Ad { get; set; } public string Ayar { get; set; } public string Kullanici { get; set; } public DateTime Zaman { get; set; } }
+        public static List<OzelRapor> OzelRaporlar() { lock (Kilit) return Yukle().OzelRaporlar.OrderBy(x => x.Ad, StringComparer.Create(new System.Globalization.CultureInfo("tr-TR"), true)).ToList(); }
+        /// <summary>Aynı adlı rapor varsa üzerine yazılır (ad karşılaştırması büyük / küçük harfe duyarsız).</summary>
+        public static void OzelRaporKaydet(string ad, string ayar, string kisi) { lock (Kilit) { var d = Yukle(); d.OzelRaporlar.RemoveAll(x => string.Equals(x.Ad, ad, StringComparison.CurrentCultureIgnoreCase)); d.OzelRaporlar.Add(new OzelRapor { Ad = ad, Ayar = ayar, Kullanici = kisi, Zaman = DateTime.Now }); Yaz(); } }
+        public static bool OzelRaporSil(string ad) { lock (Kilit) { var d = Yukle(); int n = d.OzelRaporlar.RemoveAll(x => string.Equals(x.Ad, ad, StringComparison.CurrentCultureIgnoreCase)); if (n > 0) Yaz(); return n > 0; } }
         public static decimal? MusteriOran(string kod) { lock (Kilit) return Yukle().Oranlar.TryGetValue(kod ?? "", out var o) && o > 0 ? o : (decimal?)null; }
         /// <summary>oran null ya da 0 → müşteriye özel oran silinir (varsayılana döner).</summary>
         public static void OranKaydet(string kod, decimal? oran) { lock (Kilit) { var d = Yukle(); if (oran == null || oran <= 0) d.Oranlar.Remove(kod ?? ""); else d.Oranlar[kod ?? ""] = Math.Round(oran.Value, 2); Yaz(); } }
@@ -113,7 +120,7 @@ namespace WebApplication3.Data
             _d = new Depo_();
             try { var f = Dosya; if (f != null && File.Exists(f)) _d = JsonSerializer.Deserialize<Depo_>(File.ReadAllText(f), Secenek) ?? new Depo_(); }
             catch (Exception ex) { Console.WriteLine($"[Kalıcı] Tahsilat takip kayıtları okunamadı: {ex.Message}"); }
-            _d.Notlar ??= new List<Not>(); _d.Haricler ??= new List<Haric>(); _d.Iletisimler ??= new List<Iletisim>(); _d.Talepler ??= new List<Talep>(); _d.Oranlar ??= new Dictionary<string, decimal>();
+            _d.Notlar ??= new List<Not>(); _d.Haricler ??= new List<Haric>(); _d.Iletisimler ??= new List<Iletisim>(); _d.Talepler ??= new List<Talep>(); _d.Oranlar ??= new Dictionary<string, decimal>(); _d.OzelRaporlar ??= new List<OzelRapor>();
             return _d;
         }
         static void Yaz()

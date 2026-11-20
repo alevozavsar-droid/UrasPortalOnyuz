@@ -139,7 +139,7 @@
   const SECM = new Set();                                   // Vade Farkı Takibi: seçili müşteri kodları
   let KANAL = 'E-posta';                                    // mutabakat gönderim kanalı
   const TH = { yeni: 'yeni', liste: 'liste', fatura: 'fatura' };   // Tahsilat giriş panellerine giden sekmeler → #th içindeki panel
-  const RAPOR = ['ozet', 'cari', 'kartlar', 'acik', 'hafta', 'banka', 'aylik', 'plan', 'surec', 'vftakip', 'vade', 'kapama', 'satis'];
+  const RAPOR = ['ozet', 'cari', 'kartlar', 'acik', 'hafta', 'banka', 'aylik', 'plan', 'surec', 'vftakip', 'vade', 'kapama', 'satis', 'ozel'];
   const q0 = new URLSearchParams(location.search);
   let aktif = kok.dataset.sekme || (kok.dataset.no ? 'liste' : kok.dataset.kod ? 'yeni' : 'cari'), kirli = false, HAFTA = [], haftaSec = 0;   // 20 Kas 2026 (kullanıcı): iki rapor da Alacak Takibi ile açılır
   // YENİ BANKA GİRİŞİ UYARISI (kullanıcı 17 Kas 2026: "Banka Tahsilatları sekmesine yeni bir ödeme düştüğünde uyarı gibi bir ikon koy ya da farklı renk; anlayalım bankaya ödeme geldiğini").
@@ -1187,13 +1187,191 @@
     ]);
     $('#tkPlanNot').textContent = `${C.length} müşteri · ${donemMetni()} · vadesi gelen ${tl(planlanan(null))} · tahsil edilen ${tl(S(dag, null, d => d.tutarTl))} · açık ${tl(S(acik, null, x => x.tl))}`;
   }
-  const CIZ = { ozet: cizOzet, cari: cizCari, kartlar: cizKartlar, acik: cizAcik, hafta: cizHafta, banka: cizBanka, aylik: cizAylik, plan: cizPlan, surec: cizSurec, vftakip: cizVfTakip, vade: cizVade, kapama: cizKapama, satis: cizSatis };
+  // ---------- ÖZEL RAPOR sekmesi (20 Kas 2026; kullanıcı: "İhracat Finansal Takibi ve Tahsilat raporlarına Konsolide İK Paneli'nde yaptığımız gibi Özel Rapor sekmesi ekleyelim, istenilen şekilde raporlar yapılabilsin") ----------
+  //   1) VERİ: Müşteriler · Açık Faturalar · Satış Faturaları · Tahsilatlar (satırın ne olduğu). 2) SÜTUNLAR: yongalara tıklayınca eklenir / çıkar. 3) KOŞULLAR: alan + karşılaştırma + değer (hepsi birlikte sağlanır).
+  //   4) GRUPLA: bir ya da iki alana göre toplar (ör. Satış Temsilcisi › Fatura Ayı): kayıt sayısı + seçili tutar sütunlarının toplamı; grup satırına tıklayınca o grubun satırları pencerede.
+  //   Üst çubuğun süzgeçleri, arama, İşlem Tipi ve (Satış / Tahsilat / Müşteri-satış sütunlarında) Hızlı Dönem burada da geçerli. Kayıtlı raporlar SUNUCUDA ve herkes için ortak (/Tahsilat/OzelRaporKaydet · OzelRaporSil;
+  //   K.ozelRaporlar); son çalışılan durum tarayıcıda (tkOzelRapor). Veri saklanmaz — rapor her açılışta güncel veriden hesaplanır. Sütun türleri: m metin · p ₺ tutar (toplanır) · n sayı (top: 1 ise toplanır) ·
+  //   v belge para birimiyle tutar (para birimine göre ayrı toplanır) · d tarih · a ay (yyyy-MM, "Kas 2026" yazılır).
+  const orM = (k, ad, v, g, ek) => Object.assign({ k, ad, t: 'm', v, g }, ek || {}), orP = (k, ad, v, g, ek) => Object.assign({ k, ad, t: 'p', v, g }, ek || {}), orN = (k, ad, v, g, ek) => Object.assign({ k, ad, t: 'n', v, g }, ek || {});
+  const orD = (k, ad, v, g) => ({ k, ad, t: 'd', v: r => trIso(v(r) || ''), g }), orA = (k, ad, v, g) => ({ k, ad, t: 'a', v: r => trIso(v(r) || '').slice(0, 7), g }), orV = (k, ad, v, pb, g) => ({ k, ad, t: 'v', v, pb, g });
+  const orSz = r => r.k.suzgec || {}, orVf = r => r.k.vf || {}, orTem = r => (r.k.temsilci || '').split(',')[0].trim();
+  const orSat = k => (k.satislar || []).filter(x => kalemUy(x) && donemUy(x.tarih));   // müşterinin dönemdeki satış faturaları (İşlem Tipi süzgeci geçerli)
+  const orKartH = (r, ic) => r.k.kod && cariBul(r.k.kod) ? `<a href="#" class="tk-link" data-or-kart="${esc(r.k.kod)}" title="Cari kartını aç">${ic}</a>` : ic;
+  const OR_KIMLIK = [
+    orM('kod', 'Cari Kodu', r => r.k.kod, 'Müşteri', { h: r => orKartH(r, `<b>${esc(r.k.kod || '')}</b>`) }), orM('ad', 'Müşteri', r => r.k.kisaAd, 'Müşteri', { h: r => orKartH(r, esc(r.k.kisaAd || '')) }), orM('unvan', 'Resmî Unvan', r => r.k.resmiUnvan, 'Müşteri'),
+    orM('sirket', 'Şirket', r => r.k.sirket, 'Müşteri'), orM('bolge', 'Bölge', r => r.k.bolge, 'Müşteri'), orM('ulke', 'Ülke', r => r.k.ulke || orSz(r).ulke, 'Müşteri'), orM('sehir', 'Şehir', r => orSz(r).sehir, 'Müşteri'),
+    orM('sinif', 'Cari Sınıfı', r => r.k.sinif, 'Müşteri'), orM('iliski', 'İlişki Durumu', r => r.k.iliski, 'Müşteri'), orM('temsilci', 'Satış Temsilcisi', orTem, 'Müşteri'), orM('temsilciUnvan', 'Temsilci Unvanı', r => (K.temsilciUnvan || {})[orTem(r)] || '', 'Müşteri'),
+    orM('vadeSarti', 'Vade Şartı', r => r.k.vadeSarti, 'Müşteri'), orM('rol', 'Cari Rolü', r => orSz(r).rol, 'Müşteri'), orM('kartDurum', 'Kart Durumu', r => orSz(r).durum, 'Müşteri'), orM('anaGrup', 'Faaliyet Ana Grubu', r => (orSz(r).anaGruplar || []).join(', '), 'Müşteri'),
+    orM('yetkili', 'Yetkili', r => r.k.yetkili || orSz(r).yetkili, 'Müşteri'), orM('telefon', 'Telefon', r => orSz(r).telefon, 'Müşteri'), orM('eposta', 'E-posta', r => orSz(r).eposta, 'Müşteri'), orM('vergiNo', 'Vergi No', r => orSz(r).vergiNo, 'Müşteri')];
+  const OR_CARI = [
+    orP('bakiye', 'Bakiye', r => bakiyeSec(r.k), 'Alacak'), orP('bakiyeR', 'Bakiye R', r => r.k.bakiyeR, 'Alacak'), orP('bakiyeX', 'Bakiye X', r => r.k.bakiyeX, 'Alacak'), orP('acikToplam', 'Açık Toplam', r => r.k.acikToplam, 'Alacak'), orN('acikAdet', 'Açık Fatura (Adet)', r => r.k.acikAdet, 'Alacak', { top: 1 }),
+    orP('gecmis', 'Gecikmiş', r => r.k.gecmis, 'Alacak'), orN('gecmisAdet', 'Gecikmiş Fatura (Adet)', r => r.k.gecmisAdet, 'Alacak', { top: 1 }), orN('maxGecikme', 'En Uzun Gecikme (Gün)', r => r.k.maxGecikme, 'Alacak'),
+    orP('buHafta', 'Bu Hafta Vadeli', r => r.k.buHafta, 'Alacak'), orP('g8_30', '8–30 Gün Vadeli', r => r.k.g8_30, 'Alacak'), orP('g31_60', '31–60 Gün Vadeli', r => r.k.g31_60, 'Alacak'), orP('g60', '60+ Gün Vadeli', r => r.k.g60, 'Alacak'),
+    orP('cek', 'Çek / Senet', r => r.k.cek, 'Alacak'), orN('cekAdet', 'Çek / Senet (Adet)', r => r.k.cekAdet, 'Alacak', { top: 1 }), orP('toplamRisk', 'Toplam Risk', r => (r.k.acikToplam || 0) + (r.k.cek || 0), 'Alacak'),
+    orP('son30', 'Son 30 Gün Tahsilat', r => r.k.son30Tahsilat, 'Tahsilat'), orN('son30Adet', 'Son 30 Gün Tahsilat (Adet)', r => r.k.son30Adet, 'Tahsilat', { top: 1 }), orD('sonTahsilat', 'Son Tahsilat Tarihi', r => r.k.sonTahsilatIso, 'Tahsilat'), orP('sonTahsilatTl', 'Son Tahsilat Tutarı', r => r.k.sonTahsilatTl, 'Tahsilat'), orP('buAyOdeme', 'Bu Ay Tahsilat', r => (r.k.takip || {}).buAyOdeme, 'Tahsilat'),
+    orP('satis', 'Satış · Dönem', r => topla(orSat(r.k), x => x.tl), 'Satış'), orP('satisR', 'Satış R · Dönem', r => topla(orSat(r.k).filter(x => x.islemTipi === 'R'), x => x.tl), 'Satış'), orP('satisX', 'Satış X · Dönem', r => topla(orSat(r.k).filter(x => x.islemTipi !== 'R'), x => x.tl), 'Satış'),
+    orN('satisAdet', 'Satış Faturası (Adet) · Dönem', r => orSat(r.k).length, 'Satış', { top: 1 }), orD('sonFatura', 'Son Fatura Tarihi', r => (r.k.sonFatura || {}).tarih, 'Satış'), orP('sonFaturaTl', 'Son Fatura Tutarı', r => (r.k.sonFatura || {}).tl, 'Satış'),
+    orP('aySonuVf', 'Ay Sonu Vade Farkı', r => orVf(r).aySonuVf, 'Vade Farkı'), orP('bugunVf', 'Bugüne Kadar Vade Farkı', r => orVf(r).bugunVf, 'Vade Farkı'), orP('kesilenVf', 'Kesilen Vade Farkı', r => orVf(r).kesilen, 'Vade Farkı'), orN('vfOran', '% Vade Farkı Oranı (Aylık)', r => orVf(r).oran, 'Vade Farkı'),
+    orM('risk', 'Risk', r => r.k.risk, 'Limit ve Risk'), orM('limitDurum', 'Limit Durumu', r => r.k.limitDurum, 'Limit ve Risk'), orP('limit', 'Limit', r => orVf(r).limit, 'Limit ve Risk'), orP('limitRisk', 'Limit Riski', r => orVf(r).limitRisk, 'Limit ve Risk'),
+    orN('limitYuzde', '% Limit Kullanımı', r => orVf(r).limitYuzde, 'Limit ve Risk'), orP('limitAsim', 'Limit Aşımı', r => orVf(r).limitAsim, 'Limit ve Risk'), orM('satisDurum', 'Satış Durumu', r => orVf(r).satisDurdu ? 'Durduruldu' : 'Açık', 'Limit ve Risk'),
+    orM('mutabakat', 'Mutabakat', r => orVf(r).mutabakat, 'Limit ve Risk'), orM('uyum', 'Muhasebe Uyumu', r => (r.k.uyum || {}).durum, 'Limit ve Risk'), orP('uyumFark', 'Muhasebe Farkı', r => (r.k.uyum || {}).fark, 'Limit ve Risk')];
+  const orBelgeH = r => belgeLink(r.k.kod, r.x.belge), orTip = r => r.x.islemTipi === 'R' ? 'R' : 'X';
+  const OR_KAYNAK = {
+    musteri: { ad: 'Müşteriler', birim: 'müşteri', donem: true, anahtar: r => r.k.kod, liste: () => cariler().map(k => ({ k })), kol: OR_KIMLIK.concat(OR_CARI), vars: ['kod', 'ad', 'sirket', 'temsilci', 'acikToplam', 'gecmis', 'cek', 'toplamRisk', 'son30', 'risk'] },
+    acik: { ad: 'Açık Faturalar', birim: 'fatura', donem: false, anahtar: r => r.k.kod + '|' + r.x.belge, liste: () => cariler().flatMap(k => k.kalemler.map(x => ({ k, x }))), vars: ['kod', 'ad', 'temsilci', 'belge', 'tarih', 'vade', 'gecikme', 'islemTipi', 'kalanPb', 'tl'],
+      kol: OR_KIMLIK.concat([orM('belge', 'Belge No', r => r.x.belge, 'Fatura', { h: orBelgeH }), orD('tarih', 'Fatura Tarihi', r => r.x.tarih, 'Fatura'), orA('ay', 'Fatura Ayı', r => r.x.tarih, 'Fatura'), orD('vade', 'Vade', r => r.x.vade, 'Fatura'), orA('vadeAy', 'Vade Ayı', r => r.x.vade, 'Fatura'),
+        orN('kalanGun', 'Vadeye Kalan (Gün)', r => r.x.gun, 'Fatura'), orN('gecikme', 'Gecikme (Gün)', r => r.x.gun < 0 ? -r.x.gun : 0, 'Fatura'), orM('vadeDurum', 'Vade Durumu', r => r.x.gun < 0 ? 'Gecikmiş' : 'Vadesi Gelmedi', 'Fatura'), orM('islemTipi', 'İşlem Tipi', orTip, 'Fatura'), orM('tur', 'Fatura Türü', r => r.x.tur, 'Fatura'),
+        orM('pb', 'Para Birimi', r => pbAd(r.x.pb), 'Fatura'), orV('tutar', 'Fatura Tutarı', r => r.x.tutar, r => r.x.pb, 'Fatura'), orV('kalanPb', 'Kalan', r => r.x.kalan, r => r.x.pb, 'Fatura'), orP('tl', 'Kalan', r => r.x.tl, 'Fatura')]) },
+    satis: { ad: 'Satış Faturaları', birim: 'fatura', donem: true, anahtar: r => r.k.kod + '|' + r.x.belge, liste: () => cariler().flatMap(k => orSat(k).map(x => ({ k, x }))), vars: ['kod', 'ad', 'temsilci', 'belge', 'tarih', 'islemTipi', 'tutar', 'tl', 'durum'],
+      kol: OR_KIMLIK.concat([orM('belge', 'Belge No', r => r.x.belge, 'Fatura', { h: orBelgeH }), orD('tarih', 'Fatura Tarihi', r => r.x.tarih, 'Fatura'), orA('ay', 'Fatura Ayı', r => r.x.tarih, 'Fatura'), orM('yil', 'Fatura Yılı', r => String(r.x.tarih || '').slice(0, 4), 'Fatura'), orM('islemTipi', 'İşlem Tipi', orTip, 'Fatura'),
+        orM('pb', 'Para Birimi', r => pbAd(r.x.pb), 'Fatura'), orV('tutar', 'Fatura Tutarı', r => r.x.tutar, r => r.x.pb, 'Fatura'), orP('tl', 'Fatura Tutarı', r => r.x.tl, 'Fatura'), orV('kalanPb', 'Kalan', r => r.x.kalan, r => r.x.pb, 'Fatura'), orM('durum', 'Durum', r => r.x.kalan > 0.005 ? 'Açık' : 'Kapalı', 'Fatura')]) },
+    tahsilat: { ad: 'Tahsilatlar', birim: 'tahsilat', donem: true, anahtar: r => r.x.no, vars: ['no', 'tarih', 'kod', 'ad', 'temsilci', 'yontem', 'islemTipi', 'tutar', 'tutarTl', 'durum'],
+      liste: () => tahsilatlar().filter(t => donemUy(t.tarihIso)).map(x => ({ k: cariBul(x.cariKodu) || { kod: x.cariKodu, kisaAd: x.cariAd, sirket: x.sirket }, x })),
+      kol: OR_KIMLIK.concat([orM('no', 'Tahsilat No', r => r.x.no, 'Tahsilat', { h: r => `<a href="#" class="tk-link" data-or-tah="${esc(r.x.no)}" title="Tahsilat kaydını aç"><b>${esc(r.x.no)}</b></a>` }), orD('tarih', 'Tahsilat Tarihi', r => r.x.tarihIso, 'Tahsilat'), orA('ay', 'Tahsilat Ayı', r => r.x.tarihIso, 'Tahsilat'),
+        orM('yil', 'Tahsilat Yılı', r => String(r.x.tarihIso || '').slice(0, 4), 'Tahsilat'), orM('yontem', 'Yöntem', r => r.x.yontem, 'Tahsilat'), orM('islemTipi', 'İşlem Tipi', orTip, 'Tahsilat'), orM('pb', 'Para Birimi', r => pbAd(r.x.paraBirimi), 'Tahsilat'),
+        orV('tutar', 'Tutar', r => r.x.tutar, r => r.x.paraBirimi, 'Tahsilat'), orP('tutarTl', 'Tutar', r => r.x.tutarTl, 'Tahsilat'), orM('durum', 'Durum', r => r.x.durum, 'Tahsilat'), orP('vadeFarki', 'Vade Farkı', r => r.x.vadeFarki, 'Tahsilat'), orP('kurFarki', 'Kur Farkı', r => r.x.kurFarki, 'Tahsilat'),
+        orM('vfFatura', 'Vade Farkı Fatura No', r => r.x.vadeFarkiFaturaNo, 'Tahsilat'), orN('cekAdet', 'Çek (Adet)', r => r.x.cekAdet, 'Tahsilat', { top: 1 }), orM('kaydeden', 'Kaydeden', r => r.x.kullanici, 'Tahsilat'), orM('aciklama', 'Açıklama', r => r.x.aciklama, 'Tahsilat')]) }
+  };
+  const OR_OP = [['=', '='], ['!=', '≠'], ['>=', '≥'], ['<=', '≤'], ['>', '>'], ['<', '<'], ['icerir', 'içerir'], ['icermez', 'içermez'], ['dolu', 'dolu'], ['bos', 'boş']];
+  const OR_SAKLA = 'tkOzelRapor';
+  const orVarsayilan = kaynak => ({ kaynak, sutunlar: OR_KAYNAK[kaynak].vars.slice(), kosullar: [], grup: [], ad: '' });
+  /** dışarıdan gelen ayarı (tarayıcı / kayıtlı rapor) doğrular: bilinmeyen kaynak, sütun ve koşul alanları atılır */
+  function orTemizle(a) {
+    const kaynak = a && OR_KAYNAK[a.kaynak] ? a.kaynak : 'musteri', var_ = k => OR_KAYNAK[kaynak].kol.some(c => c.k === k);
+    const sutunlar = (Array.isArray(a && a.sutunlar) ? a.sutunlar : []).filter(var_);
+    return { kaynak, sutunlar: sutunlar.length ? sutunlar : OR_KAYNAK[kaynak].vars.slice(), kosullar: (Array.isArray(a && a.kosullar) ? a.kosullar : []).filter(c => c && var_(c.a)).map(c => ({ a: c.a, o: OR_OP.some(o => o[0] === c.o) ? c.o : '=', v: String(c.v ?? '') })),
+      grup: (Array.isArray(a && a.grup) ? a.grup : []).filter(var_).slice(0, 2), ad: String((a && a.ad) || '').slice(0, 60) };
+  }
+  let orAyar = orVarsayilan('musteri'), orAcik = true; try { const s = JSON.parse(localStorage.getItem(OR_SAKLA) || 'null'); if (s) orAyar = orTemizle(s); } catch (x) { }
+  const orSakla = () => { try { localStorage.setItem(OR_SAKLA, JSON.stringify(orAyar)); } catch (x) { } };
+  const orKolonlar = () => OR_KAYNAK[orAyar.kaynak].kol, orKol = k => orKolonlar().find(c => c.k === k), orDeger = (c, r) => { try { const v = c.v(r); return v == null ? '' : v; } catch (x) { return ''; } };
+  const orSayisal = c => c.t === 'p' || c.t === 'n' || c.t === 'v', orBaslik = c => c.t === 'p' ? c.ad + ' (₺)' : c.t === 'v' ? c.ad + ' (Belge PB)' : c.ad;
+  const orSayiYaz = x => Number(x || 0).toLocaleString(TR, { maximumFractionDigits: 1 });
+  const orPbTop = (L, c) => { const m = {}; L.forEach(r => { const p = pbAd(c.pb(r)); m[p] = (m[p] || 0) + (Number(orDeger(c, r)) || 0); }); return Object.keys(m).filter(p => Math.abs(m[p]) > 0.005).sort((a, b) => (a === '₺') - (b === '₺') || a.localeCompare(b)).map(p => n2(m[p]) + ' ' + esc(p)).join('<br>'); };
+  /** sütun tanımı → tablo motoru sütunu (satır = kayıt) */
+  function orMotor(c) {
+    const v = r => orDeger(c, r);
+    if (c.t === 'p') return P(c.k, orBaslik(c), r => Number(v(r)) || 0, c.h ? { h: c.h } : null);
+    if (c.t === 'n') return P(c.k, c.ad, r => Number(v(r)) || 0, { sinif: 'sayac', h:   /* sayac: tablo-hizala ₺ eklemesin (adet, gün, %) */ r => Number(v(r)) ? orSayiYaz(v(r)) : tire, top: c.top ? r => Number(v(r)) || 0 : null, dipH: L => orSayiYaz(topla(L, v)) });
+    if (c.t === 'v') return P(c.k, orBaslik(c), r => Number(v(r)) || 0, { h: r => Number(v(r)) ? n2(v(r)) + ' ' + esc(pbAd(c.pb(r))) : tire, dipH: L => orPbTop(L, c) || '' });
+    if (c.t === 'd') return D(c.k, c.ad, v);
+    if (c.t === 'a') return M(c.k, c.ad, v, { h: r => v(r) ? ayEtiket(v(r)) : tire });
+    return M(c.k, c.ad, r => String(v(r)), c.h ? { h: c.h } : null);
+  }
+  /** koşul: değer girilmemişse süzmez (dolu / boş hariç); sayı Türkçe yazılır (80.000 · 12,5); tarih gg.aa.yyyy ya da takvimden */
+  function orUyar(kosul, r) {
+    const c = orKol(kosul.a); if (!c) return true; const x = orDeger(c, r), o = kosul.o, v = String(kosul.v ?? '').trim(), bosMu = orSayisal(c) ? !Number(x) : String(x).trim() === '';
+    if (o === 'dolu') return !bosMu; if (o === 'bos') return bosMu; if (v === '') return true;
+    let a, b;
+    if (orSayisal(c)) { a = Number(x) || 0; b = sayi(v); if (o === 'icerir') return String(x).includes(v); if (o === 'icermez') return !String(x).includes(v); }
+    else if (c.t === 'd') { a = String(x); b = trIso(v); } else if (c.t === 'a') { a = String(x); b = /^\d{4}-\d{2}/.test(v) ? v.slice(0, 7) : trIso(v).slice(0, 7); } else { a = kucuk(x); b = kucuk(v); }
+    if (o === 'icerir') return String(a).includes(String(b)); if (o === 'icermez') return !String(a).includes(String(b));
+    const k = typeof a === 'number' ? a - b : String(a).localeCompare(String(b), TR);
+    return o === '=' ? k === 0 : o === '!=' ? k !== 0 : o === '>=' ? k >= 0 : o === '<=' ? k <= 0 : o === '>' ? k > 0 : k < 0;
+  }
+  const orKosulMetni = () => orAyar.kosullar.filter(c => orKol(c.a) && (c.v !== '' || c.o === 'dolu' || c.o === 'bos')).map(c => { const col = orKol(c.a), op = (OR_OP.find(o => o[0] === c.o) || ['', c.o])[1]; return `${orBaslik(col)} ${op}${c.o === 'dolu' || c.o === 'bos' ? '' : ' ' + (col.t === 'd' ? trh(trIso(c.v)) : col.t === 'a' && /^\d{4}-\d{2}/.test(c.v) ? ayEtiket(c.v.slice(0, 7)) : c.v)}`; }).join(' · ');
+  const orGruplar = () => { const g = []; orKolonlar().forEach(c => { if (!g.includes(c.g)) g.push(c.g); }); return g; };
+  const orSecenekH = (secili, bosAd, uygun) => `<option value="">${esc(bosAd)}</option>` + orGruplar().map(g => { const l = orKolonlar().filter(c => c.g === g && (!uygun || uygun(c))); return l.length ? `<optgroup label="${esc(g)}">${l.map(c => `<option value="${esc(c.k)}"${c.k === secili ? ' selected' : ''}>${esc(orBaslik(c))}</option>`).join('')}</optgroup>` : ''; }).join('');
+  function orSutunCiz() {
+    $('#tkOrSutunlar').innerHTML = orGruplar().map(g => `<div class="tk-or-grup"><b>${esc(g)}</b>${orKolonlar().filter(c => c.g === g).map(c => `<label class="tk-or-sutun${orAyar.sutunlar.includes(c.k) ? ' secili' : ''}"><input type="checkbox" value="${esc(c.k)}"${orAyar.sutunlar.includes(c.k) ? ' checked' : ''}>${esc(orBaslik(c))}</label>`).join('')}</div>`).join('');
+  }
+  /** metin alanında değer listeden seçilir (o alandaki farklı değer 60'ı geçmiyorsa); tarih → takvim, ay → ay seçici, sayı → kutu */
+  function orKosulCiz() {
+    const hepsi = OR_KAYNAK[orAyar.kaynak].liste();
+    $('#tkOrKosullar').innerHTML = orAyar.kosullar.map((c, i) => {
+      const col = orKol(c.a), degersiz = c.o === 'dolu' || c.o === 'bos'; let deger;
+      if (degersiz) deger = '<span></span>';
+      else if (col.t === 'd') deger = `<input type="date" class="form-control orV" value="${esc(trIso(c.v))}" aria-label="Değer">`;
+      else if (col.t === 'a') deger = `<input type="month" class="form-control orV" value="${esc(c.v)}" aria-label="Değer">`;
+      else { const ds = col.t === 'm' && (c.o === '=' || c.o === '!=') ? [...new Set(hepsi.map(r => String(orDeger(col, r))).filter(Boolean))].sort((a, b) => a.localeCompare(b, TR)) : null;
+        deger = ds && ds.length && ds.length <= 60 ? `<select class="form-select orV" aria-label="Değer"><option value="">Seçin…</option>${ds.concat(c.v && !ds.includes(c.v) ? [c.v] : []).map(d => `<option${d === c.v ? ' selected' : ''}>${esc(d)}</option>`).join('')}</select>` : `<input class="form-control orV" value="${esc(c.v)}" placeholder="${orSayisal(col) ? '80.000' : 'değer'}" aria-label="Değer">`; }
+      return `<div class="tk-or-kosul" data-i="${i}"><select class="form-select orA" aria-label="Alan">${orSecenekH(c.a, 'Alan…')}</select><select class="form-select orO" aria-label="Karşılaştırma">${OR_OP.map(o => `<option value="${o[0]}"${o[0] === c.o ? ' selected' : ''}>${o[1]}</option>`).join('')}</select>${deger}<button type="button" class="tk-dgm orSil" title="Koşulu kaldır"><i class="fas fa-xmark"></i></button></div>`;
+    }).join('') || '<div class="tk-or-bos">Koşul yok: bütün kayıtlar listelenir.</div>';
+  }
+  function orUstCiz() {
+    $('#tkOrKaynak').innerHTML = Object.keys(OR_KAYNAK).map(k => `<option value="${k}"${k === orAyar.kaynak ? ' selected' : ''}>${esc(OR_KAYNAK[k].ad)}</option>`).join('');
+    const grupUygun = c => c.t === 'm' || c.t === 'a' || c.t === 'd';
+    $('#tkOrGrup1').innerHTML = orSecenekH(orAyar.grup[0] || '', 'Gruplama Yok', grupUygun); $('#tkOrGrup2').innerHTML = orSecenekH(orAyar.grup[1] || '', 'İkinci Düzey Yok', c => grupUygun(c) && c.k !== orAyar.grup[0]); $('#tkOrGrup2').disabled = !orAyar.grup[0];
+    const sel = $('#tkOrKayitli'), L = K.ozelRaporlar || []; sel.innerHTML = '<option value="">Kayıtlı Raporlar</option>' + L.map(r => `<option value="${esc(r.ad)}"${r.ad === orAyar.ad ? ' selected' : ''} title="${esc((r.kullanici || '') + ' · ' + (r.zaman || ''))}">${esc(r.ad)}</option>`).join('');
+    if (document.activeElement !== $('#tkOrAd')) $('#tkOrAd').value = orAyar.ad || '';
+    $('#tkOrAyar').hidden = !orAcik; $('#tkOrAyarAc').checked = orAcik;
+  }
+  let orKurulu = '';
+  function cizOzel() {
+    const KY = OR_KAYNAK[orAyar.kaynak], imza = orAyar.kaynak + '|' + (K.ozelRaporlar || []).length;
+    orUstCiz(); if (orKurulu !== imza || !$('#tkOrSutunlar').children.length) { orSutunCiz(); orKosulCiz(); orKurulu = imza; }
+    const tum = KY.liste(), L = tum.filter(r => orAyar.kosullar.every(c => orUyar(c, r))), S = orKolonlar().filter(c => orAyar.sutunlar.includes(c.k)), gk = orAyar.grup.map(orKol).filter(Boolean);
+    let satirSayisi = L.length;
+    if (gk.length) {
+      // GRUPLU: satır = grup; grup alanları + Kayıt + seçili sütunlardan toplanabilenler (₺ tutar, adet, belge PB tutarı)
+      const m = new Map(); L.forEach(r => { const a = gk.map(c => String(orDeger(c, r))).join(' ¦ '); if (!m.has(a)) m.set(a, { a, l: [] }); m.get(a).l.push(r); });
+      const G = [...m.values()], yaz = (c, r) => { const v = orDeger(c, r); return v === '' ? '(boş)' : c.t === 'd' ? trh(v) : c.t === 'a' ? ayEtiket(v) : String(v); };
+      const kol = gk.map(c => M('g_' + c.k, c.ad, g => String(orDeger(c, g.l[0])), { h: g => `<b>${esc(yaz(c, g.l[0]))}</b>` }));
+      kol.push(P('_n', `Adet (${KY.birim})`, g => g.l.length, { sinif: 'sayac', h: g => `<a href="#" class="tk-link" data-or-grup="${esc(g.a)}" title="Bu grubun satırlarını göster">${orSayiYaz(g.l.length)}</a>`, dipH: LL => orSayiYaz(topla(LL, g => g.l.length)) }));
+      S.filter(c => c.t === 'p' || c.t === 'v' || (c.t === 'n' && c.top)).forEach(c => kol.push(P(c.k, orBaslik(c), g => topla(g.l, r => Number(orDeger(c, r)) || 0), c.t === 'v' ? { h: g => orPbTop(g.l, c) || tire, dipH: LL => orPbTop(LL.flatMap(g => g.l), c) || '' } : c.t === 'n' ? { h: g => orSayiYaz(topla(g.l, r => Number(orDeger(c, r)) || 0)), dipH: LL => orSayiYaz(topla(LL, g => topla(g.l, r => Number(orDeger(c, r)) || 0))) } : null)));
+      tablo('ozel', kol, G, { anahtar: g => g.a, sira: { k: '_n', y: -1 }, bos: 'Koşullara uyan kayıt yok.', dipAd: (LL, ad) => `${ad} · ${LL.length} grup` });
+      cizOzel.gruplar = m; satirSayisi = G.length;
+    } else { tablo('ozel', S.map(orMotor), L, { anahtar: KY.anahtar, bos: 'Koşullara uyan kayıt yok.', dipAd: (LL, ad) => `${ad} · ${LL.length} ${KY.birim}` }); cizOzel.gruplar = null; }
+    const km = orKosulMetni();
+    $('#tkOrBaslik').innerHTML = `<i class="fas fa-filter me-1"></i>Özel Rapor${orAyar.ad ? ' · ' + esc(orAyar.ad) : ''} · ${esc(KY.ad)}${gk.length ? ' · ' + esc(gk.map(c => c.ad).join(' › ')) + ' Bazında' : ''}`;
+    $('#tkOrNot').textContent = `${L.length} / ${tum.length} ${KY.birim}${gk.length ? ` · ${satirSayisi} grup` : ''} · ${km ? 'koşul: ' + km : 'koşul yok'}${KY.donem ? ' · ' + donemMetni() : ''}`;
+    orSakla();
+  }
+  /** grup satırındaki kayıt sayısına tıklayınca: o grubun satırları seçili sütunlarla pencerede (en çok 500 satır) */
+  function orGrupAc(a) {
+    const g = cizOzel.gruplar && cizOzel.gruplar.get(a); if (!g) return; const KY = OR_KAYNAK[orAyar.kaynak], S = orKolonlar().filter(c => orAyar.sutunlar.includes(c.k)).map(orMotor), gk = orAyar.grup.map(orKol).filter(Boolean), l = g.l.slice(0, 500);
+    const ad = gk.map(c => { const v = orDeger(c, g.l[0]); return `${esc(c.ad)}: <b>${esc(v === '' ? '(boş)' : c.t === 'd' ? trh(v) : c.t === 'a' ? ayEtiket(v) : v)}</b>`; }).join(' · ');
+    penAc(ad, `${g.l.length} ${KY.birim}${g.l.length > l.length ? ` · ilk ${l.length} satır` : ''}`, `<div class="table-responsive"><table class="na-tablo tk-tablo"><thead><tr>${S.map(c => `<th class="sirasiz">${pbBaslik(c.ad)}</th>`).join('')}</tr></thead><tbody>${l.map(r => `<tr>${S.map(c => `<td>${c.h(r)}</td>`).join('')}</tr>`).join('')}</tbody><tfoot><tr class="toplam">${S.map((c, i) => `<td>${i === 0 ? `Toplam · ${g.l.length}` : c.top ? (c.dipH ? c.dipH(g.l) : tl(topla(g.l, c.top))) : ''}</td>`).join('')}</tr></tfoot></table></div>`);
+  }
+  async function orKaydet() {
+    const ad = ($('#tkOrAd').value || '').trim(); if (!ad) { mesaj('warning', 'Rapor adı girin.'); $('#tkOrAd').focus(); return; }
+    if ((K.ozelRaporlar || []).some(r => kucuk(r.ad) === kucuk(ad)) && kucuk(orAyar.ad) !== kucuk(ad) && !confirm(`"${ad}" adlı kayıtlı rapor var. Üzerine yazılsın mı?`)) return;
+    const d = await post('/Tahsilat/OzelRaporKaydet', { Ad: ad, Ayar: JSON.stringify(Object.assign({}, orAyar, { ad })) }).catch(() => ({ success: false, message: 'Ağ hatası.' }));
+    mesaj(d.success ? 'success' : 'danger', '<i class="fas fa-floppy-disk me-1"></i>' + esc(d.message)); if (d.success) { K.ozelRaporlar = d.ozelRaporlar; orAyar.ad = ad; cizOzel(); }
+  }
+  function orYukle(ad) { const r = (K.ozelRaporlar || []).find(x => x.ad === ad); if (!r) return; let a = null; try { a = JSON.parse(r.ayar); } catch (x) { } if (!a) { mesaj('danger', 'Kayıtlı rapor okunamadı.'); return; } orAyar = orTemizle(Object.assign(a, { ad: r.ad })); orKurulu = ''; delete SIRA.ozel; ciz(); }
+  async function orSil() {
+    const ad = $('#tkOrKayitli').value; if (!ad) { mesaj('info', 'Silinecek kayıtlı raporu seçin.'); return; } if (!confirm(`"${ad}" raporu herkes için silinecek. Emin misiniz?`)) return;
+    const d = await post('/Tahsilat/OzelRaporSil', { Ad: ad }).catch(() => ({ success: false, message: 'Ağ hatası.' }));
+    mesaj(d.success ? 'success' : 'danger', '<i class="fas fa-trash me-1"></i>' + esc(d.message)); if (d.success) { K.ozelRaporlar = d.ozelRaporlar; if (orAyar.ad === ad) orAyar.ad = ''; cizOzel(); }
+  }
+  if ($('#tkOrKaynak')) {
+    const kosulYenile = () => { orKosulCiz(); cizOzel(); };
+    $('#tkOrKaynak').addEventListener('change', e => { orAyar = orVarsayilan(e.target.value); orKurulu = ''; delete SIRA.ozel; ciz(); });   // veri kaynağı değişince sütun / koşul / gruplama o kaynağın varsayılanına döner
+    $('#tkOrGrup1').addEventListener('change', e => { orAyar.grup = e.target.value ? [e.target.value].concat(orAyar.grup[1] && orAyar.grup[1] !== e.target.value ? [orAyar.grup[1]] : []) : []; delete SIRA.ozel; cizOzel(); });
+    $('#tkOrGrup2').addEventListener('change', e => { orAyar.grup = orAyar.grup.slice(0, 1).concat(e.target.value ? [e.target.value] : []); cizOzel(); });
+    $('#tkOrAyarAc').addEventListener('change', e => { orAcik = e.target.checked; cizOzel(); });
+    $('#tkOrSutunlar').addEventListener('change', e => { const c = e.target.closest('input[type=checkbox]'); if (!c) return; if (c.checked) { if (!orAyar.sutunlar.includes(c.value)) orAyar.sutunlar.push(c.value); } else orAyar.sutunlar = orAyar.sutunlar.filter(x => x !== c.value); c.closest('label').classList.toggle('secili', c.checked); cizOzel(); });
+    $('#tkOrSutunSifirla').addEventListener('click', e => { e.preventDefault(); orAyar.sutunlar = OR_KAYNAK[orAyar.kaynak].vars.slice(); orSutunCiz(); cizOzel(); });
+    $('#tkOrKosulEkle').addEventListener('click', () => { const ilk = orKolonlar().find(c => c.t === 'p') || orKolonlar()[0]; orAyar.kosullar.push({ a: ilk.k, o: orSayisal(ilk) ? '>=' : '=', v: '' }); kosulYenile(); const son = $$('#tkOrKosullar .orV').pop(); if (son) son.focus(); });
+    $('#tkOrKosullar').addEventListener('change', e => {
+      const r = e.target.closest('.tk-or-kosul'); if (!r) return; const c = orAyar.kosullar[+r.dataset.i]; if (!c) return;
+      if (e.target.classList.contains('orA')) { const col = orKol(e.target.value); if (!col) return; c.a = col.k; c.v = ''; c.o = orSayisal(col) ? '>=' : '='; kosulYenile(); return; }
+      if (e.target.classList.contains('orO')) { c.o = e.target.value; kosulYenile(); return; }
+      if (e.target.classList.contains('orV')) { c.v = e.target.value.trim(); cizOzel(); }
+    });
+    $('#tkOrKosullar').addEventListener('input', e => { if (!e.target.matches('input.orV')) return; const c = orAyar.kosullar[+e.target.closest('.tk-or-kosul').dataset.i]; if (c) { c.v = e.target.value.trim(); cizOzel(); } });
+    $('#tkOrKosullar').addEventListener('click', e => { const b = e.target.closest('.orSil'); if (!b) return; orAyar.kosullar.splice(+b.closest('.tk-or-kosul').dataset.i, 1); kosulYenile(); });
+    $('#tkOrKaydet').addEventListener('click', orKaydet); $('#tkOrAd').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); orKaydet(); } });
+    $('#tkOrKayitli').addEventListener('change', e => { if (e.target.value) orYukle(e.target.value); });
+    $('#tkOrSil').addEventListener('click', orSil);
+    $('#tkOrPdf').addEventListener('click', () => { if (!window.TabloExcel) { mesaj('danger', 'PDF aktarımı yüklenemedi.'); return; } window.TabloExcel.pdf('ozel_rapor', [{ tablo: '#tkTablo-ozel', ad: 'Özel Rapor', baslik: (IHRACAT ? 'İhracat Finansal Takibi · ' : 'Tahsilat · ') + $('#tkOrBaslik').textContent.trim(), altBaslik: $('#tkOrNot').textContent.trim() }]); });
+    $('#tkTablo-ozel').addEventListener('click', e => {
+      const g = e.target.closest('a[data-or-grup]'); if (g) { e.preventDefault(); orGrupAc(g.dataset.orGrup); return; }
+      const t = e.target.closest('a[data-or-tah]'); if (t) { e.preventDefault(); tahsilatAc(t.dataset.orTah); return; }
+      const k = e.target.closest('a[data-or-kart]'); if (k) { e.preventDefault(); kartAc(k.dataset.orKart); }
+    });
+    if (pPen) pPen.addEventListener('click', e => { const k = e.target.closest('a[data-or-kart]'), t = e.target.closest('a[data-or-tah]'); if (k) { e.preventDefault(); penKapat(); kartAc(k.dataset.orKart); } else if (t) { e.preventDefault(); penKapat(); tahsilatAc(t.dataset.orTah); } });
+  }
+
+  const CIZ = { ozel: cizOzel, ozet: cizOzet, cari: cizCari, kartlar: cizKartlar, acik: cizAcik, hafta: cizHafta, banka: cizBanka, aylik: cizAylik, plan: cizPlan, surec: cizSurec, vftakip: cizVfTakip, vade: cizVade, kapama: cizKapama, satis: cizSatis };
   function ciz() {
     if (!K) return; const rapor = RAPOR.includes(aktif), cubuk = aktif !== 'yeni' && aktif !== 'adat' && aktif !== 'cek';   // çubuk Tahsilatlar, Kesilen Fark Faturaları ve (19 Kas gece, kullanıcı) ihracat sekmelerinde de: müşteri kümesi ihracat listelerine gider (ibSuzgecYaz)
     $('#tkFiltreKart').style.display = cubuk ? '' : 'none'; $('#tkExcel').style.display = aktif === 'yeni' || aktif === 'adat' || aktif === 'cek' ? 'none' : '';
     if (aktif === 'cek') cekAc();
     yeniDugmeYerlestir(cubuk);
-    $('#tkDonem').hidden = !DONEMLI.includes(aktif);
+    $('#tkDonem').hidden = !(DONEMLI.includes(aktif) || (aktif === 'ozel' && OR_KAYNAK[orAyar.kaynak].donem));   // Özel Rapor: dönem yalnız tarihli veri kaynaklarında (Açık Faturalar'da yok)
     const cip = $('#tkCariCip'), c = F.cari && cariBul(F.cari); cip.hidden = !c; if (c) cip.innerHTML = `${esc(c.kod)} ${esc(c.kisaAd)} <i class="fas fa-xmark"></i>`;
     if (cubuk) { SZ.yaz(); $('#tkKapsam').textContent = `${cariler().length} / ${(BOLGE_KILIT ? K.satirlar.filter(k => k.bolge === BOLGE_KILIT) : K.satirlar).length} müşteri${PBG === 'USD' && usdKur() ? ` · 1 $ = ${n2(usdKur())}\u00A0₺` : ''}`; }
     if (rapor) { CIZ[aktif](); if (IHRACAT && aktif === 'plan') cizHafta(); } else if (IHRACAT && aktif === 'ibOzet') cizOzet();   // ihracat kipi: Tahsilat Özeti gövdesi İhracat Özeti panelinde; Haftalık Beklenen tabloları Planlanan ↔ Gerçekleşen'de
@@ -1371,6 +1549,7 @@
     if (IB(aktif)) { if (window.IhracatFinans) window.IhracatFinans.excel(); return; }   // ihracat sekmeleri: ihracat-finans.js'in Excel'i (açık sekmenin tablosu)
     const S = { ozet: [['#tkTablo-is', 'Bekleyen İşler'], ['#tkTablo-sirket', 'Şirket Özeti'], ['#tkTablo-temsilci', 'Temsilci Özeti']], cari: [['#tkTablo-cari', 'Alacak Takibi']], kartlar: [['#tkTablo-kartlar', 'Müşteri Cari Kartları']], acik: [['#tkTablo-acik', 'Açık Faturalar']], hafta: [['#tkTablo-hafta', 'Haftalık Beklenen'], ['#tkTablo-haftaDetay', 'Haftanın Faturaları']],
       banka: [['#tkTablo-banka', 'Banka Tahsilatları']], surec: [['#tkTablo-surec', SG === 'not' ? 'Görüşme Notları' : 'Aylık Süreç']], vftakip: [['#tkTablo-vftakip', 'Vade Farkı Takibi']], vade: [['#tkTablo-vade', 'Gecikmeli Tahsilatlar']], kapama: [['#tkTablo-kapama', 'Kapama Robotu']], liste: [['#thListe', 'Tahsilatlar'], ['#tkTablo-vade', 'Gecikmeli Tahsilatlar']], fatura: [['#thFaturaListe', 'Kesilen Fark Faturaları']],
+      ozel: [['#tkTablo-ozel', 'Özel Rapor' + (orAyar.ad ? ' · ' + orAyar.ad : '')]],
       satis: [['#tkTablo-satisTip', 'Aylık Satışlar · X - R'], ['#tkTablo-satisSinif', 'Aylık Satışlar · Cari Sınıfı'], ['#tkTablo-satisTemsilci', 'Aylık Satışlar · Satış Temsilcisi'], ...($('#tkTablo-satisSube') ? [['#tkTablo-satisSube', 'Şube Satışları'], ['#tkTablo-satisSubeYil', 'Şube Satışları · Yıllara Göre']] : [])],
       aylik: [['#tkTablo-aylikPazar', 'Aylık Tahsilatlar · Yurtiçi / Yurtdışı'], ['#tkTablo-aylikSinif', 'Aylık Tahsilatlar · Cari Sınıfı'], ['#tkTablo-aylikTemsilci', 'Aylık Tahsilatlar · Satış Temsilcisi'], ['#tkTablo-aylikYontem', 'Aylık Tahsilatlar · Yöntem'], ['#tkTablo-aylikCek', 'Vade Ayına Göre Çek · Senet'], ['#tkTablo-aylikKisi', 'Tahsilatı Yapan Kişi']], plan: [['#tkTablo-planVade', 'Vade Ayına Göre Planlanan'], ['#tkTablo-planAy', 'Tahsilat Ayına Göre'], ['#tkTablo-planVf', 'Vade Farkı Doğan - Kesilen'], ...(IHRACAT ? [['#tkTablo-hafta', 'Haftalık Beklenen'], ['#tkTablo-haftaDetay', 'Haftanın Faturaları']] : [])] }[aktif]; if (!S) return;
     window.TabloExcel.indir('tahsilat_' + aktif, S.map(x => ({ tablo: x[0], ad: x[1], baslik: 'Tahsilat · ' + x[1] })));
