@@ -565,8 +565,8 @@ namespace WebApplication3.Data
         /// <summary>Banka tahsilatları (bankadan gelen döviz girişi) — Tahsilat raporu › Aylık Tahsilatlar "Yurtdışı · İhracat Banka Girişi" satırı için (19 Kas 2026, iki rapor senkron).</summary>
         public static List<(IhracatTahsilat T, string DosyaNo, string BelgeNo)> TahsilatListesi() { Yukle(); lock (Kilit) return _depo.Tahsilatlar.Select(t => (t, _depo.Dosyalar.FirstOrDefault(x => x.Id == t.DosyaId)?.DosyaNo ?? "", _depo.Belgeler.FirstOrDefault(b => b.Id == t.IbkbBelgeId)?.No ?? "")).ToList(); }
         public static List<object> GorevKisilerListe() => GorevKisiler();
-        static string GorevLink(IbkbGorev g) => KaynakSec(g.Kaynak) == "Tahsilat" ? $"/Rapor117?sekme=cari&gorev={g.Id}" : $"/IhracatFinans/Eski?sekme=bakiye&gorev={g.Id}";   /* 19 Kas 2026: Cari Bakiyeler (Mizan) eski raporda */
-        static string GorevEkranAd(IbkbGorev g) => KaynakSec(g.Kaynak) == "Tahsilat" ? "Tahsilat Raporu · Bakiye Karşılaştırması" : "İhracat Finansal Takibi (Eski) · Cari Bakiyeler";
+        static string GorevLink(IbkbGorev g) => KaynakSec(g.Kaynak) == "Tahsilat" ? $"/Rapor117?sekme=cari&gorev={g.Id}" : $"/IhracatFinans?sekme=ibBakiye&gorev={g.Id}";   /* 20 Kas 2026: Cari Bakiyeler (Mizan) tek raporda */
+        static string GorevEkranAd(IbkbGorev g) => KaynakSec(g.Kaynak) == "Tahsilat" ? "Tahsilat Raporu · Bakiye Karşılaştırması" : "İhracat Finansal Takibi · Cari Bakiyeler (Mizan)";
         public static string GorevKaydet(IbkbGorevIstek d, string kullanici, out IbkbGorev kayit)
         {
             kayit = null; if (d == null) return "Veri yok."; Yukle();

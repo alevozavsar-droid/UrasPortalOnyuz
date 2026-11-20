@@ -187,7 +187,6 @@ namespace WebApplication3.Data
             ("Rapor166", "Index", "fas fa-table-list", "Fatura İnceleme", null),
             ("Rapor167", "Index", "fas fa-table-list", "Gider Onay Ekranı", null),
             ("IhracatFinans", "Index", "fas fa-file-shield", "İhracat Finansal Takibi", null),   // 11 Kas 2026: İhracat Tahsilat Raporu (Rapor68) + İBKB Beyanname Takibi (Rapor168) birleşik gerçek kayıtlı ekran; 19 Kas 2026: Tahsilat gövdesi (yurtdışı) + ihracat sekmeleri tek rapor
-            ("IhracatFinans", "Eski", "fas fa-clock-rotate-left", "İhracat Finansal Takibi (Eski)", null),   // 19 Kas 2026: eski sayfa — İhracat Satışları, Banka Tahsilatları, Tamamlanan, Cari Bakiyeler (Mizan), Vade Takibi
             ("Rapor169", "Index", "fas fa-table-list", "Taslak Faturalar", null),
             ("Rapor170", "Index", "fas fa-table-list", "Gider / Gelir Analizi", null),
             ("Rapor171", "Index", "fas fa-table-list", "Yansıtma Faturası", null),

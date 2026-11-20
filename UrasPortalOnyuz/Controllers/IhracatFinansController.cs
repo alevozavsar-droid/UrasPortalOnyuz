@@ -28,16 +28,18 @@ namespace WebApplication3.Controllers
         [HttpGet(""), HttpGet("Index")]
         public IActionResult Index(string sekme, int gorev = 0)
         {
-            if (gorev > 0) return Redirect("/IhracatFinans/Eski?sekme=bakiye&gorev=" + gorev);
-            ViewData["Title"] = "İhracat Finansal Takibi"; ViewBag.Ihracat = true; ViewBag.Kod = ""; ViewBag.No = "";
+            // 20 Kas 2026 (kullanıcı: "Eski kaldır"): tek sayfa; ?gorev=ID (e-posta / portal mesajı) Cari Bakiyeler sekmesini görev penceresiyle açar
+            if (gorev > 0 && string.IsNullOrEmpty(sekme)) return Redirect("/IhracatFinans?sekme=ibBakiye&gorev=" + gorev);
+            ViewData["Title"] = "İhracat Finansal Takibi"; ViewBag.Ihracat = true; ViewBag.Kod = ""; ViewBag.No = ""; ViewBag.Gorev = gorev;
             return View("~/Views/Rapor117/Index.cshtml");
         }
+        /// <summary>Eski sayfa kaldırıldı (20 Kas 2026): eski bağlantılar yeni rapordaki karşılık sekmeye yönlenir (satis → ibSatis, tahsilat → ibTahsilat, tamamlanan → ibTamamlanan, bakiye → ibBakiye, vade → ibVade, liste / belgeler / musteri / sube / dab → ib*).</summary>
         [HttpGet("Eski")]
         public IActionResult Eski(string sekme, int gorev = 0)
         {
-            ViewData["Title"] = "İhracat Finansal Takibi (Eski)";
-            ViewBag.Sekme = gorev > 0 ? "bakiye" : sekme ?? "satis"; ViewBag.Gorev = gorev;   // ?gorev=ID: e-posta / portal mesajındaki bağlantı; görev penceresi açılır
-            return View("~/Views/IhracatFinans/Index.cshtml");
+            string s = string.IsNullOrEmpty(sekme) ? "" : sekme.ToLowerInvariant(); string hedef = s == "" ? "" : "ib" + char.ToUpperInvariant(s[0]) + s.Substring(1);
+            if (s == "ozet") hedef = "ibOzet";
+            return RedirectPermanent("/IhracatFinans" + (hedef == "" ? "" : "?sekme=" + hedef) + (gorev > 0 ? (hedef == "" ? "?" : "&") + "gorev=" + gorev : ""));
         }
 
         [HttpGet("Veri")]
