@@ -68,7 +68,7 @@
 <link rel="stylesheet" href="/css/cari-islem.css?v=2" />
 <link rel="stylesheet" href="/css/tahsilat.css?v=11" />
 <link rel="stylesheet" href="/css/suzgec-cubuk.css?v=2" />
-<link rel="stylesheet" href="/css/tahsilat-takip.css?v=40" />
+<link rel="stylesheet" href="/css/tahsilat-takip.css?v=46" />
 @if (ihracat) { <link rel="stylesheet" href="/css/ihracat-finans.css?v=1" /> }
 }
 @{ bool gomulu = Context.Request.Query["gomulu"] == "1"; /* 19 Kas 2026: İhracat Finansal Takibi › Tahsilat Takibi · Yurtdışı sekmesi bu raporu çerçevede açar (?gomulu=1&bolge=Yurtdışı): başlık gizli, bölge kilitli */ }
@@ -77,14 +77,12 @@
         @if (ihracat)
         {
             <h4><span class="rt-ikon"><i class="fas fa-file-shield"></i></span>İhracat Finansal Takibi</h4>
-            <span class="tk-hap" title="Yurtdışı müşteriler: Tahsilat raporunun bütün sekmeleri bölge Yurtdışı'na kilitli + Beyanname / İBKB dosyaları, İBKB belgeleri, müşteri bazlı, şube bakiyeleri, DAB bağlantıları; vade farkı yalnız tahsilat işlenirken kesilir"><i class="fas fa-earth-europe me-1"></i>Yurtdışı · Tahsilat + İhracat Takibi · Konsolide</span>
             <a class="tk-hap" href="/Rapor94/Ihracat" target="_blank" rel="noopener" title="Yurtdışı Satış Siparişi"><i class="fas fa-ship me-1"></i>Yurtdışı Satış Siparişi</a>
             <a class="tk-hap" href="/IhracatBelge?sekme=liste" target="_blank" rel="noopener" title="İhracat Belge Gönderim Takibi (akreditif, vesaik, kargo)"><i class="fas fa-file-export me-1"></i>İhracat Belge Gönderim</a>
         }
         else
         {
             <h4><span class="rt-ikon"><i class="fas fa-hand-holding-dollar"></i></span>Tahsilat</h4>
-            <span class="tk-hap"><i class="fas fa-database me-1"></i>Cari Mutabakat + Cari Kartları + Banka Hareketleri</span>
         }
         <span class="th-kur" id="thKurlar"></span>
         <div class="sag">
@@ -112,9 +110,20 @@
         <button type="button" class="tk-yeni-dgm" id="tkYeniDgm" title="Yeni tahsilat girişi (her sekmeden ulaşılır)"><i class="fas fa-plus"></i> Yeni Tahsilat</button>
     </span>
 
+    @* 20 Kas 2026 (kullanıcı: "bu başlıkları tasarımsal olarak geliştir; üstte daha az başlık, altta daha çok, ortalayarak"): İKİ KATLI ŞERİT — üstte ortalı ana gruplar (#tkGruplar: Özet · Alacak · Müşteri · Tahsilat · İhracat · İBKB),
+       altta yalnız seçili grubun sekmeleri (#tkSekmeler, ortalı; öbür grupların düğmeleri gizli). Grup düğmesi o grupta en son açılan (yoksa ilk) sekmeyi açar; eşleme tahsilat-takip.js sonunda. Sekme adları ve data-p değerleri aynı. *@
+    @{
+        var grupTanim = new List<(string k, string ad, string ikon)> { ("ozet", "Özet", "fa-chart-pie"), ("alacak", "Alacak · Müşteri", "fa-users"), ("tahsilat", "Tahsilat", "fa-hand-holding-dollar") };
+        if (ihracat) { grupTanim.Add(("ihracat", "İhracat · İBKB", "fa-ship")); }
+        var grupBas = new Dictionary<string, string> { ["cari"] = "alacak", ["banka"] = "tahsilat", ["ibSatis"] = "ihracat" };
+        var sekmeGrup = new Dictionary<string, string>();
+        string grupSimdi = "ozet";
+        foreach (var s in sekmeler) { if (grupIlk.Contains(s.Item1) && grupBas.TryGetValue(s.Item1, out var yeniGrup)) { grupSimdi = yeniGrup; } sekmeGrup[s.Item1] = grupSimdi; }
+    }
+    @* 20 Kas 2026 (kullanıcı, ikinci istek: "iki katlı grup şeridi çok kötü olmuş; hepsi açık, sabit dursun; Tahsilat'ın sekmelerine hiç dokunma; İhracat'ta yalnız hizalama, tüm sekme adlarını aynı anda görebileyim"):
+       bütün sekmeler her zaman görünür. Tahsilat şeridi eski hâliyle (tek satır, sola dayalı, grup ayraçlı). İhracat'ta iki ORTALI satır: üstte Özet | Alacak · Müşteri | Tahsilat, altta İhracat · İBKB (satır kırıcı .tk-satir-kir). *@
     <div class="na-sekme" id="tkSekmeler" data-dinamik="kapali">
-        @* 19 Kas 2026 (kullanıcı: "yeni tahsilat sekmesinin rengini farklı yapalım, anlaşılır olsun") → Yeni Tahsilat sekmesi yeşil dolgulu (sekme-yeni) *@
-        @foreach (var s in sekmeler) { <button type="button" data-p="@s.Item1" class="@(grupIlk.Contains(s.Item1) ? "grup-ilk" : "") @(s.Item1 == "yeni" ? "sekme-yeni" : "")"><i class="fas @s.Item3 me-1"></i>@s.Item2</button> }
+        @foreach (var s in sekmeler) { if (ihracat && s.Item1 == "ibSatis") { <span class="tk-satir-kir" aria-hidden="true"></span> } <button type="button" data-p="@s.Item1" data-grup="@sekmeGrup[s.Item1]" class="@(grupIlk.Contains(s.Item1) ? "grup-ilk" : "") @(s.Item1 == "yeni" ? "sekme-yeni" : "")"><i class="fas @s.Item3 me-1"></i>@s.Item2</button> }
     </div>
 
     @* Tahsilat Özeti: Views/Rapor117/_TahsilatOzet.cshtml — ihracat kipinde ayrı sekme yok, aynı gövde İhracat Özeti panelinin başında (_IhracatPaneller) *@
@@ -152,8 +161,8 @@
         <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-user-tie me-1"></i>Aylık Tahsilatlar · Satış Temsilcisine Göre</span><span class="not" id="tkAylikTemsilciNot"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-aylikTemsilci" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
         <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-calendar-days me-1"></i>Aylık Tahsilatlar · Yönteme Göre</span><span class="not" id="tkAylikNot"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-aylikYontem" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
         <div class="tk-iki">
-            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-money-check me-1"></i>Vade Ayına Göre Alınan Çek · Senet</span><span class="not">çek / senet satırları, vade ayına göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-aylikCek" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
-            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-user-pen me-1"></i>Tahsilatı Yapan Kişiye Göre</span><span class="not">işlenen tahsilatlar, tahsilat ayına göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-aylikKisi" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-money-check me-1"></i>Vade Ayına Göre Alınan Çek · Senet</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-aylikCek" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-user-pen me-1"></i>Tahsilatı Yapan Kişiye Göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-aylikKisi" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
         </div>
     </div>
 
@@ -161,8 +170,8 @@
     <div class="na-panel" data-p="plan">
         <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-scale-balanced me-1"></i>Vade Ayına Göre · Yapılması Gereken ↔ Gerçekleşen Tahsilat</span><span class="not" id="tkPlanNot"></span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-planVade" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
         <div class="tk-iki">
-            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-hand-holding-dollar me-1"></i>Tahsilat Ayına Göre · Gerçekleşen ve Gecikme</span><span class="not">ödemenin alındığı aya göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-planAy" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
-            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-percent me-1"></i>Vade Farkı · Kesilmesi Gereken ↔ Kesilen</span><span class="not">KDV hariç matrah, fatura / tahsilat ayına göre</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-planVf" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-hand-holding-dollar me-1"></i>Tahsilat Ayına Göre · Gerçekleşen ve Gecikme</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-planAy" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
+            <div class="na-kart"><div class="na-kart-b"><span><i class="fas fa-percent me-1"></i>Vade Farkı · Kesilmesi Gereken ↔ Kesilen</span></div><div class="na-kart-g p-0"><div class="table-responsive"><table class="na-tablo tk-tablo tk-matris" id="tkTablo-planVf" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div>
         </div>
         @if (ihracat)
         {
@@ -255,7 +264,7 @@
 
     @* Cari kart penceresi (19 Kas 2026): Müşteri Cari Kartları ve Alacak Takibi satırından /CariKart/Musteri sayfası pencerede açılır (limit, risk, faaliyet, talepler burada düzenlenir); kapanınca rapor tazelenir *@
     <div class="tk-perde" id="tkKart" hidden><section class="tk-pencere genis tk-kart" role="dialog" aria-modal="true">
-        <div class="ust"><div><div class="ad" id="tkKartAd"></div><div class="alt">Kart detayı · limit türü / manuel limit, risk, faaliyetler ve talepler buradan düzenlenir; pencere kapanınca rapor yenilenir</div></div><a class="tk-dgm" id="tkKartAc" href="#" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i>Yeni Sekmede Aç</a><button type="button" data-kart-kapat title="Kapat (Esc)"><i class="fas fa-xmark"></i></button></div>
+        <div class="ust"><div><div class="ad" id="tkKartAd"></div></div><a class="tk-dgm" id="tkKartAc" href="#" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i>Yeni Sekmede Aç</a><button type="button" data-kart-kapat title="Kapat (Esc)"><i class="fas fa-xmark"></i></button></div>
         <section class="govde p-0"><iframe id="tkKartIframe" title="Cari Kartı" src="about:blank"></iframe></section>
     </section></div>
 
@@ -280,8 +289,8 @@
 @section Scripts {
 <script src="/js/tablo-excel.js?v=16"></script>
 <script src="/js/suzgec-cubuk.js?v=2"></script>
-<script src="/js/tahsilat-takip.js?v=61"></script>
-<script src="/js/tahsilat.js?v=31"></script>
-<script src="/js/adat.js?v=6"></script>
-@if (ihracat) { <script src="/js/tablo-hizala.js?v=14"></script><script src="/js/ihracat-finans.js?v=18"></script> }
+<script src="/js/tahsilat-takip.js?v=65"></script>
+<script src="/js/tahsilat.js?v=32"></script>
+<script src="/js/adat.js?v=7"></script>
+@if (ihracat) { <script src="/js/tablo-hizala.js?v=14"></script><script src="/js/ihracat-finans.js?v=20"></script> }
 }

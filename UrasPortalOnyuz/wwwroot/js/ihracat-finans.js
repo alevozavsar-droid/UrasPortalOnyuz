@@ -15,7 +15,7 @@
   const n0 = v => Number(v) || 0;
   const para = v => n0(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const sembol = pb => ({ USD: '$', EUR: '€', GBP: '£', RUB: '₽', TRY: '₺', TL: '₺' })[pb] || (pb ? pb : '?');
-  const tutar = (v, pb) => para(v) + ' ' + sembol(pb);
+  const tutar = (v, pb) => para(v) + '\u00A0' + sembol(pb);
   const tarih = s => { if (!s) return '—'; const p = String(s).slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : s; };
   const AYLAR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
   const bos = '<span class="text-muted">—</span>';
@@ -31,11 +31,11 @@
   /** döviz bazında toplam: Map döviz → tutar (dövizi boş satırlar '?' altında) */
   const DOVIZ_SIRA = { USD: 0, EUR: 1, GBP: 2, RUB: 3, '?': 9 };
   const dovizTop = (L, f) => { const m = new Map(); L.forEach(d => { const pb = d.doviz || '?'; m.set(pb, (m.get(pb) || 0) + n0(typeof f === 'function' ? f(d) : d[f])); }); return [...m].filter(([, v]) => Math.abs(v) > 0.004).sort((a, b) => (DOVIZ_SIRA[a[0]] ?? 5) - (DOVIZ_SIRA[b[0]] ?? 5)); };
-  const sy = v => `<td class="sayac">${v}</td>`;   // adet hücresi: tablo-hizala ₺ eklemesin
-  const kisaUsd = v => n0(v).toLocaleString('tr-TR', { maximumFractionDigits: 0 }) + ' $';
+  const sy = v => `<td class="sayac">${v}</td>`;   // adet hücresi: tablo-hizala\u00A0₺ eklemesin
+  const kisaUsd = v => n0(v).toLocaleString('tr-TR', { maximumFractionDigits: 0 }) + '\u00A0$';
   const usdK = (tutar, doviz) => n0(tutar) * (n0((V.usdKur || {})[doviz]) || (doviz ? 1 : 0));   // ABD doları karşılığı (döviz boşsa 0)
   const dovizH = (L, f, kucuk) => { const l = dovizTop(L, f); return l.length ? (kucuk ? l.map(([pb, v]) => tutar(v, pb)).join(' · ') : l.map(([pb, v], i) => i === 0 ? tutar(v, pb) : `<small>${tutar(v, pb)}</small>`).join('')) : bos; };
-  const kisaDoviz = (L, f) => dovizTop(L, f).map(([pb, v]) => n0(v).toLocaleString('tr-TR', { maximumFractionDigits: 0 }) + ' ' + sembol(pb)).join(' · ') || '—';
+  const kisaDoviz = (L, f) => dovizTop(L, f).map(([pb, v]) => n0(v).toLocaleString('tr-TR', { maximumFractionDigits: 0 }) + '\u00A0' + sembol(pb)).join(' · ') || '—';
 
   let V = null, F = { sirket: [], yil: [], dab: [], takip: [], doviz: [], ara: '' }, OPT = { sirket: [], yil: [], dab: [], takip: [], doviz: [] };
   // 19 Kas 2026 (kullanıcı: "filtrelerde birden fazla seçime onay versin; tüm raporlarda"): süzgeçler ortak SuzgecCubuk (wwwroot/js/suzgec-cubuk.js), her değer DİZİ ([] = süzgeç yok);
@@ -175,25 +175,25 @@
     tablo('ozetSirket', ['Şirket', 'Yıl', 'Dosya', 'Yapıldı', 'Gerek Yok', 'Kısmi', 'Bekliyor', 'Vadesi Geçti', 'Beyanname Tutarı', 'Gereken', 'Getirilen', 'Kalan'],
       gr.map(g => `<tr><td class="ad">${esc(g.s)}</td><td class="sayac">${g.y}</td><td class="sayac">${g.l.length}</td><td class="sayac">${say(g.l, d => d.dabDurumu === 'Yapıldı' || d.dabDurumu === 'Peşin Yapıldı')}</td><td class="sayac">${say(g.l, d => d.dabDurumu === 'Gerek Yok')}</td><td class="sayac">${say(g.l, d => d.dabDurumu === 'Kısmi')}</td><td class="sayac">${say(g.l, d => d.dabDurumu === 'Bekliyor')}</td><td class="sayac">${say(g.l, d => d.takip === 'Vadesi Geçti')}</td><td class="para">${dovizH(g.l, 'tutar')}</td><td class="para">${dovizH(g.l, 'gereken')}</td><td class="para">${dovizH(g.l, 'getirilen')}</td><td class="para genel">${dovizH(g.l, 'kalan')}</td></tr>`),
       `<tr><td colspan="2">Toplam · ${gr.length} şirket-yıl</td><td class="sayac">${G.length}</td><td class="sayac">${say(G, d => d.dabDurumu === 'Yapıldı' || d.dabDurumu === 'Peşin Yapıldı')}</td><td class="sayac">${say(G, d => d.dabDurumu === 'Gerek Yok')}</td><td class="sayac">${say(G, d => d.dabDurumu === 'Kısmi')}</td><td class="sayac">${say(G, d => d.dabDurumu === 'Bekliyor')}</td><td class="sayac">${say(G, d => d.takip === 'Vadesi Geçti')}</td><td class="para">${dovizH(G, 'tutar')}</td><td class="para">${dovizH(G, 'gereken')}</td><td class="para">${dovizH(G, 'getirilen')}</td><td class="para genel">${dovizH(G, 'kalan')}</td></tr>`);
-    $('#ibNot-ozetSirket').textContent = `${gr.length} şirket-yıl · iptal dosyalar dışarıda`;
+    $('#ibNot-ozetSirket').textContent = `${gr.length} şirket-yıl`;
     // döviz
     const dv = [...new Set(G.map(d => d.doviz || '?'))].sort();
     tablo('ozetDoviz', ['Döviz', 'Dosya', 'Beyanname Tutarı', 'Gereken Bedel', 'Getirilen', 'Kalan', 'Kapandı', 'Açık', 'Muaf'],
       dv.map(pb => { const l = G.filter(d => (d.doviz || '?') === pb); return `<tr><td class="ad">${pb === '?' ? dovizRz('') : rz(pb, 'teal')}</td><td class="sayac">${l.length}</td><td class="para">${tutar(l.reduce((s, d) => s + n0(d.tutar), 0), pb)}</td><td class="para">${tutar(l.reduce((s, d) => s + n0(d.gereken), 0), pb)}</td><td class="para">${tutar(l.reduce((s, d) => s + n0(d.getirilen), 0), pb)}</td><td class="para genel">${tutar(l.reduce((s, d) => s + n0(d.kalan), 0), pb)}</td><td class="sayac">${say(l, d => d.takip === 'Kapandı')}</td><td class="sayac">${say(l, d => d.takip === 'Açık' || d.takip === 'Vade Yaklaşıyor' || d.takip === 'Vadesi Geçti' || d.takip === 'Kısmi')}</td><td class="sayac">${say(l, d => d.takip === 'Muaf')}</td></tr>`; }),
       `<tr><td>Toplam</td><td class="sayac">${G.length}</td><td colspan="4"><small>her döviz kendi satırında · kur uygulanmaz</small></td><td class="sayac">${say(G, d => d.takip === 'Kapandı')}</td><td class="sayac">${say(G, d => /Açık|Vade|Kısmi/.test(d.takip))}</td><td class="sayac">${say(G, d => d.takip === 'Muaf')}</td></tr>`);
-    $('#ibNot-ozetDoviz').textContent = `${dv.length} döviz · tutarlar kendi para biriminde`;
+    $('#ibNot-ozetDoviz').textContent = `${dv.length} döviz`;
     // durum dağılımı
     const satirD = (etiket, f, rzH) => { const l = G.filter(f); return `<tr><td class="ad">${rzH}</td><td class="sayac">${l.length}</td><td>${G.length ? Math.round(l.length / G.length * 100) : 0} %</td><td class="para">${dovizH(l, 'tutar', true)}</td><td class="para">${dovizH(l, 'kalan', true)}</td></tr>`; };
     tablo('ozetDurum', ['Durum', 'Dosya', 'Pay', 'Beyanname Tutarı', 'Kalan'],
       [...V.dabDurumlari.filter(x => x !== 'İptal').map(x => satirD(x, d => d.dabDurumu === x, dabRz(x))), `<tr><td colspan="5" style="background:#f8fafc;font-weight:800;font-size:.6rem;text-align:left">TAKİP DURUMU (vade = başlangıç + ${V.vadeGun} gün)</td></tr>`, ...V.takipDurumlari.filter(x => x !== 'İptal').map(x => satirD(x, d => d.takip === x, takipRz(x)))],
       `<tr><td>Toplam</td><td class="sayac">${G.length}</td><td>100 %</td><td class="para">${dovizH(G, 'tutar', true)}</td><td class="para">${dovizH(G, 'kalan', true)}</td></tr>`);
-    $('#ibNot-ozetDurum').textContent = `DAB / İBKB durumu bankadan; takip durumu vade ve bedele göre hesaplanır`;
+    $('#ibNot-ozetDurum').textContent = '';
     // aylık
     const aylar = [...new Set(G.filter(d => d.baslangic).map(d => d.baslangic.slice(0, 7)))].sort();
     tablo('ozetAy', ['Ay', 'Dosya', 'Yapıldı', 'Gerek Yok', 'Bekliyor', 'Beyanname Tutarı', 'Kalan'],
       aylar.map(a => { const l = G.filter(d => d.baslangic && d.baslangic.slice(0, 7) === a); const [y, m] = a.split('-'); return `<tr><td class="ad">${AYLAR[+m - 1]} ${y}</td><td class="sayac">${l.length}</td><td class="sayac">${say(l, d => d.dabDurumu === 'Yapıldı' || d.dabDurumu === 'Peşin Yapıldı')}</td><td class="sayac">${say(l, d => d.dabDurumu === 'Gerek Yok')}</td><td class="sayac">${say(l, d => d.dabDurumu === 'Bekliyor' || d.dabDurumu === 'Kısmi')}</td><td class="para">${dovizH(l, 'tutar', true)}</td><td class="para">${dovizH(l, 'kalan', true)}</td></tr>`; }),
       `<tr><td>Toplam · ${aylar.length} ay</td><td class="sayac">${G.filter(d => d.baslangic).length}</td><td colspan="3"><small>${G.filter(d => !d.baslangic).length} dosyada başlangıç tarihi yok</small></td><td class="para">${dovizH(G.filter(d => d.baslangic), 'tutar', true)}</td><td class="para">${dovizH(G.filter(d => d.baslangic), 'kalan', true)}</td></tr>`);
-    $('#ibNot-ozetAy').textContent = 'dosya başlangıç (fiili ihraç) ayına göre';
+    $('#ibNot-ozetAy').textContent = '';
 
     // ---- ihracata dair öbür özetler (11 Kas 2026, "özet kısmına yıl yıl satış temsilcisine göre ihracat rakamları, satış ve tahsilat özetleri gelsin"): satış / tahsilat / belge / cari bakiye süzgeçleri şirket · yıl · döviz · arama (DAB durumu süzgeci yalnız dosyalara)
     const sYil = s => (s.faturaTarihi || s.tarih || '').slice(0, 4);
@@ -212,7 +212,7 @@
       tRows.map(g => `<tr class="${g.t === 'Atanmadı' ? 'yakin' : ''}"><td class="sayac">${g.y}</td><td class="ad">${g.t === 'Atanmadı' ? '<span class="ib2-rz bekle" title="Dosyada ve müşteri cari kartında satış temsilcisi yok; dosyayı açıp Satış Temsilcisi alanını doldurun">Atanmadı</span>' : esc(g.t)}</td><td class="sayac">${g.d.length || bos}</td><td class="sayac">${musteriSay(g)}</td><td class="para">${dovizH(g.d, 'tutar')}</td><td class="para genel">${g.d.length ? tutar(usdTop(g.d), 'USD') : bos}</td><td class="para">${dovizH(g.d, 'gereken')}</td><td class="para">${dovizH(g.d, 'getirilen')}</td><td class="para">${dovizH(g.d, 'kalan')}</td><td class="sayac">${say(g.d, acikMi) || bos}</td><td class="sayac">${g.s.length || bos}</td><td class="para">${dovizH(g.s, 'tutar')}</td></tr>`),
       `<tr><td colspan="2">Toplam · ${new Set(tRows.map(g => g.t)).size} temsilci · ${new Set(tRows.map(g => g.y)).size} yıl</td><td class="sayac">${G.length}</td><td class="sayac">${new Set([...G.map(d => d.musteriKodu || d.musteri), ...S.map(s => s.cariKodu || s.cari)].filter(Boolean)).size}</td><td class="para">${dovizH(G, 'tutar')}</td><td class="para genel">${tutar(usdTop(G), 'USD')}</td><td class="para">${dovizH(G, 'gereken')}</td><td class="para">${dovizH(G, 'getirilen')}</td><td class="para">${dovizH(G, 'kalan')}</td><td class="sayac">${say(G, acikMi)}</td><td class="sayac">${S.length}</td><td class="para">${dovizH(S, 'tutar')}</td></tr>`,
       'Dosya ya da satış yok.');
-    $('#ibNot-ozetTemsilci').textContent = `${say(G, d => !d.temsilci)} dosyada temsilci atanmadı · ABD $ karşılığı dönem kuruyla · sipariş sütunları Yurtdışı Satış Siparişi'nden`;
+    $('#ibNot-ozetTemsilci').textContent = `${say(G, d => !d.temsilci)} dosyada temsilci atanmadı`;
 
     // İhracat Satışları özeti: yıl × fatura kesen şirket (Yurtdışı Satış Siparişi; yüklenmiş / faturalanmış)
     const sk = [...new Set(S.map(s => sYil(s) + '|' + s.sirket))].map(k => { const [y, sr] = k.split('|'); return { y, sr, l: S.filter(s => sYil(s) === y && s.sirket === sr) }; }).sort((a, b) => yilSirala(a, b) || a.sr.localeCompare(b.sr, 'tr'));
@@ -221,7 +221,7 @@
       sk.map(g => `<tr><td class="sayac">${g.y || '—'}</td><td class="ad">${esc(g.sr || '—')}</td><td class="sayac">${g.l.length}</td><td class="sayac">${say(g.l, s => s.durum === 'Yüklendi')}</td><td class="sayac">${say(g.l, s => s.durum === 'Faturalandı')}</td><td class="sayac">${new Set(g.l.map(s => s.cariKodu || s.cari)).size}</td><td class="para">${dovizH(g.l, 'tutar')}</td><td class="para genel">${tutar(tl(g.l), 'TRY')}</td><td class="sayac">${kg(g.l).toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</td><td class="sayac">${say(g.l, s => s.dosyaId)}</td><td class="sayac">${say(g.l, s => !s.dosyaId) ? `<a href="#" class="ib-git" data-p="satis" title="İhracat Satışları sekmesi">${say(g.l, s => !s.dosyaId)}</a>` : bos}</td><td class="sayac">${say(g.l, s => s.esikAlti) || bos}</td></tr>`),
       `<tr><td colspan="2">Toplam · ${sk.length} yıl-şirket</td><td class="sayac">${S.length}</td><td class="sayac">${say(S, s => s.durum === 'Yüklendi')}</td><td class="sayac">${say(S, s => s.durum === 'Faturalandı')}</td><td class="sayac">${new Set(S.map(s => s.cariKodu || s.cari)).size}</td><td class="para">${dovizH(S, 'tutar')}</td><td class="para genel">${tutar(tl(S), 'TRY')}</td><td class="sayac">${kg(S).toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</td><td class="sayac">${say(S, s => s.dosyaId)}</td><td class="sayac">${say(S, s => !s.dosyaId)}</td><td class="sayac">${say(S, s => s.esikAlti)}</td></tr>`,
       'Yüklenmiş / faturalanmış yurtdışı satış yok.');
-    $('#ibNot-ozetSatis').textContent = `${S.length} sipariş · Yurtdışı Satış Siparişi'nden canlı · yıl fatura tarihine göre`;
+    $('#ibNot-ozetSatis').textContent = `${S.length} sipariş`;
 
     // Banka tahsilatı · İBKB özeti: yıl × banka
     const bk = [...new Set([...T.map(t => (t.tarih || '').slice(0, 4) + '|' + t.banka), ...B.map(b => (b.tarih || '').slice(0, 4) + '|' + b.banka)])].map(k => { const [y, bn] = k.split('|'); return { y, bn, t: T.filter(t => (t.tarih || '').slice(0, 4) === y && t.banka === bn), b: B.filter(b => (b.tarih || '').slice(0, 4) === y && b.banka === bn) }; }).sort((a, b) => yilSirala(a, b) || a.bn.localeCompare(b.bn, 'tr'));
@@ -238,7 +238,7 @@
     tablo('ozetUlke', ['Ülke', 'Kural', 'Dosya', 'Müşteri', 'Beyanname Tutarı', 'ABD $ Karşılığı', 'Gereken', 'Getirilen', 'Kalan', 'Açık', 'Vadesi Geçti'],
       uk.map(g => `<tr><td class="ad">${esc(g.u)}</td><td>${kural(g.u)}</td><td class="sayac">${g.l.length}</td><td class="sayac">${new Set(g.l.map(d => d.musteriKodu || d.musteri)).size}</td><td class="para">${dovizH(g.l, 'tutar')}</td><td class="para genel">${tutar(usdTop(g.l), 'USD')}</td><td class="para">${dovizH(g.l, 'gereken')}</td><td class="para">${dovizH(g.l, 'getirilen')}</td><td class="para">${dovizH(g.l, 'kalan')}</td><td class="sayac">${say(g.l, acikMi) || bos}</td><td class="sayac">${say(g.l, d => d.takip === 'Vadesi Geçti') || bos}</td></tr>`),
       `<tr><td colspan="2">Toplam · ${uk.length} ülke</td><td class="sayac">${G.length}</td><td class="sayac">${new Set(G.map(d => d.musteriKodu || d.musteri)).size}</td><td class="para">${dovizH(G, 'tutar')}</td><td class="para genel">${tutar(usdTop(G), 'USD')}</td><td class="para">${dovizH(G, 'gereken')}</td><td class="para">${dovizH(G, 'getirilen')}</td><td class="para">${dovizH(G, 'kalan')}</td><td class="sayac">${say(G, acikMi)}</td><td class="sayac">${say(G, d => d.takip === 'Vadesi Geçti')}</td></tr>`);
-    $('#ibNot-ozetUlke').textContent = `${uk.length} ülke · ${say(G, d => !d.ulke)} dosyada ülke yok · ülke dosyadan ya da müşteri cari kartından`;
+    $('#ibNot-ozetUlke').textContent = `${uk.length} ülke · ${say(G, d => !d.ulke)} dosyada ülke yok`;
 
     // Cari bakiye özeti (mizan): döviz bazında yurtdışı müşteri bakiyeleri ↔ İBKB dosya kalanı
     const pbs = [...new Set(C.flatMap(c => c.dovizler.map(d => d.pb)))].sort((a, b) => (a === 'TRY') - (b === 'TRY') || a.localeCompare(b));
@@ -247,7 +247,7 @@
       pbs.map(pb => { const l = dvs(pb); return `<tr><td class="ad">${rz(pb, 'teal')}</td><td class="sayac">${l.length}</td><td class="para genel">${tutar(top(l, 'net'), pb)}</td><td class="para">${tutar(top(l, 'tl'), 'TRY')}</td><td class="sayac">${top(l, 'acikFaturaAdet') || bos}</td><td class="para">${tutar(top(l, 'acikFaturaTutar'), pb)}</td><td class="para">${pb === 'TRY' ? bos : tutar(top(l, 'dosyaKalan'), pb)}</td><td class="para">${pb === 'TRY' ? bos : `<span style="font-weight:800;color:${top(l, 'fark') > 0.005 ? '#b91c1c' : top(l, 'fark') < -0.005 ? '#b45309' : '#15803d'}">${tutar(top(l, 'fark'), pb)}</span>`}</td><td class="sayac">${say(l, d => d.eskiBakiyeUyari) || bos}</td></tr>`; }),
       `<tr><td>Toplam</td><td class="sayac">${C.length} cari</td><td colspan="1"><small>${say(C, c => c.kontrolDurumu === 'Kontrol Yok' || c.kontrolDurumu === 'Kontrol Gecikti')} kontrol bekliyor · ${say(C, c => c.farkVar)} fark var</small></td><td class="para">${tutar(C.reduce((a, c) => a + n0(c.bakiyeTl), 0), 'TRY')}</td><td class="sayac">${C.reduce((a, c) => a + n0(c.acikFaturaAdet), 0)}</td><td colspan="3"><small>${C.reduce((a, c) => a + n0(c.dosyaSayisi), 0)} İBKB dosyası bağlı · ${C.reduce((a, c) => a + n0(c.acikDosya), 0)} açık</small></td><td class="sayac">${say(C, c => c.eskiBakiyeUyari)}</td></tr>`,
       'Yurtdışı müşteri carisi yok.');
-    $('#ibNot-ozetBakiye').textContent = `${C.length} yurtdışı müşteri carisi · bakiye zamanı ${V.bakiyeZamani || ''} · ayrıntı Cari Bakiyeler (Mizan) sekmesinde`;
+    $('#ibNot-ozetBakiye').textContent = `${C.length} yurtdışı müşteri carisi · bakiye zamanı ${V.bakiyeZamani || ''}`;
 
     // Yurtdışı şube bakiyeleri (kendi şubelerimiz; kullanıcı: "şube detaylarını da özet kısmında görebilelim"): şubeye tıklayınca Şube Bakiyeleri sekmesinde detay
     const SB = subeListe(true), SBD = subeDv(SB);
@@ -255,12 +255,12 @@
       SB.map(s => `<tr class="tik"><td class="ad"><a href="#" class="ib-sube-git" data-id="${s.id}" title="Şube detayı">${esc(s.sube)}</a></td><td>${esc(s.ulke)}</td><td>${esc(s.sirket || '—')}</td><td>${s.temsilci ? esc(s.temsilci) : '<span class="ib2-rz bekle">Atanmadı</span>'}</td><td class="sayac">${s.yilSayisi ? `${esc(s.ilkYil)} – ${esc(s.sonYil)}` : '—'}</td><td class="para">${tutar(s.satisEsas, s.pb)}</td><td class="para">${tutar(s.toplamOdeme, s.pb)}</td><td class="para genel">${isaretli(s.bakiye, s.pb)}</td><td class="para">${s.yilSayisi ? isaretli(s.sonYilFark, s.pb) : bos}</td><td>${sonEkstreH(s)}</td></tr>`),
       `<tr><td colspan="5">Toplam · ${SB.length} şube · ${new Set(SB.map(s => s.ulke)).size} ülke</td><td class="para">${dovizH(SBD, 'satisEsas')}</td><td class="para">${dovizH(SBD, 'toplamOdeme')}</td><td class="para genel">${dovizH(SBD, 'bakiye')}</td><td class="para">${dovizH(SBD, 'sonYilFark')}</td><td><small>${SB.filter(s => !s.sonGonderim || gunFarki(s.sonGonderim.tarih) > 90).length} şubeye ekstre bekliyor</small></td></tr>`,
       'Şube yok.');
-    $('#ibNot-ozetSube').textContent = `${SB.length} şube · eksi bakiye: şube bize borçlu · ayrıntı Şube Bakiyeleri sekmesinde`;
+    $('#ibNot-ozetSube').textContent = `${SB.length} şube`;
 
     // Bekleyen görevler + düzeltme performansı (12 Kas 2026; "rapor sayfamızda bekleyen görevler gibi bir şey olsun … performans takibi")
     const GO = gorevListe('acik'); gorevTablo('ozetGorev', GO, true); perfTablo('ozetGorevPerf');
-    $('#ibNot-ozetGorev').textContent = `${GO.length} açık görev · ${GO.filter(g => g.durum === 'Düzeltildi').length} muhasebe onayı bekliyor · ${GO.filter(g => g.gecikti).length} termini geçti · ayrıntı Cari Bakiyeler sekmesinde`;
-    $('#ibNot-ozetGorevPerf').textContent = `${(V.gorevPerformans || []).length} kişi · atama → düzeltme → onay süreleri`;
+    $('#ibNot-ozetGorev').textContent = `${GO.length} açık görev · ${GO.filter(g => g.durum === 'Düzeltildi').length} muhasebe onayı bekliyor · ${GO.filter(g => g.gecikti).length} termini geçti`;
+    $('#ibNot-ozetGorevPerf').textContent = `${(V.gorevPerformans || []).length} kişi`;
 
   }
 
@@ -272,7 +272,7 @@
     const farkli = G.filter(d => d.bedelFarki);
     const dip = `<tr><td colspan="8">Toplam · ${L.length} dosya · ${L.length - G.length} iptal · ${[...new Set(L.map(d => d.musteriKodu || d.musteri))].length} müşteri · ${farkli.length} dosyada beyanname ≠ gerçek bedel</td><td class="para">${dovizH(G, 'tutar')}</td><td class="para">${dovizH(G, 'gercekBedelEtkin')}</td><td class="para">${farkli.length ? dovizH(farkli, 'bedelFarki') : bos}</td><td colspan="2"></td><td class="para">${dovizH(G, 'gereken')}</td><td class="para">${dovizH(G, 'gerekenGercek')}</td><td colspan="2"><small>${G.filter(d => d.dabDurumu === 'Yapıldı' || d.dabDurumu === 'Peşin Yapıldı').length} yapıldı · ${G.filter(d => d.dabDurumu === 'Gerek Yok').length} gerek yok · ${G.filter(d => d.dabDurumu === 'Bekliyor').length} bekliyor · ${G.filter(d => d.dabDurumu === 'Kısmi').length} kısmi</small></td><td class="para">${dovizH(G, 'getirilen')}</td><td class="para">${dovizH(G, 'kalan')}${farkli.length ? `<small>beyanname fazlası ${kisaDoviz(G, 'beyannameFazlasi')}</small>` : ''}</td><td class="para">${dovizH(G, 'kalanGercek')}</td><td colspan="2"><small>${G.filter(d => d.takip === 'Vadesi Geçti').length} vadesi geçti · ${G.filter(d => d.takip === 'Vade Yaklaşıyor').length} yaklaşıyor · ${G.filter(d => d.takip === 'Bedel Farkı').length} bedel farkı</small></td><td colspan="3"></td></tr>`;
     tablo('liste', bas, rows, dip, 'Filtreye uyan ihracat dosyası yok. "İhracat Dosyası Ekle" ile yeni dosya girin.');
-    $('#ibNot-liste').textContent = `${L.length} dosya · şirket, yıl ve dosya numarasına göre · dosya no → inceleme, fatura no → fatura incelemesi · satırları işaretleyince seçili toplam dipte`;
+    $('#ibNot-liste').textContent = `${L.length} dosya`;
   }
 
   // ---------- Müşteri Bazlı
@@ -287,7 +287,7 @@
     const farkliG = G.filter(d => d.bedelFarki);
     const dip = `<tr><td colspan="3">Toplam · ${M.length} müşteri · ${[...new Set(farkliG.map(d => d.musteriKodu || d.musteri))].length} müşteride bedel farkı</td><td><small>${[...new Set(G.map(d => d.temsilci).filter(Boolean))].length} temsilci · ${M.filter(x => x.l.every(d => !d.temsilci)).length} müşteri atanmadı</small></td><td class="sayac">${G.length}</td><td class="sayac">${say(G, d => d.dabDurumu === 'Yapıldı' || d.dabDurumu === 'Peşin Yapıldı')}</td><td class="sayac">${say(G, d => d.dabDurumu === 'Gerek Yok')}</td><td class="sayac">${say(G, d => d.dabDurumu === 'Kısmi')}</td><td class="sayac">${say(G, d => d.dabDurumu === 'Bekliyor')}</td><td class="sayac">${say(G, d => d.takip === 'Vadesi Geçti')}</td><td class="para">${dovizH(G, 'tutar')}</td><td class="para">${dovizH(G, 'gercekBedelEtkin')}</td><td>${farkliG.length ? dovizH(farkliG, 'bedelFarki') : bos}</td><td class="sayac">${farkliG.length || bos}</td><td class="para">${dovizH(G, 'gereken')}</td><td class="para">${dovizH(G, 'gerekenGercek')}</td><td class="para">${dovizH(G, 'getirilen')}</td><td class="para genel">${dovizH(G, 'kalan')}</td><td class="para">${dovizH(G, 'kalanGercek')}</td><td class="para">${farkliG.length ? dovizH(G, 'beyannameFazlasi') : bos}</td><td colspan="3"></td></tr>`;
     tablo('musteri', bas, rows, dip, 'Filtreye uyan müşteri yok.');
-    $('#ibNot-musteri').textContent = `${M.length} müşteri · dosya sayısına göre · satıra tıklayınca Dosya Listesi o müşteriye daralır · temsilci süzgeci üstte`;
+    $('#ibNot-musteri').textContent = `${M.length} müşteri`;
   }
 
   // ---------- Vade Takibi
@@ -307,7 +307,7 @@
     const rows = S.map(({ d, p }) => `<tr class="${sinif(d)}"><td class="ad">${esc(d.sirket)}</td><td class="ad">${dosyaLink(d)}</td><td class="metin">${musteriH(d)}</td><td>${esc(d.beyannameNo || '—')}</td><td class="para">${tutar(d.tutar, d.doviz)}</td><td class="para genel">${tutar(p.tutar, p.doviz)}${p.doviz !== d.doviz ? '<small>beyanname dövizinden farklı</small>' : ''}</td><td>${dovizRz(p.doviz)}</td><td>${tarih(p.tarih)}</td><td>${esc(p.banka || d.dabBanka || '—')}</td><td>${esc(p.no || '—')}</td><td>${dabRz(d.dabDurumu)}</td>${notH(p.not)}</tr>`);
     const dip = `<tr><td colspan="5">Toplam · ${S.length} DAB satırı · ${[...new Set(S.map(x => x.d.id))].length} dosya</td><td class="para genel">${dovizH(S.map(x => ({ doviz: x.p.doviz, t: x.p.tutar })), 't')}</td><td colspan="6"></td></tr>`;
     tablo('dab', bas, rows, dip, 'Bağlı DAB satırı yok. Dosya kaydında "Bağlanan DAB / İBKB" bölümünden tutar, döviz, banka ve tarih girin.');
-    $('#ibNot-dab').textContent = `${S.length} DAB satırı · Excel'deki "… BAĞLANDI" notlarından ve ekrandan girilenlerden`;
+    $('#ibNot-dab').textContent = `${S.length} DAB satırı`;
   }
 
   // ---------- İhracat Satışları (Yurtdışı Satış Siparişi'nden canlı; 11 Kas 2026 "satışlar da düşsün")
@@ -317,7 +317,7 @@
     const rows = S.map(s => { const d = s.dosyaId ? V.dosyalar.find(x => x.id === s.dosyaId) : null; return `<tr class="${d ? sinif(d) : 'eslesmedi'}"><td class="ad">${esc(s.sirket)}</td><td class="ad">${esc(s.no || '—')}</td><td>${rz(s.durum, s.durum === 'Faturalandı' ? 'ok' : 'mavi')}</td><td>${faturaLink(s.cariKodu, s.faturaNo)}</td><td>${tarih(s.faturaTarihi)}</td><td>${tarih(s.yukleme)}</td><td class="metin">${esc(s.cari)}<small>${esc(s.cariKodu || '')}</small></td><td>${esc(s.ulke || '—')}</td><td>${esc(s.temsilci || '—')}</td><td>${esc(s.odemeSekli || '—')}</td><td>${esc(s.teslimSekli || '—')}</td><td class="para">${tutar(s.tutar, s.doviz)}</td><td>${dovizRz(s.doviz)}</td><td class="para">${tutar(s.tutarTl, 'TRY')}</td><td>${d ? `${dosyaLink(d)}<small>${esc(d.beyannameNo || 'GÇB yok')}</small>` : '<span class="ib2-rz bekle" title="Bu fatura için beyanname / İBKB dosyası açılmamış">Dosya Yok</span>'}</td><td>${d ? takipRz(d.takip) : bos}</td><td>${s.esikAlti ? '<span class="ib2-rz gri" title="ABD doları karşılığı eşik altı: DAB / İBKB gerekmez">Eşik Altı</span>' : '<span class="ib2-rz teal">Bedel Getirilecek</span>'}</td><td>${d ? '' : `<button type="button" class="btn btn-light border ib-satis-dosya" data-id="${s.id}" title="Bu satıştan beyanname / İBKB dosyası aç (bilgiler dolu gelir)"><i class="fas fa-folder-plus"></i> Dosya Aç</button>`}</td></tr>`; });
     const dip = `<tr><td colspan="11">Toplam · ${S.length} ihracat satışı · ${S.filter(s => s.dosyaId).length} dosyalı · ${S.filter(s => !s.dosyaId).length} dosyasız · ${S.filter(s => s.esikAlti).length} eşik altı</td><td class="para">${dovizH(S, 'tutar')}</td><td></td><td class="para">${tutar(S.reduce((t, s) => t + n0(s.tutarTl), 0), 'TRY')}</td><td colspan="4"></td></tr>`;
     tablo('satis', bas, rows, dip, 'Filtreye uyan yüklenmiş / faturalanmış ihracat siparişi yok.');
-    $('#ibNot-satis').textContent = `${S.length} satış · Yurtdışı Satış Siparişi'nden (yüklenmiş ve faturalanmış) canlı · "Dosya Aç" bilgileri doldurur`;
+    $('#ibNot-satis').textContent = `${S.length} satış`;
   }
   // ---------- Banka Tahsilatları ("tahsilat raporu bankalardan otomatik geliyor; hangi ihracat belge numarası ile eşleşecek seçimi")
   function cizTahsilat() {
@@ -327,7 +327,7 @@
     const rows = T.map(t => `<tr class="eslesmedi"><td class="ad">${esc(t.sirket)}</td><td>${esc(t.banka || '—')}</td><td>${tarih(t.tarih)}</td><td class="metin">${esc(t.gonderen || '—')}</td><td>${esc(t.musteriKodu || '—')}</td><td class="para genel">${tutar(t.tutar, t.doviz)}</td><td>${dovizRz(t.doviz)}</td><td>${esc(t.referans || '—')}</td>${notH(t.aciklama)}<td>${rz(t.kaynak, t.kaynak === 'Banka (Otomatik)' ? 'teal' : 'gri')}</td><td>${tarih(t.olusturma)}<small>${esc(t.olusturan || '')}</small></td><td><button type="button" class="btn btn-primary ib-eslestir" data-id="${t.id}" title="İhracat dosyasıyla eşleştir"><i class="fas fa-link"></i> Eşleştir</button> <button type="button" class="btn btn-light border ib-tahsilat-duzenle" data-id="${t.id}" title="Düzenle"><i class="fas fa-pen"></i></button> <button type="button" class="btn btn-light border text-danger ib-tahsilat-sil" data-id="${t.id}" title="Sil"><i class="fas fa-trash"></i></button></td></tr>`);
     const dip = `<tr><td colspan="5">Toplam · ${T.length} açık tahsilat · ${[...new Set(T.map(t => t.banka))].filter(Boolean).length} banka</td><td class="para genel">${dovizH(T, 'tutar')}</td><td colspan="6"></td></tr>`;
     tablo('tahsilat', bas, rows, dip, 'Açık banka tahsilatı yok: gelen bedellerin tamamı ihracat dosyalarıyla eşleşti. Yeni tahsilat için "Banka Tahsilatı Ekle".');
-    $('#ibNot-tahsilat').textContent = `${T.length} açık tahsilat · tarihe göre · eşleşince Tamamlanan Tahsilatlar'a geçer`;
+    $('#ibNot-tahsilat').textContent = `${T.length} açık tahsilat`;
   }
   // ---------- Tamamlanan Tahsilatlar: eşleşmiş tahsilat + dosya + İBKB belgesi tek satırda
   function cizTamamlanan() {
@@ -336,7 +336,7 @@
     const rows = T.map(t => { const d = V.dosyalar.find(x => x.id === t.dosyaId), b = V.belgeler.find(x => x.id === t.ibkbBelgeId); return `<tr class="${t.durum === 'İBKB Düzenlendi' ? 'kapandi' : ''}"><td>${tahsilatRz(t.durum)}</td><td class="ad">${esc(t.sirket)}</td><td class="ad">${d ? dosyaLink(d) : esc(t.dosyaNo || '—')}</td><td>${esc(t.beyannameNo || (d && d.beyannameNo) || '—')}</td><td class="metin">${d ? musteriH(d) : esc(t.gonderen || '—')}</td><td class="para">${d ? tutar(d.tutar, d.doviz) : bos}</td><td>${d ? dabRz(d.dabDurumu) + (d.kalan ? `<small>kalan ${tutar(d.kalan, d.doviz)}</small>` : '') : bos}</td><td>${esc(t.banka || '—')}</td><td>${tarih(t.tarih)}</td><td class="para genel">${tutar(t.tutar, t.doviz)}</td><td>${esc(t.referans || '—')}</td><td>${b ? `<a href="/IhracatFinans/Belge/${b.id}" target="_blank" rel="noopener" title="Bankaya verilecek formu aç">${esc(b.no)}</a>` : '<span class="ib2-rz gri" title="Eşleştirmede İBKB istenmedi">Belge Yok</span>'}</td><td>${b ? belgeRz(b.durum) : bos}</td><td>${b && b.bankaIbkbNo ? esc(b.bankaIbkbNo) + `<small>${tarih(b.bankaTarihi)}</small>` : bos}</td><td>${t.eslestirme ? tarih(t.eslestirme) + `<small>${esc(t.eslestiren || '')}</small>` : bos}</td><td>${rz(t.kaynak, t.kaynak === 'Banka (Otomatik)' ? 'teal' : 'gri')}</td><td>${b ? `<a class="btn btn-light border" href="/IhracatFinans/Belge/${b.id}" target="_blank" rel="noopener" title="Yazdır / PDF"><i class="fas fa-print"></i></a> <button type="button" class="btn btn-light border ib-belge-durum" data-id="${b.id}" title="Belge durumu · banka İBKB no"><i class="fas fa-pen"></i></button> ` : ''}<button type="button" class="btn btn-light border ib-eslesme-kaldir" data-id="${t.id}" title="Eşleşmeyi kaldır (DAB satırı silinir, belge iptal olur; tahsilat Açık sekmesine döner)"><i class="fas fa-link-slash"></i></button></td></tr>`; });
     const dip = `<tr><td colspan="5">Toplam · ${T.length} tamamlanan tahsilat · ${T.filter(t => t.durum === 'İBKB Düzenlendi').length} İBKB düzenlendi · ${T.filter(t => t.durum === 'Eşleşti').length} yalnız eşleşti · ${[...new Set(T.map(t => t.dosyaId))].length} dosya</td><td colspan="4"></td><td class="para genel">${dovizH(T, 'tutar')}</td><td colspan="7"></td></tr>`;
     tablo('tamamlanan', bas, rows, dip, 'Tamamlanan tahsilat yok. Banka Tahsilatları (Açık) sekmesinde "Eşleştir" ile bağlanan tahsilatlar burada listelenir.');
-    $('#ibNot-tamamlanan').textContent = `${T.length} tahsilat · ihracat dosyası ve İBKB belgesiyle birlikte · tarihe göre`;
+    $('#ibNot-tamamlanan').textContent = `${T.length} tahsilat`;
   }
   // ---------- İBKB Belgeleri (bankaya verilecek form)
   function cizBelgeler() {
@@ -345,7 +345,7 @@
     const rows = B.map(b => `<tr class="${b.durum === 'Banka Onayladı' ? 'kapandi' : b.durum === 'İptal' ? 'soluk' : b.durum === 'Hazırlandı' ? 'yakin' : ''}"><td class="ad"><a href="/IhracatFinans/Belge/${b.id}" target="_blank" rel="noopener" title="Formu aç / yazdır">${esc(b.no)}</a></td><td>${tarih(b.tarih)}</td><td>${belgeRz(b.durum)}</td><td class="ad">${esc(b.sirket)}</td><td>${esc(b.banka || '—')}</td><td class="ad">${b.dosyaId ? `<a href="#" class="ib-incele" data-id="${b.dosyaId}" title="Dosya incelemesi">${esc(b.dosyaNo)}</a>` : esc(b.dosyaNo || '—')}</td><td>${esc(b.beyannameNo || '—')}</td><td>${faturaLink(b.musteriKodu, b.faturaNo)}</td><td class="metin">${esc(b.musteri || '—')}<small>${esc(b.musteriKodu || '')}</small></td><td>${esc(b.ulke || '—')}</td><td class="para">${tutar(b.beyannameTutar, b.beyannameDoviz)}</td><td class="para genel">${tutar(b.tutar, b.doviz)}</td><td>${tarih(b.tahsilatTarihi)}</td><td>${esc(b.tahsilatRef || '—')}</td><td>${esc(b.bankaIbkbNo || '—')}</td><td>${tarih(b.bankaTarihi)}</td>${notH(b.not)}<td>${esc(b.olusturan || '—')}<small>${esc(b.olusturma || '')}</small></td><td><a class="btn btn-light border" href="/IhracatFinans/Belge/${b.id}" target="_blank" rel="noopener" title="Yazdır / PDF"><i class="fas fa-print"></i></a> <button type="button" class="btn btn-light border ib-belge-durum" data-id="${b.id}" title="Durum · banka İBKB no"><i class="fas fa-pen"></i></button>${b.durum === 'İptal' ? ` <button type="button" class="btn btn-light border text-danger ib-belge-sil" data-id="${b.id}" title="İptal belgeyi sil"><i class="fas fa-trash"></i></button>` : ''}</td></tr>`);
     const dip = `<tr><td colspan="11">Toplam · ${B.length} belge · ${B.filter(b => b.durum === 'Hazırlandı').length} hazırlandı · ${B.filter(b => b.durum === 'Bankaya Gönderildi').length} bankada · ${B.filter(b => b.durum === 'Banka Onayladı').length} onaylandı · ${B.filter(b => b.durum === 'İptal').length} iptal</td><td class="para genel">${dovizH(B.filter(b => b.durum !== 'İptal'), 'tutar')}</td><td colspan="7"></td></tr>`;
     tablo('belgeler', bas, rows, dip, 'İBKB belgesi yok. Banka Tahsilatları sekmesinde tahsilatı dosyayla eşleştirirken "İBKB oluşturulsun mu?" sorusuna evet deyince belge burada oluşur.');
-    $('#ibNot-belgeler').textContent = `${B.length} belge · belge numarasına tıklayınca bankaya verilecek form açılır (Yazdır → PDF)`;
+    $('#ibNot-belgeler').textContent = `${B.length} belge`;
   }
 
   // ---------- Cari Bakiyeler (Mizan): muhasebe cari bakiyeleri (120 yurtdışı müşteri hesapları; portalda Cari Mutabakat Yönetimi'nin kaynağı) ↔ İBKB dosyalarının açık kalanı; düzenli kontrol işareti (11 Kas 2026)
@@ -384,8 +384,8 @@
     if (!$('#ibTablo-gorev')) return;
     const L = gorevListe(gorevMod); gorevTablo('gorev', L); perfTablo('gorevPerf');
     $$('#ibGorevSuzgec button').forEach(b => b.classList.toggle('aktif', b.dataset.g === gorevMod));
-    $('#ibNot-gorev').textContent = `${L.length} görev · akış: Atandı → Düzeltildi (atanan) → Onaylandı / İade (muhasebe) · bağlantı e-posta ve portal mesajıyla gider`;
-    $('#ibNot-gorevPerf').textContent = `${(V.gorevPerformans || []).length} kişi · ortalama düzeltme süresi atamadan "Düzeltildi"ye`;
+    $('#ibNot-gorev').textContent = `${L.length} görev`;
+    $('#ibNot-gorevPerf').textContent = `${(V.gorevPerformans || []).length} kişi`;
   }
   // görev atama formu (Kontrol Et, görev penceresi "yeniden ata", mutabakat itirazı)
   const gorevAtaH = (g, baslik, acikMi) => { g = g || {}; const K = V.gorevKisiler || []; const sec = g.atanan || ''; const termin = g.termin || new Date(new Date(V.bugun).getTime() + 7 * 86400000).toISOString().slice(0, 10);
@@ -489,7 +489,7 @@
     const rows = S.map(s => `<tr class="tik ib-sube-satir ${s.id === subeSecili ? 'secili' : ''}" data-id="${s.id}" title="Tıklayınca şube detayı açılır"><td class="ad">${esc(s.sube)}<small>${esc(s.kod)}</small></td><td>${esc(s.ulke)}</td><td>${s.sirket ? esc(s.sirket) : '<span class="ib2-rz bekle" title="Kaynak tabloda şirket yok; düzenleyip seçin">Belirsiz</span>'}</td><td>${esc(s.urunGrubu || '—')}</td><td>${s.temsilci ? esc(s.temsilci) : '<span class="ib2-rz bekle">Atanmadı</span>'}</td><td>${esc(s.sorumlu || '—')}</td><td>${rz(s.pb, 'teal')}</td><td class="sayac">${s.yilSayisi ? `${esc(s.ilkYil)} – ${esc(s.sonYil)}<small>${s.yilSayisi} yıl</small>` : '<span class="ib2-rz gri">Veri Yok</span>'}</td><td class="para">${s.sermaye ? tutar(s.sermaye, s.pb) : bos}</td><td class="para">${tutar(s.resmiFatura, s.pb)}</td><td class="para">${s.gercekMalBedeli ? tutar(s.gercekMalBedeli, s.pb) : bos}</td><td class="para">${tutar(s.toplamOdeme, s.pb)}</td><td class="para genel">${isaretli(s.bakiye, s.pb)}</td><td class="para">${s.yilSayisi ? isaretli(s.sonYilFark, s.pb) + `<small>${esc(s.sonYil)}</small>` : bos}</td><td>${sonEkstreH(s)}</td><td>${s.eposta ? `<small><i class="fas fa-envelope me-1"></i>${esc(s.eposta)}</small>` : ''}${s.telefon ? `<small><i class="fab fa-whatsapp me-1"></i>${esc(s.telefon)}</small>` : ''}${!s.eposta && !s.telefon ? '<span class="ib2-rz gri" title="Düzenle ile e-posta / telefon girin">İletişim Yok</span>' : ''}</td><td><button type="button" class="btn btn-primary ib-sube-detay" data-id="${s.id}" title="Yıl bazında detay"><i class="fas fa-magnifying-glass"></i></button> <button type="button" class="btn btn-success ib-sube-ekstre" data-id="${s.id}" title="Ekstre gönder (e-posta / WhatsApp)"><i class="fas fa-paper-plane"></i></button> <button type="button" class="btn btn-light border ib-sube-duzenle" data-id="${s.id}" title="Düzenle"><i class="fas fa-pen"></i></button> <button type="button" class="btn btn-light border text-danger ib-sube-sil" data-id="${s.id}" title="Sil"><i class="fas fa-trash"></i></button></td></tr>`);
     const dip = `<tr><td colspan="8">Toplam · ${S.length} şube · ${new Set(S.map(s => s.ulke)).size} ülke · ${S.filter(s => !s.temsilci).length} temsilci atanmadı</td><td class="para">${dovizH(D, 'sermaye')}</td><td class="para">${dovizH(D, 'resmiFatura')}</td><td class="para">${dovizH(D, 'gercekMalBedeli')}</td><td class="para">${dovizH(D, 'toplamOdeme')}</td><td class="para genel">${dovizH(D, 'bakiye')}</td><td class="para">${dovizH(D, 'sonYilFark')}</td><td colspan="3"><small>${S.filter(s => s.sonGonderim).length} şubeye ekstre gitti · ${bekleyen.length} bekliyor</small></td></tr>`;
     tablo('sube', bas, rows, dip, 'Şube yok. "Şube Ekle" ile açın.');
-    $('#ibNot-sube').textContent = `${S.length} şube · bakiye = sermaye + ödemeler − satış (birikimli) · satıra tıklayınca detay`;
+    $('#ibNot-sube').textContent = `${S.length} şube`;
     subeDetay(subeSecili, true);
   }
   function subeDetay(id, sessiz) {
@@ -599,7 +599,7 @@
   const thYenile = $('#ibThYenile'); if (thYenile) thYenile.addEventListener('click', () => { const f = $('#ibThCerceve'); if (f && f.src) f.src = f.src; });
   let TK = null, tkYuk = null;
   const tkOku = () => tkYuk || (tkYuk = fetch('/Tahsilat/KonsolideTakip', { cache: 'no-store' }).then(r => r.json()).then(j => { TK = j && j.success ? j : null; return TK; }).catch(() => null));
-  const tlH = v => n0(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
+  const tlH = v => n0(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '\u00A0₺';
   function cizOzetTahsilatTakip() {
     const t = $('#ibTablo-ozetTahsilatTakip'); if (!t) return;
     if (!TK) { t.tBodies[0].innerHTML = '<tr><td class="na-bos text-center">Tahsilat raporu verisi yükleniyor…</td></tr>'; tkOku().then(() => { if (aktifSekme() === 'ozet') cizOzetTahsilatTakip(); }); return; }
@@ -616,20 +616,20 @@
       satir('İçerideki Çek / Senet', tlH(top(L, k => k.cek)), `${top(L, k => k.cekAdet)} belge`, 'cari'),
       satir('Kesilmemiş Vade Farkı (Gecikmeli Tahsilat)', tlH(top(tahs.filter(x => !x.vadeFarkiFaturaNo), x => x.vadeFarki)), `${tahs.filter(x => !x.vadeFarkiFaturaNo && x.vadeFarki > 0).length} tahsilat · KDV hariç`, 'vade'),
       // 19 Kas 2026 gece (kullanıcı): yurtdışında ay sonu / robot vade farkı kesimi yok (dövizli tahsilat) → vade farkı yalnız tahsilat işlenirken; burada bugüne kadar doğan tutar bilgi
-      satir('Tahsilatta Kesilecek Vade Farkı (Bugüne Doğan)', tlH(top(L, k => (k.vf || {}).bugunVf)), `${L.filter(k => (k.vf || {}).bugunVf > 0.005).length} müşteri · yurtdışında ay sonu / robot kesimi yok, tahsilat işlenirken kesilir`, 'cari'),
+      satir('Tahsilatta Kesilecek Vade Farkı (Bugüne Doğan)', tlH(top(L, k => (k.vf || {}).bugunVf)), `${L.filter(k => (k.vf || {}).bugunVf > 0.005).length} müşteri`, 'cari'),
       satir('Kur Değerlemesi Bekleyen (R)', tlH(top(L, k => (k.kur || {}).rFark)), `${L.filter(k => (k.kur || {}).rAdet > 0).length} müşteri · muhasebe virmanı`, 'cari'),
       satir('Kapama Robotu · Kapatılabilir', tlH(top(L, k => (k.kapama || {}).oneriTl)), `${L.filter(k => (k.kapama || {}).oneri > 0).length} müşteride eşleşmemiş ödeme`, 'kapama'),
       satir('Muhasebe Uyumu · Uyumsuz', `${L.filter(k => (k.uyum || {}).durum === 'Uyumsuz').length} müşteri`, `${L.filter(k => k.uyumGorev).length} açık düzeltme görevi · fark ${tlH(top(L.filter(k => (k.uyum || {}).durum === 'Uyumsuz'), k => Math.abs((k.uyum || {}).fark || 0)))}`, 'cari'),
       satir('Limiti Aşan / Riskli Müşteri', `${L.filter(k => (k.vf || {}).limitDurum === 'Limit Aşıldı').length} / ${L.filter(k => k.risk === 'Riskli').length}`, 'limit aşımı / riskli', 'kartlar')
-    ], `<tr><td>Kaynak</td><td><small>Tahsilat raporu (KonsolideTakip) · bölge Yurtdışı · şirket süzgeci uygulanır · satıra tıklayınca sekme açılır</small></td></tr>`, 'Yurtdışı müşteri yok.');
-    $('#ibNot-ozetTahsilatTakip').textContent = `${L.length} yurtdışı müşteri · Tahsilat raporuyla aynı veri · ${TK.bugun ? tarih(TK.bugun) : ''}`;
+    ], '', 'Yurtdışı müşteri yok.');
+    $('#ibNot-ozetTahsilatTakip').textContent = `${L.length} yurtdışı müşteri`;
   }
   const CIZ = { ozet: L => { cizOzet(L); cizOzetTahsilatTakip(); }, satis: cizSatis, liste: cizListe, tahsilat: cizTahsilat, tamamlanan: cizTamamlanan, belgeler: cizBelgeler, musteri: cizMusteri, sube: cizSube, bakiye: cizBakiye, vade: cizVade, dab: cizDab, tahsilatTakip: () => cizTahsilatTakip() };
   const OZEL = ['satis', 'tahsilat', 'tamamlanan', 'belgeler', 'bakiye', 'sube', 'tahsilatTakip'];   // dosya listesi yerine kendi listesini çizen sekmeler (durum süzgeci de kendine göre)
   function ciz() { if (!V) return; const L = liste(); kpi(L); const p = aktifSekme(); if (OZEL.includes(p)) CIZ[p](); else (CIZ[p] || cizOzet)(L); }
   function sekme(p, sessiz) {   // sessiz: Tahsilat şeridine dokunma (ilk açılışta Tahsilat başka sekmedeyken ihracat paneli arkada hazırlanır)
     // bu sayfada olmayan sekme (ör. yeni rapordaki KPI "satis"e, eski rapordaki bağlantı "liste"ye gönderirse) öbür sayfada açılır
-    if (!$(`#ibSekmeler button[data-p="${p}"]`)) { if (p === 'tahsilatTakip' && window.TahsilatTakip) { window.TahsilatTakip.sekme('cari'); return; } p = ($('#ibSekmeler button') || { dataset: { p: 'ozet' } }).dataset.p; }   // 20 Kas 2026: bütün ihracat sekmeleri tek sayfada (eski sayfa kaldırıldı)
+    if (!$(`#ibSekmeler button[data-p="${p}"]`)) { if (p === 'tahsilatTakip') { if (window.TahsilatTakip) window.TahsilatTakip.sekme('cari'); else window.open('/IhracatFinans', '_blank', 'noopener'); return; } if (!GOMULU && V) { window.open(`/IhracatFinans?sekme=ib${p[0].toUpperCase()}${p.slice(1)}`, '_blank', 'noopener'); return; } p =($('#ibSekmeler button') || { dataset: { p: 'ozet' } }).dataset.p; }   // 20 Kas 2026: bütün ihracat sekmeleri tek sayfada (eski sayfa kaldırıldı)
     const onceki = aktifSekme(); $$('#ibSekmeler button').forEach(b => b.classList.toggle('aktif', b.dataset.p === p)); $$('#ibkb > .na-panel').forEach(x => x.classList.toggle('aktif', x.dataset.p === p)); if (V && onceki !== p) { const grup = x => OZEL.includes(x) || x === 'musteri' ? x : 'dosya'; if (grup(onceki) !== grup(p)) { F.dab = []; } filtreDoldur(); } ciz();
     if (GOMULU && !sessiz && window.TahsilatTakip) window.TahsilatTakip.isaretle('ib' + p[0].toUpperCase() + p.slice(1));   // Tahsilat şeridindeki ib* düğmesi de seçili görünür
   }

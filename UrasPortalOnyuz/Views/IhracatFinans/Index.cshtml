@@ -1,0 +1,76 @@
+﻿@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string sekme = (string)ViewBag.Sekme ?? "satis";
+    // 19 Kas 2026 (kullanıcı: "İhracat Finansal Takibi iki ayrı rapor oldu, tek raporda birleştirelim … eskiye (Eski) yaz"): bu sayfa artık /IhracatFinans/Eski — "İhracat Finansal Takibi (Eski)".
+    //   Özet · Beyanname / İBKB Dosyaları · İBKB Belgeleri · Müşteri Bazlı · Şube Bakiyeleri · DAB Bağlantıları yeni rapora (/IhracatFinans = Tahsilat gövdesi, bölge Yurtdışı) taşındı ve buradan kaldırıldı.
+    //   Burada kalanlar: İhracat Satışları · Banka Tahsilatları (Açık) · Tamamlanan Tahsilatlar · Cari Bakiyeler (Mizan) · Vade Takibi.
+    var sekmeler = new[] { ("satis", "İhracat Satışları", "fa-ship"), ("tahsilat", "Banka Tahsilatları (Açık)", "fa-building-columns"), ("tamamlanan", "Tamamlanan Tahsilatlar", "fa-circle-check"), ("bakiye", "Cari Bakiyeler (Mizan)", "fa-scale-balanced"), ("vade", "Vade Takibi", "fa-hourglass-half") };
+    var grupIlk = new[] { "tahsilat", "bakiye" };
+}
+@*
+    İHRACAT FİNANSAL TAKİBİ (ESKİ) — 11 Kas 2026'da kurulan rapor; 19 Kas 2026'da ihracat takip sekmeleri yeni rapora (Views/Rapor117/Index.cshtml ihracat kipi + Views/IhracatFinans/_IhracatPaneller.cshtml) taşındı.
+    Veri /IhracatFinans/Veri (Data/IbkbOrnek.cs, App_Data/ibkb.json). Betik wwwroot/js/ihracat-finans.js (iki sayfa ortak); stil wwwroot/css/ihracat-finans.css.
+    Derin bağlantı: /IhracatFinans/Eski?sekme=satis | tahsilat | tamamlanan | bakiye | vade (&gorev=ID görev penceresi)
+*@
+@section Styles {
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<link rel="stylesheet" href="/css/suzgec-cubuk.css?v=2" />
+<link rel="stylesheet" href="/css/ihracat-finans.css?v=1" />
+}
+
+<div class="container-fluid py-3 na ib2" id="ibkb" data-sekme="@sekme" data-gorev="@(ViewBag.Gorev ?? 0)" data-kullanici="@(User?.Identity?.Name ?? "")" data-kullanici-ad="@WebApplication3.Data.OrnekVeri.KullaniciAdi(User?.Identity?.Name ?? "")">
+    <div class="na-ust">
+        <h4><span class="rt-ikon"><i class="fas fa-file-shield"></i></span>İhracat Finansal Takibi (Eski)</h4>
+        <a class="ib2-pill" href="/IhracatFinans" title="Yeni İhracat Finansal Takibi: Tahsilat raporunun yurtdışı sekmeleri + Özet, Beyanname / İBKB Dosyaları, İBKB Belgeleri, Müşteri Bazlı, Şube Bakiyeleri, DAB Bağlantıları"><i class="fas fa-arrow-right me-1"></i>Yeni Rapor: İhracat Finansal Takibi</a>
+        <span class="ib2-pill" title="Burada kalanlar: İhracat Satışları, Banka Tahsilatları (Açık), Tamamlanan Tahsilatlar, Cari Bakiyeler (Mizan), Vade Takibi"><i class="fas fa-clock-rotate-left me-1"></i>Satış → Beyanname → Tahsilat → İBKB · Konsolide</span>
+        <a class="ib2-pill" href="/Rapor94/Ihracat" target="_blank" rel="noopener" title="Yurtdışı Satış Siparişi (İhracat Satışları sekmesinin kaynağı)"><i class="fas fa-ship me-1"></i>Yurtdışı Satış Siparişi <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:.56rem"></i></a>
+        <span class="ib2-pill" id="ibKalici" title="Kayıtlar sunucuda saklanır (App_Data/ibkb.json); yeniden başlatınca korunur."><i class="fas fa-database me-1"></i>Kalıcı Kayıt</span>
+        <div class="sag">
+            <button type="button" class="btn btn-primary btn-sm" id="ibYeni" style="font-size:.7rem"><i class="fas fa-plus me-1"></i>İhracat Dosyası Ekle</button>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="ibTahsilatYeni" style="font-size:.7rem" title="Bankadan gelen ihracat tahsilatını (döviz girişi) elle gir; banka / ERP entegrasyonu bağlanınca otomatik gelir"><i class="fas fa-money-bill-transfer me-1"></i>Banka Tahsilatı Ekle</button>
+            <button type="button" class="btn btn-light btn-sm border" id="ibExcel" style="font-size:.7rem" title="Açık sekmedeki tabloyu göründüğü gibi Excel'e indirir"><i class="fas fa-file-excel me-1"></i>Excel</button>
+        </div>
+    </div>
+    <div id="naSonuc" class="alert py-2 px-3 mb-2"></div>
+
+    <div id="ibFiltre"></div>
+
+    <div class="na-kpi" id="ibKpi" data-dinamik="kapali"></div>
+
+    <div class="na-sekme" id="ibSekmeler" data-dinamik="kapali">
+        @foreach (var s in sekmeler) { <button type="button" data-p="@s.Item1" class="@(grupIlk.Contains(s.Item1) ? "ib2-grup-ilk" : null)"><i class="fas @s.Item3 me-1"></i>@s.Item2</button> }
+    </div>
+
+    @foreach (var s in sekmeler)
+    {
+        <div class="na-panel" data-p="@s.Item1">
+            @if (s.Item1 == "tahsilat") { <div class="ib2-tahsilat-ozet" id="ibTahsilatOzet"></div> }
+            @if (s.Item1 == "bakiye")
+            {
+                @* Bekleyen görevler (12 Kas 2026): Kontrol Et'te atanan düzeltme görevleri (Atandı → Düzeltildi → muhasebe onayı) + kişi bazında performans; müşteri mutabakat gönderimleri *@
+                <div class="row g-2" id="ibGorevAlan">
+                    <div class="col-lg-8"><div class="na-kart" style="border-color:#fcd34d"><div class="na-kart-b" style="background:#fffbeb"><span><i class="fas fa-list-check me-1"></i>Bekleyen Görevler · Cari Düzeltme Atamaları</span><span class="not" id="ibNot-gorev"></span><span class="ib2-gorev-suzgec" id="ibGorevSuzgec"><button type="button" data-g="acik" class="aktif">Açık</button><button type="button" data-g="onay">Onay Bekleyen</button><button type="button" data-g="benim">Bana Atanan</button><button type="button" data-g="tum">Tümü</button></span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:34vh"><table class="na-tablo ib2-tablo" id="ibTablo-gorev" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div></div>
+                    <div class="col-lg-4"><div class="na-kart" style="border-color:#fcd34d"><div class="na-kart-b" style="background:#fffbeb"><span><i class="fas fa-ranking-star me-1"></i>Düzeltme Performansı</span><span class="not" id="ibNot-gorevPerf"></span></div><div class="na-kart-g p-0"><div class="table-responsive" style="max-height:34vh"><table class="na-tablo ib2-tablo" id="ibTablo-gorevPerf" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div></div></div>
+                </div>
+            }
+            <div class="na-kart">
+                <div class="na-kart-b"><span><i class="fas @s.Item3 me-1"></i>@s.Item2</span><span class="not" id="ibNot-@s.Item1"></span></div>
+                <div class="na-kart-g p-0"><div class="table-responsive" style="max-height:70vh"><table class="na-tablo ib2-tablo" id="ibTablo-@s.Item1" data-dinamik="kapali" data-dikey="orta"><thead></thead><tbody></tbody><tfoot></tfoot></table></div></div>
+            </div>
+        </div>
+    }
+
+    @* Dosya ekle / düzenle · banka tahsilatı · eşleştirme · belge durumu · görev modalı (içerik betikten) *@
+    <div class="modal fade" id="ibModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header py-2"><h6 class="modal-title" id="ibMBaslik">İhracat Dosyası</h6><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button></div>
+        <div class="modal-body" id="ibMGovde"></div>
+        <div class="modal-footer py-1"><span class="me-auto text-muted" style="font-size:.64rem" id="ibMNot"></span><button type="button" class="btn btn-light btn-sm border" data-bs-dismiss="modal">Vazgeç</button><button type="button" class="btn btn-primary btn-sm" id="ibMKaydet"><i class="fas fa-floppy-disk me-1"></i>Kaydet</button></div>
+    </div></div></div>
+</div>
+
+@section Scripts {
+<script src="/js/tablo-hizala.js?v=14"></script>
+<script src="/js/tablo-excel.js?v=3"></script>
+<script src="/js/suzgec-cubuk.js?v=2"></script>
+<script src="/js/ihracat-finans.js?v=20"></script>
+}

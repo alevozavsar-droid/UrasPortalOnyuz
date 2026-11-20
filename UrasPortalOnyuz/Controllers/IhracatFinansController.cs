@@ -33,13 +33,18 @@ namespace WebApplication3.Controllers
             ViewData["Title"] = "İhracat Finansal Takibi"; ViewBag.Ihracat = true; ViewBag.Kod = ""; ViewBag.No = ""; ViewBag.Gorev = gorev;
             return View("~/Views/Rapor117/Index.cshtml");
         }
-        /// <summary>Eski sayfa kaldırıldı (20 Kas 2026): eski bağlantılar yeni rapordaki karşılık sekmeye yönlenir (satis → ibSatis, tahsilat → ibTahsilat, tamamlanan → ibTamamlanan, bakiye → ibBakiye, vade → ibVade, liste / belgeler / musteri / sube / dab → ib*).</summary>
+        /// <summary>
+        /// Eski sayfa 20 Kas 2026 sabahı kaldırılmıştı; aynı gün kullanıcı isteğiyle ("İhracat Finansal Takibi (Eski) tekrar aktif et") YENİDEN AÇILDI: İhracat Satışları, Banka Tahsilatları (Açık), Tamamlanan Tahsilatlar,
+        /// Cari Bakiyeler (Mizan), Vade Takibi. Aynı sekmeler yeni raporda da durur (ib*); iki sayfa aynı veriyi kullanır. Eski sayfada olmayan sekme (liste / belgeler / musteri / sube / dab / ozet) yeni rapora yönlenir.
+        /// </summary>
         [HttpGet("Eski")]
         public IActionResult Eski(string sekme, int gorev = 0)
         {
-            string s = string.IsNullOrEmpty(sekme) ? "" : sekme.ToLowerInvariant(); string hedef = s == "" ? "" : "ib" + char.ToUpperInvariant(s[0]) + s.Substring(1);
-            if (s == "ozet") hedef = "ibOzet";
-            return RedirectPermanent("/IhracatFinans" + (hedef == "" ? "" : "?sekme=" + hedef) + (gorev > 0 ? (hedef == "" ? "?" : "&") + "gorev=" + gorev : ""));
+            string s = string.IsNullOrEmpty(sekme) ? "" : sekme.ToLowerInvariant();
+            if (s != "" && System.Array.IndexOf(new[] { "satis", "tahsilat", "tamamlanan", "bakiye", "vade" }, s) < 0) return Redirect("/IhracatFinans?sekme=ib" + char.ToUpperInvariant(s[0]) + s.Substring(1));
+            ViewData["Title"] = "İhracat Finansal Takibi (Eski)";
+            ViewBag.Sekme = gorev > 0 ? "bakiye" : (s == "" ? "satis" : s); ViewBag.Gorev = gorev;   // ?gorev=ID: görev penceresi açılır
+            return View("~/Views/IhracatFinans/Index.cshtml");
         }
 
         [HttpGet("Veri")]
