@@ -1068,60 +1068,110 @@
   //            İhracat'ta yalnız yurtdışı + "özellikle şube satışlarını da alta ekle, ayrı ayrı görelim") ----------
   //   Veri: müşterinin satış faturaları (k.satislar; vade / kur farkı faturaları hariç, fatura tarihine göre aya yazılır). Süzgeçler, cari seçimi, arama ve İşlem Tipi (X / R) geçerli; dönem Hızlı Dönem'den (yoksa içinde bulunulan yıl),
   //   seçili ayların dışındaki faturalar "Dönem Dışı" sütununda (Toplam bütün faturaları verir). 1) bölge × X / R ayrı satırlar · 2) bölge › cari sınıfı (hücrede R üstte / X altta) · 3) bölge › satış temsilcisi · 4) İhracat: şubeler tek tek.
+  // 20 Kas 2026 gece (kullanıcı: "satış raporu tasarımını ve kullanışlılığını geliştir, seçilenleri topla vs; tasarım çok geri seviye kaldı"):
+  //   · üstte özet kartları (dönem satışı, R, X, ortalama fatura, en yüksek ay, bu ay ↔ geçen ay, en çok satan temsilci, en büyük müşteri)
+  //   · GÖRÜNÜM düğmeleri: Tümü (bütün tablolar alt alta) ya da tek kırılım — tek tablo ekranın dibine kadar uzar (başlık ve dip toplam yapışkan)
+  //   · her tabloda SEÇİM KUTUSU: seçilen satırlar dipte "Seçili · n" satırında toplanır (R / X ayrı, ay ay; tıklayınca fatura fatura); başlıktaki kutu hepsini seçer
+  //   · başlığa tıklayınca SIRALAMA (ad, herhangi bir ay, Toplam): büyükten küçüğe → küçükten büyüğe → varsayılan; ara toplam satırları yerinde kalır
+  //   · PAY sütunu (satırın genel toplam içindeki payı, ince çubukla) · "R / X Ayrı Göster" kapatılınca hücrede tek tutar · yeni kırılımlar: Müşteri, Ülke
+  //   Görünüm ve R / X tercihi tarayıcıda saklanır (tkSatis); seçim ve sıralama sayfa açıkken korunur.
+  const ST = { gorunum: 'tumu', rx: true }; try { const s = JSON.parse(localStorage.getItem('tkSatis') || 'null'); if (s) { ST.gorunum = s.gorunum || 'tumu'; ST.rx = s.rx !== false; } } catch (x) { }
+  const stSakla = () => { try { localStorage.setItem('tkSatis', JSON.stringify(ST)); } catch (x) { } };
+  const SSEC = {}, SSIRA = {}, ssec = id => SSEC[id] || (SSEC[id] = new Set());   // tablo → seçili satır adları · tablo → { k: 'ad' | yyyy-MM | 'top', y: 1 | -1 }
+  const payH = (v, genel) => { if (!v || !genel) return tire; const p = v / genel * 100; return `<span class="tk-pay"><i style="width:${Math.max(0, Math.min(100, p)).toFixed(1)}%"></i><b>% ${p.toLocaleString(TR, { maximumFractionDigits: 1 })}</b></span>`; };
+  /** Satış Raporu tablosu: aylar sütun, kırılım satır. satir = { ad, alt?, adH?, deger: ym | null → sayı, h: ym | null → html, liste: ym | null → faturalar, sinif: 'toplam' (ara / genel toplam), ara (seçilemeyen ara satır), _L }.
+   *  Son satır 'toplam' ise dipte (tfoot) çizilir; secYap(ad, seçiliSatırlar) → "Seçili" satırı. Hücre tıklaması ortak tk-mx işleyicisinde (t._mx sırasıyla). */
+  function satisTablo(id, ilkBaslik, kol, satirlar, bos, secYap) {
+    const t = $('#tkTablo-' + id); if (!t) return; const bugunYm = (K.bugun || '').slice(0, 7), S = ssec(id), sr = SSIRA[id], yaprak = s => !s.sinif && !s.ara;
+    const dipI = satirlar.length > 1 && satirlar[satirlar.length - 1].sinif === 'toplam' ? satirlar.length - 1 : -1, dip = dipI >= 0 ? satirlar[dipI] : null;
+    let govde = satirlar.filter((s, i) => i !== dipI);
+    if (sr) {   // ara toplam satırları yerinde kalır; aralarındaki satırlar dizilir
+      const deg = s => sr.k === 'ad' ? s.ad : s.deger(sr.k === 'top' ? null : sr.k), cikti = []; let par = [];
+      const bosalt = () => { par.sort((a, b) => { const x = deg(a), y = deg(b); return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y), TR)) * sr.y; }); cikti.push(...par); par = []; };
+      govde.forEach(s => { if (yaprak(s)) par.push(s); else { bosalt(); cikti.push(s); } }); bosalt(); govde = cikti;
+    }
+    const yapraklar = govde.filter(yaprak); [...S].forEach(a => { if (!yapraklar.some(s => s.ad === a)) S.delete(a); });   // süzgeç değişince listede kalmayan seçim düşer
+    const secili = yapraklar.filter(s => S.has(s.ad)), secSatir = secili.length && secYap ? secYap(`Seçili · ${secili.length}`, secili) : null;
+    const hepsi = govde.concat(dip ? [dip] : [], secSatir ? [secSatir] : []); t._mx = hepsi; t._kol = null;
+    const genel = dip ? dip.deger(null) : topla(yapraklar, s => s.deger(null)), ok = k => sr && sr.k === k ? (sr.y > 0 ? ' art' : ' azl') : '';
+    t.tHead.innerHTML = `<tr><th class="sec sirasiz"><input type="checkbox" data-ssec-hepsi="${id}" title="Satırların hepsini seç / bırak"${yapraklar.length && secili.length === yapraklar.length ? ' checked' : ''}></th><th class="ad${ok('ad')}" data-sk="ad" title="Sıralamak için tıklayın">${pbBaslik(ilkBaslik)}${PBG === 'USD' ? ' <small>($)</small>' : ''}</th>${kol.map(ym => `<th class="${ym === bugunYm ? 'bugun-ay' : ''}${ok(ym)}" data-sk="${ym}" title="Sıralamak için tıklayın">${ayEtiket(ym)}</th>`).join('')}<th class="${ok('top').trim()}" data-sk="top" title="Sıralamak için tıklayın">Toplam</th><th class="pay sirasiz" title="Satırın genel toplam içindeki payı">Pay</th></tr>`;
+    const hc = (s, i, ym) => { const ic = s.h(ym); return s.liste && ic && ic !== tire ? `<a href="#" class="tk-mx" data-mx="${i}|${ym == null ? '' : ym}" title="Tıklayınca fatura fatura detay">${ic}</a>` : ic; };
+    const satirH = (s, i) => { const y = yaprak(s), sc = y && S.has(s.ad);
+      return `<tr class="${s.sinif || ''}${s.ara ? ' ara' : ''}"${sc ? ' data-secili="1"' : ''}><td class="sec">${y ? `<input type="checkbox" data-ssec="${id}" data-a="${esc(s.ad)}" title="Seç → dipte Seçili toplamı"${sc ? ' checked' : ''}>` : ''}</td><td class="ad">${s.adH || `<b>${esc(s.ad)}</b>`}${s.alt ? `<small>${esc(s.alt)}</small>` : ''}</td>${kol.map(ym => `<td class="${ym === bugunYm ? 'bugun-ay' : ''}">${hc(s, i, ym)}</td>`).join('')}<td class="top">${hc(s, i, null)}</td><td class="pay">${payH(s.deger(null), genel)}</td></tr>`; };
+    t.tBodies[0].innerHTML = govde.map(satirH).join('') || `<tr><td colspan="${kol.length + 4}" class="na-bos">${bos || 'Kayıt yok.'}</td></tr>`;
+    t.tFoot.innerHTML = (dip ? satirH(dip, govde.length) : '') + (secSatir ? satirH(secSatir, govde.length + (dip ? 1 : 0)) : '');
+  }
   function cizSatis() {
-    const ays = aylar(), ayK = new Set(ays), C = cariler();
-    const sat = C.flatMap(k => (k.satislar || []).filter(kalemUy).map(x => Object.assign({ cariKodu: k.kod, cariAd: k.kisaAd, bolge: k.bolge || 'Bölgesiz', sinif: k.sinif || 'Sınıfsız', temsilci: (k.temsilci || '').split(',')[0].trim() || 'Atanmadı', ym: x.tarih.slice(0, 7), tarihIso: x.tarih, tutarTl: x.tl, tip: x.islemTipi === 'R' ? 'R' : 'X', tur: 'Satış · ' + (x.islemTipi === 'R' ? 'R' : 'X') }, x)));
+    const ays = aylar(), ayK = new Set(ays), C = cariler(), bugunYm = (K.bugun || '').slice(0, 7);
+    const sat = C.flatMap(k => (k.satislar || []).filter(kalemUy).map(x => Object.assign({ cariKodu: k.kod, cariAd: k.kisaAd, musteri: `${k.kod} ${k.kisaAd}`, bolge: k.bolge || 'Bölgesiz', sinif: k.sinif || 'Sınıfsız', ulke: k.ulke || (k.suzgec || {}).ulke || 'Ülkesiz', temsilci: (k.temsilci || '').split(',')[0].trim() || 'Atanmadı', ym: x.tarih.slice(0, 7), tarihIso: x.tarih, tutarTl: x.tl, tip: x.islemTipi === 'R' ? 'R' : 'X', tur: 'Satış · ' + (x.islemTipi === 'R' ? 'R' : 'X') }, x)));
     const Fy = (L, y) => y === 'disi' ? L.filter(s => !ayK.has(s.ym)) : y ? L.filter(s => s.ym === y) : L, T = l => topla(l, s => s.tutarTl);
     const tutar = l => l.length ? (DV && dovizli(l) ? `<span title="${esc(tl(T(l)))}">${esc(pbTop(l, s => s.tutar))}</span>` : tl(T(l))) : '—';
-    /** R üstte / X altta hücre (Konsolide İK Paneli'ndeki R / X düzeni); toplam sütununda üçüncü satır Toplam */
-    // 20 Kas 2026 (kullanıcı: "boş olanları yazmana gerek yok, dolu ise sadece oralarda yaz"): yalnız dolu olan satır yazılır — "R —" / "X —" yok; Toplam satırı yalnız ikisi de varsa
-    const rx = (l, toplamli) => { if (!l.length) return tire; const r = l.filter(s => s.tip === 'R'), x = l.filter(s => s.tip === 'X');
+    /** R üstte / X altta hücre; yalnız dolu olan satır yazılır ("R —" / "X —" yok); Toplam satırı yalnız ikisi de varsa. "R / X Ayrı Göster" kapalıyken tek tutar */
+    const rx = (l, toplamli) => { if (!l.length) return tire; if (!ST.rx) return tutar(l); const r = l.filter(s => s.tip === 'R'), x = l.filter(s => s.tip === 'X');
       return `<span class="tk-rx">${r.length ? `<span class="r"><small>R</small>${tutar(r)}</span>` : ''}${x.length ? `<span class="x"><small>X</small>${tutar(x)}</span>` : ''}${toplamli && r.length && x.length ? `<span class="t"><small>Toplam</small><b>${tutar(l)}</b></span>` : ''}</span>`; };
-    const duz = (ad, L, alt, ek) => Object.assign({ ad, alt, deger: y => T(Fy(L, y)), h: y => { const l = Fy(L, y); return l.length ? `${tutar(l)}<small>${l.length} fatura</small>` : tire; }, liste: y => Fy(L, y) }, ek || {});   // tek tip satır (R ya da X ya da toplam)
-    const rxS = (ad, L, alt, ek) => Object.assign({ ad, alt, deger: y => T(Fy(L, y)), h: y => rx(Fy(L, y), y == null), liste: y => Fy(L, y) }, ek || {});   // hücrede R / X ayrı
+    const duz = (ad, L, alt, ek) => Object.assign({ ad, alt, _L: L, deger: y => T(Fy(L, y)), h: y => { const l = Fy(L, y); return l.length ? `${tutar(l)}<small>${l.length} fatura</small>` : tire; }, liste: y => Fy(L, y) }, ek || {});   // tek tip satır (R ya da X ya da toplam)
+    const rxS = (ad, L, alt, ek) => Object.assign({ ad, alt, _L: L, deger: y => T(Fy(L, y)), h: y => rx(Fy(L, y), y == null), liste: y => Fy(L, y) }, ek || {});   // hücrede R / X ayrı
+    const birlesik = sec => [...new Set(sec.flatMap(s => s._L))], fatSay = l => `${l.length} fatura`;
+    const secDuz = (ad, sec) => { const l = birlesik(sec); return duz(ad, l, fatSay(l), { sinif: 'toplam secili' }); }, secRx = (ad, sec) => { const l = birlesik(sec); return rxS(ad, l, fatSay(l), { sinif: 'toplam secili' }); };
     const kol = [...ays, 'disi'], bos = 'Dönemde satış faturası yok.';
     const bolgeler = BOLGE_KILIT ? [BOLGE_KILIT] : [...new Set(sat.map(s => s.bolge))].sort((a, b) => (a === 'Yurtdışı') - (b === 'Yurtdışı') || a.localeCompare(b, TR)), cokBolge = !BOLGE_KILIT && bolgeler.length > 1;
-    const musteriSay = l => `${new Set(l.map(s => s.cariKodu)).size} müşteri`;
+    const musteriSay = l => `${new Set(l.map(s => s.cariKodu)).size} müşteri`, donem = sat.filter(s => ayK.has(s.ym)), R = donem.filter(s => s.tip === 'R'), X = donem.filter(s => s.tip === 'X');
+    // ---- görünüm düğmeleri ve tercih
+    const kartlar = $$('.tk-satis .na-kart[data-sg]'); if (ST.gorunum !== 'tumu' && !kartlar.some(k => k.dataset.sg === ST.gorunum)) ST.gorunum = 'tumu';
+    $('#tkSatisGor').innerHTML = '<span class="e">Görünüm</span>' + [['tumu', 'Tümü']].concat(kartlar.map(k => [k.dataset.sg, k.dataset.sgAd])).map(([k, ad]) => `<button type="button" data-sgor="${k}" class="${ST.gorunum === k ? 'aktif' : ''}">${esc(ad)}</button>`).join('');
+    kartlar.forEach(k => { k.hidden = ST.gorunum !== 'tumu' && k.dataset.sg !== ST.gorunum; }); $('#tkSatisRx').checked = ST.rx;
+    // ---- özet kartları (seçili dönem; dönem dışı faturalar sayılmaz)
+    const ayTop = ays.map(y => [y, T(donem.filter(s => s.ym === y))]), enAy = ayTop.reduce((a, b) => b[1] > a[1] ? b : a, ['', 0]);
+    const grupEn = alan => { const m = new Map(); donem.forEach(s => m.set(s[alan], (m.get(s[alan]) || 0) + s.tutarTl)); return [...m.entries()].reduce((a, b) => b[1] > a[1] ? b : a, ['', 0]); };
+    const buAy = T(sat.filter(s => s.ym === bugunYm)), oncekiYm = (() => { const d = new Date(bugunYm + '-01T00:00:00'); d.setMonth(d.getMonth() - 1); return iso(d).slice(0, 7); })(), gecenAy = T(sat.filter(s => s.ym === oncekiYm));
+    const degisim = gecenAy ? (buAy - gecenAy) / gecenAy * 100 : null, enTem = grupEn('temsilci'), enMus = grupEn('musteri'), yuzde = (a, b) => b ? `% ${(a / b * 100).toLocaleString(TR, { maximumFractionDigits: 1 })}` : '—';
+    const kutu = (ad, deger, alt) => `<div style="--k:#475569"><div class="l">${ad}</div><div class="v">${deger}</div><div class="s">${alt || '&nbsp;'}</div></div>`;
+    $('#tkSatisKpi').innerHTML = [
+      kutu('Satış · Dönem', tl(T(donem)), `${donem.length} fatura · ${musteriSay(donem)}`), kutu('R Satış', tl(T(R)), `${yuzde(T(R), T(donem))} · ${R.length} fatura`), kutu('X Satış', tl(T(X)), `${yuzde(T(X), T(donem))} · ${X.length} fatura`),
+      kutu('Ortalama Fatura', donem.length ? tl(T(donem) / donem.length) : '—', ays.length ? `aylık ortalama ${tl(T(donem) / ays.length)}` : ''), kutu('En Yüksek Ay', enAy[0] ? esc(ayEtiket(enAy[0])) : '—', enAy[0] ? tl(enAy[1]) : ''),
+      kutu(`Bu Ay · ${esc(ayEtiket(bugunYm))}`, tl(buAy), degisim == null ? 'geçen ay satış yok' : `geçen aya göre <b class="${degisim >= 0 ? 'ok' : 'gec'}">${degisim >= 0 ? '+' : '−'} % ${Math.abs(degisim).toLocaleString(TR, { maximumFractionDigits: 1 })}</b>`),
+      kutu('En Çok Satan Temsilci', enTem[0] ? esc(enTem[0]) : '—', enTem[0] ? `${tl(enTem[1])} · ${yuzde(enTem[1], T(donem))}` : ''), kutu('En Büyük Müşteri', enMus[0] ? esc(enMus[0]) : '—', enMus[0] ? `${tl(enMus[1])} · ${yuzde(enMus[1], T(donem))}` : '')].join('');
+    $('#tkSatisNot').textContent = `${sat.length} fatura · ${donemMetni()}${sat.length !== donem.length ? ` · ${sat.length - donem.length} fatura dönem dışı` : ''}`;
     // 1) bölge × X / R: her bölgede R satırı, X satırı, bölge toplamı; sonda genel toplam
     const tipSatir = [];
     bolgeler.forEach(bl => { const lb = sat.filter(s => s.bolge === bl), r = lb.filter(s => s.tip === 'R'), x = lb.filter(s => s.tip === 'X');
       tipSatir.push(duz(`${bl} · R`, r, musteriSay(r)), duz(`${bl} · X`, x, musteriSay(x))); if (cokBolge) tipSatir.push(duz(`${bl} Toplam`, lb, musteriSay(lb), { sinif: 'toplam' })); });
-    if (cokBolge) tipSatir.push(duz('Genel R', sat.filter(s => s.tip === 'R'), ''), duz('Genel X', sat.filter(s => s.tip === 'X'), ''));
+    if (cokBolge) tipSatir.push(duz('Genel R', sat.filter(s => s.tip === 'R'), '', { ara: 1 }), duz('Genel X', sat.filter(s => s.tip === 'X'), '', { ara: 1 }));
     tipSatir.push(duz(cokBolge ? 'Genel Toplam · R + X' : 'Toplam · R + X', sat, musteriSay(sat), { sinif: 'toplam' }));
-    matris('satisTip', 'Bölge · İşlem Tipi', kol, tipSatir, bos);
-    const donem = sat.filter(s => ayK.has(s.ym));
-    $('#tkSatisNot').textContent = `${sat.length} fatura · ${donemMetni()} · R ${tl(T(donem.filter(s => s.tip === 'R')))} · X ${tl(T(donem.filter(s => s.tip === 'X')))}`;
-    // 2) bölge › cari sınıfı · 3) bölge › satış temsilcisi (hücrede R üstte / X altta; bölge ara toplamı, genel toplam)
-    const kirilim = (id, baslik, alan, sonaAt, notId, birim, altF) => {   // altF: satır adının altına ek bilgi (temsilci unvanı)
-      const satirlar = [];
+    satisTablo('satisTip', 'Bölge · İşlem Tipi', kol, sat.length ? tipSatir : [], bos, secDuz);
+    $('#tkSatisTipNot').textContent = `R ${tl(T(R))} · X ${tl(T(X))}`;
+    // 2) bölge › kırılım (cari sınıfı · satış temsilcisi · müşteri · ülke): hücrede R üstte / X altta; bölge ara toplamı, genel toplam
+    const kirilim = (id, baslik, alan, sonaAt, notId, birim, altF) => {   // altF(değer, faturalar) → satır adının altındaki bilgi (yoksa müşteri sayısı)
+      if (!$('#tkTablo-' + id)) return; const satirlar = [];
       bolgeler.forEach(bl => { const lb = sat.filter(s => s.bolge === bl), ds = [...new Set(lb.map(s => s[alan]))].sort((a, b) => (a === sonaAt) - (b === sonaAt) || a.localeCompare(b, TR));
-        ds.forEach(d => { const l = lb.filter(s => s[alan] === d); satirlar.push(rxS(cokBolge ? `${bl} · ${d}` : d, l, [altF && altF(d), musteriSay(l)].filter(Boolean).join(' · '))); });   // tek bölgede (İhracat) "Yurtdışı ·" ön eki yazılmaz
+        ds.forEach(d => { const l = lb.filter(s => s[alan] === d); satirlar.push(rxS(cokBolge ? `${bl} · ${d}` : d, l, altF ? altF(d, l) : musteriSay(l))); });   // tek bölgede (İhracat) "Yurtdışı ·" ön eki yazılmaz
         if (ds.length && cokBolge) satirlar.push(rxS(`${bl} Toplam`, lb, `${ds.length} ${birim}`, { sinif: 'toplam' })); });
       satirlar.push(rxS(cokBolge ? 'Genel Toplam' : 'Toplam', sat, musteriSay(sat), { sinif: 'toplam' }));
-      matris(id, cokBolge ? baslik : baslik.replace('Bölge · ', ''), kol, sat.length ? satirlar : [], bos);
-      $('#' + notId).textContent = `${new Set(sat.map(s => s[alan])).size} ${birim} · ${bolgeler.join(' + ')}`;
+      satisTablo(id, cokBolge ? baslik : baslik.replace('Bölge · ', ''), kol, sat.length ? satirlar : [], bos, secRx);
+      $('#' + notId).textContent = `${new Set(sat.map(s => s[alan])).size} ${birim}`;
     };
     kirilim('satisSinif', 'Bölge · Cari Sınıfı', 'sinif', 'Sınıfsız', 'tkSatisSinifNot', 'cari sınıfı');
-    kirilim('satisTemsilci', 'Bölge · Satış Temsilcisi', 'temsilci', 'Atanmadı', 'tkSatisTemsilciNot', 'satış temsilcisi', d => (K.temsilciUnvan || {})[d] || '');   // birden çok temsilcili müşteride ana (ilk) temsilci; çift sayım yok
-    // 4) İhracat Finansal Takibi: şube satışları — cari sınıfı "şube" olan her müşteri (yurtdışı şubeler) ayrı satır
+    kirilim('satisTemsilci', 'Bölge · Satış Temsilcisi', 'temsilci', 'Atanmadı', 'tkSatisTemsilciNot', 'satış temsilcisi', (d, l) => [(K.temsilciUnvan || {})[d], musteriSay(l)].filter(Boolean).join(' · '));   // birden çok temsilcili müşteride ana (ilk) temsilci; çift sayım yok
+    kirilim('satisMusteri', 'Bölge · Müşteri', 'musteri', '', 'tkSatisMusteriNot', 'müşteri', (d, l) => [l[0].temsilci, l[0].sinif, fatSay(l)].join(' · '));
+    kirilim('satisUlke', 'Bölge · Ülke', 'ulke', 'Ülkesiz', 'tkSatisUlkeNot', 'ülke');
+    // İhracat Finansal Takibi: şube satışları — cari sınıfı "şube" olan her müşteri (yurtdışı şubeler) ayrı satır
     if ($('#tkTablo-satisSube')) {
       const sb = sat.filter(s => /şube/i.test(s.sinif)), kodlar = [...new Set(sb.map(s => s.cariKodu))].sort((a, b) => T(sb.filter(s => s.cariKodu === b)) - T(sb.filter(s => s.cariKodu === a)));
       const satirlar = kodlar.map(kd => { const l = sb.filter(s => s.cariKodu === kd), c = cariBul(kd); return rxS(`${kd} ${l[0].cariAd || ''}`.trim(), l, [c && c.ulke, c && c.sirket].filter(Boolean).join(' · ')); });
       if (kodlar.length) satirlar.push(rxS('Şubeler Toplam', sb, `${kodlar.length} şube`, { sinif: 'toplam' }));
-      matris('satisSube', 'Şube', kol, satirlar, 'Dönemde şube satışı yok.');
-      $('#tkSatisSubeNot').textContent = `${kodlar.length} şube · ${sb.length} fatura · toplam satışın ${T(sat) ? '% ' + n2(T(sb) / T(sat) * 100) : '—'}`;
+      satisTablo('satisSube', 'Şube', kol, satirlar, 'Dönemde şube satışı yok.', secRx);
+      $('#tkSatisSubeNot').textContent = `${kodlar.length} şube · ${sb.length} fatura · toplam satışın ${T(sat) ? '% ' + n2(T(sb) / T(sat) * 100) : '—'}`;
     }
     cizSubeYil();
   }
   /** İhracat › Satış Raporu'nun en altı: Şube Bakiyeleri sekmesindeki kendi şubelerimizin YILLIK satışları (ihracat-finans.js verisi; aynı kayıt → senkron). Kaynak ekstrelerde yalnız yıllık toplam olduğundan aylık kırılım yoktur.
-   *  Satır = şube (ülke · şirket · para birimi), sütun = yıl; hücrede R (Resmî Fatura) üstte, Gerçek Mal Bedeli altta; Toplam sütununda Satış Esası (gerçek bedel varsa o, yoksa resmî fatura − iade). Dip toplam para birimine göre ayrı.
-   *  Şirket süzgeci ve arama geçerli; şube adına tıklayınca Şube Bakiyeleri sekmesi açılır */
+   *  Satır = ÜLKE (kullanıcı: "Boya + Kağıt olarak değil ülke bazlı ayır"), sütun = yıl; gerçek mal bedeli yoksa tek tutar, varsa R ve Gerçek iki satır ("boş olanları yazma"). Seçim kutusu → dipte Seçili satırı (para birimine göre ayrı).
+   *  Şirket süzgeci ve arama geçerli; ülke adına tıklayınca Şube Bakiyeleri sekmesi açılır */
   function cizSubeYil() {
     const t = $('#tkTablo-satisSubeYil'); if (!t) return;
     const hepsi = window.IhracatFinans && window.IhracatFinans.subeler ? window.IhracatFinans.subeler() : [];
     if (!hepsi.length && !cizSubeYil.bekledi) { cizSubeYil.bekledi = true; setTimeout(() => { if (aktif === 'satis') cizSubeYil(); }, 1800); }   // ihracat verisi henüz gelmediyse bir kez yeniden dene
     const SB = hepsi.filter(s => (!F.sirket.length || F.sirket.includes(s.sirket)) && araUyar(s.sube, s.ulke, s.kod, s.sirket, s.temsilci));
-    // 20 Kas 2026 (kullanıcı: "Boya + Kağıt olarak değil ülke bazlı ayır"): satır = ÜLKE (aynı ülkenin şube kayıtları — Fas · Boya + Fas · Kağıt, Özbekistan · Uras + Selvi — tek satırda toplanır; kayıt ayrıntısı Şube Bakiyeleri sekmesinde)
     const uy = s => ((s.ulke || s.sube || '').trim()) + '|' + (s.pb || 'TL'), tekil = l => [...new Set(l.filter(Boolean))];
     const G = tekil(SB.map(uy)).map(a => { const l = SB.filter(s => uy(s) === a), ulke = a.split('|')[0], pb = a.split('|')[1], sr = tekil(l.map(s => s.sirket));
       const ad = l.length === 1 && l[0].sube && !kucuk(l[0].sube).startsWith(kucuk(ulke)) ? `${ulke} · ${l[0].sube}` : ulke;
@@ -1129,16 +1179,30 @@
     const yilSira = y => parseInt(String(y).slice(0, 4), 10) || 0, yillar = [...new Set(SB.flatMap(s => (s.yillar || []).map(y => y.yil)))].sort((a, b) => yilSira(a) - yilSira(b) || String(a).localeCompare(String(b)));
     const sim = pb => ({ USD: '$', EUR: '€', GBP: '£' })[pb] || pbAd(pb), pr = (v, pb) => Number(v || 0).toLocaleString(TR, { maximumFractionDigits: 0 }) + ' ' + esc(sim(pb));
     const yT = (g, y, alan) => topla(g.l, s => ((s.yillar || []).find(x => x.yil === y) || {})[alan]), gT = (g, alan) => topla(g.l, s => topla(s.yillar || [], y => y[alan]));
-    // hücre (kullanıcı: "Gerçek — boş olanları yazma, gerçek kısmı dolu ise sadece oralarda yaz"): gerçek mal bedeli yoksa yalnız tutar; varsa R ve Gerçek iki satır
     const cift = (rf, gm, pb, esas) => { const var_ = v => Math.abs(v) > 0.005; if (!var_(rf) && !var_(gm)) return tire; if (!var_(gm)) return esas != null ? `<b>${pr(rf, pb)}</b>` : pr(rf, pb);
       return `<span class="tk-rx">${var_(rf) ? `<span class="r"><small>R</small>${pr(rf, pb)}</span>` : ''}<span class="x"><small>Gerçek</small>${esas != null ? `<b>${pr(gm, pb)}</b>` : pr(gm, pb)}</span></span>`; };
-    t.tHead.innerHTML = `<tr><th class="ad sirasiz">Ülke</th>${yillar.map(y => `<th class="sirasiz">${esc(y)}</th>`).join('')}<th class="sirasiz">Toplam</th></tr>`;
-    t.tBodies[0].innerHTML = G.map(g => `<tr><td class="ad"><a href="#" class="tk-link" data-git="ibSube" title="Şube Bakiyeleri sekmesini aç"><b>${esc(g.ad)}</b></a>${g.alt ? `<small>${esc(g.alt)}</small>` : ''}</td>${yillar.map(y => `<td>${cift(yT(g, y, 'resmiFatura'), yT(g, y, 'gercekMalBedeli'), g.pb)}</td>`).join('')}<td class="top">${cift(gT(g, 'resmiFatura'), gT(g, 'gercekMalBedeli'), g.pb, true)}</td></tr>`).join('') || `<tr><td colspan="${yillar.length + 2}" class="na-bos">Şube kaydı yok.</td></tr>`;
-    // dip toplam: satış esası (gerçek mal bedeli varsa o, yoksa resmî fatura − iade); para birimine göre ayrı (farklı para birimleri toplanmaz)
-    const pbler = tekil(G.map(g => g.pb)), dipH = f => pbler.map(pb => { const v = topla(G.filter(g => g.pb === pb), f); return Math.abs(v) > 0.005 ? pr(v, pb) : ''; }).filter(Boolean).join('<br>') || '—';
-    t.tFoot.innerHTML = G.length ? `<tr class="toplam"><td class="ad"><b>Toplam · ${G.length} ülke</b><small>satış esası</small></td>${yillar.map(y => `<td>${dipH(g => yT(g, y, 'satisEsas'))}</td>`).join('')}<td class="top"><b>${dipH(g => gT(g, 'satisEsas'))}</b></td></tr>` : '';
+    const S = ssec('satisSubeYil'); [...S].forEach(a => { if (!G.some(g => g.ad === a)) S.delete(a); }); const GS = G.filter(g => S.has(g.ad));
+    t.tHead.innerHTML = `<tr><th class="sec sirasiz"><input type="checkbox" data-ssec-hepsi="satisSubeYil" title="Ülkelerin hepsini seç / bırak"${G.length && GS.length === G.length ? ' checked' : ''}></th><th class="ad sirasiz">Ülke</th>${yillar.map(y => `<th class="sirasiz">${esc(y)}</th>`).join('')}<th class="sirasiz">Toplam</th></tr>`;
+    t.tBodies[0].innerHTML = G.map(g => `<tr${S.has(g.ad) ? ' data-secili="1"' : ''}><td class="sec"><input type="checkbox" data-ssec="satisSubeYil" data-a="${esc(g.ad)}" title="Seç → dipte Seçili toplamı"${S.has(g.ad) ? ' checked' : ''}></td><td class="ad"><a href="#" class="tk-link" data-git="ibSube" title="Şube Bakiyeleri sekmesini aç"><b>${esc(g.ad)}</b></a>${g.alt ? `<small>${esc(g.alt)}</small>` : ''}</td>${yillar.map(y => `<td>${cift(yT(g, y, 'resmiFatura'), yT(g, y, 'gercekMalBedeli'), g.pb)}</td>`).join('')}<td class="top">${cift(gT(g, 'resmiFatura'), gT(g, 'gercekMalBedeli'), g.pb, true)}</td></tr>`).join('') || `<tr><td colspan="${yillar.length + 3}" class="na-bos">Şube kaydı yok.</td></tr>`;
+    // dip toplam: satış esası (gerçek mal bedeli varsa o, yoksa resmî fatura − iade); para birimine göre ayrı (farklı para birimleri toplanmaz); altında seçili ülkelerin toplamı
+    const dipSatir = (L, ad, alt, sinif) => { const pbler = tekil(L.map(g => g.pb)), dipH = f => pbler.map(pb => { const v = topla(L.filter(g => g.pb === pb), f); return Math.abs(v) > 0.005 ? pr(v, pb) : ''; }).filter(Boolean).join('<br>') || '—';
+      return `<tr class="${sinif}"><td class="sec"></td><td class="ad"><b>${ad}</b><small>${alt}</small></td>${yillar.map(y => `<td>${dipH(g => yT(g, y, 'satisEsas'))}</td>`).join('')}<td class="top"><b>${dipH(g => gT(g, 'satisEsas'))}</b></td></tr>`; };
+    t.tFoot.innerHTML = G.length ? dipSatir(G, `Toplam · ${G.length} ülke`, 'satış esası', 'toplam') + (GS.length ? dipSatir(GS, `Seçili · ${GS.length}`, esc(GS.map(g => g.ulke).join(' + ')), 'toplam secili') : '') : '';
     $('#tkSatisSubeYilNot').textContent = G.length ? `${G.length} ülke · ${SB.length} şube kaydı · ${yillar.length} yıl` : '';
   }
+  // Satış Raporu etkileşimi: satır seçimi, hepsini seç, R / X anahtarı, görünüm düğmeleri, başlıkla sıralama
+  kok.addEventListener('change', e => {
+    const c = e.target.closest('[data-ssec]'); if (c) { const S = ssec(c.dataset.ssec); if (c.checked) S.add(c.dataset.a); else S.delete(c.dataset.a); cizSatis(); return; }
+    const h = e.target.closest('[data-ssec-hepsi]'); if (h) { const id = h.dataset.ssecHepsi, S = ssec(id); $$('tbody [data-ssec]', $('#tkTablo-' + id)).forEach(x => { if (h.checked) S.add(x.dataset.a); else S.delete(x.dataset.a); }); cizSatis(); return; }
+    if (e.target.id === 'tkSatisRx') { ST.rx = e.target.checked; stSakla(); cizSatis(); }
+  });
+  kok.addEventListener('click', e => {
+    const g = e.target.closest('[data-sgor]'); if (g) { ST.gorunum = g.dataset.sgor; stSakla(); cizSatis(); return; }
+    const th = e.target.closest('.tk-satis th[data-sk]'); if (!th || e.target.closest('input')) return;
+    const id = th.closest('table').id.replace('tkTablo-', ''), k = th.dataset.sk, ilk = k === 'ad' ? 1 : -1, sr = SSIRA[id];
+    if (!sr || sr.k !== k) SSIRA[id] = { k, y: ilk }; else if (sr.y === ilk) sr.y = -ilk; else delete SSIRA[id];
+    cizSatis();
+  });
   // ---------- ÇEK AKIBETİ RAPORU sekmesi (20 Kas 2026; kullanıcı: "tahsilat raporuna Çek Akıbeti Raporu sekmesi ekle, senkronize çalışsın"): raporun kendisi çerçeve içinde (ayrı kopya yok → veri tek kaynak);
   //            ilk açılışta yüklenir, bu sayfada tahsilat kaydı değiştiyse (çek girişi vb.) sekmeye dönünce yeniden okunur; çerçeve ekranın dibine kadar uzar ----------
   let cekKirli = false;
@@ -1550,7 +1614,8 @@
     const S = { ozet: [['#tkTablo-is', 'Bekleyen İşler'], ['#tkTablo-sirket', 'Şirket Özeti'], ['#tkTablo-temsilci', 'Temsilci Özeti']], cari: [['#tkTablo-cari', 'Alacak Takibi']], kartlar: [['#tkTablo-kartlar', 'Müşteri Cari Kartları']], acik: [['#tkTablo-acik', 'Açık Faturalar']], hafta: [['#tkTablo-hafta', 'Haftalık Beklenen'], ['#tkTablo-haftaDetay', 'Haftanın Faturaları']],
       banka: [['#tkTablo-banka', 'Banka Tahsilatları']], surec: [['#tkTablo-surec', SG === 'not' ? 'Görüşme Notları' : 'Aylık Süreç']], vftakip: [['#tkTablo-vftakip', 'Vade Farkı Takibi']], vade: [['#tkTablo-vade', 'Gecikmeli Tahsilatlar']], kapama: [['#tkTablo-kapama', 'Kapama Robotu']], liste: [['#thListe', 'Tahsilatlar'], ['#tkTablo-vade', 'Gecikmeli Tahsilatlar']], fatura: [['#thFaturaListe', 'Kesilen Fark Faturaları']],
       ozel: [['#tkTablo-ozel', 'Özel Rapor' + (orAyar.ad ? ' · ' + orAyar.ad : '')]],
-      satis: [['#tkTablo-satisTip', 'Aylık Satışlar · X - R'], ['#tkTablo-satisSinif', 'Aylık Satışlar · Cari Sınıfı'], ['#tkTablo-satisTemsilci', 'Aylık Satışlar · Satış Temsilcisi'], ...($('#tkTablo-satisSube') ? [['#tkTablo-satisSube', 'Şube Satışları'], ['#tkTablo-satisSubeYil', 'Şube Satışları · Yıllara Göre']] : [])],
+      // Satış Raporu: yalnız ekranda görünen kırılımlar (Görünüm düğmesi) aktarılır
+      satis: [['#tkTablo-satisTip', 'Aylık Satışlar · X - R'], ['#tkTablo-satisSinif', 'Aylık Satışlar · Cari Sınıfı'], ['#tkTablo-satisTemsilci', 'Aylık Satışlar · Satış Temsilcisi'], ['#tkTablo-satisMusteri', 'Aylık Satışlar · Müşteri'], ['#tkTablo-satisUlke', 'Aylık Satışlar · Ülke'], ['#tkTablo-satisSube', 'Şube Satışları'], ['#tkTablo-satisSubeYil', 'Şube Satışları · Yıllara Göre']].filter(x => { const el = $(x[0]), kart = el && el.closest('[data-sg]'); return el && !(kart && kart.hidden); }),
       aylik: [['#tkTablo-aylikPazar', 'Aylık Tahsilatlar · Yurtiçi / Yurtdışı'], ['#tkTablo-aylikSinif', 'Aylık Tahsilatlar · Cari Sınıfı'], ['#tkTablo-aylikTemsilci', 'Aylık Tahsilatlar · Satış Temsilcisi'], ['#tkTablo-aylikYontem', 'Aylık Tahsilatlar · Yöntem'], ['#tkTablo-aylikCek', 'Vade Ayına Göre Çek · Senet'], ['#tkTablo-aylikKisi', 'Tahsilatı Yapan Kişi']], plan: [['#tkTablo-planVade', 'Vade Ayına Göre Planlanan'], ['#tkTablo-planAy', 'Tahsilat Ayına Göre'], ['#tkTablo-planVf', 'Vade Farkı Doğan - Kesilen'], ...(IHRACAT ? [['#tkTablo-hafta', 'Haftalık Beklenen'], ['#tkTablo-haftaDetay', 'Haftanın Faturaları']] : [])] }[aktif]; if (!S) return;
     window.TabloExcel.indir('tahsilat_' + aktif, S.map(x => ({ tablo: x[0], ad: x[1], baslik: 'Tahsilat · ' + x[1] })));
   });
