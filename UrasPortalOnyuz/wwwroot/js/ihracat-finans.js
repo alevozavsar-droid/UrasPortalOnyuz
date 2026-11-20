@@ -648,7 +648,7 @@
     window.TabloExcel.indir('ibkb_' + p, sayfalar).catch(err => mesaj('danger', 'Excel indirilemedi: ' + esc(err.message)));
   }
   $('#ibExcel').addEventListener('click', excelIndir);
-  window.IhracatFinans = { sekme, excel: excelIndir, ciz: () => ciz(), gomulu: GOMULU };   // Tahsilat gövdesi (tahsilat-takip.js) buradan sürer
+  window.IhracatFinans = { sekme, excel: excelIndir, ciz: () => ciz(), gomulu: GOMULU, subeler: () => (V && V.subeler) || [] };   // subeler: Satış Raporu sekmesindeki "Şube Satışları · Yıllara Göre" tablosu (tahsilat-takip.js › cizSatis) Şube Bakiyeleri ile aynı veriden   // Tahsilat gövdesi (tahsilat-takip.js) buradan sürer
 
   // ---------- form (ekle / düzenle)
   const SAYI = (v, ond = 2) => { let s = String(v ?? '').trim(); if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.'); const x = Number(s); return isNaN(x) ? 0 : Math.round(x * 10 ** ond) / 10 ** ond; };

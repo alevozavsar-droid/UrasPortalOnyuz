@@ -187,7 +187,8 @@ namespace WebApplication3.Data
             ("Rapor166", "Index", "fas fa-table-list", "Fatura İnceleme", null),
             ("Rapor167", "Index", "fas fa-table-list", "Gider Onay Ekranı", null),
             ("IhracatFinans", "Index", "fas fa-file-shield", "İhracat Finansal Takibi", null),   // 11 Kas 2026: İhracat Tahsilat Raporu (Rapor68) + İBKB Beyanname Takibi (Rapor168) birleşik gerçek kayıtlı ekran; 19 Kas 2026: Tahsilat gövdesi (yurtdışı) + ihracat sekmeleri tek rapor
-            ("IhracatFinans", "Eski", "fas fa-clock-rotate-left", "İhracat Finansal Takibi (Eski)", null),   // 20 Kas 2026: yeniden açıldı — İhracat Satışları, Banka Tahsilatları, Tamamlanan, Cari Bakiyeler (Mizan), Vade Takibi
+            ("UrasPortekiz", "Index", "fas fa-earth-europe", "Uras Portekiz Raporu", null),   // 20 Kas 2026: Uras Portekiz Excel raporunun Türkçe karşılığı — satışlar, kasa, banka hesapları, ödeme öngörüsü (Data/UrasPortekizOrnek.cs)
+            ("IhracatFinans", "Eski", "fas fa-clock-rotate-left", "İhracat Finansal Takibi (Eski)", null),  // 20 Kas 2026: yeniden açıldı — İhracat Satışları, Banka Tahsilatları, Tamamlanan, Cari Bakiyeler (Mizan), Vade Takibi
             ("Rapor169", "Index", "fas fa-table-list", "Taslak Faturalar", null),
             ("Rapor170", "Index", "fas fa-table-list", "Gider / Gelir Analizi", null),
             ("Rapor171", "Index", "fas fa-table-list", "Yansıtma Faturası", null),
@@ -391,6 +392,7 @@ namespace WebApplication3.Data
                 case "Rapor136":
                     return "Satış";
 
+                case "UrasPortekiz":
                 case "Rapor13":
                 case "Rapor68":
                 case "Rapor122":

@@ -143,7 +143,7 @@ namespace WebApplication3.Data
         public static readonly string[] TahsilatKaynaklari = { "Banka (Otomatik)", "Elle", "Excel (Bağlanan DAB)" };
         public static readonly string[] BakiyeKontrolDurumlari = { "Uyumlu", "Fark Var", "Açıklama Bekliyor" };
         /// <summary>İhracat satış temsilcileri (kullanıcı listesi, 11 Kas 2026).</summary>
-        public static readonly string[] Temsilciler = { "Erman Kaval", "Ali Kemal Gündoğan", "Sevgi Kaya", "Berkan Özkan", "Aksel Güler" };
+        public static readonly string[] Temsilciler = { "Aksel Güler", "Berkan Özkan", "Sevgi Kaya", "Vusal Musayev", "Erman Kaval", "Ali Kemal Gündoğan" };   // 20 Kas 2026: yurtdışı satış temsilcileri (unvanlar CariKartOrnek.SatisTemsilciUnvan)
         public static readonly string[] SubeKanallar = { "E-posta", "WhatsApp" };
         public static readonly string[] SubeGonderimDurumlari = { "Gönderildi", "Mutabık", "İtirazlı", "Yanıt Bekleniyor" };
         public static readonly string[] GorevDurumlari = { "Atandı", "Düzeltildi", "Onaylandı", "İade Edildi", "İptal" };
@@ -208,6 +208,8 @@ namespace WebApplication3.Data
                 _depo.Gorevler ??= new List<IbkbGorev>(); foreach (var g in _depo.Gorevler) g.Gecmis ??= new List<IbkbGorevAdim>(); _depo.CariGonderimleri ??= new List<CariGonderim>();
                 if (_depo.TohumSurumu < TohumSurum) TohumUygula();
                 if (_depo.SubeTohumSurumu < SubeTohumSurum) SubeTohumUygula();
+                // 20 Kas 2026 (kullanıcı temsilci listesi): Özbekistan şubelerinin satış temsilcisi Vusal Musayev — kalıcı kayıtta boşsa / yalnız "Vusal" yazıyorsa bir kez düzeltilir (elle girilmiş başka ada dokunulmaz)
+                { bool d = false; foreach (var s in _depo.Subeler.Where(x => x.Ulke == "Özbekistan")) { if (string.IsNullOrEmpty(s.Temsilci) || s.Temsilci == "Vusal") { s.Temsilci = "Vusal Musayev"; d = true; } if (s.Sorumlu == "Vusal") { s.Sorumlu = "Vusal Musayev"; d = true; } } if (d) Yaz(); }
                 Console.WriteLine($"[İBKB] {_depo.Dosyalar.Count} ihracat dosyası ({string.Join(", ", _depo.Dosyalar.GroupBy(x => x.Sirket + " " + x.Yil).Select(g => g.Key + ": " + g.Count()))})" + (dosya != null ? $" · {dosya}" : " (kalıcılık kapalı)"));
             }
         }
@@ -323,8 +325,8 @@ namespace WebApplication3.Data
                         Not = "DİKKAT: kaynak tablodaki ara toplamlar sütunlarla uyuşmuyor (PDF devir −74.321 $; sütunlardan hesaplanan devir −1.056.592 $). Gizli sütun / düzeltme olabilir; yıl satırındaki Düzeltme alanıyla düzeltilmeli.",
                         Yillar = new List<SubeYil> { Y("2016-2019", 0, 1420957, 942900, 3506300, 0, "PDF: ödeme − satış −1.038.663 (sütunlardan −1.142.443)"), Y("2020", 0, 965502.47m, 882000, 684510, 0, "PDF: toplam ödeme 1.783.738, ödeme − satış +1.502.732 (sütunlardan 1.847.502,47 / +1.162.992,47)"), Y("2021-2022", 0, 1601629, 890500, 3372697, 0, "PDF: toplam ödeme 2.078.113, ödeme − satış −645.548 (sütunlardan 2.492.129 / −880.568)"), Y("2023", 0, 291341, 355450, 820065, 0, "PDF: toplam ödeme 548.508, ödeme − satış +33.976 (sütunlardan 646.791 / −173.274)"), Y("2024", 0, 215821, 155450, 432533, 0, "PDF: ödeme − satış +35.221 (sütunlardan −61.262)"), Y("2025", 0, 355500, 155650, 502213), Y("2026", 0, 237922, 253000, 461897) } },
                     new SubeCari { Id = 8, Kod = "SB-08", Sube = "Portekiz", Ulke = "Portekiz", Sirket = "", UrunGrubu = "", Temsilci = "", ParaBirimi = "EUR", Kaynak = k, Not = "Kaynak tabloda şirket ve satış temsilcisi belirtilmemiş. 2019 sermaye 61.130 €.", Yillar = new List<SubeYil> { Y("2019", 308423, 0, 0, 0, 61130), Y("2020", 594350, 0, 360224), Y("2021", 167350, 102989), Y("2022", 245450, 40375), Y("2023", 278350, 214745), Y("2024", 320057, 316441), Y("2025", 151442, 141166) } },
-                    new SubeCari { Id = 9, Kod = "SB-09", Sube = "Özbekistan", Ulke = "Özbekistan", Sirket = "Uras Kimya", UrunGrubu = "", Temsilci = "", Sorumlu = "Vusal", ParaBirimi = "USD", Kaynak = k, Not = "Vusal tablosu; şirket kaynakta yalnız 2026 bloğunda (Selvi Kimya) yazılı, 2022–2025 Uras Kimya varsayıldı.", Yillar = new List<SubeYil> { Y("2022", 66707, 30004), Y("2023", 145801, 107120), Y("2024", 129985, 84179), Y("2025", 246781, 225117) } },
-                    new SubeCari { Id = 10, Kod = "SB-10", Sube = "Özbekistan · Selvi Kimya", Ulke = "Özbekistan", Sirket = "Selvi Kimya", UrunGrubu = "", Temsilci = "", Sorumlu = "Vusal", ParaBirimi = "USD", Kaynak = k, Yillar = new List<SubeYil> { Y("2026", 218782, 141565) } },
+                    new SubeCari { Id = 9, Kod = "SB-09", Sube = "Özbekistan", Ulke = "Özbekistan", Sirket = "Uras Kimya", UrunGrubu = "", Temsilci = "Vusal Musayev", Sorumlu = "Vusal Musayev", ParaBirimi = "USD", Kaynak = k, Not = "Vusal tablosu; şirket kaynakta yalnız 2026 bloğunda (Selvi Kimya) yazılı, 2022–2025 Uras Kimya varsayıldı.", Yillar = new List<SubeYil> { Y("2022", 66707, 30004), Y("2023", 145801, 107120), Y("2024", 129985, 84179), Y("2025", 246781, 225117) } },
+                    new SubeCari { Id = 10, Kod = "SB-10", Sube = "Özbekistan · Selvi Kimya", Ulke = "Özbekistan", Sirket = "Selvi Kimya", UrunGrubu = "", Temsilci = "Vusal Musayev", Sorumlu = "Vusal Musayev", ParaBirimi = "USD", Kaynak = k, Yillar = new List<SubeYil> { Y("2026", 218782, 141565) } },
                     new SubeCari { Id = 11, Kod = "SB-11", Sube = "Dubai", Ulke = "BAE", Sirket = "", UrunGrubu = "", Temsilci = "", ParaBirimi = "USD", Kaynak = "Kullanıcı (11 Kas 2026)", Not = "Yıl satırları girilecek." }
                 };
                 foreach (var s in L) s.Olusturma = DateTime.Today;

@@ -1,0 +1,60 @@
+﻿@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string sekme = (string)ViewBag.Sekme ?? "ozet";
+    // sekmeler hepsi açık, tek satır; adlarda sayaç yok. Ayraç: özet | satış | hesaplar | öngörü
+    var sekmeler = new[] { ("ozet", "Özet", "fa-chart-pie"), ("satis", "Satışlar", "fa-file-invoice"), ("aylik", "Aylık Satışlar", "fa-calendar-days"), ("musteri", "Müşteri Bazında", "fa-users"), ("urun", "Ürün Bazında", "fa-flask"),
+        // 20 Kas 2026 (kullanıcı): Müşteri Bakiyeleri (fatura − tahsilat) ve Tahsilatlar sekmeleri; Aylık Giderler (şirket hesabından ay ay gider, rakama tıklayınca kalem kalem)
+        ("bakiye", "Müşteri Bakiyeleri", "fa-scale-balanced"), ("tahsilat", "Tahsilatlar", "fa-hand-holding-dollar"),
+        ("sirket", "Şirket Banka Hesabı", "fa-building-columns"), ("gider", "Aylık Giderler", "fa-receipt"), ("tasarruf", "Tasarruf Hesabı", "fa-piggy-bank"), ("ozel", "Murat Bey Özel Hesap", "fa-user-shield"), ("kasa", "Kasa (EUR)", "fa-cash-register"), ("ongoru", "Ödeme Öngörüsü", "fa-calendar-check") };
+    var ayrac = new[] { "satis", "sirket", "ongoru" };
+}
+@*
+    URAS PORTEKİZ RAPORU (/UrasPortekiz, 20 Kas 2026) — Uras Portekiz'in gönderdiği Excel raporunun (REPORT_PORTUGAL_*.xls) Türkçe portal karşılığı.
+    Veri /UrasPortekiz/Veri (Data/UrasPortekizOrnek.cs: App_Data/uras-portekiz klasöründeki en yeni dosya), çeviri Data/UrasPortekizCeviri.cs, betik wwwroot/js/uras-portekiz.js.
+    Tasarım kuralları (kullanıcı tercihleri): sade tema, sekmelerin hepsi görünür, süzgeçler tek satır ve çoklu seçim (ortak SuzgecCubuk), her tabloda alt toplam,
+    tutar + € bölünmez, açıklama paragrafı yok, tablo ekranın dibine kadar uzar (başlık ve dip toplam yapışkan), küçük punto yok, Excel = ekrandaki süzülmüş liste.
+*@
+<link rel="stylesheet" href="/css/nakit-avans.css?v=1" />
+<link rel="stylesheet" href="/css/suzgec-cubuk.css?v=2" />
+<link rel="stylesheet" href="/css/uras-portekiz.css?v=3" />
+
+<div class="container-fluid py-2 na up" id="up" data-sekme="@sekme" data-dinamik="kapali">
+    <div class="up-ust">
+        <h4><span class="up-ikon"><i class="fas fa-earth-europe"></i></span>Uras Portekiz Raporu</h4>
+        <span class="up-hap" id="upDosya"></span><span class="up-hap" id="upTarih"></span>
+        <span class="up-sag">
+            <label class="up-dgm" title="Uras Portekiz'den gelen yeni Excel raporunu (.xls / .xlsx) yükleyin; rapor en yeni dosyadan okunur"><i class="fas fa-upload"></i>Yeni Rapor Yükle<input type="file" id="upYukle" accept=".xls,.xlsx" hidden></label>
+            <button type="button" class="up-dgm" id="upExcel" title="Açık sekmeyi Excel olarak indir (.xlsx): süzülmüş listenin tamamı"><i class="fas fa-file-excel"></i>Excel</button>
+            <button type="button" class="up-dgm" id="upPdf" title="Açık sekmeyi PDF olarak indir: süzülmüş listenin tamamı"><i class="fas fa-file-pdf"></i>PDF</button>
+        </span>
+    </div>
+    <div id="upSonuc" class="alert py-2 px-3 mb-2" style="display:none"></div>
+    <div class="na-kpi" id="upKpi" data-dinamik="kapali"></div>
+    <div id="upSuzgec" data-dinamik="kapali"></div>
+
+    <div class="up-sekme" id="upSekmeler" data-dinamik="kapali">
+        @foreach (var s in sekmeler) { if (ayrac.Contains(s.Item1)) { <span class="cizgi"></span> } <button type="button" data-p="@s.Item1"><i class="fas @s.Item3"></i>@s.Item2</button> }
+    </div>
+
+    @* ÖZET: yıllara göre satış ve banka, gider türleri, ilk 15 müşteri ve ürün *@
+    <div class="up-panel" data-p="ozet"><div class="up-izgara" id="upOzet"></div></div>
+    @* AYLIK GİDERLER (20 Kas 2026): şirket banka hesabının çıkışları (hesaplar arası transfer hariç) — üstte seçili yılın kalem × ay tablosu, altta ay × yıl; her rakam tıklanır → kalem kalem pencere *@
+    <div class="up-panel" data-p="gider"><div id="upGider"></div></div>
+    @* liste sekmeleri: tek tablo, ekranın dibine kadar; başlık ve dip toplam yapışkan; sayfalama kart başlığında *@
+    @foreach (var p in new[] { "bakiye", "tahsilat", "satis", "aylik", "musteri", "urun", "sirket", "tasarruf", "ozel", "kasa", "ongoru" })
+    {
+        <div class="up-panel" data-p="@p">
+            <div class="up-kart">
+                <div class="up-kart-b"><span class="b" data-baslik></span><span class="say" data-say></span><span class="sayfa" data-sayfa></span></div>
+                <section class="up-kaydir" data-tam><table class="up-tablo" data-tablo="@p" data-dinamik="kapali"><thead></thead><tbody></tbody><tfoot></tfoot></table></section>
+            </div>
+        </div>
+    }
+</div>
+
+@* ayrıntı penceresi (rakama / müşteriye tıklayınca): içerik uras-portekiz.js'te kurulur; gövde <section> (kabuğun div:has(table) yükseklik kuralı ezmesin) *@
+<div class="up-perde" id="upPen" hidden><section class="up-pencere" role="dialog" aria-modal="true"><div class="ust"><div><div class="ad" id="upPenAd"></div><div class="alt" id="upPenAlt"></div></div><button type="button" id="upPenKapat" title="Kapat (Esc)"><i class="fas fa-xmark"></i></button></div><section class="govde" id="upPenGovde"></section></section></div>
+
+<script src="/js/suzgec-cubuk.js?v=2"></script>
+<script src="/js/tablo-excel.js?v=3"></script>
+<script src="/js/uras-portekiz.js?v=6"></script>
