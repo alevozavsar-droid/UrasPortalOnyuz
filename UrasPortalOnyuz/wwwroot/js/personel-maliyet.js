@@ -133,6 +133,15 @@
   const VARSAYILAN_SEKME = 'cari';   // panel bu sekmeyle açılır (kullanıcı, 6 Kas 2026: "Konsolide İK Paneli'ni açmak istediğimizde bu sayfa ile açılsın"); adreste ?sekme yoksa bu, görünümdeki varsayılan da aynı
   /** sekmede uygulanamayan anahtarlar: Üretim Personeli sekmesi yalnız üretim, Özel Kişiler yalnız özel kişileri gösterir; Prim / Üretim satırları kalem bazlıdır; Muhasebe ve Senaryo Karşılaştırması kayıtlı simülasyonlardan gelir; Şirket Teşvikleri şirket bazlıdır */
   const ANAHTAR_ETKISIZ = { uretim: ['uretim', 'ozel', 'tek'], ozel: ['uretim', 'ozel'], prim: ['tek'], muhasebe: ['uretim', 'ozel', 'tek'], tesvik: ['tek'], karsilastirma: ['uretim', 'ozel', 'tek'] };
+  /** SEKME YAZISI = SIĞAN EN BÜYÜK BOY (20 Kas 2026, "sekme başlıklarını … puntoları olabildiğince büyük yaz, genişlikleri değiştirmeyecek şekilde"): 15 sekme tek satırda kalır; yazı en çok .84rem (Tahsilat şeridi),
+   *  önce ikonlu denenir (% 10'a kadar küçülür), sığmazsa ikonlar gizlenir ve .84rem'den .68rem'e (eski boy) doğru sığan ilk boy seçilir. Pencere boyutu değişince yeniden ölçülür */
+  function sekmeSigdir() {
+    const S = $('#pmSekmeler'); if (!S) return; const bs = $$('button', S); if (!bs.length) return;
+    const kok = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16, enb = .84 * kok, enk = .68 * kok;
+    const sigar = () => S.scrollWidth <= S.clientWidth + 1 && new Set(bs.map(b => Math.round(b.getBoundingClientRect().top))).size === 1;
+    const dene = px => { bs.forEach(b => { b.style.fontSize = px.toFixed(2) + 'px'; }); return sigar(); };
+    for (const ikonsuz of [false, true]) { S.classList.toggle('ikonsuz', ikonsuz); for (let px = enb; px >= (ikonsuz ? enk : enb * .9) - .01; px -= .25) if (dene(px)) return; }
+  }
   function genelAramaYerlestir(p, panel) {
     const kutu = $('#pmAra'), yuva = GENEL_ARAMALI.includes(p) ? $(`.na-panel[data-p="${panel}"] .ayar`) : null;
     if (yuva) yuva.prepend(kutu);
@@ -283,7 +292,7 @@
     dl('#dlSgk', V.sgkIsverenleri); dl('#dlYer', V.gorevYerleri); dl('#dlUnvan', V.unvanlar); dl('#dlBolum', V.bolumler); dl('#dlCati', V.catiDepartmanlar); dl('#dlGorev', V.gorevler || []);
   }
   /** sunucu yanıtındaki güncel veriyi alır ve ekranı tazeler */
-  function veriGuncelle(j) { ['personel', 'sonKayit', 'sgkIsverenleri', 'gorevYerleri', 'catiDepartmanlar', 'bolumler', 'unvanlar', 'gorevler', 'ozelDurumlar', 'durumlar', 'sutunlar', 'parametre', 'ekSutunlar', 'uretim', 'primler', 'donem', 'donemAd', 'donemler', 'ekCalisma', 'kesinti', 'muhasebe', 'tesvik', 'odemeler', 'finans'].forEach(k => { if (j[k] !== undefined) V[k] = j[k]; }); sutunlariKur(); listeleriDoldur(); donemKur(); ekKur(); kayitBilgi(); ciz(); }
+  function veriGuncelle(j) { ['personel', 'sonKayit', 'sgkIsverenleri', 'gorevYerleri', 'catiDepartmanlar', 'bolumler', 'unvanlar', 'gorevler', 'ozelDurumlar', 'durumlar', 'sutunlar', 'parametre', 'ekSutunlar', 'uretim', 'primler', 'donem', 'donemAd', 'donemler', 'ekCalisma', 'kesinti', 'muhasebe', 'tesvik', 'odemeler', 'finans'].forEach(k => { if (j[k] !== undefined) V[k] = j[k]; }); cikisAl(j.cikisSecim); sutunlariKur(); listeleriDoldur(); donemKur(); ekKur(); kayitBilgi(); ciz(); }
   /** yeni bordro dönemi (ör. 2026-10): güncel dönemin kopyası; kesinti taksitleri o aya göre yazılır; oluşunca seçili dönem olur */
   async function yeniBordro() {
     if (duzenleme && !window.confirm('Kaydedilmemiş değişiklikler var. Yeni bordro oluşturulursa kaybolur, devam edilsin mi?')) return;
@@ -452,7 +461,18 @@
   //   ve sabit sütun başlıklarının genişliği izlenir (ResizeObserver): genişlik ne zaman değişirse left değerleri yeniden yazılır
   const sabitIzle = window.ResizeObserver ? new ResizeObserver(() => { clearTimeout(sabitIzle.z); sabitIzle.z = setTimeout(() => $$('.na-panel.aktif table.pm-excel').forEach(sabitle), 40); }) : null;
   const sabitIzleKur = () => { if (!sabitIzle) return; sabitIzle.disconnect(); $$('.na-panel.aktif table.pm-excel').forEach(t => { const bas = t.querySelector('thead tr.sutun') || t.querySelector('thead tr.tek') || t.querySelector('thead tr'); if (bas) Array.from(bas.children).slice(0, 10).forEach(th => sabitIzle.observe(th)); }); };
-  const sabitleHepsi = () => { $$('.na-panel.aktif table').forEach(sifirGenel); sabitleCiz(); sabitIzleKur(); };
+  /** GENİŞLİK KORUMASI (20 Kas 2026, "puntoları olabildiğince büyük yaz … raporu bozmayacak, genişlikleri değiştirmeyecek şekilde"): yazılar büyük boyda başlar. Görünen sekmede bir tablo büyük yazı yüzünden
+   *  kıl payı (kap genişliğinin % 15'ine kadar) taşıyorsa ve eski boyda sığıyorsa YALNIZ O TABLO eski boya döner (table.pm-dar). Zaten çok taşan (yatay kayan) geniş tablolar büyük yazıda kalır.
+   *  Şerit büyük yazıyla alt satıra iniyorsa şerit denetimleri eski boya döner (.dar) */
+  function darKontrol() {
+    const P = $('#pm > .na-panel.aktif'); if (!P) return;
+    // şerit: alt satıra indiyse ya da tek satırlık şeritte (Zam) bir düğmenin yazısı kırpıldıysa eski boya döner
+    $$('.pm-rapor-ust', P).forEach(u => { u.classList.remove('dar'); const kirpik = () => u.scrollWidth > u.clientWidth + 1 || $$('.ayar, .ayar > .btn, .ayar > label, .ayar > .pm-dort > label, .pm-senaryo-bar > .btn', u).some(e => e.scrollWidth > e.clientWidth + 1); if (u.getBoundingClientRect().height > 44 || kirpik()) u.classList.add('dar'); });
+    const tablolar = $$('table', P).filter(t => t.offsetParent !== null && t.parentElement), fazla = t => t.scrollWidth - t.parentElement.clientWidth;
+    tablolar.forEach(t => t.classList.remove('pm-dar'));
+    tablolar.filter(t => { const f = fazla(t); return f > 1 && f / Math.max(1, t.parentElement.clientWidth) <= .15; }).forEach(t => { t.classList.add('pm-dar'); if (fazla(t) > 1) t.classList.remove('pm-dar'); });   // eski boyda da sığmıyorsa büyük yazıda kalır
+  }
+  const sabitleHepsi = () => { $$('.na-panel.aktif table').forEach(sifirGenel); darKontrol(); sabitleCiz(); sabitIzleKur(); };
   const sabitleCiz = () => requestAnimationFrame(() => { kapBoyut(); $$('.na-panel.aktif table.pm-ozet, .na-panel.aktif table.pm-excel').forEach(baslikGenislik); $$('.na-panel.aktif table.pm-ozet').forEach(bolmeCiz); $$('.na-panel.aktif table.pm-excel').forEach(t => { bolmeCiz(t); sabitle(t); }); sabitYenile(); });
   // KÖK NEDEN (20 Kas 2026, Özel Kişiler ↔ Personel Maliyet Tablosu'nda Adı-Soyadı sütunu Unvan'ın üstüne biniyordu): baslikGenislik başlıklara en az 104 px yazar, sabitle o anda ölçer, ardından ortak tablo-hizala aynı kare içinde
   //   genişliği kendi değerine çeker → left değerleri eski genişlikten kalır. Çözüm: sabit sütunlar, yerleşim oturduktan sonra (sonraki kare + kısa gecikmeler) YALNIZ sabitle ile yeniden ölçülür (baslikGenislik yinelenmez)
@@ -1131,7 +1151,22 @@
   // ============================================================
   // İŞTEN ÇIKIŞ SENARYOSU — Birleşik Tablo satırları; işaretlenenler ayrılırsa kalan maliyet, tasarruf, tahmini kıdem / ihbar (veri değişmez; işaretler localStorage'da)
   // ============================================================
-  let cikisSecim = new Set(); try { cikisSecim = new Set(JSON.parse(localStorage.pmCikisSecim || '[]')); } catch (e) { /* yoksay */ }
+  // ORTAK SENARYO (20 Kas 2026, "raporu açan kişi bu seçimli hali ile mi görecek … seçimler herkes için tek ortak senaryo olsun"): işaretler artık sunucuda (V.cikisSecim, /PersonelMaliyet/CikisKaydet,
+  //   kalıcı günlük "cikis") — raporu açan herkes aynı işaretleri görür. Eskiden yalnız tarayıcıdaydı (localStorage.pmCikisSecim); ortak senaryo hiç kullanılmamışsa o tarayıcıdaki eski işaretler bir kez sunucuya aktarılır
+  let cikisSecim = new Set(), cikisBilgi = {};
+  const cikisAl = c => { if (!c) return; cikisSecim = new Set(c.anahtarlar || []); cikisBilgi = c; };
+  /** değişikliği sunucuya yazar (ekran önce iyimser güncellenir); hata olursa önceki işaretlere dönülür */
+  async function cikisGonder(istek, onceki) {
+    try { const j = await post('/PersonelMaliyet/CikisKaydet', istek); if (j && j.cikisSecim) cikisAl(j.cikisSecim); if (!j || !j.success) { if (!(j && j.cikisSecim) && onceki) cikisSecim = onceki; mesaj('danger', esc((j && j.message) || 'Senaryo kaydedilemedi.')); } }
+    catch (e) { if (onceki) cikisSecim = onceki; mesaj('danger', 'Senaryo kaydedilemedi: ' + esc(e.message)); }
+    if (aktifSekme === 'cikis') cikisCiz();
+  }
+  /** tarayıcıda kalmış eski işaretler: ortak senaryo hiç değiştirilmemişse bir kez sunucuya taşınır */
+  async function cikisEskiTasi() {
+    let eski = []; try { if (localStorage.pmCikisTasindi) return; eski = JSON.parse(localStorage.pmCikisSecim || '[]') || []; } catch (e) { return; }
+    if (!Array.isArray(eski) || !eski.length || cikisBilgi.sonZaman || cikisSecim.size) { try { localStorage.pmCikisTasindi = '1'; } catch (e) { /* yoksay */ } return; }
+    try { const j = await post('/PersonelMaliyet/CikisKaydet', { anahtarlar: eski.map(String), cikacak: true }); if (j && j.success) { cikisAl(j.cikisSecim); localStorage.pmCikisTasindi = '1'; mesaj('info', `Bu tarayıcıda kayıtlı ${eski.length} "İşten Çıkacak" işareti ortak senaryoya aktarıldı; artık raporu açan herkes aynı işaretleri görür.`); if (aktifSekme === 'cikis') cikisCiz(); } } catch (e) { /* sonraki açılışta yeniden denenir */ }
+  }
   const cikisAnahtar = r => `${r.kaynak}:${r.uSira != null ? r.uSira : r.sira0}`;   // kişi kaydı olan gündelikçide (uretimX) kaynak Üretim, anahtar kişi sırası (Üretim:9xx); bordro / özel kişide Bordro:sıra (gerçekleşen ödeme kayıtları bu anahtarla)
   const cikisAnahtarlar = r => r.anahtarlar || [cikisAnahtar(r)], cikisSecili = r => cikisAnahtarlar(r).every(k => cikisSecim.has(k));   // birleştirilmiş satır (Çoklu Satırları Birleştir): kişinin tüm kayıtları birlikte işaretlenir
   /** görev yeri → lokasyon: Çorlu içeren yerler Çorlu, diğerleri (Asia dahil) İstanbul; hücrede altında asıl görev yeri */
@@ -1164,13 +1199,12 @@
       ['#b45309', 'Çıkacakların Aylık Maliyeti', kisa(cikan), `yıllık tasarruf ${kisa(cikan * 12)}`], ['#0f766e', 'Kalan Aylık Genel Maliyet', kisa(kalan), `${tum.length - secili.length} kişi · yıllık ${kisa(kalan * 12)}`],
       ['#7c3aed', 'Tahmini Tek Seferlik Çıkış Maliyeti', kisa(cikisMaliyet), `kıdem ${kisa(topH(secili, 'kidem'))} · ihbar ${kisa(topH(secili, 'ihbar'))}`], ['#1d4ed8', 'Geri Dönüş', cikan > 0 ? ondalik(cikisMaliyet / cikan, 1) + ' ay' : '—', 'çıkış maliyeti / aylık tasarruf']];
     $('#pmCikisKpi').innerHTML = kpi.map(k => `<div style="--k:${k[0]}"><div class="l">${k[1]}</div><div class="v">${k[2]}</div><div class="s">${esc(k[3])}</div></div>`).join('');
-    $('#pmCikisSayi').textContent = `${L2.length} / ${tum.length} kişi · ${secili.length} işten çıkacak · ${V.donemAd} · tutarlar ₺ · senaryo veriyi değiştirmez, planınız saklanır`;
+    $('#pmCikisSayi').textContent = `${L2.length} / ${tum.length} kişi · ${secili.length} işten çıkacak · ${V.donemAd} · tutarlar ₺ · ortak senaryo: herkes aynı işaretleri görür${cikisBilgi.sonZaman ? ` (son değişiklik ${cikisBilgi.sonKisi || '—'} · ${cikisBilgi.sonZaman})` : ''} · veriyi değiştirmez`;
     cikisDepartmanCiz(tum);
 
-    $$('#pmCikisTablo .pmCikisSec').forEach(c => c.addEventListener('change', () => { c.dataset.k.split('|').forEach(k => { if (c.value === 'cik') cikisSecim.add(k); else cikisSecim.delete(k); }); cikisSakla(); cikisCiz(); }));
+    $$('#pmCikisTablo .pmCikisSec').forEach(c => c.addEventListener('change', () => { const onceki = new Set(cikisSecim), anahtarlar = c.dataset.k.split('|'), cik = c.value === 'cik'; anahtarlar.forEach(k => { if (cik) cikisSecim.add(k); else cikisSecim.delete(k); }); cikisCiz(); cikisGonder({ anahtarlar, cikacak: cik }, onceki); }));   // önce ekran, sonra ortak senaryoya kayıt
     sabitleHepsi();
   }
-  function cikisSakla() { try { localStorage.pmCikisSecim = JSON.stringify([...cikisSecim]); } catch (e) { /* yoksay */ } }
   /** departman ve departman-görev bazında kişi sayısı ve aylık genel maliyet (₺): mevcut, işten çıkacak (senaryo işaretleri) ve kalan — yalnız bu sekmede (işaretler Özet, Ödeme Planı ve diğer sekmelere yansımaz) */
   function cikisDepartmanCiz(tum) {
     const cikacak = r => cikisSecili(r), tutar = r => Number(r.genelMaliyet) || 0, dep = {}, gor = {};
@@ -1798,7 +1832,7 @@
 
   // ---- başlat
   fetch('/PersonelMaliyet/Veri' + (kok.dataset.donem ? '?donem=' + encodeURIComponent(kok.dataset.donem) : '')).then(r => r.json()).then(v => {
-    V = v; sutunlariKur(); listeleriDoldur(); ekKur(); donemKur();
+    V = v; cikisAl(v.cikisSecim); cikisEskiTasi(); sutunlariKur(); listeleriDoldur(); ekKur(); donemKur();
     $('#pmDonem').addEventListener('change', donemDegis);
     $('#pmYeniBordro').addEventListener('click', yeniBordro);
     // çoklu seçimli süzgeçler (20 Kas 2026): üst çubuk + sekme içi seçimler; Durum varsayılanı Aktif. Dönem (veri yükler) ve Kırılım (gruplama boyutu) tek seçim kalır
@@ -1925,7 +1959,7 @@
     $('#pmUretimEkle').addEventListener('click', () => uretimDuzenle(0)); $('#pmPrimEkle').addEventListener('click', () => primDuzenle(0));
     // işten çıkış senaryosu
     ['#pmCikisKaynak', '#pmCikisSecili', '#pmKidemTavan'].forEach(s => { $(s).addEventListener('input', cikisCiz); $(s).addEventListener('change', cikisCiz); });
-    $('#pmCikisTemizle').addEventListener('click', () => { cikisSecim.clear(); cikisSakla(); cikisCiz(); });
+    $('#pmCikisTemizle').addEventListener('click', () => { if (!cikisSecim.size) return; if (!window.confirm(`Ortak senaryodaki ${cikisSecim.size} "İşten Çıkacak" işareti herkes için kaldırılsın mı?`)) return; const onceki = new Set(cikisSecim); cikisSecim = new Set(); cikisCiz(); cikisGonder({ temizle: true }, onceki); });
     dugmeBagla('#pmCikisExcel', '#pmCikisPdf', bicim => domExcel('isten_cikis_senaryosu', [['pmCikisTablo', 'İşten Çıkış Senaryosu'], ['pmDepTablo', 'Departman Kalan'], ['pmDepGorevTablo', 'Departman ve Görev']], bicim));
 
     dugmeBagla('#pmUretimExcel', '#pmUretimPdf', bicim => ekExcel('uretim', bicim)); dugmeBagla('#pmPrimExcel', '#pmPrimPdf', bicim => ekExcel('prim', bicim)); dugmeBagla('#pmBirlesimExcel', '#pmBirlesimPdf', bicim => ekExcel('birlesim', bicim));
@@ -1940,7 +1974,8 @@
     // yoğun yerleşim: rapor açıklaması "i" ile açılır; şerit alt yazıları başlık ipucunda; pencere boyutu değişince tablo kabı yeniden ölçülür (KPI kutuları ortak na-kpi ölçüsünde)
     $('#pmBilgi').addEventListener('click', () => { kok.classList.toggle('aciklama'); kapBoyut(); });
     $$('.pm-rapor-ust').forEach(u => { const h = u.querySelector('h5'), a = u.querySelector('.alt:not(#pmOzetKapsam)'); if (h && a) h.title = a.textContent.trim(); });
-    window.addEventListener('resize', () => { clearTimeout(kapBoyut.z); kapBoyut.z = setTimeout(sabitleHepsi, 120); });
+    window.addEventListener('resize', () => { clearTimeout(kapBoyut.z); kapBoyut.z = setTimeout(() => { sekmeSigdir(); sabitleHepsi(); }, 120); });
+    sekmeSigdir(); if (document.fonts && document.fonts.ready) document.fonts.ready.then(sekmeSigdir);
     kayitBilgi(); ciz(); sekme(kok.dataset.baslangic || VARSAYILAN_SEKME); window.NA_HAZIR = true;   // açılış sekmesi: Personel Cari Kartı (6 Kas 2026)
     const kisiP = +new URLSearchParams(location.search).get('kisi'); if (kisiP && bul(kisiP)) kartAc(kisiP);   // ?kisi=<sıra> (9 Kas 2026): Personel Carileri / Personel Dosyası'ndan gelen bağlantı kişi kartını açar
     const kod = kok.dataset.kod; if (kod) { const p = V.personel.find(x => x.cariKodu === kod); if (p) { if (!!p.ozel !== (kapsam === 'ozel')) sekme(p.ozel ? 'ozel' : 'tablo'); kartAc(p.sira); } }

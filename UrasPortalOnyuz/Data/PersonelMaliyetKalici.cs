@@ -102,6 +102,7 @@ namespace WebApplication3.Data
                 case "kimlik": { var d = Al<IkPersonelMaster.KimlikIstek>(v); Hata(IkPersonelMaster.KimlikYaz(d, kisi)); break; }   // Personel Dosyası'ndan telefon / e-posta / işe giriş (9 Kas 2026): kişinin tüm dönem kayıtlarına
                 case "odeme": { var d = Al<PoIstek>(v); Hata(PersonelOdemeOrnek.Kaydet(d, kisi, out _)); break; }   // Ödeme Planı gerçekleşen ödeme (9 Kas 2026)
                 case "odemeToplu": { var d = Al<PoTopluIstek>(v); PersonelOdemeOrnek.TopluKaydet(d, kisi, out _); break; }   // "Aynı Tutar Ödendi" toplu giriş / toplu silme
+                case "cikis": { var d = Al<PcIstek>(v); Hata(PersonelCikisOrnek.Kaydet(d, kisi, out _, k.T)); break; }   // İşten Çıkış Senaryosu ortak işaretleri (20 Kas 2026)
                 case "finansGonder": { var d = Al<PfIstek>(v); Hata(PersonelFinansOrnek.Gonder(d, kisi, out _)); break; }   // şirket bazında toplu ödeme → Nakit Akış Planlama (9 Kas 2026)
                 case "finansGeriAl": { var d = Al<Controllers.PersonelMaliyetController.FinansGeriIstek>(v); PersonelFinansOrnek.GeriAl(d.Donem, kisi); break; }
                 default: throw new InvalidOperationException("bilinmeyen kayıt türü: " + k.Tip);
