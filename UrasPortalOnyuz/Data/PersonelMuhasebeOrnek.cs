@@ -98,10 +98,13 @@ namespace WebApplication3.Data
         public static string FiiliSirket(PmPersonel p) => FiiliSirketAdi(p.FiiliGorevYeri, p.SgkIsvereni);
         /// <summary>R (banka) net ödemesi her zaman Uras Power'dan yapılır (kullanıcı kuralı, 3 Kas 2026); elle değiştirilmez.</summary>
         public const string OdemeSirketiR = "Uras Power";
+        /// <summary>Kişinin R (banka) ödeme şirketi (20 Kas 2026, kullanıcı: "SGK işvereni Selvi ise ve R maaşı varsa Ödeme Şirketi Selvi olmalı"): SGK işvereni Selvi olan kişinin R ödemesini Selvi yapar; diğer herkeste Uras Power.</summary>
+        public static bool SelviMi(string sirket) => (sirket ?? "").TrimStart().StartsWith("Selvi", true, new System.Globalization.CultureInfo("tr-TR"));
+        public static string OdemeSirketiRKisi(PmPersonel p) => p != null && SelviMi(p.SgkIsvereni) ? p.SgkIsvereni : OdemeSirketiR;
         /// <summary>X (elden) net ödemesi personelin fiili görev yeri şirketinden yapılır (kullanıcı kuralı, 3 Kas 2026); SGK işvereninden farklıysa iki şirket arasında D grubu set oluşur.</summary>
         public static string OdemeSirketiX(PmPersonel p) => FiiliSirket(p);
         /// <summary>Satırın kanalına göre ödeme şirketi: X → fiili görev yeri şirketi, R → Uras Power.</summary>
-        public static string OdemeSirketiKanal(PmPersonel p, string xr) => xr == "X" ? OdemeSirketiX(p) : OdemeSirketiR;
+        public static string OdemeSirketiKanal(PmPersonel p, string xr) => xr == "X" ? OdemeSirketiX(p) : OdemeSirketiRKisi(p);
         private static string MasterSirket(string s) => s == "ALV Kimya" || s == "Alv Filo" ? "Alv Kimya" : s == "Selvi Kimya" ? "Selvi" : s;
         public static string DbName(string sirket) => CekAkibetOrnek.DbName(MasterSirket(sirket));
         public static bool OdemeYapilmiyor(PmPersonel p) => !p.BankaBlokeli && (p.Not ?? "").IndexOf("Ödeme Yapılmıyor", StringComparison.OrdinalIgnoreCase) >= 0;   // bloke hesapta ödeme elden yapılır; eski not bu durumda ödemeyi engellemez
@@ -162,7 +165,7 @@ namespace WebApplication3.Data
         public static string KaynakImzasi(string donem, string kapsam)
         {
             var sb = new StringBuilder();
-            lock (PersonelMaliyetOrnek.Kilit) foreach (var p in Kaynak(donem, kapsam)) { var h = p.Hesap; sb.Append(p.Sira).Append('|').Append(h.GenelMaliyet).Append('|').Append(h.NetRBordro).Append('|').Append(h.NetXBordro).Append('|').Append(h.ToplamBrutKazanc).Append('|').Append(h.SgkIsverenToplam).Append('|').Append(p.SgkIsvereni).Append('|').Append(FiiliSirket(p)).Append('|').Append(OdemeSirketiR).Append('|').Append(OdemeSirketiX(p)).Append('|').Append(OdemeYapilmiyor(p)).Append(';'); }
+            lock (PersonelMaliyetOrnek.Kilit) foreach (var p in Kaynak(donem, kapsam)) { var h = p.Hesap; sb.Append(p.Sira).Append('|').Append(h.GenelMaliyet).Append('|').Append(h.NetRBordro).Append('|').Append(h.NetXBordro).Append('|').Append(h.ToplamBrutKazanc).Append('|').Append(h.SgkIsverenToplam).Append('|').Append(p.SgkIsvereni).Append('|').Append(FiiliSirket(p)).Append('|').Append(OdemeSirketiRKisi(p)).Append('|').Append(OdemeSirketiX(p)).Append('|').Append(OdemeYapilmiyor(p)).Append(';'); }
             lock (Kilit) sb.Append("#E").Append(_eslemeVersiyon);
             using var sha = SHA256.Create(); return Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(sb.ToString()))).Substring(0, 16);
         }
@@ -197,7 +200,7 @@ namespace WebApplication3.Data
             decimal yansitma = 0, baskaOdeme = 0, genel = 0, ara = 0; int odemeYok = 0, xrHata = 0, genelHata = 0, yansitmaHata = 0;
             foreach (var p in kisiler)
             {
-                var h = p.Hesap; string sgk = p.SgkIsvereni, fiili = FiiliSirket(p), ode = OdemeSirketiR, odeX = OdemeSirketiX(p);
+                var h = p.Hesap; string sgk = p.SgkIsvereni, fiili = FiiliSirket(p), ode = OdemeSirketiRKisi(p), odeX = OdemeSirketiX(p);
                 genel += h.GenelMaliyet; ara += h.AraToplam;
                 if (Math.Abs(h.NetXBordro + h.NetRBordro - h.AraToplam) > 0.01m) xrHata++;
                 if (Math.Abs(h.AraToplam + h.ToplamBrutMasraflar + h.ToplamIsveren - h.GenelMaliyet) > 0.01m) genelHata++;
@@ -389,7 +392,7 @@ namespace WebApplication3.Data
         {
             PmhSimulasyon s; lock (Kilit) s = Simulasyonlar.Where(x => x.Donem == donem && x.Durum != "İptal").OrderByDescending(x => x.Id).FirstOrDefault() ?? Simulasyonlar.Where(x => x.Donem == donem).OrderByDescending(x => x.Id).FirstOrDefault();
             List<PmPersonel> k; lock (PersonelMaliyetOrnek.Kilit) k = Kaynak(donem, "*").Where(OdemeYapilmiyor).ToList();
-            var odemeYok = k.Select(p => new { sira = p.Sira, adSoyad = p.AdSoyad, cariKodu = p.CariKodu, sgkIsvereni = p.SgkIsvereni, fiiliGorevYeri = p.FiiliGorevYeri, odemeSirketi = OdemeSirketiR, odemeSirketiX = OdemeSirketiX(p), not = p.Not, netR = p.Hesap.NetRBordro, netX = p.Hesap.KalanNetElden }).ToList();
+            var odemeYok = k.Select(p => new { sira = p.Sira, adSoyad = p.AdSoyad, cariKodu = p.CariKodu, sgkIsvereni = p.SgkIsvereni, fiiliGorevYeri = p.FiiliGorevYeri, odemeSirketi = OdemeSirketiRKisi(p), odemeSirketiX = OdemeSirketiX(p), not = p.Not, netR = p.Hesap.NetRBordro, netX = p.Hesap.KalanNetElden }).ToList();
             if (s == null) return new { simNo = (string)null, versiyon = 0, durum = "Simülasyon Yok", odenebilir = false, satirlar = new List<PmhOdeme>(), odemeYok };
             var satirlar = s.Fisler.Where(f => f.IslemGrubu == "C" || f.IslemGrubu == "D")
                 .SelectMany(f => f.Satirlar.Where(x => x.KaynakKalem == "Banka" || x.KaynakKalem == "Kasa").Select(x => new PmhOdeme
@@ -407,12 +410,12 @@ namespace WebApplication3.Data
         {
             List<PmPersonel> k; lock (PersonelMaliyetOrnek.Kilit) k = Kaynak(donem, "*").ToList();
             List<string> Sirala(IEnumerable<string> l) => l.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct().OrderBy(x => x, StringComparer.Create(Tr, true)).ToList();
-            return new { sgkIsverenleri = Sirala(k.Select(p => p.SgkIsvereni)), fiiliGorevYerleri = Sirala(k.Select(p => p.FiiliGorevYeri)), odemeSirketleri = Sirala(k.Select(p => OdemeSirketiR).Concat(k.Select(OdemeSirketiX))) };
+            return new { sgkIsverenleri = Sirala(k.Select(p => p.SgkIsvereni)), fiiliGorevYerleri = Sirala(k.Select(p => p.FiiliGorevYeri)), odemeSirketleri = Sirala(k.Select(OdemeSirketiRKisi).Concat(k.Select(OdemeSirketiX))) };
         }
         private static object KaynakOzeti(string donem)
         {
             List<PmPersonel> k; lock (PersonelMaliyetOrnek.Kilit) k = Kaynak(donem, "*").ToList();
-            return new { personel = k.Count, genelMaliyet = Math.Round(k.Sum(p => p.Hesap.GenelMaliyet), 2), araToplam = Math.Round(k.Sum(p => p.Hesap.AraToplam), 2), yansitma = Math.Round(k.Where(p => !string.Equals(FiiliSirket(p), p.SgkIsvereni, StringComparison.OrdinalIgnoreCase)).Sum(p => p.Hesap.GenelMaliyet), 2), baskaSirket = Math.Round(k.Where(p => !OdemeYapilmiyor(p)).Sum(p => (p.Hesap.NetRBordro > 0 && !string.Equals(OdemeSirketiR, p.SgkIsvereni, StringComparison.OrdinalIgnoreCase) ? p.Hesap.NetRBordro : 0m) + (p.Hesap.KalanNetElden > 0 && !string.Equals(OdemeSirketiX(p), p.SgkIsvereni, StringComparison.OrdinalIgnoreCase) ? p.Hesap.KalanNetElden : 0m)), 2), odemeYok = k.Count(OdemeYapilmiyor), sirketler = k.Select(p => p.SgkIsvereni).Distinct().OrderBy(x => x).ToList(), varsayilanOdemeSirketi = OdemeSirketiR };
+            return new { personel = k.Count, genelMaliyet = Math.Round(k.Sum(p => p.Hesap.GenelMaliyet), 2), araToplam = Math.Round(k.Sum(p => p.Hesap.AraToplam), 2), yansitma = Math.Round(k.Where(p => !string.Equals(FiiliSirket(p), p.SgkIsvereni, StringComparison.OrdinalIgnoreCase)).Sum(p => p.Hesap.GenelMaliyet), 2), baskaSirket = Math.Round(k.Where(p => !OdemeYapilmiyor(p)).Sum(p => (p.Hesap.NetRBordro > 0 && !string.Equals(OdemeSirketiRKisi(p), p.SgkIsvereni, StringComparison.OrdinalIgnoreCase) ? p.Hesap.NetRBordro : 0m) + (p.Hesap.KalanNetElden > 0 && !string.Equals(OdemeSirketiX(p), p.SgkIsvereni, StringComparison.OrdinalIgnoreCase) ? p.Hesap.KalanNetElden : 0m)), 2), odemeYok = k.Count(OdemeYapilmiyor), sirketler = k.Select(p => p.SgkIsvereni).Distinct().OrderBy(x => x).ToList(), varsayilanOdemeSirketi = OdemeSirketiR };
         }
     }
 }

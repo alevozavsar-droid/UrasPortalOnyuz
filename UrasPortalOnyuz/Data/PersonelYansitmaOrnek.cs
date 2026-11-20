@@ -266,7 +266,7 @@ namespace WebApplication3.Data
                         var t = DateTime.Now; int id = ++_sonId; int fis = ++_sonFis;
                         var k = new PyKayit
                         {
-                            Id = id, No = $"PYN-{donem}-{id:0000}", Donem = donem, PersonelSira = a.Personel.Sira, CariKodu = a.Personel.CariKodu, AdSoyad = a.Personel.AdSoyad, Gorev = a.Personel.Gorev, FiiliGorevYeri = a.Personel.FiiliGorevYeri, OdemeSirketi = PersonelMuhasebeOrnek.OdemeSirketiR, OdemeSirketiX = PersonelMuhasebeOrnek.OdemeSirketiX(a.Personel),
+                            Id = id, No = $"PYN-{donem}-{id:0000}", Donem = donem, PersonelSira = a.Personel.Sira, CariKodu = a.Personel.CariKodu, AdSoyad = a.Personel.AdSoyad, Gorev = a.Personel.Gorev, FiiliGorevYeri = a.Personel.FiiliGorevYeri, OdemeSirketi = PersonelMuhasebeOrnek.OdemeSirketiRKisi(a.Personel), OdemeSirketiX = PersonelMuhasebeOrnek.OdemeSirketiX(a.Personel),
                             KaynakSirket = a.KaynakSirket, HedefSirket = h.Sirket, Pay = h.Pay, KdvOrani = KdvOrani, Durum = "Kaydedildi", Olusturan = kullanici, Zaman = t,
                             KaynakFisNo = $"YGF-{donem.Replace("-", "")}-{fis:0000}", HedefFisNo = $"PGF-{donem.Replace("-", "")}-{fis:0000}",
                             Kalemler = a.Kalemler.Select(x => new PyKalem { Alan = x.Alan, AlanAdi = x.AlanAdi, AktarimTipi = x.AktarimTipi, GiderKodu = x.GiderKodu, GiderKalem = x.GiderKalem, YansitmaKodu = x.YansitmaKodu, YansitmaKalem = x.YansitmaKalem, Tutar = KalemPay(x.Tutar, h.Pay) }).ToList()
@@ -323,7 +323,7 @@ namespace WebApplication3.Data
                 adaylar = adaylar.Select(a => new
                 {
                     sira = a.Personel.Sira, cariKodu = a.Personel.CariKodu, adSoyad = a.Personel.AdSoyad, unvan = a.Personel.Unvan, gorev = a.Personel.Gorev, bolum = a.Personel.Bolum, catiDepartman = a.Personel.CatiDepartman,
-                    sgkIsvereni = a.Personel.SgkIsvereni, fiiliGorevYeri = a.Personel.FiiliGorevYeri, odemeSirketi = PersonelMuhasebeOrnek.OdemeSirketiR, odemeSirketiX = PersonelMuhasebeOrnek.OdemeSirketiX(a.Personel), kaynakSirket = a.KaynakSirket,
+                    sgkIsvereni = a.Personel.SgkIsvereni, fiiliGorevYeri = a.Personel.FiiliGorevYeri, odemeSirketi = PersonelMuhasebeOrnek.OdemeSirketiRKisi(a.Personel), odemeSirketiX = PersonelMuhasebeOrnek.OdemeSirketiX(a.Personel), kaynakSirket = a.KaynakSirket,
                     dagilim = a.Dagilim.Select(d => new { sirket = d.Sirket, pay = d.Pay }).ToList(), hedefler = a.Hedefler.Select(h => new { sirket = h.Sirket, pay = h.Pay, tutar = a.HedefNet(h.Pay), kayit = kayitlar.FirstOrDefault(k => k.Donem == donem && k.PersonelSira == a.Personel.Sira && k.HedefSirket == h.Sirket && k.Durum != "İptal")?.No }).ToList(),
                     dagilimOzel = a.DagilimOzel, maliyet = a.Maliyet, yansitilacakPay = a.YansitilacakPay, yansitilacak = a.Yansitilacak,
                     kalemler = a.Kalemler.Select(KalemDto).ToList(),
