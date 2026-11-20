@@ -208,7 +208,7 @@ namespace WebApplication3.Data
         /// <summary>Personel maliyet tablosundaki alanın tutarı (girilen alanlar PmPersonel'den, hesaplananlar bordro hesabından).</summary>
         private static decimal AlanDegeri(PmPersonel p, PmBordro h, string alan) => alan switch
         {
-            "XNet" => p.XNet, "RNet" => p.RNet, "ToplamBrutMasraflar" => h.ToplamBrutMasraflar, "SgkIsverenToplam" => h.SgkIsverenToplam, "ToplamEkCalisma" => h.ToplamEkCalisma,
+            "XNet" => p.XNet, "RNet" => h.RNet2, "ToplamBrutMasraflar" => h.ToplamBrutMasraflar, "SgkIsverenToplam" => h.SgkIsverenToplam, "ToplamEkCalisma" => h.ToplamEkCalisma,
             "Yemek" => p.Yemek, "Yol" => p.Yol, "Servis" => p.Servis, "KiraDestegi" => p.KiraDestegi, "Egitim" => p.Egitim, "CocukYardimi" => p.CocukYardimi,
             "MaasFarki" => p.MaasFarki, "Prim" => p.Prim, "OzelOdeme" => p.OzelOdeme, "KasaTazminati" => p.KasaTazminati, "ToplamYanHaklar" => h.ToplamYanHaklar, "ToplamYasal" => h.ToplamYasal, _ => 0m
         };

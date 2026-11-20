@@ -503,6 +503,7 @@
     }
     const l = tum.filter(k => (!H.surecGecmis || k.gecmis > 0) && (!H.surecAranmayan || (aranacakMi(k) && !k.takip.buAyNot)));
     $('#tkSurecBaslik').textContent = `Aylık Süreç · ${S.donemAd}`;
+    const eskiAcik = k => (k.kalemler || []).reduce((e, x) => !e || x.tarih < e.tarih ? x : e, null);   // kalanı olan en eski tarihli fatura
     tablo('surec', [
       // 19 Kas 2026 (kullanıcı): sütun sırası Alacak Takibi mantığında — Vadesi Geçmiş · Ay Sonuna Kadar · Açık Toplam · Toplam Bakiye · Son Kesilen Fatura · robot · arama · görüşme · Bu Ay Alınan Tahsilat (en sonda)
       M('musteri', 'Müşteri', k => k.kod, { h: k => `<b>${esc(k.kod)}</b> ${esc(k.kisaAd)}<small>${esc(sinifAd(k))} · ${esc(k.sirket)}</small>` }),
@@ -510,6 +511,9 @@
       P('aySonu', 'Ay Sonuna Kadar Vadesi Gelecek\u00A0(₺)', k => k.vf.aySonuGelecek, { h: k => k.vf.aySonuGelecek ? tutarH(k.vf.aySonuGelecek, k.kalemler.filter(x => x.gun >= 0 && x.vade <= K.aySonu)) : tire, ac: `Bugünden ${trh(K.aySonu)} tarihine kadar vadesi gelecek açık faturalar: bu ay tahsil edilmesi gereken tutar.` }),
       P('acikToplam', 'Açık Toplam\u00A0(₺)', k => k.acikToplam, { h: k => k.acikToplam ? `${tutarH(k.acikToplam, k.kalemler)}<small>${k.acikAdet} fatura</small>` : tire }),
       P('bakiye', 'Toplam Bakiye\u00A0(₺)', k => k.vf.mizanBakiye, { h: k => `<b>${tl(k.vf.mizanBakiye)}</b>${k.vf.mizanDoviz ? `<small>${esc(bolunmez(k.vf.mizanDoviz))}</small>` : ''}`, ac: 'Cari hesap bakiyesi (Alacak Takibi › Bakiye ile aynı).' }),
+      // 20 Kas 2026 (kullanıcı: "Son Kesilen Faturanın soluna en eski açık fatura tarihi, altına da geçen gün veya gelecek gün sayısı … 04.10.2024 / 777 gün gibi"): kalanı olan en eski tarihli fatura; üstte fatura tarihi, altta bugüne göre gün (ileri tarihliyse "gün sonra"); tıklayınca fatura açılır
+      M('eskiFatura', 'En Eski Açık Fatura', k => (eskiAcik(k) || {}).tarih || '', { h: k => { const f = eskiAcik(k); if (!f) return tire; const g = Math.round((new Date(K.bugun) - new Date(f.tarih)) / 86400000);
+        return `<a href="#" class="tk-link" data-fat-ac="${esc(f.belge)}" data-kod="${esc(k.kod)}" title="${esc(f.belge)} · kalan ${n2(f.kalan)} ${esc(pbAd(f.pb))} · vade ${trh(f.vade)}${f.gun < 0 ? ` · ${-f.gun} gün gecikmiş` : ` · vadeye ${f.gun} gün`} — faturayı aç">${trh(f.tarih)}</a><small>${g >= 0 ? `${g} gün` : `${-g} gün sonra`}</small>`; }, ac: 'Kalanı olan (açık) en eski tarihli fatura: üstte fatura tarihi, altta fatura tarihinden bugüne geçen gün sayısı. Tıklayınca fatura detayı açılır.' }),
       // 19 Kas 2026 (kullanıcı): yalnız tarih; tıklayınca Fatura İncelemesi penceresi
       // 19 Kas 2026 (kullanıcı): üstte tutar, altta tarih — "Bu Ay Alınan Tahsilat" ile aynı düzen; tıklayınca Fatura İncelemesi
       P('sonFatura', 'Son Kesilen Fatura\u00A0(₺)', k => (k.sonFatura || {}).tl || 0, { h: k => k.sonFatura ? `<a href="#" class="tk-link" data-fat-ac="${esc(k.sonFatura.belge)}" data-kod="${esc(k.kod)}" title="${esc(k.sonFatura.belge)} · ${n2(k.sonFatura.tutar)}\u00A0${esc(pbAd(k.sonFatura.pb))}${k.sonFatura.kalan > 0.005 ? ' · açık' : ' · kapandı'} — faturayı aç">${k.sonFatura.pb && k.sonFatura.pb !== 'TL' && DV ? `${n2(k.sonFatura.tutar)}\u00A0${esc(pbAd(k.sonFatura.pb))}` : tl(k.sonFatura.tl)}</a><small>${trh(k.sonFatura.tarih)}</small>` : tire, dipH: () => '', ac: 'Müşteriye kesilen son satış faturası (vade / kur farkı faturaları hariç): üstte tutar, altta tarih; tıklayınca fatura detayı açılır.' }),
@@ -1313,4 +1317,40 @@
     if (document.hidden || !K) return; const b = await fetch('/Tahsilat/BankaHareketleri').then(r => r.json()).catch(() => null); if (!b || !b.hareketler) return;
     B = b; if (aktif === 'banka' && modal.hidden) ciz(); else bankaYeni();
   }, 60000);
+})();
+
+// ============================================================
+// SAYFAYI DOLDUR (20 Kas 2026, kullanıcı: "sayfaları daha verimli kullan, aşağı kadar getir" — Tahsilat ve İhracat Finansal Takibi):
+//   sekmenin en alttaki tablosu ekranın (çerçevenin) dibine kadar uzar; satırlar sığmazsa SAYFA değil TABLO kayar — üstteki sekme şeridi ve süzgeçler,
+//   sütun başlıkları (yapışkan) ve dip toplam (yapışkan) hep ekranda kalır. Yan yana kartlı sekmelerde (Özet, Aylık Tahsilatlar, Planlanan ↔ Gerçekleşen) ve
+//   tabloya 280 px'ten az yer kalan sekmelerde uygulanmaz (sayfa eskisi gibi kayar). Her çizimden, sekme değişiminden ve pencere boyutu değişiminden sonra yeniden ölçülür.
+// ============================================================
+(() => {
+  'use strict';
+  const kok = document.querySelector('.tk'); if (!kok || !window.MutationObserver) return;
+  const gor = e => e.offsetParent !== null, kutu = e => e.getBoundingClientRect(), saydam = c => !c || c === 'transparent' || /rgba\(\s*0,\s*0,\s*0,\s*0\s*\)/.test(c);
+  const temizle = () => kok.querySelectorAll('.tk-tam').forEach(e => { e.classList.remove('tk-tam'); ['height', 'max-height', 'overflow'].forEach(p => e.style.removeProperty(p)); e.querySelectorAll('thead th, tfoot td, tfoot th').forEach(h => { h.style.removeProperty('top'); if (h.dataset.tamZemin) { h.style.removeProperty('background-color'); delete h.dataset.tamZemin; } }); });
+  function sigdir() {
+    const onceki = kok.querySelector('.tk-tam'), kaydir = onceki ? [onceki, onceki.scrollTop, onceki.scrollLeft] : null;
+    temizle();
+    const kaplar = [...kok.querySelectorAll('.table-responsive')].filter(e => gor(e) && e.querySelector('table') && !e.closest('.tk-oz-mas, .ib-ozet-mas, .tk-oz, .tk-pencere, .modal'));
+    if (!kaplar.length) return;
+    const hedef = kaplar.reduce((a, b) => kutu(b).bottom > kutu(a).bottom ? b : a), hr = kutu(hedef);
+    if (kaplar.some(e => e !== hedef && kutu(e).bottom > hr.top + 2)) return;   // yan yana ya da iç içe tablo kartları: sayfa kayar
+    let alt = kutu(kok).bottom - hr.bottom;   // tablonun altında kalan (kart iç boşlukları) + kökün altındaki sayfa boşlukları
+    for (let e = kok; e && e !== document.documentElement; e = e.parentElement) { const cs = getComputedStyle(e); alt += parseFloat(cs.marginBottom) || 0; if (e !== kok) alt += (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.borderBottomWidth) || 0); }
+    const h = Math.floor(window.innerHeight - (hr.top + window.scrollY) - alt - 2);
+    if (h < 280) return;
+    hedef.classList.add('tk-tam'); hedef.style.setProperty('height', h + 'px', 'important'); hedef.style.setProperty('max-height', 'none', 'important'); hedef.style.setProperty('overflow', 'auto', 'important');
+    const t = hedef.querySelector('table');
+    if (t && t.tHead) { let ust = 0; for (const tr of t.tHead.rows) { for (const th of tr.cells) { th.style.top = ust + 'px'; if (saydam(getComputedStyle(th).backgroundColor)) { th.style.backgroundColor = '#f8fafc'; th.dataset.tamZemin = '1'; } } ust += kutu(tr).height; } }
+    if (t && t.tFoot) for (const tr of t.tFoot.rows) for (const td of tr.cells) if (saydam(getComputedStyle(td).backgroundColor)) { td.style.backgroundColor = '#f1f5f9'; td.dataset.tamZemin = '1'; }
+    if (kaydir && kaydir[0] === hedef) { hedef.scrollTop = kaydir[1]; hedef.scrollLeft = kaydir[2]; }
+    if (window.scrollY > 0 && document.documentElement.scrollHeight <= window.innerHeight + 2) window.scrollTo(0, 0);
+  }
+  let z = 0; const planla = () => { clearTimeout(z); z = setTimeout(sigdir, 90); };
+  new MutationObserver(planla).observe(kok, { childList: true, subtree: true });
+  window.addEventListener('resize', planla); kok.addEventListener('click', e => { if (e.target.closest('#tkSekmeler button, .na-sekme button')) planla(); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(planla);
+  planla();
 })();

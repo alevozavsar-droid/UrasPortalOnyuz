@@ -95,7 +95,7 @@ namespace WebApplication3.Data
         public static void Hazirla() { var _ = _kurulum.Value; }
 
         // ---------- Ek Çalışmalar: mesai talepleri ----------
-        public static decimal SaatUcreti(PmPersonel p) { var h = p.Hesap; decimal net = h.XNetTl + p.RNet; return net > 0 ? Math.Round(net / AylikSaat, 2) : 0; }
+        public static decimal SaatUcreti(PmPersonel p) { var h = p.Hesap; decimal net = h.XNetTl + h.RNet2; return net > 0 ? Math.Round(net / AylikSaat, 2) : 0; }
         private static decimal Carpan(TmTalep t) => decimal.TryParse((t.Hesap.TryGetValue("carpan", out var c) ? c : "x1,5").TrimStart('x'), NumberStyles.Any, TalepMotoru.Tr, out var d) ? d : 1.5m;
         private static decimal Saat(TmTalep t, string anahtar, bool ek) => decimal.TryParse(ek ? t.E(anahtar) : (t.Hesap.TryGetValue(anahtar, out var v) ? v : "0"), NumberStyles.Any, CultureInfo.InvariantCulture, out var d) ? d : 0;
         private static string MesaiDonemi(TmTalep t) => t.Ek.ContainsKey("puantajDonemi") ? t.E("puantajDonemi") : t.T("tarih")?.ToString("yyyy-MM") ?? "";

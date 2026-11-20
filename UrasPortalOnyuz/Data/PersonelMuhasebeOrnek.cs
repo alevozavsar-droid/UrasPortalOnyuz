@@ -204,7 +204,7 @@ namespace WebApplication3.Data
                 if (!string.IsNullOrWhiteSpace(p.FiiliGorevYeri) && !FiiliMap.ContainsKey(p.FiiliGorevYeri) && !string.Equals(p.FiiliGorevYeri, sgk, StringComparison.OrdinalIgnoreCase) && !p.FiiliGorevYeri.StartsWith("Asia") && !string.Equals(p.FiiliGorevYeri, "Diğer", StringComparison.OrdinalIgnoreCase)) yansitmaHata++;   // fiili görev yeri boşsa veya "Diğer" ise SGK işvereni geçerlidir (yansıtma yok, hata değil)
                 // A) Bordro tahakkuku — SGK işvereni
                 var fa = Fis(sgk, "A", "Bordro Tahakkuku");
-                decimal kazanclar = p.SgkDetayYok ? p.RNet : (h.NormalKazanc + h.HaftaSonuKazanc + h.ResmiTatilKazanc + h.BayramKazanc + h.UcretliIzinKazanc);   // SGK / brüt detayı olmayan kişide ücret = R-Net (vergi ve SGK yok)
+                decimal kazanclar = p.SgkDetayYok ? h.RNet2 : (h.NormalKazanc + h.HaftaSonuKazanc + h.ResmiTatilKazanc + h.BayramKazanc + h.UcretliIzinKazanc);   // SGK / brüt detayı olmayan kişide ücret = R-Net (vergi ve SGK yok)
                 const string A = "Bordro Tahakkuku";
                 Satir(fa, p, A, "Ücret (Brüt Esas)", "R", "Borç", kazanclar, null, null); Satir(fa, p, A, "Fazla Mesai", "R", "Borç", h.ToplamEkCalisma, null, null); Satir(fa, p, A, "Sosyal Yardımlar", "R", "Borç", h.ToplamSosyal, null, null);
                 Satir(fa, p, A, "Prim ve Ek Kazançlar", "R", "Borç", h.ToplamPrim, null, null); Satir(fa, p, A, "Yan Haklar", "R", "Borç", h.ToplamYanHaklar, null, null); Satir(fa, p, A, "Yasal Ödemeler", "R", "Borç", h.ToplamYasal, null, null);

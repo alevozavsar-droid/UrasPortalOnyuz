@@ -131,7 +131,7 @@ namespace WebApplication3.Data
         public static readonly string[] IliskiDurumlari = { "Grup İçi", "İlişkili Cari", "Grup Dışı" };
         public static readonly Dictionary<string, string> IliskiAciklama = new Dictionary<string, string> { ["Grup İçi"] = "Ortaklık / sermaye bağı bulunan grup şirketleri, şubeler, bağlı birimler.", ["İlişkili Cari"] = "Doğrudan grup bağı olmayan; yönetim bağlantısı ya da ticari ilişki nedeniyle takip amaçlı sınıflandırılan cariler.", ["Grup Dışı"] = "Grup ya da özel ilişki bağı bulunmayan standart cariler." };
         public static readonly string[] Roller = { "Sadece Müşteri", "Sadece Tedarikçi", "Çift Rol", "Diğer" };
-        public static readonly string[] VadeSartlari = { "Peşin", "Vade 30 Gün", "Vade 45 Gün", "Vade 60 Gün", "Vade 90 Gün", "Vade 120 Gün", "Çek (Vadeli)", "Akreditif (L/C)", "Mal Mukabili", "Vesaik Mukabili" };
+        public static readonly string[] VadeSartlari = { "Peşin", "Vade 30 Gün", "Vade 45 Gün", "Vade 60 Gün", "Vade 90 Gün", "Vade 120 Gün", "Vade 150 Gün", "Vade 180 Gün", "Çek (Vadeli)", "Akreditif (L/C)", "Mal Mukabili", "Vesaik Mukabili" };   // 20 Kas 2026 (kullanıcı): Vade 150 Gün ve Vade 180 Gün eklendi
         public static readonly string[] Durumlar = { "Aktif", "Pasif" };
         /// <summary>§10 faaliyet hiyerarşisi: ana grup → gruplar.</summary>
         public static readonly Dictionary<string, string[]> FaaliyetHiyerarsisi = new Dictionary<string, string[]>
