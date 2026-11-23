@@ -1015,12 +1015,15 @@
     // 21 Kas 2026 (kullanıcı: "Aylık Satışlar raporunda olduğu gibi Aylık Tahsilatlar ve Planlanan ↔ Gerçekleşen sekmelerini geliştir"): Satış Raporu'nun donanımı — özet kartları, Görünüm düğmeleri (Tümü ya da tek kırılım;
     //   tek tablo ekranı doldurur), her tabloda seçim kutusu + dipte Seçili toplamı, başlıkla sıralama, Pay sütunu (kırılım tabloları açılışta pay'a göre büyükten küçüğe), sade görünüm (koyu rakam, renkli bant yok)
     const ays = aylar(), ayK = new Set(ays), T = islenenler(), ym = s => String(s || '').slice(0, 7), bugunYm = (K.bugun || '').slice(0, 7);
-    const sat = T.flatMap(t => t.satirlar.map(s => Object.assign({ tahsilatYm: ym(t.tarihIso), vadeYm: ym(s.tarihIso), kullanici: t.kullanici, cariKodu: t.cariKodu, cariAd: t.cariAd, no: t.no }, s)));
+    const sat = T.flatMap(t => t.satirlar.map(s => Object.assign({ tahsilatYm: ym(t.tarihIso), vadeYm: ym(s.tarihIso), kullanici: t.kullanici, cariKodu: t.cariKodu, cariAd: t.cariAd, no: t.no }, s, { rxTip: t.islemTipi === 'R' ? 'R' : 'X' })));   // rxTip: tahsilatın işlem tipi
     const yontemler = [...YONTEMLER, ...sat.map(s => s.yontem)].filter((y, i, a) => y && a.indexOf(y) === i);
-    const hucre = (l, birim) => l.length ? `${DV && dovizli(l) ? `<span title="${esc(tl(topla(l, s => s.tutarTl)))}">${esc(pbTop(l, s => s.tutar))}</span>` : tl(topla(l, s => s.tutarTl))}<small>${l.length} ${birim}</small>` : tire;
+    // 22 Kas 2026 (kullanıcı: "Satış Raporu'nda olduğu gibi X, R ve Toplam şeklinde düzenle"): hücrede R üstte / X altta, Toplam sütununda üçüncü satır Toplam; "R / X Ayrı Göster" kapalıyken tek tutar + kayıt sayısı (dövizli görünüm bu kipte)
+    const hucre = (l, birim, toplamli) => !l.length ? tire : ST.rx ? rxSayi(topla(l.filter(s => s.rxTip === 'R'), s => s.tutarTl), topla(l.filter(s => s.rxTip !== 'R'), s => s.tutarTl), toplamli)
+      : `${DV && dovizli(l) ? `<span title="${esc(tl(topla(l, s => s.tutarTl)))}">${esc(pbTop(l, s => s.tutar))}</span>` : tl(topla(l, s => s.tutarTl))}<small>${l.length} ${birim}</small>`;
     const birlesik = sec => [...new Set(sec.flatMap(s => s._L))];
-    // satır (ay alanı seçilebilir: tahsilat ayı ya da çek / senet vade ayı); Toplam sütunu seçili ayların toplamıdır
-    const satirL = (ad, L, alan, birim, alt, ek) => { const li = y => y ? L.filter(s => s[alan] === y) : L.filter(s => ayK.has(s[alan])); return Object.assign({ ad, alt, _L: L, _alan: alan, _birim: birim, deger: y => topla(L.filter(s => s[alan] === y), s => s.tutarTl), h: y => hucre(li(y), birim), liste: li }, ek || {}); };
+    // satır (ay alanı seçilebilir: tahsilat ayı ya da çek / senet vade ayı). 23 Kas 2026 (kullanıcı: "dönem dışını bunlara da ekleyelim ki hepsi uyumlu olsun"): Yöntem · Çek / Senet Vadesi · Tahsilatı Yapan tablolarında da
+    //   "Dönem Dışı" sütunu — ayı (çekte vade ayı) seçili ayların dışında kalan kayıtlar; Toplam sütunu artık bütün kayıtları verir, altı tablonun sütunları ve toplamları aynı
+    const satirL = (ad, L, alan, birim, alt, ek) => { const li = y => y === 'disi' ? L.filter(s => !ayK.has(s[alan])) : y ? L.filter(s => s[alan] === y) : L; return Object.assign({ ad, alt, _L: L, _alan: alan, _birim: birim, deger: y => topla(li(y), s => s.tutarTl), h: y => hucre(li(y), birim, y == null), liste: li }, ek || {}); };
     const satir = (ad, f, alan, birim, alt) => satirL(ad, sat.filter(f), alan, birim, alt);
     const secSatir = (ad, sec) => { const l = birlesik(sec); return satirL(ad, l, sec[0]._alan, sec[0]._birim, `${l.length} ${sec[0]._birim}`, { sinif: 'toplam secili' }); };
     // 19 Kas 2026 (kullanıcı: "Aylık Tahsilatlar'ı İhracat Finansal Takibi ile senkronize et; yurt içi ve yurt dışı tahsilatlar olarak birleşimi raporla"):
@@ -1031,7 +1034,7 @@
     // sütunlar: seçili aylar + "Dönem Dışı" (Planlanan ↔ Gerçekleşen'deki gibi) → Toplam sütunu bütün kayıtları verir, Özet / İhracat kartıyla tutar
     const kolD = [...ays, 'disi'], bos = 'Dönemde tahsilat yok.', paySira = { k: 'pay', y: -1 };
     const Fy2 = (L, y) => y === 'disi' ? L.filter(s => !ayK.has(s.tahsilatYm)) : y ? L.filter(s => s.tahsilatYm === y) : L;
-    const satL = (ad, L, alt, ek) => Object.assign({ ad, alt, _L: L, deger: y => topla(Fy2(L, y), s => s.tutarTl), h: y => hucre(Fy2(L, y), 'satır'), liste: y => Fy2(L, y) }, ek || {});
+    const satL = (ad, L, alt, ek) => Object.assign({ ad, alt, _L: L, deger: y => topla(Fy2(L, y), s => s.tutarTl), h: y => hucre(Fy2(L, y), 'satır', y == null), liste: y => Fy2(L, y) }, ek || {});
     const secL = (ad, sec) => { const l = birlesik(sec); return satL(ad, l, `${l.length} satır`, { sinif: 'toplam secili' }); };
     const musteriSay = l => `${new Set(l.map(s => s.cariKodu)).size} müşteri`;
     gorunumKur('aylik', '#tkAylikGor');
@@ -1043,12 +1046,12 @@
     const buAy = TT(satB.filter(s => s.tahsilatYm === bugunYm)), gecenAy = TT(satB.filter(s => s.tahsilatYm === sOncekiAy(bugunYm))), enYon = grupEn(s => s.yontem || '—'), enTem = grupEn(temOf), kayit = new Set(donem.map(s => s.no)).size;
     const yi0 = donem.filter(s => s.bolge === 'Yurtiçi'), yd0 = donem.filter(s => s.bolge === 'Yurtdışı');
     $('#tkAylikKpi').innerHTML = [
-      sKutu('Tahsilat · Dönem', tl(top), `${kayit} tahsilat · ${musteriSay(donem)}`),
-      BOLGE_KILIT ? sKutu('Tahsilat Satırı', donem.length.toLocaleString(TR), `${new Set(donem.map(s => s.yontem)).size} yöntem`) : sKutu('Yurtiçi', tl(TT(yi0)), `${sYuzde(TT(yi0), top)} · ${musteriSay(yi0)}`),
-      BOLGE_KILIT ? sKutu('Müşteri', new Set(donem.map(s => s.cariKodu)).size.toLocaleString(TR), 'dönemde tahsilat yapan') : sKutu('Yurtdışı', tl(TT(yd0)), `${sYuzde(TT(yd0), top)} · ${musteriSay(yd0)}`),
-      sKutu('Ortalama Tahsilat', kayit ? tl(top / kayit) : '—', ays.length ? `aylık ortalama ${tl(top / ays.length)}` : ''), sKutu('En Yüksek Ay', enAy[0] ? esc(ayEtiket(enAy[0])) : '—', enAy[0] ? tl(enAy[1]) : ''),
-      sKutu(`Bu Ay · ${esc(ayEtiket(bugunYm))}`, tl(buAy), sDegisim(buAy, gecenAy, 'geçen ay tahsilat yok')),
-      sKutu('En Çok Kullanılan Yöntem', enYon[0] ? esc(enYon[0]) : '—', enYon[0] ? `${tl(enYon[1])} · ${sYuzde(enYon[1], top)}` : ''), sKutu('En Çok Tahsilat · Temsilci', enTem[0] ? esc(enTem[0]) : '—', enTem[0] ? `${tl(enTem[1])} · ${sYuzde(enTem[1], top)}` : '')].join('');
+      sKutu('Tahsilat · Dönem', tl(top), `${kayit} tahsilat · ${musteriSay(donem)}`, SR.yesil),
+      BOLGE_KILIT ? sKutu('Tahsilat Satırı', donem.length.toLocaleString(TR), `${new Set(donem.map(s => s.yontem)).size} yöntem`, SR.mavi) : sKutu('Yurtiçi', tl(TT(yi0)), `${sYuzde(TT(yi0), top)} · ${musteriSay(yi0)}`, SR.mavi),
+      BOLGE_KILIT ? sKutu('Müşteri', new Set(donem.map(s => s.cariKodu)).size.toLocaleString(TR), 'dönemde tahsilat yapan', SR.mor) : sKutu('Yurtdışı', tl(TT(yd0)), `${sYuzde(TT(yd0), top)} · ${musteriSay(yd0)}`, SR.mor),
+      sKutu('Ortalama Tahsilat', kayit ? tl(top / kayit) : '—', ays.length ? `aylık ortalama ${tl(top / ays.length)}` : '', SR.notr), sKutu('En Yüksek Ay', enAy[0] ? esc(ayEtiket(enAy[0])) : '—', enAy[0] ? tl(enAy[1]) : '', SR.sari),
+      sKutu(`Bu Ay · ${esc(ayEtiket(bugunYm))}`, tl(buAy), sDegisim(buAy, gecenAy, 'geçen ay tahsilat yok'), SR.ana),
+      sKutu('En Çok Kullanılan Yöntem', enYon[0] ? esc(enYon[0]) : '—', enYon[0] ? `${tl(enYon[1])} · ${sYuzde(enYon[1], top)}` : '', SR.camgobegi), sKutu('En Çok Tahsilat · Temsilci', enTem[0] ? esc(enTem[0]) : '—', enTem[0] ? `${tl(enTem[1])} · ${sYuzde(enTem[1], top)}` : '', SR.gul)].join('');
     $('#tkAylikNot').textContent = `${T.length} işlenmiş tahsilat · ${donemMetni()} · ${new Set(donem.map(s => s.kullanici)).size} kişi`;
     // 1) pazar: Yurtiçi · Yurtdışı (kilitli bölgede — İhracat Finansal Takibi — yalnız o bölge)
     const yi = satB.filter(s => s.bolge === 'Yurtiçi'), yd = satB.filter(s => s.bolge === 'Yurtdışı');
@@ -1071,11 +1074,11 @@
     kirilim('aylikSinif', 'Bölge · Cari Sınıfı', s => { const c = cariBul(s.cariKodu); return (c && c.sinif) || 'Sınıfsız'; }, 'Sınıfsız', 'tkAylikSinifNot', 'cari sınıfı');
     kirilim('aylikTemsilci', 'Bölge · Satış Temsilcisi', temOf, 'Atanmadı', 'tkAylikTemsilciNot', 'satış temsilcisi', d => (K.temsilciUnvan || {})[d] || '');
     // 4) yöntem · 5) vade ayına göre alınan çek / senet · 6) tahsilatı yapan kişi (sütunlar seçili aylar)
-    satisTablo('aylikYontem', 'Yöntem', ays, [...yontemler.map(y => satir(y, s => s.yontem === y, 'tahsilatYm', 'satır')), Object.assign(satir('Toplam', () => true, 'tahsilatYm', 'satır'), { sinif: 'toplam' })], 'Dönemde işlenmiş tahsilat yok.', secSatir, paySira);
+    satisTablo('aylikYontem', 'Yöntem', kolD, [...yontemler.map(y => satir(y, s => s.yontem === y, 'tahsilatYm', 'satır')), Object.assign(satir('Toplam', () => true, 'tahsilatYm', 'satır'), { sinif: 'toplam' })], 'Dönemde işlenmiş tahsilat yok.', secSatir, paySira);
     const vadeli = s => s.yontem === 'Çek' || s.yontem === 'Senet';
-    satisTablo('aylikCek', 'Belge', ays, [satir('Çek', s => s.yontem === 'Çek', 'vadeYm', 'belge'), satir('Senet', s => s.yontem === 'Senet', 'vadeYm', 'belge'), Object.assign(satir('Toplam', vadeli, 'vadeYm', 'belge'), { sinif: 'toplam' })], 'Dönemde vadesi olan çek / senet yok.', secSatir);
+    satisTablo('aylikCek', 'Belge', kolD, [satir('Çek', s => s.yontem === 'Çek', 'vadeYm', 'belge'), satir('Senet', s => s.yontem === 'Senet', 'vadeYm', 'belge'), Object.assign(satir('Toplam', vadeli, 'vadeYm', 'belge'), { sinif: 'toplam' })], 'Dönemde vadesi olan çek / senet yok.', secSatir);
     const kisiler = [...new Set(T.map(t => t.kullanici).filter(Boolean))].sort((a, b) => a.localeCompare(b, TR));
-    satisTablo('aylikKisi', 'Tahsilatı Yapan', ays, [...kisiler.map(k => satir(k, s => s.kullanici === k, 'tahsilatYm', 'satır')), Object.assign(satir('Toplam', () => true, 'tahsilatYm', 'satır'), { sinif: 'toplam' })], 'Dönemde işlenmiş tahsilat yok.', secSatir, paySira);
+    satisTablo('aylikKisi', 'Tahsilatı Yapan', kolD, [...kisiler.map(k => satir(k, s => s.kullanici === k, 'tahsilatYm', 'satır')), Object.assign(satir('Toplam', () => true, 'tahsilatYm', 'satır'), { sinif: 'toplam' })], 'Dönemde işlenmiş tahsilat yok.', secSatir, paySira);
   }
   // ---------- SATIŞ RAPORU (20 Kas 2026; kullanıcı: "X R ayrı olarak ay ay ne satışı yapılmış, bölge (yurtiçi ve yurtdışı) ve cari sınıfını ayrı ayrı göstererek … altında satışçı bazlı da satışları detaylı göster";
   //            İhracat'ta yalnız yurtdışı + "özellikle şube satışlarını da alta ekle, ayrı ayrı görelim") ----------
@@ -1092,6 +1095,9 @@
   try { const s = JSON.parse(localStorage.getItem('tkSatis') || 'null'); if (s) { if (s.gor) Object.assign(ST.gor, s.gor); else if (s.gorunum) ST.gor.satis = s.gorunum; ST.rx = s.rx !== false; ST.musteri = Array.isArray(s.musteri) ? s.musteri : []; } } catch (x) { }
   const stSakla = () => { try { localStorage.setItem('tkSatis', JSON.stringify(ST)); } catch (x) { } };
   const SVARSAY = {};   // tablo → varsayılan sıralama (kırılım tablolarında Pay büyükten küçüğe)
+  // 22 Kas 2026 ("tüm aylar hizalı olsun"): bir tabloda kaydı olan gelecek ay (ör. çek vadesi Aralık) aynı sekmedeki ÖBÜR tablolarda da sütun olur → aylar ve Dönem Dışı alt alta gelir.
+  //   KOLTUT[sekme] = son çizimde kaydı görülen gelecek aylar; ciz() çizim sırasında kolYeni'ye toplar, küme değiştiyse sekmeyi bir kez daha çizer
+  const KOLTUT = {}; let kolYeni = null;
   const SSEC = {}, SSIRA = {}, ssec = id => SSEC[id] || (SSEC[id] = new Set());   // tablo → seçili satır adları · tablo → { k: 'ad' | yyyy-MM | 'top', y: 1 | -1 }
   const payH = (v, genel) => { if (!v || !genel) return tire; const p = v / genel * 100; return `<span class="tk-pay"><i style="width:${Math.max(0, Math.min(100, p)).toFixed(1)}%"></i><b>% ${p.toLocaleString(TR, { maximumFractionDigits: 1 })}</b></span>`; };
   /** Görünüm düğmeleri (Satış Raporu · Aylık Tahsilatlar · Planlanan ↔ Gerçekleşen): sekmedeki [data-sg] kartlarından "Tümü" + kart başına düğme; tek kart seçilince öbürleri gizlenir (tablo ekranı doldurur) */
@@ -1099,9 +1105,17 @@
     const kartlar = $$(`.na-panel[data-p="${p}"] [data-sg]`); if (ST.gor[p] !== 'tumu' && !kartlar.some(k => k.dataset.sg === ST.gor[p])) ST.gor[p] = 'tumu';
     $(kap).innerHTML = '<span class="e">Görünüm</span>' + [['tumu', 'Tümü']].concat(kartlar.map(k => [k.dataset.sg, k.dataset.sgAd])).map(([k, ad]) => `<button type="button" data-sgor="${k}" class="${ST.gor[p] === k ? 'aktif' : ''}">${esc(ad)}</button>`).join('');
     kartlar.forEach(k => { k.hidden = ST.gor[p] !== 'tumu' && k.dataset.sg !== ST.gor[p]; });
+    $$('[data-rx-anahtar]').forEach(c => { c.checked = ST.rx; });
   }
+  /** R üstte / X altta hücre (Satış Raporu, Aylık Tahsilatlar, Planlanan ↔ Gerçekleşen — 22 Kas 2026): yalnız dolu satır yazılır; Toplam satırı toplam sütununda ve ikisi de varsa; "R / X Ayrı Göster" kapalıyken tek tutar.
+   *  rxSayi: sayılardan (para: tl / tl2; sinif: ok / gec rengi; ek: altına küçük bilgi) · rxMetin: hazır metinlerden (oran, gün) — üç satır da verilebilir */
+  const rxSayi = (r, x, toplamli, para, sinif, ek) => { const var_ = v => Math.abs(v) > 0.005; if (!var_(r) && !var_(x)) return tire; para = para || tl;
+    const ic = !ST.rx ? para(r + x) : `<span class="tk-rx">${var_(r) ? `<span class="r"><small>R</small>${para(r)}</span>` : ''}${var_(x) ? `<span class="x"><small>X</small>${para(x)}</span>` : ''}${var_(r) && var_(x) ? `<span class="t"><small title="Toplam">T</small><b>${para(r + x)}</b></span>` : ''}</span>`;   // 22 Kas 2026 (kullanıcı: "bunun altında da toplamı yazsın"): Toplam satırı yalnız toplam sütununda değil, R ve X'in ikisi de olan HER hücrede
+    return `${sinif ? `<span class="${sinif}">${ic}</span>` : ic}${ek ? `<small>${ek}</small>` : ''}`; };
+  const rxMetin = (r, x, t) => !ST.rx ? (t ? `<b>${t}</b>` : tire) : (r || x || t) ? `<span class="tk-rx">${r ? `<span class="r"><small>R</small>${r}</span>` : ''}${x ? `<span class="x"><small>X</small>${x}</span>` : ''}${t ? `<span class="t"><small title="Toplam">T</small><b>${t}</b></span>` : ''}</span>` : tire;
   // özet kartı yardımcıları (üç sekmede ortak): kart · yüzde · önceki ay · "geçen aya göre" değişimi
-  const sKutu = (ad, deger, alt) => `<div style="--k:#475569"><div class="l">${ad}</div><div class="v">${deger}</div><div class="s">${alt || '&nbsp;'}</div></div>`;
+  const sKutu = (ad, deger, alt, renk) => `<div style="--k:${renk || '#475569'}"><div class="l">${ad}</div><div class="v">${deger}</div><div class="s">${alt || '&nbsp;'}</div></div>`;   // renk: kartın vurgu rengi (sol şerit + etiket; 23 Kas 2026 "biraz renklendir")
+  const SR = { ana: '#0f766e', r: '#1d4ed8', x: '#b45309', notr: '#475569', mor: '#7c3aed', mavi: '#0369a1', yesil: '#15803d', kirmizi: '#dc2626', sari: '#d97706', gul: '#be123c', camgobegi: '#0e7490' };   // özet kartı renkleri (Özet sekmesindeki kartlarla aynı aile)
   const sYuzde = (a, b) => b ? `% ${(a / b * 100).toLocaleString(TR, { maximumFractionDigits: 1 })}` : '—';
   const sOncekiAy = ymd => { const d = new Date(ymd + '-01T00:00:00'); d.setMonth(d.getMonth() - 1); return iso(d).slice(0, 7); };
   const sDegisim = (bu, gecen, yokMetni) => { if (!gecen) return yokMetni; const d = (bu - gecen) / gecen * 100; return `geçen aya göre <b class="${d >= 0 ? 'ok' : 'gec'}">${d >= 0 ? '+' : '−'} % ${Math.abs(d).toLocaleString(TR, { maximumFractionDigits: 1 })}</b>`; };
@@ -1113,6 +1127,8 @@
   function satisTablo(id, ilkBaslik, kol, satirlar, bos, secYap, varsay, ops) {
     ops = ops || {}; const t = $('#tkTablo-' + id); if (!t) return; SVARSAY[id] = varsay || null;
     const bugunYm = (K.bugun || '').slice(0, 7), S = ssec(id), sr = ops.sirasiz ? null : (SSIRA[id] || varsay || null), yaprak = s => !s.sinif && !s.ara, payVar = ops.pay !== false;
+    const kolTut = KOLTUT[aktif];
+    kol = kol.filter(ym => { if (ym === 'disi' || ym <= bugunYm) return true; const dolu = satirlar.some(s => Number(s.deger(ym))); if (dolu && kolYeni) kolYeni.add(ym); return dolu || !!(kolTut && kolTut.has(ym)); });   // 22 Kas 2026: henüz gelmemiş ve sekmedeki hiçbir tabloda kaydı olmayan aylar (ör. Aralık) sütun olarak çizilmez — tablo ekrana sığsın; kayıt düşünce sütun kendiliğinden gelir
     const topV = s => s.toplam ? s.toplam(kol) : kol.reduce((a, ym) => a + (Number(s.deger(ym)) || 0), 0);
     const dipI = satirlar.length > 1 && satirlar[satirlar.length - 1].sinif === 'toplam' ? satirlar.length - 1 : -1, dip = dipI >= 0 ? satirlar[dipI] : null;
     let govde = satirlar.filter((s, i) => i !== dipI);
@@ -1128,14 +1144,62 @@
     const hepsi = govde.concat(dip ? [dip] : [], secSatir ? [secSatir] : []); t._mx = hepsi; t._kol = null;
     const genel = ops.payGenel != null ? ops.payGenel : dip ? topV(dip) : topla(yapraklar, topV);
     const ok = k => sr && sr.k === k ? (sr.y > 0 ? ' art' : ' azl') : '', sk = k => ops.sirasiz ? '' : ` data-sk="${k}" title="Sıralamak için tıklayın"`, ss = ops.sirasiz ? ' sirasiz' : '';
-    t.tHead.innerHTML = `<tr><th class="sec sirasiz"><input type="checkbox" data-ssec-hepsi="${id}" title="Satırların hepsini seç / bırak"${yapraklar.length && secili.length === yapraklar.length ? ' checked' : ''}></th><th class="ad${ss}${ok('ad')}"${sk('ad')}>${pbBaslik(ilkBaslik)}${PBG === 'USD' ? ' <small>($)</small>' : ''}</th>${kol.map(ym => `<th class="${ym === bugunYm ? 'bugun-ay' : ''}${ss}${ok(ym)}"${sk(ym)}>${ayEtiket(ym)}</th>`).join('')}<th class="${(ss + ok('top')).trim()}"${sk('top')}>Toplam</th>${payVar ? `<th class="pay${ss}${ok('pay')}"${ops.sirasiz ? ' title="Satırın tabana oranı"' : ' data-sk="pay" title="Satırın genel toplam içindeki payı · sıralamak için tıklayın"'}>Pay</th>` : ''}</tr>`;
+    t.tHead.innerHTML = `<tr><th class="sec sirasiz"><input type="checkbox" data-ssec-hepsi="${id}" title="Satırların hepsini seç / bırak"${yapraklar.length && secili.length === yapraklar.length ? ' checked' : ''}></th><th class="ad${ss}${ok('ad')}"${sk('ad')}>${pbBaslik(ilkBaslik)}${PBG === 'USD' ? ' <small>($)</small>' : ''}</th>${kol.map(ym => `<th class="ay${ym === bugunYm ? ' bugun-ay' : ''}${ss}${ok(ym)}" data-ym="${ym}"${sk(ym)}>${ayEtiket(ym)}</th>`).join('')}<th class="top${ss}${ok('top')}"${sk('top')}>Toplam</th>${payVar ? `<th class="pay${ss}${ok('pay')}"${ops.sirasiz ? ' title="Satırın tabana oranı"' : ' data-sk="pay" title="Satırın genel toplam içindeki payı · sıralamak için tıklayın"'}>Pay</th>` : ''}</tr>`;
     const baglan = (s, i, ym, ic) => s.liste && ic && ic !== tire ? `<a href="#" class="tk-mx" data-mx="${i}|${ym == null ? '' : ym}" title="Tıklayınca kalem kalem detay">${ic}</a>` : ic;
     const hc = (s, i, ym) => { const v = ym == null ? topV(s) : s.deger(ym); return baglan(s, i, ym, s.h ? s.h(ym, v) : (v ? tl(v) : tire)); };
+    const sar = h => !h || h === tire ? h : `<span class="tk-hc">${h}</span>`;   // hizalama bloğu: sütundaki bloklar eşit genişlikte (matrisHizala) → etiketler solda, tutarlar sağda tek çizgide
     const satirH = (s, i) => { const y = yaprak(s), sc = y && S.has(s.ad), tv = topV(s);
-      return `<tr class="${s.sinif || ''}${s.ara ? ' ara' : ''}"${sc ? ' data-secili="1"' : ''}><td class="sec">${y ? `<input type="checkbox" data-ssec="${id}" data-a="${esc(s.ad)}" title="Seç → dipte Seçili toplamı"${sc ? ' checked' : ''}>` : ''}</td><td class="ad">${s.adH || `<b>${esc(s.ad)}</b>`}${s.alt ? `<small>${esc(s.alt)}</small>` : ''}</td>${kol.map(ym => `<td class="${ym === bugunYm ? 'bugun-ay' : ''}">${hc(s, i, ym)}</td>`).join('')}<td class="top">${s.toplamH ? s.toplamH(tv, kol) : hc(s, i, null)}</td>${payVar ? `<td class="pay">${s.toplamH ? tire : payH(tv, genel)}</td>` : ''}</tr>`; };
+      return `<tr class="${s.sinif || ''}${s.ara ? ' ara' : ''}"${sc ? ' data-secili="1"' : ''}><td class="sec">${y ? `<input type="checkbox" data-ssec="${id}" data-a="${esc(s.ad)}" title="Seç → dipte Seçili toplamı"${sc ? ' checked' : ''}>` : ''}</td><td class="ad"${s.alt ? ` title="${esc(s.alt)}"` : ''}>${s.adH || `<b>${esc(s.ad)}</b>`}</td>${kol.map(ym => `<td class="${ym === bugunYm ? 'bugun-ay' : ym === 'disi' ? 'disi' : ''}">${sar(hc(s, i, ym))}</td>`).join('')}<td class="top">${sar(s.toplamH ? s.toplamH(tv, kol) : hc(s, i, null))}</td>${payVar ? `<td class="pay">${s.toplamH ? tire : payH(tv, genel)}</td>` : ''}</tr>`; };
     t.tBodies[0].innerHTML = govde.map(satirH).join('') || `<tr><td colspan="${kol.length + (payVar ? 4 : 3)}" class="na-bos">${bos || 'Kayıt yok.'}</td></tr>`;
     t.tFoot.innerHTML = (dip ? satirH(dip, govde.length) : '') + (secSatir ? satirH(secSatir, govde.length + (dip ? 1 : 0)) : '');
   }
+  /** AYLIK MATRİS HİZALAMA (22 Kas 2026; kullanıcı: "tüm aylar hizalı olsun, bir sağ bir sol olmasın"): açık sekmedeki matris tabloları BİRLİKTE ölçülür —
+   *  · hücredeki blok (.tk-hc) sütun boyunca eşit genişlikte: R / X / T etiketleri solda, tutarlar sağda tek çizgide (aynı ay, sekmedeki bütün tablolarda aynı blok genişliği)
+   *  · ay sütunları sekmedeki bütün tablolarda aynı genişlikte ve alt alta aynı hizada (sabit tablo düzeni; ad sütunu ortak genişlikte, Toplam sütunu artanı alır)
+   *  · sığıyorsa bütün aylar EŞİT genişlikte; sığmıyorsa her ay kendi ihtiyacı kadar (en az yer)
+   *  · ortak genişlikler ekrana sığmıyorsa (dar ekran) her tablo KENDİ ölçüsüyle yerleşir — tablo içi hizalama aynen kalır, yalnız tablolar arası hiza bırakılır; o da sığmazsa tablo yana kayar (ad sütunu sabit)
+   *  Genişlikler tek <style id="tkMatrisStil"> içinde (hücre hücre stil yazılmaz). HIZ: bloğun doğal genişliği içeriğine göre önbellekte (MO) — seçim, sıralama, görünüm gibi yeniden çizimlerde
+   *  yeni ölçüm ve ek yerleşim turu olmaz; yalnız ilk kez görülen içerik ölçülür. Yazı tipi / yakınlaştırma değişirse (sonda genişliği) önbellek boşalır.
+   *  Her çizimden (boyamadan hemen önce) ve ekranı doldurma / pencere boyutu değişiminden sonra çağrılır. */
+  const MO = new Map(); let moSonda = null, moSondaGen = 0;
+  function matrisHizala() {
+    const ts = $$(`.na-panel[data-p="${aktif}"] table.tk-matris`).filter(t => t.offsetParent && t.tHead && t.tHead.querySelector('th.ay')); if (!ts.length) return;
+    let stil = document.getElementById('tkMatrisStil'); if (!stil) { stil = document.createElement('style'); stil.id = 'tkMatrisStil'; document.head.appendChild(stil); }
+    if (!moSonda) { moSonda = document.createElement('span'); moSonda.textContent = '0123456789 ₺ RXT'; moSonda.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden;white-space:nowrap'; document.body.appendChild(moSonda); }
+    const gn = e => e.getBoundingClientRect().width, rg = document.createRange(), PAD = 7, SEC = 30, AD_ALT = 132, AD_UST = 230;   // PAD = iki yan boşluk (3 + 3) + sütun çizgisi
+    const sg = gn(moSonda); if (sg !== moSondaGen || MO.size > 20000) { MO.clear(); moSondaGen = sg; }
+    // 23 Kas 2026 (renkli R / X / T rozetleri): rozetler hücreyi birkaç piksel genişletir → önce rozetli ölçülür; sekmedeki tablolar ortak hizayla sığmıyorsa panel "tk-dar" olur
+    //   (rozet yerine yalnız renkli harf — rozetsiz, en dar ölçü) ve onunla yerleşir. Önbellek anahtarı kipi de taşır.
+    const pn = ts[0].closest('.na-panel'), kapGen = new Map(ts.map(t => [t, t.closest('.table-responsive').clientWidth]));   // kap genişliği kip değiştirilmeden ÖNCE bir kez okunur → kip denemesi ek yerleşim turu açmaz
+    const olcum = dar => { if (pn.classList.contains('tk-dar') !== dar) pn.classList.toggle('tk-dar', dar); const on = dar ? 'D|' : '';
+    const yeni = [];   // önbellekte olmayan bloklar: [blok, anahtar]
+    const bilgi = ts.map(t => { const ay = [...t.tHead.querySelectorAll('th.ay')], anah = {}, b = { t, ay, blok: {}, bas: {}, top: 0, hc: [], pay: t.tHead.querySelector('th.pay') ? 58 : 0, gen: kapGen.get(t) };
+      ay.forEach(h => { const k = h.dataset.ym, a = 'H|' + h.textContent; anah[h.cellIndex] = k; let w = MO.get(a); if (w === undefined) { rg.selectNodeContents(h); w = gn(rg); MO.set(a, w); } b.bas[k] = w + (/\b(art|azl)\b/.test(h.className) ? 20 : PAD + 2); });   // sıralanan başlıkta ok için yer
+      t.querySelectorAll('.tk-hc').forEach(h => { const td = h.parentNode, a = on + td.className + '|' + td.parentNode.className + '|' + h.innerHTML.replace(/ data-mx="[^"]*"/, ''); b.hc.push([anah[td.cellIndex], a]); if (!MO.has(a)) yeni.push([h, a]); });
+      return b; });
+    if (yeni.length) { stil.textContent = ''; yeni.forEach(([h, a]) => { if (!MO.has(a)) MO.set(a, gn(h)); }); }   // blok genişlikleri sıfırlanır → doğal genişlik ölçülür
+    bilgi.forEach(b => b.hc.forEach(([k, a]) => { const w = MO.get(a); if (k === undefined) { if (w > b.top) b.top = w; } else if (w > (b.blok[k] || 0)) b.blok[k] = w; }));
+    return bilgi; };
+    /** grup: birlikte hizalanacak tablolar → { sigar, css, min: tablo → en az genişlik } */
+    const yerles = (grup, adSabit) => { const blok = {}, bas = {}; let T = 0;
+      grup.forEach(b => { T = Math.max(T, b.top); Object.keys(b.bas).forEach(k => { bas[k] = Math.max(bas[k] || 0, b.bas[k]); blok[k] = Math.max(blok[k] || 0, b.blok[k] || 0); }); });
+      const gen = Math.min(...grup.map(b => b.gen)), topMin = Math.max(Math.ceil(T) + PAD, 76), ihtiyac = k => Math.max(Math.ceil(blok[k]) + PAD, Math.ceil(bas[k])), enCok = Math.max(...Object.keys(bas).map(ihtiyac));
+      const ayTop = (b, f) => b.ay.reduce((a, h) => a + f(h.dataset.ym), 0), esit = grup.every(b => SEC + AD_ALT + b.ay.length * enCok + topMin + b.pay <= gen), ayGen = k => esit ? enCok : ihtiyac(k);
+      const ad = adSabit || Math.max(AD_ALT, Math.min(AD_UST, gen - SEC - topMin - Math.max(...grup.map(b => ayTop(b, ayGen) + b.pay))));
+      const ek = Math.max(0, Math.floor(Math.min(...grup.map(b => (gen - SEC - ad - topMin - b.pay - ayTop(b, ayGen)) / (b.ay.length + 1)))));   // artan boşluk ay sütunlarına ve Toplam'a eşit dağılır
+      const min = new Map(); let css = '', sigar = true;
+      grup.forEach(b => { const s = '#' + b.t.id, m = SEC + ad + ayTop(b, k => ayGen(k) + ek) + topMin + b.pay; min.set(b.t, m); if (m > gen) sigar = false;
+        css += `${s} th.ad{width:${ad}px}${s} td.top>.tk-hc{min-width:${Math.ceil(T)}px}`;
+        b.ay.forEach(h => { const k = h.dataset.ym, c = h.cellIndex + 1; css += `${s} th:nth-child(${c}){width:${ayGen(k) + ek}px}${s} td:nth-child(${c})>.tk-hc{min-width:${Math.ceil(blok[k])}px}`; }); });
+      return { sigar, css, min }; };
+    const coz = dar => { const bilgi = olcum(dar), g = yerles(bilgi); return g.sigar || bilgi.length < 2 ? { tam: g.sigar, sonuc: [g] } : { tam: false, sonuc: bilgi.map(b => yerles([b], AD_ALT)) }; };   // ortak hiza sığmıyorsa her tablo kendi ölçüsüyle; ad sütunu hepsinde aynı (en dar) kalır → aylar aynı yerden başlar
+    let c = coz(false); if (!c.tam) c = coz(true); const sonuc = c.sonuc;
+    const css = sonuc.map(s => s.css).join(''); if (stil.textContent !== css) stil.textContent = css;   // değişmediyse dokunulmaz → ek yerleşim turu yok
+    sonuc.forEach(s => s.min.forEach((m, t) => { const mw = m + 'px'; if (t.style.minWidth !== mw) t.style.minWidth = mw; if (!t.hasAttribute('data-hizali')) t.setAttribute('data-hizali', '1'); }));
+  }
+  window.tkMatrisHizala = matrisHizala;
+  // çizim başına tek ölçüm: aynı karede birden çok ciz() olsa da hizalama boyamadan hemen önce bir kez çalışır (çizimi yavaşlatmaz, hizasız kare görünmez)
+  let matrisKare = 0; const matrisPlanla = () => { if (!matrisKare) matrisKare = requestAnimationFrame(() => { matrisKare = 0; matrisHizala(); }); };
   function cizSatis() {
     const ays = aylar(), ayK = new Set(ays), C = cariler(), bugunYm = (K.bugun || '').slice(0, 7);
     const sat = C.flatMap(k => (k.satislar || []).filter(kalemUy).map(x => Object.assign({ cariKodu: k.kod, cariAd: k.kisaAd, musteri: `${k.kod} ${k.kisaAd}`, bolge: k.bolge || 'Bölgesiz', sinif: k.sinif || 'Sınıfsız', ulke: k.ulke || (k.suzgec || {}).ulke || 'Ülkesiz', temsilci: (k.temsilci || '').split(',')[0].trim() || 'Atanmadı', ym: x.tarih.slice(0, 7), tarihIso: x.tarih, tutarTl: x.tl, tip: x.islemTipi === 'R' ? 'R' : 'X', tur: 'Satış · ' + (x.islemTipi === 'R' ? 'R' : 'X') }, x)));
@@ -1143,9 +1207,10 @@
     const tutar = l => l.length ? (DV && dovizli(l) ? `<span title="${esc(tl(T(l)))}">${esc(pbTop(l, s => s.tutar))}</span>` : tl(T(l))) : '—';
     /** R üstte / X altta hücre; yalnız dolu olan satır yazılır ("R —" / "X —" yok); Toplam satırı yalnız ikisi de varsa. "R / X Ayrı Göster" kapalıyken tek tutar */
     const rx = (l, toplamli) => { if (!l.length) return tire; if (!ST.rx) return tutar(l); const r = l.filter(s => s.tip === 'R'), x = l.filter(s => s.tip === 'X');
-      return `<span class="tk-rx">${r.length ? `<span class="r"><small>R</small>${tutar(r)}</span>` : ''}${x.length ? `<span class="x"><small>X</small>${tutar(x)}</span>` : ''}${toplamli && r.length && x.length ? `<span class="t"><small>Toplam</small><b>${tutar(l)}</b></span>` : ''}</span>`; };
-    const duz = (ad, L, alt, ek) => Object.assign({ ad, alt, _L: L, deger: y => T(Fy(L, y)), h: y => { const l = Fy(L, y); return l.length ? `${tutar(l)}<small>${l.length} fatura</small>` : tire; }, liste: y => Fy(L, y) }, ek || {});   // tek tip satır (R ya da X ya da toplam)
-    const rxS = (ad, L, alt, ek) => Object.assign({ ad, alt, _L: L, deger: y => T(Fy(L, y)), h: y => rx(Fy(L, y), y == null), liste: y => Fy(L, y) }, ek || {});   // hücrede R / X ayrı
+      return `<span class="tk-rx">${r.length ? `<span class="r"><small>R</small>${tutar(r)}</span>` : ''}${x.length ? `<span class="x"><small>X</small>${tutar(x)}</span>` : ''}${r.length && x.length ? `<span class="t"><small title="Toplam">T</small><b>${tutar(l)}</b></span>` : ''}</span>`; };   // Toplam satırı R ve X'in ikisi de olan her hücrede (22 Kas 2026)
+    const ayOn = L => { const m = new Map(); return y => { const k = y == null ? '' : y; if (!m.has(k)) m.set(k, Fy(L, y)); return m.get(k); }; };   // satırın ay → fatura listesi bir kez süzülür (hücre, toplam, pay, sıralama aynı listeyi kullanır)
+    const duz = (ad, L, alt, ek) => { const Fm = ayOn(L); return Object.assign({ ad, alt, _L: L, deger: y => T(Fm(y)), h: y => { const l = Fm(y); return l.length ? `${tutar(l)}<small>${l.length} fatura</small>` : tire; }, liste: Fm }, ek || {}); };   // tek tip satır (R ya da X ya da toplam)
+    const rxS = (ad, L, alt, ek) => { const Fm = ayOn(L); return Object.assign({ ad, alt, _L: L, deger: y => T(Fm(y)), h: y => rx(Fm(y), y == null), liste: Fm }, ek || {}); };   // hücrede R / X ayrı
     const birlesik = sec => [...new Set(sec.flatMap(s => s._L))], fatSay = l => `${l.length} fatura`;
     const secDuz = (ad, sec) => { const l = birlesik(sec); return duz(ad, l, fatSay(l), { sinif: 'toplam secili' }); }, secRx = (ad, sec) => { const l = birlesik(sec); return rxS(ad, l, fatSay(l), { sinif: 'toplam secili' }); };
     const kol = [...ays, 'disi'], bos = 'Dönemde satış faturası yok.';
@@ -1158,12 +1223,12 @@
     const grupEn = alan => { const m = new Map(); donem.forEach(s => m.set(s[alan], (m.get(s[alan]) || 0) + s.tutarTl)); return [...m.entries()].reduce((a, b) => b[1] > a[1] ? b : a, ['', 0]); };
     const buAy = T(sat.filter(s => s.ym === bugunYm)), oncekiYm = (() => { const d = new Date(bugunYm + '-01T00:00:00'); d.setMonth(d.getMonth() - 1); return iso(d).slice(0, 7); })(), gecenAy = T(sat.filter(s => s.ym === oncekiYm));
     const degisim = gecenAy ? (buAy - gecenAy) / gecenAy * 100 : null, enTem = grupEn('temsilci'), enMus = grupEn('musteri'), yuzde = (a, b) => b ? `% ${(a / b * 100).toLocaleString(TR, { maximumFractionDigits: 1 })}` : '—';
-    const kutu = (ad, deger, alt) => `<div style="--k:#475569"><div class="l">${ad}</div><div class="v">${deger}</div><div class="s">${alt || '&nbsp;'}</div></div>`;
+    const kutu = sKutu;
     $('#tkSatisKpi').innerHTML = [
-      kutu('Satış · Dönem', tl(T(donem)), `${donem.length} fatura · ${musteriSay(donem)}`), kutu('R Satış', tl(T(R)), `${yuzde(T(R), T(donem))} · ${R.length} fatura`), kutu('X Satış', tl(T(X)), `${yuzde(T(X), T(donem))} · ${X.length} fatura`),
-      kutu('Ortalama Fatura', donem.length ? tl(T(donem) / donem.length) : '—', ays.length ? `aylık ortalama ${tl(T(donem) / ays.length)}` : ''), kutu('En Yüksek Ay', enAy[0] ? esc(ayEtiket(enAy[0])) : '—', enAy[0] ? tl(enAy[1]) : ''),
-      kutu(`Bu Ay · ${esc(ayEtiket(bugunYm))}`, tl(buAy), degisim == null ? 'geçen ay satış yok' : `geçen aya göre <b class="${degisim >= 0 ? 'ok' : 'gec'}">${degisim >= 0 ? '+' : '−'} % ${Math.abs(degisim).toLocaleString(TR, { maximumFractionDigits: 1 })}</b>`),
-      kutu('En Çok Satan Temsilci', enTem[0] ? esc(enTem[0]) : '—', enTem[0] ? `${tl(enTem[1])} · ${yuzde(enTem[1], T(donem))}` : ''), kutu('En Büyük Müşteri', enMus[0] ? esc(enMus[0]) : '—', enMus[0] ? `${tl(enMus[1])} · ${yuzde(enMus[1], T(donem))}` : '')].join('');
+      kutu('Satış · Dönem', tl(T(donem)), `${donem.length} fatura · ${musteriSay(donem)}`, SR.ana), kutu('R Satış', tl(T(R)), `${yuzde(T(R), T(donem))} · ${R.length} fatura`, SR.r), kutu('X Satış', tl(T(X)), `${yuzde(T(X), T(donem))} · ${X.length} fatura`, SR.x),
+      kutu('Ortalama Fatura', donem.length ? tl(T(donem) / donem.length) : '—', ays.length ? `aylık ortalama ${tl(T(donem) / ays.length)}` : '', SR.notr), kutu('En Yüksek Ay', enAy[0] ? esc(ayEtiket(enAy[0])) : '—', enAy[0] ? tl(enAy[1]) : '', SR.sari),
+      kutu(`Bu Ay · ${esc(ayEtiket(bugunYm))}`, tl(buAy), degisim == null ? 'geçen ay satış yok' : `geçen aya göre <b class="${degisim >= 0 ? 'ok' : 'gec'}">${degisim >= 0 ? '+' : '−'} % ${Math.abs(degisim).toLocaleString(TR, { maximumFractionDigits: 1 })}</b>`, SR.mavi),
+      kutu('En Çok Satan Temsilci', enTem[0] ? esc(enTem[0]) : '—', enTem[0] ? `${tl(enTem[1])} · ${yuzde(enTem[1], T(donem))}` : '', SR.camgobegi), kutu('En Büyük Müşteri', enMus[0] ? esc(enMus[0].replace(/^\S+\s/, '')) : '—', enMus[0] ? `${esc(enMus[0].split(' ')[0])} · ${tl(enMus[1])} · ${yuzde(enMus[1], T(donem))}` : '', SR.mor)].join('');
     $('#tkSatisNot').textContent = `${sat.length} fatura · ${donemMetni()}${sat.length !== donem.length ? ` · ${sat.length - donem.length} fatura dönem dışı` : ''}`;
     // 1) bölge × X / R: her bölgede R satırı, X satırı, bölge toplamı; sonda genel toplam
     const tipSatir = [];
@@ -1228,10 +1293,10 @@
       return `<span class="tk-rx">${var_(rf) ? `<span class="r"><small>R</small>${pr(rf, pb)}</span>` : ''}<span class="x"><small>Gerçek</small>${esas != null ? `<b>${pr(gm, pb)}</b>` : pr(gm, pb)}</span></span>`; };
     const S = ssec('satisSubeYil'); [...S].forEach(a => { if (!G.some(g => g.ad === a)) S.delete(a); }); const GS = G.filter(g => S.has(g.ad));
     t.tHead.innerHTML = `<tr><th class="sec sirasiz"><input type="checkbox" data-ssec-hepsi="satisSubeYil" title="Ülkelerin hepsini seç / bırak"${G.length && GS.length === G.length ? ' checked' : ''}></th><th class="ad sirasiz">Ülke</th>${yillar.map(y => `<th class="sirasiz">${esc(y)}</th>`).join('')}<th class="sirasiz">Toplam</th></tr>`;
-    t.tBodies[0].innerHTML = G.map(g => `<tr${S.has(g.ad) ? ' data-secili="1"' : ''}><td class="sec"><input type="checkbox" data-ssec="satisSubeYil" data-a="${esc(g.ad)}" title="Seç → dipte Seçili toplamı"${S.has(g.ad) ? ' checked' : ''}></td><td class="ad"><a href="#" class="tk-link" data-git="ibSube" title="Şube Bakiyeleri sekmesini aç"><b>${esc(g.ad)}</b></a>${g.alt ? `<small>${esc(g.alt)}</small>` : ''}</td>${yillar.map(y => `<td>${cift(yT(g, y, 'resmiFatura'), yT(g, y, 'gercekMalBedeli'), g.pb)}</td>`).join('')}<td class="top">${cift(gT(g, 'resmiFatura'), gT(g, 'gercekMalBedeli'), g.pb, true)}</td></tr>`).join('') || `<tr><td colspan="${yillar.length + 3}" class="na-bos">Şube kaydı yok.</td></tr>`;
+    t.tBodies[0].innerHTML = G.map(g => `<tr${S.has(g.ad) ? ' data-secili="1"' : ''}><td class="sec"><input type="checkbox" data-ssec="satisSubeYil" data-a="${esc(g.ad)}" title="Seç → dipte Seçili toplamı"${S.has(g.ad) ? ' checked' : ''}></td><td class="ad"><a href="#" class="tk-link" data-git="ibSube" title="${esc(g.alt ? g.alt + ' · ' : '')}Şube Bakiyeleri sekmesini aç"><b>${esc(g.ad)}</b></a></td>${yillar.map(y => `<td>${cift(yT(g, y, 'resmiFatura'), yT(g, y, 'gercekMalBedeli'), g.pb)}</td>`).join('')}<td class="top">${cift(gT(g, 'resmiFatura'), gT(g, 'gercekMalBedeli'), g.pb, true)}</td></tr>`).join('') || `<tr><td colspan="${yillar.length + 3}" class="na-bos">Şube kaydı yok.</td></tr>`;
     // dip toplam: satış esası (gerçek mal bedeli varsa o, yoksa resmî fatura − iade); para birimine göre ayrı (farklı para birimleri toplanmaz); altında seçili ülkelerin toplamı
     const dipSatir = (L, ad, alt, sinif) => { const pbler = tekil(L.map(g => g.pb)), dipH = f => pbler.map(pb => { const v = topla(L.filter(g => g.pb === pb), f); return Math.abs(v) > 0.005 ? pr(v, pb) : ''; }).filter(Boolean).join('<br>') || '—';
-      return `<tr class="${sinif}"><td class="sec"></td><td class="ad"><b>${ad}</b><small>${alt}</small></td>${yillar.map(y => `<td>${dipH(g => yT(g, y, 'satisEsas'))}</td>`).join('')}<td class="top"><b>${dipH(g => gT(g, 'satisEsas'))}</b></td></tr>`; };
+      return `<tr class="${sinif}"><td class="sec"></td><td class="ad" title="${alt}"><b>${ad}</b></td>${yillar.map(y => `<td>${dipH(g => yT(g, y, 'satisEsas'))}</td>`).join('')}<td class="top"><b>${dipH(g => gT(g, 'satisEsas'))}</b></td></tr>`; };
     t.tFoot.innerHTML = G.length ? dipSatir(G, `Toplam · ${G.length} ülke`, 'satış esası', 'toplam') + (GS.length ? dipSatir(GS, `Seçili · ${GS.length}`, esc(GS.map(g => g.ulke).join(' + ')), 'toplam secili') : '') : '';
     $('#tkSatisSubeYilNot').textContent = G.length ? `${G.length} ülke · ${SB.length} şube kaydı · ${yillar.length} yıl` : '';
   }
@@ -1239,7 +1304,7 @@
   kok.addEventListener('change', e => {
     const c = e.target.closest('[data-ssec]'); if (c) { const S = ssec(c.dataset.ssec); if (c.checked) S.add(c.dataset.a); else S.delete(c.dataset.a); ciz(); return; }
     const h = e.target.closest('[data-ssec-hepsi]'); if (h) { const id = h.dataset.ssecHepsi, S = ssec(id); $$('tbody [data-ssec]', $('#tkTablo-' + id)).forEach(x => { if (h.checked) S.add(x.dataset.a); else S.delete(x.dataset.a); }); ciz(); return; }
-    if (e.target.id === 'tkSatisRx') { ST.rx = e.target.checked; stSakla(); cizSatis(); }
+    if (e.target.matches('[data-rx-anahtar]')) { ST.rx = e.target.checked; stSakla(); ciz(); }   // "R / X Ayrı Göster": üç sekmede tek ortak tercih
   });
   kok.addEventListener('click', e => {
     const g = e.target.closest('[data-sgor]'); if (g) { const pn = g.closest('.na-panel'); if (pn && ST.gor[pn.dataset.p] !== undefined) { ST.gor[pn.dataset.p] = g.dataset.sgor; stSakla(); ciz(); } return; }
@@ -1274,37 +1339,50 @@
     const ortGun = l => { const t = topla(l, d => d.tutarTl); return t ? topla(l, d => d.tutarTl * d.gecikmeGun) / t : 0; };
     const planlanan = y => S(dag, y, d => d.tutarTl) + S(acik, y, x => x.tl);
     const yuzde = (a, b) => b ? `<b>${Math.round(a / b * 100)} %</b>` : tire, gunH = v => v < -0.5 ? `<span class="ok">${Math.round(-v)} gün erken</span>` : v > 0.5 ? `<span class="gec">${Math.round(v)} gün</span>` : 'vadesinde';
+    // 22 Kas 2026 (kullanıcı: "Aylık Tahsilatlar, Planlanan ↔ Gerçekleşen: Satış Raporu'nda olduğu gibi X, R ve Toplam şeklinde düzenle"): hücrede R üstte / X altta, Toplam sütununda üçüncü satır Toplam;
+    //   yalnız dolu satır yazılır; "R / X Ayrı Göster" kapatılınca tek tutar. Oran satırları (Gerçekleşme, Ortalama Gecikme) her hücrede R · X · Toplam. Kalemin tipi: kapatılan / açık faturanın, vade farkı faturasının işlem tipi.
+    const rxTip = x => x.islemTipi === 'R' ? 'R' : 'X', tipL = (l, tp) => l.filter(x => rxTip(x) === tp);
+    /** tutar satırı: liste(y) → kalemler, val → kalemin tutarı; o: { para (tl / tl2), sinif (ok / gec), ek(l) → alt bilgi } */
+    const prow = (ad, alt, listeF, val, o) => { o = o || {}; const rxv = y => { const l = listeF(y); return { r: topla(tipL(l, 'R'), val), x: topla(tipL(l, 'X'), val), l }; };
+      return { ad, alt, _rxv: rxv, _para: o.para || tl, deger: y => topla(listeF(y), val), liste: listeF, h: y => { const q = rxv(y); return rxSayi(q.r, q.x, y == null, o.para || tl, o.sinif, o.ek && q.l.length ? o.ek(q.l) : ''); } }; };
+    const pSec = (ad, sec) => ({ ad, alt: sec.map(s => s.ad).join(' + '), sinif: 'toplam secili', deger: y => topla(sec, s => s.deger(y)), liste: y => sec.flatMap(s => s.liste(y)), h: y => rxSayi(topla(sec, s => s._rxv(y).r), topla(sec, s => s._rxv(y).x), y == null, sec[0]._para) });
+    const yz = (a, b) => b ? `${Math.round(a / b * 100)} %` : '', tT = d => d.tutarTl, aT = x => x.tl;
+    const gerceklesme = y => rxMetin(yz(topla(tipL(Fy(dag, y), 'R'), tT), topla(tipL(Fy(dag, y), 'R'), tT) + topla(tipL(Fy(acik, y), 'R'), aT)), yz(topla(tipL(Fy(dag, y), 'X'), tT), topla(tipL(Fy(dag, y), 'X'), tT) + topla(tipL(Fy(acik, y), 'X'), aT)), yz(S(dag, y, tT), planlanan(y)));
+    const ortGecikme = y => { const l = Fy(dag, y, 'odemeYm'), g = L => L.length ? gunH(ortGun(L)) : ''; return rxMetin(g(tipL(l, 'R')), g(tipL(l, 'X')), g(l)); };
     satisTablo('planVade', 'Vade Ayına Göre', aysT, [
-      { ad: 'Vadesi Gelen · Yapılması Gereken', alt: 'kapanan + hâlâ açık', deger: planlanan, h: (y, v) => v ? `<b>${tl(v)}</b>` : tire, liste: y => Fy(dag, y).concat(Fy(acik, y)) },
-      { ad: 'Zamanında Tahsil Edilen', alt: 'ödeme günü ≤ vade', deger: y => S(zam, y, d => d.tutarTl), h: (y, v) => v ? `<span class="ok">${tl(v)}</span>` : tire, liste: y => Fy(zam, y) },
-      { ad: 'Gecikmeli Tahsil Edilen', alt: 'ödeme günü > vade', deger: y => S(gec, y, d => d.tutarTl), h: (y, v) => { const l = Fy(gec, y); return v ? `<span class="gec">${tl(v)}</span><small>ort. ${Math.round(ortGun(l))} gün gecikme</small>` : tire; }, liste: y => Fy(gec, y) },
-      { ad: 'Hâlâ Açık · Tahsil Edilmedi', alt: 'bugün itibarıyla = Alacak Takibi açık toplamı', deger: y => S(acik, y, x => x.tl), h: (y, v) => { const l = Fy(acik, y); return v ? `${tutarH(v, l)}<small>${l.length} fatura</small>` : tire; }, liste: y => Fy(acik, y) },
-      { ad: 'Gerçekleşme', alt: 'tahsil edilen / vadesi gelen', deger: y => S(dag, y, d => d.tutarTl), h: (y, v) => y ? yuzde(v, planlanan(y)) : '', toplam: () => S(dag, null, d => d.tutarTl), toplamH: v => yuzde(v, planlanan(null)), sinif: 'toplam' }
-    ], '', null, null, { sirasiz: 1, payGenel: planlanan(null) });
+      prow('Vadesi Gelen · Yapılması Gereken', 'kapanan + hâlâ açık', y => Fy(dag, y).map(d => Object.assign({ _t: d.tutarTl }, d)).concat(Fy(acik, y).map(x => Object.assign({ _t: x.tl }, x))), x => x._t),
+      prow('Zamanında Tahsil Edilen', 'ödeme günü ≤ vade', y => Fy(zam, y), tT, { sinif: 'ok' }),
+      prow('Gecikmeli Tahsil Edilen', 'ödeme günü > vade', y => Fy(gec, y), tT, { sinif: 'gec', ek: l => `ort. ${Math.round(ortGun(l))} gün gecikme` }),
+      prow('Hâlâ Açık · Tahsil Edilmedi', 'bugün itibarıyla = Alacak Takibi açık toplamı', y => Fy(acik, y), aT, { ek: l => `${l.length} fatura` }),
+      { ad: 'Gerçekleşme', alt: 'tahsil edilen / vadesi gelen', deger: y => S(dag, y, tT), h: y => gerceklesme(y), toplam: () => S(dag, null, tT), toplamH: () => gerceklesme(null), sinif: 'toplam' }
+    ], '', pSec, null, { sirasiz: 1, payGenel: planlanan(null) });
     satisTablo('planAy', 'Tahsilat Ayına Göre', aysT, [
-      { ad: 'Tahsil Edilen', alt: 'fatura kapatan ödemeler', deger: y => S(dag, y, d => d.tutarTl, 'odemeYm'), h: (y, v) => v ? `<b>${tl(v)}</b>` : tire, liste: y => Fy(dag, y, 'odemeYm') },
-      { ad: 'Zamanında', deger: y => S(zam, y, d => d.tutarTl, 'odemeYm'), h: (y, v) => v ? `<span class="ok">${tl(v)}</span>` : tire, liste: y => Fy(zam, y, 'odemeYm') },
-      { ad: 'Gecikmeli', deger: y => S(gec, y, d => d.tutarTl, 'odemeYm'), h: (y, v) => { const l = Fy(gec, y, 'odemeYm'); return v ? `<span class="gec">${tl(v)}</span><small>ort. ${Math.round(ortGun(l))} gün</small>` : tire; }, liste: y => Fy(gec, y, 'odemeYm') },
-      { ad: 'Ortalama Gecikme', alt: 'tutar ağırlıklı; eksi = vadeden önce', deger: y => ortGun(Fy(dag, y, 'odemeYm')), h: (y, v) => y ? (Fy(dag, y, 'odemeYm').length ? gunH(v) : tire) : '', toplam: () => ortGun(dag), toplamH: v => dag.length ? gunH(v) : tire, sinif: 'toplam' }
-    ], '', null, null, { sirasiz: 1, payGenel: S(dag, null, d => d.tutarTl, 'odemeYm') });
+      prow('Tahsil Edilen', 'fatura kapatan ödemeler', y => Fy(dag, y, 'odemeYm'), tT),
+      prow('Zamanında', '', y => Fy(zam, y, 'odemeYm'), tT, { sinif: 'ok' }),
+      prow('Gecikmeli', '', y => Fy(gec, y, 'odemeYm'), tT, { sinif: 'gec', ek: l => `ort. ${Math.round(ortGun(l))} gün` }),
+      { ad: 'Ortalama Gecikme', alt: 'tutar ağırlıklı; eksi = vadeden önce', deger: y => ortGun(Fy(dag, y, 'odemeYm')), h: y => ortGecikme(y), toplam: () => ortGun(dag), toplamH: () => ortGecikme(null), sinif: 'toplam' }
+    ], '', pSec, null, { sirasiz: 1, payGenel: S(dag, null, tT, 'odemeYm') });
     const kodlar = new Set(C.map(k => k.kod)), FT = (K.faturalar || []).filter(f => kodlar.has(f.cariKodu) && f.tur === 'Vade Farkı' && kalemUy(f)).map(f => Object.assign({ fYm: ym(f.tarihIso) }, f)), bugunYm = ym(K.bugun);
-    const acikVf = topla(C, k => k.vf.bugunVf);   // açık gecikmiş faturalardan bugüne kadar doğmuş, henüz kesilmemiş vade farkı (içinde bulunulan aya yazılır)
-    const kes = (ad, kaynak, alt) => ({ ad, alt, deger: y => S(FT.filter(f => f.kaynak === kaynak), y, f => f.matrah, 'fYm'), h: (y, v) => v ? `<span class="ok">${tl2(v)}</span>` : tire, liste: y => Fy(FT.filter(f => f.kaynak === kaynak), y, 'fYm') });
+    const acikVf = topla(C, k => k.vf.bugunVf);   // açık gecikmiş faturalardan bugüne kadar doğmuş, henüz kesilmemiş vade farkı (içinde bulunulan aya yazılır; müşteri bazında tutulur → R / X ayrımı yok, "Açık Fatura" satırında)
+    const kes = (ad, kaynak, alt) => prow(ad, alt, y => Fy(FT.filter(f => f.kaynak === kaynak), y, 'fYm'), f => f.matrah, { para: tl2, sinif: 'ok' });
     const kesilmemisT = T.filter(t => !t.vadeFarkiFaturaNo).map(t => Object.assign({ tYm: ym(t.tarihIso) }, t));
+    const kesilmemisH = (y, v) => { if (!v) return tire; const l = Fy(kesilmemisT, y, 'tYm'), r = topla(tipL(l, 'R'), t => t.vadeFarki), x = topla(tipL(l, 'X'), t => t.vadeFarki), a = v - r - x, var_ = q => Math.abs(q) > 0.005;
+      if (!ST.rx) return `<span class="gec">${tl2(v)}</span>`;
+      return `<span class="gec"><span class="tk-rx">${var_(r) ? `<span class="r"><small>R</small>${tl2(r)}</span>` : ''}${var_(x) ? `<span class="x"><small>X</small>${tl2(x)}</span>` : ''}${var_(a) ? `<span class="x"><small title="Açık Fatura: açık gecikmiş faturalardan bugüne kadar doğan; müşteri bazında tutulduğundan R / X ayrımı yok">Açık</small>${tl2(a)}</span>` : ''}${[r, x, a].filter(var_).length > 1 ? `<span class="t"><small title="Toplam">T</small><b>${tl2(v)}</b></span>` : ''}</span></span>`; };
     satisTablo('planVf', 'Vade Farkı (KDV hariç)', aysT, [
-      { ad: 'Tahsilatta Doğan', alt: 'ödeme vadeden sonra alındı (çek vadesi vb.)', deger: y => S(dag, y, d => d.vadeFarki, 'odemeYm'), h: (y, v) => v ? `${tl2(v)}` : tire, liste: y => Fy(dag, y, 'odemeYm').filter(d => d.vadeFarki > 0.005) },
+      prow('Tahsilatta Doğan', 'ödeme vadeden sonra alındı (çek vadesi vb.)', y => Fy(dag, y, 'odemeYm').filter(d => d.vadeFarki > 0.005), d => d.vadeFarki, { para: tl2 }),
       kes('Kesilen · Tahsilat Sırasında', 'Tahsilat', 'tahsilatla birlikte kesilen'), kes('Kesilen · Ay Sonu / Robot', 'Ay Sonu', 'vadesi geçtiği için'), kes('Kesilen · Şimdi Kes (Elle)', 'Elle'),
-      { ad: 'Kesilmemiş', alt: 'tahsilatta doğup faturası kesilmeyen + açık gecikmiş faturalardan bugüne (bu ay)', deger: y => S(kesilmemisT, y, t => t.vadeFarki, 'tYm') + (y === bugunYm || (y === null) ? acikVf : 0) - (y === 'disi' && !ayK.has(bugunYm) ? -acikVf : 0), h: (y, v) => v ? `<span class="gec">${tl2(v)}</span>` : tire, sinif: 'toplam', liste: y => Fy(kesilmemisT, y, 'tYm').map(t => Object.assign({ tutarTl: t.vadeFarki, yontem: 'Tahsilatta doğan · kesilmedi' }, t)) }
-    ], '', null, null, { sirasiz: 1, pay: false });
+      { ad: 'Kesilmemiş', alt: 'tahsilatta doğup faturası kesilmeyen + açık gecikmiş faturalardan bugüne (bu ay)', deger: y => S(kesilmemisT, y, t => t.vadeFarki, 'tYm') + (y === bugunYm || (y === null) ? acikVf : 0) - (y === 'disi' && !ayK.has(bugunYm) ? -acikVf : 0), h: kesilmemisH, sinif: 'toplam', liste: y => Fy(kesilmemisT, y, 'tYm').map(t => Object.assign({ tutarTl: t.vadeFarki, yontem: 'Tahsilatta doğan · kesilmedi' }, t)) }
+    ], '', pSec, null, { sirasiz: 1, pay: false });
     // 21 Kas 2026 (kullanıcı: "Aylık Satışlar raporunda olduğu gibi … geliştir"): Görünüm düğmeleri + özet kartları (Toplam sütunlarıyla aynı kapsam: dönem dışı dahil bütün kayıtlar); tablolar satisTablo ile —
     //   seçim kutusu ve dipte Seçili toplamı, Pay = satırın tabana oranı (vade tablosunda vadesi gelene, tahsilat tablosunda tahsil edilene); satır sırası mantıksal olduğundan başlıkla sıralama yok
     gorunumKur('plan', '#tkPlanGor');
     const pl = planlanan(null), ted = S(dag, null, d => d.tutarTl), zamT = S(zam, null, d => d.tutarTl), gecT = S(gec, null, d => d.tutarTl), acikT = S(acik, null, x => x.tl), vfDogan = S(dag, null, d => d.vadeFarki, 'odemeYm'), vfKesilen = topla(FT, f => f.matrah);
     $('#tkPlanKpi').innerHTML = [
-      sKutu('Vadesi Gelen', tl(pl), `${dag.length + acik.length} fatura kalemi`), sKutu('Tahsil Edilen', tl(ted), `gerçekleşme ${sYuzde(ted, pl)}`),
-      sKutu('Zamanında', `<span class="ok">${tl(zamT)}</span>`, `${sYuzde(zamT, ted)} · ${zam.length} kapama`), sKutu('Gecikmeli', `<span class="gec">${tl(gecT)}</span>`, `${sYuzde(gecT, ted)} · ort. ${Math.round(ortGun(gec))} gün`),
-      sKutu('Hâlâ Açık', tl(acikT), `${sYuzde(acikT, pl)} · ${acik.length} fatura`), sKutu('Ortalama Gecikme', dag.length ? gunH(ortGun(dag)) : '—', 'tutar ağırlıklı · bütün kapamalar'),
-      sKutu('Vade Farkı · Doğan', tl2(vfDogan), 'tahsilatta · KDV hariç'), sKutu('Vade Farkı · Kesilen', tl2(vfKesilen), `${FT.length} fatura · KDV hariç`)].join('');
+      sKutu('Vadesi Gelen', tl(pl), `${dag.length + acik.length} fatura kalemi`, SR.mavi), sKutu('Tahsil Edilen', tl(ted), `gerçekleşme ${sYuzde(ted, pl)}`, SR.ana),
+      sKutu('Zamanında', `<span class="ok">${tl(zamT)}</span>`, `${sYuzde(zamT, ted)} · ${zam.length} kapama`, SR.yesil), sKutu('Gecikmeli', `<span class="gec">${tl(gecT)}</span>`, `${sYuzde(gecT, ted)} · ort. ${Math.round(ortGun(gec))} gün`, SR.kirmizi),
+      sKutu('Hâlâ Açık', tl(acikT), `${sYuzde(acikT, pl)} · ${acik.length} fatura`, SR.sari), sKutu('Ortalama Gecikme', dag.length ? gunH(ortGun(dag)) : '—', 'tutar ağırlıklı · bütün kapamalar', SR.x),
+      sKutu('Vade Farkı · Doğan', tl2(vfDogan), 'tahsilatta · KDV hariç', SR.gul), sKutu('Vade Farkı · Kesilen', tl2(vfKesilen), `${FT.length} fatura · KDV hariç`, SR.mor)].join('');
     $('#tkPlanNot').textContent = `${C.length} müşteri · ${donemMetni()}`;
   }
   // ---------- ÖZEL RAPOR sekmesi (20 Kas 2026; kullanıcı: "İhracat Finansal Takibi ve Tahsilat raporlarına Konsolide İK Paneli'nde yaptığımız gibi Özel Rapor sekmesi ekleyelim, istenilen şekilde raporlar yapılabilsin") ----------
@@ -1372,12 +1450,13 @@
   /** sütun tanımı → tablo motoru sütunu (satır = kayıt) */
   function orMotor(c) {
     const v = r => orDeger(c, r);
-    if (c.t === 'p') return P(c.k, orBaslik(c), r => Number(v(r)) || 0, c.h ? { h: c.h } : null);
+    // sinif 'or-s': tutar / tarih / ay hücresi bölünmez (genişliğe sığdırmada yalnız metin hücreleri kırılır — orSigdir)
+    if (c.t === 'p') return P(c.k, orBaslik(c), r => Number(v(r)) || 0, Object.assign({ sinif: 'or-s' }, c.h ? { h: c.h } : null));
     if (c.t === 'n') return P(c.k, c.ad, r => Number(v(r)) || 0, { sinif: 'sayac', h:   /* sayac: tablo-hizala ₺ eklemesin (adet, gün, %) */ r => Number(v(r)) ? orSayiYaz(v(r)) : tire, top: c.top ? r => Number(v(r)) || 0 : null, dipH: L => orSayiYaz(topla(L, v)) });
-    if (c.t === 'v') return P(c.k, orBaslik(c), r => Number(v(r)) || 0, { h: r => Number(v(r)) ? n2(v(r)) + ' ' + esc(pbAd(c.pb(r))) : tire, dipH: L => orPbTop(L, c) || '' });
-    if (c.t === 'd') return D(c.k, c.ad, v);
-    if (c.t === 'a') return M(c.k, c.ad, v, { h: r => v(r) ? ayEtiket(v(r)) : tire });
-    return M(c.k, c.ad, r => String(v(r)), c.h ? { h: c.h } : null);
+    if (c.t === 'v') return P(c.k, orBaslik(c), r => Number(v(r)) || 0, { sinif: 'or-s', h: r => Number(v(r)) ? n2(v(r)) + ' ' + esc(pbAd(c.pb(r))) : tire, dipH: L => orPbTop(L, c) || '' });
+    if (c.t === 'd') return D(c.k, c.ad, v, { sinif: 'or-s' });
+    if (c.t === 'a') return M(c.k, c.ad, v, { sinif: 'or-s', h: r => v(r) ? ayEtiket(v(r)) : tire });
+    return M(c.k, c.ad, r => String(v(r)), Object.assign({ sinif: r => /\S{16,}/.test(String(v(r))) ? 'or-kir' : '' }, c.h ? { h: c.h } : null));   // or-kir: boşluksuz uzun metin (e-posta gibi) — sıkışık düzende yalnız bunlar hücre içinde kırılır, olağan kelimeler bölünmez
   }
   /** koşul: değer girilmemişse süzmez (dolu / boş hariç); sayı Türkçe yazılır (80.000 · 12,5); tarih gg.aa.yyyy ya da takvimden */
   function orUyar(kosul, r) {
@@ -1430,14 +1509,32 @@
       const kol = gk.map(c => M('g_' + c.k, c.ad, g => String(orDeger(c, g.l[0])), { h: g => `<b>${esc(yaz(c, g.l[0]))}</b>` }));
       kol.push(P('_n', `Adet (${KY.birim})`, g => g.l.length, { sinif: 'sayac', h: g => `<a href="#" class="tk-link" data-or-grup="${esc(g.a)}" title="Bu grubun satırlarını göster">${orSayiYaz(g.l.length)}</a>`, dipH: LL => orSayiYaz(topla(LL, g => g.l.length)) }));
       S.filter(c => c.t === 'p' || c.t === 'v' || (c.t === 'n' && c.top)).forEach(c => kol.push(P(c.k, orBaslik(c), g => topla(g.l, r => Number(orDeger(c, r)) || 0), c.t === 'v' ? { h: g => orPbTop(g.l, c) || tire, dipH: LL => orPbTop(LL.flatMap(g => g.l), c) || '' } : c.t === 'n' ? { h: g => orSayiYaz(topla(g.l, r => Number(orDeger(c, r)) || 0)), dipH: LL => orSayiYaz(topla(LL, g => topla(g.l, r => Number(orDeger(c, r)) || 0))) } : null)));
+      kol.forEach(c => { if (c.t === 'p' && !c.sinif) c.sinif = 'or-s'; });
       tablo('ozel', kol, G, { anahtar: g => g.a, sira: { k: '_n', y: -1 }, bos: 'Koşullara uyan kayıt yok.', dipAd: (LL, ad) => `${ad} · ${LL.length} grup` });
       cizOzel.gruplar = m; satirSayisi = G.length;
     } else { tablo('ozel', S.map(orMotor), L, { anahtar: KY.anahtar, bos: 'Koşullara uyan kayıt yok.', dipAd: (LL, ad) => `${ad} · ${LL.length} ${KY.birim}` }); cizOzel.gruplar = null; }
     const km = orKosulMetni();
     $('#tkOrBaslik').innerHTML = `<i class="fas fa-filter me-1"></i>Özel Rapor${orAyar.ad ? ' · ' + esc(orAyar.ad) : ''} · ${esc(KY.ad)}${gk.length ? ' · ' + esc(gk.map(c => c.ad).join(' › ')) + ' Bazında' : ''}`;
     $('#tkOrNot').textContent = `${L.length} / ${tum.length} ${KY.birim}${gk.length ? ` · ${satirSayisi} grup` : ''} · ${km ? 'koşul: ' + km : 'koşul yok'}${KY.donem ? ' · ' + donemMetni() : ''}`;
-    orSakla();
+    orSakla(); orSigdir();
   }
+  /** ÖZEL RAPOR · GENİŞLİĞE SIĞDIRMA (23 Kas 2026; kullanıcı: "özel raporu genişliğe sığdır"): çok sütun seçilince tablo yana taşmasın diye kademeli sıkıştırma — yazı boyu DEĞİŞMEZ.
+   *  0) olağan · 1) tk-or-sik: dar yan boşluk + ince sütun çizgisi · 2) tk-or-sik2: en dar boşluk, uzun metin (e-posta, unvan) hücre içinde kırılır (tutar / tarih bölünmez)
+   *  · 3) tk-or-kayar: yine sığmıyorsa (çok fazla sütun) tablo yana kayar, seçim kutusu ve ilk sütun solda sabit kalır.
+   *  Düzey ölçülerek seçilir (taşma bitene kadar); sütun kümesi + satır sayısı + kap genişliği aynıysa önceki düzeyden başlanır (sıralama / seçimde düzey oynamaz). */
+  let orSigImza = '', orSigOlcGen = 0, orSigDuzey = 0;
+  function orSigdir() {
+    const t = $('#tkTablo-ozel'), k = t && t.closest('.table-responsive'); if (!k || !t.offsetParent || !t.tHead.rows.length) return;
+    const SINIF = ['tk-or-sik', 'tk-or-sik2', 'tk-or-kayar'], uygula = d => SINIF.forEach((s, i) => t.classList.toggle(s, i < d));
+    const imza = [...t.tHead.rows[0].cells].map(h => h.dataset.k).join(',') + '|' + t.tBodies[0].rows.length, gen = k.clientWidth;
+    // aynı tablo ve genişlik yalnız kaydırma çubuğu kadar oynadıysa (dikey çubuk belirdi / kalktı; ortak başlık düzeni sütunu sonradan genişletti): gevşetme yok,
+    //   gerekiyorsa bir düzey daha sıkıştırılır → düzeyler arasında gidip gelme olmaz. Sütun kümesi / satır sayısı ya da genişlik belirgin değiştiyse baştan ölçülür.
+    const ufak = imza === orSigImza && Math.abs(gen - orSigOlcGen) <= 24; let d = ufak ? orSigDuzey : 0;
+    uygula(d); while (d < 3 && k.scrollWidth > k.clientWidth + 1) uygula(++d);
+    orSigImza = imza; orSigDuzey = d; if (!ufak) orSigOlcGen = gen;
+  }
+  window.tkOrSigdir = () => { if (aktif === 'ozel') orSigdir(); };
+  if (window.ResizeObserver && $('#tkTablo-ozel')) { const ro = new ResizeObserver(() => window.tkOrSigdir()); ro.observe($('#tkTablo-ozel')); ro.observe($('#tkTablo-ozel').closest('.table-responsive')); }   // tablo ya da kap boyutu değişince (pencere, menü, kaydırma çubuğu, sonradan genişleyen başlık) yeniden bakılır
   /** grup satırındaki kayıt sayısına tıklayınca: o grubun satırları seçili sütunlarla pencerede (en çok 500 satır) */
   function orGrupAc(a) {
     const g = cizOzel.gruplar && cizOzel.gruplar.get(a); if (!g) return; const KY = OR_KAYNAK[orAyar.kaynak], S = orKolonlar().filter(c => orAyar.sutunlar.includes(c.k)).map(orMotor), gk = orAyar.grup.map(orKol).filter(Boolean), l = g.l.slice(0, 500);
@@ -1494,10 +1591,11 @@
     $('#tkDonem').hidden = !(DONEMLI.includes(aktif) || (aktif === 'ozel' && OR_KAYNAK[orAyar.kaynak].donem));   // Özel Rapor: dönem yalnız tarihli veri kaynaklarında (Açık Faturalar'da yok)
     const cip = $('#tkCariCip'), c = F.cari && cariBul(F.cari); cip.hidden = !c; if (c) cip.innerHTML = `${esc(c.kod)} ${esc(c.kisaAd)} <i class="fas fa-xmark"></i>`;
     if (cubuk) { SZ.yaz(); $('#tkKapsam').textContent = `${cariler().length} / ${(BOLGE_KILIT ? K.satirlar.filter(k => k.bolge === BOLGE_KILIT) : K.satirlar).length} müşteri${PBG === 'USD' && usdKur() ? ` · 1 $ = ${n2(usdKur())}\u00A0₺` : ''}`; }
-    if (rapor) { CIZ[aktif](); if (IHRACAT && aktif === 'plan') cizHafta(); } else if (IHRACAT && aktif === 'ibOzet') cizOzet();   // ihracat kipi: Tahsilat Özeti gövdesi İhracat Özeti panelinde; Haftalık Beklenen tabloları Planlanan ↔ Gerçekleşen'de
+    if (rapor) { kolYeni = new Set(); CIZ[aktif](); const es = KOLTUT[aktif] || new Set(), yn = kolYeni; kolYeni = null; if (yn.size !== es.size || [...yn].some(y => !es.has(y))) { KOLTUT[aktif] = yn; CIZ[aktif](); } if (IHRACAT && aktif === 'plan') cizHafta(); } else if (IHRACAT && aktif === 'ibOzet') cizOzet();   // ihracat kipi: Tahsilat Özeti gövdesi İhracat Özeti panelinde; Haftalık Beklenen tabloları Planlanan ↔ Gerçekleşen'de
     if (IB(aktif)) ibSuzgecYaz();
     if (TH[aktif]) { disSuzgecYaz(); if (aktif === 'liste') cizVade(); }   // Tahsilatlar sekmesinin altında Gecikmeli Tahsilatlar (vade farkı kesilmiş / kesilmemiş; toplu kesim)
     bankaYeni(); talepUyari();
+    matrisPlanla();
   }
   // 19 Kas 2026 gece (kullanıcı: "Yeni Tahsilat düğmesini tüm sekmelerde görünecek şekilde Temizle'nin soluna, sabit"): düğme çubuk görünürken #tkEk'in sonunda (Temizle'nin solu), çubuk gizliyken başlık sağında Excel'in solunda
   function yeniDugmeYerlestir(cubuk) {   // (kullanıcı, kesin): süzgeç çubuğunda TEMİZLE'NİN SOLUNDA; çubuğun olmadığı sekmelerde (Yeni Tahsilat, Adat) başlıkta Excel'in solunda
@@ -1737,7 +1835,7 @@
     if (kaydir && kaydir[0] === hedef) { hedef.scrollTop = kaydir[1]; hedef.scrollLeft = kaydir[2]; }
     if (window.scrollY > 0 && document.documentElement.scrollHeight <= window.innerHeight + 2) window.scrollTo(0, 0);
   }
-  let z = 0; const planla = () => { clearTimeout(z); z = setTimeout(sigdir, 90); };
+  let z = 0; const planla = () => { clearTimeout(z); z = setTimeout(() => { sigdir(); if (window.tkMatrisHizala) window.tkMatrisHizala(); if (window.tkOrSigdir) window.tkOrSigdir(); }, 90); };   // ekranı doldurunca kaydırma çubuğu payı değişir → aylık matris tabloları yeniden hizalanır
   new MutationObserver(planla).observe(kok, { childList: true, subtree: true });
   window.addEventListener('resize', planla); kok.addEventListener('click', e => { if (e.target.closest('#tkSekmeler button, .na-sekme button')) planla(); });
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(planla);

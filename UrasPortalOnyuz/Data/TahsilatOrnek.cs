@@ -440,13 +440,13 @@ namespace WebApplication3.Data
                     MutabakatOrnek.HareketEkle(ff.CariKodu, new MtHareket { Tarih = ot, ParaBirimi = "TL", BelgeTipi = "Tahsilat", BelgeNo = $"TH-{ot:yyyy}-VF{++vfOd:000}", Aciklama = "Havale / EFT · " + ff.No, Alacak = ff.Toplam, KapamaDurumu = "—", IslemTipi = ff.IslemTipi }, new[] { (ff.No, ff.Toplam) });
                 }
                 TahsilatSatir S(string y, DateTime t, decimal tutar, string pb = "TL", string belge = "", string banka = "") => new TahsilatSatir { Yontem = y, Tarih = t, Tutar = tutar, Pb = pb, BelgeNo = belge, Banka = banka };
-                Kaydet("120.003", b.AddDays(-6), "X", "TL", "Otomatik", null, new List<TahsilatSatir> { S("Havale / EFT", b.AddDays(-6), 850_000m, "TL", "", "Ziraat Bankası") }, "Haftalık ödeme planı", "Nazlı Erdem", true, out _, b.AddDays(-6).AddHours(14));
+                Kaydet("120.003", b.AddDays(-6), "X", "TL", "Otomatik", null, new List<TahsilatSatir> { S("Havale / EFT", b.AddDays(-6), 850_000m, "TL", "", "Ziraat Bankası") }, "Haftalık ödeme planı", "Ahmet Özkan", true, out _, b.AddDays(-6).AddHours(14));
                 var usd = AcikFaturalar("120.001").Where(f => f.ParaBirimi == "USD").Take(2).ToList();
-                if (usd.Count > 0) Kaydet("120.001", b.AddDays(-3), "X", "USD", "Manuel", usd.GroupBy(f => f.BelgeNo).ToDictionary(g => g.Key, g => 0m), new List<TahsilatSatir> { S("Havale / EFT", b.AddDays(-3), Math.Round(usd.Sum(f => f.Kalan), 2), "USD", "", "Garanti BBVA") }, "USD faturalar kapatıldı", "Nazlı Erdem", true, out _, b.AddDays(-3).AddHours(11));
+                if (usd.Count > 0) Kaydet("120.001", b.AddDays(-3), "X", "USD", "Manuel", usd.GroupBy(f => f.BelgeNo).ToDictionary(g => g.Key, g => 0m), new List<TahsilatSatir> { S("Havale / EFT", b.AddDays(-3), Math.Round(usd.Sum(f => f.Kalan), 2), "USD", "", "Garanti BBVA") }, "USD faturalar kapatıldı", "Melike Ural Kaya", true, out _, b.AddDays(-3).AddHours(11));
                 var gec = AcikFaturalar("120.011").Where(f => f.ParaBirimi == "TL" && !VfDisi(f) && (f.Vade ?? f.Tarih) < b.AddDays(-30)).Take(2).ToList();
-                if (gec.Count > 0) { decimal top = Math.Round(gec.Sum(f => f.Kalan), 2); Kaydet("120.011", b.AddDays(-1), "R", "TL", "Manuel", gec.GroupBy(f => f.BelgeNo).ToDictionary(g => g.Key, g => 0m), new List<TahsilatSatir> { S("Nakit", b.AddDays(-1), Math.Round(top * 0.3m, 2)), S("Çek", b.AddDays(44), Math.Round(top * 0.7m, 2), "TL", "ÇK-4471920", "İş Bankası") }, "Gecikmiş faturalar nakit + çekle tahsil", "Nazlı Erdem", true, out var k3, b.AddDays(-1).AddHours(16)); if (k3 != null && k3.VadeFarki > 0) FaturaKes(k3.No, "Vade Farkı", "Nazlı Erdem", out _, b.AddDays(-1).AddHours(16).AddMinutes(20)); }
+                if (gec.Count > 0) { decimal top = Math.Round(gec.Sum(f => f.Kalan), 2); Kaydet("120.011", b.AddDays(-1), "R", "TL", "Manuel", gec.GroupBy(f => f.BelgeNo).ToDictionary(g => g.Key, g => 0m), new List<TahsilatSatir> { S("Nakit", b.AddDays(-1), Math.Round(top * 0.3m, 2)), S("Çek", b.AddDays(44), Math.Round(top * 0.7m, 2), "TL", "ÇK-4471920", "İş Bankası") }, "Gecikmiş faturalar nakit + çekle tahsil", "Berk Berberoğlu", true, out var k3, b.AddDays(-1).AddHours(16)); if (k3 != null && k3.VadeFarki > 0) FaturaKes(k3.No, "Vade Farkı", "Berk Berberoğlu", out _, b.AddDays(-1).AddHours(16).AddMinutes(20)); }
                 var tas = AcikFaturalar("120.002").Where(f => f.ParaBirimi == "TL").Take(3).ToList();
-                if (tas.Count > 0) Kaydet("120.002", b, "X", "TL", "Otomatik", null, new List<TahsilatSatir> { S("Çek", b.AddDays(30), Math.Round(tas.Sum(f => f.Kalan) * 0.5m, 2), "TL", "ÇK-5580113", "Yapı Kredi"), S("Çek", b.AddDays(60), Math.Round(tas.Sum(f => f.Kalan) * 0.5m, 2), "TL", "ÇK-5580114", "Yapı Kredi") }, "Müşteriden gelen iki vadeli çek; teslim alınınca işlenecek", "Nazlı Erdem", false, out _, b.AddHours(9));
+                if (tas.Count > 0) Kaydet("120.002", b, "X", "TL", "Otomatik", null, new List<TahsilatSatir> { S("Çek", b.AddDays(30), Math.Round(tas.Sum(f => f.Kalan) * 0.5m, 2), "TL", "ÇK-5580113", "Yapı Kredi"), S("Çek", b.AddDays(60), Math.Round(tas.Sum(f => f.Kalan) * 0.5m, 2), "TL", "ÇK-5580114", "Yapı Kredi") }, "Müşteriden gelen iki vadeli çek; teslim alınınca işlenecek", "Berk Berberoğlu", false, out _, b.AddHours(9));
                 // --- ÖDEME örnekleri (Yapılan Ödemeler › Yeni Ödeme): havaleyle fatura bazlı ödeme (işlenmiş), nakit + vadeli çek toplu ödeme (işlenmiş), teslim bekleyen çek taslağı
                 var tedler = CariKartOrnek.Kartlar.Where(x => x.KartTipi == "Tedarikçi").Select(x => x.Kod).Where(kod => AcikFaturalar(kod).Any(f => f.ParaBirimi == "TL")).Take(3).ToList();
                 if (tedler.Count > 0) { var f1 = AcikFaturalar(tedler[0]).Where(f => f.ParaBirimi == "TL").Take(2).ToList(); Kaydet(tedler[0], b.AddDays(-5), "X", "TL", "Manuel", f1.GroupBy(f => f.BelgeNo).ToDictionary(g => g.Key, g => 0m), new List<TahsilatSatir> { S("Havale / EFT", b.AddDays(-5), Math.Round(f1.Sum(f => f.Kalan), 2), "TL", "DK-5520341", "Ziraat Bankası") }, "Vadesi gelen alış faturaları havaleyle ödendi", "Serkan Genç", true, out _, b.AddDays(-5).AddHours(15)); }
@@ -455,36 +455,38 @@ namespace WebApplication3.Data
                 // --- VADE FARKI örnekleri (Tahsilat › Vade Farkı sekmesi; kullanıcı 16 Kas 2026: "Vade Farkı sekmesine örnekler ver"): gecikmiş TL faturaların İŞLENMİŞ tahsilatı, faturası KESİLMEMİŞ.
                 //     Sona eklenir (önceki TH / ÖD numaraları kaymasın); yalnız yurtiçi TL cariler (yurtdışı cari bakiyeleri İhracat Finansal Takibi karşılaştırmasında kullanılıyor).
                 MtHareket Gecikmis(string kod) => AcikFaturalar(kod).Where(f => f.ParaBirimi == "TL" && f.BelgeTipi == "Fatura" && !VfDisi(f) && (f.Vade ?? f.Tarih) < b.AddDays(-12)).OrderBy(f => f.Vade ?? f.Tarih).FirstOrDefault();
-                void Vf(string kod, int gunOnce, int saat, string aciklama, Func<MtHareket, (decimal Sinir, List<TahsilatSatir> Satirlar)> kur)
+                // 23 Kas 2026 (kullanıcı: "Tahsilatı yapan kişiler Melike Ural Kaya, Aksel Güler, Ahmet Özkan, Berk Berberoğlu olabilir"): örnek tahsilatları giren kişi artık bu dört gerçek kişi (eski uydurma ad kalktı);
+                //     dağılım: nakit / çek → Berk Berberoğlu (kasa sorumlusu), yurtiçi havale → Ahmet Özkan · Melike Ural Kaya, yurtdışı döviz havalesi → ağırlıkla Aksel Güler. Yeni girilen tahsilatta kişi = oturum açan kullanıcı.
+                void Vf(string kod, int gunOnce, int saat, string aciklama, string kisi, Func<MtHareket, (decimal Sinir, List<TahsilatSatir> Satirlar)> kur)
                 {
                     var f = Gecikmis(kod); if (f == null) return; var p = kur(f); if (p.Satirlar.Sum(s => s.Tutar) <= 0) return;
-                    Kaydet(kod, b.AddDays(-gunOnce), IslemTipleri.Contains(f.IslemTipi ?? "") ? f.IslemTipi : "X", "TL", "Manuel", new Dictionary<string, decimal> { [f.BelgeNo] = p.Sinir }, p.Satirlar, aciklama, "Nazlı Erdem", true, out _, b.AddDays(-gunOnce).AddHours(saat));
+                    Kaydet(kod, b.AddDays(-gunOnce), IslemTipleri.Contains(f.IslemTipi ?? "") ? f.IslemTipi : "X", "TL", "Manuel", new Dictionary<string, decimal> { [f.BelgeNo] = p.Sinir }, p.Satirlar, aciklama, kisi, true, out _, b.AddDays(-gunOnce).AddHours(saat));
                 }
                 // 1-2) aynı müşteriden iki ayrı tahsilat: önce kısmi havale, sonra kalan nakit (toplu kesimde iki ayrı fatura)
-                Vf("120.004", 5, 11, "Gecikmiş faturaya kısmi havale", f => { decimal t = Math.Round(Math.Min(f.Kalan, 200_000m), 2); return (t, new List<TahsilatSatir> { S("Havale / EFT", b.AddDays(-5), t, "TL", "", "Ziraat Bankası") }); });
-                Vf("120.004", 1, 15, "Gecikmiş faturanın kalanı nakit tahsil edildi", f => (0m, new List<TahsilatSatir> { S("Nakit", b.AddDays(-1), f.Kalan) }));
+                Vf("120.004", 5, 11, "Gecikmiş faturaya kısmi havale", "Ahmet Özkan", f => { decimal t = Math.Round(Math.Min(f.Kalan, 200_000m), 2); return (t, new List<TahsilatSatir> { S("Havale / EFT", b.AddDays(-5), t, "TL", "", "Ziraat Bankası") }); });
+                Vf("120.004", 1, 15, "Gecikmiş faturanın kalanı nakit tahsil edildi", "Berk Berberoğlu", f => (0m, new List<TahsilatSatir> { S("Nakit", b.AddDays(-1), f.Kalan) }));
                 // 3) tek havaleyle tam kapama
-                Vf("120.006", 2, 10, "Gecikmiş fatura havaleyle kapatıldı", f => (0m, new List<TahsilatSatir> { S("Havale / EFT", b.AddDays(-2), f.Kalan, "TL", "", "Garanti BBVA") }));
+                Vf("120.006", 2, 10, "Gecikmiş fatura havaleyle kapatıldı", "Melike Ural Kaya", f => (0m, new List<TahsilatSatir> { S("Havale / EFT", b.AddDays(-2), f.Kalan, "TL", "", "Garanti BBVA") }));
                 // 4) havale + ileri vadeli çek: çek kısmında vade farkı çek vadesine kadar işler
-                Vf("120.007", 3, 14, "Gecikmiş fatura havale + 30 gün vadeli çekle tahsil", f => { decimal h = Math.Round(f.Kalan * 0.4m, 2); return (0m, new List<TahsilatSatir> { S("Havale / EFT", b.AddDays(-3), h, "TL", "", "İş Bankası"), S("Çek", b.AddDays(30), Math.Round(f.Kalan - h, 2), "TL", "ÇK-6614275", "Akbank") }); });
+                Vf("120.007", 3, 14, "Gecikmiş fatura havale + 30 gün vadeli çekle tahsil", "Melike Ural Kaya", f => { decimal h = Math.Round(f.Kalan * 0.4m, 2); return (0m, new List<TahsilatSatir> { S("Havale / EFT", b.AddDays(-3), h, "TL", "", "İş Bankası"), S("Çek", b.AddDays(30), Math.Round(f.Kalan - h, 2), "TL", "ÇK-6614275", "Akbank") }); });
                 // --- YURTDIŞI örnekleri (19 Kas 2026 gece; kullanıcı: "İhracat Finansal Takibi tüm sekmelere örnek veri ekle"): yurtdışı müşterilerin DÖVİZLİ havale tahsilatları (bölge Yurtdışı; vade farkı yalnız tahsilatta kesilir).
                 //     Gecikmeli ödemede vade farkı faturası tahsilatla kesilmiş (120.008, 120.010) ya da kesilmemiş (120.013 → Gecikmeli Tahsilatlar "Kesilmedi"), zamanında (120.012), kısmi (120.014), taslak (120.009). Kur farkı doğarsa kur farkı faturası.
                 MtHareket Yd(string kod, Func<MtHareket, bool> f) => AcikFaturalar(kod).Where(x => x.BelgeTipi == "Fatura" && x.Borc > 0 && !TlMi(x.ParaBirimi) && !VfDisi(x) && f(x)).OrderBy(x => x.Vade ?? x.Tarih).FirstOrDefault();
-                void YdKaydet(string kod, int gunOnce, int saat, string banka, string aciklama, bool gecikmis, bool vfKes, bool isle = true, decimal pay = 1m)
+                void YdKaydet(string kod, int gunOnce, int saat, string banka, string aciklama, string kisi, bool gecikmis, bool vfKes, bool isle = true, decimal pay = 1m)
                 {
                     var t = b.AddDays(-gunOnce); var f = Yd(kod, x => gecikmis ? (x.Vade ?? x.Tarih) < t.AddDays(-10) : (x.Vade ?? x.Tarih) >= t) ?? Yd(kod, x => true); if (f == null) return;
                     decimal tutar = Math.Round(f.Kalan * pay, 2); if (tutar <= 0.005m) return;
-                    var h = Kaydet(kod, t, IslemTipleri.Contains(f.IslemTipi ?? "") ? f.IslemTipi : "X", f.ParaBirimi, "Manuel", new Dictionary<string, decimal> { [f.BelgeNo] = pay < 1m ? tutar : 0m }, new List<TahsilatSatir> { S("Havale / EFT", t, tutar, f.ParaBirimi, "", banka) }, aciklama, "Nazlı Erdem", isle, out var k, t.AddHours(saat));
+                    var h = Kaydet(kod, t, IslemTipleri.Contains(f.IslemTipi ?? "") ? f.IslemTipi : "X", f.ParaBirimi, "Manuel", new Dictionary<string, decimal> { [f.BelgeNo] = pay < 1m ? tutar : 0m }, new List<TahsilatSatir> { S("Havale / EFT", t, tutar, f.ParaBirimi, "", banka) }, aciklama, kisi, isle, out var k, t.AddHours(saat));
                     if (h != null || k == null || !isle) return;
-                    if (vfKes && k.VadeFarki > 0.005m) FaturaKes(k.No, "Vade Farkı", "Nazlı Erdem", out _, t.AddHours(saat).AddMinutes(15));
-                    if (k.KurFarki > 0.005m && string.IsNullOrEmpty(k.KurFarkiFaturaNo)) FaturaKes(k.No, "Kur Farkı", "Nazlı Erdem", out _, t.AddHours(saat).AddMinutes(20));
+                    if (vfKes && k.VadeFarki > 0.005m) FaturaKes(k.No, "Vade Farkı", kisi, out _, t.AddHours(saat).AddMinutes(15));
+                    if (k.KurFarki > 0.005m && string.IsNullOrEmpty(k.KurFarkiFaturaNo)) FaturaKes(k.No, "Kur Farkı", kisi, out _, t.AddHours(saat).AddMinutes(20));
                 }
-                YdKaydet("120.008", 40, 10, "Garanti BBVA", "Export invoice payment · gecikmeli, vade farkı faturası tahsilatla kesildi", true, true);
-                YdKaydet("120.010", 25, 11, "Yapı Kredi", "SWIFT havalesi · gecikmeli ödeme, vade farkı kesildi", true, true);
-                YdKaydet("120.013", 2, 15, "Garanti BBVA", "USD havale · gecikmeli, vade farkı faturası henüz kesilmedi", true, false);
-                YdKaydet("120.012", 6, 9, "İş Bankası", "Vadesinde ödeme (EUR havale)", false, true);
-                YdKaydet("120.014", 9, 14, "Akbank", "Kısmi ödeme · faturanın yarısı", false, true, true, 0.5m);
-                YdKaydet("120.009", 0, 8, "Garanti BBVA", "Bankadan gelen döviz girişi · taslak, işleme alınacak", false, true, false);
+                YdKaydet("120.008", 40, 10, "Garanti BBVA", "Export invoice payment · gecikmeli, vade farkı faturası tahsilatla kesildi", "Aksel Güler", true, true);
+                YdKaydet("120.010", 25, 11, "Yapı Kredi", "SWIFT havalesi · gecikmeli ödeme, vade farkı kesildi", "Aksel Güler", true, true);
+                YdKaydet("120.013", 2, 15, "Garanti BBVA", "USD havale · gecikmeli, vade farkı faturası henüz kesilmedi", "Aksel Güler", true, false);
+                YdKaydet("120.012", 6, 9, "İş Bankası", "Vadesinde ödeme (EUR havale)", "Melike Ural Kaya", false, true);
+                YdKaydet("120.014", 9, 14, "Akbank", "Kısmi ödeme · faturanın yarısı", "Ahmet Özkan", false, true, true, 0.5m);
+                YdKaydet("120.009", 0, 8, "Garanti BBVA", "Bankadan gelen döviz girişi · taslak, işleme alınacak", "Aksel Güler", false, true, false);
             }
         }
     }
