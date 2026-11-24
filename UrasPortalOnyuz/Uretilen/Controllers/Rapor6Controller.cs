@@ -16,6 +16,7 @@ using WebApplication3.Models; // ProductPriceComparisonViewModel, DatabaseConfig
 
 namespace WebApplication3.Controllers
 {
+#if URETILEN_KAPALI   // üretilmiş denetleyici devre dışı: elle yazılmış sürüm Controllers/Rapor6Controller.cs (Data/SatinalmaFiyatOrnek.cs verisiyle; 23 Kas 2026)
     [Authorize] // Policy adını projenize göre düzenleyin
     [Route("UrunFiyatKarsilastirma")]
     public class Rapor6Controller : Controller
@@ -71,4 +72,5 @@ namespace WebApplication3.Controllers
 return View("Index", WebApplication3.OrnekDoldurucu.Liste<WebApplication3.Models.ProductPriceComparisonViewModel>(12));
 }
     }
+#endif
 }
